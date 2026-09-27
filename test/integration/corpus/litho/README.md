@@ -168,6 +168,7 @@ one deliberately rather than diffing it against a fresh build.
 | `kidsarray_2b.pdf`     | PDF/A-2b     | Pages written directly in a `/Kids` array named by reference     |
 | `formmark_ua1.pdf`     | PDF/UA-1     | Forms judged by what they draw, and the sequences they open      |
 | `laterreads_2u.pdf`    | PDF/A-2u     | What a later repair reads: removed annotations, a font's uses    |
+| `baretree_2b.pdf`      | PDF/A-2b     | A page tree short of the entries it requires, under the rewrites |
 
 ### Must-not-fire controls
 
@@ -401,6 +402,7 @@ which are covered under [Known divergences](#known-divergences).
 | `annots_1b.pdf`        | 16   | 14   | 14   | 12   | 12   | 14   | 12   | 12   | 10  | 10   | 11   | 12   | 8    |
 | `annotstruct_ua2.pdf`  | 13   | 12   | 12   | 12   | 12   | 14   | 14   | 14   | 10  | 9    | 9    | 8    | 13   |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
+| `baretree_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `blendcs_4.pdf`        | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 6    | 6    |
 | `charset_1b.pdf`       | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 3   | 3    | 4    | 9    | 7    |
 | `cmaps_2b.pdf`         | 9    | 6    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
@@ -4818,6 +4820,61 @@ left as the file wrote it. The PDF/A-1b to 3b outputs also held the removed
 Screen again, as an object no page lists, which no rule judges; the full rewrite
 of a PDF/A-4 output drops it either way.
 
+### `baretree_2b.pdf`
+
+ISO 32000-1, 7.7.2, Table 28 makes the catalog's `/Pages` an indirect
+reference; 7.7.3.2, Table 29 requires a page tree node's `/Type /Pages` and a
+`/Count` of the pages under it; 7.7.3.3, Table 30 requires a page's `/Parent`,
+and its `/Resources` and `/MediaBox`, both inheritable. A rewrite copied each
+entry as the source had it, and page insertion and deletion refused a root with
+no object number. The corpus files that lack `/Type` on a node or state a wrong
+`/Count` are damaged past what veraPDF parses, and none writes the root
+directly in the catalog.
+
+The catalog writes the root directly, so no page names a `/Parent`. The root
+has no `/Type`, lends nothing, and counts four of its five pages:
+
+| Page | Its own box              | Its own `/Resources` | Shows   |
+| ---- | ------------------------ | -------------------- | ------- |
+| 1    | 200 by 200               | the font             | `A`     |
+| 2    | 200 by 200, by reference | the font             | `B`     |
+| 3    | 200 by 200               | none                 | nothing |
+| 4    | 200 by 200               | `5`, no dictionary   | nothing |
+| 5    | none                     | the font             | `AB`    |
+
+Page 2 is the control: its box is a rectangle written by reference, and stays
+as it is. Pages 3 and 4 have no `/Contents`: veraPDF reports a page with no
+`/Resources` whose content paints anything, DeviceGray included, under
+`6.2.2/3` at PDF/A-4, which litho does not. The text is in the conforming
+embedded TrueType of `ttcmap_2b.pdf`, in DeviceGray under a CMYK OutputIntent.
+veraPDF 1.30.2 refuses a file holding
+a node or a page with no `/Type`, a root with no `/Count` or one larger than its
+pages. It reads no XMP from a catalog with no `/Type`, and it reads a
+`/MediaBox` of three numbers with a 0 for the missing one and reports
+`6.1.13/11`, which litho does not judge on a box short of four numbers. None of
+those shapes has a fixture: pdfjs `issue5334.pdf` has a catalog with no
+`/Type`, and pdfjs `issue15150.pdf` a `/Resources` naming no dictionary.
+
+The two tools return the same rule set in all thirteen cells, and the same
+counts in the eleven PDF/A ones: nothing at PDF/A-2b, and at the other levels
+the identification and tagging rules a part-2 claim draws. At PDF/UA-1 veraPDF
+counts `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, twice, once per
+untagged text of the four pages its `/Count` lets it read, and litho once each.
+
+Measured on litho and veraPDF 1.30.2 before the fix, `mutate-pages` refused the
+file (`/Pages is not an indirect reference`), and the stamp, flattening,
+encryption, auto-tagging, split, merge and every remediation that wrote the
+file wrote the root with no `/Type` and pages 3, 4 and 5 as the source has them:
+qpdf warned four times on each. Now a rewrite numbers the root and writes it
+with `/Type /Pages` and the `/Count 5` its walk reads, every page with the root
+as its `/Parent`, pages 3 and 4 with an empty `/Resources` and page 5 with the
+US Letter box every reader assumes, and qpdf reads it without a warning. An
+incremental update writes only what it edits: a remediation that repairs no
+page leaves pages 3, 4 and 5 as the source has them. The outputs report the
+input's rule set on both tools, and the stamp adds only its unembedded font and
+DeviceRGB. Remediation at the eight manifest profiles, default and aggressive,
+leaves nothing on either tool, before the fix and after.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
@@ -4839,6 +4896,11 @@ two is non-compliant on both sides (`formhidden_ua1` and `sigtagged_ua1` at
 PDF/UA-1 are the corpus's conforming cells), so a change that drops or invents a
 rule class leaves `matched` at 928 and moves only `ruleset_mismatch`, and on
 those two cells it moves both. Both exceptions sit in the manifest's profiles,
+three is non-compliant on both sides (`formhidden_ua1` and `sigtagged_ua1` at
+PDF/UA-1 and `baretree_2b` at PDF/A-2b are the corpus's conforming cells), so a
+change that drops or invents a rule class leaves `matched` at 928 and moves only
+`ruleset_mismatch`, and on those three cells it moves both. Both exceptions sit
+in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
 the runner is a regression, or a divergence to cover under Known divergences and
