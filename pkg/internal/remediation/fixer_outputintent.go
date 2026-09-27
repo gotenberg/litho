@@ -508,14 +508,14 @@ func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 		// the inherited one, making every inherited font and XObject
 		// unreachable, so the inherited dictionary is the base to patch. Only
 		// a page that truly inherits nothing gets a new one.
+		pe.dict = liveTreeNode(ctx, alloc, doc, pe)
 		node, ok := resourcesNode(ctx, alloc, doc, pe)
 		if !ok {
 			newRes := ast.PdfDict{"ColorSpace": ast.PdfDict{key: csArr()}}
 			newPage := make(ast.PdfDict, len(pe.dict)+1)
 			maps.Copy(newPage, pe.dict)
 			newPage["Resources"] = newRes
-			if pe.ref.ObjectNum > 0 {
-				alloc.AllocAt(pe.ref.ObjectNum, newPage)
+			if writeTreeNode(ctx, alloc, doc, pe, newPage) {
 				count++
 			}
 			continue
@@ -525,8 +525,7 @@ func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 			newPage := make(ast.PdfDict, len(pe.dict)+1)
 			maps.Copy(newPage, pe.dict)
 			newPage["Resources"] = patched.value
-			if pe.ref.ObjectNum > 0 {
-				alloc.AllocAt(pe.ref.ObjectNum, newPage)
+			if writeTreeNode(ctx, alloc, doc, pe, newPage) {
 				count++
 			}
 		}

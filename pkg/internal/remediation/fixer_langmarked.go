@@ -145,12 +145,11 @@ func repairPropertyListLangs(ctx context.Context, alloc *writer.ObjAllocator, do
 	}
 
 	w := &propertyListWalk{alloc: alloc, doc: doc, requireDeclared: requireDeclared, visited: make(map[int]bool)}
-	entries := pageTreeEntries(ctx, alloc, doc)
-	for _, page := range pages {
+	for _, pe := range pageTreeEntries(ctx, alloc, doc, pages) {
 		if ctx.Err() != nil {
 			return w.removed
 		}
-		w.page(ctx, pageTreeEntry(ctx, alloc, doc, entries, page))
+		w.page(ctx, pageTreeEntry(ctx, alloc, doc, pe))
 	}
 	return w.removed
 }
@@ -187,7 +186,7 @@ type propertyListWalk struct {
 func (w *propertyListWalk) page(ctx context.Context, pe annotPageEntry) {
 	if holder, ok := resourcesHolder(ctx, w.alloc, w.doc, pe); ok {
 		work := maps.Clone(holder.dict)
-		if pending, dirty := w.resources(ctx, work, 0); dirty && w.alloc.AllocAt(holder.ref.ObjectNum, work) {
+		if pending, dirty := w.resources(ctx, work, 0); dirty && writeTreeNode(ctx, w.alloc, w.doc, holder, work) {
 			w.removed += pending
 		}
 	}

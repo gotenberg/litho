@@ -61,7 +61,7 @@ func TestStripControlBytesFromOps_CompositeFont(t *testing.T) {
 		{Operator: "Tf", Operands: []ast.PdfObject{ast.PdfName("F2"), ast.PdfInt(12)}},
 		{Operator: "Tj", Operands: []ast.PdfObject{ast.PdfString([]byte{0x41, 0x01, 0x42})}},
 	}
-	removed, modified = stripControlBytesFromOps(simple, map[string]textFontInfo{"F1": {composite: true}})
+	removed, modified = stripControlBytesFromOps(simple, map[string]textFontInfo{"F1": {composite: true}, "F2": {}})
 	if !modified || removed != 1 {
 		t.Errorf("simple font: stripped %d byte(s), want 1", removed)
 	}
@@ -76,7 +76,7 @@ func TestStripControlBytesFromOps_CompositeFont(t *testing.T) {
 		{Operator: "Tf", Operands: []ast.PdfObject{ast.PdfName("F2"), ast.PdfInt(12)}},
 		{Operator: "Tj", Operands: []ast.PdfObject{ast.PdfString([]byte{0x43, 0x02})}},
 	}
-	removed, _ = stripControlBytesFromOps(mixed, map[string]textFontInfo{"F1": {composite: true}})
+	removed, _ = stripControlBytesFromOps(mixed, map[string]textFontInfo{"F1": {composite: true}, "F2": {}})
 	if removed != 1 {
 		t.Errorf("mixed page: stripped %d byte(s), want 1 (only the simple font's)", removed)
 	}

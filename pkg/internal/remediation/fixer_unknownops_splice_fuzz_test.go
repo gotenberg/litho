@@ -72,7 +72,9 @@ func FuzzRepairContentOps(f *testing.F) {
 		in := inlineImageBytes(ctx, data)
 		for _, newRepair := range []func() opRepair{
 			func() opRepair { return truncatedOperandStrings(2) },
-			func() opRepair { return (&controlByteStripper{}).repair },
+			// The seeds select no font, so the stripper is told the unnamed
+			// one is simple, or it would edit nothing.
+			func() opRepair { return (&controlByteStripper{fonts: map[string]textFontInfo{"": {}}}).repair },
 			func() opRepair { return markedContentLangRepair(ctx, doc, true) },
 			func() opRepair { return (&qNestingClip{limit: 2}).repair },
 		} {

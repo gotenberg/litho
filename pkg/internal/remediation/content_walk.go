@@ -46,11 +46,11 @@ func walkStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	}
 
 	w := &contentStreamWalk{alloc: alloc, doc: doc, fixer: fixer, repair: repair, colourOff: colourOff, visited: make(map[int]bool)}
-	for i, page := range pages {
+	for i, pe := range pageTreeEntries(ctx, alloc, doc, pages) {
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		w.page(ctx, page, i+1)
+		w.page(ctx, pe, i+1)
 	}
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -105,23 +105,17 @@ func (w *contentStreamWalk) firstVisit(obj ast.PdfObject) bool {
 
 // page repairs one page's own content, then the streams its resources and its
 // annotations reach. The page and its resources are read alloc-first, so a
-// page an earlier fixer rewrote is walked as it now stands; a page with no
-// /Resources of its own walks the ones it inherits.
-func (w *contentStreamWalk) page(ctx context.Context, page *document.Page, pageNum int) {
-	pageDict := livePageDict(ctx, w.alloc, w.doc, page)
-	w.pageContent(ctx, pageDict, pageNum)
-
-	var res ast.PdfObject
-	if page.Resources != nil {
-		res = page.Resources
+// page an earlier fixer rewrote is walked as it now stands. The resources are
+// the ones the page resolves its names against, its own or the ones it
+// inherits through the page tree ([resourcesHolder]), so a stream the page
+// can name is walked and one only another node's dictionary names is not.
+func (w *contentStreamWalk) page(ctx context.Context, pe annotPageEntry, pageNum int) {
+	pe = pageTreeEntry(ctx, w.alloc, w.doc, pe)
+	w.pageContent(ctx, pe.dict, pageNum)
+	if holder, ok := resourcesHolder(ctx, w.alloc, w.doc, pe); ok {
+		w.resources(ctx, holder.dict["Resources"], 0)
 	}
-	if own, ok := pageDict["Resources"]; ok && liveDictValue(ctx, w.alloc, w.doc, own) != nil {
-		res = own
-	}
-	if res != nil {
-		w.resources(ctx, res, 0)
-	}
-	w.annotations(ctx, pageDict)
+	w.annotations(ctx, pe.dict)
 }
 
 // pageContent repairs a page's own content, which ISO 32000-1, 7.7.3.3 makes

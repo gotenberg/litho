@@ -72,9 +72,9 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	var notes []string
 	visited := make(map[int]bool)
 	appearances := make(map[int]bool)
-	entries := pageTreeEntries(ctx, alloc, doc)
+	entries := pageTreeEntries(ctx, alloc, doc, pages)
 
-	for i, page := range pages {
+	for i := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("fixing graphics on page %d: %w", i+1, err)
 		}
@@ -84,7 +84,7 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		// the ancestor it inherits them from. It is read through the
 		// allocator, so the /Default space output-intent injects into the
 		// same /Resources ahead of graphics rides this write.
-		holder, ok := resourcesHolder(ctx, alloc, doc, pageTreeEntry(ctx, alloc, doc, entries, page))
+		holder, ok := resourcesHolder(ctx, alloc, doc, pageTreeEntry(ctx, alloc, doc, entries[i]))
 		if !ok {
 			continue
 		}
@@ -99,11 +99,11 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			return nil, fmt.Errorf("fixing graphics on page %d: %w", i+1, err)
 		}
 		notes = append(notes, landed...)
-		if dirty && alloc.AllocAt(holder.ref.ObjectNum, work) {
+		if dirty && writeTreeNode(ctx, alloc, doc, holder, work) {
 			notes = append(notes, pending...)
 		}
 
-		apNotes, err := fixAppearanceGraphics(ctx, alloc, doc, livePageDict(ctx, alloc, doc, page), visited, appearances)
+		apNotes, err := fixAppearanceGraphics(ctx, alloc, doc, pageTreeEntry(ctx, alloc, doc, entries[i]).dict, visited, appearances)
 		if err != nil {
 			return nil, fmt.Errorf("fixing graphics in the annotations of page %d: %w", i+1, err)
 		}

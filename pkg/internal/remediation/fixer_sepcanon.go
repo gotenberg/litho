@@ -320,9 +320,7 @@ func eachColorSpaceArrayMutable(ctx context.Context, alloc *writer.ObjAllocator,
 	newHolder := make(ast.PdfDict, len(holder.dict))
 	maps.Copy(newHolder, holder.dict)
 	newHolder["Resources"] = newRes
-	if holder.ref.ObjectNum > 0 {
-		alloc.AllocAt(holder.ref.ObjectNum, newHolder)
-	}
+	writeTreeNode(ctx, alloc, doc, holder, newHolder)
 }
 
 // attrs returns the indirect ref unchanged; it exists so patchColorants

@@ -216,8 +216,8 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		return 0
 	}
 	count, newHolder := dedupICCInOwner(ctx, alloc, doc, holder.dict, profiles, visited)
-	if newHolder != nil && holder.ref.ObjectNum > 0 {
-		alloc.AllocAt(holder.ref.ObjectNum, newHolder)
+	if newHolder != nil {
+		writeTreeNode(ctx, alloc, doc, holder, newHolder)
 	}
 	return count
 }

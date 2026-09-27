@@ -22,8 +22,10 @@ func matchToUnicodeRanges(v compliance.Violation) bool {
 }
 
 // fixToUnicodeRangeIssues repairs the /ToUnicode CMap of every font the pages
-// use. It only touches a CMap holding a bfrange that crosses a first-byte
-// boundary, so running it on a document with none changes nothing.
+// use, in the /Resources each page resolves its names against
+// ([pageResourceCategory]). It only touches a CMap holding a bfrange that
+// crosses a first-byte boundary, so running it on a document with none changes
+// nothing.
 func fixToUnicodeRangeIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -36,15 +38,12 @@ func fixToUnicodeRangeIssues(ctx context.Context, alloc *writer.ObjAllocator, do
 
 	var fixes []string
 	processed := make(map[int]bool)
-	for _, page := range pages {
+	for _, pe := range pageTreeEntries(ctx, alloc, doc, pages) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if page.Resources == nil {
-			continue
-		}
-		fontDict, err := document.ResolveDict(ctx, doc, page.Resources["Font"])
-		if err != nil || fontDict == nil {
+		fontDict := pageResourceCategory(ctx, alloc, doc, pe, "Font")
+		if fontDict == nil {
 			continue
 		}
 		// Sorted iteration so the fix list is deterministic across runs.

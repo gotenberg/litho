@@ -130,6 +130,10 @@ type annotPageEntry struct {
 	// entry built outside that walk. A page inherits its attributes from it,
 	// whatever its /Parent names (see [resourcesNode]).
 	parent *annotPageEntry
+	// kid is the index of this node in its parent's /Kids, where a node
+	// written directly in that array, with no object number of its own, is
+	// read and written (see [liveTreeNode] and [writeTreeNode]).
+	kid int
 }
 
 // fixPageAnnotations walks the page tree and fixes annotation issues on each page.
@@ -219,12 +223,15 @@ const maxPageTreeDepth = 100
 // collectPageRefs recursively collects page dicts with their indirect refs,
 // each linked to the /Pages node whose /Kids listed it.
 func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, pages *[]annotPageEntry, seen map[int]bool, depth int) {
-	collectPageTree(ctx, alloc, doc, obj, nil, pages, seen, depth)
+	collectPageTree(ctx, alloc, doc, obj, nil, 0, pages, seen, depth)
 }
 
-// collectPageTree is [collectPageRefs] for obj listed in the /Kids of parent,
-// nil for the root of the page tree.
-func collectPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, parent *annotPageEntry, pages *[]annotPageEntry, seen map[int]bool, depth int) {
+// collectPageTree is [collectPageRefs] for obj listed at index kid in the
+// /Kids of parent, nil for the root of the page tree. /Kids is read through
+// the allocator: a node written directly in it is written back there
+// ([writeTreeNode]), into an array with an object number of its own when it
+// has one.
+func collectPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, parent *annotPageEntry, kid int, pages *[]annotPageEntry, seen map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxPageTreeDepth {
 		return
 	}
@@ -255,26 +262,18 @@ func collectPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	// Best-effort: an unreadable /Type yields an empty name; the switch
 	// default handles it.
 	typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
-	entry := annotPageEntry{ref: ref, dict: dict, parent: parent}
+	entry := annotPageEntry{ref: ref, dict: dict, parent: parent, kid: kid}
 	switch typeName {
 	case "Pages":
-		kids, err := document.ResolveArray(ctx, doc, dict["Kids"])
-		if err != nil {
-			return
-		}
-		for _, kid := range kids {
-			collectPageTree(ctx, alloc, doc, kid, &entry, pages, seen, depth+1)
+		for i, kidObj := range liveArray(ctx, alloc, doc, dict["Kids"]) {
+			collectPageTree(ctx, alloc, doc, kidObj, &entry, i, pages, seen, depth+1)
 		}
 	case "Page":
 		*pages = append(*pages, entry)
 	default:
 		if _, hasKids := dict["Kids"]; hasKids {
-			kids, err := document.ResolveArray(ctx, doc, dict["Kids"])
-			if err != nil {
-				return
-			}
-			for _, kid := range kids {
-				collectPageTree(ctx, alloc, doc, kid, &entry, pages, seen, depth+1)
+			for i, kidObj := range liveArray(ctx, alloc, doc, dict["Kids"]) {
+				collectPageTree(ctx, alloc, doc, kidObj, &entry, i, pages, seen, depth+1)
 			}
 		} else {
 			*pages = append(*pages, entry)

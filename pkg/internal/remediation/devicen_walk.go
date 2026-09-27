@@ -126,20 +126,20 @@ func (w *deviceNWalk) firstVisit(obj ast.PdfObject) bool {
 // The page is read again through the allocator: an earlier page's walk, or
 // an earlier fixer, may have written it since the page tree was collected.
 func (w *deviceNWalk) pageResources(ctx context.Context, pe annotPageEntry) {
-	if live := resolveFromAllocOrDoc(ctx, w.alloc, w.doc, pe.ref); live != nil {
-		pe.dict = live
-	}
+	pe.dict = liveTreeNode(ctx, w.alloc, w.doc, pe)
 	holder, ok := resourcesHolder(ctx, w.alloc, w.doc, pe)
 	if !ok {
 		return
 	}
 	t := w.resources(ctx, holder.dict["Resources"], 0)
-	if !t.changed || holder.ref.ObjectNum <= 0 {
+	if !t.changed {
 		return
 	}
 	newHolder := maps.Clone(holder.dict)
 	newHolder["Resources"] = t.value
-	w.land(holder.ref, newHolder, t.pending)
+	if writeTreeNode(ctx, w.alloc, w.doc, holder, newHolder) {
+		w.count += t.pending
+	}
 }
 
 // annotationAppearances walks the /Resources of every appearance stream the

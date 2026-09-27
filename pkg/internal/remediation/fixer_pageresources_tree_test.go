@@ -84,6 +84,27 @@ func effectiveResources(t *testing.T, alloc *writer.ObjAllocator, doc *document.
 	return liveResourcesOf(t, alloc, doc, node)
 }
 
+// walkedPageEntries returns the entry the page tree walk ([collectPageRefs])
+// makes for every page it reaches by an object number, keyed by it.
+func walkedPageEntries(t *testing.T, alloc *writer.ObjAllocator, doc *document.Document) map[int]annotPageEntry {
+	t.Helper()
+
+	ctx := context.Background()
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
+	if !ok {
+		t.Fatal("the document has no catalog")
+	}
+	var walked []annotPageEntry
+	collectPageRefs(ctx, alloc, doc, resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)["Pages"], &walked, make(map[int]bool), 0)
+	entries := make(map[int]annotPageEntry, len(walked))
+	for _, pe := range walked {
+		if pe.ref.ObjectNum > 0 {
+			entries[pe.ref.ObjectNum] = pe
+		}
+	}
+	return entries
+}
+
 // resourceNames returns the names res defines under category, as the output
 // will carry them.
 func resourceNames(alloc *writer.ObjAllocator, doc *document.Document, res ast.PdfDict, category ast.PdfName) map[ast.PdfName]bool {
@@ -381,7 +402,7 @@ func TestResourcesHolder_ReadsTheEntryAsCompliance(t *testing.T) {
 
 	ctx := context.Background()
 	doc, alloc := newTestDoc(t, inheritanceTreePDF(inheritanceTree{}))
-	entries := pageTreeEntries(ctx, alloc, doc)
+	entries := walkedPageEntries(t, alloc, doc)
 	for _, tc := range []struct {
 		name       string
 		page, node int

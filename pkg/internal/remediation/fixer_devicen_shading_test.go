@@ -42,7 +42,7 @@ func liveShadingColourSpace(t *testing.T, alloc *writer.ObjAllocator, doc *docum
 	t.Helper()
 
 	ctx := context.Background()
-	holder, ok := resourcesHolder(ctx, alloc, doc, pageTreeEntries(ctx, alloc, doc)[3])
+	holder, ok := resourcesHolder(ctx, alloc, doc, walkedPageEntries(t, alloc, doc)[3])
 	if !ok {
 		t.Fatal("the page resolves no /Resources")
 	}

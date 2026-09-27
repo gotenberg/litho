@@ -52,6 +52,7 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	fontCache := make(map[int]textFontInfo)
 
 	total := 0
+	entries := pageTreeEntries(ctx, alloc, doc, pages)
 	for pageNum, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -60,7 +61,7 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		if err != nil || contentsObj == nil {
 			continue
 		}
-		fonts := pageTextFonts(ctx, doc, page, fontCache)
+		fonts := pageTextFonts(ctx, doc, pageResourceCategory(ctx, alloc, doc, entries[pageNum], "Font"), fontCache)
 		newData, removed, err := repairContentOps(ctx, data, func() opRepair {
 			return (&controlByteStripper{fonts: fonts}).repair
 		})
@@ -93,7 +94,8 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 // [controlByteStripper.keepAdvances]). Every byte it removes counts as an
 // edit. It tracks the text font the strings are shown with, which the guard
 // for a composite font reads, and the font size and character spacing the
-// room of a removed glyph depends on.
+// room of a removed glyph depends on. A string shown with a font name the
+// page's /Resources do not define is kept.
 //
 // # Corpus evidence
 //
@@ -104,6 +106,10 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 //     text.
 //   - verapdf: skipping composite fonts leaves ~56 .notdef references unfixed,
 //     which is the safe side of the trade.
+//   - pdfjs poppler-90-0-fuzzed.pdf: the only file showing a control byte with
+//     a font name the page does not define, on page 2 with no font selected.
+//     Keeping those strings leaves the findings litho and veraPDF share on its
+//     aggressive PDF/A-2b, PDF/A-4 and PDF/UA-1 outputs as they were.
 type controlByteStripper struct {
 	fonts       map[string]textFontInfo
 	currentFont string
@@ -183,8 +189,14 @@ func (s *controlByteStripper) repair(op content.Operation) ([]content.Operation,
 	// Identity-H is two bytes but a predefined CMap may mix widths.
 	// Skipping leaves those .notdef references unfixed, which is the safe
 	// side of the trade.
-	info := s.fonts[s.currentFont]
-	if info.composite {
+	//
+	// A font name the page's /Resources do not define selects no font (ISO
+	// 32000-1, 9.3.1, Table 105 names Tf's operand in the /Font of the
+	// current resource dictionary), so its strings reference no glyph, the
+	// .notdef rules judge none of them (ISO 19005-2, 6.2.11.8), and whether
+	// a byte is a whole code is unknown: they are kept.
+	info, known := s.fonts[s.currentFont]
+	if !known || info.composite {
 		return keep, 0
 	}
 	var operands []ast.PdfObject
@@ -538,15 +550,12 @@ func resolvedFloat(ctx context.Context, doc *document.Document, obj ast.PdfObjec
 	return document.Float(resolved)
 }
 
-// pageTextFonts describes every font in a page's resources, reusing entries
-// already described for another page through cache, keyed by object number.
-func pageTextFonts(ctx context.Context, doc *document.Document, page *document.Page, cache map[int]textFontInfo) map[string]textFontInfo {
-	if page == nil || page.Resources == nil {
-		return nil
-	}
-	fonts, err := document.ResolveDict(ctx, doc, page.Resources["Font"])
-	if err != nil || fonts == nil {
-		doc.Logger.Debug("resolving page fonts for control-byte strip", slog.Any("err", err))
+// pageTextFonts describes every font of fonts, the /Font dictionary of the
+// /Resources a page resolves its names against ([pageResourceCategory]),
+// reusing entries already described for another page through cache, keyed by
+// object number.
+func pageTextFonts(ctx context.Context, doc *document.Document, fonts ast.PdfDict, cache map[int]textFontInfo) map[string]textFontInfo {
+	if fonts == nil {
 		return nil
 	}
 	infos := make(map[string]textFontInfo, len(fonts))

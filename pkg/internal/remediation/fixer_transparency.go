@@ -19,6 +19,19 @@ func matchTransparency(v compliance.Violation) bool {
 		strings.HasPrefix(v.Rule.Clause, "6.4")
 }
 
+// fixTransparency sets opaque the transparency ISO 19005-1, 6.4 forbids: in
+// the /Resources each page resolves its names against, its own or the ones it
+// inherits through the page tree ([resourcesHolder]), in the streams they
+// name, in the page's own /Group, and in its annotations' appearances.
+//
+// # Corpus evidence
+//
+//   - litho kidsrepair_1b.pdf: three graphics states written directly in the
+//     /Resources of a page tree node, inherited by a page under the root, one
+//     whose /Parent names the root and one written directly in /Kids, kept
+//     their /CA 0.5 (6.4 t5) after a PDF/A-1b remediation, in both modes, on
+//     litho and veraPDF. Written into the node holding them, every output
+//     passes both tools.
 func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	// PDF/A-1 (ISO 19005-1 §6.4) forbids transparency outright. The
 	// only way a flagged file can become compliant is to flatten
@@ -42,27 +55,40 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	// annotations, and one form can be declared by several pages.
 	visited := make(map[int]bool)
 
-	for _, page := range pages {
+	for _, entry := range pageTreeEntries(ctx, alloc, doc, pages) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		// The page object owns both repairs below: an /ExtGState stored inline
-		// under its /Resources, and its own /Group. They share one working copy
-		// and one write, because two writes to the same object number keep only
-		// the second.
-		pageDict := livePageDict(ctx, alloc, doc, page)
+		// The page object owns its own /Group, and an /ExtGState stored
+		// inline under the /Resources it states. When it states them, both
+		// repairs share one working copy and one write, because two writes
+		// to the same object keep only the second.
+		pe := pageTreeEntry(ctx, alloc, doc, entry)
+		pageDict := pe.dict
 		workPage := make(ast.PdfDict, len(pageDict))
 		maps.Copy(workPage, pageDict)
 		pageDirty, pagePending := false, 0
 
-		// One uniform walk of the page's resources: /ExtGState here, then the
-		// XObjects, patterns and Type 3 fonts it names, recursively.
-		if page.Resources != nil {
-			n, pending, dirty := fixResourceTransparency(ctx, doc, alloc, page.Resources, workPage, visited, 0)
+		// One uniform walk of the /Resources the page resolves its names
+		// against, its own or the ones it inherits (see [resourcesHolder]):
+		// /ExtGState here, then the XObjects, patterns and Type 3 fonts it
+		// names, recursively. An inline repair of inherited /Resources is
+		// written into the ancestor holding them, which every page
+		// inheriting them draws with.
+		if holder, ok := resourcesHolder(ctx, alloc, doc, pe); ok {
+			ownResources := statesResources(pageDict)
+			owner := workPage
+			if !ownResources {
+				owner = maps.Clone(holder.dict)
+			}
+			res := liveDictValue(ctx, alloc, doc, owner["Resources"])
+			n, pending, dirty := fixResourceTransparency(ctx, doc, alloc, res, owner, visited, 0)
 			totalFixed += n
-			if dirty {
+			if dirty && ownResources {
 				pageDirty, pagePending = true, pagePending+pending
+			} else if dirty && writeTreeNode(ctx, alloc, doc, holder, owner) {
+				totalFixed += pending
 			}
 		}
 
@@ -75,7 +101,7 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			}
 		}
 
-		if pageDirty && alloc.AllocAt(page.Ref.ObjectNum, workPage) {
+		if pageDirty && writeTreeNode(ctx, alloc, doc, pe, workPage) {
 			totalFixed += pagePending
 			if groupRemoved {
 				totalFixed++
@@ -205,8 +231,8 @@ func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *
 // font a page declares.
 //
 // ISO 19005-1 §6.4 forbids transparency wherever it renders, and the compliance
-// check reaches here ([compliance] walks page.Resources /Font to the Type 3 font
-// dictionary), but this repair walk did not: it covered page resources, Form
+// check reaches here ([compliance] walks the page's /Resources /Font to the Type
+// 3 font dictionary), but this repair walk did not: it covered page resources, Form
 // XObject resources, Pattern resources and annotation appearance resources,
 // leaving an /ExtGState inside a Type 3 font flagged and unrepaired. A carrier
 // can declare NO /ExtGState on the page at all, and then the existing walks find

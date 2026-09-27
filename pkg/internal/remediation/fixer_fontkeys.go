@@ -41,8 +41,9 @@ func matchFontKeys(v compliance.Violation) bool {
 // Both edits are deterministic and preserve visible rendering, so the fixer runs
 // in every mode and is registered as safetyResource rather than gated on the
 // aggressive (opts.PreserveContent == false) flag. Fonts are located via the
-// page /Resources /Font dictionaries and by /Subtype, never by /Type, because a
-// font missing /Type is exactly what this fixer repairs.
+// /Font dictionaries of the /Resources each page resolves its names against
+// ([pageResourceCategory]) and by /Subtype, never by /Type, because a font
+// missing /Type is exactly what this fixer repairs.
 func fixFontKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -58,15 +59,12 @@ func fixFontKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	processed := make(map[int]bool)
 	var typeAdded, baseFontAdded int
 
-	for _, page := range pages {
+	for _, pe := range pageTreeEntries(ctx, alloc, doc, pages) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if page.Resources == nil {
-			continue
-		}
-		fontDict, err := document.ResolveDict(ctx, doc, page.Resources["Font"])
-		if err != nil || fontDict == nil {
+		fontDict := pageResourceCategory(ctx, alloc, doc, pe, "Font")
+		if fontDict == nil {
 			continue
 		}
 

@@ -75,6 +75,10 @@ func matchFontFixes(v compliance.Violation) bool {
 //     fonts share one descriptor, and each wrote its own /CIDSet over the
 //     document's copy of it. Read through the allocator, the descriptor gets
 //     one.
+//   - litho inlineimage_2b.pdf, repairleft_4.pdf and repairroom_2b.pdf: read
+//     after text-control's strip, the content shows no control code, so their
+//     aggressive PDF/A-2u and PDF/UA-1 outputs gain a /ToUnicode for the font
+//     that showed one. litho and veraPDF report the same findings either way.
 func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
 	// Width corrections are gated on a reported width mismatch
 	// (ISO 19005-1 §6.3.6, 19005-2 §6.2.10.5/§6.2.11.5). These clauses
@@ -145,28 +149,30 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	processed := make(map[int]bool)
 	cidSets := newCIDSetRepair(hasCIDSetViolation, needCIDSet)
 
-	for _, page := range pages {
+	entries := pageTreeEntries(ctx, alloc, doc, pages)
+	for i, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if page.Resources == nil {
-			continue
-		}
-		fontDictObj, ok := page.Resources["Font"]
-		if !ok {
-			continue
-		}
-		fontDict, err := document.ResolveDict(ctx, doc, fontDictObj)
-		if err != nil || fontDict == nil {
+		// The fonts the page's text resolves its names against: a font only
+		// another node's /Resources name is not the one the page shows, and
+		// taking it here would mark it processed with this page's codes.
+		fontDict := pageResourceCategory(ctx, alloc, doc, entries[i], "Font")
+		if fontDict == nil {
 			continue
 		}
 
 		// Which codes this page actually shows, per font resource name. A
 		// generated /ToUnicode is only attached when it covers them, because
-		// that is the set the validator holds it to.
+		// that is the set the validator holds it to. The content is read
+		// through the allocator, as the fonts are: name-utf8 renames a font
+		// key in both, and a stale content against a live /Font matches no
+		// name it renamed.
 		var shown map[string]map[byte]bool
-		if ops, perr := content.ParsePageContent(ctx, doc, page.Dict); perr == nil {
-			shown = compliance.ShownCharCodes(ops)
+		if data, _, err := livePageContentData(ctx, alloc, doc, page); err == nil && len(data) > 0 {
+			if ops, perr := content.ParseStreamData(ctx, data); perr == nil {
+				shown = compliance.ShownCharCodes(ops)
+			}
 		}
 
 		// Sorted iteration so CMap object allocation (and the output

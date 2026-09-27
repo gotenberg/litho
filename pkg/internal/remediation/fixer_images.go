@@ -34,16 +34,17 @@ func fixImageIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	var notes []string
 	visited := make(map[int]bool)
 
-	for i, page := range pages {
+	for i, pe := range pageTreeEntries(ctx, alloc, doc, pages) {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("fixing image issues on page %d: %w", i+1, err)
 		}
 
-		if page.Resources == nil {
+		xobjDict := pageResourceCategory(ctx, alloc, doc, pe, "XObject")
+		if xobjDict == nil {
 			continue
 		}
 
-		pageNotes, err := fixImageXObjects(ctx, alloc, doc, page.Resources, visited)
+		pageNotes, err := fixImageXObjects(ctx, alloc, doc, xobjDict, visited)
 		if err != nil {
 			return nil, fmt.Errorf("fixing image issues on page %d: %w", i+1, err)
 		}
@@ -61,21 +62,10 @@ func fixImageIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	return notes, nil
 }
 
-func fixImageXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool) ([]string, error) {
-	xobjObj, ok := resources["XObject"]
-	if !ok {
-		return nil, nil
-	}
-
-	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
-	if err != nil {
-		doc.Logger.Debug("resolving XObject dict for image fixes", slog.Any("err", err))
-		return nil, nil
-	}
-	if xobjDict == nil {
-		return nil, nil
-	}
-
+// fixImageXObjects repairs every image XObject named in xobjDict, the /XObject
+// dictionary of the /Resources a page resolves its names against
+// ([pageResourceCategory]).
+func fixImageXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, xobjDict ast.PdfDict, visited map[int]bool) ([]string, error) {
 	var notes []string
 
 	// Sorted rather than ranged: the notes below name the image they describe,
