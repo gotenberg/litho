@@ -5,7 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -245,6 +248,15 @@ const (
 	mutationEncryptOwner = "litho-owner"
 )
 
+// mutationEncryptPermissions is the mask mutate-encrypt encrypts with: every
+// permission bit of ISO 32000-2, Table 22 set (3-6 and 9-12), and every
+// reserved bit at the value the table forbids, bits 1-2 set and bits 7-8 and
+// 13-32 clear. The writer corrects the reserved bits whatever the mask holds
+// (see [pdf.EncryptConfig]), so the output's P is -4, as for -1, and
+// [verifyEncrypt] sees a regression in either correction, where -1 hid one
+// that stopped setting bits 7-8 and 13-32.
+const mutationEncryptPermissions int32 = 0b1111_0011_1111
+
 // mutationRedactReach is how far past the origin mutate-redact's region
 // reaches in every direction, so the region covers everything page 1 draws,
 // wherever its boxes sit. It exceeds ISO 32000-1, Annex C's 14,400-unit page
@@ -393,7 +405,7 @@ var mutationSpecs = []mutationSpec{
 				UserPassword:  mutationEncryptUser,
 				OwnerPassword: mutationEncryptOwner,
 				Algorithm:     pdf.EncryptAES256,
-				Permissions:   -1,
+				Permissions:   mutationEncryptPermissions,
 			})
 			plan := identityPlan(in)
 			plan.password = mutationEncryptUser
@@ -582,12 +594,19 @@ func verifySign(ctx context.Context, f *mutationFeature, in *mutationInput, out 
 }
 
 // verifyEncrypt checks the text reads as before with the user password, and
-// that the output is encrypted: litho reports it so, and opening it without
-// the password fails with [pdf.ErrInvalidPassword].
+// that the output is encrypted: litho reports it so, its P entry holds the
+// reserved bits ISO 32000-2, Table 22 requires (see [reservedPermissionBits]),
+// and opening it without the password fails with [pdf.ErrInvalidPassword].
 func verifyEncrypt(ctx context.Context, f *mutationFeature, in *mutationInput, out *mutationOutputDoc, plan mutationPlan) []mutationFailure {
 	failures := verifyIdentityText(ctx, f, in, out, plan)
 	if !out.reader.IsEncrypted() {
 		return append(failures, mutationFailure{Metric: metricPromiseBroken, Detail: "the output is not encrypted"})
+	}
+	p, err := encryptionPermissions(out.data)
+	if err != nil {
+		failures = append(failures, mutationFailure{Metric: metricPromiseBroken, Detail: "reading the P entry: " + err.Error()})
+	} else if broken := reservedPermissionBits(p); broken != "" {
+		failures = append(failures, mutationFailure{Metric: metricPromiseBroken, Detail: fmt.Sprintf("the P entry %d %s", p, broken)})
 	}
 	r, err := pdf.Open(ctx, bytes.NewReader(out.data), int64(len(out.data)))
 	if err == nil {
@@ -598,6 +617,73 @@ func verifyEncrypt(ctx context.Context, f *mutationFeature, in *mutationInput, o
 		return append(failures, mutationFailure{Metric: metricPromiseBroken, Detail: fmt.Sprintf("opening without the password: %v, want ErrInvalidPassword", err)})
 	}
 	return failures
+}
+
+// encryptEntry matches the /Encrypt entry of a trailer or cross-reference
+// stream dictionary that names an indirect encryption dictionary. Encryption
+// applies to strings and streams alone (ISO 32000-1, 7.6.1), so the entry
+// reads in the clear.
+var encryptEntry = regexp.MustCompile(`/Encrypt\s+(\d+)\s+(\d+)\s+R`)
+
+// permissionsEntry matches the P entry of an encryption dictionary. /Perms
+// does not match, since a digit or a sign must follow the name.
+var permissionsEntry = regexp.MustCompile(`/P\s*([-+]?\d+)`)
+
+// encryptionPermissions returns the P entry of the encryption dictionary data
+// names, read from the bytes. P is an integer, which encryption leaves alone
+// (ISO 32000-1, 7.6.1), and the encryption dictionary is never in an object
+// stream (ISO 32000-1, 7.5.7). The Reader exposes the permissions P grants,
+// not the reserved bits it holds. The last /Encrypt entry and the last
+// definition of its object win, as they do for a reader of an updated file.
+func encryptionPermissions(data []byte) (int32, error) {
+	refs := encryptEntry.FindAllSubmatch(data, -1)
+	if len(refs) == 0 {
+		return 0, errors.New("no /Encrypt entry names an indirect dictionary")
+	}
+	ref := refs[len(refs)-1]
+	header := regexp.MustCompile(`(?:^|[^0-9])` + string(ref[1]) + `\s+` + string(ref[2]) + `\s+obj\b`)
+	defs := header.FindAllIndex(data, -1)
+	if len(defs) == 0 {
+		return 0, fmt.Errorf("the encryption dictionary %s %s R is not defined", ref[1], ref[2])
+	}
+	body := data[defs[len(defs)-1][1]:]
+	if end := bytes.Index(body, []byte("endobj")); end >= 0 {
+		body = body[:end]
+	}
+	m := permissionsEntry.FindSubmatch(body)
+	if m == nil {
+		return 0, fmt.Errorf("the encryption dictionary %s %s R has no P entry", ref[1], ref[2])
+	}
+	v, err := strconv.ParseInt(string(m[1]), 10, 64)
+	if err != nil || v < math.MinInt32 || v > math.MaxUint32 {
+		return 0, fmt.Errorf("the P entry %s is not a 32-bit integer", m[1])
+	}
+	// A producer may write P unsigned; the 32 bits are the same.
+	return int32(uint32(v)), nil //nolint:gosec // v lies in [MinInt32, MaxUint32], so its low 32 bits are P.
+}
+
+// reservedPermissionBits reports how p breaks the reserved bits of the P
+// entry of a standard security handler of revision 3 or greater, "" when it
+// keeps them. ISO 32000-2, 7.6.4.2, Table 22 reads "Reserved. Must be zero
+// (0)." for bits 1-2, "Reserved. Must be 1." for bits 7-8 and "(Security
+// handlers of revision 3 or greater) Reserved. Must be 1." for bits 13-32.
+// The encrypt mutation writes AES-256, a revision 6 handler.
+func reservedPermissionBits(p int32) string {
+	const (
+		zeroBits int32 = 0b11
+		oneBits  int32 = 0b1100_0000 | ^int32(1<<12-1)
+	)
+	var broken []string
+	if p&zeroBits != 0 {
+		broken = append(broken, "sets reserved bits 1-2")
+	}
+	if p&oneBits != oneBits {
+		broken = append(broken, "clears a reserved bit of 7-8 or 13-32")
+	}
+	if len(broken) == 0 {
+		return ""
+	}
+	return strings.Join(broken, " and ") + " (ISO 32000-2, Table 22)"
 }
 
 // applyRedact redacts everything page 1 draws, with a region far larger than

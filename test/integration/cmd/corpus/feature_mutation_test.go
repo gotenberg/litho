@@ -372,6 +372,65 @@ func TestMutationAllowances_Encrypt(t *testing.T) {
 	}
 }
 
+// TestVerifyEncrypt_ReservedPermissionBits pins the P entry mutate-encrypt
+// reads from the bytes of an output, and the reserved bits of ISO 32000-2,
+// Table 22 it checks there: bits 1-2 clear, bits 7-8 and 13-32 set. The
+// litho output of [TestMutationFeatures_CleanDocumentPassesEveryCheck] is the
+// control on a real file.
+func TestVerifyEncrypt_ReservedPermissionBits(t *testing.T) {
+	t.Parallel()
+
+	encrypted := func(p string) []byte {
+		return []byte("%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n" +
+			"9 0 obj\n<< /Filter /Standard /V 5 /R 6 /Length 256 /Perms <00> /P " + p + " >>\nendobj\n" +
+			"19 0 obj\n<< /Type /Annot /P 1 0 R >>\nendobj\n" +
+			"trailer\n<< /Root 1 0 R /Encrypt 9 0 R >>\n%%EOF\n")
+	}
+	for _, tc := range []struct {
+		name    string
+		p       string
+		want    int32
+		wantBad bool
+	}{
+		{name: "every permission", p: "-4", want: -4},
+		{name: "no permission", p: "-3904", want: -3904},
+		{name: "written unsigned", p: "4294967292", want: -4},
+		{name: "bits 1-2 set", p: "-1", want: -1, wantBad: true},
+		{name: "bits 7-8 clear", p: "-196", want: -196, wantBad: true},
+		{name: "bits 13-32 clear", p: "4092", want: 4092, wantBad: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := encryptionPermissions(encrypted(tc.p))
+			if err != nil {
+				t.Fatalf("encryptionPermissions: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("P = %d, want %d", got, tc.want)
+			}
+			if broken := reservedPermissionBits(got); (broken != "") != tc.wantBad {
+				t.Errorf("reservedPermissionBits(%d) = %q, want broken %t", got, broken, tc.wantBad)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+		data string
+	}{
+		{name: "no /Encrypt entry", data: "trailer\n<< /Root 1 0 R >>\n"},
+		{name: "an undefined dictionary", data: "trailer\n<< /Root 1 0 R /Encrypt 9 0 R >>\n"},
+		{name: "no P entry", data: "9 0 obj\n<< /Filter /Standard /Perms <00> >>\nendobj\ntrailer\n<< /Encrypt 9 0 R >>\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if p, err := encryptionPermissions([]byte(tc.data)); err == nil {
+				t.Errorf("encryptionPermissions = %d, want an error", p)
+			}
+		})
+	}
+}
+
 // TestMutationAllowances_AutoTag separates a tagged output, whose structure
 // rules may move, from a deferral, which must change nothing.
 func TestMutationAllowances_AutoTag(t *testing.T) {

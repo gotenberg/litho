@@ -39,7 +39,8 @@ const (
 	metricRulesetChanged = "ruleset_changed"
 	// metricPromiseBroken counts outputs that break the mutation's own
 	// promise: a flattened form that still has fields, an encrypted output
-	// that opens without its password.
+	// that opens without its password or whose P entry breaks the reserved
+	// bits.
 	metricPromiseBroken = "promise_broken"
 	// metricSignatureInvalid counts signed outputs whose new signature litho's
 	// own verifier does not accept.
