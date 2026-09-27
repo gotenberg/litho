@@ -30,6 +30,16 @@ type PageTree struct {
 // and DeclaredArtBox hold the entries those four are derived from, as written
 // and nil when absent. An inherited crop box is declared on an ancestor /Pages
 // node. Dict holds the page's own entries verbatim.
+//
+// Resources is the page's /Resources merged key by key with every ancestor's,
+// a leniency for reading (see [traversePageTree]). InheritedResources is the
+// /Resources entry of the nearest ancestor on the page tree walk that states
+// one, as written: the dictionary ISO 32000-1, 7.7.3.4 hands whole to a page
+// stating none. An ancestor states one unless the entry is absent or null
+// (ISO 32000-1, 7.3.7); any other value ends the search, as veraPDF reads it.
+// A writer that gives a page /Resources of its own builds them from
+// InheritedResources, never from Resources, which can name a resource the
+// page cannot reach.
 type Page struct {
 	Ref              ast.PdfIndirectRef
 	Dict             ast.PdfDict
@@ -46,6 +56,10 @@ type Page struct {
 	Rotate           int               // Inherited; clockwise degrees (0, 90, 180, 270)
 	UserUnit         float64           // Non-inherited; default 1.0 (PDF 1.6+, ISO 32000-1, Table 30)
 	DPM              map[string]string // Document Part Metadata
+
+	// InheritedResources is the nearest ancestor's /Resources entry, as
+	// written, nil when none states one.
+	InheritedResources ast.PdfObject
 }
 
 // BuildPageMap constructs a reverse-lookup map from each page's [ast.PdfIndirectRef]
@@ -317,7 +331,7 @@ func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page
 	// the stack.
 	visited := make(map[int]bool)
 	done := make(map[int]bool)
-	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, 0, &pages, visited, done, 0)
+	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, nil, 0, &pages, visited, done, 0)
 	if err != nil {
 		return nil, fmt.Errorf("traversing page tree: %w", err)
 	}
@@ -403,7 +417,7 @@ const maxPageTreeDepth = 256
 //     <</Im11 ...>> while most pages state a /Resources holding only /Font
 //     and /ColorSpace, so the /Resources merge reports Im11 on every page
 //     and qpdf reports it only on the first.
-func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, inheritedRotate int, pages *[]*Page, visited, done map[int]bool, depth int) error {
+func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedResourcesEntry ast.PdfObject, inheritedMediaBox, inheritedCropBox ast.PdfArray, inheritedRotate int, pages *[]*Page, visited, done map[int]bool, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("page tree traversal canceled: %w", err)
 	}
@@ -440,6 +454,13 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	// own dictionary is partial working, at the cost of listing a resource the
 	// page cannot legally name.
 	currentResources := mergeResourceDicts(ctx, doc, inheritedResources, node)
+
+	// What ISO 32000-1, 7.7.3.4 hands a kid stating no /Resources: this
+	// node's entry, whole, when it states one (see [Page]).
+	currentResourcesEntry := inheritedResourcesEntry
+	if entry, ok := node["Resources"]; ok && !isNullOrNil(entry) {
+		currentResourcesEntry = entry
+	}
 
 	// Inherit or override MediaBox
 	currentMediaBox := inheritedMediaBox
@@ -542,7 +563,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 				continue
 			}
 
-			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentMediaBox, currentCropBox, currentRotate, pages, visited, done, depth+1)
+			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentResourcesEntry, currentMediaBox, currentCropBox, currentRotate, pages, visited, done, depth+1)
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
 					return fmt.Errorf("traversing page tree kid: %w", err)
@@ -598,6 +619,8 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			DeclaredArtBox:   declaredArtBox,
 			Rotate:           currentRotate,
 			UserUnit:         userUnit,
+
+			InheritedResources: inheritedResourcesEntry,
 		})
 	}
 

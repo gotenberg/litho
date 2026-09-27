@@ -75,7 +75,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 				return fmt.Errorf("merge canceled: %w", err)
 			}
 
-			newRef, err := copyPageForOutput(ctx, copier, alloc, page)
+			newRef, err := copyPageForOutput(ctx, copier, alloc, src.Doc, page)
 			if err != nil {
 				return fmt.Errorf("copying page %d from source %d: %w", pageNum+1, srcIdx, err)
 			}

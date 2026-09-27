@@ -284,12 +284,20 @@ func latestPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 // rewrote at its own number among them, and reading the source's copy instead
 // wrote the unrepaired resources into the stamped page.
 //
+// A page stating no /Resources starts from the dictionary it inherits, whole
+// (ISO 32000-1, 7.7.3.4), and one stating a null /Resources states none (ISO
+// 32000-1, 7.3.7).
+//
 // # Corpus evidence
 //
 //   - pdfcpu pkg_testdata__schmager_plateau10.pdf: stamped with text after a
 //     PDF/A-2b remediation, its page lost the Default colour space the
 //     remediation had added, and 12 uses of DeviceRGB failed ISO 19005-2,
 //     6.2.4.3 again.
+//   - litho resinherit_2b.pdf: seeded from the Reader's key-by-key merge of
+//     the page tree, two stamped pages reached the root's font, which the
+//     dictionary they inherit hides, and the page whose /Resources is null
+//     lost the font and colour space it inherits.
 func mergeStampResources(
 	ctx context.Context,
 	doc *document.Document,
@@ -305,20 +313,18 @@ func mergeStampResources(
 	}
 
 	// Clone the current /Resources sub-tree one level deep. When the page
-	// object carries no /Resources of its own it inherits them from an
+	// object states no /Resources of its own it inherits them from an
 	// ancestor /Pages node (ISO 32000-1 §7.7.3.4). Writing a page-level
 	// /Resources holding only the stamp additions would, for a conforming
 	// reader that stops inheriting once a page defines /Resources, hide the
-	// inherited fonts and break the page's original content. Seed from the
-	// resolved (inheritance-merged) resources so the stamped page carries
-	// everything it needs.
+	// inherited fonts and break the page's original content. Seed from what
+	// the page reaches, so the stamped page carries everything it needs and
+	// nothing it could not name before (see [pageResourcesEntry]).
 	var current ast.PdfDict
-	if resObj, ok := baseDict["Resources"]; ok {
-		if d, err := resolveDictAllocFirst(ctx, alloc, doc, resObj); err == nil && d != nil {
+	if entry := pageResourcesEntry(baseDict, page); entry != nil {
+		if d, err := resolveDictAllocFirst(ctx, alloc, doc, entry); err == nil && d != nil {
 			current = d
 		}
-	} else if page != nil && page.Resources != nil {
-		current = page.Resources
 	}
 	newResources := make(ast.PdfDict, len(current)+len(byCategory))
 	maps.Copy(newResources, current)

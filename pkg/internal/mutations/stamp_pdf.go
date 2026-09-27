@@ -120,20 +120,24 @@ func pageToFormXObject(
 		return ast.PdfIndirectRef{}, fmt.Errorf("source page has no usable MediaBox")
 	}
 
-	// Copy resources into the destination allocator. Use the resolved
-	// resources, which include those the source page inherits from ancestor
-	// /Pages nodes (ISO 32000-1 §7.7.3.4): the raw page dict often omits
-	// /Resources, and a Form XObject built from an empty resource dict would
-	// render blank because the copied content stream references fonts and
-	// XObjects it no longer declares. When the page genuinely has no
-	// resources, emit an empty dict, which Form XObjects require.
+	// Copy resources into the destination allocator. Use the ones the source
+	// page reaches, which it inherits from an ancestor /Pages node when it
+	// states none (ISO 32000-1 §7.7.3.4, see [pageResourcesEntry]): the raw page
+	// dict often omits /Resources, and a Form XObject built from an empty
+	// resource dict would render blank because the copied content stream
+	// references fonts and XObjects it no longer declares. The Reader's merged
+	// resources would instead let the form reach what the page could not. When
+	// the page reaches no resources, emit an empty dict, which Form XObjects
+	// require.
 	var resources ast.PdfObject = ast.PdfDict{}
-	if srcPage.Resources != nil {
-		copied, err := copier.CopyObject(ctx, srcPage.Resources)
-		if err != nil {
-			return ast.PdfIndirectRef{}, fmt.Errorf("copying source resources: %w", err)
+	if entry := pageResourcesEntry(srcPage.Dict, srcPage); entry != nil {
+		if d, err := document.ResolveDict(ctx, srcDoc, entry); err == nil && d != nil {
+			copied, err := copier.CopyObject(ctx, entry)
+			if err != nil {
+				return ast.PdfIndirectRef{}, fmt.Errorf("copying source resources: %w", err)
+			}
+			resources = copied
 		}
-		resources = copied
 	}
 
 	contents, err := collectPageContents(ctx, srcDoc, srcPage)

@@ -9,8 +9,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// copyPageForOutput copies one source page into alloc for a split or merge and
-// returns its new indirect reference.
+// copyPageForOutput copies one source page of doc into alloc for a split,
+// merge or insertion and returns its new indirect reference.
 //
 // It handles two constructs a naive CopyRef of the page reference would drop:
 //
@@ -19,11 +19,12 @@ import (
 //   - A page inherits Resources, MediaBox, CropBox, and Rotate from ancestor
 //     /Pages nodes (ISO 32000-1 §7.7.3.4). The output builds a flat single-level
 //     page tree with no ancestor to inherit from, so these resolved attributes
-//     are materialised onto the copied page. Without the Resources
-//     materialisation an inheriting page loses its fonts and its text becomes
-//     unextractable; without the CropBox one it is displayed at its /MediaBox
-//     size instead of the region it was cropped to.
-func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer.ObjAllocator, page *document.Page) (ast.PdfIndirectRef, error) {
+//     are materialised onto the copied page (see [flatResources] for the
+//     resources). Without the Resources materialisation an inheriting page
+//     loses its fonts and its text becomes unextractable; without the CropBox
+//     one it is displayed at its /MediaBox size instead of the region it was
+//     cropped to.
+func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) (ast.PdfIndirectRef, error) {
 	var ref ast.PdfIndirectRef
 	if page.Ref.ObjectNum != 0 {
 		copied, err := copier.CopyRef(ctx, page.Ref)
@@ -45,7 +46,7 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 	}
 
 	materialize := func(key ast.PdfName, val ast.PdfObject) error {
-		if _, has := pageDict[key]; has {
+		if statesEntry(pageDict, key) {
 			return nil
 		}
 		copied, err := copier.CopyObject(ctx, val)
@@ -56,10 +57,14 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 		return nil
 	}
 
-	if page.Resources != nil {
-		if err := materialize("Resources", page.Resources); err != nil {
+	// Judged on the source page, whose entries name objects of doc, where the
+	// copy's name objects of alloc.
+	if res, needed := flatResources(ctx, nil, doc, page.Dict, page); needed {
+		copied, err := copier.CopyObject(ctx, res)
+		if err != nil {
 			return ast.PdfIndirectRef{}, err
 		}
+		pageDict["Resources"] = copied
 	}
 	if page.MediaBox != nil {
 		if err := materialize("MediaBox", page.MediaBox); err != nil {
@@ -71,10 +76,8 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 			return ast.PdfIndirectRef{}, err
 		}
 	}
-	if page.Rotate != 0 {
-		if _, has := pageDict["Rotate"]; !has {
-			pageDict["Rotate"] = ast.PdfInt(page.Rotate)
-		}
+	if page.Rotate != 0 && !statesEntry(pageDict, "Rotate") {
+		pageDict["Rotate"] = ast.PdfInt(page.Rotate)
 	}
 
 	return ref, nil
@@ -166,7 +169,9 @@ func sameBox(a, b ast.PdfArray) bool {
 
 // materializeInheritedAttrs writes the attributes a page inherits from ancestor
 // /Pages nodes (Resources, MediaBox, CropBox, Rotate; ISO 32000-1 §7.7.3.4)
-// directly onto dict when dict lacks them, using the resolved values from page.
+// directly onto dict, the page's latest dictionary, when dict does not state
+// them, using the values page resolved to in the tree it leaves (see
+// [flatResources] for the resources).
 //
 // Callers that flatten the page tree in the source document's own object
 // numbering (delete, insert) use this instead of copyPageForOutput: they reuse
@@ -174,25 +179,85 @@ func sameBox(a, b ast.PdfArray) bool {
 // that inherited from the old tree has no ancestor left to inherit from. The
 // resolved values reference source objects; the full rewrite that follows
 // copies them like any other page content.
-func materializeInheritedAttrs(dict ast.PdfDict, page *document.Page) {
-	if page.Resources != nil {
-		if _, has := dict["Resources"]; !has {
-			dict["Resources"] = page.Resources
-		}
+func materializeInheritedAttrs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, dict ast.PdfDict, page *document.Page) {
+	if res, needed := flatResources(ctx, alloc, doc, dict, page); needed {
+		dict["Resources"] = res
 	}
-	if page.MediaBox != nil {
-		if _, has := dict["MediaBox"]; !has {
-			dict["MediaBox"] = page.MediaBox
-		}
+	if page.MediaBox != nil && !statesEntry(dict, "MediaBox") {
+		dict["MediaBox"] = page.MediaBox
 	}
-	if croppedTighter(page) {
-		if _, has := dict["CropBox"]; !has {
-			dict["CropBox"] = page.CropBox
-		}
+	if croppedTighter(page) && !statesEntry(dict, "CropBox") {
+		dict["CropBox"] = page.CropBox
 	}
-	if page.Rotate != 0 {
-		if _, has := dict["Rotate"]; !has {
-			dict["Rotate"] = ast.PdfInt(page.Rotate)
-		}
+	if page.Rotate != 0 && !statesEntry(dict, "Rotate") {
+		dict["Rotate"] = ast.PdfInt(page.Rotate)
 	}
+}
+
+// statesEntry reports whether dict states key: holds it with a value other
+// than null. ISO 32000-1, 7.3.7 makes a null dictionary value the same as an
+// absent entry, so a page whose inheritable attribute is null takes its
+// ancestor's (7.7.3.4).
+func statesEntry(dict ast.PdfDict, key ast.PdfName) bool {
+	v, ok := dict[key]
+	if !ok || v == nil {
+		return false
+	}
+	_, isNull := v.(ast.PdfNull)
+	return !isNull
+}
+
+// pageResourcesEntry returns the /Resources entry the content of page resolves
+// its names against, dict being the page's latest dictionary: dict's own when
+// it states one, else the one page inherits (see
+// [document.Page.InheritedResources]), nil when no node states one.
+//
+// ISO 32000-1, 7.7.3.4 hands a page stating none its nearest ancestor's, whole.
+// [document.Page.Resources] merges the ancestors' key by key instead, which lets
+// a page reach a resource the dictionary it inherits hides, so an edit that
+// writes a page's resources never starts from it. Any value other than null
+// ends the search, a reference to a missing object included, as veraPDF and
+// compliance read it (see compliance's pageObject.inheritedHolder).
+func pageResourcesEntry(dict ast.PdfDict, page *document.Page) ast.PdfObject {
+	if statesEntry(dict, "Resources") {
+		return dict["Resources"]
+	}
+	if page == nil {
+		return nil
+	}
+	return page.InheritedResources
+}
+
+// flatResources returns the /Resources a page has to state itself once it
+// leaves its page tree for a flat one, where no ancestor is left to inherit
+// from, and false when none has to be written. dict is the page's latest
+// dictionary, read alloc-first; a nil alloc reads doc alone.
+//
+// The page reaches in the flat tree exactly what it reached before (see
+// [pageResourcesEntry]): one stating a dictionary keeps it, and one inheriting
+// a dictionary gets that entry, whole. A page reaching none, because the
+// entry it states or inherits is not a dictionary, gets an empty dictionary: a
+// reader taking a reference to a missing object as null (ISO 32000-1, 7.3.10)
+// would otherwise find no /Resources on it at all, which ISO 32000-1, Table 30
+// requires of a page. A page no node states /Resources for stays as it is.
+//
+// # Corpus evidence
+//
+//   - litho resinherit_2b.pdf: the flat tree gave the page whose /Resources is
+//     null none at all, and the pages inheriting from an intermediate node the
+//     key-by-key merge, which reaches the root's font. qpdf reported "Resources
+//     is missing or invalid" on the null page and on the page whose /Resources
+//     names a missing object.
+func flatResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, dict ast.PdfDict, page *document.Page) (ast.PdfObject, bool) {
+	entry := pageResourcesEntry(dict, page)
+	if entry == nil {
+		return nil, false
+	}
+	if res, err := resolveDictAllocFirst(ctx, alloc, doc, entry); err != nil || res == nil {
+		return ast.PdfDict{}, true
+	}
+	if statesEntry(dict, "Resources") {
+		return nil, false
+	}
+	return entry, true
 }

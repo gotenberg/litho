@@ -71,7 +71,7 @@ func InsertPages(
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("inserting pages canceled: %w", err)
 		}
-		ref, err := copyPageForOutput(ctx, copier, alloc, page)
+		ref, err := copyPageForOutput(ctx, copier, alloc, srcDoc, page)
 		if err != nil {
 			return fmt.Errorf("copying source page %d: %w", i+1, err)
 		}
@@ -158,7 +158,7 @@ func InsertPages(
 		newDict := make(ast.PdfDict, len(base)+4)
 		maps.Copy(newDict, base)
 		newDict["Parent"] = pagesRef
-		materializeInheritedAttrs(newDict, page)
+		materializeInheritedAttrs(ctx, alloc, doc, newDict, page)
 		alloc.AllocAt(page.Ref.ObjectNum, newDict)
 	}
 

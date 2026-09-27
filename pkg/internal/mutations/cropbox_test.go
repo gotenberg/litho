@@ -1,6 +1,7 @@
 package mutations
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -34,7 +35,7 @@ func TestMaterializeInheritedAttrs_CarriesCropBox(t *testing.T) {
 		CropBox:  box(0, 0, 4, 4),
 	}
 	dict := ast.PdfDict{"Type": ast.PdfName("Page")}
-	materializeInheritedAttrs(dict, page)
+	materializeInheritedAttrs(context.Background(), nil, nil, dict, page)
 
 	got, ok := dict["CropBox"].(ast.PdfArray)
 	if !ok {
@@ -57,7 +58,7 @@ func TestMaterializeInheritedAttrs_SkipsRedundantCropBox(t *testing.T) {
 		CropBox:  box(0, 0, 612, 792),
 	}
 	dict := ast.PdfDict{"Type": ast.PdfName("Page")}
-	materializeInheritedAttrs(dict, page)
+	materializeInheritedAttrs(context.Background(), nil, nil, dict, page)
 
 	if _, has := dict["CropBox"]; has {
 		t.Errorf("/CropBox = %v was written though it matches the /MediaBox", dict["CropBox"])
@@ -72,10 +73,39 @@ func TestMaterializeInheritedAttrs_KeepsOwnCropBox(t *testing.T) {
 		CropBox:  box(0, 0, 4, 4),
 	}
 	dict := ast.PdfDict{"Type": ast.PdfName("Page"), "CropBox": box(0, 0, 1, 1)}
-	materializeInheritedAttrs(dict, page)
+	materializeInheritedAttrs(context.Background(), nil, nil, dict, page)
 
 	got, _ := dict["CropBox"].(ast.PdfArray)
 	if !sameBox(got, box(0, 0, 1, 1)) {
 		t.Errorf("/CropBox = %v, want the page's own [0 0 1 1]", got)
+	}
+}
+
+// TestMaterializeInheritedAttrs_ReplacesNullEntries pins that a page stating
+// an inheritable attribute as null gets the inherited value in a flat tree. A
+// null dictionary value is an absent entry (ISO 32000-1, 7.3.7), so the page
+// inherited the attribute (7.7.3.4), and keeping the null left it with none.
+func TestMaterializeInheritedAttrs_ReplacesNullEntries(t *testing.T) {
+	page := &document.Page{
+		MediaBox: box(0, 0, 200, 300),
+		CropBox:  box(0, 0, 100, 100),
+		Rotate:   90,
+	}
+	dict := ast.PdfDict{
+		"Type":     ast.PdfName("Page"),
+		"MediaBox": ast.PdfNull{},
+		"CropBox":  ast.PdfNull{},
+		"Rotate":   ast.PdfNull{},
+	}
+	materializeInheritedAttrs(context.Background(), nil, nil, dict, page)
+
+	if got, _ := dict["MediaBox"].(ast.PdfArray); !sameBox(got, page.MediaBox) {
+		t.Errorf("/MediaBox = %v, want the inherited %v", dict["MediaBox"], page.MediaBox)
+	}
+	if got, _ := dict["CropBox"].(ast.PdfArray); !sameBox(got, page.CropBox) {
+		t.Errorf("/CropBox = %v, want the inherited %v", dict["CropBox"], page.CropBox)
+	}
+	if got, _ := dict["Rotate"].(ast.PdfInt); got != 90 {
+		t.Errorf("/Rotate = %v, want the inherited 90", dict["Rotate"])
 	}
 }

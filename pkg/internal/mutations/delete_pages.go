@@ -194,7 +194,7 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		newDict := make(ast.PdfDict, len(base)+4)
 		maps.Copy(newDict, base)
 		newDict["Parent"] = pagesRef
-		materializeInheritedAttrs(newDict, page)
+		materializeInheritedAttrs(ctx, alloc, doc, newDict, page)
 		if len(removed) > 0 {
 			pruneLinkAnnots(ctx, alloc, doc, newDict, removed)
 		}

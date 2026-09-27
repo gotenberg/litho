@@ -70,7 +70,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		}
 
 		srcPage := allPages[pageNum-1]
-		newRef, err := copyPageForOutput(ctx, copier, alloc, srcPage)
+		newRef, err := copyPageForOutput(ctx, copier, alloc, doc, srcPage)
 		if err != nil {
 			return fmt.Errorf("copying page %d: %w", pageNum, err)
 		}
