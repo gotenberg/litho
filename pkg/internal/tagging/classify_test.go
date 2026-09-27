@@ -95,11 +95,11 @@ func TestAutoTag_EndToEnd(t *testing.T) {
 	}
 	alloc := writer.NewObjAllocator(5)
 
-	descs, err := AutoTag(ctx, alloc, doc)
+	res, err := AutoTag(ctx, alloc, doc)
 	if err != nil {
 		t.Fatalf("AutoTag: %v", err)
 	}
-	if len(descs) == 0 {
+	if len(res.Descriptions) == 0 {
 		t.Fatal("AutoTag produced no descriptions")
 	}
 
@@ -234,12 +234,12 @@ func TestAutoTag_SkipsAlreadyTagged(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 	alloc := writer.NewObjAllocator(4)
-	descs, err := AutoTag(ctx, alloc, doc)
+	res, err := AutoTag(ctx, alloc, doc)
 	if err != nil {
 		t.Fatalf("AutoTag: %v", err)
 	}
-	if len(descs) != 0 || len(alloc.Pending()) != 0 {
-		t.Errorf("AutoTag mutated an already-tagged doc: descs=%v, pending=%d", descs, len(alloc.Pending()))
+	if len(res.Descriptions) != 0 || len(alloc.Pending()) != 0 {
+		t.Errorf("AutoTag mutated an already-tagged doc: descs=%v, pending=%d", res.Descriptions, len(alloc.Pending()))
 	}
 }
 

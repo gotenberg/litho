@@ -11,6 +11,7 @@ import (
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
+	"github.com/gotenberg/litho/pkg/internal/tagging"
 )
 
 // Exported errors for granular error handling by consumers.
@@ -189,6 +190,34 @@ var (
 	// is on it. Nothing is written. Real documents nest a few dozen levels in
 	// any of these structures, so none of them reaches this.
 	ErrPageDeletionIncomplete = errors.New("page deletion incomplete: a prune stopped at its depth bound, so the deleted page would survive in the output")
+
+	// ErrAutoTagAlreadyTagged is what [AutoTagReport.Skipped] wraps when
+	// [Writer.AutoTag] left the document alone because it already declares a
+	// logical structure: a catalog /StructTreeRoot (ISO 32000-1, 14.7.2) or
+	// /MarkInfo with /Marked true (ISO 32000-1, 14.7.1). A second tree would
+	// replace the producer's. Like every skip, it is reported, not returned:
+	// the output is written without a new tree.
+	ErrAutoTagAlreadyTagged = tagging.ErrAlreadyTagged
+
+	// ErrAutoTagMarkedContent is what [AutoTagReport.Skipped] wraps when
+	// [Writer.AutoTag] left the document alone because a page's content
+	// already holds a marked-content sequence, a BDC or BMC operator (ISO
+	// 32000-1, 14.6), and marking it again would nest or cross it. That
+	// includes the /Artifact sequence a stamp queued before AutoTag wraps its
+	// content in. [AutoTagReport.Page] names the first such page.
+	ErrAutoTagMarkedContent = tagging.ErrMarkedContent
+
+	// ErrAutoTagUnreadableContent is what [AutoTagReport.Skipped] wraps when
+	// [Writer.AutoTag] left the document alone because a page's content
+	// cannot be assembled, so it cannot be shown to be unmarked.
+	// [AutoTagReport.Page] names the first such page.
+	ErrAutoTagUnreadableContent = tagging.ErrUnreadableContent
+
+	// ErrAutoTagNothingToTag is what [AutoTagReport.Skipped] wraps when
+	// [Writer.AutoTag] left the document alone because no page draws text or
+	// an image it places in a structure element. Text drawn only inside form
+	// XObjects counts as none: AutoTag does not descend into them.
+	ErrAutoTagNothingToTag = tagging.ErrNothingToTag
 
 	// ErrAttachmentTreeIncomplete is returned by [Writer.WriteTo],
 	// [Split] and [Merge] when the document's /EmbeddedFiles name tree nests

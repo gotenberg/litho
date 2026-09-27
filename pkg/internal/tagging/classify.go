@@ -3,6 +3,7 @@ package tagging
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -20,72 +21,98 @@ const headingSizeRatio = 1.15
 // heading role in ISO 32000-1 Table 337.
 const maxHeadingLevels = 6
 
+// Result is what [AutoTag] did: the descriptions [Emit] returned when it built
+// a structure tree, or the reason it left the document as it was.
+type Result struct {
+	// Descriptions are Emit's, nil when AutoTag skipped.
+	Descriptions []string
+	// Skipped is nil when AutoTag built a structure tree. Otherwise it is one
+	// of [ErrAlreadyTagged], [ErrMarkedContent], [ErrUnreadableContent] and
+	// [ErrNothingToTag], wrapped with the page it concerns when there is one.
+	Skipped error
+	// Page is the 1-based page Skipped concerns, 0 when it concerns the
+	// document.
+	Page int
+}
+
 // AutoTag classifies each page's text into a logical structure tree and emits
-// it through [Emit]. It is a no-op on an already-tagged document (one with a
-// /StructTreeRoot or /MarkInfo /Marked true) and on a document whose content is
-// already marked (any BDC/BMC sequence), leaving such documents to other
-// processors. Pages whose content cannot be parsed are skipped. It returns
-// Emit's descriptions, or nil with no error when there is nothing to tag.
+// it through [Emit]. It leaves alone, and says why in [Result.Skipped], an
+// already-tagged document (one with a /StructTreeRoot or /MarkInfo /Marked
+// true), a document whose content is already marked (any BDC/BMC sequence) or
+// cannot be assembled, and one with nothing to classify, leaving such documents
+// to other processors. Pages whose content cannot be parsed are skipped. The
+// error reports a failure, never a skip.
 //
 // It tags the document as alloc stages it: every object it reads, the catalog
 // it judges tagged or not included, is the one alloc has queued at that number
 // when there is one (see [stagedValue]).
 //
 // AutoTag mutates alloc and is not safe for concurrent use.
-func AutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ([]string, error) {
+func AutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (Result, error) {
 	tagged, err := alreadyTagged(ctx, alloc, doc)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 	if tagged {
-		return nil, nil
+		return Result{Skipped: ErrAlreadyTagged}, nil
 	}
-	marked, err := hasMarkedContent(ctx, alloc, doc)
+	skip, page, err := markedContentPage(ctx, alloc, doc)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
-	if marked {
-		return nil, nil
+	if skip != nil {
+		return Result{Skipped: fmt.Errorf("page %d: %w", page, skip), Page: page}, nil
 	}
 	root, err := Classify(ctx, alloc, doc)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 	if len(root.Kids) == 0 {
-		return nil, nil
+		return Result{Skipped: ErrNothingToTag}, nil
 	}
-	return Emit(ctx, alloc, doc, root)
+	descs, err := Emit(ctx, alloc, doc, root)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Descriptions: descs}, nil
 }
 
-// hasMarkedContent reports whether any page's content stream already contains a
-// marked-content operator (BDC or BMC). Auto-tagging assumes unmarked content:
-// re-marking a stream a producer already marked would nest or cross the existing
-// sequences and corrupt them (a BDC/EMC mismatch). A document with pre-existing
-// marked content but no [alreadyTagged] structure is left to the flat tagging
-// fixers, which skip already-marked pages rather than re-wrapping them.
+// markedContentPage returns the first page, 1-based, whose content already
+// contains a marked-content operator (BDC or BMC) with [ErrMarkedContent], or
+// cannot be assembled with [ErrUnreadableContent], whichever comes first. skip
+// is nil when every page is unmarked. Auto-tagging assumes unmarked content:
+// re-marking a stream a producer already marked would nest or cross the
+// existing sequences and corrupt them (a BDC/EMC mismatch), and content that
+// cannot be assembled cannot be shown to be unmarked. A document with
+// pre-existing marked content but no [alreadyTagged] structure is left to the
+// flat tagging fixers, which skip already-marked pages rather than re-wrapping
+// them.
 //
 // The check is conservative: a false positive (a "BDC" or "BMC" literal inside a
 // string) only makes AutoTag defer, never corrupt. It scans the parsed page
 // content [pageContentBytes] so it agrees with the bytes Emit would rewrite.
-func hasMarkedContent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (bool, error) {
+func markedContentPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (skip error, page int, err error) {
 	pages, err := stagedPages(ctx, alloc, doc)
 	if err != nil {
-		return false, err
+		return nil, 0, err
 	}
 	for pi := range pages {
 		if err := ctx.Err(); err != nil {
-			return false, err
+			return nil, 0, err
 		}
 		data, err := pageContentBytes(ctx, alloc, doc, pages[pi])
 		if err != nil {
-			// Content that cannot be assembled cannot be safely re-marked.
-			return true, nil //nolint:nilerr // unverifiable: treat as marked to defer, not corrupt
+			// The reason goes to the caller as a skip, and the error that
+			// caused it to the log, since it fails no operation.
+			doc.Logger.Debug("tagging: page content cannot be assembled; deferring",
+				slog.Int("page", pi+1), slog.Any("err", err))
+			return ErrUnreadableContent, pi + 1, nil
 		}
 		if containsMarkedContentOp(data) {
-			return true, nil
+			return ErrMarkedContent, pi + 1, nil
 		}
 	}
-	return false, nil
+	return nil, 0, nil
 }
 
 // containsMarkedContentOp reports whether data contains a BDC or BMC token,

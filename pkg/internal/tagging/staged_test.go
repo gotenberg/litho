@@ -99,12 +99,12 @@ func TestAutoTagDefersToStagedStructure(t *testing.T) {
 			doc, alloc := stagedTestDoc(t)
 			tc.stage(alloc)
 			before := alloc.Writes()
-			descs, err := AutoTag(context.Background(), alloc, doc)
+			res, err := AutoTag(context.Background(), alloc, doc)
 			if err != nil {
 				t.Fatalf("AutoTag: %v", err)
 			}
-			if len(descs) != 0 || alloc.Writes() != before {
-				t.Errorf("AutoTag tagged the document again (%v, %d objects queued)", descs, alloc.Writes()-before)
+			if len(res.Descriptions) != 0 || alloc.Writes() != before {
+				t.Errorf("AutoTag tagged the document again (%v, %d objects queued)", res.Descriptions, alloc.Writes()-before)
 			}
 		})
 	}

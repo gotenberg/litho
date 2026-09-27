@@ -1165,11 +1165,41 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 	})
 }
 
+// AutoTagReport says what a [Writer.AutoTag] did to the document.
+//
+// AutoTag is queued like every other edit, so the Writer fills the report when
+// it applies the edit: during [Writer.WriteTo], or during a remediation or a
+// [Writer.Redact] queued after AutoTag, since those apply the edits queued
+// before them. Until then Applied is false and the other fields are zero.
+//
+// Values must not be shared across goroutines without synchronization: the
+// Writer fills one on the goroutine that calls the method applying the edit, so
+// read it after that call returns.
+type AutoTagReport struct {
+	// Applied reports whether the Writer applied the edit. It stays false when
+	// the call that would apply it failed before reaching it, and when the
+	// Writer refused AutoTag after a remediation (see [ErrEditAfterRemediation]).
+	// It says the edit ran, not that the output was written: the applying
+	// call's error says that.
+	Applied bool
+	// Skipped is nil when AutoTag built a structure tree. Otherwise it says why
+	// AutoTag left the document as it was, and wraps one of
+	// [ErrAutoTagAlreadyTagged], [ErrAutoTagMarkedContent],
+	// [ErrAutoTagUnreadableContent] and [ErrAutoTagNothingToTag]: test it with
+	// [errors.Is]. A skip fails nothing, and the output is written without a
+	// new tree.
+	Skipped error
+	// Page is the 1-based page Skipped concerns, counted among the pages the
+	// Writer holds when AutoTag is queued, 0 when it concerns the whole
+	// document or AutoTag skipped nothing.
+	Page int
+}
+
 // AutoTag synthesizes a logical structure tree (a tagged PDF) for an untagged
 // document: it classifies each page's text into headings and paragraphs, marks
 // the content (tagging text, artifacting the rest), and wires the catalog
-// /StructTreeRoot and /MarkInfo. It is a no-op on an already-tagged document.
-// The change is applied when [Writer.WriteTo] is called.
+// /StructTreeRoot and /MarkInfo. The change is applied when [Writer.WriteTo] is
+// called.
 //
 // AutoTag produces the structure and marked content only; it does not set the
 // document language, title, or the PDF/UA identifier, which other operations
@@ -1180,26 +1210,45 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 // does. Queue it before a remediation, which then judges the tagged document:
 // after one it is refused with [ErrEditAfterRemediation]. It tags the pages the
 // Writer holds when it is queued, a page inserted before it included and a
-// page deleted before it left out. It is also a no-op when any page's content
-// is already marked, since marking it again would nest or cross the existing
-// sequences, and that includes the /Artifact sequence a stamp wraps its content
-// in: queue it before a stamp to tag the document.
-func (w *Writer) AutoTag() {
+// page deleted before it left out.
+//
+// It leaves some documents alone by design, and the returned [AutoTagReport]
+// says so in Skipped once the edit is applied: an already-tagged document
+// ([ErrAutoTagAlreadyTagged]), one whose content is already marked, since
+// marking it again would nest or cross the existing sequences
+// ([ErrAutoTagMarkedContent]), one whose content cannot be read
+// ([ErrAutoTagUnreadableContent]), and one with nothing to tag
+// ([ErrAutoTagNothingToTag]). Marked content includes the /Artifact sequence a
+// stamp wraps its content in: queue AutoTag before a stamp to tag the document.
+//
+// The report is filled when the edit is applied rather than complete on
+// return, because whether AutoTag tags depends on the document the edits queued
+// before it produce, which only applying them decides. A caller that does not
+// need the report calls AutoTag as a statement and ignores it.
+func (w *Writer) AutoTag() *AutoTagReport {
+	report := &AutoTagReport{}
 	if w.refuseAfterRemediation("AutoTag") != nil {
-		return
+		return report
 	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
-			descs, err := tagging.AutoTag(ctx, alloc, doc)
+			// A redaction and a remediation apply the queued edits before
+			// WriteTo does, and one that fails leaves them queued, so the edit
+			// can run more than once. Each run describes the document it saw,
+			// so it starts from an empty report.
+			*report = AutoTagReport{}
+			res, err := tagging.AutoTag(ctx, alloc, doc)
 			if err != nil {
 				return fmt.Errorf("auto-tagging: %w", err)
 			}
-			for _, d := range descs {
+			for _, d := range res.Descriptions {
 				doc.Logger.Debug("auto-tag", slog.String("detail", d))
 			}
+			*report = AutoTagReport{Applied: true, Skipped: res.Skipped, Page: res.Page}
 			return nil
 		},
 	})
+	return report
 }
 
 // EncryptAlgorithm identifies a PDF standard-security-handler algorithm.

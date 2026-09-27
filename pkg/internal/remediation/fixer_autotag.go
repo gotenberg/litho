@@ -33,7 +33,7 @@ func matchAutoTag(v compliance.Violation) bool {
 // and deferring to the flat fixers rather than aborting the whole remediation.
 func fixAutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	snap := alloc.Snapshot()
-	descriptions, err := tagging.AutoTag(ctx, alloc, doc)
+	res, err := tagging.AutoTag(ctx, alloc, doc)
 	if err != nil {
 		// Auto-tagging is best-effort: on failure, roll back any partial
 		// mutations and let the flat tagging fixers handle the document. The
@@ -44,5 +44,11 @@ func fixAutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			slog.Any("err", err))
 		return nil, nil
 	}
-	return descriptions, nil
+	// A skip is the flat fixers' cue, as a failure is, and has no fix to
+	// report.
+	if res.Skipped != nil {
+		doc.Logger.Debug("remediation: auto-tagging skipped; deferring to flat tagging fixers",
+			slog.Any("reason", res.Skipped))
+	}
+	return res.Descriptions, nil
 }
