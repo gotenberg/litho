@@ -58,6 +58,20 @@ var validRenderingIntents = map[ast.PdfName]bool{
 	"Perceptual":           true,
 }
 
+// fixGraphics repairs the graphics rules [matchGraphics] claims, page by page:
+// the resources each page resolves its names against, and the appearances of
+// its annotations, which draw from their own /Resources (ISO 32000-1, 12.5.5)
+// whether or not the page resolves any.
+//
+// # Corpus evidence
+//
+//   - litho laterreads_2u.pdf: every PDF/A output kept the /OPI of an
+//     appearance on a page resolving no /Resources and the /Interpolate of the
+//     image it draws (6.2.4 t2 and t3 at part 1, 6.2.9 t1 and 6.2.8 t3 at
+//     parts 2 and 3, 6.2.8.1 t1 and 6.2.7.1 t3 at part 4), on litho and
+//     veraPDF.
+//   - pdfcpu pkg_testdata__testWithText.pdf, pdfjs pr6531_2.pdf: the two
+//     corpus files with such a page; neither output changes.
 func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -79,30 +93,15 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			return nil, fmt.Errorf("fixing graphics on page %d: %w", i+1, err)
 		}
 
-		// The node holding the /Resources the page resolves its names
-		// against owns every repair written inline below it: the page, or
-		// the ancestor it inherits them from. It is read through the
-		// allocator, so the /Default space output-intent injects into the
-		// same /Resources ahead of graphics rides this write.
-		holder, ok := resourcesHolder(ctx, alloc, doc, pageTreeEntry(ctx, alloc, doc, entries[i]))
-		if !ok {
-			continue
-		}
-		work := maps.Clone(holder.dict)
-		resDict := liveDictValue(ctx, alloc, doc, work["Resources"])
-		if resDict == nil {
-			continue
-		}
-
-		landed, pending, dirty, err := fixResourcesGraphics(ctx, alloc, doc, resDict, work, visited, 0)
+		pageNotes, err := fixPageResourcesGraphics(ctx, alloc, doc, pageTreeEntry(ctx, alloc, doc, entries[i]), visited)
 		if err != nil {
 			return nil, fmt.Errorf("fixing graphics on page %d: %w", i+1, err)
 		}
-		notes = append(notes, landed...)
-		if dirty && writeTreeNode(ctx, alloc, doc, holder, work) {
-			notes = append(notes, pending...)
-		}
+		notes = append(notes, pageNotes...)
 
+		// An appearance stream draws from its own /Resources (ISO 32000-1,
+		// 12.5.5), so a page that resolves none still has its appearances
+		// repaired.
 		apNotes, err := fixAppearanceGraphics(ctx, alloc, doc, pageTreeEntry(ctx, alloc, doc, entries[i]).dict, visited, appearances)
 		if err != nil {
 			return nil, fmt.Errorf("fixing graphics in the annotations of page %d: %w", i+1, err)
@@ -111,6 +110,34 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	}
 
 	return notes, nil
+}
+
+// fixPageResourcesGraphics repairs the /Resources the page of pe resolves its
+// names against, and returns what it repaired. A page that resolves none has
+// nothing to repair here.
+//
+// The node holding them owns every repair written inline below it: the page,
+// or the ancestor it inherits them from ([resourcesHolder]). It is read through
+// the allocator, so the /Default space output-intent injects into the same
+// /Resources ahead of graphics rides this write.
+func fixPageResourcesGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, visited map[int]bool) ([]string, error) {
+	holder, ok := resourcesHolder(ctx, alloc, doc, pe)
+	if !ok {
+		return nil, nil
+	}
+	work := maps.Clone(holder.dict)
+	resDict := liveDictValue(ctx, alloc, doc, work["Resources"])
+	if resDict == nil {
+		return nil, nil
+	}
+	landed, pending, dirty, err := fixResourcesGraphics(ctx, alloc, doc, resDict, work, visited, 0)
+	if err != nil {
+		return nil, err
+	}
+	if dirty && writeTreeNode(ctx, alloc, doc, holder, work) {
+		landed = append(landed, pending...)
+	}
+	return landed, nil
 }
 
 // fixResourcesGraphics repairs the graphics states one resource dictionary
