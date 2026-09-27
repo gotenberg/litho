@@ -150,34 +150,48 @@ func parentTreeMCIDs(ctx context.Context, doc *document.Document, treeRoot, page
 	return covered, true
 }
 
-// parentTreeMCIDReach maps each MCID the page's ParentTree entry names to
-// whether the structure element it names reaches the structure tree root, in
-// the sense of [structElemReachesRoot]. An MCID the entry does not name is
-// absent from the map.
-func parentTreeMCIDReach(ctx context.Context, doc *document.Document, treeRoot, page ast.PdfDict) map[int]bool {
-	reach := make(map[int]bool)
-	spObj, ok := page["StructParents"]
+// parentTreeMCIDReach maps each MCID the ParentTree entry of holder's
+// /StructParents names (a page's, or a form XObject's) to whether the
+// structure element it names reaches the structure tree root, in the sense of
+// [structElemReachesRoot]. An MCID the entry does not name is absent from the
+// map. complete is false when [numberTreeLookup] stopped before reading the
+// tree whole, and then an absent MCID is no evidence the file maps nothing.
+func parentTreeMCIDReach(ctx context.Context, doc *document.Document, treeRoot, holder ast.PdfDict) (reach map[int]bool, complete bool) {
+	reach = make(map[int]bool)
+	spObj, ok := holder["StructParents"]
 	if !ok {
-		return reach
+		return reach, true
 	}
 	key, err := document.ResolveInt(ctx, doc, spObj)
 	if err != nil {
-		return reach
+		return reach, true
 	}
 	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
 	if err != nil || ptDict == nil {
-		return reach
+		return reach, true
 	}
-	// A truncated read needs no signal here: an MCID absent from this map counts
-	// as tagged where the map is read, so stopping early can only withhold a
-	// finding, never invent one.
-	entries, _ := numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+	entries, complete := numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
 	for mcid, elem := range entries {
 		if !isNullObject(elem) {
 			reach[mcid] = structElemReachesRoot(ctx, doc, elem)
 		}
 	}
-	return reach
+	return reach, complete
+}
+
+// structParentEntry returns the ParentTree entry the /StructParent of holder
+// names (ISO 32000-1, 14.7.4.4), unresolved, and whether the tree was read
+// whole: a nil entry is an absent key only when complete is true.
+func structParentEntry(ctx context.Context, doc *document.Document, treeRoot, holder ast.PdfDict) (elem ast.PdfObject, complete bool) {
+	key, err := document.ResolveInt(ctx, doc, holder["StructParent"])
+	if err != nil {
+		return nil, true
+	}
+	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+	if err != nil || ptDict == nil {
+		return nil, true
+	}
+	return numberTreeValue(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
 }
 
 // structElemReachesRoot reports whether climbing /P from elem reaches a

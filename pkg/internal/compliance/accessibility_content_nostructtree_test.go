@@ -14,7 +14,8 @@ import (
 // (GFSEGroupedContent.isTaggedContent walks its parent chain and is true only
 // on reaching the StructTreeRoot), so with no structure tree there is no owner
 // and the content is untagged. litho used to count any /MCID as tagged. The
-// control keeps the same content tagged once a structure tree exists.
+// control keeps the same content tagged once a structure tree exists whose
+// ParentTree maps the MCID to an element reaching the root.
 //
 // # Corpus evidence
 //
@@ -46,7 +47,11 @@ func TestCheckContentMarking_MCIDWithoutStructTree(t *testing.T) {
 				}
 				if tt.structTree {
 					objs[0] = "<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 5 0 R >>"
-					objs = append(objs, "<< /Type /StructTreeRoot >>")
+					objs[2] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /StructParents 0 >>"
+					objs = append(objs,
+						"<< /Type /StructTreeRoot /K [6 0 R] /ParentTree 7 0 R >>",
+						"<< /Type /StructElem /S /P /P 5 0 R /Pg 3 0 R /K [0] >>",
+						"<< /Nums [0 [6 0 R]] >>")
 				}
 				doc, cat := tableDoc(t, 1, objs...)
 				rule := Rule_14289_1_7_1_t03

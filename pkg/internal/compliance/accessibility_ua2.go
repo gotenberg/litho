@@ -189,19 +189,11 @@ func annotStructParentObj(ctx context.Context, doc *document.Document, treeRoot,
 	if treeRoot == nil {
 		return nil
 	}
-	spObj, ok := annot["StructParent"]
-	if !ok {
+	if _, ok := annot["StructParent"]; !ok {
 		return nil
 	}
-	key, err := document.ResolveInt(ctx, doc, spObj)
-	if err != nil {
-		return nil
-	}
-	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
-	if err != nil || ptDict == nil {
-		return nil
-	}
-	return numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+	elem, _ := structParentEntry(ctx, doc, treeRoot, annot)
+	return elem
 }
 
 // linkTargetConflict judges ISO 14289-2, 8.2.5.20 t2 for one Link annotation:

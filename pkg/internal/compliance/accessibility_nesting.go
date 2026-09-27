@@ -217,10 +217,19 @@ func annotStructParentTypes(ctx context.Context, state *walkState, treeRoot, ann
 // numberTreeLookupObj resolves a key in a number tree to its raw value object.
 // It mirrors [numberTreeLookup] but returns the value as-is rather than forcing
 // an array, because an annotation /StructParent entry references a single
-// structure element. Depth is capped by [maxEFNameTreeDepth].
+// structure element. Depth is capped by [maxEFNameTreeDepth]. A caller that
+// must tell an absent key from a read the cap stopped uses [numberTreeValue].
 func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.PdfDict, key, depth int, seen map[int]bool) ast.PdfObject {
+	v, _ := numberTreeValue(ctx, doc, node, key, depth, seen)
+	return v
+}
+
+// numberTreeValue is [numberTreeLookupObj] reporting whether it read the tree
+// whole: a nil value means the key is absent only when complete is true, as
+// for [numberTreeLookup].
+func numberTreeValue(ctx context.Context, doc *document.Document, node ast.PdfDict, key, depth int, seen map[int]bool) (value ast.PdfObject, complete bool) {
 	if depth > maxEFNameTreeDepth || ctx.Err() != nil {
-		return nil
+		return nil, false
 	}
 	if numsObj, ok := node["Nums"]; ok {
 		nums, err := document.ResolveArray(ctx, doc, numsObj)
@@ -230,10 +239,13 @@ func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.P
 				if kerr != nil || int(k) != key {
 					continue
 				}
-				return nums[i+1]
+				return nums[i+1], true
 			}
 		}
 	}
+	// A kid that stopped early leaves the whole lookup incomplete: the key may
+	// sit in the part that went unread.
+	complete = true
 	if kidsObj, ok := node["Kids"]; ok {
 		kids, err := document.ResolveArray(ctx, doc, kidsObj)
 		if err == nil {
@@ -248,13 +260,17 @@ func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.P
 				if kerr != nil || kd == nil {
 					continue
 				}
-				if v := numberTreeLookupObj(ctx, doc, kd, key, depth+1, seen); v != nil {
-					return v
+				v, kidComplete := numberTreeValue(ctx, doc, kd, key, depth+1, seen)
+				if v != nil {
+					return v, kidComplete
+				}
+				if !kidComplete {
+					complete = false
 				}
 			}
 		}
 	}
-	return nil
+	return nil, complete
 }
 
 // checkPDFUA2AnnotStructNesting validates PDF/UA-2 annotation-in-structure

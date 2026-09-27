@@ -11,18 +11,20 @@ import (
 )
 
 // contentMarkingDoc builds a minimal tagged single-page PDF whose page content
-// stream is the given operator string. The catalog declares /MarkInfo and an
-// (empty) StructTreeRoot so the document presents as a tagged PDF.
+// stream is the given operator string. The catalog declares /MarkInfo and a
+// StructTreeRoot whose ParentTree maps the page's MCID 0 to the Document
+// element, which reaches the root, so an /MCID 0 sequence tags its content.
 func contentMarkingDoc(t *testing.T, content string) (*document.Document, ast.PdfDict) {
 	t.Helper()
 
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot 5 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /StructParents 0 >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
-		"<< /Type /StructTreeRoot /K [6 0 R] >>",
-		"<< /Type /StructElem /S /Document /P 5 0 R /K [] >>",
+		"<< /Type /StructTreeRoot /K [6 0 R] /ParentTree 7 0 R >>",
+		"<< /Type /StructElem /S /Document /P 5 0 R /K [0] /Pg 3 0 R >>",
+		"<< /Nums [0 [6 0 R]] >>",
 	}
 
 	var buf bytes.Buffer
@@ -102,10 +104,10 @@ func TestContentMarking_DoResourceScope(t *testing.T) {
 	ctx := context.Background()
 	content := "q\n/X0 Do\nQ"
 	contentObj := fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content)
-	form := "<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Length 0 >>\nstream\n\nendstream"
+	form := "<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Length 14 >>\nstream\n0 0 10 10 re f\nendstream"
 
-	// Page inherits /X0 (an untagged Form) from the Pages node: the Do paints
-	// real, untagged content -> §7.1 t3 fires.
+	// Page inherits /X0 (an untagged Form painting a square) from the Pages
+	// node: the Do paints real, untagged content -> §7.1 t3 fires.
 	inheritDoc, inheritCat := objsDocPDF(t,
 		"<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot 5 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /XObject << /X0 6 0 R >> >> >>",
