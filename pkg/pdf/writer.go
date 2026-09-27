@@ -1510,6 +1510,14 @@ func (w *Writer) SetFormField(name, value string) {
 // print needs optional content usage that ISO 19005-1 to ISO 19005-3 and both
 // parts of ISO 14289 forbid.
 //
+// A widget the viewer displays is drawn as it shows on screen, whether or not
+// its Print flag is set, so it prints once flattened. Content that shows on
+// screen and not in print needs the same optional content usage (ISO 32000-1,
+// 8.11.4.4) those parts forbid: ISO 19005-1, 6.1.13 forbids optional content,
+// and ISO 19005-2 and ISO 19005-3, 6.9, ISO 14289-1, 7.10 and ISO 14289-2, 8.7
+// forbid the /AS array that applies it. The flattened page matches what the
+// viewer displayed.
+//
 // On a tagged document each baked appearance is tagged under the structure
 // element that enclosed its widget, a Form element taking the PrintField role
 // of its field (ISO 32000-1, Table 348), or marked as an artifact when no

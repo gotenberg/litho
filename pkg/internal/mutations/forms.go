@@ -451,6 +451,15 @@ func setKidAppearanceStates(ctx context.Context, doc *document.Document, alloc *
 // it would print: content that shows only in print needs optional content that
 // PDF/A and PDF/UA forbid (see [annotationHiddenOrNoView]).
 //
+// A widget the viewer displays is baked as it shows on screen, whether or not
+// its Print flag is set, so the flattened page prints it. Content that shows on
+// screen and not in print is the mirror case and needs the same construct: an
+// optional content group whose print usage the configuration's /AS array
+// applies (ISO 32000-1, 8.11.4.3 and 8.11.4.4). ISO 19005-1, 6.1.13 forbids
+// optional content, and ISO 19005-2 and ISO 19005-3, 6.9, ISO 14289-1, 7.10
+// and ISO 14289-2, 8.7 forbid /AS. The flattened page matches what the viewer
+// displayed.
+//
 // The form, the page annotations and their appearances are read from alloc
 // first, as earlier stages staged them. A remediation that keeps one round
 // queues its repairs there, and reading the source's copies undid them: the
@@ -772,7 +781,9 @@ const (
 //
 // ToggleNoView (bit 9) inverts NoView on events a flattened page no longer
 // receives, so it does not change the answer, and Invisible (bit 1) concerns
-// only an annotation type with no handler, which a widget is not.
+// only an annotation type with no handler, which a widget is not. A displayed
+// widget whose Print flag (bit 3) is clear is not dropped: [FlattenForm] bakes
+// it as the viewer shows it.
 //
 // # Corpus evidence
 //
