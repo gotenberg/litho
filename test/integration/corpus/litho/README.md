@@ -159,6 +159,7 @@ one deliberately rather than diffing it against a fresh build.
 | `annotlang_ua1.pdf`    | PDF/UA-1     | Languages annotations name; symbolic TrueType encoding dicts     |
 | `xmppage_2b.pdf`       | PDF/A-2b     | Extension schema tests on the XMP packets pages carry            |
 | `parentreach_2b.pdf`   | PDF/A-2b     | Repairs of the resources a page inherits past its `/Parent`      |
+| `inlineinterp_2b.pdf`  | PDF/A-2b     | Inline images asking for interpolation in every stream parsed    |
 
 ### Must-not-fire controls
 
@@ -440,6 +441,7 @@ which are covered under [Known divergences](#known-divergences).
 | `imagereach_2b.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
+| `inlineinterp_2b.pdf`  | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 10   | 8    |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
 | `langpua_ua2.pdf`      | 7    | 5    | 8    | 7    | 7    | 8    | 7    | 7    | 4   | 4    | 5    | 4    | 3    |
 | `limits_1b.pdf`        | 12   | 9    | 9    | 6    | 7    | 9    | 6    | 7    | 4   | 4    | 5    | 11   | 9    |
@@ -4339,6 +4341,55 @@ and, at PDF/A-2b, where nothing else ran the metadata repair, all nine. The
 repair now renames page 3's `rdf:Seq` an `rdf:Bag` and drops the value types of
 page 4's entry with no property array, which no property can use, so the
 PDF/A-2b and PDF/A-3b outputs, default and aggressive, pass on both tools.
+
+### `inlineinterp_2b.pdf`
+
+ISO 19005-2, 6.2.8 t3 holds every image dictionary to an `/Interpolate` of
+false, and an inline image writes the key `/I` (ISO 32000-1, 8.9.7, Table 93).
+veraPDF judges each inline image as an image of its own, wherever a content
+stream it parses holds it. The images repair set `/Interpolate` on image
+XObjects alone, so every inline image kept its finding through a remediation.
+The corpus holds such images in page content and tiling pattern cells only;
+this fixture puts one in each other stream veraPDF parses:
+
+| Stream                                          | Key written                 | A-2b           |
+| ----------------------------------------------- | --------------------------- | -------------- |
+| a form XObject the page draws                   | `/I true`                   | `6.2.8/3`      |
+| glyph `a` of a Type 3 font the page shows       | `/Interpolate true`         | `6.2.8/3`      |
+| the normal appearance of a Square annotation    | `/I true`                   | `6.2.8/3`      |
+| the page's content, an indirect array of two    | `/Interpolate true /I true` | `6.2.8/3`      |
+| the same content, text in Helvetica, unembedded | none                        | `6.2.11.4.1/1` |
+
+Each image's data holds a NUL, a high byte, a delimiter and an end-of-line
+marker. The repair respells each `true` as `false` in place and carries every
+other byte across, so all four streams are rewritten, the page's through the
+array its `/Contents` names. That array is why the unembedded font is there: no
+repair answers it, so it stays in every output, and a rewrite of the page a
+validator can no longer read shows as a finding one tool reports and the other
+does not.
+
+| Rule at PDF/A-2b                 | veraPDF | litho | litho remediated |
+| -------------------------------- | ------- | ----- | ---------------- |
+| `6.2.8/3` `/Interpolate` true    | 4       | 4     | 0                |
+| `6.2.11.4.1/1` font not embedded | 1       | 1     | 1                |
+| `6.2.4.3/4` DeviceGray           | 6       | 6     | 0                |
+| `6.6.2.1/1` no metadata          | 1       | 1     | 0                |
+
+The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
+counts but for `7.1/3` and `7.2/34` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the
+family described under
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin). Remediated
+at the eight profiles `manifest.json` lists, default and aggressive, every
+output leaves the font alone at the PDF/A levels, `6.3.4/1` at PDF/A-1b, and
+`7.18.1/2` and `7.21.4.1/1` at PDF/UA-1 and `8.4.5.5.1/1` at PDF/UA-2, where no
+interpolation rule applies, and veraPDF agrees on each one's rule set and
+counts.
+
+Before the repair, every PDF/A output kept the four `6.2.8/3` findings on both
+tools. With the repair but not the write of the page's array, the rewrite wrote
+the reference to its new stream as the value of the array's object, which
+qpdf reads as an integer and litho's text extraction as no text: the writer
+rolled the content repairs back and the four findings came back.
 
 ## Scope
 
