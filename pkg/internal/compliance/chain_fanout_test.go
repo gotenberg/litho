@@ -67,3 +67,50 @@ func TestActionChainFanoutBomb(t *testing.T) {
 		_, _ = ValidatePDFA(context.Background(), doc, models.PDFA2b)
 	})
 }
+
+// TestActionChainSharedNextArrayFanOut pins that a /Next array written as an
+// object of its own, whose direct actions each name it again, is walked once
+// in the PDF/A action check: walked anew wherever it is reached, it fans out
+// 2^depth up to maxActionChainDepth.
+func TestActionChainSharedNextArrayFanOut(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	doc, cat := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R /OpenAction << /S /Named /N /NextPage /Next 4 0 R >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"[<< /S /JavaScript /JS (a) /Next 4 0 R >> << /S /JavaScript /JS (b) /Next 4 0 R >>]",
+	)
+	got := checkCatalogOpenAction(ctx, doc, cat, string(models.PDFA2b), 2, make(map[int]bool))
+	if ctx.Err() != nil {
+		t.Fatal("the walk did not end before the deadline")
+	}
+	if n := countRule(got, Rule_19005_2_6_5_1_t01); n != 2 {
+		t.Errorf("6.5.1 t1 fired %d times, want 2, one per direct JavaScript action: %v", n, got)
+	}
+}
+
+// TestFormFieldSharedKidsArrayFanOut pins that a /Kids array written as an
+// object of its own, whose direct fields each name it again, is walked once in
+// the PDF/A form field action check: walked anew wherever it is reached, it
+// fans out 2^depth up to maxActionChainDepth.
+func TestFormFieldSharedKidsArrayFanOut(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	doc, cat := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R] >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"[<< /T (a) /Kids 4 0 R /AA << /K << /S /JavaScript /JS (x) >> >> >> << /T (b) /Kids 4 0 R >>]",
+		"<< /T (p) /FT /Tx /Kids 4 0 R >>",
+	)
+	got := checkFormFieldActions(ctx, doc, cat, string(models.PDFA2b), 2, make(map[int]bool))
+	if ctx.Err() != nil {
+		t.Fatal("the walk did not end before the deadline")
+	}
+	if n := countRule(got, Rule_19005_2_6_4_1_t02); n != 1 {
+		t.Errorf("6.4.1 t2 fired %d times, want 1, for field a: %v", n, got)
+	}
+}

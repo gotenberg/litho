@@ -143,9 +143,10 @@ var allowedAAKeys = map[ast.PdfName]bool{
 // Anti-DoS guard, not spec-mandated: the spec puts no length on a chain, and a
 // crafted one of direct dictionaries nested thousands deep would otherwise grow
 // the goroutine stack with it. Fan-out needs no cap of its own: the run judges
-// each action object once ([objectJudgedOnce]), so a /Next array that repeats
-// an action, or a chain that loops back on itself, adds no work, and the direct
-// dictionaries a chain can hold are bounded by the file's size. Action chains
+// each action object, and each /Next array written as an object of its own,
+// once ([objectJudgedOnce]), so a /Next array that repeats an action, or a
+// chain that loops back on itself, adds no work, and the direct dictionaries a
+// chain can hold are bounded by the file's size. Action chains
 // in real documents are a few actions long, so 200 leaves ample headroom.
 //
 // The outline and form-field walks reuse the value as their own depth bound,
@@ -531,9 +532,16 @@ func objectJudgedOnce(obj ast.PdfObject, judged map[int]bool) bool {
 // action the document performs: ISO 19005-1 6.6.1 and ISO 19005-2/3 6.5.1
 // restrict each of them, and veraPDF links every /Next entry that is a
 // dictionary as a PDAction of its own. judged records the object numbers of
-// actions already walked in this run (see [objectJudgedOnce]): a crafted /Next
-// cycle would otherwise recurse to the depth cap, and a /Next array that lists
-// the same action repeatedly would fan out 2^depth (a denial of service).
+// the actions, and of the /Next arrays, already walked in this run (see
+// [objectJudgedOnce]): a crafted /Next cycle would otherwise recurse to the
+// depth cap, and a /Next array that lists the same action repeatedly would fan
+// out 2^depth (a denial of service). Only an indirect object can be reached
+// twice, so a direct action is always walked, but an array written as an
+// object of its own can hold direct actions that each name it again: walked
+// anew wherever it is reached, it too fans out 2^depth. veraPDF judges the
+// direct actions of such an array wherever it is reached; litho walks it
+// once, a deliberate divergence and an anti-DoS guard, as
+// [goToTreeViolations] does.
 //
 // # Corpus evidence
 //
@@ -590,8 +598,13 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 		results = append(results, walkActionChain(ctx, doc, d, profile, part, loc, depth+1, judged)...)
 	}
 
-	// /Next can be a single action dict or an array of action dicts.
+	// /Next can be a single action dict or an array of action dicts. An array
+	// written as an object of its own is walked once a run, like an action
+	// object: its direct actions can each name it again in their own /Next.
 	if nextArr, err := document.ResolveArray(ctx, doc, nextObj); err == nil {
+		if objectJudgedOnce(nextObj, judged) {
+			return results
+		}
 		for i, item := range nextArr {
 			if ctx.Err() != nil {
 				return results
@@ -809,8 +822,10 @@ func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog 
 }
 
 // walkFormFields recursively checks form field dicts for forbidden actions. seen
-// processes each field object once, so a shared or cyclic /Kids tree (a node
-// whose children list the same object repeatedly) cannot force exponential work.
+// processes each field object, and each /Kids array written as an object of its
+// own, once, so a shared or cyclic /Kids tree (a node whose children list the
+// same object repeatedly, or direct kids that each name their own /Kids array
+// again) cannot force exponential work.
 // listedByField says whether fields is the /Fields array or a form field's
 // /Kids, the only lists veraPDF draws form fields from.
 func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Violation, depth int, seen, judged map[int]bool, listedByField bool) {
@@ -866,8 +881,10 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 			}
 		}
 
-		// Recurse into /Kids.
-		if kidsObj, hasKids := field["Kids"]; hasKids {
+		// Recurse into /Kids. A /Kids array written as an object of its own is
+		// walked once, as a field object is: its direct kids can each name it
+		// again as their /Kids ([document.VisitedBefore]).
+		if kidsObj, hasKids := field["Kids"]; hasKids && !document.VisitedBefore(kidsObj, seen) {
 			kids, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil {
 				walkFormFields(ctx, doc, kids, profile, part, results, depth+1, seen, judged, isField)
