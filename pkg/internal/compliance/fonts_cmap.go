@@ -418,7 +418,7 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 		if !predefined {
 			return failf(ruleT1,
 				"font %s on page %d: CMap %q is not predefined and not embedded",
-				fontName, pageNum, encName)
+				fontName, pageNum, string(encName))
 		}
 		return nil
 	}
@@ -455,7 +455,7 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 		if unembedded {
 			results = append(results, failf(ruleT1,
 				"font %s on page %d: CMap uses non-embedded CMap %q via /UseCMap",
-				fontName, pageNum, useName)...)
+				fontName, pageNum, string(useName))...)
 		}
 	}
 

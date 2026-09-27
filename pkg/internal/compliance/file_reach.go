@@ -609,7 +609,7 @@ func nameNotUTF8(name ast.PdfName, where, profile string) []Violation {
 	}
 	return []Violation{{
 		Rule:    rule,
-		Context: fmt.Sprintf("%s: name %q is not valid UTF-8", where, name),
+		Context: fmt.Sprintf("%s: name %q is not valid UTF-8", where, string(name)),
 	}}
 }
 

@@ -231,12 +231,19 @@ func check3DStreamSubtype(ctx context.Context, doc *document.Document, annot ast
 		doc.Logger.Debug("compliance: cannot resolve 3DD stream", "error", err)
 		return nil
 	}
-	subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-	if subtype != "U3D" && subtype != "PRC" {
-		return failf(Rule_19005_4_6_1_6_1_t03,
-			"%s: 3D stream Subtype=%q (must be U3D or PRC)", loc, subtype)
+	subtype, err := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+	if subtype == "U3D" || subtype == "PRC" {
+		return nil
 	}
-	return nil
+	// A missing /Subtype resolves to the empty name, which %q printed as "/"
+	// through PdfName.String, so the message says what the key holds instead.
+	if err != nil {
+		return failf(Rule_19005_4_6_1_6_1_t03, "%s: 3D stream /Subtype is not a name (must be U3D or PRC)", loc)
+	}
+	if !knownKey(stream.Dict, "Subtype") {
+		return failf(Rule_19005_4_6_1_6_1_t03, "%s: 3D stream /Subtype is missing (must be U3D or PRC)", loc)
+	}
+	return failf(Rule_19005_4_6_1_6_1_t03, "%s: 3D stream Subtype=%q (must be U3D or PRC)", loc, string(subtype))
 }
 
 // checkAnnotFlags validates annotation flag requirements (§6.5.3 for part 1,

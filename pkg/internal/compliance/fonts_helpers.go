@@ -452,7 +452,7 @@ func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict
 				ffSubtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
 				if ffSubtype != "" && !isValidFontFileSubtype(part, string(ffSubtype)) {
 					results = append(results, failf(fontReqKeyRule(part, 7),
-						"embedded font program /Subtype %q is not permitted", ffSubtype)...)
+						"embedded font program /Subtype %q is not permitted", string(ffSubtype))...)
 				}
 			}
 		}

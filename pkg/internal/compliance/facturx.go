@@ -500,8 +500,10 @@ func checkInvoiceAFRelationship(ctx context.Context, doc *document.Document, inv
 	if !invoice.found {
 		return nil
 	}
+	// A null entry is an absent one (ISO 32000-1, 7.3.7). It resolves to the
+	// empty name, which the value messages below would print as "".
 	afObj, ok := invoice.dict["AFRelationship"]
-	if !ok {
+	if !ok || isNullObject(afObj) {
 		return failf(Rule_invoice_AFRelationship, "%s: filespec object %d missing /AFRelationship", v.label, invoice.objNum)
 	}
 	got, err := document.ResolveName(ctx, doc, afObj)
@@ -515,9 +517,9 @@ func checkInvoiceAFRelationship(ctx context.Context, doc *document.Document, inv
 		if lenient {
 			return nil
 		}
-		return failf(Rule_invoice_AFRelationshipNonSpec, "%s: filespec object %d /AFRelationship = %q is tolerated but the spec mandates %q", v.label, invoice.objNum, got, v.relationship)
+		return failf(Rule_invoice_AFRelationshipNonSpec, "%s: filespec object %d /AFRelationship = %q is tolerated but the spec mandates %q", v.label, invoice.objNum, string(got), v.relationship)
 	}
-	return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship = %q, want %q", v.label, invoice.objNum, got, v.relationship)
+	return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship = %q, want %q", v.label, invoice.objNum, string(got), v.relationship)
 }
 
 func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, lenient bool) []Violation {
@@ -541,7 +543,12 @@ func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invo
 		}
 		return failf(Rule_invoice_StreamSubtypeNonSpec, "%s: embedded stream %d /Subtype = application/xml is tolerated but the spec mandates text/xml", v.label, invoice.streamRef.ObjectNum)
 	}
-	return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype = %q, want %q", v.label, invoice.streamRef.ObjectNum, subtype, "text/xml")
+	// A missing /Subtype resolves to the empty name, which %q printed as "/"
+	// through PdfName.String, a value the stream does not have.
+	if !knownKey(invoice.streamDict, "Subtype") {
+		return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype is missing, want %q", v.label, invoice.streamRef.ObjectNum, "text/xml")
+	}
+	return failf(Rule_invoice_StreamSubtype, "%s: embedded stream %d /Subtype = %q, want %q", v.label, invoice.streamRef.ObjectNum, string(subtype), "text/xml")
 }
 
 func checkInvoiceConflictingVariant(ctx context.Context, doc *document.Document, v hybridInvoiceVariant) []Violation {

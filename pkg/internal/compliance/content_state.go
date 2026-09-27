@@ -144,12 +144,12 @@ func checkContentStreamResourcesOps(
 		case resourceNameInherited:
 			if !inheritedStated && inheritRule.Specification != "" {
 				inheritedStated = true
-				results = append(results, failf(inheritRule, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, operator, name, string(category))...)
+				results = append(results, failf(inheritRule, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, operator, string(name), string(category))...)
 			}
 		case resourceNameUndefined:
 			if !undefinedStated && resourceRule.Specification != "" {
 				undefinedStated = true
-				results = append(results, failf(resourceRule, "page %d: %s operator references %q %s Resources/%s", pageNum, operator, name, why, string(category))...)
+				results = append(results, failf(resourceRule, "page %d: %s operator references %q %s Resources/%s", pageNum, operator, string(name), why, string(category))...)
 			}
 		}
 	}
@@ -164,7 +164,7 @@ func checkContentStreamResourcesOps(
 
 		if op.Operator == "ri" && len(op.Operands) >= 1 && riRule.Specification != "" {
 			if riName, ok := op.Operands[0].(ast.PdfName); ok && !validRenderingIntents[string(riName)] {
-				results = append(results, failf(riRule, "page %d: ri operator uses invalid intent %q", pageNum, riName)...)
+				results = append(results, failf(riRule, "page %d: ri operator uses invalid intent %q", pageNum, string(riName))...)
 			}
 		}
 

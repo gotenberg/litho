@@ -508,10 +508,9 @@ func checkImageXObjectPart1(
 	// /Intent must be a valid rendering intent (§6.2.9), the same constraint
 	// parts 2-4 enforce in checkImageXObject.
 	if intentObj, hasIntent := imgDict["Intent"]; hasIntent {
-		intent, _ := document.ResolveName(ctx, doc, intentObj)
-		if !validRenderingIntents[string(intent)] {
+		if what := invalidImageIntent(ctx, doc, intentObj); what != "" {
 			results = append(results, failf(renderingIntentRule(1),
-				"page %d, XObject %s: invalid rendering intent %q", pageNum, name, intent)...)
+				"page %d, XObject %s: %s", pageNum, name, what)...)
 		}
 	}
 
@@ -611,11 +610,9 @@ func checkImageXObject(
 
 	// /Intent must be a valid rendering intent (§6.2.6).
 	if intentObj, hasIntent := imgDict["Intent"]; hasIntent {
-		intent, _ := document.ResolveName(ctx, doc, intentObj)
-		if !validRenderingIntents[string(intent)] {
-			riRule := renderingIntentRule(part)
-			results = append(results, failf(riRule,
-				"page %d, XObject %s: invalid rendering intent %q", pageNum, name, intent)...)
+		if what := invalidImageIntent(ctx, doc, intentObj); what != "" {
+			results = append(results, failf(renderingIntentRule(part),
+				"page %d, XObject %s: %s", pageNum, name, what)...)
 		}
 	}
 
@@ -683,6 +680,26 @@ func bpcMaskRule(part int) Rule {
 // the value rule does not apply. This is a detection-only check: correcting the
 // bit depth would require decompressing and resampling the pixel data, which
 // risks visible corruption and is out of scope for remediation.
+// invalidImageIntent states why the /Intent value obj of an image dictionary
+// is not one of the rendering intents ISO 32000-1, 8.6.5.8 names, or returns ""
+// when it is one. A name is quoted without the solidus [ast.PdfName.String]
+// writes: %q of the resolved name printed a null or non-name value, which
+// resolves to the empty name, as "/".
+func invalidImageIntent(ctx context.Context, doc *document.Document, obj ast.PdfObject) string {
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	intent, isName := resolved.(ast.PdfName)
+	switch {
+	case err == nil && isName && validRenderingIntents[string(intent)]:
+		return ""
+	case err == nil && isName:
+		return fmt.Sprintf("invalid rendering intent %q", string(intent))
+	case err == nil && isNullObject(resolved):
+		return "/Intent is null, not a rendering intent"
+	default:
+		return "/Intent is not a name"
+	}
+}
+
 func checkImageBitsPerComponent(ctx context.Context, doc *document.Document, imgDict ast.PdfDict, name ast.PdfName, pageNum, part int, stencil bool) []Violation {
 	bpcObj, ok := imgDict["BitsPerComponent"]
 	if !ok {

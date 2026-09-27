@@ -17,9 +17,11 @@ import (
 // /Subtype (test 1) and missing /F or /UF filespec keys (test 2), and ISO
 // 19005-3 §6.8 test 1, which states the same MIME type requirement.
 //
-// The part-3 arm matches on the full specification, clause and test number:
-// clause 6.8 holds the /F and /UF, /AFRelationship and /AF rules of parts 2
-// and 3 too, which [fixFileSpecFUF] and [fixAFRelationship] repair.
+// Both media type rules match on the full specification, clause and test
+// number, never on the words of the message: clause 6.8 holds the /F and /UF,
+// /AFRelationship and /AF rules of parts 2 and 3 too, which [fixFileSpecFUF]
+// and [fixAFRelationship] repair, and the message of a /Subtype that is
+// missing or not a name mentions no MIME type.
 //
 // # Corpus evidence
 //
@@ -29,16 +31,15 @@ import (
 //   - All corpora: 32 files of the 264 that embed files kept one or more
 //     6.8 t1 findings after a PDF/A-3b remediation, and none keeps one now.
 func matchEmbeddedSubtype(v compliance.Violation) bool {
-	if v.Rule.Specification == "ISO_19005_3" && v.Rule.Clause == "6.8" && v.Rule.TestNumber == 1 {
+	if v.Rule.TestNumber == 1 &&
+		(v.Rule.Specification == "ISO_19005_3" && v.Rule.Clause == "6.8" ||
+			v.Rule.Specification == "ISO_19005_4" && v.Rule.Clause == "6.9") {
 		return true
 	}
 	if !clausePrefix(v, "6.9") {
 		return false
 	}
-	return contextContains(v, "invalid /Subtype") ||
-		contextContains(v, "MIME") ||
-		contextContains(v, "missing F=") ||
-		contextContains(v, "missing UF=")
+	return contextContains(v, "missing F=") || contextContains(v, "missing UF=")
 }
 
 // fixEmbeddedSubtype rewrites every EmbeddedFile stream's /Subtype to a

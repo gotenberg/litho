@@ -53,8 +53,9 @@ func TestMatchEmbeddedSubtype(t *testing.T) {
 	t.Parallel()
 
 	for _, v := range []compliance.Violation{
-		{Rule: compliance.Rule_19005_3_6_8_t01, Context: `object 4: embedded file /Subtype "/" is not a valid MIME type`},
-		{Rule: compliance.Rule_19005_4_6_9_t01, Context: "embedded file stream missing /Subtype MIME type"},
+		{Rule: compliance.Rule_19005_3_6_8_t01, Context: "object 4: embedded file /Subtype is missing"},
+		{Rule: compliance.Rule_19005_4_6_9_t01, Context: "object 4: embedded file /Subtype is missing"},
+		{Rule: compliance.Rule_19005_4_6_9_t01, Context: "object 4 /FS: embedded file /Subtype is not a name"},
 	} {
 		if !matchEmbeddedSubtype(v) {
 			t.Errorf("must match %s %s t%d", v.Rule.Specification, v.Rule.Clause, v.Rule.TestNumber)
@@ -65,6 +66,7 @@ func TestMatchEmbeddedSubtype(t *testing.T) {
 		compliance.Rule_19005_3_6_8_t03,
 		compliance.Rule_19005_3_6_8_t04,
 		compliance.Rule_19005_2_6_8_t02,
+		compliance.Rule_19005_2_6_9_t01,
 	} {
 		if matchEmbeddedSubtype(compliance.Violation{Rule: r, Context: "embedded file /Subtype is not a valid MIME type"}) {
 			t.Errorf("must not match %s %s t%d", r.Specification, r.Clause, r.TestNumber)

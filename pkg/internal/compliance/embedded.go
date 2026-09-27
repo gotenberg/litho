@@ -183,18 +183,40 @@ func checkEmbeddedSubtypeMIME(ctx context.Context, doc *document.Document, fs fi
 			doc.Logger.Debug("compliance.embedded: cannot resolve embedded file stream", "error", err)
 			continue
 		}
-		// Per ISO 32000-1, 7.3.5, the lexer already resolves every #XX escape,
-		// so a name written /text#2Fxml arrives here as "text/xml". Decoding
-		// #2F a second time would turn /text#232Fxml, whose one correct
-		// decoding is the literal "text#2Fxml", back into a valid MIME type and
-		// accept a file this clause rejects.
-		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-		if !mimeTypePattern.MatchString(string(subtype)) {
-			results = append(results, failf(Rule_19005_3_6_8_t01,
-				"%s: embedded file /Subtype %q is not a valid MIME type", fs.label(), subtype)...)
+		if defect := embeddedSubtypeDefect(ctx, doc, stream.Dict); defect != "" {
+			results = append(results, failf(Rule_19005_3_6_8_t01, "%s: embedded file %s", fs.label(), defect)...)
 		}
 	}
 	return results
+}
+
+// embeddedSubtypeDefect states what keeps the /Subtype of the embedded file
+// stream dict from being the valid MIME type ISO 19005-3, 6.8 t1 and ISO
+// 19005-4, 6.9 t1 require, or returns "" when it is one.
+//
+// The statement names the key's own defect: an absent or null entry (ISO
+// 32000-1, 7.3.7) is missing, and a present name is quoted without the solidus
+// [ast.PdfName.String] writes. Formatting the name with %q went through String,
+// so a missing /Subtype, which resolves to the empty name, printed as "/", and
+// a name with a slash inside it read as a malformed type.
+func embeddedSubtypeDefect(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
+	resolved, err := document.ResolveObject(ctx, doc, dict["Subtype"])
+	if err == nil && isNullObject(resolved) {
+		return "/Subtype is missing"
+	}
+	subtype, isName := resolved.(ast.PdfName)
+	if err != nil || !isName {
+		return "/Subtype is not a name"
+	}
+	// Per ISO 32000-1, 7.3.5, the lexer already resolves every #XX escape, so a
+	// name written /text#2Fxml arrives here as "text/xml". Decoding #2F a second
+	// time would turn /text#232Fxml, whose one correct decoding is the literal
+	// "text#2Fxml", back into a valid MIME type and accept a file this clause
+	// rejects.
+	if mimeTypePattern.MatchString(string(subtype)) {
+		return ""
+	}
+	return fmt.Sprintf("/Subtype %q is not a valid MIME type", string(subtype))
 }
 
 // resolveNamesDict resolves the /Names dict from the catalog.
@@ -499,14 +521,14 @@ func checkAFRelationship(ctx context.Context, doc *document.Document, fs fileSpe
 	afName, err := document.ResolveName(ctx, doc, afObj)
 	if err != nil || afName == "" {
 		doc.Logger.Debug("compliance.embedded: /AFRelationship is not a valid name",
-			"object", fs.objNum, "error", err)
+			"filespec", fs.label(), "error", err)
 		rule := afRelationshipRule(part)
 		return failf(rule, "%s: AFRelationship is not a valid name", fs.label())
 	}
 
 	if !validAFRelationships[afName] {
 		rule := afRelationshipRule(part)
-		return failf(rule, "%s: AFRelationship value %q is not valid", fs.label(), afName)
+		return failf(rule, "%s: AFRelationship value %q is not valid", fs.label(), string(afName))
 	}
 
 	return nil
@@ -841,18 +863,18 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 	rc, err := doc.NewStreamReader(ctx, stream)
 	if err != nil {
 		doc.Logger.Debug("compliance.embedded: cannot decode embedded stream",
-			"object", fs.objNum, "error", err)
+			"filespec", fs.label(), "error", err)
 		return nil
 	}
 	lim := doc.Limits()
 	data, isPDF, tooLarge, err := readEmbeddedFile(ctx, rc, lim.MaxEmbeddedFileBytes, doc.Logger)
 	if closeErr := rc.Close(); closeErr != nil {
 		doc.Logger.Debug("compliance.embedded: closing embedded stream",
-			"object", fs.objNum, "error", closeErr)
+			"filespec", fs.label(), "error", closeErr)
 	}
 	if err != nil {
 		doc.Logger.Debug("compliance.embedded: cannot decode embedded stream",
-			"object", fs.objNum, "error", err)
+			"filespec", fs.label(), "error", err)
 		return nil
 	}
 
@@ -861,16 +883,16 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 	// cannot, whatever its size.
 	if !isPDF {
 		return failf(rule,
-			"object %d: embedded file is not a PDF document", fs.objNum)
+			"%s: embedded file is not a PDF document", fs.label())
 	}
 	if tooLarge {
 		doc.Logger.Debug("compliance.embedded: embedded PDF too large, skipping",
-			"object", fs.objNum, "limit", lim.MaxEmbeddedFileBytes)
+			"filespec", fs.label(), "limit", lim.MaxEmbeddedFileBytes)
 		return nil
 	}
 
 	doc.Logger.Debug("compliance.embedded: validating embedded PDF",
-		"object", fs.objNum, "size", len(data))
+		"filespec", fs.label(), "size", len(data))
 
 	// Parse the embedded PDF under the budgets of the document that carries
 	// it: a caller who lowered them for the outer file meant them for what it
@@ -878,10 +900,10 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 	embDoc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, document.WithLimits(lim))
 	if err != nil {
 		doc.Logger.Debug("compliance.embedded: cannot parse embedded PDF",
-			"object", fs.objNum, "error", err)
+			"filespec", fs.label(), "error", err)
 		// An unparseable PDF cannot be PDF/A-compliant.
 		return failf(rule,
-			"object %d: embedded file is not a valid PDF", fs.objNum)
+			"%s: embedded file is not a valid PDF", fs.label())
 	}
 
 	for _, profile := range accepted {
@@ -892,21 +914,21 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 		violations, err := ValidatePDFA(ctx, embDoc, profile)
 		if err != nil {
 			doc.Logger.Debug("compliance.embedded: validation error for embedded PDF",
-				"object", fs.objNum, "profile", profile, "error", err)
+				"filespec", fs.label(), "profile", profile, "error", err)
 			continue
 		}
 
 		if len(violations) == 0 {
 			doc.Logger.Debug("compliance.embedded: embedded PDF passes",
-				"object", fs.objNum, "profile", profile)
+				"filespec", fs.label(), "profile", profile)
 			return nil // Passes at least one profile, compliant.
 		}
 
 		doc.Logger.Debug("compliance.embedded: embedded PDF fails profile",
-			"object", fs.objNum, "profile", profile, "violations", len(violations))
+			"filespec", fs.label(), "profile", profile, "violations", len(violations))
 	}
 
 	// Failed all accepted profiles.
 	return failf(rule,
-		"object %d: embedded file is not compliant with an accepted PDF/A part", fs.objNum)
+		"%s: embedded file is not compliant with an accepted PDF/A part", fs.label())
 }

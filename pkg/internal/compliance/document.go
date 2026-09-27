@@ -517,21 +517,8 @@ func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog 
 				doc.Logger.Debug("compliance.document: cannot resolve embedded file stream", "error", err)
 				continue
 			}
-			subtypeObj, hasSubtype := stream.Dict["Subtype"]
-			if !hasSubtype {
-				results = append(results, failf(Rule_19005_4_6_9_t01,
-					"embedded file stream missing /Subtype MIME type")...)
-				break
-			}
-			// Per ISO 32000-1, 7.3.5, the lexer already resolves every #XX
-			// escape, so a name written /text#2Fxml arrives here as "text/xml".
-			// Decoding #2F a second time would turn /text#232Fxml, whose one
-			// correct decoding is the literal "text#2Fxml", back into a valid
-			// MIME type and accept a file this clause rejects.
-			subtype, _ := document.ResolveName(ctx, doc, subtypeObj)
-			if !mimeTypePattern.MatchString(string(subtype)) {
-				results = append(results, failf(Rule_19005_4_6_9_t01,
-					"embedded file stream invalid /Subtype MIME type: %q", subtype)...)
+			if defect := embeddedSubtypeDefect(ctx, doc, stream.Dict); defect != "" {
+				results = append(results, failf(Rule_19005_4_6_9_t01, "%s: embedded file %s", fs.label(), defect)...)
 				break
 			}
 		}
