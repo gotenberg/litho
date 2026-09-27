@@ -163,7 +163,7 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 	var results []Violation
 	// Each annotation is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): an annotation object two pages list fails once.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -290,7 +290,7 @@ func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.
 	}
 
 	var results []Violation
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		annot := pa.annot
 		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 		if subtype != "Link" {
@@ -301,7 +301,7 @@ func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.
 		// isOutsideCropBox == true.
 		flags, _ := document.ResolveInt(ctx, doc, annot["F"])
 		const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
-		if int(flags)&hiddenBit != 0 || annotRectOutsidePageCropBox(ctx, doc, annot, pa.page) {
+		if int(flags)&hiddenBit != 0 || isAnnotOutsideCropBox(ctx, doc, annot, pa.page) {
 			continue
 		}
 		// /Contents is a text string, judged by the text it decodes to: a byte
@@ -326,7 +326,7 @@ func checkMediaClipData(ctx context.Context, doc *document.Document, catalog ast
 	var results []Violation
 	// Each Screen annotation is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): one two pages list reaches its clip once.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -431,7 +431,7 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 	var results []Violation
 	// Each widget is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): a widget object two pages list fails once.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -448,8 +448,10 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 		if int(flags)&hiddenBit != 0 {
 			continue
 		}
-		// Annotations with Rect outside the page CropBox are exempt.
-		if annotRectOutsideCropBox(ctx, doc, annot) {
+		// A widget whose rectangle lies off the crop box of the page listing
+		// it is exempt: isOutsideCropBox == true. veraPDF reads the page that
+		// lists the widget, not the one its /P names.
+		if isAnnotOutsideCropBox(ctx, doc, annot, pa.page) {
 			continue
 		}
 		if fieldTU(ctx, doc, annot) != "" {
@@ -553,64 +555,6 @@ func fieldTU(ctx context.Context, doc *document.Document, annot ast.PdfDict) str
 func isFieldDict(d ast.PdfDict) bool {
 	_, hasT := d["T"]
 	return hasT
-}
-
-// annotRectOutsideCropBox checks if an annotation's /Rect is entirely outside
-// the crop box of the page its /P entry names. Returns true if the annotation
-// is not visible on the page.
-func annotRectOutsideCropBox(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
-	pageObj := annot["P"]
-	if pageObj == nil {
-		return false
-	}
-	page, err := document.ResolveDict(ctx, doc, pageObj)
-	if err != nil || page == nil {
-		return false
-	}
-	return annotRectOutsidePageCropBox(ctx, doc, annot, page)
-}
-
-// annotRectOutsidePageCropBox reports whether an annotation's /Rect lies
-// entirely outside page's /CropBox (or /MediaBox if no CropBox). A rectangle
-// that only touches the box's edge counts as outside, as in veraPDF's
-// isOutsideCropBox.
-func annotRectOutsidePageCropBox(ctx context.Context, doc *document.Document, annot, page ast.PdfDict) bool {
-	rect, err := document.ResolveArray(ctx, doc, annot["Rect"])
-	if err != nil || len(rect) < 4 {
-		return false
-	}
-	box, err := document.ResolveArray(ctx, doc, page["CropBox"])
-	if err != nil || len(box) < 4 {
-		box, err = document.ResolveArray(ctx, doc, page["MediaBox"])
-		if err != nil || len(box) < 4 {
-			return false
-		}
-	}
-	// Parse rectangles, measuring the coordinates rather than the references
-	// naming them (ISO 32000-1, 7.3.9). Left unresolved every corner reads as
-	// zero, so a widget sitting on the page was reported as off it and exempted
-	// from ISO 14289-1 7.18.4 test 1.
-	rect = document.ResolveRectangle(ctx, doc, rect)
-	box = document.ResolveRectangle(ctx, doc, box)
-	rx1, ry1 := document.Float(rect[0]), document.Float(rect[1])
-	rx2, ry2 := document.Float(rect[2]), document.Float(rect[3])
-	bx1, by1 := document.Float(box[0]), document.Float(box[1])
-	bx2, by2 := document.Float(box[2]), document.Float(box[3])
-	// Normalise: ensure min < max.
-	if rx1 > rx2 {
-		rx1, rx2 = rx2, rx1
-	}
-	if ry1 > ry2 {
-		ry1, ry2 = ry2, ry1
-	}
-	if bx1 > bx2 {
-		bx1, bx2 = bx2, bx1
-	}
-	if by1 > by2 {
-		by1, by2 = by2, by1
-	}
-	// Check non-intersection.
-	return rx2 <= bx1 || rx1 >= bx2 || ry2 <= by1 || ry1 >= by2
 }
 
 // nonNullKeyPresent reports whether dict holds key with a value that resolves to

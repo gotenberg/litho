@@ -140,7 +140,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 			results = append(results, checkXObjectTransparency1(ctx, doc, res, i+1, drawn, judged)...)
 		}
 
-		results = append(results, checkAnnotAPTransparency1(ctx, doc, page, i+1, judged, annotsSeen)...)
+		results = append(results, checkAnnotAPTransparency1(ctx, doc, &pages[i].pageObject, i+1, judged, annotsSeen)...)
 		walk.walkPage(ctx, &pages[i], i+1)
 	}
 	return results
@@ -160,7 +160,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 // 32000-1, 12.5.5, Table 168): measured with veraPDF 1.30 at PDF/A-1b, a form
 // with a transparency group under an /AP key other than /N, /R and /D fails
 // 6.4 t3 nowhere.
-func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, judged, seen map[int]bool) []Violation {
+func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page *pageObject, pageNum int, judged, seen map[int]bool) []Violation {
 	var results []Violation
 	for _, pa := range judgedPageAnnotations(ctx, doc, page, pageNum-1, seen) {
 		if ctx.Err() != nil {

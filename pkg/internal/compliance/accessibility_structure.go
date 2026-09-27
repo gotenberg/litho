@@ -941,7 +941,7 @@ func checkAnnotArtifactFlags(ctx context.Context, doc *document.Document, catalo
 
 	// Each annotation is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): an annotation object two pages list fails once.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}

@@ -369,16 +369,16 @@ func judgeAction(ctx context.Context, doc *document.Document, obj ast.PdfObject,
 // ([judgedAnnotations]): a Widget object several pages list fails its action
 // rules once.
 func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, judged map[int]bool) []Violation {
-	pages := collectPages(ctx, doc, catalog)
+	pages := collectPageObjects(ctx, doc, catalog)
 
 	var results []Violation
 	seen := make(map[int]bool)
-	for pageIdx, page := range pages {
+	for pageIdx := range pages {
 		if ctx.Err() != nil {
 			return results
 		}
 
-		for _, pa := range judgedPageAnnotations(ctx, doc, page, pageIdx, seen) {
+		for _, pa := range judgedPageAnnotations(ctx, doc, &pages[pageIdx], pageIdx, seen) {
 			if ctx.Err() != nil {
 				return results
 			}

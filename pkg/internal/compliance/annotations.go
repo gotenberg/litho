@@ -23,7 +23,8 @@ const (
 // the page whose /Annots reached it, that page's zero-based index in the pages
 // walked, and the annotation's index in that page's /Annots.
 type pageAnnot struct {
-	page, annot       ast.PdfDict
+	page              *pageObject
+	annot             ast.PdfDict
 	pageIdx, annotIdx int
 }
 
@@ -51,14 +52,14 @@ type pageAnnot struct {
 //     every profile the compliance goldens cover and at PDF/A-1b, 2b, 3b and 4
 //     and PDF/UA-1 and 2 on the other corpora. litho annotshare_ua1.pdf plants
 //     both shapes.
-func judgedAnnotations(ctx context.Context, doc *document.Document, pages []ast.PdfDict) []pageAnnot {
+func judgedAnnotations(ctx context.Context, doc *document.Document, pages []pageObject) []pageAnnot {
 	var out []pageAnnot
 	seen := make(map[int]bool)
-	for i, page := range pages {
+	for i := range pages {
 		if ctx.Err() != nil {
 			return out
 		}
-		out = append(out, judgedPageAnnotations(ctx, doc, page, i, seen)...)
+		out = append(out, judgedPageAnnotations(ctx, doc, &pages[i], i, seen)...)
 	}
 	return out
 }
@@ -66,10 +67,10 @@ func judgedAnnotations(ctx context.Context, doc *document.Document, pages []ast.
 // judgedPageAnnotations is [judgedAnnotations] for one page, the pageIdx-th, of
 // a walk that visits the pages one at a time: seen holds the annotation objects
 // earlier pages of the walk listed, and receives this page's.
-func judgedPageAnnotations(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int, seen map[int]bool) []pageAnnot {
+func judgedPageAnnotations(ctx context.Context, doc *document.Document, page *pageObject, pageIdx int, seen map[int]bool) []pageAnnot {
 	// Best-effort: an /Annots that does not resolve to an array lists no
 	// annotation, as veraPDF's PDPage.getAnnotations reads it.
-	annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
+	annots, _ := document.ResolveArray(ctx, doc, page.dict["Annots"])
 	var out []pageAnnot
 	for i, annotObj := range annots {
 		if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
@@ -178,12 +179,11 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 	// rules once.
 	seen := make(map[int]bool)
 	for pageIdx := range vctx.pages {
-		page := vctx.pages[pageIdx].dict
 		if ctx.Err() != nil {
 			return results
 		}
 
-		for _, pa := range judgedPageAnnotations(ctx, doc, page, pageIdx, seen) {
+		for _, pa := range judgedPageAnnotations(ctx, doc, &vctx.pages[pageIdx].pageObject, pageIdx, seen) {
 			if ctx.Err() != nil {
 				return results
 			}

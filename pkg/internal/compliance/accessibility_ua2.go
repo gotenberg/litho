@@ -42,7 +42,7 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 	nsResolver := newNSRoleResolver(ctx, doc, treeRoot)
 	// Each widget is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): a widget object two pages list fails once.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -342,7 +342,9 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 	// judged in the unit veraPDF judges it in ([judgedAnnotations]): an
 	// annotation object two pages list reaches its destination once.
 	annotsSeen := make(map[int]bool)
-	for pageIdx, page := range collectPages(ctx, doc, catalog) {
+	pages := collectPageObjects(ctx, doc, catalog)
+	for pageIdx := range pages {
+		page := pages[pageIdx].dict
 		if ctx.Err() != nil {
 			return results
 		}
@@ -359,7 +361,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 			}
 		}
 
-		for _, pa := range judgedPageAnnotations(ctx, doc, page, pageIdx, annotsSeen) {
+		for _, pa := range judgedPageAnnotations(ctx, doc, &pages[pageIdx], pageIdx, annotsSeen) {
 			annot := pa.annot
 			if st, _ := document.ResolveName(ctx, doc, annot["Subtype"]); st == "Link" {
 				// A /Dest written as null is absent (ISO 32000-1, 7.3.7): veraPDF builds

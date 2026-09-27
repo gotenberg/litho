@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -377,19 +378,18 @@ func isAnnotHidden(ctx context.Context, doc *document.Document, annot ast.PdfDic
 	return int(flags)&annotFlagHidden != 0
 }
 
-// isAnnotOutsideCropBox checks if the annotation's /Rect is entirely outside
-// the page's effective crop box (CropBox if present, otherwise MediaBox).
-func isAnnotOutsideCropBox(ctx context.Context, doc *document.Document, annot, page ast.PdfDict) bool {
+// isAnnotOutsideCropBox reports whether the annotation's /Rect lies entirely
+// outside the crop box of page, the page whose /Annots lists it
+// ([judgedAnnotations]), which is veraPDF's isOutsideCropBox, the exemption
+// every ISO 14289-1, 7.18 annotation test states. A rectangle that only
+// touches the box's edge counts as outside. The crop box is the one
+// [pageCropBox] reads.
+func isAnnotOutsideCropBox(ctx context.Context, doc *document.Document, annot ast.PdfDict, page *pageObject) bool {
 	annotRect := resolveRect(ctx, doc, annot["Rect"])
 	if annotRect == nil {
 		return false
 	}
-
-	// CropBox defaults to MediaBox per PDF spec.
-	cropBox := resolveRect(ctx, doc, page["CropBox"])
-	if cropBox == nil {
-		cropBox = resolveRect(ctx, doc, page["MediaBox"])
-	}
+	cropBox := pageCropBox(ctx, doc, page)
 	if cropBox == nil {
 		return false
 	}
@@ -400,6 +400,71 @@ func isAnnotOutsideCropBox(ctx context.Context, doc *document.Document, annot, p
 		annotRect[0] >= cropBox[2] || // annot left ≥ crop right
 		annotRect[3] <= cropBox[1] || // annot top ≤ crop bottom
 		annotRect[1] >= cropBox[3] // annot bottom ≥ crop top
+}
+
+// pageCropBox returns the crop box of page, normalized, or nil when the page
+// states or inherits neither a crop box nor a media box.
+//
+// Both boxes are inheritable (ISO 32000-1, 7.7.3.3, Table 30), so a page reads
+// the one its nearest ancestor states when it states none, and a crop box is
+// reduced to its intersection with the media box (14.11.2.1). veraPDF reads
+// them the same way (PDPage.getCropBox): a page that inherits its media box
+// from the page tree still has one, where reading the page dictionary alone
+// left the page with no box and no annotation off it. A box that is not four
+// numbers reads its missing corners as 0 ([pageBoxCorner]), as veraPDF's
+// PDPage.getDoubleArrayForBox does, so a crop box of [0 0 300] covers no
+// height and every annotation lies off it. Measured against veraPDF 1.30.2 at
+// PDF/UA-1: a Link without /Contents on a page with that crop box, and one
+// lying beyond a media box its page inherits, pass ISO 14289-1, 7.18.5 t1 and
+// t2 and 7.18.1 t2.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11306.pdf: its first page inherits its media box and lists
+//     ten Links lying below it. 7.18.5 t1 and t2 and 7.18.1 t2 count 10, 10 and
+//     11, as veraPDF does, where litho counted 20, 20 and 21.
+//   - pdfjs issue7446.pdf: its one annotation lies beyond the media box its
+//     page inherits, and veraPDF does not report 7.18.1 t1, which litho did.
+//   - All corpora: no other count moves at PDF/UA-1.
+func pageCropBox(ctx context.Context, doc *document.Document, page *pageObject) []float64 {
+	media := pageBoxRect(ctx, doc, page, "MediaBox")
+	crop := pageBoxRect(ctx, doc, page, "CropBox")
+	if crop == nil || media == nil {
+		if crop != nil {
+			return crop
+		}
+		return media
+	}
+	return []float64{
+		math.Max(crop[0], media[0]), math.Max(crop[1], media[1]),
+		math.Min(crop[2], media[2]), math.Min(crop[3], media[3]),
+	}
+}
+
+// pageBoxRect returns the page boundary key names that page states or inherits
+// from its nearest ancestor ([pageObject.inheritedHolder]), normalized so that
+// [0],[1] is the lower-left and [2],[3] the upper-right, or nil when no node
+// states it or the nearest one states no array.
+func pageBoxRect(ctx context.Context, doc *document.Document, page *pageObject, key ast.PdfName) []float64 {
+	node, _, _ := page.inheritedHolder(key)
+	if node == nil {
+		return nil
+	}
+	arr, err := document.ResolveArray(ctx, doc, node[key])
+	if err != nil {
+		return nil
+	}
+	r := []float64{
+		pageBoxCorner(ctx, doc, arr, 0), pageBoxCorner(ctx, doc, arr, 1),
+		pageBoxCorner(ctx, doc, arr, 2), pageBoxCorner(ctx, doc, arr, 3),
+	}
+	if r[0] > r[2] {
+		r[0], r[2] = r[2], r[0]
+	}
+	if r[1] > r[3] {
+		r[1], r[3] = r[3], r[1]
+	}
+	return r
 }
 
 // resolveRect resolves a PDF rectangle (4-element number array) and normalizes it

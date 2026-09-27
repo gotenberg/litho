@@ -121,7 +121,7 @@ func checkOrphanWidgetAppearances(ctx context.Context, doc *document.Document, v
 		if ctx.Err() != nil {
 			return
 		}
-		for _, pa := range judgedPageAnnotations(ctx, doc, vctx.pages[pi].dict, pi, seen) {
+		for _, pa := range judgedPageAnnotations(ctx, doc, &vctx.pages[pi].pageObject, pi, seen) {
 			if subtype, _ := document.ResolveName(ctx, doc, pa.annot["Subtype"]); subtype != "Widget" {
 				continue
 			}

@@ -39,7 +39,7 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 	// Each annotation is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): an annotation object two pages list fails its
 	// rules once, and the page listing it first decides its crop box.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -304,7 +304,7 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 	// Each annotation is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): an annotation object two pages list fails its
 	// rules once.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}

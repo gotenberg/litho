@@ -127,7 +127,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 
 	// Each annotation is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): an annotation object two pages list fails once.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -201,7 +201,7 @@ func checkAnnotContentsAltMatch(ctx context.Context, doc *document.Document, cat
 	var results []Violation
 	// Each annotation is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): an annotation object two pages list fails once.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -234,7 +234,7 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 	// Each widget is judged in the unit veraPDF judges it in
 	// ([judgedAnnotations]): a widget object two pages list fails once.
-	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+	for _, pa := range judgedAnnotations(ctx, doc, collectPageObjects(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
