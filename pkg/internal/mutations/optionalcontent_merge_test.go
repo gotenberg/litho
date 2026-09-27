@@ -15,6 +15,12 @@ import (
 // /OCProperties and from the page's /Properties. The two paths name the same
 // objects, which is what makes the switched-off group hide anything.
 func optionalContentPDF() []byte {
+	return namedOptionalContentPDF("")
+}
+
+// namedOptionalContentPDF is [optionalContentPDF] with a default configuration
+// named name, and unnamed when name is empty.
+func namedOptionalContentPDF(name string) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.5\n")
 
@@ -24,8 +30,12 @@ func optionalContentPDF() []byte {
 		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", num, body)
 	}
 	const content = "/OC /MCvis BDC BT ET EMC /OC /MChid BDC BT ET EMC\n"
+	configName := ""
+	if name != "" {
+		configName = fmt.Sprintf("/Name (%s) ", name)
+	}
 	write(1, "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [6 0 R 7 0 R] "+
-		"/D << /Order [6 0 R 7 0 R] /OFF [7 0 R] >> >> >>")
+		"/D << "+configName+"/Order [6 0 R 7 0 R] /OFF [7 0 R] >> >> >>")
 	write(2, "<< /Type /Pages /Count 1 /Kids [3 0 R] >>")
 	write(3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "+
 		"/Resources << /Properties << /MCvis 6 0 R /MChid 7 0 R >> >> >>")
@@ -180,5 +190,67 @@ func TestMergeKeepsOptionalContentGroupIdentity(t *testing.T) {
 	// /OCProperties left every later source's layers switched on.
 	if len(off) != len(docs) {
 		t.Errorf("merged pages have %v switched off, want one per source (%d)", off, len(docs))
+	}
+}
+
+// TestMergeNamesTheOptionalContentConfiguration pins that the default
+// configuration a merge writes carries the /Name ISO 14289-1, 7.10 and ISO
+// 19005-2, 6.9 ask of every optional content configuration dictionary: the
+// first source's that names one, and a name of its own when none does.
+func TestMergeNamesTheOptionalContentConfiguration(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name  string
+		names []string
+		want  string
+	}{
+		{"none named", []string{"", ""}, mergedConfigName},
+		{"first named", []string{"Layers", "Other"}, "Layers"},
+		{"second named", []string{"", "Other"}, "Other"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			sources := make([]MergeSource, len(tc.names))
+			for i, name := range tc.names {
+				src := namedOptionalContentPDF(name)
+				doc, err := document.NewDocument(ctx, bytes.NewReader(src), int64(len(src)), nil)
+				if err != nil {
+					t.Fatalf("NewDocument: %v", err)
+				}
+				catalog, err := document.ResolveCatalog(ctx, doc)
+				if err != nil {
+					t.Fatalf("ResolveCatalog: %v", err)
+				}
+				pages, err := document.ResolvePages(ctx, doc, catalog)
+				if err != nil {
+					t.Fatalf("ResolvePages: %v", err)
+				}
+				sources[i] = MergeSource{Doc: doc, Pages: pages}
+			}
+			var merged bytes.Buffer
+			if err := Merge(ctx, sources, &merged, "", false, CompactOptions{}, DefaultMergeBookmarkConfig(), nil); err != nil {
+				t.Fatalf("Merge: %v", err)
+			}
+			out, err := document.NewDocument(ctx, bytes.NewReader(merged.Bytes()), int64(merged.Len()), nil)
+			if err != nil {
+				t.Fatalf("reopening the merge: %v", err)
+			}
+			catalog, err := document.ResolveCatalog(ctx, out)
+			if err != nil {
+				t.Fatalf("ResolveCatalog: %v", err)
+			}
+			ocp, err := document.ResolveDict(ctx, out, catalog.Dict["OCProperties"])
+			if err != nil || ocp == nil {
+				t.Fatalf("resolving /OCProperties: %v", err)
+			}
+			config, err := document.ResolveDict(ctx, out, ocp["D"])
+			if err != nil || config == nil {
+				t.Fatalf("resolving /D: %v", err)
+			}
+			if got := optionalContentConfigName(ctx, out, config); document.DecodePdfString(got) != tc.want {
+				t.Errorf("/D /Name = %q, want %q", document.DecodePdfString(got), tc.want)
+			}
+		})
 	}
 }

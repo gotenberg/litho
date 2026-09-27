@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -356,12 +357,23 @@ func raiseMergedCatalogVersion(catalog ast.PdfDict, floor string) bool {
 // says nothing about the others. Usage application dictionaries (/AS) are
 // dropped rather than carried, since a stale one would name groups by reference.
 //
+// The configuration is named, as ISO 14289-1, 7.10 and ISO 19005-2 and -3, 6.9
+// ask of every optional content configuration dictionary (and ISO 19005-4,
+// 6.10): the /Name of the first source's default configuration that has one,
+// and [mergedConfigName] otherwise. It is the only configuration the output
+// writes, so no other one shares its name. /Name is a text string presented
+// in a user interface (ISO 32000-1, 8.11.4.3, Table 101).
+//
 // # Corpus evidence
 //
 //   - pdfjs issue9462.pdf: merging it with itself showed the hidden layers of
 //     every page after the first.
+//   - All corpora: merging each of 1124 tagged files with the next, 43 outputs
+//     added ISO 14289-1, 7.10 test 1 and ISO 19005-2, 6.9 test 1 over both
+//     their sources, and none does now.
 func mergeOptionalContent(ctx context.Context, sources []MergeSource, copiers []*writer.Copier, dst ast.PdfDict) {
 	var ocgs, off ast.PdfArray
+	var name ast.PdfString
 
 	for i, src := range sources {
 		if err := ctx.Err(); err != nil {
@@ -388,6 +400,9 @@ func mergeOptionalContent(ctx context.Context, sources []MergeSource, copiers []
 			continue
 		}
 		hidden := hiddenOptionalContent(ctx, src.Doc, ocp, groups)
+		if name == "" {
+			name = optionalContentConfigName(ctx, src.Doc, ocp["D"])
+		}
 
 		for _, group := range groups {
 			copied, err := copier.CopyObject(ctx, group)
@@ -410,7 +425,10 @@ func mergeOptionalContent(ctx context.Context, sources []MergeSource, copiers []
 		return
 	}
 
-	config := ast.PdfDict{"Order": ocgs}
+	if name == "" {
+		name = document.EncodePdfString(mergedConfigName)
+	}
+	config := ast.PdfDict{"Name": name, "Order": ocgs}
 	if len(off) > 0 {
 		config["OFF"] = off
 	}
@@ -418,6 +436,25 @@ func mergeOptionalContent(ctx context.Context, sources []MergeSource, copiers []
 		"OCGs": ocgs,
 		"D":    config,
 	}
+}
+
+// mergedConfigName names the default optional content configuration of a merge
+// none of whose sources names its own.
+const mergedConfigName = "Default"
+
+// optionalContentConfigName returns the /Name of an optional content
+// configuration dictionary, or "" when it names none or an empty one (ISO
+// 32000-1, 8.11.4.3, Table 101).
+func optionalContentConfigName(ctx context.Context, doc *document.Document, config ast.PdfObject) ast.PdfString {
+	dict, err := document.ResolveDict(ctx, doc, config)
+	if err != nil || dict == nil {
+		return ""
+	}
+	name, err := document.ResolveString(ctx, doc, dict["Name"])
+	if err != nil || strings.TrimSpace(document.DecodePdfString(name)) == "" {
+		return ""
+	}
+	return name
 }
 
 // hiddenOptionalContent returns the object numbers of the groups a source's
