@@ -215,6 +215,12 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// PDF/A level 'a': validate catalog /Lang is a valid language tag (§6.8.4).
 	if level == 'a' && !ua {
 		results = append(results, checkPDFALangValid(ctx, doc, catalog, profile, part)...)
+		// The same clauses judge the /Lang of the element an annotation or a
+		// form field names by /StructParent, which the tree walk above never
+		// sees when the tree does not reach the element.
+		results = append(results, structParentLangViolations(ctx, vctx, pdfaLangValidRule(part), func(s ast.PdfString) bool {
+			return pdfaLangTagInvalid(s, part)
+		})...)
 	}
 
 	// PDF/A-4 §6.2.10.8: ActualText shall not contain PUA values.

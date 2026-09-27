@@ -20,6 +20,11 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	// Language (§7.2/§8.2): /Lang key required in catalog.
 	results = append(results, checkLangRequired(ctx, doc, catalog, profile)...)
 
+	// Structure-element /Lang reached through an annotation or a form field
+	// (§7.2 t29 / §8.4.4 t2), which the structure-tree walk above never sees
+	// when the tree does not reach the element.
+	results = append(results, structParentLangViolations(ctx, vctx, langValidRule(profile), uaLangTagInvalid)...)
+
 	// Marked-content /Lang format (§7.2 t29 / §8.4.4 t2): a /Lang set on a BDC
 	// sequence must be a valid language tag.
 	results = append(results, checkMarkedContentLang(ctx, doc, catalog, profile)...)

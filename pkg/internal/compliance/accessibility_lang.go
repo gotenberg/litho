@@ -1405,6 +1405,47 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 	return results
 }
 
+// structParentLangViolations reports rule once for each /Lang that invalid
+// condemns on a structure element an annotation or a form field names by its
+// /StructParent: the element the /ParentTree maps that key to (ISO 32000-1,
+// 14.7.4.4), whose /Lang [structParentLangValues] collects as veraPDF reads it
+// (GFPDAnnot.getLang, GFPDFormField.getLang). Every rule scoped to veraPDF's
+// CosLang judges these tags: ISO 14289-1, 7.2 t29, ISO 14289-2, 8.4.4 t2, ISO
+// 19005-1, 6.8.4 t1 and ISO 19005-2 and -3, 6.7.4 t1.
+//
+// veraPDF builds a CosLang from that /Lang whether or not the structure tree
+// reaches the element, whatever the element's /Type and /S, and whether or not
+// the catalog carries a /Lang, and judges it apart from the CosLang the tree
+// walk builds for the same element. So an element the tree also reaches is
+// judged once more for each annotation or field that names it, and a widget
+// that is also a field of the /AcroForm twice. Measured on veraPDF 1.30.2 at
+// PDF/UA-1 and PDF/UA-2, with and without a catalog /Lang, and at PDF/A-1a
+// and PDF/A-2a.
+func structParentLangViolations(ctx context.Context, vctx *validationCtx, rule Rule, invalid func(ast.PdfString) bool) []Violation {
+	if rule.Specification == "" {
+		return nil
+	}
+	root, err := document.ResolveDict(ctx, vctx.doc, vctx.catalog["StructTreeRoot"])
+	if err != nil || root == nil {
+		return nil
+	}
+	var results []Violation
+	for _, v := range structParentLangValues(ctx, vctx, root) {
+		s, ok := v.value.(ast.PdfString)
+		if !ok || !invalid(s) {
+			continue
+		}
+		results = append(results, failf(rule, "lang=%s, %s", strings.TrimSpace(document.DecodePdfString(s)), v.where)...)
+	}
+	return results
+}
+
+// uaLangTagInvalid reports whether s fails the PDF/UA Language-Tag test
+// ([IsValidUALangTag]), in the shape [structParentLangViolations] takes.
+func uaLangTagInvalid(s ast.PdfString) bool {
+	return !IsValidUALangTag(s)
+}
+
 // IsValidLangTag reports whether tag is a well-formed language identifier for
 // PDF/A-2/3/4 and PDF/UA (ISO 19005-2/3 §6.7.4 t1, ISO 14289-1 §7.2 t29, ISO
 // 14289-2 §8.4.4 t2): a 1-8 letter primary subtag followed by any number of 1-8
