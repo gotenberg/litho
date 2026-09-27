@@ -1,0 +1,99 @@
+%PDF-1.7
+%¿÷¢þ
+1 0 obj
+<< /AcroForm << /Fields [ 2 0 R ] >> /Lang (en-US) /MarkInfo << /Marked true >> /Metadata 3 0 R /Pages 4 0 R /StructTreeRoot 5 0 R /Type /Catalog /ViewerPreferences << /DisplayDocTitle true >> >>
+endobj
+2 0 obj
+<< /F 4 /FT /Tx /P 6 0 R /Rect [ 50 600 200 620 ] /Subtype /Widget /T (name) /Type /Annot >>
+endobj
+3 0 obj
+<< /Subtype /XML /Type /Metadata /Length 1924 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="pikepdf">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+ <rdf:Description rdf:about=""><pdfuaid:part xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">1</pdfuaid:part><pdfaid:part xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">2</pdfaid:part><pdfaid:conformance xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">B</pdfaid:conformance></rdf:Description><rdf:Description rdf:about=""><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/"><rdf:Alt><rdf:li xml:lang="x-default">litho corpus fixture</rdf:li></rdf:Alt></dc:title></rdf:Description><rdf:Description rdf:about=""><pdfaExtension:schemas xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"><rdf:Bag><rdf:li rdf:parseType="Resource"><pdfaSchema:schema xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#">PDF/UA identification schema</pdfaSchema:schema><pdfaSchema:namespaceURI xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#">http://www.aiim.org/pdfua/ns/id/</pdfaSchema:namespaceURI><pdfaSchema:prefix xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#">pdfuaid</pdfaSchema:prefix><pdfaSchema:property xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"><rdf:Seq><rdf:li rdf:parseType="Resource"><pdfaProperty:name xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">part</pdfaProperty:name><pdfaProperty:valueType xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">Integer</pdfaProperty:valueType><pdfaProperty:category xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">internal</pdfaProperty:category><pdfaProperty:description xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">The part of ISO 14289 the file conforms to</pdfaProperty:description></rdf:li></rdf:Seq></pdfaSchema:property></rdf:li></rdf:Bag></pdfaExtension:schemas></rdf:Description></rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>
+endstream
+endobj
+4 0 obj
+<< /Count 3 /Kids [ 6 0 R 7 0 R 8 0 R ] /MediaBox [ 0 0 612 792 ] /Type /Pages >>
+endobj
+5 0 obj
+<< /K 9 0 R /ParentTree 10 0 R /ParentTreeNextKey 1 /Type /StructTreeRoot >>
+endobj
+6 0 obj
+<< /Annots [ 11 0 R 12 0 R 2 0 R 13 0 R 13 0 R ] /Contents 14 0 R /MediaBox [ 0 0 612 792 ] /Parent 4 0 R /Resources << >> /Tabs /S /Type /Page >>
+endobj
+7 0 obj
+<< /Annots [ 11 0 R 12 0 R 2 0 R 15 0 R ] /Contents 16 0 R /Parent 4 0 R /Resources << >> /Tabs /S /Type /Page >>
+endobj
+8 0 obj
+<< /Annots [ 17 0 R ] /ArtBox [ 0 0 400 null ] /Contents 18 0 R /CropBox [ 0 0 300 ] /MediaBox [ 0 0 612 792 ] /Parent 4 0 R /Resources << >> /Tabs /S /Type /Page >>
+endobj
+9 0 obj
+<< /K [ 19 0 R ] /P 5 0 R /S /Document /Type /StructElem >>
+endobj
+10 0 obj
+<< /Nums [ 0 19 0 R ] >>
+endobj
+11 0 obj
+<< /A << /S /URI /URI (https://example.com/) >> /Border [ 0 0 0 ] /F 4 /Rect [ 50 700 200 720 ] /Subtype /Link /Type /Annot >>
+endobj
+12 0 obj
+<< /Rect [ 50 650 70 670 ] /Subtype /Text /Type /Annot >>
+endobj
+13 0 obj
+<< /Contents (a square) /F 4 /Rect [ 50 550 100 580 ] /StructParent 0 /Subtype /Square /Type /Annot >>
+endobj
+14 0 obj
+<< /Length 0 >>
+stream
+endstream
+endobj
+15 0 obj
+<< /A << /S /URI /URI (https://example.com/off) >> /Border [ 0 0 0 ] /F 4 /Rect [ 700 700 800 720 ] /Subtype /Link /Type /Annot >>
+endobj
+16 0 obj
+<< /Length 0 >>
+stream
+endstream
+endobj
+17 0 obj
+<< /A << /S /URI /URI (https://example.com/above) >> /Border [ 0 0 0 ] /F 4 /Rect [ 50 700 200 720 ] /Subtype /Link /Type /Annot >>
+endobj
+18 0 obj
+<< /Length 0 >>
+stream
+endstream
+endobj
+19 0 obj
+<< /Alt (another description) /K << /Obj 13 0 R /Type /OBJR >> /P 9 0 R /S /Annot /Type /StructElem >>
+endobj
+xref
+0 20
+0000000000 65535 f 
+0000000015 00000 n 
+0000000226 00000 n 
+0000000334 00000 n 
+0000002339 00000 n 
+0000002436 00000 n 
+0000002528 00000 n 
+0000002690 00000 n 
+0000002819 00000 n 
+0000003000 00000 n 
+0000003075 00000 n 
+0000003116 00000 n 
+0000003259 00000 n 
+0000003333 00000 n 
+0000003452 00000 n 
+0000003501 00000 n 
+0000003648 00000 n 
+0000003697 00000 n 
+0000003845 00000 n 
+0000003894 00000 n 
+trailer << /Root 1 0 R /Size 20 /ID [<374df200374afc19f94213ab4b19dea3><374df200374afc19f94213ab4b19dea3>] >>
+startxref
+4013
+%%EOF

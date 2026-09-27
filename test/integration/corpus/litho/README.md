@@ -172,6 +172,7 @@ one deliberately rather than diffing it against a fresh build.
 | `namedmcid_ua1.pdf`    | PDF/UA-1     | Marked content naming its property list; Links judged per page   |
 | `directstream_2b.pdf`  | PDF/A-2b     | Streams written inside other objects, under every writer path    |
 | `pagelabels_2b.pdf`    | PDF/A-2b     | Page labels in every numbering style, under the page edits       |
+| `annotshare_ua1.pdf`   | PDF/UA-1     | Annotation objects on two pages; XMP scoping; short page boxes   |
 
 ### Must-not-fire controls
 
@@ -252,6 +253,10 @@ violation but is exempt, so a firing is a false positive.
 | `namedmcid_ua1`                           | Page and form content tagged through a named property list's `/MCID`   | ISO 14289-1, 7.1 t3          |
 | `namedmcid_ua1`                           | Unmapped `/MCID`s inside a mapped one, around nothing, around artifact | ISO 14289-1, 7.1 t3          |
 | `namedmcid_ua1`                           | A Private Use glyph covered by `/ActualText` in the page's named list  | ISO 14289-2, 8.4.3 t1        |
+| `annotshare_ua1`                          | `pdfuaid:part` 1, its namespace declared on the property element       | ISO 14289-1, 5 t2            |
+| `annotshare_ua1`                          | A Link beyond the media box its page inherits from the page tree       | ISO 14289-1, 7.18.5          |
+| `annotshare_ua1`                          | A Link above a crop box of three numbers, which has no height          | ISO 14289-1, 7.18.5          |
+| `annotshare_ua1`                          | An extension schema whose every element declares its namespace         | ISO 19005-2, 6.6.2.3.1       |
 | `annots_1b`                               | A plain square and a plain widget, both with `/F 4` and an `/N` stream | ISO 19005-1, 6.5.3           |
 | `annots_1b`                               | An appearance dict carrying `/D` beside an `/N` of the wrong type      | ISO 19005-1, 6.5.3 t5, t6    |
 | `fontkeys_1b`                             | A Helvetica with no `/FirstChar`, `/LastChar` or `/Widths`             | ISO 19005-1, 6.3.2 t4-t6     |
@@ -406,6 +411,7 @@ which are covered under [Known divergences](#known-divergences).
 | `annotkinds_ua2.pdf`   | 7    | 7    | 8    | 8    | 8    | 8    | 8    | 8    | 5   | 5    | 6    | 8    | 10   |
 | `annotlang_ua1.pdf`    | 6    | 5    | 6    | 5    | 5    | 6    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `annots_1b.pdf`        | 16   | 14   | 14   | 12   | 12   | 14   | 12   | 12   | 10  | 10   | 11   | 12   | 8    |
+| `annotshare_ua1.pdf`   | 6    | 4    | 5    | 4    | 5    | 6    | 5    | 6    | 7   | 7    | 8    | 6    | 4    |
 | `annotstruct_ua2.pdf`  | 13   | 12   | 12   | 12   | 12   | 14   | 14   | 14   | 10  | 9    | 9    | 8    | 13   |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
 | `baretree_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
@@ -1737,7 +1743,7 @@ outside the structure tree. `c1c11d3` judges the language of text no structure
 element owns, and both tools now report the rule on this file, so `7.1/12` is
 the cell's only difference.
 
-One veraPDF gap sits outside the corpus, because planting it would add a
+Two veraPDF gaps sit outside the corpus, because planting either would add a
 disagreeing cell rather than coverage.
 
 **`6.1.9/1`, an `endobj` with no preceding EOL, where litho is right.** The
@@ -1752,6 +1758,17 @@ reports. veraPDF builds no `CosIndirect` for the scalar, so its
 right and veraPDF under-reports, the same way it drops a `/P`-less structure
 element under `8.2.1/2`. `pdfjs/issue1045.pdf`, `bug1011159.pdf` and
 `issue3566.pdf` all carry the construct.
+
+**`6.1.13/11` on a page boundary whose corners are indirect references, where
+litho is right.** veraPDF measures a box through `GFCosBBox.getRequiredValue`,
+which tests each array entry as written for a number, so a corner written as a
+reference to one reads as `null`, which the rule's arithmetic takes for 0.
+`/MediaBox [0 0 612 5 0 R]`, object 5 being `792`, fails the size limit there,
+measured on veraPDF 1.30.2 at PDF/A-2b and PDF/A-3b. ISO 32000-1, 7.3.10 lets
+any object be indirect, so the box is 612 by 792 and litho passes it, while it
+reads a missing corner and one that is no number as 0 as veraPDF does.
+`pdfjs/issue7872.pdf` writes every corner of its boxes that way, and veraPDF
+fails it twice.
 
 ### Instance counts, which the corpus does not pin
 
@@ -5039,6 +5056,72 @@ labels their pages showed in their sources, the unlabelled pages their page
 numbers, and report the input's rule set on both tools, the move in all
 thirteen cells. Remediation at the eight manifest profiles, default and
 aggressive, leaves nothing on either tool and keeps every label.
+
+### `annotshare_ua1.pdf`
+
+veraPDF judges an annotation object once, on the first page listing it, however
+many pages list it: its validator skips an object key it has met already. litho
+judged it once for every listing, so each rule an annotation failed counted
+again for every page listing it. No corpus file lists an annotation object
+twice. Page 1 lists four annotation objects, the Square twice, and page 2 lists
+the first three again:
+
+| Construct                                                                  | Verdict at PDF/UA-1                |
+| -------------------------------------------------------------------------- | ---------------------------------- |
+| a Link without `/Contents` outside the structure tree, listed by two pages | `7.18.5/1`, `7.18.5/2`, `7.18.1/2` |
+| a Text annotation with no flags, `/Contents` or appearance, on two pages   | `7.18.1/1`, `7.18.1/2`             |
+| a text field Widget with no `/TU` and no appearance, on two pages          | `7.18.1/3`, `7.18.4/1`             |
+| a Square under an Annot element, listed twice by page 1                    | silent                             |
+| a Link beyond the media box page 2 inherits from the page tree             | silent                             |
+| a Link on page 3 above its crop box of three numbers, `[0 0 300]`          | silent                             |
+
+Every rule counts once, and `7.18.1/2` twice, for the Link and the Text. At
+PDF/UA-2 the Square's `/Contents` differs from its element's `/Alt`, and
+`8.9.4.2/1` counts once. From part 2 the Text fails the flag test once
+(`6.3.2/1`), and the Text, the Widget and the Square, which carry no
+appearance, fail the appearance test once each (`6.3.3/1`); at part 1 the Text
+fails `6.5.3/2` and the Widget `6.9/2` once.
+
+Both exempt Links lie off the crop box veraPDF reads (`PDPage.getCropBox`): the
+one the page inherits, and one whose missing corner reads as 0, which covers no
+height. litho read the page dictionary alone, found no box on page 2 and a
+malformed one on page 3, and held both Links to the rules.
+
+Page 3 also states an art box of `[0 0 400 null]`. veraPDF reads a missing
+corner and one that is no number as 0 (`GFCosBBox.getRequiredValue`), so the
+crop and art boxes fail `6.1.13/11` at every part-2 and part-3 level, twice;
+litho skipped any box that was not four numbers. No corpus file carries a box
+that short except one a damaged page object runs into.
+
+The XMP packet declares every namespace on the property element using it, as
+pikepdf's metadata API writes it: `pdfuaid:part` 1, `pdfaid:part` 2 and
+`pdfaid:conformance` B, `dc:title`, and an extension schema declaring the
+`pdfuaid` namespace whose every element declares its own. litho read
+`pdfuaid:part` through the literal `pdfuaid:part>1<`, which met only the closing
+tag, and reported `5/2` on a packet claiming part 1. PDF/A-2b sees a conforming
+identification and extension schema.
+
+Measured on veraPDF 1.30.2 and litho, the file agrees with veraPDF in all
+thirteen cells, rule for rule and count for count. Before the fix litho reported
+`5/2` at PDF/UA-1 and missed `6.1.13/11` at the part-2 and part-3 levels, and at
+PDF/UA-1 counted `7.18.5/1` 4 times, `7.18.5/2` 3, `7.18.1/2` 6, `7.18.1/1`,
+`7.18.1/3` and `7.18.4/1` twice, at PDF/UA-2 `8.9.4.2/1` twice, and at PDF/A-2b
+`6.3.2/1` twice and `6.3.3/1` 6 times. The other rules the cells report are
+the stream lengths pikepdf writes (`6.1.7/1`, `6.1.7.1/1`, `6.1.6.1/1`), the
+part-2 claim at the other levels (`6.7.11`, `6.6.4`, `6.7.3`), the `Annot`
+element at PDF/A-1a, no PDF 1.4 standard type (`6.8.3.4/1`), the `%PDF-1.7`
+header at part 4 (`6.1.2/1`), the Document element outside the PDF 2.0
+namespace (`8.2.5.2/2`) and the part-1 claim (`5/2`, `5/5`) at PDF/UA-2, and,
+at PDF/A-4f, the missing `/EmbeddedFiles`.
+
+Remediation at the eight manifest profiles, default and aggressive, leaves the
+same rule set and counts on both tools in every cell: nothing at the PDF/A
+levels, where the page box repair now drops the short crop and art boxes it
+used to leave alone, the Link's and the Text's missing descriptions at
+PDF/UA-1, and the contradicting `/Alt` at PDF/UA-2. The stamp, page, autotag,
+flatten, encrypt and redact mutations move the rule sets only as their
+allowances let them, and the one qpdf warning their outputs carry, the Square
+listed twice, is the input's own.
 
 ## Scope
 
