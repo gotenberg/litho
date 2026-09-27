@@ -3,6 +3,7 @@ package remediation
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -153,29 +154,7 @@ func TestFixStructDestSatisfiesStructureDestinations(t *testing.T) {
 	if _, err := fixStructDest(ctx, alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
 		t.Fatalf("fixStructDest: %v", err)
 	}
-
-	var out bytes.Buffer
-	if err := mutations.FullRewrite(ctx, &out, mutations.FullRewriteConfig{Doc: doc, Overrides: alloc.Pending()}); err != nil {
-		t.Fatalf("FullRewrite: %v", err)
-	}
-	reread, err := document.NewDocument(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()), nil)
-	if err != nil {
-		t.Fatalf("reopening the output: %v", err)
-	}
-	errs, err := compliance.ValidatePDFUA(ctx, reread, models.PDFUA2)
-	if err != nil {
-		t.Fatalf("ValidatePDFUA: %v", err)
-	}
-	var t1, t2 int
-	for _, v := range toViolations(errs) {
-		switch v.Rule {
-		case compliance.Rule_14289_2_8_8_t01:
-			t1++
-		case compliance.Rule_14289_2_8_8_t02:
-			t2++
-		}
-	}
-	if t1 != 2 || t2 != 0 {
+	if t1, t2 := structDest88(t, doc, alloc); t1 != 2 || t2 != 0 {
 		t.Errorf("8.8 fires %d times on test 1 and %d on test 2, want 2 (Bravo, Echo) and 0", t1, t2)
 	}
 }
@@ -207,6 +186,226 @@ func TestRemediatePDFUA2NamesAnElementOfAWrappedTree(t *testing.T) {
 		t.Fatalf("fixes %v, want the single-doc-root fixer to wrap the paragraphs", rep.Fixed)
 	}
 	wantStructGoTo(t, "Two", pendingDict(t, alloc, 8)["A"], 9, 6, ast.PdfName("Fit"))
+}
+
+// structDest88 writes the fixer's edits and counts ISO 14289-2, 8.8 tests 1
+// and 2 on the output.
+func structDest88(t *testing.T, doc *document.Document, alloc *writer.ObjAllocator) (t1, t2 int) {
+	t.Helper()
+	ctx := context.Background()
+	var out bytes.Buffer
+	if err := mutations.FullRewrite(ctx, &out, mutations.FullRewriteConfig{Doc: doc, Overrides: alloc.Pending()}); err != nil {
+		t.Fatalf("FullRewrite: %v", err)
+	}
+	reread, err := document.NewDocument(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()), nil)
+	if err != nil {
+		t.Fatalf("reopening the output: %v", err)
+	}
+	errs, err := compliance.ValidatePDFUA(ctx, reread, models.PDFUA2)
+	if err != nil {
+		t.Fatalf("ValidatePDFUA: %v", err)
+	}
+	for _, v := range toViolations(errs) {
+		switch v.Rule {
+		case compliance.Rule_14289_2_8_8_t01:
+			t1++
+		case compliance.Rule_14289_2_8_8_t02:
+			t2++
+		}
+	}
+	return t1, t2
+}
+
+// namedStructDestPDF builds a tagged three-page PDF laid out as
+// [structDestPDF], whose destinations name their target (ISO 32000-1,
+// 12.3.2.3), sit in a dictionary under /Dest, or hang off additional actions.
+//
+// The /Names /Dests tree maps (p2) to page 2 and (sd) to a destination
+// dictionary already carrying a structure destination, and the catalog /Dests
+// maps /legacy to page 1. The outline holds Alpha (14, /Dest (p2)), Bravo (15,
+// a GoTo action to (p2)), Charlie (16, /Dest (sd)) and Delta (17, /Dest
+// (nope), which names nothing). Page 1 carries the Link 8 (/Dest /legacy) and
+// the Link 9, whose /Dest holds a GoTo action for page 2. Page 2 opens with a
+// GoTo action for page 2 under its /AA and carries the Widget 20, whose direct
+// /AA holds a direct GoTo action for page 1 under /E and the indirect GoTo
+// action 22 under /X, and the Link 21, whose /AA 23 holds a direct GoTo action
+// to (p2).
+func namedStructDestPDF() []byte {
+	return buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R /Outlines 6 0 R /Names << /Dests 7 0 R >> /Dests << /legacy [3 0 R /Fit] >> >>",
+		"<< /Type /Pages /Kids [3 0 R 10 0 R 11 0 R] /Count 3 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /StructParents 0 /Annots [8 0 R 9 0 R] >>",
+		"<< /Type /StructTreeRoot /K 5 0 R /ParentTree << /Nums [0 [12 0 R] 1 [12 0 R 13 0 R]] >> >>",
+		"<< /Type /StructElem /S /Document /P 4 0 R /K [12 0 R 13 0 R] >>",
+		"<< /Type /Outlines /First 14 0 R /Last 17 0 R /Count 4 >>",
+		"<< /Names [(p2) [10 0 R /XYZ 0 792 0] (sd) 19 0 R] >>",
+		"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /Dest /legacy >>",
+		"<< /Type /Annot /Subtype /Link /Rect [0 20 10 30] /Dest << /Type /Action /S /GoTo /D [10 0 R /Fit] >> >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /StructParents 1 /Annots [20 0 R 21 0 R] /AA << /O << /S /GoTo /D [10 0 R /Fit] >> >> >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructElem /S /P /P 5 0 R /Pg 3 0 R /K [0 << /Type /MCR /Pg 10 0 R /MCID 0 >>] >>",
+		"<< /Type /StructElem /S /P /P 5 0 R /Pg 10 0 R /K 1 >>",
+		"<< /Title (Alpha) /Parent 6 0 R /Next 15 0 R /Dest (p2) >>",
+		"<< /Title (Bravo) /Parent 6 0 R /Prev 14 0 R /Next 16 0 R /A << /S /GoTo /D (p2) >> >>",
+		"<< /Title (Charlie) /Parent 6 0 R /Prev 15 0 R /Next 17 0 R /Dest (sd) >>",
+		"<< /Title (Delta) /Parent 6 0 R /Prev 16 0 R /Dest (nope) >>",
+		"null",
+		"<< /D [10 0 R /Fit] /SD [13 0 R /Fit] >>",
+		"<< /Type /Annot /Subtype /Widget /Rect [0 40 10 50] /AA << /E << /S /GoTo /D [3 0 R /Fit] >> /X 22 0 R >> >>",
+		"<< /Type /Annot /Subtype /Link /Rect [0 60 10 70] /AA 23 0 R >>",
+		"<< /S /GoTo /D [10 0 R /Fit] >>",
+		"<< /D << /S /GoTo /D (p2) >> >>",
+	)
+}
+
+// TestFixStructDestNamedAndNestedDestinations pins the destinations
+// [TestFixStructDestWritesGoToActions] does not reach. A named destination
+// opens the page its name maps to (ISO 32000-1, 12.3.2.3), and the GoTo action
+// replacing it keeps the name under /D, so the name tree stays the one table
+// of targets. A GoTo action under an annotation's or a page's /AA gains /SD
+// wherever it is written. A dictionary under /Dest, which ISO 32000-1, Tables
+// 153 and 173 do not allow, becomes the /A action it stands for.
+func TestFixStructDestNamedAndNestedDestinations(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, namedStructDestPDF())
+
+	if _, err := fixStructDest(ctx, alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
+		t.Fatalf("fixStructDest: %v", err)
+	}
+
+	xyz := []ast.PdfObject{ast.PdfName("XYZ"), ast.PdfInt(0), ast.PdfInt(792), ast.PdfInt(0)}
+	wantNamedGoTo := func(label string, action ast.PdfObject, name ast.PdfObject, elem int, view ...ast.PdfObject) {
+		t.Helper()
+		act, ok := action.(ast.PdfDict)
+		if !ok {
+			t.Fatalf("%s: action %v (%T), want a GoTo action dictionary", label, action, action)
+		}
+		if act["S"] != ast.PdfName("GoTo") || act["D"] != name {
+			t.Errorf("%s: /S %v /D %v, want /GoTo and the name %v", label, act["S"], act["D"], name)
+		}
+		sd, isArr := act["SD"].(ast.PdfArray)
+		if !isArr || len(sd) == 0 || sd[0] != (ast.PdfIndirectRef{ObjectNum: elem}) || !slices.Equal(sd[1:], ast.PdfArray(view)) {
+			t.Errorf("%s: /SD %v, want element %d with view %v", label, act["SD"], elem, view)
+		}
+	}
+
+	alpha := pendingDict(t, alloc, 14)
+	if _, has := alpha["Dest"]; has {
+		t.Errorf("Alpha keeps /Dest %v beside its action", alpha["Dest"])
+	}
+	wantNamedGoTo("Alpha", alpha["A"], ast.PdfString("p2"), 13, xyz...)
+	wantNamedGoTo("Bravo", pendingDict(t, alloc, 15)["A"], ast.PdfString("p2"), 13, xyz...)
+	wantNamedGoTo("link 8", pendingDict(t, alloc, 8)["A"], ast.PdfName("legacy"), 5, ast.PdfName("Fit"))
+
+	link9 := pendingDict(t, alloc, 9)
+	if _, has := link9["Dest"]; has {
+		t.Errorf("link 9 keeps its dictionary under /Dest: %v", link9["Dest"])
+	}
+	wantStructGoTo(t, "link 9", link9["A"], 10, 13, ast.PdfName("Fit"))
+
+	pageAA, _ := pendingDict(t, alloc, 10)["AA"].(ast.PdfDict)
+	wantStructGoTo(t, "page 2 /AA /O", pageAA["O"], 10, 13, ast.PdfName("Fit"))
+
+	widgetAA, _ := pendingDict(t, alloc, 20)["AA"].(ast.PdfDict)
+	wantStructGoTo(t, "widget /AA /E", widgetAA["E"], 3, 5, ast.PdfName("Fit"))
+	if widgetAA["X"] != (ast.PdfIndirectRef{ObjectNum: 22}) {
+		t.Errorf("widget /AA /X %v, want its action 22 kept by reference", widgetAA["X"])
+	}
+	wantStructGoTo(t, "action 22", pendingDict(t, alloc, 22), 10, 13, ast.PdfName("Fit"))
+	wantNamedGoTo("link 21 /AA /D", pendingDict(t, alloc, 23)["D"], ast.PdfString("p2"), 13, xyz...)
+	if _, rewritten := alloc.Pending()[21]; rewritten {
+		t.Error("link 21 was rewritten, want its indirect /AA rewritten in place")
+	}
+
+	// Charlie's name already maps to a structure destination, and Delta's to
+	// nothing a reader could open.
+	for _, objNum := range []int{7, 16, 17, 19} {
+		if _, rewritten := alloc.Pending()[objNum]; rewritten {
+			t.Errorf("object %d was rewritten: %v", objNum, alloc.Pending()[objNum])
+		}
+	}
+
+	if t1, t2 := structDest88(t, doc, alloc); t1 != 1 || t2 != 0 {
+		t.Errorf("8.8 fires %d times on test 1 and %d on test 2, want 1 (Delta) and 0", t1, t2)
+	}
+}
+
+// TestFixStructDestNamesAnElementOfTheOnlyPage pins the destinations of a
+// document of one page whose tree holds no content: the structure destination
+// names the tree's first element, which a reader can open on no page but the
+// destination's. A page object outside the page tree is no page of the
+// document, and a document of two pages keeps its page destinations alone.
+func TestFixStructDestNamesAnElementOfTheOnlyPage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	build := func(kids string, count int) []byte {
+		return buildStructPDF(
+			"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R /Outlines 6 0 R >>",
+			fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids, count),
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /StructTreeRoot /K 5 0 R >>",
+			"<< /Type /StructElem /S /Document /P 4 0 R /K [] >>",
+			"<< /Type /Outlines /First 7 0 R /Last 8 0 R /Count 2 >>",
+			"<< /Title (One) /Parent 6 0 R /Next 8 0 R /A << /S /GoTo /D [3 0 R /FitH 721] >> >>",
+			"<< /Title (Orphan) /Parent 6 0 R /Prev 7 0 R /Dest [9 0 R /Fit] >>",
+			"<< /Type /Page /Parent 10 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /Pages /Kids [9 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		)
+	}
+
+	doc, alloc := newTestDoc(t, build("3 0 R", 1))
+	if _, err := fixStructDest(ctx, alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
+		t.Fatalf("fixStructDest: %v", err)
+	}
+	wantStructGoTo(t, "One", pendingDict(t, alloc, 7)["A"], 3, 5, ast.PdfName("FitH"), ast.PdfInt(721))
+	if _, rewritten := alloc.Pending()[8]; rewritten {
+		t.Errorf("Orphan was rewritten: %v", alloc.Pending()[8])
+	}
+	if t1, t2 := structDest88(t, doc, alloc); t1 != 1 || t2 != 0 {
+		t.Errorf("8.8 fires %d times on test 1 and %d on test 2, want 1 (Orphan) and 0", t1, t2)
+	}
+
+	doc, alloc = newTestDoc(t, build("3 0 R 11 0 R", 2))
+	fixes, err := fixStructDest(ctx, alloc, doc, Options{}, nil, "PDF/UA-2")
+	if err != nil || fixes != nil {
+		t.Errorf("two pages: fixes %v, error %v, want nothing rewritten", fixes, err)
+	}
+}
+
+// TestRemediatePDFUA2NamesTheElementOfAnUntaggedPage pins the structure
+// destination fixer behind the struct-tree fixer: an untagged document of
+// one page gains a structure tree holding an empty Document, which its
+// bookmark then names.
+func TestRemediatePDFUA2NamesTheElementOfAnUntaggedPage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /Outlines 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /Outlines /First 5 0 R /Last 5 0 R /Count 1 >>",
+		"<< /Title (General) /Parent 4 0 R /A << /S /GoTo /D [3 0 R /FitH 721] >> >>",
+	))
+	rep, err := RemediatePDFUA(ctx, doc, alloc, models.PDFUA2, Options{})
+	if err != nil {
+		t.Fatalf("RemediatePDFUA: %v", err)
+	}
+	for _, v := range toViolations(rep.Residual) {
+		if matchStructDest(v) {
+			t.Errorf("residual %v", v)
+		}
+	}
+	act, _ := pendingDict(t, alloc, 5)["A"].(ast.PdfDict)
+	sd, _ := act["SD"].(ast.PdfArray)
+	if len(sd) == 0 {
+		t.Fatalf("General's action %v names no structure destination", act)
+	}
+	elem, _ := alloc.Pending()[sd[0].(ast.PdfIndirectRef).ObjectNum].(ast.PdfDict)
+	if elem["S"] != ast.PdfName("Document") {
+		t.Errorf("/SD names %v, want the Document element the struct-tree fixer wrote", elem)
+	}
 }
 
 // TestFixStructDest_NoStructTree pins the guard: without a structure

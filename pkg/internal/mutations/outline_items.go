@@ -92,6 +92,12 @@ func itemStructDest(ctx context.Context, doc *document.Document, item ast.PdfDic
 	return destStructDest(ctx, doc, dest, 0)
 }
 
+// DestStructDest returns the structure destination dest is or names, read as
+// [destStructDest] reads it, or nil when it is none.
+func DestStructDest(ctx context.Context, doc *document.Document, dest ast.PdfObject) ast.PdfArray {
+	return destStructDest(ctx, doc, dest, 0)
+}
+
 // destStructDest returns the structure destination dest is, or nil: an array
 // whose first element is a structure element (ISO 32000-2, 12.3.2.3), or a
 // dictionary carrying one under /SD, a form a named destination's value takes
