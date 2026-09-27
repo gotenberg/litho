@@ -181,6 +181,7 @@ one deliberately rather than diffing it against a fresh build.
 | `destforms_ua2.pdf`    | PDF/UA-2     | Named destinations, `/Dest` dictionaries, additional actions     |
 | `rolemapns_ua2.pdf`    | PDF/UA-2     | Mapped private types in namespaces the root `/RoleMap` misses    |
 | `viewerboxes_2b.pdf`   | PDF/A-2b     | Boxes veraPDF passes and no viewer uses, under the rewrites      |
+| `gotochain_ua2.pdf`    | PDF/UA-2     | GoTo actions run through `/Next`: arrays, a loop, a shared one   |
 
 ### Must-not-fire controls
 
@@ -406,6 +407,8 @@ violation but is exempt, so a firing is a false positive.
 | `noresources_4`                           | Page 5, showing the content stream page 4 has judged already           | ISO 19005-4, 6.2.2 t3        |
 | `noresources_4`                           | Page 6, whose content paints nothing under an empty `/Resources`       | ISO 32000-2, Table 31        |
 | `noresources_4`                           | Page 2's annotation appearance, which states no `/Resources` either    | ISO 19005-4, 6.2.2 t3        |
+| `gotochain_ua2`                           | A GoTo action run through `/Next` whose `/SD` names page 1's heading   | ISO 14289-2, 8.8 t2          |
+| `gotochain_ua2`                           | The GoTo action two chains share, a second time                        | one action per object        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -473,6 +476,7 @@ which are covered under [Known divergences](#known-divergences).
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
+| `gotochain_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 1    |
 | `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
 | `gstate_2b.pdf`        | 9    | 7    | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
@@ -5562,16 +5566,60 @@ manifest profiles, default and aggressive, show each page as the source shows
 it. The rewrites pass PDF/A-2b on both tools, and the remediations leave nothing
 on either.
 
+### `gotochain_ua2.pdf`
+
+ISO 32000-1, 12.6.2, Table 193 lets an action's `/Next` hold one action or an
+array of actions, run after it, so the actions an owner triggers form a tree.
+ISO 14289-2, 8.8 asks every destination inside the document to be a structure
+destination (ISO 32000-2, 12.3.2.3), a GoTo action's among them wherever it
+runs. veraPDF judges every GoTo action of the tree, each action object once
+whichever owner reaches it first. Two corpus files run a GoTo action after
+another action, neither tagged, and none writes `/Next` as an array, loops it
+back on itself or shares a chained action between two owners, so this file
+does, over three pages that each open with a heading of their own:
+
+| Owner                     | Action tree                                                                                                                                     | GoTo actions without `/SD` |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Outline item `First page` | A direct GoTo action for page 1, whose direct `/Next` array holds a Named action, then a GoTo action for page 2 written as an object of its own | 2                          |
+| `/OpenAction`             | A direct GoTo action for page 1 whose `/Next` is that same GoTo action for page 2                                                               | 1                          |
+| First link on page 1      | A GoTo action for page 3, a URI action, then a GoTo action for page 2 looping back to the first, all objects of their own                       | 2                          |
+| Second link on page 1     | A Named action whose `/Next` is an array object of its own: a direct GoTo action for page 3, and one whose `/SD` names page 1's heading         | 1                          |
+| Page 2                    | `/AA /O`, a Named action object whose `/Next` is a direct GoTo action to `(second)`, a `/Names /Dests` entry for page 2                         | 1                          |
+
+The GoTo action for page 2 that the outline item and the `/OpenAction` share is
+one object, judged once.
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
+count for count. PDF/UA-2 reports `8.8/2` seven times. PDF/UA-1 reports the
+part-2 claim (`5/2`) and the `%PDF-2.0` header (`6.1/1`). The PDF/A cells report
+the links' appearances painted in device RGB and the text in device gray with no
+output intent (`6.2.3.3/1` and `6.2.3.3/3` at part 1, `6.2.4.3/2` and
+`6.2.4.3/4` from part 2) and the missing PDF/A identification. Parts 1 to 3 add
+the `pdfuaid` properties no extension schema declares, and parts 2 and 3 the
+header (`6.1.2/1`) and page 2's `/AA` (`6.5.2/2`), which part 4 reports as
+`6.6.3/1`; PDF/A-4f adds the missing `/EmbeddedFiles`.
+
+Measured on litho and veraPDF 1.30.2 before the fix, litho reported `8.8/2`
+three times, on the GoTo actions an owner holds itself, against veraPDF's seven.
+PDF/UA-2 remediation, default and aggressive, gave those three a structure
+destination and left the four run through `/Next`, which veraPDF reported and
+litho did not. Now litho judges every GoTo action of the tree, each object once,
+and remediation walks the tree: each of the seven carries `/SD`, the Named and
+URI actions keep their entries, and PDF.js opens the page the outline item, the
+links and the `/OpenAction` opened before. Remediation at the eight manifest
+profiles, default and aggressive, leaves nothing on either tool, and every
+`mutate-*` cell passes.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 129 x 8 = 1032 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 129 x 13 = 1677 cells. litho
+runner scores 130 x 8 = 1040 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 130 x 13 = 1690 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1675 of the 1677 cells. The two
+fixtures exist to protect, and it holds in 1688 of the 1690 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5583,7 +5631,7 @@ seven is non-compliant on both sides (`baretree_2b`, `pagelabels_2b` and
 `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1;
 and `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's
 conforming cells), so a change that drops or invents a rule class leaves
-`matched` at 1032 and moves only `ruleset_mismatch`, and on those seven cells it
+`matched` at 1040 and moves only `ruleset_mismatch`, and on those seven cells it
 moves both. Both exceptions sit in the manifest's profiles, `complex_ua2` at
 PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus, and the text
 scoreboard names the rules only one side reports. A third cell in the runner is
