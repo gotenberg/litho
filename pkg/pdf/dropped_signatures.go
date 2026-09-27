@@ -17,8 +17,11 @@ import (
 // carried into it could never verify. litho leaves it out instead: a signed
 // signature field leaves the form and its widget's appearance is drawn into
 // the page, so the page looks as it did, and a /Perms entry naming a signature
-// goes. An incremental update appends to the signed bytes and keeps every
-// signature.
+// goes. The input's document security store goes with its signatures: the
+// catalog /DSS holds their certificates, OCSP responses, CRLs and /VRI entries
+// (ISO 32000-2, 12.8.4.3), which validate nothing the output holds. An
+// incremental update appends to the signed bytes and keeps every signature,
+// and the store.
 //
 // DroppedSignature values are immutable and safe for concurrent use.
 type DroppedSignature struct {

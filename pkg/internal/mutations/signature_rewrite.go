@@ -84,6 +84,9 @@ func SignedSignatures(ctx context.Context, doc *document.Document) []SignedSigna
 //   - The catalog /Perms loses its /DocMDP and /UR3 entries, the signature
 //     dictionaries of a certification and of usage rights (ISO 32000-1,
 //     12.8.4, Table 258): each names a signature the rewrite invalidates.
+//   - The catalog /DSS goes (see [dropSecurityStore]), also when the edits
+//     before took every signature out: the store validates the signatures
+//     the file holds, which the rewrite leaves out.
 //
 // An incremental update keeps every signature, which it appends after, so
 // only a full rewrite calls it.
@@ -128,7 +131,16 @@ func BakeSignaturesForRewrite(ctx context.Context, doc *document.Document, overr
 		return overrides, nil
 	}
 	if signatureInventory(ctx, probe, doc, probeCatalog, StagedPages(ctx, probe, doc, reader)).empty() {
-		return overrides, nil
+		// The edits took every signature out, or the file holds none. The
+		// store goes in the first case alone: in a file with no signature it
+		// validates none the rewrite drops.
+		if _, has := probeCatalog["DSS"]; !has || signatureInventory(ctx, nil, doc, sourceCatalog.Dict, reader).empty() {
+			return overrides, nil
+		}
+		updated := maps.Clone(probeCatalog)
+		dropSecurityStore(doc, updated)
+		probe.AllocAt(catalogRef.ObjectNum, updated)
+		return probe.Pending(), nil
 	}
 
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
@@ -171,10 +183,35 @@ func BakeSignaturesForRewrite(ctx context.Context, doc *document.Document, overr
 	updated := maps.Clone(catalog)
 	formChanged := dropSignedFields(ctx, alloc, doc, updated)
 	permsChanged := dropSignaturePerms(ctx, alloc, doc, updated)
-	if formChanged || permsChanged {
+	storeChanged := dropSecurityStore(doc, updated)
+	if formChanged || permsChanged || storeChanged {
 		alloc.AllocAt(catalogRef.ObjectNum, updated)
 	}
 	return alloc.Pending(), nil
+}
+
+// dropSecurityStore removes the document security store from catalog, as
+// [BakeSignaturesForRewrite] describes, and reports whether catalog held one.
+//
+// Its certificates, OCSP responses and CRLs, and the /VRI entry each keyed by
+// the uppercase hex SHA-1 of one signature's /Contents, are the validation data
+// of the document's signatures (ISO 32000-2, 12.8.4.3; ETSI EN 319 142-1,
+// 5.4.2). A rewrite keeps none of its source's signatures, so the store
+// validates nothing the output holds, and goes whole: no signature stays for
+// its shared arrays to serve, nor a /VRI entry to keep.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14269.pdf, issue8047.pdf: the only 2 of the 5217 files that
+//     carry a /DSS, each with 2 signatures and 1 /VRI entry. A full rewrite
+//     copied the store, and drops it now.
+func dropSecurityStore(doc *document.Document, catalog ast.PdfDict) bool {
+	if _, has := catalog["DSS"]; !has {
+		return false
+	}
+	delete(catalog, "DSS")
+	doc.Logger.Debug("rewrite: removing /DSS, the validation data of the signatures the rewrite drops")
+	return true
 }
 
 // readerPages returns doc's pages as the file holds them, none when its page

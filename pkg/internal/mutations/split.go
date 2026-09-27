@@ -260,6 +260,13 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 	// independent but forbidden by the profiles litho targets, and litho's own
 	// remediation deletes both (ISO 19005-2/3, 6.11; part 4, 6.12), so
 	// carrying them would re-emit a key this codebase removes elsewhere.
+	//
+	// /Perms and /DSS are deliberately NOT here either. Each describes the
+	// source's signatures: /Perms names the certification and usage rights
+	// signatures (ISO 32000-1, 12.8.4, Table 258) and /DSS holds their
+	// validation data (ISO 32000-2, 12.8.4.3). A split or a merge keeps none
+	// of those signatures (see [bakeSignedSignatures]), as a full rewrite
+	// keeps none (see [dropSecurityStore]).
 	keepKeys := []ast.PdfName{
 		"ViewerPreferences", "PageLayout", "PageMode", "Lang", "MarkInfo",
 		"Metadata", "OutputIntents", "OCProperties", "Extensions", "Version",
