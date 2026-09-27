@@ -198,6 +198,24 @@ var explicitResourcesRules = map[string][]ruleMatch{
 	familyA4: {"6.2.2-t02"},
 }
 
+// pageResourcesRules are failed by a page's content stream for want of any
+// resource dictionary: the page states no /Resources and no ancestor lends
+// one, which ISO 19005-4, 6.2.2 test 3 reports. ISO 32000-1, Table 30 requires
+// the entry, and the Writer writes it on every page it writes, an empty
+// dictionary on one that inherits none, so a mutation that writes the page
+// may pass the rule the input failed.
+//
+// # Corpus evidence
+//
+//   - litho noresources_4: a stamp, a page move and an encryption each write
+//     /Resources on every page, and 6.2.2 test 3, which five of its content
+//     streams fail, passes at PDF/A-4.
+//
+//nolint:gochecknoglobals // static rule table
+var pageResourcesRules = map[string][]ruleMatch{
+	familyA4: {"6.2.2-t03"},
+}
+
 // textLanguageRules require the language of page text to be determined,
 // ISO 14289-1, 7.2 test 34. A stamp's text carries no /Lang, so a document
 // with no catalog /Lang fails it once stamped.

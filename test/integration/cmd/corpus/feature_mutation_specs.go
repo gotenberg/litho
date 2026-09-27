@@ -225,10 +225,12 @@ func runesContain(s, sub string) bool {
 }
 
 // strictAllowance lets the rule set move only as a rewrite moves it: any
-// file-structure rule may pass (see [fileStructureRules]), nothing else may
-// change.
+// file-structure rule may pass (see [fileStructureRules]), and so may the rule
+// a page with no resource dictionary fails, since the Writer writes one on
+// every page it writes (see [pageResourcesRules]). Nothing else may change.
 func strictAllowance(profileDir string) ruleAllowance {
-	return ruleAllowance{mayRemove: fileStructureRules[ruleFamily(profileDir)]}
+	family := ruleFamily(profileDir)
+	return ruleAllowance{mayRemove: concatRules(fileStructureRules[family], pageResourcesRules[family])}
 }
 
 // mutationStampText is the text mutate-stamp draws. Its normalized form is

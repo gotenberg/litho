@@ -372,6 +372,27 @@ func TestMutationAllowances_Encrypt(t *testing.T) {
 	}
 }
 
+// TestMutationAllowances_PageWithoutResources lets every mutation that writes
+// a page pass ISO 19005-4, 6.2.2 test 3, which a page with no resource
+// dictionary fails and whose rewrite the Writer gives one, and fail it
+// nowhere: an output that fails it where the input did not is a finding.
+func TestMutationAllowances_PageWithoutResources(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"stamp", "pages", "sign", "encrypt"} {
+		spec := specNamed(t, name)
+		out := []string{}
+		if name == "encrypt" {
+			out = encryptionRules[familyA4]
+		}
+		if got := spec.allowance(ruleContext{profile: "PDF_A-4"}).check([]string{"6.2.2-t03"}, out); got != "" {
+			t.Errorf("%s at PDF_A-4, 6.2.2-t03 passes: check %q, want ok", name, got)
+		}
+		if got := spec.allowance(ruleContext{profile: "PDF_A-4"}).check(nil, append([]string{"6.2.2-t03"}, out...)); got != "added 6.2.2-t03" {
+			t.Errorf("%s at PDF_A-4, 6.2.2-t03 fails: check %q, want it added", name, got)
+		}
+	}
+}
+
 // TestVerifyEncrypt_ReservedPermissionBits pins the P entry mutate-encrypt
 // reads from the bytes of an output, and the reserved bits of ISO 32000-2,
 // Table 22 it checks there: bits 1-2 clear, bits 7-8 and 13-32 set. The
