@@ -50,8 +50,19 @@ func (c *Copier) Override(objNum int) (ast.PdfObject, bool) {
 // Mapping exposes the src-to-dst object number map assembled during the
 // copy pass. Callers use it to translate references allocated in the
 // source namespace into the destination namespace after copy completes.
+// It holds the entries [Copier.MapTo] recorded too.
 func (c *Copier) Mapping() map[int]int {
 	return c.mapping
+}
+
+// MapTo records dst as the copy of source object srcObjNum: every reference to
+// it the copier meets is rewritten to dst, and the object itself is never
+// copied. It stands one object of the output in for one of the source, as a
+// page insertion stands the target's structure element in for the root of the
+// source's structure tree. A mapping the copier already holds is replaced, so
+// call it before the copy that should honour it.
+func (c *Copier) MapTo(srcObjNum int, dst ast.PdfIndirectRef) {
+	c.mapping[srcObjNum] = dst.ObjectNum
 }
 
 // CopyRef resolves an indirect reference from the source document, deep-copies
