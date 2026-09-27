@@ -139,9 +139,10 @@ func TestFlattenDrawsACheckedButton(t *testing.T) {
 	}
 }
 
-// TestFlattenKeepsAnEmptyFieldAlone is the control: a field holding nothing has
-// nothing to draw, so the widget stays rather than vanish silently.
-func TestFlattenKeepsAnEmptyFieldAlone(t *testing.T) {
+// TestFlattenDropsAnEmptyField is the control: a field holding nothing has
+// nothing to draw, so no appearance is generated for it, and the widget goes
+// with the form rather than outlive it as a field (see widgetDrawsNothing).
+func TestFlattenDropsAnEmptyField(t *testing.T) {
 	t.Parallel()
 
 	ctx, doc, alloc := flattenDoc(t,
@@ -152,10 +153,35 @@ func TestFlattenKeepsAnEmptyFieldAlone(t *testing.T) {
 
 	page, ok := alloc.Pending()[3].(ast.PdfDict)
 	if !ok {
-		return // The page was left alone entirely, which is also correct.
+		t.Fatal("the page was left alone, so the empty field survived the flatten")
+	}
+	if annots, _ := page["Annots"].(ast.PdfArray); len(annots) != 0 {
+		t.Errorf("an empty field survived the flatten: %v", annots)
+	}
+	if _, drawn := flattenedPage(t, alloc); len(drawn) != 0 {
+		t.Errorf("the flatten drew %d appearances for a field holding nothing", len(drawn))
+	}
+}
+
+// TestFlattenKeepsAnEmptyFieldWithACharacteristic is the control: an empty field
+// whose /MK states a background colour still paints it when a viewer builds its
+// appearance (ISO 32000-1, Table 189), so litho, which draws no such box, keeps
+// the widget.
+func TestFlattenKeepsAnEmptyFieldWithACharacteristic(t *testing.T) {
+	t.Parallel()
+
+	ctx, doc, alloc := flattenDoc(t,
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [10 10 130 30] /MK << /BG [1 1 0] >> >>")
+	if err := FlattenForm(ctx, alloc, doc); err != nil {
+		t.Fatalf("FlattenForm: %v", err)
+	}
+
+	page, ok := alloc.Pending()[3].(ast.PdfDict)
+	if !ok {
+		return // The page was left alone entirely, which keeps the widget too.
 	}
 	if annots, _ := page["Annots"].(ast.PdfArray); len(annots) != 1 {
-		t.Errorf("an empty field was dropped instead of kept: %v", annots)
+		t.Errorf("an empty field with a background colour was dropped: %v", annots)
 	}
 }
 

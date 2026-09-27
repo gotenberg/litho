@@ -473,6 +473,8 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	// The default appearance string a kept widget inherits from the form, which
 	// the form's removal would otherwise take with it.
 	inheritedDA := formDefaultAppearance(ctx, doc, alloc, catalogDict)
+	// A tagged document's structure tree has to follow the widgets out.
+	tags := newFlattenTags(ctx, alloc, doc, catalogRef, catalogDict)
 
 	// Remove /AcroForm from the catalog.
 	newCatalog := make(ast.PdfDict, len(catalogDict))
@@ -496,10 +498,10 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	}
 
 	for _, page := range pages {
-		flattenPageAnnotations(ctx, doc, alloc, page, regenerated, inheritedDA, catalogDict)
+		flattenPageAnnotations(ctx, doc, alloc, page, regenerated, inheritedDA, catalogDict, tags)
 	}
 
-	return nil
+	return tags.commit(ctx, alloc, doc)
 }
 
 // flattenPageAnnotations processes widget annotations on a page,
@@ -521,7 +523,7 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 //     behind the values "Man", "150" and "Red". Flattening wrote those empty
 //     streams into the page and then deleted the widgets, so the values left
 //     the document entirely.
-func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page, regenerated bool, inheritedDA ast.PdfObject, catalogDict ast.PdfDict) {
+func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page, regenerated bool, inheritedDA ast.PdfObject, catalogDict ast.PdfDict, tags *flattenTags) {
 	// Start from the latest pending version of the page dict so the edit
 	// composes correctly with any prior mutation that has already
 	// rewritten this page, its /Annots included.
@@ -587,6 +589,12 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 			// this shape: it writes /V and asks for regeneration without
 			// building an /AP.
 			generated, built := generatedWidgetAppearance(ctx, doc, alloc, catalogDict, annotDict, inheritedDA)
+			if !built && widgetDrawsNothing(ctx, doc, annotDict) {
+				// Nothing to draw and nothing lost: the widget goes with the
+				// form rather than outliving it as a field.
+				tags.drop(ctx, alloc, doc, annotObj, annotDict)
+				continue
+			}
 			if !built {
 				keepWidget(alloc, annotObj, annotDict, inheritedDA)
 				remainingAnnots = append(remainingAnnots, annotObj)
@@ -625,10 +633,15 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		apRef := alloc.Alloc(asFormXObject(apStream, x2-x1, y2-y1))
 		xobjName := ast.PdfName(fmt.Sprintf("FlatAP%d", apRef.ObjectNum))
 
+		// On a tagged page the appearance is tagged under the widget's
+		// structure element, or marked as an artifact when it had none (see
+		// flattenTags).
+		open, closing := tags.bake(ctx, alloc, doc, page, annotObj, annotDict)
+
 		// string(): PdfName.String already adds the slash, and "//Name Do"
 		// names no XObject, so the flattened appearance never drew.
-		stampOps = append(stampOps, fmt.Sprintf("\nq 1 0 0 1 %s %s cm /%s Do Q",
-			FormatFloat(x1), FormatFloat(y1), string(xobjName)))
+		stampOps = append(stampOps, fmt.Sprintf("\n%sq 1 0 0 1 %s %s cm /%s Do Q%s",
+			open, FormatFloat(x1), FormatFloat(y1), string(xobjName), closing))
 		xobjectAdditions = append(xobjectAdditions, stampResource{
 			category: "XObject", name: xobjName, ref: apRef,
 		})
@@ -660,6 +673,11 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		// coordinates, so it must start from the default graphics state rather
 		// than whatever the page left in force (ISO 32000-1, 8.4.4).
 		newDict["Contents"] = appendPageContents(ctx, doc, alloc, baseDict, newContentBrackets(alloc), stampRef)
+	}
+	// Marked content on a page that had none needs the key its /ParentTree
+	// entry is filed under (ISO 32000-1, 14.7.4.4).
+	if key, assigned := tags.structParents(page); assigned {
+		newDict["StructParents"] = key
 	}
 
 	// Update /Annots: keep non-widget annotations, drop the rest.
@@ -944,6 +962,80 @@ func keepWidget(alloc *writer.ObjAllocator, annotObj ast.PdfObject, annotDict as
 		updated["DA"] = inheritedDA
 	}
 	alloc.AllocAt(ref.ObjectNum, updated)
+}
+
+// widgetDrawsNothing reports whether a widget that stores no appearance, and
+// that litho could not draw one for, would show nothing on the page anyway.
+//
+// A viewer builds a missing appearance from the field's value (ISO 32000-1,
+// 12.7.3.3), over the colours and captions the widget's /MK states (12.5.6.19,
+// Table 189). A text or choice field with no value and a button that is off
+// therefore draw nothing once /MK states nothing to paint either, and neither
+// does a signature field, whose appearance comes from its stream alone. Such a
+// widget can leave with the form it belonged to: keeping it left a form field in
+// a document the flatten promised had none. A widget of any other kind, or one
+// holding a value litho could not draw, is not known to be blank and stays.
+//
+// # Corpus evidence
+//
+//   - litho filestruct_1b, sigcms_2b, typedreads_1b: each kept an empty text
+//     field or an unsigned signature field after flattening, and litho still
+//     read it as a form field.
+func widgetDrawsNothing(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	if appearanceCharacteristicsPaint(ctx, doc, annotDict) {
+		return false
+	}
+	fieldType, value := inheritedFieldTypeAndValue(ctx, doc, annotDict)
+	switch fieldType {
+	case "Tx", "Ch":
+		switch v := value.(type) {
+		case nil, ast.PdfNull:
+			return true
+		case ast.PdfString:
+			return strings.TrimSpace(document.DecodePdfString(v)) == ""
+		case ast.PdfArray:
+			// A multiple-selection choice field lists its values (Table 231).
+			return len(v) == 0
+		}
+		return false
+	case "Btn":
+		switch v := value.(type) {
+		case nil, ast.PdfNull:
+			return true
+		case ast.PdfName:
+			return v == "" || v == "Off"
+		}
+		return false
+	case "Sig":
+		return true
+	}
+	return false
+}
+
+// appearanceCharacteristicsPaint reports whether the widget's /MK states
+// something a viewer paints when it builds the widget's appearance: a background
+// or border colour, a caption or an icon (ISO 32000-1, Table 189).
+func appearanceCharacteristicsPaint(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	mk, err := document.ResolveDict(ctx, doc, annotDict["MK"])
+	if err != nil || mk == nil {
+		return false
+	}
+	for _, key := range []ast.PdfName{"BG", "BC"} {
+		if colour, err := document.ResolveArray(ctx, doc, mk[key]); err == nil && len(colour) > 0 {
+			return true
+		}
+	}
+	for _, key := range []ast.PdfName{"CA", "RC", "AC"} {
+		if caption, err := document.ResolveString(ctx, doc, mk[key]); err == nil && len(caption) > 0 {
+			return true
+		}
+	}
+	for _, key := range []ast.PdfName{"I", "RI", "IX"} {
+		if _, has := mk[key]; has {
+			return true
+		}
+	}
+	return false
 }
 
 // formDefaultAppearance returns the interactive form's /DA string, the default

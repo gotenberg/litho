@@ -1310,6 +1310,13 @@ func (w *Writer) SetFormField(name, value string) {
 // FlattenForm bakes form field appearances into page content streams and
 // removes the AcroForm dictionary. Forces a full rewrite. The mutation is
 // queued and applied when [Writer.WriteTo] is called.
+//
+// A widget with nothing to draw, no appearance and no value, goes with the
+// form. On a tagged document each baked appearance is tagged under the
+// structure element that enclosed its widget, a Form element taking the
+// PrintField role of its field (ISO 32000-1, Table 348), or marked as an
+// artifact when no element did, so the page content stays tagged or artifact
+// as ISO 14289-1, 7.1 requires.
 func (w *Writer) FlattenForm() {
 	if w.refuseAfterRemediation("FlattenForm") != nil {
 		return
