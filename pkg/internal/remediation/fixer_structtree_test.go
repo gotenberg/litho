@@ -5,9 +5,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // minimalPDFNoStructTree builds a valid single-page PDF with a Catalog that
@@ -298,6 +301,107 @@ func TestFixStructTree_UA2RoleMappedDocumentGetsPDF2NS(t *testing.T) {
 	docElem := pendingDict(t, alloc, 5)
 	if uri := resolveNSString(t, alloc, docElem["NS"]); uri != pdf2NamespaceURI {
 		t.Errorf("role-mapped Document namespace: got %q, want %q", uri, pdf2NamespaceURI)
+	}
+}
+
+// TestRemediatePDFUA2RoleMappedDocumentStaysTheRoot pins what a root child
+// whose private type the /RoleMap sends to Document becomes at PDF/UA-2: the
+// single Document itself, typed Document in the PDF 2.0 namespace, with the
+// /RoleMap left as the file wrote it.
+//
+// The legacy /RoleMap governs only a type in no namespace or in the PDF 1.7 one
+// (ISO 32000-2:2020, 14.8.6), and reaches the PDF 1.7 Document, which ISO
+// 14289-2 8.2.5.2 t2 rejects. Declaring the PDF 2.0 namespace alone cut the
+// element off from the map, leaving a private type no standard namespace
+// defines (8.2.4 t1) and a root with no Document (8.2.5.2 t1), which the
+// single-doc-root fixer then answered by wrapping the element in a second
+// Document. Mapping the type within the PDF 2.0 namespace is a same-namespace
+// mapping (8.2.4 t3). veraPDF 1.30.2 accepts the retagged element.
+func TestRemediatePDFUA2RoleMappedDocumentStaysTheRoot(t *testing.T) {
+	t.Parallel()
+
+	shapes := []struct {
+		name string
+		pdf  []byte
+	}{
+		{"no namespaces", roleMappedDocumentPDF()},
+		{"pdf 1.7 namespace listed", buildStructPDF(
+			"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /StructTreeRoot /K 5 0 R /RoleMap 6 0 R /Namespaces [7 0 R] >>",
+			"<< /Type /StructElem /S /Workbook /P 4 0 R >>",
+			"<< /Workbook /Document /Worksheet /Part >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) >>",
+		)},
+	}
+	for _, shape := range shapes {
+		t.Run(shape.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			doc, alloc := newTestDoc(t, shape.pdf)
+			if _, err := RemediatePDFUA(ctx, doc, alloc, models.PDFUA2, Options{}); err != nil {
+				t.Fatalf("RemediatePDFUA: %v", err)
+			}
+
+			var out bytes.Buffer
+			if err := mutations.FullRewrite(ctx, &out, mutations.FullRewriteConfig{Doc: doc, Overrides: alloc.Pending()}); err != nil {
+				t.Fatalf("FullRewrite: %v", err)
+			}
+			reread, err := document.NewDocument(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()), nil)
+			if err != nil {
+				t.Fatalf("reopening the output: %v", err)
+			}
+
+			catalog, err := document.ResolveCatalog(ctx, reread)
+			if err != nil {
+				t.Fatalf("resolving the catalog: %v", err)
+			}
+			st, err := document.ResolveDict(ctx, reread, catalog.Dict["StructTreeRoot"])
+			if err != nil {
+				t.Fatalf("resolving the structure tree root: %v", err)
+			}
+			kids, err := document.ResolveArray(ctx, reread, st["K"])
+			if err != nil {
+				kids = ast.PdfArray{st["K"]}
+			}
+			if len(kids) != 1 {
+				t.Fatalf("the root holds %v, want one element", kids)
+			}
+			elem, err := document.ResolveDict(ctx, reread, kids[0])
+			if err != nil {
+				t.Fatalf("resolving the root element: %v", err)
+			}
+			// The source element holds no kid, so a wrapper shows as one.
+			if _, wrapped := elem["K"]; wrapped {
+				t.Errorf("the root element holds %v, want the source element itself", elem["K"])
+			}
+			if s, _ := document.ResolveName(ctx, reread, elem["S"]); s != "Document" {
+				t.Errorf("the root element is %s, want /Document", s)
+			}
+			ns, err := document.ResolveDict(ctx, reread, elem["NS"])
+			if err != nil {
+				t.Fatalf("resolving the root element's namespace: %v", err)
+			}
+			if uri, _ := document.ResolveString(ctx, reread, ns["NS"]); string(uri) != pdf2NamespaceURI {
+				t.Errorf("the root element's namespace is %q, want %q", uri, pdf2NamespaceURI)
+			}
+			if roleMap := compliance.LoadRoleMap(ctx, reread, st); len(roleMap) != 2 {
+				t.Errorf("the /RoleMap holds %v, want the two entries the file wrote", roleMap)
+			}
+
+			errs, err := compliance.ValidatePDFUA(ctx, reread, models.PDFUA2)
+			if err != nil {
+				t.Fatalf("ValidatePDFUA: %v", err)
+			}
+			for _, v := range toViolations(errs) {
+				switch v.Rule {
+				case compliance.Rule_14289_2_8_2_4_t01, compliance.Rule_14289_2_8_2_4_t03,
+					compliance.Rule_14289_2_8_2_5_2_t01, compliance.Rule_14289_2_8_2_5_2_t02:
+					t.Errorf("the output fails %s test %d: %s", v.Rule.Clause, v.Rule.TestNumber, v.Context)
+				}
+			}
+		})
 	}
 }
 

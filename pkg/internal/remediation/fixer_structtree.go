@@ -60,12 +60,13 @@ func fixStructTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 				maps.Copy(newST, stDict)
 				newST["Namespaces"] = nsArray
 
-				ensureDocumentElementNS(ctx, alloc, doc, newST, ns20Ref)
+				retagged := ensureDocumentElementNS(ctx, alloc, doc, newST, ns20Ref)
 
 				if stRef.ObjectNum > 0 {
 					alloc.AllocAt(stRef.ObjectNum, newST)
 				}
 				fixes = append(fixes, "added /Namespaces to existing StructTreeRoot")
+				fixes = append(fixes, retagged...)
 			} else if docRef, docElem, needs := documentElementNeedingNS(ctx, alloc, doc, stDict); needs && docRef.ObjectNum > 0 {
 				// /Namespaces exists but the Document element still names
 				// the PDF 1.7 namespace (or none): repoint it at PDF 2.0,
@@ -74,11 +75,10 @@ func fixStructTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 				if stWithNS != nil && stRef.ObjectNum > 0 {
 					alloc.AllocAt(stRef.ObjectNum, stWithNS)
 				}
-				newDoc := make(ast.PdfDict, len(docElem)+1)
-				maps.Copy(newDoc, docElem)
-				newDoc["NS"] = ns20Ref
+				newDoc, retagged := pdf2DocumentElement(ctx, doc, docElem, ns20Ref)
 				alloc.AllocAt(docRef.ObjectNum, newDoc)
 				fixes = append(fixes, "pointed Document element /NS at the PDF 2.0 namespace")
+				fixes = append(fixes, retagged...)
 			}
 		}
 		return fixes, nil
@@ -149,17 +149,58 @@ func buildStandardNamespaces(alloc *writer.ObjAllocator) (ast.PdfArray, ast.PdfI
 // ensureDocumentElementNS points the root /Document structure element's /NS
 // at the PDF 2.0 namespace (ISO 14289-2 §8.2.5.2 t2). It sets /NS when
 // missing and repoints it when it names the PDF 1.7 namespace; any other
-// existing namespace is left untouched.
-func ensureDocumentElementNS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict, ns20Ref ast.PdfIndirectRef) {
+// existing namespace is left untouched. It returns the fix message of a
+// retagged private type, see [pdf2DocumentElement].
+func ensureDocumentElementNS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict, ns20Ref ast.PdfIndirectRef) []string {
 	docRef, docElem, needs := documentElementNeedingNS(ctx, alloc, doc, stDict)
 	if !needs || docRef.ObjectNum == 0 {
-		return
+		return nil
 	}
 
+	newDoc, retagged := pdf2DocumentElement(ctx, doc, docElem, ns20Ref)
+	alloc.AllocAt(docRef.ObjectNum, newDoc)
+	return retagged
+}
+
+// pdf2DocumentElement returns a copy of the root Document element that declares
+// the PDF 2.0 namespace ns20Ref and whose /S names Document, with the fix
+// message of the private type it replaced, if any.
+//
+// Declaring the namespace repairs an element whose /S names Document. An /S
+// naming a private type the /RoleMap sends to Document needs the name as well:
+// the legacy /RoleMap governs only a type in no namespace or in the PDF 1.7 one
+// (ISO 32000-2:2020, 14.8.6), so the element declaring the PDF 2.0 namespace is
+// cut off from the map, and its type is one no standard namespace defines
+// (ISO 14289-2 §8.2.4 t1), leaving the root with no Document (§8.2.5.2 t1).
+// Wrapping it in a new Document nests a Document in a Document. The legacy map
+// reaches only the PDF 1.7 Document (§8.2.5.2 t2), and each /RoleMapNS entry
+// that reaches the PDF 2.0 one costs more than the name: one in the PDF 2.0
+// namespace maps a type within its own namespace (§8.2.4 t3), one in the PDF
+// 1.7 namespace takes every element declaring that namespace off the legacy
+// map, and one in a new namespace invents a vocabulary the file never
+// declared. Naming the type Document states what the /RoleMap already says the
+// element is, and the map stays as the file wrote it for any other element of
+// that type; [retagDroppedRoles] retags the elements of a dropped mapping for
+// the same reason.
+//
+// # Corpus evidence
+//
+//   - All corpora: 6 of the 1126 tagged files hold a single root kid the
+//     /RoleMap maps to Document, pdfjs issue10301 (/Workbook) and five veraPDF
+//     PDF/A test files (/PDFDocument). Declaring the namespace alone left
+//     veraPDF reporting 8.2.4 t1 on each PDF/UA-2 output, default and
+//     aggressive, and the single-doc-root fixer wrapped each element in a
+//     second Document.
+func pdf2DocumentElement(ctx context.Context, doc *document.Document, docElem ast.PdfDict, ns20Ref ast.PdfIndirectRef) (ast.PdfDict, []string) {
 	newDoc := make(ast.PdfDict, len(docElem)+1)
 	maps.Copy(newDoc, docElem)
 	newDoc["NS"] = ns20Ref
-	alloc.AllocAt(docRef.ObjectNum, newDoc)
+	private := structType(ctx, doc, docElem)
+	if private == "Document" {
+		return newDoc, nil
+	}
+	newDoc["S"] = ast.PdfName("Document")
+	return newDoc, []string{fmt.Sprintf("retagged the root %s element, which the /RoleMap maps to Document, as a PDF 2.0 Document", private)}
 }
 
 // documentElementNeedingNS resolves the structure tree root's single child
@@ -204,7 +245,9 @@ func documentElementNeedingNS(ctx context.Context, alloc *writer.ObjAllocator, d
 	// /PDFDocument under /RoleMap << /PDFDocument /Document >>. The validator
 	// resolves through the map (ISO 32000-1, 14.8.4) and reports §8.2.5.2 t2,
 	// so a raw comparison skipped the element, added /Namespaces to the root
-	// and left the Document untagged.
+	// and left the Document untagged. Declaring the PDF 2.0 namespace cuts
+	// such an element off from the map, so its repair names the type Document
+	// too ([pdf2DocumentElement]).
 	//
 	// The RAW /S catches the opposite shape, a literally named Document whose
 	// /RoleMap sends the name elsewhere (/Document to /Book, say): resolving
