@@ -224,6 +224,26 @@ func encryptionVersionFloor(alloc *ObjAllocator, trailer ast.PdfDict) string {
 	return ""
 }
 
+// DeclaresPDF2 reports whether a file whose header names header and whose
+// catalog is the trailer's /Root in alloc declares PDF 2.0 or later.
+//
+// Per ISO 32000-1, 7.5.2 a catalog /Version later than the header is the
+// version the file declares, so the later of the two answers. A /Version that
+// is not a version number is ignored, as readers ignore it. The raises
+// [WriteRewrite] applies for cross-reference streams and encryption stop at
+// 1.7, so the answer before them is the answer after.
+func DeclaresPDF2(alloc *ObjAllocator, trailer ast.PdfDict, header string) bool {
+	declared := header
+	if alloc != nil {
+		if catalog, ok := resolvePending(alloc, trailer["Root"]); ok {
+			if v, ok := catalog["Version"].(ast.PdfName); ok {
+				declared = atLeastVersion(declared, string(v))
+			}
+		}
+	}
+	return atLeastVersion(declared, isoPDF2Version) == declared
+}
+
 // resolvePending returns obj as a dictionary, following one level of
 // indirection through the allocator. mutations.applyEncryption stores the
 // /Encrypt dictionary as an indirect reference, while a nested /CF sits inline.

@@ -191,7 +191,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	// Last, after every alloc.Alloc above: see [applyEncryption] on why an
 	// object allocated after the sweep is written in the clear.
 	if encryptCfg != nil {
-		if err := applyEncryption(ctx, alloc, trailer, encryptCfg); err != nil {
+		if err := applyEncryption(ctx, alloc, trailer, encryptCfg, version); err != nil {
 			return fmt.Errorf("encrypting merge output: %w", err)
 		}
 	}

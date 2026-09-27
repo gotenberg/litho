@@ -1248,6 +1248,12 @@ type EncryptConfig struct {
 	Algorithm EncryptAlgorithm
 	// Permissions is the 32-bit PDF permission mask. Pass -1 for "all
 	// permissions granted".
+	//
+	// An output that declares PDF 2.0 sets bit 10 whatever the mask says: ISO
+	// 32000-2, Table 22 retires the bit, and requires writers to set it for
+	// readers that follow earlier specifications. Below 2.0 the mask is
+	// written as given, and bit 10 is the permission to extract content for
+	// accessibility (ISO 32000-1, Table 22).
 	Permissions int32
 }
 
@@ -1930,7 +1936,7 @@ func pdfuaAccessibilityClause(profile models.PDFUAProfile) string {
 // accessibilityPermission is bit 10 of the P key of a standard security
 // handler, the permission to extract text and graphics in support of
 // accessibility (ISO 32000-1, 7.6.3.2, Table 22).
-const accessibilityPermission = 1 << 9
+const accessibilityPermission = crypto.AccessibilityPermission
 
 // permitsAccessibility reports whether the permissions p of an encryption set
 // [accessibilityPermission].

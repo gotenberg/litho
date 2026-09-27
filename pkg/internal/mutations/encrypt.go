@@ -25,9 +25,28 @@ import (
 // standard security handler derives the file encryption key from the first
 // /ID element (ISO 32000-1, 7.6.3.3), so a preserved /ID and a freshly
 // generated key disagree and every string and stream decrypts to garbage.
-func applyEncryption(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, cfg *crypto.EncryptConfig) error {
+//
+// version is the header version the output is written with. When the output
+// declares PDF 2.0, bit 10 of the P entry is set whatever mask cfg carries
+// (see [crypto.AccessibilityPermission]).
+func applyEncryption(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, cfg *crypto.EncryptConfig, version string) error {
+	enc := *cfg
+	// ISO 32000-2, 7.6.4.2, Table 22, bit 10: "Not used. This bit was
+	// previously used to determine whether content could be extracted for the
+	// purposes of accessibility, however, that restriction has been deprecated
+	// in PDF 2.0. PDF readers shall ignore this bit and PDF writers shall
+	// always set this bit to 1 to ensure compatibility with PDF readers
+	// following earlier specifications." The PDF Association errata for ISO
+	// 32000-2:2020 leave that row as it is. Below 2.0, ISO 32000-1, 7.6.3.2,
+	// Table 22 keeps the bit a permission a file may withhold, so the caller's
+	// mask stands. The bit goes in before the encryptor is built: P enters the
+	// file key (ISO 32000-1, 7.6.3.3, Algorithm 2) and /Perms (ISO 32000-2,
+	// 7.6.4.4.9), so it must be final before either is computed.
+	if writer.DeclaresPDF2(alloc, trailer, version) {
+		enc.Permissions |= crypto.AccessibilityPermission
+	}
 	docID := GenerateDocumentID()
-	encryptor, encDict, err := crypto.NewEncryptor(*cfg, docID)
+	encryptor, encDict, err := crypto.NewEncryptor(enc, docID)
 	if err != nil {
 		return fmt.Errorf("creating encryptor: %w", err)
 	}

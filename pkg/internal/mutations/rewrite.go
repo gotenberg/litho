@@ -124,18 +124,6 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		}
 	}
 
-	// Shared with Split and Merge so the three write paths cannot drift: see
-	// applyEncryption for the ordering the sweep depends on.
-	if cfg.EncryptCfg != nil {
-		if err := applyEncryption(ctx, alloc, trailer, cfg.EncryptCfg); err != nil {
-			return err
-		}
-	}
-
-	// Decryption: the reader already decrypted all objects during resolution,
-	// and the copier copies the decrypted data. All that remains is to omit
-	// /Encrypt from the trailer, which the trailer built above never copies.
-
 	version := cfg.Version
 	if version == "" && cfg.RequiredVersion != "" {
 		version = cfg.RequiredVersion
@@ -143,6 +131,18 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	if version == "" {
 		version = doc.Version
 	}
+
+	// Shared with Split and Merge so the three write paths cannot drift: see
+	// applyEncryption for the ordering the sweep depends on.
+	if cfg.EncryptCfg != nil {
+		if err := applyEncryption(ctx, alloc, trailer, cfg.EncryptCfg, version); err != nil {
+			return err
+		}
+	}
+
+	// Decryption: the reader already decrypted all objects during resolution,
+	// and the copier copies the decrypted data. All that remains is to omit
+	// /Encrypt from the trailer, which the trailer built above never copies.
 
 	return writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
 		Version:           version,
