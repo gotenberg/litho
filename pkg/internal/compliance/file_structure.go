@@ -1119,7 +1119,8 @@ func streamLengthRule(profile string) Rule {
 // [document.Page]. Those are reduced to their intersection with the media box
 // (ISO 32000-1, 14.11.2.1), so a declared 14405-unit trim box on a 500-unit
 // page would read as 500 units and pass a limit ISO 19005-2, 6.1.13 places on
-// the file.
+// the file. A box that is not four numbers is measured on the corners
+// [pageBoxCorner] reads, so a short one fails.
 //
 // Each page is judged on the boxes it takes: its own bleed, trim and art boxes,
 // and the media and crop boxes it states or inherits from its nearest ancestor
@@ -1171,18 +1172,12 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 			}
 
 			arr, err := document.ResolveArray(ctx, doc, boxObj)
-			if err != nil || len(arr) < 4 {
+			if err != nil {
 				continue
 			}
 
-			x1, err1 := resolveFloat(ctx, doc, arr[0])
-			y1, err2 := resolveFloat(ctx, doc, arr[1])
-			x2, err3 := resolveFloat(ctx, doc, arr[2])
-			y2, err4 := resolveFloat(ctx, doc, arr[3])
-			if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
-				continue
-			}
-
+			x1, y1 := pageBoxCorner(ctx, doc, arr, 0), pageBoxCorner(ctx, doc, arr, 1)
+			x2, y2 := pageBoxCorner(ctx, doc, arr, 2), pageBoxCorner(ctx, doc, arr, 3)
 			width := math.Abs(x2 - x1)
 			height := math.Abs(y2 - y1)
 
@@ -1196,6 +1191,64 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 	}
 
 	return results
+}
+
+// pageBoxCorner returns the i-th number of a page boundary array as ISO
+// 19005-2, 6.1.13 t11 measures it: 0 when the array holds fewer than i+1
+// entries or the entry is no number.
+//
+// ISO 32000-1, 7.9.5 writes a rectangle as four numbers, so a box that is
+// shorter or holds something else has no size the clause could accept, and
+// veraPDF measures it: GFCosBBox.getRequiredValue answers null for a missing
+// corner and for one that is no number, and the rule's arithmetic takes null
+// for 0. A box listing more than four numbers is measured on its first four.
+// Measured against veraPDF 1.30.2 at PDF/A-2b and PDF/A-3b: [0 0 612], [0 612],
+// [], [0 0 612 /Foo] and [0 0 612 null] fail t11, [0 0 612 792 7] passes, and
+// [10 10 300] passes, its height read as |0 - 10|.
+//
+// A corner written as an indirect reference to a number reads as that number
+// (ISO 32000-1, 7.3.10 lets any object be indirect), where veraPDF reads it as
+// 0: getRequiredValue tests the entry as written, a reference, for a number.
+// Deliberate divergence, veraPDF-side: [0 0 612 5 0 R] naming 792 is a 612 by
+// 792 box, which veraPDF 1.30.2 fails, measured.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7872.pdf: writes every corner of its boxes as an indirect
+//     reference, and veraPDF fails t11 twice where litho passes it.
+//   - pdfjs issue13783.pdf: a damaged page object's /MediaBox runs on into the
+//     entries after it ([0 Resources 26 0 R ...]), and fails t11 at PDF/A-2b
+//     and PDF/A-3b, where litho skipped it. veraPDF does not parse the file.
+//   - All corpora: no other count moves at PDF/A-2b or PDF/A-3b.
+func pageBoxCorner(ctx context.Context, doc *document.Document, box ast.PdfArray, i int) float64 {
+	if i >= len(box) {
+		return 0
+	}
+	v, err := resolveFloat(ctx, doc, box[i])
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+// PageBoundaryRect returns the rectangle ISO 19005-2, 6.1.13 t11 measures a
+// page boundary array as, [x0 y0 x1 y1] with each corner read by
+// [pageBoxCorner], and whether the array as written differs from it: it is not
+// four entries, or one of its first four is no number. The remediation writes
+// this rectangle in place of such a box, so it repairs the box the validator
+// measured.
+func PageBoundaryRect(ctx context.Context, doc *document.Document, box ast.PdfArray) (ast.PdfArray, bool) {
+	differs := len(box) != 4
+	rect := make(ast.PdfArray, 4)
+	for i := range rect {
+		rect[i] = ast.PdfReal(pageBoxCorner(ctx, doc, box, i))
+		if i < len(box) {
+			if _, err := resolveFloat(ctx, doc, box[i]); err != nil {
+				differs = true
+			}
+		}
+	}
+	return rect, differs
 }
 
 // resolveFloat resolves a PdfObject to a float64, handling both PdfInt and PdfReal.

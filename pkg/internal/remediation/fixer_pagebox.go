@@ -35,6 +35,13 @@ func matchPageBoxes(v compliance.Violation) bool {
 // runs; shrinking over-sized boxes can crop visible content and only
 // runs in aggressive mode.
 //
+// A box that is not four numbers is first read as the rectangle ISO 19005-2,
+// 6.1.13 t11 measures ([compliance.PageBoundaryRect]), its missing corners and
+// the ones that are no number at 0. A crop box of [0 0 300] so encloses no
+// area and is dropped like any degenerate box, and a media box of that shape
+// is replaced. Left as written, the box stayed unrepaired while the validator
+// reported it.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue7872.pdf: writes its /MediaBox as an array of indirect
@@ -89,6 +96,11 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			// outside it. The resolved copy drives the decision only: a box
 			// needing no change keeps the form the producer wrote.
 			arr = document.ResolveRectangle(ctx, doc, arr)
+			if measured, differs := compliance.PageBoundaryRect(ctx, doc, arr); differs {
+				arr = measured
+				newPage[key] = measured
+				modified = true
+			}
 			// A degenerate box encloses nothing, and growing it to the 3-unit
 			// minimum at its lower-left corner leaves the page's content
 			// outside the page, so the text drawn there is lost. Every box
@@ -190,6 +202,11 @@ func clampBoxesInDict(ctx context.Context, doc *document.Document, dict ast.PdfD
 			continue
 		}
 		arr = document.ResolveRectangle(ctx, doc, arr)
+		if measured, differs := compliance.PageBoundaryRect(ctx, doc, arr); differs {
+			arr = measured
+			out[key] = measured
+			modified = true
+		}
 		if isDegenerateBox(arr) {
 			if key != "MediaBox" {
 				delete(out, key)
