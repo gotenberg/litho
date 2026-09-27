@@ -136,8 +136,10 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // Anti-DoS guard, not spec-mandated: the spec puts no length on a chain, and a
 // crafted one of direct dictionaries nested thousands deep would otherwise grow
 // the goroutine stack with it. Fan-out needs no cap of its own: the splice
-// handles each indirect action once and reuses its result, so a /Next array
-// that repeats an action, or a chain that loops back on itself, adds no work.
+// handles each indirect action, and each /Next array written as an object of
+// its own, once and reuses its result, so a /Next array that repeats an
+// action, a chain that loops back on itself, or an array whose direct actions
+// name it again, adds no work.
 // The value is the depth compliance's walkActionChain judges to (its
 // maxActionChainDepth), so the splice reaches every action the validator
 // flags, and an action beyond it is neither flagged nor cut. The structure
@@ -160,9 +162,9 @@ const maxActionChainDepth = 200
 // the first forbidden one, such as the navigation of every outline item whose
 // GoTo is followed by a script.
 //
-// Every action is read through the allocator. An indirect action is rewritten
-// at its own object number, since its spliced form is the same whichever
-// parent reaches it; a direct one is rebuilt in its parent. One splice serves a
+// Every action is read through the allocator. An indirect action, or /Next
+// array, is rewritten at its own object number, since its spliced form is the
+// same whichever parent reaches it; a direct one is rebuilt in its parent. One splice serves a
 // whole fixer run, so an action several parents share is spliced once. Not
 // safe for concurrent use.
 //
@@ -187,6 +189,10 @@ type actionSplice struct {
 	// active holds the verdict of each indirect action whose splice is under
 	// way, so a /Next cycle back to it ends there.
 	active map[int]bool
+	// arrays holds, per /Next array written as an object of its own, the
+	// actions its splice left, and nil while that splice is under way (see
+	// [actionSplice.spliceNext]).
+	arrays map[int][]ast.PdfObject
 	// cut counts the forbidden actions cut out of the entries spliced so far.
 	// An action two entries share counts in each.
 	cut int
@@ -209,6 +215,7 @@ func newActionSplice(alloc *writer.ObjAllocator, doc *document.Document, profile
 		profile: profile,
 		done:    make(map[int]splicedAction),
 		active:  make(map[int]bool),
+		arrays:  make(map[int][]ast.PdfObject),
 	}
 }
 
@@ -297,13 +304,8 @@ func (s *actionSplice) splice(ctx context.Context, obj ast.PdfObject, depth int)
 
 	var next []ast.PdfObject
 	nextChanged := false
-	nextObj, hasNext := action["Next"]
-	if hasNext {
-		for _, item := range s.nextActions(ctx, nextObj) {
-			out := s.splice(ctx, item, depth+1)
-			next = append(next, out.actions...)
-			nextChanged = nextChanged || out.changed
-		}
+	if nextObj, hasNext := action["Next"]; hasNext {
+		next, nextChanged = s.spliceNext(ctx, nextObj, depth+1)
 	}
 
 	out := unchanged
@@ -333,6 +335,73 @@ func (s *actionSplice) splice(ctx context.Context, obj ast.PdfObject, depth int)
 		s.done[ref.ObjectNum] = out
 	}
 	return out
+}
+
+// spliceNext splices the actions the /Next value nextObj lists (see
+// [actionSplice]), and returns the actions that replace them in a parent's
+// sequence and whether the action holding nextObj must change.
+//
+// A /Next array written as an object of its own is spliced once a run and
+// rewritten at its own object number, so the action holding it keeps its
+// reference, while a cut parent takes its entries in its place. Its direct
+// actions can each name it again in their own /Next: spliced anew wherever it
+// is reached, it would fan out 2^depth up to [maxActionChainDepth], and the
+// structure destination fixer walks such an array once for the same reason
+// ([structElemPicker.fixNext]). An array reached again while its splice is
+// under way, a /Next cycle back to it, keeps its reference in a permitted
+// action and lists nothing in the place of a cut one, so the edge back goes as
+// it does for an action under way.
+func (s *actionSplice) spliceNext(ctx context.Context, nextObj ast.PdfObject, depth int) ([]ast.PdfObject, bool) {
+	arr, isArr := s.nextArray(ctx, nextObj)
+	if !isArr {
+		out := s.splice(ctx, nextObj, depth)
+		return out.actions, out.changed
+	}
+	ref, isRef := nextObj.(ast.PdfIndirectRef)
+	if !isRef || ref.ObjectNum <= 0 {
+		return s.spliceArray(ctx, arr, depth)
+	}
+	if actions, ok := s.arrays[ref.ObjectNum]; ok {
+		return actions, false
+	}
+	s.arrays[ref.ObjectNum] = nil
+	actions, changed := s.spliceArray(ctx, arr, depth)
+	if changed {
+		s.alloc.AllocAt(ref.ObjectNum, ast.PdfArray(slices.Clone(actions)))
+	}
+	s.arrays[ref.ObjectNum] = actions
+	return actions, false
+}
+
+// spliceArray splices each action arr lists, and returns the actions that
+// replace them and whether any differs from the entry it replaces.
+func (s *actionSplice) spliceArray(ctx context.Context, arr ast.PdfArray, depth int) ([]ast.PdfObject, bool) {
+	var next []ast.PdfObject
+	changed := false
+	for _, item := range arr {
+		out := s.splice(ctx, item, depth)
+		next = append(next, out.actions...)
+		changed = changed || out.changed
+	}
+	return next, changed
+}
+
+// nextArray returns the array a /Next value is, read through the allocator,
+// and false when it is a single action.
+func (s *actionSplice) nextArray(ctx context.Context, nextObj ast.PdfObject) (ast.PdfArray, bool) {
+	switch v := nextObj.(type) {
+	case ast.PdfArray:
+		return v, true
+	case ast.PdfIndirectRef:
+		if pending, ok := s.alloc.Pending()[v.ObjectNum]; ok {
+			arr, isArr := pending.(ast.PdfArray)
+			return arr, isArr
+		}
+		if arr, err := document.ResolveArray(ctx, s.doc, v); err == nil {
+			return arr, true
+		}
+	}
+	return nil, false
 }
 
 // nextActions returns the actions a /Next value lists: the items of an array,
@@ -665,8 +734,9 @@ func rewriteFieldAA(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 type fieldAACleaner func(ctx context.Context, aaObj ast.PdfObject, location string) ([]string, ast.PdfDict)
 
 // fieldActionWalk carries the state of one [rewriteFieldAA] walk. seen
-// processes each field object once, so a shared or cyclic /Kids tree cannot
-// force exponential work or loop.
+// processes each field object, and each /Kids array written as an object of
+// its own, once, so a shared or cyclic /Kids tree cannot force exponential
+// work or loop.
 type fieldActionWalk struct {
 	alloc   *writer.ObjAllocator
 	doc     *document.Document
@@ -683,6 +753,14 @@ type fieldActionWalk struct {
 // /Kids, the only lists compliance's walkFormFields draws form fields from.
 func (w *fieldActionWalk) array(ctx context.Context, arrObj ast.PdfObject, listedByField bool, depth int) (ast.PdfObject, bool) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
+		return arrObj, false
+	}
+	// An indirect array is walked once too: its direct fields can each name
+	// it again as their /Kids, and walked anew wherever it is reached it
+	// fans out 2^depth. It is rewritten at its own object number, so a parent
+	// reaching it again keeps its reference and loses nothing
+	// ([document.VisitedBefore]).
+	if document.VisitedBefore(arrObj, w.seen) {
 		return arrObj, false
 	}
 	arr := liveArray(ctx, w.alloc, w.doc, arrObj)
