@@ -184,6 +184,7 @@ one deliberately rather than diffing it against a fresh build.
 | `gotochain_ua2.pdf`    | PDF/UA-2     | GoTo actions run through `/Next`: arrays, a loop, a shared one   |
 | `emptyfig_ua2.pdf`     | PDF/UA-2     | Figures that enclose nothing, and every reference to them        |
 | `sharedk_ua1.pdf`      | PDF/UA-1     | A structure `/K` array two elements share, direct kids in it     |
+| `fieldkids_2b.pdf`     | PDF/A-2b     | Form fields whose `/Kids` arrays are objects of their own        |
 
 ### Must-not-fire controls
 
@@ -465,6 +466,7 @@ which are covered under [Known divergences](#known-divergences).
 | `exttypes_2b.pdf`      | 10   | 7    | 9    | 6    | 7    | 10   | 7    | 8    | 5   | 5    | 6    | 5    | 6    |
 | `extvalue_2b.pdf`      | 7    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 5   | 5    | 6    | 5    | 6    |
 | `fenote_ua2.pdf`       | 4    | 3    | 5    | 4    | 4    | 5    | 4    | 4    | 3   | 3    | 4    | 5    | 6    |
+| `fieldkids_2b.pdf`     | 6    | 3    | 5    | 2    | 3    | 6    | 3    | 4    | 5   | 5    | 6    | 8    | 6    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
 | `fontclaims_2b.pdf`    | 9    | 6    | 9    | 6    | 7    | 9    | 6    | 7    | 7   | 7    | 8    | 11   | 11   |
 | `fontcopies_2b.pdf`    | 14   | 11   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 13   | 13   |
@@ -5709,6 +5711,46 @@ reports each, twice in all, and veraPDF reports one, as it reports one for two
 `Figure` elements written directly in two arrays of a single tree. The rule
 sets agree.
 
+### `fieldkids_2b.pdf`
+
+ISO 32000-1, 12.7.3.1, Table 220 makes a field's `/Kids` an array of indirect
+references, and nothing stops the array being written as an object of its own
+and named by reference. Every walk over the field tree reads such an array
+once: the direct fields it holds could each name it again, and read anew
+wherever it is reached it fans out 2^depth, a denial of service that a 4-object
+file drives to the caller's timeout. No corpus file names a field's `/Kids` by
+reference, so this file gives the gate the shape:
+
+| Field         | Kind         | `/Kids`                | Widgets                           |
+| ------------- | ------------ | ---------------------- | --------------------------------- |
+| `group`       | non-terminal | an array, by reference | none of its own                   |
+| `group.first` | text, merged | none                   | itself, with an appearance        |
+| `group.inner` | text         | an array, by reference | one, whose `/AA` holds JavaScript |
+| `group.note`  | text, direct | none                   | none: written in `group`'s array  |
+| `check`       | check box    | an array, by reference | one, with no appearance           |
+
+The page shows nothing, and every appearance paints nothing.
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
+count for count. PDF/A-2b reports `6.4.1/1` for the widget of `group.inner` and
+`6.3.3/1` for the widget of `check`; every PDF/A cell of parts 2 and 3 reports
+both, and part 1 reports them as `6.6.2/1` and `6.9/2`, the latter reached
+through the field walk. PDF/UA-1 reports `7.18.1/3` and `7.18.4/1` once per
+widget. The other rules are the ones the part-2, level-B claim draws at the
+levels it does not match: identification, tagging, and at part 4 the
+`%PDF-1.7` header.
+
+`forms` lists the four terminal fields, and `set-form` sets `group.inner` and
+`check` through the arrays. Measured on litho and veraPDF 1.30.2, `set-form`,
+`split`, `merge` and `autotag` outputs report on both tools what the file does,
+`set-form` adding `6.4.1/3` for the `/NeedAppearances` it sets, and the
+`flatten-form` output passes both. Remediation at the eight manifest profiles,
+default and aggressive, leaves nothing on either tool; at PDF/UA-1 it adds a
+`/TU` to the four fields written as objects of their own, `group.note` being
+written directly. Every output litho wrote before the walks read each array
+once is byte-identical to the one it writes now, but the encrypted one, whose
+key is random.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
@@ -5731,6 +5773,7 @@ seven is non-compliant on both sides (`baretree_2b`, `pagelabels_2b` and
 and `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's
 conforming cells), so a change that drops or invents a rule class leaves
 `matched` at 1056 and moves only `ruleset_mismatch`, and on those seven cells it
+`matched` at 1048 and moves only `ruleset_mismatch`, and on those seven cells it
 moves both. Both exceptions sit in the manifest's profiles, `complex_ua2` at
 PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus, and the text
 scoreboard names the rules only one side reports. A third cell in the runner is
