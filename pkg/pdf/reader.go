@@ -215,6 +215,11 @@ type Reader struct {
 	schSchema   *schematron.Schema // non-nil when WithSchematron was set
 	schPhase    string             // phase argument to WithSchematron
 	lenient     bool               // relax Factur-X consumer-path tolerances (WithLenient)
+	// encryptedOrigin is set on a Reader a [Pipeline] opened over an
+	// intermediate file it wrote from an encrypted document, directly or
+	// through earlier intermediate files (see [Reader.derivesFromEncrypted]).
+	// It is set once, before concurrent use begins.
+	encryptedOrigin bool
 }
 
 // Close releases any resources held by the [Reader]. When the Reader
@@ -722,6 +727,14 @@ func (r *Reader) Version() string {
 // IsEncrypted reports whether the document uses password-based encryption.
 func (r *Reader) IsEncrypted() bool {
 	return r.doc.IsEncrypted
+}
+
+// derivesFromEncrypted reports whether r's document is encrypted, or is one a
+// [Pipeline] wrote in the clear from an encrypted document. A Split or a Merge
+// stage writes its output to an intermediate file and reopens it, so the
+// Reader over that file reads a decrypted copy of an encrypted source.
+func (r *Reader) derivesFromEncrypted() bool {
+	return r.doc.IsEncrypted || r.encryptedOrigin
 }
 
 // PageCount returns the total number of pages in the document.

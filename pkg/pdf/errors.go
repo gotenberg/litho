@@ -125,7 +125,8 @@ var (
 	// ErrSignFullRewriteIncompatible is returned by [Writer.WriteTo] when
 	// [Writer.Sign] is combined with [Writer.Encrypt],
 	// [Writer.RemoveEncryption] or [WithEncryption], or with an encrypted
-	// source, a remediated one included. Signing covers a ByteRange of the
+	// source, a remediated one included, or one a [Pipeline] split or merged
+	// and reopened in the clear. Signing covers a ByteRange of the
 	// existing bytes via an incremental update, and the incremental update of
 	// an encrypted file would append the signature dictionary's strings in
 	// plaintext where its security handler requires ciphertext (ISO 32000-1,

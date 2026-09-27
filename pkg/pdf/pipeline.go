@@ -29,6 +29,13 @@ import (
 // closure contents; incompatible-operation checks (e.g., Sign +
 // encryption) are enforced by [Writer.WriteTo] at execution time.
 //
+// A Split or Merge stage reopens its output in the clear, and that document
+// still counts as encrypted when a [Reader] it was made from was: the source,
+// a Reader merged into it, or an earlier stage's output made from one. A
+// [Writer.Sign] after it fails with [ErrSignFullRewriteIncompatible], as it
+// does on the encrypted source itself. To sign the result, write the
+// pipeline, reopen its output and sign that.
+//
 // A remediation is the last edit, as on any [Writer]: an Apply stage after
 // the one that remediates may only call [Writer.Sign], and a Split or Merge
 // stage after it is refused with [ErrEditAfterRemediation] before it runs.
@@ -92,7 +99,9 @@ func (p *Pipeline) Split(pages []int, opts ...WriteOption) *Pipeline {
 }
 
 // Merge appends others to the current document. At least one other
-// source is required. Honors [WithBookmarks] on the stage itself.
+// source is required. Honors [WithBookmarks] on the stage itself. An
+// encrypted Reader among others makes the merged document one a later
+// [Writer.Sign] refuses (see [Pipeline]).
 func (p *Pipeline) Merge(others []*Reader, opts ...WriteOption) *Pipeline {
 	cp := append([]*Reader(nil), others...)
 	return p.add(&mergeStage{others: cp, opts: opts})
@@ -323,10 +332,28 @@ func (ex *executor) flushToTempFile(ctx context.Context, stage string) error {
 	if err := ex.writer.WriteTo(ctx, f); err != nil {
 		return fmt.Errorf("flushing pending mutations: %w", err)
 	}
-	return ex.reopenAsCurrent(ctx, f)
+	return ex.reopenAsCurrent(ctx, f, []*Reader{ex.cur})
 }
 
-func (ex *executor) reopenAsCurrent(ctx context.Context, f *os.File) error {
+// reopenAsCurrent makes f, an intermediate file the pipeline wrote from the
+// documents of from, the current document.
+//
+// The Reader over f counts as encrypted when a document it was written from
+// was (see [Reader.derivesFromEncrypted]), although f is written in the clear:
+// [Writer.WriteTo] refuses to sign an encrypted document, and a signature asked
+// for after a Split or a Merge of one would otherwise go on a decrypted copy
+// the caller never asked for, where the same Writer on the source refuses it.
+// A Merge brings the pages of every Reader it is given into f, so each of them
+// counts.
+//
+// # Corpus evidence
+//
+//   - All corpora: litho opens 86 encrypted files. A pipeline signing after a
+//     Split of one signed 84 of them, and one signing after a Merge of one
+//     into a plaintext document signed 84. Both refuse all 84 now.
+//   - pdfjs issue19484_1.pdf, issue19484_2.pdf: neither splits nor merges, on
+//     an object stream that does not inflate.
+func (ex *executor) reopenAsCurrent(ctx context.Context, f *os.File, from []*Reader) error {
 	stat, err := f.Stat()
 	if err != nil {
 		return fmt.Errorf("stat intermediate file: %w", err)
@@ -339,6 +366,7 @@ func (ex *executor) reopenAsCurrent(ctx context.Context, f *os.File) error {
 		return fmt.Errorf("reopening intermediate file: %w", err)
 	}
 	next.adoptConfiguration(ex.cur)
+	next.encryptedOrigin = slices.ContainsFunc(from, (*Reader).derivesFromEncrypted)
 	if ex.curOwned && ex.cur != nil {
 		if closeErr := ex.cur.Close(); closeErr != nil {
 			ex.logger.Debug("closing previous reader failed", slog.Any("err", closeErr))
@@ -442,7 +470,7 @@ func (s *splitStage) apply(ctx context.Context, ex *executor) error {
 	if err := Split(ctx, ex.cur, s.pages, f, opts...); err != nil {
 		return err
 	}
-	if err := ex.reopenAsCurrent(ctx, f); err != nil {
+	if err := ex.reopenAsCurrent(ctx, f, []*Reader{ex.cur}); err != nil {
 		return err
 	}
 	var size int64
@@ -489,7 +517,7 @@ func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
 	if err := Merge(ctx, sources, f, opts...); err != nil {
 		return err
 	}
-	if err := ex.reopenAsCurrent(ctx, f); err != nil {
+	if err := ex.reopenAsCurrent(ctx, f, sources); err != nil {
 		return err
 	}
 	var size int64

@@ -1600,8 +1600,9 @@ func (w *Writer) RemoveAttachment(name string) {
 // other string (ISO 32000-1, 7.6.1), an update litho cannot write. The source
 // decides: a remediation of an encrypted source works on a decrypted copy,
 // and signing is refused after it all the same, since the caller asked to sign
-// the encrypted document, not that copy. To sign a decrypted document, write
-// it, reopen the output and sign that.
+// the encrypted document, not that copy. So does a [Pipeline] stage after a
+// Split or a Merge of an encrypted document. To sign a decrypted document,
+// write it, reopen the output and sign that.
 func (w *Writer) Sign(signer Signer) {
 	w.signer = signer
 }
@@ -2705,11 +2706,12 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // top (see [Writer.Sign]).
 //
 // Signing an encrypted source returns the same error even when the caller
-// asks for nothing else, and after a remediation too, although the
-// remediation works on a decrypted copy: the signature of an encrypted
-// document belongs in its encrypted bytes, which litho cannot write (see
-// [Writer.Sign]). Encrypted-then-signed output is permitted by the
-// specification but not yet implemented.
+// asks for nothing else, after a remediation too, although the remediation
+// works on a decrypted copy, and in a [Pipeline] after a Split or a Merge of
+// an encrypted document, which the pipeline reopens in the clear: the
+// signature of an encrypted document belongs in its encrypted bytes, which
+// litho cannot write (see [Writer.Sign]). Encrypted-then-signed output is
+// permitted by the specification but not yet implemented.
 //
 // After [Writer.Redact], WriteTo checks the output against every removed
 // string before writing a byte, and returns [ErrRedactionRefused] or
@@ -2780,7 +2782,9 @@ func (w *Writer) signsARewrite() bool {
 }
 
 // signsEncrypted reports whether the document a signature is asked for is
-// encrypted: the source the Writer was built on, or the document it edits.
+// encrypted: the source the Writer was built on, or the document it edits. A
+// source a [Pipeline] reopened after a Split or a Merge of an encrypted
+// document counts (see [Reader.derivesFromEncrypted]).
 //
 // The signature of an encrypted document is written in that document. Its
 // ByteRange covers the bytes of the file (ISO 32000-1, 12.8.1), and every
@@ -2795,6 +2799,9 @@ func (w *Writer) signsARewrite() bool {
 // round, and the refusal that read that copy let a signature asked for on the
 // encrypted document go on a document the caller never asked to decrypt,
 // depending on what was queued and on how many rounds the remediation kept.
+// A pipeline's Split and Merge stages edit a decrypted copy the same way, so
+// the document a later stage's Writer is built on answers for the encrypted
+// one it came from.
 //
 // # Corpus evidence
 //
@@ -2805,7 +2812,7 @@ func (w *Writer) signsARewrite() bool {
 //     issue7303.pdf at PDF/A-2b, whose remediation keeps a later round. All
 //     336 are refused now.
 func (w *Writer) signsEncrypted() bool {
-	return w.source.doc.IsEncrypted || w.reader.doc.IsEncrypted
+	return w.source.derivesFromEncrypted() || w.reader.doc.IsEncrypted
 }
 
 // sourceDamaged reports whether the document the Writer edits is one the
