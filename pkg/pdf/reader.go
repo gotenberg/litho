@@ -624,7 +624,10 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 // plugins, default CMYK profile, OCR engine, loaded schemas and leniency. A
 // [Pipeline] reads back every intermediate file it writes, and a stage after
 // that must read the document as the caller asked. The password is not
-// carried, since intermediate files are written in the clear. r must not be
+// carried: every file read back this way is written in the clear, the
+// remediation's temp files (see [Writer.writeTempFile]) and a Pipeline's
+// intermediate files alike, which carry an encryption a stage asks for to the
+// pipeline's output instead (see [executor.carryEncryption]). r must not be
 // in use yet: these fields are set once, before concurrent use begins.
 //
 // The resource budgets are not adopted here: they govern the parse itself,

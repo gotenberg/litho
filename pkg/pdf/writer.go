@@ -37,6 +37,9 @@ type writeOpts struct {
 	bookmarks         *BookmarkOptions
 	tempDir           string
 	encrypt           *EncryptConfig
+	// inTheClear writes the output unencrypted, whatever [Writer.Encrypt] or
+	// [WithEncryption] asks for (see [inTheClear]).
+	inTheClear bool
 }
 
 // WithFullRewrite forces a clean rewrite of the entire file instead of an
@@ -69,6 +72,19 @@ func WithEncryption(cfg EncryptConfig) WriteOption {
 	}
 }
 
+// inTheClear writes the output unencrypted, whatever encryption
+// [Writer.Encrypt] or [WithEncryption] asks for. A [Pipeline] writes each
+// intermediate file it reopens with it: it has no password to reopen an
+// encrypted one with, and it encrypts its own output instead (see
+// [executor.carryEncryption]). The guards of [Writer.WriteTo] still read the
+// encryption the Writer was asked for, so a signature asked for beside it is
+// refused as it is on the output.
+func inTheClear() WriteOption {
+	return func(o *writeOpts) {
+		o.inTheClear = true
+	}
+}
+
 // compactOptions maps the public write options onto the mutations layer's
 // compaction selector, keeping that internal type out of every public
 // signature the same way [writeOpts.internalEncrypt] does.
@@ -86,7 +102,7 @@ func (o writeOpts) compactOptions() mutations.CompactOptions {
 // the mutations layer while [crypto.EncryptConfig] stays out of every public
 // signature.
 func (o writeOpts) internalEncrypt() *crypto.EncryptConfig {
-	if o.encrypt == nil {
+	if o.encrypt == nil || o.inTheClear {
 		return nil
 	}
 	internal := o.encrypt.toInternal()
@@ -1323,6 +1339,18 @@ func (c EncryptConfig) toInternal() crypto.EncryptConfig {
 		UserPassword:  c.UserPassword,
 		OwnerPassword: c.OwnerPassword,
 		Algorithm:     crypto.Algorithm(c.Algorithm),
+		Permissions:   c.Permissions,
+	}
+}
+
+// encryptConfigFromInternal is the inverse of [EncryptConfig.toInternal]. A
+// [Pipeline] reads the encryption a [Writer] was asked for back through it, to
+// carry it past an intermediate file written in the clear.
+func encryptConfigFromInternal(c crypto.EncryptConfig) EncryptConfig {
+	return EncryptConfig{
+		UserPassword:  c.UserPassword,
+		OwnerPassword: c.OwnerPassword,
+		Algorithm:     EncryptAlgorithm(c.Algorithm),
 		Permissions:   c.Permissions,
 	}
 }
@@ -2825,6 +2853,15 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	if encrypt != nil {
 		w.encryptCfg = encrypt
 		w.forceRewrite = true
+	}
+	// A pipeline intermediate is written in the clear once the guards above
+	// have read the encryption the Writer was asked for (see inTheClear). The
+	// full rewrite Encrypt forced stays, so an encrypted source is not passed
+	// through as the ciphertext it is.
+	if cfg.inTheClear && w.encryptCfg != nil {
+		encryptCfg := w.encryptCfg
+		w.encryptCfg = nil
+		defer func() { w.encryptCfg = encryptCfg }()
 	}
 	write := w.writeToInternal
 	if w.signer != nil && (cfg.fullRewrite || w.signsARewrite()) {

@@ -29,6 +29,14 @@ import (
 // closure contents; incompatible-operation checks (e.g., Sign +
 // encryption) are enforced by [Writer.WriteTo] at execution time.
 //
+// Every intermediate file is written in the clear, and the encryption a stage
+// asks for, [Writer.Encrypt] in an Apply stage or [WithEncryption] on a Split
+// or Merge, goes on the pipeline's output instead. The [Writer] of each later
+// Apply stage starts with it, as if the stage had called [Writer.Encrypt]
+// first, so a later [Writer.Sign] or PDF/A remediation is refused as it is on
+// one Writer. A later request replaces it: [Writer.Encrypt] in a later stage,
+// or [WithEncryption] on a later Split or Merge or on [Pipeline.WriteTo].
+//
 // A Split or Merge stage reopens its output in the clear, and that document
 // still counts as encrypted when a [Reader] it was made from was: the source,
 // a Reader merged into it, or an earlier stage's output made from one. A
@@ -288,17 +296,49 @@ type executor struct {
 	totalStages int
 	logger      *slog.Logger
 	result      *PipelineResult
+	// encrypt is the encryption an earlier stage asked for, which the
+	// pipeline's output owes the caller although every intermediate file is
+	// written in the clear (see [executor.carryEncryption]). nil when none did.
+	encrypt *EncryptConfig
 }
 
 func (ex *executor) isLastStage() bool { return ex.stageIdx == ex.totalStages-1 }
 
 // ensureWriter binds a Writer to the current document, placing its temp
-// files where the pipeline places its own.
+// files where the pipeline places its own. The Writer is asked for the
+// encryption an earlier stage asked for, as if the stage that binds it had
+// called [Writer.Encrypt] first (see [executor.carryEncryption]).
 func (ex *executor) ensureWriter() {
 	if ex.writer == nil {
 		ex.writer = NewWriter(ex.cur)
 		ex.writer.tempDir = ex.tempDir
+		if ex.encrypt != nil {
+			ex.writer.Encrypt(*ex.encrypt)
+		}
 	}
+}
+
+// carryEncryption records cfg, the encryption a stage asked for its output,
+// as the one the pipeline's output owes the caller, and returns the option
+// that writes the stage's output, an intermediate file, in the clear.
+//
+// An intermediate file is reopened as the next stage's document, and the
+// pipeline holds no password to reopen an encrypted one with. Written under
+// the encryption an Apply stage asked for, it failed to reopen as soon as that
+// encryption set a user password, and under an owner password alone it
+// reopened, and the Split or Merge after it wrote the output in the clear.
+// The caller asked for an encrypted output either way, so the encryption waits
+// for the write that produces it: [executor.ensureWriter] asks each later
+// Writer for it, and a Split or Merge that is the last stage writes with it.
+// A later request replaces it, as [WithEncryption] on [Writer.WriteTo]
+// replaces [Writer.Encrypt]. The remediation writes its temp files in the
+// clear for the same reason (see [Writer.writeTempFile]).
+func (ex *executor) carryEncryption(cfg *EncryptConfig) WriteOption {
+	if cfg != nil {
+		carried := *cfg
+		ex.encrypt = &carried
+	}
+	return inTheClear()
 }
 
 // releaseWriter closes the current Writer, removing the remediation output
@@ -329,20 +369,49 @@ func (ex *executor) flushToTempFile(ctx context.Context, stage string) error {
 		return fmt.Errorf("creating intermediate temp file: %w", err)
 	}
 	ex.tmpFiles = append(ex.tmpFiles, f)
-	if err := ex.writer.WriteTo(ctx, f); err != nil {
+	var encrypt *EncryptConfig
+	if ex.writer.encryptCfg != nil {
+		cfg := encryptConfigFromInternal(*ex.writer.encryptCfg)
+		encrypt = &cfg
+	}
+	if err := ex.writer.WriteTo(ctx, f, ex.carryEncryption(encrypt)); err != nil {
 		return fmt.Errorf("flushing pending mutations: %w", err)
 	}
 	return ex.reopenAsCurrent(ctx, f, []*Reader{ex.cur})
+}
+
+// restructureOptions returns the options a Split or a Merge stage writes with,
+// given the ones the stage carries. The last stage writes the pipeline's
+// output: the encryption an earlier stage asked for, then the options of
+// [Pipeline.WriteTo], then the stage's own, so a later request wins. Any other
+// writes an intermediate file, in the clear, and an encryption among its
+// options is carried to the output (see [executor.carryEncryption]).
+func (ex *executor) restructureOptions(stageOpts []WriteOption) []WriteOption {
+	var opts []WriteOption
+	if ex.isLastStage() {
+		if ex.encrypt != nil {
+			opts = append(opts, WithEncryption(*ex.encrypt))
+		}
+		opts = append(opts, ex.finalOpts...)
+		return append(opts, stageOpts...)
+	}
+	cfg := writeOpts{}
+	for _, o := range stageOpts {
+		o(&cfg)
+	}
+	opts = append(opts, stageOpts...)
+	return append(opts, ex.carryEncryption(cfg.encrypt))
 }
 
 // reopenAsCurrent makes f, an intermediate file the pipeline wrote from the
 // documents of from, the current document.
 //
 // The Reader over f counts as encrypted when a document it was written from
-// was (see [Reader.derivesFromEncrypted]), although f is written in the clear:
-// [Writer.WriteTo] refuses to sign an encrypted document, and a signature asked
-// for after a Split or a Merge of one would otherwise go on a decrypted copy
-// the caller never asked for, where the same Writer on the source refuses it.
+// was (see [Reader.derivesFromEncrypted]), although f is written in the clear
+// (see [executor.carryEncryption]): [Writer.WriteTo] refuses to sign an
+// encrypted document, and a signature asked for after a Split or a Merge of
+// one would otherwise go on a decrypted copy the caller never asked for, where
+// the same Writer on the source refuses it.
 // A Merge brings the pages of every Reader it is given into f, so each of them
 // counts.
 //
@@ -449,11 +518,7 @@ func (s *splitStage) apply(ctx context.Context, ex *executor) error {
 	if err := ex.flushToTempFile(ctx, s.name()); err != nil {
 		return err
 	}
-	var opts []WriteOption
-	if ex.isLastStage() {
-		opts = append(opts, ex.finalOpts...)
-	}
-	opts = append(opts, s.opts...)
+	opts := ex.restructureOptions(s.opts)
 
 	if ex.isLastStage() {
 		if err := Split(ctx, ex.cur, s.pages, ex.finalDst, opts...); err != nil {
@@ -496,11 +561,7 @@ func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
 	sources = append(sources, ex.cur)
 	sources = append(sources, s.others...)
 
-	var opts []WriteOption
-	if ex.isLastStage() {
-		opts = append(opts, ex.finalOpts...)
-	}
-	opts = append(opts, s.opts...)
+	opts := ex.restructureOptions(s.opts)
 
 	if ex.isLastStage() {
 		if err := Merge(ctx, sources, ex.finalDst, opts...); err != nil {

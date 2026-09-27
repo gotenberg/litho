@@ -117,6 +117,57 @@ func TestPipe_EncryptStageGrantsWhatTheEncryptCommandGrants(t *testing.T) {
 	}
 }
 
+// TestPipe_EncryptStageSurvivesALaterSplitOrMerge pins that an encrypt stage
+// before a split or a merge encrypts the output, as pipe promises when it
+// withholds the encryption-dropped warning for a pipeline with an encrypt
+// stage.
+//
+// The split and the merge reopen an intermediate file the encrypt stage wrote.
+// With a user password pipe failed ("reopening intermediate file: invalid PDF
+// password"), and with an owner password alone it wrote the output in the
+// clear.
+func TestPipe_EncryptStageSurvivesALaterSplitOrMerge(t *testing.T) {
+	ctx := context.Background()
+	const password = "s3cret"
+	for _, tc := range []struct {
+		name   string
+		stages func(other string) []string
+		user   string
+		pages  int
+	}{
+		{"a split, under a user password", func(string) []string { return []string{"split", "-pages", "1"} }, password, 1},
+		{"a merge, under a user password", func(other string) []string { return []string{"merge", other} }, password, 3},
+		{"a split, under an owner password alone", func(string) []string { return []string{"split", "-pages", "2"} }, "", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := twoPageTempPDF(t)
+			out := filepath.Join(t.TempDir(), "out.pdf")
+			args := []string{"pipe", src, "encrypt", "-owner-password", "owner"}
+			if tc.user != "" {
+				args = append(args, "-user-password", tc.user)
+			}
+			args = append(append(args, tc.stages(onePageTempPDF(t))...), "-o", out)
+			if rc, errOut := runPipeArgs(t, args); rc != exitOK {
+				t.Fatalf("pipe: exit %d, stderr: %s", rc, errOut)
+			}
+			if tc.user != "" && opensWithoutAPassword(t, out) {
+				t.Error("the output opens with no password")
+			}
+			r, err := pdf.OpenFile(ctx, out, pdf.WithPassword(tc.user))
+			if err != nil {
+				t.Fatalf("opening the output: %v", err)
+			}
+			defer r.Close()
+			if !r.IsEncrypted() {
+				t.Error("the output is not encrypted")
+			}
+			if n, err := r.PageCount(ctx); err != nil || n != tc.pages {
+				t.Errorf("the output has %d page(s) (%v), want %d", n, err, tc.pages)
+			}
+		})
+	}
+}
+
 // TestPipe_MergeThenDeleteComposesInOrder pins ORDER, not just execution.
 //
 // merge is the only stage taking positional file arguments, so it is the one
