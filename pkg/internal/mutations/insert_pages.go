@@ -173,5 +173,8 @@ func InsertPages(
 		}
 	}
 
+	if err := mergeInsertedFields(ctx, alloc, doc, catalogRef, current, srcDoc, copier, copiedRefs); err != nil {
+		return fmt.Errorf("adding the inserted pages' form fields: %w", err)
+	}
 	return nil
 }

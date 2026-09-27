@@ -82,7 +82,7 @@ func rebuildAcroForm(
 	sources []acroFormSource,
 	dst ast.PdfDict,
 ) {
-	fields := collectRootFields(alloc, pageRefs)
+	fields := collectRootFields(alloc, pageRefs, true)
 	if len(fields) == 0 {
 		return
 	}
@@ -131,11 +131,12 @@ type acroFormSource struct {
 }
 
 // collectRootFields returns the root field of every widget annotation on
-// pageRefs, first-seen order, without duplicates.
+// pageRefs, first-seen order, without duplicates, and without signature fields
+// when dropSignatures is set (see [dropsSignature]).
 //
 // Order follows the pages and their /Annots arrays rather than a map, so the
 // same input always produces the same /Fields array.
-func collectRootFields(alloc *writer.ObjAllocator, pageRefs []ast.PdfObject) ast.PdfArray {
+func collectRootFields(alloc *writer.ObjAllocator, pageRefs []ast.PdfObject, dropSignatures bool) ast.PdfArray {
 	seen := make(map[int]bool)
 	out := ast.PdfArray{}
 
@@ -161,7 +162,7 @@ func collectRootFields(alloc *writer.ObjAllocator, pageRefs []ast.PdfObject) ast
 			if !ok || seen[rootRef.ObjectNum] {
 				continue
 			}
-			if dropsSignature(alloc, rootRef) {
+			if dropSignatures && dropsSignature(alloc, rootRef) {
 				continue
 			}
 			seen[rootRef.ObjectNum] = true

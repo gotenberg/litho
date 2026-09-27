@@ -1039,6 +1039,12 @@ func (w *Writer) DeletePages(pages ...int) error {
 // The pages go before the first of the Reader's pages from pos on that an
 // earlier deletion kept, after the pages an earlier insertion put there, and
 // at the end when no such page is left.
+//
+// The form fields the inserted pages' widgets present join the document's
+// interactive form, which is created when the document has none. Two root
+// fields cannot share a name (ISO 32000-1, 12.7.3.2), so a copied field whose
+// name the form already uses is renamed with the first free "_2", "_3"
+// suffix.
 func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error {
 	if err := w.refuseAfterRemediation("InsertPages"); err != nil {
 		return err

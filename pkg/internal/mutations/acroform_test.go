@@ -41,7 +41,7 @@ func TestCollectRootFields_NamesOnlySurvivingRoots(t *testing.T) {
 		widgetPage(alloc, kidB, lone),
 	}
 
-	got := collectRootFields(alloc, kept)
+	got := collectRootFields(alloc, kept, true)
 	if len(got) != 2 {
 		t.Fatalf("/Fields = %v, want the shared root and the lone widget", got)
 	}
@@ -186,7 +186,7 @@ func TestCollectRootFields_DropsSignatureFields(t *testing.T) {
 	text := alloc.Alloc(ast.PdfDict{"FT": ast.PdfName("Tx"), "T": ast.PdfString("name")})
 	textWidget := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Widget"), "Parent": text})
 
-	got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, sigWidget, textWidget)})
+	got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, sigWidget, textWidget)}, true)
 	if len(got) != 1 {
 		t.Fatalf("/Fields = %v, want only the text field", got)
 	}

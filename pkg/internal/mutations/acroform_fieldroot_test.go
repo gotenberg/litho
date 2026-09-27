@@ -35,7 +35,7 @@ func TestCollectRootFields_MarkupAnnotationTitleIsNotAField(t *testing.T) {
 				"Contents": ast.PdfString("a comment"),
 			})
 
-			got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, widget, markup)})
+			got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, widget, markup)}, true)
 
 			for _, f := range got {
 				if f == ast.PdfObject(markup) {
@@ -57,7 +57,7 @@ func TestCollectRootFields_MarkupOnlyPageYieldsNoFields(t *testing.T) {
 	alloc := writer.NewObjAllocator(1)
 	only := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Polygon"), "T": ast.PdfString("author")})
 
-	if got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, only)}); len(got) != 0 {
+	if got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, only)}, true); len(got) != 0 {
 		t.Errorf("/Fields = %v for a page with only a markup annotation, want none", got)
 	}
 }
@@ -76,7 +76,7 @@ func TestCollectRootFields_NonTerminalFieldStillQualifies(t *testing.T) {
 	root := alloc.Alloc(ast.PdfDict{"T": ast.PdfString("group")}) // no /FT, no /Subtype
 	kid := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Widget"), "Parent": root})
 
-	got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, kid)})
+	got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, kid)}, true)
 	if len(got) != 1 || got[0] != ast.PdfObject(root) {
 		t.Fatalf("/Fields = %v, want the non-terminal root %v", got, root)
 	}
@@ -90,7 +90,7 @@ func TestCollectRootFields_MergedWidgetWithoutFTStillQualifies(t *testing.T) {
 
 	merged := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Widget"), "T": ast.PdfString("name")})
 
-	got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, merged)})
+	got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, merged)}, true)
 	if len(got) != 1 || got[0] != ast.PdfObject(merged) {
 		t.Fatalf("/Fields = %v, want the merged field-widget %v", got, merged)
 	}
