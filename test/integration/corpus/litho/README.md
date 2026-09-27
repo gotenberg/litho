@@ -166,6 +166,7 @@ one deliberately rather than diffing it against a fresh build.
 | `inlinefs_4.pdf`       | PDF/A-4      | File specifications written inline outside any annotation `/FS`  |
 | `sigtagged_ua1.pdf`    | PDF/UA-1     | A certified signature on a tagged page, under the rewrites       |
 | `kidsarray_2b.pdf`     | PDF/A-2b     | Pages written directly in a `/Kids` array named by reference     |
+| `formmark_ua1.pdf`     | PDF/UA-1     | Forms judged by what they draw, and the sequences they open      |
 
 ### Must-not-fire controls
 
@@ -242,6 +243,7 @@ violation but is exempt, so a firing is a false positive.
 | `tableregular_ua2`                        | A flat table carrying a real `/ColSpan` that adds up                   | ISO 14289-2, 8.2.5.26 t3     |
 | `tableregular_ua2`                        | A table whose every `TH` carries a `/Scope`, settling determination    | ISO 14289-2, 8.2.5.26 t5, t6 |
 | `artifact_ua1`                            | A tagged paragraph and a top-level artifact, neither one nested        | ISO 14289-1, 7.1 t1, t2      |
+| `formmark_ua1`                            | Five forms painting nothing untagged, two of them nothing at all       | ISO 14289-1, 7.1 t3          |
 | `annots_1b`                               | A plain square and a plain widget, both with `/F 4` and an `/N` stream | ISO 19005-1, 6.5.3           |
 | `annots_1b`                               | An appearance dict carrying `/D` beside an `/N` of the wrong type      | ISO 19005-1, 6.5.3 t5, t6    |
 | `fontkeys_1b`                             | A Helvetica with no `/FirstChar`, `/LastChar` or `/Widths`             | ISO 19005-1, 6.3.2 t4-t6     |
@@ -435,6 +437,7 @@ which are covered under [Known divergences](#known-divergences).
 | `formcycle_ua1.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `formflat_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 6   | 6    | 7    | 1    | 3    |
 | `formhidden_ua1.pdf`   | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 5    |
+| `formmark_ua1.pdf`     | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 2    | 3    |
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
@@ -4709,6 +4712,49 @@ of the two pages untagged (`7.1/3`, `8.2.2/1`) and their `/Tabs` unset
 eight manifest profiles, default and aggressive, passes both tools but the
 PDF/UA-2 ones, where both report `8.8/2` for the destination of page 2's GoTo
 action. qpdf reads each output without a warning.
+
+### `formmark_ua1.pdf`
+
+ISO 14289-1, 7.1 asks that real content be tagged or marked as an artifact (test
+3), and that neither sit inside the other (tests 1 and 2); ISO 14289-2, 8.2.2
+asks the first again. veraPDF builds its content items from what a form XObject
+draws, in the marked-content state around the `Do` (ISO 32000-1, 14.6): a form
+that paints nothing is no content, and the sequences a form opens are judged as
+the page's are. litho counted every `Do` of a form as one untagged content item
+and read no marked content inside a form. Flattening `annothidden_2b.pdf` drew
+its empty appearances onto an untagged page, and litho reported `7.1/3` and
+`8.2.2/1` on the output where veraPDF reports neither. No corpus file opened a
+sequence inside a form, or drew a form that paints nothing into a tagged
+document.
+
+One tagged page paints a square as a `/P` and draws six forms:
+
+| Form       | Draws                                                                  | Verdict          |
+| ---------- | ---------------------------------------------------------------------- | ---------------- |
+| `Empty`    | nothing                                                                | silent           |
+| `ArtForm`  | a square in its own `/Artifact`                                        | silent           |
+| `TagForm`  | a square under `/MCID 3`, which only its `/StructParents 1` entry maps | silent           |
+| `ObjrForm` | an unmarked square; its `/StructParent 2` names a `/Figure` over it    | silent           |
+| `Chain`    | a form whose content stream is empty                                   | silent           |
+| `NestForm` | in the page's `/MCID 1`, an unresolved `/MCID 0`, then an `/Artifact`  | `7.1/1`, `7.1/2` |
+
+Measured on veraPDF 1.30.2 and litho, the file agrees with veraPDF in all
+thirteen cells, rule for rule and count for count. PDF/UA-1 reports `7.1/1` and
+`7.1/2`, both from `NestForm`'s artifact, which opens inside the page's tagged
+sequence, and PDF/UA-2 the part-1 claim (`5/2`, `5/5`) and the Document element
+outside the PDF 2.0 namespace (`8.2.5.2/2`). Before the fix litho reported
+`7.1/3` in place of the two at PDF/UA-1, and `8.2.2/1` beside the three at
+PDF/UA-2. The PDF/A cells report the six squares painting in DeviceGray with no
+output intent (`6.2.3.3/3` at part 1, `6.2.4.3/4` from part 2), the `pdfuaid`
+properties no extension schema declares and the missing PDF/A identification
+(`6.7.9/2`, `/3` and `6.7.11/1` at part 1, `6.6.2.3.1/1`, `/2` and `6.6.4/1` at
+parts 2 and 3, `6.7.3/1` at part 4), the `%PDF-1.7` header at part 4 and, at 4f,
+the missing `/EmbeddedFiles`.
+
+Remediation at the eight manifest profiles, default and aggressive, leaves
+nothing on either tool but `7.1/1` and `7.1/2` at PDF/UA-1, on both: no repair
+reaches into a form. The flattened output reports the input's rule set at every
+manifest profile.
 
 ## Scope
 
