@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -41,6 +42,12 @@ func matchPageBoxes(v compliance.Violation) bool {
 // area and is dropped like any degenerate box, and a media box of that shape
 // is replaced. Left as written, the box stayed unrepaired while the validator
 // reported it.
+//
+// A page that read the default crop box, its media box, because the crop box
+// it states or inherits encloses no area, would read the crop box of a node
+// above once that one is dropped, and show another region. Such a page states
+// its media box as its crop box instead (see [cropShowsThrough]), as a rewrite
+// writes it.
 //
 // # Corpus evidence
 //
@@ -106,7 +113,8 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			// outside the page, so the text drawn there is lost. Every box
 			// except /MediaBox defaults to another box when absent (ISO
 			// 32000-1, Table 30), so dropping it is both lossless and what the
-			// producer meant.
+			// producer meant. A crop box a node above states that would then
+			// show through is kept off the page below (see [cropShowsThrough]).
 			if isDegenerateBox(arr) {
 				if key != "MediaBox" {
 					delete(newPage, key)
@@ -121,6 +129,10 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 				newPage[key] = clamped
 				modified = true
 			}
+		}
+		if cropShowsThrough(ctx, doc, pe, newPage) {
+			newPage["CropBox"] = slices.Clone(fixedMediaBox(ctx, doc, pe, newPage, opts.PreserveContent, fallbackMedia))
+			modified = true
 		}
 		// A page written directly in its parent's /Kids is written back
 		// there ([writeTreeNode]).
@@ -143,6 +155,83 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		fixes = append(fixes, fmt.Sprintf("normalised inherited page boundaries on %d page tree node(s)", nodes))
 	}
 	return fixes, nil
+}
+
+// cropShowsThrough reports whether, once the degenerate crop boxes are
+// dropped, a crop box a node above pe states would show through on pe, a page
+// that read the default in its place: fixed, pe's repaired dictionary, states
+// no crop box, and the one pe stated, or the nearest it inherited, enclosed no
+// area. The default is the media box (ISO 32000-1, Table 30), and the one of
+// a node above is another region.
+//
+// A crop box written as a reference is left as it is, by the leaf pass and the
+// node pass alike, and one that is no array is passed over, as the reader
+// passes over it (see [document.Page]).
+func cropShowsThrough(ctx context.Context, doc *document.Document, pe annotPageEntry, fixed ast.PdfDict) bool {
+	if hasNonNullEntry(fixed, "CropBox") {
+		return false
+	}
+	_, ownDropped := pe.dict["CropBox"].(ast.PdfArray)
+	readsDefault := ownDropped
+	nearest := !ownDropped
+	depth := 0
+	for node := pe.parent; node != nil && depth <= maxPageTreeDepth; node, depth = node.parent, depth+1 {
+		if !hasNonNullEntry(node.dict, "CropBox") {
+			continue
+		}
+		entry := node.dict["CropBox"]
+		box, err := document.ResolveArray(ctx, doc, entry)
+		if err != nil || box == nil {
+			continue
+		}
+		degenerate := isDegenerateBox(measuredBox(ctx, doc, box))
+		if nearest {
+			readsDefault, nearest = degenerate, false
+		}
+		if _, direct := entry.(ast.PdfArray); direct && degenerate {
+			// The node pass drops it, and the one above shows through.
+			continue
+		}
+		return readsDefault && !degenerate
+	}
+	return false
+}
+
+// fixedMediaBox returns the media box pe, a page whose repaired dictionary is
+// fixed, has once the page boxes are repaired: its own, repaired already, or
+// the one it inherits, repaired as the node pass repairs it (see
+// [clampBoxesInDict]).
+func fixedMediaBox(ctx context.Context, doc *document.Document, pe annotPageEntry, fixed ast.PdfDict, preserveContent bool, fallbackMedia ast.PdfArray) ast.PdfArray {
+	holder := fixed
+	for node, depth := pe.parent, 0; !hasNonNullEntry(holder, "MediaBox") && node != nil && depth <= maxPageTreeDepth; node, depth = node.parent, depth+1 {
+		holder = node.dict
+	}
+	entry := holder["MediaBox"]
+	box, err := document.ResolveArray(ctx, doc, entry)
+	if err != nil || box == nil {
+		return defaultMediaBox
+	}
+	if _, direct := entry.(ast.PdfArray); !direct {
+		return document.ResolveRectangle(ctx, doc, box)
+	}
+	box = measuredBox(ctx, doc, box)
+	if isDegenerateBox(box) {
+		return fallbackMedia
+	}
+	if clamped, changed := clampBoxArray(box, preserveContent); changed {
+		return clamped
+	}
+	return box
+}
+
+// measuredBox returns box as the rectangle ISO 19005-2, 6.1.13 t11 measures
+// (see [compliance.PageBoundaryRect]), its references to numbers resolved.
+func measuredBox(ctx context.Context, doc *document.Document, box ast.PdfArray) ast.PdfArray {
+	box = document.ResolveRectangle(ctx, doc, box)
+	if measured, differs := compliance.PageBoundaryRect(ctx, doc, box); differs {
+		return measured
+	}
+	return box
 }
 
 // clampPageTreeBoxes normalises the boxes declared on the interior nodes of the

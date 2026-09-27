@@ -92,6 +92,22 @@ func TestRewrites_WriteThePageBoxesTheReaderReads(t *testing.T) {
 				return err
 			})
 		}, 0},
+		// ISO 19005-2, 6.1.13 t11 fails the boxes enclosing no area, so the
+		// remediation repairs them itself before the output is written.
+		{"remediation of the page boxes", func(t *testing.T) []byte {
+			source := openBytes(t, src)
+			defer source.Close()
+			w := NewWriter(source)
+			defer w.Close()
+			if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
+				t.Fatalf("RemediatePDFA: %v", err)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			return out.Bytes()
+		}, 0},
 		{"split", func(t *testing.T) []byte {
 			source := openBytes(t, src)
 			defer source.Close()
