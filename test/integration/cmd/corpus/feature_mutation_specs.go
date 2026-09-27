@@ -279,8 +279,8 @@ const mutationRedactReach = 1e6
 //
 // # Corpus evidence
 //
-//   - litho: 75 of the 92 fixtures have one page, so mutate-pages deletes a
-//     page on 17.
+//   - litho: 91 of the 119 fixtures have one page, so mutate-pages deletes a
+//     page on 28.
 //   - litho: 37 fixtures refuse the whole-page redaction by design, 28 with
 //     ErrRedactionRefused (content a form XObject draws, an inline image, a
 //     stroked path) and 9 with ErrRedactionIncomplete; the 2 encrypted
