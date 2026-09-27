@@ -914,7 +914,7 @@ func (m *Machine) PathBoxes() []PathBox {
 	return m.pathBoxes
 }
 
-func handleBDC(_ context.Context, m *Machine, state *State, op content.Operation) {
+func handleBDC(ctx context.Context, m *Machine, state *State, op content.Operation) {
 	mcState := MarkedContentState{MCID: -1}
 	if len(op.Operands) >= 1 {
 		if tag, ok := op.Operands[0].(ast.PdfName); ok {
@@ -934,7 +934,7 @@ func handleBDC(_ context.Context, m *Machine, state *State, op content.Operation
 
 	if len(op.Operands) >= 2 {
 		applyBDCOptionalContent(m, state, &mcState, op.Operands[1])
-		if props, ok := op.Operands[1].(ast.PdfDict); ok {
+		if props := m.propertyList(ctx, op.Operands[1]); props != nil {
 			applyBDCProperties(&mcState, props)
 		}
 	}
@@ -943,6 +943,35 @@ func handleBDC(_ context.Context, m *Machine, state *State, op content.Operation
 	if mcState.HasText {
 		m.PendingActualText = mcState.ActualText
 	}
+}
+
+// propertyList returns the property list a BDC operand carries: the operand
+// itself when it is written inline, or the dictionary the current resources'
+// /Properties defines under its name (ISO 32000-1, 14.6.2). A name defining
+// no dictionary carries none. Text under a named list belongs to the
+// structure element its /MCID maps as surely as text under an inline one, so
+// a redaction that removes it clears that element's copy of the text too.
+//
+// # Corpus evidence
+//
+//   - All corpora: the text extracted from pdfjs issue20722.pdf, the one file
+//     naming lists that carry an /MCID, and from the litho fixtures naming
+//     lists that carry a /Lang is unchanged.
+func (m *Machine) propertyList(ctx context.Context, operand ast.PdfObject) ast.PdfDict {
+	switch v := operand.(type) {
+	case ast.PdfDict:
+		return v
+	case ast.PdfName:
+		if m.Resources == nil || m.Doc == nil {
+			return nil
+		}
+		// Best-effort: an unresolvable /Properties or entry names no list,
+		// and the sequence then carries no properties, as before.
+		props, _ := document.ResolveDict(ctx, m.Doc, m.StagedObject(m.Resources["Properties"]))
+		pd, _ := document.ResolveDict(ctx, m.Doc, m.StagedObject(props[v]))
+		return pd
+	}
+	return nil
 }
 
 // applyBDCOptionalContent handles the /OC tag case where the BDC props

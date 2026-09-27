@@ -22,16 +22,22 @@ import (
 // Object 10 describes MCID 0 and object 11 describes MCID 1.
 func taggedFixture(t *testing.T, nums string) (*document.Document, *document.Page) {
 	t.Helper()
-	ctx := context.Background()
-
 	body := "/P <</MCID 0>> BDC BT /F1 12 Tf 100 700 Td (SECRET) Tj ET EMC " +
 		"/P <</MCID 1>> BDC BT /F1 12 Tf 100 600 Td (KEEP) Tj ET EMC"
+	return taggedFixtureWith(t, nums, body, "")
+}
+
+// taggedFixtureWith builds [taggedFixture]'s document with body as the page's
+// content and properties as the entries of its /Properties resource.
+func taggedFixtureWith(t *testing.T, nums, body, properties string) (*document.Document, *document.Page) {
+	t.Helper()
+	ctx := context.Background()
 
 	data := []byte("%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 8 0 R >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
-		"5 0 obj\n<< /Font << /F1 4 0 R >> >>\nendobj\n" +
+		"5 0 obj\n<< /Font << /F1 4 0 R >> /Properties << " + properties + " >> >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
 		"/Resources 5 0 R /Contents 6 0 R /StructParents 0 >>\nendobj\n" +
 		"6 0 obj\n<< /Length " + strconv.Itoa(len(body)) + " >>\nstream\n" + body + "\nendstream\nendobj\n" +
@@ -90,6 +96,36 @@ func TestScrubStructText_ClearsTheElementForRemovedContent(t *testing.T) {
 	// The element itself stays: dropping it would detach the page's structure.
 	if scrubbed["S"] != ast.PdfName("P") {
 		t.Errorf("element lost its /S: %v", scrubbed)
+	}
+}
+
+// TestScrubStructText_ClearsTheElementOfANamedPropertyList pins that text whose
+// marked content names its property list from the page's /Properties (ISO
+// 32000-1, 14.6.2) is tied to its structure element as text under an inline
+// list is. The extractor read an inline list alone, so the removed text carried
+// no MCID and the element kept a readable copy of it in /ActualText.
+func TestScrubStructText_ClearsTheElementOfANamedPropertyList(t *testing.T) {
+	body := "/P /S0 BDC BT /F1 12 Tf 100 700 Td (SECRET) Tj ET EMC " +
+		"/P /S1 BDC BT /F1 12 Tf 100 600 Td (KEEP) Tj ET EMC"
+	doc, page := taggedFixtureWith(t, distinctElements, body, "/S0 << /MCID 0 >> /S1 << /MCID 1 >>")
+	alloc := writer.NewObjAllocator(20)
+
+	report, err := RedactPageRegions(context.Background(), alloc, doc, page, coversSecret)
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+	if len(report.RemovedMCIDs) != 1 || report.RemovedMCIDs[0] != 0 {
+		t.Fatalf("RemovedMCIDs = %v, want [0]", report.RemovedMCIDs)
+	}
+	scrubbed, ok := alloc.Pending()[10].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("object 10 = %T, want the rewritten structure element", alloc.Pending()[10])
+	}
+	if _, present := scrubbed["ActualText"]; present {
+		t.Errorf("/ActualText survived: the structure tree still holds the removed text")
+	}
+	if _, queued := alloc.Pending()[11]; queued {
+		t.Errorf("the surviving element was rewritten: %v", alloc.Pending()[11])
 	}
 }
 
