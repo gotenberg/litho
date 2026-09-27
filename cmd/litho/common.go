@@ -207,7 +207,13 @@ func abandonOutput(path string, closeDst func() error) {
 // releaseWriter closes w, which removes the temp file a remediation left when
 // the command stopped before writing it, and warns when that file could not
 // be removed. Deferred right after [pdf.NewWriter] in every command.
+//
+// It also reports the signatures the output does not carry (see
+// [warnSignaturesDropped]). Every command that writes through a Writer defers
+// this, so none can forget the warning, and a command whose write failed
+// prints none: the Writer reports only on an output it wrote.
 func releaseWriter(w *pdf.Writer, stderr io.Writer) {
+	warnSignaturesDropped(stderr, w.DroppedSignatures())
 	if err := w.Close(); err != nil {
 		fmt.Fprintf(stderr, "warning: %v\n", err)
 	}

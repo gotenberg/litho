@@ -353,6 +353,7 @@ func (f *mutationFeature) write(ctx context.Context, in *mutationInput, src *pdf
 	if err == nil {
 		var buf bytes.Buffer
 		if err = w.WriteTo(ctx, &buf); err == nil {
+			plan.droppedSignatures = w.DroppedSignatures()
 			return buf.Bytes(), plan, "", nil
 		}
 	}

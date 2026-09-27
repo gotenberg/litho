@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
@@ -42,12 +43,16 @@ type writeOpts struct {
 	// inTheClear writes the output unencrypted, whatever [Writer.Encrypt] or
 	// [WithEncryption] asks for (see [inTheClear]).
 	inTheClear bool
+	// droppedSignatures receives the signatures the output drops (see
+	// [WithDroppedSignatures]).
+	droppedSignatures *[]DroppedSignature
 }
 
 // WithFullRewrite forces a clean rewrite of the entire file instead of an
 // incremental update. Required for operations that touch every object
 // (encrypt, decrypt, flatten). A Writer that signs ([Writer.Sign]) writes the
-// rewrite, then signs it in an incremental update on top.
+// rewrite, then signs it in an incremental update on top. The rewrite leaves
+// out the source's signatures (see [Writer.DroppedSignatures]).
 func WithFullRewrite() WriteOption {
 	return func(o *writeOpts) {
 		o.fullRewrite = true
@@ -704,6 +709,12 @@ type Writer struct {
 	// document and restore what Redact removed.
 	redactions     [][]RedactRegion
 	redactedTokens []string
+
+	// droppedSignatures lists the signatures the writes that produce the
+	// output left out, each a full rewrite (see [Writer.DroppedSignatures]). A
+	// remediation writes its output before WriteTo, so the record outlives
+	// one write; a remediation or a WriteTo that fails puts it back as it was.
+	droppedSignatures []DroppedSignature
 
 	// preSerializedPath is the path to a temp file holding the fully
 	// serialized PDF when remediation pre-serializes for accurate
@@ -2229,13 +2240,16 @@ func (w *Writer) materialize(ctx context.Context) (undo func(), err error) {
 	if len(w.mutations) == 0 && len(w.rewriteOverrides) == 0 && !w.trailerDirty && !w.decrypt {
 		return func() {}, nil
 	}
+	prevDropped := slices.Clone(w.droppedSignatures)
 	path, err := w.writeTempFile(ctx, w, "litho-staged-*.pdf")
 	if err != nil {
+		w.droppedSignatures = prevDropped
 		return nil, fmt.Errorf("writing the edited document to remediate: %w", err)
 	}
 	logger := w.reader.doc.Logger
 	next, err := w.reader.reopenFile(ctx, path)
 	if err != nil {
+		w.droppedSignatures = prevDropped
 		removeTempFile(logger, path)
 		return nil, fmt.Errorf("reopening the edited document to remediate: %w", err)
 	}
@@ -2249,6 +2263,7 @@ func (w *Writer) materialize(ctx context.Context) (undo func(), err error) {
 		w.reader, w.basePath = prevReader, ""
 		w.mutations, w.rewriteOverrides = prevMutations, prevOverrides
 		w.folded, w.trailerDirty = prevFolded, prevTrailerDirty
+		w.droppedSignatures = prevDropped
 		if err := releaseOwnedReader(base, basePath); err != nil {
 			logger.Debug("remediate: releasing the edited document failed", slog.Any("err", err))
 		}
@@ -2400,6 +2415,7 @@ func (w *Writer) remediate(
 	preTrailerDirty := w.trailerDirty
 	preRequiredVersion := w.requiredVersion
 	preRewriteOverrides := w.rewriteOverrides
+	preDropped := slices.Clone(w.droppedSignatures)
 	preTrailerSnap := make(ast.PdfDict, len(doc.Index.Trailer))
 	maps.Copy(preTrailerSnap, doc.Index.Trailer)
 	restoreTrailer := func() {
@@ -2413,6 +2429,7 @@ func (w *Writer) remediate(
 		w.trailerDirty = preTrailerDirty
 		w.requiredVersion = preRequiredVersion
 		w.rewriteOverrides = preRewriteOverrides
+		w.droppedSignatures = preDropped
 		restoreTrailer()
 		unmaterialize()
 	}
@@ -2618,6 +2635,7 @@ func (w *Writer) remediate(
 			slog.Int("residual", len(next.residual)))
 		removeTempFile(doc.Logger, tmpPath)
 		tmpPath, residual = next.path, next.residual
+		w.droppedSignatures = appendDroppedSignatures(w.droppedSignatures, next.dropped...)
 		fixed = append(fixed, next.fixed...)
 		rolledBack = append(rolledBack, next.rolledBack...)
 		disabled = append(disabled, next.disabled...)
@@ -2702,6 +2720,9 @@ type roundResult struct {
 	fixed      []string
 	rolledBack []string
 	disabled   []string
+	// dropped are the signatures the round's full rewrite left out, which a
+	// first round written as an incremental update kept.
+	dropped []DroppedSignature
 }
 
 // remediationRound reopens the serialized output at path and runs the
@@ -2759,7 +2780,7 @@ func (w *Writer) remediationRound(
 		return roundResult{}, false, err
 	}
 	if reason == "" {
-		return roundResult{path: tmpPath, residual: res, fixed: rep.Fixed}, true, nil
+		return roundResult{path: tmpPath, residual: res, fixed: rep.Fixed, dropped: w2.droppedSignatures}, true, nil
 	}
 	if rep.ContentSnapshot == nil {
 		logger.Debug("remediate: round regressed, keeping previous output",
@@ -2782,7 +2803,10 @@ func (w *Writer) remediationRound(
 			slog.String("reason", reason))
 		return roundResult{}, false, nil
 	}
-	return roundResult{path: tmpPath, residual: res, fixed: kept, rolledBack: rep.ContentFixed, disabled: rep.ContentFixers}, true, nil
+	return roundResult{
+		path: tmpPath, residual: res, fixed: kept, rolledBack: rep.ContentFixed, disabled: rep.ContentFixers,
+		dropped: w2.droppedSignatures,
+	}, true, nil
 }
 
 // writeRound serializes the output of a remediation round w2 queues to a temp
@@ -2954,6 +2978,11 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // After [Writer.Redact], WriteTo checks the output against every removed
 // string before writing a byte, and returns [ErrRedactionRefused] or
 // [ErrRedactionIncomplete] rather than write a file that still holds one.
+//
+// A full rewrite leaves out the signatures of the document it rewrites: each
+// covers bytes the rewrite moves (ISO 32000-1, 12.8.1). The appearance of each
+// signed widget is drawn into its page, and [Writer.DroppedSignatures] names
+// what the output left out. An incremental update keeps every signature.
 func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (err error) {
 	defer recoverToError(w.logger(), "Writer.WriteTo", &err)
 	if w.closed {
@@ -3027,10 +3056,17 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	if w.signer != nil && (cfg.fullRewrite || w.signsARewrite()) {
 		write = w.writeSignedRewrite
 	}
+	// A failed write leaves the record as the remediation left it, since a
+	// retry may write the output another way.
+	dropped := slices.Clone(w.droppedSignatures)
 	if err := write(ctx, dst, w.signer, opts...); err != nil {
+		w.droppedSignatures = dropped
 		return err
 	}
 	w.consumed = true
+	if cfg.droppedSignatures != nil {
+		*cfg.droppedSignatures = w.DroppedSignatures()
+	}
 	// Nothing reads the remediation output the Writer edited any more. A
 	// failed write keeps it, since a retry serializes from it.
 	if err := w.releaseBase(); err != nil {
@@ -3395,12 +3431,19 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 				overrides = mutAlloc.Pending()
 			}
 		}
-		enforced, enforceErr := w.enforceRedactions(ctx, overrides)
+		// A signature copied into a rewrite covers bytes it no longer holds.
+		// The drawing goes in before the redaction check, which scans what is
+		// written.
+		baked, err := mutations.BakeSignaturesForRewrite(ctx, w.reader.doc, overrides)
+		if err != nil {
+			return fmt.Errorf("drawing the signatures into their pages: %w", err)
+		}
+		enforced, enforceErr := w.enforceRedactions(ctx, baked)
 		if enforceErr != nil {
 			return enforceErr
 		}
 		overrides = enforced
-		return mutations.FullRewrite(ctx, dst, mutations.FullRewriteConfig{
+		if err := mutations.FullRewrite(ctx, dst, mutations.FullRewriteConfig{
 			Doc:             w.reader.doc,
 			EncryptCfg:      w.encryptCfg,
 			Decrypt:         w.decrypt,
@@ -3410,7 +3453,11 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 			XRefStream:      cfg.xrefStream,
 			Compact:         cfg.compactOptions(),
 			Overrides:       overrides,
-		})
+		}); err != nil {
+			return err
+		}
+		w.recordDroppedSignatures(ctx)
+		return nil
 	}
 
 	doc := w.reader.doc
@@ -3542,6 +3589,9 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 		}
 		return err
 	}
+	if cfg.droppedSignatures != nil {
+		*cfg.droppedSignatures = droppedSignaturesOf(ctx, src.doc)
+	}
 	return nil
 }
 
@@ -3615,6 +3665,13 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 			return fmt.Errorf("%w: %w", ErrAttachmentTreeIncomplete, err)
 		}
 		return err
+	}
+	if cfg.droppedSignatures != nil {
+		docs := make([]*document.Document, len(sources))
+		for i, src := range sources {
+			docs[i] = src.doc
+		}
+		*cfg.droppedSignatures = droppedSignaturesOf(ctx, docs...)
 	}
 	return nil
 }

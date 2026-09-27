@@ -3,18 +3,21 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"slices"
 	"testing"
 )
 
-// TestEncryptLeavesTheSignatureValueInTheClear pins that encrypting a signed
-// document writes each signature's /Contents as it was, unencrypted.
+// TestEncryptDropsTheSourceSignature pins that encrypting a signed document
+// leaves its signature out of the output and reports it.
 //
-// ISO 32000-2, 7.6.2 lists the /Contents of a signature dictionary among the
-// strings encryption does not apply to: the value is written after the digest
-// is computed, into the hole the ByteRange leaves, so readers take the bytes
-// as they stand. The writer encrypted it like any other string, and every
-// reader, litho's included, then saw a signature value that was noise.
-func TestEncryptLeavesTheSignatureValueInTheClear(t *testing.T) {
+// Encryption rewrites every object at a new offset and encrypts every string
+// and stream, so the bytes a signature's /ByteRange names are not in the
+// output (ISO 32000-1, 12.8.1): poppler's pdfsig reported the copied
+// signature invalid. The /Contents of a signature dictionary a rewrite still
+// holds stays in the clear (ISO 32000-2, 7.6.2), which
+// TestEncryptPendingObjects_LeavesSignatureValueInTheClear pins in the
+// mutations package.
+func TestEncryptDropsTheSourceSignature(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -46,11 +49,15 @@ func TestEncryptLeavesTheSignatureValueInTheClear(t *testing.T) {
 		enc.Encrypt(EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: algorithm, Permissions: -1})
 		var out bytes.Buffer
 		err := enc.WriteTo(ctx, &out)
+		dropped := enc.DroppedSignatures()
 		if closeErr := enc.Close(); closeErr != nil {
 			t.Errorf("Close: %v", closeErr)
 		}
 		if err != nil {
 			t.Fatalf("algorithm %d: encrypting: %v", algorithm, err)
+		}
+		if wantDropped := []DroppedSignature{{Field: want[0].FieldName}}; !slices.Equal(dropped, wantDropped) {
+			t.Errorf("algorithm %d: DroppedSignatures = %v, want %v", algorithm, dropped, wantDropped)
 		}
 
 		got, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()), WithPassword("user"))
@@ -58,13 +65,11 @@ func TestEncryptLeavesTheSignatureValueInTheClear(t *testing.T) {
 			t.Fatalf("algorithm %d: opening the encrypted output: %v", algorithm, err)
 		}
 		sigs, err := got.ExtractSignatures(ctx)
-		_ = got.Close()
-		if err != nil || len(sigs) != 1 {
-			t.Fatalf("algorithm %d: the output holds %d signatures (%v), want 1", algorithm, len(sigs), err)
+		if closeErr := got.Close(); closeErr != nil {
+			t.Errorf("closing the encrypted output: %v", closeErr)
 		}
-		if sigs[0].Contents != want[0].Contents {
-			t.Errorf("algorithm %d: the signature value reads back %d bytes differing from the %d signed",
-				algorithm, len(sigs[0].Contents), len(want[0].Contents))
+		if err != nil || len(sigs) != 0 {
+			t.Errorf("algorithm %d: the output holds %d signatures (%v), want none", algorithm, len(sigs), err)
 		}
 	}
 }

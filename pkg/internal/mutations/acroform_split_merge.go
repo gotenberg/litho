@@ -29,9 +29,10 @@ import (
 // because the difference cannot be reached: real acyclic /Parent chains stay
 // far shallower than the smallest of them.
 //
-// This constant is borrowed for one walk that is not an ascent at all:
-// pruneFieldKidsAt in dest_prune.go descends /Kids under it. The limit is fine
-// there, the name is not, and that site says so.
+// This constant is borrowed for two walks that are not an ascent at all:
+// pruneFieldKidsAt in dest_prune.go and signedFieldWalk in
+// signature_rewrite.go descend /Kids under it. The limit is fine there, the
+// name is not, and those sites say so.
 //
 // The number is not what makes any of these walks safe. A bound stops a cycle
 // without detecting one, so the walk runs to the bound and then reports

@@ -75,6 +75,8 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 		return exitError
 	}
 
+	var dropped []pdf.DroppedSignature
+	writeOpts = append(writeOpts, pdf.WithDroppedSignatures(&dropped))
 	if err := pdf.Merge(ctx, readers, dst, writeOpts...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "merging: %v\n", err)
@@ -86,5 +88,6 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 		return exitError
 	}
 
+	warnSignaturesDropped(stderr, dropped)
 	return exitOK
 }

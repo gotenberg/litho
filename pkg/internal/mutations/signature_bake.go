@@ -21,7 +21,9 @@ import (
 // drew the signature's appearance as an annotation of no field, which qpdf
 // reports as not reachable from /AcroForm. The appearance is drawn into the
 // page as [FlattenForm] draws one, so the page looks as it did, and the widget
-// goes, so no annotation is left without its field.
+// goes, so no annotation is left without its field. A signed field nested
+// below one that is not signed leaves its parent's /Kids too (see
+// [pruneNestedSignedFields]).
 //
 // artifacts marks each drawn appearance as an artifact. It is for a tagged
 // output that carries none of doc's structure, where no structure element
@@ -90,23 +92,46 @@ func bakeSignedSignatures(
 			return nil, fmt.Errorf("drawing signed signatures into their pages: %w", err)
 		}
 		flattenPageWidgets(ctx, doc, alloc, page, tags, func(annotObj ast.PdfObject, annotDict ast.PdfDict) (widgetOutcome, ast.PdfStream) {
-			if !signedSignatureWidget(ctx, alloc, doc, annotDict) {
+			if _, signed := widgetSignedField(ctx, alloc, doc, annotObj, annotDict); !signed {
 				return widgetKept, ast.PdfStream{}
 			}
-			if annotationHiddenOrNoView(ctx, doc, annotDict) {
-				return widgetDropped, ast.PdfStream{}
-			}
-			if rect, ok := widgetRect(ctx, doc, annotDict); !ok || rect[0] == rect[2] || rect[1] == rect[3] {
-				return widgetDropped, ast.PdfStream{}
-			}
-			appearance, ok := resolveWidgetAppearance(ctx, doc, alloc, annotDict)
-			if !ok {
-				return widgetDropped, ast.PdfStream{}
-			}
-			return widgetBaked, appearance
+			return signedWidgetOutcome(ctx, doc, alloc, annotDict)
 		})
 	}
+	pruneNestedSignedFields(ctx, alloc, doc)
 	return alloc.Pending(), nil
+}
+
+// pruneNestedSignedFields takes each signed signature field out of doc's form,
+// queuing in alloc the fields whose /Kids lose one.
+//
+// [dropsSignature] leaves a signed root field out of the output's form, but a
+// signed field can sit below a field that is not one, since /FT and /V are
+// inheritable (ISO 32000-1, 12.7.3.1): the copier follows the page's other
+// widgets up to that parent and takes its /Kids whole, the signed field with
+// them, whose digest covers bytes the output does not hold (12.8.1).
+//
+// # Corpus evidence
+//
+//   - pdfjs xfa_filled_imm1344e.pdf, xfa_issue13855.pdf, xfa_issue14071.pdf:
+//     each nests its one signed signature field below a root field that is
+//     not a signature field. A split of page 1 and a merge with itself
+//     carried it into the output, where poppler's pdfsig reported it, and
+//     neither does now; qpdf reports the same on all six outputs.
+func pruneNestedSignedFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil || catalog == nil {
+		return
+	}
+	form, err := resolveDictAllocFirst(ctx, alloc, doc, catalog.Dict["AcroForm"])
+	if err != nil || form == nil {
+		return
+	}
+	fields, err := resolveArrayAllocFirst(ctx, alloc, doc, form["Fields"])
+	if err != nil {
+		return
+	}
+	newSignedFieldWalk(ctx, alloc, doc, true).list(fields, "", "", nil, 0)
 }
 
 // presentsSignedSignature reports whether the page's /Annots holds a widget of
@@ -118,35 +143,12 @@ func presentsSignedSignature(ctx context.Context, doc *document.Document, page *
 	}
 	for _, annot := range annots {
 		dict, err := document.ResolveDict(ctx, doc, annot)
-		if err == nil && dict != nil && signedSignatureWidget(ctx, nil, doc, dict) {
+		if err != nil || dict == nil {
+			continue
+		}
+		if _, signed := widgetSignedField(ctx, nil, doc, annot, dict); signed {
 			return true
 		}
 	}
 	return false
-}
-
-// signedSignatureWidget reports whether the annotation is a widget of a signed
-// signature field: its root field, itself when it has no /Parent (ISO 32000-1,
-// 12.5.6.19), is one [dropsSignature] leaves behind. Objects are read from
-// alloc first, then doc.
-func signedSignatureWidget(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annotDict ast.PdfDict) bool {
-	if subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"]); subtype != "Widget" {
-		return false
-	}
-	root := annotDict
-	if parent, hasParent := annotDict["Parent"].(ast.PdfIndirectRef); hasParent {
-		rootRef, ok := rootFieldAllocFirst(ctx, alloc, doc, parent)
-		if !ok {
-			return false
-		}
-		dict, err := resolveDictAllocFirst(ctx, alloc, doc, rootRef)
-		if err != nil || dict == nil {
-			return false
-		}
-		root = dict
-	}
-	return signedSignatureField(root, func(value ast.PdfObject) bool {
-		dict, err := resolveDictAllocFirst(ctx, alloc, doc, value)
-		return err == nil && dict != nil
-	})
 }

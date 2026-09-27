@@ -220,14 +220,14 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	}
 
 	// The per-stage report is diagnostic only and this command prints nothing
-	// but the output file, so discard it in the assignment rather than binding
-	// a name with no use.
+	// but the output file on stdout; the signatures it says the output left
+	// out are warned about on stderr below, as the standalone commands warn.
 	// Pipeline.WriteTo forwards these to the final document write: the
 	// executor keeps them as finalOpts for a split or merge stage, and the
 	// terminal flush passes them straight to Writer.WriteTo. They do not
 	// reach the intermediate temp files, which is correct, since compacting
 	// a spill that the next stage reopens and rewrites is wasted work.
-	_, err = pipeline.WriteTo(ctx, dst, compactWriteOptions(compact)...)
+	result, err := pipeline.WriteTo(ctx, dst, compactWriteOptions(compact)...)
 	if err != nil {
 		// Withdraw the file createOutput already made. Every other
 		// output-producing command in this package does this on a failed write
@@ -252,6 +252,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	for _, report := range autoTagReports {
 		warnAutoTagSkipped(stderr, report)
 	}
+	warnSignaturesDropped(stderr, result.DroppedSignatures)
 
 	// A remediate stage asserts the profile in the output whatever it could
 	// not repair, exactly as the standalone command does, so a pipeline that

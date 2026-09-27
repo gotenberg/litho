@@ -248,16 +248,6 @@ var autoTagReachRules = map[string][]ruleMatch{
 	familyUA2: {"8.2.5.2-t02"},
 }
 
-// signatureDigestRules require a signature's digest to cover the whole file,
-// ISO 19005-2, 6.4.3 test 1. A full rewrite keeps an existing signature
-// dictionary while moving every byte its /ByteRange names, so a signed input
-// fails it once rewritten.
-//
-//nolint:gochecknoglobals // static rule table
-var signatureDigestRules = map[string][]ruleMatch{
-	familyA2: {"6.4.3-t01"},
-}
-
 // encryptionRules forbid the Encrypt key in the trailer, 6.1.3 test 2 in each
 // part of ISO 19005. An encrypted PDF/A output has to fail it.
 //

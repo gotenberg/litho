@@ -88,6 +88,14 @@
 // one. An encrypted source, or an encrypted output, is not signed:
 // [ErrSignFullRewriteIncompatible].
 //
+// A signature covers the bytes of the file it was made in (ISO 32000-1,
+// 12.8.1). An incremental update appends to them and keeps every signature. A
+// full rewrite, a [Split] and a [Merge] move them, so they leave the input's
+// signatures out: each signed widget's appearance is drawn into its page, and
+// the field leaves the form. [Writer.DroppedSignatures],
+// [PipelineResult.DroppedSignatures] and [WithDroppedSignatures] report what
+// an output left out.
+//
 // # Functional options
 //
 // Each entry point takes its own option type, so the compiler prevents
@@ -103,10 +111,10 @@
 //   - [Writer.WriteTo], [Split], and [Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
 //     [WithBookmarks], [WithPipelineTempDir], [WithEncryption],
-//     [WithObjectStreams], [WithDedup]. [NewWriter] takes them too, as
-//     defaults for the Writer's WriteTo, which overrides them with its own.
-//     [NewWriter], [Writer.WriteTo] and [Pipeline.WriteTo] also take
-//     [WithTempDir].
+//     [WithObjectStreams], [WithDedup], [WithDroppedSignatures]. [NewWriter]
+//     takes them too, as defaults for the Writer's WriteTo, which overrides
+//     them with its own. [NewWriter], [Writer.WriteTo] and [Pipeline.WriteTo]
+//     also take [WithTempDir].
 //   - [Writer.RemediatePDFA], [Writer.RemediatePDFUA], and
 //     [Writer.RemediateFacturX] take [RemediateOption]: [WithLanguage],
 //     [WithAggressiveFixes], [WithRegressionTolerance], [WithFigureAltText],

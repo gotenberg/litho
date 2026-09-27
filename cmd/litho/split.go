@@ -72,6 +72,8 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 		return exitError
 	}
 
+	var dropped []pdf.DroppedSignature
+	writeOpts = append(writeOpts, pdf.WithDroppedSignatures(&dropped))
 	if err := pdf.Split(ctx, r, pageList, dst, writeOpts...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "splitting: %v\n", err)
@@ -83,5 +85,6 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 		return exitError
 	}
 
+	warnSignaturesDropped(stderr, dropped)
 	return exitOK
 }

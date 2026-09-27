@@ -99,6 +99,9 @@ type mutationPlan struct {
 	// autoTag is the report [pdf.Writer.AutoTag] returned, which the write
 	// fills.
 	autoTag *pdf.AutoTagReport
+	// droppedSignatures are the input's signatures the write left out (see
+	// [pdf.Writer.DroppedSignatures]), which the write fills.
+	droppedSignatures []pdf.DroppedSignature
 	// release frees what the mutation holds until the write, a second Reader.
 	release func()
 }
@@ -332,11 +335,11 @@ var mutationSpecs = []mutationSpec{
 			family := ruleFamily(rc.profile)
 			a := strictAllowance(rc.profile)
 			a.mayRemove = concatRules(a.mayRemove, explicitResourcesRules[family])
-			a.mayAdd = signatureDigestRules[family]
 			// Deleting a page prunes the structure elements that name it, and
 			// a rule only they failed goes with them. The copy that replaces
-			// the page carries its content, not its structure.
-			a.anyRemove = rc.plan.deleted && tagsContent(rc.profile)
+			// the page carries its content, not its structure. A rewrite
+			// drops the input's signatures (see [droppedSignaturesRemove]).
+			a.anyRemove = rc.plan.deleted && tagsContent(rc.profile) || droppedSignaturesRemove(rc)
 			return a
 		},
 	},
@@ -416,7 +419,7 @@ var mutationSpecs = []mutationSpec{
 			family := ruleFamily(rc.profile)
 			a := strictAllowance(rc.profile)
 			a.mustFail = encryptionRules[family]
-			a.mayAdd = signatureDigestRules[family]
+			a.anyRemove = droppedSignaturesRemove(rc)
 			return a
 		},
 	},
@@ -433,6 +436,27 @@ var mutationSpecs = []mutationSpec{
 			return ruleAllowance{anyRemove: true, mayAdd: metadataRules[ruleFamily(rc.profile)]}
 		},
 	},
+}
+
+// droppedSignaturesRemove reports whether the write left the input's
+// signatures out, which lets any rule the input fails pass on the output.
+//
+// A full rewrite moves every byte a signature covers (ISO 32000-1, 12.8.1), so
+// the Writer draws each signed widget into its page and drops the signature,
+// its field and the /Perms entries naming it. A rule only they failed goes with
+// them: the signature rules of ISO 19005-2, 6.4.3, and the annotation rules of
+// ISO 14289 the widgets failed. A rewrite that copied a signature again would
+// fail ISO 19005-2, 6.4.3 test 1 on the output, which no allowance admits.
+//
+// # Corpus evidence
+//
+//   - litho sigcms_2b: mutate-pages and mutate-encrypt drop its four signed
+//     fields, and 6.4.3 tests 1 to 3 pass at PDF/A-2a, 2b, 2u and 3b.
+//   - litho docmdp_2b: they drop its certification signature, and at PDF/UA-1
+//     7.18.1 test 3, 7.18.3 test 1 and 7.18.4 test 1 pass, at PDF/UA-2 8.9.3.3
+//     test 1, all of which its widget failed.
+func droppedSignaturesRemove(rc ruleContext) bool {
+	return len(rc.plan.droppedSignatures) > 0
 }
 
 // concatRules joins rule lists into a new slice.
@@ -568,17 +592,23 @@ func verifyFlatten(ctx context.Context, _ *mutationFeature, in *mutationInput, o
 // verifySign checks the text is untouched and the output holds one more
 // signature than the input, one made by the corpus signer that litho's
 // verifier accepts: the digest matches the bytes its /ByteRange names and the
-// certificate chains to the signer's root.
+// certificate chains to the signer's root. A signature on a full rewrite, which
+// the Writer writes for a source it repaired on reading, is the output's only
+// one: the rewrite drops the input's (see [pdf.Writer.DroppedSignatures]).
 func verifySign(ctx context.Context, f *mutationFeature, in *mutationInput, out *mutationOutputDoc, plan mutationPlan) []mutationFailure {
 	failures := verifyIdentityText(ctx, f, in, out, plan)
 	results, err := out.reader.VerifySignatures(ctx, f.signer.roots())
 	if err != nil {
 		return append(failures, mutationFailure{Metric: metricSignatureInvalid, Detail: fmt.Sprintf("verifying: %v", err)})
 	}
-	if len(results) != in.signatures+1 {
+	want := in.signatures + 1
+	if len(plan.droppedSignatures) > 0 {
+		want = 1
+	}
+	if len(results) != want {
 		return append(failures, mutationFailure{
 			Metric: metricSignatureInvalid,
-			Detail: fmt.Sprintf("%d signatures, want %d", len(results), in.signatures+1),
+			Detail: fmt.Sprintf("%d signatures, want %d", len(results), want),
 		})
 	}
 	for _, v := range results {

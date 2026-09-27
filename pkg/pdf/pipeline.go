@@ -65,6 +65,12 @@ type Pipeline struct {
 type PipelineResult struct {
 	// Stages reports one entry per executed stage in declaration order.
 	Stages []StageReport
+	// DroppedSignatures lists the signatures of the pipeline's documents that
+	// its output does not carry, each once, in the order the stages dropped
+	// them: a Split or a Merge drops every signature of the documents it
+	// reads, and an Apply stage those its Writer's full rewrite drops (see
+	// [Writer.DroppedSignatures]).
+	DroppedSignatures []DroppedSignature
 }
 
 // StageReport summarizes a single pipeline stage.
@@ -247,6 +253,10 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 				Index: len(p.stages) - 1, Name: stageNameWrite, Err: err,
 			}
 		}
+		ex.recordDropped(ex.writer.DroppedSignatures()...)
+	}
+	if cfg.droppedSignatures != nil {
+		*cfg.droppedSignatures = slices.Clone(ex.result.DroppedSignatures)
 	}
 
 	logger.Debug("pipeline completed",
@@ -377,7 +387,22 @@ func (ex *executor) flushToTempFile(ctx context.Context, stage string) error {
 	if err := ex.writer.WriteTo(ctx, f, ex.carryEncryption(encrypt)); err != nil {
 		return fmt.Errorf("flushing pending mutations: %w", err)
 	}
+	ex.recordDropped(ex.writer.DroppedSignatures()...)
 	return ex.reopenAsCurrent(ctx, f, []*Reader{ex.cur})
+}
+
+// recordDropped adds to the result the signatures a stage's output does not
+// carry, each once.
+func (ex *executor) recordDropped(sigs ...DroppedSignature) {
+	ex.result.DroppedSignatures = appendDroppedSignatures(ex.result.DroppedSignatures, sigs...)
+}
+
+// recordRestructured records the signatures of sources, the documents a Split
+// or a Merge read, which the new file it builds drops.
+func (ex *executor) recordRestructured(ctx context.Context, sources ...*Reader) {
+	for _, src := range sources {
+		ex.recordDropped(droppedSignaturesOf(ctx, src.doc)...)
+	}
 }
 
 // restructureOptions returns the options a Split or a Merge stage writes with,
@@ -524,6 +549,7 @@ func (s *splitStage) apply(ctx context.Context, ex *executor) error {
 		if err := Split(ctx, ex.cur, s.pages, ex.finalDst, opts...); err != nil {
 			return err
 		}
+		ex.recordRestructured(ctx, ex.cur)
 		ex.dstWritten = true
 		ex.recordStage(s.name(), true, 0)
 		return nil
@@ -535,6 +561,7 @@ func (s *splitStage) apply(ctx context.Context, ex *executor) error {
 	if err := Split(ctx, ex.cur, s.pages, f, opts...); err != nil {
 		return err
 	}
+	ex.recordRestructured(ctx, ex.cur)
 	if err := ex.reopenAsCurrent(ctx, f, []*Reader{ex.cur}); err != nil {
 		return err
 	}
@@ -567,6 +594,7 @@ func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
 		if err := Merge(ctx, sources, ex.finalDst, opts...); err != nil {
 			return err
 		}
+		ex.recordRestructured(ctx, sources...)
 		ex.dstWritten = true
 		ex.recordStage(s.name(), true, 0)
 		return nil
@@ -578,6 +606,7 @@ func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
 	if err := Merge(ctx, sources, f, opts...); err != nil {
 		return err
 	}
+	ex.recordRestructured(ctx, sources...)
 	if err := ex.reopenAsCurrent(ctx, f, sources); err != nil {
 		return err
 	}
