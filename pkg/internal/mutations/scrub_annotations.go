@@ -102,12 +102,12 @@ func scrubPageAnnotations(
 
 		ref, isRef := entry.(ast.PdfIndirectRef)
 		if !isRef {
-			return fmt.Errorf("%w: an annotation on a page carries %q", ErrAnnotationNotAddressable, hits[0])
+			return fmt.Errorf("%w: an annotation on a page carries the text in %s", ErrAnnotationNotAddressable, hits[0])
 		}
 		if paints, err := appearancePaintsText(ctx, doc, annot); err != nil {
 			return err
 		} else if paints {
-			return fmt.Errorf("%w: annotation %d carries %q", ErrAnnotationAppearanceHoldsText, ref.ObjectNum, hits[0])
+			return fmt.Errorf("%w: annotation %d carries the text in %s", ErrAnnotationAppearanceHoldsText, ref.ObjectNum, hits[0])
 		}
 
 		newAnnot := make(ast.PdfDict, len(annot))

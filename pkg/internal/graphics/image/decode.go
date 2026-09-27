@@ -1221,7 +1221,7 @@ func lookupImage(ctx context.Context, doc *document.Document, page *document.Pag
 				return ast.PdfStream{}, colorContext{}, err
 			}
 			if stream.Dict == nil {
-				return ast.PdfStream{}, colorContext{}, fmt.Errorf("image %q is not a stream", name)
+				return ast.PdfStream{}, colorContext{}, fmt.Errorf("image %q is not a stream", string(name))
 			}
 			return stream, pageColorContext(page), nil
 		}
@@ -1232,7 +1232,7 @@ func lookupImage(ctx context.Context, doc *document.Document, page *document.Pag
 	if err := ctx.Err(); err != nil {
 		return ast.PdfStream{}, colorContext{}, err
 	}
-	return ast.PdfStream{}, colorContext{}, fmt.Errorf("image %q: %w", name, ErrImageNotFound)
+	return ast.PdfStream{}, colorContext{}, fmt.Errorf("image %q: %w", string(name), ErrImageNotFound)
 }
 
 // decodeImageStream decodes the Image XObject stream that name refers to.
@@ -1307,7 +1307,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	if _, stated := stream.Dict["ColorSpace"]; !stated && usesJPXDecode(ctx, doc, stream.Dict) {
 		jpxCol, err = jpxColorSpace(ctx, doc, stream, renderingIntent(ctx, doc, stream.Dict))
 		if err != nil {
-			return nil, fmt.Errorf("image %q: %w", name, err)
+			return nil, fmt.Errorf("image %q: %w", string(name), err)
 		}
 		colorSpace = jpxCol.space
 	}
@@ -1356,7 +1356,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// reported a missing SOI marker, so no JPEG decoded at all.
 	rc, err := doc.NewStreamReaderChecked(ctx, stream)
 	if errors.Is(err, filter.ErrUnsupportedFilter) {
-		return nil, fmt.Errorf("image %q cannot be decoded: %w", name, err)
+		return nil, fmt.Errorf("image %q cannot be decoded: %w", string(name), err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("opening image stream: %w", err)
@@ -1473,7 +1473,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	isLab := false
 	if !isIndexed && colorSpace == "Lab" {
 		if lab, isLab = resolveLabParams(ctx, doc, stream.Dict["ColorSpace"]); !isLab {
-			return nil, fmt.Errorf("image %q is in a Lab colour space with no usable /WhitePoint", name)
+			return nil, fmt.Errorf("image %q is in a Lab colour space with no usable /WhitePoint", string(name))
 		}
 	}
 

@@ -1676,7 +1676,7 @@ func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error
 			break
 		}
 		if nextTok.Type == lexer.TokenEOF {
-			return nil, fmt.Errorf("reading the value of inline image key %q: %w", keyName, ErrTruncatedInlineImageDict)
+			return nil, fmt.Errorf("reading the value of inline image key %q: %w", string(keyName), ErrTruncatedInlineImageDict)
 		}
 
 		// The entries between BI and ID form a dictionary (ISO 32000-1,
@@ -1693,7 +1693,7 @@ func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error
 			// past it would take the next key, or the ID that ends the
 			// dictionary, with it.
 			if skipErr := p.SkipFailedObject(mark); skipErr != nil {
-				return nil, fmt.Errorf("inline image dict value for %q: %w", keyName, err)
+				return nil, fmt.Errorf("inline image dict value for %q: %w", string(keyName), err)
 			}
 			continue
 		}
