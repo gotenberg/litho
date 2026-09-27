@@ -281,8 +281,8 @@ const mutationRedactReach = 1e6
 //
 // # Corpus evidence
 //
-//   - litho: 91 of the 119 fixtures have one page, so mutate-pages deletes a
-//     page on 28.
+//   - litho: 92 of the 124 fixtures have one page, so mutate-pages deletes a
+//     page on 32.
 //   - litho: 37 fixtures refuse the whole-page redaction by design, 28 with
 //     ErrRedactionRefused (content a form XObject draws, an inline image, a
 //     stroked path) and 9 with ErrRedactionIncomplete; the 2 encrypted
@@ -300,7 +300,7 @@ const mutationRedactReach = 1e6
 //     structcopy_ua2, whose Link lost its element. The copy carries its
 //     structure elements now, and the cells pass.
 //   - litho: with the deletion no longer allowed to pass any rule at the
-//     tagged profiles, the 28 fixtures whose first page moves to the end
+//     tagged profiles, the 32 fixtures whose first page moves to the end
 //     count no ruleset_changed cell but imagereach_2b's six.
 //   - litho a4syntax_4: 1 ruleset_changed cell (PDF/A-4, 6.1.2 test 1) under
 //     each of mutate-pages, mutate-flatten and mutate-encrypt: a full rewrite

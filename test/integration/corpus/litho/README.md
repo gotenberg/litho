@@ -5311,13 +5311,13 @@ default and aggressive, leaves nothing on either tool.
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 123 x 8 = 984 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 123 x 13 = 1599 cells. litho
+runner scores 124 x 8 = 992 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 124 x 13 = 1612 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1597 of the 1599 cells. The two
+fixtures exist to protect, and it holds in 1610 of the 1612 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5326,17 +5326,14 @@ The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
 six is non-compliant on both sides (`baretree_2b` and `pagelabels_2b` at
-PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1; and `structcopy_ua2`
-at PDF/UA-2 are the corpus's conforming cells), so a change that drops or
-invents a rule class leaves `matched` at 984 and moves only `ruleset_mismatch`,
-and on those five cells it moves both. Both exceptions sit in the manifest's
-and `outlinedest_ua2` at PDF/UA-2 are the corpus's conforming cells), so a
-change that drops or invents a rule class leaves `matched` at 984 and moves only
-`ruleset_mismatch`, and on those six cells it moves both. Both exceptions sit in the manifest's
-profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this
-corpus, and the text scoreboard names the rules only one side reports. A third
-cell in the runner is a regression, or a divergence to cover under Known
-divergences and mark `*`.
+PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1; and
+`outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's conforming
+cells), so a change that drops or invents a rule class leaves `matched` at 992
+and moves only `ruleset_mismatch`, and on those six cells it moves both. Both
+exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
+PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
+the rules only one side reports. A third cell in the runner is a regression, or
+a divergence to cover under Known divergences and mark `*`.
 
 The `remediation` and `remediation-aggressive` features validate each
 remediated output with both tools, and their `disagreement` metric sums, over
