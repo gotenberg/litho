@@ -424,6 +424,17 @@ func (p *structPrune) objectOnGonePage(ctx context.Context, obj ast.PdfObject) b
 // pages that stayed keeps its place and loses only /Pg either way, because
 // dropping it would detach those children from the tree, and because /Pg is
 // optional (ISO 32000-1, Table 323) and the content it named is gone.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000153.pdf: the empty cells of tables on pages the
+//     split left out kept their rows, and their tables, as long as a
+//     surviving kid was enough to keep an element: every split of the file
+//     carried skeleton tables that failed ISO 14289-1, 7.2 test 42.
+//   - All corpora, 1085 tagged files: while a surviving kid kept an element,
+//     splitting out page 1 added 7.2 test 42 at PDF/UA-1 and ISO 14289-2,
+//     8.2.5.26 test 3 at PDF/UA-2 on 16 files each. Since an element needs
+//     content that stays, it adds them on none.
 func (p *structPrune) element(ctx context.Context, obj ast.PdfObject, element ast.PdfDict, depth int) kidOutcome {
 	// An element named twice answers with the verdict it already reached, so a
 	// /K that fans out is pruned once. Only an indirect element can be named
