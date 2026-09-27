@@ -167,6 +167,7 @@ one deliberately rather than diffing it against a fresh build.
 | `sigtagged_ua1.pdf`    | PDF/UA-1     | A certified signature on a tagged page, under the rewrites       |
 | `kidsarray_2b.pdf`     | PDF/A-2b     | Pages written directly in a `/Kids` array named by reference     |
 | `formmark_ua1.pdf`     | PDF/UA-1     | Forms judged by what they draw, and the sequences they open      |
+| `laterreads_2u.pdf`    | PDF/A-2u     | What a later repair reads: removed annotations, a font's uses    |
 
 ### Must-not-fire controls
 
@@ -458,6 +459,7 @@ which are covered under [Known divergences](#known-divergences).
 | `kidsarray_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 12   | 8    |
 | `kidsrepair_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 5    | 5    |
 | `langpua_ua2.pdf`      | 7    | 5    | 8    | 7    | 7    | 8    | 7    | 7    | 4   | 4    | 5    | 4    | 3    |
+| `laterreads_2u.pdf`    | 12   | 9    | 12   | 8    | 9    | 15   | 11   | 12   | 14  | 13   | 14   | 14   | 11   |
 | `limits_1b.pdf`        | 12   | 9    | 9    | 6    | 7    | 9    | 6    | 7    | 4   | 4    | 5    | 11   | 9    |
 | `limits_2b.pdf`        | 10   | 8    | 12   | 10   | 10   | 12   | 10   | 10   | 6   | 6    | 7    | 10   | 8    |
 | `linearized_1b.pdf`    | 6    | 4    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
@@ -4542,8 +4544,9 @@ constructs below, so no gate cell reached them:
 | `item`, only child of field `group`  | 6: Hidden, Print          | removed with `group`                        |
 | widget of the signed field `sig`     | 2: Hidden                 | kept, `/F 4`: the signature needs its field |
 
-Page 1's `/Annots` is an indirect array, which the removal writes into the page
-where every later fixer reads it. The signature carries the CMS blob of
+Page 1's `/Annots` is an indirect array, which the removal writes back at its
+own object number, where every later fixer reads it (see
+`laterreads_2u.pdf`). The signature carries the CMS blob of
 `sigcms_2b.pdf` with a `/ByteRange` patched to cover the file, so `6.4.3` is
 silent. Every annotation but the pop-ups has an empty appearance, and the pages
 draw nothing.
@@ -4756,16 +4759,75 @@ nothing on either tool but `7.1/1` and `7.1/2` at PDF/UA-1, on both: no repair
 reaches into a form. The flattened output reports the input's rule set at every
 manifest profile.
 
+### `laterreads_2u.pdf`
+
+Remediation runs its fixers over one allocator, and a fixer reads an object
+where an earlier one queued it. Four repairs read past that. The annotations
+fixer writes the `/Annots` it filtered at the array's own object number and
+queues each annotation it removes as the null object: annot-opacity,
+annot-appearance, annot-artifact, af-relationship and forbidden-annots read the
+array as the file wrote it, and wrote the removed annotation back with their
+own repair. annot-flags wrote the array it filtered into the page instead, so
+the array object stayed as the file wrote it, still listing what it removed.
+The fonts repair decided a font's `/ToUnicode` on the first page whose
+`/Resources` named it, from that page's content alone. And the graphics repair
+skipped the appearances of a page that resolves no `/Resources`, though an
+appearance draws from its own (ISO 32000-1, 12.5.5). No gated corpus file
+reaches any of them.
+
+| Page | Carries                                                                                                                               | Read by                         |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 1    | no `/Resources` above it, no `/Contents`; a Square whose appearance has `/OPI`, drawing an image with `/Interpolate true`             | graphics                        |
+| 2    | an indirect `/Annots`: a Screen and a Square, each with `/CA 0.5` and no appearance                                                   | annot-opacity, annot-appearance |
+| 3    | an indirect `/Annots`: a Hidden FileAttachment written inline, whose file specification has no `/UF` and embeds a text file; a Square | annot-flags                     |
+| 4    | `/Resources` naming the unembedded ZapfDingbats `Zp`, which the page shows nothing with                                               | fonts                           |
+| 5    | `Zp` showing two codes, a form naming `Zf` showing two, an appearance naming `Za` showing two                                         | fonts                           |
+
+The image is in an ICCBased space and the file carries a CMYK PDF/A output
+intent. An image in a device space makes veraPDF look up a `/Default` space in
+the `/Resources` page 1 lacks and report the device family as an undefined name
+(`6.2.2/3` at part 4), and a repair of device colour gives the page `/Resources`
+before the graphics repair runs.
+
+Measured on veraPDF 1.30.2 and litho, the file returns the same rule set in all
+thirteen cells, and the same counts in the eleven PDF/A ones. At PDF/UA-1
+veraPDF counts `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per
+untagged content item, and litho once each. The PDF/A cells report the three
+unembedded fonts (`6.3.4/1` at part 1, `6.2.11.4.1/1` at parts 2 and 3,
+`6.2.10.4.1/1` at part 4), their six codes with no Unicode mapping (`6.3.8/1`
+at PDF/A-1a, `6.2.11.7.2/1` at the A and U levels of parts 2 and 3), the
+appearance's `/OPI` and the image's `/Interpolate` (`6.2.4/2` and `/3` at part
+1, `6.2.9/1` and `6.2.8/3` at parts 2 and 3, `6.2.8.1/1` and `6.2.7.1/3` at
+part 4), the annotations (`6.5.2/1`, `6.5.3/1` and `/2` at part 1, `6.3.1/1`,
+`6.3.2/2` and `6.3.3/1` from part 2) and the attachment (`6.1.11/1` at part 1,
+`6.8/2` and `/5` at part 2, `6.8/1` to `/4` at part 3, and the `6.9` tests at
+part 4), beside the identification and tagging rules a part-2 claim draws at the
+other levels. veraPDF judges the attachment's file specification in the array
+object, which it sweeps as an indirect object.
+
+Remediation at the eight manifest profiles, default and aggressive, leaves, on
+both tools and count for count, the unembedded fonts at the PDF/A profiles
+(`6.3.4/1`, `6.2.11.4.1/1` or `6.2.10.4.1/1`), `7.1/3`, `7.18.1/2` and
+`7.21.4.1/1` at PDF/UA-1, and `8.2.2/1`, `8.4.5.5.1/1` and `8.9.2.4.12/1` at
+PDF/UA-2. Before the fixes, on both tools, every PDF/A output kept the
+appearance and image findings, the PDF/A-2a and 2u outputs kept `6.2.11.7.2/1`,
+PDF/UA-1 `7.21.7/1` and PDF/UA-2 `8.4.5.8/1`, six times each, and the default
+PDF/A-1b output kept `6.1.11/1` and the default PDF/A-2a, 2b and 2u outputs
+`6.8/5`, from the attachment's embedded file in the array object annot-flags
+left as the file wrote it. The PDF/A-1b to 3b outputs also held the removed
+Screen again, as an object no page lists, which no rule judges; the full rewrite
+of a PDF/A-4 output drops it either way.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 115 x 8 = 920 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 115 x 13 = 1495 cells. litho
+runner scores 116 x 8 = 928 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 116 x 13 = 1508 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1493 of the 1495 cells. The two
+fixtures exist to protect, and it holds in 1506 of the 1508 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -4775,7 +4837,7 @@ verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
 two is non-compliant on both sides (`formhidden_ua1` and `sigtagged_ua1` at
 PDF/UA-1 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 920 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 928 and moves only `ruleset_mismatch`, and on
 those two cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
