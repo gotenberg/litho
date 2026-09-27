@@ -92,7 +92,7 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			continue
 		}
 
-		landed, pending, dirty, err := fixResourcesGraphics(ctx, alloc, doc, resDict, work, visited)
+		landed, pending, dirty, err := fixResourcesGraphics(ctx, alloc, doc, resDict, work, visited, 0)
 		if err != nil {
 			return nil, fmt.Errorf("fixing graphics on page %d: %w", i+1, err)
 		}
@@ -100,32 +100,264 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		if dirty && alloc.AllocAt(holder.ref.ObjectNum, work) {
 			notes = append(notes, pending...)
 		}
+
+		apNotes, err := fixAppearanceGraphics(ctx, alloc, doc, livePageDict(ctx, alloc, doc, page), visited)
+		if err != nil {
+			return nil, fmt.Errorf("fixing graphics in the annotations of page %d: %w", i+1, err)
+		}
+		notes = append(notes, apNotes...)
 	}
 
 	return notes, nil
 }
 
 // fixResourcesGraphics repairs the graphics states one resource dictionary
-// declares and the XObjects it names, recursively.
+// declares and the XObjects it names, and the resources of the Type 3 fonts
+// and tiling patterns it names, recursively.
+//
+// A glyph procedure of a Type 3 font and the cell of a tiling pattern are
+// content streams that draw from their own /Resources (ISO 32000-1, 9.6.5 and
+// 8.7.3.3), and compliance judges the XObjects and graphics states each
+// draws as it judges a page's. depth counts the forms, fonts and patterns
+// above resources and stops at the document's form-nesting budget, the bound
+// compliance's walk of the same streams applies.
 //
 // owner is the caller's working copy of the dictionary that holds resources
 // under /Resources, which [fixExtGStates] updates in place when a repair can
 // only be written through it. landed describes the repairs already written;
 // pending describes the ones that land with the caller's write of owner, which
 // the caller makes only when dirty is set.
-func fixResourcesGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, owner ast.PdfDict, visited map[int]bool) (landed, pending []string, dirty bool, err error) {
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1771477.pdf and pdfcpu
+//     pkg_testdata__FOSDEM14_HPC_devroom_14_GoCUDA.pdf: images with
+//     /Interpolate true drawn in tiling pattern cells kept ISO 19005-2, 6.2.8
+//     t3 after a PDF/A-2b remediation.
+func fixResourcesGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, owner ast.PdfDict, visited map[int]bool, depth int) (landed, pending []string, dirty bool, err error) {
+	if depth > doc.Limits().MaxFormDepth {
+		return nil, nil, false, nil
+	}
 	landed, pending, dirty, err = fixExtGStates(ctx, alloc, doc, resources, owner)
 	if err != nil {
 		return nil, nil, false, err
 	}
 
-	xobjNotes, err := fixXObjects(ctx, alloc, doc, resources, visited)
+	xobjNotes, err := fixXObjects(ctx, alloc, doc, resources, visited, depth)
 	if err != nil {
 		return nil, nil, false, err
 	}
 	landed = append(landed, xobjNotes...)
 
-	return landed, pending, dirty, nil
+	patternNotes, err := fixPatternGraphics(ctx, alloc, doc, resources, visited, depth)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	landed = append(landed, patternNotes...)
+
+	// Read again: a graphics state repaired above may have rebuilt the
+	// /Resources an inline font is written back through, in owner or at its
+	// own object number.
+	if live := liveDictValue(ctx, alloc, doc, owner["Resources"]); live != nil {
+		resources = live
+	}
+	fontLanded, fontPending, fontDirty, err := fixType3FontGraphics(ctx, alloc, doc, resources, owner, visited, depth)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	landed = append(landed, fontLanded...)
+	pending = append(pending, fontPending...)
+
+	return landed, pending, dirty || fontDirty, nil
+}
+
+// fixType3FontGraphics repairs the resources of every Type 3 font the /Font
+// entry of resources declares, which its glyph procedures draw from (ISO
+// 32000-1, 9.6.5). A font with an object number of its own is written there;
+// the others through the chain above them, as [fixExtGStates] writes a
+// graphics state. The results mean what [fixResourcesGraphics]'s do.
+//
+// # Corpus evidence
+//
+//   - litho imagedraws_2b.pdf: an image with /Interpolate true drawn by a
+//     Type 3 glyph kept ISO 19005-2, 6.2.8 t3 after a PDF/A-2b remediation,
+//     on litho and veraPDF alike.
+func fixType3FontGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, owner ast.PdfDict, visited map[int]bool, depth int) (landed, pending []string, dirty bool, err error) {
+	fontsObj, ok := resources["Font"]
+	if !ok {
+		return nil, nil, false, nil
+	}
+	fonts := liveDictValue(ctx, alloc, doc, fontsObj)
+
+	// Fonts written inline accumulate here and are written together, for the
+	// reason fixExtGStates gives.
+	var inline ast.PdfDict
+	var inlineNotes []string
+	for _, name := range slices.Sorted(maps.Keys(fonts)) {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, false, err
+		}
+		entry := fonts[name]
+		ref, isRef := entry.(ast.PdfIndirectRef)
+		if isRef && visited[ref.ObjectNum] {
+			continue
+		}
+		font := liveDictValue(ctx, alloc, doc, entry)
+		if subtype, _ := document.ResolveName(ctx, doc, font["Subtype"]); subtype != "Type3" {
+			continue
+		}
+		if isRef {
+			visited[ref.ObjectNum] = true
+		}
+		work := maps.Clone(font)
+		fontRes := liveDictValue(ctx, alloc, doc, work["Resources"])
+		if fontRes == nil {
+			continue
+		}
+		fontLanded, fontPending, fontDirty, err := fixResourcesGraphics(ctx, alloc, doc, fontRes, work, visited, depth+1)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		landed = append(landed, fontLanded...)
+		if !fontDirty {
+			continue
+		}
+		if isRef {
+			if alloc.AllocAt(ref.ObjectNum, work) {
+				landed = append(landed, fontPending...)
+			}
+			continue
+		}
+		if inline == nil {
+			inline = make(ast.PdfDict)
+		}
+		inline[name] = work
+		inlineNotes = append(inlineNotes, fontPending...)
+	}
+	if len(inline) == 0 {
+		return landed, nil, false, nil
+	}
+
+	rebuilt := maps.Clone(fonts)
+	maps.Copy(rebuilt, inline)
+	written, ownerDirty := writeResourceCategory(alloc, owner, resources, "Font", rebuilt)
+	switch {
+	case written:
+		landed = append(landed, inlineNotes...)
+	case ownerDirty:
+		pending = inlineNotes
+	}
+	return landed, pending, ownerDirty, nil
+}
+
+// fixPatternGraphics repairs the resources of every tiling pattern the
+// /Pattern entry of resources declares, which its cell draws from (ISO
+// 32000-1, 8.7.3.3). A tiling pattern is a stream, so it has an object number
+// of its own (7.3.8.1) and is written there with its body.
+func fixPatternGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool, depth int) ([]string, error) {
+	patterns := liveDictValue(ctx, alloc, doc, resources["Pattern"])
+	var notes []string
+	for _, name := range slices.Sorted(maps.Keys(patterns)) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		ref, isRef := patterns[name].(ast.PdfIndirectRef)
+		if !isRef || ref.ObjectNum <= 0 || visited[ref.ObjectNum] {
+			continue
+		}
+		stream, ok := liveStream(ctx, alloc, doc, ref)
+		if !ok || !isTilingPattern(ctx, doc, stream.Dict) {
+			continue
+		}
+		visited[ref.ObjectNum] = true
+		work := maps.Clone(stream.Dict)
+		patternRes := liveDictValue(ctx, alloc, doc, work["Resources"])
+		if patternRes == nil {
+			continue
+		}
+		landed, pending, dirty, err := fixResourcesGraphics(ctx, alloc, doc, patternRes, work, visited, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		notes = append(notes, landed...)
+		if dirty && writeXObjectDict(ctx, alloc, doc, name, ref, stream, work) {
+			notes = append(notes, pending...)
+		}
+	}
+	return notes, nil
+}
+
+// fixAppearanceGraphics repairs the appearance streams of the annotations of
+// the page pageDict, under /N, /R and /D, each a stream or a subdictionary of
+// appearance states (ISO 32000-1, 12.5.5), as forms, with the resources they
+// draw from.
+//
+// An appearance stream is a form XObject (12.5.5), and compliance judges the
+// form rules on its dictionary whatever its /Subtype says, and the XObjects it
+// draws, as veraPDF does. Each is read through the allocator, and visited
+// once with the forms the resources name.
+//
+// # Corpus evidence
+//
+//   - pdfjs pr12564.pdf and issue11306.pdf: images with /Interpolate true
+//     drawn by annotation appearances kept ISO 19005-2, 6.2.8 t3 after a
+//     PDF/A-2b remediation.
+//   - litho imagedraws_2b.pdf: appearances carrying /OPI and /Ref kept ISO
+//     19005-2, 6.2.9 t1 and t2 after a PDF/A-2b remediation, on litho and
+//     veraPDF alike.
+func fixAppearanceGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited map[int]bool) ([]string, error) {
+	var notes []string
+	for _, annotObj := range liveArray(ctx, alloc, doc, pageDict["Annots"]) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		annot := liveDictValue(ctx, alloc, doc, annotObj)
+		ap := liveDictValue(ctx, alloc, doc, annot["AP"])
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			entry, ok := ap[key]
+			if !ok {
+				continue
+			}
+			for _, streamObj := range appearanceStreams(ctx, alloc, doc, entry) {
+				ref, isRef := streamObj.(ast.PdfIndirectRef)
+				if !isRef || ref.ObjectNum <= 0 || visited[ref.ObjectNum] {
+					continue
+				}
+				stream, ok := liveStream(ctx, alloc, doc, ref)
+				if !ok {
+					continue
+				}
+				visited[ref.ObjectNum] = true
+				work := maps.Clone(stream.Dict)
+				landed, pending, modified, err := repairFormDict(ctx, alloc, doc, "AP/"+key, work, visited, 1)
+				if err != nil {
+					return nil, err
+				}
+				notes = append(notes, landed...)
+				if modified && writeXObjectDict(ctx, alloc, doc, "AP/"+key, ref, stream, work) {
+					notes = append(notes, pending...)
+				}
+			}
+		}
+	}
+	return notes, nil
+}
+
+// appearanceStreams returns the appearance streams an /AP entry names: the
+// entry itself when it is a stream, and otherwise the value of each state of
+// the subdictionary it is, in sorted state order.
+func appearanceStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, entry ast.PdfObject) []ast.PdfObject {
+	if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
+		if _, isStream := liveStream(ctx, alloc, doc, ref); isStream {
+			return []ast.PdfObject{entry}
+		}
+	}
+	states := liveDictValue(ctx, alloc, doc, entry)
+	out := make([]ast.PdfObject, 0, len(states))
+	for _, state := range slices.Sorted(maps.Keys(states)) {
+		out = append(out, states[state])
+	}
+	return out
 }
 
 // fixExtGStates repairs every graphics state parameter dictionary the
@@ -416,7 +648,7 @@ func normalizeHalftone(ctx context.Context, doc *document.Document, htObj ast.Pd
 	return newDict, true
 }
 
-func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool) ([]string, error) {
+func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool, depth int) ([]string, error) {
 	xobjObj, ok := resources["XObject"]
 	if !ok {
 		return nil, nil
@@ -523,7 +755,7 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 				}
 				maskNotes, err := fixXObjects(ctx, alloc, doc, ast.PdfDict{
 					"XObject": ast.PdfDict{key: maskRef},
-				}, visited)
+				}, visited, depth)
 				if err != nil {
 					return nil, err
 				}
@@ -556,67 +788,73 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		}
 
 		if subtype == "Form" {
-			// Remove /Subtype2 and /PS (6.2.5).
-			if _, ok := newDict["Subtype2"]; ok {
-				delete(newDict, "Subtype2")
-				modified = true
-				objNotes = append(objNotes, fmt.Sprintf("removed /Subtype2 from form XObject %s", string(name)))
+			landed, pending, formModified, err := repairFormDict(ctx, alloc, doc, name, newDict, visited, depth+1)
+			if err != nil {
+				return nil, err
 			}
-			if _, ok := newDict["PS"]; ok {
-				delete(newDict, "PS")
+			notes = append(notes, landed...)
+			if formModified {
 				modified = true
-				objNotes = append(objNotes, fmt.Sprintf("removed /PS from form XObject %s", string(name)))
-			}
-
-			// Remove /OPI (6.2.8.1).
-			if _, ok := newDict["OPI"]; ok {
-				delete(newDict, "OPI")
-				modified = true
-				objNotes = append(objNotes, fmt.Sprintf("removed /OPI from form XObject %s", string(name)))
-			}
-
-			// Remove /Ref (6.2.8.2).
-			if _, ok := newDict["Ref"]; ok {
-				delete(newDict, "Ref")
-				modified = true
-				objNotes = append(objNotes, fmt.Sprintf("removed /Ref from form XObject %s", string(name)))
-			}
-
-			// Recurse into form XObject resources. newDict is the working
-			// copy written below, so a graphics state written directly in
-			// the form's /Resources rides the same write as the keys removed
-			// above.
-			if formRes := liveDictValue(ctx, alloc, doc, newDict["Resources"]); formRes != nil {
-				landed, pending, dirty, err := fixResourcesGraphics(ctx, alloc, doc, formRes, newDict, visited)
-				if err != nil {
-					return nil, err
-				}
-				notes = append(notes, landed...)
-				if dirty {
-					modified = true
-					objNotes = append(objNotes, pending...)
-				}
+				objNotes = append(objNotes, pending...)
 			}
 		}
 
-		if modified {
-			// Preserve the original stream bytes: only the dict changed, so
-			// re-emitting with nil data would blank the image pixels or form
-			// content (serializeStream rewrites /Length from the data, leaving
-			// an empty, corrupt stream).
-			data, derr := xobjStream.Bytes(ctx)
-			if derr != nil {
-				// The original payload is unreadable, so it cannot be carried
-				// across. Leave the object untouched rather than write the
-				// fixed dict with an empty body: a still-flagged violation is
-				// safer than a corrupt stream, and re-validation re-surfaces it.
-				doc.Logger.Debug("skipping XObject dict fix; original stream unreadable",
-					slog.String("name", string(name)), slog.Any("err", derr))
-			} else if alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, data)) {
-				notes = append(notes, objNotes...)
-			}
+		if modified && writeXObjectDict(ctx, alloc, doc, name, ref, xobjStream, newDict) {
+			notes = append(notes, objNotes...)
 		}
 	}
 
 	return notes, nil
+}
+
+// repairFormDict removes from work, the working copy of the dictionary of the
+// form named name, the keys ISO 19005 forbids on a form XObject, and repairs
+// the resources it holds, at depth, recursively. landed describes the repairs
+// already written; pending the ones that land with the caller's write of work,
+// which the caller makes only when modified is set.
+func repairFormDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name ast.PdfName, work ast.PdfDict, visited map[int]bool, depth int) (landed, pending []string, modified bool, err error) {
+	// /Subtype2 and /PS (6.2.5), /OPI (6.2.8.1) and /Ref (6.2.8.2).
+	for _, key := range []ast.PdfName{"Subtype2", "PS", "OPI", "Ref"} {
+		if _, ok := work[key]; ok {
+			delete(work, key)
+			modified = true
+			pending = append(pending, fmt.Sprintf("removed /%s from form XObject %s", string(key), string(name)))
+		}
+	}
+
+	// Recurse into the form's resources. work is the copy the caller writes,
+	// so a graphics state written directly in the form's /Resources rides the
+	// same write as the keys removed above.
+	if formRes := liveDictValue(ctx, alloc, doc, work["Resources"]); formRes != nil {
+		resLanded, resPending, dirty, err := fixResourcesGraphics(ctx, alloc, doc, formRes, work, visited, depth)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		landed = resLanded
+		if dirty {
+			modified = true
+			pending = append(pending, resPending...)
+		}
+	}
+	return landed, pending, modified, nil
+}
+
+// writeXObjectDict writes work, the repaired dictionary of the stream at ref
+// named name, over it with the stream's own bytes, and reports whether the
+// write landed.
+//
+// Only the dictionary changed, so the original bytes go back unchanged:
+// re-emitting with nil data would blank the image pixels or form content
+// (serializeStream rewrites /Length from the data, leaving an empty, corrupt
+// stream). A body that cannot be read is left untouched rather than written
+// empty under the fixed dictionary: a still-flagged violation is safer than a
+// corrupt stream, and re-validation surfaces it again.
+func writeXObjectDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name ast.PdfName, ref ast.PdfIndirectRef, stream ast.PdfStream, work ast.PdfDict) bool {
+	data, err := stream.Bytes(ctx)
+	if err != nil {
+		doc.Logger.Debug("skipping XObject dict fix; original stream unreadable",
+			slog.String("name", string(name)), slog.Any("err", err))
+		return false
+	}
+	return alloc.AllocAt(ref.ObjectNum, ast.NewStream(work, data))
 }
