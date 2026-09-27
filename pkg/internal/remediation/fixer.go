@@ -91,6 +91,10 @@ var registry = []fixer{
 	// stays unassociated until that mapping is registered here.
 	{name: "parent-tree", safety: safetyStructural, matches: matchParentTree, apply: fixParentTree},
 	{name: "single-doc-root", safety: safetyStructural, matches: matchSingleDocRoot, apply: fixSingleDocRoot},
+	// empty-figure runs before struct-dest, so no structure destination it
+	// writes names a Figure that goes, and before figure-alt, which gives the
+	// Figures that stay their alternate text.
+	{name: "empty-figure", safety: safetyStructural, matches: matchEmptyFigure, apply: fixEmptyFigure},
 	{name: "struct-dest", safety: safetyStructural, matches: matchStructDest, apply: fixStructDest},
 	{name: "struct-parent", safety: safetyStructural, matches: matchStructParent, apply: fixStructParent},
 	{name: "annot-nesting", safety: safetyStructural, matches: matchAnnotNesting, apply: fixAnnotNesting},

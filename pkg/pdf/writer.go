@@ -303,9 +303,11 @@ func WithAggressiveFixes() RemediateOption {
 // §8.2.5.28.2). A processor cannot describe an image, so litho never fabricates
 // alt text by default: it leaves the figure for a human. Supplying a string here
 // fills missing /Alt in any mode; the string is the caller's own content, not a
-// machine guess. Without it, [WithAggressiveFixes] inserts a generic placeholder
-// to pass the mechanical presence check, which satisfies the validator but does
-// not convey the image to a reader, so the document still needs human review.
+// machine guess. Without it, [WithAggressiveFixes] removes each such Figure
+// that encloses no content, which no alternate text could describe, and inserts
+// a generic placeholder in the others to pass the mechanical presence check,
+// which satisfies the validator but does not convey the image to a reader, so
+// the document still needs human review. With it, every Figure keeps its place.
 func WithFigureAltText(alt string) RemediateOption {
 	return func(o *remediateOpts) {
 		o.figureAlt = alt

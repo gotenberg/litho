@@ -18,8 +18,9 @@ type Options struct {
 	// the missing description from assistive technology, so it is never
 	// fabricated by default. When set, this string is used in either mode. When
 	// empty, the figure is left for a human in the default safe mode, and in
-	// aggressive mode (PreserveContent == false) a generic placeholder is
-	// inserted so the document passes the mechanical check.
+	// aggressive mode (PreserveContent == false) a Figure enclosing no content
+	// is removed ([fixEmptyFigure]) and a generic placeholder is inserted in the
+	// others so the document passes the mechanical check.
 	FigureAlt string
 	// PinnedID, when 16 bytes long, seeds the trailer /ID minted by the
 	// trailer-id fixer instead of crypto/rand. Reproducible-build callers

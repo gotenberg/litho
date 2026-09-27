@@ -46,7 +46,10 @@ type figureNode struct {
 // not the literal content-preservation meaning. A synthesized placeholder is
 // reported as still owing human review, so the residual stays auditable after the
 // verdict flips green. Only indirect Figure elements are touched; an inline
-// Figure has no object number to rewrite in place and is left alone.
+// Figure has no object number to rewrite in place and is left alone. In
+// aggressive mode without a caller string, [fixEmptyFigure] has already taken
+// out the Figures that enclose nothing, so the placeholder goes to the Figures
+// that stay.
 //
 // In safe mode without a caller string the finding stays in the report's
 // residual, as every refusal does. What a Figure paints changes nothing: no

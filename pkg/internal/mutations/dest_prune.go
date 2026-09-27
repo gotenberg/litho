@@ -597,6 +597,16 @@ func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	return obj, dropped, truncated
 }
 
+// PruneNameTree drops from the name tree rooted at tree every value gone
+// reports, as [pruneDestNameTree] does, reading objects from alloc first and
+// queuing every node it rewrites in alloc at its own number. It returns the
+// object to store in the parent in place of tree, which differs from tree only
+// when the root node is written inline, whether anything was dropped, and
+// whether the walk stopped at its depth bound with part of the tree unread.
+func PruneNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, tree ast.PdfObject, gone func(value ast.PdfObject) bool) (ast.PdfObject, bool, bool) {
+	return pruneDestNameTree(ctx, alloc, doc, tree, dropWhen(gone), 0)
+}
+
 // pruneDestNameTreeAt is [pruneDestNameTree] carrying the nodes already walked.
 //
 // visited mirrors the guard [document.LookupNameTree] applies to the same kind
