@@ -44,13 +44,15 @@ func TestFileSpecFixersComposeOnTheSameAnnotation(t *testing.T) {
 		t.Fatalf("fixAFRelationship: %v", err)
 	}
 
+	// At PDF/A-3b the /AFRelationship fixer also moves the /FS to an object
+	// of its own, so an /AF array can list it; read it wherever it now lives.
 	annot := pendingDict(t, alloc, 4)
-	fs, ok := annot["FS"].(ast.PdfDict)
-	if !ok {
-		t.Fatalf("/FS = %T, want a direct dictionary", annot["FS"])
+	fs := liveDictValue(ctx, alloc, doc, annot["FS"])
+	if fs == nil {
+		t.Fatalf("/FS = %T, want a file specification", annot["FS"])
 	}
 
-	// Both repairs must survive in the single pending annotation.
+	// Both repairs must survive in the single pending file specification.
 	if _, hasUF := fs["UF"]; !hasUF {
 		t.Error("/UF was discarded by the AFRelationship fixer")
 	}

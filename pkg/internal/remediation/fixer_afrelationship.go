@@ -51,25 +51,194 @@ func fixAFRelationship(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 
 	var fixes []string
 
-	count := fixAFInEmbeddedFilesTree(ctx, doc, alloc, catalogDict)
+	treeSpecs := make(map[int]bool)
+	count := fixAFInEmbeddedFilesTree(ctx, doc, alloc, catalogDict, treeSpecs)
 	count += fixAFInFileAttachmentAnnots(ctx, doc, alloc, catalogDict)
 	allCount, specRefs := fixAFOnAllFilespecs(ctx, doc, alloc)
 	count += allCount
-	if count > 0 {
-		fixes = append(fixes, fmt.Sprintf("added /AFRelationship /Unspecified to %d file specs", count))
-	}
 
 	// ISO 19005-3 §6.8 t4: every file specification dictionary must be an
 	// associated file, i.e. referenced from an /AF array. Wire the catalog
 	// /AF for PDF/A-3 targets; parts 2 and 4 carry no such requirement at
 	// this scope.
-	if compliance.PDFAPart(profile) == 3 && len(specRefs) > 0 {
+	part3 := compliance.PDFAPart(profile) == 3
+	var promoted fileSpecPromotion
+	if part3 {
+		promoted = promoteInlineFileSpecs(ctx, doc, alloc, catalogDict)
+		count += promoted.relationships
+		specRefs = associatedFileSpecRefs(specRefs, treeSpecs, promoted.refs)
+	}
+	if count > 0 {
+		fixes = append(fixes, fmt.Sprintf("added /AFRelationship /Unspecified to %d file specs", count))
+	}
+	if len(promoted.refs) > 0 {
+		fixes = append(fixes, fmt.Sprintf("moved %d inline file spec(s) to objects of their own", len(promoted.refs)))
+	}
+	if part3 && len(specRefs) > 0 {
 		if afFix := ensureCatalogAFRefs(ctx, doc, alloc, catalogRef, specRefs); afFix != "" {
 			fixes = append(fixes, afFix)
 		}
 	}
 
 	return fixes, nil
+}
+
+// associatedFileSpecRefs returns the sorted object numbers of every file
+// specification the catalog /AF must list: the ones typed /Filespec, the
+// ones the /Names /EmbeddedFiles tree names, and the ones promoted from
+// inline dictionaries.
+//
+// ISO 32000-1, 7.11.4 makes a value of the /EmbeddedFiles tree a file
+// specification whatever its /Type says, and compliance judges it as one
+// under ISO 19005-3, 6.8 t4, so the sweep's /Type test alone left a mistyped
+// one unlisted.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9367.pdf: its tree names three file specifications typed
+//     /F, and each kept 6.8 t4 after a PDF/A-3b remediation.
+func associatedFileSpecRefs(typed []int, tree map[int]bool, promoted []int) []int {
+	all := make(map[int]bool, len(typed)+len(tree)+len(promoted))
+	for _, objNum := range typed {
+		all[objNum] = true
+	}
+	for objNum := range tree {
+		all[objNum] = true
+	}
+	for _, objNum := range promoted {
+		all[objNum] = true
+	}
+	return slices.Sorted(maps.Keys(all))
+}
+
+// maxInlineFileSpecDepth bounds the descent into an annotation's direct
+// values while looking for inline file specifications. Anti-DoS guard, not
+// spec-mandated: indirect values are not followed, so the walk cannot cycle,
+// and only a crafted annotation nests deeper than a handful of levels. It
+// equals compliance's maxAnnotFileSpecDepth, the bound of the walk that finds
+// the file specifications ISO 19005-3, 6.8 t4 judges, so the repair reaches
+// every one that walk reports.
+const maxInlineFileSpecDepth = 16
+
+// fileSpecPromotion is what [promoteInlineFileSpecs] did: the object numbers
+// of the file specifications it moved out of line, in the order it moved
+// them, and how many of them it gave an /AFRelationship.
+type fileSpecPromotion struct {
+	refs          []int
+	relationships int
+}
+
+// promoteInlineFileSpecs moves every file specification written inline in an
+// annotation to an object of its own and writes the annotation back naming it,
+// so an /AF array can list it (ISO 19005-3, 6.8 t4). A file specification
+// without /AFRelationship gets /Unspecified on the way, as the other walks
+// give it (6.8 t3).
+//
+// An /AF array lists indirect objects (ISO 32000-2, 14.13), and ISO 32000-1,
+// 7.3.10 makes an indirect reference the same value as the object it names,
+// so the move changes nothing a reader resolves. It reaches what compliance
+// judges: the /Type /Filespec dictionaries at any depth of the direct values
+// of an annotation that is itself an indirect object, an annotation's /FS and
+// a remote go-to action's /F among them. An inline annotation has no object
+// number to write back, and compliance cites none either. Each annotation is
+// read through the allocator, since filespec-fuf, annot-flags and
+// annot-appearance write it ahead of this fixer, and visited once.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14203.pdf: a FileAttachment's inline /FS kept 6.8 t4 after
+//     a PDF/A-3b remediation.
+//   - litho afref_3b.pdf: a FileAttachment's inline /FS and a Link's /GoToR
+//     /F kept 6.8 t4 after a PDF/A-3b remediation, on litho and veraPDF
+//     alike.
+func promoteInlineFileSpecs(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogDict ast.PdfDict) fileSpecPromotion {
+	var p fileSpecPromotion
+	pagesObj, ok := catalogDict["Pages"]
+	if !ok {
+		return p
+	}
+	var pages []annotPageEntry
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
+
+	seen := make(map[int]bool)
+	for _, pe := range pages {
+		for _, annotObj := range liveArray(ctx, alloc, doc, pe.dict["Annots"]) {
+			if ctx.Err() != nil {
+				return p
+			}
+			ref, isRef := annotObj.(ast.PdfIndirectRef)
+			if !isRef || ref.ObjectNum <= 0 || seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+			annot := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+			if annot == nil {
+				continue
+			}
+			if rebuilt, changed := p.value(ctx, doc, alloc, annot, 0); changed {
+				alloc.AllocAt(ref.ObjectNum, rebuilt)
+			}
+		}
+	}
+	return p
+}
+
+// value returns obj, a direct value at depth below an annotation, with every
+// file specification inside it moved to an object of its own, and whether
+// anything moved. The annotation itself, at depth 0, is never moved.
+func (p *fileSpecPromotion) value(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, obj ast.PdfObject, depth int) (ast.PdfObject, bool) {
+	if depth > maxInlineFileSpecDepth || ctx.Err() != nil {
+		return obj, false
+	}
+	switch v := obj.(type) {
+	case ast.PdfArray:
+		var rebuilt ast.PdfArray
+		for i, item := range v {
+			nv, changed := p.value(ctx, doc, alloc, item, depth+1)
+			if !changed {
+				continue
+			}
+			if rebuilt == nil {
+				rebuilt = slices.Clone(v)
+			}
+			rebuilt[i] = nv
+		}
+		if rebuilt == nil {
+			return obj, false
+		}
+		return rebuilt, true
+	case ast.PdfDict:
+		// Sorted, so the promoted objects take their numbers in a stable
+		// order and the output bytes do not vary between runs.
+		var rebuilt ast.PdfDict
+		for _, key := range sortedDictKeys(v) {
+			nv, changed := p.value(ctx, doc, alloc, v[key], depth+1)
+			if !changed {
+				continue
+			}
+			if rebuilt == nil {
+				rebuilt = maps.Clone(v)
+			}
+			rebuilt[key] = nv
+		}
+		if typeName, _ := document.ResolveName(ctx, doc, v["Type"]); depth == 0 || typeName != "Filespec" {
+			if rebuilt == nil {
+				return obj, false
+			}
+			return rebuilt, true
+		}
+		if rebuilt == nil {
+			rebuilt = maps.Clone(v)
+		}
+		if _, ok := rebuilt["AFRelationship"]; !ok {
+			rebuilt["AFRelationship"] = ast.PdfName("Unspecified")
+			p.relationships++
+		}
+		ref := alloc.Alloc(rebuilt)
+		p.refs = append(p.refs, ref.ObjectNum)
+		return ref, true
+	}
+	return obj, false
 }
 
 // fixAFOnAllFilespecs walks every indirect object and adds /AFRelationship
@@ -145,8 +314,9 @@ func ensureCatalogAFRefs(ctx context.Context, doc *document.Document, alloc *wri
 }
 
 // fixAFInEmbeddedFilesTree repairs the file specifications in the catalog
-// /Names/EmbeddedFiles name tree (PDF/A-2/3/4 §6.8).
-func fixAFInEmbeddedFilesTree(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogDict ast.PdfDict) int {
+// /Names/EmbeddedFiles name tree (PDF/A-2/3/4 §6.8), and records in specs the
+// object number of each one the tree names indirectly.
+func fixAFInEmbeddedFilesTree(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogDict ast.PdfDict, specs map[int]bool) int {
 	namesDict, err := document.ResolveDict(ctx, doc, catalogDict["Names"])
 	if err != nil || namesDict == nil {
 		return 0
@@ -155,7 +325,7 @@ func fixAFInEmbeddedFilesTree(ctx context.Context, doc *document.Document, alloc
 	if !ok {
 		return 0
 	}
-	return fixAFInNameTree(ctx, doc, alloc, efObj, make(map[int]bool), 0)
+	return fixAFInNameTree(ctx, doc, alloc, efObj, make(map[int]bool), 0, specs)
 }
 
 // fixAFInFileAttachmentAnnots repairs the file specification referenced by each
@@ -211,10 +381,11 @@ func fixAFInFileAttachmentAnnots(ctx context.Context, doc *document.Document, al
 }
 
 // fixAFInNameTree walks an EmbeddedFiles name tree, adding /AFRelationship to
-// each filespec. seen visits each node once and depth is capped: a name tree is
-// a strict tree, so a /Kids tree whose every node lists the same child twice
-// would otherwise fan out 2^depth (a denial of service).
-func fixAFInNameTree(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, obj ast.PdfObject, seen map[int]bool, depth int) int {
+// each filespec and recording in specs the object number of each indirect one
+// that resolves to a dictionary. seen visits each node once and depth is
+// capped: a name tree is a strict tree, so a /Kids tree whose every node lists
+// the same child twice would otherwise fan out 2^depth (a denial of service).
+func fixAFInNameTree(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, obj ast.PdfObject, seen map[int]bool, depth int, specs map[int]bool) int {
 	if depth > maxNameTreeWalkDepth {
 		return 0
 	}
@@ -236,6 +407,9 @@ func fixAFInNameTree(ctx context.Context, doc *document.Document, alloc *writer.
 		if arr, err := document.ResolveArray(ctx, doc, namesArr); err == nil {
 			for i := 1; i < len(arr); i += 2 {
 				count += fixFileSpecAFRelationship(ctx, doc, alloc, arr[i])
+				if ref, ok := arr[i].(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 && resolveFromAllocOrDoc(ctx, alloc, doc, ref) != nil {
+					specs[ref.ObjectNum] = true
+				}
 			}
 		}
 	}
@@ -244,7 +418,7 @@ func fixAFInNameTree(ctx context.Context, doc *document.Document, alloc *writer.
 	if kidsArr, ok := d["Kids"]; ok {
 		if arr, err := document.ResolveArray(ctx, doc, kidsArr); err == nil {
 			for _, kid := range arr {
-				count += fixAFInNameTree(ctx, doc, alloc, kid, seen, depth+1)
+				count += fixAFInNameTree(ctx, doc, alloc, kid, seen, depth+1, specs)
 			}
 		}
 	}
