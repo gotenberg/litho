@@ -156,6 +156,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formcycle_ua1.pdf`    | PDF/UA-1     | Forms whose resources list each other, under auto-tagging        |
 | `formflat_ua1.pdf`     | PDF/UA-1     | Tagged widgets with no `/AcroForm`, under the form mutations     |
 | `remreach_2b.pdf`      | PDF/A-2b     | Defects below a page's resources the repairs did not reach       |
+| `annotlang_ua1.pdf`    | PDF/UA-1     | Languages annotations name; symbolic TrueType encoding dicts     |
 
 ### Must-not-fire controls
 
@@ -360,6 +361,10 @@ violation but is exempt, so a firing is a false positive.
 | `extguards_2b`                            | XPath values `a:b`, `$x` and `x:f(1)/a`, which the JDK compiles        | ISO 19005-2, 6.6.2.3.1 t2    |
 | `extguards_2b`                            | `xmpMM:DerivedFrom` declared a type holding `stRef:filePath`           | ISO 19005-2, 6.6.2.3.1 t2    |
 | `extguards_2b`                            | `xmp:CreateDate` declared an unknown type, holding a date              | ISO 19005-2, 6.6.2.3.1 t2    |
+| `annotlang_ua1`                           | An annotation whose element outside the tree carries `/Lang (de-DE)`   | ISO 14289-1, 7.2 t29         |
+| `annotlang_ua1`                           | An annotation's own malformed `/Lang`, beside an element with none     | ISO 14289-1, 7.2 t29         |
+| `annotlang_ua1`                           | A symbolic TrueType whose `/Encoding` lists `/Differences` only        | ISO 14289-1, 7.21.6 t3       |
+| `annotlang_ua1`                           | A symbolic TrueType whose `/Encoding` is an empty dictionary           | ISO 14289-1, 7.21.6 t3       |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -377,6 +382,7 @@ which are covered under [Known divergences](#known-divergences).
 | `a4syntax_4.pdf`       | 17   | 15   | 21   | 19   | 19   | 21   | 19   | 19   | 16  | 17   | 18   | 13   | 8    |
 | `afref_3b.pdf`         | 5    | 2    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 10   | 7    |
 | `annotkinds_ua2.pdf`   | 7    | 7    | 8    | 8    | 8    | 8    | 8    | 8    | 5   | 5    | 6    | 8    | 10   |
+| `annotlang_ua1.pdf`    | 6    | 5    | 6    | 5    | 5    | 6    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `annots_1b.pdf`        | 16   | 14   | 14   | 12   | 12   | 14   | 12   | 12   | 10  | 10   | 11   | 12   | 8    |
 | `annotstruct_ua2.pdf`  | 13   | 12   | 12   | 12   | 12   | 14   | 14   | 14   | 10  | 9    | 9    | 8    | 13   |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
@@ -4168,6 +4174,61 @@ PDF/A-3b nothing, where each left the 15 DeviceN findings and the image, and
 PDF/A-3b the association. The aggressive remediation, which drops the
 attachment, leaves nothing at any PDF/A level. veraPDF agrees on every output
 in both modes.
+
+### `annotlang_ua1.pdf`
+
+Two constructs no file of the seven corpora reaches, each planted so that it is
+the only source of the rules it answers: a regression moves the rule set, not
+just a count.
+
+An annotation or a form field names a structure element by its `/StructParent`
+(ISO 32000-1, 14.7.4.4), and veraPDF reads that element's `/Lang` as a
+`CosLang` (GFPDAnnot.getLang, GFPDFormField.getLang) whether or not the
+structure tree reaches it. Every rule scoped to `CosLang` judges it: ISO
+14289-1 `7.2/29`, ISO 14289-2 `8.4.4/2`, `6.8.4/1` at PDF/A-1a and `6.7.4/1`
+at PDF/A-2a and 3a. litho judged only the elements its tree walk reached. The
+tree here holds two paragraphs and reaches no annotation:
+
+| Square | Its element, outside the tree  | Answers                           |
+| ------ | ------------------------------ | --------------------------------- |
+| A1     | `/Lang (en_US)`                | every `CosLang` rule              |
+| A2     | `/Lang ()`                     | the PDF/UA rules; PDF/A admits it |
+| A3     | `/Lang (de-DE)`                | silent                            |
+| A4     | none; the square's own `/Lang` | silent                            |
+
+A form field names its element the same way, and a widget that is also a
+field is read twice. No widget is planted, since the `mutate-pages` and
+`mutate-flatten` cells treat widgets apart; `TestStructParentLangValidated`
+pins that route.
+
+ISO 14289-1 `7.21.6/3` and its restatements, `6.3.7/2` at PDF/A-1,
+`6.2.11.6/3` at PDF/A-2 and 3, `6.2.10.6/3` at PDF/A-4 and `8.4.5.7/3` at
+PDF/UA-2, forbid a symbolic TrueType font an `/Encoding` entry. veraPDF tests
+`Encoding == null`, where `Encoding` is the name `/Encoding` names or the
+`/BaseEncoding` of the dictionary (GFPDSimpleFont.getEncoding), so a dictionary
+naming no base encoding passes. `S1`'s lists `/Differences` only and `S2`'s is
+empty but for its `/Type`; litho reported both. Both embed the symbolic program
+of `ttcmap_2b.pdf`'s T4 and carry a `/ToUnicode`, so no other font rule fires.
+An `/Encoding` that is neither a name, a dictionary nor null stops veraPDF
+1.30.2 with a NullPointerException, so it is not planted.
+
+| Profile         | Rule         | litho | veraPDF 1.30.2 | litho before |
+| --------------- | ------------ | ----- | -------------- | ------------ |
+| PDF/UA-1        | `7.2/29`     | 2     | 2              | 0            |
+| PDF/UA-2        | `8.4.4/2`    | 2     | 2              | 0            |
+| PDF/A-1a        | `6.8.4/1`    | 1     | 1              | 0            |
+| PDF/A-2a, 3a    | `6.7.4/1`    | 1     | 1              | 0            |
+| PDF/UA-1        | `7.21.6/3`   | 0     | 0              | 2            |
+| PDF/UA-2        | `8.4.5.7/3`  | 0     | 0              | 2            |
+| PDF/A-1a, 1b    | `6.3.7/2`    | 0     | 0              | 2            |
+| PDF/A-2a to 3u  | `6.2.11.6/3` | 0     | 0              | 2            |
+| PDF/A-4, 4e, 4f | `6.2.10.6/3` | 0     | 0              | 2            |
+
+Before the fix every one of the thirteen cells disagreed. After it the rule
+sets and the counts of every rule equal veraPDF 1.30.2's in all thirteen, and
+in the remediated output of the eight profiles `manifest.json` lists, default
+and aggressive. Remediation leaves the language rules at PDF/UA-1, PDF/UA-2 and
+PDF/A-2a on both tools, since the `/Lang` repair walks the structure tree.
 
 ## Scope
 
