@@ -164,6 +164,7 @@ one deliberately rather than diffing it against a fresh build.
 | `annothidden_2b.pdf`   | PDF/A-2b     | Annotations that show nowhere, under PDF/A remediation           |
 | `kidsrepair_1b.pdf`    | PDF/A-1b     | Repairs of inherited resources and of pages written in `/Kids`   |
 | `inlinefs_4.pdf`       | PDF/A-4      | File specifications written inline outside any annotation `/FS`  |
+| `sigtagged_ua1.pdf`    | PDF/UA-1     | A certified signature on a tagged page, under the rewrites       |
 
 ### Must-not-fire controls
 
@@ -475,6 +476,7 @@ which are covered under [Known divergences](#known-divergences).
 | `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
+| `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
 | `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 30   |
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
@@ -4481,8 +4483,8 @@ box:
 ISO 14289-1, 7.18.4 test 1 exempts a hidden widget from the Form tag, so
 `draft` needs none. ISO 14289-2, 8.9.2.2 test 2 fires on `stamp` and `note` and
 not on `tip`, whose ToggleNoView it permits. With an XMP packet claiming
-`pdfuaid:part` 1, the file conforms to PDF/UA-1 on both tools, the one cell of
-this corpus that reports nothing, and its flattened output conforms too.
+`pdfuaid:part` 1, the file conforms to PDF/UA-1 on both tools, one of the two
+cells of this corpus that report nothing, and its flattened output conforms too.
 
 Measured on veraPDF 1.30.2 and litho, flattening before the fix kept all five
 widgets and their fields, which `mutate-flatten` counts as `promise_broken`.
@@ -4597,6 +4599,59 @@ passed before too. The two sibling pages are written back into the one `/Kids`
 array, each keeping the other's repair, and qpdf reads every output, warning
 only that the two pages are direct, as it does on the fixture.
 
+### `sigtagged_ua1.pdf`
+
+A signature covers the bytes its `/ByteRange` names (ISO 32000-1, 12.8.1). An
+incremental update appends after them and keeps it valid; a full rewrite moves
+every one of them, so litho draws each signed widget's appearance into its page
+and drops the signature, its field and the `/Perms` entry naming it (ISO
+32000-1, 12.8.4). No fixture was both tagged and signed, so the mutation cells
+never saw a signature drawn into a tagged page, nor a certification a rewrite
+drops.
+
+One tagged page shows `AB` as a paragraph and presents three fields, each merged
+with its widget, carrying a `/TU` and the only kid of its own Form element:
+
+| Field      | Kind                                           | After a full rewrite                                |
+| ---------- | ---------------------------------------------- | --------------------------------------------------- |
+| `approval` | signed; `/Perms /DocMDP` names it, with `/P 2` | drawn into the page under its Form element, as `tv` |
+| `name`     | a text field                                   | kept                                                |
+| `cosign`   | an unsigned signature field                    | kept, to be signed                                  |
+
+The signature is genuine: the builder signs the file's bytes itself, a detached
+CMS SignedData with one RSA signer, its self-signed certificate and no signed
+attributes, so a rebuild is byte for byte and poppler's pdfsig reports it valid,
+its certificate untrusted. No appearance draws text, so drawing one into the
+page changes no page text, which `mutate-pages` and `mutate-encrypt` compare.
+
+Measured on veraPDF 1.30.2 and litho before the fix, the full rewrites of
+`mutate-pages` and `mutate-encrypt` copied `approval` with its `/ByteRange`,
+which pdfsig reported invalid or not verified, and both tools failed `6.4.3/1`
+on the page move at PDF/A-2b; `mutate-flatten` kept `/Perms /DocMDP` naming a
+signature no field held. After it, pdfsig finds only the unsigned `cosign` on
+the page move and no signature on the flattened output, each passes PDF/UA-1 on
+both tools, and `mutate-sign` keeps `approval` valid beside the signature it
+adds. The `pages` and `encrypt` cells no longer admit `6.4.3/1`, so a rewrite
+that copied the signature again fails 8 cells here.
+
+The file agrees with veraPDF in all thirteen cells, rule for rule and count for
+count, and so does each of the page move, the flattened, the signed and the
+rewritten output. PDF/UA-1 reports nothing on either tool. The other cells
+report the appearances painting in DeviceRGB and DeviceGray with no output
+intent (`6.2.3.3/1` and `/3` at part 1, `6.2.4.3/2` and `/4` from part 2), the
+`pdfuaid` properties no extension schema declares and the missing PDF/A
+identification (`6.7.9/2`, `/3` and `6.7.11/1` at part 1, `6.6.2.3.1/1`, `/2`
+and `6.6.4/1` at parts 2 and 3, `6.7.3/1` at part 4), the `%PDF-1.7` header and,
+at 4f, the missing `/EmbeddedFiles` at part 4. At PDF/UA-2 they are the part-1
+claim (`5/2`, `5/5`), the Document element outside the PDF 2.0 namespace
+(`8.2.5.2/2`) and the three widgets with neither a `Lbl` element nor `/Contents`
+(`8.10.2.3/1`).
+
+Remediation at the eight manifest profiles, default and aggressive, leaves
+nothing on either tool except `8.10.2.3/1` at PDF/UA-2, on both. The PDF/A-4
+remediation writes `%PDF-2.0` in a full rewrite, which drops the signature; the
+others update the file incrementally and keep it.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -4621,6 +4676,14 @@ moves both. Both exceptions sit in the manifest's profiles, `complex_ua2` at
 PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus, and the text
 scoreboard names the rules only one side reports. A third cell in the runner is
 a regression, or a divergence to cover under Known divergences and mark `*`.
+two is non-compliant on both sides (`formhidden_ua1` and `sigtagged_ua1` at
+PDF/UA-1 are the corpus's conforming cells), so a change that drops or invents a
+rule class leaves `matched` at 880 and moves only `ruleset_mismatch`, and on
+those two cells it moves both. Both exceptions sit in the manifest's profiles,
+`complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
+and the text scoreboard names the rules only one side reports. A third cell in
+the runner is a regression, or a divergence to cover under Known divergences
+and mark `*`.
 
 The `remediation` and `remediation-aggressive` features validate each
 remediated output with both tools, and their `disagreement` metric sums, over
