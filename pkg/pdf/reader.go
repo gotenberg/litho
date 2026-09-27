@@ -959,14 +959,16 @@ func (r *Reader) Permissions() Permissions {
 }
 
 // Mask builds the 32-bit /P permission value for these flags, suitable
-// for [EncryptConfig.Permissions]. It is the inverse of the decoding in
-// [Reader.Permissions]: every reserved bit the spec requires to be 1
-// (bits 7-8 and 13-32, ISO 32000-2 Table 22) is set, the reserved low
-// bits 1-2 are cleared, and each named permission bit is set only when
-// its flag is true. Bit 10, the permission to extract content for
-// accessibility, has no flag here and stays set. The writer sets the reserved
-// bits of any mask the same way (see [EncryptConfig.Permissions]), so -1
-// grants what a Mask with every flag true grants.
+// for [EncryptConfig.Permissions], and the inverse of the decoding in
+// [Reader.Permissions]. It sets the reserved bits ISO 32000-2, Table 22
+// requires to be 1: bits 7-8, and bits 13-32 for security handlers of
+// revision 3 or greater. The table names no value of bits 13-32 for the
+// revision 2 handler, whose mask gets them set as well. It clears the
+// reserved low bits 1-2, and sets each named permission bit only when its
+// flag is true. Bit 10, the permission to extract content for
+// accessibility, has no flag here and stays set. The writer sets the
+// reserved bits of any mask the same way (see [EncryptConfig.Permissions]),
+// so -1 grants what a Mask with every flag true grants.
 func (p Permissions) Mask() int32 {
 	// Start from all bits set, then clear the reserved low bits and any
 	// denied permission. The high reserved bits stay 1 as the spec wants.

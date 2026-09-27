@@ -27,9 +27,10 @@ func permissionsPDF(header, extraCatalog string) []byte {
 // PDF 2.0 sets bit 10 of its P entry whatever mask the caller gives, and that
 // an output declaring an earlier version keeps the mask as given.
 //
-// ISO 32000-2, Table 22 retires the bit: "Not used. [...] PDF readers shall
-// ignore this bit and PDF writers shall always set this bit to 1 to ensure
-// compatibility with PDF readers following earlier specifications." ISO
+// ISO 32000-2, Table 22 marks the bit "Not used", the restriction it carried
+// "deprecated in PDF 2.0", and still asks writers to set it: "PDF readers
+// shall ignore this bit and PDF writers shall always set this bit to 1 to
+// ensure compatibility with PDF readers following earlier specifications." ISO
 // 32000-1, Table 22 still makes it the permission to extract content for
 // accessibility, which a PDF 1.x file may withhold. Every other bit is the
 // caller's, and the P value is part of what the file key is derived from (ISO
