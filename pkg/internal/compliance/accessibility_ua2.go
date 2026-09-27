@@ -286,25 +286,34 @@ func isWidgetOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject
 // checkStructureDestinations validates PDF/UA-2 §8.8:
 //   - t01: Destinations in outline items, OpenAction, and Link annotations
 //     must be structure destinations (array starting with struct element ref).
-//   - t02: GoTo action destinations must be structure destinations.
+//   - t02: GoTo action destinations must be structure destinations, the
+//     GoTo actions another action runs through /Next among them (see
+//     [goToTreeViolations]).
 //
 // # Corpus evidence
 //
 //   - pdfjs issue16839.pdf: writes /OpenAction 0 0 R, the free-list head, and
 //     veraPDF builds no destination from it.
+//   - govdocs thread_000_000904.pdf, pdfjs issue3214.pdf: each runs a GoTo
+//     action through /Next, which litho did not judge. Test 2 fired 26 and 4
+//     times at PDF/UA-2 against veraPDF's 27 and 5, and now agrees.
+//   - govdocs thread_300_300076.pdf, pdfjs issue14847.pdf: links share GoTo
+//     actions, which litho judged once per link. Test 2 fired 29 and 10 times
+//     against veraPDF's 20 and 4, and now agrees. No other file moves.
 func checkStructureDestinations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
 	}
 
 	var results []Violation
+	judged := make(map[int]bool)
 
 	// Check outline destinations (t01 for /Dest, t02 for /A GoTo).
 	outlinesObj, ok := catalog["Outlines"]
 	if ok {
 		outlines, _ := document.ResolveDict(ctx, doc, outlinesObj)
 		if outlines != nil {
-			walkOutlineStructDest(ctx, doc, outlines["First"], &results, 0, make(map[int]bool))
+			walkOutlineStructDest(ctx, doc, outlines["First"], &results, 0, make(map[int]bool), judged)
 		}
 	}
 
@@ -319,19 +328,13 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 		}
 	}
 	if hasOpenAction {
-		if !isStructureDestination(ctx, doc, oaObj) {
-			// Could be an action dict. Check if GoTo.
-			oaDict, _ := document.ResolveDict(ctx, doc, oaObj)
-			if oaDict != nil {
-				if s, _ := document.ResolveName(ctx, doc, oaDict["S"]); s == "GoTo" && !goToHasStructDest(ctx, doc, oaDict) {
-					results = append(results, fail(Rule_14289_2_8_8_t02,
-						"OpenAction GoTo destination is not a structure destination")...)
-				}
-			} else {
-				// Direct destination array.
-				results = append(results, fail(Rule_14289_2_8_8_t01,
-					"OpenAction destination is not a structure destination")...)
-			}
+		// A dictionary is the action itself (ISO 32000-1, 7.7.2, Table 28), and
+		// anything else a destination.
+		if oaDict, _ := document.ResolveDict(ctx, doc, oaObj); oaDict != nil {
+			results = append(results, goToTreeViolations(ctx, doc, oaObj, "OpenAction", 0, judged)...)
+		} else if !isStructureDestination(ctx, doc, oaObj) {
+			results = append(results, fail(Rule_14289_2_8_8_t01,
+				"OpenAction destination is not a structure destination")...)
 		}
 	}
 
@@ -351,14 +354,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 		// Page /AA additional-actions (the /O open and /C close triggers) can
 		// carry a GoTo whose destination must also be a structure destination.
 		for _, actObj := range pageActionObjects(ctx, doc, page) {
-			act, err := document.ResolveDict(ctx, doc, actObj)
-			if err != nil || act == nil {
-				continue
-			}
-			if s, _ := document.ResolveName(ctx, doc, act["S"]); s == "GoTo" && !goToHasStructDest(ctx, doc, act) {
-				results = append(results, fail(Rule_14289_2_8_8_t02,
-					"page additional-action GoTo destination is not a structure destination")...)
-			}
+			results = append(results, goToTreeViolations(ctx, doc, actObj, "page additional-action", 0, judged)...)
 		}
 
 		for _, pa := range judgedPageAnnotations(ctx, doc, &pages[pageIdx], pageIdx, annotsSeen) {
@@ -372,14 +368,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 				}
 			}
 			for _, actObj := range actionObjects(ctx, doc, annot) {
-				act, err := document.ResolveDict(ctx, doc, actObj)
-				if err != nil || act == nil {
-					continue
-				}
-				if s, _ := document.ResolveName(ctx, doc, act["S"]); s == "GoTo" && !goToHasStructDest(ctx, doc, act) {
-					results = append(results, fail(Rule_14289_2_8_8_t02,
-						"annotation GoTo destination is not a structure destination")...)
-				}
+				results = append(results, goToTreeViolations(ctx, doc, actObj, "annotation", 0, judged)...)
 			}
 		}
 	}
@@ -425,8 +414,9 @@ func actionObjects(ctx context.Context, doc *document.Document, dict ast.PdfDict
 // siblings iteratively via /Next and recursing into children via /First.
 // visited tracks resolved item object numbers across the whole walk: a
 // crafted /Next or /First cycle would otherwise recurse forever, and stack
-// exhaustion is not recoverable in Go.
-func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.PdfObject, results *[]Violation, depth int, visited map[int]bool) {
+// exhaustion is not recoverable in Go. judged is the run's set of action
+// objects already judged (see [goToTreeViolations]).
+func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.PdfObject, results *[]Violation, depth int, visited, judged map[int]bool) {
 	if depth > maxActionChainDepth {
 		return
 	}
@@ -455,25 +445,64 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 			}
 		}
 
-		// Check /A action on outline item.
 		if aObj, hasA := item["A"]; hasA {
-			aDict, _ := document.ResolveDict(ctx, doc, aObj)
-			if aDict != nil {
-				s, _ := document.ResolveName(ctx, doc, aDict["S"])
-				if s == "GoTo" {
-					if !goToHasStructDest(ctx, doc, aDict) {
-						*results = append(*results, fail(Rule_14289_2_8_8_t02,
-							"Outline GoTo action destination is not a structure destination")...)
-					}
-				}
-			}
+			*results = append(*results, goToTreeViolations(ctx, doc, aObj, "Outline", 0, judged)...)
 		}
 
 		// Recurse into children; siblings continue the loop.
-		walkOutlineStructDest(ctx, doc, item["First"], results, depth+1, visited)
+		walkOutlineStructDest(ctx, doc, item["First"], results, depth+1, visited, judged)
 
 		obj = item["Next"]
 	}
+}
+
+// goToTreeViolations judges the GoTo actions of the action tree obj heads,
+// found at site, under ISO 14289-2, 8.8 test 2. An action's /Next holds one
+// action or an array of them, run after it (ISO 32000-1, 12.6.2, Table 193),
+// and 8.8 covers every destination whose target lies in the document, so a
+// GoTo action run after another action is judged as a GoTo action the site
+// holds itself. veraPDF links every /Next entry that is a dictionary as a
+// PDAction of its own and judges each PDGoToAction among them, measured.
+//
+// judged is the run's set of the indirect objects walked (see
+// [objectJudgedOnce]): veraPDF judges an action object once, whichever site
+// reaches it first, so an action two sites share, or a /Next that loops back,
+// adds no finding. A /Next array written as an object of its own is walked
+// once too, although veraPDF judges the direct actions it holds wherever it
+// is reached. Deliberate divergence, an anti-DoS guard: each of its direct
+// actions can name it again in its own /Next, and walking it anew wherever it
+// is reached fans out 2^depth up to [maxActionChainDepth].
+func goToTreeViolations(ctx context.Context, doc *document.Document, obj ast.PdfObject, site string, depth int, judged map[int]bool) []Violation {
+	if ctx.Err() != nil || depth > maxActionChainDepth || objectJudgedOnce(obj, judged) {
+		return nil
+	}
+	act, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || act == nil {
+		return nil
+	}
+	var results []Violation
+	if s, _ := document.ResolveName(ctx, doc, act["S"]); s == "GoTo" && !goToHasStructDest(ctx, doc, act) {
+		msg := site + " GoTo destination is not a structure destination"
+		if depth > 0 {
+			msg = site + " GoTo destination, run through /Next, is not a structure destination"
+		}
+		results = append(results, fail(Rule_14289_2_8_8_t02, msg)...)
+	}
+	nextObj, ok := act["Next"]
+	if !ok {
+		return results
+	}
+	next := ast.PdfArray{nextObj}
+	if arr, err := document.ResolveArray(ctx, doc, nextObj); err == nil {
+		if objectJudgedOnce(nextObj, judged) {
+			return results
+		}
+		next = arr
+	}
+	for _, item := range next {
+		results = append(results, goToTreeViolations(ctx, doc, item, site, depth+1, judged)...)
+	}
+	return results
 }
 
 // goToHasStructDest reports whether a GoTo action dict satisfies the PDF/UA-2

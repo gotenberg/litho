@@ -149,8 +149,10 @@ var allowedAAKeys = map[ast.PdfName]bool{
 // in real documents are a few actions long, so 200 leaves ample headroom.
 //
 // The outline and form-field walks reuse the value as their own depth bound,
-// and remediation's action-chain splice descends as deep (its
-// maxActionChainDepth), so it cuts every action this walk judges.
+// and so does [goToTreeViolations], which follows the same /Next tree for ISO
+// 14289-2, 8.8. Remediation's action-chain splice and its structure
+// destination walk descend as deep (its maxActionChainDepth), so they reach
+// every action these walks judge.
 //
 // # Corpus evidence
 //

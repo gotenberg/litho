@@ -80,7 +80,7 @@ func TestWalkOutlineStructDest_NextCycleTerminates(t *testing.T) {
 	}
 
 	var results []Violation
-	walkOutlineStructDest(context.Background(), doc, outlines["First"], &results, 0, make(map[int]bool))
+	walkOutlineStructDest(context.Background(), doc, outlines["First"], &results, 0, make(map[int]bool), make(map[int]bool))
 }
 
 func TestWalkNSCheck_KCycleTerminates(t *testing.T) {
