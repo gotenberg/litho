@@ -182,6 +182,7 @@ one deliberately rather than diffing it against a fresh build.
 | `rolemapns_ua2.pdf`    | PDF/UA-2     | Mapped private types in namespaces the root `/RoleMap` misses    |
 | `viewerboxes_2b.pdf`   | PDF/A-2b     | Boxes veraPDF passes and no viewer uses, under the rewrites      |
 | `gotochain_ua2.pdf`    | PDF/UA-2     | GoTo actions run through `/Next`: arrays, a loop, a shared one   |
+| `emptyfig_ua2.pdf`     | PDF/UA-2     | Figures that enclose nothing, and every reference to them        |
 
 ### Must-not-fire controls
 
@@ -453,6 +454,7 @@ which are covered under [Known divergences](#known-divergences).
 | `docinfo_1b.pdf`       | 11   | 8    | 4    | 1    | 2    | 4    | 1    | 2    | 6   | 6    | 7    | 5    | 5    |
 | `docmdp_2b.pdf`        | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 10   | 8    |
 | `docsync_1b.pdf`       | 11   | 9    | 6    | 4    | 4    | 6    | 4    | 4    | 6   | 6    | 7    | 9    | 8    |
+| `emptyfig_ua2.pdf`     | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `encperm_ua1.pdf`      | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 2    | 4    |
 | `extguards_2b.pdf`     | 9    | 6    | 6    | 3    | 4    | 7    | 4    | 5    | 5   | 5    | 6    | 5    | 5    |
 | `extpredef_2b.pdf`     | 7    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 5   | 5    | 6    | 5    | 5    |
@@ -5609,6 +5611,57 @@ URI actions keep their entries, and PDF.js opens the page the outline item, the
 links and the `/OpenAction` opened before. Remediation at the eight manifest
 profiles, default and aggressive, leaves nothing on either tool, and every
 `mutate-*` cell passes.
+
+### `emptyfig_ua2.pdf`
+
+ISO 14289-2, 8.2.5.28.2 and ISO 14289-1, 7.3 ask every Figure for alternate
+text. Aggressive PDF/UA remediation removes a Figure that lacks it and encloses
+nothing, since no text could describe it, and every reference to it goes with
+it; the default mode leaves the Figure, and alternate text the caller supplies
+keeps it. The corpus reaches two of the forms such a Figure takes, no kid and
+a marked-content identifier its page does not mark, and no reference the
+removal cleans but a `/ParentTree` slot, so this file packs the other forms and
+references into a tagged document of two pages:
+
+| Figure          | Encloses                                                | Named by                                            | After aggressive remediation                       |
+| --------------- | ------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------- |
+| F1              | the null object                                         |                                                     | removed                                            |
+| F2              | MCID 7, which page 1 does not mark                      | a `/ParentTree` slot                                | removed, the slot null                             |
+| F3              | an object reference to object 999, which is not defined | a `/ParentTree` entry of its own, under key 5       | removed, the entry gone                            |
+| F4              | F5 alone                                                |                                                     | removed                                            |
+| F5              | a marked-content reference to MCID 8, unmarked          | a `/ParentTree` slot                                | removed, the slot null                             |
+| F6, with `/Alt` | F7 alone                                                |                                                     | stays, with no kid                                 |
+| F7              | nothing                                                 |                                                     | removed                                            |
+| F8, in a `Div`  | MCID 9, unmarked                                        | a `/ParentTree` slot                                | removed; the `Div` stays, with no kid              |
+| F9              | MCID 10, unmarked                                       | the `/IDTree`, a `/Ref`, an outline `/SE` and `/SD` | removed; the `/SD` names the `Document` instead    |
+| F10, on page 2  | MCID 0 of page 2, unmarked                              | an outline item's `/SD`                             | removed; the `/SD` goes, the action keeps its `/D` |
+| K2              | MCID 2, a drawing page 1 marks                          |                                                     | stays, with the placeholder `/Alt`                 |
+| K3              | nothing                                                 | an outline item's `/Dest`, a destination array      | stays, with the placeholder `/Alt`                 |
+
+The `Document` is the element page 1 opens on once F9 is gone, the one
+structure-destination remediation picks for a destination to page 1. Page 2
+holds no other element, so the action to it keeps its page destination alone,
+as that remediation leaves a destination to a page no element begins on. K3
+stays because a destination array names it with no page destination beside it
+to fall back on.
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
+count for count. PDF/UA-2 reports `8.2.5.28.2/1` for the eleven Figures lacking
+alternate text, and PDF/UA-1 `7.3/1` for the same eleven beside the part-2
+claim (`5/2`) and the `%PDF-2.0` header (`6.1/1`). The PDF/A cells report the
+text and drawings painted in device gray with no output intent (`6.2.3.3/3` at
+part 1, `6.2.4.3/4` from part 2) and the missing PDF/A identification. Parts 1
+to 3 add the `pdfuaid` properties no extension schema declares, and parts 2
+and 3 the header (`6.1.2/1`); PDF/A-4f adds the missing `/EmbeddedFiles`.
+
+Measured on litho and veraPDF 1.30.2 before the removal, aggressive remediation
+to PDF/UA-1, PDF/UA-2 and WTPDF-1.0 Accessibility gave all eleven Figures the
+placeholder `/Alt`, and both tools reported nothing on the outputs. Now nine go
+and K2 and K3 keep the placeholder: the PDF/UA-1 output passes both tools, and
+the PDF/UA-2 and WTPDF-1.0 Accessibility outputs fail `8.8/2` once on both, the
+action to page 2. The default mode leaves the eleven findings on both tools, as
+before. Remediation at the six PDF/A manifest profiles and at WTPDF-1.0 Reuse,
+default and aggressive, leaves nothing on either tool.
 
 ## Scope
 
