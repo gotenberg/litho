@@ -288,3 +288,94 @@ func TestCompleteWrittenPageTree_CompletesOnlyWhatTheUpdateWrites(t *testing.T) 
 		t.Errorf("an update writing no page tree object wrote %s", got)
 	}
 }
+
+// boxTreeObjects are the objects of a two-page document whose root states the
+// /CropBox [0 0 500 700]. Page 3 states /MediaBox [0 0 600 800 7] and /CropBox
+// [0 0 300], which the reader reads as the default, its media box. Node 4
+// states /CropBox [0 0 0 0], which page 5, stating none, reads as the default
+// too.
+var boxTreeObjects = []string{
+	"<< /Type /Catalog /Pages 2 0 R >>",
+	"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 612 792] /CropBox [0 0 500 700] >>",
+	"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800 7] /CropBox [0 0 300] /Contents 6 0 R >>",
+	"<< /Type /Pages /Parent 2 0 R /Kids [5 0 R] /Count 1 /CropBox [0 0 0 0] >>",
+	"<< /Type /Page /Parent 4 0 R /Contents 6 0 R >>",
+	"<< /Length 0 >>\nstream\n\nendstream",
+}
+
+// TestCompleteWrittenPageTree_WritesTheBoxesTheReaderReads pins that an
+// update writes the page boundaries of the pages and nodes it writes as the
+// rectangles the reader reads, and leaves the others as the file states them.
+// A crop box the reader cannot use is dropped, and where that lets the root's
+// show through, the page states its media box as its crop box instead: page 3
+// always, page 5 only when the update writes node 4, whose crop box it
+// inherits.
+func TestCompleteWrittenPageTree_WritesTheBoxesTheReaderReads(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	doc := attachDoc(t, boxTreeObjects...)
+	for _, tc := range []struct {
+		name  string
+		held  []int
+		crop5 []float64
+	}{
+		{name: "pages only", held: []int{3, 5}},
+		{name: "pages and node", held: []int{3, 4, 5}, crop5: []float64{0, 0, 612, 792}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+			for _, num := range tc.held {
+				obj, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: num})
+				if err != nil {
+					t.Fatalf("resolving object %d: %v", num, err)
+				}
+				alloc.AllocAt(num, obj)
+			}
+			if err := CompleteWrittenPageTree(ctx, alloc, doc); err != nil {
+				t.Fatalf("CompleteWrittenPageTree: %v", err)
+			}
+			if got := len(alloc.Pending()); got != len(tc.held) {
+				t.Errorf("the update writes %d objects, want the %d it held", got, len(tc.held))
+			}
+			page3 := pendingDictAt(t, alloc, 3)
+			for _, key := range []ast.PdfName{"MediaBox", "CropBox"} {
+				box, _ := page3[key].(ast.PdfArray)
+				if !slices.Equal(boxNumbers(box), []float64{0, 0, 600, 800}) {
+					t.Errorf("page 3 /%s = %v, want [0 0 600 800]", key, page3[key])
+				}
+			}
+			page5 := pendingDictAt(t, alloc, 5)
+			box, _ := page5["CropBox"].(ast.PdfArray)
+			if got := boxNumbers(box); !slices.Equal(got, tc.crop5) {
+				t.Errorf("page 5 /CropBox = %v, want %v", page5["CropBox"], tc.crop5)
+			}
+			if _, has := page5["MediaBox"]; has {
+				t.Errorf("page 5 states /MediaBox %v, where it inherits the root's", page5["MediaBox"])
+			}
+			if slices.Contains(tc.held, 4) {
+				if crop, has := pendingDictAt(t, alloc, 4)["CropBox"]; has {
+					t.Errorf("node 4 states /CropBox %v, which encloses no area", crop)
+				}
+			}
+		})
+	}
+}
+
+// boxNumbers returns the entries of box as numbers, nil for nil, and nil when
+// one is no number.
+func boxNumbers(box ast.PdfArray) []float64 {
+	if box == nil {
+		return nil
+	}
+	values := make([]float64, 0, len(box))
+	for _, v := range box {
+		n, ok := document.Number(v)
+		if !ok {
+			return nil
+		}
+		values = append(values, n)
+	}
+	return values
+}
