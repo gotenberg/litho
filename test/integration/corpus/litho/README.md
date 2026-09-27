@@ -170,6 +170,7 @@ one deliberately rather than diffing it against a fresh build.
 | `laterreads_2u.pdf`    | PDF/A-2u     | What a later repair reads: removed annotations, a font's uses    |
 | `baretree_2b.pdf`      | PDF/A-2b     | A page tree short of the entries it requires, under the rewrites |
 | `namedmcid_ua1.pdf`    | PDF/UA-1     | Marked content naming its property list; Links judged per page   |
+| `directstream_2b.pdf`  | PDF/A-2b     | Streams written inside other objects, under every writer path    |
 
 ### Must-not-fire controls
 
@@ -422,6 +423,7 @@ which are covered under [Known divergences](#known-divergences).
 | `contentstream_4.pdf`  | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 6   | 6    | 7    | 8    | 7    |
 | `csnames_2b.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 5    | 6    |
 | `defaultcs_4.pdf`      | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 10   | 7    |
+| `directstream_2b.pdf`  | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `docinfo_1b.pdf`       | 11   | 8    | 4    | 1    | 2    | 4    | 1    | 2    | 6   | 6    | 7    | 5    | 5    |
 | `docmdp_2b.pdf`        | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 10   | 8    |
 | `docsync_1b.pdf`       | 11   | 9    | 6    | 4    | 4    | 6    | 4    | 4    | 6   | 6    | 7    | 9    | 8    |
@@ -4941,16 +4943,66 @@ fix litho also left `7.1/3` at PDF/UA-1 and `8.2.2/1` and `8.4.3/1` at
 PDF/UA-2. Deleting either page and flattening leave outputs on which both tools
 report the same rule set and counts at both PDF/UA levels.
 
+### `directstream_2b.pdf`
+
+ISO 32000-1, 7.3.8.1 makes every stream an indirect object, and 7.5.7 keeps
+streams out of object streams. litho's parser reads a stream written inside a
+dictionary or an array, as veraPDF's does, and every writer path wrote it back
+where it found it: qpdf then reads the object holding it as damaged, and a write
+with `--compact` packed it into an object stream. The writers now give each
+such stream an indirect object of its own, with a reference in its place. No
+corpus file holds one. Split, merge and insert wrote one for two pdfjs files,
+`poppler-937-0-fuzzed.pdf` and `issue13783.pdf`, whose page box runs on into the
+page's `/Contents` reference: the page copy resolved the reference into the
+`/CropBox` it wrote.
+
+The page holds a stream in each place a copy meets one, each showing its own
+text in the conforming embedded TrueType of `ttcmap_2b.pdf`, in DeviceGray with
+no output intent:
+
+| Where the stream sits                                    | Shows |
+| -------------------------------------------------------- | ----- |
+| the page's indirect content stream, first in `/Contents` | `A`   |
+| the `/Contents` array, directly, second                  | `B`   |
+| the page's `/XObject` resources, directly, as `/Fm0`     | `AB`  |
+| `/Fm0`'s own `/XObject` resources, directly, as `/Fm1`   | `BA`  |
+
+The direct content stream draws `/Fm0`, which draws `/Fm1`, and the page's
+`/MediaBox` runs on past its four coordinates into a reference to the indirect
+content stream, the shape of the two pdfjs files. pikepdf makes every stream
+indirect, so the page is appended by hand in an incremental update.
+
+Measured on veraPDF 1.30.2 and litho, the file returns the same rule set in all
+thirteen cells. Both tools read every stream. veraPDF counts the four text
+paints in DeviceGray (`6.2.3.3/3` at part 1, `6.2.4.3/4` from part 2) and litho
+two; at PDF/UA-1 veraPDF counts `7.1/3` and `7.2/34`, and at PDF/UA-2
+`8.2.2/1`, once per stream, and litho once each. The other cells report the
+identification and tagging rules a part-2 claim draws.
+
+Before the fix, every write of the file held the direct streams inline: split,
+merge, insert, rotation, stamping, flattening, auto-tagging, encryption, and
+remediation at the eight manifest profiles, default and aggressive. qpdf failed
+every output, and a split with `--compact` held them inside an object stream.
+Now each output holds every stream as an object of its own, qpdf reads it
+without a warning, and its pages show the four texts. The gate's qpdf check
+tells the two apart in `mutate-encrypt` alone: the input already carries the
+warning classes an output writing the streams inline draws, so the other cells
+read the same either way, and the Go tests of each writer path pin the rest.
+Remediation at the eight manifest profiles, default and aggressive, leaves
+nothing at the PDF/A profiles on either tool, and `7.1/3` at PDF/UA-1 and
+`8.2.2/1` at PDF/UA-2 on both, veraPDF counting two and litho one, before the
+fix and after.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 118 x 8 = 944 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 118 x 13 = 1534 cells. litho
+runner scores 119 x 8 = 952 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 119 x 13 = 1547 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1532 of the 1534 cells. The two
+fixtures exist to protect, and it holds in 1545 of the 1547 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -4960,7 +5012,7 @@ verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
 three is non-compliant on both sides (`formhidden_ua1` and `sigtagged_ua1` at
 PDF/UA-1 and `baretree_2b` at PDF/A-2b are the corpus's conforming cells), so a
-change that drops or invents a rule class leaves `matched` at 944 and moves only
+change that drops or invents a rule class leaves `matched` at 952 and moves only
 `ruleset_mismatch`, and on those three cells it moves both. Both exceptions sit
 in the manifest's profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the
 metric reads 2 on this corpus, and the text scoreboard names the rules only one
