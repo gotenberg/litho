@@ -45,7 +45,7 @@ func TestStructPageTargetsReadsAnIndirectStructureType(t *testing.T) {
 		}
 		return resolved
 	}
-	targets := structPageTargets(ctx, resolve, root["K"])
+	targets := StructPageTargets(ctx, resolve, root["K"])
 	if got := targets[3]; got.ObjectNum != 10 {
 		t.Errorf("page 1 opens %v, want the Document (10)", got)
 	}

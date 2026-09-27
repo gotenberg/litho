@@ -74,7 +74,7 @@ func WriteOutline(
 
 	var targets *outlineTargets
 	if root, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["StructTreeRoot"]); err == nil && root != nil {
-		targets = &outlineTargets{byPage: structPageTargets(ctx, allocResolver(ctx, alloc, doc), root["K"])}
+		targets = &outlineTargets{byPage: StructPageTargets(ctx, AllocResolver(ctx, alloc, doc), root["K"])}
 	}
 
 	outlineRef := BuildOutline(ctx, alloc, pageRefs, outlineItems(bookmarks), targets)

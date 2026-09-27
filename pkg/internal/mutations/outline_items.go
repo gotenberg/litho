@@ -198,7 +198,7 @@ func structDestArray(ctx context.Context, doc *document.Document, obj ast.PdfObj
 // structure destinations follows instead. An item carries the structure
 // element its source item named when the output holds that element. Otherwise
 // it opens the first element in the output's logical order whose content
-// begins on its page (see [structPageTargets]): the element a reader following
+// begins on its page (see [StructPageTargets]): the element a reader following
 // the structure destination shows on the page the item opens. That is how an
 // item whose element left with its pages keeps one, and how an item that named
 // a page alone gains one. An item on a page no element begins on opens the
@@ -258,7 +258,7 @@ func outputOutlineTargets(ctx context.Context, alloc *writer.ObjAllocator, root 
 	}
 	return &outlineTargets{
 		carry:  carriedElement(sources),
-		byPage: structPageTargets(ctx, allocResolver(ctx, alloc, nil), rootDict["K"]),
+		byPage: StructPageTargets(ctx, AllocResolver(ctx, alloc, nil), rootDict["K"]),
 	}
 }
 
@@ -283,13 +283,13 @@ func carriedElement(sources []*structSource) func(int, ast.PdfIndirectRef) (ast.
 	}
 }
 
-// structPageTargets maps each page's object number to the first structure
+// StructPageTargets maps each page's object number to the first structure
 // element, in the logical order of the tree under rootK (ISO 32000-1,
 // 14.7.2), whose content begins on that page (see [elementPages.first]), read
 // through resolve. An element is visited before its kids, so a page names the
 // outermost element beginning on it. Only an element written as an object of
 // its own can be a destination's target.
-func structPageTargets(ctx context.Context, resolve func(ast.PdfObject) ast.PdfObject, rootK ast.PdfObject) map[int]ast.PdfIndirectRef {
+func StructPageTargets(ctx context.Context, resolve func(ast.PdfObject) ast.PdfObject, rootK ast.PdfObject) map[int]ast.PdfIndirectRef {
 	targets := make(map[int]ast.PdfIndirectRef)
 	pages := newElementPages(resolve)
 	visited := make(map[int]bool)
@@ -438,9 +438,9 @@ func (e *elementPages) start(ctx context.Context, elem ast.PdfDict, depth int) e
 	return elementStart{empty: len(kids) == 0}
 }
 
-// allocResolver returns a resolve function reading an object from alloc first,
+// AllocResolver returns a resolve function reading an object from alloc first,
 // and from doc when alloc holds none at its number and doc is not nil.
-func allocResolver(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) func(ast.PdfObject) ast.PdfObject {
+func AllocResolver(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) func(ast.PdfObject) ast.PdfObject {
 	return func(obj ast.PdfObject) ast.PdfObject {
 		ref, isRef := obj.(ast.PdfIndirectRef)
 		if !isRef {
