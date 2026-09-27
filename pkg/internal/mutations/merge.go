@@ -273,10 +273,11 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 // merge whose first source names none with no language, while later sources
 // named theirs. The first source naming one keeps the entries and metadata a
 // merge takes from its first source in their language whenever that source
-// names one. A tagged source naming another language, or none, states that on
-// its elements (see [structOutput.add]). With no language named, the empty
-// identifier still says the language is unknown (ISO 32000-1, 14.9.2), as its
-// source did, where no entry says nothing.
+// names one. A tagged source naming another language states it on its
+// elements, and the content of one naming none inherits the catalog's (see
+// [structOutput.add]). With no language named, the empty identifier still
+// says the language is unknown (ISO 32000-1, 14.9.2), as its source did, where
+// no entry says nothing.
 //
 // # Corpus evidence
 //
