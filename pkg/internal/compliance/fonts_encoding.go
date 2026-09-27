@@ -1738,6 +1738,65 @@ func nonSymbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool
 	return len(subs) == 0
 }
 
+// symbolicEncodingNamed reports whether enc, the /Encoding entry of a symbolic
+// TrueType font, fails ISO 14289-1, 7.21.6 t3 and its restatements (ISO
+// 19005-1, 6.3.7 t2; ISO 19005-2 and -3, 6.2.11.6 t3; ISO 19005-4, 6.2.10.6
+// t3; ISO 14289-2, 8.4.5.7 t3), which forbid a symbolic TrueType font an
+// /Encoding entry.
+//
+// veraPDF runs the test as "Encoding == null", where Encoding is the name
+// /Encoding names, or the /BaseEncoding of an encoding dictionary read as a name
+// or a string (GFPDSimpleFont.getEncoding). litho follows that reading, which
+// relaxes the clause text for a dictionary that names no base encoding: such a
+// dictionary lists /Differences at most, and ISO 32000-1, 9.6.6.4 draws a
+// symbolic font through its (3,0) or (1,0) cmap subtable, ignoring the
+// /Encoding entry.
+// An absent entry passes, and so does one that resolves to null, which ISO
+// 32000-1, 7.3.7 treats as absent.
+//
+// An /Encoding that is neither a name, a dictionary nor null stops veraPDF
+// 1.30.2 with a NullPointerException, so no verdict stands against the clause
+// text there, and litho states the rule: ISO 32000-1, Table 111 allows only a
+// name or a dictionary.
+//
+// Measured on veraPDF 1.30.2 at PDF/A-1b, PDF/A-2b, PDF/A-4, PDF/UA-1 and
+// PDF/UA-2, with the program embedded and not: a name, and a dictionary whose
+// /BaseEncoding is a name or a string, fail; a /Differences-only dictionary,
+// direct or indirect, an empty dictionary, a /BaseEncoding integer, null and no
+// entry pass; an integer /Encoding stops the validation.
+func symbolicEncodingNamed(ctx context.Context, doc *document.Document, enc ast.PdfObject) bool {
+	if enc == nil {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, enc)
+	if err != nil {
+		// A reference to no object is null (ISO 32000-1, 7.3.10).
+		return false
+	}
+	var dict ast.PdfDict
+	switch v := resolved.(type) {
+	case nil, ast.PdfNull:
+		return false
+	case ast.PdfName:
+		return true
+	case ast.PdfDict:
+		dict = v
+	case ast.PdfStream:
+		dict = v.Dict
+	default:
+		return true
+	}
+	base, err := document.ResolveObject(ctx, doc, dict["BaseEncoding"])
+	if err != nil {
+		return false
+	}
+	switch base.(type) {
+	case ast.PdfName, ast.PdfString:
+		return true
+	}
+	return false
+}
+
 // checkTrueTypeEncoding validates TrueType-specific encoding rules (rule 7).
 //
 // # Corpus evidence
@@ -1755,10 +1814,8 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 	if symbolic {
 		// Symbolic TrueType must not specify /Encoding.
 		rule := trueTypeEncodingSymbolicNoEncodingRule(profile)
-		if rule.Specification != "" {
-			if _, hasEnc := fontDict["Encoding"]; hasEnc {
-				results = append(results, failf(rule, "font %s on page %d", fontName, pageNum)...)
-			}
+		if rule.Specification != "" && symbolicEncodingNamed(ctx, doc, fontDict["Encoding"]) {
+			results = append(results, failf(rule, "font %s on page %d", fontName, pageNum)...)
 		}
 
 		// The permitted cmap subtable set for a symbolic TrueType font depends
