@@ -705,6 +705,46 @@ func TestInsertPages_JoinsTheTargetTreeWherePagesGo(t *testing.T) {
 	}
 }
 
+// TestInsertPages_TwiceOnOneWriter pins that a second insertion on one Writer
+// joins the tree the first left: its keys follow the first's, and its
+// identifiers are renamed past the ones the first renamed.
+func TestInsertPages_TwiceOnOneWriter(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	in := taggedThreePagePDF("en-US")
+	target := openDeclaration(t, in, false)
+	defer target.Close()
+	source := openDeclaration(t, in, false)
+	defer source.Close()
+
+	w := NewWriter(target)
+	defer w.Close()
+	for range 2 {
+		if err := w.InsertPages(3, source, 3); err != nil {
+			t.Fatalf("InsertPages: %v", err)
+		}
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	tree := readOutputTree(t, out.Bytes())
+	const want = "Document[Sect[Para#p1 Para#p2] Link Para#p3 Document[Para#p3_2] Document[Para#p3_3]]"
+	if got := tree.outline(); got != want {
+		t.Errorf("tree = %q, want %q", got, want)
+	}
+	if got, want := tree.structParents(), []int{0, 1, 2, 6, 10}; !slices.Equal(got, want) {
+		t.Errorf("pages' /StructParents = %v, want %v", got, want)
+	}
+	tree.assertPagesOwnTree(t)
+	for _, profile := range []models.PDFUAProfile{models.PDFUA1, models.PDFUA2} {
+		before, after := uaRuleIDs(ctx, t, in, profile), uaRuleIDs(ctx, t, out.Bytes(), profile)
+		if !slices.Equal(before, after) {
+			t.Errorf("%s: the output fails %v, the source %v", profile, after, before)
+		}
+	}
+}
+
 // TestInsertPages_MixedTagging pins what an insertion does when one side is
 // untagged: a tagged source's elements form the tree of an untagged target,
 // and an untagged source's content joins a tagged target outside its tree,
