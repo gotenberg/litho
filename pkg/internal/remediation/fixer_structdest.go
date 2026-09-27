@@ -233,16 +233,12 @@ func (p *structElemPicker) fixLinkAnnots(ctx context.Context, alloc *writer.ObjA
 		if pageDict == nil {
 			continue
 		}
-		annots, err := document.ResolveArray(ctx, p.doc, pageDict["Annots"])
-		if err != nil {
-			continue
-		}
-		for _, aObj := range annots {
+		for _, aObj := range liveArray(ctx, alloc, p.doc, pageDict["Annots"]) {
 			ref, isRef := aObj.(ast.PdfIndirectRef)
 			if !isRef {
 				continue // direct annot dicts cannot be re-allocated in place
 			}
-			annot := resolveFromAllocOrDoc(ctx, alloc, p.doc, ref)
+			annot := liveAnnotation(ctx, alloc, p.doc, ref)
 			if annot == nil {
 				continue
 			}

@@ -142,12 +142,7 @@ func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, d
 
 		for i, annotObj := range annots {
 			ref, isRef := annotObj.(ast.PdfIndirectRef)
-			var annotDict ast.PdfDict
-			if isRef {
-				annotDict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
-			} else if d, err := document.ResolveDict(ctx, doc, annotObj); err == nil {
-				annotDict = d
-			}
+			annotDict := liveAnnotation(ctx, alloc, doc, annotObj)
 			if annotDict == nil {
 				continue
 			}

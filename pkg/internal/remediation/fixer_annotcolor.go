@@ -162,12 +162,7 @@ func fixAnnotColor(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			if r, ok := annotObj.(ast.PdfIndirectRef); ok {
 				annotRef = r
 			}
-			var annotDict ast.PdfDict
-			if annotRef.ObjectNum > 0 {
-				annotDict = resolveFromAllocOrDoc(ctx, alloc, doc, annotRef)
-			} else if d, err := document.ResolveDict(ctx, doc, annotObj); err == nil {
-				annotDict = d
-			}
+			annotDict := liveAnnotation(ctx, alloc, doc, annotObj)
 			if annotDict == nil {
 				continue
 			}

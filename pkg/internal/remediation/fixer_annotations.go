@@ -171,15 +171,18 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			continue
 		}
 
-		resolved, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil || len(resolved) == 0 {
+		// Read through the allocator, as every fixer after it reads the array
+		// this one writes back.
+		resolved := liveArray(ctx, alloc, doc, annotsObj)
+		if len(resolved) == 0 {
 			continue
 		}
 		// fixAnnotArray marks and replaces entries in the array it is given,
-		// and the resolved one is the document's cached /Annots. Editing it in
-		// place wrote the removed annotations' null slots into the cache, where
-		// every later read of the document saw them: the allocator holds the
-		// rebuilt array, and the edit belongs there alone.
+		// and the resolved one is the document's cached /Annots or the one
+		// queued in the allocator. Editing it in place wrote the removed
+		// annotations' null slots into the cache, where every later read of
+		// the document saw them: the allocator holds the rebuilt array, and the
+		// edit belongs there alone.
 		annots := slices.Clone(resolved)
 
 		pageFixes, modified := fixAnnotArray(ctx, alloc, doc, annots, i+1, opts, profile)

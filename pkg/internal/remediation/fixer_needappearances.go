@@ -50,7 +50,7 @@ func fixNeedAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	// Removing the flag hands authority to the stored appearances. When a field
 	// has a value that only the viewer's own generation puts on the page, that
 	// discards it, so the violation stays as a residual the caller can see.
-	if needAppearancesShowsAValue(ctx, doc) {
+	if needAppearancesShowsAValue(ctx, alloc, doc) {
 		return nil, nil
 	}
 
@@ -111,13 +111,9 @@ func normaliseWidgetAppearances(ctx context.Context, alloc *writer.ObjAllocator,
 		if err := ctx.Err(); err != nil {
 			return repaired
 		}
-		annots, err := document.ResolveArray(ctx, doc, page.Dict["Annots"])
-		if err != nil {
-			continue
-		}
-		for _, annotObj := range annots {
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
+		for _, annotObj := range liveArray(ctx, alloc, doc, livePageDict(ctx, alloc, doc, page)["Annots"]) {
+			annot := liveAnnotation(ctx, alloc, doc, annotObj)
+			if annot == nil {
 				continue
 			}
 			ap, err := document.ResolveDict(ctx, doc, annot["AP"])
@@ -278,7 +274,7 @@ const maxAppearanceNestDepth = 3
 //   - pdfjs issue12233.pdf: keeps 12-to-45 byte appearances that paint no
 //     glyphs at all, and remediation silently dropped the field values "Man",
 //     "150" and "Red" from the page.
-func needAppearancesShowsAValue(ctx context.Context, doc *document.Document) bool {
+func needAppearancesShowsAValue(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) bool {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return false
@@ -292,13 +288,9 @@ func needAppearancesShowsAValue(ctx context.Context, doc *document.Document) boo
 		if err := ctx.Err(); err != nil {
 			return false
 		}
-		annots, err := document.ResolveArray(ctx, doc, page.Dict["Annots"])
-		if err != nil {
-			continue
-		}
-		for _, annotObj := range annots {
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
+		for _, annotObj := range liveArray(ctx, alloc, doc, livePageDict(ctx, alloc, doc, page)["Annots"]) {
+			annot := liveAnnotation(ctx, alloc, doc, annotObj)
+			if annot == nil {
 				continue
 			}
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])

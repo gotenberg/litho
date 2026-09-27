@@ -99,16 +99,14 @@ func fixAnnotArtifact(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		annots, err := document.ResolveArray(ctx, doc, pe.dict["Annots"])
-		if err != nil {
-			continue
-		}
-		for _, annotObj := range annots {
+		// Read through the allocator: annotations and forbidden-annots run
+		// first and write the /Annots they filtered at its own object number.
+		for _, annotObj := range liveArray(ctx, alloc, doc, pe.dict["Annots"]) {
 			ref, ok := annotObj.(ast.PdfIndirectRef)
 			if !ok || ref.ObjectNum == 0 || processed[ref.ObjectNum] {
 				continue
 			}
-			annot := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+			annot := liveAnnotation(ctx, alloc, doc, ref)
 			if annot == nil {
 				continue
 			}

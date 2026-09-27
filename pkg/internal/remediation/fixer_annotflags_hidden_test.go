@@ -358,12 +358,10 @@ func TestFixAnnotFlagsRemovesAnInlineHiddenAnnotation(t *testing.T) {
 }
 
 // TestFixAnnotFlagsRemovalSurvivesALaterFixer is the clobber test for an
-// indirect /Annots array. Several later fixers read a page's /Annots with
-// document.ResolveArray, which reads an indirect array as the file wrote it:
-// were the filtered array written back at its own object number, annot-appearance
-// would find the removed annotation there, read it past its pending null, and
-// write it back with an appearance. The page carries the filtered array
-// instead, which every later fixer reads through the page.
+// indirect /Annots array. The filtered array is written back at its own object
+// number, and annot-appearance, which runs later, reads it there: read as the
+// file wrote it, the array still listed the removed annotation, which the fixer
+// read past its pending null and wrote back with an appearance.
 func TestFixAnnotFlagsRemovalSurvivesALaterFixer(t *testing.T) {
 	t.Parallel()
 

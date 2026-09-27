@@ -53,22 +53,16 @@ func fixAnnotOpacity(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			return nil, ctx.Err()
 		}
 
-		annotsObj, ok := pe.dict["Annots"]
-		if !ok {
-			continue
-		}
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil || len(annots) == 0 {
-			continue
-		}
-
-		for _, annotObj := range annots {
+		// The annotations fixer runs first and writes the /Annots it filtered
+		// at the array's own object number: read as the file wrote it, the
+		// array still lists what it removed.
+		for _, annotObj := range liveArray(ctx, alloc, doc, pe.dict["Annots"]) {
 			annotRef, ok := annotObj.(ast.PdfIndirectRef)
 			if !ok || annotRef.ObjectNum == 0 {
 				// An inline annotation cannot be rewritten in place.
 				continue
 			}
-			annotDict := resolveFromAllocOrDoc(ctx, alloc, doc, annotRef)
+			annotDict := liveAnnotation(ctx, alloc, doc, annotRef)
 			if annotDict == nil {
 				continue
 			}

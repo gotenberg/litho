@@ -743,17 +743,14 @@ func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *
 }
 
 // fixAnnotationTransparency walks page annotations and fixes transparency in
-// their appearance stream resources.
+// their appearance stream resources. The array and each annotation are read
+// through the allocator, so an annotation an earlier fixer removed is not
+// repaired.
 func fixAnnotationTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotsObj ast.PdfObject, visited map[int]bool) int {
-	annots, err := document.ResolveArray(ctx, doc, annotsObj)
-	if err != nil || annots == nil {
-		return 0
-	}
-
 	fixed := 0
-	for _, annotObj := range annots {
-		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
-		if err != nil || annotDict == nil {
+	for _, annotObj := range liveArray(ctx, alloc, doc, annotsObj) {
+		annotDict := liveAnnotation(ctx, alloc, doc, annotObj)
+		if annotDict == nil {
 			continue
 		}
 

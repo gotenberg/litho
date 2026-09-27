@@ -66,16 +66,9 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		annotsObj, ok := pe.dict["Annots"]
-		if !ok {
-			continue
-		}
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil || len(annots) == 0 {
-			continue
-		}
-
-		for _, annotObj := range annots {
+		// Read through the allocator, for the reason [fixAnnotOpacity] gives:
+		// an annotation the annotations fixer removed is given no appearance.
+		for _, annotObj := range liveArray(ctx, alloc, doc, pe.dict["Annots"]) {
 			var annotRef ast.PdfIndirectRef
 			if r, ok := annotObj.(ast.PdfIndirectRef); ok {
 				annotRef = r
@@ -83,13 +76,9 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			if annotRef.ObjectNum == 0 {
 				continue
 			}
-			annotDict := resolveFromAllocOrDoc(ctx, alloc, doc, annotRef)
+			annotDict := liveAnnotation(ctx, alloc, doc, annotRef)
 			if annotDict == nil {
-				resolved, err := document.ResolveDict(ctx, doc, annotObj)
-				if err != nil || resolved == nil {
-					continue
-				}
-				annotDict = resolved
+				continue
 			}
 
 			// Best-effort: an unreadable /Subtype yields an empty name,

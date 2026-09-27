@@ -506,16 +506,9 @@ func fixForbiddenActionsOnPages(ctx context.Context, s *actionSplice, catalog as
 				annotRef = r
 			}
 
-			var annotDict ast.PdfDict
-			if annotRef.ObjectNum > 0 {
-				annotDict = resolveFromAllocOrDoc(ctx, alloc, doc, annotRef)
-			}
+			annotDict := liveAnnotation(ctx, alloc, doc, annotObj)
 			if annotDict == nil {
-				resolved, err := document.ResolveDict(ctx, doc, annotObj)
-				if err != nil || resolved == nil {
-					continue
-				}
-				annotDict = resolved
+				continue
 			}
 
 			newAnnot, annotFixes := stripAnnotationActions(ctx, s, annotDict, pageNum)

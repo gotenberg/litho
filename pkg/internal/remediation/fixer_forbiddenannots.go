@@ -65,15 +65,15 @@ func fixForbiddenAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		if !ok {
 			continue
 		}
-		arr, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil {
-			continue
-		}
+		// The array is rebuilt whole and written back, so it is read through
+		// the allocator: the annotations fixer runs first and writes the
+		// /Annots it filtered at its own object number, and a copy of the
+		// file's array put back what it removed.
+		arr := liveArray(ctx, alloc, doc, annotsObj)
 
 		filtered := make(ast.PdfArray, 0, len(arr))
 		for _, item := range arr {
-			d, derr := document.ResolveDict(ctx, doc, item)
-			if derr == nil && d != nil {
+			if d := liveAnnotation(ctx, alloc, doc, item); d != nil {
 				if subtype, _ := document.ResolveName(ctx, doc, d["Subtype"]); forbiddenUA2AnnotSubtypes[subtype] {
 					removed++
 					continue

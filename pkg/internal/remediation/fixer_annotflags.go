@@ -282,16 +282,9 @@ func readAnnotSheets(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			subtypes:  make([]ast.PdfName, len(annots)),
 		}
 		for i, annotObj := range annots {
-			var dict ast.PdfDict
-			if ref, isRef := annotObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
-				dict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
-			}
+			dict := liveAnnotation(ctx, alloc, doc, annotObj)
 			if dict == nil {
-				resolved, err := document.ResolveDict(ctx, doc, annotObj)
-				if err != nil || resolved == nil {
-					continue
-				}
-				dict = resolved
+				continue
 			}
 			sh.dicts[i] = dict
 			// Best-effort: an unreadable /Subtype yields an empty name, which
@@ -308,31 +301,40 @@ func readAnnotSheets(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 // writeSheetAnnots writes a page's /Annots once annotations left it, and
 // reports whether it had an object to write.
 //
-// The page takes the array whenever it has an object number, even when /Annots
-// was an indirect array. Several fixers that run later read an indirect array
-// as the file wrote it (document.ResolveArray): one written back at its own
-// object number would show them the removed annotations, which they read past
-// their pending null and write back with a repair. Each of them reads the array
-// through the page. A page written directly in its parent's /Kids, which ISO
-// 32000-1, 7.7.3.2, Table 29 does not allow, is written back there
-// ([writeTreeNode]); it used to leave the array to write, and its annotations
-// stayed on it when the array was its own.
+// An indirect array is written at its own object number, as the annotations
+// fixer writes it, and every fixer after them reads it there, alloc first
+// ([liveArray]). Written into the page instead, the array object stayed as the
+// file wrote it: nothing named it any more, but an incremental update keeps
+// every object it does not rewrite, and a fixer sweeping every object, such as
+// filespec-fuf, read it there and wrote it back with a repair of an annotation
+// it listed. The removed annotation came back as part of an orphan.
+//
+// An array written inline goes back into the page, and a page written directly
+// in its parent's /Kids, which ISO 32000-1, 7.7.3.2, Table 29 does not allow,
+// goes back there ([writeTreeNode]).
+//
+// # Corpus evidence
+//
+//   - litho laterreads_2u.pdf: the default PDF/A-1b output kept 6.1.11 t1, and
+//     the default PDF/A-2a, 2b and 2u outputs 6.8 t5, on litho and veraPDF,
+//     from the embedded file of a removed FileAttachment in the array object
+//     the file wrote, which veraPDF sweeps as an indirect object.
+//   - litho annothidden_2b.pdf, govdocs thread_400_400575.pdf and pdfjs
+//     annotation_hidden_noview.pdf: their PDF/A outputs change bytes alone.
 func writeSheetAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, sh *annotSheet, kept ast.PdfArray) bool {
-	if treeNodeWritable(sh.page) {
-		newPage := maps.Clone(liveTreeNode(ctx, alloc, doc, sh.page))
-		if len(kept) == 0 {
-			delete(newPage, "Annots")
-		} else {
-			newPage["Annots"] = kept
-		}
-		if writeTreeNode(ctx, alloc, doc, sh.page, newPage) {
-			return true
-		}
-	}
 	if annotsRef, isRef := sh.annotsObj.(ast.PdfIndirectRef); isRef && annotsRef.ObjectNum > 0 {
 		return alloc.AllocAt(annotsRef.ObjectNum, kept)
 	}
-	return false
+	if !treeNodeWritable(sh.page) {
+		return false
+	}
+	newPage := maps.Clone(liveTreeNode(ctx, alloc, doc, sh.page))
+	if len(kept) == 0 {
+		delete(newPage, "Annots")
+	} else {
+		newPage["Annots"] = kept
+	}
+	return writeTreeNode(ctx, alloc, doc, sh.page, newPage)
 }
 
 // annotSlot places an annotation written inline: the sheet and the entry of

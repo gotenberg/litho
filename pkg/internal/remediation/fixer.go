@@ -329,6 +329,42 @@ func liveArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 	return arr
 }
 
+// liveAnnotation returns the annotation an entry of a page's /Annots names, as the
+// next fixer should see it: the replacement an earlier fixer queued at its
+// object number, or else the document's copy, and nil when it is no readable
+// dictionary.
+//
+// An annotation the annotations or annot-flags fixer removed is queued as the
+// null object. [resolveFromAllocOrDoc] reads past a queued value that is no
+// dictionary to the document's copy, so a fixer that wrote its repair of that
+// copy back brought the annotation back as an orphan object, and the rules that
+// sweep every object judged it again. Every fixer that writes an annotation back
+// reads it here, from the /Annots it reads through [liveArray].
+//
+// # Corpus evidence
+//
+//   - litho laterreads_2u.pdf: the PDF/A-1b to 3b outputs held a removed
+//     Screen annotation again, which annot-opacity or annot-appearance wrote
+//     back from the array as the file wrote it.
+//   - govdocs thread_400_400575.pdf, pdfcpu
+//     pkg_testdata__text_annotations.pdf, pdfjs 160F-2019.pdf,
+//     annotation_hidden_noview.pdf and annotation_hidden_print.pdf: their
+//     PDF/A outputs change bytes alone, and no rule moves on litho or
+//     veraPDF.
+func liveAnnotation(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, entry ast.PdfObject) ast.PdfDict {
+	if ref, ok := entry.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+		if obj, pending := alloc.Pending()[ref.ObjectNum]; pending {
+			annot, _ := obj.(ast.PdfDict)
+			return annot
+		}
+	}
+	annot, err := document.ResolveDict(ctx, doc, entry)
+	if err != nil {
+		return nil
+	}
+	return annot
+}
+
 // liveDictValue is the dictionary counterpart of [liveArray]: it resolves a
 // value that is either an inline dictionary or a reference to one, reading the
 // replacement an earlier fixer queued at that object number before the

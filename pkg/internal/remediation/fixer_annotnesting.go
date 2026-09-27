@@ -130,21 +130,12 @@ func fixAnnotNesting(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		annots, err := document.ResolveArray(ctx, doc, page.Dict["Annots"])
-		if err != nil || len(annots) == 0 {
-			continue
-		}
-		for _, annotObj := range annots {
+		for _, annotObj := range liveArray(ctx, alloc, doc, livePageDict(ctx, alloc, doc, page)["Annots"]) {
 			annotRef, isRef := annotObj.(ast.PdfIndirectRef)
 			if !isRef || annotRef.ObjectNum == 0 {
 				continue
 			}
-			annot := resolveFromAllocOrDoc(ctx, alloc, doc, annotRef)
-			if annot == nil {
-				if d, derr := document.ResolveDict(ctx, doc, annotObj); derr == nil {
-					annot = d
-				}
-			}
+			annot := liveAnnotation(ctx, alloc, doc, annotRef)
 			if annot == nil {
 				continue
 			}

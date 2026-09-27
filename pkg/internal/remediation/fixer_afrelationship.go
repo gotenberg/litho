@@ -267,26 +267,17 @@ func fixAFInFileAttachmentAnnots(ctx context.Context, doc *document.Document, al
 		if ctx.Err() != nil {
 			return count
 		}
-		annots, err := document.ResolveArray(ctx, doc, pe.dict["Annots"])
-		if err != nil {
-			continue
-		}
-		for _, annotObj := range annots {
-			// Alloc-aware read: an earlier fixer may already have rewritten
-			// this annotation (filespec-fuf runs first and patches a direct
-			// /FS through it). Reading the stale on-disk dictionary here made
-			// the AllocAt below discard that pending fix, and only the
-			// fixpoint loop's second round put it back.
-			var annotDict ast.PdfDict
-			if ref, isRef := annotObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
-				annotDict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
-			}
+		// The array and each annotation are read through the allocator. The
+		// annotations fixer runs first, writes the /Annots it filtered at its
+		// own object number and nulls what it removed, and a FileAttachment
+		// read from the file's array came back with its repaired /FS. An
+		// earlier fixer may also have rewritten a kept annotation
+		// (filespec-fuf patches a direct /FS through it), and reading the
+		// file's copy made the AllocAt below discard that pending fix.
+		for _, annotObj := range liveArray(ctx, alloc, doc, pe.dict["Annots"]) {
+			annotDict := liveAnnotation(ctx, alloc, doc, annotObj)
 			if annotDict == nil {
-				resolved, err := document.ResolveDict(ctx, doc, annotObj)
-				if err != nil || resolved == nil {
-					continue
-				}
-				annotDict = resolved
+				continue
 			}
 			if subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"]); subtype != "FileAttachment" {
 				continue
