@@ -72,14 +72,29 @@ ENV PATH="/opt/java/bin:${PATH}"
 
 # Install pdfcpu CLI: third-party oracle for the bookmarks feature.
 # Pinned to a tagged release so corpus runs stay reproducible when
-# upstream master shifts the JSON export shape.
+# upstream master shifts the JSON export shape. The release publishes one
+# Linux archive per architecture: the image installs its own, so an arm64
+# host runs pdfcpu natively, and checks it against the SHA-256 versions.env
+# pins for that architecture.
 ARG PDFCPU_VERSION
+ARG PDFCPU_SHA256_AMD64
+ARG PDFCPU_SHA256_ARM64
 RUN : "${PDFCPU_VERSION:?build through corpus init, which passes versions.env}" \
+  && case "${TARGETARCH}" in \
+    amd64) arch=x86_64 pin=PDFCPU_SHA256_AMD64 sha256="${PDFCPU_SHA256_AMD64}" ;; \
+    arm64) arch=arm64 pin=PDFCPU_SHA256_ARM64 sha256="${PDFCPU_SHA256_ARM64}" ;; \
+    *) echo "no pdfcpu archive for architecture ${TARGETARCH}" >&2 && exit 1 ;; \
+  esac \
+  && : "${sha256:?build through corpus init, which passes versions.env}" \
+  && name="pdfcpu_${PDFCPU_VERSION}_Linux_${arch}" \
   && curl -fSL -o /tmp/pdfcpu.tar.xz \
-  "https://github.com/pdfcpu/pdfcpu/releases/download/v${PDFCPU_VERSION}/pdfcpu_${PDFCPU_VERSION}_Linux_x86_64.tar.xz" \
+    "https://github.com/pdfcpu/pdfcpu/releases/download/v${PDFCPU_VERSION}/${name}.tar.xz" \
+  && if ! echo "${sha256}  /tmp/pdfcpu.tar.xz" | sha256sum -c -; then \
+    echo "${name}.tar.xz does not match ${pin}=${sha256}: pin the hash its release lists in checksums.txt" >&2 && exit 1; \
+  fi \
   && tar -xJf /tmp/pdfcpu.tar.xz -C /tmp \
-  && install -m 0755 "/tmp/pdfcpu_${PDFCPU_VERSION}_Linux_x86_64/pdfcpu" /usr/local/bin/pdfcpu \
-  && rm -rf /tmp/pdfcpu.tar.xz "/tmp/pdfcpu_${PDFCPU_VERSION}_Linux_x86_64"
+  && install -m 0755 "/tmp/${name}/pdfcpu" /usr/local/bin/pdfcpu \
+  && rm -rf /tmp/pdfcpu.tar.xz "/tmp/${name}"
 
 # Install Mustang CLI: third-party oracle for the facturx-validity
 # feature. Covers the Factur-X / ZUGFeRD PDF wrapper (filename,

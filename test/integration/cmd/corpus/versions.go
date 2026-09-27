@@ -77,6 +77,16 @@ var localToolPins = map[string]bool{
 // with another value of any of them is stale. The keys mirror the
 // record_stage calls in corpus/entrypoint.sh.
 //
+// The pdfcpu archive hashes are not listed. Each checks the download of the
+// release PDFCPU_VERSION names for one architecture, and a golden made on
+// either architecture is the same golden, so a hash says nothing about it.
+//
+// # Corpus evidence
+//
+//   - pdfcpu: the bookmarks, merges and merge-empty goldens the arm64 pdfcpu
+//     0.12.1 makes match the x86_64 ones on all 51, 39 and 38 files, header
+//     timestamps and temp-file names aside.
+//
 //nolint:gochecknoglobals // static dependency table
 var stagePins = map[string][]string{
 	"goldens/text":               {"PDFJS_REVISION", "NODE_VERSION"},

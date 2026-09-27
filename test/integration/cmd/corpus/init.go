@@ -99,12 +99,16 @@ func provisionCorpus(m *Manifest, pins *resolvedPins) error {
 
 	// Auto-mode corpora rely on a small in-tree helper (the
 	// `scan-claims` subcommand) to attach each PDF's claimed conformance
-	// profile before VeraPDF runs. Cross-compile it for linux/amd64 on
-	// the host, then bind-mount the binary into the container so the
-	// provisioning image stays Go-free.
+	// profile before VeraPDF runs. Cross-compile it on the host for the
+	// architecture of the image just built, then bind-mount the binary into
+	// the container so the provisioning image stays Go-free.
 	binaryMount := []string{}
 	if m.EffectiveProfileMode() == ProfileModeAuto {
-		binPath, err := buildScanClaimsBinary()
+		goarch, err := imageGOARCH(image)
+		if err != nil {
+			return fmt.Errorf("build scan-claims helper: %w", err)
+		}
+		binPath, err := buildScanClaimsBinary(goarch)
 		if err != nil {
 			return fmt.Errorf("build scan-claims helper: %w", err)
 		}
@@ -143,22 +147,57 @@ func dockerBuildArgs(image, dockerCtx string, pins *resolvedPins) []string {
 	return append(args, dockerCtx)
 }
 
-// buildScanClaimsBinary cross-compiles the `corpus scan-claims` helper
-// for linux/amd64 (matching the verapdf/cli base image) and returns
-// the path to the resulting binary. The caller is responsible for
-// cleaning up the binary's parent directory.
-func buildScanClaimsBinary() (string, error) {
+// imageGOARCH returns the GOARCH of the architecture image runs.
+//
+// The helper runs in the final image, whose node base docker build pulls for
+// the daemon's own platform: arm64 on an arm64 host. Only the veraPDF stage is
+// pinned to linux/amd64, and the image copies jars out of it, so its platform
+// says nothing about the one the helper runs on. Asking the built image rather
+// than the host keeps the two in step when a caller builds for another
+// platform.
+func imageGOARCH(image string) (string, error) {
+	out, err := exec.Command("docker", "image", "inspect", "--format", "{{.Architecture}}", image).Output() //nolint:gosec // image is the fixed builder name
+	if err != nil {
+		return "", fmt.Errorf("docker image inspect %s: %w", image, err)
+	}
+	return scanClaimsGOARCH(strings.TrimSpace(string(out)))
+}
+
+// scanClaimsGOARCH maps an image architecture, as Docker names it, to the
+// GOARCH the helper is built for. It accepts the architectures the corpus
+// Dockerfile builds for, whose JRE and pdfcpu steps refuse any other, so a
+// helper built here always has an image to run in.
+func scanClaimsGOARCH(arch string) (string, error) {
+	switch arch {
+	case "amd64", "arm64":
+		return arch, nil
+	default:
+		return "", fmt.Errorf("the corpus image has architecture %q, which the Dockerfile does not build", arch)
+	}
+}
+
+// scanClaimsBuildEnv is the environment the helper is built in: the caller's,
+// with a static Linux target for goarch appended last, since os/exec keeps the
+// last value of a duplicated key.
+func scanClaimsBuildEnv(goarch string) []string {
+	return append(os.Environ(),
+		"GOOS=linux",
+		"GOARCH="+goarch,
+		"CGO_ENABLED=0",
+	)
+}
+
+// buildScanClaimsBinary cross-compiles the `corpus scan-claims` helper for
+// linux/goarch and returns the path to the resulting binary. The caller is
+// responsible for cleaning up the binary's parent directory.
+func buildScanClaimsBinary(goarch string) (string, error) {
 	dir, err := os.MkdirTemp("", "litho-scanclaims-")
 	if err != nil {
 		return "", fmt.Errorf("tempdir: %w", err)
 	}
 	binPath := filepath.Join(dir, "scan-claims")
 	cmd := exec.Command("go", "build", "-o", binPath, "./test/integration/cmd/corpus") //nolint:gosec // package path is fixed
-	cmd.Env = append(os.Environ(),
-		"GOOS=linux",
-		"GOARCH=amd64",
-		"CGO_ENABLED=0",
-	)
+	cmd.Env = scanClaimsBuildEnv(goarch)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
