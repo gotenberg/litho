@@ -115,7 +115,7 @@ func main() {
 
 The public surface lives in three types: `Reader` opens and extracts, `Writer` queues mutations and emits, and `Pipeline` chains operations. See the [godoc](https://pkg.go.dev/github.com/gotenberg/litho/pkg/pdf) for the full API.
 
-`Reader` is safe for concurrent use after construction. `Writer` is single-use and not safe for concurrent use. Close a `Writer` when done: a remediated one holds its output in a temp file until `WriteTo` streams it or `Close` removes it.
+`Reader` is safe for concurrent use after construction. `Writer` is single-use and not safe for concurrent use. A `Writer` never modifies the `Reader` it is built on, so several may share one `Reader` while other goroutines read it. Close a `Writer` when done: a remediated one holds its output in a temp file until `WriteTo` streams it or `Close` removes it.
 
 A remediation is the last edit on a `Writer`. Queue every other edit before it: afterwards the `Writer` accepts `Sign`, `WriteTo` and `Close`, and refuses anything else, a second remediation included, with `ErrEditAfterRemediation`.
 

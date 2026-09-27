@@ -43,6 +43,8 @@ Trivial accessors returning cached scalars (page count, PDF version) omit `ctx`.
 
 `Document` is safe for concurrent reads after construction. Mutable caches use `sync.RWMutex`. Validation runs serialize via `Document.LockValidationRun`. The `Authenticate` call is part of the setup phase and must complete before concurrent use begins.
 
+Nothing that writes a document writes into the `Reader` it reads. `NewWriter`, `Split` and `Merge` work on `Document.Fork`, a copy with its own trailer, caches and logger, so their edits and the logger `WithWriteLogger` swaps in stay out of a `Reader` other goroutines read. A field added to `Document` or `Reader` needs a fork decision (`TestForkDecidesEveryField`, `TestReaderForkDecidesEveryField`).
+
 Document the concurrency contract on every public type.
 
 ### Resource streaming

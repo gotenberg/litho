@@ -634,6 +634,24 @@ func (r *Reader) adoptConfiguration(src *Reader) {
 	r.lenient = src.lenient
 }
 
+// fork returns a Reader over r's document whose mutable state is its own (see
+// [document.Document.Fork]), read with the configuration r was opened with. A
+// [Writer] edits a fork, and [Split] and [Merge] read their sources through
+// one, so what they stage in the trailer or in a cached object, and the logger
+// [WithWriteLogger] swaps in, never reach r, which other goroutines may be
+// reading (see [Reader]). The fork does not own r's file: closing it releases
+// nothing, and r must stay open while the fork is in use.
+func (r *Reader) fork() *Reader {
+	return &Reader{
+		doc:       r.doc.Fork(),
+		ocr:       r.ocr,
+		ciiSchema: r.ciiSchema,
+		schSchema: r.schSchema,
+		schPhase:  r.schPhase,
+		lenient:   r.lenient,
+	}
+}
+
 // reopenFile opens path, a file litho wrote from r's document, with the
 // reading configuration r was opened with (see adoptConfiguration). The
 // remediation gates judge their output through it, and a judge that dropped

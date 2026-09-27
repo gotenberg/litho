@@ -192,9 +192,9 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	// staged, which is pending too.
 	staged := alloc.Writes()
 
-	// ClearMetadata empties /Info in place on the shared document, so a
-	// refusal after it has run would otherwise persist on a Writer the caller
-	// was told to treat as untouched.
+	// ClearMetadata empties /Info in place on the document the Writer edits,
+	// so a refusal after it has run would otherwise persist on a Writer the
+	// caller was told to treat as untouched.
 	preTrailer := make(ast.PdfDict, len(doc.Index.Trailer))
 	maps.Copy(preTrailer, doc.Index.Trailer)
 	restoreTrailer := func() { doc.Index.Trailer = preTrailer }

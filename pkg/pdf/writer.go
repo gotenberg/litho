@@ -580,8 +580,8 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 //     Encrypt, Sign, ...). Mutations are queued; nothing is written yet.
 //  4. Optionally, remediate once, after every other edit (RemediatePDFA,
 //     RemediatePDFUA, RemediateWTPDF, RemediateFacturX or RepairFacturX).
-//  5. Call WriteTo exactly once. It drains the queue, produces the
-//     output, and may mutate the underlying Reader's in-memory state.
+//  5. Call WriteTo exactly once. It drains the queue and produces the
+//     output.
 //
 // A remediation is the last edit on a Writer. It writes the edits queued
 // before it to a temp file and validates, repairs and measures that document,
@@ -599,16 +599,19 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 // removes it itself. A Writer that is remediated and never written keeps the
 // file until [Writer.Close].
 //
-// A Writer is single-use: create a new Writer (and, if you need a
-// pristine baseline, a new Reader) for each distinct output. Method
-// calls must be serialised; no Writer method is safe for concurrent
-// use, Close included. The Reader the Writer was built from must not be
-// consumed by any other goroutine between NewWriter and WriteTo.
+// A Writer is single-use: create a new Writer for each distinct output.
+// Method calls must be serialised; no Writer method is safe for
+// concurrent use, Close included. The Writer never modifies the Reader it
+// was built from (see [NewWriter]): other goroutines may read that Reader,
+// and build other Writers on it, while the Writer runs.
 type Writer struct {
 	// reader is the document the Writer edits: source, until a remediation
 	// writes the queued edits to a temp file or keeps a later round (see
 	// [Writer.rebase]). It then reads that file, at basePath, which the
-	// Writer owns and releases with [Writer.releaseBase].
+	// Writer owns and releases with [Writer.releaseBase]. source is the
+	// Writer's own copy of the Reader it was built on (see [Reader.fork]),
+	// never that Reader itself: the Writer edits the trailer and the cache of
+	// the document it edits.
 	reader       *Reader
 	source       *Reader
 	basePath     string
@@ -692,8 +695,14 @@ func (w *Writer) unfoldedMutations() []mutation {
 
 // NewWriter creates a single-use [Writer] that queues mutations
 // against r. Release the Writer with [Writer.Close] and close r with
-// [Reader.Close] after the Writer has finished; do not issue further
-// reads through r while the Writer is active.
+// [Reader.Close] after the Writer has finished.
+//
+// The Writer never modifies r. It edits a copy of r's document that shares
+// only what r fixed when it opened, so reads through r may go on while the
+// Writer is active, from any goroutine, and any number of Writers may be built
+// on one Reader and run at once. r reports afterwards what it reported
+// before. The copy reads r's file, so r must stay open until the Writer has
+// finished.
 //
 // NewWriter reads [WithTempDir] from opts. The other options shape a write,
 // and belong to [Writer.WriteTo].
@@ -702,7 +711,17 @@ func NewWriter(r *Reader, opts ...WriteOption) *Writer {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return &Writer{reader: r, source: r, tempDir: cfg.tempDir}
+	w := newWriterOn(r.fork())
+	w.tempDir = cfg.tempDir
+	return w
+}
+
+// newWriterOn returns a Writer that edits r itself rather than a copy of it.
+// r must be a reader no other goroutine reads, such as one litho opened over a
+// temp file it wrote: a Writer writes its staged edits into the document it
+// edits (see [NewWriter]).
+func newWriterOn(r *Reader) *Writer {
+	return &Writer{reader: r, source: r}
 }
 
 // Close removes the temp file a remediation left for [Writer.WriteTo] to
@@ -2137,8 +2156,10 @@ func (w *Writer) remediate(
 	// state that later WriteTo calls would honor. The trailer snapshot
 	// undoes in-place mutations made by fixers such as trailer-id
 	// (assigning a fresh /ID) or enforceInfoDictLimits (deleting /Info),
-	// which otherwise persist on the shared document even when
-	// remediation returns ErrRemediationBrokePDF. Nothing is queued any more:
+	// which otherwise persist on the document the Writer edits even when
+	// remediation returns ErrRemediationBrokePDF. That document is the
+	// Writer's own copy (see NewWriter), so the Reader it was built on never
+	// sees them, failed run or not. Nothing is queued any more:
 	// materialize wrote the queued edits into the document.
 	preForceRewrite := w.forceRewrite
 	preTrailerDirty := w.trailerDirty
@@ -2177,7 +2198,9 @@ func (w *Writer) remediate(
 	// nothing. Clear the caches here so run()'s validation re-parses under
 	// compliance mode and sees a defect whose sole symptom is a format
 	// violation. Otherwise remediation silently skips it and over-reports the
-	// file as fixed.
+	// file as fixed. The document is the Writer's own, so no other goroutine
+	// reads it: on the caller's Reader, the clear also dropped the format
+	// violations a validation running beside it had recorded.
 	doc.ClearCaches()
 
 	report, err := run(ctx, alloc, doc, nil)
@@ -2488,7 +2511,9 @@ func (w *Writer) remediationRound(
 		return roundResult{}, false, nil
 	}
 
-	w2 := NewWriter(r2)
+	// w2 writes r2 itself, not a copy: the round's repairs to the trailer are
+	// in r2, and the round is r2's only reader.
+	w2 := newWriterOn(r2)
 	w2.rewriteOverrides = alloc.Pending()
 	w2.trailerDirty = rep.TrailerDirty
 	w2.forceRewrite = rep.NeedsFullRewrite
@@ -2649,11 +2674,12 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // rewrite, or [WithWriteLogger] for structured logs covering every
 // mutation, best-effort fallback, and write-engine decision.
 //
-// WriteTo drains the mutation queue and may alter the backing
-// [Reader]'s in-memory state. It is single-use: after it produces
-// output successfully it returns [ErrWriterConsumed] on every
-// subsequent call. To produce another output, create a new Writer
-// from a fresh Reader. After [Writer.Close] it returns [ErrWriterClosed].
+// WriteTo drains the mutation queue into the Writer's copy of the
+// document and leaves the [Reader] the Writer was built on as it was. It
+// is single-use: after it produces output successfully it returns
+// [ErrWriterConsumed] on every subsequent call. To produce another
+// output, create a new Writer, on the same Reader if you like. After
+// [Writer.Close] it returns [ErrWriterClosed].
 //
 // After a remediation, WriteTo streams the temp file the remediation wrote
 // and removes it, whether the write succeeds or not. A signature, an
@@ -3003,8 +3029,10 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	// Swap the document logger for the duration of the write so every
 	// internal call site that uses doc.Logger (mutations, copier, remediation)
 	// routes through the caller's logger. The previous logger is restored on
-	// return. The Reader is not safe for concurrent writes, so there is no
-	// race here.
+	// return. The document is the Writer's own (see NewWriter), and no Writer
+	// method runs concurrently with another, so no goroutine reads the field
+	// while it is swapped. Swapping it on the caller's Reader raced every
+	// goroutine reading that Reader.
 	if cfg.logger != nil {
 		prev := w.reader.doc.Logger
 		w.reader.doc.Logger = cfg.logger
@@ -3194,6 +3222,9 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 // The output is written in the clear unless [WithEncryption] is passed, even
 // when src is encrypted: see that option for why a source's encryption cannot
 // carry across on its own.
+//
+// Split reads a copy of src's document, as a [Writer] edits one, so src is
+// left as it was and other goroutines may read it meanwhile.
 func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) (err error) {
 	defer recoverToError(src.logger(), "pdf.Split", &err)
 	cfg := writeOpts{}
@@ -3201,10 +3232,12 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 		o(&cfg)
 	}
 
+	// The split reads a copy of src's document, so the logger it swaps in, and
+	// whatever the copy caches, stays out of src, which other goroutines may be
+	// reading. Swapping the logger on src itself raced every one of them.
+	src = src.fork()
 	if cfg.logger != nil {
-		prev := src.doc.Logger
 		src.doc.Logger = cfg.logger
-		defer func() { src.doc.Logger = prev }()
 	}
 	src.doc.Logger.Debug("split started",
 		slog.Int("pages", len(pages)),
@@ -3239,6 +3272,10 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 // The output is written in the clear unless [WithEncryption] is passed, even
 // when the sources are encrypted. Sources opened under different passwords
 // are written under the single key that option supplies.
+//
+// Merge reads a copy of each source's document, as [Split] does, so the
+// sources are left as they were and other goroutines may read them
+// meanwhile. One Reader may appear more than once in sources.
 func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteOption) (err error) {
 	var lg *slog.Logger
 	if len(sources) > 0 {
@@ -3250,10 +3287,16 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 		o(&cfg)
 	}
 
+	// The merge reads a copy of each source's document, for the reason Split
+	// does. A Reader passed twice is copied twice, and each copy reads it
+	// alone.
+	forks := make([]*Reader, len(sources))
+	for i, src := range sources {
+		forks[i] = src.fork()
+	}
+	sources = forks
 	if len(sources) > 0 && cfg.logger != nil {
-		prev := sources[0].doc.Logger
 		sources[0].doc.Logger = cfg.logger
-		defer func() { sources[0].doc.Logger = prev }()
 	}
 	if len(sources) > 0 {
 		sources[0].doc.Logger.Debug("merge started",

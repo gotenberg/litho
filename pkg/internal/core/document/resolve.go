@@ -1263,7 +1263,10 @@ func (d *Document) runXrefAugmentation(ctx context.Context, running chan struct{
 		overridden++
 	}
 	changed := added > 0 || overridden > 0
-	d.xrefAugmented = changed
+	// A fork can copy the entries a run on its parent wrote without seeing
+	// that run complete (see [Document.Fork]), and its own run then finds
+	// nothing left to change: the index is still an augmented one.
+	d.xrefAugmented = d.xrefAugmented || changed
 	d.mu.Unlock()
 	a.done.Store(true)
 	if changed {

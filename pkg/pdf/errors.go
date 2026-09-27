@@ -109,10 +109,10 @@ var (
 
 	// ErrWriterConsumed is returned by [Writer.WriteTo] when the Writer
 	// has already produced output. A Writer is single-use: its mutations
-	// drain into the backing [Reader]'s in-memory state on the first
-	// successful write, so a second write would re-apply an
-	// already-mutated state and emit a corrupt document. Create a fresh
-	// Writer (and Reader) for each distinct output.
+	// drain into the Writer's copy of the document on the first successful
+	// write, so a second write would re-apply an already-mutated state and
+	// emit a corrupt document. Create a fresh Writer for each distinct
+	// output: the [Reader] it is built on is left as it was.
 	ErrWriterConsumed = errors.New("writer already consumed; create a new Writer")
 
 	// ErrWriterClosed is returned by [Writer.WriteTo], [Writer.Redact] and
