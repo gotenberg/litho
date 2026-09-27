@@ -178,6 +178,7 @@ one deliberately rather than diffing it against a fresh build.
 | `outlinedest_ua2.pdf`  | PDF/UA-2     | Outline structure destinations in every form; named OC configs   |
 | `pageboxes_2b.pdf`     | PDF/A-2b     | Page boxes that are not rectangles, under inherited crop boxes   |
 | `rolemapscope_ua2.pdf` | PDF/UA-2     | Private types the root `/RoleMap` maps, per declared namespace   |
+| `destforms_ua2.pdf`    | PDF/UA-2     | Named destinations, `/Dest` dictionaries, additional actions     |
 
 ### Must-not-fire controls
 
@@ -442,6 +443,7 @@ which are covered under [Known divergences](#known-divergences).
 | `contentstream_4.pdf`  | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 6   | 6    | 7    | 8    | 7    |
 | `csnames_2b.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 5    | 6    |
 | `defaultcs_4.pdf`      | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 10   | 7    |
+| `destforms_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 2    |
 | `directstream_2b.pdf`  | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `docinfo_1b.pdf`       | 11   | 8    | 4    | 1    | 2    | 4    | 1    | 2    | 6   | 6    | 7    | 5    | 5    |
 | `docmdp_2b.pdf`        | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 10   | 8    |
@@ -5410,16 +5412,59 @@ off from the map, and the single-Document repair then wrapped it in a second
 at the seven other manifest profiles leaves nothing on either tool, and every
 `mutate-*` cell passes.
 
+### `destforms_ua2.pdf`
+
+ISO 14289-2, 8.8 asks every destination inside the document to be a structure
+destination (ISO 32000-2, 12.3.2.3). It judges a named destination by the value
+the name maps to, and a GoTo action wherever it hangs. PDF/UA-2 remediation
+gives a destination one by writing a GoTo action with the page destination
+under `/D` and the structure destination under `/SD` (12.6.4.2, Table 202). The
+corpus files the gate remediates reach a GoTo action under a page's or an
+annotation's `/AA` only in documents of one page holding no structure content,
+and never name a destination through the catalog `/Dests` or write a
+dictionary under `/Dest`, so this file packs those forms into a tagged document
+of three pages, each opening with a heading or a paragraph of its own:
+
+| Owner                      | Destination                                                                           | Test    |
+| -------------------------- | ------------------------------------------------------------------------------------- | ------- |
+| Outline item `Second page` | `/Dest (second)`, a `/Names /Dests` entry for page 2                                  | `8.8/1` |
+| Outline item `Third page`  | A GoTo action whose `/D` is `/third`, a catalog `/Dests` entry for page 3             | `8.8/2` |
+| First link on page 1       | `/Dest /third`                                                                        | `8.8/1` |
+| First link on page 1       | A direct GoTo action for page 1 under `/E` of its direct `/AA`                        | `8.8/2` |
+| Second link on page 1      | `/Dest` holding a GoTo action for page 2, which ISO 32000-1, Table 173 does not allow | `8.8/1` |
+| Second link on page 1      | A GoTo action to `(second)` under `/X` of an `/AA` written as an object of its own    | `8.8/2` |
+| Page 2                     | A direct GoTo action for page 2 under `/AA /O`                                        | `8.8/2` |
+| Page 2                     | A GoTo action for page 3, an object of its own, under `/AA /C`                        | `8.8/2` |
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
+count for count. PDF/UA-2 reports `8.8/1` three times and `8.8/2` five times.
+PDF/UA-1 reports the part-2 claim (`5/2`) and the `%PDF-2.0` header (`6.1/1`).
+The PDF/A cells report the links' appearances painted in device RGB and the
+text in device gray with no output intent (`6.2.3.3/1` and `6.2.3.3/3` at part
+1, `6.2.4.3/2` and `6.2.4.3/4` from part 2) and the missing PDF/A
+identification. Parts 1 to 3 add the `pdfuaid` properties no extension schema
+declares, and parts 2 and 3 the header (`6.1.2/1`) and page 2's `/AA`
+(`6.5.2/2`), which part 4 reports as `6.6.3/1`; PDF/A-4f adds the missing
+`/EmbeddedFiles`.
+
+Measured on litho and veraPDF 1.30.2 before the fix, PDF/UA-2 remediation,
+default and aggressive, left all eight destinations as they were, and both
+tools reported `8.8/1` three times and `8.8/2` five times on the output. Now
+each is a GoTo action carrying `/SD`, a name kept under `/D` and the dictionary
+under `/Dest` moved to `/A`, and PDF.js opens the page each opened before.
+Remediation at the eight manifest profiles, default and aggressive, leaves
+nothing on either tool, and every `mutate-*` cell passes.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 126 x 8 = 1008 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 126 x 13 = 1638 cells. litho
+runner scores 127 x 8 = 1016 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 127 x 13 = 1651 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1636 of the 1638 cells. The two
+fixtures exist to protect, and it holds in 1649 of the 1651 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5430,7 +5475,7 @@ the cells whose sets of failed rules (clause and test) differ. Every cell but
 six is non-compliant on both sides (`baretree_2b` and `pagelabels_2b` at
 PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1; and
 `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's conforming
-cells), so a change that drops or invents a rule class leaves `matched` at 1008
+cells), so a change that drops or invents a rule class leaves `matched` at 1016
 and moves only `ruleset_mismatch`, and on those six cells it moves both. Both
 exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
 PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
