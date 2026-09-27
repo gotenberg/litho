@@ -186,24 +186,100 @@ func langTagValid(ctx context.Context, doc *document.Document, obj ast.PdfObject
 // repairStructElemLangs walks the logical structure tree from the catalog's
 // StructTreeRoot and strips every invalid /Lang it finds: on the StructTreeRoot
 // itself, on indirect structure elements, and on inline (direct-dict) structure
-// elements nested in a /K array. It returns the number of /Lang entries removed.
+// elements nested in a /K array. It then does the same for the elements the
+// /ParentTree maps an object's /StructParent to (see [repairParentTreeLangs]),
+// which the tree need not reach. It returns the number of /Lang entries
+// removed.
 func repairStructElemLangs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, requireDeclared bool) int {
 	stObj, ok := catalogDict["StructTreeRoot"]
 	if !ok {
 		return 0
 	}
-	stRef, ok := stObj.(ast.PdfIndirectRef)
-	if !ok {
-		return 0
-	}
-	stDict := resolveFromAllocOrDoc(ctx, alloc, doc, stRef)
+	stDict := liveDictValue(ctx, alloc, doc, stObj)
 	if stDict == nil {
 		return 0
 	}
-	visited := map[int]bool{stRef.ObjectNum: true}
+	visited := make(map[int]bool)
 	count := 0
-	repairOwner(ctx, alloc, doc, stRef, stDict, visited, &count, 0, requireDeclared)
+	// A StructTreeRoot written inline has no object number to write a repair
+	// of its own /Lang or /K back to, so only the /ParentTree walk reaches
+	// its elements.
+	if stRef, isRef := stObj.(ast.PdfIndirectRef); isRef {
+		visited[stRef.ObjectNum] = true
+		repairOwner(ctx, alloc, doc, stRef, stDict, visited, &count, 0, requireDeclared)
+	}
+	repairParentTreeLangs(ctx, alloc, doc, stDict, visited, &count, requireDeclared)
 	return count
+}
+
+// repairParentTreeLangs strips every invalid /Lang from the structure elements
+// the /ParentTree of the structure tree root stDict maps an object's
+// /StructParent key to, and from their inline descendants, skipping the ones
+// visited holds.
+//
+// ISO 32000-1, 14.7.4.4 makes such a value an indirect reference to the one
+// element enclosing the object, where the key of a content stream's
+// /StructParents maps to an array of them, so every value of the tree that
+// resolves to a dictionary is one. The rules on /Lang judge the element an
+// annotation or a form field names that way whether or not the structure tree
+// reaches it (ISO 14289-1, 7.2 t29, ISO 14289-2, 8.4.4 t2, ISO 19005-1, 6.8.4
+// t1, ISO 19005-2 and -3, 6.7.4 t1, as veraPDF reads them through
+// GFPDAnnot.getLang and GFPDFormField.getLang), so the tree walk alone left
+// their tags in the output. The element of a form XObject's /StructParent is
+// repaired as well: an invalid tag serves no reader. An element written
+// inline in the /ParentTree, which 14.7.4.4 does not allow, has no object
+// number to write back and stays as it is.
+//
+// The /ParentTree is read as the fixers ahead of this one left it: the
+// structural fixers that register /ParentTree entries write a flat /Nums back
+// on the root, or at the tree's own object number.
+//
+// # Corpus evidence
+//
+//   - litho annotlang_ua1.pdf: the elements of two of its annotations sit
+//     outside the structure tree, one tagged en_US and one with an empty
+//     tag. Each kept its finding after a remediation at PDF/UA-1, PDF/UA-2
+//     and WTPDF, and the first after one at PDF/A-1a and PDF/A-2a, default
+//     and aggressive. None is left now, and nothing else moves.
+//   - All corpora: 11 files map an element holding /Lang through their
+//     /ParentTree, and none writes an element inline there. Only
+//     annotlang_ua1.pdf holds a tag PDF/UA refuses, and the outputs of the
+//     other 10 do not change at those five profiles.
+func repairParentTreeLangs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict, visited map[int]bool, count *int, requireDeclared bool) {
+	tree, ok := stDict["ParentTree"]
+	if !ok {
+		return
+	}
+	if ref, isRef := tree.(ast.PdfIndirectRef); isRef {
+		live := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+		if live == nil {
+			return
+		}
+		tree = live
+	}
+	var elems []ast.PdfIndirectRef
+	err := document.WalkNumberTree(ctx, doc, tree, func(int) {}, func(_ int, value ast.PdfObject) {
+		if ref, isRef := value.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+			elems = append(elems, ref)
+		}
+	})
+	if err != nil {
+		doc.Logger.Debug("remediation: catalog-lang cannot walk the whole /ParentTree", "error", err)
+	}
+	for _, ref := range elems {
+		if ctx.Err() != nil {
+			return
+		}
+		if visited[ref.ObjectNum] {
+			continue
+		}
+		visited[ref.ObjectNum] = true
+		// A reference to an array, a content stream's entry written as an
+		// object of its own, resolves to no dictionary and is skipped.
+		if elem := resolveFromAllocOrDoc(ctx, alloc, doc, ref); elem != nil {
+			repairOwner(ctx, alloc, doc, ref, elem, visited, count, 0, requireDeclared)
+		}
+	}
 }
 
 // repairOwner repairs one indirect structure object: its own /Lang plus any
