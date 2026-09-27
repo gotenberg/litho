@@ -52,7 +52,7 @@ func pdfIntAt(t *testing.T, d ast.PdfDict, key string) int {
 func TestBuildOutline_RootCountCountsEveryVisibleItem(t *testing.T) {
 	alloc := writer.NewObjAllocator(20)
 
-	ref := BuildOutline(context.Background(), alloc, countFixturePageRefs(), countFixtureTree())
+	ref := BuildOutline(context.Background(), alloc, countFixturePageRefs(), outlineItems(countFixtureTree()), nil)
 	if ref.ObjectNum == 0 {
 		t.Fatal("BuildOutline returned a zero ref for a non-empty tree")
 	}
@@ -66,7 +66,7 @@ func TestBuildOutline_RootCountCountsEveryVisibleItem(t *testing.T) {
 func TestBuildOutline_ItemCountCountsEveryDescendant(t *testing.T) {
 	alloc := writer.NewObjAllocator(20)
 
-	ref := BuildOutline(context.Background(), alloc, countFixturePageRefs(), countFixtureTree())
+	ref := BuildOutline(context.Background(), alloc, countFixturePageRefs(), outlineItems(countFixtureTree()), nil)
 	if ref.ObjectNum == 0 {
 		t.Fatal("BuildOutline returned a zero ref for a non-empty tree")
 	}
@@ -110,7 +110,7 @@ func TestWriteOutline_RootCountCountsEveryVisibleItem(t *testing.T) {
 // counting as its own length: the recursive count has to generalise the old
 // behaviour, not replace it.
 func TestVisibleOutlineCount_FlatListCountsItsLength(t *testing.T) {
-	flat := []models.Bookmark{
+	flat := []OutlineItem{
 		{Title: "one", PageNumber: 1},
 		{Title: "two", PageNumber: 1},
 		{Title: "three", PageNumber: 1},
@@ -124,7 +124,7 @@ func TestVisibleOutlineCount_FlatListCountsItsLength(t *testing.T) {
 }
 
 func TestVisibleOutlineCount_CountsEveryLevel(t *testing.T) {
-	if got := visibleOutlineCount(countFixtureTree()); got != 5 {
+	if got := visibleOutlineCount(outlineItems(countFixtureTree())); got != 5 {
 		t.Errorf("visibleOutlineCount = %d, want 5 (A, A1, A1a, A2, B)", got)
 	}
 }

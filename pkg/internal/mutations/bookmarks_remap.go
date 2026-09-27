@@ -2,8 +2,6 @@ package mutations
 
 import (
 	"fmt"
-
-	"github.com/gotenberg/litho/pkg/models"
 )
 
 // OrphanHandling controls what happens to bookmarks whose target page is
@@ -28,16 +26,16 @@ const (
 // are promoted to the dropped bookmark's level (recursively) so that
 // surviving descendants are not lost.
 func FilterAndRemap(
-	bookmarks []models.Bookmark,
+	bookmarks []OutlineItem,
 	newPageNum func(int) int,
 	policy OrphanHandling,
 	promoteOrphanChildren bool,
 	keptPages []int,
-) []models.Bookmark {
+) []OutlineItem {
 	if len(bookmarks) == 0 {
 		return nil
 	}
-	out := make([]models.Bookmark, 0, len(bookmarks))
+	out := make([]OutlineItem, 0, len(bookmarks))
 	for _, bm := range bookmarks {
 		newPage := newPageNum(bm.PageNumber)
 		isOrphan := newPage == 0
@@ -109,7 +107,7 @@ func abs(x int) int {
 // to shift each source's bookmarks into the concatenated page space.
 //
 // Page number zero means the bookmark names no page of its document, which is
-// what [models.Bookmark] carries for a destination that is null, points outside
+// what an [OutlineItem] carries for a destination that is null, points outside
 // the file, or does not resolve. Shifting it produced a page number in the
 // preceding source. The entry is kept without a destination instead, which is
 // what the writer emits for zero.
@@ -119,11 +117,11 @@ func abs(x int) int {
 //   - govdocs thread_400_400931.pdf, thread_400_400934.pdf: merging them sent
 //     the latter's "cr2002073.pdf" bookmark, whose /Dest is [null 0 0 1], to
 //     page 5, the last page of the other document.
-func OffsetPages(bookmarks []models.Bookmark, offset int) []models.Bookmark {
+func OffsetPages(bookmarks []OutlineItem, offset int) []OutlineItem {
 	if len(bookmarks) == 0 || offset == 0 {
 		return bookmarks
 	}
-	out := make([]models.Bookmark, len(bookmarks))
+	out := make([]OutlineItem, len(bookmarks))
 	for i, bm := range bookmarks {
 		if bm.PageNumber > 0 {
 			bm.PageNumber += offset
@@ -136,8 +134,8 @@ func OffsetPages(bookmarks []models.Bookmark, offset int) []models.Bookmark {
 
 // WrapInRoot wraps a flat slice of bookmarks under a single root container
 // with the given title pointing to firstPage. Returns the new root bookmark.
-func WrapInRoot(bookmarks []models.Bookmark, title string, firstPage int) models.Bookmark {
-	return models.Bookmark{
+func WrapInRoot(bookmarks []OutlineItem, title string, firstPage int) OutlineItem {
+	return OutlineItem{
 		Title:      title,
 		PageNumber: firstPage,
 		Children:   bookmarks,

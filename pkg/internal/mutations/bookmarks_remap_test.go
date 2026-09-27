@@ -2,12 +2,10 @@ package mutations
 
 import (
 	"testing"
-
-	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestFilterAndRemap_DropOrphans(t *testing.T) {
-	bookmarks := []models.Bookmark{
+	bookmarks := []OutlineItem{
 		{Title: "A", PageNumber: 1},
 		{Title: "B", PageNumber: 3}, // dropped
 		{Title: "C", PageNumber: 5},
@@ -30,8 +28,8 @@ func TestFilterAndRemap_DropOrphans(t *testing.T) {
 }
 
 func TestFilterAndRemap_PromoteOrphanChildren(t *testing.T) {
-	bookmarks := []models.Bookmark{
-		{Title: "Parent", PageNumber: 3, Children: []models.Bookmark{ // dropped
+	bookmarks := []OutlineItem{
+		{Title: "Parent", PageNumber: 3, Children: []OutlineItem{ // dropped
 			{Title: "Child A", PageNumber: 1}, // kept
 			{Title: "Child B", PageNumber: 5}, // kept
 		}},
@@ -54,8 +52,8 @@ func TestFilterAndRemap_PromoteOrphanChildren(t *testing.T) {
 }
 
 func TestFilterAndRemap_NoPromote(t *testing.T) {
-	bookmarks := []models.Bookmark{
-		{Title: "Parent", PageNumber: 3, Children: []models.Bookmark{
+	bookmarks := []OutlineItem{
+		{Title: "Parent", PageNumber: 3, Children: []OutlineItem{
 			{Title: "Child", PageNumber: 1},
 		}},
 	}
@@ -72,7 +70,7 @@ func TestFilterAndRemap_NoPromote(t *testing.T) {
 }
 
 func TestFilterAndRemap_OrphanRemap(t *testing.T) {
-	bookmarks := []models.Bookmark{
+	bookmarks := []OutlineItem{
 		{Title: "Orphan", PageNumber: 4}, // not kept; nearest is 5 (idx 1 → new 2)
 	}
 	keptOldPages := []int{1, 5, 10}
@@ -89,7 +87,7 @@ func TestFilterAndRemap_OrphanRemap(t *testing.T) {
 }
 
 func TestFilterAndRemap_OrphanKeep(t *testing.T) {
-	bookmarks := []models.Bookmark{
+	bookmarks := []OutlineItem{
 		{Title: "Dropped", PageNumber: 3},
 	}
 	got := FilterAndRemap(bookmarks, func(int) int { return 0 }, OrphanKeep, false, []int{1})
@@ -105,8 +103,8 @@ func TestFilterAndRemap_OrphanKeep(t *testing.T) {
 }
 
 func TestOffsetPages(t *testing.T) {
-	bookmarks := []models.Bookmark{
-		{Title: "A", PageNumber: 1, Children: []models.Bookmark{
+	bookmarks := []OutlineItem{
+		{Title: "A", PageNumber: 1, Children: []OutlineItem{
 			{Title: "A.1", PageNumber: 2},
 		}},
 		{Title: "B", PageNumber: 5},
@@ -126,7 +124,7 @@ func TestOffsetPages(t *testing.T) {
 // TestOffsetPagesKeepsDestinationlessBookmarks pins that a bookmark naming no
 // page keeps naming none after the shift.
 //
-// Page number zero is what [models.Bookmark] carries when the destination is
+// Page number zero is what [OutlineItem] carries when the destination is
 // null, points outside the file, or does not resolve. Adding the offset to it
 // produced a page in the PRECEDING document.
 //
@@ -136,8 +134,8 @@ func TestOffsetPages(t *testing.T) {
 //     the latter's "cr2002073.pdf" bookmark, whose /Dest is [null 0 0 1], to
 //     page 5, which belongs to the other file entirely.
 func TestOffsetPagesKeepsDestinationlessBookmarks(t *testing.T) {
-	bookmarks := []models.Bookmark{
-		{Title: "no destination", PageNumber: 0, Children: []models.Bookmark{
+	bookmarks := []OutlineItem{
+		{Title: "no destination", PageNumber: 0, Children: []OutlineItem{
 			{Title: "child with a page", PageNumber: 3},
 			{Title: "child without one", PageNumber: 0},
 		}},
@@ -163,7 +161,7 @@ func TestOffsetPagesKeepsDestinationlessBookmarks(t *testing.T) {
 }
 
 func TestWrapInRoot(t *testing.T) {
-	children := []models.Bookmark{
+	children := []OutlineItem{
 		{Title: "Section A", PageNumber: 1},
 	}
 	root := WrapInRoot(children, "Document 1", 1)

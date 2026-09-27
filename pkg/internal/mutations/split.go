@@ -54,6 +54,10 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	var copier *writer.Copier
 	var tree *structOutput
 	var untagged []untaggedCopy
+	// An outline item opens the first copy of its page, as a link to it does
+	// (see [shareRepeatedPages]), so its structure destination is the first
+	// round's copy of the element.
+	var firstStructs *structSource
 	for rank, indices := range pageRanks(selected) {
 		rankPages := pagesAt(selected, indices)
 		overrides, structs, err := pageCopyPlan(ctx, doc, allPages, rankPages, removed, bakeTagged)
@@ -66,6 +70,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		}
 		if rank == 0 {
 			copier = c
+			firstStructs = structs
 		} else if err := shareRepeatedPages(ctx, doc, copier, c, rankPages, firstCopies); err != nil {
 			return err
 		}
@@ -157,7 +162,25 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		}
 	}
 
-	// Handle bookmarks for the output.
+	// After every copy from the source, whose content may name structure keys
+	// the tree has to carry or, from a round copied without its structure,
+	// drop.
+	var rootRef ast.PdfIndirectRef
+	if tree != nil {
+		for _, u := range untagged {
+			tree.untag(u.copier, u.pages)
+		}
+		ref, err := tree.finish(ctx)
+		if err != nil {
+			return fmt.Errorf("carrying the structure tree: %w", err)
+		}
+		rootRef = ref
+		catalogDict["StructTreeRoot"] = rootRef
+	}
+
+	// Handle bookmarks for the output, once its structure tree is whole, so
+	// each item can open the structure element it names (see
+	// [outlineTargets]).
 	if bookmarkCfg.Handling != BookmarkNone {
 		newBookmarks, err := resolveSplitBookmarks(ctx, doc, allPages, pages, bookmarkCfg)
 		if err != nil {
@@ -174,25 +197,12 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 					newPageRefs[i+1] = r
 				}
 			}
-			outlineRef := BuildOutline(ctx, alloc, newPageRefs, newBookmarks)
+			targets := outputOutlineTargets(ctx, alloc, rootRef, []*structSource{firstStructs})
+			outlineRef := BuildOutline(ctx, alloc, newPageRefs, newBookmarks, targets)
 			if outlineRef.ObjectNum > 0 {
 				catalogDict["Outlines"] = outlineRef
 			}
 		}
-	}
-
-	// After every copy from the source, whose content may name structure keys
-	// the tree has to carry or, from a round copied without its structure,
-	// drop.
-	if tree != nil {
-		for _, u := range untagged {
-			tree.untag(u.copier, u.pages)
-		}
-		rootRef, err := tree.finish(ctx)
-		if err != nil {
-			return fmt.Errorf("carrying the structure tree: %w", err)
-		}
-		catalogDict["StructTreeRoot"] = rootRef
 	}
 
 	catalogRef := alloc.Alloc(catalogDict)

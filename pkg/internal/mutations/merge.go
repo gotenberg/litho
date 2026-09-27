@@ -50,8 +50,9 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	copiers := make([]*writer.Copier, len(sources))
 
 	// The structure trees of the tagged sources, joined into one (see
-	// [structOutput]), and the pages of the untagged ones.
+	// [structOutput]), each source's, and the pages of the untagged ones.
 	var tree *structOutput
+	structSources := make([]*structSource, len(sources))
 	var untagged []untaggedCopy
 
 	for srcIdx, src := range sources {
@@ -85,6 +86,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 				tree = newStructOutput(alloc, lang)
 			}
 			tree.expect(structs, copier)
+			structSources[srcIdx] = structs
 		}
 		copiers[srcIdx] = copier
 		srcCatalogRef, srcHasCatalog := CatalogRef(ctx, src.Doc)
@@ -171,7 +173,24 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		return err
 	}
 
-	// Handle bookmarks for the merged output.
+	// After every copy from the sources, whose content may name structure keys
+	// the tree has to carry or, from an untagged source, drop.
+	var rootRef ast.PdfIndirectRef
+	if tree != nil {
+		for _, u := range untagged {
+			tree.untag(u.copier, u.pages)
+		}
+		var err error
+		rootRef, err = tree.finish(ctx)
+		if err != nil {
+			return fmt.Errorf("carrying the structure tree: %w", err)
+		}
+		catalogDict["StructTreeRoot"] = rootRef
+	}
+
+	// Handle bookmarks for the merged output, once its structure tree is
+	// whole, so each item can open the structure element it names (see
+	// [outlineTargets]).
 	if bookmarkCfg.Handling != BookmarkNone {
 		newBookmarks := resolveMergeBookmarks(ctx, sources, cumulativeOffsets, bookmarkCfg)
 		if len(newBookmarks) > 0 {
@@ -181,24 +200,12 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 					newPageRefs[i+1] = r
 				}
 			}
-			outlineRef := BuildOutline(ctx, alloc, newPageRefs, newBookmarks)
+			targets := outputOutlineTargets(ctx, alloc, rootRef, structSources)
+			outlineRef := BuildOutline(ctx, alloc, newPageRefs, newBookmarks, targets)
 			if outlineRef.ObjectNum > 0 {
 				catalogDict["Outlines"] = outlineRef
 			}
 		}
-	}
-
-	// After every copy from the sources, whose content may name structure keys
-	// the tree has to carry or, from an untagged source, drop.
-	if tree != nil {
-		for _, u := range untagged {
-			tree.untag(u.copier, u.pages)
-		}
-		rootRef, err := tree.finish(ctx)
-		if err != nil {
-			return fmt.Errorf("carrying the structure tree: %w", err)
-		}
-		catalogDict["StructTreeRoot"] = rootRef
 	}
 
 	catalogRef := alloc.Alloc(catalogDict)

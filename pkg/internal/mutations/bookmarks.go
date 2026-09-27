@@ -47,6 +47,9 @@ func SetBookmarks(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 // output to their indirect references in the allocator. This is the
 // low-level entry point behind [SetBookmarks]. [Split] and [Merge] build
 // fresh catalogs and call [BuildOutline] instead.
+//
+// In a tagged document each item opens the first structure element whose
+// content begins on its page beside the page (see [outlineTargets]).
 func WriteOutline(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -57,23 +60,6 @@ func WriteOutline(
 	if len(bookmarks) == 0 {
 		return nil
 	}
-
-	// Build outline items as a linked list (each item has /Next, /Prev, /Parent).
-	outlineRef := alloc.Alloc(ast.PdfNull{}) // placeholder, will be replaced
-	items := buildOutlineItems(alloc, bookmarks, outlineRef, pageRefs)
-
-	if len(items) == 0 {
-		return nil
-	}
-
-	// Build the root /Outlines dict.
-	outlineDict := ast.PdfDict{
-		"Type":  ast.PdfName("Outlines"),
-		"First": items[0],
-		"Last":  items[len(items)-1],
-		"Count": ast.PdfInt(visibleOutlineCount(bookmarks)),
-	}
-	alloc.AllocAt(outlineRef.ObjectNum, outlineDict)
 
 	// Update the catalog to reference the new /Outlines.
 	catalogRef, ok := CatalogRef(ctx, doc)
@@ -86,6 +72,16 @@ func WriteOutline(
 		return err
 	}
 
+	var targets *outlineTargets
+	if root, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["StructTreeRoot"]); err == nil && root != nil {
+		targets = &outlineTargets{byPage: structPageTargets(ctx, allocResolver(ctx, alloc, doc), root["K"])}
+	}
+
+	outlineRef := BuildOutline(ctx, alloc, pageRefs, outlineItems(bookmarks), targets)
+	if outlineRef.ObjectNum == 0 {
+		return nil
+	}
+
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
 	maps.Copy(newCatalog, catalogDict)
 	newCatalog["Outlines"] = outlineRef
@@ -95,31 +91,34 @@ func WriteOutline(
 	return nil
 }
 
-// BuildOutline allocates outline objects for the given bookmark tree and
+// BuildOutline allocates outline objects for the given item tree and
 // returns the ref to the root /Outlines dict (or a zero ref if nothing was
 // written). The caller is responsible for inserting the returned ref into
-// the catalog. Used by [Split] and [Merge], which build fresh catalogs.
+// the catalog. Used by [Split] and [Merge], which build fresh catalogs, and
+// by [WriteOutline]. targets decides the structure destination each item
+// opens, and a nil one opens none.
 func BuildOutline(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	pageRefs map[int]ast.PdfIndirectRef,
-	bookmarks []models.Bookmark,
+	items []OutlineItem,
+	targets *outlineTargets,
 ) ast.PdfIndirectRef {
-	if len(bookmarks) == 0 {
+	if len(items) == 0 || ctx.Err() != nil {
 		return ast.PdfIndirectRef{}
 	}
 
 	outlineRef := alloc.Alloc(ast.PdfNull{}) // placeholder
-	items := buildOutlineItems(alloc, bookmarks, outlineRef, pageRefs)
-	if len(items) == 0 {
+	refs := buildOutlineItems(alloc, items, outlineRef, pageRefs, targets)
+	if len(refs) == 0 {
 		return ast.PdfIndirectRef{}
 	}
 
 	outlineDict := ast.PdfDict{
 		"Type":  ast.PdfName("Outlines"),
-		"First": items[0],
-		"Last":  items[len(items)-1],
-		"Count": ast.PdfInt(visibleOutlineCount(bookmarks)),
+		"First": refs[0],
+		"Last":  refs[len(refs)-1],
+		"Count": ast.PdfInt(visibleOutlineCount(items)),
 	}
 	alloc.AllocAt(outlineRef.ObjectNum, outlineDict)
 	return outlineRef
@@ -142,7 +141,7 @@ func BuildOutline(
 // [buildOutlineItems] already recurses over, and a tree read back from a
 // document arrives capped at maxOutlineDepth (100) by the outline parser, so
 // this adds no reach the writer did not already have.
-func visibleOutlineCount(bookmarks []models.Bookmark) int {
+func visibleOutlineCount(bookmarks []OutlineItem) int {
 	total := 0
 	for i := range bookmarks {
 		total += 1 + visibleOutlineCount(bookmarks[i].Children)
@@ -151,41 +150,57 @@ func visibleOutlineCount(bookmarks []models.Bookmark) int {
 }
 
 // buildOutlineItems creates outline item objects and returns their refs.
-func buildOutlineItems(alloc *writer.ObjAllocator, bookmarks []models.Bookmark, parent ast.PdfIndirectRef, pageRefs map[int]ast.PdfIndirectRef) []ast.PdfIndirectRef {
-	refs := make([]ast.PdfIndirectRef, len(bookmarks))
+//
+// An item opening a page opens it through an explicit destination (ISO
+// 32000-1, 12.3.2.2). When targets names a structure destination for it, the
+// item opens both through a GoTo action instead: /D the page and /SD the
+// structure element (ISO 32000-2, 12.6.4.2, Table 202), whose view parameters
+// the page destination takes too. A reader that knows no structure
+// destination follows /D, and ISO 32000-1, Table 153 forbids /Dest beside /A.
+func buildOutlineItems(alloc *writer.ObjAllocator, items []OutlineItem, parent ast.PdfIndirectRef, pageRefs map[int]ast.PdfIndirectRef, targets *outlineTargets) []ast.PdfIndirectRef {
+	refs := make([]ast.PdfIndirectRef, len(items))
 
 	// Every ref exists before any dict is built, so each item can name its
 	// /Prev and /Next.
-	for i := range bookmarks {
+	for i := range items {
 		refs[i] = alloc.Alloc(ast.PdfNull{}) // placeholder
 	}
 
-	for i, bm := range bookmarks {
+	for i, item := range items {
 		d := ast.PdfDict{
 			// An outline item's /Title is a text string (ISO 32000-1, 12.3.3).
-			"Title":  document.EncodePdfString(bm.Title),
+			"Title":  document.EncodePdfString(item.Title),
 			"Parent": parent,
 		}
 
-		// Destination: [pageRef /Fit]
-		if pageRef, ok := pageRefs[bm.PageNumber]; ok {
-			d["Dest"] = ast.PdfArray{pageRef, ast.PdfName("Fit")}
+		if pageRef, ok := pageRefs[item.PageNumber]; ok {
+			if sd := targets.structDest(item, pageRef); sd != nil {
+				dest := make(ast.PdfArray, 0, len(sd))
+				dest = append(dest, pageRef)
+				d["A"] = ast.PdfDict{
+					"S":  ast.PdfName("GoTo"),
+					"D":  append(dest, sd[1:]...),
+					"SD": sd,
+				}
+			} else {
+				d["Dest"] = ast.PdfArray{pageRef, ast.PdfName("Fit")}
+			}
 		}
 
 		if i > 0 {
 			d["Prev"] = refs[i-1]
 		}
-		if i < len(bookmarks)-1 {
+		if i < len(items)-1 {
 			d["Next"] = refs[i+1]
 		}
 
 		// Recurse for children.
-		if len(bm.Children) > 0 {
-			childRefs := buildOutlineItems(alloc, bm.Children, refs[i], pageRefs)
+		if len(item.Children) > 0 {
+			childRefs := buildOutlineItems(alloc, item.Children, refs[i], pageRefs, targets)
 			if len(childRefs) > 0 {
 				d["First"] = childRefs[0]
 				d["Last"] = childRefs[len(childRefs)-1]
-				d["Count"] = ast.PdfInt(visibleOutlineCount(bm.Children))
+				d["Count"] = ast.PdfInt(visibleOutlineCount(item.Children))
 			}
 		}
 

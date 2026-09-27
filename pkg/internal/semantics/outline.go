@@ -22,6 +22,18 @@ import (
 //     broken outline made `litho bookmarks` fail on a file poppler and pikepdf
 //     both read as having no outline.
 func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookmark, error) {
+	return ResolveOutlineItems(ctx, doc, func(b models.Bookmark, _ ast.PdfDict, children []models.Bookmark) models.Bookmark {
+		b.Children = children
+		return b
+	})
+}
+
+// ResolveOutlineItems is [ResolveOutline] for a tree of items of any type. It
+// walks the outline as ResolveOutline does and makes each item with build,
+// from the item's bookmark, whose Children it leaves empty, the outline item
+// dictionary the document holds (ISO 32000-1, 12.3.3, Table 153), and the
+// item's children, made first.
+func ResolveOutlineItems[T any](ctx context.Context, doc *document.Document, build func(b models.Bookmark, item ast.PdfDict, children []T) T) ([]T, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
@@ -68,7 +80,7 @@ func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookm
 		return nil, fmt.Errorf("failed to fetch pages for outline mapping: %w", err)
 	}
 
-	return parseOutlineItems(ctx, doc, firstObj, document.BuildPageMap(pages), make(map[int]bool), 0)
+	return parseOutlineItems(ctx, doc, firstObj, document.BuildPageMap(pages), build, make(map[int]bool), 0)
 }
 
 // maxOutlineDepth caps outline /First nesting. Anti-DoS guard, not spec-mandated:
@@ -81,11 +93,11 @@ const maxOutlineDepth = 100
 // numbers across the whole walk: a crafted /Next or /First cycle would otherwise
 // loop forever (a 700-byte file hangs until the caller's context deadline, and a
 // /First cycle exhausts the goroutine stack, which is not recoverable in Go).
-func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int, visited map[int]bool, depth int) ([]models.Bookmark, error) {
+func parseOutlineItems[T any](ctx context.Context, doc *document.Document, itemObj ast.PdfObject, pageMap map[ast.PdfIndirectRef]int, build func(models.Bookmark, ast.PdfDict, []T) T, visited map[int]bool, depth int) ([]T, error) {
 	if depth > maxOutlineDepth {
 		return nil, nil
 	}
-	var bookmarks []models.Bookmark
+	var items []T
 	currentObj := itemObj
 
 	for currentObj != nil {
@@ -144,15 +156,15 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 		}
 
 		// Recursively parse children
+		var children []T
 		if firstChildObj, ok := dict["First"]; ok {
-			children, err := parseOutlineItems(ctx, doc, firstChildObj, pageMap, visited, depth+1)
+			children, err = parseOutlineItems(ctx, doc, firstChildObj, pageMap, build, visited, depth+1)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse outline children: %w", err)
 			}
-			b.Children = children
 		}
 
-		bookmarks = append(bookmarks, b)
+		items = append(items, build(b, dict, children))
 
 		// Move to the next sibling in the linked list
 		if nextObj, ok := dict["Next"]; ok {
@@ -162,5 +174,5 @@ func parseOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.
 		}
 	}
 
-	return bookmarks, nil
+	return items, nil
 }
