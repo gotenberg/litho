@@ -274,17 +274,6 @@ const mutationRedactReach = 1e6
 //   - litho xrefstm_2b: 1 ruleset_changed cell (PDF/A-1b, 6.7.3 tests 2, 4
 //     and 7 pass) under mutate-pages and mutate-encrypt: a full rewrite drops
 //     the direct /Info dictionary the source's cross-reference stream holds.
-//   - litho: 9 qpdf_failed PDFs under mutate-pages, qpdf "this widget
-//     annotation is not reachable from /AcroForm": InsertPages copies a page's
-//     widgets without adding their fields to the /AcroForm.
-//   - litho annotstruct_ua2, formstruct_ua2, idfields_ua2: 6 ruleset_changed
-//     cells under mutate-flatten (ISO 14289-1, 7.1 test 3 and ISO 14289-2,
-//     8.2.2): the flattened appearance lands in a tagged page neither tagged
-//     nor an artifact.
-//   - litho filestruct_1b, sigcms_2b, typedreads_1b: 3 promise_broken PDFs
-//     under mutate-flatten: a widget FlattenForm does not bake (filestruct_1b's
-//     has no appearance) survives the /AcroForm it removes, and litho still
-//     reads it as a form field.
 //   - litho complex_2u, forbidden_mix, inlineimage_2b: 3 promise_broken PDFs
 //     under mutate-autotag. Their content is already marked, and AutoTag
 //     leaves such a document alone by design, which the public API cannot

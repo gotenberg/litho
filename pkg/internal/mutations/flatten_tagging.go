@@ -65,6 +65,10 @@ const (
 //     14289-1, 7.1 test 3 and ISO 14289-2, 8.2.2 test 1, 6 cells veraPDF
 //     confirmed. With the appearances tagged or marked, veraPDF reports a subset
 //     of the input's rules on each at both profiles.
+//   - All corpora, 617 files that mention a form: the flattened output of 43
+//     tagged files no longer fails ISO 14289-1, 7.1 test 3 or ISO 14289-2,
+//     8.2.2 test 1, and no output fails a PDF/UA rule the untagged flatten
+//     passed.
 type flattenTags struct {
 	catalogRef ast.PdfIndirectRef
 	// rootRef is the structure tree root's object; zero when the catalog holds
