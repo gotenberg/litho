@@ -291,11 +291,15 @@ const mutationRedactReach = 1e6
 //     the page move change which page that is, so an image the second page
 //     draws is judged. veraPDF reports the same rule set on the outputs. Not a
 //     mutation defect.
-//   - litho namedmcid_ua1: 2 ruleset_changed cells under mutate-pages, 7.1
-//     test 3 at PDF/UA-1 and 8.2.2 test 1 at PDF/UA-2 added. The copy of the
-//     tagged first page carries its content, not its structure, so its MCIDs
-//     map to no element and its content is untagged. veraPDF reports the same
-//     rule set on the output. A limitation of InsertPages, not of the move.
+//   - litho namedmcid_ua1, structcopy_ua2: while the copy of a tagged first
+//     page carried its content and not its structure, its MCIDs mapped to no
+//     element, and mutate-pages added 7.1 test 3 at PDF/UA-1 and 8.2.2 test 1
+//     at PDF/UA-2 on both tools, and 7.18.5 test 1 at PDF/UA-1 on
+//     structcopy_ua2, whose Link lost its element. The copy carries its
+//     structure elements now, and the cells pass.
+//   - litho: with the deletion no longer allowed to pass any rule at the
+//     tagged profiles, the 28 fixtures whose first page moves to the end
+//     count no ruleset_changed cell but imagereach_2b's six.
 //   - litho a4syntax_4: 1 ruleset_changed cell (PDF/A-4, 6.1.2 test 1) under
 //     each of mutate-pages, mutate-flatten and mutate-encrypt: a full rewrite
 //     writes a %PDF-1.7 header over a PDF 2.0 source.
@@ -342,10 +346,11 @@ var mutationSpecs = []mutationSpec{
 			a := strictAllowance(rc.profile)
 			a.mayRemove = concatRules(a.mayRemove, explicitResourcesRules[family])
 			// Deleting a page prunes the structure elements that name it, and
-			// a rule only they failed goes with them. The copy that replaces
-			// the page carries its content, not its structure. A rewrite
-			// drops the input's signatures (see [droppedSignaturesRemove]).
-			a.anyRemove = rc.plan.deleted && tagsContent(rc.profile) || droppedSignaturesRemove(rc)
+			// the copy that replaces the page carries them again, so a rule
+			// only they failed stays failed and no rule may go on their
+			// account. A rewrite drops the input's signatures (see
+			// [droppedSignaturesRemove]).
+			a.anyRemove = droppedSignaturesRemove(rc)
 			return a
 		},
 	},
