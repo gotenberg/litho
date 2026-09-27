@@ -273,7 +273,7 @@ func TestCollectMCIDs(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var mcids []int
-			collectMCIDs(context.Background(), nil, tc.obj, &mcids)
+			collectMCIDs(context.Background(), nil, tc.obj, make(map[int]bool), 0, &mcids)
 			if len(mcids) != len(tc.want) {
 				t.Fatalf("got %v, want %v", mcids, tc.want)
 			}

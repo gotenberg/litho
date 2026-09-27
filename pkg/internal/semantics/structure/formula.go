@@ -38,10 +38,9 @@ func ExtractFormulas(ctx context.Context, doc *document.Document) ([]models.Form
 	if !ok {
 		return nil, nil
 	}
-	kRes, _ := resolve(ctx, doc, kObj)
 
 	var formulas []models.FormulaElement
-	findFormulas(ctx, doc, kRes, &formulas)
+	findFormulas(ctx, doc, kObj, make(map[int]bool), 0, &formulas)
 
 	if len(formulas) == 0 {
 		return nil, nil
@@ -49,20 +48,37 @@ func ExtractFormulas(ctx context.Context, doc *document.Document) ([]models.Form
 	return formulas, nil
 }
 
-// findFormulas recursively searches the structure tree for /Formula elements.
-func findFormulas(ctx context.Context, doc *document.Document, obj ast.PdfObject, formulas *[]models.FormulaElement) {
-	switch v := obj.(type) {
+// maxFormulaTreeDepth caps the structure tree walks of this file. Anti-DoS
+// guard, not spec-mandated: a real structure tree nests a few dozen levels at
+// most. It matches compliance.MaxStructTreeWalkDepth, the depth validation
+// walks the same tree to.
+const maxFormulaTreeDepth = 200
+
+// findFormulas recursively searches the structure tree below obj, a /K value,
+// for /Formula elements. visited holds the objects already walked, elements
+// and /K arrays written as objects of their own alike: a structure tree is a
+// strict tree (ISO 32000-1, 14.7.2), and without it an element naming itself
+// recursed until the goroutine stack was exhausted, and direct elements that
+// each name their own /K array again fanned out 2^depth.
+func findFormulas(ctx context.Context, doc *document.Document, obj ast.PdfObject, visited map[int]bool, depth int, formulas *[]models.FormulaElement) {
+	if depth > maxFormulaTreeDepth || ctx.Err() != nil || document.VisitedBefore(obj, visited) {
+		return
+	}
+	resolved, err := resolve(ctx, doc, obj)
+	if err != nil {
+		return
+	}
+	switch v := resolved.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			kidRes, _ := resolve(ctx, doc, kid)
-			findFormulas(ctx, doc, kidRes, formulas)
+			findFormulas(ctx, doc, kid, visited, depth+1, formulas)
 		}
 	case ast.PdfDict:
 		// Check if this is a /Formula structure element.
 		if sObj, ok := v["S"]; ok {
-			sRes, _ := resolve(ctx, doc, sObj)
+			sRes, _ := resolve(ctx, doc, sObj) // Best-effort: an unreadable /S names no Formula.
 			if sName, ok := sRes.(ast.PdfName); ok && sName == "Formula" {
-				fe := extractFormulaElement(ctx, doc, v)
+				fe := extractFormulaElement(ctx, doc, obj, v)
 				if fe != nil {
 					*formulas = append(*formulas, *fe)
 				}
@@ -71,21 +87,25 @@ func findFormulas(ctx context.Context, doc *document.Document, obj ast.PdfObject
 
 		// Recurse into children.
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := resolve(ctx, doc, kObj)
-			findFormulas(ctx, doc, kRes, formulas)
+			findFormulas(ctx, doc, kObj, visited, depth+1, formulas)
 		}
 	}
 }
 
-// extractFormulaElement extracts MathML and MCIDs from a /Formula struct elem.
-func extractFormulaElement(ctx context.Context, doc *document.Document, dict ast.PdfDict) *models.FormulaElement {
+// extractFormulaElement extracts MathML and MCIDs from a /Formula struct elem,
+// dict, written as obj.
+func extractFormulaElement(ctx context.Context, doc *document.Document, obj ast.PdfObject, dict ast.PdfDict) *models.FormulaElement {
 	mathml := extractMathMLFromAF(ctx, doc, dict)
 
-	// Collect MCIDs from children.
+	// Collect MCIDs from children. The element itself counts as walked, so a
+	// /K naming it back adds its content once.
 	var mcids []int
 	if kObj, ok := dict["K"]; ok {
-		kRes, _ := resolve(ctx, doc, kObj)
-		collectMCIDs(ctx, doc, kRes, &mcids)
+		visited := make(map[int]bool)
+		if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+			visited[ref.ObjectNum] = true
+		}
+		collectMCIDs(ctx, doc, kObj, visited, 0, &mcids)
 	}
 
 	if mathml == "" && len(mcids) == 0 {
@@ -198,26 +218,33 @@ func extractMathMLFromAF(ctx context.Context, doc *document.Document, dict ast.P
 	return ""
 }
 
-// collectMCIDs recursively collects all MCID values from a structure subtree.
-func collectMCIDs(ctx context.Context, doc *document.Document, obj ast.PdfObject, mcids *[]int) {
-	switch v := obj.(type) {
+// collectMCIDs recursively collects all MCID values from the structure
+// subtree below obj, a /K value, walking each object once as [findFormulas]
+// does.
+func collectMCIDs(ctx context.Context, doc *document.Document, obj ast.PdfObject, visited map[int]bool, depth int, mcids *[]int) {
+	if depth > maxFormulaTreeDepth || ctx.Err() != nil || document.VisitedBefore(obj, visited) {
+		return
+	}
+	resolved, err := resolve(ctx, doc, obj)
+	if err != nil {
+		return
+	}
+	switch v := resolved.(type) {
 	case ast.PdfInt:
 		*mcids = append(*mcids, int(v))
 	case ast.PdfArray:
 		for _, item := range v {
-			itemRes, _ := resolve(ctx, doc, item)
-			collectMCIDs(ctx, doc, itemRes, mcids)
+			collectMCIDs(ctx, doc, item, visited, depth+1, mcids)
 		}
 	case ast.PdfDict:
 		if mcidObj, ok := v["MCID"]; ok {
-			mcidRes, _ := resolve(ctx, doc, mcidObj)
+			mcidRes, _ := resolve(ctx, doc, mcidObj) // Best-effort: an unreadable /MCID names no content.
 			if mcidInt, ok := mcidRes.(ast.PdfInt); ok {
 				*mcids = append(*mcids, int(mcidInt))
 			}
 		}
 		if kObj, ok := v["K"]; ok {
-			kRes, _ := resolve(ctx, doc, kObj)
-			collectMCIDs(ctx, doc, kRes, mcids)
+			collectMCIDs(ctx, doc, kObj, visited, depth+1, mcids)
 		}
 	}
 }
