@@ -19,11 +19,31 @@ import (
 // a minimal Helvetica/WinAnsiEncoding font dictionary.
 // This allows text extraction to continue when a font cannot be resolved,
 // producing best-effort output rather than aborting the page.
+//
+// It carries Helvetica's widths, as that dictionary does (see
+// [injectStandard14Widths]), and as pdf.js lays out a font the resources do not
+// define: its fallback font takes Helvetica's metrics. Without them every glyph
+// advanced one em, twice Helvetica's average, so text in the fallback reached
+// twice as far across the page as any reader draws it, and the part past the
+// page's edge was dropped as clipped.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9105_other.pdf: draws "Adobe tweet" at 105 points in a font
+//     its resources do not define, 583.69 points wide in pdf.js. At one em a
+//     glyph it reached 1155, and once a rewrite gave the page the US Letter
+//     media box it lacks, litho read only "Adobe" from it and the PDF/A-2b
+//     remediation refused its own output for the text it lost.
+//   - All corpora: six files draw text in a font their resources do not
+//     define, and the text litho extracts from each, and its auto-tagging of
+//     each, are unchanged byte for byte.
 func fallbackFont() *Font {
-	return &Font{
+	font := &Font{
 		Subtype:  "Type1",
 		Encoding: copyEncoding(encodings.WinAnsiEncoding),
 	}
+	injectStandard14Widths(font, "Helvetica")
+	return font
 }
 
 // collectAnnotAppearanceObjects returns the set of object numbers referenced by
