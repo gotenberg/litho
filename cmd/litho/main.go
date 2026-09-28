@@ -205,8 +205,8 @@ func timeoutStatus(code int, ctxErr error) int {
 //
 // It is split from [run] so that the status every command returns passes
 // through a single place, which is what lets the deadline check above see it.
-// The switch returns directly from thirty-nine cases, and post-processing each
-// one would be thirty-nine chances to miss one.
+// The switch returns directly from forty cases, and post-processing each
+// one would be forty chances to miss one.
 func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, stderr io.Writer) int {
 	switch cmd {
 	case "info":
@@ -277,6 +277,8 @@ func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, st
 		return runStampPDF(ctx, globalArgs, stdout, stderr)
 	case "sign":
 		return runSign(ctx, globalArgs, stdout, stderr)
+	case "timestamp":
+		return runTimestamp(ctx, globalArgs, stdout, stderr)
 	case "attach":
 		return runAttach(ctx, globalArgs, stdout, stderr)
 	case "detach":
@@ -336,6 +338,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  stamp-image   Stamp an image on pages")
 	fmt.Fprintln(w, "  stamp-pdf     Stamp a PDF page on pages")
 	fmt.Fprintln(w, "  sign          Sign a PDF with a certificate and private key")
+	fmt.Fprintln(w, "  timestamp     Add an RFC 3161 document timestamp")
 	fmt.Fprintln(w, "  attach        Embed a file attachment")
 	fmt.Fprintln(w, "  detach        Remove a file attachment")
 	fmt.Fprintln(w, "  autotag       Synthesize a PDF/UA structure tree")

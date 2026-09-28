@@ -692,8 +692,9 @@ type Signer interface {
 // A remediation is the last edit on a Writer. It writes the edits queued
 // before it to a temp file and validates, repairs and measures that document,
 // so its [RemediationReport] describes the output. After it, the Writer
-// accepts [Writer.Sign], [Writer.WriteTo] and [Writer.Close], and refuses every
-// other call, a second remediation included, with [ErrEditAfterRemediation]:
+// accepts [Writer.Sign], [Writer.Timestamp], [Writer.WriteTo] and
+// [Writer.Close], and refuses every other call, a second remediation
+// included, with [ErrEditAfterRemediation]:
 // the refused call queues nothing, a method with an error return returns the
 // refusal, and WriteTo returns the first refusal, whatever the method, and
 // writes nothing. A remediation that fails leaves the Writer open to edits.
@@ -767,6 +768,7 @@ type Writer struct {
 	// same, since a redaction that refuses puts the Writer back as it was.
 	folded          int
 	signer          Signer
+	timestamp       *timestampOpts
 	signOpts        signOpts
 	requiredVersion string
 
@@ -3250,7 +3252,7 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	// Signing an encrypted source is also rejected (see signsEncrypted). A
 	// full rewrite the caller, an edit or a remediation asks for is not: its
 	// output is signed on top, see writeSignedRewrite.
-	if w.signer != nil && (w.encryptCfg != nil || encrypt != nil || w.decrypt || w.signsEncrypted()) {
+	if (w.signer != nil || w.timestamp != nil) && (w.encryptCfg != nil || encrypt != nil || w.decrypt || w.signsEncrypted()) {
 		return ErrSignFullRewriteIncompatible
 	}
 	if encrypt != nil {
@@ -3275,14 +3277,19 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 		w.encryptCfg = nil
 		defer func() { w.encryptCfg = encryptCfg }()
 	}
+	steps := w.signingSteps()
+	var first *signingStep
+	if len(steps) > 0 {
+		first = &steps[0]
+	}
 	write := w.writeToInternal
-	if w.signer != nil && (cfg.fullRewrite || w.signsARewrite()) {
+	if first != nil && (cfg.fullRewrite || w.signsARewrite()) {
 		write = w.writeSignedRewrite
 	}
 	// A failed write leaves the record as the remediation left it, since a
 	// retry may write the output another way.
 	dropped := slices.Clone(w.droppedSignatures)
-	if err := write(ctx, dst, w.signer, opts...); err != nil {
+	if err := w.writeSigned(ctx, dst, write, steps, opts...); err != nil {
 		w.droppedSignatures = dropped
 		return err
 	}
@@ -3366,7 +3373,7 @@ func (w *Writer) sourceDamaged() bool {
 // byte for byte.
 //
 // It has the signature of [Writer.writeToInternal] so [Writer.WriteTo] can pick
-// either; signer is never nil here.
+// either; step is never nil here.
 //
 // # Corpus evidence
 //
@@ -3387,7 +3394,7 @@ func (w *Writer) sourceDamaged() bool {
 //     now, on top of the unsigned rewrite byte for byte. poppler's pdfsig
 //     reports each new signature valid, and qpdf finds nothing in a signed
 //     output it does not find in the unsigned one.
-func (w *Writer) writeSignedRewrite(ctx context.Context, dst io.Writer, signer Signer, opts ...WriteOption) error {
+func (w *Writer) writeSignedRewrite(ctx context.Context, dst io.Writer, step *signingStep, opts ...WriteOption) error {
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
@@ -3431,8 +3438,7 @@ func (w *Writer) writeSignedRewrite(ctx context.Context, dst io.Writer, signer S
 	if cfg.logger != nil {
 		base.doc.Logger = cfg.logger
 	}
-	adapter, info := w.signing(signer)
-	if err := mutations.WriteWithSignature(ctx, dst, base.doc, adapter, info, nil, nil, cfg.xrefStream, w.mediaBoxDefault(cfg)); err != nil {
+	if err := mutations.WriteWithSignature(ctx, dst, base.doc, step.signer, step.info, nil, nil, cfg.xrefStream, w.mediaBoxDefault(cfg)); err != nil {
 		return fmt.Errorf("signing the rewritten document: %w", err)
 	}
 	return nil
@@ -3554,7 +3560,7 @@ func (w *Writer) mediaBoxDefault(cfg writeOpts) *document.MediaBoxDefault {
 //   - govdocs: write syscalls were 30% of a remediate run against an
 //     unbuffered destination, since each round serializes the document to a
 //     temp file to revalidate it.
-func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Signer, opts ...WriteOption) (err error) {
+func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signingStep, opts ...WriteOption) (err error) {
 	// The serializer emits a write per token: a dictionary key, a delimiter, a
 	// number. Against an unbuffered destination every one of those is a
 	// syscall, which dominated remediation, since each round serializes the
@@ -3587,7 +3593,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	// serialization keeps the applied fixes.
 	if w.preSerializedPath != "" {
 		stale := w.encryptCfg != nil ||
-			signer != nil ||
+			step != nil ||
 			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream ||
 			cfg.packObjectStreams || cfg.dedupStreams ||
 			(cfg.pageSize != nil && !slices.Equal(cfg.pageSize, w.defaults.pageSize))
@@ -3619,7 +3625,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	// of its rewrite, and rejects the unsafe sign combinations.
 	hasEdits := len(w.mutations) > 0 || w.trailerDirty || len(w.rewriteOverrides) > 0 ||
 		w.encryptCfg != nil || w.decrypt
-	if hasEdits && signer == nil {
+	if hasEdits && step == nil {
 		if w.reader.doc.IsEncrypted && !w.reader.doc.Authenticated {
 			return ErrEncryptedNotAuthenticated
 		}
@@ -3651,7 +3657,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	logger.Debug("writer.WriteTo started",
 		slog.Int("mutations", len(w.mutations)),
 		slog.Bool("full_rewrite", cfg.fullRewrite || w.forceRewrite),
-		slog.Bool("signer", signer != nil),
+		slog.Bool("signer", step != nil),
 		slog.Bool("xref_stream", cfg.xrefStream),
 	)
 
@@ -3682,7 +3688,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	// the source back with only the signature added. The mutations a
 	// redaction's overrides already hold are not applied again (see
 	// [Writer.folded]).
-	if signer != nil {
+	if step != nil {
 		pending := w.unfoldedMutations()
 		mutFuncs := make([]mutations.MutationFunc, len(pending))
 		for i, m := range pending {
@@ -3696,8 +3702,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 		} else {
 			maps.Copy(overrides, w.rewriteOverrides)
 		}
-		adapter, info := w.signing(signer)
-		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, adapter, info, overrides, mutFuncs, cfg.xrefStream, w.mediaBoxDefault(cfg))
+		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, step.signer, step.info, overrides, mutFuncs, cfg.xrefStream, w.mediaBoxDefault(cfg))
 	}
 
 	if cfg.fullRewrite || w.forceRewrite {

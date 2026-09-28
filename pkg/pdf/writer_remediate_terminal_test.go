@@ -17,9 +17,10 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// terminalCalls names the Writer methods a remediated Writer still accepts.
+// terminalCalls names the Writer methods a remediated Writer still accepts:
+// Timestamp registers a document timestamp as Sign registers a signature.
 // DroppedSignatures edits nothing: it reports on the output WriteTo wrote.
-var terminalCalls = []string{"Sign", "WriteTo", "Close", "DroppedSignatures"}
+var terminalCalls = []string{"Sign", "Timestamp", "WriteTo", "Close", "DroppedSignatures"}
 
 // refusedCall is one Writer method a remediated Writer refuses, called the way
 // a caller would call it after the remediation.

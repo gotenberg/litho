@@ -71,12 +71,20 @@ type SignatureInfo struct {
 	// adbe.pkcs7.detached.
 	SubFilter ast.PdfName
 	// TimestampURL is the RFC 3161 timestamp authority that timestamps the
-	// signature value, "" for none.
+	// signature value, "" for none. For a document timestamp it is the
+	// authority whose token is the whole /Contents.
 	TimestampURL string
+	// DocTimeStamp makes the dictionary a document timestamp (ISO 32000-2,
+	// 12.8.5): /Type /DocTimeStamp, /SubFilter /ETSI.RFC3161 and none of the
+	// entries above but the field.
+	DocTimeStamp bool
 }
 
 // subFilter returns the /SubFilter the signature dictionary takes.
 func (info SignatureInfo) subFilter() ast.PdfName {
+	if info.DocTimeStamp {
+		return SubFilterRFC3161
+	}
 	if info.SubFilter == "" {
 		return SubFilterPKCS7Detached
 	}
@@ -176,7 +184,14 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		"Contents":  ast.PdfString(string(placeholderBytes)),
 		"ByteRange": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(9999999999), ast.PdfInt(9999999999), ast.PdfInt(9999999999)},
 	}
-	info.entries(sigDict)
+	if info.DocTimeStamp {
+		// ISO 32000-2, 12.8.5: the timestamp authority's token is the
+		// signature, and its genTime the signing time, so the dictionary
+		// carries no /M or other claim of the signer's.
+		sigDict["Type"] = ast.PdfName("DocTimeStamp")
+	} else {
+		info.entries(sigDict)
+	}
 
 	// Update or create AcroForm with the signature field.
 	catalogRef, ok := CatalogRef(ctx, doc)
@@ -271,6 +286,11 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		// used to be queued as object 0, the head of the free list, with the
 		// catalog pointing at 0 0 R.
 		newCatalog["AcroForm"] = acroFormDict
+	}
+	if info.DocTimeStamp {
+		if err := DeclareESIC(ctx, alloc, doc, newCatalog); err != nil {
+			return err
+		}
 	}
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 	// The update writes the catalog, and the pages the edits before it wrote.

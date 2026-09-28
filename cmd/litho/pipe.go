@@ -33,11 +33,12 @@ func pipeUsage(w io.Writer) {
 	fmt.Fprintln(w, "Stages: rotate, split, merge, delete, insert, encrypt, decrypt,")
 	fmt.Fprintln(w, "        autotag, set-metadata, set-form, flatten-form,")
 	fmt.Fprintln(w, "        set-bookmarks, attach, detach, stamp-text, stamp-image,")
-	fmt.Fprintln(w, "        stamp-pdf, remediate, sign")
+	fmt.Fprintln(w, "        stamp-pdf, remediate, sign, timestamp")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "remediate runs at most once, as the last stage but sign, and a PDF/A")
-	fmt.Fprintln(w, "profile takes no encrypt stage. sign runs at most once, as the last")
-	fmt.Fprintln(w, "stage, and takes no encrypt or decrypt stage.")
+	fmt.Fprintln(w, "remediate runs at most once, as the last stage but sign and timestamp,")
+	fmt.Fprintln(w, "and a PDF/A profile takes no encrypt stage. sign and timestamp run at")
+	fmt.Fprintln(w, "most once each, as the last stages, timestamp after sign, and take no")
+	fmt.Fprintln(w, "encrypt or decrypt stage.")
 }
 
 // runPipe implements `litho pipe <file> <stage> [flags] <stage> [flags] ... -o out.pdf`.
@@ -422,7 +423,8 @@ func expectsValue(arg string) bool {
 // sign is the last stage and there is one at most: a stage after it would
 // rewrite what it signed. It takes no encrypt or decrypt stage, which
 // [pdf.Writer.WriteTo] refuses beside a signature with
-// [pdf.ErrSignFullRewriteIncompatible].
+// [pdf.ErrSignFullRewriteIncompatible]. A timestamp stage, the document
+// timestamp of ISO 32000-2, 12.8.5, obeys the same rules and follows sign.
 //
 // A remediation is the last edit a document takes: its report describes the
 // output only when nothing edits it afterwards, and a [pdf.Writer] refuses
@@ -435,32 +437,13 @@ func expectsValue(arg string) bool {
 // trailer, so an encrypt stage cannot precede a PDF/A remediate stage. A
 // PDF/UA or WTPDF remediation keeps it.
 func validateStageOrder(groups [][]string) error {
-	signAt := -1
-	for i, g := range groups {
-		if len(g) == 0 || g[0] != "sign" {
-			continue
+	// A document timestamp covers the signature before it too (ISO 32000-2,
+	// 12.8.5), so timestamp goes after sign, and is the last stage.
+	for _, stage := range []string{"timestamp", "sign"} {
+		var err error
+		if groups, err = validateSigningStage(groups, stage); err != nil {
+			return err
 		}
-		if signAt >= 0 {
-			return fmt.Errorf("only one sign stage is allowed: a second signature would sign the first one's output, which a pipe does not write")
-		}
-		signAt = i
-	}
-	if signAt >= 0 {
-		var after []string
-		for _, g := range groups[signAt+1:] {
-			if len(g) > 0 {
-				after = append(after, fmt.Sprintf("%q", g[0]))
-			}
-		}
-		if len(after) > 0 {
-			return fmt.Errorf("sign must be the last stage, since a signature covers the bytes it was computed over: move %s before sign", strings.Join(after, ", "))
-		}
-		for _, g := range groups[:signAt] {
-			if len(g) > 0 && (g[0] == "encrypt" || g[0] == "decrypt") {
-				return fmt.Errorf("the %q stage cannot come with a sign stage: litho does not sign a document it encrypts or decrypts", g[0])
-			}
-		}
-		groups = groups[:signAt]
 	}
 
 	remediateAt := -1
@@ -495,6 +478,43 @@ func validateStageOrder(groups [][]string) error {
 		}
 	}
 	return nil
+}
+
+// validateSigningStage refuses a stage, sign or timestamp, that is not the
+// last of groups or is not alone, or that comes with an encrypt or decrypt
+// stage (see [validateStageOrder]), and returns the groups before it.
+func validateSigningStage(groups [][]string, stage string) ([][]string, error) {
+	at := -1
+	for i, g := range groups {
+		if len(g) == 0 || g[0] != stage {
+			continue
+		}
+		if at >= 0 {
+			if stage == "sign" {
+				return nil, fmt.Errorf("only one sign stage is allowed: a second signature would sign the first one's output, which a pipe does not write")
+			}
+			return nil, fmt.Errorf("only one %s stage is allowed: a pipe writes one document timestamp", stage)
+		}
+		at = i
+	}
+	if at < 0 {
+		return groups, nil
+	}
+	var after []string
+	for _, g := range groups[at+1:] {
+		if len(g) > 0 {
+			after = append(after, fmt.Sprintf("%q", g[0]))
+		}
+	}
+	if len(after) > 0 {
+		return nil, fmt.Errorf("%s must be the last stage, since a signature covers the bytes it was computed over: move %s before %s", stage, strings.Join(after, ", "), stage)
+	}
+	for _, g := range groups[:at] {
+		if len(g) > 0 && (g[0] == "encrypt" || g[0] == "decrypt") {
+			return nil, fmt.Errorf("the %q stage cannot come with a %s stage: litho does not sign a document it encrypts or decrypts", g[0], stage)
+		}
+	}
+	return groups[:at], nil
 }
 
 // remediateProfile returns the --profile of the pipeline's remediate stage,
@@ -545,7 +565,8 @@ func stageProfileValue(group []string) string {
 // stageCmds names every command that also runs as a pipeline stage.
 //
 // sign is one, and runs last: [validateStageOrder] refuses a stage after it,
-// since a signature covers the bytes it was computed over.
+// since a signature covers the bytes it was computed over. timestamp, the
+// document timestamp, is one too, and runs after it.
 //
 // One output-producing command is deliberately absent, so that this set reads
 // as a decision rather than an oversight:
@@ -562,7 +583,7 @@ var stageCmds = map[string]bool{
 	"set-form": true, "flatten-form": true, "set-bookmarks": true,
 	"attach": true, "detach": true, "stamp-text": true,
 	"stamp-image": true, "stamp-pdf": true, "remediate": true, "autotag": true,
-	"sign": true,
+	"sign": true, "timestamp": true,
 }
 
 func isStageCmd(s string) bool { return stageCmds[s] }
@@ -995,6 +1016,25 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		}
 		p.Apply(func(_ context.Context, w *pdf.Writer) error {
 			w.Sign(signer, opts...)
+			return nil
+		})
+
+	case "timestamp":
+		fs := flag.NewFlagSet("timestamp", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		flags := registerTimestampFlags(fs)
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		tsaURL, opts, err := flags.options()
+		if err != nil {
+			return nil, err
+		}
+		if src.IsEncrypted() {
+			return nil, errors.New(encryptedTimestampRefusal)
+		}
+		p.Apply(func(_ context.Context, w *pdf.Writer) error {
+			w.Timestamp(tsaURL, opts...)
 			return nil
 		})
 

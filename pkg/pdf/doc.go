@@ -73,7 +73,8 @@
 // A remediation is the last edit on a Writer. Queue every other edit first:
 // the remediation judges and repairs the document they produce, so its
 // [RemediationReport] describes the output. After it, only [Writer.Sign],
-// [Writer.WriteTo] and [Writer.Close] are accepted, and every other call, a
+// [Writer.Timestamp], [Writer.WriteTo] and [Writer.Close] are accepted, and
+// every other call, a
 // second remediation included, is refused with [ErrEditAfterRemediation]. The
 // output of a PDF/A remediation is never encrypted, since ISO 19005 forbids
 // it: [ErrPDFAForbidsEncryption]. That of a PDF/UA-1 remediation is encrypted
@@ -94,6 +95,8 @@
 // attributes PAdES asks for. [WithPAdES] makes it a PAdES baseline signature
 // (ETSI.CAdES.detached), and [WithTimestampAuthority] adds an RFC 3161
 // signature timestamp. Implement [Signer] for anything else.
+// [Writer.Timestamp] adds an RFC 3161 document timestamp, after the
+// signature when both are asked for.
 //
 // A signature covers the bytes of the file it was made in (ISO 32000-1,
 // 12.8.1). An incremental update appends to them and keeps every signature. A
@@ -133,6 +136,7 @@
 //     [WithSignatureLocation], [WithSignatureContactInfo], [WithSignerName],
 //     [WithSigningTime], [WithSignatureField], [WithPAdES],
 //     [WithTimestampAuthority].
+//   - [Writer.Timestamp] takes [TimestampOption]: [WithTimestampField].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:
