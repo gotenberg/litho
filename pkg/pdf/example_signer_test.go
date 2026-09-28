@@ -106,14 +106,15 @@ func printSignatures(ctx context.Context, data []byte, roots *x509.CertPool) {
 }
 
 // selfSignedCertificate returns a self-signed signing certificate for key,
-// valid from 2026 to 2036. A real signer's certificate comes from a
-// certificate authority.
+// valid from 2026 to the end of year 9999, the latest time X.509 encodes, so
+// the example never outlives its certificate. A real signer's certificate
+// comes from a certificate authority.
 func selfSignedCertificate(key crypto.Signer) *x509.Certificate {
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "litho example signer"},
 		NotBefore:             time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		NotAfter:              time.Date(2036, 1, 1, 0, 0, 0, 0, time.UTC),
+		NotAfter:              time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
 	}
