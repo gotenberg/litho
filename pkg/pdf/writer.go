@@ -248,6 +248,7 @@ type remediateOpts struct {
 	tolerance       RegressionTolerance
 	documentID      []byte
 	fonts           FontProvider
+	wholeFonts      bool
 }
 
 // RegressionTolerance bounds the integrity probe that runs after
@@ -1892,7 +1893,7 @@ func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent, FigureAlt: cfg.figureAlt, PinnedID: cfg.documentID, Fonts: fontProvider(cfg.fonts)}
+	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent, FigureAlt: cfg.figureAlt, PinnedID: cfg.documentID, Fonts: fontProvider(cfg.fonts), WholeFonts: cfg.wholeFonts}
 }
 
 // RemediatePDFA validates the document against the given PDF/A profile,

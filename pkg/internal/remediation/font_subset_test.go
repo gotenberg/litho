@@ -109,9 +109,14 @@ func subsetProvider(fsType uint16) FontProvider {
 // report and the rewritten output, reopened.
 func remediateFontsAndReopen(t *testing.T, data []byte, profile string, provider FontProvider) (*Report, *document.Document, []byte) {
 	t.Helper()
+	return remediateWithOptionsAndReopen(t, data, profile, Options{PreserveContent: true, Fonts: provider})
+}
+
+// remediateWithOptionsAndReopen is [remediateFontsAndReopen] under opts.
+func remediateWithOptionsAndReopen(t *testing.T, data []byte, profile string, opts Options) (*Report, *document.Document, []byte) {
+	t.Helper()
 	ctx := context.Background()
 	doc, alloc := newTestDoc(t, data)
-	opts := Options{PreserveContent: true, Fonts: provider}
 	var report *Report
 	var err error
 	if strings.HasPrefix(profile, "PDF/UA") {
@@ -258,6 +263,53 @@ func TestFixFontEmbed_SubsetsSuppliedPrograms(t *testing.T) {
 			if n > whole[rule] {
 				t.Errorf("%s: the subset fails %v %d times, the whole program %d", profile, rule, n, whole[rule])
 			}
+		}
+	}
+}
+
+// TestFixFontEmbed_WholeFontsOption pins that [Options.WholeFonts] embeds
+// every supplied program whole, untagged, where the default run subsets each
+// of them, and that the whole programs fail no font rule.
+func TestFixFontEmbed_WholeFontsOption(t *testing.T) {
+	t.Parallel()
+	data := subsetFontsPDF(false, []string{
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>",
+		subsetTrueTypeFont(),
+	})
+	for _, profile := range []string{string(models.PDFA1b), string(models.PDFA2b), string(models.PDFUA1)} {
+		report, doc, _ := remediateWithOptionsAndReopen(t, data, profile,
+			Options{PreserveContent: true, Fonts: subsetProvider(0), WholeFonts: true})
+		if len(report.FontRefusals) != 0 {
+			t.Fatalf("%s: refusals %v", profile, report.FontRefusals)
+		}
+		wholes := 0
+		for _, f := range report.Fixed {
+			if strings.Contains(f, "(subset of ") {
+				t.Errorf("%s: a program was subset: %s", profile, f)
+			}
+			if strings.HasPrefix(f, "embedded ") && strings.Contains(f, wholeRequested) {
+				wholes++
+			}
+		}
+		if wholes != 3 {
+			t.Errorf("%s: %d whole programs, want 3: %v", profile, wholes, report.Fixed)
+		}
+		for name, want := range map[ast.PdfName][]byte{"F1": subsetSans(0), "F2": subsetSerif(), "F3": subsetSans(0)} {
+			font := pageFont(t, doc, name)
+			if base, _ := font["BaseFont"].(ast.PdfName); subsetTagged.MatchString(string(base)) {
+				t.Errorf("%s %s: a whole program's font is tagged %q", profile, name, base)
+			}
+			fd, program := fontProgram(t, doc, font)
+			if !bytes.Equal(program, want) {
+				t.Errorf("%s %s: embedded %d bytes, want the %d-byte program supplied", profile, name, len(program), len(want))
+			}
+			if _, ok := fd["CharSet"]; ok {
+				t.Errorf("%s %s: a whole program carries /CharSet", profile, name)
+			}
+		}
+		if embed, presence, width := embeddingFindingsAt(t, doc, profile); embed+presence+width != 0 {
+			t.Errorf("%s: output fails embedding %d, presence %d, width %d times", profile, embed, presence, width)
 		}
 	}
 }

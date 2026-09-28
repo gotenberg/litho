@@ -127,12 +127,13 @@ func fixFontEmbed(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	entries := pageTreeEntries(ctx, alloc, doc, pages)
 	uses := collectFontUses(ctx, alloc, doc, pages, entries)
 	e := &fontEmbedder{
-		alloc:    alloc,
-		doc:      doc,
-		provider: opts.Fonts,
-		profile:  profile,
-		programs: make(map[programKey]ast.PdfIndirectRef),
-		written:  make(map[int]programKey),
+		alloc:      alloc,
+		doc:        doc,
+		provider:   opts.Fonts,
+		wholeFonts: opts.WholeFonts,
+		profile:    profile,
+		programs:   make(map[programKey]ast.PdfIndirectRef),
+		written:    make(map[int]programKey),
 	}
 	targets := make([]fontTarget, 0, len(uses.codes)+len(uses.inline))
 	for _, objNum := range slices.Sorted(maps.Keys(uses.codes)) {
@@ -222,8 +223,10 @@ type fontEmbedder struct {
 	alloc    *writer.ObjAllocator
 	doc      *document.Document
 	provider FontProvider
-	profile  string
-	programs map[programKey]ast.PdfIndirectRef
+	// wholeFonts embeds every program whole ([Options.WholeFonts]).
+	wholeFonts bool
+	profile    string
+	programs   map[programKey]ast.PdfIndirectRef
 	// written holds, by descriptor object number, the program this run wrote
 	// into the descriptor. A descriptor held directly has no entry.
 	written map[int]programKey

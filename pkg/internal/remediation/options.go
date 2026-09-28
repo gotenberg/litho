@@ -35,6 +35,10 @@ type Options struct {
 	// Fonts supplies the programs of the fonts the document shows without
 	// embedding them ([fixFontEmbed]). Nil leaves every such font unembedded.
 	Fonts FontProvider
+	// WholeFonts embeds every program Fonts supplies whole instead of a
+	// subset of the glyphs the document shows, so a later edit can show
+	// characters the document does not show yet.
+	WholeFonts bool
 	// fonts collects the fonts a run embedded and the ones it left
 	// unembedded although Fonts was set, for [Report.FontRefusals] and
 	// [Report.FontsEmbedded]. [remediate] sets it for its run.

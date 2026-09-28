@@ -127,7 +127,7 @@ func (r FontRefusal) String() string {
 // litho embeds a subset of the program, holding the glyphs the document shows
 // with the font and those they are drawn from, under a subset tag, with the
 // /CharSet or /CIDSet PDF/A-1 asks of a subset. The program stays whole when
-// its OS/2 fsType forbids subsetting, when its font descriptor serves another
+// [WithWholeFontPrograms] asks for it, when its OS/2 fsType forbids subsetting, when its font descriptor serves another
 // font the document shows, when the interactive form's default resources name
 // the font, and when validation rejects the subset where it accepts the whole
 // program; a whole program is written once and shared by every font given it.
@@ -163,6 +163,21 @@ func WithFontProvider(p FontProvider) RemediateOption {
 // first. The option may be shared by concurrent remediations.
 func WithFontFiles(fsys fs.FS) RemediateOption {
 	return WithFontProvider(&fontFiles{fsys: fsys})
+}
+
+// WithWholeFontPrograms embeds every program [WithFontProvider] or
+// [WithFontFiles] supplies whole, under the font's own name, instead of the
+// subset litho embeds by default. A subset holds only the glyphs the document
+// shows, so text a later edit adds in characters the document does not show
+// has no glyph to draw; a whole program keeps every glyph, at the cost of a
+// larger file. Each font is still embedded only where the whole program
+// serves it as the document shows it, and [RemediationReport.Fixed] states
+// that the caller asked for the whole program. Without a provider it does
+// nothing.
+func WithWholeFontPrograms() RemediateOption {
+	return func(o *remediateOpts) {
+		o.wholeFonts = true
+	}
 }
 
 // maxFontFileBytes bounds the size of a font file [WithFontFiles] reads.

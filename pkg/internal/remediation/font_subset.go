@@ -22,6 +22,7 @@ const (
 	wholeFormFont   = "the interactive form's default resources name the font"
 	wholeUnreadable = "the program could not be subset"
 	wholeRejected   = "validation rejects the subset"
+	wholeRequested  = "the caller asked for whole programs"
 )
 
 // queuedFont is a font [fontEmbedder.embed] planned, which
@@ -114,7 +115,8 @@ func (q *queuedFont) describe() string {
 // judged over the subset as it was over the whole program, and one the rules
 // reject over the subset keeps the whole program.
 //
-// A program stays whole when its OS/2 fsType sets the No subsetting bit
+// A program stays whole when the caller asks for whole programs
+// ([Options.WholeFonts]), when its OS/2 fsType sets the No subsetting bit
 // (OpenType specification, OS/2 table), when the font's descriptor serves a
 // font the document shows that does not share the subset, which would draw
 // its own glyphs from the same program ([fontEmbedder.sharingWhole]), and
@@ -149,6 +151,8 @@ func (e *fontEmbedder) subsetQueued(ctx context.Context, uses fontUses) error {
 	var order []programKey
 	for _, q := range e.queued {
 		switch {
+		case e.wholeFonts:
+			q.plan.whole = wholeRequested
 		case q.plan.program.noSubset:
 			q.plan.whole = wholeFSType
 		case e.formFonts(ctx)[q.objNum]:

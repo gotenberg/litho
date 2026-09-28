@@ -118,7 +118,8 @@
 //   - [Writer.RemediatePDFA], [Writer.RemediatePDFUA], and
 //     [Writer.RemediateFacturX] take [RemediateOption]: [WithLanguage],
 //     [WithAggressiveFixes], [WithRegressionTolerance], [WithFigureAltText],
-//     [WithDocumentID], [WithFontProvider], [WithFontFiles].
+//     [WithDocumentID], [WithFontProvider], [WithFontFiles],
+//     [WithWholeFontPrograms].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:

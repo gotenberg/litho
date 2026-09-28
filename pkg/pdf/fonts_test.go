@@ -110,6 +110,47 @@ func TestWithFontFiles_EmbedsMatchingPrograms(t *testing.T) {
 	}
 }
 
+// TestWithWholeFontPrograms_EmbedsWholePrograms pins that the option turns
+// the default subset into the whole program supplied, through the public API.
+func TestWithWholeFontPrograms_EmbedsWholePrograms(t *testing.T) {
+	t.Parallel()
+	data := unembeddedFontsDoc("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+	program := fontbuild.TrueType{PostScriptName: "LiberationSans", Family: "Liberation Sans", Subfamily: "Regular", Glyphs: []fontbuild.Glyph{
+		{Name: "A", Unicode: 'A', Advance: 667}, {Name: "B", Unicode: 'B', Advance: 667},
+		{Name: "C", Unicode: 'C', Advance: 722}, {Name: "D", Unicode: 'D', Advance: 722},
+	}}.Build()
+	fonts := fstest.MapFS{"LiberationSans-Regular.ttf": {Data: program}}
+	for _, tc := range []struct {
+		name  string
+		opts  []RemediateOption
+		whole bool
+	}{
+		{"default", []RemediateOption{WithFontFiles(fonts)}, false},
+		{"whole", []RemediateOption{WithFontFiles(fonts), WithWholeFontPrograms()}, true},
+	} {
+		report, after := remediateFonts(t, data, tc.opts...)
+		if after != 0 {
+			t.Errorf("%s: %d fonts stay unembedded: %v", tc.name, after, report.FontRefusals)
+		}
+		var fix string
+		for _, f := range report.Fixed {
+			if strings.HasPrefix(f, "embedded LiberationSans") {
+				fix = f
+			}
+		}
+		want := "(subset of 3 glyphs"
+		if tc.whole {
+			want = fmt.Sprintf("(whole TrueType program as /FontFile2, %d bytes, the caller asked for whole programs)", len(program))
+		}
+		if !strings.Contains(fix, want) {
+			t.Errorf("%s: fix %q, want it to contain %q", tc.name, fix, want)
+		}
+	}
+	if _, after := remediateFonts(t, data, WithWholeFontPrograms()); after != 1 {
+		t.Errorf("without a provider: %d unembedded fonts, want 1", after)
+	}
+}
+
 func TestWithFontProvider_ReportsRefusals(t *testing.T) {
 	t.Parallel()
 	data := unembeddedFontsDoc("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
