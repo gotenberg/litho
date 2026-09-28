@@ -285,7 +285,7 @@ func placementCovers(
 	if err != nil {
 		return nil, fmt.Errorf("%w: parsing page content: %w", ErrImageShared, err)
 	}
-	machine := graphics.NewMachine(pageBox(page))
+	machine := graphics.NewMachine(pageBox(ctx, alloc, doc, page))
 	machine.Doc = doc
 	machine.Resources = page.Resources
 	machine.IgnoreOCVisibility = true

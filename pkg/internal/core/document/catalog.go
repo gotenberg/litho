@@ -743,7 +743,10 @@ func clampToMediaBox(box, media, def ast.PdfArray) ast.PdfArray {
 // a stamp lands and what a page stamp clips to, and the boxes a rewrite or a
 // remediation writes, which it writes as they read so no write changes how a
 // page looks. Compliance measures a box as its validator does instead (ISO
-// 19005-2, 6.1.13), for its verdicts only.
+// 19005-2, 6.1.13), for its verdicts only. A redaction is the one write that
+// reads wider than a viewer: it searches the union of the viewer region and
+// every box the page and its ancestors state, whatever their shape, so no
+// reader's reading of the page leaves text in the file.
 //
 // pdf.js reads a box through lookupNormalRect, which takes an array of exactly
 // four numbers, and keeps it when it encloses an area. poppler's

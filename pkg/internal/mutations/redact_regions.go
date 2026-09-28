@@ -3,10 +3,13 @@ package mutations
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"math"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
@@ -208,7 +211,7 @@ func redactPageRegions(
 		return RedactReport{}, fmt.Errorf("parsing page content: %w", err)
 	}
 
-	machine := graphics.NewMachine(pageBox(page))
+	machine := graphics.NewMachine(pageBox(ctx, alloc, doc, page))
 	// An optional-content group that is off still holds its content in the
 	// file, so its visibility must not gate removal.
 	machine.IgnoreOCVisibility = true
@@ -538,21 +541,120 @@ func pathPaintStrokes(operator string) bool {
 	return false
 }
 
-// pageBox returns the page's visible region for the graphics machine,
-// preferring the /CropBox and falling back to the /MediaBox. A zero box leaves
-// [graphics.NewMachine] to supply its own bounds.
-func pageBox(page *document.Page) [4]float64 {
-	arr := page.CropBox
-	if len(arr) != 4 {
-		arr = page.MediaBox
+// pageBox returns the region the graphics machine seeds its clipping path
+// with for a redaction: the widest region any reading of the page could show,
+// never the narrower one a viewer shows.
+//
+// It is the one place a write reads a page boundary other than as a viewer
+// does (see [document.UsableBox]), and on purpose: a redaction answers for
+// every reader of the file, not for the one litho matches elsewhere, so text a
+// lenient reader shows must not be left in the page because pdf.js and poppler
+// hide it. The region is the union of the viewer region, [document.Page.ViewedBox]
+// and [document.Page.ViewedMediaBox], and every box the page or an ancestor
+// /Pages node states: /MediaBox and /CropBox, which ISO 32000-1, 7.7.3.3,
+// Table 30 makes inheritable, and the page's /BleedBox, /TrimBox and /ArtBox.
+// Each stated box contributes the first four entries it holds, read as numbers
+// where they are numbers and as zero where not, whatever it holds beyond them
+// and whether or not they enclose an area, so a five-entry box or one whose
+// corners meet widens the region all the same; a box of fewer than four
+// entries describes no rectangle, and a reader substitutes the default Table
+// 30 gives it, which the viewer region already holds. The ancestors are read
+// because poppler passes over a page's unusable box to the nearest ancestor's
+// while pdf.js reads none, and a crop box that ISO 32000-1, 14.11.2.1 would
+// reduce to the media box is taken whole, as a reader that skips the reduction
+// shows it.
+//
+// Selection itself is geometric and reads no clip (see [RedactPageRegions]),
+// so the region decides what the machine reports as clipped, not what is
+// removed. It is read wide so that no such report narrows a redaction.
+//
+// The page dictionary is read as earlier stages staged it, from alloc first,
+// so a box a crop stage wrote is read too.
+func pageBox(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) [4]float64 {
+	region := boxUnion{}
+	region.add(page.ViewedBox())
+	region.add(page.ViewedMediaBox())
+	for _, box := range []ast.PdfArray{
+		page.MediaBox, page.DeclaredCropBox, page.DeclaredBleedBox, page.DeclaredTrimBox, page.DeclaredArtBox,
+	} {
+		region.add(box)
 	}
-	if len(arr) != 4 {
-		return [4]float64{}
+
+	own := latestPageDict(alloc, page)
+	for _, key := range []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox"} {
+		region.add(stagedBox(ctx, alloc, doc, own[key]))
 	}
-	return [4]float64{
-		document.Float(arr[0]),
-		document.Float(arr[1]),
-		document.Float(arr[2]),
-		document.Float(arr[3]),
+
+	// The /Parent chain is followed with a visited set as well as a depth cap:
+	// a cycle of /Parent references would otherwise be read up to the cap.
+	visited := make(map[int]bool)
+	if page.Ref.ObjectNum != 0 {
+		visited[page.Ref.ObjectNum] = true
 	}
+	parentObj := own["Parent"]
+	for depth := 0; depth < document.MaxPageTreeDepth && parentObj != nil; depth++ {
+		if document.VisitedBefore(parentObj, visited) {
+			break
+		}
+		obj, err := resolveAllocFirst(ctx, alloc, doc, parentObj)
+		if err != nil {
+			doc.Logger.Debug("redaction page box: an ancestor did not resolve, reading no further",
+				slog.Int("page", page.Ref.ObjectNum), slog.Any("err", err))
+			break
+		}
+		node, ok := obj.(ast.PdfDict)
+		if !ok {
+			break
+		}
+		region.add(stagedBox(ctx, alloc, doc, node["MediaBox"]))
+		region.add(stagedBox(ctx, alloc, doc, node["CropBox"]))
+		parentObj = node["Parent"]
+	}
+
+	// The viewed media box always holds four numbers, so the union is set.
+	return [4]float64{region.x0, region.y0, region.x1, region.y1}
+}
+
+// stagedBox resolves a page box entry, from alloc first, into an array whose
+// references to numbers are resolved (see [document.ResolveRectangle]). It
+// returns nil for an absent entry or one that is no array.
+func stagedBox(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, entry ast.PdfObject) ast.PdfArray {
+	if entry == nil {
+		return nil
+	}
+	obj, err := resolveAllocFirst(ctx, alloc, doc, entry)
+	if err != nil {
+		doc.Logger.Debug("redaction page box: a box entry did not resolve", slog.Any("err", err))
+		return nil
+	}
+	arr, ok := obj.(ast.PdfArray)
+	if !ok {
+		return nil
+	}
+	return document.ResolveRectangle(ctx, doc, arr)
+}
+
+// boxUnion accumulates the smallest rectangle holding every box added to it.
+type boxUnion struct {
+	x0, y0, x1, y1 float64
+	set            bool
+}
+
+// add widens the union by the rectangle box's first four entries describe, a
+// non-number entry read as zero. A box of fewer than four entries describes
+// none and is passed over.
+func (u *boxUnion) add(box ast.PdfArray) {
+	if len(box) < 4 {
+		return
+	}
+	a, b := document.Float(box[0]), document.Float(box[2])
+	c, d := document.Float(box[1]), document.Float(box[3])
+	x0, x1 := math.Min(a, b), math.Max(a, b)
+	y0, y1 := math.Min(c, d), math.Max(c, d)
+	if !u.set {
+		u.x0, u.y0, u.x1, u.y1, u.set = x0, y0, x1, y1, true
+		return
+	}
+	u.x0, u.y0 = math.Min(u.x0, x0), math.Min(u.y0, y0)
+	u.x1, u.y1 = math.Max(u.x1, x1), math.Max(u.y1, y1)
 }
