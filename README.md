@@ -31,7 +31,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 
 - Repair PDF/A and PDF/UA violations behind a regression-bounded integrity probe that rolls back a content-modifying fix if it degrades the document.
 - Two modes: content-preserving by default, or aggressive via `WithAggressiveFixes`.
-- Embed the fonts a document leaves unembedded from programs you supply (`WithFontProvider`, `WithFontFiles`, `--font-dir`). litho ships no font program: it embeds one only when it holds every glyph the document shows at the widths the document declares, subsets it to those glyphs (`WithWholeFontPrograms`, `--no-font-subset` embed the whole program, for text you will edit later), and reports every font it refuses.
+- Embed the fonts a document leaves unembedded from programs you supply (`WithFontProvider`, `WithFontFiles`, `--font-dir`) or from the operating system's fonts (`WithSystemFonts`, `--system-fonts`). litho ships no font program: it embeds one only when it holds every glyph the document shows at the widths the document declares, subsets it to those glyphs (`WithWholeFontPrograms`, `--no-font-subset` embed the whole program, for text you will edit later), and reports every font it refuses.
 - Build Factur-X and ZUGFeRD hybrid invoices by embedding a Cross-Industry Invoice payload and remediating the PDF/A-3 base.
 - A remediation is the last edit on a document: it judges the document the edits queued before it produce, so its report describes the output. A PDF/A output is never encrypted, since ISO 19005 forbids it.
 
@@ -122,9 +122,10 @@ A remediation is the last edit on a `Writer`. Queue every other edit before it: 
 
 ### Embedding fonts
 
-Every PDF/A and PDF/UA profile requires the fonts a document shows to be embedded. litho ships no font program, so a remediation embeds only the programs you supply, and the licence to embed them is yours. Two options supply them:
+Every PDF/A and PDF/UA profile requires the fonts a document shows to be embedded. litho ships no font program, so a remediation embeds only the programs you supply, and the licence to embed them is yours. Three options supply them:
 
-- `pdf.WithFontFiles(fsys)` reads every `.ttf`, `.otf` and `.cff` file under an `fs.FS`, such as `os.DirFS("/usr/share/fonts")` or an `embed.FS`. A font takes the program whose PostScript name is its `/BaseFont`, else one of its family and style, else one of a metric-compatible family: Helvetica, Arial, Arimo, Liberation Sans and Nimbus Sans stand for one another, as do Times, Times New Roman, Tinos, Liberation Serif and Nimbus Roman, and Courier, Courier New, Cousine, Liberation Mono and Nimbus Mono PS. Symbol takes Standard Symbols PS, and ZapfDingbats takes D050000L.
+- `pdf.WithFontFiles(fsys)` reads every `.ttf`, `.otf`, `.ttc`, `.otc` and `.cff` file under an `fs.FS`, each face of a TrueType or OpenType Collection standing as a program of its own, such as `os.DirFS("/usr/share/fonts")` or an `embed.FS`. A font takes the program whose PostScript name is its `/BaseFont`, else one of its family and style, else one of a metric-compatible family: Helvetica, Arial, Arimo, Liberation Sans and Nimbus Sans stand for one another, as do Times, Times New Roman, Tinos, Liberation Serif and Nimbus Roman, and Courier, Courier New, Cousine, Liberation Mono and Nimbus Mono PS. Symbol takes Standard Symbols PS, and ZapfDingbats takes D050000L.
+- `pdf.WithSystemFonts()` is `pdf.WithFontFiles` over the operating system's font directories: `~/Library/Fonts`, `/Library/Fonts` and `/System/Library/Fonts` on macOS; the per-user fonts directory and `%WINDIR%\Fonts` on Windows; `$XDG_DATA_HOME/fonts`, `~/.fonts`, the `fonts` directory of each `$XDG_DATA_DIRS` entry, `/usr/local/share/fonts` and `/usr/share/fonts` elsewhere. litho reads the files itself, in pure Go, with no fontconfig. The directories are indexed once, at the first font a remediation asks for, from the header tables of each file only. `WithFontProvider` and `WithFontFiles` are asked first, and the system's fonts serve the fonts they supply no program for. The output then depends on the fonts of the host (see [Reproducible output](#reproducible-output)).
 - `pdf.WithFontProvider(p)` asks a `pdf.FontProvider` for each unembedded font. The `pdf.FontRequest` names the font and lists every code the document shows with it, with its glyph name, character and declared width. Return a TrueType, OpenType or bare CFF program, or `nil` to supply none. A returned error aborts the remediation. `pdf.FontProviderFunc` adapts a function.
 
 ```go
@@ -167,7 +168,7 @@ The same input bytes and options write the same output bytes. A remediation that
 report, err := w.RemediatePDFA(ctx, models.PDFA2b, pdf.WithDocumentID([]byte("0123456789abcdef")))
 ```
 
-A value of any other length is ignored. An encrypted output is the exception: its keys, salts, IVs and `/ID` are random, as the cryptography requires.
+A value of any other length is ignored. `pdf.WithSystemFonts` (`--system-fonts`) makes the output depend on the fonts installed on the host as well: another machine, or a font update on the same one, can embed another program or none. It is off by default, and the derived `/ID` records that it was used, so an output made with it never shares an `/ID` with one made without. Supply the programs with `pdf.WithFontFiles` over a directory you control for output that depends on the input alone. An encrypted output is the exception: its keys, salts, IVs and `/ID` are random, as the cryptography requires.
 
 ## CLI
 
@@ -192,6 +193,9 @@ litho remediate --profile PDF/A-2b -o fixed.pdf document.pdf
 litho remediate --profile PDF/A-2b --font-dir /usr/share/fonts \
   --document-id 00112233445566778899aabbccddeeff -o fixed.pdf document.pdf
 
+# Remediate, embedding the unembedded fonts from the operating system's fonts.
+litho remediate --profile PDF/A-2b --system-fonts -o fixed.pdf document.pdf
+
 # Transform.
 litho rotate --angle 90 -o rotated.pdf document.pdf
 litho merge -o merged.pdf a.pdf b.pdf
@@ -209,7 +213,7 @@ litho sign --cert cert.pem --key key.pem --reason Approved -o signed.pdf documen
 
 Run `litho` with no arguments to list every subcommand, or `litho <command> -h` to see its flags.
 
-`--font-dir` is `pdf.WithFontFiles` over a directory: `remediate` and the `pipe` remediate stage search it recursively and embed a subset of the program each unembedded font takes (see [Embedding fonts](#embedding-fonts)). `remediate` lists every font left unembedded, with the reason, under `Fonts left unembedded`, or `refused_fonts` with `-f json`. `pipe` prints no report: `pipe --strict` exits `2` when a font stays unembedded. `--document-id` is `pdf.WithDocumentID`: 32 hex digits pin the trailer `/ID` a remediation writes when the document has no valid one, so two runs over the same file write the same bytes. A directory that does not exist, or a value that is not 32 hex digits, exits `1` and writes nothing.
+`--font-dir` is `pdf.WithFontFiles` over a directory: `remediate` and the `pipe` remediate stage search it recursively and embed a subset of the program each unembedded font takes (see [Embedding fonts](#embedding-fonts)). `--system-fonts` is `pdf.WithSystemFonts`: the operating system's fonts serve the fonts `--font-dir` supplies no program for, or every font without `--font-dir`. `remediate` lists every font left unembedded, with the reason, under `Fonts left unembedded`, or `refused_fonts` with `-f json`. `pipe` prints no report: `pipe --strict` exits `2` when a font stays unembedded. `--document-id` is `pdf.WithDocumentID`: 32 hex digits pin the trailer `/ID` a remediation writes when the document has no valid one, so two runs over the same file write the same bytes. A directory that does not exist, or a value that is not 32 hex digits, exits `1` and writes nothing.
 
 ### Signing
 

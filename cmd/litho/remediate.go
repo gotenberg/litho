@@ -62,7 +62,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR [--no-font-subset]] [--document-id HEX] [--compact] [--strict] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--system-fonts] [--no-font-subset] [--document-id HEX] [--compact] [--strict] -o out.pdf")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
 		return exitError
@@ -264,10 +264,11 @@ func remediateFacturX(ctx context.Context, w *pdf.Writer, variant facturxVariant
 	return w.RemediateFacturX(ctx, cfg, opts...)
 }
 
-// fontFlags are the --font-dir and --no-font-subset flags remediate and the
-// pipe's remediate stage share.
+// fontFlags are the --font-dir, --system-fonts and --no-font-subset flags
+// remediate and the pipe's remediate stage share.
 type fontFlags struct {
 	dir      *string
+	system   *bool
 	noSubset *bool
 }
 
@@ -276,27 +277,35 @@ func registerFontFlags(fs *flag.FlagSet) fontFlags {
 	return fontFlags{
 		dir: fs.String("font-dir", "",
 			"Directory of TrueType, OpenType or CFF font files, searched recursively, to embed for the fonts the document does not embed: a font takes the file of its name, its family, or a metric-compatible family (Arial for Helvetica), subset to the glyphs it shows unless --no-font-subset; the report lists each font refused and why (the licence to embed them is yours)"),
+		system: fs.Bool("system-fonts", false,
+			"Also search the operating system's font directories, after --font-dir, for the fonts the document does not embed, matched as --font-dir matches them; the output then depends on the fonts installed on this host"),
 		noSubset: fs.Bool("no-font-subset", false,
-			"Embed the --font-dir programs whole instead of subset to the glyphs the document shows, so later edits can show other characters"),
+			"Embed the --font-dir or --system-fonts programs whole instead of subset to the glyphs the document shows, so later edits can show other characters"),
 	}
 }
 
 // options returns the remediation options the font flags ask for: none when
-// --font-dir is empty, or an error when it names no readable directory or
-// --no-font-subset comes without it, since there is then no program to keep
-// whole.
+// --font-dir is empty and --system-fonts unset, or an error when --font-dir
+// names no readable directory or --no-font-subset comes without either, since
+// there is then no program to keep whole.
 func (f fontFlags) options() ([]pdf.RemediateOption, error) {
-	if *f.dir == "" {
+	if *f.dir == "" && !*f.system {
 		if *f.noSubset {
-			return nil, errors.New("--no-font-subset needs --font-dir")
+			return nil, errors.New("--no-font-subset needs --font-dir or --system-fonts")
 		}
 		return nil, nil
 	}
-	opt, err := fontDirOption(*f.dir)
-	if err != nil {
-		return nil, err
+	var opts []pdf.RemediateOption
+	if *f.dir != "" {
+		opt, err := fontDirOption(*f.dir)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, opt)
 	}
-	opts := []pdf.RemediateOption{opt}
+	if *f.system {
+		opts = append(opts, pdf.WithSystemFonts())
+	}
 	if *f.noSubset {
 		opts = append(opts, pdf.WithWholeFontPrograms())
 	}

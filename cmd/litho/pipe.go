@@ -376,7 +376,7 @@ func splitStageGroups(args []string) [][]string {
 // rotate` swallowed the rotate stage. TrimLeft strips every leading dash, so
 // these two entries cover -h, -help and --help.
 var boolStageFlags = map[string]bool{
-	"aggressive": true, "generate": true, "no-font-subset": true,
+	"aggressive": true, "generate": true, "no-font-subset": true, "system-fonts": true,
 	"h": true, "help": true,
 }
 
