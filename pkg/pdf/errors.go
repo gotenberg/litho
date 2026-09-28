@@ -341,9 +341,15 @@ var (
 	// when the output failed the integrity checks.
 	ErrFontRolledBack = remediation.ErrFontRolledBack
 
-	// errFontFileTooLarge marks a font file [WithFontFiles] skips, one past
-	// [maxFontFileBytes].
+	// errFontFileTooLarge marks a font file [WithFontFiles] and
+	// [WithSystemFonts] skip, one past [maxFontFileBytes] or
+	// [maxFontCollectionBytes].
 	errFontFileTooLarge = errors.New("font file too large")
+
+	// errFontIndexBudget marks a read past [maxFontIndexBytes], which ends
+	// the index of [WithFontFiles] or [WithSystemFonts] with the files it
+	// read.
+	errFontIndexBudget = errors.New("font index byte budget spent")
 
 	// ErrEditAfterRemediation is returned, wrapped with the names of the
 	// refused call and of the remediation, when a [Writer] is asked for an edit

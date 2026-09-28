@@ -3,18 +3,12 @@ package pdf
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"path"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/remediation"
-	"github.com/gotenberg/litho/pkg/internal/typography/cff"
-	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // FontProvider supplies the programs of the fonts a document shows without
@@ -145,24 +139,30 @@ func WithFontProvider(p FontProvider) RemediateOption {
 }
 
 // WithFontFiles embeds font programs read from the font files of fsys
-// ([WithFontProvider]): every .ttf, .otf and .cff file under its root, read
-// once, at the first font a remediation asks for. A font takes the program
+// ([WithFontProvider]): every .ttf, .otf, .ttc, .otc and .cff file under its
+// root, each face of a TrueType or OpenType Collection (.ttc, .otc) standing
+// as a program of its own. The first font a remediation asks for indexes the
+// files once, reading only the header tables that name each face, and the
+// program a font takes is read when it is chosen. A font takes the program
 // whose PostScript name is its /BaseFont with any subset tag dropped, else one
 // of its family and style, bold and italic read from the name's style suffix
-// ("Arial,Bold", "Arial-BoldItalicMT"). Failing both, it
-// takes a program of a metric-compatible family: Helvetica, Arial, Arimo,
-// Liberation Sans and Nimbus Sans stand for one another, as do Times, Times
-// New Roman, Tinos, Liberation Serif and Nimbus Roman, and Courier, Courier
-// New, Cousine, Liberation Mono and Nimbus Mono PS; Symbol takes Standard
-// Symbols PS and ZapfDingbats D050000L. The width check keeps a family that
-// is not metric-compatible after all from moving text, and
-// [RemediationReport.Fixed] names the program each font received.
+// ("Arial,Bold", "Arial-BoldItalicMT"), the face of regular or bold weight
+// first. Failing both, it takes a program of a metric-compatible family:
+// Helvetica, Arial, Arimo, Liberation Sans and Nimbus Sans stand for one
+// another, as do Times, Times New Roman, Tinos, Liberation Serif and Nimbus
+// Roman, and Courier, Courier New, Cousine, Liberation Mono and Nimbus Mono
+// PS; Symbol takes Standard Symbols PS and ZapfDingbats D050000L. The width
+// check keeps a family that is not metric-compatible after all from moving
+// text, and [RemediationReport.Fixed] names the program each font received.
 //
-// A file of more than 64 MiB, or one no TrueType, OpenType or CFF reader
-// accepts, is skipped. An error walking fsys aborts the remediation that asked
-// first. The option may be shared by concurrent remediations.
+// A program of more than 64 MiB, a collection of more than 256 MiB, or a file
+// no TrueType, OpenType or CFF reader accepts, is skipped. The index reads at
+// most 16384 files and 64 MiB of header tables, and ignores the files past
+// either bound. An error walking or reading fsys aborts the remediation that
+// asked first. The option may be shared by concurrent remediations, which
+// share its index.
 func WithFontFiles(fsys fs.FS) RemediateOption {
-	return WithFontProvider(&fontFiles{fsys: fsys})
+	return WithFontProvider(newFontFiles(fsys))
 }
 
 // WithWholeFontPrograms embeds every program [WithFontProvider] or
@@ -178,145 +178,6 @@ func WithWholeFontPrograms() RemediateOption {
 	return func(o *remediateOpts) {
 		o.wholeFonts = true
 	}
-}
-
-// maxFontFileBytes bounds the size of a font file [WithFontFiles] reads.
-// Anti-DoS guard, not spec-mandated: the largest font programs in use, pan-CJK
-// families, weigh 20 to 30 MiB, and a file past this bound in a font
-// directory is no font a document embeds.
-const maxFontFileBytes = 64 << 20
-
-// fontFiles is the [FontProvider] of [WithFontFiles]. Its index is built once,
-// under mu, and read-only after, so concurrent remediations share it.
-type fontFiles struct {
-	fsys    fs.FS
-	mu      sync.Mutex
-	indexed bool
-	files   []fontFile
-	err     error
-}
-
-// fontFile is one indexed program.
-type fontFile struct {
-	path   string
-	psName string
-	family string
-	bold   bool
-	italic bool
-	// cffOutlines reports a program with CFF outlines, which a Type 1 font
-	// takes without becoming a TrueType font.
-	cffOutlines bool
-}
-
-// FontProgram returns the program of the best indexed match for req.
-func (f *fontFiles) FontProgram(ctx context.Context, req FontRequest) ([]byte, error) {
-	files, err := f.index(ctx)
-	if err != nil {
-		return nil, err
-	}
-	best := matchFontFile(files, req)
-	if best == nil {
-		return nil, nil
-	}
-	data, err := readFontFile(f.fsys, best.path)
-	if err != nil {
-		return nil, fmt.Errorf("reading font file %s: %w", best.path, err)
-	}
-	return data, nil
-}
-
-// index returns the index, building it at the first call. A walk the caller's
-// ctx stopped is not kept, so the next remediation walks again.
-func (f *fontFiles) index(ctx context.Context) ([]fontFile, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if !f.indexed {
-		files, err := indexFontFiles(ctx, f.fsys)
-		if err != nil && ctx.Err() != nil {
-			return nil, err
-		}
-		f.files, f.err, f.indexed = files, err, true
-	}
-	return f.files, f.err
-}
-
-// indexFontFiles reads the names and styles of the font files under fsys, in
-// path order.
-func indexFontFiles(ctx context.Context, fsys fs.FS) ([]fontFile, error) {
-	var files []fontFile
-	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		switch strings.ToLower(path.Ext(p)) {
-		case ".ttf", ".otf", ".cff":
-		default:
-			return nil
-		}
-		data, err := readFontFile(fsys, p)
-		if errors.Is(err, errFontFileTooLarge) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("reading font file %s: %w", p, err)
-		}
-		if file, ok := describeFontFile(p, data); ok {
-			files = append(files, file)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("indexing font files: %w", err)
-	}
-	return files, nil
-}
-
-// readFontFile reads the file at p, refusing one past [maxFontFileBytes].
-func readFontFile(fsys fs.FS, p string) ([]byte, error) {
-	file, err := fsys.Open(p)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, maxFontFileBytes+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(data) > maxFontFileBytes {
-		return nil, errFontFileTooLarge
-	}
-	return data, nil
-}
-
-// describeFontFile reads the names and style of the program data holds.
-func describeFontFile(p string, data []byte) (fontFile, bool) {
-	if truetype.IsSfnt(data) {
-		info, err := truetype.ReadInfo(data)
-		if err != nil || info.Outline == truetype.OutlineNone {
-			return fontFile{}, false
-		}
-		sub := strings.ToLower(info.Subfamily)
-		return fontFile{
-			path:        p,
-			psName:      normalizeFontName(info.PostScriptName),
-			family:      normalizeFontName(info.Family),
-			bold:        strings.Contains(sub, "bold") || info.MacStyle&1 != 0,
-			italic:      strings.Contains(sub, "italic") || strings.Contains(sub, "oblique") || info.MacStyle&2 != 0,
-			cffOutlines: info.Outline == truetype.OutlineCFF,
-		}, true
-	}
-	info, err := cff.ReadInfo(data)
-	if err != nil || info.CID {
-		return fontFile{}, false
-	}
-	family, bold, italic := splitFontName(info.FontName)
-	return fontFile{path: p, psName: normalizeFontName(info.FontName), family: family, bold: bold, italic: italic, cffOutlines: true}, true
 }
 
 // metricAliases are families drawn with the same advance widths, which
@@ -345,7 +206,10 @@ func metricFamilies(family string) []string {
 	return []string{family}
 }
 
-// matchFontFile returns the file that best serves req, or nil.
+// matchFontFile returns the file that best serves req, or nil. Between faces
+// that match alike, the one of regular or bold weight comes first, so a Light
+// or Black face of the family does not stand for its Regular or Bold one, and
+// then the first indexed.
 func matchFontFile(files []fontFile, req FontRequest) *fontFile {
 	base := req.BaseFont
 	if tag, rest, ok := strings.Cut(base, "+"); ok && len(tag) == 6 {
@@ -355,8 +219,12 @@ func matchFontFile(files []fontFile, req FontRequest) *fontFile {
 	ps := normalizeFontName(base)
 	families := metricFamilies(family)
 
+	target := regularWeightClass
+	if bold {
+		target = boldWeightClassTarget
+	}
 	var best *fontFile
-	bestRank := 0
+	bestRank, bestDist := 0, 0
 	for i := range files {
 		file := &files[i]
 		var rank int
@@ -376,11 +244,31 @@ func matchFontFile(files []fontFile, req FontRequest) *fontFile {
 		if file.cffOutlines == (req.Subtype == "Type1") {
 			rank++
 		}
-		if rank > bestRank {
-			best, bestRank = file, rank
+		dist := weightDistance(file.weight, target)
+		if rank > bestRank || rank == bestRank && dist < bestDist {
+			best, bestRank, bestDist = file, rank, dist
 		}
 	}
 	return best
+}
+
+// OS/2 usWeightClass values of the Normal and Bold weights (OpenType
+// specification, OS/2 table, usWeightClass).
+const (
+	regularWeightClass    = 400
+	boldWeightClassTarget = 700
+)
+
+// weightDistance is how far a face of weight class w is from target. A face
+// that states no weight (0) counts as the target's.
+func weightDistance(w, target int) int {
+	if w == 0 {
+		return 0
+	}
+	if w > target {
+		return w - target
+	}
+	return target - w
 }
 
 // splitFontName splits a PostScript or /BaseFont name into its normalized
