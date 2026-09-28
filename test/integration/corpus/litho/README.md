@@ -188,6 +188,7 @@ one deliberately rather than diffing it against a fresh build.
 | `boxorigin_2b.pdf`     | PDF/A-2b     | Crop boxes whose lower-left corner is not the user-space origin  |
 | `treekids_ua1.pdf`     | PDF/UA-1     | Structure trees whose `/Kids` arrays are objects of their own    |
 | `directfig_ua2.pdf`    | PDF/UA-2     | Figures written directly in a structure `/K`, under remediation  |
+| `inlinekids_ua2.pdf`   | PDF/UA-2     | Figures of their own that only inline elements list              |
 
 ### Must-not-fire controls
 
@@ -501,6 +502,7 @@ which are covered under [Known divergences](#known-divergences).
 | `inlinefs_4.pdf`       | 7    | 5    | 9    | 7    | 7    | 11   | 9    | 9    | 4   | 4    | 5    | 10   | 6    |
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `inlineinterp_2b.pdf`  | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 10   | 8    |
+| `inlinekids_ua2.pdf`   | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
 | `kidsarray_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 12   | 8    |
 | `kidsrepair_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 5    | 5    |
@@ -5882,16 +5884,54 @@ outputs give D1 to D3 the placeholder, take out D4 to D6, and pass both tools.
 The default mode leaves the six findings, as before. Remediation at the six
 PDF/A manifest profiles, default and aggressive, leaves nothing on either tool.
 
+### `inlinekids_ua2.pdf`
+
+ISO 32000-1, 14.7.2, Table 323 lets an element's `/K` hold a structure element
+directly, with no object number of its own, and lets that inline element's `/K`
+list elements that do have one. A `Figure` only an inline element lists takes
+alternate text at its own number like any other, and aggressive remediation
+takes out one that encloses nothing: its reference leaves the inline element's
+`/K` in the object holding that element, or the `/K` array written as an object
+of its own the inline element names. No corpus file lists an element of its own
+from an inline one, so this file packs the places such a `Figure` sits into a
+tagged page:
+
+| Figure | Listed by                                                 | Encloses                             | After aggressive remediation       |
+| ------ | --------------------------------------------------------- | ------------------------------------ | ---------------------------------- |
+| F1     | the `/K` of an inline `Div`                               | MCID 1, a drawing                    | stays, with the placeholder `/Alt` |
+| F2     | the `/K` array of an inline `Part`                        | MCID 9, which the page does not mark | removed                            |
+| F3     | a `/K` array of its own an inline `Sect` names            | nothing                              | removed, the array left empty      |
+| F4     | the `/K` of an inline `Figure`, itself lacking `/Alt`     | the null object                      | removed, with the inline `Figure`  |
+| F5     | the `/K` of an inline `NonStruct` that names it in `/Ref` | nothing                              | stays, with the placeholder `/Alt` |
+
+F5 stays because the inline element naming it in `/Ref` has no object number to
+write that entry back at. The page's `/ParentTree` array names the `P` holding
+MCID 0 and F1. Each inline holder has a structure type of its own: veraPDF gives
+every element written inline the identity `0 0 obj` and reads two inline
+elements of one type as one, so with three inline `Div` elements it reported
+only the last one's `Figure`. The file agrees with veraPDF 1.30.2 in all
+thirteen cells, rule for rule and count for count. PDF/UA-2 reports
+`8.2.5.28.2/1` six times and PDF/UA-1 `7.3/1` six times, beside the part-2
+claim (`5/2`) and the `%PDF-2.0` header (`6.1/1`). The PDF/A cells report the
+rules `directfig_ua2`'s do.
+
+Measured on litho and veraPDF 1.30.2 before the fix, aggressive remediation to
+PDF/UA-1 and PDF/UA-2 gave all six `Figure` elements the placeholder: the
+removal kept every `Figure` an inline element lists. Now those outputs give F1
+and F5 the placeholder, take out F2 to F4 and the inline `Figure`, and pass
+both tools, as the placeholder-only outputs did. The default mode leaves the six
+findings.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 136 x 8 = 1088 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 136 x 13 = 1768 cells. litho
+runner scores 137 x 8 = 1096 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 137 x 13 = 1781 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1766 of the 1768 cells. The two
+fixtures exist to protect, and it holds in 1779 of the 1781 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5903,7 +5943,7 @@ eight is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and
 `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2` and `structcopy_ua2` at
 PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1088 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 1096 and moves only `ruleset_mismatch`, and on
 those eight cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
