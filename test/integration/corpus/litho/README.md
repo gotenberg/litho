@@ -5968,12 +5968,13 @@ ISO 32000-1, 7.7.3.3, Table 30 makes `/MediaBox` required and inheritable, and
 gives it no default. A viewer draws a page that neither states nor inherits a
 box it uses on US Letter, and `pdf.Reader.Page` reads it so. A write that gives
 such a page a media box, as every rewrite, split, merge, insertion and
-remediation does for a page it writes, gives it the size most pages of the
-document have, at origin 0 0, and US Letter, or the size
-`pdf.WithDefaultPageSize` names, only when no page has one. No corpus file
-holds a page missing its media box among pages a majority size shares: pdfjs
-`boundingBox_invalid.pdf`'s two sized pages tie, and the others are US Letter
-or smaller than it.
+remediation does for a page it writes, gives it the first size of the
+document's pages, the one most pages have first, each in both orientations,
+then the size `pdf.WithDefaultPageSize` names, that holds everything the page
+paints, at origin 0 0, and US Letter, what a viewer showed, when none does. No
+corpus file holds a page missing its media box among pages a majority size
+shares: pdfjs `boundingBox_invalid.pdf`'s two sized pages tie, and the others
+are US Letter or smaller than it.
 
 | Page | Its box, or its node's           | A viewer shows | A rewrite writes       |
 | ---- | -------------------------------- | -------------- | ---------------------- |
@@ -5999,9 +6000,12 @@ The two tools return the same rule set in all thirteen cells: `6.1.13/11` at
 every part-2 and part-3 level, and the identification, tagging, title and
 language rules the part-2, level-B claim draws elsewhere. Remediated at the
 eight manifest profiles, default and aggressive, every output conforms on both
-tools. The PDF/A-2 and PDF/A-3 remediations repair the node's box to A4 in an
-incremental update, which writes neither page 3 nor page 5; the PDF/A-2a, PDF/A-4
-and PDF/UA ones rewrite the file, and every page shows A4 but pages 4 and 5.
+tools. Every remediation but PDF/A-1b's shows every page at A4 but pages 4
+and 5: the PDF/A-2 and PDF/A-3 ones repair the node's box to US Letter in an
+incremental update and give pages 3, 5 and 6 each a box of its own, and the
+PDF/A-2a, PDF/A-4 and PDF/UA ones rewrite the file. PDF/A-1b reports no page
+box, so its incremental update writes none of them, and qpdf reads pages 3 and
+5 as US Letter, as it reads the source.
 Measured on the pinned pdf.js, the full rewrite, the split, the merge and the
 insertion show pages 3 and 6 at 595.28 by 841.89 and page 5 at 590 by 830,
 where they showed 612 by 792 and 590 by 792 before, and qpdf finds nothing in
