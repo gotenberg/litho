@@ -39,7 +39,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 
 - Rotate, delete, insert, split, and merge pages.
 - Stamp text, images, and PDF overlays for watermarks.
-- Encrypt (RC4, AES-128, AES-256), decrypt, and sign (PKCS#7/CMS, incremental).
+- Encrypt (RC4, AES-128, AES-256), decrypt, and sign (PKCS#7/CMS or PAdES B-B to B-LTA, with RFC 3161 timestamps, incremental).
 - Flatten forms, set metadata and form fields, and manage attachments and bookmarks.
 - Chain operations through a `Pipeline` with managed intermediate storage.
 
@@ -118,7 +118,7 @@ The public surface lives in three types: `Reader` opens and extracts, `Writer` q
 
 `Reader` is safe for concurrent use after construction. `Writer` is single-use and not safe for concurrent use. A `Writer` never modifies the `Reader` it is built on, so several may share one `Reader` while other goroutines read it. Close a `Writer` when done: a remediated one holds its output in a temp file until `WriteTo` streams it or `Close` removes it.
 
-A remediation is the last edit on a `Writer`. Queue every other edit before it: afterwards the `Writer` accepts `Sign`, `WriteTo` and `Close`, and refuses anything else, a second remediation included, with `ErrEditAfterRemediation`.
+A remediation is the last edit on a `Writer`. Queue every other edit before it: afterwards the `Writer` accepts `Sign`, `Timestamp`, `WriteTo` and `Close`, and refuses anything else, a second remediation included, with `ErrEditAfterRemediation`.
 
 ### Embedding fonts
 
@@ -168,7 +168,7 @@ The same input bytes and options write the same output bytes. A remediation that
 report, err := w.RemediatePDFA(ctx, models.PDFA2b, pdf.WithDocumentID([]byte("0123456789abcdef")))
 ```
 
-A value of any other length is ignored. `pdf.WithSystemFonts` (`--system-fonts`) makes the output depend on the fonts installed on the host as well: another machine, or a font update on the same one, can embed another program or none. It is off by default, and the derived `/ID` records that it was used, so an output made with it never shares an `/ID` with one made without. Supply the programs with `pdf.WithFontFiles` over a directory you control for output that depends on the input alone. An encrypted output is the exception: its keys, salts, IVs and `/ID` are random, as the cryptography requires.
+A value of any other length is ignored. `pdf.WithSystemFonts` (`--system-fonts`) makes the output depend on the fonts installed on the host as well: another machine, or a font update on the same one, can embed another program or none. It is off by default, and the derived `/ID` records that it was used, so an output made with it never shares an `/ID` with one made without. Supply the programs with `pdf.WithFontFiles` over a directory you control for output that depends on the input alone. An encrypted output is the exception: its keys, salts, IVs and `/ID` are random, as the cryptography requires. So is what a network service answers: an RFC 3161 token (`--tsa-url`, `litho timestamp`) carries the authority's time and nonce, and the OCSP responses and CRLs `--ltv` embeds carry their responders' times.
 
 ## CLI
 
@@ -219,9 +219,11 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 
 `litho sign` signs with an X.509 certificate and its private key, RSA or ECDSA on P-256, P-384 or P-521. Pass them as two PEM files, `--cert` and `--key`, the key unencrypted, in PKCS #8, PKCS #1 or SEC 1 form, or as a PKCS #12 key store (`.p12`, `.pfx`) with `--p12`. The store's password comes from the first line of `--p12-password-file` or from the environment variable `--p12-password-env` names, never from the command line, and is empty without either. litho reads the stores current exporters write (PBES2 with AES) and the `-legacy` ones older tools write (triple DES and RC2). `--chain` adds intermediate certificates to `--cert`, `--reason`, `--location`, `--contact` and `--name` fill the signature dictionary, `--field` signs an existing empty signature field or names the new one, and `--signing-time` fixes the time for reproducible output. In `pipe`, a `sign` stage runs last, after any `remediate` stage. An encrypted document or PEM key is refused: decrypt it first.
 
-The signature is a detached CMS SignedData (`adbe.pkcs7.detached`) over SHA-256, with the ESS signing-certificate-v2 attribute PAdES asks for, appended in an incremental update. It carries no RFC 3161 timestamp, which needs a timestamp authority reached over the network.
+The signature is a detached CMS SignedData (`adbe.pkcs7.detached`) over SHA-256, with the ESS signing-certificate-v2 attribute PAdES asks for, appended in an incremental update.
 
-In Go, `pdf.NewSigner` builds the same signer from a certificate and any `crypto.Signer`, `pdf.ParseSignerPEM` from PEM data, and `pdf.ParseSignerPKCS12` from a PKCS #12 key store and its password. Implement `pdf.Signer` for anything else, such as a timestamped signature or one a remote service computes whole.
+`--pades` writes a PAdES baseline signature instead (`ETSI.CAdES.detached`, ETSI EN 319 142-1, level B-B): no signing-time attribute, the `/M` entry carrying the time. `--tsa-url URL` timestamps the signature with an RFC 3161 timestamp authority (B-T), and `--ltv` adds the signer's and the authority's certificate chains, with an OCSP response or CRL for each certificate fetched from the addresses the certificates list, to the document security store in an update of its own (B-LT). `litho timestamp --tsa-url URL -o out.pdf in.pdf` adds an RFC 3161 document timestamp, and a `timestamp` stage after a `sign` stage in `pipe` makes the signature B-LTA. Each network exchange has a timeout and a size cap. A timestamp authority that gives no usable token, a certificate no OCSP response or CRL vouches for, and a revoked one fail the command, which then writes nothing. A field signed in place gets what its `/Lock` and `/SV` seed values ask for: the fields it locks turn read-only, and a seed value litho cannot meet is refused with the reason.
+
+In Go, `pdf.NewSigner` builds the same signer from a certificate and any `crypto.Signer`, `pdf.ParseSignerPEM` from PEM data, and `pdf.ParseSignerPKCS12` from a PKCS #12 key store and its password. `pdf.WithPAdES`, `pdf.WithTimestampAuthority`, `pdf.WithLTV` and `Writer.Timestamp` do what the flags above do, and `pdf.WithValidationData` supplies the validation data so signing reaches no network. Implement `pdf.Signer` for anything else, such as a signature a remote service computes whole.
 
 ### Resource limits
 
