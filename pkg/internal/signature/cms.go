@@ -51,21 +51,26 @@ func hashForOID(raw asn1.RawValue) (crypto.Hash, error) {
 	if _, err := asn1.Unmarshal(raw.FullBytes, &ai); err != nil {
 		return 0, fmt.Errorf("%w: parsing digest algorithm: %v", ErrSignatureMalformed, err)
 	}
+	return hashForObjectID(ai.Algorithm)
+}
+
+// hashForObjectID maps a digest algorithm OID to its [crypto.Hash].
+func hashForObjectID(oid asn1.ObjectIdentifier) (crypto.Hash, error) {
 	switch {
-	case ai.Algorithm.Equal(oidSHA256):
+	case oid.Equal(oidSHA256):
 		return crypto.SHA256, nil
-	case ai.Algorithm.Equal(oidSHA384):
+	case oid.Equal(oidSHA384):
 		return crypto.SHA384, nil
-	case ai.Algorithm.Equal(oidSHA512):
+	case oid.Equal(oidSHA512):
 		return crypto.SHA512, nil
-	case ai.Algorithm.Equal(oidSHA224):
+	case oid.Equal(oidSHA224):
 		return crypto.SHA224, nil
-	case ai.Algorithm.Equal(oidSHA1):
+	case oid.Equal(oidSHA1):
 		return crypto.SHA1, nil
-	case ai.Algorithm.Equal(oidMD5):
+	case oid.Equal(oidMD5):
 		return crypto.MD5, nil
 	}
-	return 0, fmt.Errorf("%w: digest OID %v", ErrUnsupportedSignatureAlgo, ai.Algorithm)
+	return 0, fmt.Errorf("%w: digest OID %v", ErrUnsupportedSignatureAlgo, oid)
 }
 
 // Digest-to-SignatureAlgorithm tables, keyed by [crypto.Hash], for each

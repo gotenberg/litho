@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -69,6 +70,9 @@ type SignatureInfo struct {
 	// SubFilter is the /SubFilter the caller asked for, "" for
 	// adbe.pkcs7.detached.
 	SubFilter ast.PdfName
+	// TimestampURL is the RFC 3161 timestamp authority that timestamps the
+	// signature value, "" for none.
+	TimestampURL string
 }
 
 // subFilter returns the /SubFilter the signature dictionary takes.
@@ -158,9 +162,8 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 
 	// Reserve space for the signature. The /Contents value is a hex string
 	// of estimatedSize bytes, which requires estimatedSize*2 hex chars.
-	params := SignParams{SubFilter: info.subFilter()}
+	params := SignParams{SubFilter: info.subFilter(), TimestampURL: info.TimestampURL}
 	estimatedSize := max(signer.EstimatedSize(params), 8192)
-	placeholderHexLen := estimatedSize * 2
 
 	// Create the signature dictionary with a placeholder /Contents.
 	// Actual zero bytes (not ASCII '0') make the serializer produce a hex
@@ -294,9 +297,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	if _, ok := doc.Index.Trailer["Type"]; ok {
 		useXRefStream = true
 	}
-
-	var buf bytes.Buffer
-	if err := writer.WriteIncremental(ctx, &buf, writer.IncrementalConfig{
+	cfg := writer.IncrementalConfig{
 		Source:          doc.RawReader(),
 		SourceSize:      doc.FileSize(),
 		StartXRefOffset: startXRef,
@@ -304,8 +305,54 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		Trailer:         trailer,
 		UseXRefStream:   useXRefStream,
 		Generation:      doc.ObjectGeneration,
-	}); err != nil {
-		return fmt.Errorf("writing incremental for signing: %w", err)
+	}
+
+	// A signature carrying an RFC 3161 token can outgrow its placeholder,
+	// since the token's size is known only once the authority answers. The
+	// update is then written again with room for what the signature took, and
+	// signed again, once.
+	for retried := false; ; retried = true {
+		pdfBytes, err := signedUpdate(ctx, cfg, signer, params, estimatedSize)
+		var tooLarge *signatureTooLargeError
+		if errors.As(err, &tooLarge) && !retried && params.TimestampURL != "" {
+			estimatedSize = tooLarge.size + timestampSlack
+			sigDict["Contents"] = ast.PdfString(string(make([]byte, estimatedSize)))
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := dst.Write(pdfBytes); err != nil {
+			return fmt.Errorf("writing the signed document: %w", err)
+		}
+		return nil
+	}
+}
+
+// timestampSlack is the room a signature rewritten to fit its RFC 3161 token
+// keeps beyond what its first attempt took. Not spec-mandated: a second
+// token from the same authority differs from the first in its serial number,
+// time and nonce, a few bytes, and the signature value of ECDSA by a few more.
+const timestampSlack = 1024
+
+// signatureTooLargeError reports a signature of size bytes that does not fit the
+// placeholder [signedUpdate] wrote.
+type signatureTooLargeError struct {
+	size, room int
+}
+
+func (e *signatureTooLargeError) Error() string {
+	return fmt.Sprintf("signature (%d bytes) exceeds estimated size (%d bytes)", e.size, e.room)
+}
+
+// signedUpdate writes the update cfg describes, whose signature dictionary
+// holds a /Contents placeholder of estimatedSize zero bytes and a /ByteRange
+// placeholder, fills in the ByteRange, signs the bytes it covers and writes
+// the signature into the placeholder, and returns the whole signed file.
+func signedUpdate(ctx context.Context, cfg writer.IncrementalConfig, signer Signer, params SignParams, estimatedSize int) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := writer.WriteIncremental(ctx, &buf, cfg); err != nil {
+		return nil, fmt.Errorf("writing incremental for signing: %w", err)
 	}
 
 	pdfBytes := buf.Bytes()
@@ -314,20 +361,21 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	// come first in the buffer, and a source holding a hex string or a
 	// ByteRange of the same shape, the placeholder of a signature another tool
 	// prepared, would otherwise take the patch meant for this one.
-	srcSize := doc.FileSize()
+	srcSize := cfg.SourceSize
 	if srcSize < 0 || srcSize > int64(len(pdfBytes)) {
-		return fmt.Errorf("the %d-byte output cannot hold its %d-byte source", len(pdfBytes), srcSize)
+		return nil, fmt.Errorf("the %d-byte output cannot hold its %d-byte source", len(pdfBytes), srcSize)
 	}
 	update := pdfBytes[srcSize:]
 	updateStart := len(pdfBytes) - len(update)
 
 	// The serializer writes a binary PdfString as hex: <0000...0000>.
+	placeholderHexLen := estimatedSize * 2
 	placeholderHex := bytes.Repeat([]byte("00"), estimatedSize)
 	sigContentsMarker := append([]byte{'<'}, placeholderHex...)
 	sigContentsMarker = append(sigContentsMarker, '>')
 	at := bytes.Index(update, sigContentsMarker)
 	if at < 0 {
-		return fmt.Errorf("signature placeholder not found in output")
+		return nil, fmt.Errorf("signature placeholder not found in output")
 	}
 	sigStart := updateStart + at
 	sigEnd := sigStart + len(sigContentsMarker)
@@ -346,7 +394,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	brNew := fmt.Appendf(nil, "/ByteRange [0 %010d %010d %010d]", byteRange[1], byteRange[2], byteRange[3])
 	brAt := bytes.Index(update, brOld)
 	if brAt < 0 || len(brNew) != len(brOld) {
-		return fmt.Errorf("signature ByteRange placeholder not found in output")
+		return nil, fmt.Errorf("signature ByteRange placeholder not found in output")
 	}
 	copy(update[brAt:], brNew)
 
@@ -357,21 +405,17 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 
 	sigBytes, err := signer.Sign(ctx, digest, params)
 	if err != nil {
-		return fmt.Errorf("signing: %w", err)
+		return nil, fmt.Errorf("signing: %w", err)
 	}
 
 	// Hex-encode the signature and pad it with zeros to fill the placeholder.
 	sigHex := hex.EncodeToString(sigBytes)
 	if len(sigHex) > placeholderHexLen {
-		return fmt.Errorf("signature (%d bytes) exceeds estimated size (%d bytes)", len(sigBytes), estimatedSize)
+		return nil, &signatureTooLargeError{size: len(sigBytes), room: estimatedSize}
 	}
 	sigHex += string(bytes.Repeat([]byte("0"), placeholderHexLen-len(sigHex)))
 	copy(pdfBytes[sigStart+1:sigEnd-1], []byte(sigHex))
-
-	if _, err := dst.Write(pdfBytes); err != nil {
-		return fmt.Errorf("writing the signed document: %w", err)
-	}
-	return nil
+	return pdfBytes, nil
 }
 
 // signatureFieldName returns the first of Signature1, Signature2, ... that no

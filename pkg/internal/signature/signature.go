@@ -272,6 +272,10 @@ func extractSigsRecursiveAt(ctx context.Context, doc *document.Document, fields 
 							}
 						}
 
+						if sf, err := document.ResolveName(ctx, doc, vDict["SubFilter"]); err == nil {
+							sig.SubFilter = string(sf)
+						}
+
 						// Extract MDP policy from /Reference array.
 						sig.MDPPolicy = extractMDPPolicy(ctx, doc, vDict)
 

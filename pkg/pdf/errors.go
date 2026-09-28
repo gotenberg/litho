@@ -167,6 +167,13 @@ var (
 	// and 6.3). Nothing is written.
 	ErrSignatureNotPAdES = signature.ErrNotCAdES
 
+	// ErrTimestampAuthority is returned by [Writer.WriteTo] when the RFC 3161
+	// timestamp authority [WithTimestampAuthority] names gives no usable
+	// token: it cannot be reached, refuses the request, or answers with a
+	// token that does not verify, carries another nonce or imprints another
+	// digest. Nothing is written.
+	ErrTimestampAuthority = signature.ErrTimestampAuthority
+
 	// ErrSignerKeyUnsupported is returned by [NewSigner], [ParseSignerPEM]
 	// and [ParseSignerPKCS12] for a private key other than RSA or ECDSA on
 	// P-256, P-384 or P-521.

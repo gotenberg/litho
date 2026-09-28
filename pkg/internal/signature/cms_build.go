@@ -45,8 +45,8 @@ const cmsFixedOverhead = 512
 //
 // It signs with an RSA key under PKCS #1 v1.5 (RFC 8017, 8.2) or an ECDSA key
 // on P-256, P-384 or P-521 (RFC 5753), both over SHA-256, the digest the PDF
-// signing flow hands it. It takes no timestamp: an RFC 3161 token needs a
-// timestamp authority reached over the network.
+// signing flow hands it. It takes no timestamp: [AddSignatureTimestamp] adds
+// the RFC 3161 token [RequestTimestamp] obtains.
 //
 // A CMSSigner is safe for concurrent use when its key is: it holds no mutable
 // state, and each call builds its own SignedData.

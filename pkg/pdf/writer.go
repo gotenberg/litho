@@ -13,7 +13,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -22,7 +21,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/remediation"
-	"github.com/gotenberg/litho/pkg/internal/signature"
 	"github.com/gotenberg/litho/pkg/internal/tagging"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -677,55 +675,6 @@ type Signer interface {
 	// EstimatedSize returns the maximum expected signature byte count;
 	// used to size the /Contents placeholder in the output PDF.
 	EstimatedSize() int
-}
-
-// signerAdapter wraps a public [Signer] so it satisfies the internal
-// [mutations.Signer] interface. The method sets are identical; this
-// adapter exists only to bridge the two named interface types without
-// leaking the internal one through the public API.
-//
-// at is the signing time the signature dictionary's /M records. It reaches the
-// signer of [NewSigner] as the SignedData's signing-time, so the two agree.
-type signerAdapter struct {
-	inner Signer
-	at    time.Time
-}
-
-// Sign returns the SignedData over digest. Under ETSI.CAdES.detached the
-// signer of [NewSigner] writes the CAdES form, and the SignedData of any other
-// [Signer] is refused with [ErrSignatureNotPAdES] when it is not one (see
-// [WithPAdES]).
-func (a signerAdapter) Sign(_ context.Context, digest []byte, params mutations.SignParams) ([]byte, error) {
-	cades := params.SubFilter == mutations.SubFilterCAdESDetached
-	if s, ok := a.inner.(*builtinSigner); ok {
-		return s.signAt(digest, a.at, cades)
-	}
-	der, err := a.inner.Sign(digest)
-	if err != nil {
-		return nil, err
-	}
-	if cades {
-		if err := signature.CheckCAdES(der); err != nil {
-			return nil, fmt.Errorf("the Signer's SignedData under ETSI.CAdES.detached: %w", err)
-		}
-	}
-	return der, nil
-}
-
-// Certificate returns the signing certificate.
-func (a signerAdapter) Certificate() *x509.Certificate { return a.inner.Certificate() }
-
-// EstimatedSize returns the Signer's estimate.
-func (a signerAdapter) EstimatedSize(_ mutations.SignParams) int { return a.inner.EstimatedSize() }
-
-// signing returns the signer and the signature dictionary entries of a write,
-// with the signing time [WithSigningTime] set or else now.
-func (w *Writer) signing(signer Signer) (signerAdapter, mutations.SignatureInfo) {
-	info := w.signOpts.info
-	if info.Time.IsZero() {
-		info.Time = time.Now()
-	}
-	return signerAdapter{inner: signer, at: info.Time}, info
 }
 
 // Writer queues modifications against an open [Reader] and emits the

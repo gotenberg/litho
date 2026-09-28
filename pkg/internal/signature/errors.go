@@ -67,3 +67,9 @@ var (
 // PAdES baseline signature (ETSI EN 319 142-1, 6.3), returned by
 // [CheckCAdES].
 var ErrNotCAdES = errors.New("signature is not a PAdES baseline CAdES signature")
+
+// ErrTimestampAuthority indicates an RFC 3161 timestamp authority that gave
+// no usable token: it could not be reached, refused the request, or answered
+// with a token that does not verify, carries another nonce or imprints
+// another digest. Returned by [RequestTimestamp].
+var ErrTimestampAuthority = errors.New("timestamp authority gave no usable token")

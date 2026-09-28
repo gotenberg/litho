@@ -35,8 +35,8 @@ type builtinSigner struct {
 // key service works when its client implements that interface. For any other
 // scheme implement [Signer] directly.
 //
-// The signature carries no RFC 3161 timestamp, which needs a timestamp
-// authority reached over the network, and so no long-term validation data.
+// The signature carries an RFC 3161 timestamp only with
+// [WithTimestampAuthority], which reaches the authority over the network.
 //
 // It returns [ErrSignerKeyUnsupported] for another key type,
 // [ErrSignerKeyMismatch] when key does not match cert, and
@@ -263,6 +263,25 @@ func WithSigningTime(t time.Time) SignOption {
 // [WithLTV] as well, B-LT.
 func WithPAdES() SignOption {
 	return func(o *signOpts) { o.info.SubFilter = mutations.SubFilterCAdESDetached }
+}
+
+// WithTimestampAuthority timestamps the signature with the RFC 3161
+// timestamp authority at url, an http or https URL, which then vouches for
+// when the signature existed (PAdES baseline B-T, ETSI EN 319 142-1, 6.3).
+// [Writer.WriteTo] sends the authority the SHA-256 of the SignedData's
+// signature value with a random nonce, checks the token it answers (a granted
+// status, the nonce, the imprint, and a signature by a certificate restricted
+// to timestamping, RFC 3161, 2.3 and 2.4.2), and adds it to the SignerInfo's
+// unsigned attributes as the signature-time-stamp attribute (RFC 3161,
+// Appendix A). It works with any [Signer] returning a DER SignedData.
+//
+// Each exchange is bounded by ctx and by a one-minute timeout, and the answer
+// by a size cap. An authority that cannot be reached, refuses, or answers
+// with a token that does not verify fails the write with
+// [ErrTimestampAuthority], and nothing is written. The token carries the
+// authority's time, so the output differs from one write to the next.
+func WithTimestampAuthority(url string) SignOption {
+	return func(o *signOpts) { o.info.TimestampURL = url }
 }
 
 // WithSignatureField names the signature field. An unsigned signature field

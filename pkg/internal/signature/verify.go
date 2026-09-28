@@ -112,6 +112,23 @@ func parsePDFDate(s string) (time.Time, error) {
 // evaluated independently of its cryptographic checks, so a signature whose
 // PKCS#7 data does not parse still reports its MDP fields beside the
 // ErrorMessage that says why.
+//
+// An RFC 3161 token sets the signing time the chain is validated at only once
+// it verifies over what it timestamps: the signature value for the token in a
+// SignerInfo's unsigned attributes (RFC 3161, Appendix A), the signed bytes
+// for a document timestamp, whose /Contents is the token itself (ISO 32000-2,
+// 12.8.5). A token that does not verify is reported with the reason in
+// TimestampError, and the /M entry stands in for it.
+//
+// # Corpus evidence
+//
+//   - All corpora: 41 signatures in 5171 files, 11 carrying a token. 10
+//     tokens verify; the eleventh, pdfjs bug854315.pdf's, embeds a
+//     certificate crypto/x509 does not parse, and its chain verdict stays
+//     what it was.
+//   - pdfjs issue15813.pdf and issue8047.pdf: the two document timestamps,
+//     whose HashValid was false while their token was checked as a
+//     SignedData over the signed bytes, verify now.
 func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.CertPool) ([]models.SignatureValidation, error) {
 	sigs, err := ExtractSignatures(ctx, doc)
 	if err != nil {
@@ -129,6 +146,7 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 	for _, sig := range sigs {
 		result := models.SignatureValidation{
 			FieldName:   sig.FieldName,
+			SubFilter:   sig.SubFilter,
 			SigningTime: sig.SigningTime,
 		}
 
@@ -180,18 +198,53 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 			}
 		}
 
-		// Determine the effective signing time: prefer a cryptographic
-		// timestamp over the self-declared /M entry.
-		var effectiveSignTime time.Time
+		// The signed bytes are read once, for the digest check below and for
+		// a document timestamp's imprint.
+		var content []byte
+		readFailed := false
+		if sig.ByteRange[1] > 0 && sig.ByteRange[3] >= 0 &&
+			byteRangeReadable(sig.ByteRange, doc.FileSize()) {
+			chunk1, e1 := doc.ReadFileBytes(ctx, sig.ByteRange[0], sig.ByteRange[1])
+			chunk2, e2 := doc.ReadFileBytes(ctx, sig.ByteRange[2], sig.ByteRange[3])
+			if e1 != nil || e2 != nil {
+				readFailed = true
+			} else {
+				content = make([]byte, 0, len(chunk1)+len(chunk2))
+				content = append(content, chunk1...)
+				content = append(content, chunk2...)
+			}
+		}
 
-		// Try to extract an RFC 3161 timestamp from the signature.
-		tsResult := extractTimestampFromSignature(der)
-		if tsResult != nil {
+		// Determine the effective signing time: prefer a cryptographic
+		// timestamp over the self-declared /M entry. Only a token that
+		// verifies over what it timestamps sets it: a token copied from
+		// another signature would otherwise pin the chain validation to a
+		// time it does not vouch for.
+		var effectiveSignTime time.Time
+		docTimestamp := sig.SubFilter == "ETSI.RFC3161"
+		ts, tsErr := signatureTimestamp(der, content, docTimestamp)
+		if ts != nil {
 			result.HasTimestamp = true
-			result.TimestampTime = tsResult.Time.Format(time.RFC3339)
-			result.TimestampIssuer = tsResult.IssuerCN
-			effectiveSignTime = tsResult.Time
-		} else if sig.SigningTime != "" {
+			result.TimestampTime = ts.Time.Format(time.RFC3339)
+			if ts.Signer != nil {
+				result.TimestampIssuer = ts.Signer.Subject.CommonName
+			}
+			if tsErr == nil {
+				effectiveSignTime = ts.Time
+			} else {
+				result.TimestampError = tsErr.Error()
+			}
+		}
+		if docTimestamp && ts != nil && ts.Signer != nil {
+			// ISO 32000-2, 12.8.5: the token is the whole signature, and
+			// the TSA signed it.
+			leaf = ts.Signer
+			result.SignerCN = leaf.Subject.CommonName
+			result.Issuer = leaf.Issuer.CommonName
+			result.NotBefore = leaf.NotBefore.Format(time.RFC3339)
+			result.NotAfter = leaf.NotAfter.Format(time.RFC3339)
+		}
+		if effectiveSignTime.IsZero() && sig.SigningTime != "" {
 			// Fall back to the /M entry.
 			if t, err := parsePDFDate(sig.SigningTime); err == nil {
 				effectiveSignTime = t
@@ -252,38 +305,38 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 
 		// Determine LTV status: the document has enough embedded data for
 		// full offline validation if it has a DSS with revocation info and
-		// a cryptographic timestamp.
-		result.LTVEnabled = result.HasDSS && result.HasTimestamp &&
+		// a cryptographic timestamp that verifies.
+		result.LTVEnabled = result.HasDSS && result.HasTimestamp && result.TimestampError == "" &&
 			(result.RevocationOK || result.RevocationInfo != "")
 
-		// Cryptographically verify the PKCS#7/CMS signature over the byte
-		// range it covers. HashValid is true only when the SignerInfo's
-		// signed messageDigest matches the recomputed digest of those
-		// bytes and the signature value verifies against the signer's
-		// public key. This is independent of CertChainValid (trust) and
-		// of revocation: a signature can be cryptographically valid yet
-		// chain-untrusted, or vice versa.
-		if sig.ByteRange[1] > 0 && sig.ByteRange[3] >= 0 &&
-			byteRangeReadable(sig.ByteRange, doc.FileSize()) {
-			chunk1, e1 := doc.ReadFileBytes(ctx, sig.ByteRange[0], sig.ByteRange[1])
-			chunk2, e2 := doc.ReadFileBytes(ctx, sig.ByteRange[2], sig.ByteRange[3])
-			if e1 != nil || e2 != nil {
-				result.HashValid = false
+		// Cryptographically verify the signature over the byte range it
+		// covers. HashValid is true only when the SignerInfo's signed
+		// messageDigest matches the recomputed digest of those bytes and
+		// the signature value verifies against the signer's public key, or,
+		// for a document timestamp, when its token imprints those bytes and
+		// verifies (ISO 32000-2, 12.8.5). This is independent of
+		// CertChainValid (trust) and of revocation: a signature can be
+		// cryptographically valid yet chain-untrusted, or vice versa.
+		switch {
+		case readFailed:
+			if result.ErrorMessage == "" {
+				result.ErrorMessage = "could not read signed byte range"
+			}
+		case content == nil:
+			// A /ByteRange naming bytes the file does not hold covers
+			// nothing, so nothing verifies.
+		case docTimestamp:
+			result.HashValid = ts != nil && tsErr == nil
+			if !result.HashValid && result.ErrorMessage == "" && tsErr != nil {
+				result.ErrorMessage = tsErr.Error()
+			}
+		default:
+			if _, verifyErr := verifyCMSSignature(der, content, certs); verifyErr != nil {
 				if result.ErrorMessage == "" {
-					result.ErrorMessage = "could not read signed byte range"
+					result.ErrorMessage = verifyErr.Error()
 				}
 			} else {
-				content := make([]byte, 0, len(chunk1)+len(chunk2))
-				content = append(content, chunk1...)
-				content = append(content, chunk2...)
-				if _, verifyErr := verifyCMSSignature(der, content, certs); verifyErr != nil {
-					result.HashValid = false
-					if result.ErrorMessage == "" {
-						result.ErrorMessage = verifyErr.Error()
-					}
-				} else {
-					result.HashValid = true
-				}
+				result.HashValid = true
 			}
 		}
 

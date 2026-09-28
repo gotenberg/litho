@@ -174,7 +174,7 @@ func runSign(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	}
 
 	if fs.NArg() < 1 || *output == "" || !flags.hasKeyMaterial() {
-		fmt.Fprintln(stderr, "Usage: litho sign <file> (--cert cert.pem --key key.pem [--chain chain.pem] | --p12 id.p12 [--p12-password-file F | --p12-password-env VAR]) [--reason R] [--location L] [--contact C] [--name N] [--field F] [--signing-time T] [--pades] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho sign <file> (--cert cert.pem --key key.pem [--chain chain.pem] | --p12 id.p12 [--p12-password-file F | --p12-password-env VAR]) [--reason R] [--location L] [--contact C] [--name N] [--field F] [--signing-time T] [--pades] [--tsa-url URL] -o out.pdf")
 		return exitError
 	}
 

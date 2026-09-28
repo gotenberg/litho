@@ -203,6 +203,10 @@ type Signature struct {
 	DocumentHash string   `json:"documentHash"`
 	SigningTime  string   `json:"signingTime,omitempty"`
 	MDPPolicy    int      `json:"mdpPolicy,omitempty"`
+	// SubFilter is the signature dictionary's /SubFilter, such as
+	// adbe.pkcs7.detached, ETSI.CAdES.detached or, for a document timestamp,
+	// ETSI.RFC3161 (ISO 32000-2, 12.8.3 and 12.8.5).
+	SubFilter string `json:"subFilter,omitempty"`
 }
 
 // SignatureValidation holds the result of validating a PDF signature's
@@ -225,9 +229,14 @@ type SignatureValidation struct {
 	HasTimestamp    bool   `json:"hasTimestamp,omitempty"`
 	TimestampTime   string `json:"timestampTime,omitempty"`
 	TimestampIssuer string `json:"timestampIssuer,omitempty"`
-	LTVEnabled      bool   `json:"ltvEnabled,omitempty"`
-	RevocationOK    bool   `json:"revocationOK,omitempty"`
-	RevocationInfo  string `json:"revocationInfo,omitempty"`
+	// TimestampError says why the RFC 3161 token found does not verify over
+	// what it timestamps; its time is then not trusted as the signing time.
+	TimestampError string `json:"timestampError,omitempty"`
+	// SubFilter is the signature dictionary's /SubFilter.
+	SubFilter      string `json:"subFilter,omitempty"`
+	LTVEnabled     bool   `json:"ltvEnabled,omitempty"`
+	RevocationOK   bool   `json:"revocationOK,omitempty"`
+	RevocationInfo string `json:"revocationInfo,omitempty"`
 
 	// MDP (Modification Detection and Prevention) fields
 	MDPPolicy int    `json:"mdpPolicy,omitempty"`

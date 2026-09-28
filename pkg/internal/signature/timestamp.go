@@ -105,41 +105,6 @@ func extractEncapContent(raw asn1.RawValue) ([]byte, error) {
 	return content, nil
 }
 
-// extractTimestampFromSignature attempts to extract an RFC 3161 timestamp
-// token from the unsigned attributes of a PKCS#7 SignedData structure.
-// Returns nil if no timestamp attribute is found.
-func extractTimestampFromSignature(der []byte) *timestampResult {
-	var ci contentInfo
-	_, err := asn1.Unmarshal(der, &ci)
-	if err != nil {
-		return nil
-	}
-
-	// Parse SignedData with full signer info to access unsigned attributes.
-	var sd signedDataFull
-	_, err = asn1.Unmarshal(ci.Content.Bytes, &sd)
-	if err != nil {
-		return nil
-	}
-
-	// Look through signer infos for timestamp unsigned attributes.
-	for _, si := range sd.SignerInfos {
-		for _, attr := range si.UnsignedAttrs {
-			// OID 1.2.840.113549.1.9.16.2.14 = id-smime-aa-timeStampToken
-			if attr.Type.Equal(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16, 2, 14}) {
-				if len(attr.Values.Bytes) > 0 {
-					ts, err := parseTimestampToken(attr.Values.Bytes)
-					if err == nil {
-						return ts
-					}
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // signedDataFull extends signedData to include SignerInfos for timestamp extraction.
 type signedDataFull struct {
 	Version          int
