@@ -34,9 +34,10 @@ var facturxVariants = map[string]facturxVariant{
 }
 
 type remediateResult struct {
-	Profile  string   `json:"profile"`
-	Fixed    []string `json:"fixed"`
-	Residual []string `json:"residual,omitempty"`
+	Profile      string   `json:"profile"`
+	Fixed        []string `json:"fixed"`
+	Residual     []string `json:"residual,omitempty"`
+	RefusedFonts []string `json:"refused_fonts,omitempty"`
 }
 
 func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -50,6 +51,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	invoice := fs.String("invoice", "", "Cross-Industry Invoice XML to embed (Factur-X / ZUGFeRD profiles)")
 	level := fs.String("level", "", "Factur-X conformance level: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG")
 	compact := registerCompactFlag(fs)
+	fontDir := registerFontDirFlag(fs)
 	strict := fs.Bool("strict", false,
 		"Exit 2 when violations remain that could not be fixed")
 
@@ -58,9 +60,15 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--compact] [--strict] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--compact] [--strict] -o out.pdf")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
+		return exitError
+	}
+
+	fontOpt, err := fontDirOption(*fontDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
 	}
 
@@ -85,6 +93,9 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	var remOpts []pdf.RemediateOption
 	if *aggressive {
 		remOpts = append(remOpts, pdf.WithAggressiveFixes())
+	}
+	if fontOpt != nil {
+		remOpts = append(remOpts, fontOpt)
 	}
 
 	var report *pdf.RemediationReport
@@ -142,6 +153,9 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	for _, e := range report.Residual {
 		result.Residual = append(result.Residual, e.Error())
 	}
+	for _, refusal := range report.FontRefusals {
+		result.RefusedFonts = append(result.RefusedFonts, refusal.String())
+	}
 
 	// -o - writes the document to stdout, so the report goes to stderr rather
 	// than landing inside the bytes the caller is capturing. See reportWriter.
@@ -163,6 +177,12 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		if len(result.Residual) > 0 {
 			fmt.Fprintf(reportOut, "Residual: %d\n", len(result.Residual))
 			for _, r := range result.Residual {
+				fmt.Fprintf(reportOut, "  %s\n", r)
+			}
+		}
+		if len(result.RefusedFonts) > 0 {
+			fmt.Fprintf(reportOut, "Fonts left unembedded: %d\n", len(result.RefusedFonts))
+			for _, r := range result.RefusedFonts {
 				fmt.Fprintf(reportOut, "  %s\n", r)
 			}
 		}
@@ -234,4 +254,27 @@ func remediateFacturX(ctx context.Context, w *pdf.Writer, variant facturxVariant
 	}
 
 	return w.RemediateFacturX(ctx, cfg, opts...)
+}
+
+// registerFontDirFlag declares the --font-dir flag remediate and the pipe's
+// remediate stage share.
+func registerFontDirFlag(fs *flag.FlagSet) *string {
+	return fs.String("font-dir", "",
+		"Directory of TrueType, OpenType or CFF font files to embed for the fonts the document does not embed (the licence to embed them is yours)")
+}
+
+// fontDirOption returns the remediation option embedding the font files of
+// dir, nil when dir is empty, or an error when dir is no readable directory.
+func fontDirOption(dir string) (pdf.RemediateOption, error) {
+	if dir == "" {
+		return nil, nil
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return nil, fmt.Errorf("--font-dir: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("--font-dir: %s is not a directory", dir)
+	}
+	return pdf.WithFontFiles(os.DirFS(dir)), nil
 }
