@@ -18,18 +18,25 @@ import (
 // text in Helvetica, so every mutation has text to keep and a page to move.
 func mutationTestPDF(t *testing.T) []byte {
 	t.Helper()
+	return mutationTestPDFWithBoxes(t, "/MediaBox [0 0 612 792]", "/MediaBox [0 0 612 792]")
+}
+
+// mutationTestPDFWithBoxes returns the document [mutationTestPDF] does, with
+// first and second as the page boundary entries of its two pages.
+func mutationTestPDFWithBoxes(t *testing.T, first, second string) []byte {
+	t.Helper()
 	page := func(text string) string {
 		return fmt.Sprintf("BT /F1 12 Tf 72 700 Td (%s) Tj ET", text)
 	}
-	first, second := page("First page text"), page("Second page text")
+	firstText, secondText := page("First page text"), page("Second page text")
 	objects := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>",
+		"<< /Type /Page /Parent 2 0 R " + first + " /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>",
+		"<< /Type /Page /Parent 2 0 R " + second + " /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>",
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(first), first),
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(second), second),
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(firstText), firstText),
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(secondText), secondText),
 	}
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.7\n")
@@ -202,6 +209,92 @@ func TestMutationFeature_ProfilelessFixtureSkipsTheRuleCheck(t *testing.T) {
 	v := f.Compare("doc", out)
 	if !v.Match || v.Metrics[metricRulesetChanged] != 0 {
 		t.Errorf("match=%t ruleset_changed=%d reason %q, want a match", v.Match, v.Metrics[metricRulesetChanged], v.Reason)
+	}
+}
+
+// shiftedBoxesPDF returns a two-page document whose visible corners are not
+// the user-space origin: page 1 crops to [50 60 500 700] and page 2 states
+// its media box from the upper-right corner, [306 396 -306 -396], so its
+// visible corner is (-306, -396).
+func shiftedBoxesPDF(t *testing.T) []byte {
+	t.Helper()
+	return mutationTestPDFWithBoxes(t,
+		"/MediaBox [0 0 612 792] /CropBox [50 60 500 700]",
+		"/MediaBox [306 396 -306 -396]")
+}
+
+// TestMutationStamp_ShiftedBoxesPassEveryCheck runs mutate-stamp on pages whose
+// visible corner is not the user-space origin. [pdf.TextStamp] measures X and
+// Y from that corner, so the cell's stamp must read at the inset from it.
+func TestMutationStamp_ShiftedBoxesPassEveryCheck(t *testing.T) {
+	t.Parallel()
+	f := newMutationFeature(specNamed(t, "stamp"))
+	for _, v := range runMutationFixtures(t, f, shiftedBoxesPDF(t), "PDF_A-2b") {
+		if v.Skipped || !v.Match {
+			t.Errorf("%s: skipped=%t match=%t reason %q, want a match", v.FixtureID, v.Skipped, v.Match, v.Reason)
+		}
+	}
+}
+
+// TestVerifyStamp_MisplacedStampBreaksThePromise stamps each page of
+// [shiftedBoxesPDF] at an offset from its visible corner and checks the
+// verdict: at the inset it passes, and moved by the box origin a second time,
+// as the cell once stamped, it carries the stamp's text and still fails. The
+// text check alone passes both.
+func TestVerifyStamp_MisplacedStampBreaksThePromise(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := shiftedBoxesPDF(t)
+	origins := [][2]float64{{50, 60}, {-306, -396}}
+	for _, tc := range []struct {
+		name  string
+		shift bool
+		want  string
+	}{
+		{"at the inset", false, ""},
+		{"moved by the box origin twice", true, metricPromiseBroken},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer src.Close()
+			in, err := readMutationInput(ctx, src, data, specNamed(t, "stamp"))
+			if err != nil {
+				t.Fatalf("readMutationInput: %v", err)
+			}
+			w := pdf.NewWriter(src)
+			defer w.Close()
+			for i, origin := range origins {
+				x, y := float64(mutationStampInset), float64(mutationStampInset)
+				if tc.shift {
+					x, y = x+origin[0], y+origin[1]
+				}
+				stamp := pdf.TextStamp{Text: mutationStampText, X: x, Y: y, FontSize: mutationStampFontSize}
+				if err := w.StampText(stamp, i+1); err != nil {
+					t.Fatalf("StampText(%d): %v", i+1, err)
+				}
+			}
+			var buf bytes.Buffer
+			if err := w.WriteTo(ctx, &buf); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			out, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+			if err != nil {
+				t.Fatalf("reopening: %v", err)
+			}
+			defer out.Close()
+
+			failures := verifyStamp(ctx, nil, in, &mutationOutputDoc{reader: out, data: buf.Bytes(), pages: len(origins)}, mutationPlan{})
+			switch {
+			case tc.want == "" && len(failures) > 0:
+				t.Errorf("failures %v, want none", failures)
+			case tc.want != "" && (len(failures) != 1 || failures[0].Metric != tc.want):
+				t.Errorf("failures %v, want one %s", failures, tc.want)
+			}
+		})
 	}
 }
 

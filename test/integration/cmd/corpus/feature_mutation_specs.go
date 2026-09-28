@@ -241,6 +241,13 @@ const mutationStampText = "LITHO MUTATION STAMP"
 // of each page's crop box, in points.
 const mutationStampInset = 10
 
+// mutationStampTolerance is how far, in points, the stamp's first glyph may
+// read from where the stamp was placed. Text extraction reports the origin of
+// the glyph the stamp's Td places, so a correct stamp reads at the exact
+// point, and the tolerance absorbs only the rounding of written reals. A box
+// origin smaller than it moves the stamp by less than the check can see.
+const mutationStampTolerance = 0.5
+
 // mutationStampFontSize is the stamp's size in points: small enough to fit a
 // narrow page, since text past the crop box is read all the same.
 const mutationStampFontSize = 8
@@ -340,6 +347,7 @@ var mutationSpecs = []mutationSpec{
 	{
 		name:             "stamp",
 		needsDefaultText: true,
+		extraMetrics:     []string{metricPromiseBroken},
 		apply:            applyStamp,
 		verify:           verifyStamp,
 		allowance: func(rc ruleContext) ruleAllowance {
@@ -518,15 +526,19 @@ func uaRules(ctx context.Context, r *pdf.Reader) ([]string, error) {
 	return distinctRuleIDs(violations), nil
 }
 
-// applyStamp draws [mutationStampText] on every page, inside its crop box.
-// The stamp is an /Artifact (ISO 32000-1, 14.8.2.2), so a plain read of the
-// page must not see it and a read with [pdf.WithArtifacts] must.
+// applyStamp draws [mutationStampText] on every page, [mutationStampInset]
+// points inside the lower-left corner of its crop box. [pdf.TextStamp] takes
+// X and Y from the page's bottom-left corner, not from the user-space origin,
+// so the stamp names the inset alone: adding the box origin moved it twice on
+// a page whose box does not start at (0, 0). The stamp is an /Artifact (ISO
+// 32000-1, 14.8.2.2), so a plain read of the page must not see it and a read
+// with [pdf.WithArtifacts] must.
 func applyStamp(_ context.Context, _ *mutationFeature, in *mutationInput, w *pdf.Writer) (mutationPlan, error) {
-	for i, box := range in.boxes {
+	for i := range in.pages {
 		if err := w.StampText(pdf.TextStamp{
 			Text:     mutationStampText,
-			X:        box[0] + mutationStampInset,
-			Y:        box[1] + mutationStampInset,
+			X:        mutationStampInset,
+			Y:        mutationStampInset,
 			FontSize: mutationStampFontSize,
 		}, i+1); err != nil {
 			return mutationPlan{}, fmt.Errorf("stamping page %d: %w", i+1, err)
@@ -535,8 +547,9 @@ func applyStamp(_ context.Context, _ *mutationFeature, in *mutationInput, w *pdf
 	return identityPlan(in), nil
 }
 
-// verifyStamp checks that every page reads as before without artifacts, and
-// carries the stamp with them.
+// verifyStamp checks that every page reads as before without artifacts,
+// carries the stamp with them, and carries it where [pdf.TextStamp] promises
+// (see [stampPlacement]).
 func verifyStamp(ctx context.Context, _ *mutationFeature, in *mutationInput, out *mutationOutputDoc, _ mutationPlan) []mutationFailure {
 	plain := readPageTexts(ctx, out.reader, out.pages)
 	for i := range min(len(plain), len(in.defaultText)) {
@@ -557,6 +570,63 @@ func verifyStamp(ctx context.Context, _ *mutationFeature, in *mutationInput, out
 		if got.err == "" && !strings.Contains(got.text, stamp) {
 			return []mutationFailure{{Metric: metricTextWrong, Detail: fmt.Sprintf("page %d does not carry the stamp", i+1)}}
 		}
+	}
+	return stampPlacement(ctx, in, out)
+}
+
+// stampPlacement checks that the stamp's text starts [mutationStampInset]
+// points right of and above each page's visible lower-left corner, within
+// [mutationStampTolerance]. The corner is the lesser of each pair of the crop
+// box's coordinates, since a rectangle may name either pair of opposite
+// corners (ISO 32000-1, 7.9.5). A stamp drawn from the user-space origin, or
+// moved by the box origin twice, still reads as the stamp's text: only its
+// position tells it apart. A page litho reads no positions from is left to
+// the text check.
+//
+// # Corpus evidence
+//
+//   - litho: every stamp on the 310 pages of the other 133 fixtures reads at
+//     exactly (10, 10), since none has a crop box off the origin.
+//   - litho boxorigin_2b: planted in turn, the cell adding the box origin to X
+//     and Y, stampOriginShift reading the crop box's first two entries, and
+//     no shift at all each count promise_broken. The text check passes all
+//     three.
+//   - litho viewerboxes_2b: stampOriginShift reading the first two entries of
+//     page 1's /MediaBox [10 10 300] counts promise_broken, the stamp reading
+//     at (20, 20).
+func stampPlacement(ctx context.Context, in *mutationInput, out *mutationOutputDoc) []mutationFailure {
+	stamp := normalizeContent(mutationStampText)
+	for i := range min(out.pages, len(in.boxes)) {
+		elements, err := out.reader.ExtractTextElements(ctx, i+1)
+		if err != nil {
+			continue
+		}
+		box := in.boxes[i]
+		wantX := min(box[0], box[2]) + mutationStampInset
+		wantY := min(box[1], box[3]) + mutationStampInset
+		var seen []string
+		placed := false
+		for _, e := range elements {
+			if !strings.HasPrefix(normalizeContent(e.Text), stamp) {
+				continue
+			}
+			if math.Abs(e.X-wantX) <= mutationStampTolerance && math.Abs(e.Y-wantY) <= mutationStampTolerance {
+				placed = true
+				break
+			}
+			seen = append(seen, fmt.Sprintf("(%g, %g)", e.X, e.Y))
+		}
+		if placed {
+			continue
+		}
+		where := "nowhere"
+		if len(seen) > 0 {
+			where = "at " + strings.Join(seen, ", ")
+		}
+		return []mutationFailure{{
+			Metric: metricPromiseBroken,
+			Detail: fmt.Sprintf("page %d: the stamp reads %s, want (%g, %g)", i+1, where, wantX, wantY),
+		}}
 	}
 	return nil
 }
