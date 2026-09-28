@@ -557,6 +557,7 @@ func (t *flattenTags) rewriteParentTree(ctx context.Context, alloc *writer.ObjAl
 // has none. ok is false when the tree cannot be read whole: a node that does not
 // resolve, a /Nums array of odd length or with a key that is not an integer, or
 // a descent past [maxStructTreeDepth]. An absent tree reads as an empty one.
+// The walk reads each node and each /Kids array once.
 func readParentTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) (map[int]ast.PdfObject, int, bool) {
 	entries := make(map[int]ast.PdfObject)
 	maxKey := -1
@@ -600,6 +601,13 @@ func readParentTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			}
 		}
 		if kidsObj, has := dict["Kids"]; has {
+			// A /Kids array written as an object of its own can be named by
+			// several direct nodes, and re-read per node it fans out 2^depth
+			// (see [document.VisitedBefore]). A repeat adds nothing the first
+			// read did not.
+			if document.VisitedBefore(kidsObj, visited) {
+				return true
+			}
 			kids, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj)
 			if err != nil {
 				return false

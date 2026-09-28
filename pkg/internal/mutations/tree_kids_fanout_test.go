@@ -76,6 +76,22 @@ func TestTreeWalks_SharedKidsArrayFanOut(t *testing.T) {
 			pruneDestNameTree(context.Background(), alloc, doc, root, keep, 0)
 			return nil
 		}},
+		{"readNameTree", func(t *testing.T) error {
+			doc, alloc := newMutationDoc(t, sharedKidsTreePDF())
+			entries, ok := readNameTree(context.Background(), alloc, doc, root)
+			if !ok || len(entries) != 1 {
+				return fmt.Errorf("read %d entries, ok %v; want 1, true", len(entries), ok)
+			}
+			return nil
+		}},
+		{"readParentTree", func(t *testing.T) error {
+			doc, alloc := newMutationDoc(t, sharedKidsTreePDF())
+			entries, maxKey, ok := readParentTree(context.Background(), alloc, doc, root)
+			if !ok || len(entries) != 1 || maxKey != 0 {
+				return fmt.Errorf("read %d entries, highest key %d, ok %v; want 1, 0, true", len(entries), maxKey, ok)
+			}
+			return nil
+		}},
 		{"structPrune.parentTree", func(t *testing.T) error {
 			doc, alloc := newMutationDoc(t, sharedKidsTreePDF())
 			p := newStructPrune(alloc, doc, func(ast.PdfIndirectRef) bool { return false }, nil, false)
@@ -95,6 +111,80 @@ func TestTreeWalks_SharedKidsArrayFanOut(t *testing.T) {
 				}
 			case <-time.After(10 * time.Second):
 				t.Fatal("the walk did not end before the deadline")
+			}
+		})
+	}
+}
+
+// layeredKidsTreePDF builds a document whose object 4 is a name and number
+// tree root over layers /Kids arrays, each written as an object of its own
+// holding two direct nodes that name the next layer's array, the last holding
+// one leaf mapping (k) and 0 to the page. The tree holds no cycle and stays
+// under every depth cap, so only marking the arrays keeps a walk from fanning
+// out 2^layers.
+func layeredKidsTreePDF(layers int) []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"<< /Kids 5 0 R >>",
+	}
+	for i := range layers {
+		next := 6 + i
+		if i == layers-1 {
+			objs = append(objs, "[<< /Names [(k) 3 0 R] /Nums [0 [3 0 R]] >>]")
+			continue
+		}
+		objs = append(objs, fmt.Sprintf("[<< /Kids %d 0 R >> << /Kids %d 0 R >>]", next, next))
+	}
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.7\n")
+	offs := make([]int, len(objs))
+	for i, o := range objs {
+		offs[i] = buf.Len()
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
+	for _, off := range offs {
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", off)
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
+	return buf.Bytes()
+}
+
+// TestTreeReads_LayeredKidsArraysFanOut pins that the structure name and
+// parent tree reads visit each /Kids array once: 40 layers of shared arrays,
+// walked anew wherever reached, are 2^40 visits.
+func TestTreeReads_LayeredKidsArraysFanOut(t *testing.T) {
+	t.Parallel()
+	root := ast.PdfIndirectRef{ObjectNum: 4}
+	tests := []struct {
+		name string
+		read func(ctx context.Context, t *testing.T) (int, bool)
+	}{
+		{"readNameTree", func(ctx context.Context, t *testing.T) (int, bool) {
+			doc, alloc := newMutationDoc(t, layeredKidsTreePDF(40))
+			entries, ok := readNameTree(ctx, alloc, doc, root)
+			return len(entries), ok
+		}},
+		{"readParentTree", func(ctx context.Context, t *testing.T) (int, bool) {
+			doc, alloc := newMutationDoc(t, layeredKidsTreePDF(40))
+			entries, _, ok := readParentTree(ctx, alloc, doc, root)
+			return len(entries), ok
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			n, ok := tt.read(ctx, t)
+			if ctx.Err() != nil {
+				t.Fatal("the walk did not end before the deadline")
+			}
+			if !ok || n != 1 {
+				t.Errorf("read %d entries, ok %v; want 1, true", n, ok)
 			}
 		})
 	}

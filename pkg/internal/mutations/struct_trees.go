@@ -101,7 +101,8 @@ func buildTree(alloc *writer.ObjAllocator, pairs []treePair, leafKey ast.PdfName
 // key. ok is false when the tree cannot be read whole: a node that does not
 // resolve, a /Names array of odd length or with a key that is not a string, or
 // a descent past [maxStructTreeDepth]. An absent tree reads as an empty one.
-// The first value listed for a key is the one kept, as a lookup finds it.
+// The first value listed for a key is the one kept, as a lookup finds it. The
+// walk reads each node and each /Kids array once.
 func readNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) (map[string]ast.PdfObject, bool) {
 	entries := make(map[string]ast.PdfObject)
 	if obj == nil {
@@ -143,6 +144,13 @@ func readNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			}
 		}
 		if kidsObj, has := dict["Kids"]; has {
+			// A /Kids array written as an object of its own can be named by
+			// several direct nodes, and re-read per node it fans out 2^depth
+			// (see [document.VisitedBefore]). A repeat adds nothing the first
+			// read did not.
+			if document.VisitedBefore(kidsObj, visited) {
+				return true
+			}
 			kids, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj)
 			if err != nil {
 				return false
