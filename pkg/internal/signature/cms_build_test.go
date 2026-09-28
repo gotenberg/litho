@@ -82,7 +82,7 @@ func TestCMSSignerSignsWhatTheVerifierAccepts(t *testing.T) {
 			content := []byte("the signed byte ranges of a PDF")
 			digest := sha256.Sum256(content)
 			at := time.Date(2026, 9, 28, 10, 11, 12, 0, time.FixedZone("CEST", 2*3600))
-			der, err := s.Sign(digest[:], at)
+			der, err := s.Sign(digest[:], at, false)
 			if err != nil {
 				t.Fatalf("Sign: %v", err)
 			}
@@ -108,7 +108,7 @@ func TestCMSSignerSignsWhatTheVerifierAccepts(t *testing.T) {
 				t.Errorf("verifying other content: %v, want ErrSignatureInvalid", err)
 			}
 
-			attrs := signerAttributes(t, der)
+			attrs := signerAttributes(t, der, 4)
 			var gotTime time.Time
 			if _, err := asn1.Unmarshal(attrs[oidCMSAttrSigningTime.String()], &gotTime); err != nil || !gotTime.Equal(at) {
 				t.Errorf("signing-time = %v (%v), want %v", gotTime, err, at)
@@ -134,7 +134,7 @@ func TestCMSSignerSignsWhatTheVerifierAccepts(t *testing.T) {
 
 // signerAttributes returns the value of each signed attribute of the first
 // SignerInfo of der, by attribute OID.
-func signerAttributes(t *testing.T, der []byte) map[string][]byte {
+func signerAttributes(t *testing.T, der []byte, want int) map[string][]byte {
 	t.Helper()
 	var ci contentInfo
 	if _, err := asn1.Unmarshal(der, &ci); err != nil {
@@ -154,8 +154,8 @@ func signerAttributes(t *testing.T, der []byte) map[string][]byte {
 		}
 		out[a.Type.String()] = a.Values.Bytes
 	}
-	if len(out) != 4 {
-		t.Errorf("%d signed attributes, want 4", len(out))
+	if len(out) != want {
+		t.Errorf("%d signed attributes, want %d", len(out), want)
 	}
 	return out
 }

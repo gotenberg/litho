@@ -18,16 +18,34 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// Signer produces a PKCS#7/CMS signature for the given digest. Implementations
-// control key material and signing algorithms.
+// The signature dictionary /SubFilter values litho writes (ISO 32000-2,
+// 12.8.3.3 and 12.8.3.4; ISO 32000-2, 12.8.5 for the document timestamp).
+const (
+	SubFilterPKCS7Detached ast.PdfName = "adbe.pkcs7.detached"
+	SubFilterCAdESDetached ast.PdfName = "ETSI.CAdES.detached"
+	SubFilterRFC3161       ast.PdfName = "ETSI.RFC3161"
+)
+
+// SignParams is what a signature is asked to be once the signature dictionary
+// is settled: the /SubFilter its /Contents must suit, and the RFC 3161
+// timestamp authority that timestamps its signature value, "" for none.
+type SignParams struct {
+	SubFilter    ast.PdfName
+	TimestampURL string
+}
+
+// Signer produces the /Contents of a signature dictionary for the given
+// digest: a CMS SignedData, or an RFC 3161 timestamp token for a document
+// timestamp. Implementations control key material and signing algorithms.
 type Signer interface {
-	// Sign computes a PKCS#7/CMS signature over the given SHA-256 digest.
-	Sign(digest []byte) ([]byte, error)
-	// Certificate returns the signing certificate for embedding in the
-	// signature field's /Cert entry.
+	// Sign computes the /Contents over the given SHA-256 digest, as params
+	// asks for it.
+	Sign(ctx context.Context, digest []byte, params SignParams) ([]byte, error)
+	// Certificate returns the signing certificate.
 	Certificate() *x509.Certificate
-	// EstimatedSize returns the maximum expected signature byte count.
-	EstimatedSize() int
+	// EstimatedSize returns the maximum expected byte count of what Sign
+	// returns for params.
+	EstimatedSize(params SignParams) int
 }
 
 // SignatureInfo holds the optional entries of the signature dictionary (ISO
@@ -48,6 +66,17 @@ type SignatureInfo struct {
 	// signature field of that name is signed in place, and a new root field
 	// takes it otherwise. Empty picks Signature1, Signature2, ...
 	Field string
+	// SubFilter is the /SubFilter the caller asked for, "" for
+	// adbe.pkcs7.detached.
+	SubFilter ast.PdfName
+}
+
+// subFilter returns the /SubFilter the signature dictionary takes.
+func (info SignatureInfo) subFilter() ast.PdfName {
+	if info.SubFilter == "" {
+		return SubFilterPKCS7Detached
+	}
+	return info.SubFilter
 }
 
 // entries adds the entries info sets to the signature dictionary sigDict.
@@ -129,7 +158,8 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 
 	// Reserve space for the signature. The /Contents value is a hex string
 	// of estimatedSize bytes, which requires estimatedSize*2 hex chars.
-	estimatedSize := max(signer.EstimatedSize(), 8192)
+	params := SignParams{SubFilter: info.subFilter()}
+	estimatedSize := max(signer.EstimatedSize(params), 8192)
 	placeholderHexLen := estimatedSize * 2
 
 	// Create the signature dictionary with a placeholder /Contents.
@@ -139,7 +169,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	sigDict := ast.PdfDict{
 		"Type":      ast.PdfName("Sig"),
 		"Filter":    ast.PdfName("Adobe.PPKLite"),
-		"SubFilter": ast.PdfName("adbe.pkcs7.detached"),
+		"SubFilter": params.SubFilter,
 		"Contents":  ast.PdfString(string(placeholderBytes)),
 		"ByteRange": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(9999999999), ast.PdfInt(9999999999), ast.PdfInt(9999999999)},
 	}
@@ -325,7 +355,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	h.Write(pdfBytes[byteRange[2] : byteRange[2]+byteRange[3]])
 	digest := h.Sum(nil)
 
-	sigBytes, err := signer.Sign(digest)
+	sigBytes, err := signer.Sign(ctx, digest, params)
 	if err != nil {
 		return fmt.Errorf("signing: %w", err)
 	}

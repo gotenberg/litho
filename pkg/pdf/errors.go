@@ -159,6 +159,14 @@ var (
 	// 12.7.3.2). Nothing is written.
 	ErrSignatureFieldUnavailable = mutations.ErrSignatureFieldUnavailable
 
+	// ErrSignatureNotPAdES is returned by [Writer.WriteTo] under [WithPAdES]
+	// when the SignedData a [Signer] other than the one of [NewSigner]
+	// returned is not the CAdES signature of a PAdES baseline signature: it
+	// carries a signing-time attribute, or lacks the content-type,
+	// message-digest or ESS signing-certificate one (ETSI EN 319 142-1, 5.2.1
+	// and 6.3). Nothing is written.
+	ErrSignatureNotPAdES = signature.ErrNotCAdES
+
 	// ErrSignerKeyUnsupported is returned by [NewSigner], [ParseSignerPEM]
 	// and [ParseSignerPKCS12] for a private key other than RSA or ECDSA on
 	// P-256, P-384 or P-521.

@@ -139,11 +139,17 @@ func (s *CMSSigner) EstimatedSize() int {
 
 // Sign returns the DER-encoded ContentInfo of a detached SignedData over the
 // content whose SHA-256 is digest, signed at the time at.
-func (s *CMSSigner) Sign(digest []byte, at time.Time) ([]byte, error) {
+//
+// With cades it returns the CAdES signature an ETSI.CAdES.detached signature
+// dictionary holds (ISO 32000-2, 12.8.3.4; ETSI EN 319 142-1, PAdES baseline
+// B-B): the same SignedData without the signing-time attribute, which ETSI EN
+// 319 142-1, 5.2.1 and 6.3, Table 1 forbid there, the signature dictionary's
+// /M carrying the claimed signing time instead. at is then unused.
+func (s *CMSSigner) Sign(digest []byte, at time.Time, cades bool) ([]byte, error) {
 	if len(digest) != sha256.Size {
 		return nil, fmt.Errorf("%w: a %d-byte digest is not a SHA-256", ErrSignatureMalformed, len(digest))
 	}
-	attrs, err := s.signedAttributes(digest, at)
+	attrs, err := s.signedAttributes(digest, at, cades)
 	if err != nil {
 		return nil, err
 	}
@@ -226,9 +232,10 @@ func (s *CMSSigner) Sign(digest []byte, at time.Time) ([]byte, error) {
 }
 
 // signedAttributes returns the content octets of the SignedAttributes: the
-// DER encodings of its four Attributes, sorted as DER sorts a SET OF (X.690,
+// DER encodings of its four Attributes, or three without the signing-time
+// under cades (see [CMSSigner.Sign]), sorted as DER sorts a SET OF (X.690,
 // 11.6).
-func (s *CMSSigner) signedAttributes(digest []byte, at time.Time) ([]byte, error) {
+func (s *CMSSigner) signedAttributes(digest []byte, at time.Time, cades bool) ([]byte, error) {
 	contentType, err := asn1.Marshal(oidCMSData)
 	if err != nil {
 		return nil, fmt.Errorf("encoding the content type: %w", err)
@@ -248,16 +255,20 @@ func (s *CMSSigner) signedAttributes(digest []byte, at time.Time) ([]byte, error
 		return nil, err
 	}
 
-	var attrs [][]byte
-	for _, a := range []struct {
+	type attr struct {
 		oid   asn1.ObjectIdentifier
 		value []byte
-	}{
+	}
+	list := []attr{
 		{oidCMSAttrContentType, contentType},
-		{oidCMSAttrSigningTime, signingTime},
 		{oidAttrMessageDigest, messageDigest},
 		{oidCMSAttrSigningCert, signingCert},
-	} {
+	}
+	if !cades {
+		list = append(list, attr{oidCMSAttrSigningTime, signingTime})
+	}
+	var attrs [][]byte
+	for _, a := range list {
 		oid, err := asn1.Marshal(a.oid)
 		if err != nil {
 			return nil, fmt.Errorf("encoding attribute %v: %w", a.oid, err)

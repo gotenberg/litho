@@ -22,6 +22,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/remediation"
+	"github.com/gotenberg/litho/pkg/internal/signature"
 	"github.com/gotenberg/litho/pkg/internal/tagging"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -690,14 +691,32 @@ type signerAdapter struct {
 	at    time.Time
 }
 
-func (a signerAdapter) Sign(digest []byte) ([]byte, error) {
+// Sign returns the SignedData over digest. Under ETSI.CAdES.detached the
+// signer of [NewSigner] writes the CAdES form, and the SignedData of any other
+// [Signer] is refused with [ErrSignatureNotPAdES] when it is not one (see
+// [WithPAdES]).
+func (a signerAdapter) Sign(_ context.Context, digest []byte, params mutations.SignParams) ([]byte, error) {
+	cades := params.SubFilter == mutations.SubFilterCAdESDetached
 	if s, ok := a.inner.(*builtinSigner); ok {
-		return s.signAt(digest, a.at)
+		return s.signAt(digest, a.at, cades)
 	}
-	return a.inner.Sign(digest)
+	der, err := a.inner.Sign(digest)
+	if err != nil {
+		return nil, err
+	}
+	if cades {
+		if err := signature.CheckCAdES(der); err != nil {
+			return nil, fmt.Errorf("the Signer's SignedData under ETSI.CAdES.detached: %w", err)
+		}
+	}
+	return der, nil
 }
+
+// Certificate returns the signing certificate.
 func (a signerAdapter) Certificate() *x509.Certificate { return a.inner.Certificate() }
-func (a signerAdapter) EstimatedSize() int             { return a.inner.EstimatedSize() }
+
+// EstimatedSize returns the Signer's estimate.
+func (a signerAdapter) EstimatedSize(_ mutations.SignParams) int { return a.inner.EstimatedSize() }
 
 // signing returns the signer and the signature dictionary entries of a write,
 // with the signing time [WithSigningTime] set or else now.

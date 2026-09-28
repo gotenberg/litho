@@ -27,7 +27,8 @@ type builtinSigner struct {
 // signing-time, message-digest and ESS signing-certificate-v2 (RFC 5035)
 // signed attributes, and cert followed by chain in its certificates. chain is
 // the intermediate certificates a verifier needs to reach a trusted root, in
-// any order; duplicates and cert itself are dropped.
+// any order; duplicates and cert itself are dropped. [WithPAdES] makes it the
+// CAdES signature of a PAdES baseline signature instead.
 //
 // key is an RSA key, signed with PKCS #1 v1.5, or an ECDSA key on P-256,
 // P-384 or P-521. It is a [crypto.Signer], so a key held in an HSM or a cloud
@@ -184,13 +185,14 @@ func parsePEMPrivateKey(data []byte) (crypto.Signer, error) {
 
 // Sign returns the SignedData over digest, signed now.
 func (s *builtinSigner) Sign(digest []byte) ([]byte, error) {
-	return s.signAt(digest, time.Now())
+	return s.signAt(digest, time.Now(), false)
 }
 
 // signAt returns the SignedData over digest with at as its signing-time, the
-// instant the signature dictionary's /M records.
-func (s *builtinSigner) signAt(digest []byte, at time.Time) ([]byte, error) {
-	der, err := s.cms.Sign(digest, at)
+// instant the signature dictionary's /M records, or its CAdES form without
+// one (see [WithPAdES]).
+func (s *builtinSigner) signAt(digest []byte, at time.Time, cades bool) ([]byte, error) {
+	der, err := s.cms.Sign(digest, at, cades)
 	if err != nil {
 		return nil, fmt.Errorf("building the CMS signature: %w", err)
 	}
@@ -237,13 +239,30 @@ func WithSignerName(name string) SignOption {
 }
 
 // WithSigningTime sets the /M signing time, and the signing-time attribute of
-// the SignedData when the [Signer] is the one of [NewSigner]. Without it both
-// record the time of [Writer.WriteTo]. A fixed time, with a deterministic
+// the SignedData when the [Signer] is the one of [NewSigner] and [WithPAdES],
+// which writes none, is not given. Without it both record the time of
+// [Writer.WriteTo]. A fixed time, with a deterministic
 // signature scheme such as RSA PKCS #1 v1.5, makes the signed output
 // reproducible byte for byte. The time is the signer's claim, not a trusted
 // timestamp.
 func WithSigningTime(t time.Time) SignOption {
 	return func(o *signOpts) { o.info.Time = t }
+}
+
+// WithPAdES writes a PAdES baseline signature (ETSI EN 319 142-1, level B-B)
+// instead of the adbe.pkcs7.detached one of ISO 32000-1, 12.8.3.3: the
+// signature dictionary's /SubFilter is ETSI.CAdES.detached (ISO 32000-2,
+// 12.8.3.4), and its SignedData carries the content-type, message-digest and
+// ESS signing-certificate-v2 signed attributes and no signing-time, which
+// ETSI EN 319 142-1, 5.2.1 moves to the /M entry, always written. The signer
+// of [NewSigner] builds that SignedData. The SignedData of another [Signer]
+// is checked, and [Writer.WriteTo] returns [ErrSignatureNotPAdES] when it
+// does not qualify.
+//
+// With [WithTimestampAuthority] the signature reaches level B-T, and with
+// [WithLTV] as well, B-LT.
+func WithPAdES() SignOption {
+	return func(o *signOpts) { o.info.SubFilter = mutations.SubFilterCAdESDetached }
 }
 
 // WithSignatureField names the signature field. An unsigned signature field

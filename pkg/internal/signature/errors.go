@@ -62,3 +62,8 @@ var (
 	// extension excludes signing (RFC 5280, 4.2.1.3).
 	ErrSignerCertificateUsage = errors.New("certificate key usage does not allow signing")
 )
+
+// ErrNotCAdES indicates a SignedData that cannot be the CAdES signature of a
+// PAdES baseline signature (ETSI EN 319 142-1, 6.3), returned by
+// [CheckCAdES].
+var ErrNotCAdES = errors.New("signature is not a PAdES baseline CAdES signature")

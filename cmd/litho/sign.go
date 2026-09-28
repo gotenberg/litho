@@ -20,6 +20,8 @@ type signFlags struct {
 	field, signingTime              *string
 
 	p12, p12PasswordFile, p12PasswordEnv *string
+
+	pades padesFlags
 }
 
 // registerSignFlags declares the signing flags on fs.
@@ -40,6 +42,8 @@ func registerSignFlags(fs *flag.FlagSet) signFlags {
 		p12:             fs.String("p12", "", "PKCS #12 (.p12, .pfx) key store holding the private key, its certificate and chain; replaces --cert, --key and --chain"),
 		p12PasswordFile: fs.String("p12-password-file", "", "File whose first line is the --p12 password (default: the empty password)"),
 		p12PasswordEnv:  fs.String("p12-password-env", "", "Environment variable holding the --p12 password"),
+
+		pades: registerPAdESFlags(fs),
 	}
 }
 
@@ -148,7 +152,7 @@ func (f signFlags) options() ([]pdf.SignOption, error) {
 		}
 		opts = append(opts, pdf.WithSigningTime(t))
 	}
-	return opts, nil
+	return append(opts, f.pades.options()...), nil
 }
 
 // encryptedSignRefusal explains why an encrypted document is not signed.
@@ -170,7 +174,7 @@ func runSign(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	}
 
 	if fs.NArg() < 1 || *output == "" || !flags.hasKeyMaterial() {
-		fmt.Fprintln(stderr, "Usage: litho sign <file> (--cert cert.pem --key key.pem [--chain chain.pem] | --p12 id.p12 [--p12-password-file F | --p12-password-env VAR]) [--reason R] [--location L] [--contact C] [--name N] [--field F] [--signing-time T] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho sign <file> (--cert cert.pem --key key.pem [--chain chain.pem] | --p12 id.p12 [--p12-password-file F | --p12-password-env VAR]) [--reason R] [--location L] [--contact C] [--name N] [--field F] [--signing-time T] [--pades] -o out.pdf")
 		return exitError
 	}
 
