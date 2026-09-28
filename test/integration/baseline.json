@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-28T08:28:04Z",
+  "captured_at": "2026-09-28T10:00:06Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -118,6 +118,14 @@
           "skipped": 0,
           "metrics": {
             "ruleset_mismatch": 2
+          }
+        },
+        "determinism": {
+          "matched": 966,
+          "mismatched": 0,
+          "skipped": 138,
+          "metrics": {
+            "nondeterministic": 0
           }
         },
         "mutate-autotag": {
