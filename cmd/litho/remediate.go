@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -52,6 +53,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	level := fs.String("level", "", "Factur-X conformance level: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG")
 	compact := registerCompactFlag(fs)
 	fontDir := registerFontDirFlag(fs)
+	documentID := registerDocumentIDFlag(fs)
 	strict := fs.Bool("strict", false,
 		"Exit 2 when violations remain that could not be fixed")
 
@@ -60,13 +62,18 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--compact] [--strict] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--document-id HEX] [--compact] [--strict] -o out.pdf")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
 		return exitError
 	}
 
 	fontOpt, err := fontDirOption(*fontDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return exitError
+	}
+	idOpt, err := documentIDOption(*documentID)
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
@@ -96,6 +103,9 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	if fontOpt != nil {
 		remOpts = append(remOpts, fontOpt)
+	}
+	if idOpt != nil {
+		remOpts = append(remOpts, idOpt)
 	}
 
 	var report *pdf.RemediationReport
@@ -277,4 +287,33 @@ func fontDirOption(dir string) (pdf.RemediateOption, error) {
 		return nil, fmt.Errorf("--font-dir: %s is not a directory", dir)
 	}
 	return pdf.WithFontFiles(os.DirFS(dir)), nil
+}
+
+// documentIDBytes is the length of the /ID seed [pdf.WithDocumentID] takes.
+const documentIDBytes = 16
+
+// registerDocumentIDFlag declares the --document-id flag remediate and the
+// pipe's remediate stage share.
+func registerDocumentIDFlag(fs *flag.FlagSet) *string {
+	return fs.String("document-id", "",
+		"32 hex digits pinning the trailer /ID remediation writes when the document has no valid one, so identical inputs give identical output bytes")
+}
+
+// documentIDOption returns the remediation option pinning the trailer /ID to
+// the 16 bytes hexID spells, nil when hexID is empty, or an error when hexID is
+// not 32 hex digits. Remediation writes an /ID when the document has no valid
+// one, and that /ID is otherwise random: the one input that makes two runs of
+// this command over the same file write different bytes.
+func documentIDOption(hexID string) (pdf.RemediateOption, error) {
+	if hexID == "" {
+		return nil, nil
+	}
+	id, err := hex.DecodeString(hexID)
+	if err != nil {
+		return nil, fmt.Errorf("--document-id: %w", err)
+	}
+	if len(id) != documentIDBytes {
+		return nil, fmt.Errorf("--document-id: want %d hex digits, got %d", 2*documentIDBytes, len(hexID))
+	}
+	return pdf.WithDocumentID(id), nil
 }

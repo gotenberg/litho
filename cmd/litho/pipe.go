@@ -850,6 +850,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		profile := fs.String("profile", "", "Compliance profile (required)")
 		aggressive := fs.Bool("aggressive", false, "Enable aggressive fixers")
 		fontDir := registerFontDirFlag(fs)
+		documentID := registerDocumentIDFlag(fs)
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
@@ -860,6 +861,10 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		if err != nil {
 			return nil, err
 		}
+		idOpt, err := documentIDOption(*documentID)
+		if err != nil {
+			return nil, err
+		}
 		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
 			var opts []pdf.RemediateOption
 			if *aggressive {
@@ -867,6 +872,9 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			}
 			if fontOpt != nil {
 				opts = append(opts, fontOpt)
+			}
+			if idOpt != nil {
+				opts = append(opts, idOpt)
 			}
 			// The report was discarded here because this command prints
 			// nothing. That answered the PRINTING question only: the exit code
