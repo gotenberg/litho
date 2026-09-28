@@ -142,14 +142,33 @@ func ReadInfo(data []byte) (Info, error) {
 	if err != nil {
 		return Info{}, err
 	}
+	return readInfo(records, func(tag string, _ int) ([]byte, error) {
+		return TableData(data, records, tag)
+	})
+}
+
+// Table prefixes [readInfo] reads: the head table is 54 bytes (OpenType
+// specification, head table), [readInfo] reads the hhea table up to its
+// descender, the OS/2 table up to sCapHeight and the post table up to
+// isFixedPitch.
+const (
+	headInfoBytes = 54
+	hheaInfoBytes = 8
+	os2InfoBytes  = 90
+	postInfoBytes = 16
+)
+
+// readInfo reads [Info] from the tables records lists, which table returns:
+// the table tagged tag, or at least its first need bytes when need is
+// positive, and an error wrapping [ErrTableNotFound] when records lists none.
+func readInfo(records []TableRecord, table func(tag string, need int) ([]byte, error)) (Info, error) {
 	var info Info
 
-	head, err := TableData(data, records, "head")
+	head, err := table("head", headInfoBytes)
 	if err != nil {
 		return Info{}, err
 	}
-	// The head table is 54 bytes (OpenType specification, head table).
-	if len(head) < 54 {
+	if len(head) < headInfoBytes {
 		return Info{}, fmt.Errorf("%w: head table too short", ErrInvalidFont)
 	}
 	info.UnitsPerEm = binary.BigEndian.Uint16(head[18:20])
@@ -158,11 +177,11 @@ func ReadInfo(data []byte) (Info, error) {
 	}
 	info.MacStyle = binary.BigEndian.Uint16(head[44:46])
 
-	if hhea, err := TableData(data, records, "hhea"); err == nil && len(hhea) >= 8 {
+	if hhea, err := table("hhea", hheaInfoBytes); err == nil && len(hhea) >= hheaInfoBytes {
 		info.Ascender = int16(binary.BigEndian.Uint16(hhea[4:6]))  //nolint:gosec // G115: hhea ascender is stored as int16.
 		info.Descender = int16(binary.BigEndian.Uint16(hhea[6:8])) //nolint:gosec // G115: hhea descender is stored as int16.
 	}
-	if os2, err := TableData(data, records, "OS/2"); err == nil && len(os2) >= 10 {
+	if os2, err := table("OS/2", os2InfoBytes); err == nil && len(os2) >= 10 {
 		info.HasOS2 = true
 		info.WeightClass = binary.BigEndian.Uint16(os2[4:6])
 		info.FSType = binary.BigEndian.Uint16(os2[8:10])
@@ -172,11 +191,11 @@ func ReadInfo(data []byte) (Info, error) {
 			info.Descender = int16(binary.BigEndian.Uint16(os2[70:72])) //nolint:gosec // G115: sTypoDescender is stored as int16.
 		}
 		// sCapHeight arrived with version 2, at offset 88.
-		if version := binary.BigEndian.Uint16(os2[0:2]); version >= 2 && len(os2) >= 90 {
+		if version := binary.BigEndian.Uint16(os2[0:2]); version >= 2 && len(os2) >= os2InfoBytes {
 			info.CapHeight = int16(binary.BigEndian.Uint16(os2[88:90])) //nolint:gosec // G115: sCapHeight is stored as int16.
 		}
 	}
-	if post, err := TableData(data, records, "post"); err == nil && len(post) >= 16 {
+	if post, err := table("post", postInfoBytes); err == nil && len(post) >= postInfoBytes {
 		// italicAngle is a 16.16 Fixed.
 		info.ItalicAngle = float64(int32(binary.BigEndian.Uint32(post[4:8]))) / 65536 //nolint:gosec // G115: italicAngle is a signed 16.16 Fixed.
 		info.FixedPitch = binary.BigEndian.Uint32(post[12:16]) != 0
@@ -189,7 +208,7 @@ func ReadInfo(data []byte) (Info, error) {
 		info.Outline = OutlineCFF
 	}
 
-	if name, err := TableData(data, records, "name"); err == nil {
+	if name, err := table("name", 0); err == nil {
 		names := readNames(name)
 		info.PostScriptName = names[nameIDPostScript]
 		info.Family = cmp.Or(names[nameIDTypographicFamily], names[nameIDFamily])

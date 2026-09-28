@@ -683,6 +683,12 @@ func assembleSfnt(version uint32, tables map[string][]byte) []byte {
 			tags = append(tags, tag)
 		}
 	}
+	return assembleTables(version, tags, tables)
+}
+
+// assembleTables lays out the tables tags names, in that order, as
+// [assembleSfnt] does.
+func assembleTables(version uint32, tags []string, tables map[string][]byte) []byte {
 	n := len(tags)
 	searchRange, selector := 1, 0
 	for searchRange*2 <= n {
@@ -690,7 +696,7 @@ func assembleSfnt(version uint32, tables map[string][]byte) []byte {
 		selector++
 	}
 	out := binary.BigEndian.AppendUint32(nil, version)
-	out = binary.BigEndian.AppendUint16(out, uint16(n))                  //nolint:gosec // G115: at most len(subsetTables).
+	out = binary.BigEndian.AppendUint16(out, uint16(n))                  //nolint:gosec // G115: at most len(subsetTables), or maxSfntTables for an extracted face.
 	out = binary.BigEndian.AppendUint16(out, uint16(16*searchRange))     //nolint:gosec // G115: as above.
 	out = binary.BigEndian.AppendUint16(out, uint16(selector))           //nolint:gosec // G115: as above.
 	out = binary.BigEndian.AppendUint16(out, uint16(16*(n-searchRange))) //nolint:gosec // G115: as above.
@@ -703,7 +709,7 @@ func assembleSfnt(version uint32, tables map[string][]byte) []byte {
 		}
 		out = append(out, tag...)
 		out = binary.BigEndian.AppendUint32(out, tableChecksum(t))
-		out = binary.BigEndian.AppendUint32(out, uint32(offset)) //nolint:gosec // G115: the program is no larger than its source, whose offsets are uint32.
+		out = binary.BigEndian.AppendUint32(out, uint32(offset)) //nolint:gosec // G115: the program is no larger than its source, whose offsets are uint32, or than the maxBytes of ExtractFace.
 		out = binary.BigEndian.AppendUint32(out, uint32(len(t))) //nolint:gosec // G115: as above.
 		offset += (len(t) + 3) &^ 3
 	}
