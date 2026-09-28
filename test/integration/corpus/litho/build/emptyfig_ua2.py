@@ -26,11 +26,14 @@ references the removal cleans, so this file packs them into two pages:
     GoTo action to page 1, which then names the element page 1 opens on.
   * F10's MCID 0 on page 2, which marks nothing, is the only element on page 2,
     and the outline item `Page two` names it in the /SD of its GoTo action to
-    page 2, which then keeps its page destination alone.
+    page 2. Removing F10 would leave that /SD no element to name and the
+    action its page destination alone, which ISO 14289-2, 8.8 rejects, so F10
+    stays.
 
-Two Figures lacking alternate text stay: K2, whose MCID 2 the page marks
-around a drawing, and K3, which has no kid but which the outline item `Pinned`
-names in a destination array, where no page destination stands beside it.
+Three Figures lacking alternate text stay: F10, K2, whose MCID 2 the page
+marks around a drawing, and K3, which has no kid but which the outline item
+`Pinned` names in a destination array, where no page destination stands
+beside it.
 
 See ../README.md for the authoritative expected firing set.
 """

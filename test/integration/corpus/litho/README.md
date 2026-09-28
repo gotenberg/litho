@@ -187,6 +187,7 @@ one deliberately rather than diffing it against a fresh build.
 | `fieldkids_2b.pdf`     | PDF/A-2b     | Form fields whose `/Kids` arrays are objects of their own        |
 | `boxorigin_2b.pdf`     | PDF/A-2b     | Crop boxes whose lower-left corner is not the user-space origin  |
 | `treekids_ua1.pdf`     | PDF/UA-1     | Structure trees whose `/Kids` arrays are objects of their own    |
+| `directfig_ua2.pdf`    | PDF/UA-2     | Figures written directly in a structure `/K`, under remediation  |
 
 ### Must-not-fire controls
 
@@ -456,6 +457,7 @@ which are covered under [Known divergences](#known-divergences).
 | `csnames_2b.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 5    | 6    |
 | `defaultcs_4.pdf`      | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 10   | 7    |
 | `destforms_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 2    |
+| `directfig_ua2.pdf`    | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `directstream_2b.pdf`  | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `docinfo_1b.pdf`       | 11   | 8    | 4    | 1    | 2    | 4    | 1    | 2    | 6   | 6    | 7    | 5    | 5    |
 | `docmdp_2b.pdf`        | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 10   | 8    |
@@ -5632,27 +5634,27 @@ a marked-content identifier its page does not mark, and no reference the
 removal cleans but a `/ParentTree` slot, so this file packs the other forms and
 references into a tagged document of two pages:
 
-| Figure          | Encloses                                                | Named by                                            | After aggressive remediation                       |
-| --------------- | ------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------- |
-| F1              | the null object                                         |                                                     | removed                                            |
-| F2              | MCID 7, which page 1 does not mark                      | a `/ParentTree` slot                                | removed, the slot null                             |
-| F3              | an object reference to object 999, which is not defined | a `/ParentTree` entry of its own, under key 5       | removed, the entry gone                            |
-| F4              | F5 alone                                                |                                                     | removed                                            |
-| F5              | a marked-content reference to MCID 8, unmarked          | a `/ParentTree` slot                                | removed, the slot null                             |
-| F6, with `/Alt` | F7 alone                                                |                                                     | stays, with no kid                                 |
-| F7              | nothing                                                 |                                                     | removed                                            |
-| F8, in a `Div`  | MCID 9, unmarked                                        | a `/ParentTree` slot                                | removed; the `Div` stays, with no kid              |
-| F9              | MCID 10, unmarked                                       | the `/IDTree`, a `/Ref`, an outline `/SE` and `/SD` | removed; the `/SD` names the `Document` instead    |
-| F10, on page 2  | MCID 0 of page 2, unmarked                              | an outline item's `/SD`                             | removed; the `/SD` goes, the action keeps its `/D` |
-| K2              | MCID 2, a drawing page 1 marks                          |                                                     | stays, with the placeholder `/Alt`                 |
-| K3              | nothing                                                 | an outline item's `/Dest`, a destination array      | stays, with the placeholder `/Alt`                 |
+| Figure          | Encloses                                                | Named by                                            | After aggressive remediation                    |
+| --------------- | ------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------- |
+| F1              | the null object                                         |                                                     | removed                                         |
+| F2              | MCID 7, which page 1 does not mark                      | a `/ParentTree` slot                                | removed, the slot null                          |
+| F3              | an object reference to object 999, which is not defined | a `/ParentTree` entry of its own, under key 5       | removed, the entry gone                         |
+| F4              | F5 alone                                                |                                                     | removed                                         |
+| F5              | a marked-content reference to MCID 8, unmarked          | a `/ParentTree` slot                                | removed, the slot null                          |
+| F6, with `/Alt` | F7 alone                                                |                                                     | stays, with no kid                              |
+| F7              | nothing                                                 |                                                     | removed                                         |
+| F8, in a `Div`  | MCID 9, unmarked                                        | a `/ParentTree` slot                                | removed; the `Div` stays, with no kid           |
+| F9              | MCID 10, unmarked                                       | the `/IDTree`, a `/Ref`, an outline `/SE` and `/SD` | removed; the `/SD` names the `Document` instead |
+| F10, on page 2  | MCID 0 of page 2, unmarked                              | an outline item's `/SD`                             | stays, with the placeholder `/Alt`              |
+| K2              | MCID 2, a drawing page 1 marks                          |                                                     | stays, with the placeholder `/Alt`              |
+| K3              | nothing                                                 | an outline item's `/Dest`, a destination array      | stays, with the placeholder `/Alt`              |
 
 The `Document` is the element page 1 opens on once F9 is gone, the one
 structure-destination remediation picks for a destination to page 1. Page 2
-holds no other element, so the action to it keeps its page destination alone,
-as that remediation leaves a destination to a page no element begins on. K3
-stays because a destination array names it with no page destination beside it
-to fall back on.
+holds no other element, so without F10 the action to it would keep its page
+destination alone, which ISO 14289-2, 8.8 rejects: F10 stays as the only
+element that `/SD` can name. K3 stays because a destination array names it
+with no page destination beside it to fall back on.
 
 The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
 count for count. PDF/UA-2 reports `8.2.5.28.2/1` for the eleven Figures lacking
@@ -5665,10 +5667,12 @@ and 3 the header (`6.1.2/1`); PDF/A-4f adds the missing `/EmbeddedFiles`.
 
 Measured on litho and veraPDF 1.30.2 before the removal, aggressive remediation
 to PDF/UA-1, PDF/UA-2 and WTPDF-1.0 Accessibility gave all eleven Figures the
-placeholder `/Alt`, and both tools reported nothing on the outputs. Now nine go
-and K2 and K3 keep the placeholder: the PDF/UA-1 output passes both tools, and
-the PDF/UA-2 and WTPDF-1.0 Accessibility outputs fail `8.8/2` once on both, the
-action to page 2. The default mode leaves the eleven findings on both tools, as
+placeholder `/Alt`, and both tools reported nothing on the outputs. With the
+removal, nine went and K2 and K3 kept the placeholder, and the PDF/UA-2 and
+WTPDF-1.0 Accessibility outputs failed `8.8/2` once on both, the action to
+page 2 left without its `/SD`. Now eight go and F10, K2 and K3 keep the
+placeholder: the PDF/UA-1, PDF/UA-2 and WTPDF-1.0 Accessibility outputs pass
+both tools. The default mode leaves the eleven findings on both tools, as
 before. Remediation at the six PDF/A manifest profiles and at WTPDF-1.0 Reuse,
 default and aggressive, leaves nothing on either tool.
 
@@ -5706,9 +5710,14 @@ Measured on litho before the fix, the walks read the array under each `Sect`
 and reported the `Figure` twice, `7.3/1`, `8.2.5.28.2/1` and `Table 5.
 Sect-Span/1` each twice, against veraPDF's once. Remediation at the eight
 manifest profiles, default and aggressive, leaves nothing at the six PDF/A
-profiles on either tool, and at PDF/UA-1 and PDF/UA-2 leaves the `Figure` on
-both: alternate text goes on a `Figure` written as an object of its own, and
-this one is written directly in the array. A split naming the page twice, a
+profiles on either tool. At PDF/UA-1 and PDF/UA-2 the default mode leaves the
+`Figure` on both, as it leaves every `Figure` lacking alternate text. Aggressive
+remediation took nothing out of the tree and gave no placeholder to a `Figure`
+written directly in an array, so it left the `Figure` too; now it takes the
+`Figure` out of the shared array, since it encloses nothing, and alternate text
+the caller supplies goes into the array in its place. The aggressive PDF/UA-1
+output passes both tools, and the aggressive PDF/UA-2 output keeps `Table 5.
+Sect-Span/1` alone on both. A split naming the page twice, a
 merge of the file with itself and an insertion of it into itself copy the tree
 twice, and each copy holds a `Figure` written directly in an array: litho
 reports each, twice in all, and veraPDF reports one, as it reports one for two
@@ -5831,6 +5840,47 @@ PDF/UA-1 what the file does, the structure carried whole, and `redact` over
 page 1 leaves no text on it. Every output of `redact`, `flatten-form`, `split`
 and `merge` over the 5235 corpus files litho wrote before the tree readers
 read each array once is byte-identical to the one it writes now.
+
+### `directfig_ua2.pdf`
+
+ISO 32000-1, 14.7.2, Table 323 lets an element's `/K` hold a structure element
+directly, with no object number of its own, and ISO 14289-2, 8.2.5.28.2 and
+ISO 14289-1, 7.3 ask such a `Figure` for alternate text like any other.
+Remediation writes the text into the object that holds the `Figure`, the
+element whose `/K` lists it, through inline elements however deep, or the `/K`
+array written as an object of its own, and aggressive remediation takes out a
+`Figure` that encloses nothing from that object. No corpus file writes a
+`Figure` directly but `sharedk_ua1`, whose one encloses nothing, so this file
+packs the places such a `Figure` sits into a tagged page:
+
+| Figure | Written in                                                 | Encloses                             | After aggressive remediation       |
+| ------ | ---------------------------------------------------------- | ------------------------------------ | ---------------------------------- |
+| D1     | the `Document`'s `/K` array                                | MCID 1, a drawing                    | stays, with the placeholder `/Alt` |
+| D2     | the `/K` array of a `Div` written inline in the same array | MCID 2, a drawing                    | stays, with the placeholder `/Alt` |
+| D3     | a `/K` array written as an object of its own, a `Sect`'s   | MCID 3, a drawing                    | stays, with the placeholder `/Alt` |
+| D4     | the `Document`'s `/K` array                                | MCID 9, which the page does not mark | removed                            |
+| D5     | the `Sect`'s array, beside D3                              | D6 alone                             | removed, with D6                   |
+| D6     | D5's `/K` array                                            | the null object                      | removed                            |
+
+The page's `/ParentTree` array names, for each identifier, the nearest element
+written as an object of its own. The file agrees with veraPDF 1.30.2 in all
+thirteen cells, rule for rule. PDF/UA-2 reports `8.2.5.28.2/1` and PDF/UA-1
+`7.3/1`, beside the part-2 claim (`5/2`) and the `%PDF-2.0` header (`6.1/1`).
+litho reports each of the six `Figure` elements, and veraPDF one, D4, whose
+context names it `0 0 obj`, the number every element written directly has. The
+PDF/A cells report the drawings painted in device gray with no output intent
+(`6.2.3.3/3` at part 1, `6.2.4.3/4` from part 2) and the missing PDF/A
+identification. Parts 1 to 3 add the `pdfuaid` properties no extension schema
+declares, and parts 2 and 3 the header (`6.1.2/1`); PDF/A-4f adds the missing
+`/EmbeddedFiles`.
+
+Measured on litho and veraPDF 1.30.2 before the fix, remediation to PDF/UA-1,
+PDF/UA-2 and WTPDF-1.0 Accessibility, default and aggressive, left all six
+findings on litho and the one on veraPDF: the placeholder and the removal
+reached only a `Figure` written as an object of its own. Now the aggressive
+outputs give D1 to D3 the placeholder, take out D4 to D6, and pass both tools.
+The default mode leaves the six findings, as before. Remediation at the six
+PDF/A manifest profiles, default and aggressive, leaves nothing on either tool.
 
 ## Scope
 
