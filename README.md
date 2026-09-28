@@ -120,6 +120,55 @@ The public surface lives in three types: `Reader` opens and extracts, `Writer` q
 
 A remediation is the last edit on a `Writer`. Queue every other edit before it: afterwards the `Writer` accepts `Sign`, `WriteTo` and `Close`, and refuses anything else, a second remediation included, with `ErrEditAfterRemediation`.
 
+### Embedding fonts
+
+Every PDF/A and PDF/UA profile requires the fonts a document shows to be embedded. litho ships no font program, so a remediation embeds only the programs you supply, and the licence to embed them is yours. Two options supply them:
+
+- `pdf.WithFontFiles(fsys)` reads every `.ttf`, `.otf` and `.cff` file under an `fs.FS`, such as `os.DirFS("/usr/share/fonts")` or an `embed.FS`. A font takes the program whose PostScript name is its `/BaseFont`, else one of its family and style, else one of a metric-compatible family: Helvetica, Arial, Arimo, Liberation Sans and Nimbus Sans stand for one another, as do Times, Times New Roman, Tinos, Liberation Serif and Nimbus Roman, and Courier, Courier New, Cousine, Liberation Mono and Nimbus Mono PS. Symbol takes Standard Symbols PS, and ZapfDingbats takes D050000L.
+- `pdf.WithFontProvider(p)` asks a `pdf.FontProvider` for each unembedded font. The `pdf.FontRequest` names the font and lists every code the document shows with it, with its glyph name, character and declared width. Return a TrueType, OpenType or bare CFF program, or `nil` to supply none. A returned error aborts the remediation. `pdf.FontProviderFunc` adapts a function.
+
+```go
+report, err := w.RemediatePDFA(ctx, models.PDFA2b, pdf.WithFontFiles(os.DirFS("/usr/share/fonts")))
+if err != nil {
+	log.Fatal(err)
+}
+for _, refusal := range report.FontRefusals {
+	fmt.Println(refusal) // font LithoCustom (object 7): no font program supplied
+}
+```
+
+litho embeds a program only when it serves the font as the document shows it, so no text moves. Every font it leaves unembedded is listed in `RemediationReport.FontRefusals` and stays in the residual. Match the reason with `errors.Is`:
+
+| Reason                       | The font stays unembedded because                                                                                                                                           |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ErrFontNotSupplied`         | No program was supplied.                                                                                                                                                    |
+| `ErrFontProgramInvalid`      | The program is no readable TrueType, OpenType or CFF font, or exceeds the stream budget.                                                                                    |
+| `ErrFontEmbeddingRestricted` | The program's OS/2 fsType forbids embedding its outlines.                                                                                                                   |
+| `ErrFontKind`                | The outlines do not suit the font: CFF for a TrueType font, TrueType for a symbolic Type 1 font, a multiple master font, or a composite font whose CIDs name no characters. |
+| `ErrFontCoverage`            | The program lacks a glyph for a code the document shows.                                                                                                                    |
+| `ErrFontWidths`              | The program's advances disagree with the declared widths by more than one unit, or the font declares none.                                                                  |
+| `ErrFontRejected`            | The embedded font would fail a rule of the profile the unembedded one passed.                                                                                               |
+| `ErrFontUnwritable`          | The font dictionary is written inline where no object number reaches it.                                                                                                    |
+| `ErrFontRolledBack`          | The output failed the integrity checks and the embedding was undone with the other content repairs.                                                                         |
+
+litho embeds a subset of each program: the glyphs the document shows with the font and the glyphs they are drawn from, under a fresh subset tag. At PDF/A-1 a Type 1 subset carries the `/CharSet` and a CIDFont subset the `/CIDSet` ISO 19005-1, 6.3.5 requires. Fonts given the same program share one subset. A program stays whole when its OS/2 fsType forbids subsetting, when its font descriptor serves another font the document shows, when the interactive form's default resources name the font, or when validation rejects the subset and accepts the whole program. `RemediationReport.Fixed` states which each font received:
+
+```text
+embedded ArialMT (subset of 9 glyphs, TrueType program as /FontFile2, 14292 bytes) for font Helvetica (object 5)
+```
+
+`ExampleWithFontFiles` in the [godoc](https://pkg.go.dev/github.com/gotenberg/litho/pkg/pdf#example-WithFontFiles) runs the whole flow.
+
+### Reproducible output
+
+The same input and options give the same output bytes, with one exception: a remediation writes a random trailer `/ID` when the document has no valid one. `pdf.WithDocumentID` pins it to a 16-byte value, so a reproducible build writes the same file every run:
+
+```go
+report, err := w.RemediatePDFA(ctx, models.PDFA2b, pdf.WithDocumentID([]byte("0123456789abcdef")))
+```
+
+A value of any other length is ignored. An encrypted output is never reproducible: `Writer.Encrypt` draws its own `/ID`.
+
 ## CLI
 
 `litho` exposes the same capabilities as subcommands.
@@ -139,6 +188,10 @@ litho validate --profile Factur-X invoice.pdf
 # Remediate.
 litho remediate --profile PDF/A-2b -o fixed.pdf document.pdf
 
+# Remediate, embedding the unembedded fonts from a font directory, with a pinned /ID.
+litho remediate --profile PDF/A-2b --font-dir /usr/share/fonts \
+  --document-id 00112233445566778899aabbccddeeff -o fixed.pdf document.pdf
+
 # Transform.
 litho rotate --angle 90 -o rotated.pdf document.pdf
 litho merge -o merged.pdf a.pdf b.pdf
@@ -154,6 +207,8 @@ litho encrypt --user-password secret -o encrypted.pdf document.pdf
 ```
 
 Run `litho` with no arguments to list every subcommand, or `litho <command> -h` to see its flags.
+
+`--font-dir` is `pdf.WithFontFiles` over a directory: `remediate` and the `pipe` remediate stage search it recursively and embed a subset of the program each unembedded font takes (see [Embedding fonts](#embedding-fonts)). `remediate` lists every font left unembedded, with the reason, under `Fonts left unembedded`, or `refused_fonts` with `-f json`. `pipe` prints no report: `pipe --strict` exits `2` when a font stays unembedded. `--document-id` is `pdf.WithDocumentID`: 32 hex digits pin the trailer `/ID` a remediation writes when the document has no valid one, so two runs over the same file write the same bytes. A directory that does not exist, or a value that is not 32 hex digits, exits `1` and writes nothing.
 
 Signing is library-only. `Writer.Sign` takes a `pdf.Signer`, which the CLI cannot supply without additional crypto dependencies, so `litho sign` refuses with that explanation and exits `1`.
 

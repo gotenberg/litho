@@ -270,7 +270,7 @@ func remediateFacturX(ctx context.Context, w *pdf.Writer, variant facturxVariant
 // remediate stage share.
 func registerFontDirFlag(fs *flag.FlagSet) *string {
 	return fs.String("font-dir", "",
-		"Directory of TrueType, OpenType or CFF font files to embed for the fonts the document does not embed (the licence to embed them is yours)")
+		"Directory of TrueType, OpenType or CFF font files, searched recursively, to embed for the fonts the document does not embed: a font takes the file of its name, its family, or a metric-compatible family (Arial for Helvetica), subset to the glyphs it shows; the report lists each font refused and why (the licence to embed them is yours)")
 }
 
 // fontDirOption returns the remediation option embedding the font files of
