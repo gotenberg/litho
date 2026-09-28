@@ -10,8 +10,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
+	"github.com/gotenberg/litho/pkg/internal/signature"
 	"github.com/gotenberg/litho/pkg/internal/tagging"
 )
 
@@ -142,6 +144,39 @@ var (
 	// profile requires of the header and of every object. WriteTo writes the
 	// rewrite and signs it in an incremental update on top.
 	ErrSignFullRewriteIncompatible = errors.New("sign is incompatible with encryption and decryption")
+
+	// ErrSignatureFieldUnavailable is returned by [Writer.WriteTo] when the
+	// field [WithSignatureField] names cannot take the signature: a field of
+	// that name exists and is not a signature field, is signed already, or
+	// carries a /Lock or required seed values, or no field has the name and it
+	// holds a period, which a new root field's name cannot (ISO 32000-1,
+	// 12.7.3.2). Nothing is written.
+	ErrSignatureFieldUnavailable = mutations.ErrSignatureFieldUnavailable
+
+	// ErrSignerKeyUnsupported is returned by [NewSigner] and [ParseSignerPEM]
+	// for a private key other than RSA or ECDSA on P-256, P-384 or P-521.
+	ErrSignerKeyUnsupported = signature.ErrSignerKeyUnsupported
+
+	// ErrSignerKeyMismatch is returned by [NewSigner] and [ParseSignerPEM] when
+	// the private key is not the one of the signing certificate, or when either
+	// is missing.
+	ErrSignerKeyMismatch = signature.ErrSignerKeyMismatch
+
+	// ErrSignerCertificateUsage is returned by [NewSigner] and
+	// [ParseSignerPEM] for a certificate whose key usage extension allows
+	// neither digitalSignature nor nonRepudiation (RFC 5280, 4.2.1.3).
+	ErrSignerCertificateUsage = signature.ErrSignerCertificateUsage
+
+	// ErrSignerKeyEncrypted is returned by [ParseSignerPEM] for a password-
+	// protected private key, an ENCRYPTED PRIVATE KEY block (RFC 5958) or a
+	// legacy PEM block with a Proc-Type ENCRYPTED header (RFC 1421). Decrypt
+	// it first, or build the key and call [NewSigner].
+	ErrSignerKeyEncrypted = errors.New("private key is encrypted")
+
+	// ErrSignerPEM is returned by [ParseSignerPEM] for input that holds no
+	// certificate, no private key or more than one, or a block that does not
+	// parse.
+	ErrSignerPEM = errors.New("invalid signer PEM")
 
 	// ErrEncryptedNotAuthenticated is returned by [Writer.WriteTo] when the
 	// source document is encrypted but was never authenticated, so its

@@ -12,6 +12,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -594,6 +595,10 @@ type PDFStamp struct {
 // calls [Signer.Sign] during [Writer.WriteTo] with the SHA-256 hash of
 // the ByteRange regions.
 //
+// [NewSigner] and [ParseSignerPEM] return one built on an X.509 certificate
+// and an RSA or ECDSA key. Implement it for anything else, such as a
+// signature with a timestamp or one a remote service computes whole.
+//
 // The interface is owned by the [pdf] package so callers never have to
 // import an internal path. An internal adapter forwards user
 // implementations to the signing engine at write time.
@@ -614,11 +619,32 @@ type Signer interface {
 // [mutations.Signer] interface. The method sets are identical; this
 // adapter exists only to bridge the two named interface types without
 // leaking the internal one through the public API.
-type signerAdapter struct{ inner Signer }
+//
+// at is the signing time the signature dictionary's /M records. It reaches the
+// signer of [NewSigner] as the SignedData's signing-time, so the two agree.
+type signerAdapter struct {
+	inner Signer
+	at    time.Time
+}
 
-func (a signerAdapter) Sign(digest []byte) ([]byte, error) { return a.inner.Sign(digest) }
-func (a signerAdapter) Certificate() *x509.Certificate     { return a.inner.Certificate() }
-func (a signerAdapter) EstimatedSize() int                 { return a.inner.EstimatedSize() }
+func (a signerAdapter) Sign(digest []byte) ([]byte, error) {
+	if s, ok := a.inner.(*builtinSigner); ok {
+		return s.signAt(digest, a.at)
+	}
+	return a.inner.Sign(digest)
+}
+func (a signerAdapter) Certificate() *x509.Certificate { return a.inner.Certificate() }
+func (a signerAdapter) EstimatedSize() int             { return a.inner.EstimatedSize() }
+
+// signing returns the signer and the signature dictionary entries of a write,
+// with the signing time [WithSigningTime] set or else now.
+func (w *Writer) signing(signer Signer) (signerAdapter, mutations.SignatureInfo) {
+	info := w.signOpts.info
+	if info.Time.IsZero() {
+		info.Time = time.Now()
+	}
+	return signerAdapter{inner: signer, at: info.Time}, info
+}
 
 // Writer queues modifications against an open [Reader] and emits the
 // result through [Writer.WriteTo]. Usage is:
@@ -710,6 +736,7 @@ type Writer struct {
 	// same, since a redaction that refuses puts the Writer back as it was.
 	folded          int
 	signer          Signer
+	signOpts        signOpts
 	requiredVersion string
 
 	// remediation names the remediation method that ran on the Writer, ""
@@ -1899,8 +1926,16 @@ func (w *Writer) RemoveAttachment(name string) {
 // the encrypted document, not that copy. So does a [Pipeline] stage after a
 // Split or a Merge of an encrypted document. To sign a decrypted document,
 // write it, reopen the output and sign that.
-func (w *Writer) Sign(signer Signer) {
+//
+// opts set the optional entries of the signature dictionary, the signing time
+// and the field the signature goes in (see [SignOption]). A later call
+// replaces the signer and the options of an earlier one.
+func (w *Writer) Sign(signer Signer, opts ...SignOption) {
 	w.signer = signer
+	w.signOpts = signOpts{}
+	for _, o := range opts {
+		o(&w.signOpts)
+	}
 }
 
 // remediateConfig applies the remediation options and returns the
@@ -3336,7 +3371,8 @@ func (w *Writer) writeSignedRewrite(ctx context.Context, dst io.Writer, signer S
 	if cfg.logger != nil {
 		base.doc.Logger = cfg.logger
 	}
-	if err := mutations.WriteWithSignature(ctx, dst, base.doc, signerAdapter{inner: signer}, nil, nil, cfg.xrefStream); err != nil {
+	adapter, info := w.signing(signer)
+	if err := mutations.WriteWithSignature(ctx, dst, base.doc, adapter, info, nil, nil, cfg.xrefStream); err != nil {
 		return fmt.Errorf("signing the rewritten document: %w", err)
 	}
 	return nil
@@ -3583,7 +3619,8 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 		} else {
 			maps.Copy(overrides, w.rewriteOverrides)
 		}
-		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, signerAdapter{inner: signer}, overrides, mutFuncs, cfg.xrefStream)
+		adapter, info := w.signing(signer)
+		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, adapter, info, overrides, mutFuncs, cfg.xrefStream)
 	}
 
 	if cfg.fullRewrite || w.forceRewrite {

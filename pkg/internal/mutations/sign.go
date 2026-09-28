@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -29,6 +30,54 @@ type Signer interface {
 	EstimatedSize() int
 }
 
+// SignatureInfo holds the optional entries of the signature dictionary (ISO
+// 32000-1, Table 252) and the field the signature goes in. An empty string
+// leaves its entry out, and a zero Time leaves /M out.
+type SignatureInfo struct {
+	// Name is the /Name of the signer.
+	Name string
+	// Reason is the /Reason for signing.
+	Reason string
+	// Location is the /Location of the signing.
+	Location string
+	// ContactInfo is the /ContactInfo a verifier may use to reach the signer.
+	ContactInfo string
+	// Time is the /M signing time.
+	Time time.Time
+	// Field is the fully qualified name of the signature field. An unsigned
+	// signature field of that name is signed in place, and a new root field
+	// takes it otherwise. Empty picks Signature1, Signature2, ...
+	Field string
+}
+
+// entries adds the entries info sets to the signature dictionary sigDict.
+func (info SignatureInfo) entries(sigDict ast.PdfDict) {
+	for key, value := range map[ast.PdfName]string{
+		"Name": info.Name, "Reason": info.Reason, "Location": info.Location, "ContactInfo": info.ContactInfo,
+	} {
+		if value != "" {
+			sigDict[key] = document.EncodePdfString(value)
+		}
+	}
+	if !info.Time.IsZero() {
+		sigDict["M"] = ast.PdfString(PDFDate(info.Time))
+	}
+}
+
+// PDFDate formats t as a PDF date (ISO 32000-1, 7.9.4), D:YYYYMMDDHHmmSS
+// followed by the offset of t's zone from UTC: Z, or +HH'mm' or -HH'mm'.
+func PDFDate(t time.Time) string {
+	_, offset := t.Zone()
+	if offset == 0 {
+		return t.Format("D:20060102150405") + "Z"
+	}
+	sign := '+'
+	if offset < 0 {
+		sign, offset = '-', -offset
+	}
+	return fmt.Sprintf("%s%c%02d'%02d'", t.Format("D:20060102150405"), sign, offset/3600, offset%3600/60)
+}
+
 // MutationFunc is the signature of a deferred mutation applied during writing.
 type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error
 
@@ -45,6 +94,11 @@ type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 // an empty allocator, and a document signed after a remediation lost every
 // repair the remediation had kept in overrides.
 //
+// info sets the signature dictionary's optional entries and the field the
+// signature goes in (see [SignatureInfo]). A field named there that exists and
+// is not an unsigned signature field is refused with
+// [ErrSignatureFieldUnavailable], before anything is written.
+//
 // # Corpus evidence
 //
 //   - All corpora: of 110 files sampled across them, 42 could be signed after
@@ -53,7 +107,7 @@ type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //   - All corpora: of another 110 files sampled across them, remediated at
 //     PDF/A-2b and signed, poppler's pdfsig reported a digest mismatch on all
 //     58 signed while the ByteRange was filled in after the digest.
-func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, overrides map[int]ast.PdfObject, mutations []MutationFunc, xrefStream bool) error {
+func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, info SignatureInfo, overrides map[int]ast.PdfObject, mutations []MutationFunc, xrefStream bool) error {
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	// A done ctx can stop the raw-byte augmentation short, and the allocator
 	// then starts below objects the file defines.
@@ -89,6 +143,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		"Contents":  ast.PdfString(string(placeholderBytes)),
 		"ByteRange": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(9999999999), ast.PdfInt(9999999999), ast.PdfInt(9999999999)},
 	}
+	info.entries(sigDict)
 
 	// Update or create AcroForm with the signature field.
 	catalogRef, ok := CatalogRef(ctx, doc)
@@ -133,27 +188,43 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		// lists them ([mergeInsertedFields]).
 		fields = targetRootFields(ctx, alloc, doc, signedPageRefs(ctx, alloc, doc))
 	}
-	fieldName, err := signatureFieldName(ctx, alloc, doc, fields)
+	existing, err := signatureField(ctx, alloc, doc, fields, info.Field)
 	if err != nil {
 		return err
 	}
+	fieldName := info.Field
+	if fieldName == "" {
+		if fieldName, err = signatureFieldName(ctx, alloc, doc, fields); err != nil {
+			return err
+		}
+	}
 
 	sigRef := alloc.Alloc(sigDict)
-	sigFieldRef := alloc.Alloc(ast.PdfDict{
-		"Type":    ast.PdfName("Annot"),
-		"Subtype": ast.PdfName("Widget"),
-		"FT":      ast.PdfName("Sig"),
-		"T":       document.EncodePdfString(fieldName),
-		"V":       sigRef,
-		"Rect":    ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0)},
-		"F":       ast.PdfInt(132), // Hidden + Print
-	})
+	if existing.dict != nil {
+		// ISO 32000-1, 12.7.4.5: a signature field is signed by setting its
+		// /V to the signature dictionary. Its widgets, on the pages already,
+		// stay as they are, and the form lists it already.
+		signed := make(ast.PdfDict, len(existing.dict)+1)
+		maps.Copy(signed, existing.dict)
+		signed["V"] = sigRef
+		alloc.AllocAt(existing.ref.ObjectNum, signed)
+	} else {
+		fields = append(fields, alloc.Alloc(ast.PdfDict{
+			"Type":    ast.PdfName("Annot"),
+			"Subtype": ast.PdfName("Widget"),
+			"FT":      ast.PdfName("Sig"),
+			"T":       document.EncodePdfString(fieldName),
+			"V":       sigRef,
+			"Rect":    ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0)},
+			"F":       ast.PdfInt(132), // Print + Locked
+		}))
+	}
 
 	if acroFormDict == nil {
 		acroFormDict = ast.PdfDict{}
 		acroFormRef = alloc.Alloc(ast.PdfNull{}) // placeholder
 	}
-	acroFormDict["Fields"] = append(fields, sigFieldRef)
+	acroFormDict["Fields"] = fields
 	acroFormDict["SigFlags"] = ast.PdfInt(3) // SignaturesExist | AppendOnly
 
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)

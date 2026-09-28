@@ -398,3 +398,9 @@ var ErrPagePruneIncomplete = errors.New("a page-delete prune stopped at its dept
 // decide what to do, where one that gets neither cannot. Real trees nest two or
 // three levels, so no ordinary document reaches this.
 var ErrAttachmentTreeIncomplete = errors.New("embedded-files tree nests deeper than the attachment walk can read, so rebuilding it would drop entries")
+
+// ErrSignatureFieldUnavailable reports a signature field name that cannot take
+// the signature: a field of that name exists and is not a signature field, is
+// signed already, or asks for more than the signature litho writes, or the name
+// is not one a new root field can take.
+var ErrSignatureFieldUnavailable = errors.New("signature field unavailable")
