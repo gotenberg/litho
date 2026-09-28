@@ -5963,13 +5963,13 @@ the embedding rule falls to two, NO and WD, on both tools, and no rule appears.
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 137 x 8 = 1096 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 137 x 13 = 1781 cells. litho
+runner scores 138 x 8 = 1104 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 138 x 13 = 1794 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1779 of the 1781 cells. The two
+fixtures exist to protect, and it holds in 1792 of the 1794 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5981,7 +5981,7 @@ eight is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and
 `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2` and `structcopy_ua2` at
 PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1096 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 1104 and moves only `ruleset_mismatch`, and on
 those eight cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
