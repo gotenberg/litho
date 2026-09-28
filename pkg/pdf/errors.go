@@ -331,7 +331,7 @@ var (
 
 	// ErrFontKind is the reason of a [FontRefusal] for a font the supplied
 	// program cannot serve: a TrueType font given CFF outlines, a symbolic
-	// Type 1 font given TrueType outlines, a multiple master font, or a
+	// font whose codes name no glyphs, a multiple master font, or a
 	// composite font whose CIDs name no characters, such as an Identity
 	// ordering.
 	ErrFontKind = remediation.ErrFontKind

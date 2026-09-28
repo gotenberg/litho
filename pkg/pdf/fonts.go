@@ -111,8 +111,8 @@ func (r FontRefusal) String() string {
 //     one unit the glyph width rules allow, so no text moves;
 //   - its OS/2 fsType permits embedding its outlines;
 //   - its outlines suit the font: a TrueType font takes TrueType (glyf)
-//     outlines; a Type 1 font takes a CFF program, or TrueType outlines when
-//     it is not symbolic, which makes it a TrueType font; a composite font of
+//     outlines; a Type 1 font takes a CFF program, or TrueType outlines,
+//     which make it a TrueType font; a composite font of
 //     an Adobe character collection (Japan1, GB1, CNS1, Korea1) takes
 //     TrueType outlines through a /CIDToGIDMap built from the collection's
 //     Unicode values;
@@ -127,6 +127,15 @@ func (r FontRefusal) String() string {
 // the font, and when validation rejects the subset where it accepts the whole
 // program; a whole program is written once and shared by every font given it.
 // [RemediationReport.Fixed] states which each font received.
+//
+// A TrueType program receives the cmap a PDF reader looks its glyphs up
+// through (ISO 32000-1, 9.6.6.4): a (3,1) subtable beside the Unicode one of a
+// program made for the Macintosh, for a font that is not symbolic, and for a
+// symbolic font a single subtable, which for a symbolic Type 1 font maps each
+// code to the glyph of the name its encoding gives the code. A font embedded
+// as a symbolic TrueType font, which a reader reads no text from but a
+// /ToUnicode CMap, receives one stating the text its glyph names gave its
+// codes, unless it carries its own.
 //
 // Every font it leaves unembedded is listed with the reason in
 // [RemediationReport.FontRefusals], and stays in the residual. Embedding

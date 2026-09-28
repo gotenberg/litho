@@ -258,6 +258,9 @@ type embedPlan struct {
 	cidSet []byte
 	// gids are the glyphs of program the shown codes draw.
 	gids []uint16
+	// toUnicode is the /ToUnicode CMap stream data a simple font receives,
+	// nil when it keeps its own or receives none.
+	toUnicode []byte
 	// rebuild plans the same font over another program.
 	rebuild func(ctx context.Context, prog *suppliedProgram) (*embedPlan, error)
 	// subsetGlyphs is the glyph count of a subset program, 0 for a whole one,
@@ -421,8 +424,8 @@ func (e *fontEmbedder) supply(ctx context.Context, req FontRequest) (*suppliedPr
 }
 
 // planSimple plans the embedding of a simple font: a TrueType font takes a
-// TrueType program, and a Type 1 font a CFF program as /Type1C or, when it is
-// not symbolic, a TrueType program, which makes it a TrueType font.
+// TrueType program, and a Type 1 font a CFF program as /Type1C or a TrueType
+// program, which makes it a TrueType font.
 func (e *fontEmbedder) planSimple(ctx context.Context, font ast.PdfDict, subtype string, shownSet map[byte]bool) (*embedPlan, error) {
 	if subtype == "MMType1" {
 		// ISO 32000-1, 9.6.2.3 draws a multiple master instance from the
@@ -479,23 +482,41 @@ func (e *fontEmbedder) buildSimple(ctx context.Context, s *simpleFont, prog *sup
 	font, subtype, baseFont, symbolic, names, codes, shownSet, widths := s.font, s.subtype, s.baseFont, s.symbolic, s.names, s.codes, s.shownSet, s.widths
 	cand := maps.Clone(font)
 	var glyph func(code byte) (uint16, bool)
+	var toUnicode []byte
 	switch {
 	case subtype == "TrueType" && prog.format != outlinesTrueType:
 		return nil, fmt.Errorf("%w: a TrueType font takes glyf outlines, and %s carries CFF ones", ErrFontKind, prog.psName)
 	case subtype == "TrueType" && symbolic:
 		// ISO 32000-1, 9.6.6.4: a symbolic TrueType font maps its codes
 		// through the program's (3,0) or (1,0) cmap subtable.
+		prog = e.fitCmap(ctx, prog, true)
 		if len(prog.symbol) == 0 {
 			return nil, fmt.Errorf("%w: a symbolic TrueType font needs a (3,0) or (1,0) cmap, which %s lacks", ErrFontKind, prog.psName)
 		}
+		toUnicode = symbolicToUnicode(ctx, e.doc, font, names)
+		glyph = func(code byte) (uint16, bool) { gid, ok := prog.symbol[uint16(code)]; return gid, ok }
+	case prog.format == outlinesTrueType && symbolic:
+		// A symbolic Type 1 font names its glyphs through its own encoding,
+		// which a symbolic TrueType font does not carry: ISO 32000-1,
+		// 9.6.6.4 has a reader map each code through the program's (3,0) or
+		// (1,0) cmap subtable, and ISO 19005-2, 6.2.11.6 bars an /Encoding
+		// from the font. The program receives a (3,0) subtable taking each
+		// code to the glyph of the name the Type 1 font gave it
+		// ([fontEmbedder.symbolCmap]), so every code keeps its glyph.
+		if names == nil {
+			return nil, fmt.Errorf("%w: the codes of the symbolic font %s name no glyphs the file states", ErrFontKind, baseFont)
+		}
+		fitted, err := e.symbolCmap(ctx, prog, names)
+		if err != nil {
+			return nil, err
+		}
+		prog = fitted
+		cand["Subtype"] = ast.PdfName("TrueType")
+		delete(cand, "Encoding")
+		toUnicode = symbolicToUnicode(ctx, e.doc, font, names)
 		glyph = func(code byte) (uint16, bool) { gid, ok := prog.symbol[uint16(code)]; return gid, ok }
 	case prog.format == outlinesTrueType:
-		if symbolic {
-			// A symbolic Type 1 font names its glyphs through its own
-			// encoding, which a TrueType font dictionary cannot carry: a
-			// symbolic TrueType font reads codes through the symbol cmap.
-			return nil, fmt.Errorf("%w: a symbolic Type 1 font takes a CFF program", ErrFontKind)
-		}
+		prog = e.fitCmap(ctx, prog, false)
 		if names == nil || len(prog.unicode) == 0 {
 			return nil, fmt.Errorf("%w: the codes of %s cannot reach the Unicode cmap of %s", ErrFontKind, baseFont, prog.psName)
 		}
@@ -529,6 +550,10 @@ func (e *fontEmbedder) buildSimple(ctx context.Context, s *simpleFont, prog *sup
 			gid, ok := prog.names[name]
 			return gid, ok
 		}
+	}
+
+	if toUnicode != nil {
+		cand["ToUnicode"] = ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(toUnicode))}, toUnicode)
 	}
 
 	var missing, off []string
@@ -565,9 +590,51 @@ func (e *fontEmbedder) buildSimple(ctx context.Context, s *simpleFont, prog *sup
 	descriptor[key] = programStream(prog)
 	cand["FontDescriptor"] = descriptor
 	return &embedPlan{
-		font: cand, descriptor: descriptor, program: prog, programKey: key, gids: gids,
+		font: cand, descriptor: descriptor, program: prog, programKey: key, gids: gids, toUnicode: toUnicode,
 		rebuild: func(ctx context.Context, sub *suppliedProgram) (*embedPlan, error) { return e.buildSimple(ctx, s, sub) },
 	}, nil
+}
+
+// symbolicToUnicode returns the /ToUnicode CMap a simple font embedded as a
+// symbolic TrueType font receives, nil when it carries one of its own or the
+// file names no glyph for its codes. A reader derives the text of a symbolic
+// TrueType font's codes from its /ToUnicode CMap (ISO 32000-1, 9.10.2), where
+// it read the unembedded font's through the glyph names its encoding or, for
+// Symbol and ZapfDingbats, the standard font's built-in encoding gives them
+// (names). The CMap states the text of every code names covers, as litho's
+// text extraction reads it ([typography.ResolveFont]), so the text stays what
+// it was. A code the file names no glyph for gets none: its meaning would be
+// invented.
+//
+// # Corpus evidence
+//
+//   - govdocs: remediated at PDF/A-2b with WithSystemFonts on macOS, pdf.js
+//     read Symbol's bullet as the MacRoman summation sign and alpha as "a"
+//     in 11 of 31 outputs sampled, once the Symbol fonts took Apple's
+//     programs without a /ToUnicode CMap. With the CMap, 4 read otherwise
+//     than unembedded: ZapfDingbats codes pdf.js had read as the letters l,
+//     q and z now read as the dingbats they draw, Delta reads U+0394 for
+//     U+2206, and three Symbol brace pieces, whose Private Use values no CMap
+//     states, read as Latin-1 letters where pdf.js read nothing.
+func symbolicToUnicode(ctx context.Context, doc *document.Document, font ast.PdfDict, names map[byte]string) []byte {
+	if _, ok := font["ToUnicode"]; ok || names == nil {
+		return nil
+	}
+	resolved, err := typography.ResolveFont(ctx, doc, font)
+	if err != nil || resolved == nil {
+		doc.Logger.Debug("remediation: font-embed: no text for the symbolic font", "error", err)
+		return nil
+	}
+	mapping := make(map[uint16]rune, len(resolved.Encoding))
+	for code, r := range resolved.Encoding {
+		if names[code] != "" && names[code] != ".notdef" && isValidUnicodeMapping(r) {
+			mapping[uint16(code)] = r
+		}
+	}
+	if len(mapping) == 0 {
+		return nil
+	}
+	return generateToUnicodeCMap(mapping, 1)
 }
 
 // adobeOrderings are the character collections whose CIDs litho maps to
@@ -751,6 +818,9 @@ func (e *fontEmbedder) write(ctx context.Context, objNum int, font ast.PdfDict, 
 	if plan.descendant == nil {
 		out := maps.Clone(plan.font)
 		out["FontDescriptor"] = descriptorRef
+		if plan.toUnicode != nil {
+			out["ToUnicode"] = e.alloc.Alloc(flateStream(ast.PdfDict{}, plan.toUnicode))
+		}
 		e.alloc.AllocAt(objNum, out)
 		return
 	}

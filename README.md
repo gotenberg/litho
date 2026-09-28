@@ -140,17 +140,17 @@ for _, refusal := range report.FontRefusals {
 
 litho embeds a program only when it serves the font as the document shows it, so no text moves. Every font it leaves unembedded is listed in `RemediationReport.FontRefusals` and stays in the residual. Match the reason with `errors.Is`:
 
-| Reason                       | The font stays unembedded because                                                                                                                                           |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ErrFontNotSupplied`         | No program was supplied.                                                                                                                                                    |
-| `ErrFontProgramInvalid`      | The program is no readable TrueType, OpenType or CFF font, or exceeds the stream budget.                                                                                    |
-| `ErrFontEmbeddingRestricted` | The program's OS/2 fsType forbids embedding its outlines.                                                                                                                   |
-| `ErrFontKind`                | The outlines do not suit the font: CFF for a TrueType font, TrueType for a symbolic Type 1 font, a multiple master font, or a composite font whose CIDs name no characters. |
-| `ErrFontCoverage`            | The program lacks a glyph for a code the document shows.                                                                                                                    |
-| `ErrFontWidths`              | The program's advances disagree with the declared widths by more than one unit, or the font declares none.                                                                  |
-| `ErrFontRejected`            | The embedded font would fail a rule of the profile the unembedded one passed.                                                                                               |
-| `ErrFontUnwritable`          | The font dictionary is written inline where no object number reaches it.                                                                                                    |
-| `ErrFontRolledBack`          | The output failed the integrity checks and the embedding was undone with the other content repairs.                                                                         |
+| Reason                       | The font stays unembedded because                                                                                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ErrFontNotSupplied`         | No program was supplied.                                                                                                                                                           |
+| `ErrFontProgramInvalid`      | The program is no readable TrueType, OpenType or CFF font, or exceeds the stream budget.                                                                                           |
+| `ErrFontEmbeddingRestricted` | The program's OS/2 fsType forbids embedding its outlines.                                                                                                                          |
+| `ErrFontKind`                | The outlines do not suit the font: CFF for a TrueType font, a symbolic font whose codes name no glyphs, a multiple master font, or a composite font whose CIDs name no characters. |
+| `ErrFontCoverage`            | The program lacks a glyph for a code the document shows.                                                                                                                           |
+| `ErrFontWidths`              | The program's advances disagree with the declared widths by more than one unit, or the font declares none.                                                                         |
+| `ErrFontRejected`            | The embedded font would fail a rule of the profile the unembedded one passed.                                                                                                      |
+| `ErrFontUnwritable`          | The font dictionary is written inline where no object number reaches it.                                                                                                           |
+| `ErrFontRolledBack`          | The output failed the integrity checks and the embedding was undone with the other content repairs.                                                                                |
 
 By default litho embeds a subset of each program (`WithWholeFontPrograms`, or `--no-font-subset` on the CLI, embeds the whole program instead, for text you will edit later): the glyphs the document shows with the font and the glyphs they are drawn from, under a fresh subset tag. At PDF/A-1 a Type 1 subset carries the `/CharSet` and a CIDFont subset the `/CIDSet` ISO 19005-1, 6.3.5 requires. Fonts given the same program share one subset. A program stays whole when its OS/2 fsType forbids subsetting, when its font descriptor serves another font the document shows, when the interactive form's default resources name the font, or when validation rejects the subset and accepts the whole program. `RemediationReport.Fixed` states which each font received:
 
