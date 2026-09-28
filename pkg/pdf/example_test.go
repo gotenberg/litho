@@ -6,20 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
-	"testing/fstest"
 
-	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // ExampleWithFontFiles remediates a document that shows Helvetica and a
-// custom font without embedding either. The font directory holds a Liberation
-// Sans program, which stands for Helvetica, and nothing for the custom font,
-// so that one is refused. In a real program the directory is
-// os.DirFS("/usr/share/fonts") or an embed.FS; the example builds the program
-// in memory so it runs anywhere.
+// custom font without embedding either. The font directory holds a program
+// named LiberationSans, which stands for Helvetica, and nothing for the custom
+// font, so that one is refused. The directory may as well be
+// os.DirFS("/usr/share/fonts") or an embed.FS.
 func ExampleWithFontFiles() {
 	ctx := context.Background()
 
@@ -29,9 +27,7 @@ func ExampleWithFontFiles() {
 	}
 	defer r.Close()
 
-	fonts := fstest.MapFS{
-		"LiberationSans-Regular.ttf": {Data: liberationSansAB()},
-	}
+	fonts := os.DirFS("testdata/fonts")
 
 	w := pdf.NewWriter(r)
 	defer w.Close()
@@ -77,7 +73,7 @@ func ExampleWithSystemFonts() {
 	w := pdf.NewWriter(r)
 	defer w.Close()
 	report, err := w.RemediatePDFA(ctx, models.PDFA2b,
-		pdf.WithFontFiles(fstest.MapFS{"LiberationSans-Regular.ttf": {Data: liberationSansAB()}}),
+		pdf.WithFontFiles(os.DirFS("testdata/fonts")),
 		pdf.WithSystemFonts(),
 	)
 	if err != nil {
@@ -86,21 +82,6 @@ func ExampleWithSystemFonts() {
 	for _, refusal := range report.FontRefusals {
 		fmt.Println(refusal)
 	}
-}
-
-// liberationSansAB returns a synthetic stand-in for LiberationSans-Regular.ttf
-// drawing "A" and "B" at Helvetica's widths.
-func liberationSansAB() []byte {
-	return fontbuild.TrueType{
-		PostScriptName: "LiberationSans",
-		Family:         "Liberation Sans",
-		Subfamily:      "Regular",
-		NotdefAdvance:  500,
-		Glyphs: []fontbuild.Glyph{
-			{Name: "A", Unicode: 'A', Advance: 667},
-			{Name: "B", Unicode: 'B', Advance: 667},
-		},
-	}.Build()
 }
 
 // unembeddedFontsPDF is one page showing "AB" in Helvetica and in LithoCustom,
