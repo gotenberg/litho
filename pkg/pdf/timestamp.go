@@ -86,7 +86,10 @@ func (w *Writer) signingSteps() []signingStep {
 // each reads what the one before wrote; the signing flow holds its update in
 // memory already.
 func (w *Writer) writeSigned(ctx context.Context, dst io.Writer, write func(context.Context, io.Writer, *signingStep, ...WriteOption) error, steps []signingStep, opts ...WriteOption) error {
-	if len(steps) <= 1 {
+	// The validation data [WithLTV] asks for follows the signature it
+	// validates, and a document timestamp covers both.
+	ltv := w.signer != nil && w.signOpts.ltv
+	if len(steps) <= 1 && !ltv {
 		var first *signingStep
 		if len(steps) == 1 {
 			first = &steps[0]
@@ -98,6 +101,13 @@ func (w *Writer) writeSigned(ctx context.Context, dst io.Writer, write func(cont
 		return err
 	}
 	out := buf.Bytes()
+	if ltv {
+		next, err := w.appendValidationData(ctx, out, opts...)
+		if err != nil {
+			return err
+		}
+		out = next
+	}
 	for i := range steps[1:] {
 		next, err := w.appendSignature(ctx, out, &steps[1+i], opts...)
 		if err != nil {

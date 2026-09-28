@@ -35,6 +35,19 @@ func post(ctx context.Context, rawURL, contentType string, body []byte, limit in
 	return do(req, limit)
 }
 
+// get fetches rawURL and returns its body, refusing a status other than 200
+// and a body of more than limit bytes.
+func get(ctx context.Context, rawURL string, limit int64) ([]byte, error) {
+	if err := httpURL(rawURL); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building the request to %s: %w", redacted(rawURL), err)
+	}
+	return do(req, limit)
+}
+
 // httpURL refuses a URL litho does not fetch: one of a scheme other than http
 // or https, such as the ldap URLs some certificates list beside their http
 // ones.

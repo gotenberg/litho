@@ -7,7 +7,9 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/internal/pkitest"
 	"github.com/gotenberg/litho/pkg/models"
@@ -120,5 +122,46 @@ func TestSign_TimestampAuthority(t *testing.T) {
 	}
 	if _, err := os.Stat(refused); !os.IsNotExist(err) {
 		t.Errorf("a refused signature left %s behind: %v", refused, err)
+	}
+}
+
+// TestSign_LTV signs with --ltv against a local OCSP responder, alone and
+// through a pipe's sign stage, and checks the verifier calls the signature
+// LTV-enabled; a revoked signer fails the command.
+func TestSign_LTV(t *testing.T) {
+	pki := pkitest.New(t)
+	certPath, keyPath := writePKIPEM(t, pki)
+	for _, tc := range []struct {
+		name string
+		args func(src, out string) []string
+	}{
+		{"sign", func(src, out string) []string {
+			return []string{"sign", "--cert", certPath, "--key", keyPath, "--pades", "--tsa-url", pki.TSAURL(), "--ltv", "-o", out, src}
+		}},
+		{"pipe", func(src, out string) []string {
+			return []string{"pipe", src, "sign", "--cert", certPath, "--key", keyPath, "--pades", "--ltv", "--tsa-url", pki.TSAURL(), "-o", out}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "signed.pdf")
+			var stdout, stderr bytes.Buffer
+			if rc := run(context.Background(), tc.args(onePageTempPDF(t), out), &stdout, &stderr); rc != exitOK {
+				t.Fatalf("exit %d, stderr: %s", rc, stderr.String())
+			}
+			results := validationsOf(t, out, pki)
+			if len(results) != 1 || !results[0].HashValid || !results[0].LTVEnabled || !results[0].RevocationOK {
+				t.Errorf("validations %+v, want one LTV-enabled signature", results)
+			}
+		})
+	}
+
+	pki.Revoke(pki.Leaf, time.Now().Add(-time.Hour))
+	out := filepath.Join(t.TempDir(), "revoked.pdf")
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(), []string{"sign", "--cert", certPath, "--key", keyPath, "--ltv", "-o", out, onePageTempPDF(t)}, &stdout, &stderr); rc != exitError {
+		t.Errorf("a revoked signer: exit %d, want %d", rc, exitError)
+	}
+	if !strings.Contains(stderr.String(), "revoked") {
+		t.Errorf("stderr %q does not say the certificate is revoked", stderr.String())
 	}
 }

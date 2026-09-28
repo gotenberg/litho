@@ -300,31 +300,9 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 
 	// The update is written to a buffer first, so the placeholder can be
 	// patched before anything reaches dst.
-	startXRef, err := document.FindStartXRef(doc.RawReader(), doc.FileSize())
+	cfg, err := incrementalConfig(doc, alloc, xrefStream)
 	if err != nil {
-		return fmt.Errorf("finding startxref: %w", err)
-	}
-
-	trailer := make(ast.PdfDict, len(doc.Index.Trailer))
-	for k, v := range doc.Index.Trailer {
-		if k == "Prev" || k == "Size" {
-			continue
-		}
-		trailer[k] = v
-	}
-
-	useXRefStream := xrefStream
-	if _, ok := doc.Index.Trailer["Type"]; ok {
-		useXRefStream = true
-	}
-	cfg := writer.IncrementalConfig{
-		Source:          doc.RawReader(),
-		SourceSize:      doc.FileSize(),
-		StartXRefOffset: startXRef,
-		Allocator:       alloc,
-		Trailer:         trailer,
-		UseXRefStream:   useXRefStream,
-		Generation:      doc.ObjectGeneration,
+		return err
 	}
 
 	// A signature carrying an RFC 3161 token can outgrow its placeholder,
@@ -347,6 +325,37 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		}
 		return nil
 	}
+}
+
+// incrementalConfig returns the configuration of an update appending the
+// objects alloc holds to doc: its trailer without /Prev and /Size, which the
+// writer sets, and a cross-reference stream when xrefStream asks for one or
+// doc's last section is one.
+func incrementalConfig(doc *document.Document, alloc *writer.ObjAllocator, xrefStream bool) (writer.IncrementalConfig, error) {
+	startXRef, err := document.FindStartXRef(doc.RawReader(), doc.FileSize())
+	if err != nil {
+		return writer.IncrementalConfig{}, fmt.Errorf("finding startxref: %w", err)
+	}
+	trailer := make(ast.PdfDict, len(doc.Index.Trailer))
+	for k, v := range doc.Index.Trailer {
+		if k == "Prev" || k == "Size" {
+			continue
+		}
+		trailer[k] = v
+	}
+	useXRefStream := xrefStream
+	if _, ok := doc.Index.Trailer["Type"]; ok {
+		useXRefStream = true
+	}
+	return writer.IncrementalConfig{
+		Source:          doc.RawReader(),
+		SourceSize:      doc.FileSize(),
+		StartXRefOffset: startXRef,
+		Allocator:       alloc,
+		Trailer:         trailer,
+		UseXRefStream:   useXRefStream,
+		Generation:      doc.ObjectGeneration,
+	}, nil
 }
 
 // timestampSlack is the room a signature rewritten to fit its RFC 3161 token

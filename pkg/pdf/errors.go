@@ -174,6 +174,17 @@ var (
 	// digest. Nothing is written.
 	ErrTimestampAuthority = signature.ErrTimestampAuthority
 
+	// ErrValidationData is returned by [Writer.WriteTo] under [WithLTV] when
+	// a certificate of the signature's chains has no issuer litho can find,
+	// or no OCSP response or CRL, fetched or given with [WithValidationData],
+	// vouches for it. Nothing is written.
+	ErrValidationData = signature.ErrValidationData
+
+	// ErrCertificateRevoked is returned by [Writer.WriteTo] under [WithLTV]
+	// when an OCSP response or a CRL reports a certificate of the signature's
+	// chains revoked. Nothing is written.
+	ErrCertificateRevoked = signature.ErrCertificateRevoked
+
 	// ErrSignerKeyUnsupported is returned by [NewSigner], [ParseSignerPEM]
 	// and [ParseSignerPKCS12] for a private key other than RSA or ECDSA on
 	// P-256, P-384 or P-521.

@@ -212,6 +212,11 @@ type SignOption func(*signOpts)
 // signOpts holds what the [SignOption] values of [Writer.Sign] set.
 type signOpts struct {
 	info mutations.SignatureInfo
+	// ltv asks for the signature's validation data in the document security
+	// store, and validation, when set, is where it comes from (see
+	// [WithLTV] and [WithValidationData]).
+	ltv        bool
+	validation *ValidationData
 }
 
 // WithSignatureReason sets the /Reason for signing, such as "I approve this

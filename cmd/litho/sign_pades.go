@@ -11,6 +11,7 @@ import (
 type padesFlags struct {
 	pades  *bool
 	tsaURL *string
+	ltv    *bool
 }
 
 // registerPAdESFlags declares the PAdES flags on fs.
@@ -18,6 +19,7 @@ func registerPAdESFlags(fs *flag.FlagSet) padesFlags {
 	return padesFlags{
 		pades:  fs.Bool("pades", false, "Write a PAdES baseline signature (ETSI.CAdES.detached) instead of adbe.pkcs7.detached"),
 		tsaURL: fs.String("tsa-url", "", "RFC 3161 timestamp authority URL that timestamps the signature (PAdES B-T)"),
+		ltv:    fs.Bool("ltv", false, "Add the chains and their OCSP responses or CRLs, fetched from the certificates, to the document security store (PAdES B-LT)"),
 	}
 }
 
@@ -29,6 +31,9 @@ func (f padesFlags) options() []pdf.SignOption {
 	}
 	if *f.tsaURL != "" {
 		opts = append(opts, pdf.WithTimestampAuthority(*f.tsaURL))
+	}
+	if *f.ltv {
+		opts = append(opts, pdf.WithLTV())
 	}
 	return opts
 }

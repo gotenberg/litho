@@ -73,3 +73,14 @@ var ErrNotCAdES = errors.New("signature is not a PAdES baseline CAdES signature"
 // with a token that does not verify, carries another nonce or imprints
 // another digest. Returned by [RequestTimestamp].
 var ErrTimestampAuthority = errors.New("timestamp authority gave no usable token")
+
+// ErrValidationData indicates validation data that cannot be gathered or
+// does not vouch for a certificate: no OCSP response or CRL covers it, an
+// issuer is missing, or a response or CRL does not verify. Returned by
+// [CollectValidationData].
+var ErrValidationData = errors.New("validation data unavailable")
+
+// ErrCertificateRevoked indicates an OCSP response or a CRL reporting a
+// certificate of the signature revoked. Returned by
+// [CollectValidationData].
+var ErrCertificateRevoked = errors.New("certificate revoked")

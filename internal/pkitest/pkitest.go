@@ -71,6 +71,7 @@ type PKI struct {
 
 	mu       sync.Mutex
 	tsaMode  TSAMode
+	ocspDown bool
 	revoked  map[string]time.Time // by serial number
 	requests map[string]int       // by path
 	serial   int64
@@ -101,6 +102,22 @@ func New(t testing.TB) *PKI {
 	notAfter := notBefore.AddDate(11, 0, 0)
 	issue := func(tmpl, parent *x509.Certificate, pub crypto.PublicKey, parentKey crypto.Signer) *x509.Certificate {
 		tmpl.NotBefore, tmpl.NotAfter = notBefore, notAfter
+		// RFC 5280, 4.2.1.2, method (1): the SHA-1 of the public key bits,
+		// which OCSP clients match a byKey ResponderID against; crypto/x509
+		// derives it from SHA-256 instead.
+		spki, err := x509.MarshalPKIXPublicKey(pub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var info struct {
+			Algorithm pkix.AlgorithmIdentifier
+			PublicKey asn1.BitString
+		}
+		if _, err := asn1.Unmarshal(spki, &info); err != nil {
+			t.Fatal(err)
+		}
+		keyID := sha1.Sum(info.PublicKey.Bytes) //nolint:gosec // RFC 5280, 4.2.1.2 key identifier.
+		tmpl.SubjectKeyId = keyID[:]
 		der, err := x509.CreateCertificate(rand.Reader, tmpl, parent, pub, parentKey)
 		if err != nil {
 			t.Fatalf("issuing %s: %v", tmpl.Subject.CommonName, err)
@@ -162,6 +179,14 @@ func (p *PKI) SetTSAMode(m TSAMode) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.tsaMode = m
+}
+
+// SetOCSPDown has the OCSP responder answer every request with a server
+// error, so a client falls back to the CRLs.
+func (p *PKI) SetOCSPDown(down bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.ocspDown = down
 }
 
 // Revoke has the OCSP responder and the CRLs report cert revoked at at.
@@ -350,6 +375,13 @@ type ocspRequest struct {
 // certificate the root or the intermediate issued, with a response the
 // issuer signs itself.
 func (p *PKI) serveOCSP(w http.ResponseWriter, r *http.Request) {
+	p.mu.Lock()
+	down := p.ocspDown
+	p.mu.Unlock()
+	if down {
+		http.Error(w, "pkitest: OCSP responder down", http.StatusServiceUnavailable)
+		return
+	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBytes))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -389,7 +421,7 @@ func (p *PKI) serveOCSP(w http.ResponseWriter, r *http.Request) {
 		status = asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 1, IsCompound: true, Bytes: p.generalized(revokedAt)}
 	}
 	single := p.wrap(asn1.ClassUniversal, asn1.TagSequence, slices.Concat(
-		p.der(id), p.der(status), p.generalized(now.Add(-time.Minute)),
+		p.der(id), p.der(status), p.generalized(now),
 		p.wrap(asn1.ClassContextSpecific, 0, p.generalized(now.Add(24*time.Hour)))))
 	keyHash := sha1.Sum(p.publicKeyBits(issuer)) //nolint:gosec // RFC 6960, 4.2.1 ResponderID byKey.
 	tbs := p.wrap(asn1.ClassUniversal, asn1.TagSequence, slices.Concat(
@@ -412,12 +444,38 @@ func (p *PKI) serveOCSP(w http.ResponseWriter, r *http.Request) {
 // serveCRL answers /crl/root and /crl/intermediate with the CRL of that
 // authority, listing what [PKI.Revoke] revoked.
 func (p *PKI) serveCRL(w http.ResponseWriter, r *http.Request) {
-	issuer, key := p.Root, p.RootKey
+	issuer := p.Root
 	if r.URL.Path == "/crl/intermediate" {
-		issuer, key = p.Intermediate, p.IntermediateKey
+		issuer = p.Intermediate
+	}
+	der, err := p.crl(issuer)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/pkix-crl")
+	p.write(w, der)
+}
+
+// CRL returns the current CRL of issuer, the root or the intermediate, as
+// its distribution point serves it.
+func (p *PKI) CRL(issuer *x509.Certificate) []byte {
+	der, err := p.crl(issuer)
+	if err != nil {
+		p.t.Errorf("pkitest: %v", err)
+	}
+	return der
+}
+
+// crl returns the CRL of issuer, the root or the intermediate, listing what
+// [PKI.Revoke] revoked.
+func (p *PKI) crl(issuer *x509.Certificate) ([]byte, error) {
+	key := p.RootKey
+	if issuer == p.Intermediate {
+		key = p.IntermediateKey
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	tmpl := &x509.RevocationList{Number: p.nextSerial(), ThisUpdate: now.Add(-time.Minute), NextUpdate: now.Add(24 * time.Hour)}
+	tmpl := &x509.RevocationList{Number: p.nextSerial(), ThisUpdate: now, NextUpdate: now.Add(24 * time.Hour)}
 	p.mu.Lock()
 	for serial, at := range p.revoked {
 		if n, ok := new(big.Int).SetString(serial, 10); ok {
@@ -425,13 +483,7 @@ func (p *PKI) serveCRL(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	p.mu.Unlock()
-	der, err := x509.CreateRevocationList(rand.Reader, tmpl, issuer, key)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/pkix-crl")
-	p.write(w, der)
+	return x509.CreateRevocationList(rand.Reader, tmpl, issuer, key)
 }
 
 // serveCert answers /cert/root and /cert/intermediate with that
