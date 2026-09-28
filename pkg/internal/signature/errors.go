@@ -45,3 +45,20 @@ var (
 	// public-key algorithm the verifier does not implement.
 	ErrUnsupportedSignatureAlgo = errors.New("unsupported signature algorithm")
 )
+
+// Signer-construction sentinels, returned by [NewCMSSigner].
+var (
+	// ErrSignerKeyUnsupported indicates a private key [CMSSigner] cannot sign
+	// with: a key type other than RSA or ECDSA, or ECDSA on a curve other than
+	// P-256, P-384 or P-521.
+	ErrSignerKeyUnsupported = errors.New("unsupported signing key")
+
+	// ErrSignerKeyMismatch indicates a signing key and certificate that do not
+	// belong together: the key is not the private half of the certificate's
+	// public key, or one of them is missing.
+	ErrSignerKeyMismatch = errors.New("signing key does not match the certificate")
+
+	// ErrSignerCertificateUsage indicates a certificate whose key usage
+	// extension excludes signing (RFC 5280, 4.2.1.3).
+	ErrSignerCertificateUsage = errors.New("certificate key usage does not allow signing")
+)
