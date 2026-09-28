@@ -56,9 +56,11 @@ func writeSigningPEM(t *testing.T, kind string) (certPath, keyPath string) {
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: "litho cli signer"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().AddDate(1, 0, 0),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
+		// Valid well before the signing time the tests pin, so a pinned
+		// time stays inside the validity period on any day the tests run.
+		NotBefore: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		NotAfter:  time.Now().AddDate(1, 0, 0),
+		KeyUsage:  x509.KeyUsageDigitalSignature,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, key.Public(), key)
 	if err != nil {
