@@ -23,14 +23,16 @@ import (
 // the copied graph is plaintext whatever the source was.
 //
 // A page that neither states nor inherits a media box a viewer uses gets the
-// size most pages of doc have, and mediaBoxFallback, nil for US Letter, when
-// none has one (see [document.DefaultMediaBox]). The size comes from the whole
-// of doc, not the pages the split keeps: a split of the one page missing its
-// media box from an A4 document is an A4 page.
+// first size of doc's pages, the one most pages have first, then
+// mediaBoxFallback, nil for none, that holds what the page paints, and US
+// Letter, what a viewer drew, when none does (see [document.MediaBoxDefault]).
+// The sizes come from the whole of doc, not the pages the split keeps: a split
+// of the one page missing its media box from an A4 document is an A4 page.
 func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig, mediaBoxFallback ast.PdfArray) error {
 	if len(pages) == 0 {
 		return fmt.Errorf("no pages specified")
 	}
+	media := &document.MediaBoxDefault{Docs: []*document.Document{doc}, Fallback: mediaBoxFallback}
 
 	// Validate page numbers.
 	for _, p := range pages {
@@ -92,7 +94,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("split canceled: %w", err)
 			}
-			newRef, err := copyPageForOutput(ctx, c, alloc, doc, selected[i])
+			newRef, err := copyPageForOutput(ctx, c, alloc, doc, selected[i], media)
 			if err != nil {
 				return fmt.Errorf("copying page %d: %w", pages[i], err)
 			}
@@ -214,8 +216,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	catalogRef := alloc.Alloc(catalogDict)
 	// The copied pages keep what their source states, which can be short of
 	// what ISO 32000-1, Table 30 requires of a page.
-	media := &document.MediaBoxDefault{Docs: []*document.Document{doc}, Fallback: mediaBoxFallback}
-	if err := completeRewrittenPageTree(ctx, alloc, catalogRef, media); err != nil {
+	if err := completeRewrittenPageTree(ctx, alloc, catalogRef, media, nil); err != nil {
 		return err
 	}
 

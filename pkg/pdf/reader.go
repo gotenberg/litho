@@ -1606,11 +1606,11 @@ func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
 // substitute, 612 x 792 before /UserUnit and /Rotate apply. Every rewrite
 // writes a page's boxes as Page reads them, so no rewrite changes the size
 // Page reports, but for a page with no media box a viewer uses: Page reports
-// what a viewer shows for the source, while a write gives that page the size
-// most pages of the document have (see [WithDefaultPageSize]), since ISO
-// 32000-1, Table 30 gives the media box no default and the other pages are
-// the best evidence of the size the producer meant. Page then reports that
-// size on the output.
+// what a viewer shows for the source, while a write may give that page the
+// size of the document's other pages when it holds everything the page paints
+// (see [WithDefaultPageSize]), since ISO 32000-1, Table 30 gives the media box
+// no default and the other pages are the best evidence of the size the
+// producer meant. Page then reports that size on the output.
 //
 // No box field reports that fallback as a box. MediaBox reports the media box
 // the file declares. CropBox, BleedBox, TrimBox and ArtBox report the

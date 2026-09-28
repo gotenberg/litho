@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/mutations"
 )
 
 const (
@@ -40,10 +41,13 @@ func matchPageBoxes(v compliance.Violation) bool {
 // as, whatever ISO 19005-2, 6.1.13 t11 measures it as, so the repair and a
 // rewrite write the same box (see mutations.completeRewrittenPageTree). A crop,
 // bleed, trim or art box is dropped for the default ISO 32000-1, Table 30
-// gives it. A media box, which has none, is replaced by the size most pages of
-// the document have ([document.DefaultMediaBox]), itself brought within the
-// limits above. A viewer draws such a page on US Letter; the output shows it
-// at the size of the pages around it. Read as the rectangle
+// gives it. A media box, which has none, is replaced on a page by the first
+// size of the document's pages that holds what the page paints, US Letter,
+// the page a viewer drew, when none does ([document.MediaBoxDefault]), itself
+// brought within the limits above, so the output never shows less of a page
+// than a viewer did. A node's is replaced by US Letter, what a viewer drew
+// every page under it on, and each page under it stating none gets a media
+// box of its own the same way. Read as the rectangle
 // t11 measures, its missing corners and the ones that are no number at 0, a
 // crop box of [0 0 300 400 9] was written as [0 0 300 400], and a viewer that
 // had drawn the page on the media box drew it on the smaller box. Left as
@@ -69,14 +73,18 @@ func matchPageBoxes(v compliance.Violation) bool {
 //     lower-left corner lost the text of two pages, which litho's own
 //     regression gate caught, leaving the file unremediable.
 //   - pdfjs boundingBox_invalid.pdf: page 1 states /MediaBox [0 0 0 0], which
-//     the pinned pdf.js shows at US Letter. Its replacement is 800 by 600, the
-//     size of page 2, which ties page 3's 600 by 800 and comes first. Its text,
-//     drawn at (25, 700), falls off that page, and the PDF/A-2b remediation
-//     refuses with the text-loss check, where at US Letter it succeeded.
+//     the pinned pdf.js shows at US Letter. The most common size, 800 by 600,
+//     ties page 3's 600 by 800 and comes first, but its text, drawn at
+//     (25, 700), falls off it, and the PDF/A-2b remediation refused with the
+//     text-loss check. The page takes 600 by 800, which holds it, and the
+//     remediation succeeds with its 70 bytes of text.
 //   - All corpora: over the PDF/A-2b remediation of the 9 files holding a page
 //     with no media box a viewer uses, boundingBox_invalid.pdf is the one
 //     output that changes. The others repair no media box, or repair one to
 //     the US Letter most of their pages have.
+//   - litho defaultbox_2b.pdf: the PDF/A-2b remediation gives the pages with
+//     no media box and the one under a node stating [0 0 0 0] A4 each, and
+//     the node US Letter.
 //   - verapdf 6-1-13-t09-fail-c through -f: walking only the leaves left them
 //     unremediable, their box sitting on the "Pages tree" node litho itself
 //     names in the violation.
@@ -98,14 +106,21 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
 
 	// The fixer runs only on a document reporting a page boundary violation,
-	// so the page tree walk the default media box costs is paid rarely.
+	// so the page tree walk the candidate sizes cost is paid rarely.
 	media := &document.MediaBoxDefault{Docs: []*document.Document{doc}, Fallback: opts.MediaBoxFallback}
-	replacement, err := media.Resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if clamped, changed := clampBoxArray(replacement, opts.PreserveContent); changed {
-		replacement = clamped
+	choose := func(pe annotPageEntry, page ast.PdfDict) (ast.PdfArray, error) {
+		extent, err := mutations.PageDictContentExtent(ctx, alloc, doc, pe.ref, page, nearestResources(pe, page))
+		if err != nil {
+			return nil, err
+		}
+		box, err := media.Resolve(ctx, extent)
+		if err != nil {
+			return nil, err
+		}
+		if clamped, changed := clampBoxArray(box, opts.PreserveContent); changed {
+			box = clamped
+		}
+		return box, nil
 	}
 
 	count := 0
@@ -135,13 +150,17 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			// absent (ISO 32000-1, Table 30), so dropping it is both lossless
 			// and what a viewer already shows. A crop box a node above states
 			// that would then show through is kept off the page below (see
-			// [cropShowsThrough]). A /MediaBox, which has no default, gets the
-			// size most pages of the document have.
+			// [cropShowsThrough]). A /MediaBox, which has no default, gets a
+			// size that holds what the page paints.
 			if !document.UsableBox(arr) {
 				if key != "MediaBox" {
 					delete(newPage, key)
 				} else {
-					newPage[key] = slices.Clone(replacement)
+					box, err := choose(pe, newPage)
+					if err != nil {
+						return nil, err
+					}
+					newPage[key] = box
 				}
 				modified = true
 				continue
@@ -151,8 +170,18 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 				modified = true
 			}
 		}
+		// A page inheriting a media box no viewer uses, which the node pass
+		// writes as US Letter, gets a size of its own.
+		if !hasNonNullEntry(newPage, "MediaBox") && !inheritsUsableMediaBox(ctx, doc, pe) {
+			box, err := choose(pe, newPage)
+			if err != nil {
+				return nil, err
+			}
+			newPage["MediaBox"] = box
+			modified = true
+		}
 		if cropShowsThrough(ctx, doc, pe, newPage) {
-			newPage["CropBox"] = slices.Clone(fixedMediaBox(ctx, doc, pe, newPage, opts.PreserveContent, replacement))
+			newPage["CropBox"] = slices.Clone(fixedMediaBox(ctx, doc, pe, newPage, opts.PreserveContent))
 			modified = true
 		}
 		// A page written directly in its parent's /Kids is written back
@@ -166,7 +195,7 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	// and 6.1.13 test 11 reports it as one. Walking only the leaves left
 	// such a box unremediable, sitting on the "Pages tree" node litho itself
 	// names in the violation.
-	nodes := clampPageTreeBoxes(ctx, alloc, doc, pagesObj, opts.PreserveContent, replacement)
+	nodes := clampPageTreeBoxes(ctx, alloc, doc, pagesObj, opts.PreserveContent, document.LetterMediaBox())
 
 	var fixes []string
 	if count > 0 {
@@ -221,9 +250,8 @@ func cropShowsThrough(ctx context.Context, doc *document.Document, pe annotPageE
 // fixedMediaBox returns the media box pe, a page whose repaired dictionary is
 // fixed, has once the page boxes are repaired: its own, repaired already, or
 // the one it inherits, repaired as the node pass repairs it (see
-// [clampBoxesInDict]). A page given none a viewer uses gets replacement, the
-// default media box (see [document.DefaultMediaBox]).
-func fixedMediaBox(ctx context.Context, doc *document.Document, pe annotPageEntry, fixed ast.PdfDict, preserveContent bool, replacement ast.PdfArray) ast.PdfArray {
+// [clampBoxesInDict]). A page given none a viewer uses is drawn on US Letter.
+func fixedMediaBox(ctx context.Context, doc *document.Document, pe annotPageEntry, fixed ast.PdfDict, preserveContent bool) ast.PdfArray {
 	holder := fixed
 	for node, depth := pe.parent, 0; !hasNonNullEntry(holder, "MediaBox") && node != nil && depth <= maxPageTreeDepth; node, depth = node.parent, depth+1 {
 		holder = node.dict
@@ -231,19 +259,50 @@ func fixedMediaBox(ctx context.Context, doc *document.Document, pe annotPageEntr
 	entry := holder["MediaBox"]
 	box, err := document.ResolveArray(ctx, doc, entry)
 	if err != nil || box == nil {
-		return replacement
+		return document.LetterMediaBox()
 	}
 	box = document.ResolveRectangle(ctx, doc, box)
 	if _, direct := entry.(ast.PdfArray); !direct {
 		return box
 	}
 	if !document.UsableBox(box) {
-		return replacement
+		return document.LetterMediaBox()
 	}
 	if clamped, changed := clampBoxArray(box, preserveContent); changed {
 		return clamped
 	}
 	return box
+}
+
+// inheritsUsableMediaBox reports whether pe, a page stating no media box,
+// inherits one a viewer uses from the nearest node above it stating one (ISO
+// 32000-1, 7.7.3.4).
+func inheritsUsableMediaBox(ctx context.Context, doc *document.Document, pe annotPageEntry) bool {
+	for node, depth := pe.parent, 0; node != nil && depth <= maxPageTreeDepth; node, depth = node.parent, depth+1 {
+		if !hasNonNullEntry(node.dict, "MediaBox") {
+			continue
+		}
+		box, err := document.ResolveArray(ctx, doc, node.dict["MediaBox"])
+		if err != nil || box == nil {
+			return false
+		}
+		return document.UsableBox(document.ResolveRectangle(ctx, doc, box))
+	}
+	return false
+}
+
+// nearestResources returns the /Resources entry page, the repaired dictionary
+// of pe, states, or the nearest node above it states, nil for none.
+func nearestResources(pe annotPageEntry, page ast.PdfDict) ast.PdfObject {
+	if hasNonNullEntry(page, "Resources") {
+		return page["Resources"]
+	}
+	for node, depth := pe.parent, 0; node != nil && depth <= maxPageTreeDepth; node, depth = node.parent, depth+1 {
+		if hasNonNullEntry(node.dict, "Resources") {
+			return node.dict["Resources"]
+		}
+	}
+	return nil
 }
 
 // clampPageTreeBoxes normalises the boxes declared on the interior nodes of the

@@ -24,7 +24,7 @@ import (
 //     materialisation an inheriting page loses its fonts and its text becomes
 //     unextractable; without the CropBox one it is displayed at its /MediaBox
 //     size instead of the region it was cropped to.
-func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) (ast.PdfIndirectRef, error) {
+func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, media *document.MediaBoxDefault) (ast.PdfIndirectRef, error) {
 	var ref ast.PdfIndirectRef
 	if page.Ref.ObjectNum != 0 {
 		copied, err := copier.CopyRef(ctx, page.Ref)
@@ -88,8 +88,36 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 	if page.Rotate != 0 && !statesEntry(pageDict, "Rotate") {
 		pageDict["Rotate"] = ast.PdfInt(page.Rotate)
 	}
+	if err := sizeCopiedPage(ctx, doc, page, pageDict, media); err != nil {
+		return ast.PdfIndirectRef{}, err
+	}
 
 	return ref, nil
+}
+
+// sizeCopiedPage gives pageDict, the copy of page, the media box media
+// chooses when page neither states nor inherits one a viewer uses (see
+// [document.MediaBoxDefault]). It is chosen here, from what the source page
+// paints, because the copy is the last point where the page's content reads
+// against the document it names: the page tree repair after it reads the
+// output, whose objects no document holds. A nil media, or one choosing
+// none, leaves the box to that repair.
+func sizeCopiedPage(ctx context.Context, doc *document.Document, page *document.Page, pageDict ast.PdfDict, media *document.MediaBoxDefault) error {
+	if media == nil || document.UsableBox(page.MediaBox) {
+		return nil
+	}
+	extent, err := PageContentExtent(ctx, nil, doc, page)
+	if err != nil {
+		return err
+	}
+	box, err := media.Resolve(ctx, extent)
+	if err != nil {
+		return err
+	}
+	if box != nil {
+		pageDict["MediaBox"] = box
+	}
+	return nil
 }
 
 // pageCopyLinks are the page entries that reach OTHER pages of the source
@@ -159,9 +187,9 @@ func pageCopyOverrides(pages []*document.Page) map[int]ast.PdfObject {
 // rectangle, a /CropBox that is none either: [0 0 612 792 7 0 R] was copied
 // whole, the content stream it runs on into included. A crop box enclosing the
 // region of a /MediaBox a viewer uses is not written either. The page's
-// /MediaBox is written on its own, and a rewrite writes one a viewer does not
-// use as the size most pages of the document have (see
-// [completeRewrittenPageTree]). The effective crop box of such a page is
+// /MediaBox is written on its own, and a copy writes one a viewer does not
+// use as a size that holds what the page paints (see [sizeCopiedPage]). The
+// effective crop box of such a page is
 // reduced to US Letter, the page a viewer draws it on, so the crop box it
 // declares is written instead, and a viewer clips it against the media box the
 // output gives the page.

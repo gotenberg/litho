@@ -77,12 +77,13 @@ func (f *pageSizeFlag) Set(value string) error {
 
 // registerDefaultPageSizeFlag adds --default-page-size to fs and returns the
 // bound value. Every command that writes a PDF offers it: a write gives a page
-// with no media box a viewer uses the size most pages of the document have,
-// whether it rewrites the file or appends an update that writes the page.
+// with no media box a viewer uses a size of the document's pages, or this one,
+// that holds what the page paints, whether it rewrites the file or appends an
+// update that writes the page.
 func registerDefaultPageSizeFlag(fs *flag.FlagSet) *pageSizeFlag {
 	f := &pageSizeFlag{}
-	fs.Var(f, "default-page-size", "Page size for a page with no media box, when no page of the document has one: "+
-		"letter (default), legal, a3, a4, a5, or WIDTHxHEIGHT in points")
+	fs.Var(f, "default-page-size", "Page size tried for a page with no media box after the document's own sizes, "+
+		"when it holds what the page paints: letter, legal, a3, a4, a5, or WIDTHxHEIGHT in points")
 	return f
 }
 

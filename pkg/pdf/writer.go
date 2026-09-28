@@ -62,23 +62,28 @@ const (
 	maxPageSize = 14400.0
 )
 
-// WithDefaultPageSize sets the size, in points, of the page a write gives a
-// page that neither states nor inherits a media box a viewer uses, when no
-// page of the document has one either. It defaults to US Letter, 612 by 792.
+// WithDefaultPageSize sets the size, in points, a write tries for a page that
+// neither states nor inherits a media box a viewer uses, after the sizes of the
+// document's own pages. Without it, the write tries none.
 //
 // ISO 32000-1, 7.7.3.3, Table 30 makes /MediaBox required and gives it no
 // default. A viewer draws a page without one on US Letter, which is what
 // [Reader.Page] reports. A write that gives such a page a media box, as every
-// rewrite, split, merge, insertion and remediation does, gives it the width
-// and height most pages of the document have, taken in page order, a tie going
-// to the size the earliest page has, at origin 0 0. The output then shows the
-// page at a size a viewer did not show for the source: the rest of the
-// document is the best evidence of the size the producer meant. A crop box
-// the page states is kept, and a viewer clips it against the new media box.
-// [Split] takes the size from every page of its source, [Merge] from every
-// page of its sources, and a [Writer] from the pages of its document and of
-// the documents [Writer.InsertPages] takes pages from. This option names the
-// size only when none of those pages has a media box a viewer uses.
+// rewrite, split, merge, insertion and remediation does, tries the widths and
+// heights the document's pages have, the one most pages have first, a tie
+// going to the size the earliest page has, each in its own orientation then
+// turned a quarter, then this size, and gives the page the first that holds
+// everything it paints: its text, paths, images, forms and annotations, within
+// the region a viewer showed of it. When none holds it, or what it paints
+// cannot be measured, the page gets US Letter, what a viewer showed, so no
+// write shows less of a page than a viewer did. Every media box it gets
+// starts at 0 0. The output may show the page at a size a viewer did not show
+// for the source: the rest of the document is the best evidence of the size
+// the producer meant. A crop box the page states is kept, and a viewer clips
+// it against the new media box. [Split] takes the sizes from every page of its
+// source, [Merge] from every page of its sources, and a [Writer] from the
+// pages of its document and of the documents [Writer.InsertPages] takes pages
+// from.
 //
 // width and height must lie between 3 and 14,400, the page sizes ISO 32000-1,
 // Annex C.2, Table C.1 allows; the write otherwise fails with
@@ -3554,11 +3559,11 @@ func appendPromotedPageTree(alloc *writer.ObjAllocator, doc *document.Document) 
 // amount regardless of document size.
 const writeBufferSize = 64 << 10
 
-// mediaBoxDefault returns the media box a write of the Writer given cfg gives
-// a page that neither states nor inherits one a viewer uses (see
-// [WithDefaultPageSize]): the size most pages of its document and of the
-// documents its insertions take pages from have, and the default page size
-// when none has one, the one cfg names, else the one [NewWriter] was given.
+// mediaBoxDefault returns what chooses the media box a write of the Writer
+// given cfg gives a page that neither states nor inherits one a viewer uses
+// (see [WithDefaultPageSize]): the sizes of the pages of its document and of
+// the documents its insertions take pages from, then the default page size,
+// the one cfg names, else the one [NewWriter] was given.
 // The writes of the Writer's temp files pass no options, and size such a page
 // as its output does.
 func (w *Writer) mediaBoxDefault(cfg writeOpts) *document.MediaBoxDefault {

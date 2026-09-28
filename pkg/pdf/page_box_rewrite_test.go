@@ -3,7 +3,6 @@ package pdf
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -247,17 +246,17 @@ func invalidBoundingBoxPDF() []byte {
 	})
 }
 
-// TestRemediatePDFA_RefusesADefaultMediaBoxThatCutsText pins that the PDF/A
-// page box repair replaces a /MediaBox no viewer uses (see
-// [document.UsableBox]) with the size most pages of the document have (see
-// [WithDefaultPageSize]), and that the remediation refuses, rather than write,
-// an output where that size leaves text off the page. ISO 32000-1, Table 30
-// gives the media box no default, and ISO 19005-2, 6.1.13 fails a box under 3
-// units. Pages 2 and 3 measure 800 by 600 and 600 by 800, a tie the earlier
-// page wins, and page 1 draws its text at (25, 700), above an 800 by 600
-// page: a viewer draws the source's page 1 on US Letter, where the text
-// shows. The remediation's text-loss check catches the loss.
-func TestRemediatePDFA_RefusesADefaultMediaBoxThatCutsText(t *testing.T) {
+// TestRemediatePDFA_NeverShrinksWhatAViewerShowed pins that the PDF/A page box
+// repair replaces a /MediaBox no viewer uses (see [document.UsableBox]) with
+// the first size of the document's pages that holds what the page paints, and
+// never one that leaves content off the page (see [WithDefaultPageSize]). ISO
+// 32000-1, Table 30 gives the media box no default, and ISO 19005-2, 6.1.13
+// fails a box under 3 units. Pages 2 and 3 measure 800 by 600 and 600 by 800,
+// a tie the earlier page wins. Page 1 draws its text at (25, 700), above an 800
+// by 600 page and inside a 600 by 800 one, the same size turned, which it gets;
+// drawn at (25, 500) it gets 800 by 600; drawn over a rectangle filling US
+// Letter, which neither holds, it keeps the US Letter a viewer drew it on.
+func TestRemediatePDFA_NeverShrinksWhatAViewerShowed(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	src := invalidBoundingBoxPDF()
@@ -265,48 +264,48 @@ func TestRemediatePDFA_RefusesADefaultMediaBoxThatCutsText(t *testing.T) {
 	if want := [][2]float64{{612, 792}, {800, 600}, {600, 800}}; !slices.Equal(sizes, want) {
 		t.Fatalf("the source pages measure %v, want %v", sizes, want)
 	}
-	for _, aggressive := range []bool{false, true} {
-		t.Run(fmt.Sprintf("aggressive=%v", aggressive), func(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		at         string
+		aggressive bool
+		want       []float64
+	}{
+		{"the turned size", "BT 25 700 TD", false, []float64{0, 0, 600, 800}},
+		{"the turned size, aggressive", "BT 25 700 TD", true, []float64{0, 0, 600, 800}},
+		{"the most common size", "BT 25 500 TD", false, []float64{0, 0, 800, 600}},
+		{"what a viewer showed", "0 0 610 790 re f BT 25 700 TD", false, []float64{0, 0, 612, 792}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			source := openBytes(t, src)
+			data := bytes.Replace(src, []byte("BT 25 700 TD"), []byte(tc.at), 1)
+			source := openBytes(t, data)
 			defer source.Close()
 			w := NewWriter(source)
 			defer w.Close()
 			var opts []RemediateOption
-			if aggressive {
+			if tc.aggressive {
 				opts = append(opts, WithAggressiveFixes())
 			}
-			if _, err := w.RemediatePDFA(ctx, models.PDFA2b, opts...); !errors.Is(err, ErrRemediationBrokePDF) {
-				t.Fatalf("RemediatePDFA returned %v, want ErrRemediationBrokePDF for the text the 800 by 600 page leaves off", err)
+			rep, err := w.RemediatePDFA(ctx, models.PDFA2b, opts...)
+			if err != nil {
+				t.Fatalf("RemediatePDFA: %v", err)
+			}
+			if !slices.ContainsFunc(rep.Fixed, func(fix string) bool { return strings.Contains(fix, "page boundaries") }) {
+				t.Fatalf("the remediation repaired no page boundary, so the test proves nothing: %q", rep.Fixed)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			o := readOutputTree(t, out.Bytes())
+			if got := boxValues(o.pages[0].MediaBox); !slices.Equal(got, tc.want) {
+				t.Errorf("page 1 states /MediaBox %v, want %v", got, tc.want)
+			}
+			r := openBytes(t, out.Bytes())
+			defer r.Close()
+			if text := mustText(t, r, 1); !strings.Contains(text, "Empty /MediaBox") {
+				t.Errorf("page 1 reads %q, want its text", text)
 			}
 		})
-	}
-
-	// The same repair, with the page's text inside the size it takes, is
-	// written.
-	fits := bytes.Replace(src, []byte("BT 25 700 TD"), []byte("BT 25 500 TD"), 1)
-	source := openBytes(t, fits)
-	defer source.Close()
-	w := NewWriter(source)
-	defer w.Close()
-	rep, err := w.RemediatePDFA(ctx, models.PDFA2b)
-	if err != nil {
-		t.Fatalf("RemediatePDFA: %v", err)
-	}
-	if !slices.ContainsFunc(rep.Fixed, func(fix string) bool { return strings.Contains(fix, "page boundaries") }) {
-		t.Fatalf("the remediation repaired no page boundary, so the test proves nothing: %q", rep.Fixed)
-	}
-	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out); err != nil {
-		t.Fatalf("WriteTo: %v", err)
-	}
-	o := readOutputTree(t, out.Bytes())
-	if got, want := boxValues(o.pages[0].MediaBox), []float64{0, 0, 800, 600}; !slices.Equal(got, want) {
-		t.Errorf("page 1 states /MediaBox %v, want %v", got, want)
-	}
-	r := openBytes(t, out.Bytes())
-	defer r.Close()
-	if text := mustText(t, r, 1); !strings.Contains(text, "Empty /MediaBox") {
-		t.Errorf("page 1 reads %q, want its text", text)
 	}
 }

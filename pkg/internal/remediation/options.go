@@ -45,9 +45,9 @@ type Options struct {
 	// subset of the glyphs the document shows, so a later edit can show
 	// characters the document does not show yet.
 	WholeFonts bool
-	// MediaBoxFallback is the media box a page no node gives one a viewer
-	// uses gets when no page of the document has one either, nil for US
-	// Letter (see [document.DefaultMediaBox]).
+	// MediaBoxFallback is the size tried for a page no node gives a media
+	// box a viewer uses after the sizes of the document's pages, nil for none
+	// (see [document.MediaBoxDefault]).
 	MediaBoxFallback ast.PdfArray
 	// fonts collects the fonts a run embedded and the ones it left
 	// unembedded although Fonts was set, for [Report.FontRefusals] and

@@ -39,6 +39,11 @@ func InsertPages(
 	if pos < 0 || pos > len(targetPages) {
 		return fmt.Errorf("insert position %d out of range [0, %d]", pos, len(targetPages))
 	}
+	// A copied page with no media box a viewer uses is sized from the pages of
+	// both documents, as the source reads it. The caller's default page size
+	// is the write's, which runs later: a page no size of the two documents
+	// holds is left to it (see [document.MediaBoxDefault.DerivedOnly]).
+	media := &document.MediaBoxDefault{Docs: []*document.Document{doc, srcDoc}, DerivedOnly: true}
 
 	// Determine which source pages to insert, and where each stands in the
 	// source.
@@ -165,7 +170,7 @@ func InsertPages(
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("inserting pages canceled: %w", err)
 			}
-			ref, err := copyPageForOutput(ctx, c, alloc, srcDoc, pagesToInsert[i])
+			ref, err := copyPageForOutput(ctx, c, alloc, srcDoc, pagesToInsert[i], media)
 			if err != nil {
 				return fmt.Errorf("copying source page %d: %w", i+1, err)
 			}

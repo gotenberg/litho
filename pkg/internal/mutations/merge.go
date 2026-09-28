@@ -30,12 +30,17 @@ type MergeSource struct {
 // merge into one file under the single key derived here.
 //
 // A page that neither states nor inherits a media box a viewer uses gets the
-// size most pages of the sources have, taken in source order, and
-// mediaBoxFallback, nil for US Letter, when none has one (see
-// [document.DefaultMediaBox]).
+// first size of the sources' pages, the one most pages have first, taken in
+// source order, then mediaBoxFallback, nil for none, that holds what the page
+// paints, and US Letter, what a viewer drew, when none does (see
+// [document.MediaBoxDefault]).
 func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig, mediaBoxFallback ast.PdfArray) error {
 	if len(sources) == 0 {
 		return fmt.Errorf("no sources to merge")
+	}
+	media := &document.MediaBoxDefault{Fallback: mediaBoxFallback}
+	for _, src := range sources {
+		media.Docs = append(media.Docs, src.Doc)
 	}
 
 	alloc := writer.NewObjAllocator(0)
@@ -106,7 +111,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 				return fmt.Errorf("merge canceled: %w", err)
 			}
 
-			newRef, err := copyPageForOutput(ctx, copier, alloc, src.Doc, page)
+			newRef, err := copyPageForOutput(ctx, copier, alloc, src.Doc, page, media)
 			if err != nil {
 				return fmt.Errorf("copying page %d from source %d: %w", pageNum+1, srcIdx, err)
 			}
@@ -220,11 +225,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	catalogRef := alloc.Alloc(catalogDict)
 	// The copied pages keep what their sources state, which can be short of
 	// what ISO 32000-1, Table 30 requires of a page.
-	media := &document.MediaBoxDefault{Fallback: mediaBoxFallback}
-	for _, src := range sources {
-		media.Docs = append(media.Docs, src.Doc)
-	}
-	if err := completeRewrittenPageTree(ctx, alloc, catalogRef, media); err != nil {
+	if err := completeRewrittenPageTree(ctx, alloc, catalogRef, media, nil); err != nil {
 		return err
 	}
 

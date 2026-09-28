@@ -58,10 +58,69 @@ type FullRewriteConfig struct {
 	// in destination numbering, so a source-numbered AllocAt would stomp
 	// an unrelated copied object and silently drop the edit.
 	Overrides map[int]ast.PdfObject
-	// MediaBoxFallback is the media box a page that neither states nor
-	// inherits one a viewer uses gets when no page of Doc or PageSources has
-	// one either, nil for US Letter (see [document.DefaultMediaBox]).
+	// MediaBoxFallback is the size tried for a page that neither states nor
+	// inherits a media box a viewer uses after the sizes of the pages of Doc
+	// and PageSources, nil for none (see [document.MediaBoxDefault]).
 	MediaBoxFallback ast.PdfArray
+}
+
+// rewriteExtents returns what measures, for the page tree repair of a
+// rewrite of doc under overrides that copier copied, what a page of the output
+// paints (see [PageContentExtent]). The output's objects are no document's,
+// so the page is measured as its source stages it, the source page the copier
+// copied it from, read through overrides. The source's pages are read the
+// first time a page needs it, and a page the copy did not come from a source
+// page, or that cannot be told, reads as unknown.
+func rewriteExtents(doc *document.Document, overrides map[int]ast.PdfObject, copier *writer.Copier) extentFunc {
+	var (
+		staged *writer.ObjAllocator
+		source map[int]*document.Page
+		read   bool
+	)
+	return func(ctx context.Context, ref ast.PdfIndirectRef, _ ast.PdfDict, _ ast.PdfObject) (document.ContentExtent, error) {
+		if !read {
+			read = true
+			staged = writer.NewObjAllocator(0)
+			for num, obj := range overrides {
+				staged.AllocAt(num, obj)
+			}
+			pages, err := defaultPages(ctx, doc)
+			if err != nil {
+				return document.ContentExtent{}, err
+			}
+			source = make(map[int]*document.Page)
+			for _, page := range StagedPages(ctx, staged, doc, pages) {
+				if page.Ref.ObjectNum == 0 {
+					continue
+				}
+				if dst, ok := copier.Mapping()[page.Ref.ObjectNum]; ok {
+					source[dst] = page
+				}
+			}
+		}
+		page, ok := source[ref.ObjectNum]
+		if !ok {
+			return document.ContentExtent{}, nil
+		}
+		return PageContentExtent(ctx, staged, doc, page)
+	}
+}
+
+// defaultPages returns the pages of doc as the reader reads them, none when
+// its catalog or page tree cannot be read. Only a cancelled ctx is an error.
+func defaultPages(ctx context.Context, doc *document.Document) ([]*document.Page, error) {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err == nil {
+		var pages []*document.Page
+		if pages, err = document.ResolvePages(ctx, doc, catalog); err == nil {
+			return pages, nil
+		}
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
+	doc.Logger.Debug("rewrite: no source pages to measure", slog.Any("err", err))
+	return nil, nil
 }
 
 // FullRewrite performs a complete rewrite of the document, applying the
@@ -113,7 +172,7 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	// Before the sweep of applyEncryption, since a node it adds is an object
 	// of the output like any other.
 	media := &document.MediaBoxDefault{Docs: append([]*document.Document{doc}, cfg.PageSources...), Fallback: cfg.MediaBoxFallback}
-	if err := completeRewrittenPageTree(ctx, alloc, newCatalogRef, media); err != nil {
+	if err := completeRewrittenPageTree(ctx, alloc, newCatalogRef, media, rewriteExtents(doc, cfg.Overrides, copier)); err != nil {
 		return err
 	}
 
