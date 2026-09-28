@@ -5,11 +5,13 @@ import (
 	"crypto"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/internal/pkcs12"
 	"github.com/gotenberg/litho/pkg/internal/signature"
 )
 
@@ -79,7 +81,52 @@ func ParseSignerPEM(certPEM, keyPEM []byte) (Signer, error) {
 	if err != nil {
 		return nil, err
 	}
+	return signerOfKey(key, certs)
+}
 
+// ParseSignerPKCS12 returns the [Signer] of [NewSigner] from a PKCS #12 key
+// store (RFC 7292) under password: the .p12 or .pfx file that certificate
+// authorities, browsers and operating systems export. The store holds one
+// private key. The certificate whose public key matches it signs, and the
+// store's other certificates form its chain.
+//
+// The password verifies the store's MAC (HMAC over SHA-1 or SHA-2, keyed by
+// the derivation of RFC 7292, Appendix B) and decrypts its content: PBES2
+// (PBKDF2 with AES-CBC or DES-EDE3-CBC, RFC 8018), which current exporters
+// write, or the legacy triple DES and 40- or 128-bit RC2 schemes of RFC
+// 7292, Appendix C, which older ones write. A store in public-key privacy
+// or integrity mode is not read.
+//
+// It returns [ErrSignerPKCS12Password] when the password does not fit, and
+// [ErrSignerPKCS12] for a store that does not parse, uses another algorithm,
+// states an iteration count over 2^21, exceeds 1 MiB, or holds no private
+// key, more than one, or no certificate. It returns [ErrSignerKeyMismatch]
+// when no certificate is the key's, and the errors of [NewSigner].
+func ParseSignerPKCS12(data []byte, password string) (_ Signer, err error) {
+	defer recoverToError(nil, "ParseSignerPKCS12", &err)
+	contents, err := pkcs12.Decode(data, password)
+	if errors.Is(err, pkcs12.ErrIncorrectPassword) {
+		return nil, fmt.Errorf("%w: %w", ErrSignerPKCS12Password, err)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrSignerPKCS12, err)
+	}
+	if n := len(contents.Keys); n != 1 {
+		return nil, fmt.Errorf("%w: %d private keys, want one", ErrSignerPKCS12, n)
+	}
+	if len(contents.Certificates) == 0 {
+		return nil, fmt.Errorf("%w: no certificate", ErrSignerPKCS12)
+	}
+	key, ok := contents.Keys[0].(crypto.Signer)
+	if !ok {
+		return nil, fmt.Errorf("%w: %T", ErrSignerKeyUnsupported, contents.Keys[0])
+	}
+	return signerOfKey(key, contents.Certificates)
+}
+
+// signerOfKey returns the [Signer] of [NewSigner] for key, signing as the
+// certificate of certs whose public key is key's, the others its chain.
+func signerOfKey(key crypto.Signer, certs []*x509.Certificate) (Signer, error) {
 	leaf := -1
 	for i, c := range certs {
 		if pub, ok := key.Public().(interface{ Equal(crypto.PublicKey) bool }); ok && pub.Equal(c.PublicKey) {

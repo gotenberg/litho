@@ -658,8 +658,8 @@ type PDFStamp struct {
 // calls [Signer.Sign] during [Writer.WriteTo] with the SHA-256 hash of
 // the ByteRange regions.
 //
-// [NewSigner] and [ParseSignerPEM] return one built on an X.509 certificate
-// and an RSA or ECDSA key. Implement it for anything else, such as a
+// [NewSigner], [ParseSignerPEM] and [ParseSignerPKCS12] return one built on
+// an X.509 certificate and an RSA or ECDSA key. Implement it for anything else, such as a
 // signature with a timestamp or one a remote service computes whole.
 //
 // The interface is owned by the [pdf] package so callers never have to

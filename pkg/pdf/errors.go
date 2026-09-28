@@ -159,17 +159,18 @@ var (
 	// 12.7.3.2). Nothing is written.
 	ErrSignatureFieldUnavailable = mutations.ErrSignatureFieldUnavailable
 
-	// ErrSignerKeyUnsupported is returned by [NewSigner] and [ParseSignerPEM]
-	// for a private key other than RSA or ECDSA on P-256, P-384 or P-521.
+	// ErrSignerKeyUnsupported is returned by [NewSigner], [ParseSignerPEM]
+	// and [ParseSignerPKCS12] for a private key other than RSA or ECDSA on
+	// P-256, P-384 or P-521.
 	ErrSignerKeyUnsupported = signature.ErrSignerKeyUnsupported
 
-	// ErrSignerKeyMismatch is returned by [NewSigner] and [ParseSignerPEM] when
-	// the private key is not the one of the signing certificate, or when either
-	// is missing.
+	// ErrSignerKeyMismatch is returned by [NewSigner], [ParseSignerPEM] and
+	// [ParseSignerPKCS12] when the private key is not the one of the signing
+	// certificate, or when either is missing.
 	ErrSignerKeyMismatch = signature.ErrSignerKeyMismatch
 
-	// ErrSignerCertificateUsage is returned by [NewSigner] and
-	// [ParseSignerPEM] for a certificate whose key usage extension allows
+	// ErrSignerCertificateUsage is returned by [NewSigner], [ParseSignerPEM]
+	// and [ParseSignerPKCS12] for a certificate whose key usage extension allows
 	// neither digitalSignature nor nonRepudiation (RFC 5280, 4.2.1.3).
 	ErrSignerCertificateUsage = signature.ErrSignerCertificateUsage
 
@@ -183,6 +184,17 @@ var (
 	// certificate, no private key or more than one, or a block that does not
 	// parse.
 	ErrSignerPEM = errors.New("invalid signer PEM")
+
+	// ErrSignerPKCS12 is returned by [ParseSignerPKCS12] for a key store that
+	// does not parse, uses an algorithm or mode litho does not read, exceeds
+	// a size or iteration cap, or holds no private key, more than one, or no
+	// certificate.
+	ErrSignerPKCS12 = errors.New("invalid signer PKCS #12 store")
+
+	// ErrSignerPKCS12Password is returned by [ParseSignerPKCS12] when the
+	// password does not verify the store's MAC or, in a store without one,
+	// does not decrypt it.
+	ErrSignerPKCS12Password = errors.New("incorrect PKCS #12 password")
 
 	// ErrEncryptedNotAuthenticated is returned by [Writer.WriteTo] when the
 	// source document is encrypted but was never authenticated, so its

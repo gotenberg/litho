@@ -88,10 +88,11 @@
 // one. An encrypted source, or an encrypted output, is not signed:
 // [ErrSignFullRewriteIncompatible].
 //
-// [NewSigner] and [ParseSignerPEM] return a [Signer] that signs with an X.509
-// certificate and an RSA or ECDSA key: a detached CMS SignedData over SHA-256
-// with the signed attributes PAdES asks for, and no timestamp. Implement
-// [Signer] for anything else.
+// [NewSigner], [ParseSignerPEM] and [ParseSignerPKCS12] (a .p12 or .pfx key
+// store) return a [Signer] that signs with an X.509 certificate and an RSA or
+// ECDSA key: a detached CMS SignedData over SHA-256 with the signed
+// attributes PAdES asks for, and no timestamp. Implement [Signer] for
+// anything else.
 //
 // A signature covers the bytes of the file it was made in (ISO 32000-1,
 // 12.8.1). An incremental update appends to them and keeps every signature. A
