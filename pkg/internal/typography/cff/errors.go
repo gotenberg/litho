@@ -9,4 +9,7 @@ var (
 	// ErrTruncated indicates the CFF data ended before a structure was
 	// fully read.
 	ErrTruncated = errors.New("cff: data truncated")
+	// ErrSubsetUnsupported indicates a program [Subset] does not cut down:
+	// a CID-keyed one, or one whose charstrings are not Type 2.
+	ErrSubsetUnsupported = errors.New("cff: program cannot be subset")
 )
