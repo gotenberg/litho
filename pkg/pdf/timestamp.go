@@ -179,5 +179,8 @@ func (docTimestamper) Sign(ctx context.Context, digest []byte, params mutations.
 // its token.
 func (docTimestamper) Certificate() *x509.Certificate { return nil }
 
+// Chain returns nil, for the reason [docTimestamper.Certificate] does.
+func (docTimestamper) Chain() []*x509.Certificate { return nil }
+
 // EstimatedSize returns the room kept for the token.
 func (docTimestamper) EstimatedSize(mutations.SignParams) int { return timestampTokenReserve }

@@ -154,10 +154,22 @@ var (
 	// ErrSignatureFieldUnavailable is returned by [Writer.WriteTo] when the
 	// field [WithSignatureField] names cannot take the signature: a field of
 	// that name exists and is not a signature field, is signed already, or
-	// carries a /Lock or required seed values, or no field has the name and it
-	// holds a period, which a new root field's name cannot (ISO 32000-1,
-	// 12.7.3.2). Nothing is written.
+	// carries a /Lock of an action ISO 32000-1, Table 233 does not define or
+	// one a document timestamp is asked to honour, or no field has the name
+	// and it holds a period, which a new root field's name cannot (ISO
+	// 32000-1, 12.7.3.2). Nothing is written.
 	ErrSignatureFieldUnavailable = mutations.ErrSignatureFieldUnavailable
+
+	// ErrSeedValueUnmet is returned by [Writer.WriteTo] when the signature
+	// field [WithSignatureField] names requires, through its seed value
+	// dictionary (ISO 32000-1, 12.7.4.5, Tables 234 and 235), what the
+	// signature cannot be: another signature handler, subfilter or digest, a
+	// reason other than the one [WithSignatureReason] gave, a certification
+	// signature or legal attestations, revocation information inside the
+	// SignedData, a timestamp with no authority named, or a signing
+	// certificate, issuer, policy, subject or key usage the signer's does not
+	// match. The message names the requirement. Nothing is written.
+	ErrSeedValueUnmet = mutations.ErrSeedValueUnmet
 
 	// ErrSignatureNotPAdES is returned by [Writer.WriteTo] under [WithPAdES]
 	// when the SignedData a [Signer] other than the one of [NewSigner]

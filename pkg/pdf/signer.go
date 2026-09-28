@@ -297,6 +297,14 @@ func WithTimestampAuthority(url string) SignOption {
 // the signature goes in a new field named Signature1, Signature2 or the first
 // such name no field holds. [Writer.WriteTo] returns
 // [ErrSignatureFieldUnavailable] for a name the signature cannot take.
+//
+// A field signed in place is honoured as ISO 32000-1, 12.7.4.5 describes. Its
+// /Lock (Table 233) turns the fields it names read-only in the signed
+// revision and puts a FieldMDP transform naming them in the signature
+// dictionary (12.8.2.4). Its seed values (/SV, Tables 234 and 235) choose the
+// subfilter, the reason and the timestamp authority the caller left unset,
+// and a requirement the signature cannot meet fails the write with
+// [ErrSeedValueUnmet].
 func WithSignatureField(name string) SignOption {
 	return func(o *signOpts) { o.info.Field = name }
 }

@@ -404,3 +404,11 @@ var ErrAttachmentTreeIncomplete = errors.New("embedded-files tree nests deeper t
 // signed already, or asks for more than the signature litho writes, or the name
 // is not one a new root field can take.
 var ErrSignatureFieldUnavailable = errors.New("signature field unavailable")
+
+// ErrSeedValueUnmet reports a signature field whose seed value dictionary
+// (ISO 32000-1, 12.7.4.5, Table 234) requires what the signature cannot be:
+// another signature handler, subfilter or digest, a reason other than the
+// one asked for, a certification signature, revocation information inside
+// the SignedData, a timestamp with no authority named, or a signing
+// certificate other than the signer's.
+var ErrSeedValueUnmet = errors.New("signature field seed value cannot be met")

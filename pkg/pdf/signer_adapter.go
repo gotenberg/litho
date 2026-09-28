@@ -59,6 +59,15 @@ func (a signerAdapter) signedData(digest []byte, cades bool) ([]byte, error) {
 // Certificate returns the signing certificate.
 func (a signerAdapter) Certificate() *x509.Certificate { return a.inner.Certificate() }
 
+// Chain returns the chain the signer of [NewSigner] was given, and nil for
+// any other [Signer], whose chain the interface does not expose.
+func (a signerAdapter) Chain() []*x509.Certificate {
+	if s, ok := a.inner.(*builtinSigner); ok {
+		return s.cms.Chain()
+	}
+	return nil
+}
+
 // EstimatedSize returns the Signer's estimate, and room for a timestamp token
 // when params asks for one.
 func (a signerAdapter) EstimatedSize(params mutations.SignParams) int {

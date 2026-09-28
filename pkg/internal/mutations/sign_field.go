@@ -17,10 +17,13 @@ import (
 // the chain is also cut at the first object it revisits.
 const maxFieldAncestors = 64
 
-// namedField is a field of the interactive form, by reference and as read.
+// namedField is a field of the interactive form, by reference and as read,
+// with the /Lock and /SV dictionaries of a signature field (ISO 32000-1,
+// Table 232), nil when it has none.
 type namedField struct {
-	ref  ast.PdfIndirectRef
-	dict ast.PdfDict
+	ref      ast.PdfIndirectRef
+	dict     ast.PdfDict
+	lock, sv ast.PdfDict
 }
 
 // signatureField returns the unsigned signature field whose fully qualified
@@ -31,9 +34,9 @@ type namedField struct {
 // Any other field of that name is refused with [ErrSignatureFieldUnavailable]:
 // two fields with one fully qualified name are one field (ISO 32000-1,
 // 12.7.3.2), so the signature cannot go in a field of its own under it. So is
-// a signature field that holds a signature already (12.7.4.5), and one whose
-// /Lock or /SV (Table 232) asks the signature to lock fields or to meet seed
-// values, which the signature dictionary litho writes does not honour. A name
+// a signature field that holds a signature already (12.7.4.5). A field's
+// /Lock and /SV (Table 232) are returned with it, for [lockFields] and
+// [applySeedValues] to honour. A name
 // no field has is refused when it holds a period, since the new field is a
 // root field and a partial name holds none (12.7.3.2), and when a widget the
 // form does not list carries it ([pageWidgetFieldNames]).
@@ -164,15 +167,14 @@ func usableSignatureField(ctx context.Context, alloc *writer.ObjAllocator, doc *
 			return namedField{}, fmt.Errorf("%w: field %q is signed already", ErrSignatureFieldUnavailable, name)
 		}
 	}
-	if _, ok := field["Lock"]; ok {
-		return namedField{}, fmt.Errorf("%w: field %q asks its signature to lock fields (/Lock, ISO 32000-1, Table 232), which litho does not do", ErrSignatureFieldUnavailable, name)
+	found := namedField{ref: ref, dict: field}
+	// ISO 32000-1, Table 232 types /Lock and /SV as dictionaries; one that
+	// is not asks nothing of the signature.
+	if lock, err := resolveDictAllocFirst(ctx, alloc, doc, field["Lock"]); err == nil && lock != nil {
+		found.lock = lock
 	}
 	if sv, err := resolveDictAllocFirst(ctx, alloc, doc, field["SV"]); err == nil && sv != nil {
-		// ISO 32000-1, Table 234: a set /Ff bit makes the matching seed value
-		// a requirement.
-		if ff, ok := sv["Ff"].(ast.PdfInt); ok && ff != 0 {
-			return namedField{}, fmt.Errorf("%w: field %q requires seed values (/SV /Ff %d, ISO 32000-1, Table 234) litho does not check", ErrSignatureFieldUnavailable, name, ff)
-		}
+		found.sv = sv
 	}
-	return namedField{ref: ref, dict: field}, nil
+	return found, nil
 }

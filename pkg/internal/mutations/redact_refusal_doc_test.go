@@ -33,6 +33,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrAttachmentTreeIncomplete":      "the attachment walks",
 	"ErrImageShared":                   "CheckBlankedImageUses, document-wide rather than per page",
 	"ErrSignatureFieldUnavailable":     "WriteWithSignature",
+	"ErrSeedValueUnmet":                "WriteWithSignature",
 }
 
 // TestRedactPageRegionsDocNamesEveryRefusal pins the refusal list on

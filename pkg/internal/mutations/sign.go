@@ -42,8 +42,12 @@ type Signer interface {
 	// Sign computes the /Contents over the given SHA-256 digest, as params
 	// asks for it.
 	Sign(ctx context.Context, digest []byte, params SignParams) ([]byte, error)
-	// Certificate returns the signing certificate.
+	// Certificate returns the signing certificate, nil when it is known only
+	// once Sign returns, as a timestamp authority's is.
 	Certificate() *x509.Certificate
+	// Chain returns the certificates above the signing certificate the
+	// signature carries, nil when they are not known before signing.
+	Chain() []*x509.Certificate
 	// EstimatedSize returns the maximum expected byte count of what Sign
 	// returns for params.
 	EstimatedSize(params SignParams) int
@@ -168,31 +172,6 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		}
 	}
 
-	// Reserve space for the signature. The /Contents value is a hex string
-	// of estimatedSize bytes, which requires estimatedSize*2 hex chars.
-	params := SignParams{SubFilter: info.subFilter(), TimestampURL: info.TimestampURL}
-	estimatedSize := max(signer.EstimatedSize(params), 8192)
-
-	// Create the signature dictionary with a placeholder /Contents.
-	// Actual zero bytes (not ASCII '0') make the serializer produce a hex
-	// string <0000...0000> that the second pass can locate and patch.
-	placeholderBytes := make([]byte, estimatedSize)
-	sigDict := ast.PdfDict{
-		"Type":      ast.PdfName("Sig"),
-		"Filter":    ast.PdfName("Adobe.PPKLite"),
-		"SubFilter": params.SubFilter,
-		"Contents":  ast.PdfString(string(placeholderBytes)),
-		"ByteRange": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(9999999999), ast.PdfInt(9999999999), ast.PdfInt(9999999999)},
-	}
-	if info.DocTimeStamp {
-		// ISO 32000-2, 12.8.5: the timestamp authority's token is the
-		// signature, and its genTime the signing time, so the dictionary
-		// carries no /M or other claim of the signer's.
-		sigDict["Type"] = ast.PdfName("DocTimeStamp")
-	} else {
-		info.entries(sigDict)
-	}
-
 	// Update or create AcroForm with the signature field.
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
@@ -246,14 +225,65 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 			return err
 		}
 	}
+	// The field's seed values settle what the signature is before its
+	// dictionary is written (ISO 32000-1, 12.7.4.5, Table 234).
+	if existing.sv != nil {
+		if err := applySeedValues(ctx, doc, existing.sv, &info, signer, fieldName); err != nil {
+			return err
+		}
+	}
+
+	// Reserve space for the signature. The /Contents value is a hex string
+	// of estimatedSize bytes, which requires estimatedSize*2 hex chars.
+	params := SignParams{SubFilter: info.subFilter(), TimestampURL: info.TimestampURL}
+	estimatedSize := max(signer.EstimatedSize(params), 8192)
+
+	// Create the signature dictionary with a placeholder /Contents.
+	// Actual zero bytes (not ASCII '0') make the serializer produce a hex
+	// string <0000...0000> that the second pass can locate and patch.
+	placeholderBytes := make([]byte, estimatedSize)
+	sigDict := ast.PdfDict{
+		"Type":      ast.PdfName("Sig"),
+		"Filter":    ast.PdfName("Adobe.PPKLite"),
+		"SubFilter": params.SubFilter,
+		"Contents":  ast.PdfString(string(placeholderBytes)),
+		"ByteRange": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(9999999999), ast.PdfInt(9999999999), ast.PdfInt(9999999999)},
+	}
+	if info.DocTimeStamp {
+		// ISO 32000-2, 12.8.5: the timestamp authority's token is the
+		// signature, and its genTime the signing time, so the dictionary
+		// carries no /M or other claim of the signer's.
+		sigDict["Type"] = ast.PdfName("DocTimeStamp")
+	} else {
+		info.entries(sigDict)
+	}
+	if existing.lock != nil && info.DocTimeStamp {
+		return fmt.Errorf("%w: field %q asks its signature to lock fields (/Lock, ISO 32000-1, Table 232), which a document timestamp does not", ErrSignatureFieldUnavailable, fieldName)
+	}
+	if existing.lock != nil {
+		// ISO 32000-1, 12.7.4.5, Table 233: signing the field locks the
+		// fields its /Lock names. The FieldMDP transform records which, so
+		// a verifier can tell a later change to them (12.8.2.4, Table 256),
+		// and the fields turn read-only in the signed revision.
+		ref, err := lockFields(ctx, alloc, doc, fields, existing.lock, catalogRef)
+		if err != nil {
+			return err
+		}
+		sigDict["Reference"] = ast.PdfArray{ref}
+	}
 
 	sigRef := alloc.Alloc(sigDict)
 	if existing.dict != nil {
 		// ISO 32000-1, 12.7.4.5: a signature field is signed by setting its
 		// /V to the signature dictionary. Its widgets, on the pages already,
 		// stay as they are, and the form lists it already.
-		signed := make(ast.PdfDict, len(existing.dict)+1)
-		maps.Copy(signed, existing.dict)
+		// A /Lock that names the field itself turned it read-only above.
+		current := existing.dict
+		if d, err := resolveDictAllocFirst(ctx, alloc, doc, existing.ref); err == nil && d != nil {
+			current = d
+		}
+		signed := make(ast.PdfDict, len(current)+1)
+		maps.Copy(signed, current)
 		signed["V"] = sigRef
 		alloc.AllocAt(existing.ref.ObjectNum, signed)
 	} else {

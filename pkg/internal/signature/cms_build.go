@@ -127,6 +127,9 @@ func NewCMSSigner(cert *x509.Certificate, key crypto.Signer, chain []*x509.Certi
 // Certificate returns the signing certificate.
 func (s *CMSSigner) Certificate() *x509.Certificate { return s.cert }
 
+// Chain returns the certificates written after the signing certificate.
+func (s *CMSSigner) Chain() []*x509.Certificate { return slices.Clone(s.chain) }
+
 // EstimatedSize returns an upper bound on the bytes of a SignedData
 // [CMSSigner.Sign] returns.
 func (s *CMSSigner) EstimatedSize() int {
