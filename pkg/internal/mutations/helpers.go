@@ -157,7 +157,14 @@ func FormatFloat(f float64) string {
 	return s
 }
 
-// GenerateDocumentID creates a random 16-byte document ID.
+// GenerateDocumentID creates a random 16-byte document ID for an encrypted
+// output. Encryption keeps it random where remediation derives its /ID from
+// the content: its first string is the only per-file input to the RC4 and
+// AES-128 file key (ISO 32000-1, 7.6.3.3, Algorithm 2), so a value derived
+// from anything less than the whole plaintext output would give two different
+// outputs under one password the same key, and under RC4 the same keystream.
+// The AES outputs are not reproducible either way, since their IVs, and the
+// AES-256 file key and salts, are random.
 func GenerateDocumentID() []byte {
 	id := make([]byte, 16)
 	_, _ = rand.Read(id) // crypto/rand never fails on supported platforms

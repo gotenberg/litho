@@ -27,11 +27,11 @@ func remediateTwice(t *testing.T, args func(out string) []string) ([]byte, []byt
 	return outs[0], outs[1]
 }
 
-// TestRemediate_DocumentIDPinsOutputBytes pins that --document-id makes two
-// runs over the same file write the same bytes, on the command and on the
-// pipe's remediate stage. The fixture has no /ID, so remediation writes one,
-// and without the flag it is random: the two runs differ, which keeps the
-// check from passing on a file whose output never varied.
+// TestRemediate_DocumentIDPinsOutputBytes pins that two runs over the same
+// file write the same bytes, on the command and on the pipe's remediate stage,
+// and that --document-id chooses the /ID. The fixture has no /ID, so
+// remediation writes one: derived from the file and the options without the
+// flag, the pinned one with it.
 func TestRemediate_DocumentIDPinsOutputBytes(t *testing.T) {
 	src := writeTempPDF(t, redactableCLIPDF())
 	// The hex spelling of "LITHO-PINNED-ID!", which the writer emits as a
@@ -41,8 +41,11 @@ func TestRemediate_DocumentIDPinsOutputBytes(t *testing.T) {
 	a, b := remediateTwice(t, func(out string) []string {
 		return []string{"remediate", "--profile", "PDF/A-2b", "-o", out, src}
 	})
-	if bytes.Equal(a, b) {
-		t.Fatal("two runs without --document-id wrote the same bytes, so this fixture cannot show the flag works")
+	if !bytes.Equal(a, b) {
+		t.Error("remediate: two runs without --document-id wrote different bytes")
+	}
+	if !bytes.Contains(a, []byte("/ID")) || bytes.Contains(a, []byte("(LITHO-PINNED-ID!)")) {
+		t.Error("remediate: the output without --document-id does not carry a derived /ID")
 	}
 
 	a, b = remediateTwice(t, func(out string) []string {

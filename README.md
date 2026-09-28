@@ -168,6 +168,7 @@ report, err := w.RemediatePDFA(ctx, models.PDFA2b, pdf.WithDocumentID([]byte("01
 ```
 
 A value of any other length is ignored. An encrypted output is never reproducible: `Writer.Encrypt` draws its own `/ID`.
+Output is reproducible: the same input bytes and options write the same output bytes. A remediation that must give a document its first trailer `/ID` derives it from the document's bytes and the remediation options, and `WithDocumentID` (`--document-id` on the CLI) pins it instead. An encrypted output is the exception: its keys, salts, IVs and `/ID` are random, as the cryptography requires.
 
 ## CLI
 

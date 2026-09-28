@@ -323,14 +323,14 @@ const documentIDBytes = 16
 // pipe's remediate stage share.
 func registerDocumentIDFlag(fs *flag.FlagSet) *string {
 	return fs.String("document-id", "",
-		"32 hex digits pinning the trailer /ID remediation writes when the document has no valid one, so identical inputs give identical output bytes")
+		"32 hex digits pinning the trailer /ID remediation writes when the document has no valid one (default: derived from the file and the options)")
 }
 
 // documentIDOption returns the remediation option pinning the trailer /ID to
 // the 16 bytes hexID spells, nil when hexID is empty, or an error when hexID is
 // not 32 hex digits. Remediation writes an /ID when the document has no valid
-// one, and that /ID is otherwise random: the one input that makes two runs of
-// this command over the same file write different bytes.
+// one, derived from the file and the options unless pinned, so two runs of
+// this command over the same file write the same bytes either way.
 func documentIDOption(hexID string) (pdf.RemediateOption, error) {
 	if hexID == "" {
 		return nil, nil

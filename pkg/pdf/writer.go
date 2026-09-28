@@ -316,13 +316,19 @@ func WithFigureAltText(alt string) RemediateOption {
 	}
 }
 
-// WithDocumentID pins the 16-byte seed for the trailer /ID that
-// remediation mints when the source has none (or a malformed one).
-// Reproducible-build callers pin it so identical inputs produce identical
-// output bytes; the random /ID is otherwise litho's documented
-// nondeterminism seam. An id of any other length is ignored and the
-// random seam applies. [Writer.Encrypt] mints its own ID and is not
-// affected by this option.
+// WithDocumentID pins the 16-byte string of the trailer /ID that
+// remediation mints when the source has none or a malformed one.
+//
+// Without it, remediation derives that string from the content: the first
+// 16 bytes of a SHA-256 over the bytes of the document it repairs (the
+// source, with the edits queued before it) and the options that shape the
+// output (the profile, [WithLanguage], [WithAggressiveFixes],
+// [WithFigureAltText], and whether fonts are supplied). The same input and
+// options then write the same bytes, and a change to either mints another
+// /ID. A source whose /ID has a valid first string keeps it, since ISO
+// 32000-1, 14.4 makes it the file's permanent identifier. An id of any other
+// length is ignored and the derived /ID applies. Encryption ([Writer.Encrypt],
+// [WithEncryption]) mints its own /ID and is not affected by this option.
 // The slice is retained, not copied; leave it untouched until the
 // remediation completes.
 func WithDocumentID(id []byte) RemediateOption {
@@ -1517,6 +1523,18 @@ func encryptConfigFromInternal(c crypto.EncryptConfig) EncryptConfig {
 // Forces a full rewrite since every string and stream must be
 // encrypted. It replaces the encryption [NewWriter] was given, and
 // [WithEncryption] passed to [Writer.WriteTo] replaces it.
+//
+// An encrypted output is not byte-reproducible: two writes of the same input
+// with the same passwords write different bytes. The security handler draws
+// its randomness where the cryptography requires it: the file key, salts and
+// /Perms padding of AES-256 (ISO 32000-2, 7.6.4.4.7 to 7.6.4.4.9), the
+// initialization vector of every AES string and stream (ISO 32000-1, 7.6.2),
+// and the trailer /ID. The first /ID string is the only per-file input to the
+// RC4 and AES-128 file key (ISO 32000-1, 7.6.3.3, Algorithm 2), so it stays
+// random where remediation derives its /ID from the content
+// ([WithDocumentID]): a value derived from anything less than the whole
+// plaintext output would give two different outputs under one password the
+// same key, and under RC4 the same keystream.
 func (w *Writer) Encrypt(cfg EncryptConfig) {
 	if w.refuseAfterRemediation("Encrypt") != nil {
 		return

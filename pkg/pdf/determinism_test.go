@@ -167,6 +167,42 @@ func TestRemediationWritesTheSameBytesEveryRun(t *testing.T) {
 	}
 }
 
+// TestRemediationDerivesAMissingIDFromTheContent pins that remediation mints
+// the /ID of a file without one from its content, with no [WithDocumentID]:
+// the same fixture and options write the same bytes on every run, and another
+// mode mints another /ID. filestruct_1b.pdf is the litho fixture without an
+// /ID, and before the derivation its remediation wrote different bytes on
+// every run.
+func TestRemediationDerivesAMissingIDFromTheContent(t *testing.T) {
+	t.Parallel()
+
+	data := readLithoFixture(t, "filestruct_1b.pdf")
+	ctx := context.Background()
+	ids := make(map[bool]string)
+	for _, aggressive := range []bool{false, true} {
+		var opts []RemediateOption
+		if aggressive {
+			opts = append(opts, WithAggressiveFixes())
+		}
+		sameOutputEveryRun(t, func() ([]byte, error) {
+			return remediateFixture(ctx, data, "PDF/A-1b", opts...)
+		})
+		out, err := remediateFixture(ctx, data, "PDF/A-1b", opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := Open(ctx, bytes.NewReader(out), int64(len(out)))
+		if err != nil {
+			t.Fatalf("reopening the output: %v", err)
+		}
+		ids[aggressive] = fmt.Sprint(r.doc.Index.Trailer["ID"])
+		r.Close()
+	}
+	if ids[false] == ids[true] {
+		t.Errorf("the default and aggressive remediations minted the same /ID %s", ids[false])
+	}
+}
+
 // TestWriterEditsWriteTheSameBytesEveryRun guards CONTRIBUTING "Deterministic
 // output" for the Writer's edits, Split and Merge: each writes the same bytes
 // on every run over the same fixture.

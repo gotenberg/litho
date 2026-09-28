@@ -22,10 +22,10 @@ type Options struct {
 	// is removed ([fixEmptyFigure]) and a generic placeholder is inserted in the
 	// others so the document passes the mechanical check.
 	FigureAlt string
-	// PinnedID, when 16 bytes long, seeds the trailer /ID minted by the
-	// trailer-id fixer instead of crypto/rand. Reproducible-build callers
-	// pin it so identical inputs yield identical output bytes; the random
-	// /ID is litho's documented nondeterminism seam.
+	// PinnedID, when 16 bytes long, is the trailer /ID string the trailer-id
+	// fixer mints instead of the one [deriveDocumentID] derives from the
+	// document bytes and these options. Both are reproducible: pinning lets a
+	// caller choose the identifier.
 	PinnedID []byte
 	// Disabled names the fixers the run skips: the content-tier fixers whose
 	// repairs a writer rolled back in an earlier round of the same
