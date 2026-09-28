@@ -124,6 +124,8 @@ type suppliedProgram struct {
 	ascent, descent, capHeight float64
 	italicAngle                float64
 	fixedPitch, bold           bool
+	// noSubset reports a program whose OS/2 fsType forbids subsetting it.
+	noSubset bool
 }
 
 // minUnitsPerEm and maxUnitsPerEm bound the head table's unitsPerEm: the
@@ -220,6 +222,7 @@ func readSfntProgram(ctx context.Context, data []byte) (*suppliedProgram, error)
 		return nil, fmt.Errorf("%w: neither a glyf nor a CFF table", ErrFontProgramInvalid)
 	}
 	p.bold = info.WeightClass >= boldWeightClass || info.MacStyle&1 != 0
+	p.noSubset = info.SubsettingRestricted()
 	if p.psName = info.PostScriptName; p.psName == "" {
 		p.psName = info.FullName
 	}

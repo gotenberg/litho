@@ -31,7 +31,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 
 - Repair PDF/A and PDF/UA violations behind a regression-bounded integrity probe that rolls back a content-modifying fix if it degrades the document.
 - Two modes: content-preserving by default, or aggressive via `WithAggressiveFixes`.
-- Embed the fonts a document leaves unembedded from programs you supply (`WithFontProvider`, `WithFontFiles`, `--font-dir`). litho ships no font program: it embeds one only when it holds every glyph the document shows at the widths the document declares, and reports every font it refuses.
+- Embed the fonts a document leaves unembedded from programs you supply (`WithFontProvider`, `WithFontFiles`, `--font-dir`). litho ships no font program: it embeds one only when it holds every glyph the document shows at the widths the document declares, subsets it to those glyphs, and reports every font it refuses.
 - Build Factur-X and ZUGFeRD hybrid invoices by embedding a Cross-Industry Invoice payload and remediating the PDF/A-3 base.
 - A remediation is the last edit on a document: it judges the document the edits queued before it produce, so its report describes the output. A PDF/A output is never encrypted, since ISO 19005 forbids it.
 

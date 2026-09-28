@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"bytes"
+	"cmp"
 	"compress/zlib"
 	"context"
 	"crypto/sha256"
@@ -50,10 +51,12 @@ func matchFontEmbed(v compliance.Violation) bool {
 // tolerance of every width the font declares ([ErrFontWidths]), so no text
 // moves, and a font no rule of the profile fails that did not fail before
 // ([ErrFontRejected]), judged as validation judges it
-// ([compliance.JudgeFontShowing]). The program is embedded whole: litho does
-// not subset. A whole program is no subset, so a subset tag on the font's
-// name goes (ISO 32000-1, 9.6.4), and so do a /CharSet and a /CIDSet, which
-// describe the program the file never carried.
+// ([compliance.JudgeFontShowing]). The program is then cut down to the glyphs
+// the document shows ([fontEmbedder.subsetQueued]), which takes a fresh subset tag
+// (ISO 32000-1, 9.6.4), or embedded whole where subsetting is barred or the
+// subset fails a rule the whole program passes. A subset tag the file wrote
+// goes, and so do a /CharSet and a /CIDSet, which describe a program the file
+// never carried.
 //
 // The fonts are the ones a stream the pages draw shows text with, read
 // through the allocator ([collectFontUses]), and a font no stream shows is
@@ -138,28 +141,52 @@ func fixFontEmbed(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	for _, use := range uses.inline {
 		targets = append(targets, fontTarget{site: &use.site, walked: use.font, codes: use.codes, composite: use.composite})
 	}
-	var fixes []string
-	for _, t := range targets {
+	var outcomes []fontOutcome
+	for i, t := range targets {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("embedding fonts: %w", err)
 		}
-		fix, err := e.embed(ctx, t)
+		err := e.embed(ctx, i, t)
 		var refusal *fontRefusedError
 		switch {
 		case errors.As(err, &refusal):
-			if opts.fonts != nil {
-				opts.fonts.refused = append(opts.fonts.refused, FontRefusal{BaseFont: refusal.baseFont, Object: t.objNum, Err: refusal.err})
-			}
+			outcomes = append(outcomes, fontOutcome{order: i, baseFont: refusal.baseFont, objNum: t.objNum, refused: refusal.err})
 		case err != nil:
 			return nil, err
-		case fix != "":
-			fixes = append(fixes, fix)
+		}
+	}
+	written, err := e.finish(ctx, uses)
+	if err != nil {
+		return nil, err
+	}
+	outcomes = append(outcomes, written...)
+	slices.SortStableFunc(outcomes, func(a, b fontOutcome) int { return cmp.Compare(a.order, b.order) })
+	var fixes []string
+	for _, o := range outcomes {
+		if o.refused != nil {
 			if opts.fonts != nil {
-				opts.fonts.embedded = append(opts.fonts.embedded, FontEmbed{BaseFont: e.lastBaseFont, Object: t.objNum})
+				opts.fonts.refused = append(opts.fonts.refused, FontRefusal{BaseFont: o.baseFont, Object: o.objNum, Err: o.refused})
 			}
+			continue
+		}
+		fixes = append(fixes, o.fix)
+		if opts.fonts != nil {
+			opts.fonts.embedded = append(opts.fonts.embedded, FontEmbed{BaseFont: o.baseFont, Object: o.objNum})
 		}
 	}
 	return fixes, nil
+}
+
+// fontOutcome is what [fixFontEmbed] did with one of its targets, under the
+// order it met the target in: the fix description of a font it embedded, or
+// why it refused the font. objNum is the font's object number in the document
+// the run read, 0 for a font written inline.
+type fontOutcome struct {
+	order    int
+	baseFont string
+	objNum   int
+	fix      string
+	refused  error
 }
 
 // fontTarget is a font [fixFontEmbed] embeds: the font object objNum, or the
@@ -200,9 +227,12 @@ type fontEmbedder struct {
 	// written holds, by descriptor object number, the program this run wrote
 	// into the descriptor. A descriptor held directly has no entry.
 	written map[int]programKey
-	// lastBaseFont is the /BaseFont of the font [fontEmbedder.embed] last
-	// embedded.
-	lastBaseFont string
+	// fdUsers and drFonts are [fontEmbedder.descriptorUsers] and
+	// [fontEmbedder.formFonts], read once per run.
+	fdUsers map[int]int
+	drFonts map[int]bool
+	// queued holds the fonts embed planned, in the order the run met them.
+	queued []*queuedFont
 }
 
 // embedPlan is a font as it stands once embedded: the font dictionary holding
@@ -220,12 +250,24 @@ type embedPlan struct {
 	programKey ast.PdfName
 	// cidToGID is a composite font's /CIDToGIDMap stream data.
 	cidToGID []byte
+	// cidSet is the /CIDSet stream data a composite font's subset carries,
+	// nil when it carries none.
+	cidSet []byte
+	// gids are the glyphs of program the shown codes draw.
+	gids []uint16
+	// rebuild plans the same font over another program.
+	rebuild func(ctx context.Context, prog *suppliedProgram) (*embedPlan, error)
+	// subsetGlyphs is the glyph count of a subset program, 0 for a whole one,
+	// and whole the reason a program is embedded whole.
+	subsetGlyphs int
+	whole        string
 }
 
-// embed embeds the font t names when it is shown and unembedded. It returns
-// the fix description, a *fontRefusedError for a font it leaves unembedded, or the
-// provider's error.
-func (e *fontEmbedder) embed(ctx context.Context, t fontTarget) (string, error) {
+// embed plans the embedding of the font t names when it is shown and
+// unembedded, and queues the plan for [fontEmbedder.finish], which writes it,
+// under order. It returns a *fontRefusedError for a font it leaves
+// unembedded, or the provider's error: finish reports what it writes.
+func (e *fontEmbedder) embed(ctx context.Context, order int, t fontTarget) error {
 	var font ast.PdfDict
 	if t.site != nil {
 		if font = t.site.font(ctx, e.alloc, e.doc); font == nil {
@@ -235,7 +277,7 @@ func (e *fontEmbedder) embed(ctx context.Context, t fontTarget) (string, error) 
 		font = resolveFromAllocOrDoc(ctx, e.alloc, e.doc, ast.PdfIndirectRef{ObjectNum: t.objNum})
 	}
 	if font == nil {
-		return "", nil
+		return nil
 	}
 	subtype := nameOf(ctx, e.doc, font["Subtype"])
 	var shown []ast.PdfString
@@ -245,19 +287,19 @@ func (e *fontEmbedder) embed(ctx context.Context, t fontTarget) (string, error) 
 	case "Type3":
 		// ISO 32000-1, 9.6.5: a Type 3 font draws its glyphs with content
 		// streams and has no program to embed.
-		return "", nil
+		return nil
 	default:
 		if len(t.codes) > 0 {
 			shown = []ast.PdfString{ast.PdfString(slices.Sorted(maps.Keys(t.codes)))}
 		}
 	}
 	if len(shown) == 0 {
-		return "", nil
+		return nil
 	}
 	embedRule := compliance.FontEmbeddingRule(e.profile)
 	before := compliance.JudgeFontShowing(ctx, e.doc, font, shown, e.profile)
 	if !hasViolationOf(before, embedRule) {
-		return "", nil
+		return nil
 	}
 	baseFont := nameOf(ctx, e.doc, font["BaseFont"])
 	refused := func(err error) error { return &fontRefusedError{baseFont: baseFont, err: err} }
@@ -268,10 +310,10 @@ func (e *fontEmbedder) embed(ctx context.Context, t fontTarget) (string, error) 
 		// Type0, Type1, MMType1, Type3 or TrueType font, and a descendant
 		// CIDFont named there directly, or a font of no known subtype, has no
 		// program validation reads as its own.
-		return "", refused(fmt.Errorf("%w: a font of subtype %q", ErrFontKind, subtype))
+		return refused(fmt.Errorf("%w: a font of subtype %q", ErrFontKind, subtype))
 	}
 	if t.site != nil && !t.site.writable(ctx, e.alloc, e.doc) {
-		return "", refused(fmt.Errorf("%w: a font dictionary written inline where no object number reaches its resource dictionary", ErrFontUnwritable))
+		return refused(fmt.Errorf("%w: a font dictionary written inline where no object number reaches its resource dictionary", ErrFontUnwritable))
 	}
 
 	// A descriptor this run wrote a program into is one an earlier font
@@ -280,7 +322,7 @@ func (e *fontEmbedder) embed(ctx context.Context, t fontTarget) (string, error) 
 	// viewer may still draw it, so it is not replaced.
 	fdNum := e.descriptorNumber(ctx, font, subtype)
 	if _, ours := e.written[fdNum]; !ours && e.holdsProgram(ctx, font, subtype) {
-		return "", refused(fmt.Errorf("%w: the font carries a program validation cannot read, which litho does not replace", ErrFontKind))
+		return refused(fmt.Errorf("%w: the font carries a program validation cannot read, which litho does not replace", ErrFontKind))
 	}
 
 	var plan *embedPlan
@@ -292,41 +334,25 @@ func (e *fontEmbedder) embed(ctx context.Context, t fontTarget) (string, error) 
 	}
 	if err != nil {
 		if isFontRefusal(err) {
-			return "", refused(err)
+			return refused(err)
 		}
-		return "", err
+		return err
 	}
 	if err := e.judge(ctx, plan, before, shown); err != nil {
-		return "", refused(err)
+		return refused(err)
 	}
 	key := programKey{sum: sha256.Sum256(plan.program.data), format: plan.program.format}
 	if prev, ours := e.written[fdNum]; ours && prev != key {
-		return "", refused(fmt.Errorf("%w: the font shares its descriptor with a font given another program", ErrFontKind))
-	}
-	objNum := t.objNum
-	if t.site != nil {
-		// Allocated first, so the resource dictionary names it: the site
-		// was found writable above, and nothing queued since moved it.
-		objNum = e.alloc.Alloc(ast.PdfNull{}).ObjectNum
-		if !t.site.replace(ctx, e.alloc, e.doc, ast.PdfIndirectRef{ObjectNum: objNum}) {
-			return "", refused(fmt.Errorf("%w: the resource dictionary holding it could not be written", ErrFontUnwritable))
-		}
+		return refused(fmt.Errorf("%w: the font shares its descriptor with a font given another program", ErrFontKind))
 	}
 	if fdNum != 0 {
 		e.written[fdNum] = key
 	}
-	e.write(ctx, objNum, font, plan)
-	e.lastBaseFont = baseFont
-	kind := "TrueType program as /FontFile2"
-	if plan.program.format == outlinesCFF {
-		kind = "CFF program as /FontFile3"
-	}
-	where := fmt.Sprintf("object %d", objNum)
-	if t.site != nil {
-		where = fmt.Sprintf("written inline as /%s, now object %d", string(t.site.name), objNum)
-	}
-	return fmt.Sprintf("embedded %s (whole %s, %d bytes) for font %s (%s)",
-		plan.program.psName, kind, len(plan.program.data), baseFont, where), nil
+	e.queued = append(e.queued, &queuedFont{
+		order: order, objNum: t.objNum, site: t.site, font: font, baseFont: baseFont, fdNum: fdNum,
+		before: before, shown: shown, plan: plan, whole: key,
+	})
+	return nil
 }
 
 // isFontRefusal reports whether err wraps one of the refusal sentinels.
@@ -425,7 +451,29 @@ func (e *fontEmbedder) planSimple(ctx context.Context, font ast.PdfDict, subtype
 	if err != nil {
 		return nil, err
 	}
+	s := &simpleFont{font: font, subtype: subtype, fd: fd, baseFont: baseFont, symbolic: symbolic, names: names, codes: codes, shownSet: shownSet, widths: widths}
+	return e.buildSimple(ctx, s, prog)
+}
 
+// simpleFont is what planning a simple font reads from the file, which
+// [fontEmbedder.buildSimple] turns into a plan for a program.
+type simpleFont struct {
+	font     ast.PdfDict
+	subtype  string
+	fd       ast.PdfDict
+	baseFont string
+	symbolic bool
+	names    map[byte]string
+	codes    []byte
+	shownSet map[byte]bool
+	widths   declaredWidths
+}
+
+// buildSimple plans the embedding of prog for the simple font s, refusing a
+// program that lacks a glyph for a shown code or advances one differently
+// from the width the font declares.
+func (e *fontEmbedder) buildSimple(ctx context.Context, s *simpleFont, prog *suppliedProgram) (*embedPlan, error) {
+	font, subtype, baseFont, symbolic, names, codes, shownSet, widths := s.font, s.subtype, s.baseFont, s.symbolic, s.names, s.codes, s.shownSet, s.widths
 	cand := maps.Clone(font)
 	var glyph func(code byte) (uint16, bool)
 	switch {
@@ -481,12 +529,14 @@ func (e *fontEmbedder) planSimple(ctx context.Context, font ast.PdfDict, subtype
 	}
 
 	var missing, off []string
+	var gids []uint16
 	for _, code := range codes {
 		gid, ok := glyph(code)
 		if !ok || gid == 0 {
 			missing = append(missing, describeCode(uint32(code), names[code]))
 			continue
 		}
+		gids = append(gids, gid)
 		declared := widths.at(code)
 		adv, known := prog.advance(gid)
 		if !known || !compliance.WidthsConsistent(declared, adv) {
@@ -503,7 +553,7 @@ func (e *fontEmbedder) planSimple(ctx context.Context, font ast.PdfDict, subtype
 		maps.Copy(cand, widths.synthesized)
 	}
 
-	descriptor := e.descriptor(fd, baseFont, prog, symbolic)
+	descriptor := e.descriptor(s.fd, baseFont, prog, symbolic)
 	stripSubsetTag(cand, descriptor)
 	key := ast.PdfName("FontFile2")
 	if prog.format == outlinesCFF {
@@ -511,7 +561,10 @@ func (e *fontEmbedder) planSimple(ctx context.Context, font ast.PdfDict, subtype
 	}
 	descriptor[key] = programStream(prog)
 	cand["FontDescriptor"] = descriptor
-	return &embedPlan{font: cand, descriptor: descriptor, program: prog, programKey: key}, nil
+	return &embedPlan{
+		font: cand, descriptor: descriptor, program: prog, programKey: key, gids: gids,
+		rebuild: func(ctx context.Context, sub *suppliedProgram) (*embedPlan, error) { return e.buildSimple(ctx, s, sub) },
+	}, nil
 }
 
 // adobeOrderings are the character collections whose CIDs litho maps to
@@ -560,6 +613,24 @@ func (e *fontEmbedder) planComposite(ctx context.Context, font ast.PdfDict, show
 	if err != nil {
 		return nil, err
 	}
+	c := &compositeFont{font: font, desc: desc, fd: fd, baseFont: baseFont, codes: req.Codes, toUnicode: toUnicode}
+	return e.buildComposite(c, prog)
+}
+
+// compositeFont is what planning a composite font reads from the file, which
+// [fontEmbedder.buildComposite] turns into a plan for a program.
+type compositeFont struct {
+	font, desc, fd ast.PdfDict
+	baseFont       string
+	codes          []FontCode
+	toUnicode      map[int]rune
+}
+
+// buildComposite plans the embedding of prog for the composite font c,
+// refusing a program that lacks a glyph for a shown CID or advances one
+// differently from the width the font declares.
+func (e *fontEmbedder) buildComposite(c *compositeFont, prog *suppliedProgram) (*embedPlan, error) {
+	font, desc, fd, baseFont, toUnicode := c.font, c.desc, c.fd, c.baseFont, c.toUnicode
 	if prog.format != outlinesTrueType {
 		return nil, fmt.Errorf("%w: a composite font takes glyf outlines here, and %s carries CFF ones", ErrFontKind, prog.psName)
 	}
@@ -574,7 +645,8 @@ func (e *fontEmbedder) planComposite(ctx context.Context, font ast.PdfDict, show
 		return prog.unicode[uint16(r)]
 	}
 	var missing, off []string
-	for _, fc := range req.Codes {
+	var gids []uint16
+	for _, fc := range c.codes {
 		cid := uint16(fc.Code) //nolint:gosec // G115: the codes are CIDs, uint16 values.
 		if cid == 0 {
 			// CID 0 is .notdef in every collection, which the .notdef rules
@@ -586,6 +658,7 @@ func (e *fontEmbedder) planComposite(ctx context.Context, font ast.PdfDict, show
 			missing = append(missing, describeCode(fc.Code, ""))
 			continue
 		}
+		gids = append(gids, gid)
 		if adv, ok := prog.advance(gid); !ok || !compliance.WidthsConsistent(fc.Width, adv) {
 			off = append(off, fmt.Sprintf("CID %d declares %g, program %.1f", fc.Code, fc.Width, adv))
 		}
@@ -622,7 +695,10 @@ func (e *fontEmbedder) planComposite(ctx context.Context, font ast.PdfDict, show
 	newDesc["FontDescriptor"] = descriptor
 	cand := maps.Clone(font)
 	cand["DescendantFonts"] = ast.PdfArray{newDesc}
-	return &embedPlan{font: cand, descriptor: descriptor, descendant: newDesc, program: prog, programKey: "FontFile2", cidToGID: cidToGID}, nil
+	return &embedPlan{
+		font: cand, descriptor: descriptor, descendant: newDesc, program: prog, programKey: "FontFile2", cidToGID: cidToGID, gids: gids,
+		rebuild: func(_ context.Context, sub *suppliedProgram) (*embedPlan, error) { return e.buildComposite(c, sub) },
+	}, nil
 }
 
 // judge refuses a plan whose font fails a rule the unembedded font, judged in
@@ -653,11 +729,15 @@ func (e *fontEmbedder) judge(ctx context.Context, plan *embedPlan, before []comp
 
 // write queues the planned font: the program stream, shared with every font
 // of the run given the same program, the descriptor at the number the font's
-// descriptor had or a new one, and the font, and for a composite font its
-// descendant and its /CIDToGIDMap.
+// descriptor had or a new one, with its /CIDSet stream, and the font, and for
+// a composite font its descendant and its /CIDToGIDMap.
 func (e *fontEmbedder) write(ctx context.Context, objNum int, font ast.PdfDict, plan *embedPlan) {
 	descriptor := maps.Clone(plan.descriptor)
 	descriptor[plan.programKey] = e.programRef(plan.program)
+	if plan.cidSet != nil {
+		// ISO 32000-1, Table 124 makes /CIDSet a stream, which is indirect.
+		descriptor["CIDSet"] = e.alloc.Alloc(flateStream(ast.PdfDict{}, plan.cidSet))
+	}
 
 	holder := font
 	if plan.descendant != nil {
@@ -817,7 +897,8 @@ func realOf(v float64) ast.PdfObject {
 }
 
 // stripSubsetTag drops a subset tag from the font's /BaseFont and the
-// descriptor's /FontName (ISO 32000-1, 9.6.4): the embedded program is whole.
+// descriptor's /FontName (ISO 32000-1, 9.6.4): the tag names a subset the file
+// never carried, and [fontEmbedder.markSubset] tags the one litho embeds.
 func stripSubsetTag(font, descriptor ast.PdfDict) {
 	name, ok := font["BaseFont"].(ast.PdfName)
 	if !ok {

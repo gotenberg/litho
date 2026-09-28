@@ -108,8 +108,8 @@ func (r FontRefusal) String() string {
 
 // WithFontProvider embeds the programs p supplies for the fonts a document
 // shows without embedding them. A remediation asks p once per such font and
-// embeds the program it returns, whole, only where it serves the font as the
-// document shows it:
+// embeds the program it returns only where it serves the font as the document
+// shows it:
 //
 //   - it holds a glyph for every code the document shows with the font;
 //   - each of those glyphs advances as far as the font declares, within the
@@ -124,9 +124,14 @@ func (r FontRefusal) String() string {
 //   - the embedded font fails no rule of the profile the unembedded one
 //     passed.
 //
-// litho does not subset: each distinct program is written once, whole, and
-// shared by every font given it, so the output grows by the size of the
-// programs embedded.
+// litho embeds a subset of the program, holding the glyphs the document shows
+// with the font and those they are drawn from, under a subset tag, with the
+// /CharSet or /CIDSet PDF/A-1 asks of a subset. The program stays whole when
+// its OS/2 fsType forbids subsetting, when its font descriptor serves another
+// font the document shows, when the interactive form's default resources name
+// the font, and when validation rejects the subset where it accepts the whole
+// program; a whole program is written once and shared by every font given it.
+// [RemediationReport.Fixed] states which each font received.
 //
 // Every font it leaves unembedded is listed with the reason in
 // [RemediationReport.FontRefusals], and stays in the residual. Embedding
