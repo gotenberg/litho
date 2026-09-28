@@ -186,6 +186,7 @@ one deliberately rather than diffing it against a fresh build.
 | `sharedk_ua1.pdf`      | PDF/UA-1     | A structure `/K` array two elements share, direct kids in it     |
 | `fieldkids_2b.pdf`     | PDF/A-2b     | Form fields whose `/Kids` arrays are objects of their own        |
 | `boxorigin_2b.pdf`     | PDF/A-2b     | Crop boxes whose lower-left corner is not the user-space origin  |
+| `treekids_ua1.pdf`     | PDF/UA-1     | Structure trees whose `/Kids` arrays are objects of their own    |
 
 ### Must-not-fire controls
 
@@ -545,6 +546,7 @@ which are covered under [Known divergences](#known-divergences).
 | `threed_4e.pdf`        | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 11   | 8    |
 | `threedcs_4.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 5    | 7    | 8    | 6    |
 | `trailer_2b.pdf`       | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
+| `treekids_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
 | `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
@@ -5792,6 +5794,44 @@ crop box's first two entries (page 3 at `(210, 310)`), and no shift at all (page
 1 at `(10, 10)`). The six other `mutate-*` cells pass the file at all eight
 profiles.
 
+### `treekids_ua1.pdf`
+
+ISO 32000-1, 7.9.6 and 7.9.7 make a name or number tree's `/Kids` an array of
+indirect references to its nodes, and a file may write that array as an object
+of its own (7.3.10). A walk that marks the nodes it met, and not the arrays it
+read, reads such an array again wherever a direct node names it: were the
+direct nodes to name their own array again, the work would double at every
+level. The structure tree's `/ParentTree` and `/IDTree` readers the page copy
+and form flattening use were such walks. No corpus file names a structure
+tree's `/Kids` by reference, so this file does, once each:
+
+| Tree          | Root                   | `/Kids`                | Leaf, written directly in `/Kids` |
+| ------------- | ---------------------- | ---------------------- | --------------------------------- |
+| `/ParentTree` | an object, no `/Nums`  | an array, by reference | `/Nums` for keys 0 and 1          |
+| `/IDTree`     | an object, no `/Names` | an array, by reference | `/Names` for `p1`, `p2` and `p3`  |
+
+Page 1 inherits its `/MediaBox` from the page tree node and states `/CropBox
+[0 0 300 792]`; its second paragraph sits at x = 400, past the crop box, where
+a viewer hides it and a reader ignoring the crop box shows it. A redaction
+searches the widest region any reading of the page shows, so the `redact`
+mutation clears it with the rest of page 1.
+
+litho and veraPDF 1.30.2 agree in all thirteen cells, rule for rule and count
+for count. PDF/UA-1 reports only the Helvetica left unembedded
+(`7.21.4.1/1`). PDF/UA-2 reports the part-1 claim and the missing
+`pdfuaid:rev` (`5/2`, `5/5`), the `Document` outside the PDF 2.0 namespace
+(`8.2.5.2/2`) and the unembedded font (`8.4.5.5.1/1`). The PDF/A cells report
+the font, the text painted in device gray with no output intent (`6.2.3.3/3`
+at part 1, `6.2.4.3/4` from part 2) and the missing PDF/A identification;
+parts 1 to 3 add the `pdfuaid` property no extension schema declares, part 4
+the `%PDF-1.7` header (`6.1.2/1`), and PDF/A-4f the missing `/EmbeddedFiles`.
+
+Measured on litho, `split`, `merge` and `flatten-form` outputs report at
+PDF/UA-1 what the file does, the structure carried whole, and `redact` over
+page 1 leaves no text on it. Every output of `redact`, `flatten-form`, `split`
+and `merge` over the 5235 corpus files litho wrote before the tree readers
+read each array once is byte-identical to the one it writes now.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
@@ -5815,6 +5855,12 @@ eight is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
 rule class leaves `matched` at 1072 and moves only `ruleset_mismatch`, and on
 those eight cells it moves both. Both exceptions sit in the manifest's profiles, `complex_ua2` at
+seven is non-compliant on both sides (`baretree_2b`, `pagelabels_2b` and
+`viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1;
+and `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's
+conforming cells), so a change that drops or invents a rule class leaves
+`matched` at 1072 and moves only `ruleset_mismatch`, and on those seven cells it
+moves both. Both exceptions sit in the manifest's profiles, `complex_ua2` at
 PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus, and the text
 scoreboard names the rules only one side reports. A third cell in the runner is
 a regression, or a divergence to cover under Known divergences and mark `*`.
