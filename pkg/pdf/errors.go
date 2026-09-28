@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 	"github.com/gotenberg/litho/pkg/internal/tagging"
 )
@@ -261,6 +262,43 @@ var (
 	// remediation is undone rather than reported. Point the temp files at a
 	// writable directory with [WithTempDir].
 	ErrRemediationUnverified = errors.New("remediation output could not be written to a temp file to verify it")
+
+	// ErrFontNotSupplied is the reason of a [FontRefusal] for a font the
+	// [FontProvider] supplied no program for.
+	ErrFontNotSupplied = remediation.ErrFontNotSupplied
+
+	// ErrFontProgramInvalid is the reason of a [FontRefusal] for a supplied
+	// program litho cannot read as a TrueType, OpenType or CFF font, or one
+	// larger than the document's stream budget ([Limits]).
+	ErrFontProgramInvalid = remediation.ErrFontProgramInvalid
+
+	// ErrFontEmbeddingRestricted is the reason of a [FontRefusal] for a
+	// supplied program whose OS/2 fsType forbids embedding its outlines.
+	ErrFontEmbeddingRestricted = remediation.ErrFontEmbeddingRestricted
+
+	// ErrFontKind is the reason of a [FontRefusal] for a font the supplied
+	// program cannot serve: a TrueType font given CFF outlines, a symbolic
+	// Type 1 font given TrueType outlines, a multiple master font, or a
+	// composite font whose CIDs name no characters, such as an Identity
+	// ordering.
+	ErrFontKind = remediation.ErrFontKind
+
+	// ErrFontCoverage is the reason of a [FontRefusal] for a supplied program
+	// lacking a glyph for a code the document shows.
+	ErrFontCoverage = remediation.ErrFontCoverage
+
+	// ErrFontWidths is the reason of a [FontRefusal] for a supplied program
+	// whose advances disagree with the widths the font declares by more than
+	// one unit, so text would move, or for a font that declares no widths.
+	ErrFontWidths = remediation.ErrFontWidths
+
+	// ErrFontRejected is the reason of a [FontRefusal] for a font that,
+	// embedded, would fail a rule of the profile it did not fail before.
+	ErrFontRejected = remediation.ErrFontRejected
+
+	// errFontFileTooLarge marks a font file [WithFontFiles] skips, one past
+	// [maxFontFileBytes].
+	errFontFileTooLarge = errors.New("font file too large")
 
 	// ErrEditAfterRemediation is returned, wrapped with the names of the
 	// refused call and of the remediation, when a [Writer] is asked for an edit

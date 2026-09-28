@@ -247,6 +247,7 @@ type remediateOpts struct {
 	figureAlt       string
 	tolerance       RegressionTolerance
 	documentID      []byte
+	fonts           FontProvider
 }
 
 // RegressionTolerance bounds the integrity probe that runs after
@@ -366,6 +367,12 @@ type RemediationReport struct {
 	// and were subsequently discarded. When non-empty, the output preserves
 	// rendering at the cost of leaving the listed violations unfixed.
 	RolledBack []string
+	// FontRefusals lists, in object-number order, the fonts the document
+	// shows unembedded that the remediation left so although
+	// [WithFontProvider] or [WithFontFiles] was given, each with the reason.
+	// It is nil without a provider. The refusals are the first pass's: a
+	// later round meets the same fonts and refuses them for the same reasons.
+	FontRefusals []FontRefusal
 }
 
 // ResidualViolations returns the residual findings as structured
@@ -1884,7 +1891,7 @@ func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent, FigureAlt: cfg.figureAlt, PinnedID: cfg.documentID}
+	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent, FigureAlt: cfg.figureAlt, PinnedID: cfg.documentID, Fonts: fontProvider(cfg.fonts)}
 }
 
 // RemediatePDFA validates the document against the given PDF/A profile,
@@ -2082,11 +2089,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 		relationship = DefaultFacturXRelationship
 	}
 
-	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
-	for _, o := range opts {
-		o(&rcfg)
-	}
-	remOpts := remediation.Options{Lang: rcfg.lang, PreserveContent: rcfg.preserveContent, FigureAlt: rcfg.figureAlt, PinnedID: rcfg.documentID}
+	rcfg, remOpts := remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFA(ctx, profile)
 	}
@@ -2509,6 +2512,7 @@ func (w *Writer) remediate(
 		restorePreState()
 		return nil, err
 	}
+	refused := fontRefusals(report.FontRefusals)
 
 	if len(alloc.Pending()) > 0 || report.NeedsFullRewrite || report.TrailerDirty {
 		// Keep the allocator's pending map as the override source. WriteTo
@@ -2711,7 +2715,7 @@ func (w *Writer) remediate(
 	}
 	w.markPreSerialized(tmpPath)
 	w.remediation, w.pdfaClause, w.accessibilityClause = target.method, target.pdfaClause, target.accessibilityClause
-	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack)}, nil
+	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack), FontRefusals: refused}, nil
 }
 
 // countRepairs counts the fixes that actually repaired something, ignoring the
