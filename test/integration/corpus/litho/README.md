@@ -189,6 +189,7 @@ one deliberately rather than diffing it against a fresh build.
 | `treekids_ua1.pdf`     | PDF/UA-1     | Structure trees whose `/Kids` arrays are objects of their own    |
 | `directfig_ua2.pdf`    | PDF/UA-2     | Figures written directly in a structure `/K`, under remediation  |
 | `inlinekids_ua2.pdf`   | PDF/UA-2     | Figures of their own that only inline elements list              |
+| `fontembed_2b.pdf`     | PDF/A-2b     | Unembedded fonts a supplied program embeds, wherever they sit    |
 
 ### Must-not-fire controls
 
@@ -477,6 +478,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fontclaims_2b.pdf`    | 9    | 6    | 9    | 6    | 7    | 9    | 6    | 7    | 7   | 7    | 8    | 11   | 11   |
 | `fontcopies_2b.pdf`    | 14   | 11   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 13   | 13   |
 | `fontdict_2b.pdf`      | 9    | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 8   | 8    | 9    | 7    | 7    |
+| `fontembed_2b.pdf`     | 6    | 4    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `fontkeys_1b.pdf`      | 13   | 10   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 8    | 8    |
 | `fontleft_2b.pdf`      | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 14   | 13   |
 | `forbidden_mix.pdf`    | 14   | 12   | 14   | 12   | 12   | 16   | 14   | 14   | 14  | 13   | 13   | 11   | 9    |
@@ -5921,6 +5923,42 @@ removal kept every `Figure` an inline element lists. Now those outputs give F1
 and F5 the placeholder, take out F2 to F4 and the inline `Figure`, and pass
 both tools, as the placeholder-only outputs did. The default mode leaves the six
 findings.
+
+### `fontembed_2b.pdf`
+
+Remediation embeds a font program only when the caller supplies one
+(`pdf.WithFontProvider`, `pdf.WithFontFiles`), and the corpus commits none, so
+the gate remediates this file without one and every font stays unembedded. The
+fonts are the ones a synthetic program built at test time serves, in each place
+a font dictionary sits: `TestFontEmbedFixture` in `pkg/pdf` remediates the file
+at PDF/A-2b with such programs and pins what each font becomes.
+
+| Font | Written                                             | Kind                                | With the test's programs      |
+| ---- | --------------------------------------------------- | ----------------------------------- | ----------------------------- |
+| HV   | as an object, named by the page                     | Helvetica, no `/Widths`             | embedded, TrueType            |
+| TT   | as an object, named by the page                     | TrueType under WinAnsiEncoding      | embedded, TrueType            |
+| CF   | as an object, named by the page                     | non-symbolic Type 1                 | embedded, CFF as `/Type1C`    |
+| IN   | inline in the page's direct `/Font` dictionary      | Helvetica-Bold                      | embedded at a new object      |
+| FI   | inline in the direct `/Resources` of form `X1`      | TrueType, TT's twin                 | embedded at a new object      |
+| SH   | inline in a `/Resources` object pages 2 and 3 share | Helvetica-Oblique                   | embedded once, for both pages |
+| JP   | as an object, named by the page                     | Type0 over Adobe-Japan1, `<3042>`   | embedded, CIDFontType2        |
+| NO   | as an object, named by the page                     | TrueType no program is supplied for | refused, `ErrFontNotSupplied` |
+| WD   | as an object, named by the page                     | TrueType declaring 900, program 667 | refused, `ErrFontWidths`      |
+
+| Rule at PDF/A-2b            | veraPDF | litho |
+| --------------------------- | ------- | ----- |
+| `6.2.4.3/4` DeviceGray      | 10      | 10    |
+| `6.2.11.4.1/1` not embedded | 9       | 9     |
+| `6.6.2.1/1` no metadata     | 1       | 1     |
+
+The two tools return the same rule set in all thirteen cells, and the same
+count for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts
+the untagged-content rules once per text show. Remediated without a program at
+the eight manifest profiles, default and aggressive, each output fails the
+embedding rule nine times on both tools, beside PDF/A-1b's `6.3.3.3/1`, PDF/UA-1's
+`7.1/3` and PDF/UA-2's `8.2.2/1`, the same on both. Remediated with the test's
+programs at PDF/A-1b, PDF/A-2b (default and aggressive), PDF/A-4 and PDF/UA-1,
+the embedding rule falls to two, NO and WD, on both tools, and no rule appears.
 
 ## Scope
 
