@@ -217,11 +217,11 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 
 ### Signing
 
-`litho sign` signs with an X.509 certificate and its private key, both PEM files: the key unencrypted, in PKCS #8, PKCS #1 or SEC 1 form, RSA or ECDSA on P-256, P-384 or P-521. `--chain` adds intermediate certificates, `--reason`, `--location`, `--contact` and `--name` fill the signature dictionary, `--field` signs an existing empty signature field or names the new one, and `--signing-time` fixes the time for reproducible output. In `pipe`, a `sign` stage runs last, after any `remediate` stage. An encrypted document or key is refused: decrypt it first.
+`litho sign` signs with an X.509 certificate and its private key, RSA or ECDSA on P-256, P-384 or P-521. Pass them as two PEM files, `--cert` and `--key`, the key unencrypted, in PKCS #8, PKCS #1 or SEC 1 form, or as a PKCS #12 key store (`.p12`, `.pfx`) with `--p12`. The store's password comes from the first line of `--p12-password-file` or from the environment variable `--p12-password-env` names, never from the command line, and is empty without either. litho reads the stores current exporters write (PBES2 with AES) and the `-legacy` ones older tools write (triple DES and RC2). `--chain` adds intermediate certificates to `--cert`, `--reason`, `--location`, `--contact` and `--name` fill the signature dictionary, `--field` signs an existing empty signature field or names the new one, and `--signing-time` fixes the time for reproducible output. In `pipe`, a `sign` stage runs last, after any `remediate` stage. An encrypted document or PEM key is refused: decrypt it first.
 
-The signature is a detached CMS SignedData (`adbe.pkcs7.detached`) over SHA-256, with the ESS signing-certificate-v2 attribute PAdES asks for, appended in an incremental update. It carries no RFC 3161 timestamp, which needs a timestamp authority reached over the network, and litho reads no PKCS #12 file: export it to PEM first (`openssl pkcs12 -in id.p12 -nodes -out id.pem`) and pass that file as both `--cert` and `--key`.
+The signature is a detached CMS SignedData (`adbe.pkcs7.detached`) over SHA-256, with the ESS signing-certificate-v2 attribute PAdES asks for, appended in an incremental update. It carries no RFC 3161 timestamp, which needs a timestamp authority reached over the network.
 
-In Go, `pdf.NewSigner` builds the same signer from a certificate and any `crypto.Signer`, and `pdf.ParseSignerPEM` from PEM data. Implement `pdf.Signer` for anything else, such as a timestamped signature or one a remote service computes whole.
+In Go, `pdf.NewSigner` builds the same signer from a certificate and any `crypto.Signer`, `pdf.ParseSignerPEM` from PEM data, and `pdf.ParseSignerPKCS12` from a PKCS #12 key store and its password. Implement `pdf.Signer` for anything else, such as a timestamped signature or one a remote service computes whole.
 
 ### Resource limits
 
