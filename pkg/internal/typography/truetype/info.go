@@ -32,6 +32,9 @@ const (
 	FSTypePreviewPrint = 0x0004
 	// FSTypeEditable is the Editable embedding bit.
 	FSTypeEditable = 0x0008
+	// FSTypeNoSubsetting is the No subsetting bit: the font must not be
+	// subset before it is embedded.
+	FSTypeNoSubsetting = 0x0100
 	// FSTypeBitmapOnly is the Bitmap embedding only bit: only the bitmaps
 	// the font carries may be embedded, never its outlines.
 	FSTypeBitmapOnly = 0x0200
@@ -106,6 +109,13 @@ func (i Info) EmbeddingRestricted() bool {
 		return true
 	}
 	return i.FSType&FSTypeRestricted != 0 && i.FSType&(FSTypePreviewPrint|FSTypeEditable) == 0
+}
+
+// SubsettingRestricted reports whether the program's fsType forbids embedding
+// a subset of it: the No subsetting bit (OpenType specification, OS/2 table,
+// fsType) asks for the whole program.
+func (i Info) SubsettingRestricted() bool {
+	return i.FSType&FSTypeNoSubsetting != 0
 }
 
 // IsSfnt reports whether data starts with an sfnt version tag: TrueType

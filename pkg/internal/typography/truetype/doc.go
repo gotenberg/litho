@@ -3,5 +3,7 @@
 // (character-to-glyph mapping) and post (PostScript glyph names)
 // tables for Unicode fallback in PDF text extraction, and the hhea,
 // hmtx, head, loca and maxp tables for glyph widths, glyph counts and
-// empty glyphs. Glyph outlines are not parsed.
+// empty glyphs, and cuts a program down to the glyphs a document shows
+// ([Subset]). Glyph outlines are copied, never interpreted: a composite
+// glyph is read only for the glyphs it draws.
 package truetype
