@@ -1465,6 +1465,14 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // CRLs, and RFC 3161 timestamp tokens are used for Long-Term Validation
 // (LTV), enabling offline verification of signatures with expired certificates.
 //
+// An RFC 3161 token counts as the signing time only once it verifies over
+// what it timestamps: a signature timestamp over the SignerInfo's signature
+// value (RFC 3161, Appendix A), a document timestamp, whose SubFilter is
+// ETSI.RFC3161, over the bytes its /ByteRange covers (ISO 32000-2, 12.8.5).
+// A token that does not is reported in TimestampError, and the /M entry
+// stands in for it. A document timestamp is reported like a signature, its
+// signer the timestamp authority and HashValid whether its token verifies.
+//
 // A signature with a DocMDP or FieldMDP transform also reports its access
 // permissions as MDPPolicy, the /P of ISO 32000-1, 12.8.2.2, Table 254: P=1
 // permits no change, P=2 permits filling in forms, instantiating page
