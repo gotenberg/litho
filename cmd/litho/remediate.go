@@ -52,7 +52,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	invoice := fs.String("invoice", "", "Cross-Industry Invoice XML to embed (Factur-X / ZUGFeRD profiles)")
 	level := fs.String("level", "", "Factur-X conformance level: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG")
 	compact := registerCompactFlag(fs)
-	fontDir := registerFontDirFlag(fs)
+	fonts := registerFontFlags(fs)
 	documentID := registerDocumentIDFlag(fs)
 	strict := fs.Bool("strict", false,
 		"Exit 2 when violations remain that could not be fixed")
@@ -62,13 +62,13 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--document-id HEX] [--compact] [--strict] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR [--no-font-subset]] [--document-id HEX] [--compact] [--strict] -o out.pdf")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
 		return exitError
 	}
 
-	fontOpt, err := fontDirOption(*fontDir)
+	fontOpts, err := fonts.options()
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
@@ -101,9 +101,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if *aggressive {
 		remOpts = append(remOpts, pdf.WithAggressiveFixes())
 	}
-	if fontOpt != nil {
-		remOpts = append(remOpts, fontOpt)
-	}
+	remOpts = append(remOpts, fontOpts...)
 	if idOpt != nil {
 		remOpts = append(remOpts, idOpt)
 	}
@@ -266,19 +264,48 @@ func remediateFacturX(ctx context.Context, w *pdf.Writer, variant facturxVariant
 	return w.RemediateFacturX(ctx, cfg, opts...)
 }
 
-// registerFontDirFlag declares the --font-dir flag remediate and the pipe's
-// remediate stage share.
-func registerFontDirFlag(fs *flag.FlagSet) *string {
-	return fs.String("font-dir", "",
-		"Directory of TrueType, OpenType or CFF font files, searched recursively, to embed for the fonts the document does not embed: a font takes the file of its name, its family, or a metric-compatible family (Arial for Helvetica), subset to the glyphs it shows; the report lists each font refused and why (the licence to embed them is yours)")
+// fontFlags are the --font-dir and --no-font-subset flags remediate and the
+// pipe's remediate stage share.
+type fontFlags struct {
+	dir      *string
+	noSubset *bool
+}
+
+// registerFontFlags declares the font flags on fs.
+func registerFontFlags(fs *flag.FlagSet) fontFlags {
+	return fontFlags{
+		dir: fs.String("font-dir", "",
+			"Directory of TrueType, OpenType or CFF font files, searched recursively, to embed for the fonts the document does not embed: a font takes the file of its name, its family, or a metric-compatible family (Arial for Helvetica), subset to the glyphs it shows unless --no-font-subset; the report lists each font refused and why (the licence to embed them is yours)"),
+		noSubset: fs.Bool("no-font-subset", false,
+			"Embed the --font-dir programs whole instead of subset to the glyphs the document shows, so later edits can show other characters"),
+	}
+}
+
+// options returns the remediation options the font flags ask for: none when
+// --font-dir is empty, or an error when it names no readable directory or
+// --no-font-subset comes without it, since there is then no program to keep
+// whole.
+func (f fontFlags) options() ([]pdf.RemediateOption, error) {
+	if *f.dir == "" {
+		if *f.noSubset {
+			return nil, errors.New("--no-font-subset needs --font-dir")
+		}
+		return nil, nil
+	}
+	opt, err := fontDirOption(*f.dir)
+	if err != nil {
+		return nil, err
+	}
+	opts := []pdf.RemediateOption{opt}
+	if *f.noSubset {
+		opts = append(opts, pdf.WithWholeFontPrograms())
+	}
+	return opts, nil
 }
 
 // fontDirOption returns the remediation option embedding the font files of
-// dir, nil when dir is empty, or an error when dir is no readable directory.
+// dir, or an error when dir is no readable directory.
 func fontDirOption(dir string) (pdf.RemediateOption, error) {
-	if dir == "" {
-		return nil, nil
-	}
 	info, err := os.Stat(dir)
 	if err != nil {
 		return nil, fmt.Errorf("--font-dir: %w", err)

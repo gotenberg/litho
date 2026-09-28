@@ -375,7 +375,7 @@ func splitStageGroups(args []string) [][]string {
 // rotate` swallowed the rotate stage. TrimLeft strips every leading dash, so
 // these two entries cover -h, -help and --help.
 var boolStageFlags = map[string]bool{
-	"aggressive": true, "generate": true,
+	"aggressive": true, "generate": true, "no-font-subset": true,
 	"h": true, "help": true,
 }
 
@@ -849,7 +849,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		fs.SetOutput(stderr)
 		profile := fs.String("profile", "", "Compliance profile (required)")
 		aggressive := fs.Bool("aggressive", false, "Enable aggressive fixers")
-		fontDir := registerFontDirFlag(fs)
+		fonts := registerFontFlags(fs)
 		documentID := registerDocumentIDFlag(fs)
 		if err := fs.Parse(args); err != nil {
 			return nil, err
@@ -857,7 +857,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		if *profile == "" {
 			return nil, fmt.Errorf("--profile is required")
 		}
-		fontOpt, err := fontDirOption(*fontDir)
+		fontOpts, err := fonts.options()
 		if err != nil {
 			return nil, err
 		}
@@ -870,9 +870,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			if *aggressive {
 				opts = append(opts, pdf.WithAggressiveFixes())
 			}
-			if fontOpt != nil {
-				opts = append(opts, fontOpt)
-			}
+			opts = append(opts, fontOpts...)
 			if idOpt != nil {
 				opts = append(opts, idOpt)
 			}
