@@ -161,14 +161,13 @@ embedded ArialMT (subset of 9 glyphs, TrueType program as /FontFile2, 14292 byte
 
 ### Reproducible output
 
-The same input and options give the same output bytes, with one exception: a remediation writes a random trailer `/ID` when the document has no valid one. `pdf.WithDocumentID` pins it to a 16-byte value, so a reproducible build writes the same file every run:
+The same input bytes and options write the same output bytes. A remediation that must give a document its first trailer `/ID` derives it from the document's bytes and the remediation options, so two runs over one file agree. `pdf.WithDocumentID` pins the `/ID` to a 16-byte value instead:
 
 ```go
 report, err := w.RemediatePDFA(ctx, models.PDFA2b, pdf.WithDocumentID([]byte("0123456789abcdef")))
 ```
 
-A value of any other length is ignored. An encrypted output is never reproducible: `Writer.Encrypt` draws its own `/ID`.
-Output is reproducible: the same input bytes and options write the same output bytes. A remediation that must give a document its first trailer `/ID` derives it from the document's bytes and the remediation options, and `WithDocumentID` (`--document-id` on the CLI) pins it instead. An encrypted output is the exception: its keys, salts, IVs and `/ID` are random, as the cryptography requires.
+A value of any other length is ignored. An encrypted output is the exception: its keys, salts, IVs and `/ID` are random, as the cryptography requires.
 
 ## CLI
 

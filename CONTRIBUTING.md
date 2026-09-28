@@ -95,7 +95,7 @@ Every goroutine has a defined exit condition and cannot outlive its parent call.
 
 ### Deterministic output
 
-Given identical input bytes and identical options, the writer produces identical output bytes, modulo the documented `/ID` and date seams. Never iterate a Go map to emit ordered output: sort keys or object numbers first. Confine unavoidable nondeterministic inputs (`/ID` generation, current-date metadata) so reproducible-build callers can pin them.
+Given identical input bytes and identical options, the writer produces identical output bytes; encryption, whose keys, salts, IVs and `/ID` are random by necessity, is the one documented exception. A new trailer `/ID` is derived from the content, and `WithDocumentID` pins it. Never iterate a Go map to emit ordered output: sort keys or object numbers first. Confine any unavoidable nondeterministic input so reproducible-build callers can pin it. The gate's `determinism` cell runs each operation twice over the litho corpus.
 
 ## Documentation rules
 
