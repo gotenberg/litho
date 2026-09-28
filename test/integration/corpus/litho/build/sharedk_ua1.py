@@ -12,9 +12,8 @@ is how a four-object file ran until the caller's timeout; this file shares the
 array once, which every tool reads to the end.
 
 The Figure has no alternate text and encloses nothing (ISO 14289-1, 7.3 t1;
-ISO 14289-2, 8.2.5.28.2 t1). veraPDF reports it under each Sect, twice, and
-litho reads the shared array once and reports it once: the rule set agrees,
-the instance count does not (see ../README.md, Known divergences).
+ISO 14289-2, 8.2.5.28.2 t1). litho reads the shared array once and reports it
+once, as veraPDF 1.30.2 does: the rule set and the instance count agree.
 
 A P element beside the two Sects marks a filled rectangle, so the page has
 tagged content and draws no text.
