@@ -120,6 +120,30 @@ func (q *queuedFont) describe() string {
 // its own glyphs from the same program ([fontEmbedder.sharingWhole]), and
 // when the interactive form's default resources name the font, since a reader
 // filling a field draws characters no page shows (ISO 32000-1, 12.7.3.3).
+//
+// # Corpus evidence
+//
+//   - govdocs: the 785 files that show an unembedded font, remediated with
+//     the Liberation 2.1.5 and URW base35 families at PDF/A-2b and PDF/A-1b:
+//     4124 of the 4133 programs embedded are subsets, 7 stay whole for a
+//     form's default resources and 2 for a descriptor shared with a font
+//     given no subset. No rule gains a finding in any file, and the 680
+//     outputs that embed a program fall from 806 to 432 MB at PDF/A-2b (817
+//     to 444 MB at PDF/A-1b), none of them growing.
+//   - litho: the 72 files that show an unembedded font, at PDF/A-2b: 65 of
+//     the 68 programs embedded are subsets, 3 stay whole for a form's default
+//     resources, no rule gains a finding, and the 54 outputs that embed a
+//     program fall from 3.4 to 1.2 MB.
+//   - govdocs thread_000_000187.pdf, thread_400_400566.pdf and
+//     thread_000_000336.pdf: give one program to many fonts, and grew by up
+//     to 718 KB when each font took a subset of its own, which is why the
+//     fonts given one program share one subset.
+//   - govdocs: 40 of those outputs judged by veraPDF 1.30.2 at PDF/A-2b and
+//     PDF/A-1b, and 20 remediated at PDF/UA-1, fail every rule as often as
+//     with the whole programs. pdf.js places the 15393 text items of the
+//     first three pages of the 40 PDF/A-2b outputs where it placed them with
+//     the whole programs, and pdf.js and poppler render those pages pixel for
+//     pixel alike.
 func (e *fontEmbedder) subsetQueued(ctx context.Context, uses fontUses) error {
 	groups := make(map[programKey][]*queuedFont)
 	var order []programKey
