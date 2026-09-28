@@ -22,6 +22,15 @@ type Glyph struct {
 	Advance uint16
 	// Empty leaves the glyph without an outline, as a space is.
 	Empty bool
+	// Components, when set, makes the glyph a TrueType composite glyph
+	// drawing each listed GID at the origin (OpenType specification, glyf
+	// table, composite glyph description). CFF programs ignore it.
+	Components []uint16
+	// Seac, when set, makes a CFF glyph an accented character built from
+	// the two glyphs the Standard encoding codes name, base then accent
+	// (Type 2 charstring endchar with four arguments). TrueType programs
+	// ignore it.
+	Seac *[2]byte
 }
 
 // TrueType describes a TrueType program with glyf outlines.
@@ -54,10 +63,12 @@ func (t TrueType) Build() []byte {
 	loca := make([]uint32, 0, n+1)
 	for _, g := range glyphs {
 		loca = append(loca, uint32(glyf.Len())) //nolint:gosec // G115: test programs stay far below 4 GiB.
-		if g.Empty {
-			continue
+		switch {
+		case len(g.Components) > 0:
+			glyf.Write(compositeGlyph(g.Components))
+		case !g.Empty:
+			glyf.Write(rectangleGlyph(int16(g.Advance))) //nolint:gosec // G115: test advances stay below 32768.
 		}
-		glyf.Write(rectangleGlyph(int16(g.Advance))) //nolint:gosec // G115: test advances stay below 32768.
 	}
 	loca = append(loca, uint32(glyf.Len())) //nolint:gosec // G115: test programs stay far below 4 GiB.
 	var locaTable bytes.Buffer
@@ -139,6 +150,27 @@ func rectangleGlyph(width int16) []byte {
 	}
 	for _, dy := range []int16{0, 0, 500, 0} {
 		be16(&b, uint16(dy)) //nolint:gosec // G115: a two's-complement delta.
+	}
+	for b.Len()%4 != 0 {
+		b.WriteByte(0)
+	}
+	return b.Bytes()
+}
+
+// compositeGlyph returns a composite glyph drawing each of gids at the
+// origin, with word arguments and no transform.
+func compositeGlyph(gids []uint16) []byte {
+	var b bytes.Buffer
+	be16(&b, 0xFFFF) // numberOfContours -1
+	b.Write(make([]byte, 8))
+	for i, gid := range gids {
+		flags := uint16(0x0001 | 0x0002) // ARG_1_AND_2_ARE_WORDS, ARGS_ARE_XY_VALUES
+		if i < len(gids)-1 {
+			flags |= 0x0020 // MORE_COMPONENTS
+		}
+		be16(&b, flags)
+		be16(&b, gid)
+		be32(&b, 0)
 	}
 	for b.Len()%4 != 0 {
 		b.WriteByte(0)
