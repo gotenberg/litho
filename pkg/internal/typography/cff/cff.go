@@ -748,60 +748,13 @@ func ReadUnitsPerEm(data []byte) uint16 {
 // and returns the first element (horizontal scale). Returns 0 if absent.
 // Handles both integer and real (nibble-encoded) number operands.
 func parseFontMatrixScale(dictData []byte) float64 {
-	// Track operands as float64 to handle reals.
-	operands := make([]float64, 0, 6) //nolint:mnd // A CFF DICT operator takes at most six operands (FontMatrix); a capacity hint, not a limit.
-
-	for i := 0; i < len(dictData); {
-		b := dictData[i]
-		switch {
-		case b <= 21:
-			op := int(b)
-			if b == 12 && i+1 < len(dictData) {
-				i++
-				op = 1200 + int(dictData[i])
-			}
-			if op == 1207 && len(operands) >= 1 { //nolint:mnd // FontMatrix (12 7)
-				return operands[0]
-			}
-			operands = operands[:0]
-			i++
-		case b >= 32 && b <= 246: //nolint:mnd // CFF spec (Tech Note #5176) Table 3: b0 32-246 is a one-byte operand, value b0-139.
-			operands = append(operands, float64(int32(b)-139))
-			i++
-		case b >= 247 && b <= 250: //nolint:mnd // CFF spec Table 3: b0 247-250 is a two-byte positive operand, (b0-247)*256 + b1 + 108.
-			if i+1 >= len(dictData) {
-				return 0
-			}
-			operands = append(operands, float64((int32(b)-247)*256+int32(dictData[i+1])+108))
-			i += 2
-		case b >= 251 && b <= 254: //nolint:mnd // CFF spec Table 3: b0 251-254 is a two-byte negative operand, -(b0-251)*256 - b1 - 108.
-			if i+1 >= len(dictData) {
-				return 0
-			}
-			operands = append(operands, float64(-(int32(b)-251)*256-int32(dictData[i+1])-108))
-			i += 2
-		case b == 28: //nolint:mnd // CFF spec Table 3: b0 28 introduces a 16-bit two's-complement operand.
-			if i+2 >= len(dictData) {
-				return 0
-			}
-			operands = append(operands, float64(int16(binary.BigEndian.Uint16(dictData[i+1:i+3])))) //nolint:gosec // intentional two's-complement conversion
-			i += 3
-		case b == 29: //nolint:mnd // CFF spec Table 3: b0 29 introduces a 32-bit two's-complement operand.
-			if i+4 >= len(dictData) {
-				return 0
-			}
-			operands = append(operands, float64(int32(binary.BigEndian.Uint32(dictData[i+1:i+5])))) //nolint:gosec // intentional two's-complement conversion
-			i += 5
-		case b == 30: //nolint:mnd // CFF spec Table 3: b0 30 introduces a nibble-encoded real number.
-			// Real number: nibble-encoded.
-			val, end := parseRealNumber(dictData, i+1)
-			operands = append(operands, val)
-			i = end
-		default:
-			i++
+	scale, found := 0.0, false
+	scanDict(dictData, func(op int, operands []float64) {
+		if !found && op == opFontMatrix && len(operands) >= 1 {
+			scale, found = operands[0], true
 		}
-	}
-	return 0
+	})
+	return scale
 }
 
 // parseRealNumber decodes a CFF nibble-encoded real number starting at pos.
