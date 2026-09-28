@@ -146,6 +146,29 @@ func TestSubset_RealPrograms(t *testing.T) {
 			t.Errorf("%s: subset of %d bytes, source %d", name, len(out), len(src))
 		}
 		checkKept(t, src, out, newGID)
+		// The subroutines the three glyphs do not call are emptied, and the
+		// INDEXes keep their lengths.
+		before, err := readSubsetSource(src)
+		if err != nil {
+			t.Fatalf("%s: reading the source: %v", name, err)
+		}
+		after, err := readSubsetSource(out)
+		if err != nil {
+			t.Fatalf("%s: reading the subset: %v", name, err)
+		}
+		if len(after.localSubrs) != len(before.localSubrs) || len(after.globalSubrs) != len(before.globalSubrs) {
+			t.Errorf("%s: subroutine INDEXes of %d and %d entries, source %d and %d", name,
+				len(after.localSubrs), len(after.globalSubrs), len(before.localSubrs), len(before.globalSubrs))
+		}
+		emptied := 0
+		for _, body := range append(after.localSubrs, after.globalSubrs...) {
+			if len(body) == 1 && body[0] == csReturn {
+				emptied++
+			}
+		}
+		if emptied == 0 {
+			t.Errorf("%s: no subroutine emptied", name)
+		}
 	}
 }
 

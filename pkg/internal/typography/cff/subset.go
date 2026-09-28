@@ -23,8 +23,8 @@ const (
 	opFDSelect       = 1237
 )
 
-// Type 2 charstring operators the seac walk reads (Adobe Technical Note #5177,
-// Appendix A).
+// Type 2 charstring operators the glyph walk reads (Adobe Technical Note
+// #5177, Appendix A).
 const (
 	csHstem     = 1
 	csVstem     = 3
@@ -41,7 +41,7 @@ const (
 	csFixed     = 255
 )
 
-// maxCharstringOps bounds the operators one seac walk interprets, subroutine
+// maxCharstringOps bounds the operators one glyph walk interprets, subroutine
 // bodies included. Anti-DoS guard, not spec-mandated: subroutines nest ten
 // deep and each may call the next many times, so a crafted program can make
 // one glyph expand exponentially, while a real glyph runs a few hundred
@@ -56,10 +56,12 @@ const maxEncodedGlyphs = math.MaxUint8
 // glyphs of keep and the base and accent glyphs a kept glyph's seac endchar
 // draws, with the map from each original glyph ID kept to its new one.
 //
-// The program keeps the first font of the source's FontSet, its String and
-// Global Subr INDEXes, its Private DICT and its local subroutines, so every
+// The program keeps the first font of the source's FontSet, its String INDEX,
+// its Private DICT and both subroutine INDEXes at their lengths, so every
 // subroutine index a kept charstring calls still resolves: subroutines are
-// kept, not renumbered. It writes a format 0 charset, and a custom encoding
+// not renumbered. A subroutine no kept glyph calls is emptied to a lone
+// return, unless a walk of the kept glyphs could not follow every call, when
+// all are kept whole. It writes a format 0 charset, and a custom encoding
 // rebuilt for the glyphs kept, which come first in the new order so the
 // encoding can assign them codes; a predefined encoding is kept as the
 // source names it. The Top DICT loses UniqueID and XUID, which identify the
@@ -86,13 +88,14 @@ func Subset(ctx context.Context, data []byte, keep []uint16) ([]byte, map[uint16
 			queue = append(queue, int(gid))
 		}
 	}
+	usage := &subrUsage{local: make([]bool, len(src.localSubrs)), global: make([]bool, len(src.globalSubrs))}
 	for i := 0; i < len(queue); i++ {
 		if i%500 == 0 {
 			if err := ctx.Err(); err != nil {
 				return nil, nil, err
 			}
 		}
-		base, accent, ok := src.seac(queue[i])
+		base, accent, ok := src.walk(queue[i], usage)
 		if !ok {
 			continue
 		}
@@ -118,6 +121,10 @@ func Subset(ctx context.Context, data []byte, keep []uint16) ([]byte, map[uint16
 		if n > 0 {
 			charset = binary.BigEndian.AppendUint16(charset, uint16(src.sids[old])) //nolint:gosec // G115: a name-keyed charset holds Card16 SIDs.
 		}
+	}
+	if !usage.lost {
+		src.localSubrs = pruneSubrs(src.localSubrs, usage.local)
+		src.globalSubrs = pruneSubrs(src.globalSubrs, usage.global)
 	}
 	return src.assemble(charset, encoding, charStrings), newGID, nil
 }
@@ -454,20 +461,32 @@ func (s *subsetSource) privateDict() []byte {
 	return out
 }
 
-// seac returns the Standard encoding codes of the base and accent glyphs the
-// glyph's charstring draws through a seac endchar (Adobe Technical Note
-// #5177, Appendix C), or false when it draws none.
-func (s *subsetSource) seac(gid int) (base, accent int, ok bool) {
-	w := &seacWalker{src: s, budget: maxCharstringOps}
+// subrUsage records the subroutines the kept glyphs call.
+type subrUsage struct {
+	local, global []bool
+	// lost reports a walk that could not follow every call: past the
+	// operator budget or the nesting limit, on a malformed charstring, or
+	// through an arithmetic operator whose result a call could index by.
+	lost bool
+}
+
+// walk interprets the glyph's charstring, recording the subroutines it calls
+// in usage, and returns the Standard encoding codes of the base and accent
+// glyphs it draws through a seac endchar (Adobe Technical Note #5177,
+// Appendix C), or false when it draws none.
+func (s *subsetSource) walk(gid int, usage *subrUsage) (base, accent int, ok bool) {
+	w := &glyphWalker{src: s, usage: usage, budget: maxCharstringOps}
 	w.run(s.charStrings[gid], 0)
 	return w.base, w.accent, w.found
 }
 
-// seacWalker interprets a Type 2 charstring far enough to reach its endchar,
-// counting stem hints so a hintmask's mask bytes are skipped, and expanding
-// subroutines.
-type seacWalker struct {
+// glyphWalker interprets a Type 2 charstring to its endchar, counting stem
+// hints so a hintmask's mask bytes are skipped, and expanding subroutines.
+// Type 2 charstrings branch nowhere, so one pass reaches every subroutine the
+// glyph calls.
+type glyphWalker struct {
 	src          *subsetSource
+	usage        *subrUsage
 	stack        []float64
 	stems        int
 	budget       int
@@ -475,22 +494,37 @@ type seacWalker struct {
 	base, accent int
 }
 
+// Flex operators, the escape operators that are not arithmetic (Adobe
+// Technical Note #5177, section 4.1).
+const (
+	csHflex  = 34
+	csFlex   = 35
+	csHflex1 = 36
+	csFlex1  = 37
+)
+
+// lose ends the walk and marks the calls it records incomplete.
+func (w *glyphWalker) lose() {
+	w.usage.lost = true
+	w.done = true
+}
+
 // run interprets one charstring or subroutine body.
-func (w *seacWalker) run(cs []byte, depth int) {
+func (w *glyphWalker) run(cs []byte, depth int) {
 	if depth > maxSubrNesting {
-		w.done = true
+		w.lose()
 		return
 	}
 	for i := 0; i < len(cs) && !w.done; {
 		if w.budget--; w.budget < 0 {
-			w.done = true
+			w.lose()
 			return
 		}
 		b := cs[i]
 		switch {
 		case b == csShortInt:
 			if i+2 >= len(cs) {
-				w.done = true
+				w.lose()
 				return
 			}
 			w.push(float64(int16(binary.BigEndian.Uint16(cs[i+1:])))) //nolint:gosec // G115: a two's-complement int16 operand.
@@ -500,21 +534,21 @@ func (w *seacWalker) run(cs []byte, depth int) {
 			i++
 		case b >= 247 && b <= 250:
 			if i+1 >= len(cs) {
-				w.done = true
+				w.lose()
 				return
 			}
 			w.push((float64(b)-247)*256 + float64(cs[i+1]) + 108)
 			i += 2
 		case b >= 251 && b <= 254:
 			if i+1 >= len(cs) {
-				w.done = true
+				w.lose()
 				return
 			}
 			w.push(-(float64(b)-251)*256 - float64(cs[i+1]) - 108)
 			i += 2
 		case b == csFixed:
 			if i+4 >= len(cs) {
-				w.done = true
+				w.lose()
 				return
 			}
 			w.push(float64(int32(binary.BigEndian.Uint32(cs[i+1:]))) / fixed1616Scale) //nolint:gosec // G115: a two's-complement 16.16 operand.
@@ -523,6 +557,17 @@ func (w *seacWalker) run(cs []byte, depth int) {
 			i++
 			switch b {
 			case csEscape:
+				if i >= len(cs) {
+					w.lose()
+					return
+				}
+				switch cs[i] {
+				case csHflex, csFlex, csHflex1, csFlex1:
+				default:
+					// An arithmetic operator computes a value a later call
+					// may take as its index, which this walk does not track.
+					w.usage.lost = true
+				}
 				i++
 				w.stack = w.stack[:0]
 			case csHstem, csVstem, csHstemhm, csVstemhm:
@@ -534,20 +579,21 @@ func (w *seacWalker) run(cs []byte, depth int) {
 				w.stack = w.stack[:0]
 				i += (w.stems + 7) / 8
 			case csCallsubr, csCallgsubr:
-				subrs := w.src.localSubrs
+				subrs, used := w.src.localSubrs, w.usage.local
 				if b == csCallgsubr {
-					subrs = w.src.globalSubrs
+					subrs, used = w.src.globalSubrs, w.usage.global
 				}
 				if len(w.stack) == 0 {
-					w.done = true
+					w.lose()
 					return
 				}
 				idx := int(w.stack[len(w.stack)-1]) + int(subrBias(len(subrs)))
 				w.stack = w.stack[:len(w.stack)-1]
 				if idx < 0 || idx >= len(subrs) {
-					w.done = true
+					w.lose()
 					return
 				}
+				used[idx] = true
 				w.run(subrs[idx], depth+1)
 			case csReturn:
 				return
@@ -565,12 +611,27 @@ func (w *seacWalker) run(cs []byte, depth int) {
 }
 
 // push appends an operand, ending the walk past the Type 2 stack limit.
-func (w *seacWalker) push(v float64) {
+func (w *glyphWalker) push(v float64) {
 	if len(w.stack) >= maxCharstringStack {
-		w.done = true
+		w.lose()
 		return
 	}
 	w.stack = append(w.stack, v)
+}
+
+// pruneSubrs returns subrs with every subroutine used does not mark replaced
+// by a lone return, which keeps the index of every one kept, and the bias the
+// charstrings apply to it, unchanged.
+func pruneSubrs(subrs [][]byte, used []bool) [][]byte {
+	out := make([][]byte, len(subrs))
+	for i, body := range subrs {
+		if used[i] {
+			out[i] = body
+		} else {
+			out[i] = []byte{csReturn}
+		}
+	}
+	return out
 }
 
 // dictEntry is one operator of a CFF DICT with the bytes of its operands.
