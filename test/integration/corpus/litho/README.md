@@ -190,6 +190,7 @@ one deliberately rather than diffing it against a fresh build.
 | `directfig_ua2.pdf`    | PDF/UA-2     | Figures written directly in a structure `/K`, under remediation  |
 | `inlinekids_ua2.pdf`   | PDF/UA-2     | Figures of their own that only inline elements list              |
 | `fontembed_2b.pdf`     | PDF/A-2b     | Unembedded fonts a supplied program embeds, wherever they sit    |
+| `defaultbox_2b.pdf`    | PDF/A-2b     | Pages missing their media box in an A4 document, under rewrites  |
 
 ### Must-not-fire controls
 
@@ -457,6 +458,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_ua2.pdf`      | 11   | 8    | 16   | 12   | 12   | 16   | 12   | 12   | 8   | 8    | 9    | 18\* | 18\* |
 | `contentstream_4.pdf`  | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 6   | 6    | 7    | 8    | 7    |
 | `csnames_2b.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 5    | 6    |
+| `defaultbox_2b.pdf`    | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 4   | 4    | 5    | 7    | 6    |
 | `defaultcs_4.pdf`      | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 10   | 7    |
 | `destforms_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 2    |
 | `directfig_ua2.pdf`    | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
@@ -5960,16 +5962,61 @@ embedding rule nine times on both tools, beside PDF/A-1b's `6.3.3.3/1`, PDF/UA-1
 programs at PDF/A-1b, PDF/A-2b (default and aggressive), PDF/A-4 and PDF/UA-1,
 the embedding rule falls to two, NO and WD, on both tools, and no rule appears.
 
+### `defaultbox_2b.pdf`
+
+ISO 32000-1, 7.7.3.3, Table 30 makes `/MediaBox` required and inheritable, and
+gives it no default. A viewer draws a page that neither states nor inherits a
+box it uses on US Letter, and `pdf.Reader.Page` reads it so. A write that gives
+such a page a media box, as every rewrite, split, merge, insertion and
+remediation does for a page it writes, gives it the size most pages of the
+document have, at origin 0 0, and US Letter, or the size
+`pdf.WithDefaultPageSize` names, only when no page has one. No corpus file
+holds a page missing its media box among pages a majority size shares: pdfjs
+`boundingBox_invalid.pdf`'s two sized pages tie, and the others are US Letter
+or smaller than it.
+
+| Page | Its box, or its node's           | A viewer shows | A rewrite writes       |
+| ---- | -------------------------------- | -------------- | ---------------------- |
+| 1    | A4, 595.28 by 841.89             | A4             | A4                     |
+| 2    | A4                               | A4             | A4                     |
+| 3    | none                             | US Letter      | A4                     |
+| 4    | US Letter                        | US Letter      | US Letter, the control |
+| 5    | none, `/CropBox [0 0 590 830]`   | 590 by 792     | A4, showing 590 by 830 |
+| 6    | its node's `/MediaBox [0 0 0 0]` | US Letter      | A4, on the node        |
+| 7    | A4                               | A4             | A4                     |
+
+Page 5's crop box reaches past US Letter, which a viewer cuts it to, and fits
+A4, which the viewer cuts it against once the page has one. Each page draws its
+own word at (20, 100), inside every size, in the conforming embedded TrueType
+of `ttcmap_2b.pdf`, in DeviceGray under a CMYK OutputIntent, and states its
+own `/Resources`.
+
+| Rule at PDF/A-2b               | veraPDF | litho |
+| ------------------------------ | ------- | ----- |
+| `6.1.13/11` page 6's media box | 1       | 1     |
+
+The two tools return the same rule set in all thirteen cells: `6.1.13/11` at
+every part-2 and part-3 level, and the identification, tagging, title and
+language rules the part-2, level-B claim draws elsewhere. Remediated at the
+eight manifest profiles, default and aggressive, every output conforms on both
+tools. The PDF/A-2 and PDF/A-3 remediations repair the node's box to A4 in an
+incremental update, which writes neither page 3 nor page 5; the PDF/A-2a, PDF/A-4
+and PDF/UA ones rewrite the file, and every page shows A4 but pages 4 and 5.
+Measured on the pinned pdf.js, the full rewrite, the split, the merge and the
+insertion show pages 3 and 6 at 595.28 by 841.89 and page 5 at 590 by 830,
+where they showed 612 by 792 and 590 by 792 before, and qpdf finds nothing in
+any of them.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 138 x 8 = 1104 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 138 x 13 = 1794 cells. litho
+runner scores 139 x 8 = 1112 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 139 x 13 = 1807 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1792 of the 1794 cells. The two
+fixtures exist to protect, and it holds in 1805 of the 1807 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5981,7 +6028,7 @@ eight is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and
 `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2` and `structcopy_ua2` at
 PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1104 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 1112 and moves only `ruleset_mismatch`, and on
 those eight cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
