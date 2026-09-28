@@ -211,8 +211,6 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 
 `--font-dir` is `pdf.WithFontFiles` over a directory: `remediate` and the `pipe` remediate stage search it recursively and embed a subset of the program each unembedded font takes (see [Embedding fonts](#embedding-fonts)). `remediate` lists every font left unembedded, with the reason, under `Fonts left unembedded`, or `refused_fonts` with `-f json`. `pipe` prints no report: `pipe --strict` exits `2` when a font stays unembedded. `--document-id` is `pdf.WithDocumentID`: 32 hex digits pin the trailer `/ID` a remediation writes when the document has no valid one, so two runs over the same file write the same bytes. A directory that does not exist, or a value that is not 32 hex digits, exits `1` and writes nothing.
 
-Signing is library-only. `Writer.Sign` takes a `pdf.Signer`, which the CLI cannot supply without additional crypto dependencies, so `litho sign` refuses with that explanation and exits `1`.
-
 ### Signing
 
 `litho sign` signs with an X.509 certificate and its private key, both PEM files: the key unencrypted, in PKCS #8, PKCS #1 or SEC 1 form, RSA or ECDSA on P-256, P-384 or P-521. `--chain` adds intermediate certificates, `--reason`, `--location`, `--contact` and `--name` fill the signature dictionary, `--field` signs an existing empty signature field or names the new one, and `--signing-time` fixes the time for reproducible output. In `pipe`, a `sign` stage runs last, after any `remediate` stage. An encrypted document or key is refused: decrypt it first.
