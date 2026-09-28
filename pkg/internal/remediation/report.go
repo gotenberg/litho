@@ -35,4 +35,7 @@ type Report struct {
 	// them back keeps them off the later rounds of the same remediation
 	// ([Options.Disabled]).
 	ContentFixers []string
+	// FontRefusals lists the fonts left unembedded although [Options.Fonts]
+	// was set, each with the reason, in object-number order.
+	FontRefusals []FontRefusal
 }

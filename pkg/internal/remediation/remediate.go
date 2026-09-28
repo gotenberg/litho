@@ -126,6 +126,8 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 	if err := reserveDefinedObjects(ctx, doc, alloc); err != nil {
 		return nil, err
 	}
+	var fontRefusals []FontRefusal
+	opts.refusals = &fontRefusals
 
 	// Classify violations by fixer. A disabled fixer claims nothing, so the
 	// violations it would have answered stay in the residual.
@@ -246,6 +248,7 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		ContentSnapshot:  contentSnapshot,
 		ContentFixed:     contentFixed,
 		ContentFixers:    contentFixers,
+		FontRefusals:     fontRefusals,
 	}, nil
 }
 

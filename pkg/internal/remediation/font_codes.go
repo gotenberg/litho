@@ -18,6 +18,10 @@ type fontUses struct {
 	// codes holds, by font object number, every one-byte code a text operator
 	// shows with that font, in any stream that selects it.
 	codes map[int]map[byte]bool
+	// composite holds, by font object number, the distinct strings a text
+	// operator shows with each Type0 font, whose codes may be longer than one
+	// byte and so do not fit codes.
+	composite map[int][]ast.PdfString
 	// drawn holds, at each page's index, the fonts the streams that page draws
 	// select, in the order the walk first reaches them: the page's content, the
 	// forms it draws, the tiling patterns it paints with and the glyph
@@ -70,11 +74,13 @@ type fontUses struct {
 //     at PDF/UA-2, six times each, on litho and veraPDF.
 func collectFontUses(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page, entries []annotPageEntry) fontUses {
 	w := &fontCodeWalk{
-		alloc:   alloc,
-		doc:     doc,
-		uses:    fontUses{codes: make(map[int]map[byte]bool), drawn: make([][]ast.PdfObject, len(pages))},
-		visited: make(map[int]bool),
-		listed:  make(map[int]bool),
+		alloc:    alloc,
+		doc:      doc,
+		uses:     fontUses{codes: make(map[int]map[byte]bool), composite: make(map[int][]ast.PdfString), drawn: make([][]ast.PdfObject, len(pages))},
+		visited:  make(map[int]bool),
+		listed:   make(map[int]bool),
+		shownAt:  make(map[int]map[ast.PdfString]bool),
+		subtypes: make(map[int]string),
 	}
 	for i, page := range pages {
 		if ctx.Err() != nil {
@@ -100,6 +106,10 @@ type fontCodeWalk struct {
 	page    int
 	visited map[int]bool
 	listed  map[int]bool
+	// shownAt holds the strings already recorded in uses.composite, by font
+	// object number, and subtypes each font's /Subtype once read.
+	shownAt  map[int]map[ast.PdfString]bool
+	subtypes map[int]string
 }
 
 // parsed walks the content stream whose decoded bytes are data, resolving its
@@ -121,12 +131,13 @@ func (w *fontCodeWalk) stream(ctx context.Context, ops []content.Operation, res 
 	}
 	fonts := liveDictValue(ctx, w.alloc, w.doc, res["Font"])
 	shown := compliance.ShownCharCodes(ops)
+	strs := compliance.ShownStrings(ops)
 	for _, name := range slices.Sorted(maps.Keys(shown)) {
 		entry, ok := fonts[ast.PdfName(name)]
 		if !ok {
 			continue
 		}
-		w.record(entry, shown[name])
+		w.record(ctx, entry, shown[name], strs[name])
 	}
 	if depth >= w.doc.Limits().MaxFormDepth {
 		return
@@ -151,9 +162,10 @@ func (w *fontCodeWalk) stream(ctx context.Context, ops []content.Operation, res 
 	}
 }
 
-// record adds codes to what the font entry names shows, and lists it for the
-// page being walked when no page listed it before.
-func (w *fontCodeWalk) record(entry ast.PdfObject, codes map[byte]bool) {
+// record adds codes to what the font entry names shows, strs too when it is a
+// Type0 font, and lists it for the page being walked when no page listed it
+// before.
+func (w *fontCodeWalk) record(ctx context.Context, entry ast.PdfObject, codes map[byte]bool, strs []ast.PdfString) {
 	ref, ok := entry.(ast.PdfIndirectRef)
 	if !ok || ref.ObjectNum <= 0 {
 		return
@@ -164,10 +176,36 @@ func (w *fontCodeWalk) record(entry ast.PdfObject, codes map[byte]bool) {
 		w.uses.codes[ref.ObjectNum] = set
 	}
 	maps.Copy(set, codes)
+	if len(strs) > 0 && w.subtype(ctx, ref) == "Type0" {
+		seen := w.shownAt[ref.ObjectNum]
+		if seen == nil {
+			seen = make(map[ast.PdfString]bool)
+			w.shownAt[ref.ObjectNum] = seen
+		}
+		for _, s := range strs {
+			if !seen[s] {
+				seen[s] = true
+				w.uses.composite[ref.ObjectNum] = append(w.uses.composite[ref.ObjectNum], s)
+			}
+		}
+	}
 	if !w.listed[ref.ObjectNum] {
 		w.listed[ref.ObjectNum] = true
 		w.uses.drawn[w.page] = append(w.uses.drawn[w.page], entry)
 	}
+}
+
+// subtype returns the /Subtype of the font ref names, read through the
+// allocator once.
+func (w *fontCodeWalk) subtype(ctx context.Context, ref ast.PdfIndirectRef) string {
+	if st, ok := w.subtypes[ref.ObjectNum]; ok {
+		return st
+	}
+	// A /Subtype that is no name names no Type0 font, which is all this
+	// answers.
+	st, _ := document.ResolveName(ctx, w.doc, resolveFromAllocOrDoc(ctx, w.alloc, w.doc, ref)["Subtype"])
+	w.subtypes[ref.ObjectNum] = string(st)
+	return string(st)
 }
 
 // child walks the stream entry names, a form XObject or a tiling pattern

@@ -168,6 +168,11 @@ var registry = []fixer{
 	// Inlining a usecmap chain maps every code exactly as the chain did, so
 	// the glyph a content byte selects does not change.
 	{name: "cmap-flatten", safety: safetyContent, matches: matchCMapFlatten, apply: fixCMapFlatten},
+	// font-embed runs after every other font fixer, and reads the fonts
+	// through the allocator, so the font it embeds a program in carries
+	// their repairs. Embedding changes the glyphs that render, so it sits in
+	// the content tier a rollback discards.
+	{name: "font-embed", safety: safetyContent, matches: matchFontEmbed, apply: fixFontEmbed},
 	{name: "images", safety: safetyContent, matches: matchImageIssues, apply: fixImageIssues},
 	{name: "lzw", safety: safetyContent, matches: matchLZW, apply: fixLZW},
 	{name: "signature-strip", safety: safetyContent, matches: matchSignatureStrip, apply: fixSignatureStrip},

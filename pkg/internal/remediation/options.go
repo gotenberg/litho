@@ -32,6 +32,12 @@ type Options struct {
 	// remediation ([Report.ContentFixers]). The violations they match stay
 	// in the residual.
 	Disabled []string
+	// Fonts supplies the programs of the fonts the document shows without
+	// embedding them ([fixFontEmbed]). Nil leaves every such font unembedded.
+	Fonts FontProvider
+	// refusals collects the fonts a run left unembedded although Fonts was
+	// set, for [Report.FontRefusals]. [remediate] sets it for its run.
+	refusals *[]FontRefusal
 }
 
 // WithDisabled returns a copy of o whose run skips the fixers named in names

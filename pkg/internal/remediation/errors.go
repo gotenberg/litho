@@ -17,3 +17,32 @@ var errInlineImageSplice = errors.New("remediation: the repairs of a content str
 // /ParentTree or its /IDTree could not read the whole of it, so an edit built
 // on the walk could leave a reference behind.
 var errStructTreeUnread = errors.New("remediation: the structure tree cannot be read whole")
+
+// The reasons a remediation leaves a font unembedded although a font provider
+// is configured ([Options.Fonts]). Each [FontRefusal] wraps one of them.
+var (
+	// ErrFontNotSupplied reports that the provider supplied no program for
+	// the font.
+	ErrFontNotSupplied = errors.New("no font program supplied")
+	// ErrFontProgramInvalid reports a supplied program litho cannot read as a
+	// TrueType, OpenType or CFF font, or one larger than the document may
+	// decode.
+	ErrFontProgramInvalid = errors.New("the supplied font program cannot be read")
+	// ErrFontEmbeddingRestricted reports a supplied program whose OS/2 fsType
+	// forbids embedding its outlines.
+	ErrFontEmbeddingRestricted = errors.New("the supplied font program forbids embedding")
+	// ErrFontKind reports a font the supplied program cannot serve: a program
+	// whose outlines the font dictionary cannot take, or a font whose codes
+	// cannot be mapped onto another program's glyphs.
+	ErrFontKind = errors.New("the supplied font program cannot serve this font")
+	// ErrFontCoverage reports a supplied program lacking a glyph for a code
+	// the document shows.
+	ErrFontCoverage = errors.New("the supplied font program lacks a glyph the document shows")
+	// ErrFontWidths reports a supplied program whose advance widths disagree
+	// with the widths the font declares, so the text would not keep its
+	// positions.
+	ErrFontWidths = errors.New("the supplied font program's widths disagree with the font's")
+	// ErrFontRejected reports a font that, embedded, would fail a rule of the
+	// profile it did not fail before.
+	ErrFontRejected = errors.New("the embedded font would fail validation")
+)
