@@ -34,6 +34,7 @@ var featureRegistry = append([]FeatureFactory{
 	func() Feature { return newFacturxFeature() },
 	func() Feature { return newSchematronFeature() },
 	func() Feature { return newImageDecodeFeature() },
+	func() Feature { return newDeterminismFeature() },
 }, mutationFeatureFactories()...)
 
 // runOptions captures the CLI flags for the run subcommand.

@@ -23,6 +23,7 @@
     "mutate-flatten": "goldens/compliance",
     "mutate-sign": "goldens/compliance",
     "mutate-encrypt": "goldens/compliance",
-    "mutate-redact": "goldens/compliance"
+    "mutate-redact": "goldens/compliance",
+    "determinism": "goldens/compliance"
   }
 }

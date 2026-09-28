@@ -1,0 +1,165 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// lithoCorpusPDFs is the tracked litho corpus, which the determinism tests
+// read from the repository.
+const lithoCorpusPDFs = "../../corpus/litho/pdfs"
+
+// writeDeterminismPDF writes the plain two-page mutation document as a litho
+// fixture named name and returns its path.
+func writeDeterminismPDF(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, mutationTestPDF(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// runDeterminism runs f on fixtureID of path and returns its verdict.
+func runDeterminism(t *testing.T, f *determinismFeature, path, fixtureID string) Verdict {
+	t.Helper()
+	out, err := f.Run(context.Background(), path, fixtureID)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return f.Compare(fixtureID, out)
+}
+
+// TestDeterminismFeature_CountsARunThatDiffers pins the cell's contract: an
+// operation that writes the same bytes twice matches with a zero metric, and
+// one that writes different bytes counts one nondeterministic cell and names
+// the operation.
+func TestDeterminismFeature_CountsARunThatDiffers(t *testing.T) {
+	t.Parallel()
+
+	path := writeDeterminismPDF(t, "plain_2b.pdf")
+	f := newDeterminismFeature()
+	f.ops = []determinismOp{
+		{name: "steady", run: func(_ context.Context, data []byte, _ string) ([]byte, error) { return data, nil }},
+		{name: "random", run: func(_ context.Context, _ []byte, _ string) ([]byte, error) { return []byte(rand.Text()), nil }},
+	}
+	fixtures := []Fixture{
+		{ID: "PDF_A-1b/plain_2b", PDFPath: path},
+		{ID: "PDF_A-2b/plain_2b", PDFPath: path},
+		{ID: "PDF_UA-1/plain_2b", PDFPath: path},
+	}
+	if err := f.Prepare(context.Background(), fixtures); err != nil {
+		t.Fatal(err)
+	}
+
+	steady := runDeterminism(t, f, path, fixtures[0].ID)
+	if !steady.Match || steady.Metrics[metricNondeterministic] != 0 {
+		t.Errorf("steady operation: %+v, want a match with a zero metric", steady)
+	}
+	random := runDeterminism(t, f, path, fixtures[1].ID)
+	if random.Match || random.Metrics[metricNondeterministic] != 1 || !strings.HasPrefix(random.Reason, "random:") {
+		t.Errorf("random operation: %+v, want one nondeterministic cell naming the operation", random)
+	}
+	if spare := runDeterminism(t, f, path, fixtures[2].ID); !spare.Skipped {
+		t.Errorf("fixture beyond the operations: %+v, want skipped", spare)
+	}
+}
+
+// TestDeterminismFeature_RealOperationsAgree runs every operation of the cell
+// on a plain document and expects each to write the same bytes twice.
+func TestDeterminismFeature_RealOperationsAgree(t *testing.T) {
+	t.Parallel()
+
+	path := writeDeterminismPDF(t, "plain_2b.pdf")
+	f := newDeterminismFeature()
+	var fixtures []Fixture
+	for i := range f.ops {
+		fixtures = append(fixtures, Fixture{ID: "P" + string(rune('a'+i)) + "/plain_2b", PDFPath: path})
+	}
+	if err := f.Prepare(context.Background(), fixtures); err != nil {
+		t.Fatal(err)
+	}
+	for i, fx := range fixtures {
+		v := runDeterminism(t, f, path, fx.ID)
+		if !v.Match || v.Skipped {
+			t.Errorf("%s: %+v, want a match", f.ops[i].name, v)
+		}
+	}
+}
+
+// TestDeterminismFeature_LeavesOutTheRandomMutations pins the operation list:
+// both remediation modes and every mutation but the two whose cryptography
+// draws random bytes.
+func TestDeterminismFeature_LeavesOutTheRandomMutations(t *testing.T) {
+	t.Parallel()
+
+	var names []string
+	for _, op := range newDeterminismFeature().ops {
+		names = append(names, op.name)
+	}
+	got := strings.Join(names, ",")
+	for _, want := range []string{"remediation", "remediation-aggressive", "mutate-stamp", "mutate-pages", "mutate-autotag", "mutate-flatten", "mutate-redact"} {
+		if !strings.Contains(","+got+",", ","+want+",") {
+			t.Errorf("operations %s lack %s", got, want)
+		}
+	}
+	for _, unwanted := range []string{"mutate-sign", "mutate-encrypt"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("operations %s hold %s, whose output is random by design", got, unwanted)
+		}
+	}
+}
+
+// TestLithoHomeProfile_CoversEveryFixture pins that every litho fixture maps
+// to a home profile, so none skips the cell unnoticed.
+func TestLithoHomeProfile_CoversEveryFixture(t *testing.T) {
+	t.Parallel()
+
+	entries, err := os.ReadDir(lithoCorpusPDFs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, e := range entries {
+		base, ok := strings.CutSuffix(e.Name(), ".pdf")
+		if !ok {
+			continue
+		}
+		n++
+		home, ok := lithoHomeProfile(base)
+		if !ok {
+			t.Errorf("%s: no home profile", e.Name())
+			continue
+		}
+		if _, isA := dirToPDFAProfile[home]; !isA {
+			if _, isUA := dirToPDFUAProfile[home]; !isUA {
+				t.Errorf("%s: home profile %s has no remediation", e.Name(), home)
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("found no litho fixture")
+	}
+}
+
+// TestDeterminismMetricIsACostMetric pins that a rise in nondeterministic
+// cells is a regression.
+func TestDeterminismMetricIsACostMetric(t *testing.T) {
+	t.Parallel()
+
+	if !costMetrics[metricNondeterministic] {
+		t.Error("nondeterministic is not a cost metric")
+	}
+	raw, err := json.Marshal(determinismOutput{Op: "x", Same: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := newDeterminismFeature().Compare("id", raw); len(v.Metrics) != 1 {
+		t.Errorf("a matching cell emits %v, want the metric at zero", v.Metrics)
+	}
+}

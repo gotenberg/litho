@@ -83,6 +83,10 @@ var costMetrics = map[string]bool{
 	metricRulesetChanged:   true,
 	metricPromiseBroken:    true,
 	metricSignatureInvalid: true,
+
+	// The determinism cell counts the (PDF, operation) cells whose two runs
+	// wrote different bytes. See determinismFeature.
+	metricNondeterministic: true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any
