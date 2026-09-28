@@ -35,9 +35,16 @@ type Options struct {
 	// Fonts supplies the programs of the fonts the document shows without
 	// embedding them ([fixFontEmbed]). Nil leaves every such font unembedded.
 	Fonts FontProvider
-	// refusals collects the fonts a run left unembedded although Fonts was
-	// set, for [Report.FontRefusals]. [remediate] sets it for its run.
-	refusals *[]FontRefusal
+	// fonts collects the fonts a run embedded and the ones it left
+	// unembedded although Fonts was set, for [Report.FontRefusals] and
+	// [Report.FontsEmbedded]. [remediate] sets it for its run.
+	fonts *fontLedger
+}
+
+// fontLedger is what one run of [fixFontEmbed] did with the fonts it met.
+type fontLedger struct {
+	refused  []FontRefusal
+	embedded []FontEmbed
 }
 
 // WithDisabled returns a copy of o whose run skips the fixers named in names

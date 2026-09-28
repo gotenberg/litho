@@ -45,4 +45,12 @@ var (
 	// ErrFontRejected reports a font that, embedded, would fail a rule of the
 	// profile it did not fail before.
 	ErrFontRejected = errors.New("the embedded font would fail validation")
+	// ErrFontUnwritable reports a font the remediation cannot write back: a
+	// font dictionary written inline in a resource dictionary that no object
+	// number reaches.
+	ErrFontUnwritable = errors.New("the font cannot be written back")
+	// ErrFontRolledBack reports a font whose embedding a writer discarded
+	// with the other content repairs of its round, when the output failed
+	// the integrity checks.
+	ErrFontRolledBack = errors.New("the font's embedding was rolled back")
 )

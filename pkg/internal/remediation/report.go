@@ -36,6 +36,14 @@ type Report struct {
 	// ([Options.Disabled]).
 	ContentFixers []string
 	// FontRefusals lists the fonts left unembedded although [Options.Fonts]
-	// was set, each with the reason, in object-number order.
+	// was set, each with the reason, in the order the run met them.
 	FontRefusals []FontRefusal
+	// FontsEmbedded lists the fonts the run embedded a supplied program for,
+	// which a writer rolling back the content tier reports as refused
+	// ([ErrFontRolledBack]).
+	FontsEmbedded []FontEmbed
+	// FontsJudged reports that the run judged every font it could embed:
+	// [Options.Fonts] was set and font-embed not disabled. FontRefusals is
+	// then the run's whole verdict, empty or not.
+	FontsJudged bool
 }

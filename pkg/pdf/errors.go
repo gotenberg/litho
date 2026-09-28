@@ -296,6 +296,16 @@ var (
 	// embedded, would fail a rule of the profile it did not fail before.
 	ErrFontRejected = remediation.ErrFontRejected
 
+	// ErrFontUnwritable is the reason of a [FontRefusal] for a font
+	// dictionary written inline in a resource dictionary that no object
+	// number reaches, so no embedded font can be written in its place.
+	ErrFontUnwritable = remediation.ErrFontUnwritable
+
+	// ErrFontRolledBack is the reason of a [FontRefusal] for a font whose
+	// embedding was discarded with the other content repairs of its round,
+	// when the output failed the integrity checks.
+	ErrFontRolledBack = remediation.ErrFontRolledBack
+
 	// errFontFileTooLarge marks a font file [WithFontFiles] skips, one past
 	// [maxFontFileBytes].
 	errFontFileTooLarge = errors.New("font file too large")

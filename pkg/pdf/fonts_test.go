@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 
+	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -176,5 +178,59 @@ func TestMatchFontFile(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s (%s): matched %q, want %q", tc.req.BaseFont, tc.req.Subtype, got, tc.want)
 		}
+	}
+}
+
+// TestWithFontProvider_ReportsTheFinalState pins [RemediationReport.FontRefusals]
+// to the fonts the output leaves unembedded, across the rounds a remediation
+// runs: a font the first round refuses and a later round embeds is not listed,
+// and one every round refuses is listed once.
+func TestWithFontProvider_ReportsTheFinalState(t *testing.T) {
+	t.Parallel()
+	data := unembeddedFontsDoc("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+	program := abProgram("TestSans", "Test Sans", "Regular", 667, 667)
+
+	var calls atomic.Int32
+	late := FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) {
+		if calls.Add(1) == 1 {
+			return nil, nil
+		}
+		return program, nil
+	})
+	report, after := remediateFonts(t, data, WithFontProvider(late))
+	if calls.Load() < 2 {
+		t.Fatalf("the provider was asked %d times, want a second round to ask again", calls.Load())
+	}
+	if after != 0 || len(report.FontRefusals) != 0 {
+		t.Errorf("a font embedded in the second round: %d unembedded, refusals %v, want none", after, report.FontRefusals)
+	}
+
+	never := FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) { return nil, nil })
+	report, after = remediateFonts(t, data, WithFontProvider(never))
+	if after != 1 || len(report.FontRefusals) != 1 || !errors.Is(report.FontRefusals[0].Err, ErrFontNotSupplied) {
+		t.Errorf("a font every round refuses: %d unembedded, refusals %v, want it listed once", after, report.FontRefusals)
+	}
+}
+
+// TestFontVerdict_RolledBack pins the fonts a rolled-back pass embedded to the
+// refusals, with [ErrFontRolledBack], and a pass that did not judge the fonts
+// to no verdict at all.
+func TestFontVerdict_RolledBack(t *testing.T) {
+	t.Parallel()
+	rep := &remediation.Report{
+		FontsJudged:   true,
+		FontRefusals:  []remediation.FontRefusal{{BaseFont: "Courier", Object: 7, Err: remediation.ErrFontNotSupplied}},
+		FontsEmbedded: []remediation.FontEmbed{{BaseFont: "Helvetica", Object: 5}},
+	}
+	kept, judged := fontVerdict(rep, false)
+	if !judged || len(kept) != 1 {
+		t.Errorf("kept pass: %v (judged %v), want Courier's refusal", kept, judged)
+	}
+	rolled, _ := fontVerdict(rep, true)
+	if len(rolled) != 2 || rolled[1].BaseFont != "Helvetica" || !errors.Is(rolled[1].Err, ErrFontRolledBack) {
+		t.Errorf("rolled-back pass: %v, want Helvetica refused as rolled back", rolled)
+	}
+	if _, judged := fontVerdict(&remediation.Report{FontRefusals: rep.FontRefusals}, false); judged {
+		t.Errorf("a pass that did not judge the fonts gave a verdict")
 	}
 }

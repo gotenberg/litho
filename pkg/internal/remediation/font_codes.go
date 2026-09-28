@@ -2,8 +2,10 @@ package remediation
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -29,6 +31,178 @@ type fontUses struct {
 	// appearances. Each font object is listed once, at the first page that
 	// reaches it, and only a font with an object number of its own is listed.
 	drawn [][]ast.PdfObject
+	// inline holds the fonts written inline in a resource dictionary, which
+	// codes and composite, keyed by object number, cannot hold, in the order
+	// the walk first reaches them. A dictionary every stream resolving it
+	// reaches through the same object is listed once.
+	inline []*inlineFontUse
+}
+
+// inlineFontUse is what a font dictionary written inline in a resource
+// dictionary shows, and where it sits.
+type inlineFontUse struct {
+	site inlineFontSite
+	// font is the dictionary as the walk first read it, which stands for a
+	// site no object number reaches.
+	font ast.PdfDict
+	// codes and composite mean what the fields of [fontUses] keyed by object
+	// number mean.
+	codes     map[byte]bool
+	composite []ast.PdfString
+	shownAt   map[ast.PdfString]bool
+}
+
+// inlineFontSite places a font dictionary written inline: the entry name of
+// the /Font dictionary of the /Resources that owner holds.
+type inlineFontSite struct {
+	owner resourcesOwner
+	name  ast.PdfName
+}
+
+// resourcesOwner names the object holding a /Resources dictionary a stream
+// resolves its names against: a node of the page tree, which a page's content
+// resolves through ([resourcesHolder]), or the stream or dictionary at ref, a
+// form XObject, a tiling pattern or an appearance stream, or a Type 3 font.
+// The zero value names none: the resources of a Type 3 font written inline,
+// which no object number reaches.
+type resourcesOwner struct {
+	node   *annotPageEntry
+	ref    ast.PdfIndirectRef
+	stream bool
+}
+
+// dict returns the owner's dictionary, read through the allocator, nil when
+// it names none or no longer resolves to one.
+func (o resourcesOwner) dict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ast.PdfDict {
+	switch {
+	case o.node != nil:
+		return liveTreeNode(ctx, alloc, doc, *o.node)
+	case o.ref.ObjectNum <= 0:
+		return nil
+	case o.stream:
+		s, ok := liveStream(ctx, alloc, doc, o.ref)
+		if !ok {
+			return nil
+		}
+		return s.Dict
+	}
+	return resolveFromAllocOrDoc(ctx, alloc, doc, o.ref)
+}
+
+// write queues dict as the owner's dictionary, a stream keeping its bytes,
+// and reports whether the write landed.
+func (o resourcesOwner) write(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, dict ast.PdfDict) bool {
+	switch {
+	case o.node != nil:
+		return writeTreeNode(ctx, alloc, doc, *o.node, dict)
+	case o.ref.ObjectNum <= 0:
+		return false
+	case o.stream:
+		s, ok := liveStream(ctx, alloc, doc, o.ref)
+		if !ok {
+			return false
+		}
+		// The dictionary changes, the bytes do not, so a filtered stream is
+		// carried across raw.
+		return alloc.AllocAt(o.ref.ObjectNum, ast.NewLazyStream(dict, s.Bytes))
+	}
+	return alloc.AllocAt(o.ref.ObjectNum, dict)
+}
+
+// key names the owner among the others the walk reaches.
+func (o resourcesOwner) key() string {
+	if o.node == nil {
+		return fmt.Sprintf("O%d", o.ref.ObjectNum)
+	}
+	return treeNodeKey(*o.node)
+}
+
+// treeNodeKey names a page tree node: its object number, or its place in the
+// /Kids of the node listing it when it has none.
+func treeNodeKey(n annotPageEntry) string {
+	if n.ref.ObjectNum > 0 || n.parent == nil {
+		return fmt.Sprintf("N%d", n.ref.ObjectNum)
+	}
+	return fmt.Sprintf("%s/%d", treeNodeKey(*n.parent), n.kid)
+}
+
+// siteChain is the chain of dictionaries above a font dictionary written
+// inline, read through the allocator: the owner's dictionary, the /Resources
+// it holds and the /Font dictionary that holds, and key, naming the first
+// link of the chain with an object number of its own, the /Font dictionary,
+// the /Resources or the owner, and the font's name in it. Every stream
+// resolving the font reaches it through that link.
+type siteChain struct {
+	owner, res, fonts ast.PdfDict
+	key               string
+}
+
+// chain returns the site's [siteChain], zero when the owner or its
+// /Resources no longer resolve.
+func (s inlineFontSite) chain(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) siteChain {
+	var c siteChain
+	if c.owner = s.owner.dict(ctx, alloc, doc); c.owner == nil {
+		return siteChain{}
+	}
+	if c.res = liveDictValue(ctx, alloc, doc, c.owner["Resources"]); c.res == nil {
+		return siteChain{}
+	}
+	c.fonts = liveDictValue(ctx, alloc, doc, c.res["Font"])
+	fontsRef, fontsIndirect := c.res["Font"].(ast.PdfIndirectRef)
+	resRef, resIndirect := c.owner["Resources"].(ast.PdfIndirectRef)
+	switch {
+	case fontsIndirect && fontsRef.ObjectNum > 0:
+		c.key = fmt.Sprintf("F%d", fontsRef.ObjectNum)
+	case resIndirect && resRef.ObjectNum > 0:
+		c.key = fmt.Sprintf("R%d", resRef.ObjectNum)
+	default:
+		c.key = s.owner.key()
+	}
+	c.key += "/" + string(s.name)
+	return c
+}
+
+// font returns the font dictionary written inline at the site, read through
+// the allocator, nil when the site no longer holds one there.
+func (s inlineFontSite) font(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ast.PdfDict {
+	d, _ := s.chain(ctx, alloc, doc).fonts[s.name].(ast.PdfDict)
+	return d
+}
+
+// writable reports whether [inlineFontSite.replace] has a place to write
+// the site: the /Font dictionary, the /Resources or the owner, whichever
+// first has an object number, or a page tree node written directly in /Kids.
+func (s inlineFontSite) writable(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) bool {
+	c := s.chain(ctx, alloc, doc)
+	if _, ok := c.fonts[s.name].(ast.PdfDict); !ok {
+		return false
+	}
+	if !strings.HasPrefix(c.key, "N") && !strings.HasPrefix(c.key, "O") {
+		// The /Font dictionary or the /Resources has an object number.
+		return true
+	}
+	if s.owner.node != nil {
+		return treeNodeWritable(*s.owner.node)
+	}
+	return s.owner.ref.ObjectNum > 0
+}
+
+// replace writes ref in place of the font dictionary written inline at the
+// site, at the first link of the chain above it with an object number of its
+// own ([writeResourceCategory]), and reports whether the write landed.
+func (s inlineFontSite) replace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef) bool {
+	c := s.chain(ctx, alloc, doc)
+	if _, ok := c.fonts[s.name].(ast.PdfDict); !ok {
+		return false
+	}
+	rebuilt := maps.Clone(c.fonts)
+	rebuilt[s.name] = ref
+	work := maps.Clone(c.owner)
+	written, ownerDirty := writeResourceCategory(alloc, work, c.res, "Font", rebuilt)
+	if written {
+		return true
+	}
+	return ownerDirty && s.owner.write(ctx, alloc, doc, work)
 }
 
 // collectFontUses walks the content streams each of pages draws, entries being
@@ -53,7 +227,10 @@ type fontUses struct {
 // as compliance leaves it. Every object is read through the allocator, so a
 // stream an earlier fixer rewrote is read as it now stands. Each stream is
 // walked once, and the nesting below a page stops at the document's
-// form-nesting budget.
+// form-nesting budget. A font dictionary written inline, which ISO 32000-1,
+// 7.3.7 permits and no object number names, is recorded with the object
+// holding the /Resources that names it ([inlineFontSite]), so a fixer can
+// write it back there.
 //
 // # Corpus evidence
 //
@@ -81,6 +258,7 @@ func collectFontUses(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		listed:   make(map[int]bool),
 		shownAt:  make(map[int]map[ast.PdfString]bool),
 		subtypes: make(map[int]string),
+		inlineAt: make(map[string]*inlineFontUse),
 	}
 	for i, page := range pages {
 		if ctx.Err() != nil {
@@ -89,7 +267,9 @@ func collectFontUses(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		w.page = i
 		pe := pageTreeEntry(ctx, alloc, doc, entries[i])
 		if data, _, err := livePageContentData(ctx, alloc, doc, page); err == nil && len(data) > 0 {
-			w.parsed(ctx, data, pageResourcesFor(ctx, alloc, doc, pe), 0)
+			if holder, ok := resourcesHolder(ctx, alloc, doc, pe); ok {
+				w.parsed(ctx, data, liveDictValue(ctx, alloc, doc, holder.dict["Resources"]), resourcesOwner{node: &holder}, 0)
+			}
 		}
 		w.annotations(ctx, pe.dict)
 	}
@@ -97,8 +277,9 @@ func collectFontUses(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 }
 
 // fontCodeWalk carries one [collectFontUses] run. page is the index of the page
-// being walked, visited the object numbers of the streams already walked, and
-// listed the font objects already listed in drawn.
+// being walked, visited the object numbers of the streams already walked,
+// listed the font objects already listed in drawn, and inlineAt the entries of
+// uses.inline by the key of their [siteChain].
 type fontCodeWalk struct {
 	alloc   *writer.ObjAllocator
 	doc     *document.Document
@@ -110,22 +291,24 @@ type fontCodeWalk struct {
 	// object number, and subtypes each font's /Subtype once read.
 	shownAt  map[int]map[ast.PdfString]bool
 	subtypes map[int]string
+	inlineAt map[string]*inlineFontUse
 }
 
 // parsed walks the content stream whose decoded bytes are data, resolving its
-// names against res, at depth streams below the page.
-func (w *fontCodeWalk) parsed(ctx context.Context, data []byte, res ast.PdfDict, depth int) {
+// names against res, the /Resources owner holds, at depth streams below the
+// page.
+func (w *fontCodeWalk) parsed(ctx context.Context, data []byte, res ast.PdfDict, owner resourcesOwner, depth int) {
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
 		w.doc.Logger.Debug("remediation: fonts: cannot parse a content stream to read its codes", "error", err)
 		return
 	}
-	w.stream(ctx, ops, res, depth)
+	w.stream(ctx, ops, res, owner, depth)
 }
 
 // stream records the codes ops shows with each font res names, then walks the
 // streams ops draws.
-func (w *fontCodeWalk) stream(ctx context.Context, ops []content.Operation, res ast.PdfDict, depth int) {
+func (w *fontCodeWalk) stream(ctx context.Context, ops []content.Operation, res ast.PdfDict, owner resourcesOwner, depth int) {
 	if ctx.Err() != nil || res == nil {
 		return
 	}
@@ -135,6 +318,10 @@ func (w *fontCodeWalk) stream(ctx context.Context, ops []content.Operation, res 
 	for _, name := range slices.Sorted(maps.Keys(shown)) {
 		entry, ok := fonts[ast.PdfName(name)]
 		if !ok {
+			continue
+		}
+		if font, inline := entry.(ast.PdfDict); inline {
+			w.recordInline(ctx, inlineFontSite{owner: owner, name: ast.PdfName(name)}, font, shown[name], strs[name])
 			continue
 		}
 		w.record(ctx, entry, shown[name], strs[name])
@@ -195,6 +382,33 @@ func (w *fontCodeWalk) record(ctx context.Context, entry ast.PdfObject, codes ma
 	}
 }
 
+// recordInline adds codes, and strs for a Type0 font, to what the font
+// dictionary written inline at site shows.
+func (w *fontCodeWalk) recordInline(ctx context.Context, site inlineFontSite, font ast.PdfDict, codes map[byte]bool, strs []ast.PdfString) {
+	key := site.chain(ctx, w.alloc, w.doc).key
+	if key == "" {
+		// The owner no longer resolves to the dictionary the walk read, so the
+		// site names no place, and the use is listed under the walk's own.
+		key = fmt.Sprintf("?%d", len(w.uses.inline))
+	}
+	use := w.inlineAt[key]
+	if use == nil {
+		use = &inlineFontUse{site: site, font: font, codes: make(map[byte]bool, len(codes)), shownAt: make(map[ast.PdfString]bool)}
+		w.inlineAt[key] = use
+		w.uses.inline = append(w.uses.inline, use)
+	}
+	maps.Copy(use.codes, codes)
+	if subtype, _ := document.ResolveName(ctx, w.doc, font["Subtype"]); subtype != "Type0" {
+		return
+	}
+	for _, s := range strs {
+		if !use.shownAt[s] {
+			use.shownAt[s] = true
+			use.composite = append(use.composite, s)
+		}
+	}
+}
+
 // subtype returns the /Subtype of the font ref names, read through the
 // allocator once.
 func (w *fontCodeWalk) subtype(ctx context.Context, ref ast.PdfIndirectRef) string {
@@ -215,7 +429,7 @@ func (w *fontCodeWalk) child(ctx context.Context, entry ast.PdfObject, keep func
 	if !ok || !keep(ctx, w.doc, stream.Dict) {
 		return
 	}
-	w.walkStream(ctx, stream, depth+1)
+	w.walkStream(ctx, entry, stream, depth+1)
 }
 
 // type3Glyphs walks every glyph procedure of the Type 3 font entry names
@@ -231,6 +445,10 @@ func (w *fontCodeWalk) type3Glyphs(ctx context.Context, entry ast.PdfObject, dep
 	if res == nil {
 		return
 	}
+	var owner resourcesOwner
+	if ref, ok := entry.(ast.PdfIndirectRef); ok {
+		owner.ref = ref
+	}
 	procs := liveDictValue(ctx, w.alloc, w.doc, font["CharProcs"])
 	for _, glyph := range slices.Sorted(maps.Keys(procs)) {
 		stream, ok := w.firstStream(ctx, procs[glyph])
@@ -241,7 +459,7 @@ func (w *fontCodeWalk) type3Glyphs(ctx context.Context, entry ast.PdfObject, dep
 		if err != nil {
 			continue
 		}
-		w.parsed(ctx, data, res, depth+1)
+		w.parsed(ctx, data, res, owner, depth+1)
 	}
 }
 
@@ -260,7 +478,7 @@ func (w *fontCodeWalk) annotations(ctx context.Context, pageDict ast.PdfDict) {
 			}
 			for _, streamObj := range appearanceStreams(ctx, w.alloc, w.doc, entry) {
 				if stream, ok := w.firstStream(ctx, streamObj); ok {
-					w.walkStream(ctx, stream, 1)
+					w.walkStream(ctx, streamObj, stream, 1)
 				}
 			}
 		}
@@ -268,9 +486,9 @@ func (w *fontCodeWalk) annotations(ctx context.Context, pageDict ast.PdfDict) {
 }
 
 // walkStream walks a form-like stream, a form XObject, a pattern cell or an
-// appearance, at depth against its own /Resources, and leaves one that states
-// none, as compliance does.
-func (w *fontCodeWalk) walkStream(ctx context.Context, stream ast.PdfStream, depth int) {
+// appearance, the one entry names, at depth against its own /Resources, and
+// leaves one that states none, as compliance does.
+func (w *fontCodeWalk) walkStream(ctx context.Context, entry ast.PdfObject, stream ast.PdfStream, depth int) {
 	res := liveDictValue(ctx, w.alloc, w.doc, stream.Dict["Resources"])
 	if res == nil {
 		return
@@ -280,7 +498,8 @@ func (w *fontCodeWalk) walkStream(ctx context.Context, stream ast.PdfStream, dep
 		w.doc.Logger.Debug("remediation: fonts: cannot decode a content stream to read its codes", "error", err)
 		return
 	}
-	w.parsed(ctx, data, res, depth)
+	ref, _ := entry.(ast.PdfIndirectRef)
+	w.parsed(ctx, data, res, resourcesOwner{ref: ref, stream: true}, depth)
 }
 
 // firstStream returns the stream entry names, read through the allocator, and

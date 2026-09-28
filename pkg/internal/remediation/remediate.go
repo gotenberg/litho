@@ -117,17 +117,18 @@ func reserveDefinedObjects(ctx context.Context, doc *document.Document, alloc *w
 }
 
 func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile string, opts Options, violations []error) (*Report, error) {
+	fontsJudged := opts.Fonts != nil && !slices.Contains(opts.Disabled, "font-embed")
 	if len(violations) == 0 {
 		doc.Logger.Debug("remediate: no violations",
 			slog.String("profile", profile),
 		)
-		return &Report{}, nil
+		return &Report{FontsJudged: fontsJudged}, nil
 	}
 	if err := reserveDefinedObjects(ctx, doc, alloc); err != nil {
 		return nil, err
 	}
-	var fontRefusals []FontRefusal
-	opts.refusals = &fontRefusals
+	fonts := &fontLedger{}
+	opts.fonts = fonts
 
 	// Classify violations by fixer. A disabled fixer claims nothing, so the
 	// violations it would have answered stay in the residual.
@@ -248,7 +249,9 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		ContentSnapshot:  contentSnapshot,
 		ContentFixed:     contentFixed,
 		ContentFixers:    contentFixers,
-		FontRefusals:     fontRefusals,
+		FontRefusals:     fonts.refused,
+		FontsEmbedded:    fonts.embedded,
+		FontsJudged:      fontsJudged,
 	}, nil
 }
 

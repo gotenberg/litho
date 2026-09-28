@@ -87,13 +87,17 @@ type FontCode struct {
 type FontRefusal struct {
 	// BaseFont is the font's /BaseFont.
 	BaseFont string
-	// Object is the object number of the font dictionary in the document
-	// the remediation read.
+	// Object is the object number of the font dictionary in the file the
+	// pass that last judged it read: the document for the first pass, the
+	// output of the pass before for a later one. An output written as an
+	// incremental update keeps the document's numbers, and one rewritten
+	// whole numbers its objects anew. It is 0 for a font dictionary written
+	// inline in a resource dictionary.
 	Object int
 	// Err says why, wrapping [ErrFontNotSupplied],
 	// [ErrFontProgramInvalid], [ErrFontEmbeddingRestricted],
-	// [ErrFontKind], [ErrFontCoverage], [ErrFontWidths] or
-	// [ErrFontRejected].
+	// [ErrFontKind], [ErrFontCoverage], [ErrFontWidths],
+	// [ErrFontRejected], [ErrFontUnwritable] or [ErrFontRolledBack].
 	Err error
 }
 

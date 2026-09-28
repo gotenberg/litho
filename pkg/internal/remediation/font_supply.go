@@ -62,8 +62,17 @@ type FontRefusal struct {
 	// Object is the object number of the font dictionary.
 	Object int
 	// Err wraps one of the refusal sentinels, [ErrFontNotSupplied] to
-	// [ErrFontRejected].
+	// [ErrFontUnwritable], or [ErrFontRolledBack].
 	Err error
+}
+
+// FontEmbed records a font a run embedded a supplied program for.
+type FontEmbed struct {
+	// BaseFont is the font's /BaseFont.
+	BaseFont string
+	// Object is the object number the font dictionary had in the document
+	// the run read, 0 for one written inline in a resource dictionary.
+	Object int
 }
 
 // outlineFormat names the program a font dictionary receives.

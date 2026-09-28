@@ -57,12 +57,35 @@ func matchFontEmbed(v compliance.Violation) bool {
 //
 // The fonts are the ones a stream the pages draw shows text with, read
 // through the allocator ([collectFontUses]), and a font no stream shows is
-// left as it is: no rule asks for the program of a font nothing draws. So is a
-// font dictionary written inline in a resource dictionary, which the walk
-// does not record, and which stays in the residual.
+// left as it is: no rule asks for the program of a font nothing draws. A font
+// dictionary written inline in a resource dictionary, which ISO 32000-1, 7.3.7
+// permits, is embedded as the others are and written at a new object number,
+// which its resource dictionary names in its place ([inlineFontSite.replace]).
+// A reader resolves the name to the same dictionary either way, and the one
+// object keeps the font a single font wherever the resource dictionary is
+// shared. One whose resource dictionary no object number reaches, the
+// resources of a Type 3 font written inline, is refused ([ErrFontUnwritable]),
+// and so is a font of a subtype that takes no program ([ErrFontKind]).
+//
+// Every font this pass leaves unembedded while it shows text unembedded is
+// listed with a [FontRefusal], one written inline with object number 0.
 //
 // # Corpus evidence
 //
+//   - All corpora: 10 files show text with an unembedded font written inline
+//     in a resource dictionary, which the fixer used to leave unembedded and
+//     unreported. Remediated at PDF/A-2b with a provider over Arial, Times
+//     New Roman and Courier New, default and aggressive, pdfjs
+//     asciihexdecode.pdf, freetexts.pdf, issue16633.pdf, issue17848.pdf,
+//     issue6069.pdf, issue6106.pdf and issue6108.pdf lose 6.2.11.4.1 t1 on
+//     litho and veraPDF 1.30.2, issue6069.pdf to issue6108.pdf 6.2.11.2 t4 to
+//     t6 besides, and five outputs pass both tools. No rule gains a finding.
+//   - litho fontcopies_2b.pdf and pdfjs issue11555.pdf: the 15 inline copies
+//     of Helvetica and LithoKorea and the inline KozMinPro6N-Regular the
+//     provider cannot serve are now listed as refused, with object number 0.
+//   - litho fontembed_2b.pdf: three fonts written inline, in a page's /Font
+//     dictionary, a form's /Resources and a /Resources two pages share, are
+//     embedded with synthetic programs, on litho and veraPDF alike.
 //   - govdocs and litho: measured with a provider over the Liberation 2.1.5
 //     and URW base35 families, on the 856 files that hold an unembedded
 //     font, at PDF/A-2b and PDF/UA-1, default and aggressive.
@@ -108,25 +131,46 @@ func fixFontEmbed(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		programs: make(map[programKey]ast.PdfIndirectRef),
 		written:  make(map[int]programKey),
 	}
-	var fixes []string
+	targets := make([]fontTarget, 0, len(uses.codes)+len(uses.inline))
 	for _, objNum := range slices.Sorted(maps.Keys(uses.codes)) {
+		targets = append(targets, fontTarget{objNum: objNum, codes: uses.codes[objNum], composite: uses.composite[objNum]})
+	}
+	for _, use := range uses.inline {
+		targets = append(targets, fontTarget{site: &use.site, walked: use.font, codes: use.codes, composite: use.composite})
+	}
+	var fixes []string
+	for _, t := range targets {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("embedding fonts: %w", err)
 		}
-		fix, err := e.embed(ctx, objNum, uses)
+		fix, err := e.embed(ctx, t)
 		var refusal *fontRefusedError
 		switch {
 		case errors.As(err, &refusal):
-			if opts.refusals != nil {
-				*opts.refusals = append(*opts.refusals, FontRefusal{BaseFont: refusal.baseFont, Object: objNum, Err: refusal.err})
+			if opts.fonts != nil {
+				opts.fonts.refused = append(opts.fonts.refused, FontRefusal{BaseFont: refusal.baseFont, Object: t.objNum, Err: refusal.err})
 			}
 		case err != nil:
 			return nil, err
 		case fix != "":
 			fixes = append(fixes, fix)
+			if opts.fonts != nil {
+				opts.fonts.embedded = append(opts.fonts.embedded, FontEmbed{BaseFont: e.lastBaseFont, Object: t.objNum})
+			}
 		}
 	}
 	return fixes, nil
+}
+
+// fontTarget is a font [fixFontEmbed] embeds: the font object objNum, or the
+// font dictionary written inline at site, as the walk read it in walked, with
+// what the pages show with it ([fontUses]).
+type fontTarget struct {
+	objNum    int
+	site      *inlineFontSite
+	walked    ast.PdfDict
+	codes     map[byte]bool
+	composite []ast.PdfString
 }
 
 // fontRefusedError carries a refusal out of [fontEmbedder.embed].
@@ -156,6 +200,9 @@ type fontEmbedder struct {
 	// written holds, by descriptor object number, the program this run wrote
 	// into the descriptor. A descriptor held directly has no entry.
 	written map[int]programKey
+	// lastBaseFont is the /BaseFont of the font [fontEmbedder.embed] last
+	// embedded.
+	lastBaseFont string
 }
 
 // embedPlan is a font as it stands once embedded: the font dictionary holding
@@ -175,29 +222,36 @@ type embedPlan struct {
 	cidToGID []byte
 }
 
-// embed embeds the font at objNum when it is shown and unembedded. It returns
+// embed embeds the font t names when it is shown and unembedded. It returns
 // the fix description, a *fontRefusedError for a font it leaves unembedded, or the
 // provider's error.
-func (e *fontEmbedder) embed(ctx context.Context, objNum int, uses fontUses) (string, error) {
-	ref := ast.PdfIndirectRef{ObjectNum: objNum}
-	font := resolveFromAllocOrDoc(ctx, e.alloc, e.doc, ref)
+func (e *fontEmbedder) embed(ctx context.Context, t fontTarget) (string, error) {
+	var font ast.PdfDict
+	if t.site != nil {
+		if font = t.site.font(ctx, e.alloc, e.doc); font == nil {
+			font = t.walked
+		}
+	} else {
+		font = resolveFromAllocOrDoc(ctx, e.alloc, e.doc, ast.PdfIndirectRef{ObjectNum: t.objNum})
+	}
 	if font == nil {
 		return "", nil
 	}
 	subtype := nameOf(ctx, e.doc, font["Subtype"])
 	var shown []ast.PdfString
 	switch subtype {
-	case "Type1", "MMType1", "TrueType":
-		codes := slices.Sorted(maps.Keys(uses.codes[objNum]))
-		if len(codes) == 0 {
-			return "", nil
-		}
-		shown = []ast.PdfString{ast.PdfString(codes)}
 	case "Type0":
-		if shown = uses.composite[objNum]; len(shown) == 0 {
-			return "", nil
-		}
+		shown = t.composite
+	case "Type3":
+		// ISO 32000-1, 9.6.5: a Type 3 font draws its glyphs with content
+		// streams and has no program to embed.
+		return "", nil
 	default:
+		if len(t.codes) > 0 {
+			shown = []ast.PdfString{ast.PdfString(slices.Sorted(maps.Keys(t.codes)))}
+		}
+	}
+	if len(shown) == 0 {
 		return "", nil
 	}
 	embedRule := compliance.FontEmbeddingRule(e.profile)
@@ -207,6 +261,18 @@ func (e *fontEmbedder) embed(ctx context.Context, objNum int, uses fontUses) (st
 	}
 	baseFont := nameOf(ctx, e.doc, font["BaseFont"])
 	refused := func(err error) error { return &fontRefusedError{baseFont: baseFont, err: err} }
+	switch subtype {
+	case "Type1", "MMType1", "TrueType", "Type0":
+	default:
+		// ISO 32000-1, 9.5 and Table 110: a resource dictionary's font is a
+		// Type0, Type1, MMType1, Type3 or TrueType font, and a descendant
+		// CIDFont named there directly, or a font of no known subtype, has no
+		// program validation reads as its own.
+		return "", refused(fmt.Errorf("%w: a font of subtype %q", ErrFontKind, subtype))
+	}
+	if t.site != nil && !t.site.writable(ctx, e.alloc, e.doc) {
+		return "", refused(fmt.Errorf("%w: a font dictionary written inline where no object number reaches its resource dictionary", ErrFontUnwritable))
+	}
 
 	// A descriptor this run wrote a program into is one an earlier font
 	// shares, and the font takes the same program there. Any other program
@@ -222,7 +288,7 @@ func (e *fontEmbedder) embed(ctx context.Context, objNum int, uses fontUses) (st
 	if subtype == "Type0" {
 		plan, err = e.planComposite(ctx, font, shown)
 	} else {
-		plan, err = e.planSimple(ctx, font, subtype, uses.codes[objNum])
+		plan, err = e.planSimple(ctx, font, subtype, t.codes)
 	}
 	if err != nil {
 		if isFontRefusal(err) {
@@ -237,21 +303,35 @@ func (e *fontEmbedder) embed(ctx context.Context, objNum int, uses fontUses) (st
 	if prev, ours := e.written[fdNum]; ours && prev != key {
 		return "", refused(fmt.Errorf("%w: the font shares its descriptor with a font given another program", ErrFontKind))
 	}
+	objNum := t.objNum
+	if t.site != nil {
+		// Allocated first, so the resource dictionary names it: the site
+		// was found writable above, and nothing queued since moved it.
+		objNum = e.alloc.Alloc(ast.PdfNull{}).ObjectNum
+		if !t.site.replace(ctx, e.alloc, e.doc, ast.PdfIndirectRef{ObjectNum: objNum}) {
+			return "", refused(fmt.Errorf("%w: the resource dictionary holding it could not be written", ErrFontUnwritable))
+		}
+	}
 	if fdNum != 0 {
 		e.written[fdNum] = key
 	}
 	e.write(ctx, objNum, font, plan)
+	e.lastBaseFont = baseFont
 	kind := "TrueType program as /FontFile2"
 	if plan.program.format == outlinesCFF {
 		kind = "CFF program as /FontFile3"
 	}
-	return fmt.Sprintf("embedded %s (whole %s, %d bytes) for font %s (object %d)",
-		plan.program.psName, kind, len(plan.program.data), baseFont, objNum), nil
+	where := fmt.Sprintf("object %d", objNum)
+	if t.site != nil {
+		where = fmt.Sprintf("written inline as /%s, now object %d", string(t.site.name), objNum)
+	}
+	return fmt.Sprintf("embedded %s (whole %s, %d bytes) for font %s (%s)",
+		plan.program.psName, kind, len(plan.program.data), baseFont, where), nil
 }
 
 // isFontRefusal reports whether err wraps one of the refusal sentinels.
 func isFontRefusal(err error) bool {
-	for _, s := range []error{ErrFontNotSupplied, ErrFontProgramInvalid, ErrFontEmbeddingRestricted, ErrFontKind, ErrFontCoverage, ErrFontWidths, ErrFontRejected} {
+	for _, s := range []error{ErrFontNotSupplied, ErrFontProgramInvalid, ErrFontEmbeddingRestricted, ErrFontKind, ErrFontCoverage, ErrFontWidths, ErrFontRejected, ErrFontUnwritable} {
 		if errors.Is(err, s) {
 			return true
 		}

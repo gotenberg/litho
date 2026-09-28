@@ -367,11 +367,12 @@ type RemediationReport struct {
 	// and were subsequently discarded. When non-empty, the output preserves
 	// rendering at the cost of leaving the listed violations unfixed.
 	RolledBack []string
-	// FontRefusals lists, in object-number order, the fonts the document
-	// shows unembedded that the remediation left so although
-	// [WithFontProvider] or [WithFontFiles] was given, each with the reason.
-	// It is nil without a provider. The refusals are the first pass's: a
-	// later round meets the same fonts and refuses them for the same reasons.
+	// FontRefusals lists, in object-number order, the fonts the output
+	// shows unembedded although [WithFontProvider] or [WithFontFiles] was
+	// given, each with the reason. It is nil without a provider. It is the
+	// verdict of the last pass that judged the fonts: a font one round
+	// refused and a later round embedded is not listed, and one every round
+	// refused is listed once, with the last round's reason.
 	FontRefusals []FontRefusal
 }
 
@@ -2512,7 +2513,9 @@ func (w *Writer) remediate(
 		restorePreState()
 		return nil, err
 	}
-	refused := fontRefusals(report.FontRefusals)
+	// fonts is the verdict on the fonts of the last pass that judged them,
+	// which a later pass replaces: the output holds what that pass left.
+	fonts, _ := fontVerdict(report, false)
 
 	if len(alloc.Pending()) > 0 || report.NeedsFullRewrite || report.TrailerDirty {
 		// Keep the allocator's pending map as the override source. WriteTo
@@ -2654,6 +2657,7 @@ func (w *Writer) remediate(
 		fixed = keepFixedWithout(report.Fixed, report.ContentFixed)
 		rolledBack = report.ContentFixed
 		disabled = report.ContentFixers
+		fonts, _ = fontVerdict(report, true)
 		doc.Logger.Debug("remediate: rollback succeeded",
 			slog.Int("kept_fixes", len(fixed)),
 			slog.Int("rolled_back", len(report.ContentFixed)),
@@ -2675,6 +2679,11 @@ func (w *Writer) remediate(
 			removeTempFile(doc.Logger, tmpPath)
 			restorePreState()
 			return nil, err
+		}
+		if next.fontsJudged {
+			// A round that is not kept read the output that stands, so
+			// what it left unembedded is what the output leaves.
+			fonts = next.fonts
 		}
 		if !ok {
 			break
@@ -2715,7 +2724,24 @@ func (w *Writer) remediate(
 	}
 	w.markPreSerialized(tmpPath)
 	w.remediation, w.pdfaClause, w.accessibilityClause = target.method, target.pdfaClause, target.accessibilityClause
-	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack), FontRefusals: refused}, nil
+	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack), FontRefusals: fontRefusals(fonts)}, nil
+}
+
+// fontVerdict returns the fonts a remediation pass left unembedded, with the
+// ones it embedded when rolledBack says the writer discarded its content
+// repairs, which the embeddings are among, and whether the pass judged the
+// fonts at all ([remediation.Report.FontsJudged]).
+func fontVerdict(rep *remediation.Report, rolledBack bool) ([]remediation.FontRefusal, bool) {
+	if rep == nil || !rep.FontsJudged {
+		return nil, false
+	}
+	out := slices.Clone(rep.FontRefusals)
+	if rolledBack {
+		for _, f := range rep.FontsEmbedded {
+			out = append(out, remediation.FontRefusal{BaseFont: f.BaseFont, Object: f.Object, Err: remediation.ErrFontRolledBack})
+		}
+	}
+	return out, true
 }
 
 // countRepairs counts the fixes that actually repaired something, ignoring the
@@ -2774,6 +2800,10 @@ type roundResult struct {
 	// dropped are the signatures the round's full rewrite left out, which a
 	// first round written as an incremental update kept.
 	dropped []DroppedSignature
+	// fonts is the round's verdict on the fonts ([fontVerdict]), set with
+	// fontsJudged whenever the round's pass judged them, kept or not.
+	fonts       []remediation.FontRefusal
+	fontsJudged bool
 }
 
 // remediationRound reopens the serialized output at path and runs the
@@ -2822,8 +2852,19 @@ func (w *Writer) remediationRound(
 		return roundResult{}, false, nil
 	}
 	rep, err := run(ctx, alloc, r2.doc, disabled)
-	if err != nil || rep == nil || countRepairs(rep.Fixed) == 0 {
+	if err != nil || rep == nil {
 		return roundResult{}, false, nil
+	}
+	// discarded is the result of a round that is not kept: its pass read
+	// the output that stands, so its verdict on the fonts is that output's,
+	// with any embedding it made discarded along with the round.
+	discarded := func() roundResult {
+		var r roundResult
+		r.fonts, r.fontsJudged = fontVerdict(rep, true)
+		return r
+	}
+	if countRepairs(rep.Fixed) == 0 {
+		return discarded(), false, nil
 	}
 
 	// w2 writes r2 itself, not a copy: the round's repairs to the trailer are
@@ -2839,19 +2880,21 @@ func (w *Writer) remediationRound(
 		return roundResult{}, false, err
 	}
 	if reason == "" {
-		return roundResult{path: tmpPath, residual: res, fixed: rep.Fixed, dropped: w2.droppedSignatures}, true, nil
+		kept := roundResult{path: tmpPath, residual: res, fixed: rep.Fixed, dropped: w2.droppedSignatures}
+		kept.fonts, kept.fontsJudged = fontVerdict(rep, false)
+		return kept, true, nil
 	}
 	if rep.ContentSnapshot == nil {
 		logger.Debug("remediate: round regressed, keeping previous output",
 			slog.String("reason", reason))
-		return roundResult{}, false, nil
+		return discarded(), false, nil
 	}
 
 	// The allocator restores its pending map in place, which w2 writes from.
 	alloc.Restore(*rep.ContentSnapshot)
 	kept := keepFixedWithout(rep.Fixed, rep.ContentFixed)
 	if countRepairs(kept) == 0 {
-		return roundResult{}, false, nil
+		return discarded(), false, nil
 	}
 	tmpPath, res, reason, err = w.writeRound(ctx, w2, revalidate, baseline, tol)
 	if err != nil {
@@ -2860,12 +2903,12 @@ func (w *Writer) remediationRound(
 	if reason != "" {
 		logger.Debug("remediate: round regressed after rollback, keeping previous output",
 			slog.String("reason", reason))
-		return roundResult{}, false, nil
+		return discarded(), false, nil
 	}
-	return roundResult{
-		path: tmpPath, residual: res, fixed: kept, rolledBack: rep.ContentFixed, disabled: rep.ContentFixers,
-		dropped: w2.droppedSignatures,
-	}, true, nil
+	result := discarded()
+	result.path, result.residual, result.fixed, result.rolledBack, result.disabled = tmpPath, res, kept, rep.ContentFixed, rep.ContentFixers
+	result.dropped = w2.droppedSignatures
+	return result, true, nil
 }
 
 // writeRound serializes the output of a remediation round w2 queues to a temp
