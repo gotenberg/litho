@@ -185,6 +185,7 @@ one deliberately rather than diffing it against a fresh build.
 | `emptyfig_ua2.pdf`     | PDF/UA-2     | Figures that enclose nothing, and every reference to them        |
 | `sharedk_ua1.pdf`      | PDF/UA-1     | A structure `/K` array two elements share, direct kids in it     |
 | `fieldkids_2b.pdf`     | PDF/A-2b     | Form fields whose `/Kids` arrays are objects of their own        |
+| `boxorigin_2b.pdf`     | PDF/A-2b     | Crop boxes whose lower-left corner is not the user-space origin  |
 
 ### Must-not-fire controls
 
@@ -438,6 +439,7 @@ which are covered under [Known divergences](#known-divergences).
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
 | `baretree_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `blendcs_4.pdf`        | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 6    | 6    |
+| `boxorigin_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
 | `charset_1b.pdf`       | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 3   | 3    | 4    | 9    | 7    |
 | `cmaps_2b.pdf`         | 9    | 6    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
 | `colouroff_2b.pdf`     | 4    | 1    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
@@ -5751,16 +5753,55 @@ written directly. Every output litho wrote before the walks read each array
 once is byte-identical to the one it writes now, but the encrypted one, whose
 key is random.
 
+### `boxorigin_2b.pdf`
+
+A page draws in user space, where `(0, 0)` is the coordinate origin, and a
+viewer shows the crop box (ISO 32000-1, 14.11.2), which nothing makes start
+there. `pdf.TextStamp` measures X and Y from the page's bottom-left corner, the
+visible one, so litho translates a stamp by the lower-left point of the region
+a viewer shows. A rectangle may name either pair of opposite corners (7.9.5),
+so that point is the lesser of each pair, and a crop box reaching past the media
+box counts once reduced to their intersection (14.11.2.1). No page elsewhere in
+this corpus has a crop box that does not start at the origin, so the
+`mutate-stamp` cell could not tell a stamp at the corner from one at the origin,
+or from one moved by the box origin twice, as the cell itself placed it:
+
+| Page | Boundaries as written                              | Visible lower-left |
+| ---- | -------------------------------------------------- | ------------------ |
+| 1    | `/MediaBox [0 0 612 792] /CropBox [50 60 500 700]` | `(50, 60)`         |
+| 2    | `/MediaBox [-306 -396 306 396]`                    | `(-306, -396)`     |
+| 3    | `/MediaBox [306 396 -306 -396]`                    | `(-100, -150)`     |
+|      | `/CropBox [200 300 -100 -150]`                     |                    |
+| 4    | `/MediaBox [0 0 612 792] /CropBox [30 40 700 900]` | `(30, 40)`         |
+| 5    | `/CropBox [100 120 500 700] /Rotate 90`            | `(100, 120)`       |
+| 6    | `/CropBox [70 80 400 500]`, from its parent node   | `(70, 80)`         |
+
+Pages 5 and 6 state `/MediaBox [0 0 612 792]`. No page draws anything.
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
+count for count, and PDF/A-2b reports nothing: every rule is one the file draws
+at a level it does not claim, as on `viewerboxes_2b.pdf`. Remediation at the
+eight manifest profiles, default and aggressive, leaves nothing on either tool.
+
+`mutate-stamp` reads where the stamp's text lands on each page and requires it
+10 points right of and above the visible corner. Its stamp reads there on every
+page, and poppler's `pdftotext -bbox` places it at the same points. Planted in
+turn, each misplacement fails the cell on this file: the cell adding the box
+origin to X and Y (page 1 reads at `(110, 130)`), `stampOriginShift` reading the
+crop box's first two entries (page 3 at `(210, 310)`), and no shift at all (page
+1 at `(10, 10)`). The six other `mutate-*` cells pass the file at all eight
+profiles.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 133 x 8 = 1064 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 133 x 13 = 1729 cells. litho
+runner scores 134 x 8 = 1072 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 134 x 13 = 1742 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1727 of the 1729 cells. The two
+fixtures exist to protect, and it holds in 1740 of the 1742 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5768,12 +5809,12 @@ non-empty set in each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-seven is non-compliant on both sides (`baretree_2b`, `pagelabels_2b` and
-`viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1;
-and `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's
-conforming cells), so a change that drops or invents a rule class leaves
-`matched` at 1064 and moves only `ruleset_mismatch`, and on those seven cells it
-moves both. Both exceptions sit in the manifest's profiles, `complex_ua2` at
+eight is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
+`pagelabels_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and
+`sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2` and `structcopy_ua2` at
+PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
+rule class leaves `matched` at 1072 and moves only `ruleset_mismatch`, and on
+those eight cells it moves both. Both exceptions sit in the manifest's profiles, `complex_ua2` at
 PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus, and the text
 scoreboard names the rules only one side reports. A third cell in the runner is
 a regression, or a divergence to cover under Known divergences and mark `*`.
