@@ -249,6 +249,7 @@ type remediateOpts struct {
 	tolerance       RegressionTolerance
 	documentID      []byte
 	fonts           FontProvider
+	systemFonts     *fontFiles
 	wholeFonts      bool
 }
 
@@ -324,7 +325,8 @@ func WithFigureAltText(alt string) RemediateOption {
 // 16 bytes of a SHA-256 over the bytes of the document it repairs (the
 // source, with the edits queued before it) and the options that shape the
 // output (the profile, [WithLanguage], [WithAggressiveFixes],
-// [WithFigureAltText], and whether fonts are supplied). The same input and
+// [WithFigureAltText], whether fonts are supplied, and whether
+// [WithSystemFonts] searches the host's fonts). The same input and
 // options then write the same bytes, and a change to either mints another
 // /ID. A source whose /ID has a valid first string keeps it, since ISO
 // 32000-1, 14.4 makes it the file's permanent identifier. An id of any other
@@ -1941,12 +1943,30 @@ func (w *Writer) Sign(signer Signer, opts ...SignOption) {
 // remediateConfig applies the remediation options and returns the
 // resolved settings plus the internal options the RemediatePDFA and
 // RemediatePDFUA entry points share.
-func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options) {
+// The font providers log what they skip to the Writer's logger.
+func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options) {
 	cfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return cfg, remediation.Options{Lang: cfg.lang, PreserveContent: cfg.preserveContent, FigureAlt: cfg.figureAlt, PinnedID: cfg.documentID, Fonts: fontProvider(cfg.fonts), WholeFonts: cfg.wholeFonts}
+	// The caller's provider comes first, so the system's fonts serve only
+	// the fonts it supplies no program for.
+	var providers []FontProvider
+	if cfg.fonts != nil {
+		providers = append(providers, cfg.fonts)
+	}
+	if cfg.systemFonts != nil {
+		providers = append(providers, cfg.systemFonts)
+	}
+	return cfg, remediation.Options{
+		Lang:            cfg.lang,
+		PreserveContent: cfg.preserveContent,
+		FigureAlt:       cfg.figureAlt,
+		PinnedID:        cfg.documentID,
+		Fonts:           fontProvider(w.logger(), providers),
+		SystemFonts:     cfg.systemFonts != nil,
+		WholeFonts:      cfg.wholeFonts,
+	}
 }
 
 // RemediatePDFA validates the document against the given PDF/A profile,
@@ -1975,7 +1995,7 @@ func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
 func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediatePDFA", &err)
-	cfg, remOpts := remediateConfig(opts)
+	cfg, remOpts := w.remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFA(ctx, profile)
 	}
@@ -2007,7 +2027,7 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
 func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediatePDFUA", &err)
-	cfg, remOpts := remediateConfig(opts)
+	cfg, remOpts := w.remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFUA(ctx, profile)
 	}
@@ -2030,7 +2050,7 @@ func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
 func (w *Writer) RemediateWTPDF(ctx context.Context, profile models.WTPDFProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateWTPDF", &err)
-	cfg, remOpts := remediateConfig(opts)
+	cfg, remOpts := w.remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidateWTPDF(ctx, profile)
 	}
@@ -2144,7 +2164,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 		relationship = DefaultFacturXRelationship
 	}
 
-	rcfg, remOpts := remediateConfig(opts)
+	rcfg, remOpts := w.remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFA(ctx, profile)
 	}

@@ -124,7 +124,7 @@
 //     [Writer.RemediateFacturX] take [RemediateOption]: [WithLanguage],
 //     [WithAggressiveFixes], [WithRegressionTolerance], [WithFigureAltText],
 //     [WithDocumentID], [WithFontProvider], [WithFontFiles],
-//     [WithWholeFontPrograms].
+//     [WithSystemFonts], [WithWholeFontPrograms].
 //   - [Writer.Sign] takes [SignOption]: [WithSignatureReason],
 //     [WithSignatureLocation], [WithSignatureContactInfo], [WithSignerName],
 //     [WithSigningTime], [WithSignatureField].

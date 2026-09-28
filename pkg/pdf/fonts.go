@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -165,10 +166,10 @@ func WithFontFiles(fsys fs.FS) RemediateOption {
 	return WithFontProvider(newFontFiles(fsys))
 }
 
-// WithWholeFontPrograms embeds every program [WithFontProvider] or
-// [WithFontFiles] supplies whole, under the font's own name, instead of the
-// subset litho embeds by default. A subset holds only the glyphs the document
-// shows, so text a later edit adds in characters the document does not show
+// WithWholeFontPrograms embeds every program [WithFontProvider],
+// [WithFontFiles] or [WithSystemFonts] supplies whole, under the font's own
+// name, instead of the subset litho embeds by default. A subset holds only the
+// glyphs the document shows, so text a later edit adds in characters the document does not show
 // has no glyph to draw; a whole program keeps every glyph, at the cost of a
 // larger file. Each font is still embedded only where the whole program
 // serves it as the document shows it, and [RemediationReport.Fixed] states
@@ -308,9 +309,12 @@ func normalizeFontName(name string) string {
 	return out
 }
 
-// fontProvider adapts a [FontProvider] to the remediation engine.
-func fontProvider(p FontProvider) remediation.FontProvider {
-	if p == nil {
+// fontProvider adapts providers to the remediation engine: each is asked in
+// turn, and the first program one returns, or the first error, answers. The
+// providers of [WithFontFiles] and [WithSystemFonts] log to logger what they
+// skip.
+func fontProvider(logger *slog.Logger, providers []FontProvider) remediation.FontProvider {
+	if len(providers) == 0 {
 		return nil
 	}
 	return func(ctx context.Context, req remediation.FontRequest) ([]byte, error) {
@@ -325,7 +329,19 @@ func fontProvider(p FontProvider) remediation.FontProvider {
 		for i, c := range req.Codes {
 			out.Codes[i] = FontCode{Code: c.Code, Glyph: c.Glyph, Unicode: c.Unicode, Width: c.Width}
 		}
-		return p.FontProgram(ctx, out)
+		for _, p := range providers {
+			var program []byte
+			var err error
+			if files, ok := p.(*fontFiles); ok {
+				program, err = files.program(ctx, logger, out)
+			} else {
+				program, err = p.FontProgram(ctx, out)
+			}
+			if err != nil || program != nil {
+				return program, err
+			}
+		}
+		return nil, nil
 	}
 }
 

@@ -62,6 +62,32 @@ func ExampleWithFontFiles() {
 	// LithoCustom left unembedded, not supplied: true
 }
 
+// ExampleWithSystemFonts embeds the unembedded fonts from the operating
+// system's fonts, after the programs of a directory the caller controls. It
+// has no Output line: what it embeds depends on the fonts of the host.
+func ExampleWithSystemFonts() {
+	ctx := context.Background()
+
+	r, err := pdf.Open(ctx, bytes.NewReader(unembeddedFontsPDF), int64(len(unembeddedFontsPDF)))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer r.Close()
+
+	w := pdf.NewWriter(r)
+	defer w.Close()
+	report, err := w.RemediatePDFA(ctx, models.PDFA2b,
+		pdf.WithFontFiles(fstest.MapFS{"LiberationSans-Regular.ttf": {Data: liberationSansAB()}}),
+		pdf.WithSystemFonts(),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, refusal := range report.FontRefusals {
+		fmt.Println(refusal)
+	}
+}
+
 // liberationSansAB returns a synthetic stand-in for LiberationSans-Regular.ttf
 // drawing "A" and "B" at Helvetica's widths.
 func liberationSansAB() []byte {

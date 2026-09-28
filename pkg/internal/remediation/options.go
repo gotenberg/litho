@@ -35,6 +35,10 @@ type Options struct {
 	// Fonts supplies the programs of the fonts the document shows without
 	// embedding them ([fixFontEmbed]). Nil leaves every such font unembedded.
 	Fonts FontProvider
+	// SystemFonts reports that Fonts searches the operating system's font
+	// directories, which [deriveDocumentID] hashes, since the output then
+	// depends on the fonts of the host.
+	SystemFonts bool
 	// WholeFonts embeds every program Fonts supplies whole instead of a
 	// subset of the glyphs the document shows, so a later edit can show
 	// characters the document does not show yet.

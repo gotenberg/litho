@@ -119,16 +119,23 @@ func firstIDString(arr ast.PdfArray) (ast.PdfString, bool) {
 // the output change the /ID. [Options.Disabled] is left out, since a
 // rolled-back round repairs the same document and keeps the first round's
 // /ID. The font programs [Options.Fonts] supplies are left out too, as a
-// provider has no identity to hash; whether one is supplied is hashed.
+// provider has no identity to hash; whether one is supplied is hashed, and
+// whether it searches the operating system's fonts ([Options.SystemFonts]).
+// That last one extends the fonts field rather than adding one, so the /ID of
+// a remediation without system fonts stays what it was.
 func deriveDocumentID(ctx context.Context, doc *document.Document, opts Options, profile string) ([]byte, error) {
 	h := sha256.New()
+	fonts := strconv.FormatBool(opts.Fonts != nil)
+	if opts.SystemFonts {
+		fonts += "+system"
+	}
 	fields := []string{
 		documentIDDomain,
 		profile,
 		opts.Lang,
 		strconv.FormatBool(opts.PreserveContent),
 		opts.FigureAlt,
-		strconv.FormatBool(opts.Fonts != nil),
+		fonts,
 	}
 	for _, f := range fields {
 		// Length-prefixed, so no two field lists hash the same bytes.

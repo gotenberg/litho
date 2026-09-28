@@ -214,7 +214,7 @@ func (f *fontFiles) describe(p string, budget *int64) ([]fontFile, error) {
 		return nil, err
 	}
 	defer fh.Close()
-	if strings.EqualFold(path.Ext(p), ".cff") {
+	if strings.HasSuffix(strings.ToLower(p), ".cff") {
 		return describeCFF(p, fh, budget)
 	}
 	r, size, whole, err := readerAt(fh, maxFontCollectionBytes)
