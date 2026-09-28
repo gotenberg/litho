@@ -43,8 +43,11 @@ func matchEmptyFigure(v compliance.Violation) bool {
 // fixEmptyFigure takes out of the structure tree each Figure that lacks the
 // alternate text ISO 14289-1, 7.3 and ISO 14289-2, 8.2.5.28.2 require and
 // encloses nothing, in aggressive mode (opts.PreserveContent false) when the
-// caller supplies no alternate text. A Figure encloses nothing when it has no
-// kid, or when each of its kids (ISO 32000-1, 14.7.2, Table 323) is:
+// caller supplies no alternate text. A Figure written directly in a /K, with no
+// object number of its own, goes out of the element or the /K array written as
+// an object of its own that holds it ([emptyFigures.dropDirect]). A Figure
+// encloses nothing when it has no kid, or when each of its kids (ISO 32000-1,
+// 14.7.2, Table 323) is:
 //
 //   - a marked-content identifier, bare or in a marked-content reference
 //     (Table 324), that no marked-content sequence of its page carries
@@ -67,8 +70,10 @@ func matchEmptyFigure(v compliance.Violation) bool {
 // (ISO 32000-2, 14.7.2, Table 355) and the /SE of the outline items naming it
 // (ISO 32000-1, 12.3.3, Table 153). A structure destination under /SD (ISO
 // 32000-2, 12.6.4.2, Table 202) names instead the element its page destination
-// opens on, picked as [fixStructDest] picks one, or goes when there is none,
-// the action keeping its page destination under /D. An element the removal
+// opens on, picked as [fixStructDest] picks one. A Figure that is the only
+// element such a destination could name stays, with the placeholder
+// [fixFigureAlt] gives it: without it the action would keep its page
+// destination alone, which ISO 14289-2, 8.8 rejects. An element the removal
 // leaves empty goes only when it is such a Figure too; any other stays.
 //
 // A Figure stays whenever the evidence falls short: a kid naming no page of the
@@ -78,7 +83,8 @@ func matchEmptyFigure(v compliance.Violation) bool {
 // inline element naming it in /Ref, or a destination naming it with no page
 // destination to fall back on: a destination array, or an /SD beside no /D. A
 // tree, /ParentTree or /IDTree the walks cannot read whole leaves every Figure
-// in place.
+// in place. A Figure written directly whose kids lead back to the /K array
+// holding it stays too.
 //
 // It runs before [fixStructDest], so the structure destinations that fixer
 // writes never name a removed Figure.
@@ -92,7 +98,14 @@ func matchEmptyFigure(v compliance.Violation) bool {
 //     or /Ref names one. Only those outputs change, and litho and veraPDF 1.30.2
 //     report on each the rules and counts they reported with the placeholder.
 //   - litho emptyfig_ua2.pdf: holds the forms and references no other file
-//     reaches, and agrees with veraPDF on every output.
+//     reaches, and agrees with veraPDF on every output. Its F10 is the only
+//     element on page 2, which an outline item's /SD names: removed, it left
+//     8.8 test 2 once on both tools at PDF/UA-2 and WTPDF-1.0 Accessibility,
+//     and kept, those outputs pass both.
+//   - litho sharedk_ua1.pdf, directfig_ua2.pdf: the only files over the 1132
+//     tagged ones that write a Figure directly in a /K. Their empty ones stayed
+//     under the placeholder-less aggressive run and failed 7.3 or 8.2.5.28.2
+//     on both tools; now they go and no other output of the 1132 moves.
 func fixEmptyFigure(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	if opts.PreserveContent || opts.FigureAlt != "" {
 		return nil, nil
@@ -105,12 +118,19 @@ func fixEmptyFigure(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	if err != nil {
 		return nil, fmt.Errorf("finding empty Figures: %w", err)
 	}
-	if len(removed) == 0 {
-		return nil, nil
-	}
 
 	snap := alloc.Snapshot()
 	dests, err := f.remove(ctx, removed)
+	if err == nil && len(dests.stranded) > 0 {
+		// plan keeps every Figure whose removal strands a structure
+		// destination, so this is a walk reading differently the second
+		// time: leave every Figure rather than drop an /SD.
+		err = fmt.Errorf("structure destinations naming Figures %v: %w", dests.stranded, errStructTreeUnread)
+	}
+	if err == nil && len(removed) == 0 && dests.direct == 0 {
+		alloc.Restore(snap)
+		return nil, nil
+	}
 	if err != nil {
 		// A walk stopping short would leave references to a removed Figure
 		// behind, so every Figure stays and figure-alt answers it.
@@ -122,13 +142,16 @@ func fixEmptyFigure(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		return nil, nil
 	}
 
-	fixes := make([]string, 0, len(removed)+1)
+	fixes := make([]string, 0, len(removed)+2)
 	for _, num := range removed {
 		fixes = append(fixes, fmt.Sprintf("removed empty Figure %d 0 R (encloses no content, so no alternate text describes it)", num))
 	}
-	if dests.retargeted+dests.dropped+dests.outlines > 0 {
-		fixes = append(fixes, fmt.Sprintf("repointed the references to removed Figures: %d structure destination(s) retargeted, %d dropped, %d outline /SE entry(ies) dropped",
-			dests.retargeted, dests.dropped, dests.outlines))
+	if dests.direct > 0 {
+		fixes = append(fixes, fmt.Sprintf("removed %d empty Figure(s) written directly in a /K (enclosing no content, so no alternate text describes them)", dests.direct))
+	}
+	if dests.retargeted+dests.outlines > 0 {
+		fixes = append(fixes, fmt.Sprintf("repointed the references to removed Figures: %d structure destination(s) retargeted, %d outline /SE entry(ies) dropped",
+			dests.retargeted, dests.outlines))
 	}
 	return fixes, nil
 }
@@ -150,9 +173,13 @@ const (
 // 32000-1, 14.7.4.4).
 type parentTreeClaim struct{ key, mcid int }
 
-// destCounts tallies the destinations a removal repointed.
+// destCounts tallies what a removal did beyond the Figures it took out by
+// object number: the Figures written directly it took out, the destinations it
+// repointed, and the Figures named by a structure destination that found no
+// element to name instead.
 type destCounts struct {
-	retargeted, dropped, outlines int
+	direct, retargeted, outlines int
+	stranded                     []int
 }
 
 // emptyFigures finds the Figures [fixEmptyFigure] removes and removes them.
@@ -194,6 +221,19 @@ type emptyFigures struct {
 	// loaded on first use.
 	annotKeys map[int]bool
 	verdicts  map[int]bool
+	roleMap   map[ast.PdfName]ast.PdfName
+	profile   string
+	// direct reports that the walk met a Figure written directly in a /K
+	// that lacks alternate text.
+	direct bool
+	// directVerdicts caches whether the kids a Figure written directly lists
+	// through a /K array written as an object of its own enclose nothing, by
+	// the array's object number and the object number of the Figure's /Pg: a
+	// shared array's verdict is reached once per path through it otherwise.
+	directVerdicts map[[2]int]bool
+	// sdNamed marks the Figures a structure destination beside a page
+	// destination names.
+	sdNamed map[int]bool
 }
 
 // newEmptyFigures walks the structure tree and returns nil when it holds no
@@ -229,18 +269,22 @@ func newEmptyFigures(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		claims:     make(map[int][]parentTreeClaim),
 		mcids:      make(map[int]map[int]bool),
 		verdicts:   make(map[int]bool),
+		roleMap:    compliance.LoadRoleMap(ctx, doc, root),
+		profile:    profile,
+
+		directVerdicts: make(map[[2]int]bool),
+		sdNamed:        make(map[int]bool),
 	}
 	if !f.walk(ctx, root["K"], rootRef.ObjectNum, 0) {
 		doc.Logger.Debug("empty-figure: the structure tree cannot be read whole")
 		return nil
 	}
-	roleMap := compliance.LoadRoleMap(ctx, doc, root)
 	for _, num := range f.order {
-		if compliance.FigureNeedsAltText(ctx, doc, f.elems[num], roleMap, profile) {
+		if compliance.FigureNeedsAltText(ctx, doc, f.elems[num], f.roleMap, profile) {
 			f.figures[num] = true
 		}
 	}
-	if len(f.figures) == 0 {
+	if len(f.figures) == 0 && !f.direct {
 		return nil
 	}
 	if _, _, ok := f.editParentTree(ctx, root["ParentTree"], f.claim, make(map[int]bool), 0); !ok {
@@ -343,6 +387,9 @@ func (f *emptyFigures) walk(ctx context.Context, kObj ast.PdfObject, holder, dep
 			if !isStructElement(v) {
 				continue
 			}
+			if compliance.FigureNeedsAltText(ctx, f.doc, v, f.roleMap, f.profile) {
+				f.direct = true
+			}
 			// An element written inline has no object number to write it
 			// back at, so what it names in /Ref stays named.
 			for _, target := range f.kids(ctx, v["Ref"]) {
@@ -360,6 +407,15 @@ func (f *emptyFigures) walk(ctx context.Context, kObj ast.PdfObject, holder, dep
 
 // plan returns the object numbers of the Figures to remove, in ascending
 // order.
+//
+// A structure destination naming a Figure that goes names the element its page
+// destination opens on once the Figure is gone ([emptyFigures.retarget]). When
+// no element begins on that page but the Figure, the /SD would go and leave
+// the action a page destination alone, which ISO 14289-2, 8.8 test 2 rejects,
+// so such a Figure stays. plan finds them by running the removal on a snapshot
+// of alloc, and runs it again with the Figures kept, until no destination is
+// left without an element: each run keeps at least one more Figure, so the
+// loop ends within as many runs as Figures go.
 func (f *emptyFigures) plan(ctx context.Context) ([]int, error) {
 	removed := f.removable(ctx)
 	if len(removed) == 0 {
@@ -373,6 +429,22 @@ func (f *emptyFigures) plan(ctx context.Context) ([]int, error) {
 		return nil, err
 	}
 	if pinned {
+		clear(f.verdicts)
+		removed = f.removable(ctx)
+	}
+	for slices.ContainsFunc(removed, func(num int) bool { return f.sdNamed[num] }) {
+		snap := f.alloc.Snapshot()
+		dests, err := f.remove(ctx, removed)
+		f.alloc.Restore(snap)
+		if err != nil {
+			return nil, fmt.Errorf("trying the removal: %w", err)
+		}
+		if len(dests.stranded) == 0 {
+			break
+		}
+		for _, num := range dests.stranded {
+			f.kept[num] = true
+		}
 		clear(f.verdicts)
 		removed = f.removable(ctx)
 	}
@@ -461,11 +533,55 @@ func (f *emptyFigures) encloses(ctx context.Context, fig ast.PdfDict, kid ast.Pd
 		_, target := f.lookup(ctx, dict["Obj"])
 		return target != lookupNull
 	}
-	ref, isRef := kid.(ast.PdfIndirectRef)
-	if !isRef || !isStructElement(dict) {
+	if !isStructElement(dict) {
 		return true
 	}
+	ref, isRef := kid.(ast.PdfIndirectRef)
+	if !isRef {
+		return !f.directGoes(ctx, dict, onPath)
+	}
 	return !f.goes(ctx, ref.ObjectNum, onPath)
+}
+
+// directGoes reports whether fig, a structure element written directly in a
+// /K, is a Figure lacking alternate text that encloses nothing. Nothing but
+// the value holding it names such an element, so no reference keeps it. A
+// /K array written as an object of its own is judged once per /Pg
+// ([emptyFigures.directVerdicts]), and one the verdict already waits on
+// answers that the Figure stays, as a /K cycle does in [emptyFigures.goes].
+func (f *emptyFigures) directGoes(ctx context.Context, fig ast.PdfDict, onPath map[int]bool) bool {
+	if ctx.Err() != nil || len(onPath) > compliance.MaxStructTreeWalkDepth ||
+		!compliance.FigureNeedsAltText(ctx, f.doc, fig, f.roleMap, f.profile) {
+		return false
+	}
+	ref, isRef := fig["K"].(ast.PdfIndirectRef)
+	if !isRef {
+		return f.enclosesNothing(ctx, fig, onPath)
+	}
+	if onPath[ref.ObjectNum] {
+		return false
+	}
+	page, _ := fig["Pg"].(ast.PdfIndirectRef)
+	key := [2]int{ref.ObjectNum, page.ObjectNum}
+	if verdict, done := f.directVerdicts[key]; done {
+		return verdict
+	}
+	onPath[ref.ObjectNum] = true
+	verdict := f.enclosesNothing(ctx, fig, onPath)
+	delete(onPath, ref.ObjectNum)
+	f.directVerdicts[key] = verdict
+	return verdict
+}
+
+// enclosesNothing reports whether no kid of the Figure fig may enclose content
+// ([emptyFigures.encloses]).
+func (f *emptyFigures) enclosesNothing(ctx context.Context, fig ast.PdfDict, onPath map[int]bool) bool {
+	for _, kid := range f.kids(ctx, fig["K"]) {
+		if f.encloses(ctx, fig, kid, onPath) {
+			return false
+		}
+	}
+	return true
 }
 
 // marked reports whether the page pgObj names may carry a marked-content
@@ -745,9 +861,13 @@ func (f *emptyFigures) pinValue(ctx context.Context, v ast.PdfObject, depth int)
 			pinned = f.pinValue(ctx, item, depth+1) || pinned
 		}
 	case ast.PdfDict:
-		if num, names := f.structDestTarget(ctx, x["SD"], f.figures); names && !present(x, "D") && !remoteAction(x) {
-			f.kept[num] = true
-			pinned = true
+		if num, names := f.structDestTarget(ctx, x["SD"], f.figures); names && !remoteAction(x) {
+			if present(x, "D") {
+				f.sdNamed[num] = true
+			} else {
+				f.kept[num] = true
+				pinned = true
+			}
 		}
 		for _, key := range slices.Sorted(maps.Keys(x)) {
 			// An /SD beside a /D is repointed, not kept: its array is judged
@@ -795,6 +915,7 @@ func (f *emptyFigures) remove(ctx context.Context, removed []int) (destCounts, e
 	}
 	f.unlist(ctx, gone)
 	f.unref(ctx, gone)
+	direct := f.dropDirect(ctx, gone)
 
 	root := resolveFromAllocOrDoc(ctx, f.alloc, f.doc, f.rootRef)
 	if root == nil {
@@ -831,7 +952,115 @@ func (f *emptyFigures) remove(ctx context.Context, removed []int) (destCounts, e
 	if rootChanged {
 		f.alloc.AllocAt(f.rootRef.ObjectNum, newRoot)
 	}
-	return f.retarget(ctx, gone)
+	var counts destCounts
+	if len(gone) > 0 {
+		var err error
+		if counts, err = f.retarget(ctx, gone); err != nil {
+			return destCounts{}, err
+		}
+	}
+	counts.direct = direct
+	return counts, nil
+}
+
+// dropDirect takes out each Figure written directly in a /K that encloses
+// nothing ([emptyFigures.directGoes]), and returns how many it took out. It
+// rewrites the object holding one at its number: the structure tree root or an
+// element whose /K holds it, through inline elements however deep, or a /K
+// array written as an object of its own. A node left with no kid loses /K, and
+// such an array is left empty.
+func (f *emptyFigures) dropDirect(ctx context.Context, gone map[int]bool) int {
+	dropped := 0
+	for _, num := range append([]int{f.rootRef.ObjectNum}, f.order...) {
+		if gone[num] || ctx.Err() != nil {
+			continue
+		}
+		node := resolveFromAllocOrDoc(ctx, f.alloc, f.doc, ast.PdfIndirectRef{ObjectNum: num})
+		updated, n := f.pruneElement(ctx, node)
+		if n > 0 {
+			dropped += n
+			f.alloc.AllocAt(num, updated)
+		}
+	}
+	for _, num := range slices.Sorted(maps.Keys(f.arrays)) {
+		obj, _ := f.lookup(ctx, ast.PdfIndirectRef{ObjectNum: num})
+		arr, isArr := obj.(ast.PdfArray)
+		if !isArr {
+			continue
+		}
+		kept, n := f.pruneKids(ctx, arr)
+		if n == 0 {
+			continue
+		}
+		dropped += n
+		if kept == nil {
+			kept = ast.PdfArray{}
+		}
+		f.alloc.AllocAt(num, kept)
+	}
+	return dropped
+}
+
+// pruneElement returns node with the Figures written directly in its /K that
+// go taken out ([emptyFigures.pruneKids]), and how many went. A /K naming an
+// object is left to that object's own turn.
+func (f *emptyFigures) pruneElement(ctx context.Context, node ast.PdfDict) (ast.PdfDict, int) {
+	kObj, has := node["K"]
+	if _, isRef := kObj.(ast.PdfIndirectRef); !has || isRef {
+		return node, 0
+	}
+	kept, n := f.pruneKids(ctx, kObj)
+	if n == 0 {
+		return node, 0
+	}
+	updated := maps.Clone(node)
+	if kept == nil {
+		delete(updated, "K")
+	} else {
+		updated["K"] = kept
+	}
+	return updated, n
+}
+
+// pruneKids returns the /K value kObj without the Figures written directly in
+// it that go, and with the inline elements it holds pruned in turn, and how
+// many Figures went. It returns nil when no kid is left.
+func (f *emptyFigures) pruneKids(ctx context.Context, kObj ast.PdfObject) (ast.PdfObject, int) {
+	switch v := kObj.(type) {
+	case ast.PdfArray:
+		out := make(ast.PdfArray, 0, len(v))
+		n := 0
+		for _, item := range v {
+			elem, isDict := item.(ast.PdfDict)
+			if !isDict || !isStructElement(elem) {
+				out = append(out, item)
+				continue
+			}
+			if f.directGoes(ctx, elem, make(map[int]bool)) {
+				n++
+				continue
+			}
+			updated, m := f.pruneElement(ctx, elem)
+			n += m
+			out = append(out, updated)
+		}
+		if n == 0 {
+			return kObj, 0
+		}
+		if len(out) == 0 {
+			return nil, n
+		}
+		return out, n
+	case ast.PdfDict:
+		if !isStructElement(v) {
+			return kObj, 0
+		}
+		if f.directGoes(ctx, v, make(map[int]bool)) {
+			return nil, 1
+		}
+		return f.pruneElement(ctx, v)
+	}
+	return kObj, 0
 }
 
 // unlist takes the removed Figures out of the /K of each node listing them,
@@ -1057,8 +1286,9 @@ func (f *emptyFigures) editParentTree(ctx context.Context, nodeObj ast.PdfObject
 
 // retarget repoints the destinations and outline items naming a removed Figure
 // throughout the document, reading the tree the removal left: an /SD names the
-// element its page destination opens on ([structElemPicker.structDest]) or
-// goes, and an /SE goes.
+// element its page destination opens on ([structElemPicker.structDest]), and an
+// /SE goes. An /SD with no element to name goes, and the Figure it named is
+// reported stranded, for [emptyFigures.plan] to keep.
 func (f *emptyFigures) retarget(ctx context.Context, gone map[int]bool) (destCounts, error) {
 	var counts destCounts
 	catalog := resolveFromAllocOrDoc(ctx, f.alloc, f.doc, f.catalogRef)
@@ -1125,7 +1355,7 @@ func (f *emptyFigures) retargetValue(ctx context.Context, v ast.PdfObject, gone 
 				set(key, updated)
 			}
 		}
-		if _, names := f.structDestTarget(ctx, x["SD"], gone); names && !remoteAction(x) {
+		if num, names := f.structDestTarget(ctx, x["SD"], gone); names && !remoteAction(x) {
 			var sd ast.PdfArray
 			ok := false
 			if picker != nil {
@@ -1136,7 +1366,9 @@ func (f *emptyFigures) retargetValue(ctx context.Context, v ast.PdfObject, gone 
 				counts.retargeted++
 			} else {
 				set("SD", nil)
-				counts.dropped++
+				if !slices.Contains(counts.stranded, num) {
+					counts.stranded = append(counts.stranded, num)
+				}
 			}
 		}
 		if ref, isRef := x["SE"].(ast.PdfIndirectRef); isRef && gone[ref.ObjectNum] {

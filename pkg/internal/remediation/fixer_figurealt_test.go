@@ -274,24 +274,75 @@ func TestFixFigureAlt_DepthBoundCapsCollection(t *testing.T) {
 	}
 }
 
-func TestFixFigureAlt_InlineFigureSkipped(t *testing.T) {
-	// An inline Figure (a direct dict in /K, no object number) cannot be rewritten
-	// in place, so it is skipped rather than corrupting the parent.
-	pdf := buildStructPDF(
-		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
-		"<< /Type /StructTreeRoot /K 5 0 R >>",
-		"<< /Type /StructElem /S /Document /P 4 0 R /K [<< /Type /StructElem /S /Figure >>] >>",
-	)
-	doc, alloc := newTestDoc(t, pdf)
+// TestFixFigureAlt_WritesFiguresWrittenDirectly pins that a Figure written
+// directly in a /K, with no object number of its own, takes the alternate text
+// in the object that holds it: the element or the /K array written as an
+// object of its own, however deep inline elements nest it. A /K array two
+// elements share is rewritten once.
+func TestFixFigureAlt_WritesFiguresWrittenDirectly(t *testing.T) {
+	t.Parallel()
+	figure := "<< /Type /StructElem /S /Figure >>"
+	for _, tc := range []struct {
+		name  string
+		objs  []string
+		owner int
+		path  []int
+	}{
+		{name: "in an element's /K array", objs: []string{
+			"<< /Type /StructElem /S /Document /P 4 0 R /K [" + figure + "] >>",
+		}, owner: 5, path: []int{0}},
+		{name: "as an element's /K", objs: []string{
+			"<< /Type /StructElem /S /Document /P 4 0 R /K " + figure + " >>",
+		}, owner: 5},
+		{name: "under an inline element", objs: []string{
+			"<< /Type /StructElem /S /Document /P 4 0 R /K [<< /Type /StructElem /S /Sect /K [(x) " + figure + "] >>] >>",
+		}, owner: 5, path: []int{0, 1}},
+		{name: "in a /K array two elements share", objs: []string{
+			"<< /Type /StructElem /S /Document /P 4 0 R /K [6 0 R 7 0 R] >>",
+			"<< /Type /StructElem /S /Sect /P 5 0 R /K 8 0 R >>",
+			"<< /Type /StructElem /S /Sect /P 5 0 R /K 8 0 R >>",
+			"[<< /Type /StructElem /S /Span >> " + figure + "]",
+		}, owner: 8, path: []int{1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			objs := append([]string{
+				"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+				"<< /Type /StructTreeRoot /K 5 0 R >>",
+			}, tc.objs...)
+			doc, alloc := newTestDoc(t, buildStructPDF(objs...))
 
-	descs, err := fixFigureAlt(context.Background(), alloc, doc, Options{PreserveContent: false}, nil, "PDF/UA-1")
-	if err != nil {
-		t.Fatalf("fixFigureAlt: %v", err)
-	}
-	if len(descs) != 0 || len(alloc.Pending()) != 0 {
-		t.Errorf("an inline figure must be skipped: descs=%v pending=%d", descs, len(alloc.Pending()))
+			descs, err := fixFigureAlt(context.Background(), alloc, doc, Options{FigureAlt: "A chart"}, nil, "PDF/UA-1")
+			if err != nil {
+				t.Fatalf("fixFigureAlt: %v", err)
+			}
+			if len(descs) != 1 || !strings.Contains(descs[0], "on 1 figure(s)") {
+				t.Fatalf("descs %v, want one Figure given alternate text", descs)
+			}
+			if len(alloc.Pending()) != 1 {
+				t.Errorf("pending %d objects, want the owner %d alone", len(alloc.Pending()), tc.owner)
+			}
+			var node ast.PdfObject = alloc.Pending()[tc.owner]
+			if d, isDict := node.(ast.PdfDict); isDict {
+				node = d["K"]
+			}
+			for _, i := range tc.path {
+				if d, isDict := node.(ast.PdfDict); isDict {
+					node = d["K"]
+				}
+				arr, isArr := node.(ast.PdfArray)
+				if !isArr || i >= len(arr) {
+					t.Fatalf("owner %d holds %v, no kid %d", tc.owner, node, i)
+				}
+				node = arr[i]
+			}
+			fig, _ := node.(ast.PdfDict)
+			if got := fig["Alt"]; got != ast.PdfString("A chart") {
+				t.Errorf("Figure %v: /Alt %v, want the caller's text", fig, got)
+			}
+		})
 	}
 }
 

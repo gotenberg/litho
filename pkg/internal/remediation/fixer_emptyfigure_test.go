@@ -315,6 +315,82 @@ func TestFixEmptyFigure_KeepsFigureAnInlineElementHolds(t *testing.T) {
 	}
 }
 
+// TestFixEmptyFigure_RemovesFiguresWrittenDirectly pins that a Figure written
+// directly in a /K, with no object number of its own, goes like any other
+// when it encloses nothing: out of the element or the /K array written as an
+// object of its own that holds it. A direct Figure enclosing content stays.
+func TestFixEmptyFigure_RemovesFiguresWrittenDirectly(t *testing.T) {
+	t.Parallel()
+	empty := "<< /Type /StructElem /S /Figure /Pg 3 0 R /K 1 >>"
+	marked := "<< /Type /StructElem /S /Figure /Pg 3 0 R /K 0 >>"
+	for _, tc := range []struct {
+		name  string
+		elem  string
+		extra []string
+		owner int
+		want  string
+	}{
+		{name: "in an element's /K array", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [" + empty + " " + marked + "] >>", owner: 9, want: "[" + marked + "]"},
+		{name: "as an element's /K", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K " + empty + " >>", owner: 9},
+		{name: "nested in a Figure that goes too", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Figure /K [" + empty + " null] >> " + marked + "] >>", owner: 9, want: "[" + marked + "]"},
+		{name: "under an inline element", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K [" + empty + " " + marked + "] >>] >>", owner: 9, want: "[<< /Type /StructElem /S /Div /K [" + marked + "] >>]"},
+		{name: "in a /K array two elements share", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K 10 0 R >>", extra: []string{
+			"[" + empty + " " + marked + "]",
+			"<< /Type /StructElem /S /Sect /P 5 0 R /K 10 0 R >>",
+		}, owner: 10, want: "[" + marked + "]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, alloc := newTestDoc(t, emptyFigurePDF(tc.elem, tc.extra...))
+			fixes, err := fixEmptyFigure(context.Background(), alloc, doc, aggressive, nil, "PDF/UA-2")
+			if err != nil {
+				t.Fatalf("fixEmptyFigure: %v", err)
+			}
+			if len(fixes) != 1 || !strings.Contains(fixes[0], "removed 1 empty Figure(s) written directly") {
+				t.Fatalf("fixes %v, want one direct Figure removed", fixes)
+			}
+			if len(alloc.Pending()) != 1 {
+				t.Errorf("pending %d objects, want the owner %d alone", len(alloc.Pending()), tc.owner)
+			}
+			got := alloc.Pending()[tc.owner]
+			if d, isDict := got.(ast.PdfDict); isDict {
+				got = d["K"]
+			}
+			var want ast.PdfObject
+			if tc.want != "" {
+				// The expected value is read back from a file holding it as
+				// an object of its own, after the fixture's.
+				wantDoc, _ := newTestDoc(t, emptyFigurePDF(tc.elem, append(slices.Clone(tc.extra), tc.want)...))
+				resolved, err := wantDoc.Resolve(context.Background(), ast.PdfIndirectRef{ObjectNum: 10 + len(tc.extra)})
+				if err != nil {
+					t.Fatalf("reading the expected value: %v", err)
+				}
+				want = resolved
+			}
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("owner %d holds %v, want %v", tc.owner, got, want)
+			}
+		})
+	}
+}
+
+// TestFixEmptyFigure_DirectFigureNamingItsOwnArrayStays pins that a Figure
+// written directly in a /K array that it names again as its own /K ends the
+// walk and stays: it may enclose itself, and nothing shows it encloses
+// nothing.
+func TestFixEmptyFigure_DirectFigureNamingItsOwnArrayStays(t *testing.T) {
+	t.Parallel()
+	doc, alloc := newTestDoc(t, emptyFigurePDF("<< /Type /StructElem /S /Sect /P 5 0 R /K 10 0 R >>",
+		"[<< /Type /StructElem /S /Figure /K 10 0 R >> << /Type /StructElem /S /Figure /K 10 0 R >>]"))
+	fixes, err := fixEmptyFigure(context.Background(), alloc, doc, aggressive, nil, "PDF/UA-2")
+	if err != nil {
+		t.Fatalf("fixEmptyFigure: %v", err)
+	}
+	if len(fixes) != 0 || len(alloc.Pending()) != 0 {
+		t.Errorf("fixes=%v pending=%d, want both Figures kept", fixes, len(alloc.Pending()))
+	}
+}
+
 // TestFixEmptyFigure_UnreadableParentTreeKeepsEveryFigure pins that a
 // /ParentTree the walk cannot read whole leaves every Figure in place: a slot
 // naming the Figure could stay behind.
@@ -341,7 +417,8 @@ func TestFixEmptyFigure_UnreadableParentTreeKeepsEveryFigure(t *testing.T) {
 // (page 13) enclose nothing, each named by every kind of reference the
 // removal cleans: the /IDTree, a /Ref, the /ParentTree, an outline item's
 // /SE and a link's GoTo /SD. Page 3 holds a P (8), so the Document begins on it
-// and a structure destination can name it instead; page 13 holds nothing else.
+// and a structure destination can name it instead; page 13 holds nothing else,
+// so Figure 12 is the only element a structure destination to it can name.
 func referencesPDF() []byte {
 	return buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R /Outlines 16 0 R >>",
@@ -371,27 +448,30 @@ func TestFixEmptyFigure_CleansEveryReference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fixEmptyFigure: %v", err)
 	}
-	for _, want := range []string{"removed empty Figure 9 0 R", "removed empty Figure 12 0 R", "2 structure destination(s) retargeted, 1 dropped, 1 outline /SE"} {
+	for _, want := range []string{"removed empty Figure 9 0 R", "2 structure destination(s) retargeted, 1 outline /SE"} {
 		if !slices.ContainsFunc(fixes, func(f string) bool { return strings.Contains(f, want) }) {
 			t.Errorf("fixes %v, want %q", fixes, want)
 		}
 	}
-
-	if kids := liveKids(t, doc, alloc, 5); listsRef(kids, 9) || listsRef(kids, 12) || len(kids) != 2 {
-		t.Errorf("Document /K = %v, want the P and the Link alone", kids)
+	if slices.ContainsFunc(fixes, func(f string) bool { return strings.Contains(f, "Figure 12 0 R") }) {
+		t.Errorf("fixes %v: Figure 12 is the only element the /SD to page 13 can name, and stays", fixes)
 	}
-	if ref := pendingDict(t, alloc, 11)["Ref"]; fmt.Sprint(ref) != fmt.Sprint(ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 8}}) {
-		t.Errorf("Link /Ref = %v, want the P alone", ref)
+
+	if kids := liveKids(t, doc, alloc, 5); listsRef(kids, 9) || !listsRef(kids, 12) || len(kids) != 3 {
+		t.Errorf("Document /K = %v, want the P, Figure 12 and the Link", kids)
+	}
+	if ref := pendingDict(t, alloc, 11)["Ref"]; fmt.Sprint(ref) != fmt.Sprint(ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 8}, ast.PdfIndirectRef{ObjectNum: 12}}) {
+		t.Errorf("Link /Ref = %v, want the P and Figure 12", ref)
 	}
 
 	root := pendingDict(t, alloc, 4)
 	ids, _ := root["IDTree"].(ast.PdfDict)
-	if names := fmt.Sprint(ids["Names"]); strings.Contains(names, "fig") || !strings.Contains(names, "para") {
-		t.Errorf("/IDTree /Names = %s, want the P's identifier alone", names)
+	if names := fmt.Sprint(ids["Names"]); strings.Contains(names, "fig1") || !strings.Contains(names, "fig2") || !strings.Contains(names, "para") {
+		t.Errorf("/IDTree /Names = %s, want the P's and Figure 12's identifiers", names)
 	}
 	wantNums := ast.PdfArray{
 		ast.PdfInt(0), ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 8}, ast.PdfNull{}},
-		ast.PdfInt(1), ast.PdfArray{ast.PdfNull{}},
+		ast.PdfInt(1), ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 12}},
 		ast.PdfInt(2), ast.PdfIndirectRef{ObjectNum: 11},
 	}
 	if nums := pendingDict(t, alloc, 7)["Nums"]; fmt.Sprint(nums) != fmt.Sprint(wantNums) {
@@ -399,14 +479,15 @@ func TestFixEmptyFigure_CleansEveryReference(t *testing.T) {
 	}
 
 	// The link's action opens page 3, where the Document begins, and its /Next
-	// opens page 13, where no element begins any more.
+	// opens page 13, where Figure 12 alone begins: removing it would drop the
+	// /SD and leave ISO 14289-2, 8.8 unmet.
 	act, _ := pendingDict(t, alloc, 10)["A"].(ast.PdfDict)
 	if sd := fmt.Sprint(act["SD"]); sd != fmt.Sprint(ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 5}, ast.PdfName("Fit")}) {
 		t.Errorf("link /SD = %s, want the Document, the outermost element beginning on page 3", sd)
 	}
 	next, _ := act["Next"].(ast.PdfDict)
-	if _, has := next["SD"]; has || next["D"] == nil {
-		t.Errorf("/Next = %v, want its /SD dropped and its /D kept", next)
+	if sd := fmt.Sprint(next["SD"]); sd != fmt.Sprint(ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 12}, ast.PdfName("Fit")}) || next["D"] == nil {
+		t.Errorf("/Next = %v, want its /SD naming Figure 12 and its /D kept", next)
 	}
 	item := pendingDict(t, alloc, 15)
 	if _, has := item["SE"]; has {
