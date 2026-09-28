@@ -796,7 +796,9 @@ func UsableBox(box ast.PdfArray) bool {
 // size every mainstream reader assumes for it: pdf.js falls back to its
 // LETTER_SIZE_MEDIABOX, poppler's PageAttrs start from 612 by 792, and qpdf
 // reports "MediaBox is undefined; setting to letter / ANSI A". A fresh array
-// each call, so a caller may write it as an entry of its own.
+// each call, so a caller may write it as an entry of its own. It is the size
+// litho reads such a page at; a write gives the page [DefaultMediaBox]
+// instead.
 func LetterMediaBox() ast.PdfArray {
 	return ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(612), ast.PdfInt(792)}
 }

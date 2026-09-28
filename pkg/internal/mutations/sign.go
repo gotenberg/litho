@@ -107,7 +107,7 @@ type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //   - All corpora: of another 110 files sampled across them, remediated at
 //     PDF/A-2b and signed, poppler's pdfsig reported a digest mismatch on all
 //     58 signed while the ByteRange was filled in after the digest.
-func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, info SignatureInfo, overrides map[int]ast.PdfObject, mutations []MutationFunc, xrefStream bool) error {
+func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, info SignatureInfo, overrides map[int]ast.PdfObject, mutations []MutationFunc, xrefStream bool, media *document.MediaBoxDefault) error {
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	// A done ctx can stop the raw-byte augmentation short, and the allocator
 	// then starts below objects the file defines.
@@ -241,7 +241,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	}
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 	// The update writes the catalog, and the pages the edits before it wrote.
-	if err := CompleteWrittenPageTree(ctx, alloc, doc); err != nil {
+	if err := CompleteWrittenPageTree(ctx, alloc, doc, media); err != nil {
 		return err
 	}
 

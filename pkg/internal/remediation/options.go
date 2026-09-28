@@ -1,5 +1,7 @@
 package remediation
 
+import "github.com/gotenberg/litho/pkg/internal/core/ast"
+
 // Options configures remediation behavior.
 type Options struct {
 	// Lang is the BCP 47 language tag for the catalog /Lang entry.
@@ -43,6 +45,10 @@ type Options struct {
 	// subset of the glyphs the document shows, so a later edit can show
 	// characters the document does not show yet.
 	WholeFonts bool
+	// MediaBoxFallback is the media box a page no node gives one a viewer
+	// uses gets when no page of the document has one either, nil for US
+	// Letter (see [document.DefaultMediaBox]).
+	MediaBoxFallback ast.PdfArray
 	// fonts collects the fonts a run embedded and the ones it left
 	// unembedded although Fonts was set, for [Report.FontRefusals] and
 	// [Report.FontsEmbedded]. [remediate] sets it for its run.

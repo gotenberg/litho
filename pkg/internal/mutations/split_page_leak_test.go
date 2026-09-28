@@ -96,7 +96,7 @@ func splitFirstTwoPages(t *testing.T, withBeads bool) []byte {
 	}
 
 	var out bytes.Buffer
-	if err := Split(ctx, doc, pages, []int{1, 2}, &out, "", false, CompactOptions{}, BookmarkConfig{Handling: BookmarkNone}, nil); err != nil {
+	if err := Split(ctx, doc, pages, []int{1, 2}, &out, "", false, CompactOptions{}, BookmarkConfig{Handling: BookmarkNone}, nil, nil); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	return out.Bytes()

@@ -116,10 +116,12 @@
 //   - [Writer.WriteTo], [Split], and [Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
 //     [WithBookmarks], [WithPipelineTempDir], [WithEncryption],
-//     [WithObjectStreams], [WithDedup], [WithDroppedSignatures]. [NewWriter]
-//     takes them too, as defaults for the Writer's WriteTo, which overrides
-//     them with its own. [NewWriter], [Writer.WriteTo] and [Pipeline.WriteTo]
-//     also take [WithTempDir].
+//     [WithObjectStreams], [WithDedup], [WithDroppedSignatures],
+//     [WithDefaultPageSize]. [NewWriter] takes them too, as defaults for the
+//     Writer's WriteTo, which overrides them with its own, and a
+//     [WithDefaultPageSize] given to it also reaches its remediation.
+//     [NewWriter], [Writer.WriteTo] and [Pipeline.WriteTo] also take
+//     [WithTempDir].
 //   - [Writer.RemediatePDFA], [Writer.RemediatePDFUA], and
 //     [Writer.RemediateFacturX] take [RemediateOption]: [WithLanguage],
 //     [WithAggressiveFixes], [WithRegressionTolerance], [WithFigureAltText],

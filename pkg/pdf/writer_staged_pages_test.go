@@ -309,7 +309,9 @@ func TestWriterStampsEachPageWhereAViewerShowsIt(t *testing.T) {
 				t.Parallel()
 				target, pageNum := src, 1
 				if inserted {
-					target, pageNum = labelledPDF(1, ""), 2
+					// A US Letter target, the size a page with no media
+					// box a viewer uses takes in the output.
+					target, pageNum = letterPDF(), 2
 				}
 				out := writeLabelled(t, target, func(w *Writer) error {
 					if inserted {

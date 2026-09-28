@@ -12,6 +12,7 @@ import (
 func runDelete(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	pages := fs.String("pages", "", "Page range (required)")
@@ -48,7 +49,7 @@ func runDelete(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 		return exitError
 	}
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 
 	if err := w.DeletePages(pageList...); err != nil {

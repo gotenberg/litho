@@ -18,13 +18,17 @@ import (
 // hand rather than owning a FlagSet, so this stands in for the usage a FlagSet
 // would print for any other command.
 func pipeUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... [--compact] [--strict] -o out.pdf")
+	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... [--compact] [--strict] [--default-page-size SIZE] -o out.pdf")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  --compact   Shrink the output by packing objects into object streams")
 	fmt.Fprintln(w, "              and merging duplicate streams. Applies to the final write,")
 	fmt.Fprintln(w, "              and only when a stage rewrites the whole file.")
 	fmt.Fprintln(w, "  --strict    Exit 2 when a remediate stage leaves violations it could")
 	fmt.Fprintln(w, "              not fix. The output is still written.")
+	fmt.Fprintln(w, "  --default-page-size SIZE")
+	fmt.Fprintln(w, "              Page size for a page with no media box, when no page of the")
+	fmt.Fprintln(w, "              document has one: letter (default), legal, a3, a4, a5, or")
+	fmt.Fprintln(w, "              WIDTHxHEIGHT in points. Applies to every stage.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Stages: rotate, split, merge, delete, insert, encrypt, decrypt,")
 	fmt.Fprintln(w, "        autotag, set-metadata, set-form, flatten-form,")
@@ -55,10 +59,19 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	}
 
 	// Extract -o, -p, and input file before stage parsing.
-	inputFile, password, outputFile, compact, strict, stageArgs := parsePipeGlobals(args)
+	inputFile, password, outputFile, compact, strict, pageSizeArg, stageArgs := parsePipeGlobals(args)
 	if inputFile == "" {
 		fmt.Fprintln(stderr, "pipe: missing input file")
 		return exitError
+	}
+	var defaultPageSize *pageSizeFlag
+	if pageSizeArg != nil {
+		parsed, err := parsePageSizeFlag(*pageSizeArg)
+		if err != nil {
+			fmt.Fprintf(stderr, "pipe: %v\n", err)
+			return exitError
+		}
+		defaultPageSize = parsed
 	}
 
 	// Split stageArgs into groups: each group starts with a stage name.
@@ -228,7 +241,11 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// terminal flush passes them straight to Writer.WriteTo. They do not
 	// reach the intermediate temp files, which is correct, since compacting
 	// a spill that the next stage reopens and rewrites is wasted work.
-	result, err := pipeline.WriteTo(ctx, dst, compactWriteOptions(compact)...)
+	// The default page size reaches every stage, not only the final write:
+	// Pipeline.WriteTo hands it to each Writer and each intermediate split or
+	// merge, since a stage that gives a page a media box gives it for good.
+	finalOpts := append(compactWriteOptions(compact), defaultPageSize.writeOptions()...)
+	result, err := pipeline.WriteTo(ctx, dst, finalOpts...)
 	if err != nil {
 		// Withdraw the file createOutput already made. Every other
 		// output-producing command in this package does this on a failed write
@@ -280,7 +297,10 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 // A look-behind ("was the previous token a flag?") cannot express this, because
 // the legitimate -o also follows a flag. The token consumed as a value has to be
 // marked consumed, so the one after it is examined normally.
-func parsePipeGlobals(args []string) (inputFile, password, outputFile string, compact, strict bool, rest []string) {
+//
+// --default-page-size takes a value, as -o does, in either spelling, or joined
+// by "=".
+func parsePipeGlobals(args []string) (inputFile, password, outputFile string, compact, strict bool, pageSize *string, rest []string) {
 	consumed := false
 	for i := 0; i < len(args); i++ {
 		if consumed {
@@ -311,6 +331,12 @@ func parsePipeGlobals(args []string) (inputFile, password, outputFile string, co
 		// stage flag spelling.
 		case args[i] == "-strict" || args[i] == "--strict":
 			strict = true
+		case (args[i] == "-default-page-size" || args[i] == "--default-page-size") && i+1 < len(args):
+			pageSize = &args[i+1]
+			i++
+		case strings.HasPrefix(args[i], "-default-page-size=") || strings.HasPrefix(args[i], "--default-page-size="):
+			_, value, _ := strings.Cut(args[i], "=")
+			pageSize = &value
 		case inputFile == "" && !strings.HasPrefix(args[i], "-"):
 			inputFile = args[i]
 		default:

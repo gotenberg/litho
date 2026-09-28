@@ -15,6 +15,7 @@ import (
 func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("stamp-text", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	text := fs.String("text", "", "Text to stamp (required)")
@@ -78,7 +79,7 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 	// This command has no encryption flag, so it can never be encrypting.
 	warnEncryptionDropped(stderr, false, r)
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 
 	var pageList []int

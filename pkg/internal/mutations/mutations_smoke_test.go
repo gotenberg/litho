@@ -103,7 +103,7 @@ func TestSplit_SinglePage(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err = Split(ctx, doc, pages, []int{1}, &out, "", false, CompactOptions{}, DefaultSplitBookmarkConfig(), nil)
+	err = Split(ctx, doc, pages, []int{1}, &out, "", false, CompactOptions{}, DefaultSplitBookmarkConfig(), nil, nil)
 	if err != nil {
 		t.Fatalf("Split: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestMerge_TwoSources(t *testing.T) {
 	err := Merge(ctx, []MergeSource{
 		{Doc: doc1, Pages: p1},
 		{Doc: doc2, Pages: p2},
-	}, &out, "", false, CompactOptions{}, DefaultMergeBookmarkConfig(), nil)
+	}, &out, "", false, CompactOptions{}, DefaultMergeBookmarkConfig(), nil, nil)
 	if err != nil {
 		t.Fatalf("Merge: %v", err)
 	}

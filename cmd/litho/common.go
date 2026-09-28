@@ -272,6 +272,7 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 
 	fs := flag.NewFlagSet(cmdName, flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	var compact *bool
@@ -301,7 +302,7 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 		warnEncryptionDropped(stderr, false, r)
 	}
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 	mutate(w)
 

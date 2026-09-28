@@ -44,6 +44,7 @@ type remediateResult struct {
 func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("remediate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	profile := fs.String("profile", "", "Compliance profile (required, e.g., PDF/A-2b, PDF/UA-1, Factur-X)")
@@ -94,7 +95,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		warnEncryptionDropped(stderr, false, r)
 	}
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 
 	var remOpts []pdf.RemediateOption

@@ -15,8 +15,8 @@ import (
 // four numbers, which ISO 19005-2, 6.1.13 t11 measures with their missing
 // corners, and the ones that are no number, at 0, and which pdf.js and poppler
 // read as no box (see [document.UsableBox]). A short media box is replaced by
-// US Letter, the page a viewer draws in its place, and not by the 800 by 600 a
-// sibling page uses; a short crop box, an art box ending in null and a bleed
+// the 800 by 600 the sibling page uses, the size most pages of the document
+// have (see [document.DefaultMediaBox]); a short crop box, an art box ending in null and a bleed
 // box of five numbers are dropped, their Table 30 defaults applying, which is
 // what a viewer drew in their place. Measured on its first four, the bleed box
 // was kept as [0 0 700 500], a box a viewer had not drawn the page by.
@@ -83,7 +83,7 @@ func TestShortPageBoxesRepaired(t *testing.T) {
 		want string
 	}{
 		{"the node's trim box of three numbers", box(pages, "TrimBox"), "absent"},
-		{"a media box of three numbers", box(page1, "MediaBox"), "0 0 612 792"},
+		{"a media box of three numbers", box(page1, "MediaBox"), "0 0 800 600"},
 		{"a crop box of three numbers", box(page2, "CropBox"), "absent"},
 		{"an art box ending in null", box(page2, "ArtBox"), "absent"},
 		{"a bleed box of five numbers", box(page2, "BleedBox"), "absent"},

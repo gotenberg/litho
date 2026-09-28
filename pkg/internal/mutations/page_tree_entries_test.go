@@ -148,8 +148,10 @@ func TestFullRewrite_WritesThePageTreeTheReaderReads(t *testing.T) {
 	if page3["Type"] != ast.PdfName("Page") || page3["Parent"] != rootRef {
 		t.Errorf("page 3 /Type %v /Parent %v, want /Page and %v", page3["Type"], page3["Parent"], rootRef)
 	}
-	if box, _ := page3["MediaBox"].(ast.PdfArray); !slices.Equal(box, document.LetterMediaBox()) {
-		t.Errorf("page 3 /MediaBox = %v, want %v", page3["MediaBox"], document.LetterMediaBox())
+	// Page 5, the one page stating a media box, gives the size page 3 takes
+	// (see document.DefaultMediaBox).
+	if box, _ := page3["MediaBox"].(ast.PdfArray); !slices.Equal(boxNumbers(box), []float64{0, 0, 300, 300}) {
+		t.Errorf("page 3 /MediaBox = %v, want page 5's size, [0 0 300 300]", page3["MediaBox"])
 	}
 	if _, has := page3["Resources"]; has {
 		t.Errorf("page 3 states /Resources %v, where it inherits the root's", page3["Resources"])
@@ -265,15 +267,15 @@ func TestCompleteWrittenPageTree_CompletesOnlyWhatTheUpdateWrites(t *testing.T) 
 	doc := attachDoc(t, bareTreeObjects...)
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	alloc.AllocAt(3, ast.PdfDict{"Contents": ast.PdfIndirectRef{ObjectNum: 6}, "Parent": ast.PdfIndirectRef{ObjectNum: 2}, "Rotate": ast.PdfInt(90)})
-	if err := CompleteWrittenPageTree(ctx, alloc, doc); err != nil {
+	if err := CompleteWrittenPageTree(ctx, alloc, doc, &document.MediaBoxDefault{Docs: []*document.Document{doc}}); err != nil {
 		t.Fatalf("CompleteWrittenPageTree: %v", err)
 	}
 	page := pendingDictAt(t, alloc, 3)
 	if page["Type"] != ast.PdfName("Page") || page["Rotate"] != ast.PdfInt(90) {
 		t.Errorf("page 3 = %v, want /Type /Page beside the edit's /Rotate 90", page)
 	}
-	if box, _ := page["MediaBox"].(ast.PdfArray); !slices.Equal(box, document.LetterMediaBox()) {
-		t.Errorf("page 3 /MediaBox = %v, want %v", page["MediaBox"], document.LetterMediaBox())
+	if box, _ := page["MediaBox"].(ast.PdfArray); !slices.Equal(boxNumbers(box), []float64{0, 0, 300, 300}) {
+		t.Errorf("page 3 /MediaBox = %v, want page 5's size, [0 0 300 300]", page["MediaBox"])
 	}
 	if got := len(alloc.Pending()); got != 1 {
 		t.Errorf("the update writes %d objects, want the one page it edited: %v", got, alloc.Pending())
@@ -281,7 +283,7 @@ func TestCompleteWrittenPageTree_CompletesOnlyWhatTheUpdateWrites(t *testing.T) 
 
 	untouched := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	untouched.AllocAt(7, ast.PdfDict{"Type": ast.PdfName("Font")})
-	if err := CompleteWrittenPageTree(ctx, untouched, doc); err != nil {
+	if err := CompleteWrittenPageTree(ctx, untouched, doc, nil); err != nil {
 		t.Fatalf("CompleteWrittenPageTree: %v", err)
 	}
 	if got := fmt.Sprint(untouched.Pending()); len(untouched.Pending()) != 1 {
@@ -307,8 +309,9 @@ var boxTreeObjects = []string{
 // TestCompleteWrittenPageTree_WritesTheBoxesTheReaderReads pins that an
 // update writes the page boundaries of the pages and nodes it writes as a
 // viewer reads them, and leaves the others as the file states them. A media
-// box a viewer does not use is written as US Letter, the page it draws in its
-// place, and a crop box it does not use is dropped. Where that lets the
+// box a viewer does not use is written as the size most pages have, here the
+// US Letter page 5 inherits from the root, and a crop box it does not use is
+// dropped. Where that lets the
 // root's show through, the page states its media box as its crop box instead:
 // page 3 always, page 5 only when the update writes node 4, whose crop box it
 // inherits.
@@ -335,7 +338,7 @@ func TestCompleteWrittenPageTree_WritesTheBoxesTheReaderReads(t *testing.T) {
 				}
 				alloc.AllocAt(num, obj)
 			}
-			if err := CompleteWrittenPageTree(ctx, alloc, doc); err != nil {
+			if err := CompleteWrittenPageTree(ctx, alloc, doc, nil); err != nil {
 				t.Fatalf("CompleteWrittenPageTree: %v", err)
 			}
 			if got := len(alloc.Pending()); got != len(tc.held) {

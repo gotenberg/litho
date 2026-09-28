@@ -12,6 +12,7 @@ import (
 func runInsert(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("insert", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	source := fs.String("source", "", "Source PDF file (required)")
@@ -60,7 +61,7 @@ func runInsert(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 		}
 	}
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 
 	if err := w.InsertPages(*pos, srcReader, srcPageList...); err != nil {

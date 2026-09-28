@@ -12,6 +12,7 @@ import (
 func runDetach(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("detach", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	name := fs.String("name", "", "Attachment name to remove (required)")
@@ -35,7 +36,7 @@ func runDetach(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	// This command has no encryption flag, so it can never be encrypting.
 	warnEncryptionDropped(stderr, false, r)
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 	w.RemoveAttachment(*name)
 

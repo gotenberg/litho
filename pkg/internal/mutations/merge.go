@@ -28,7 +28,12 @@ type MergeSource struct {
 // parameter existed. Encryption is a property of the output alone: each
 // source is decrypted as it resolves, so sources under different passwords
 // merge into one file under the single key derived here.
-func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig) error {
+//
+// A page that neither states nor inherits a media box a viewer uses gets the
+// size most pages of the sources have, taken in source order, and
+// mediaBoxFallback, nil for US Letter, when none has one (see
+// [document.DefaultMediaBox]).
+func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig, mediaBoxFallback ast.PdfArray) error {
 	if len(sources) == 0 {
 		return fmt.Errorf("no sources to merge")
 	}
@@ -215,7 +220,11 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	catalogRef := alloc.Alloc(catalogDict)
 	// The copied pages keep what their sources state, which can be short of
 	// what ISO 32000-1, Table 30 requires of a page.
-	if err := completeRewrittenPageTree(ctx, alloc, catalogRef); err != nil {
+	media := &document.MediaBoxDefault{Fallback: mediaBoxFallback}
+	for _, src := range sources {
+		media.Docs = append(media.Docs, src.Doc)
+	}
+	if err := completeRewrittenPageTree(ctx, alloc, catalogRef, media); err != nil {
 		return err
 	}
 

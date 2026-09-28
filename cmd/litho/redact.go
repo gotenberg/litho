@@ -88,6 +88,7 @@ func parseRedactRegion(spec string) (pdf.RedactRegion, error) {
 func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("redact", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	format := fs.String("f", "text", "Report format: text or json")
@@ -140,7 +141,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	// can open. This command has no encryption flag, so it is never encrypting.
 	warnEncryptionDropped(stderr, false, r)
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 
 	// Before the output file exists: a refused redaction must leave nothing

@@ -160,9 +160,11 @@ func pageCopyOverrides(pages []*document.Page) map[int]ast.PdfObject {
 // whole, the content stream it runs on into included. A crop box enclosing the
 // region of a /MediaBox a viewer uses is not written either. The page's
 // /MediaBox is written on its own, and a rewrite writes one a viewer does not
-// use as the US Letter page it draws in its place (see
-// [completeRewrittenPageTree]), which the effective crop box is already
-// reduced to.
+// use as the size most pages of the document have (see
+// [completeRewrittenPageTree]). The effective crop box of such a page is
+// reduced to US Letter, the page a viewer draws it on, so the crop box it
+// declares is written instead, and a viewer clips it against the media box the
+// output gives the page.
 //
 // # Corpus evidence
 //
@@ -175,7 +177,10 @@ func cropBoxToWrite(page *document.Page) (ast.PdfArray, bool) {
 	if !document.UsableBox(page.DeclaredCropBox) || !document.UsableBox(page.CropBox) {
 		return nil, false
 	}
-	if document.UsableBox(page.MediaBox) && sameRegion(page.CropBox, page.MediaBox) {
+	if !document.UsableBox(page.MediaBox) {
+		return page.DeclaredCropBox, true
+	}
+	if sameRegion(page.CropBox, page.MediaBox) {
 		return nil, false
 	}
 	return page.CropBox, true

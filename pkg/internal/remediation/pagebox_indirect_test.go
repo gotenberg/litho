@@ -42,42 +42,80 @@ func indirectMediaBoxPDF() []byte {
 	return b.Bytes()
 }
 
-// TestDegenerateMediaBoxBecomesUSLetter pins that the replacement for a
-// degenerate /MediaBox is the US Letter page a viewer draws in its place (see
-// [document.LetterMediaBox]), whatever size the document's other pages use,
-// here an 800 by 600 sibling that writes its box through an indirect reference
-// (ISO 32000-1, 7.3.10). ISO 32000-1, Table 30 gives the media box no default.
-// The replacement was the widest width and height the pages use, a page
-// larger than the one pdf.js and poppler show, and larger than the one a
-// rewrite writes.
-func TestDegenerateMediaBoxBecomesUSLetter(t *testing.T) {
+// TestDegenerateMediaBoxTakesTheDocumentSize pins that the replacement for a
+// degenerate /MediaBox is the size most pages of the document have (see
+// [document.DefaultMediaBox]), here an 800 by 600 sibling that writes its box
+// through an indirect reference (ISO 32000-1, 7.3.10), and that a document
+// whose pages have none a viewer uses takes the fallback the options name, US
+// Letter when they name none. ISO 32000-1, Table 30 gives the media box no
+// default.
+func TestDegenerateMediaBoxTakesTheDocumentSize(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	data := indirectMediaBoxPDF()
-	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
-	if err != nil {
-		t.Fatalf("NewDocument: %v", err)
+	a4 := ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfReal(595.28), ast.PdfReal(841.89)}
+	tests := []struct {
+		name     string
+		data     []byte
+		fallback ast.PdfArray
+		want     []float64
+	}{
+		{name: "the sibling's size", data: indirectMediaBoxPDF(), fallback: a4, want: []float64{0, 0, 800, 600}},
+		{name: "US Letter when no page has one", data: noUsableMediaBoxPDF(), want: []float64{0, 0, 612, 792}},
+		{name: "the fallback when no page has one", data: noUsableMediaBoxPDF(), fallback: a4, want: []float64{0, 0, 595.28, 841.89}},
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			doc, err := document.NewDocument(ctx, bytes.NewReader(tt.data), int64(len(tt.data)), nil)
+			if err != nil {
+				t.Fatalf("NewDocument: %v", err)
+			}
+			alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
-	if _, err := fixPageBoxes(ctx, alloc, doc, Options{}, nil, ""); err != nil {
-		t.Fatalf("fixPageBoxes: %v", err)
-	}
+			if _, err := fixPageBoxes(ctx, alloc, doc, Options{MediaBoxFallback: tt.fallback}, nil, ""); err != nil {
+				t.Fatalf("fixPageBoxes: %v", err)
+			}
 
-	page, ok := alloc.Pending()[3].(ast.PdfDict)
-	if !ok {
-		t.Fatalf("the degenerate page was not rewritten: %T", alloc.Pending()[3])
+			page, ok := alloc.Pending()[3].(ast.PdfDict)
+			if !ok {
+				t.Fatalf("the degenerate page was not rewritten: %T", alloc.Pending()[3])
+			}
+			box, ok := page["MediaBox"].(ast.PdfArray)
+			if !ok || len(box) != 4 {
+				t.Fatalf("/MediaBox = %v, want a four-element array", page["MediaBox"])
+			}
+			for i, want := range tt.want {
+				if document.Float(box[i]) != want {
+					t.Fatalf("/MediaBox = %v, want %v", box, tt.want)
+				}
+			}
+		})
 	}
-	box, ok := page["MediaBox"].(ast.PdfArray)
-	if !ok || len(box) != 4 {
-		t.Fatalf("/MediaBox = %v, want a four-element array", page["MediaBox"])
+}
+
+// noUsableMediaBoxPDF builds one page whose /MediaBox is degenerate, the only
+// page of its document.
+func noUsableMediaBoxPDF() []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 0 0] >>",
 	}
-	for i, want := range []float64{0, 0, 612, 792} {
-		if document.Float(box[i]) != want {
-			t.Fatalf("/MediaBox = %v, want US Letter, [0 0 612 792]", box)
-		}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offsets := make([]int, len(objs))
+	for i, o := range objs {
+		offsets[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
 	}
+	start := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, start)
+	return b.Bytes()
 }
 
 // indirectBoxPDF builds a two-page document. Page 1 is a valid 250 by 50 page

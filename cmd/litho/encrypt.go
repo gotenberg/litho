@@ -133,6 +133,7 @@ func warnEncryptionDroppedWithRemedy(stderr io.Writer, encrypting bool, remedy s
 func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("encrypt", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	userPwd := fs.String("user-password", "", "User password")
@@ -166,7 +167,7 @@ func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 	// always a request the write engine will refuse.
 	warnCompactSkipped(stderr, *compact, true)
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 	w.Encrypt(pdf.EncryptConfig{
 		UserPassword:  *userPwd,

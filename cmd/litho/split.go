@@ -12,6 +12,7 @@ import (
 func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("split", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	pages := fs.String("pages", "", "Page range (required)")
@@ -42,6 +43,7 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	// and fires the compaction one on a file that was compacted fine.
 	encrypting := len(writeOpts) > 0
 	writeOpts = append(writeOpts, compactWriteOptions(*compact)...)
+	writeOpts = append(writeOpts, defaultPageSize.writeOptions()...)
 
 	r, closer, err := openPDF(ctx, fs.Arg(0), *password)
 	if err != nil {

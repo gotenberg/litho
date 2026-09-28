@@ -78,10 +78,13 @@ func TestPageCopies_WriteRectangleBoxes(t *testing.T) {
 	if err := Split(ctx, openBytes(t, src), []int{1, 2}, &split); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
-	if err := Merge(ctx, []*Reader{openBytes(t, labelledPDF(1, "")), openBytes(t, src)}, &merged); err != nil {
+	// The other document is US Letter, so the pages with no media box a
+	// viewer uses take the size a viewer shows them at (see
+	// WithDefaultPageSize).
+	if err := Merge(ctx, []*Reader{openBytes(t, letterPDF()), openBytes(t, src)}, &merged); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
-	inserted := writeLabelled(t, labelledPDF(1, ""), func(w *Writer) error {
+	inserted := writeLabelled(t, letterPDF(), func(w *Writer) error {
 		return w.InsertPages(1, openBytes(t, src))
 	})
 	moved := writeLabelled(t, src, func(w *Writer) error {

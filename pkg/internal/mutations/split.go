@@ -21,7 +21,13 @@ import (
 // clear, which is what a split of an encrypted source produced before the
 // parameter existed: the reader decrypts every object as it resolves it, so
 // the copied graph is plaintext whatever the source was.
-func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig) error {
+//
+// A page that neither states nor inherits a media box a viewer uses gets the
+// size most pages of doc have, and mediaBoxFallback, nil for US Letter, when
+// none has one (see [document.DefaultMediaBox]). The size comes from the whole
+// of doc, not the pages the split keeps: a split of the one page missing its
+// media box from an A4 document is an A4 page.
+func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig, mediaBoxFallback ast.PdfArray) error {
 	if len(pages) == 0 {
 		return fmt.Errorf("no pages specified")
 	}
@@ -208,7 +214,8 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	catalogRef := alloc.Alloc(catalogDict)
 	// The copied pages keep what their source states, which can be short of
 	// what ISO 32000-1, Table 30 requires of a page.
-	if err := completeRewrittenPageTree(ctx, alloc, catalogRef); err != nil {
+	media := &document.MediaBoxDefault{Docs: []*document.Document{doc}, Fallback: mediaBoxFallback}
+	if err := completeRewrittenPageTree(ctx, alloc, catalogRef, media); err != nil {
 		return err
 	}
 

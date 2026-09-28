@@ -119,6 +119,12 @@ var (
 	// output: the [Reader] it is built on is left as it was.
 	ErrWriterConsumed = errors.New("writer already consumed; create a new Writer")
 
+	// ErrInvalidPageSize is returned by [Writer.WriteTo], [Split], [Merge],
+	// [Pipeline.WriteTo] and the remediation methods when
+	// [WithDefaultPageSize] names a width or a height outside the page sizes
+	// ISO 32000-1, Annex C.2, Table C.1 allows, 3 to 14,400 units.
+	ErrInvalidPageSize = errors.New("invalid default page size")
+
 	// ErrWriterClosed is returned by [Writer.WriteTo], [Writer.Redact] and
 	// the remediation methods after [Writer.Close]. Close releases the
 	// remediated output a Writer holds, and a later write cannot rebuild it

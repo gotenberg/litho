@@ -15,6 +15,7 @@ import (
 func runSetBookmarks(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("set-bookmarks", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	fromJSON := fs.String("from-json", "", "JSON file with bookmark definitions (required unless --generate)")
@@ -39,7 +40,7 @@ func runSetBookmarks(ctx context.Context, args []string, _stdout, stderr io.Writ
 	// This command has no encryption flag, so it can never be encrypting.
 	warnEncryptionDropped(stderr, false, r)
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 	if *generate {
 		w.GenerateBookmarks(defaultBookmarkGenOptions(), pdf.BookmarkReplace)

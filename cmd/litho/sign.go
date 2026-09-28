@@ -92,6 +92,7 @@ const encryptedSignRefusal = "litho cannot sign an encrypted document: its signa
 func runSign(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("sign", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	flags := registerSignFlags(fs)
@@ -131,7 +132,7 @@ func runSign(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		return exitError
 	}
 
-	w := pdf.NewWriter(r)
+	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
 	w.Sign(signer, opts...)
 

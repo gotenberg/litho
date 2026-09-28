@@ -58,6 +58,10 @@ type FullRewriteConfig struct {
 	// in destination numbering, so a source-numbered AllocAt would stomp
 	// an unrelated copied object and silently drop the edit.
 	Overrides map[int]ast.PdfObject
+	// MediaBoxFallback is the media box a page that neither states nor
+	// inherits one a viewer uses gets when no page of Doc or PageSources has
+	// one either, nil for US Letter (see [document.DefaultMediaBox]).
+	MediaBoxFallback ast.PdfArray
 }
 
 // FullRewrite performs a complete rewrite of the document, applying the
@@ -108,7 +112,8 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	}
 	// Before the sweep of applyEncryption, since a node it adds is an object
 	// of the output like any other.
-	if err := completeRewrittenPageTree(ctx, alloc, newCatalogRef); err != nil {
+	media := &document.MediaBoxDefault{Docs: append([]*document.Document{doc}, cfg.PageSources...), Fallback: cfg.MediaBoxFallback}
+	if err := completeRewrittenPageTree(ctx, alloc, newCatalogRef, media); err != nil {
 		return err
 	}
 

@@ -137,7 +137,7 @@ func TestCompleteWrittenPageTree_SharedKidsArrayFanOut(t *testing.T) {
 		"[3 0 R << /Type /Pages /Kids 4 0 R /Count 1 >> << /Type /Pages /Kids 4 0 R /Count 1 >>]",
 	))
 	alloc.AllocAt(2, ast.PdfDict{"Type": ast.PdfName("Pages"), "Kids": ast.PdfIndirectRef{ObjectNum: 4}, "Count": ast.PdfInt(1)})
-	err := CompleteWrittenPageTree(ctx, alloc, doc)
+	err := CompleteWrittenPageTree(ctx, alloc, doc, nil)
 	if ctx.Err() != nil {
 		t.Fatal("the walk did not end before the deadline")
 	}

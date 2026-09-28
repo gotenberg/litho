@@ -178,7 +178,7 @@ func TestMergeKeepsOptionalContentGroupIdentity(t *testing.T) {
 	}
 
 	var merged bytes.Buffer
-	if err := Merge(ctx, docs, &merged, "", false, CompactOptions{}, DefaultMergeBookmarkConfig(), nil); err != nil {
+	if err := Merge(ctx, docs, &merged, "", false, CompactOptions{}, DefaultMergeBookmarkConfig(), nil, nil); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 
@@ -229,7 +229,7 @@ func TestMergeNamesTheOptionalContentConfiguration(t *testing.T) {
 				sources[i] = MergeSource{Doc: doc, Pages: pages}
 			}
 			var merged bytes.Buffer
-			if err := Merge(ctx, sources, &merged, "", false, CompactOptions{}, DefaultMergeBookmarkConfig(), nil); err != nil {
+			if err := Merge(ctx, sources, &merged, "", false, CompactOptions{}, DefaultMergeBookmarkConfig(), nil, nil); err != nil {
 				t.Fatalf("Merge: %v", err)
 			}
 			out, err := document.NewDocument(ctx, bytes.NewReader(merged.Bytes()), int64(merged.Len()), nil)

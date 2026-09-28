@@ -12,6 +12,7 @@ import (
 func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	userPwd := fs.String("user-password", "", "Encrypt the output with this user password")
@@ -42,6 +43,7 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	// and fires the compaction one on a file that was compacted fine.
 	encrypting := len(writeOpts) > 0
 	writeOpts = append(writeOpts, compactWriteOptions(*compact)...)
+	writeOpts = append(writeOpts, defaultPageSize.writeOptions()...)
 
 	var readers []*pdf.Reader
 	var closers []func()

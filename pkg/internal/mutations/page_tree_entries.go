@@ -35,6 +35,9 @@ type pageTreeRepair struct {
 	// 7.7.3.2), and the reader walks a node or an array reached a second
 	// time, through a cycle or a second parent, once (see traversePageTree).
 	done map[int]bool
+	// media is the media box a page no node gives one a viewer uses gets
+	// (see [document.DefaultMediaBox]).
+	media *document.MediaBoxDefault
 }
 
 // inheritedEntries are the inheritable page entries an ancestor states (ISO
@@ -96,10 +99,10 @@ type walkedKid struct {
 //     /MediaBox required, the last two inheritable (7.7.3.4), and each page
 //     boundary a rectangle (7.9.5). Every boundary a node or a page states is
 //     written as a viewer reads it, so the page looks as it did (see
-//     [pageTreeRepair.repairBoundary]). A page no node gives a /MediaBox a
-//     viewer uses gets [document.LetterMediaBox], and a crop, bleed, trim or
-//     art box a viewer does not use is dropped for the default Table 30 gives
-//     it. One no node gives /Resources, or whose /Resources is no dictionary,
+//     [pageTreeRepair.repairBoundary]), but for a /MediaBox a viewer does not
+//     use: a page no node gives one gets the size most pages of the document
+//     have (see [document.DefaultMediaBox]), and a crop, bleed, trim or art
+//     box a viewer does not use is dropped for the default Table 30 gives it. One no node gives /Resources, or whose /Resources is no dictionary,
 //     gets an empty dictionary, which is what Table 30 writes for a page
 //     needing no resources, as the flat page tree of a split already writes it
 //     (see [flatResources]).
@@ -128,13 +131,22 @@ type walkedKid struct {
 //     rewrite writes each as a viewer reads it. litho annotshare_ua1.pdf loses
 //     a /CropBox of three numbers and an /ArtBox ending in null, litho
 //     pageboxes_2b.pdf gets US Letter for its media boxes and loses a /TrimBox
-//     and a /BleedBox, pdfjs boundingBox_invalid.pdf gets US Letter for a
+//     and a /BleedBox, pdfjs boundingBox_invalid.pdf gets 800 by 600 for a
 //     /MediaBox of [0 0 0 0] and loses a /CropBox of [0 0 0 0], and pdfjs
 //     issue17190.pdf gets US Letter for its root's [0 0 0 0]. litho
 //     directstream_2b.pdf, pdfjs issue13783.pdf and poppler-937-0-fuzzed.pdf
 //     get US Letter for a /MediaBox that runs on into the entries after it.
 //     Every page measures in pdf.Reader.Page, and shows in the pinned pdf.js,
-//     what its source did.
+//     what its source did, but a page with no media box among pages of
+//     another size.
+//   - All corpora: 9 files hold a page with no media box a viewer uses, and
+//     in 3 the size most pages have is not US Letter. Over the full rewrite,
+//     split, merge and insertion, litho baretree_2b.pdf's page 5 shows 200 by
+//     200 and litho viewerboxes_2b.pdf's pages 1 and 3 show 600 by 800 in the
+//     pinned pdf.js, where they showed US Letter. pdfjs boundingBox_invalid.pdf's
+//     page 1 shows 800 by 600, its first sized page's, and its text at
+//     (25, 700) falls off the page: extracted text goes from 70 to 55 bytes.
+//     qpdf and veraPDF at PDF/A-2b report on every output what they did.
 //   - All corpora: over the full rewrite, split, merge, insertion, page move
 //     and PDF/A-1b remediation of those files but litho pageboxes_2b.pdf,
 //     veraPDF fails ISO 19005-2, 6.1.13 t11 on 12 outputs, 0 now, and reports
@@ -143,8 +155,8 @@ type walkedKid struct {
 //     height, which ISO 14289-1, 7.18 exempts. Its outputs show the whole
 //     page, and litho and veraPDF both count one more check of 7.18.1 t2 and
 //     7.18.5 t1 and t2 for each copy of the page, the rule sets unchanged.
-func completeRewrittenPageTree(ctx context.Context, alloc *writer.ObjAllocator, catalogRef ast.PdfIndirectRef) error {
-	s := &pageTreeRepair{alloc: alloc, done: make(map[int]bool)}
+func completeRewrittenPageTree(ctx context.Context, alloc *writer.ObjAllocator, catalogRef ast.PdfIndirectRef, media *document.MediaBoxDefault) error {
+	s := &pageTreeRepair{alloc: alloc, done: make(map[int]bool), media: media}
 	if err := s.run(ctx, catalogRef); err != nil {
 		return fmt.Errorf("completing the page tree: %w", err)
 	}
@@ -158,12 +170,12 @@ func completeRewrittenPageTree(ctx context.Context, alloc *writer.ObjAllocator, 
 // complete, and one that does not leaves the page tree as doc has it. It
 // numbers nothing and adds no node, which [document.Document.PromoteDirectKids]
 // and a rewrite do.
-func CompleteWrittenPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+func CompleteWrittenPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, media *document.MediaBoxDefault) error {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok || !holdsPageTreeObject(alloc, catalogRef) {
 		return nil
 	}
-	s := &pageTreeRepair{alloc: alloc, doc: doc, done: make(map[int]bool)}
+	s := &pageTreeRepair{alloc: alloc, doc: doc, done: make(map[int]bool), media: media}
 	if err := s.run(ctx, catalogRef); err != nil {
 		return fmt.Errorf("completing the page tree: %w", err)
 	}
@@ -546,8 +558,9 @@ func (s *pageTreeRepair) nodeBoundaries(ctx context.Context, dict ast.PdfDict, o
 
 // pageMediaBox completes the /MediaBox of dict, a page, into out, and returns
 // the media box the page has in the output: its own, the one it inherits when
-// a viewer uses it (see [pageTreeRepair.usable]), or
-// [document.LetterMediaBox] when neither the page nor any node gives it one.
+// a viewer uses it (see [pageTreeRepair.usable]), or the default media box
+// (see [document.DefaultMediaBox]) when neither the page nor any node gives it
+// one.
 func (s *pageTreeRepair) pageMediaBox(ctx context.Context, dict ast.PdfDict, out *cowDict, inherited inheritedEntries) (ast.PdfArray, error) {
 	box, stated, err := s.boundary(ctx, dict, "MediaBox")
 	if err != nil {
@@ -562,9 +575,12 @@ func (s *pageTreeRepair) pageMediaBox(ctx context.Context, dict ast.PdfDict, out
 		box = inherited.mediaBox
 	}
 	if box == nil {
-		letter := document.LetterMediaBox()
-		out.set("MediaBox", letter)
-		return letter, nil
+		replacement, err := s.media.Resolve(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out.set("MediaBox", replacement)
+		return replacement, nil
 	}
 	held, _, err := s.repairBoundary(ctx, "MediaBox", box, out)
 	return held, err
@@ -630,9 +646,11 @@ func (s *pageTreeRepair) boundary(ctx context.Context, dict ast.PdfDict, key ast
 // ISO 32000-1, 7.7.3.3, Table 30 makes each page boundary a rectangle, four
 // numbers (7.9.5). A rewrite writes each box as a viewer reads it, so no
 // rewrite changes how a page looks: a box a viewer uses is kept as written. A
-// media box it does not use is replaced by [document.LetterMediaBox], the page
-// a viewer draws in its place, since Table 30 gives the media box no default.
-// Any other box it does not use is dropped: Table 30 defaults the crop box to
+// media box it does not use is replaced by the size most pages of the document
+// have (see [document.DefaultMediaBox]), since Table 30 gives the media box no
+// default: a viewer draws such a page on US Letter, and the output shows it at
+// the size of the pages around it instead. A crop box a viewer uses is kept as
+// written, and a viewer clips it against the replacement. Any other box it does not use is dropped: Table 30 defaults the crop box to
 // the media box, and the bleed, trim and art boxes to the crop box, which is
 // what a viewer reads in its place. Compliance measures such a box as its
 // validator does (ISO 19005-2, 6.1.13), and the box a rewrite writes is one
@@ -646,9 +664,12 @@ func (s *pageTreeRepair) repairBoundary(ctx context.Context, key ast.PdfName, bo
 	case usable:
 		return box, true, nil
 	case key == "MediaBox":
-		letter := document.LetterMediaBox()
-		out.set(key, letter)
-		return letter, false, nil
+		replacement, err := s.media.Resolve(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		out.set(key, replacement)
+		return replacement, false, nil
 	default:
 		out.del(key)
 		return nil, false, nil

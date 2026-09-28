@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
 // Pipeline chains write operations against a single PDF state that
@@ -215,9 +217,13 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 		logger = slog.New(slog.DiscardHandler)
 	}
 	defer recoverToError(logger, "Pipeline.WriteTo", &err)
+	if cfg.pageSizeErr != nil {
+		return nil, cfg.pageSizeErr
+	}
 
 	ex := &executor{
 		tempDir:     cfg.tempDir,
+		pageSize:    cfg.pageSize,
 		finalOpts:   opts,
 		finalDst:    dst,
 		totalStages: len(p.stages),
@@ -295,10 +301,15 @@ type executor struct {
 	curOwned bool
 	// curFile is the intermediate temp file cur reads, nil while cur is the
 	// caller's source.
-	curFile     *os.File
-	writer      *Writer
-	tmpFiles    []*os.File
-	tempDir     string
+	curFile  *os.File
+	writer   *Writer
+	tmpFiles []*os.File
+	tempDir  string
+	// pageSize is the default page size the options of [Pipeline.WriteTo]
+	// name (see [WithDefaultPageSize]), nil for none. Every stage writes
+	// with it, not only the last: an intermediate file that gave a page a
+	// media box gave it for good.
+	pageSize    ast.PdfArray
 	finalOpts   []WriteOption
 	finalDst    io.Writer
 	dstWritten  bool
@@ -322,6 +333,7 @@ func (ex *executor) ensureWriter() {
 	if ex.writer == nil {
 		ex.writer = NewWriter(ex.cur)
 		ex.writer.tempDir = ex.tempDir
+		ex.writer.defaults.pageSize = ex.pageSize
 		if ex.encrypt != nil {
 			ex.writer.Encrypt(*ex.encrypt)
 		}
@@ -423,6 +435,10 @@ func (ex *executor) restructureOptions(stageOpts []WriteOption) []WriteOption {
 	cfg := writeOpts{}
 	for _, o := range stageOpts {
 		o(&cfg)
+	}
+	if ex.pageSize != nil {
+		pageSize := ex.pageSize
+		opts = append(opts, func(o *writeOpts) { o.pageSize = pageSize })
 	}
 	opts = append(opts, stageOpts...)
 	return append(opts, ex.carryEncryption(cfg.encrypt))

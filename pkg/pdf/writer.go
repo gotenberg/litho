@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"math"
 	"os"
 	"slices"
 	"strings"
@@ -47,6 +48,61 @@ type writeOpts struct {
 	// droppedSignatures receives the signatures the output drops (see
 	// [WithDroppedSignatures]).
 	droppedSignatures *[]DroppedSignature
+	// pageSize is the media box [WithDefaultPageSize] names, nil for US
+	// Letter, and pageSizeErr the refusal of the size it was given.
+	pageSize    ast.PdfArray
+	pageSizeErr error
+}
+
+// Page sizes a default page size may take. ISO 32000-1, Annex C.2, Table C.1
+// bounds a page between 3 by 3 and 14,400 by 14,400 units, and ISO 19005-2,
+// 6.1.13 and ISO 19005-4, 6.1.9 require it of every page boundary.
+const (
+	minPageSize = 3.0
+	maxPageSize = 14400.0
+)
+
+// WithDefaultPageSize sets the size, in points, of the page a write gives a
+// page that neither states nor inherits a media box a viewer uses, when no
+// page of the document has one either. It defaults to US Letter, 612 by 792.
+//
+// ISO 32000-1, 7.7.3.3, Table 30 makes /MediaBox required and gives it no
+// default. A viewer draws a page without one on US Letter, which is what
+// [Reader.Page] reports. A write that gives such a page a media box, as every
+// rewrite, split, merge, insertion and remediation does, gives it the width
+// and height most pages of the document have, taken in page order, a tie going
+// to the size the earliest page has, at origin 0 0. The output then shows the
+// page at a size a viewer did not show for the source: the rest of the
+// document is the best evidence of the size the producer meant. A crop box
+// the page states is kept, and a viewer clips it against the new media box.
+// [Split] takes the size from every page of its source, [Merge] from every
+// page of its sources, and a [Writer] from the pages of its document and of
+// the documents [Writer.InsertPages] takes pages from. This option names the
+// size only when none of those pages has a media box a viewer uses.
+//
+// width and height must lie between 3 and 14,400, the page sizes ISO 32000-1,
+// Annex C.2, Table C.1 allows; the write otherwise fails with
+// [ErrInvalidPageSize]. Given to [NewWriter], it also sizes the pages a
+// remediation of the Writer repairs.
+func WithDefaultPageSize(width, height float64) WriteOption {
+	return func(o *writeOpts) {
+		if !(width >= minPageSize && width <= maxPageSize && height >= minPageSize && height <= maxPageSize) {
+			o.pageSize = nil
+			o.pageSizeErr = fmt.Errorf("%w: %g by %g, each side must lie between %g and %g", ErrInvalidPageSize, width, height, minPageSize, maxPageSize)
+			return
+		}
+		o.pageSize = ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), pageExtent(width), pageExtent(height)}
+		o.pageSizeErr = nil
+	}
+}
+
+// pageExtent returns v, a page extent within the sizes a page may take, as a
+// media box writes it: an integer when it is a whole number, a real otherwise.
+func pageExtent(v float64) ast.PdfObject {
+	if v == math.Trunc(v) {
+		return ast.PdfInt(int64(v))
+	}
+	return ast.PdfReal(v)
 }
 
 // WithFullRewrite forces a clean rewrite of the entire file instead of an
@@ -1942,8 +1998,9 @@ func (w *Writer) Sign(signer Signer, opts ...SignOption) {
 
 // remediateConfig applies the remediation options and returns the
 // resolved settings plus the internal options the RemediatePDFA and
-// RemediatePDFUA entry points share.
-// The font providers log what they skip to the Writer's logger.
+// RemediatePDFUA entry points share. The font providers log what they skip
+// to the Writer's logger, and the default page size [NewWriter] was given (see
+// [WithDefaultPageSize]) sizes a page the remediation gives a media box.
 func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options) {
 	cfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
 	for _, o := range opts {
@@ -1958,7 +2015,7 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 	if cfg.systemFonts != nil {
 		providers = append(providers, cfg.systemFonts)
 	}
-	return cfg, remediation.Options{
+	remOpts := remediation.Options{
 		Lang:            cfg.lang,
 		PreserveContent: cfg.preserveContent,
 		FigureAlt:       cfg.figureAlt,
@@ -1967,6 +2024,10 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 		SystemFonts:     cfg.systemFonts != nil,
 		WholeFonts:      cfg.wholeFonts,
 	}
+	if w != nil {
+		remOpts.MediaBoxFallback = w.defaults.pageSize
+	}
+	return cfg, remOpts
 }
 
 // RemediatePDFA validates the document against the given PDF/A profile,
@@ -2483,6 +2544,9 @@ func (w *Writer) remediate(
 	}
 	if err := w.refuseAfterRemediation(target.method); err != nil {
 		return nil, err
+	}
+	if w.defaults.pageSizeErr != nil {
+		return nil, w.defaults.pageSizeErr
 	}
 	if target.pdfaClause != "" && w.encryptCfg != nil {
 		return nil, fmt.Errorf("%w (%s): %s before Writer.%s", ErrPDFAForbidsEncryption, target.pdfaClause, w.encryptBy, target.method)
@@ -3185,6 +3249,9 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	for _, o := range opts {
 		o(&cfg)
 	}
+	if cfg.pageSizeErr != nil {
+		return cfg.pageSizeErr
+	}
 	// The guard below reads the encryption WithEncryption asks for as well as
 	// w.encryptCfg, the one Encrypt or NewWriter asked for: reading only the
 	// latter would let Sign + WithEncryption past it and silently drop one of
@@ -3392,7 +3459,7 @@ func (w *Writer) writeSignedRewrite(ctx context.Context, dst io.Writer, signer S
 		base.doc.Logger = cfg.logger
 	}
 	adapter, info := w.signing(signer)
-	if err := mutations.WriteWithSignature(ctx, dst, base.doc, adapter, info, nil, nil, cfg.xrefStream); err != nil {
+	if err := mutations.WriteWithSignature(ctx, dst, base.doc, adapter, info, nil, nil, cfg.xrefStream, w.mediaBoxDefault(cfg)); err != nil {
 		return fmt.Errorf("signing the rewritten document: %w", err)
 	}
 	return nil
@@ -3487,6 +3554,22 @@ func appendPromotedPageTree(alloc *writer.ObjAllocator, doc *document.Document) 
 // amount regardless of document size.
 const writeBufferSize = 64 << 10
 
+// mediaBoxDefault returns the media box a write of the Writer given cfg gives
+// a page that neither states nor inherits one a viewer uses (see
+// [WithDefaultPageSize]): the size most pages of its document and of the
+// documents its insertions take pages from have, and the default page size
+// when none has one, the one cfg names, else the one [NewWriter] was given.
+// The writes of the Writer's temp files pass no options, and size such a page
+// as its output does.
+func (w *Writer) mediaBoxDefault(cfg writeOpts) *document.MediaBoxDefault {
+	fallback := cfg.pageSize
+	if fallback == nil {
+		fallback = w.defaults.pageSize
+	}
+	docs := append([]*document.Document{w.reader.doc}, w.pageSources()...)
+	return &document.MediaBoxDefault{Docs: docs, Fallback: fallback}
+}
+
 // writeToInternal performs the serialization, signed with signer when it is
 // not nil. [Writer.WriteTo] wraps it with the single-use guard and the
 // sign/full-rewrite compatibility check, and passes the Writer's signer.
@@ -3533,7 +3616,8 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 		stale := w.encryptCfg != nil ||
 			signer != nil ||
 			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream ||
-			cfg.packObjectStreams || cfg.dedupStreams
+			cfg.packObjectStreams || cfg.dedupStreams ||
+			(cfg.pageSize != nil && !slices.Equal(cfg.pageSize, w.defaults.pageSize))
 		if !stale {
 			return w.copyFromPreSerialized(ctx, dst)
 		}
@@ -3640,7 +3724,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 			maps.Copy(overrides, w.rewriteOverrides)
 		}
 		adapter, info := w.signing(signer)
-		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, adapter, info, overrides, mutFuncs, cfg.xrefStream)
+		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, adapter, info, overrides, mutFuncs, cfg.xrefStream, w.mediaBoxDefault(cfg))
 	}
 
 	if cfg.fullRewrite || w.forceRewrite {
@@ -3694,15 +3778,16 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 		}
 		overrides = enforced
 		if err := mutations.FullRewrite(ctx, dst, mutations.FullRewriteConfig{
-			Doc:             w.reader.doc,
-			EncryptCfg:      w.encryptCfg,
-			Decrypt:         w.decrypt,
-			Version:         cfg.version,
-			RequiredVersion: w.requiredVersion,
-			PageSources:     w.pageSources(),
-			XRefStream:      cfg.xrefStream,
-			Compact:         cfg.compactOptions(),
-			Overrides:       overrides,
+			Doc:              w.reader.doc,
+			EncryptCfg:       w.encryptCfg,
+			Decrypt:          w.decrypt,
+			Version:          cfg.version,
+			RequiredVersion:  w.requiredVersion,
+			PageSources:      w.pageSources(),
+			XRefStream:       cfg.xrefStream,
+			Compact:          cfg.compactOptions(),
+			Overrides:        overrides,
+			MediaBoxFallback: w.mediaBoxDefault(cfg).Fallback,
 		}); err != nil {
 			return err
 		}
@@ -3751,7 +3836,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	appendPromotedPageTree(alloc, doc)
 	// A page or node the update writes goes out with the entries ISO 32000-1
 	// requires of it; the ones it does not write stay as the file has them.
-	if err := mutations.CompleteWrittenPageTree(ctx, alloc, doc); err != nil {
+	if err := mutations.CompleteWrittenPageTree(ctx, alloc, doc, w.mediaBoxDefault(cfg)); err != nil {
 		return err
 	}
 	logger.Debug("incremental update",
@@ -3848,6 +3933,9 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 	for _, o := range opts {
 		o(&cfg)
 	}
+	if cfg.pageSizeErr != nil {
+		return cfg.pageSizeErr
+	}
 
 	// The split reads a copy of src's document, so the logger it swaps in, and
 	// whatever the copy caches, stays out of src, which other goroutines may be
@@ -3872,7 +3960,7 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 
 	version := cfg.version
 	bookmarkCfg := buildSplitBookmarkConfig(src, cfg.bookmarks)
-	if err := mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, cfg.compactOptions(), bookmarkCfg, cfg.internalEncrypt()); err != nil {
+	if err := mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, cfg.compactOptions(), bookmarkCfg, cfg.internalEncrypt(), cfg.pageSize); err != nil {
 		// Translate at the boundary so a caller can match with errors.Is
 		// without importing pkg/internal.
 		if errors.Is(err, mutations.ErrAttachmentTreeIncomplete) {
@@ -3933,6 +4021,9 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 	for _, o := range opts {
 		o(&cfg)
 	}
+	if cfg.pageSizeErr != nil {
+		return cfg.pageSizeErr
+	}
 
 	// The merge reads a copy of each source's document, for the reason Split
 	// does. A Reader passed twice is copied twice, and each copy reads it
@@ -3969,7 +4060,7 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 	}
 
 	bookmarkCfg := buildMergeBookmarkConfig(sources, cfg.bookmarks)
-	if err := mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, cfg.compactOptions(), bookmarkCfg, cfg.internalEncrypt()); err != nil {
+	if err := mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, cfg.compactOptions(), bookmarkCfg, cfg.internalEncrypt(), cfg.pageSize); err != nil {
 		// Translate at the boundary so a caller can match with errors.Is
 		// without importing pkg/internal. A merge rebuilds one attachment tree
 		// from every source, so a source the walk cannot read whole would lose
