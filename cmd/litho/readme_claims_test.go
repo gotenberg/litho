@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -20,50 +21,48 @@ func readREADME(t *testing.T) string {
 	return string(data)
 }
 
-// TestREADME_DoesNotAdvertiseTheSignCLI pins a claim the CLI cannot honour.
+// TestREADME_SignExampleRuns pins the `litho sign` invocation the README shows
+// as one that works.
 //
-// `litho sign` ALWAYS refuses: it takes a pdf.Signer the CLI cannot supply
-// without crypto dependencies, prints an explanation and exits 1, which
-// TestSign_RefusesWithAnExplanation already pins. The README nonetheless listed
-//
-//	litho sign --cert cert.pem --key key.pem -o signed.pdf document.pdf
-//
-// among its CLI examples, beside redact and encrypt, which do work. Measured:
-// running it exits 1 with "signing requires a custom Signer implementation".
-// Documenting an invocation that always fails is the same defect as advising a
-// flag the command rejects.
-//
-// The Features list still claims signing, correctly: the LIBRARY signs. Only
-// the CLI example was false, so only it was removed.
-func TestREADME_DoesNotAdvertiseTheSignCLI(t *testing.T) {
+// The README once listed a sign example while the command always refused, and
+// the example was removed. The command signs now, so the example is back, and
+// this test runs it with a generated certificate and key in place of the
+// README's file names: an example that stopped working fails here.
+func TestREADME_SignExampleRuns(t *testing.T) {
 	readme := readREADME(t)
 
-	// The control: without it a README that lost its example block entirely,
-	// or a path that read the wrong file, would pass this test silently.
-	if !strings.Contains(readme, "litho encrypt --user-password secret") {
-		t.Fatal("the CLI example block is missing, so the assertion below proves nothing")
-	}
-
+	var example []string
 	for _, line := range strings.Split(readme, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "litho sign") {
-			t.Errorf("README shows a `litho sign` invocation, which always exits 1: %q", line)
+		if fields := strings.Fields(line); len(fields) > 1 && fields[0] == "litho" && fields[1] == "sign" {
+			example = fields[1:]
+			break
 		}
 	}
-}
-
-// TestSign_TheCLIStillRefuses is the other half of the claim above. The README
-// says signing is library-only; if the CLI ever gains it, this test fails and
-// the documentation has to be revisited rather than quietly drifting again.
-func TestSign_TheCLIStillRefuses(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	rc := run(context.Background(), []string{"sign", "-o", "out.pdf", "in.pdf"}, &stdout, &stderr)
-
-	if rc == exitOK {
-		t.Fatalf("sign succeeded, so the README's library-only note is now wrong; stderr: %s",
-			stderr.String())
+	if example == nil {
+		t.Fatal("README shows no `litho sign` invocation")
 	}
-	if !strings.Contains(stderr.String(), "Signer") {
-		t.Errorf("sign failed without explaining why; stderr: %q", stderr.String())
+
+	certPath, keyPath := writeSigningPEM(t, "ec")
+	out := filepath.Join(t.TempDir(), "signed.pdf")
+	names := map[string]string{
+		"cert.pem": certPath, "key.pem": keyPath, "document.pdf": onePageTempPDF(t), "signed.pdf": out,
+	}
+	for i, arg := range example {
+		if sub, ok := names[arg]; ok {
+			example[i] = sub
+			delete(names, arg)
+		}
+	}
+	if len(names) > 0 {
+		t.Fatalf("the README example %q no longer names the files this test substitutes: %v", example, names)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(), example, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("the README's sign example exits %d: %s", rc, stderr.String())
+	}
+	if n := signatureCountOf(t, out); n != 1 {
+		t.Errorf("the README's sign example wrote %d signatures, want 1", n)
 	}
 }
 

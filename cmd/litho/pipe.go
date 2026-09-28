@@ -29,10 +29,11 @@ func pipeUsage(w io.Writer) {
 	fmt.Fprintln(w, "Stages: rotate, split, merge, delete, insert, encrypt, decrypt,")
 	fmt.Fprintln(w, "        autotag, set-metadata, set-form, flatten-form,")
 	fmt.Fprintln(w, "        set-bookmarks, attach, detach, stamp-text, stamp-image,")
-	fmt.Fprintln(w, "        stamp-pdf, remediate")
+	fmt.Fprintln(w, "        stamp-pdf, remediate, sign")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "remediate runs at most once, as the last stage, and a PDF/A profile")
-	fmt.Fprintln(w, "takes no encrypt stage.")
+	fmt.Fprintln(w, "remediate runs at most once, as the last stage but sign, and a PDF/A")
+	fmt.Fprintln(w, "profile takes no encrypt stage. sign runs at most once, as the last")
+	fmt.Fprintln(w, "stage, and takes no encrypt or decrypt stage.")
 }
 
 // runPipe implements `litho pipe <file> <stage> [flags] <stage> [flags] ... -o out.pdf`.
@@ -391,17 +392,51 @@ func expectsValue(arg string) bool {
 // validateStageOrder refuses a stage order the library would refuse partway
 // through, before pipe opens anything.
 //
+// A signature covers the bytes it was computed over (ISO 32000-1, 12.8.1), so
+// sign is the last stage and there is one at most: a stage after it would
+// rewrite what it signed. It takes no encrypt or decrypt stage, which
+// [pdf.Writer.WriteTo] refuses beside a signature with
+// [pdf.ErrSignFullRewriteIncompatible].
+//
 // A remediation is the last edit a document takes: its report describes the
 // output only when nothing edits it afterwards, and a [pdf.Writer] refuses
-// every edit after one, a second remediation included. So remediate must be
-// the last stage, and there is one at most. Every stage after it is named,
-// so the caller can move them in one go.
+// every edit after one, a second remediation included, but accepts a
+// signature. So remediate must be the last stage but sign, and there is one at
+// most. Every stage after it is named, so the caller can move them in one go.
 //
 // PDF/A forbids encryption: ISO 19005-1, 6.1.3, ISO 19005-2, 6.1.3, ISO
 // 19005-3, 6.1.3 and ISO 19005-4, 6.1.3 each keep the Encrypt key out of the
 // trailer, so an encrypt stage cannot precede a PDF/A remediate stage. A
 // PDF/UA or WTPDF remediation keeps it.
 func validateStageOrder(groups [][]string) error {
+	signAt := -1
+	for i, g := range groups {
+		if len(g) == 0 || g[0] != "sign" {
+			continue
+		}
+		if signAt >= 0 {
+			return fmt.Errorf("only one sign stage is allowed: a second signature would sign the first one's output, which a pipe does not write")
+		}
+		signAt = i
+	}
+	if signAt >= 0 {
+		var after []string
+		for _, g := range groups[signAt+1:] {
+			if len(g) > 0 {
+				after = append(after, fmt.Sprintf("%q", g[0]))
+			}
+		}
+		if len(after) > 0 {
+			return fmt.Errorf("sign must be the last stage, since a signature covers the bytes it was computed over: move %s before sign", strings.Join(after, ", "))
+		}
+		for _, g := range groups[:signAt] {
+			if len(g) > 0 && (g[0] == "encrypt" || g[0] == "decrypt") {
+				return fmt.Errorf("the %q stage cannot come with a sign stage: litho does not sign a document it encrypts or decrypts", g[0])
+			}
+		}
+		groups = groups[:signAt]
+	}
+
 	remediateAt := -1
 	for i, g := range groups {
 		if len(g) == 0 || g[0] != "remediate" {
@@ -483,12 +518,11 @@ func stageProfileValue(group []string) string {
 
 // stageCmds names every command that also runs as a pipeline stage.
 //
-// Two output-producing commands are deliberately absent, so that this set reads
-// as a decision rather than an oversight:
+// sign is one, and runs last: [validateStageOrder] refuses a stage after it,
+// since a signature covers the bytes it was computed over.
 //
-// sign, because a signature covers the bytes it was computed over. A stage
-// after it rewrites the document and voids it, and pipe cannot guarantee it
-// runs last, so the honest surface is the standalone command.
+// One output-producing command is deliberately absent, so that this set reads
+// as a decision rather than an oversight:
 //
 // redact, because its value is the report: RedactReport names the copies that
 // survived and the objects it could not prove clean, and Redact refuses with
@@ -502,6 +536,7 @@ var stageCmds = map[string]bool{
 	"set-form": true, "flatten-form": true, "set-bookmarks": true,
 	"attach": true, "detach": true, "stamp-text": true,
 	"stamp-image": true, "stamp-pdf": true, "remediate": true, "autotag": true,
+	"sign": true,
 }
 
 func isStageCmd(s string) bool { return stageCmds[s] }
@@ -910,6 +945,31 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 				return err
 			}
 			return fmt.Errorf("unknown profile %q", *profile)
+		})
+
+	case "sign":
+		fs := flag.NewFlagSet("sign", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		flags := registerSignFlags(fs)
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		// Loaded now, so a bad key or certificate fails before the output
+		// file exists, as it does for the standalone command.
+		signer, err := flags.signer()
+		if err != nil {
+			return nil, err
+		}
+		opts, err := flags.options()
+		if err != nil {
+			return nil, err
+		}
+		if src.IsEncrypted() {
+			return nil, errors.New(encryptedSignRefusal)
+		}
+		p.Apply(func(_ context.Context, w *pdf.Writer) error {
+			w.Sign(signer, opts...)
+			return nil
 		})
 
 	case "attach":

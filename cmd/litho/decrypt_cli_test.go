@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -72,30 +71,5 @@ func TestDecrypt_RejectsAWrongPassword(t *testing.T) {
 	}
 	if _, err := os.Stat(out); err == nil {
 		t.Errorf("%s exists: a failed decrypt must not leave an output file", out)
-	}
-}
-
-// TestSign_RefusesWithAnExplanation pins a deliberate refusal rather than a
-// gap.
-//
-// runSign parses its flags and then always fails: the library's Sign method
-// takes a pdf.Signer the CLI cannot supply without pulling in crypto
-// dependencies. The refusal is the behaviour, and it should stay loud and
-// keep explaining itself rather than degrade into a bare non-zero exit.
-func TestSign_RefusesWithAnExplanation(t *testing.T) {
-	src := onePageTempPDF(t)
-	out := filepath.Join(t.TempDir(), "signed.pdf")
-
-	var stdout, stderr bytes.Buffer
-	rc := run(context.Background(), []string{"sign", "-o", out, src}, &stdout, &stderr)
-	if rc == exitOK {
-		t.Fatal("sign reported success; it cannot sign anything")
-	}
-	if !strings.Contains(stderr.String(), "Signer") {
-		t.Errorf("stderr = %q, want it to name the Signer interface the caller needs",
-			strings.TrimSpace(stderr.String()))
-	}
-	if _, err := os.Stat(out); err == nil {
-		t.Errorf("%s exists: a refusal must not create an output file", out)
 	}
 }

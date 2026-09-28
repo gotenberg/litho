@@ -335,7 +335,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  stamp-text    Stamp text on pages")
 	fmt.Fprintln(w, "  stamp-image   Stamp an image on pages")
 	fmt.Fprintln(w, "  stamp-pdf     Stamp a PDF page on pages")
-	fmt.Fprintln(w, "  sign          Sign a PDF (stub, requires custom Signer)")
+	fmt.Fprintln(w, "  sign          Sign a PDF with a certificate and private key")
 	fmt.Fprintln(w, "  attach        Embed a file attachment")
 	fmt.Fprintln(w, "  detach        Remove a file attachment")
 	fmt.Fprintln(w, "  autotag       Synthesize a PDF/UA structure tree")

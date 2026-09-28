@@ -17,7 +17,6 @@ import (
 // other way round, and an allow list read from the same map it is checking
 // proves nothing.
 var nonStageOutputCmds = map[string]string{
-	"sign":   "a later stage rewrites the document and voids the signature, and pipe cannot guarantee sign runs last",
 	"redact": "redact's value is its report, and pipe prints nothing but the document",
 	"pipe":   "pipe is the pipeline itself, so it cannot be one of its own stages",
 }
