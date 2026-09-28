@@ -346,6 +346,31 @@ func TestFixFigureAlt_WritesFiguresWrittenDirectly(t *testing.T) {
 	}
 }
 
+// TestFixFigureAlt_WritesFigureAnInlineElementLists pins that a Figure with an
+// object number of its own that only an element written inline lists takes
+// the alternate text at its own number.
+func TestFixFigureAlt_WritesFigureAnInlineElementLists(t *testing.T) {
+	t.Parallel()
+	doc, alloc := newTestDoc(t, buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K 5 0 R >>",
+		"<< /Type /StructElem /S /Document /P 4 0 R /K [<< /Type /StructElem /S /Sect /K [6 0 R] >>] >>",
+		"<< /Type /StructElem /S /Figure >>",
+	))
+	descs, err := fixFigureAlt(context.Background(), alloc, doc, Options{FigureAlt: "A chart"}, nil, "PDF/UA-1")
+	if err != nil {
+		t.Fatalf("fixFigureAlt: %v", err)
+	}
+	if len(descs) != 1 || !strings.Contains(descs[0], "on 1 figure(s)") {
+		t.Fatalf("descs %v, want one Figure given alternate text", descs)
+	}
+	if got := pendingDict(t, alloc, 6)["Alt"]; got != ast.PdfString("A chart") {
+		t.Errorf("Figure 6 /Alt = %v, want the caller's text", got)
+	}
+}
+
 func TestFixFigureAlt_UA1EmptyAltNotSatisfied(t *testing.T) {
 	// An empty /Alt fails PDF/UA-1 §7.3 (it demands non-empty), so aggressive mode
 	// replaces it with the placeholder.

@@ -45,7 +45,9 @@ func matchEmptyFigure(v compliance.Violation) bool {
 // encloses nothing, in aggressive mode (opts.PreserveContent false) when the
 // caller supplies no alternate text. A Figure written directly in a /K, with no
 // object number of its own, goes out of the element or the /K array written as
-// an object of its own that holds it ([emptyFigures.dropDirect]). A Figure
+// an object of its own that holds it ([emptyFigures.dropDirect]), and so does a
+// reference to a Figure that goes from the /K of an element written inline. A
+// Figure
 // encloses nothing when it has no kid, or when each of its kids (ISO 32000-1,
 // 14.7.2, Table 323) is:
 //
@@ -79,8 +81,7 @@ func matchEmptyFigure(v compliance.Violation) bool {
 // A Figure stays whenever the evidence falls short: a kid naming no page of the
 // document, content that cannot be read, a marked-content reference into a
 // form XObject (/Stm), a /ParentTree entry pairing it with content a page or an
-// annotation holds, a node listing it with no object number of its own, an
-// inline element naming it in /Ref, or a destination naming it with no page
+// annotation holds, an inline element naming it in /Ref, or a destination naming it with no page
 // destination to fall back on: a destination array, or an /SD beside no /D. A
 // tree, /ParentTree or /IDTree the walks cannot read whole leaves every Figure
 // in place. A Figure written directly whose kids lead back to the /K array
@@ -106,6 +107,13 @@ func matchEmptyFigure(v compliance.Violation) bool {
 //     tagged ones that write a Figure directly in a /K. Their empty ones stayed
 //     under the placeholder-less aggressive run and failed 7.3 or 8.2.5.28.2
 //     on both tools; now they go and no other output of the 1132 moves.
+//   - All corpora: no file has an element written inline list an element of
+//     its own, over the 203 files at PDF/UA-1 and 169 at PDF/UA-2 that hold a
+//     Figure lacking alternate text.
+//   - litho inlinekids_ua2.pdf: packs the Figures only inline elements list.
+//     Its empty ones took the placeholder under the aggressive run, since the
+//     removal kept every one; now they go, and the outputs pass litho and
+//     veraPDF 1.30.2 at PDF/UA-1 and PDF/UA-2 as before.
 func fixEmptyFigure(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	if opts.PreserveContent || opts.FigureAlt != "" {
 		return nil, nil
@@ -199,14 +207,17 @@ type emptyFigures struct {
 	// each name it again as their /K.
 	arrays map[int]bool
 	// holders maps an element to the object numbers of the nodes whose /K
-	// lists it, elements or the root.
-	holders map[int][]int
+	// lists it, elements or the root, and inlineHeld marks the elements an
+	// element written inline lists, which [emptyFigures.dropDirect] unlists
+	// in the object holding that element.
+	holders    map[int][]int
+	inlineHeld map[int]bool
 	// figures marks the elements that stand for Figure and lack the
 	// alternate text the profile requires.
 	figures map[int]bool
-	// kept marks the elements that stay whatever they enclose: listed by an
-	// element written inline, named by an inline element's /Ref, or named by
-	// a destination with no page destination beside it.
+	// kept marks the elements that stay whatever they enclose: named by an
+	// inline element's /Ref, or named by a destination with no page
+	// destination beside it.
 	kept map[int]bool
 	// claims maps a Figure to the /ParentTree entries naming it.
 	claims map[int][]parentTreeClaim
@@ -264,6 +275,7 @@ func newEmptyFigures(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		elems:      make(map[int]ast.PdfDict),
 		arrays:     make(map[int]bool),
 		holders:    make(map[int][]int),
+		inlineHeld: make(map[int]bool),
 		figures:    make(map[int]bool),
 		kept:       make(map[int]bool),
 		claims:     make(map[int][]parentTreeClaim),
@@ -371,7 +383,7 @@ func (f *emptyFigures) walk(ctx context.Context, kObj ast.PdfObject, holder, dep
 				continue
 			}
 			if holder == 0 {
-				f.kept[v.ObjectNum] = true
+				f.inlineHeld[v.ObjectNum] = true
 			} else {
 				f.holders[v.ObjectNum] = append(f.holders[v.ObjectNum], holder)
 			}
@@ -473,7 +485,7 @@ func (f *emptyFigures) goes(ctx context.Context, num int, onPath map[int]bool) b
 	if onPath[num] || ctx.Err() != nil {
 		return false
 	}
-	if !f.figures[num] || f.kept[num] || len(f.holders[num]) == 0 {
+	if !f.figures[num] || f.kept[num] || (len(f.holders[num]) == 0 && !f.inlineHeld[num]) {
 		f.verdicts[num] = false
 		return false
 	}
@@ -964,11 +976,12 @@ func (f *emptyFigures) remove(ctx context.Context, removed []int) (destCounts, e
 }
 
 // dropDirect takes out each Figure written directly in a /K that encloses
-// nothing ([emptyFigures.directGoes]), and returns how many it took out. It
-// rewrites the object holding one at its number: the structure tree root or an
-// element whose /K holds it, through inline elements however deep, or a /K
-// array written as an object of its own. A node left with no kid loses /K, and
-// such an array is left empty.
+// nothing ([emptyFigures.directGoes]), and each reference to a Figure gone
+// holds that the /K of an element written inline lists, and returns how many
+// Figures written directly it took out. It rewrites the object holding one at
+// its number: the structure tree root or an element whose /K holds it, through
+// inline elements however deep, or a /K array written as an object of its own.
+// A node left with no kid loses /K, and such an array is left empty.
 func (f *emptyFigures) dropDirect(ctx context.Context, gone map[int]bool) int {
 	dropped := 0
 	for _, num := range append([]int{f.rootRef.ObjectNum}, f.order...) {
@@ -976,8 +989,8 @@ func (f *emptyFigures) dropDirect(ctx context.Context, gone map[int]bool) int {
 			continue
 		}
 		node := resolveFromAllocOrDoc(ctx, f.alloc, f.doc, ast.PdfIndirectRef{ObjectNum: num})
-		updated, n := f.pruneElement(ctx, node)
-		if n > 0 {
+		updated, n, changed := f.pruneElement(ctx, node, gone)
+		if changed {
 			dropped += n
 			f.alloc.AllocAt(num, updated)
 		}
@@ -988,8 +1001,8 @@ func (f *emptyFigures) dropDirect(ctx context.Context, gone map[int]bool) int {
 		if !isArr {
 			continue
 		}
-		kept, n := f.pruneKids(ctx, arr)
-		if n == 0 {
+		kept, n, changed := f.pruneKids(ctx, arr, gone)
+		if !changed {
 			continue
 		}
 		dropped += n
@@ -1002,16 +1015,26 @@ func (f *emptyFigures) dropDirect(ctx context.Context, gone map[int]bool) int {
 }
 
 // pruneElement returns node with the Figures written directly in its /K that
-// go taken out ([emptyFigures.pruneKids]), and how many went. A /K naming an
-// object is left to that object's own turn.
-func (f *emptyFigures) pruneElement(ctx context.Context, node ast.PdfDict) (ast.PdfDict, int) {
+// go, and the references to a Figure gone holds, taken out
+// ([emptyFigures.pruneKids]), how many Figures written directly went, and
+// whether node changed. A /K naming any other object is left to that object's
+// own turn.
+func (f *emptyFigures) pruneElement(ctx context.Context, node ast.PdfDict, gone map[int]bool) (ast.PdfDict, int, bool) {
 	kObj, has := node["K"]
-	if _, isRef := kObj.(ast.PdfIndirectRef); !has || isRef {
-		return node, 0
+	if !has {
+		return node, 0, false
 	}
-	kept, n := f.pruneKids(ctx, kObj)
-	if n == 0 {
-		return node, 0
+	if ref, isRef := kObj.(ast.PdfIndirectRef); isRef {
+		if !gone[ref.ObjectNum] {
+			return node, 0, false
+		}
+		updated := maps.Clone(node)
+		delete(updated, "K")
+		return updated, 0, true
+	}
+	kept, n, changed := f.pruneKids(ctx, kObj, gone)
+	if !changed {
+		return node, 0, false
 	}
 	updated := maps.Clone(node)
 	if kept == nil {
@@ -1019,18 +1042,24 @@ func (f *emptyFigures) pruneElement(ctx context.Context, node ast.PdfDict) (ast.
 	} else {
 		updated["K"] = kept
 	}
-	return updated, n
+	return updated, n, true
 }
 
 // pruneKids returns the /K value kObj without the Figures written directly in
-// it that go, and with the inline elements it holds pruned in turn, and how
-// many Figures went. It returns nil when no kid is left.
-func (f *emptyFigures) pruneKids(ctx context.Context, kObj ast.PdfObject) (ast.PdfObject, int) {
+// it that go and the references to a Figure gone holds, and with the inline
+// elements it holds pruned in turn, how many Figures written directly went, and
+// whether kObj changed. It returns nil when no kid is left.
+func (f *emptyFigures) pruneKids(ctx context.Context, kObj ast.PdfObject, gone map[int]bool) (ast.PdfObject, int, bool) {
 	switch v := kObj.(type) {
 	case ast.PdfArray:
 		out := make(ast.PdfArray, 0, len(v))
 		n := 0
+		changed := false
 		for _, item := range v {
+			if ref, isRef := item.(ast.PdfIndirectRef); isRef && gone[ref.ObjectNum] {
+				changed = true
+				continue
+			}
 			elem, isDict := item.(ast.PdfDict)
 			if !isDict || !isStructElement(elem) {
 				out = append(out, item)
@@ -1038,29 +1067,31 @@ func (f *emptyFigures) pruneKids(ctx context.Context, kObj ast.PdfObject) (ast.P
 			}
 			if f.directGoes(ctx, elem, make(map[int]bool)) {
 				n++
+				changed = true
 				continue
 			}
-			updated, m := f.pruneElement(ctx, elem)
+			updated, m, elemChanged := f.pruneElement(ctx, elem, gone)
 			n += m
+			changed = changed || elemChanged
 			out = append(out, updated)
 		}
-		if n == 0 {
-			return kObj, 0
+		if !changed {
+			return kObj, 0, false
 		}
 		if len(out) == 0 {
-			return nil, n
+			return nil, n, true
 		}
-		return out, n
+		return out, n, true
 	case ast.PdfDict:
 		if !isStructElement(v) {
-			return kObj, 0
+			return kObj, 0, false
 		}
 		if f.directGoes(ctx, v, make(map[int]bool)) {
-			return nil, 1
+			return nil, 1, true
 		}
-		return f.pruneElement(ctx, v)
+		return f.pruneElement(ctx, v, gone)
 	}
-	return kObj, 0
+	return kObj, 0, false
 }
 
 // unlist takes the removed Figures out of the /K of each node listing them,

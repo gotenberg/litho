@@ -299,19 +299,83 @@ func TestFixEmptyFigure_CascadesThroughFiguresOnly(t *testing.T) {
 	}
 }
 
-// TestFixEmptyFigure_KeepsFigureAnInlineElementHolds pins that a Figure an
-// element written inline lists stays: the inline element has no object
-// number to write its /K back at.
-func TestFixEmptyFigure_KeepsFigureAnInlineElementHolds(t *testing.T) {
+// TestFixEmptyFigure_RemovesFigureAnInlineElementLists pins that a Figure with
+// an object number of its own that only an element written inline lists goes
+// when it encloses nothing: its reference leaves the inline element's /K in the
+// object holding that element, or the /K array written as an object of its
+// own the inline element names. It stays when it encloses content or when the
+// inline element also names it in /Ref.
+func TestFixEmptyFigure_RemovesFigureAnInlineElementLists(t *testing.T) {
 	t.Parallel()
-	doc, alloc := newTestDoc(t, emptyFigurePDF("<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R >>] >>",
-		"<< /Type /StructElem /S /Figure >>"))
-	fixes, err := fixEmptyFigure(context.Background(), alloc, doc, aggressive, nil, "PDF/UA-2")
-	if err != nil {
-		t.Fatalf("fixEmptyFigure: %v", err)
+	marked := "<< /Type /StructElem /S /Figure /Pg 3 0 R /K 0 >>"
+	for _, tc := range []struct {
+		name   string
+		elem   string
+		extra  []string
+		owner  int
+		want   string
+		direct bool
+	}{
+		{name: "as an inline element's /K", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R >>] >>",
+			owner: 9, want: "[<< /Type /StructElem /S /Div >>]"},
+		{name: "in an inline element's /K array", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K << /Type /StructElem /S /Div /K [10 0 R " + marked + "] >> >>",
+			owner: 9, want: "<< /Type /StructElem /S /Div /K [" + marked + "] >>"},
+		{name: "in a /K array of its own an inline element names", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 11 0 R >>] >>",
+			extra: []string{"[10 0 R]"}, owner: 11, want: "[]"},
+		{name: "under an inline Figure that goes too", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Figure /K 10 0 R >> " + marked + "] >>",
+			owner: 9, want: "[" + marked + "]", direct: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			objs := append([]string{"<< /Type /StructElem /S /Figure >>"}, tc.extra...)
+			doc, alloc := newTestDoc(t, emptyFigurePDF(tc.elem, objs...))
+			fixes, err := fixEmptyFigure(context.Background(), alloc, doc, aggressive, nil, "PDF/UA-2")
+			if err != nil {
+				t.Fatalf("fixEmptyFigure: %v", err)
+			}
+			wantFixes := 1
+			if tc.direct {
+				wantFixes = 2
+			}
+			if len(fixes) != wantFixes || !strings.Contains(fixes[0], "removed empty Figure 10 0 R") {
+				t.Fatalf("fixes %v, want the removal of Figure 10 reported", fixes)
+			}
+			if len(alloc.Pending()) != 1 {
+				t.Errorf("pending %d objects, want the owner %d alone", len(alloc.Pending()), tc.owner)
+			}
+			got := alloc.Pending()[tc.owner]
+			if d, isDict := got.(ast.PdfDict); isDict {
+				got = d["K"]
+			}
+			// The expected value is read back from a file holding it as an
+			// object of its own, after the fixture's.
+			wantDoc, _ := newTestDoc(t, emptyFigurePDF(tc.elem, append(objs, tc.want)...))
+			want, err := wantDoc.Resolve(context.Background(), ast.PdfIndirectRef{ObjectNum: 10 + len(objs)})
+			if err != nil {
+				t.Fatalf("reading the expected value: %v", err)
+			}
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("owner %d holds %v, want %v", tc.owner, got, want)
+			}
+		})
 	}
-	if len(fixes) != 0 || len(alloc.Pending()) != 0 {
-		t.Errorf("fixes=%v pending=%d, want the Figure kept", fixes, len(alloc.Pending()))
+	for _, tc := range []struct{ name, elem, figure string }{
+		{name: "enclosing content", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R >>] >>",
+			figure: "<< /Type /StructElem /S /Figure /Pg 3 0 R /K 0 >>"},
+		{name: "named in the inline element's /Ref", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R /Ref [10 0 R] >>] >>",
+			figure: "<< /Type /StructElem /S /Figure >>"},
+	} {
+		t.Run("stays "+tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, alloc := newTestDoc(t, emptyFigurePDF(tc.elem, tc.figure))
+			fixes, err := fixEmptyFigure(context.Background(), alloc, doc, aggressive, nil, "PDF/UA-2")
+			if err != nil {
+				t.Fatalf("fixEmptyFigure: %v", err)
+			}
+			if len(fixes) != 0 || len(alloc.Pending()) != 0 {
+				t.Errorf("fixes=%v pending=%d, want the Figure kept", fixes, len(alloc.Pending()))
+			}
+		})
 	}
 }
 
