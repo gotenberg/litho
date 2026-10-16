@@ -664,7 +664,11 @@ type PDFStamp struct {
 // The interface is owned by the [pdf] package so callers never have to
 // import an internal path. An internal adapter forwards user
 // implementations to the signing engine at write time.
-// Implementations must be safe for concurrent use.
+// Implementations must be safe for concurrent use. One signature may call
+// Sign twice: again when the RFC 3161 token outgrows the room reserved for it,
+// and again under another subfilter when a signature field's seed values
+// recommend ETSI.CAdES.detached first and the first SignedData is not a CAdES
+// one (see [WithSignatureField]).
 type Signer interface {
 	// Sign computes a PKCS#7 / CMS signature over the given SHA-256
 	// digest bytes.

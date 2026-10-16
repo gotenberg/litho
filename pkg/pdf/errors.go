@@ -176,7 +176,11 @@ var (
 	// returned is not the CAdES signature of a PAdES baseline signature: it
 	// carries a signing-time attribute, or lacks the content-type,
 	// message-digest or ESS signing-certificate one (ETSI EN 319 142-1, 6.3,
-	// Table 1). Nothing is written.
+	// Table 1). It is also returned, with [ErrSeedValueUnmet], when the seed
+	// values of the field [WithSignatureField] names require a list of
+	// subfilters whose first litho writes is ETSI.CAdES.detached, and that
+	// Signer's SignedData does not qualify.
+	// Nothing is written.
 	ErrSignatureNotPAdES = signature.ErrNotCAdES
 
 	// ErrTimestampAuthority is returned by [Writer.WriteTo] when the RFC 3161

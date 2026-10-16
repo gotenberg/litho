@@ -26,7 +26,8 @@ type signerAdapter struct {
 // Sign returns the SignedData over digest. Under ETSI.CAdES.detached the
 // signer of [NewSigner] writes the CAdES form, and the SignedData of any other
 // [Signer] is refused with [ErrSignatureNotPAdES] when it is not one (see
-// [WithPAdES]).
+// [WithPAdES]). The refusal also wraps [mutations.ErrSubFilterUnwritable], so
+// a subfilter a field's seed values chose gives way to the next they accept.
 //
 // With a timestamp authority, the SignedData's signature value is then
 // timestamped (see [WithTimestampAuthority]).
@@ -50,7 +51,7 @@ func (a signerAdapter) signedData(digest []byte, cades bool) ([]byte, error) {
 	}
 	if cades {
 		if err := signature.CheckCAdES(der); err != nil {
-			return nil, fmt.Errorf("the Signer's SignedData under ETSI.CAdES.detached: %w", err)
+			return nil, fmt.Errorf("the Signer's SignedData under ETSI.CAdES.detached: %w: %w", mutations.ErrSubFilterUnwritable, err)
 		}
 	}
 	return der, nil

@@ -40,7 +40,8 @@ type SignParams struct {
 // timestamp. Implementations control key material and signing algorithms.
 type Signer interface {
 	// Sign computes the /Contents over the given SHA-256 digest, as params
-	// asks for it.
+	// asks for it. An error wrapping [ErrSubFilterUnwritable] says the
+	// signer cannot write params.SubFilter.
 	Sign(ctx context.Context, digest []byte, params SignParams) ([]byte, error)
 	// Certificate returns the signing certificate, nil when it is known only
 	// once Sign returns, as a timestamp authority's is.
@@ -82,6 +83,10 @@ type SignatureInfo struct {
 	// 12.8.5): /Type /DocTimeStamp, /SubFilter /ETSI.RFC3161 and none of the
 	// entries above but the field.
 	DocTimeStamp bool
+
+	// seedSubFilter is the subfilter choice the field's seed values made, nil
+	// when the caller's or the default stands.
+	seedSubFilter *seedSubFilterChoice
 }
 
 // subFilter returns the /SubFilter the signature dictionary takes.
@@ -233,20 +238,12 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		}
 	}
 
-	// Reserve space for the signature. The /Contents value is a hex string
-	// of estimatedSize bytes, which requires estimatedSize*2 hex chars.
 	params := SignParams{SubFilter: info.subFilter(), TimestampURL: info.TimestampURL}
-	estimatedSize := max(signer.EstimatedSize(params), 8192)
-
-	// Create the signature dictionary with a placeholder /Contents.
-	// Actual zero bytes (not ASCII '0') make the serializer produce a hex
-	// string <0000...0000> that the second pass can locate and patch.
-	placeholderBytes := make([]byte, estimatedSize)
+	// [signedFile] sets the subfilter and the /Contents placeholder, which
+	// the signature's form decides.
 	sigDict := ast.PdfDict{
 		"Type":      ast.PdfName("Sig"),
 		"Filter":    ast.PdfName("Adobe.PPKLite"),
-		"SubFilter": params.SubFilter,
-		"Contents":  ast.PdfString(string(placeholderBytes)),
 		"ByteRange": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(9999999999), ast.PdfInt(9999999999), ast.PdfInt(9999999999)},
 	}
 	if info.DocTimeStamp {
@@ -320,27 +317,88 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		// catalog pointing at 0 0 R.
 		newCatalog["AcroForm"] = acroFormDict
 	}
-	switch {
-	case info.DocTimeStamp:
-		if err := DeclareESIC(ctx, alloc, doc, newCatalog, ESICLevelLTV); err != nil {
+	// ISO 32000-1, 12.7.4.5, Table 234: the seed values list the acceptable
+	// subfilters in preference order. Whether a caller's Signer writes the
+	// one tried shows only once it signs, so a Signer that cannot is asked
+	// again, under the next one, from where the subfilter starts to matter.
+	snap := alloc.Snapshot()
+	parts := signedFileParts{
+		sigDict: sigDict, catalog: newCatalog, catalogRef: catalogRef,
+		docTimeStamp: info.DocTimeStamp, xrefStream: xrefStream, media: media,
+	}
+	for {
+		pdfBytes, err := signedFile(ctx, alloc, doc, signer, parts, params)
+		if errors.Is(err, ErrSubFilterUnwritable) && info.seedSubFilter != nil {
+			next, refusal := info.seedSubFilter.fallBack(err)
+			if refusal != nil {
+				return refusal
+			}
+			doc.Logger.Info("signing: the signer cannot write the subfilter the field's seed values prefer, so the signature takes the next one they accept",
+				slog.String("field", fieldName), slog.String("preferred", string(params.SubFilter)),
+				slog.String("subfilter", string(next)), slog.Any("err", err))
+			alloc.Restore(snap)
+			params.SubFilter = next
+			continue
+		}
+		if err != nil {
 			return err
+		}
+		if _, err := dst.Write(pdfBytes); err != nil {
+			return fmt.Errorf("writing the signed document: %w", err)
+		}
+		return nil
+	}
+}
+
+// signedFileParts is what [signedFile] completes: the signature dictionary,
+// queued already, the catalog of the update, not queued yet, and how the
+// update is written.
+type signedFileParts struct {
+	sigDict      ast.PdfDict
+	catalog      ast.PdfDict
+	catalogRef   ast.PdfIndirectRef
+	docTimeStamp bool
+	xrefStream   bool
+	media        *document.MediaBoxDefault
+}
+
+// signedFile completes the update alloc holds for a signature params
+// describes, writes and signs it, and returns the whole signed file. The
+// signature dictionary takes the subfilter and a /Contents placeholder sized
+// by the signer's estimate, and the catalog the ESIC extension the signature
+// declares. It runs again on alloc restored to where it started when the
+// signer cannot write the subfilter.
+func signedFile(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, signer Signer, parts signedFileParts, params SignParams) ([]byte, error) {
+	// The /Contents value is a hex string of estimatedSize bytes, which
+	// requires estimatedSize*2 hex chars. Actual zero bytes (not ASCII '0')
+	// make the serializer produce a hex string <0000...0000> that the second
+	// pass can locate and patch.
+	estimatedSize := max(signer.EstimatedSize(params), 8192)
+	parts.sigDict["SubFilter"] = params.SubFilter
+	parts.sigDict["Contents"] = ast.PdfString(string(make([]byte, estimatedSize)))
+
+	catalog := maps.Clone(parts.catalog)
+	switch {
+	case parts.docTimeStamp:
+		if err := DeclareESIC(ctx, alloc, doc, catalog, ESICLevelLTV); err != nil {
+			return nil, err
 		}
 	case params.SubFilter == SubFilterCAdESDetached:
-		if err := DeclareESIC(ctx, alloc, doc, newCatalog, ESICLevelCAdES); err != nil {
-			return err
+		if err := DeclareESIC(ctx, alloc, doc, catalog, ESICLevelCAdES); err != nil {
+			return nil, err
 		}
 	}
-	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+	alloc.AllocAt(parts.catalogRef.ObjectNum, catalog)
 	// The update writes the catalog, and the pages the edits before it wrote.
-	if err := CompleteWrittenPageTree(ctx, alloc, doc, media); err != nil {
-		return err
+	if err := CompleteWrittenPageTree(ctx, alloc, doc, parts.media); err != nil {
+		return nil, err
 	}
 
 	// The update is written to a buffer first, so the placeholder can be
 	// patched before anything reaches dst.
-	cfg, err := incrementalConfig(doc, alloc, xrefStream)
+	cfg, err := incrementalConfig(doc, alloc, parts.xrefStream)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// A signature carrying an RFC 3161 token can outgrow its placeholder,
@@ -352,16 +410,10 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		var tooLarge *signatureTooLargeError
 		if errors.As(err, &tooLarge) && !retried && params.TimestampURL != "" {
 			estimatedSize = tooLarge.size + timestampSlack
-			sigDict["Contents"] = ast.PdfString(string(make([]byte, estimatedSize)))
+			parts.sigDict["Contents"] = ast.PdfString(string(make([]byte, estimatedSize)))
 			continue
 		}
-		if err != nil {
-			return err
-		}
-		if _, err := dst.Write(pdfBytes); err != nil {
-			return fmt.Errorf("writing the signed document: %w", err)
-		}
-		return nil
+		return pdfBytes, err
 	}
 }
 

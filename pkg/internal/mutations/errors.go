@@ -412,3 +412,10 @@ var ErrSignatureFieldUnavailable = errors.New("signature field unavailable")
 // the SignedData, a timestamp with no authority named, or a signing
 // certificate other than the signer's.
 var ErrSeedValueUnmet = errors.New("signature field seed value cannot be met")
+
+// ErrSubFilterUnwritable reports a [Signer] whose /Contents does not suit the
+// /SubFilter [SignParams] asked for: a caller's SignedData that is not the
+// CAdES signature ETSI.CAdES.detached requires (ETSI EN 319 142-1, 6.3). A
+// subfilter a seed value dictionary chose then gives way to the next one it
+// accepts (see [WriteWithSignature]).
+var ErrSubFilterUnwritable = errors.New("the signer cannot write the signature's subfilter")

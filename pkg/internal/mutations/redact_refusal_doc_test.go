@@ -34,6 +34,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrImageShared":                   "CheckBlankedImageUses, document-wide rather than per page",
 	"ErrSignatureFieldUnavailable":     "WriteWithSignature",
 	"ErrSeedValueUnmet":                "WriteWithSignature",
+	"ErrSubFilterUnwritable":           "the Signer WriteWithSignature calls",
 }
 
 // TestRedactPageRegionsDocNamesEveryRefusal pins the refusal list on

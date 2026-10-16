@@ -112,14 +112,33 @@ func applySeedValues(ctx context.Context, doc *document.Document, sv ast.PdfDict
 				return unmet("it requires one of the subfilters %v, not the %s asked for", subFilters, info.SubFilter)
 			}
 		default:
-			// Table 234: the first name the signer supports is the one to
-			// use.
-			i := slices.IndexFunc(subFilters, func(n ast.PdfName) bool { return slices.Contains(supported, n) })
-			if i >= 0 {
-				info.SubFilter = subFilters[i]
-			} else if ff&seedSubFilter != 0 {
-				return unmet("it requires one of the subfilters %v; litho writes %v", subFilters, supported)
+			// Table 234: "The first name in the array that matches an
+			// encoding supported by the signature handler shall be the one
+			// used", and /Ff bit 2 makes the list binding. Bound, the
+			// signature takes that first name or none: pyHanko's validator
+			// reports any other as a seed value violation ("the standard
+			// mandates that we take the first available subfilter"). Unbound,
+			// the names are recommendations, so the signature falls back
+			// through the others and then litho's default when a caller's
+			// Signer, whose SignedData shows its form only once it signs,
+			// cannot write the first (see [WriteWithSignature]).
+			var acceptable []ast.PdfName
+			for _, n := range subFilters {
+				if slices.Contains(supported, n) && !slices.Contains(acceptable, n) {
+					acceptable = append(acceptable, n)
+				}
 			}
+			required := ff&seedSubFilter != 0
+			switch {
+			case len(acceptable) == 0 && required:
+				return unmet("it requires one of the subfilters %v; litho writes %v", subFilters, supported)
+			case required:
+				acceptable = acceptable[:1]
+			case !slices.Contains(acceptable, SubFilterPKCS7Detached):
+				acceptable = append(acceptable, SubFilterPKCS7Detached)
+			}
+			info.SubFilter = acceptable[0]
+			info.seedSubFilter = &seedSubFilterChoice{field: field, listed: subFilters, required: required, fallbacks: acceptable[1:]}
 		}
 	}
 
@@ -186,6 +205,33 @@ func applySeedValues(ctx context.Context, doc *document.Document, sv ast.PdfDict
 		}
 	}
 	return nil
+}
+
+// seedSubFilterChoice is the subfilter a seed value dictionary chose (ISO
+// 32000-1, 12.7.4.5, Table 234): the field holding it, its /SubFilter list,
+// whether /Ff bit 2 makes the list a requirement, and the acceptable
+// subfilters, in preference order, left to fall back to, none when it does.
+type seedSubFilterChoice struct {
+	field     string
+	listed    []ast.PdfName
+	required  bool
+	fallbacks []ast.PdfName
+}
+
+// fallBack returns the next acceptable subfilter once the signer could not
+// write the one tried, cause saying why, and consumes it. With none left it
+// returns the refusal: [ErrSeedValueUnmet] wrapping cause when the list is a
+// requirement, cause alone otherwise.
+func (c *seedSubFilterChoice) fallBack(cause error) (ast.PdfName, error) {
+	if len(c.fallbacks) == 0 {
+		if c.required {
+			return "", fmt.Errorf("%w: field %q: its subfilters %v are required, which makes the first litho writes binding (ISO 32000-1, Table 234), and the signer cannot write it: %w", ErrSeedValueUnmet, c.field, c.listed, cause)
+		}
+		return "", cause
+	}
+	next := c.fallbacks[0]
+	c.fallbacks = c.fallbacks[1:]
+	return next, nil
 }
 
 // checkCertSeed checks the signing certificate against the requirements of

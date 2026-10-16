@@ -309,7 +309,14 @@ func WithTimestampAuthority(url string) SignOption {
 // dictionary (12.8.2.4). Its seed values (/SV, Tables 234 and 235) choose the
 // subfilter, the reason and the timestamp authority the caller left unset,
 // and a requirement the signature cannot meet fails the write with
-// [ErrSeedValueUnmet].
+// [ErrSeedValueUnmet]. Their subfilters are in preference order, and the
+// first litho writes is the one the signature takes. When it is
+// ETSI.CAdES.detached and a [Signer] other than the one of [NewSigner]
+// returns a SignedData that is not a CAdES one (see [WithPAdES]), a list
+// that is a recommendation lets [Writer.WriteTo] call the Signer again, under
+// the next subfilter it names and then adbe.pkcs7.detached. A required list
+// binds its first subfilter (ISO 32000-1, Table 234), so the write fails with
+// [ErrSeedValueUnmet] and [ErrSignatureNotPAdES].
 func WithSignatureField(name string) SignOption {
 	return func(o *signOpts) { o.info.Field = name }
 }
