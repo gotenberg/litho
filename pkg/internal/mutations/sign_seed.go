@@ -365,7 +365,8 @@ func keyUsageMatches(usage x509.KeyUsage, pattern string) bool {
 
 // lockFields turns read-only the fields lock, the /Lock of the signature
 // field being signed, names (ISO 32000-1, 12.7.4.5, Table 233), by setting
-// the ReadOnly bit of their /Ff (Table 221) in alloc, and returns the FieldMDP
+// the ReadOnly bit of the /Ff (Table 221) of each terminal field among them in
+// alloc, and returns the FieldMDP
 // signature reference dictionary (12.8.2.4, Tables 253 and 256) that records
 // the lock in the signature. fields are the form's root fields, and
 // catalogRef names the catalog the transform's /Data refers to.
@@ -432,7 +433,11 @@ func lockFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		}
 		named := top.named || (hasT && slices.Contains(names, name))
 		locked := action == "All" || (action == "Include" && named) || (action == "Exclude" && !named)
-		if hasT && locked {
+		// /Ff is inheritable (ISO 32000-1, 12.7.3.1, Table 220), so a
+		// non-terminal field's ReadOnly bit reaches every kid that sets no
+		// /Ff of its own, an Exclude-named kid among them. Each terminal
+		// field takes the bit itself instead.
+		if hasT && locked && !hasKidFields(ctx, alloc, doc, field) {
 			if !isRef {
 				doc.Logger.Debug("signing: a locked field written directly cannot be updated", slog.String("field", name))
 			} else {
@@ -482,6 +487,28 @@ func lockFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		"TransformParams": params,
 		"Data":            catalogRef,
 	}, nil
+}
+
+// hasKidFields reports whether field is a non-terminal field: a kid of it
+// carries a partial name, where a widget kid carries none (ISO 32000-1,
+// 12.7.3.1).
+func hasKidFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, field ast.PdfDict) bool {
+	kidsObj, ok := field["Kids"]
+	if !ok {
+		return false
+	}
+	kids, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj)
+	if err != nil {
+		return false
+	}
+	for _, kid := range kids {
+		if d, err := resolveDictAllocFirst(ctx, alloc, doc, kid); err == nil && d != nil {
+			if _, ok := d["T"]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // seedInt returns obj as an integer, 0 when it is none.

@@ -148,6 +148,59 @@ func TestSignatureFieldLock(t *testing.T) {
 	})
 }
 
+// TestSignatureFieldLockExcludesAKid signs a field whose /Lock excludes one kid
+// of a non-terminal field. /Ff is inheritable (ISO 32000-1, 12.7.3.1), so the
+// lock sets the ReadOnly bit of the other kid and leaves the parent's alone,
+// and the excluded kid stays writable (Table 233).
+func TestSignatureFieldLockExcludesAKid(t *testing.T) {
+	t.Parallel()
+	pki := pkitest.New(t)
+	signer, err := NewSigner(pki.Leaf, pki.LeafKey, pki.Intermediate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 7 0 R] >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [7 0 R] >>",
+		"<< /FT /Tx /T (group) /Kids [5 0 R 6 0 R] >>",
+		"<< /T (first) /Parent 4 0 R /V (one) >>",
+		"<< /T (second) /Parent 4 0 R /V (two) >>",
+		"<< /FT /Sig /T (Approval) /Type /Annot /Subtype /Widget /Rect [0 0 0 0] /P 3 0 R /Lock 8 0 R >>",
+		"<< /Type /SigFieldLock /Action /Exclude /Fields [(group.first)] >>",
+	})
+	out, err := signSeeded(t, src, signer)
+	if err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	ff := func(num int) ast.PdfInt {
+		d, err := document.ResolveDict(ctx, r.doc, ast.PdfIndirectRef{ObjectNum: num})
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, _ := d["Ff"].(ast.PdfInt)
+		return n
+	}
+	if got := ff(4); got&1 != 0 {
+		t.Errorf("group /Ff %d: its ReadOnly bit reaches the excluded group.first", got)
+	}
+	if got := ff(5); got&1 != 0 {
+		t.Errorf("group.first /Ff %d, want it writable", got)
+	}
+	if got := ff(6); got&1 == 0 {
+		t.Errorf("group.second /Ff %d, want it read-only", got)
+	}
+	if got := ff(7); got&1 == 0 {
+		t.Errorf("Approval /Ff %d, want it read-only", got)
+	}
+}
+
 // TestSignatureFieldSeedValues signs fields whose seed values ask for things
 // the signature can be, which it becomes, and things it cannot, which are
 // refused (ISO 32000-1, 12.7.4.5, Tables 234 and 235).
