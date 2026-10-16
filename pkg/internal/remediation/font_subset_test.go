@@ -454,6 +454,44 @@ func TestFixFontEmbed_FontsShareOneSubset(t *testing.T) {
 	}
 }
 
+// TestFixFontEmbed_EncodingsKeepOwnPrograms pins that fonts given one program
+// under different encodings each hold a subset of their own, even when the
+// subsets come out alike, since veraPDF reads a stream shared by both under the
+// first font's encoding and judges the other font by it, and that a whole
+// program stays one stream.
+func TestFixFontEmbed_EncodingsKeepOwnPrograms(t *testing.T) {
+	t.Parallel()
+	stream := "BT /F1 12 Tf 72 700 Td (AB) Tj /F2 12 Tf 0 20 Td (AB) Tj /F3 12 Tf 0 20 Td (AB) Tj ET"
+	data := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(stream), stream),
+		trueTypeFont("ArialMT", 667, 667),
+		strings.Replace(trueTypeFont("Arial-BoldMT", 667, 667), "/WinAnsiEncoding", "/MacRomanEncoding", 1),
+		trueTypeFont("Arial-ItalicMT", 667, 667),
+	)
+	provider := func(context.Context, FontRequest) ([]byte, error) { return subsetSans(0), nil }
+	for _, whole := range []bool{false, true} {
+		report, doc, _ := remediateWithOptionsAndReopen(t, data, string(models.PDFA2b), Options{PreserveContent: true, Fonts: provider, WholeFonts: whole})
+		if len(report.FontRefusals) != 0 {
+			t.Fatalf("whole=%v: refusals %v", whole, report.FontRefusals)
+		}
+		fd1, _ := fontProgram(t, doc, pageFont(t, doc, "F1"))
+		fd2, _ := fontProgram(t, doc, pageFont(t, doc, "F2"))
+		fd3, _ := fontProgram(t, doc, pageFont(t, doc, "F3"))
+		if shared := fd1["FontFile2"] == fd2["FontFile2"]; shared != whole {
+			t.Errorf("whole=%v: WinAnsiEncoding and MacRomanEncoding fonts hold programs %v and %v, want them shared only when whole", whole, fd1["FontFile2"], fd2["FontFile2"])
+		}
+		if fd1["FontFile2"] != fd3["FontFile2"] {
+			t.Errorf("whole=%v: two WinAnsiEncoding fonts hold programs %v and %v, want one shared", whole, fd1["FontFile2"], fd3["FontFile2"])
+		}
+		if got := fontFindings(t, doc, string(models.PDFA2b)); len(got) != 0 {
+			t.Errorf("whole=%v: font findings %v", whole, got)
+		}
+	}
+}
+
 // TestFixFontEmbed_InlineFontSharesSubset pins that a font written inline in
 // a resource dictionary joins the subset of the program it shares with an
 // indirect font: finish moves it to a new object, and both fonts draw from one

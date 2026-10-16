@@ -132,8 +132,9 @@ func fixFontEmbed(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		provider:   opts.Fonts,
 		wholeFonts: opts.WholeFonts,
 		profile:    profile,
-		programs:   make(map[programKey]ast.PdfIndirectRef),
+		programs:   make(map[programShare]ast.PdfIndirectRef),
 		written:    make(map[int]programKey),
+		fdMapping:  make(map[int]string),
 	}
 	targets := make([]fontTarget, 0, len(uses.codes)+len(uses.inline))
 	for _, objNum := range slices.Sorted(maps.Keys(uses.codes)) {
@@ -218,6 +219,14 @@ type programKey struct {
 	format outlineFormat
 }
 
+// programShare identifies a program stream the run writes: a program, read
+// under one mapping of codes to glyphs ([fontEmbedder.codeMapping]). Fonts
+// share a stream only when both agree.
+type programShare struct {
+	program programKey
+	mapping string
+}
+
 // fontEmbedder carries one run of [fixFontEmbed].
 type fontEmbedder struct {
 	alloc    *writer.ObjAllocator
@@ -226,10 +235,14 @@ type fontEmbedder struct {
 	// wholeFonts embeds every program whole ([Options.WholeFonts]).
 	wholeFonts bool
 	profile    string
-	programs   map[programKey]ast.PdfIndirectRef
+	programs   map[programShare]ast.PdfIndirectRef
 	// written holds, by descriptor object number, the program this run wrote
 	// into the descriptor. A descriptor held directly has no entry.
 	written map[int]programKey
+	// fdMapping holds, by descriptor object number, the mapping of the first
+	// font the run planned over the descriptor: fonts sharing a descriptor
+	// share the program it holds, whatever their mappings.
+	fdMapping map[int]string
 	// fdUsers and drFonts are [fontEmbedder.descriptorUsers] and
 	// [fontEmbedder.formFonts], read once per run.
 	fdUsers map[int]int
@@ -351,12 +364,18 @@ func (e *fontEmbedder) embed(ctx context.Context, order int, t fontTarget) error
 	if prev, ours := e.written[fdNum]; ours && prev != key {
 		return refused(fmt.Errorf("%w: the font shares its descriptor with a font given another program", ErrFontKind))
 	}
+	share := programShare{program: key, mapping: e.codeMapping(ctx, plan)}
 	if fdNum != 0 {
 		e.written[fdNum] = key
+		if mapping, seen := e.fdMapping[fdNum]; seen {
+			share.mapping = mapping
+		} else {
+			e.fdMapping[fdNum] = share.mapping
+		}
 	}
 	e.queued = append(e.queued, &queuedFont{
 		order: order, objNum: t.objNum, site: t.site, font: font, baseFont: baseFont, fdNum: fdNum,
-		before: before, shown: shown, plan: plan, whole: key,
+		before: before, shown: shown, plan: plan, share: share,
 	})
 	return nil
 }
@@ -798,12 +817,16 @@ func (e *fontEmbedder) judge(ctx context.Context, plan *embedPlan, before []comp
 }
 
 // write queues the planned font: the program stream, shared with every font
-// of the run given the same program, the descriptor at the number the font's
-// descriptor had or a new one, with its /CIDSet stream, and the font, and for
-// a composite font its descendant and its /CIDToGIDMap.
-func (e *fontEmbedder) write(ctx context.Context, objNum int, font ast.PdfDict, plan *embedPlan) {
+// of the run given the same program, under the same mapping when it is a
+// subset ([fontEmbedder.subsetQueued]), the descriptor at the number the
+// font's descriptor had or a new one, with its /CIDSet stream, and the font,
+// and for a composite font its descendant and its /CIDToGIDMap.
+func (e *fontEmbedder) write(ctx context.Context, objNum int, font ast.PdfDict, plan *embedPlan, mapping string) {
+	if plan.subsetGlyphs == 0 {
+		mapping = ""
+	}
 	descriptor := maps.Clone(plan.descriptor)
-	descriptor[plan.programKey] = e.programRef(plan.program)
+	descriptor[plan.programKey] = e.programRef(plan.program, mapping)
 	if plan.cidSet != nil {
 		// ISO 32000-1, Table 124 makes /CIDSet a stream, which is indirect.
 		descriptor["CIDSet"] = e.alloc.Alloc(flateStream(ast.PdfDict{}, plan.cidSet))
@@ -848,9 +871,10 @@ func (e *fontEmbedder) place(entry ast.PdfObject, dict ast.PdfDict) ast.PdfIndir
 }
 
 // programRef returns the object holding prog's program stream, written once
-// per program and format.
-func (e *fontEmbedder) programRef(prog *suppliedProgram) ast.PdfIndirectRef {
-	key := programKey{sum: sha256.Sum256(prog.data), format: prog.format}
+// per program, format and mapping of codes to glyphs
+// ([fontEmbedder.codeMapping]).
+func (e *fontEmbedder) programRef(prog *suppliedProgram, mapping string) ast.PdfIndirectRef {
+	key := programShare{program: programKey{sum: sha256.Sum256(prog.data), format: prog.format}, mapping: mapping}
 	if ref, ok := e.programs[key]; ok {
 		return ref
 	}

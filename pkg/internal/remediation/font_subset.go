@@ -44,9 +44,10 @@ type queuedFont struct {
 	before []compliance.Violation
 	shown  []ast.PdfString
 	plan   *embedPlan
-	// whole identifies the supplied program, so the fonts given the same one
+	// share identifies the supplied program and the font's mapping of codes
+	// to glyphs, so the fonts given the same program under the same mapping
 	// share its subset.
-	whole programKey
+	share programShare
 }
 
 // finish writes the fonts [fontEmbedder.embed] queued, each over a subset of
@@ -79,7 +80,7 @@ func (e *fontEmbedder) finish(ctx context.Context, uses fontUses) ([]fontOutcome
 		return nil, err
 	}
 	for _, q := range e.queued {
-		e.write(ctx, q.writeTo, q.font, q.plan)
+		e.write(ctx, q.writeTo, q.font, q.plan, q.share.mapping)
 		outcomes = append(outcomes, fontOutcome{order: q.order, baseFont: q.baseFont, objNum: q.objNum, fix: q.describe()})
 	}
 	return outcomes, nil
@@ -106,8 +107,9 @@ func (q *queuedFont) describe() string {
 }
 
 // subsetQueued gives the queued fonts subsets of their programs. The fonts
-// given the same program share one subset, holding .notdef, the glyphs each
-// of them shows and the components those draw, so the program is written
+// given the same program under the same mapping of codes to glyphs
+// ([fontEmbedder.codeMapping]) share one subset, holding .notdef, the glyphs
+// each of them shows and the components those draw, so the program is written
 // once, as a whole program shared by several fonts is. A subset carries the
 // subset tag ISO 32000-1, 9.6.4 gives a font whose program holds only part of
 // its glyphs, and, at PDF/A-1, the /CharSet of a Type 1 subset and the
@@ -147,8 +149,8 @@ func (q *queuedFont) describe() string {
 //     the whole programs, and pdf.js and poppler render those pages pixel for
 //     pixel alike.
 func (e *fontEmbedder) subsetQueued(ctx context.Context, uses fontUses) error {
-	groups := make(map[programKey][]*queuedFont)
-	var order []programKey
+	groups := make(map[programShare][]*queuedFont)
+	var order []programShare
 	for _, q := range e.queued {
 		switch {
 		case e.wholeFonts:
@@ -158,10 +160,10 @@ func (e *fontEmbedder) subsetQueued(ctx context.Context, uses fontUses) error {
 		case e.formFonts(ctx)[q.objNum]:
 			q.plan.whole = wholeFormFont
 		default:
-			if _, seen := groups[q.whole]; !seen {
-				order = append(order, q.whole)
+			if _, seen := groups[q.share]; !seen {
+				order = append(order, q.share)
 			}
-			groups[q.whole] = append(groups[q.whole], q)
+			groups[q.share] = append(groups[q.share], q)
 		}
 	}
 	for _, key := range order {
@@ -227,6 +229,76 @@ func (e *fontEmbedder) sharingWhole(ctx context.Context, members []*queuedFont, 
 		out = append(out, q)
 	}
 	return out
+}
+
+// codeMapping returns what decides which glyph of its program each code of
+// the planned font selects, as a key equal for two fonts exactly when they
+// read the program alike: the font type and the symbolic flag, which choose
+// the cmap subtable a TrueType font reads (ISO 32000-1, 9.6.6.4), the
+// /Encoding with its /BaseEncoding and /Differences (ISO 32000-1, 9.6.6.1),
+// and for a composite font its CMap, the character collection of its
+// CIDFont and the /CIDToGIDMap (ISO 32000-1, 9.7.4.2 and 9.7.5).
+//
+// The fonts given one program share its subset only under one mapping. A
+// conforming reader reads each font's program under that font's own mapping,
+// whoever shares the stream, but veraPDF caches a TrueType program by its
+// stream, the symbolic flag and the object holding /Encoding, which it does
+// not tell apart when the encoding is written directly, a name or a
+// dictionary. It then reads a stream two such fonts share once, under the
+// first font's encoding, and judges the other by it: a code the other font's
+// /Differences names reads as a glyph the program lacks (ISO 19005-2,
+// 6.2.11.4.1 t2) of the wrong width (6.2.11.5). An embedded CMap is keyed by
+// its object, which keeps two fonts naming equal CMaps in different objects
+// apart, at the cost of a second subset.
+//
+// A whole program stays one stream whatever the mappings of the fonts given
+// it: a copy per mapping repeats the largest streams of the file.
+//
+// # Corpus evidence
+//
+//   - govdocs: the 1091 files remediated with the system fonts at PDF/A-2b:
+//     18 outputs change, each giving a TrueType font a subset of its own, and
+//     grow from 24.0 to 24.9 MB, 641 KB of it thread_300_300655.pdf, whose
+//     fonts each carry their own /Differences (11 to 59 program streams). No
+//     litho rule moves. veraPDF 1.30.2 judges 9 of them better and none worse:
+//     6.2.11.4.1 t2 falls from 41 to 5 and 6.2.11.5 from 39 to 2, 3 outputs
+//     now pass, and thread_000_000153.pdf loses the 2 and 2 its Helvetica
+//     over MacRomanEncoding and over WinAnsiEncoding with /Differences
+//     caused.
+//   - govdocs: those 18 files with whole programs grow from 43 to 68 MB
+//     when each mapping takes a copy of the program, 12.3 to 33.0 MB of it
+//     thread_300_300655.pdf, which is why a whole program stays shared.
+//   - litho: no output of the 139 files changes.
+func (e *fontEmbedder) codeMapping(ctx context.Context, plan *embedPlan) string {
+	var sb strings.Builder
+	sb.WriteString(nameOf(ctx, e.doc, plan.font["Subtype"]))
+	if flags, ok := plan.descriptor["Flags"].(ast.PdfInt); ok && int(flags)&fontFlagSymbolic != 0 {
+		sb.WriteString(" symbolic")
+	}
+	enc := plan.font["Encoding"]
+	switch name := nameOf(ctx, e.doc, enc); {
+	case name != "":
+		sb.WriteString(" /" + name)
+	case plan.descendant != nil:
+		if ref, ok := enc.(ast.PdfIndirectRef); ok {
+			sb.WriteString(" CMap " + ref.String())
+		}
+	default:
+		if d := liveDictValue(ctx, e.alloc, e.doc, enc); d != nil {
+			sb.WriteString(" base /" + nameOf(ctx, e.doc, d["BaseEncoding"]) + " [")
+			for _, el := range liveArray(ctx, e.alloc, e.doc, d["Differences"]) {
+				if el != nil {
+					sb.WriteString(" " + el.String())
+				}
+			}
+			sb.WriteString(" ]")
+		}
+	}
+	if plan.descendant != nil {
+		info := liveDictValue(ctx, e.alloc, e.doc, plan.descendant["CIDSystemInfo"])
+		fmt.Fprintf(&sb, " %s-%s %x", stringOf(ctx, e.doc, info["Registry"]), stringOf(ctx, e.doc, info["Ordering"]), sha256.Sum256(plan.cidToGID))
+	}
+	return sb.String()
 }
 
 // subsetProgram returns prog cut down to .notdef, the glyphs of gids and what
