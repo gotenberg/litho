@@ -261,7 +261,10 @@ func WithSigningTime(t time.Time) SignOption {
 // ESS signing-certificate-v2 signed attributes and no signing-time, whose
 // time ETSI EN 319 142-1, 6.3, Table 1 moves to the /M entry, always written.
 // A document older than PDF 2.0 declares the ESIC extension of level 2 in its
-// catalog (ETSI EN 319 142-1, 5.6), unless it declares one already. The signer
+// catalog (ETSI EN 319 142-1, 5.6), unless it declares that level or a
+// higher one already. A lower level, such as the level 1 of a document
+// timestamp or a document security store, gives way to it: ISO 32000-1, 7.12
+// allows one ESIC entry, and a level includes the ones below it. The signer
 // of [NewSigner] builds that SignedData. The SignedData of another [Signer]
 // is checked, and [Writer.WriteTo] returns [ErrSignatureNotPAdES] when it
 // does not qualify.
