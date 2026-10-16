@@ -191,6 +191,7 @@ one deliberately rather than diffing it against a fresh build.
 | `inlinekids_ua2.pdf`   | PDF/UA-2     | Figures of their own that only inline elements list              |
 | `fontembed_2b.pdf`     | PDF/A-2b     | Unembedded fonts a supplied program embeds, wherever they sit    |
 | `defaultbox_2b.pdf`    | PDF/A-2b     | Pages missing their media box in an A4 document, under rewrites  |
+| `siglock_2b.pdf`       | PDF/A-2b     | Unsigned signature fields carrying a `/Lock` or seed values      |
 
 ### Must-not-fire controls
 
@@ -543,6 +544,7 @@ which are covered under [Known divergences](#known-divergences).
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
+| `siglock_2b.pdf`       | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
 | `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
 | `structcopy_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 0    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
@@ -6011,16 +6013,54 @@ insertion show pages 3 and 6 at 595.28 by 841.89 and page 5 at 590 by 830,
 where they showed 612 by 792 and 590 by 792 before, and qpdf finds nothing in
 any of them.
 
+### `siglock_2b.pdf`
+
+ISO 32000-1, 12.7.4.5 lets an unsigned signature field state what signing it
+does and asks: its `/Lock` (Table 233) names the fields the signature turns
+read-only, and its seed values (`/SV`, Table 234) choose or require the
+subfilter, the reason and the digest. `pdf.WithSignatureField` signs such a
+field in place and honours both. No corpus file holds an unsigned signature
+field with either, so the `mutate-sign` cell, which signs each unsigned
+signature field in a write of its own, reaches every path here.
+
+| Field          | Kind         | Entry                                                       | Signing it                             |
+| -------------- | ------------ | ----------------------------------------------------------- | -------------------------------------- |
+| `name`         | text         | none                                                        |                                        |
+| `group`        | non-terminal | none                                                        |                                        |
+| `group.first`  | text         | none                                                        |                                        |
+| `group.second` | text         | none                                                        |                                        |
+| `lockinclude`  | signature    | `/Lock /Include [(name) (group)]`                           | locks `name` and both kids of `group`  |
+| `lockexclude`  | signature    | `/Lock /Exclude [(group.first)]`                            | locks every field but `group.first`    |
+| `lockall`      | signature    | `/Lock /All`                                                | locks every field                      |
+| `seedmet`      | signature    | `/SV`: a subfilter list, a required reason and digest       | `ETSI.CAdES.detached`, the seed reason |
+| `seedunmet`    | signature    | `/SV` requiring `adbe.x509.rsa_sha1`, which litho cannot do | refused, `ErrSeedValueUnmet`           |
+
+`seedmet` lists `adbe.x509.rsa_sha1` first, which litho does not write, so the
+subfilter Table 234 picks is the next, `ETSI.CAdES.detached`; it requires the
+reason `I approve this document` and a SHA-256 or SHA-512 digest. A locked
+field turns read-only through the ReadOnly bit of its `/Ff` (Table 221), which
+kids inherit (12.7.3.1): `lockexclude` sets it on `group.second` alone, since
+setting it on `group` would reach the excluded `group.first`. Every field is
+merged with its widget on the one page; the signature widgets are of zero size,
+the text widgets' appearances paint nothing, and the page shows nothing.
+
+The two tools return the same rule set in all thirteen cells: none at PDF/A-2b,
+and elsewhere the identification, tagging, title and language rules the
+part-2, level-B claim draws, which no signature field changes. Remediated at the
+eight manifest profiles, default and aggressive, every output conforms on both
+tools. Under `mutate-sign` the four fields signed in place keep their promises,
+read with qpdf, and `seedunmet` is the cell's one documented refusal.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 139 x 8 = 1112 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 139 x 13 = 1807 cells. litho
+runner scores 140 x 8 = 1120 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 140 x 13 = 1820 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1805 of the 1807 cells. The two
+fixtures exist to protect, and it holds in 1818 of the 1820 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -6028,12 +6068,12 @@ non-empty set in each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-eight is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
-`pagelabels_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and
-`sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2` and `structcopy_ua2` at
+nine is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
+`pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
+and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2` and `structcopy_ua2` at
 PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1112 and moves only `ruleset_mismatch`, and on
-those eight cells it moves both. Both exceptions sit in the manifest's profiles,
+rule class leaves `matched` at 1120 and moves only `ruleset_mismatch`, and on
+those nine cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
 the runner is a regression, or a divergence to cover under Known divergences and

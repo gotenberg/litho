@@ -1,0 +1,127 @@
+%PDF-1.7
+%¿÷¢þ
+1 0 obj
+<< /AcroForm << /Fields [ 2 0 R 3 0 R 4 0 R 5 0 R 6 0 R 7 0 R 8 0 R ] >> /Metadata 9 0 R /Pages 10 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /AP << /N 11 0 R >> /F 4 /FT /Tx /P 12 0 R /Rect [ 72 700 172 720 ] /Subtype /Widget /T (name) /Type /Annot /V (Ada) >>
+endobj
+3 0 obj
+<< /FT /Tx /Kids [ 13 0 R 14 0 R ] /T (group) >>
+endobj
+4 0 obj
+<< /F 4 /FT /Sig /Lock 15 0 R /P 12 0 R /Rect [ 0 0 0 0 ] /Subtype /Widget /T (lockinclude) /Type /Annot >>
+endobj
+5 0 obj
+<< /F 4 /FT /Sig /Lock 16 0 R /P 12 0 R /Rect [ 0 0 0 0 ] /Subtype /Widget /T (lockexclude) /Type /Annot >>
+endobj
+6 0 obj
+<< /F 4 /FT /Sig /Lock 17 0 R /P 12 0 R /Rect [ 0 0 0 0 ] /Subtype /Widget /T (lockall) /Type /Annot >>
+endobj
+7 0 obj
+<< /F 4 /FT /Sig /P 12 0 R /Rect [ 0 0 0 0 ] /SV 18 0 R /Subtype /Widget /T (seedmet) /Type /Annot >>
+endobj
+8 0 obj
+<< /F 4 /FT /Sig /P 12 0 R /Rect [ 0 0 0 0 ] /SV 19 0 R /Subtype /Widget /T (seedunmet) /Type /Annot >>
+endobj
+9 0 obj
+<< /Subtype /XML /Type /Metadata /Length 580 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/" xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">litho corpus fixture</rdf:li></rdf:Alt></dc:title>
+    <pdfaid:part>2</pdfaid:part>
+    <pdfaid:conformance>B</pdfaid:conformance>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+
+<?xpacket end="w"?>
+
+endstream
+endobj
+10 0 obj
+<< /Count 1 /Kids [ 12 0 R ] /Type /Pages >>
+endobj
+11 0 obj
+<< /BBox [ 0 0 100 20 ] /Subtype /Form /Type /XObject /Length 16 >>
+stream
+0 0 100 20 re n
+
+endstream
+endobj
+12 0 obj
+<< /Annots [ 2 0 R 13 0 R 14 0 R 4 0 R 5 0 R 6 0 R 7 0 R 8 0 R ] /Contents 20 0 R /MediaBox [ 0 0 612 792 ] /Parent 10 0 R /Resources << >> /Type /Page >>
+endobj
+13 0 obj
+<< /AP << /N 21 0 R >> /F 4 /P 12 0 R /Parent 3 0 R /Rect [ 72 650 172 670 ] /Subtype /Widget /T (first) /Type /Annot /V (one) >>
+endobj
+14 0 obj
+<< /AP << /N 22 0 R >> /F 4 /P 12 0 R /Parent 3 0 R /Rect [ 72 600 172 620 ] /Subtype /Widget /T (second) /Type /Annot /V (two) >>
+endobj
+15 0 obj
+<< /Action /Include /Fields [ (name) (group) ] /Type /SigFieldLock >>
+endobj
+16 0 obj
+<< /Action /Exclude /Fields [ (group.first) ] /Type /SigFieldLock >>
+endobj
+17 0 obj
+<< /Action /All /Type /SigFieldLock >>
+endobj
+18 0 obj
+<< /DigestMethod [ /SHA256 /SHA512 ] /Ff 74 /Reasons [ (I approve this document) ] /SubFilter [ /adbe.x509.rsa_sha1 /ETSI.CAdES.detached /adbe.pkcs7.detached ] /Type /SV >>
+endobj
+19 0 obj
+<< /Ff 2 /SubFilter [ /adbe.x509.rsa_sha1 ] /Type /SV >>
+endobj
+20 0 obj
+<< /Length 0 >>
+stream
+
+endstream
+endobj
+21 0 obj
+<< /BBox [ 0 0 100 20 ] /Subtype /Form /Type /XObject /Length 16 >>
+stream
+0 0 100 20 re n
+
+endstream
+endobj
+22 0 obj
+<< /BBox [ 0 0 100 20 ] /Subtype /Form /Type /XObject /Length 16 >>
+stream
+0 0 100 20 re n
+
+endstream
+endobj
+xref
+0 23
+0000000000 65535 f 
+0000000015 00000 n 
+0000000151 00000 n 
+0000000289 00000 n 
+0000000353 00000 n 
+0000000476 00000 n 
+0000000599 00000 n 
+0000000718 00000 n 
+0000000835 00000 n 
+0000000954 00000 n 
+0000001615 00000 n 
+0000001676 00000 n 
+0000001794 00000 n 
+0000001965 00000 n 
+0000002111 00000 n 
+0000002258 00000 n 
+0000002344 00000 n 
+0000002429 00000 n 
+0000002484 00000 n 
+0000002673 00000 n 
+0000002746 00000 n 
+0000002796 00000 n 
+0000002914 00000 n 
+trailer << /Root 1 0 R /Size 23 /ID [<a53ac4038522c9c212c82fe4b946e19b><a53ac4038522c9c212c82fe4b946e19b>] >>
+startxref
+3032
+%%EOF
