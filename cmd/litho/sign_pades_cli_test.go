@@ -165,3 +165,63 @@ func TestSign_LTV(t *testing.T) {
 		t.Errorf("stderr %q does not say the certificate is revoked", stderr.String())
 	}
 }
+
+// TestSign_PKCS12PAdESTimestamp signs with a PKCS #12 key store, --pades and
+// --tsa-url against a local timestamp authority, alone and through a pipe's
+// sign stage, and checks the output holds one PAdES signature that verifies
+// up to the store's root and carries a verifying signature timestamp.
+func TestSign_PKCS12PAdESTimestamp(t *testing.T) {
+	pki := pkitest.New(t)
+	store := filepath.Join(p12TestData, "aes256.p12")
+	password := writePasswordFile(t, "litho-test\n")
+
+	rootPEM, err := os.ReadFile(filepath.Join(p12TestData, "root.pem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(rootPEM) {
+		t.Fatal("no certificate in the key stores' root.pem")
+	}
+	roots.AddCert(pki.Root)
+
+	for _, tc := range []struct {
+		name string
+		args func(src, out string) []string
+	}{
+		{"sign", func(src, out string) []string {
+			return []string{"sign", "--p12", store, "--p12-password-file", password, "--pades", "--tsa-url", pki.TSAURL(), "-o", out, src}
+		}},
+		{"pipe", func(src, out string) []string {
+			return []string{"pipe", src, "sign", "--p12", store, "--p12-password-file", password, "--pades", "--tsa-url", pki.TSAURL(), "-o", out}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "signed.pdf")
+			var stdout, stderr bytes.Buffer
+			if rc := run(context.Background(), tc.args(onePageTempPDF(t), out), &stdout, &stderr); rc != exitOK {
+				t.Fatalf("exit %d, stderr: %s", rc, stderr.String())
+			}
+			ctx := context.Background()
+			r, err := pdf.OpenFile(ctx, out)
+			if err != nil {
+				t.Fatalf("opening %s: %v", out, err)
+			}
+			defer r.Close()
+			results, err := r.VerifySignatures(ctx, roots)
+			if err != nil {
+				t.Fatalf("VerifySignatures: %v", err)
+			}
+			if len(results) != 1 || !results[0].HashValid || !results[0].CertChainValid || !results[0].HasTimestamp || results[0].TimestampError != "" {
+				t.Errorf("validations %+v, want one timestamped signature that verifies", results)
+			}
+			data, err := os.ReadFile(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Contains(data, []byte("/SubFilter /ETSI.CAdES.detached")) {
+				t.Error("the signature dictionary does not name ETSI.CAdES.detached")
+			}
+		})
+	}
+}
