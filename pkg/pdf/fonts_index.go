@@ -258,7 +258,7 @@ func (f *fontFiles) describe(p string, budget *int64) ([]fontFile, error) {
 			path:        p,
 			face:        dir,
 			psName:      normalizeFontName(info.PostScriptName),
-			family:      normalizeFontName(info.Family),
+			family:      withWidth(normalizeFontName(info.Family), parseFontStyle(sub).width),
 			bold:        strings.Contains(sub, "bold") || info.MacStyle&1 != 0,
 			italic:      strings.Contains(sub, "italic") || strings.Contains(sub, "oblique") || info.MacStyle&2 != 0,
 			weight:      int(info.WeightClass),
@@ -287,8 +287,9 @@ func describeCFF(p string, fh fs.File, budget *int64) ([]fontFile, error) {
 	if err != nil || info.CID {
 		return nil, nil
 	}
-	family, bold, italic := splitFontName(info.FontName)
-	return []fontFile{{path: p, psName: normalizeFontName(info.FontName), family: family, bold: bold, italic: italic, cffOutlines: true}}, nil
+	// A bare CFF program states its style in its name alone.
+	family, style := splitFontName(info.FontName)
+	return []fontFile{{path: p, psName: normalizeFontName(info.FontName), family: family, bold: style.bold, italic: style.italic, weight: style.weight, cffOutlines: true}}, nil
 }
 
 // readerAt returns random access to fh and its size: fh itself when it

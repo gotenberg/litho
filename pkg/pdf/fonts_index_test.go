@@ -57,6 +57,81 @@ func TestMatchFontFile_PrefersRegularAndBoldWeights(t *testing.T) {
 	}
 }
 
+// TestMatchFontFile_KeepsTheStyle pins that a face stands for a font only in
+// the font's style: the width and the weight its name states, and the italic
+// its descriptor's /Flags states. Each case is a name the govdocs corpus shows
+// unembedded.
+func TestMatchFontFile_KeepsTheStyle(t *testing.T) {
+	t.Parallel()
+	files := []fontFile{
+		{path: "helvetica.ttc", psName: "helvetica", family: "helvetica", weight: 400},
+		{path: "helveticabold.ttc", psName: "helveticabold", family: "helvetica", bold: true, weight: 700},
+		{path: "arialnarrow.ttf", psName: "arialnarrow", family: "arialnarrow", weight: 400},
+		{path: "futura.ttc", psName: "futuramedium", family: "futura", weight: 500},
+		{path: "futurabold.ttc", psName: "futurabold", family: "futura", bold: true, weight: 700},
+		{path: "futuracondensed.ttc", psName: "futuracondensedextrabold", family: "futuracondensed", bold: true, weight: 800},
+		{path: "times.ttf", psName: "timesnewroman", family: "timesnewroman", weight: 400},
+		{path: "timesitalic.ttf", psName: "timesnewromanpsitalic", family: "timesnewroman", italic: true, weight: 400},
+		{path: "arialblack.ttf", psName: "arialblack", family: "arialblack", bold: true, weight: 900},
+	}
+	for _, tc := range []struct {
+		req  FontRequest
+		want string
+	}{
+		// A width word names another family, here a metric-compatible one.
+		{FontRequest{BaseFont: "Helvetica-Narrow", Subtype: "Type1"}, "arialnarrow.ttf"},
+		{FontRequest{BaseFont: "Futura-Bold", Subtype: "Type1"}, "futurabold.ttc"},
+		{FontRequest{BaseFont: "Futura-CondensedBold", Subtype: "Type1"}, "futuracondensed.ttc"},
+		{FontRequest{BaseFont: "Futura", Subtype: "Type1"}, "futura.ttc"},
+		// A weight word the family has no face of matches no face.
+		{FontRequest{BaseFont: "Helvetica-Black", Subtype: "Type1"}, ""},
+		{FontRequest{BaseFont: "Futura-Light", Subtype: "Type1"}, ""},
+		{FontRequest{BaseFont: "Futura-Book", Subtype: "Type1"}, ""},
+		{FontRequest{BaseFont: "Futura-Heavy", Subtype: "Type1"}, ""},
+		// The Italic flag asks for the italic face, and never removes the
+		// italic a name states.
+		{FontRequest{BaseFont: "TimesNewRoman", Subtype: "TrueType", Flags: fontFlagItalic}, "timesitalic.ttf"},
+		{FontRequest{BaseFont: "TimesNewRoman,Italic", Subtype: "TrueType"}, "timesitalic.ttf"},
+		{FontRequest{BaseFont: "TimesNewRoman", Subtype: "TrueType"}, "times.ttf"},
+		// The PostScript name still matches whatever the weight.
+		{FontRequest{BaseFont: "ArialBlack", Subtype: "TrueType"}, "arialblack.ttf"},
+	} {
+		got := ""
+		if f := matchFontFile(files, tc.req); f != nil {
+			got = f.path
+		}
+		if got != tc.want {
+			t.Errorf("%s (flags %d): matched %q, want %q", tc.req.BaseFont, tc.req.Flags, got, tc.want)
+		}
+	}
+}
+
+func TestParseFontStyle(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		family string
+		want   fontStyle
+	}{
+		{"Arial,BoldItalic", "arial", fontStyle{bold: true, italic: true}},
+		{"TimesNewRomanPS-BoldMT", "timesnewroman", fontStyle{bold: true}},
+		{"Times-Roman", "times", fontStyle{}},
+		{"Helvetica-Narrow", "helveticanarrow", fontStyle{width: "narrow"}},
+		{"ArialNarrow-Bold", "arialnarrow", fontStyle{bold: true}},
+		{"Univers-CondensedBold", "universcondensed", fontStyle{bold: true, width: "condensed"}},
+		{"Futura-CondensedLight", "futuracondensed", fontStyle{weight: 300, width: "condensed"}},
+		{"StoneSerif-SemiboldItalic", "stoneserif", fontStyle{bold: true, italic: true, weight: 600}},
+		{"AvantGarde-BookOblique", "avantgarde", fontStyle{italic: true, weight: 400}},
+		{"Helvetica-Black", "helvetica", fontStyle{bold: true, weight: 900}},
+		{"AmericanTypewriter-Medium", "americantypewriter", fontStyle{weight: 500}},
+	} {
+		family, style := splitFontName(tc.name)
+		if family != tc.family || style != tc.want {
+			t.Errorf("%s: got %q %+v, want %q %+v", tc.name, family, style, tc.family, tc.want)
+		}
+	}
+}
+
 // TestFontFiles_Bounds pins the index's handling of what it cannot or may not
 // read: a file past the byte budget ends the index with the files before it,
 // an unreadable file aborts a strict index and is skipped by a lenient one,

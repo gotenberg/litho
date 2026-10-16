@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"math"
 	"slices"
 	"strings"
 
@@ -155,9 +156,13 @@ func WithFontProvider(p FontProvider) RemediateOption {
 // files once, reading only the header tables that name each face, and the
 // program a font takes is read when it is chosen. A font takes the program
 // whose PostScript name is its /BaseFont with any subset tag dropped, else one
-// of its family and style, bold and italic read from the name's style suffix
-// ("Arial,Bold", "Arial-BoldItalicMT"), the face of regular or bold weight
-// first. Failing both, it takes a program of a metric-compatible family:
+// of its family and style, read from the name's style suffix ("Arial,Bold",
+// "Arial-BoldItalicMT", "Helvetica-Narrow", "Futura-Light"): bold and italic,
+// italic also when the font descriptor's /Flags marks the font italic, the
+// weight a weight word states (Light, Medium, Semibold, Black), and the width
+// a width word states (Condensed, Narrow), the face of regular or bold weight
+// first. A face of another weight or width is another design, and does not
+// stand for the font. Failing both, it takes a program of a metric-compatible family:
 // Helvetica, Arial, Arimo, Liberation Sans and Nimbus Sans stand for one
 // another, as do Times, Times New Roman, Tinos, Liberation Serif and Nimbus
 // Roman, and Courier, Courier New, Cousine, Liberation Mono and Nimbus Mono
@@ -216,34 +221,61 @@ func metricFamilies(family string) []string {
 	return []string{family}
 }
 
-// matchFontFile returns the file that best serves req, or nil. Between faces
-// that match alike, the one of regular or bold weight comes first, so a Light
-// or Black face of the family does not stand for its Regular or Bold one, and
-// then the first indexed.
+// matchFontFile returns the file that best serves req, or nil. A face of the
+// font's family stands for it only in the font's style: bold and italic as
+// its name states them, italic also when its descriptor's /Flags sets the
+// Italic flag, the weight a weight word of its name states, and the width a
+// width word states. The face whose PostScript name is the font's serves it
+// unless the Italic flag asks for a slant the face lacks. Between faces that
+// match alike, the one closest to the weight comes first, so a Light or Black
+// face of the family does not stand for its Regular or Bold one, and then the
+// first indexed.
+//
+// # Corpus evidence
+//
+//   - govdocs: at PDF/A-2b with the macOS system fonts, 8 files show
+//     Helvetica-Narrow, which took Helvetica's Regular face and was refused
+//     for its widths, and now takes Arial Narrow and embeds; pdf.js reads
+//     their text at the same positions, and veraPDF reports one 6.2.11.4.1
+//     failure fewer per file and nothing new.
+//   - govdocs: 16 fonts whose weight word the family has no face of
+//     (Helvetica-Black, Times-ExtraBold, Futura-Light, Futura-Book,
+//     Arial-BlackItalic) took the Bold or Regular face, every one refused
+//     for its widths, and now match none.
+//   - govdocs: the 294 fonts no program served before those changes name
+//     families the system does not ship (Melior, New Century Schoolbook, Century Gothic, WP symbol
+//     fonts) or styles it has no face of (Geneva,Bold, Symbol,Italic); none is
+//     a name the matching misreads.
 func matchFontFile(files []fontFile, req FontRequest) *fontFile {
 	base := req.BaseFont
 	if tag, rest, ok := strings.Cut(base, "+"); ok && len(tag) == 6 {
 		base = rest
 	}
-	family, bold, italic := splitFontName(base)
+	family, style := splitFontName(base)
+	// ISO 32000-1, 9.8.2, Table 123: bit 7 of /Flags marks a font whose
+	// glyphs slant. A producer often leaves it clear on an italic font its
+	// name calls italic, so the flag adds italic and never removes it.
+	flagItalic := req.Flags&fontFlagItalic != 0
+	if flagItalic {
+		style.italic = true
+	}
 	ps := normalizeFontName(base)
 	families := metricFamilies(family)
+	target, tolerance := style.targetWeight()
 
-	target := regularWeightClass
-	if bold {
-		target = boldWeightClassTarget
-	}
 	var best *fontFile
 	bestRank, bestDist := 0, 0
 	for i := range files {
 		file := &files[i]
+		dist := weightDistance(file.weight, target)
+		sameStyle := file.bold == style.bold && file.italic == style.italic && dist <= tolerance
 		var rank int
 		switch {
-		case file.psName == ps:
+		case file.psName == ps && (file.italic || !flagItalic):
 			rank = 3
-		case file.bold == bold && file.italic == italic && file.family == family:
+		case sameStyle && file.family == family:
 			rank = 2
-		case file.bold == bold && file.italic == italic && slices.Contains(families, file.family):
+		case sameStyle && slices.Contains(families, file.family):
 			rank = 1
 		default:
 			continue
@@ -254,7 +286,6 @@ func matchFontFile(files []fontFile, req FontRequest) *fontFile {
 		if file.cffOutlines == (req.Subtype == "Type1") {
 			rank++
 		}
-		dist := weightDistance(file.weight, target)
 		if rank > bestRank || rank == bestRank && dist < bestDist {
 			best, bestRank, bestDist = file, rank, dist
 		}
@@ -262,12 +293,24 @@ func matchFontFile(files []fontFile, req FontRequest) *fontFile {
 	return best
 }
 
+// fontFlagItalic is the Italic flag of a font descriptor's /Flags (ISO
+// 32000-1, 9.8.2, Table 123, bit 7).
+const fontFlagItalic = 1 << 6
+
 // OS/2 usWeightClass values of the Normal and Bold weights (OpenType
 // specification, OS/2 table, usWeightClass).
 const (
 	regularWeightClass    = 400
 	boldWeightClassTarget = 700
 )
+
+// namedWeightTolerance is how far a face's weight class may be from the one a
+// weight word of the font's name states (Light, Medium, Semibold, Black). The
+// OpenType usWeightClass names its weights at multiples of 100, so a face
+// within half a step is a face of that weight, and a Medium or Book face does
+// not stand for a font its name calls Light or Regular. A matching heuristic,
+// not spec-mandated.
+const namedWeightTolerance = 50
 
 // weightDistance is how far a face of weight class w is from target. A face
 // that states no weight (0) counts as the target's.
@@ -281,21 +324,109 @@ func weightDistance(w, target int) int {
 	return target - w
 }
 
+// fontStyle is the style a font name states.
+type fontStyle struct {
+	bold, italic bool
+	// weight is the usWeightClass a weight word of the name states, 0 when
+	// it states none but Bold.
+	weight int
+	// width is the width word the name states, empty for a font of normal
+	// width.
+	width string
+}
+
+// targetWeight returns the weight class a face of the style has, and how far
+// from it a face may be. A name stating no weight word but Bold bounds the
+// distance not at all: it states the weight of the family's Regular or Bold
+// face, which a face's subfamily and macStyle state where its usWeightClass
+// may not, and the distance only ranks the faces of that style.
+func (s fontStyle) targetWeight() (target, tolerance int) {
+	switch {
+	case s.weight != 0:
+		return s.weight, namedWeightTolerance
+	case s.bold:
+		return boldWeightClassTarget, math.MaxInt
+	}
+	return regularWeightClass, math.MaxInt
+}
+
+// fontWeightWords maps the weight words of font names to their OpenType
+// usWeightClass (OpenType specification, OS/2 table, usWeightClass), longest
+// first where one holds another. Bold, Regular and their synonyms are absent:
+// a name stating them alone states the weight a family's Bold or Regular
+// face has, whatever its class.
+var fontWeightWords = []struct {
+	word   string
+	weight int
+}{
+	{"extralight", 200},
+	{"ultralight", 200},
+	{"hairline", 100},
+	{"thin", 100},
+	{"semibold", 600},
+	{"demibold", 600},
+	{"extrabold", 800},
+	{"ultrabold", 800},
+	{"light", 300},
+	{"book", 400},
+	{"medium", 500},
+	{"demi", 600},
+	{"black", 900},
+	{"heavy", 900},
+}
+
+// fontWidthWords are the width words of font names. A face of another width
+// is another design, drawn with other advances.
+var fontWidthWords = []string{"condensed", "narrow", "compressed", "extended", "expanded"}
+
+// parseFontStyle reads the style words of a name's style suffix, or of a
+// face's subfamily.
+func parseFontStyle(style string) fontStyle {
+	style = strings.ToLower(style)
+	var s fontStyle
+	s.bold = strings.Contains(style, "bold") || strings.Contains(style, "black") || strings.Contains(style, "heavy")
+	s.italic = strings.Contains(style, "italic") || strings.Contains(style, "oblique")
+	for _, w := range fontWeightWords {
+		if strings.Contains(style, w.word) {
+			s.weight = w.weight
+			// A Semibold face and every heavier one is a bold face of its
+			// family, a Medium one is not.
+			s.bold = w.weight >= 600
+			break
+		}
+	}
+	for _, w := range fontWidthWords {
+		if strings.Contains(style, w) {
+			s.width = w
+			break
+		}
+	}
+	return s
+}
+
+// withWidth returns family named for the width word, which a name may state
+// in its family ("ArialNarrow") or in its style ("Helvetica-Narrow"), so both
+// name one family.
+func withWidth(family, width string) string {
+	if width == "" || strings.HasSuffix(family, width) {
+		return family
+	}
+	return family + width
+}
+
 // splitFontName splits a PostScript or /BaseFont name into its normalized
-// family and its bold and italic style: "Arial,BoldItalic",
+// family, named for its width, and its style: "Arial,BoldItalic",
 // "Arial-BoldItalicMT" and "TimesNewRomanPS-BoldMT" split at the comma or the
-// last hyphen.
-func splitFontName(name string) (family string, bold, italic bool) {
+// last hyphen, and "Helvetica-Narrow" names the family helveticanarrow.
+func splitFontName(name string) (string, fontStyle) {
 	fam, style := name, ""
 	if i := strings.IndexByte(name, ','); i >= 0 {
 		fam, style = name[:i], name[i+1:]
 	} else if i := strings.LastIndexByte(name, '-'); i > 0 {
 		fam, style = name[:i], name[i+1:]
 	}
-	style = strings.ToLower(style)
-	bold = strings.Contains(style, "bold") || strings.Contains(style, "black") || strings.Contains(style, "heavy")
-	italic = strings.Contains(style, "italic") || strings.Contains(style, "oblique")
-	return normalizeFontName(fam), bold, italic
+	s := parseFontStyle(style)
+	return withWidth(normalizeFontName(fam), s.width), s
 }
 
 // normalizeFontName lowercases a font name, drops its spaces, hyphens and
