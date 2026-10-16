@@ -58,8 +58,8 @@ func TestWriterTimestamp(t *testing.T) {
 		if _, ok := dts["M"]; ok {
 			t.Error("the document timestamp carries an /M, the signer's claim ISO 32000-2, 12.8.5 leaves to the token")
 		}
-		if !hasESIC(t, out) {
-			t.Error("the catalog of a pre-2.0 document declares no ESIC extension")
+		if got := esicLevel(t, out); got != 1 {
+			t.Errorf("the catalog of a pre-2.0 document declares ESIC level %d, want 1 (ETSI EN 319 142-1, 5.6)", got)
 		}
 	})
 
@@ -151,8 +151,11 @@ func TestWriterTimestamp(t *testing.T) {
 	})
 }
 
-// hasESIC reports whether the catalog of data declares the ESIC extension.
-func hasESIC(t *testing.T, data []byte) bool {
+// esicLevel returns the /ExtensionLevel of the ESIC developer extension the
+// catalog of data declares, 0 when it declares none. It fails the test when
+// the entry is not the base-1.7 developer extensions dictionary of ETSI EN
+// 319 142-1, 5.6.
+func esicLevel(t *testing.T, data []byte) int {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -166,8 +169,18 @@ func hasESIC(t *testing.T, data []byte) bool {
 	}
 	ext, err := document.ResolveDict(ctx, r.doc, cat.Dict["Extensions"])
 	if err != nil || ext == nil {
-		return false
+		return 0
 	}
-	_, ok := ext["ESIC"]
-	return ok
+	if _, ok := ext["ESIC"]; !ok {
+		return 0
+	}
+	esic, err := document.ResolveDict(ctx, r.doc, ext["ESIC"])
+	if err != nil {
+		t.Fatalf("/Extensions /ESIC: %v", err)
+	}
+	if esic["Type"] != ast.PdfName("DeveloperExtensions") || esic["BaseVersion"] != ast.PdfName("1.7") {
+		t.Errorf("/ESIC = %v, want a /DeveloperExtensions dictionary of /BaseVersion /1.7", esic)
+	}
+	level, _ := esic["ExtensionLevel"].(ast.PdfInt)
+	return int(level)
 }

@@ -252,7 +252,10 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	if info.DocTimeStamp {
 		// ISO 32000-2, 12.8.5: the timestamp authority's token is the
 		// signature, and its genTime the signing time, so the dictionary
-		// carries no /M or other claim of the signer's.
+		// carries no /M or other claim of the signer's. ETSI EN 319 142-1
+		// V1.2.1, 5.4.3 forbids Cert, Reference, Changes, R, Prop_AuthTime
+		// and Prop_AuthType there, advises against Name, M, Location, Reason
+		// and ContactInfo, and allows only 0 for an /V, left to its default.
 		sigDict["Type"] = ast.PdfName("DocTimeStamp")
 	} else {
 		info.entries(sigDict)
@@ -317,8 +320,13 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		// catalog pointing at 0 0 R.
 		newCatalog["AcroForm"] = acroFormDict
 	}
-	if info.DocTimeStamp {
-		if err := DeclareESIC(ctx, alloc, doc, newCatalog); err != nil {
+	switch {
+	case info.DocTimeStamp:
+		if err := DeclareESIC(ctx, alloc, doc, newCatalog, ESICLevelLTV); err != nil {
+			return err
+		}
+	case params.SubFilter == SubFilterCAdESDetached:
+		if err := DeclareESIC(ctx, alloc, doc, newCatalog, ESICLevelCAdES); err != nil {
 			return err
 		}
 	}

@@ -35,7 +35,9 @@ type DSSData struct {
 // VRIKey returns the key of the VRI dictionary of the signature whose
 // /Contents is contents: the uppercase hexadecimal SHA-1 of the signature
 // (ISO 32000-2, 12.8.4.4, Table 263), taken over the /Contents string as it
-// stands, its zero padding included, as iText and PDFBox take it.
+// stands, its zero padding included, as iText and PDFBox take it and pyHanko
+// documents (DocumentSecurityStore.add_dss: "including any padding"). ETSI
+// EN 319 142-1 V1.2.1, 5.4.2.2, requirement a) hashes the same bytes.
 func VRIKey(contents []byte) string {
 	sum := sha1.Sum(contents) //nolint:gosec // ISO 32000-2, 12.8.4.4 names SHA-1.
 	return strings.ToUpper(hex.EncodeToString(sum[:]))
@@ -156,7 +158,7 @@ func WriteDSS(ctx context.Context, dst io.Writer, doc *document.Document, data D
 	} else {
 		newCatalog["DSS"] = alloc.Alloc(dss)
 	}
-	if err := DeclareESIC(ctx, alloc, doc, newCatalog); err != nil {
+	if err := DeclareESIC(ctx, alloc, doc, newCatalog, ESICLevelLTV); err != nil {
 		return err
 	}
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)

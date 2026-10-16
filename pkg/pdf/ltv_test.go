@@ -79,8 +79,10 @@ func TestWithLTV(t *testing.T) {
 		if info == nil || info.CertCount != 4 || info.VRICount != 1 {
 			t.Errorf("DSS %+v, want 4 certificates and 1 VRI", info)
 		}
-		if !hasESIC(t, out) {
-			t.Error("the catalog of a pre-2.0 document declares no ESIC extension")
+		// The PAdES signature declared level 2, which the security store
+		// update keeps: a pre-2.0 catalog holds one dictionary per prefix.
+		if got := esicLevel(t, out); got != 2 {
+			t.Errorf("the catalog of a pre-2.0 document declares ESIC level %d, want the signature's 2 (ETSI EN 319 142-1, 5.6)", got)
 		}
 	}
 

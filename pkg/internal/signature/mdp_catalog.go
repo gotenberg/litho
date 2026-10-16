@@ -34,7 +34,8 @@ type catalogEntry struct {
 //     [removedAnnotation].
 //   - /DSS holds validation data (ISO 32000-2, 12.8.4.3).
 //   - /Extensions may change in the /ESIC and /ADBE entries that ETSI EN 319
-//     142-1, 5.6 has a writer declare for validation data, and in the /ISO_
+//     142-1, 5.6 has a writer declare for validation data and for an
+//     ETSI.CAdES.detached signature, and in the /ISO_
 //     entry (ISO 32000-2, 7.12.2) that a signature using the algorithms of
 //     ISO/TS 32001 or ISO/TS 32002 declares.
 //   - /Perms may change in its /UR3 entry, a usage rights signature (12.8.4,

@@ -258,8 +258,10 @@ func WithSigningTime(t time.Time) SignOption {
 // instead of the adbe.pkcs7.detached one of ISO 32000-1, 12.8.3.3: the
 // signature dictionary's /SubFilter is ETSI.CAdES.detached (ISO 32000-2,
 // 12.8.3.4), and its SignedData carries the content-type, message-digest and
-// ESS signing-certificate-v2 signed attributes and no signing-time, which
-// ETSI EN 319 142-1, 5.2.1 moves to the /M entry, always written. The signer
+// ESS signing-certificate-v2 signed attributes and no signing-time, whose
+// time ETSI EN 319 142-1, 6.3, Table 1 moves to the /M entry, always written.
+// A document older than PDF 2.0 declares the ESIC extension of level 2 in its
+// catalog (ETSI EN 319 142-1, 5.6), unless it declares one already. The signer
 // of [NewSigner] builds that SignedData. The SignedData of another [Signer]
 // is checked, and [Writer.WriteTo] returns [ErrSignatureNotPAdES] when it
 // does not qualify.
