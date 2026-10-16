@@ -25,6 +25,12 @@ const corpusSignerCN = "litho corpus signer"
 //
 // The key is generated per run and never leaves the process. A caller that
 // verifies a signature it made trusts [corpusSigner.roots] as the root.
+//
+// mutate-sign hands [pdf.Writer.Sign] the embedded Signer, not the
+// corpusSigner: the Writer writes the CAdES form a seed value can choose
+// (ISO 32000-1, 12.7.4.5, Table 234) only through the signer of
+// [pdf.NewSigner] itself, and refuses the SignedData of a wrapper that does
+// not hold one with [pdf.ErrSignatureNotPAdES].
 // Safe for concurrent use: the built-in signer is, and cert is set once by
 // newCorpusSigner.
 type corpusSigner struct {

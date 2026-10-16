@@ -101,6 +101,14 @@ var uncomparedMetrics = map[string]bool{
 	"verapdf_pre":   true,
 	"verapdf_post":  true,
 	"verapdf_fixed": true,
+
+	// The mutate-sign inventory: the unsigned signature fields it signed in
+	// place and the ones whose own /Lock or seed values refused it. They count
+	// what the run reached, and the qpdf the fields are read with is
+	// optional, so a run without it reads 0 in both. A defect in what they
+	// count fails promise_broken or signature_invalid instead.
+	metricFieldSigned:  true,
+	metricFieldRefused: true,
 }
 
 // defaultBaselinePath returns the canonical baseline location. The

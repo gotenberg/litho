@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"regexp"
 	"slices"
@@ -29,6 +30,10 @@ type mutationSpec struct {
 	needsTagState bool
 	// extraMetrics are the metrics beyond the six every spec emits.
 	extraMetrics []string
+	// counters are the inventory counts the spec emits beside its metrics,
+	// which count what the run reached rather than what failed (see
+	// [mutationPlan.counts]).
+	counters []string
 	// refusals are the errors the Writer documents as refusing this mutation
 	// on some inputs. A refusal skips the PDF rather than failing it.
 	refusals []error
@@ -104,6 +109,16 @@ type mutationPlan struct {
 	droppedSignatures []pdf.DroppedSignature
 	// release frees what the mutation holds until the write, a second Reader.
 	release func()
+	// signField names the unsigned signature field mutate-sign signs in, ""
+	// for a new field.
+	signField string
+	// signForm is the input's form as qpdf reads it, and signTrials each of
+	// its unsigned signature fields signed in a write of its own (see
+	// [mutationFeature.signFields]).
+	signForm   *qpdfForm
+	signTrials []signFieldTrial
+	// counts are the spec's inventory counts, which verify fills.
+	counts map[string]int
 }
 
 // pageText is one page's text, normalized with [normalizeContent]. err is
@@ -421,15 +436,13 @@ var mutationSpecs = []mutationSpec{
 	{
 		name:         "sign",
 		needsSigner:  true,
-		extraMetrics: []string{metricSignatureInvalid},
+		extraMetrics: []string{metricSignatureInvalid, metricPromiseBroken},
+		counters:     []string{metricFieldSigned, metricFieldRefused},
 		// ISO 32000-1, 12.8.1 signs the bytes as written, and litho does not
 		// sign an encrypted source (see [pdf.Writer.Sign]).
 		refusals: []error{pdf.ErrSignFullRewriteIncompatible},
-		apply: func(_ context.Context, f *mutationFeature, in *mutationInput, w *pdf.Writer) (mutationPlan, error) {
-			w.Sign(f.signer)
-			return identityPlan(in), nil
-		},
-		verify: verifySign,
+		apply:    applySign,
+		verify:   verifySign,
 		allowance: func(rc ruleContext) ruleAllowance {
 			return strictAllowance(rc.profile)
 		},
@@ -698,8 +711,16 @@ func verifyFlatten(ctx context.Context, _ *mutationFeature, in *mutationInput, o
 // certificate chains to the signer's root. A signature on a full rewrite, which
 // the Writer writes for a source it repaired on reading, is the output's only
 // one: the rewrite drops the input's (see [pdf.Writer.DroppedSignatures]).
+// Signed in an existing field, the accepted signature must sit in that field.
+// Each unsigned signature field signed in a write of its own is checked too
+// (see [mutationFeature.verifySignFields]).
 func verifySign(ctx context.Context, f *mutationFeature, in *mutationInput, out *mutationOutputDoc, plan mutationPlan) []mutationFailure {
 	failures := verifyIdentityText(ctx, f, in, out, plan)
+	fieldFailures, counts := f.verifySignFields(ctx, in, plan.signForm, plan.signTrials)
+	failures = append(failures, fieldFailures...)
+	if plan.counts != nil {
+		maps.Copy(plan.counts, counts)
+	}
 	results, err := out.reader.VerifySignatures(ctx, f.signer.roots())
 	if err != nil {
 		return append(failures, mutationFailure{Metric: metricSignatureInvalid, Detail: fmt.Sprintf("verifying: %v", err)})
@@ -715,7 +736,7 @@ func verifySign(ctx context.Context, f *mutationFeature, in *mutationInput, out 
 		})
 	}
 	for _, v := range results {
-		if v.SignerCN == corpusSignerCN && v.HashValid && v.CertChainValid {
+		if v.SignerCN == corpusSignerCN && v.HashValid && v.CertChainValid && (plan.signField == "" || v.FieldName == plan.signField) {
 			return failures
 		}
 	}

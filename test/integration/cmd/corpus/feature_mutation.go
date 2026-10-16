@@ -224,6 +224,8 @@ type mutationOutput struct {
 	Profile  string            `json:"profile,omitempty"`
 	Anchor   bool              `json:"anchor"`
 	Failures []mutationFailure `json:"failures,omitempty"`
+	// Counts are the spec's inventory counts, on the anchor only.
+	Counts map[string]int `json:"counts,omitempty"`
 }
 
 // Run mutates the fixture's PDF, once per PDF, and checks the output at the
@@ -238,6 +240,7 @@ func (f *mutationFeature) Run(ctx context.Context, pdfPath, fixtureID string) ([
 	if out.Skip == "" {
 		if out.Anchor {
 			out.Failures = append(out.Failures, res.failures...)
+			out.Counts = res.plan.counts
 		}
 		if !res.readable && !out.Anchor {
 			out.Skip = "no readable output, counted on " + f.anchorOf(pdfPath)
@@ -423,9 +426,12 @@ func (f *mutationFeature) Compare(fixtureID string, output []byte) Verdict {
 		return Verdict{FixtureID: fixtureID, Skipped: true, Reason: got.Skip}
 	}
 
-	metrics := make(map[string]int, len(f.spec.metrics()))
+	metrics := make(map[string]int, len(f.spec.metrics())+len(f.spec.counters))
 	for _, m := range f.spec.metrics() {
 		metrics[m] = 0
+	}
+	for _, c := range f.spec.counters {
+		metrics[c] = got.Counts[c]
 	}
 	reasons := make([]string, 0, len(got.Failures))
 	for _, failure := range got.Failures {
