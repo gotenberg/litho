@@ -497,7 +497,7 @@ func aesCBCEncryptZeroIV(key, plaintext []byte) ([]byte, error) {
 	}
 	data := make([]byte, len(plaintext)+padLen)
 	copy(data, plaintext)
-	mode := cipher.NewCBCEncrypter(block, iv)
+	mode := cipher.NewCBCEncrypter(block, iv) //nolint:gosec // G407: ISO 32000-2, 7.6.4.4.7-8 (Algorithms 8 and 9) mandate a zero IV for /OE and /UE
 	mode.CryptBlocks(data, data)
 	return data, nil
 }
