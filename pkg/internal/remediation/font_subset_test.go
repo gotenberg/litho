@@ -444,6 +444,9 @@ func TestFixFontEmbed_FontsShareOneSubset(t *testing.T) {
 	if fd1["FontFile2"] != fd2["FontFile2"] {
 		t.Errorf("the fonts hold programs %v and %v, want one shared", fd1["FontFile2"], fd2["FontFile2"])
 	}
+	if first["Encoding"] != ast.PdfName("WinAnsiEncoding") || second["Encoding"] != ast.PdfName("WinAnsiEncoding") {
+		t.Errorf("encodings %v and %v, want both written directly under one mapping", first["Encoding"], second["Encoding"])
+	}
 	if n, _ := truetype.NumGlyphs(program); n != 3 {
 		t.Errorf("%d glyphs in the shared subset, want .notdef, A and B", n)
 	}
@@ -457,8 +460,9 @@ func TestFixFontEmbed_FontsShareOneSubset(t *testing.T) {
 // TestFixFontEmbed_EncodingsKeepOwnPrograms pins that fonts given one program
 // under different encodings each hold a subset of their own, even when the
 // subsets come out alike, since veraPDF reads a stream shared by both under the
-// first font's encoding and judges the other font by it, and that a whole
-// program stays one stream.
+// first font's encoding and judges the other font by it, that a whole
+// program stays one stream, and that each encoding then sits in an object of
+// its own, which veraPDF keys the program by.
 func TestFixFontEmbed_EncodingsKeepOwnPrograms(t *testing.T) {
 	t.Parallel()
 	stream := "BT /F1 12 Tf 72 700 Td (AB) Tj /F2 12 Tf 0 20 Td (AB) Tj /F3 12 Tf 0 20 Td (AB) Tj ET"
@@ -485,6 +489,21 @@ func TestFixFontEmbed_EncodingsKeepOwnPrograms(t *testing.T) {
 		}
 		if fd1["FontFile2"] != fd3["FontFile2"] {
 			t.Errorf("whole=%v: two WinAnsiEncoding fonts hold programs %v and %v, want one shared", whole, fd1["FontFile2"], fd3["FontFile2"])
+		}
+		// veraPDF keys a TrueType program by the object holding /Encoding,
+		// so each mapping holds its encoding in an object of its own, shared
+		// by the fonts of that mapping.
+		enc1, ok1 := pageFont(t, doc, "F1")["Encoding"].(ast.PdfIndirectRef)
+		enc2, ok2 := pageFont(t, doc, "F2")["Encoding"].(ast.PdfIndirectRef)
+		enc3, ok3 := pageFont(t, doc, "F3")["Encoding"].(ast.PdfIndirectRef)
+		if !ok1 || !ok2 || !ok3 || enc1 == enc2 || enc1 != enc3 {
+			t.Errorf("whole=%v: encodings %v, %v and %v, want the WinAnsiEncoding fonts to share one object and the MacRomanEncoding font to hold another",
+				whole, pageFont(t, doc, "F1")["Encoding"], pageFont(t, doc, "F2")["Encoding"], pageFont(t, doc, "F3")["Encoding"])
+		}
+		for ref, want := range map[ast.PdfIndirectRef]ast.PdfName{enc1: "WinAnsiEncoding", enc2: "MacRomanEncoding"} {
+			if got, err := document.ResolveName(context.Background(), doc, ref); err != nil || got != want {
+				t.Errorf("whole=%v: encoding object %v holds %v (%v), want %v", whole, ref, got, err, want)
+			}
 		}
 		if got := fontFindings(t, doc, string(models.PDFA2b)); len(got) != 0 {
 			t.Errorf("whole=%v: font findings %v", whole, got)

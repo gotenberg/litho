@@ -48,6 +48,9 @@ type queuedFont struct {
 	// to glyphs, so the fonts given the same program under the same mapping
 	// share its subset.
 	share programShare
+	// mapping is the font's own mapping of codes to glyphs, which share
+	// replaces with the first font's when the fonts share a descriptor.
+	mapping string
 }
 
 // finish writes the fonts [fontEmbedder.embed] queued, each over a subset of
@@ -79,8 +82,9 @@ func (e *fontEmbedder) finish(ctx context.Context, uses fontUses) ([]fontOutcome
 	if err := e.subsetQueued(ctx, uses); err != nil {
 		return nil, err
 	}
+	encodings := e.encodingObjects()
 	for _, q := range e.queued {
-		e.write(ctx, q.writeTo, q.font, q.plan, q.share.mapping)
+		e.write(ctx, q.writeTo, q.font, q.plan, q.share.mapping, encodings[q])
 		outcomes = append(outcomes, fontOutcome{order: q.order, baseFont: q.baseFont, objNum: q.objNum, fix: q.describe()})
 	}
 	return outcomes, nil
@@ -252,7 +256,9 @@ func (e *fontEmbedder) sharingWhole(ctx context.Context, members []*queuedFont, 
 // apart, at the cost of a second subset.
 //
 // A whole program stays one stream whatever the mappings of the fonts given
-// it: a copy per mapping repeats the largest streams of the file.
+// it: a copy per mapping repeats the largest streams of the file. Those fonts
+// hold their encodings in objects of their own instead
+// ([fontEmbedder.encodingObjects]), which veraPDF tells apart.
 //
 // # Corpus evidence
 //
@@ -299,6 +305,82 @@ func (e *fontEmbedder) codeMapping(ctx context.Context, plan *embedPlan) string 
 		fmt.Fprintf(&sb, " %s-%s %x", stringOf(ctx, e.doc, info["Registry"]), stringOf(ctx, e.doc, info["Ordering"]), sha256.Sum256(plan.cidToGID))
 	}
 	return sb.String()
+}
+
+// encodingObjects returns, for each queued simple TrueType font given a
+// program that another queued font reads under another mapping of codes to
+// glyphs ([fontEmbedder.codeMapping]), the object its /Encoding moves to when
+// the font writes it directly. The fonts of one program and one mapping share
+// the object.
+//
+// Such fonts can come to share one program stream: a whole program
+// ([Options.WholeFonts], [fontEmbedder.sharingWhole]), the program of a
+// descriptor several fonts share, or two subsets the writer's stream
+// deduplication merges because they hold the same glyphs. A conforming
+// reader reads the stream under each font's own encoding, but veraPDF 1.30.2
+// caches a TrueType program by its stream, the symbolic flag and the object
+// key of /Encoding (FontProgramIDGenerator.getTrueTypeFontProgramID), and
+// every encoding written directly has the key "direct". It then reads a
+// shared stream once, under the first font's encoding, and judges the other
+// fonts by it: a code another font's encoding names reads as a glyph the
+// program lacks (ISO 19005-2, 6.2.11.4.1 t2) of the wrong width (6.2.11.5).
+// An encoding in an object of its own carries that object's key, so each
+// mapping is read apart, while the program stays one stream. ISO 32000-1,
+// 7.3.10 lets any object be indirect, and Table 111 asks /Encoding for a name
+// or a dictionary, which the object holds. A CFF program and a composite font
+// are left alone: veraPDF keys neither by /Encoding, and a composite font's
+// mapping lives in its CMap and /CIDToGIDMap, which the key already tells
+// apart when they differ.
+//
+// # Corpus evidence
+//
+//   - govdocs: the 1091 files remediated with the system fonts at PDF/A-2b:
+//     24 outputs change, 17 of them among the 18 the split by mapping
+//     changed, and grow by 3 KB in all. TrueType program streams that fonts
+//     of different direct encodings share fall from 12 to 0, all of them in
+//     descriptors the file shares among such fonts; from 13 to 0 with stream
+//     deduplication, which merged one pair of alike subsets in
+//     thread_300_300224.pdf; and from 38 to 0 with whole programs, which stay
+//     one stream each (50.7 MB over the 24 outputs).
+//   - govdocs: veraPDF 1.30.2 over those 24 outputs judges 5 better and none
+//     worse, 6.2.11.4.1 t2 falling from 16 to 7 and 6.2.11.5 from 11 to 2,
+//     and 12 pass instead of 8, alike with stream deduplication; with whole
+//     programs it judges 13 better and none worse, 6.2.11.4.1 t2 falling
+//     from 27 to 7 and 6.2.11.5 from 46 to 2, and 12 pass instead of 6.
+//     litho's verdicts do not move, and pdf.js places each of the 237418
+//     text items where it placed them before.
+//   - litho: no output of the 140 files changes, subset or whole.
+func (e *fontEmbedder) encodingObjects() map[*queuedFont]*ast.PdfIndirectRef {
+	mappings := make(map[programKey]map[string]bool)
+	for _, q := range e.queued {
+		if mappings[q.share.program] == nil {
+			mappings[q.share.program] = make(map[string]bool)
+		}
+		mappings[q.share.program][q.mapping] = true
+	}
+	out := make(map[*queuedFont]*ast.PdfIndirectRef)
+	objects := make(map[programShare]ast.PdfIndirectRef)
+	for _, q := range e.queued {
+		if len(mappings[q.share.program]) < 2 || q.plan.descendant != nil || q.plan.program.format != outlinesTrueType {
+			continue
+		}
+		enc := q.plan.font["Encoding"]
+		switch enc.(type) {
+		case ast.PdfName, ast.PdfDict:
+		default:
+			// No encoding, or one already in an object of its own, which
+			// veraPDF keys by that object.
+			continue
+		}
+		key := programShare{program: q.share.program, mapping: q.mapping}
+		ref, seen := objects[key]
+		if !seen {
+			ref = e.alloc.Alloc(enc)
+			objects[key] = ref
+		}
+		out[q] = &ref
+	}
+	return out
 }
 
 // subsetProgram returns prog cut down to .notdef, the glyphs of gids and what

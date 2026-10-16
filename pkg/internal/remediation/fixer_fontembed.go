@@ -364,7 +364,8 @@ func (e *fontEmbedder) embed(ctx context.Context, order int, t fontTarget) error
 	if prev, ours := e.written[fdNum]; ours && prev != key {
 		return refused(fmt.Errorf("%w: the font shares its descriptor with a font given another program", ErrFontKind))
 	}
-	share := programShare{program: key, mapping: e.codeMapping(ctx, plan)}
+	mapping := e.codeMapping(ctx, plan)
+	share := programShare{program: key, mapping: mapping}
 	if fdNum != 0 {
 		e.written[fdNum] = key
 		if mapping, seen := e.fdMapping[fdNum]; seen {
@@ -375,7 +376,7 @@ func (e *fontEmbedder) embed(ctx context.Context, order int, t fontTarget) error
 	}
 	e.queued = append(e.queued, &queuedFont{
 		order: order, objNum: t.objNum, site: t.site, font: font, baseFont: baseFont, fdNum: fdNum,
-		before: before, shown: shown, plan: plan, share: share,
+		before: before, shown: shown, plan: plan, share: share, mapping: mapping,
 	})
 	return nil
 }
@@ -820,8 +821,10 @@ func (e *fontEmbedder) judge(ctx context.Context, plan *embedPlan, before []comp
 // of the run given the same program, under the same mapping when it is a
 // subset ([fontEmbedder.subsetQueued]), the descriptor at the number the
 // font's descriptor had or a new one, with its /CIDSet stream, and the font,
-// and for a composite font its descendant and its /CIDToGIDMap.
-func (e *fontEmbedder) write(ctx context.Context, objNum int, font ast.PdfDict, plan *embedPlan, mapping string) {
+// and for a composite font its descendant and its /CIDToGIDMap. A simple
+// font's /Encoding names encoding when it is set
+// ([fontEmbedder.encodingObjects]).
+func (e *fontEmbedder) write(ctx context.Context, objNum int, font ast.PdfDict, plan *embedPlan, mapping string, encoding *ast.PdfIndirectRef) {
 	if plan.subsetGlyphs == 0 {
 		mapping = ""
 	}
@@ -841,6 +844,9 @@ func (e *fontEmbedder) write(ctx context.Context, objNum int, font ast.PdfDict, 
 	if plan.descendant == nil {
 		out := maps.Clone(plan.font)
 		out["FontDescriptor"] = descriptorRef
+		if encoding != nil {
+			out["Encoding"] = *encoding
+		}
 		if plan.toUnicode != nil {
 			out["ToUnicode"] = e.alloc.Alloc(flateStream(ast.PdfDict{}, plan.toUnicode))
 		}
