@@ -146,7 +146,7 @@ func (s *CMSSigner) EstimatedSize() int {
 // With cades it returns the CAdES signature an ETSI.CAdES.detached signature
 // dictionary holds (ISO 32000-2, 12.8.3.4; ETSI EN 319 142-1, PAdES baseline
 // B-B): the same SignedData without the signing-time attribute, which ETSI EN
-// 319 142-1, 5.2.1 and 6.3, Table 1 forbid there, the signature dictionary's
+// 319 142-1, 6.3, Table 1 forbids there, the signature dictionary's
 // /M carrying the claimed signing time instead. at is then unused.
 func (s *CMSSigner) Sign(digest []byte, at time.Time, cades bool) ([]byte, error) {
 	if len(digest) != sha256.Size {

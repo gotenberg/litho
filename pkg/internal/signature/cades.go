@@ -14,7 +14,8 @@ var oidCMSAttrSigningCertV1 = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16,
 // PAdES baseline signature: ETSI EN 319 142-1, 6.3, Table 1 has its first
 // SignerInfo carry the content-type, message-digest and ESS
 // signing-certificate or signing-certificate-v2 signed attributes and no
-// signing-time, which 5.2.1 moves to the signature dictionary's /M.
+// signing-time, the claimed time being the signature dictionary's /M
+// (Table 1, requirement g). Clause numbers are those of V1.2.1 (2024-01).
 func CheckCAdES(der []byte) error {
 	var ci contentInfo
 	if _, err := asn1.Unmarshal(der, &ci); err != nil {
@@ -32,7 +33,7 @@ func CheckCAdES(der []byte) error {
 		return fmt.Errorf("%w: the SignerInfo has no signed attributes", ErrNotCAdES)
 	}
 	if hasAttribute(attrs, oidCMSAttrSigningTime) {
-		return fmt.Errorf("%w: it carries a signing-time attribute (ETSI EN 319 142-1, 5.2.1)", ErrNotCAdES)
+		return fmt.Errorf("%w: it carries a signing-time attribute (ETSI EN 319 142-1, 6.3, Table 1)", ErrNotCAdES)
 	}
 	for _, need := range []struct {
 		name string

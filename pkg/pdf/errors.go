@@ -175,8 +175,8 @@ var (
 	// when the SignedData a [Signer] other than the one of [NewSigner]
 	// returned is not the CAdES signature of a PAdES baseline signature: it
 	// carries a signing-time attribute, or lacks the content-type,
-	// message-digest or ESS signing-certificate one (ETSI EN 319 142-1, 5.2.1
-	// and 6.3). Nothing is written.
+	// message-digest or ESS signing-certificate one (ETSI EN 319 142-1, 6.3,
+	// Table 1). Nothing is written.
 	ErrSignatureNotPAdES = signature.ErrNotCAdES
 
 	// ErrTimestampAuthority is returned by [Writer.WriteTo] when the RFC 3161

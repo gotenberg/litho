@@ -192,6 +192,8 @@ func TestSignatureFieldSeedValues(t *testing.T) {
 		{"a subject name", "<< /Cert << /Ff 8 /SubjectDN [<< /CN (pkitest signer) >>] >> >>", nil, nil},
 		{"a key usage", "<< /Cert << /Ff 32 /KeyUsage [(1XXXXXXXX)] >> >>", nil, nil},
 		{"the handler and version", "<< /Ff 5 /Filter /Adobe.PPKLite /V 2 >>", nil, nil},
+		{"a document it may leave unlocked", "<< /Ff 128 /LockDocument /false >>", nil, nil},
+		{"a document lock left to the signer", "<< /Ff 128 /LockDocument /auto >>", nil, nil},
 	} {
 		t.Run("meets "+tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -228,6 +230,9 @@ func TestSignatureFieldSeedValues(t *testing.T) {
 		{"another issuer", "<< /Cert << /Ff 2 /Issuer [" + otherHex + "] >> >>", nil},
 		{"another subject name", "<< /Cert << /Ff 8 /SubjectDN [<< /CN (someone else) >>] >> >>", nil},
 		{"another key usage", "<< /Cert << /Ff 32 /KeyUsage [(0XXXXXXXX)] >> >>", nil},
+		{"a named appearance", "<< /Ff 256 /AppearanceFilter (Corporate) >>", nil},
+		{"the PDF 2.0 seed value version", "<< /Ff 4 /V 3 /LockDocument /auto >>", nil},
+		{"the bit after AppearanceFilter", "<< /Ff 512 >>", nil},
 		{"a flag no table defines", "<< /Ff 4096 >>", nil},
 	} {
 		t.Run("refuses "+tc.name, func(t *testing.T) {

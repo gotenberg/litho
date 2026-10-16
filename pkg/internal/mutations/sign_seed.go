@@ -18,7 +18,11 @@ import (
 )
 
 // The /Ff bits of a seed value dictionary that make an entry a requirement
-// (ISO 32000-1, 12.7.4.5, Table 234; ISO 32000-2 adds bits 8 and 9).
+// (ISO 32000-1, 12.7.4.5, Table 234, bits 1 to 7; ISO 32000-2, 12.7.5.5,
+// Table 237 adds bit 8 for LockDocument and bit 9 for AppearanceFilter). The
+// values match pyHanko's SigSeedValFlags (LOCK_DOCUMENT 128,
+// APPEARANCE_FILTER 256) and HexaPDF's seed value bit field (lock_document 7,
+// appearance_filter 8, counted from 0).
 const (
 	seedFilter           = 1 << 0
 	seedSubFilter        = 1 << 1
@@ -33,7 +37,9 @@ const (
 )
 
 // The /Ff bits of a certificate seed value dictionary (ISO 32000-1,
-// 12.7.4.5, Table 235); bit 5 is reserved.
+// 12.7.4.5, Table 235); bit 5 is reserved, and bit 7 (URL) asks nothing of
+// the certificate. pyHanko's SigCertConstraintFlags and HexaPDF's bit field
+// give the same values.
 const (
 	certSeedSubject   = 1 << 0
 	certSeedIssuer    = 1 << 1
@@ -44,7 +50,14 @@ const (
 
 // maxSeedVersion is the highest seed value dictionary /V litho reads every
 // entry of: ISO 32000-1, Table 234 defines 1 for the PDF 1.5 entries and 2
-// for all the table lists.
+// for all the table lists, and ISO 32000-2, Table 237 adds 3 for the PDF 2.0
+// ones (pyHanko's SeedValueDictVersion: PDF_1_5 1, PDF_1_7 2, PDF_2_0 3).
+// litho stays at 2: of the PDF 2.0 entries it reads LockDocument and
+// AppearanceFilter, but not the SignaturePolicyOID, SignaturePolicyHashValue,
+// SignaturePolicyHashAlgorithm and SignaturePolicyCommitmentType entries
+// ISO 32000-2 adds to the certificate seed value dictionary (HexaPDF's
+// SVCert types them PDF 2.0), and it writes no signature-policy-identifier
+// attribute (ETSI EN 319 122-1, 5.2.9) to meet them.
 const maxSeedVersion = 2
 
 // maxLockDepth bounds the field tree [lockFields] walks. Anti-DoS guard, not
