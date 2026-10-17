@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
 )
@@ -50,8 +51,11 @@ var (
 // filter litho can produce. A picture in DeviceGray, DeviceRGB, DeviceCMYK, an
 // ICCBased, CalGray or CalRGB space keeps that space (see [blankNative]), and
 // so does one in a Separation or DeviceN space naming only the colorant None,
-// which paints nothing (ISO 32000-1, 8.6.6.4); any other indexed, Separation,
-// DeviceN or Lab picture is written as DeviceRGB. Any /SMask is carried over untouched, because a
+// which paints nothing (ISO 32000-1, 8.6.6.4). Any other picture, indexed,
+// Separation, DeviceN or Lab, or a JPX image taking its colour from its own
+// data, is written in sRGB, the space the decode converts its pixels to, and
+// states it by litho's sRGB profile ([icc.SRGBProfile]). See [srgbColorSpace]
+// for why not DeviceRGB. Any /SMask is carried over untouched, because a
 // soft mask is a separate grayscale image that stays valid against the new
 // samples and dropping it would change transparency outside the region.
 //
@@ -147,7 +151,7 @@ func blankImage(
 	canvas := image.NewNRGBA(bounds)
 	draw.Draw(canvas, bounds, img, bounds.Min, draw.Src)
 
-	// The DeviceRGB replacement is opaque, so a picture whose pixels are not
+	// The RGB replacement is opaque, so a picture whose pixels are not
 	// would start painting where it painted nothing: an image in a space over
 	// the colorant None decodes fully transparent (ISO 32000-1, 8.6.6.4), and
 	// rewritten as RGB it would cover its whole placement in black.
@@ -206,12 +210,16 @@ func blankImage(
 		if err != nil {
 			return 0, fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
 		}
+		cs, err := srgbColorSpace(alloc)
+		if err != nil {
+			return 0, fmt.Errorf("blanked image %q: %w", box.Name, err)
+		}
 		dict = ast.PdfDict{
 			"Type":             ast.PdfName("XObject"),
 			"Subtype":          ast.PdfName("Image"),
 			"Width":            ast.PdfInt(w),
 			"Height":           ast.PdfInt(h),
-			"ColorSpace":       ast.PdfName("DeviceRGB"),
+			"ColorSpace":       cs,
 			"BitsPerComponent": ast.PdfInt(8),
 			"Filter":           ast.PdfName("FlateDecode"),
 		}
@@ -225,6 +233,38 @@ func blankImage(
 		return 0, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
 	return ref.ObjectNum, nil
+}
+
+// srgbColorSpace allocates litho's sRGB profile as an ICC profile stream and
+// returns the [/ICCBased ref] colour space naming it, for a picture rewritten
+// in the sRGB its decode produced.
+//
+// The decode turns every colour space it reads into sRGB pixels
+// (IEC 61966-2-1), so an ICC profile of sRGB states exactly the colour the
+// replacement holds. DeviceRGB stated the same numbers with no colour of their
+// own, which a conforming PDF/A file may use only under a DefaultRGB space or
+// an RGB output intent (ISO 19005-1, 6.2.3.3; ISO 19005-2, 6.2.4.3 test 2;
+// ISO 19005-4, 6.2.4.3), so redacting an image the input stated in CIELab,
+// ROMM-RGB, an indexed or a tinted space wrote a violation the input did not
+// have. An ICCBased space is device independent under every part (ISO 19005-1,
+// 6.2.3.2; ISO 19005-2, 6.2.4.2), and the profile is the version 2.1 display
+// profile remediation writes for the same purpose.
+//
+// # Corpus evidence
+//
+//   - litho imagecolour_2b: redacting page 1 rewrote its four JPX images,
+//     which state no /ColorSpace, as DeviceRGB, adding 6.2.3.3 test 1 at
+//     PDF/A-1b and 6.2.4.3 test 2 at PDF/A-2a, 2b, 2u, 3b and 4.
+func srgbColorSpace(alloc *writer.ObjAllocator) (ast.PdfArray, error) {
+	profile, err := flateCompress(icc.SRGBProfile())
+	if err != nil {
+		return nil, fmt.Errorf("compressing the sRGB profile: %w", err)
+	}
+	ref := alloc.Alloc(ast.NewStream(ast.PdfDict{
+		"N":      ast.PdfInt(3),
+		"Filter": ast.PdfName("FlateDecode"),
+	}, profile))
+	return ast.PdfArray{ast.PdfName("ICCBased"), ref}, nil
 }
 
 // blankNative clears the covered samples of a picture in its own colour space

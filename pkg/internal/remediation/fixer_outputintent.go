@@ -13,10 +13,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
-//go:embed srgb.icc
-var sRGBICCProfile []byte
+// sRGBICCProfile is litho's built-in sRGB profile, shared with the writers
+// that state samples they produced in sRGB.
+var sRGBICCProfile = icc.SRGBProfile()
 
 //go:embed cmyk.icc
 var cmykICCProfile []byte
