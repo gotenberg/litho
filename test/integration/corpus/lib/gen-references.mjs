@@ -87,6 +87,54 @@ function round(val, decimals) {
   return Math.round(val * factor) / factor;
 }
 
+// lineBreakTolerance is how far, in user space units, an item may sit from
+// the previous one across the line before it starts a new line.
+const lineBreakTolerance = 2;
+
+// joinLines concatenates a page's text items into the golden text, one line
+// per line of text as it runs on the page. A horizontal line is the run of
+// items sharing a baseline, so a horizontal item starts a new line when its Y
+// moves. A vertical line is a column: PDF.js gives the items of a vertical
+// font (writing mode 1, ISO 32000-1, 9.7.4.3) dir "ttb", their origins
+// advance down the column, and the next column sits at another X. A vertical
+// item therefore starts a new line when its X moves. A change of writing mode
+// starts a new line when the item moved at all: PDF.js puts the empty
+// end-of-line marker that precedes a change of mode at the origin of the item
+// that follows, and that marker already broke the line. PDF.js emits the
+// spaces and end-of-line markers it synthesises with dir "ltr" whatever the
+// writing mode, so a blank item keeps the writing mode of the line it sits
+// in. A page with no vertical item breaks exactly where it did when only Y was
+// compared.
+function joinLines(items) {
+  let fullText = "";
+  let mode = null;
+  let lastX = 0;
+  let lastY = 0;
+  for (const item of items) {
+    if (item.str === undefined) continue;
+    const x = item.transform[4];
+    const y = item.transform[5];
+    const blank = item.str.trim() === "";
+    let itemMode = item.dir === "ttb" ? "vertical" : "horizontal";
+    if (blank && mode !== null) {
+      itemMode = mode;
+    }
+    if (mode !== null) {
+      const movedX = Math.abs(x - lastX) > lineBreakTolerance;
+      const movedY = Math.abs(y - lastY) > lineBreakTolerance;
+      const across = itemMode === "vertical" ? movedX : movedY;
+      if (itemMode === mode ? across : movedX || movedY) {
+        fullText += "\n";
+      }
+    }
+    fullText += item.str;
+    mode = itemMode;
+    lastX = x;
+    lastY = y;
+  }
+  return fullText;
+}
+
 const pdfs = fs
   .readdirSync(pdfsDir)
   .filter((name) => name.toLowerCase().endsWith(".pdf"))
@@ -152,16 +200,7 @@ for (const name of pdfs) {
 
       try {
         const textContent = await page.getTextContent();
-        let fullText = "";
-        let lastY = null;
-        for (const item of textContent.items) {
-          if (item.str === undefined) continue;
-          if (lastY !== null && Math.abs(item.transform[5] - lastY) > 2) {
-            fullText += "\n";
-          }
-          fullText += item.str;
-          lastY = item.transform[5];
-        }
+        const fullText = joinLines(textContent.items);
         result.pages.push({
           pageNumber: i,
           text: fullText,
