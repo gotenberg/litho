@@ -403,6 +403,34 @@ func GlyphToRuneFull(name string) (rune, bool) {
 			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
 		}
 	}
+	if r, ok := numericGlyphNameRune(name); ok {
+		return r, true
+	}
+	// "iSQPXXXX": 4 hex digits after "iSQP" prefix (e.g., "iSQP0041" = U+0041 = 'A').
+	// Used by some PDF generators as font-internal Unicode references.
+	if len(name) == 8 && name[:4] == "iSQP" {
+		if r, err := strconv.ParseUint(name[4:], 16, 32); err == nil && r > 0 {
+			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
+		}
+	}
+	// Try RecoverGlyphName (strip suffixes like ".001", ".alt", etc.)
+	recovered := RecoverGlyphName(name)
+	if recovered != name {
+		return GlyphToRuneSimple(recovered)
+	}
+	// Try decomposing "<base><modifier>" names like "ccaron" → c + caron → č.
+	// The base is a known glyph and the modifier is a combining diacritical.
+	if r, ok := resolveBaseModifier(name); ok {
+		return r, true
+	}
+	return 0, false
+}
+
+// numericGlyphNameRune decodes the producer conventions that spell a glyph
+// name as a number rather than as a name: "Gxx", "g00xx", "Cdd" and "Cxx".
+// None of them is in the Adobe Glyph List, so ISO 32000-1, 9.10.2 gives them
+// no Unicode value: the number is a guess at what the producer meant.
+func numericGlyphNameRune(name string) (rune, bool) {
 	// Non-standard glyph name patterns used by some PDF generators:
 	// "Gxx": 2 hex digits (e.g., "G4F" = U+004F).
 	if len(name) == 3 && name[0] == 'G' {
@@ -437,24 +465,21 @@ func GlyphToRuneFull(name string) (rune, bool) {
 			}
 		}
 	}
-	// "iSQPXXXX": 4 hex digits after "iSQP" prefix (e.g., "iSQP0041" = U+0041 = 'A').
-	// Used by some PDF generators as font-internal Unicode references.
-	if len(name) == 8 && name[:4] == "iSQP" {
-		if r, err := strconv.ParseUint(name[4:], 16, 32); err == nil && r > 0 {
-			return rune(r), true //nolint:gosec // value constrained by 32-bit parse
-		}
-	}
-	// Try RecoverGlyphName (strip suffixes like ".001", ".alt", etc.)
-	recovered := RecoverGlyphName(name)
-	if recovered != name {
-		return GlyphToRuneSimple(recovered)
-	}
-	// Try decomposing "<base><modifier>" names like "ccaron" → c + caron → č.
-	// The base is a known glyph and the modifier is a combining diacritical.
-	if r, ok := resolveBaseModifier(name); ok {
-		return r, true
-	}
 	return 0, false
+}
+
+// NumericGlyphName returns the value [GlyphToRuneFull] reads from name when
+// it resolves name only as a number ("Gxx", "g00xx", "Cdd", "Cxx"), not by
+// finding it in a glyph list or reading a uniXXXX or uXXXX[XX] spelling. The
+// boolean is false for every other name.
+func NumericGlyphName(name string) (rune, bool) {
+	if _, ok := GlyphToRuneSimple(name); ok {
+		return 0, false
+	}
+	if _, ok := texMathGlyphs[name]; ok {
+		return 0, false
+	}
+	return numericGlyphNameRune(name)
 }
 
 // diacriticalModifiers maps modifier suffixes to their Unicode combining

@@ -681,6 +681,13 @@ func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfOb
 // resolveEncoding resolves the /Encoding entry from the font dictionary into
 // the font's encoding map. Handles both named encodings (WinAnsiEncoding, etc.)
 // and dictionary-based encodings with /BaseEncoding and /Differences.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400235.pdf, thread_300_300511.pdf, pdfjs TAMReview.pdf:
+//     symbolic Type 1 programs whose built-in encodings leave 0x27 and 0x60
+//     without a usable name. Filled from StandardEncoding they read as curly
+//     quotes, where PDF.js reads straight ones.
 func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol bool) {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
@@ -740,7 +747,12 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 			// almost always store glyphs at Latin-1 byte positions.
 			// Seed from the FontFile / FontFile3 first so the program's
 			// own encoding wins, then overlay the appropriate built-in
-			// on any unfilled slot.
+			// on any unfilled slot. A symbolic Type 1 font whose program
+			// leaves a slot without a usable name takes the WinAnsi
+			// default ResolveFont gives symbolic fonts: StandardEncoding
+			// is the nonsymbolic default (ISO 32000-1, 9.6.6.1), and it
+			// reads 0x27 and 0x60 as curly quotes where PDF.js, whose
+			// symbolic default is MacRoman, reads straight ones.
 			font.Encoding = make(map[byte]rune)
 			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbats, isSymbol)
 			extractCFFEncodingAsBase(ctx, doc, fontDict, font)
@@ -751,7 +763,7 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 				overlay = encodings.BuildSymbolEncoding()
 			case isDingbats:
 				overlay = encodings.BuildZapfDingbatsEncoding()
-			case isType1Like:
+			case isType1Like && !fontIsSymbolicByFlags(ctx, doc, fontDict):
 				overlay = encodings.StandardEncoding
 			default:
 				overlay = encodings.WinAnsiEncoding
@@ -1436,6 +1448,9 @@ func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict 
 				continue
 			}
 		}
+		if builtinNumericNameMisreads(glyphName, code) {
+			continue
+		}
 		if r, ok := encodings.GlyphToRuneFull(glyphName); ok {
 			if font.Encoding == nil {
 				font.Encoding = make(map[byte]rune)
@@ -1552,13 +1567,42 @@ func applyType1FontFileEncoding(ctx context.Context, doc *document.Document, fon
 		return
 	}
 	for i, name := range enc {
-		if name == "" || name == ".notdef" {
+		if name == "" || name == ".notdef" || builtinNumericNameMisreads(name, i) {
 			continue
 		}
 		if r, ok := resolveGlyphRune(name, isDingbats, isSymbol); ok {
 			font.Encoding[byte(i)] = r //nolint:gosec // i is bounded by 0..255 via the array size
 		}
 	}
+}
+
+// builtinNumericNameMisreads reports whether name, found at code in a font
+// program's built-in encoding, is a numeric glyph name ("Gxx", "g00xx", "Cdd",
+// "Cxx") whose number names a character other than code.
+//
+// ISO 32000-1, 9.10.2 maps a simple font's codes to Unicode through glyph
+// names the Adobe Glyph List carries. A numeric name is not one of them, so
+// reading it as a number is a guess at the producer's convention. Producers
+// that number glyphs by their code write the number in decimal or in
+// hexadecimal, and the two readings of "G97" disagree: a guess that lands on
+// the code itself confirms the convention, one that lands elsewhere reads
+// the wrong one and names a character the code does not carry. The caller
+// then leaves the code to the default encoding, which is what PDF.js reads,
+// since it never takes a built-in encoding's numeric names as numbers
+// (src/core/fonts.js, adjustType1ToUnicode, through getUnicodeForGlyph).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300161.pdf, thread_200_200155.pdf, thread_000_000364.pdf,
+//     thread_400_400786.pdf: Times New Roman programs whose built-in
+//     encodings name code c "G<c in decimal>". Read as hexadecimal, "G97"
+//     became U+0097 and "G32" became "2", so every "a" and every space came
+//     out wrong.
+//   - govdocs thread_300_300606.pdf: a program naming code c "G<c in
+//     hexadecimal>" keeps its reading, which PDF.js shares.
+func builtinNumericNameMisreads(name string, code int) bool {
+	r, ok := encodings.NumericGlyphName(name)
+	return ok && r != rune(code) //nolint:gosec // code is a one-byte character code, 0..255
 }
 
 // applyType1CharStringWidths fills gaps in font.Widths from the
@@ -2405,6 +2449,9 @@ func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict as
 	}
 	// Convert glyph names to runes and overwrite the encoding table.
 	for code, name := range encMap {
+		if builtinNumericNameMisreads(name, int(code)) {
+			continue
+		}
 		if r, ok := encodings.GlyphToRuneFull(name); ok {
 			font.Encoding[code] = r
 		}
@@ -2432,7 +2479,7 @@ func extractCFFEncodingAsBase(ctx context.Context, doc *document.Document, fontD
 		font.Encoding = make(map[byte]rune)
 	}
 	for code, name := range encMap {
-		if _, set := font.Encoding[code]; set {
+		if _, set := font.Encoding[code]; set || builtinNumericNameMisreads(name, int(code)) {
 			continue
 		}
 		if r, ok := encodings.GlyphToRuneFull(name); ok {
