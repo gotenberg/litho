@@ -14,8 +14,8 @@ import (
 // object 4 = [4 0 R] compared with itself re-resolves the same array from a
 // fresh frame every time: ResolveObject's cycle guard is per-resolution, the
 // same property that made the DPart walk fatal. Reached from ValidatePDFA,
-// ValidatePDFUA and ValidateWTPDF via tintTransformEqual/functionStreamEqual
-// -> functionDictEqual, where a stack overflow is fatal and uncatchable.
+// ValidatePDFUA and ValidateWTPDF via tintTransformEqual, where a stack
+// overflow is fatal and uncatchable.
 func TestPdfObjectEqual_SelfReferencingArrayTerminates(t *testing.T) {
 	t.Parallel()
 

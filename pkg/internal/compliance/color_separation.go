@@ -1,7 +1,6 @@
 package compliance
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -188,68 +187,13 @@ func checkSeparationLinks(ctx context.Context, doc *document.Document, pages []p
 	})
 }
 
-// tintTransformEqual compares two tint transform function objects for
-// equivalence. Per the spec, the comparison is structural (same dict keys/values
-// and stream content), ignoring compression and indirect/direct status.
+// tintTransformEqual reports whether two tint transforms are the same function
+// for ISO 19005-2, 6.2.4.4 t2. veraPDF compares them as COS objects
+// (GFPDSeparation.getareTintAndAlternateConsistent calls COSObject.equals,
+// veraPDF 1.30.2), by content and through references, so a copy of a function
+// is the same function; see [streamEqualAt] for how a stream compares.
 func tintTransformEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObject) bool {
-	// Try as streams (Type 4 PostScript calculator functions).
-	sa, errA := document.ResolveStream(ctx, doc, a)
-	sb, errB := document.ResolveStream(ctx, doc, b)
-	if errA == nil && errB == nil {
-		return functionStreamEqual(ctx, doc, sa, sb)
-	}
-
-	// Try as dicts (Type 0/2/3 functions).
-	da, errA := document.ResolveDict(ctx, doc, a)
-	db, errB := document.ResolveDict(ctx, doc, b)
-	if errA == nil && errB == nil && da != nil && db != nil {
-		return functionDictEqual(ctx, doc, da, db)
-	}
-
-	return false
-}
-
-// functionStreamEqual compares two function streams (Type 4 PostScript).
-func functionStreamEqual(ctx context.Context, doc *document.Document, a, b ast.PdfStream) bool {
-	// Compare decoded stream bytes.
-	dataA, errA := doc.DecodeStream(ctx, a)
-	dataB, errB := doc.DecodeStream(ctx, b)
-	if errA != nil || errB != nil {
-		return false
-	}
-	if !bytes.Equal(dataA, dataB) {
-		return false
-	}
-	// Compare function dict keys (FunctionType, Domain, Range, etc.)
-	// ignoring stream-specific keys (Length, Filter, DecodeParms).
-	return functionDictEqual(ctx, doc, a.Dict, b.Dict)
-}
-
-// functionDictEqual compares two function dictionaries, ignoring
-// stream-encoding keys (Length, Filter, DecodeParms, DL).
-func functionDictEqual(ctx context.Context, doc *document.Document, a, b ast.PdfDict) bool {
-	skip := map[ast.PdfName]bool{"Length": true, "Filter": true, "DecodeParms": true, "DL": true}
-	keysA := 0
-	for k, vA := range a {
-		if skip[k] {
-			continue
-		}
-		keysA++
-		vB, ok := b[k]
-		if !ok {
-			return false
-		}
-		if !pdfObjectEqual(ctx, doc, vA, vB) {
-			return false
-		}
-	}
-	keysB := 0
-	for k := range b {
-		if !skip[k] {
-			keysB++
-		}
-	}
-	return keysA == keysB
+	return pdfObjectEqual(ctx, doc, a, b)
 }
 
 // deviceNProcessColorants are the colorant names a DeviceN array may carry

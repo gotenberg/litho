@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5" //nolint:gosec // G501: MD5 computes the ICC profile ID per ICC.1, not for security.
 	"fmt"
@@ -339,10 +340,71 @@ func pdfObjectEqualAt(ctx context.Context, doc *document.Document, a, b ast.PdfO
 			}
 		}
 		return true
+	case ast.PdfStream:
+		vb, ok := b.(ast.PdfStream)
+		return ok && streamEqualAt(ctx, doc, va, vb, seen)
 	case nil:
 		return b == nil
 	}
 	return false
+}
+
+// streamCompareSkippedKeys are the stream dictionary entries veraPDF leaves out
+// when it compares two streams (COSStream.equals, veraPDF 1.30.2): the ones
+// that say how the data is encoded and how long it is, ISO 32000-1, 7.3.8.2,
+// Table 5.
+//
+//nolint:gochecknoglobals // immutable lookup set.
+var streamCompareSkippedKeys = map[ast.PdfName]bool{"Filter": true, "DecodeParms": true, "Length": true}
+
+// streamEqualAt compares two streams as veraPDF does (COSStream.equals,
+// veraPDF 1.30.2): every dictionary entry but [streamCompareSkippedKeys] must
+// be equal, and so must the stream data as the file writes it, before any
+// filter is undone, byte for byte. Two streams holding one program under
+// different filters are then different streams, and two copies of one stream
+// the same.
+//
+// A stream whose data exceeds the document's stream budget
+// ([document.Document.Limits]) is not read, and compares equal only to itself
+// (see [pdfObjectEqualAt]): the comparison reads each stream's data whole, and
+// a validation walk may compare one pair at every link.
+func streamEqualAt(ctx context.Context, doc *document.Document, a, b ast.PdfStream, seen map[[2]int]bool) bool {
+	countA, countB := 0, 0
+	for key, valA := range a.Dict {
+		if streamCompareSkippedKeys[key] {
+			continue
+		}
+		countA++
+		valB, ok := b.Dict[key]
+		if !ok || !pdfObjectEqualAt(ctx, doc, valA, valB, seen) {
+			return false
+		}
+	}
+	for key := range b.Dict {
+		if !streamCompareSkippedKeys[key] {
+			countB++
+		}
+	}
+	if countA != countB {
+		return false
+	}
+	dataA, okA := boundedStreamData(ctx, doc, a)
+	dataB, okB := boundedStreamData(ctx, doc, b)
+	return okA && okB && bytes.Equal(dataA, dataB)
+}
+
+// boundedStreamData returns the data of stream as the file writes it, and
+// false when it cannot be read or exceeds the document's stream budget.
+func boundedStreamData(ctx context.Context, doc *document.Document, stream ast.PdfStream) ([]byte, bool) {
+	budget := doc.Limits().MaxStreamBytes
+	if n, err := document.ResolveInt(ctx, doc, stream.Dict["Length"]); err == nil && (n < 0 || int64(n) > budget) {
+		return nil, false
+	}
+	data, err := stream.Bytes(ctx)
+	if err != nil || int64(len(data)) > budget {
+		return nil, false
+	}
+	return data, true
 }
 
 // formatDictAddr returns a stable string key for cycle detection on a PdfDict.
