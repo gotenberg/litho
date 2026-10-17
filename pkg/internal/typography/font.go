@@ -882,6 +882,52 @@ func resolveType0Metrics(ctx context.Context, doc *document.Document, fontDict a
 			font.WMode = int(document.Float(wmObj))
 		}
 	}
+
+	if cmapWritingMode(ctx, doc, fontDict) == 1 {
+		font.WMode = 1
+	}
+}
+
+// cmapWritingMode returns the writing mode a Type 0 font's /Encoding CMap
+// declares: 0 horizontal, 1 vertical. Per ISO 32000-1, 9.7.4.3 and 9.7.5.3,
+// the CMap, not the CIDFont, carries the writing mode. A predefined CMap
+// declares it by name (9.7.5.2, Table 118: Identity-V and every -V CMap are
+// vertical), an embedded CMap stream through its /WMode entry (Table 120,
+// default 0). A name or stream litho cannot read is horizontal.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1905623.pdf (UniJIS-UTF16-V), vertical.pdf and issue6387.pdf
+//     (Identity-V): read as horizontal, each column ran off the page edge
+//     to the right and its tail was dropped as text outside the CropBox.
+//     Read as vertical, all three recover every character PDF.js extracts.
+func cmapWritingMode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) int {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return 0
+	}
+	resolved, err := document.ResolveObject(ctx, doc, encObj)
+	if err != nil {
+		doc.Logger.Debug("resolving Type0 /Encoding for writing mode", slog.Any("err", err))
+		return 0
+	}
+	switch enc := resolved.(type) {
+	case ast.PdfName:
+		switch enc {
+		case "Identity-V":
+			return 1
+		case "Identity-H":
+			return 0
+		}
+		if m := cmap.LoadPredefinedCIDMap(string(enc)); m != nil {
+			return m.WMode()
+		}
+	case ast.PdfStream:
+		if wm, ok := enc.Dict["WMode"]; ok && document.Float(wm) == 1 {
+			return 1
+		}
+	}
+	return 0
 }
 
 // resolveSimpleFontMetrics extracts metrics for simple fonts (Type1, TrueType,

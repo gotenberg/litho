@@ -124,3 +124,34 @@ func TestReconstructText_VerticalSingleColumn(t *testing.T) {
 		t.Errorf("vertical single column: got %q, want %q", got, want)
 	}
 }
+
+// TestCMapWritingMode pins that a Type 0 font takes its writing mode from
+// its /Encoding CMap (ISO 32000-1, 9.7.5.2, Table 118 and 9.7.5.3, Table
+// 120): the -V predefined CMaps and an embedded CMap with /WMode 1 are
+// vertical, the -H ones horizontal.
+func TestCMapWritingMode(t *testing.T) {
+	t.Parallel()
+	vertical := ast.NewStream(ast.PdfDict{"Type": ast.PdfName("CMap"), "WMode": ast.PdfInt(1)}, nil)
+	horizontal := ast.NewStream(ast.PdfDict{"Type": ast.PdfName("CMap")}, nil)
+	for _, tc := range []struct {
+		name string
+		enc  ast.PdfObject
+		want int
+	}{
+		{"Identity-V", ast.PdfName("Identity-V"), 1},
+		{"Identity-H", ast.PdfName("Identity-H"), 0},
+		{"UniJIS-UTF16-V", ast.PdfName("UniJIS-UTF16-V"), 1},
+		{"UniJIS-UTF16-H", ast.PdfName("UniJIS-UTF16-H"), 0},
+		{"embedded vertical", vertical, 1},
+		{"embedded horizontal", horizontal, 0},
+		{"unknown name", ast.PdfName("NoSuchCMap-V"), 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := cmapWritingMode(context.Background(), nil, ast.PdfDict{"Encoding": tc.enc})
+			if got != tc.want {
+				t.Errorf("writing mode: got %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
