@@ -197,6 +197,8 @@ one deliberately rather than diffing it against a fresh build.
 | `cmapnotdef_2b.pdf`    | PDF/A-2b     | Encoding CMaps whose notdef ranges map the codes they show       |
 | `cmappredef_2b.pdf`    | PDF/A-2b     | Fonts naming predefined CMaps, through their bases and notdefs   |
 | `cmapusevert_1b.pdf`   | PDF/A-1b     | An encoding CMap whose `/UseCMap` names the vertical CMap V      |
+| `stdremap_ua2.pdf`     | PDF/UA-2     | A standard type the root `/RoleMap` sends to a private dead end  |
+| `remapchain_ua2.pdf`   | PDF/UA-2     | Standard types mapped through a private type to a standard one   |
 
 ### Must-not-fire controls
 
@@ -430,6 +432,9 @@ violation but is exempt, so a firing is a false positive.
 | `cmapnotdef_2b`                           | `N2`: a code a notdef range maps to a CID the program holds            | ISO 32000-1, 9.7.6.3         |
 | `cmappredef_2b`                           | `P2`: codes `/UniJIS-UCS2-V` takes from its base, to glyphs present    | ISO 32000-1, 9.7.5.2         |
 | `cmappredef_2b`                           | `P5`: a code `/90ms-RKSJ-H`'s notdef range maps to a CID present       | ISO 32000-1, 9.7.6.3         |
+| `remapchain_ua2`                          | `Div`: a `/RoleMap` chain through `Section` that ends on `Sect`        | ISO 14289-2, 8.2.4 t4        |
+| `remapchain_ua2`                          | PDF 1.7 `Sect`: a `/RoleMapNS` chain through a custom `Section`        | ISO 14289-2, 8.2.4 t4        |
+| `stdremap_ua2`                            | PDF 2.0 `Sect`: an element the `/RoleMap` entry for `Sect` misses      | ISO 32000-2, 14.8.6          |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -550,6 +555,7 @@ which are covered under [Known divergences](#known-divergences).
 | `parentreach_2b.pdf`   | 7    | 3    | 7    | 3    | 4    | 8    | 4    | 5    | 7   | 7    | 8    | 7    | 7    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
+| `remapchain_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 4    | 0    |
 | `remreach_2b.pdf`      | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 6    | 6    | 10   | 8    |
 | `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
 | `repairroom_2b.pdf`    | 5    | 2    | 7    | 3    | 5    | 8    | 4    | 6    | 8   | 8    | 9    | 10   | 9    |
@@ -561,6 +567,7 @@ which are covered under [Known divergences](#known-divergences).
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
 | `siglock_2b.pdf`       | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
 | `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
+| `stdremap_ua2.pdf`     | 4    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `structcopy_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 0    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
 | `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 30   |
@@ -6165,16 +6172,58 @@ two unrelated characters. Remediation of `cmapusevert_1b` at PDF/A-1b now
 embeds V flattened over H, with `/WMode 1` in its dictionary and program, and
 both tools find the output conforming; before, 6.3.3.3 stayed.
 
+### `stdremap_ua2.pdf` and `remapchain_ua2.pdf`
+
+ISO 14289-2, 8.2.4 test 4 reports a structure element whose type is standard
+in the namespace it belongs to and whose role mapping leads to no standard type.
+A mapping is followed to its end (ISO 32000-2, 14.7.4 and 14.8.6), through the
+structure tree root's `/RoleMap` for an element in no namespace or in a PDF 1.7
+namespace without a `/RoleMapNS`, and through the `/RoleMapNS` of the element's
+namespace otherwise. No corpus file maps a standard type to a private one that a
+PDF/UA-2 reading reaches, so these two files do, each under a root `Document` in
+the PDF 2.0 namespace:
+
+| File             | Element   | Namespace | Mapping                                               | Read at PDF/UA-2 |
+| ---------------- | --------- | --------- | ----------------------------------------------------- | ---------------- |
+| `stdremap_ua2`   | `Sect`    | PDF 1.7   | `/RoleMap` `Sect` to `Book`, which nothing maps       | `8.2.4/4`        |
+| `stdremap_ua2`   | `Sect`    | PDF 2.0   | none: the `/RoleMap` does not govern it               | `Sect`           |
+| `remapchain_ua2` | `Div`     | none      | `/RoleMap` `Div` to `Section`, `Section` to `Sect`    | `Sect`           |
+| `remapchain_ua2` | `Sect`    | PDF 1.7   | `/RoleMapNS` to a custom `Section`, which maps `Sect` | the 2.0 `Sect`   |
+| `remapchain_ua2` | `Callout` | custom    | `/RoleMapNS` to the PDF 2.0 `Aside`                   | `Aside`          |
+
+Both files agree with veraPDF 1.30.2 on the rule set in all thirteen cells and
+both WTPDF levels. PDF/UA-2 reports the PDF 1.7 `Sect` of `stdremap_ua2` once
+on each tool and nothing on `remapchain_ua2`; the WTPDF levels add their missing
+declaration (`6.1.3/1`). PDF/UA-1 and the level-A cells read both files as PDF
+1.7, where no namespace counts: the `/RoleMap` reaches both `Sect` elements of
+`stdremap_ua2`, which PDF/UA-1 reports as `7.1/7` and parts 2 and 3 at level A
+as `6.7.3.4/3`, and it does not map `Callout`, which PDF/UA-1 reports as
+`7.1/5`, PDF/A-1a as `6.8.3.4/1` and parts 2 and 3 at level A as `6.7.3.4/1`.
+PDF/UA-1 also reports the `Div` of `remapchain_ua2` as `7.1/7`, since ISO
+14289-1 forbids remapping a standard type at all. The other cells report what
+`rolemapscope_ua2.pdf` reports. The counts differ in one respect: litho reports
+`7.1/7` and `6.7.3.4/3` once per `/RoleMap` entry, veraPDF once per element, so
+on `stdremap_ua2` veraPDF counts two checks where litho reports one.
+
+Measured on litho and veraPDF 1.30.2 before the fix, litho judged 8.2.4 test 4
+on the first hop of each mapping and only for an element in no namespace: it
+missed the PDF 1.7 `Sect` of `stdremap_ua2` and reported both the `Div` and the
+PDF 1.7 `Sect` of `remapchain_ua2`, and at PDF/A-2a and PDF/A-3a it reported
+the `Div` as `6.7.3.4/3`. Remediation at the manifest profiles and both WTPDF
+levels, default and aggressive, leaves the same rule set on both tools; on
+`stdremap_ua2` at PDF/UA-2 and both WTPDF levels that set is `8.2.4/4`, which no
+repair removes yet.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 145 x 8 = 1160 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 145 x 13 = 1885 cells. litho
+runner scores 147 x 8 = 1176 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 147 x 13 = 1911 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1883 of the 1885 cells. The two
+fixtures exist to protect, and it holds in 1909 of the 1911 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -6182,12 +6231,12 @@ non-empty set in each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-nine is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
+ten is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
-and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2` and `structcopy_ua2` at
-PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1160 and moves only `ruleset_mismatch`, and on
-those nine cells it moves both. Both exceptions sit in the manifest's profiles,
+and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
+`structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
+rule class leaves `matched` at 1176 and moves only `ruleset_mismatch`, and on
+those ten cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
 the runner is a regression, or a divergence to cover under Known divergences and
