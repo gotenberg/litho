@@ -61,10 +61,12 @@ func type0CMapPDF(t *testing.T, content, encoding, cmapBody string, embed bool) 
 // maps nowhere reaches no glyph, not the .notdef glyph.
 //
 // ISO 32000-1 §9.7.6.3 sends a code no cidrange or cidchar covers to CID 0. Where
-// litho holds every mapping the CMap has (no usecmap base, no notdef range), that
-// code reaches nothing in the embedded program, so both the .notdef rule and the
-// glyph-presence rule apply. A code written as CID 0 is different: it reaches the
-// .notdef glyph, which the program does contain, and fires the .notdef rule alone.
+// litho holds every mapping the CMap has, its usecmap base and notdef ranges
+// included, that code reaches nothing in the embedded program, so both the
+// .notdef rule and the glyph-presence rule apply. A code written as CID 0 is
+// different: it reaches the .notdef glyph, which the program does contain, and
+// fires the .notdef rule alone. A base or a notdef range that maps the code
+// decides its CID as veraPDF's CMap.toCID does.
 // Both readings were measured against veraPDF 1.30.2, which reports the pair for
 // an encoding CMap written with bfchar alone and the .notdef rule alone for an
 // explicit <0000>.
@@ -129,18 +131,76 @@ func TestUnmappedCodeResolvesToNoGlyph(t *testing.T) {
 			wantNotdef: false,
 		},
 		{
-			name:       "a CMap naming a usecmap base leaves the code unresolved",
+			// The Identity-H base maps <0043> to CID 67, which the program
+			// lacks; veraPDF reads a missing CIDFontType2 glyph as .notdef.
+			name:       "a usecmap base maps the code to a CID the program lacks",
 			content:    showUnmapped,
+			encoding:   "8 0 R",
+			cmapBody:   "/Identity-H usecmap\n" + bfcharOnly,
+			wantGlyph:  true,
+			wantNotdef: true,
+		},
+		{
+			name:       "a usecmap base maps the code to a CID the program holds",
+			content:    "BT /F1 12 Tf 10 50 Td <0005> Tj ET",
 			encoding:   "8 0 R",
 			cmapBody:   "/Identity-H usecmap\n" + bfcharOnly,
 			wantGlyph:  false,
 			wantNotdef: false,
 		},
 		{
-			name:       "a CMap with a notdef range leaves the code unresolved",
+			// A notdef range maps <0043> to CID 0. veraPDF's
+			// CIDFontType2Program.containsCID refuses CID 0 and GFGlyph
+			// exempts only code 0, so the glyph is absent as well as .notdef.
+			name:       "a notdef range maps the code to CID 0",
 			content:    showUnmapped,
 			encoding:   "8 0 R",
 			cmapBody:   bfcharOnly + "1 beginnotdefrange\n<0000> <00FF> 0\nendnotdefrange\n",
+			wantGlyph:  true,
+			wantNotdef: true,
+		},
+		{
+			name:       "a notdef range maps the code to a CID the program holds",
+			content:    showUnmapped,
+			encoding:   "8 0 R",
+			cmapBody:   bfcharOnly + "1 beginnotdefrange\n<0000> <00FF> 1\nendnotdefrange\n",
+			wantGlyph:  false,
+			wantNotdef: false,
+		},
+		{
+			name:       "a cidchar mapping a code other than 0 to CID 0",
+			content:    showUnmapped,
+			encoding:   "8 0 R",
+			cmapBody:   "1 begincidchar\n<0043> 0\nendcidchar\n",
+			wantGlyph:  true,
+			wantNotdef: true,
+		},
+		{
+			// GFGlyph counts the glyph of code 0 present whatever it maps to.
+			name:       "an unmapped code 0 reaches the .notdef glyph alone",
+			content:    "BT /F1 12 Tf 10 50 Td <0000> Tj ET",
+			encoding:   "8 0 R",
+			cmapBody:   bfcharOnly,
+			wantGlyph:  false,
+			wantNotdef: true,
+		},
+		{
+			// veraPDF ignores a usecmap naming a CMap it does not bundle.
+			name:       "a usecmap base no reader bundles leaves the code unmapped",
+			content:    showUnmapped,
+			encoding:   "8 0 R",
+			cmapBody:   "/No-Such-H usecmap\n" + bfcharOnly,
+			wantGlyph:  true,
+			wantNotdef: true,
+		},
+		{
+			// veraPDF bundles Adobe-KR-9, an identity CMap over the collection's
+			// CIDs, and litho does not, so litho leaves the code unresolved
+			// where veraPDF 1.30.2 reports both rules: a known false negative.
+			name:       "a usecmap base only veraPDF bundles leaves the code unresolved",
+			content:    showUnmapped,
+			encoding:   "8 0 R",
+			cmapBody:   "/Adobe-KR-9 usecmap\n" + bfcharOnly,
 			wantGlyph:  false,
 			wantNotdef: false,
 		},

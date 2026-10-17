@@ -153,64 +153,15 @@ func parseBCMapCIDToUnicode(data []byte) (map[int]rune, error) {
 
 // parseBCMapCharToCID parses a binary CMap (.bcmap) encoding file
 // (e.g., GBK-EUC-H) and returns the character-code→CID map. Codespace
-// ranges are also collected to determine valid byte lengths.
+// ranges are also collected to determine valid byte lengths. The notdef
+// mappings and the usecmap base, which [parseBCMapCIDProgram] also reads, are
+// left out.
 func parseBCMapCharToCID(data []byte) (charToCID map[int]int, codespaces []CodeSpaceRange, err error) {
-	if len(data) == 0 {
-		return nil, nil, fmt.Errorf("empty bcmap data")
+	prog, err := parseBCMapCIDProgram(data)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	s := &bcmapStream{data: data, pos: 1}
-	charToCID = make(map[int]int, 8192) //nolint:mnd // typical CMap size
-
-	for s.pos < len(s.data) {
-		tag, tagErr := s.readByte()
-		if tagErr != nil {
-			break
-		}
-
-		recType := int(tag >> 5)
-
-		if recType == 7 {
-			if skipErr := s.skipString(); skipErr != nil {
-				return nil, nil, fmt.Errorf("bcmap metadata: %w", skipErr)
-			}
-			continue
-		}
-
-		seq := tag&0x10 != 0
-		dataSize := int(tag & 0x0F)
-
-		count, countErr := s.readNumber()
-		if countErr != nil {
-			return nil, nil, fmt.Errorf("bcmap record count: %w", countErr)
-		}
-
-		switch recType {
-		case 0:
-			var cs []CodeSpaceRange
-			cs, err = s.collectCodespace(count, dataSize)
-			if err == nil {
-				codespaces = append(codespaces, cs...)
-			}
-		case 1:
-			err = s.advanceNotdef(count, dataSize)
-		case 2:
-			err = s.collectCIDChar(count, dataSize, seq, charToCID)
-		case 3:
-			err = s.collectCIDRange(count, dataSize, seq, charToCID)
-		case 4:
-			err = s.advanceBFChar(count, dataSize, seq)
-		case 5:
-			err = s.advanceBFRange(count, dataSize, seq)
-		default:
-			err = fmt.Errorf("unknown record type %d", recType)
-		}
-		if err != nil {
-			return nil, nil, fmt.Errorf("bcmap record type %d: %w", recType, err)
-		}
-	}
-
-	return charToCID, codespaces, nil
+	return prog.charToCID, prog.codespaces, nil
 }
 
 // collectCodespace parses codespace range entries (type 0) and returns them.

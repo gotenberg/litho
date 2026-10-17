@@ -1102,16 +1102,7 @@ func type0ShownGlyphs(ctx context.Context, doc *document.Document, font ast.PdfD
 			return out
 		}
 	case "":
-		stream, err := document.ResolveStream(ctx, doc, font["Encoding"])
-		if err != nil {
-			return nil
-		}
-		data, err := doc.DecodeStream(ctx, stream)
-		if err != nil {
-			doc.Logger.Debug("compliance: fonts: cannot decode Type0 encoding CMap", "error", err)
-			return nil
-		}
-		embedded := cmap.ParseEmbeddedCIDMap(ctx, data)
+		embedded := embeddedEncodingCIDMap(ctx, doc, font["Encoding"])
 		if embedded == nil {
 			return nil
 		}
@@ -1142,7 +1133,7 @@ func zipCodesAndCIDs(m *cmap.CIDMap, data []byte, unmappedNotdef bool) []shownGl
 		}
 		switch {
 		case !c.Mapped:
-			if unmappedNotdef {
+			if unmappedNotdef && !c.Undefined {
 				out = append(out, shownGlyph{code: codes[i], glyph: 0})
 			}
 		case c.CID >= 0 && c.CID <= maxCID:

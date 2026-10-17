@@ -23,6 +23,17 @@ const cidCMap = "/CIDInit /ProcSet findresource begin\n" +
 	"1 begincidrange\n<8140> <8150> 633\nendcidrange\n" +
 	"endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n"
 
+// baseNotdefCMap is an embedded CID CMap that builds on a predefined base and
+// declares notdef mappings, so decoding walks the base and the notdef list.
+const baseNotdefCMap = "/CIDInit /ProcSet findresource begin\n" +
+	"12 dict begin\nbegincmap\n" +
+	"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n" +
+	"1 begincidchar\n<0041> 7\nendcidchar\n" +
+	"/Identity-H usecmap\n" +
+	"1 beginnotdefrange\n<0100> <01FF> 3\nendnotdefrange\n" +
+	"1 beginnotdefchar\n<0042> 1\nendnotdefchar\n" +
+	"endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n"
+
 // FuzzCMapMapping feeds arbitrary strings through arbitrary CMaps and asserts
 // crash-freedom.
 //
@@ -43,8 +54,10 @@ func FuzzCMapMapping(f *testing.F) {
 	f.Add([]byte(unicodeCMap), []byte{0x81})       // truncated two-byte code
 	f.Add([]byte(unicodeCMap), []byte{0xFF, 0xFF}) // outside every range
 	f.Add([]byte(cidCMap), []byte("A\x81\x45"))
-	f.Add([]byte("begincmap\nendcmap\n"), []byte("abc")) // no codespace at all
-	f.Add([]byte(zeroWidthCMapSrc), []byte("AB"))        // "<>" declares no code at all
+	f.Add([]byte(baseNotdefCMap), []byte("\x00\x41\x01\x50\xFF"))
+	f.Add([]byte(baseNotdefCMap[:len(baseNotdefCMap)/2]), []byte("\x00\x41")) // truncated inside a block
+	f.Add([]byte("begincmap\nendcmap\n"), []byte("abc"))                      // no codespace at all
+	f.Add([]byte(zeroWidthCMapSrc), []byte("AB"))                             // "<>" declares no code at all
 	f.Add([]byte{}, []byte{})
 
 	f.Fuzz(func(t *testing.T, cmapSrc, codes []byte) {

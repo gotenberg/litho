@@ -540,6 +540,95 @@ func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict a
 // not spec-mandated: real usecmap chains are 1-2 deep.
 const maxUseCMapChainDepth = 5
 
+// embeddedEncodingCIDMap reads the embedded encoding CMap stream encObj of a
+// Type 0 font into the code-to-CID map veraPDF builds for it
+// (PDCMap.getCMapFile): the stream's own mappings over the bases it names,
+// in-program by usecmap and in its dictionary by /UseCMap (ISO 32000-1,
+// 9.7.5.3, Table 120). A /UseCMap name is a predefined CMap
+// ([cmap.NamedBase]); a /UseCMap stream is read the same way, recursively, up
+// to [maxUseCMapChainDepth].
+//
+// It returns nil when encObj is no stream litho can decode, so the caller
+// leaves the font's codes unchecked. A base litho cannot read, past the depth
+// cap or reached again through a cycle, leaves the codes it could map unknown
+// rather than unmapped ([cmap.CIDMap.UnmappedNotdef]): veraPDF raises a
+// LoopedException on the cycle, and litho does not guess its verdict.
+func embeddedEncodingCIDMap(ctx context.Context, doc *document.Document, encObj ast.PdfObject) *cmap.CIDMap {
+	return embeddedEncodingCIDMapAt(ctx, doc, encObj, make(map[int]bool), 0)
+}
+
+// type0MappedCIDZeroAbsent reports whether a Type 0 font's embedded encoding
+// CMap maps a shown code other than 0 to CID 0, through a cidchar, cidrange
+// or notdef mapping, over a CIDFontType2 descendant. veraPDF counts that glyph
+// absent from the program ISO 19005-2, 6.2.11.4.1 requires to define every
+// glyph referenced for rendering: CIDFontType2Program.containsCID refuses
+// CID 0, and GFGlyph.initForNotType3 exempts only code 0. A CIDFontType0
+// (CFF) descendant is left out: its charset holds CID 0, which veraPDF's CFF
+// reader has not been measured to treat the same way.
+func type0MappedCIDZeroAbsent(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, embedded *cmap.CIDMap, usage *fontUsageInfo) bool {
+	if embedded == nil || usage == nil {
+		return false
+	}
+	mapped := false
+	for _, s := range usage.rawStrings {
+		codes := embedded.Codes([]byte(s))
+		for i, c := range embedded.Decode([]byte(s)) {
+			if c.Mapped && c.CID == 0 && i < len(codes) && codes[i] != 0 {
+				mapped = true
+				break
+			}
+		}
+		if mapped {
+			break
+		}
+	}
+	if !mapped {
+		return false
+	}
+	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
+	if err != nil || len(descArr) == 0 {
+		return false
+	}
+	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
+	if err != nil || cidFontDict == nil {
+		return false
+	}
+	subtype, _ := document.ResolveName(ctx, doc, cidFontDict["Subtype"])
+	return subtype == "CIDFontType2"
+}
+
+// embeddedEncodingCIDMapAt is [embeddedEncodingCIDMap] carrying the CMap
+// streams the chain has already read, and how deep it is.
+func embeddedEncodingCIDMapAt(ctx context.Context, doc *document.Document, encObj ast.PdfObject, visited map[int]bool, depth int) *cmap.CIDMap {
+	if ctx.Err() != nil || depth > maxUseCMapChainDepth || document.VisitedBefore(encObj, visited) {
+		return nil
+	}
+	stream, err := document.ResolveStream(ctx, doc, encObj)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: cannot resolve Type0 encoding CMap", "error", err)
+		return nil
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: cannot decode Type0 encoding CMap", "error", err)
+		return nil
+	}
+	var base cmap.Base
+	if useObj, ok := stream.Dict["UseCMap"]; ok {
+		resolved, _ := document.ResolveObject(ctx, doc, useObj)
+		// veraPDF's PDCMap reads any value but a name or a stream, a missing
+		// object included, as naming no CMap, and CMap.useCMap ignores it.
+		switch v := resolved.(type) {
+		case ast.PdfName:
+			base = cmap.NamedBase(string(v))
+		case ast.PdfStream:
+			base.Map = embeddedEncodingCIDMapAt(ctx, doc, useObj, visited, depth+1)
+			base.Unresolved = base.Map == nil
+		}
+	}
+	return cmap.ParseEmbeddedCIDMapOver(ctx, data, base)
+}
+
 // findNonPredefinedUseCMap checks a CMap (stream data + dict) for references to
 // non-predefined CMaps, recursively following embedded CMap chains.
 // Returns the first non-predefined CMap name found, or "" if all are predefined.

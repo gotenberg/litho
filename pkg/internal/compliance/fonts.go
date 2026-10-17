@@ -1852,17 +1852,7 @@ func type0CodeSplitter(ctx context.Context, doc *document.Document, fontDict ast
 			return codes
 		}
 	case "":
-		stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"])
-		if err != nil {
-			doc.Logger.Debug("compliance: fonts: cannot resolve Type0 encoding CMap", "error", err)
-			return nil
-		}
-		data, err := doc.DecodeStream(ctx, stream)
-		if err != nil {
-			doc.Logger.Debug("compliance: fonts: cannot decode Type0 encoding CMap", "error", err)
-			return nil
-		}
-		if m := cmap.ParseEmbeddedCIDMap(ctx, data); m != nil {
+		if m := embeddedEncodingCIDMap(ctx, doc, fontDict["Encoding"]); m != nil {
 			return m.Codes
 		}
 		return nil
@@ -2263,8 +2253,8 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 //   - notdef is true when decoding reached a character code that unambiguously
 //     renders as the .notdef glyph (an Identity odd-length tail, or an embedded
 //     CMap mapping a code to a CID beyond 65535).
-//   - unmappedZero is true when an embedded CMap leaves a shown code unmapped,
-//     which selects CID 0.
+//   - unmappedZero is true when an embedded CMap leaves a shown code other
+//     than 0 unmapped, which selects CID 0.
 //
 // Identity-H/V treats each 2-byte unit as the CID directly. An embedded CMap
 // stream is decoded through embedded. A predefined CMap
@@ -2280,17 +2270,24 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 	if encName == "" && embedded != nil {
 		cids = make(map[uint16]bool)
 		for _, s := range usage.rawStrings {
-			for _, c := range embedded.Decode([]byte(s)) {
+			codes := embedded.Codes([]byte(s))
+			for i, c := range embedded.Decode([]byte(s)) {
 				if !c.Mapped {
 					// A code the CMap leaves unmapped selects CID 0 when litho
 					// holds all its mappings (ISO 32000-1, 9.7.6.3); see
 					// cmap.CIDMap.UnmappedNotdef. unmappedZero separates that
 					// from a code written as CID 0: the first reaches no glyph
 					// at all, the second reaches the .notdef glyph, which the
-					// program does contain.
-					if embedded.UnmappedNotdef() {
+					// program does contain. Code 0 is the exception: veraPDF
+					// (GFGlyph.initForNotType3) counts the glyph of code 0
+					// present whatever it maps to. Bytes matching no codespace
+					// are left out: veraPDF splits them otherwise
+					// (cmap.CIDCode.Undefined).
+					if embedded.UnmappedNotdef() && !c.Undefined {
 						cids[0] = true
-						unmappedZero = true
+						if i < len(codes) && codes[i] != 0 {
+							unmappedZero = true
+						}
 					}
 					continue
 				}
@@ -2362,11 +2359,7 @@ func type0UsedCIDs(ctx context.Context, doc *document.Document, fontDict ast.Pdf
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
 	var embedded *cmap.CIDMap
 	if encName == "" {
-		if stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"]); err == nil {
-			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
-				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
-			}
-		}
+		embedded = embeddedEncodingCIDMap(ctx, doc, fontDict["Encoding"])
 	}
 	cids, _, _, ok := collectType0CIDs(string(encName), embedded, usage)
 	if !ok || len(cids) == 0 {
@@ -2411,11 +2404,7 @@ func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
 	var embedded *cmap.CIDMap
 	if encName == "" {
-		if stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"]); err == nil {
-			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
-				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
-			}
-		}
+		embedded = embeddedEncodingCIDMap(ctx, doc, fontDict["Encoding"])
 	}
 	usedCIDs, notdef, _, ok := collectType0CIDs(string(encName), embedded, usage)
 	if !ok {
@@ -2495,11 +2484,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
 	var embedded *cmap.CIDMap
 	if encName == "" {
-		if stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"]); err == nil {
-			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
-				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
-			}
-		}
+		embedded = embeddedEncodingCIDMap(ctx, doc, fontDict["Encoding"])
 	}
 	usedCIDs, notdef, unmappedZero, ok := collectType0CIDs(string(encName), embedded, usage)
 	if !ok {
@@ -2544,7 +2529,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		// does contain, so that keeps firing the .notdef rule alone (both tools
 		// agree there; see absentType0CIDs). renderingMode == 3 exempts the
 		// glyph-presence half, as in the decode-level branch above.
-		if unmappedZero && checksPresence && type0HasEmbeddedProgram(ctx, doc, fontDict) {
+		if (unmappedZero || type0MappedCIDZeroAbsent(ctx, doc, fontDict, embedded, usage)) && checksPresence && type0HasEmbeddedProgram(ctx, doc, fontDict) {
 			presence.add(0, "font %s on page %d: the encoding CMap maps a rendered code to no glyph in the embedded font program", fontName, pageNum)
 		}
 	}
@@ -2736,11 +2721,7 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
 	var embedded *cmap.CIDMap
 	if encName == "" {
-		if stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"]); err == nil {
-			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
-				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
-			}
-		}
+		embedded = embeddedEncodingCIDMap(ctx, doc, fontDict["Encoding"])
 	}
 	usedCIDs, notdef, _, decodeOK := collectType0CIDs(string(encName), embedded, usage)
 	if !decodeOK {
@@ -2847,13 +2828,9 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
 	var embedded *cmap.CIDMap
 	if encName == "" {
-		if stream, serr := document.ResolveStream(ctx, doc, fontDict["Encoding"]); serr == nil {
-			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
-				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
-			}
-		}
+		embedded = embeddedEncodingCIDMap(ctx, doc, fontDict["Encoding"])
 	}
-	if _, _, unmappedZero, decodeOK := collectType0CIDs(string(encName), embedded, usage); decodeOK && unmappedZero &&
+	if _, _, unmappedZero, decodeOK := collectType0CIDs(string(encName), embedded, usage); decodeOK && (unmappedZero || type0MappedCIDZeroAbsent(ctx, doc, fontDict, embedded, usage)) &&
 		usage.visible && type0HasEmbeddedProgram(ctx, doc, fontDict) {
 		faults.add(0, "font %s on page %d: the encoding CMap maps a rendered code to no glyph in the embedded font program", fontName, pageNum)
 	}

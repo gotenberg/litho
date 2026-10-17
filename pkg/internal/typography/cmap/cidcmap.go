@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
@@ -17,6 +18,24 @@ import (
 // the content stream to CID values used for width lookup in the /W array.
 type CIDCMap struct {
 	Mapping map[int]int
+
+	// notdefs holds the program's notdefchar and notdefrange entries in the
+	// order it defines them, and useCMaps the bases its usecmap operators
+	// name; see [ParseEmbeddedCIDMap].
+	notdefs  []notdefSpan
+	useCMaps []useCMapCall
+
+	// incomplete records a program holding more notdef entries than
+	// [maxNotdefEntries] or more usecmap operators than [maxUseCMapOps], some
+	// of whose mappings litho then does not hold.
+	incomplete bool
+}
+
+// useCMapCall is one usecmap operator of a CMap program: the base it names, and
+// how many notdef entries the program had defined when it ran.
+type useCMapCall struct {
+	name     string
+	notdefAt int
 }
 
 // strToInt converts a PDF hex string (byte sequence) to an integer by
@@ -31,12 +50,17 @@ func strToInt(s ast.PdfString) int {
 }
 
 // ParseCID extracts CID mapping data from a CMap stream payload.
-// It handles begincidchar/endcidchar and begincidrange/endcidrange sections.
+// It handles begincidchar/endcidchar and begincidrange/endcidrange sections,
+// and records the notdefchar and notdefrange sections and the usecmap
+// operators [ParseEmbeddedCIDMap] resolves.
 func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
 
 	c := &CIDCMap{Mapping: make(map[int]int)}
+	// lastName is the name token most recently read outside a mapping block,
+	// the operand a usecmap operator takes (ISO 32000-1, 9.7.5.4).
+	lastName := ""
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -124,7 +148,23 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 					}
 				}
 			}
+		case tok.Type == lexer.TokenKeyword && (tok.Value == "beginnotdefchar" || tok.Value == "beginnotdefrange"):
+			if err := parseNotdefBlock(ctx, p, c, tok.Value == "beginnotdefrange"); err != nil {
+				return nil, err
+			}
 		default:
+			switch {
+			case tok.Type == lexer.TokenName:
+				lastName = strings.TrimPrefix(tok.Value, "/")
+			case tok.Type == lexer.TokenKeyword && tok.Value == "usecmap" && lastName != "":
+				// Each usecmap adds a base at the point the program runs it,
+				// as veraPDF's CMapParser does (ISO 32000-1, 9.7.5.4).
+				if len(c.useCMaps) < maxUseCMapOps {
+					c.useCMaps = append(c.useCMaps, useCMapCall{name: lastName, notdefAt: len(c.notdefs)})
+				} else {
+					c.incomplete = true
+				}
+			}
 			if _, err := p.Consume(); err != nil {
 				return nil, err
 			}
@@ -134,39 +174,135 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 	return c, nil
 }
 
+// parseNotdefBlock reads the entries of one notdefchar or notdefrange block,
+// whose begin keyword p is positioned on, into c. A notdefchar entry maps one
+// code and a notdefrange entry a span of codes, every one of them to the
+// single CID the entry gives (Adobe Technical Note #5014, notdefrange): unlike a
+// cidrange, the CID does not increment across the span.
+func parseNotdefBlock(ctx context.Context, p *parser.Parser, c *CIDCMap, isRange bool) error {
+	if _, err := p.Consume(); err != nil {
+		return err
+	}
+	end := "endnotdefchar"
+	if isRange {
+		end = "endnotdefrange"
+	}
+	for {
+		t, err := p.Peek(0)
+		if err != nil || t.Type == lexer.TokenEOF {
+			return nil
+		}
+		if t.Type == lexer.TokenKeyword && t.Value == end {
+			_, err := p.Consume()
+			return err
+		}
+		lowObj, err := p.ParseObject(ctx)
+		if err != nil {
+			return nil
+		}
+		highObj := lowObj
+		if isRange {
+			if highObj, err = p.ParseObject(ctx); err != nil {
+				return nil
+			}
+		}
+		dstObj, err := p.ParseObject(ctx)
+		if err != nil {
+			return nil
+		}
+		lowStr, ok1 := lowObj.(ast.PdfString)
+		highStr, ok2 := highObj.(ast.PdfString)
+		dstInt, ok3 := dstObj.(ast.PdfInt)
+		if !ok1 || !ok2 || !ok3 {
+			continue
+		}
+		low, high := strToInt(lowStr), strToInt(highStr)
+		if low > high {
+			continue
+		}
+		if len(c.notdefs) >= maxNotdefEntries {
+			c.incomplete = true
+			continue
+		}
+		c.notdefs = append(c.notdefs, notdefSpan{lo: low, hi: high, cid: int(dstInt)})
+	}
+}
+
 // ParseEmbeddedCIDMap builds a [CIDMap] from an embedded CMap stream: the
 // cidchar/cidrange sections supply the code-to-CID mapping and the
 // codespacerange sections supply the byte-length structure needed to decode
-// content-stream strings. Returns nil when the codespace is missing, so a
-// malformed stream degrades to "encoding not decodable" instead of wrong
-// CIDs.
+// content-stream strings. It is [ParseEmbeddedCIDMapOver] with no base named
+// by the stream dictionary.
+func ParseEmbeddedCIDMap(ctx context.Context, data []byte) *CIDMap {
+	return ParseEmbeddedCIDMapOver(ctx, data, Base{})
+}
+
+// Base is the CMap a CMap stream dictionary's /UseCMap entry names (ISO
+// 32000-1, 9.7.5.3, Table 120). The zero value names none.
+type Base struct {
+	// Map is the base, resolved; nil when the entry names none or names one
+	// litho cannot resolve.
+	Map *CIDMap
+	// Unresolved records an entry naming a base litho cannot resolve, whose
+	// mappings it then does not hold.
+	Unresolved bool
+}
+
+// ParseEmbeddedCIDMapOver builds a [CIDMap] from an embedded CMap stream
+// over the base its stream dictionary names. Returns nil when no codespace is
+// declared, by the stream or by a base, so a malformed stream degrades to
+// "encoding not decodable" instead of wrong CIDs.
 //
-// A CMap with a codespace but no cidchar or cidrange section still decodes:
-// ISO 32000-1, 9.7.6.3 sends a code no mapping covers to CID 0, and a
-// bfchar or bfrange section maps to Unicode, not to CIDs (9.10.3). When the
-// stream names a base CMap (usecmap) or notdef mappings, which litho does not
-// resolve, an unmapped code stays unknown instead.
+// A code reads as veraPDF's CMap.toCID reads it: the stream's own cidchar and
+// cidrange mappings come first, a later one overriding an earlier one, then
+// the bases its usecmap operators name in program order, then the base named
+// by the dictionary, which veraPDF (PDCMap.getCMapFile) adds once the program
+// has run. Only then do the notdef mappings apply: the stream's own and its
+// bases', in the order they were added, the first covering the code giving
+// its CID (Adobe Technical Note #5014, notdefrange). A usecmap names a predefined
+// CMap ([PredefinedCIDBase], ISO 32000-1, 9.7.5.4).
+//
+// A code nothing maps selects CID 0 (ISO 32000-1, 9.7.6.3), and a bfchar or
+// bfrange section maps to Unicode, not to CIDs (9.10.3), so a CMap written
+// with bfchar alone decodes every code to CID 0. When a base litho cannot
+// resolve could still supply the code, it stays unknown instead; see
+// [CIDMap.UnmappedNotdef].
 //
 // # Corpus evidence
 //
 //   - pdfjs bug920426.pdf: gives a Type 0 font an encoding CMap written with
 //     bfchar alone, and veraPDF's CMap.toCID reads its codes as CID 0.
-func ParseEmbeddedCIDMap(ctx context.Context, data []byte) *CIDMap {
+func ParseEmbeddedCIDMapOver(ctx context.Context, data []byte, dictBase Base) *CIDMap {
 	cidc, err := ParseCID(ctx, data)
 	if err != nil || cidc == nil {
 		return nil
 	}
 	full, err := Parse(ctx, data)
-	if err != nil || full == nil || len(full.CodeSpaceRanges) == 0 {
+	if err != nil || full == nil {
 		return nil
 	}
-	closed := !bytes.Contains(data, []byte("usecmap")) && !bytes.Contains(data, []byte("beginnotdef"))
-	if len(cidc.Mapping) == 0 && !closed {
-		return nil
-	}
-	return &CIDMap{
+	m := &CIDMap{
 		charToCID:      cidc.Mapping,
 		cs:             &CMap{CodeSpaceRanges: full.CodeSpaceRanges},
-		unmappedNotdef: closed,
+		unmappedNotdef: !cidc.incomplete,
 	}
+	ownNotdefs := 0
+	for _, op := range cidc.useCMaps {
+		m.notdefs = append(m.notdefs, cidc.notdefs[ownNotdefs:op.notdefAt]...)
+		ownNotdefs = op.notdefAt
+		m.useBase(NamedBase(op.name))
+	}
+	m.notdefs = append(m.notdefs, cidc.notdefs[ownNotdefs:]...)
+	m.useBase(dictBase)
+	if len(m.notdefs) > maxNotdefEntries {
+		m.notdefs = nil
+		m.unmappedNotdef = false
+	}
+	if len(m.cs.CodeSpaceRanges) == 0 {
+		return nil
+	}
+	if !m.unmappedNotdef && len(m.charToCID) == 0 && len(m.bases) == 0 && len(m.notdefs) == 0 {
+		return nil
+	}
+	return m
 }

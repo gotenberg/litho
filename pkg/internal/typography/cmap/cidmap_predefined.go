@@ -9,9 +9,16 @@ import (
 
 // CIDCode is one decoded character code: its CID and whether the encoding CMap
 // actually mapped it. An unmapped code renders as the .notdef glyph.
+//
+// Undefined marks bytes that match no codespace range, which litho reads one
+// byte at a time. veraPDF (CMap.getCodeFromStream) reads them differently: it
+// skips as many bytes as the shortest codespace that matched so far and yields
+// code 0. The two splits disagree on such bytes, so a caller does not infer
+// the CID they select.
 type CIDCode struct {
-	CID    int
-	Mapped bool
+	CID       int
+	Mapped    bool
+	Undefined bool
 }
 
 // CIDMap decodes content-stream character codes to CIDs for a predefined
@@ -19,16 +26,26 @@ type CIDCode struct {
 // counterpart of the code->Unicode [CMap] that [LoadPredefinedCMap] builds.
 type CIDMap struct {
 	charToCID map[int]int
-	cs        *CMap // carries the codespace ranges for the shared helpers
+	// spans maps code ranges to incrementing CIDs, consulted after charToCID:
+	// the Identity CMaps, which map every two-byte code to itself.
+	spans []cidSpan
+	// bases are the CMaps this one builds on (usecmap, /UseCMap), consulted in
+	// order once charToCID and spans leave a code unmapped.
+	bases []*CIDMap
+	// notdefs are the notdef mappings of this CMap and of its bases, in the
+	// order veraPDF's CMap.useCMap gathers them, the first covering a code
+	// giving its CID.
+	notdefs []notdefSpan
+	cs      *CMap // carries the codespace ranges for the shared helpers
 	// unmappedNotdef marks a map whose every mapping litho holds, so a code it
 	// leaves unmapped selects CID 0; see [CIDMap.UnmappedNotdef].
 	unmappedNotdef bool
 }
 
 // UnmappedNotdef reports whether a code the map leaves unmapped is known to
-// select CID 0 (ISO 32000-1, 9.7.6.3): true for an embedded CMap that names no
-// base CMap (usecmap) and no notdef mappings, false when an unresolved base
-// CMap or notdef range could still supply the code.
+// select CID 0 (ISO 32000-1, 9.7.6.3): true for an embedded CMap whose every
+// base CMap (usecmap, /UseCMap) litho resolved, false when an unresolved base
+// could still supply the code.
 func (m *CIDMap) UnmappedNotdef() bool {
 	return m.unmappedNotdef
 }
@@ -85,8 +102,8 @@ func (m *CIDMap) Decode(data []byte) []CIDCode {
 
 	var out []CIDCode
 	for off := 0; off < len(data); {
-		consumed, cid, mapped := m.next(data[off:], lengths, hasShort)
-		out = append(out, CIDCode{CID: cid, Mapped: mapped})
+		consumed, cid, mapped, undefined := m.next(data[off:], lengths, hasShort)
+		out = append(out, CIDCode{CID: cid, Mapped: mapped, Undefined: undefined})
 		off += consumed
 	}
 	return out
@@ -101,7 +118,7 @@ func (m *CIDMap) Codes(data []byte) []uint32 {
 
 	var out []uint32
 	for off := 0; off < len(data); {
-		consumed, _, _ := m.next(data[off:], lengths, hasShort)
+		consumed, _, _, _ := m.next(data[off:], lengths, hasShort)
 		var code uint32
 		for _, b := range data[off : off+consumed] {
 			code = code<<8 | uint32(b)
@@ -117,31 +134,38 @@ func (m *CIDMap) Codes(data []byte) []uint32 {
 // codespace width that fits, falls back to a shorter mapped prefix, and for a
 // mixed-width CMap advances a single byte past an unmapped multi-byte code so a
 // following narrower code can re-align. consumed is always >= 1.
-func (m *CIDMap) next(data []byte, lengths []int, hasShort bool) (consumed, cid int, mapped bool) {
+func (m *CIDMap) next(data []byte, lengths []int, hasShort bool) (consumed, cid int, mapped, undefined bool) {
 	for _, n := range slices.Backward(lengths) {
 		if n == 0 || n > len(data) {
 			continue
 		}
 		candidate := data[:n]
-		if !m.cs.inCodeSpace(candidate) {
+		if !m.cs.inCodeSpaceBytewise(candidate) {
 			continue
 		}
-		if c, ok := m.charToCID[strToInt(ast.PdfString(candidate))]; ok {
-			return n, c, true
+		if c, ok := m.lookup(strToInt(ast.PdfString(candidate))); ok {
+			return n, c, true, false
 		}
-		// In codespace but unmapped: prefer a shorter mapped prefix.
+		// In codespace but unmapped: prefer a shorter mapped prefix that is a
+		// code of its own. Mappings are keyed by value, so a prefix outside
+		// every codespace would find the mapping of a wider code with the
+		// same value: <01> would take the notdef range <0000> <001F> of a
+		// two-byte CMap.
 		for shorter := n - 1; shorter >= 1; shorter-- {
-			if c, ok := m.charToCID[strToInt(ast.PdfString(data[:shorter]))]; ok {
-				return shorter, c, true
+			if !m.cs.inCodeSpaceBytewise(data[:shorter]) {
+				continue
+			}
+			if c, ok := m.lookup(strToInt(ast.PdfString(data[:shorter]))); ok {
+				return shorter, c, true, false
 			}
 		}
 		// Still unmapped: in a mixed-width CMap, advance one byte so a narrower
 		// following code can re-align; otherwise consume the full width.
 		if n > 1 && hasShort {
-			return 1, 0, false
+			return 1, 0, false, false
 		}
-		return n, 0, false
+		return n, 0, false, false
 	}
 	// No codespace matched: an undefined byte. Advance one to re-align.
-	return 1, 0, false
+	return 1, 0, false, true
 }
