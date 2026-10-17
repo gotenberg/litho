@@ -53,19 +53,23 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		}
 		prev := elements[i-1]
 		el := elements[i]
-		newLine := false
+		var newLine bool
 		switch {
 		case el.Vertical || isOrthogonalRotation(el.Angle):
 			// Vertical WMode or 90°/270° rotated text: characters progress
 			// along Y, so line breaks are detected by X changes.
-			if math.Abs(prev.X-el.X) > 2.0 {
-				newLine = true
+			// PDF.js measures a vertical font against the size along the
+			// column and rotated text against the size across its line.
+			size := prev.FontSize
+			if !el.Vertical {
+				size = runs.height(i-1, prev)
 			}
+			newLine = leavesLine(math.Abs(prev.X-el.X), size)
 			runs.restart(i, el)
 		case isRotated(el.Angle):
 			// For arbitrarily rotated text, project positions onto the
 			// perpendicular axis of the text direction to detect line breaks.
-			newLine = perpDist(prev, el) > 2.0
+			newLine = leavesLine(perpDist(prev, el), runs.height(i-1, prev))
 			runs.restart(i, el)
 		default:
 			newLine = runs.breaksLine(i, prev, el)
@@ -182,13 +186,32 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 }
 
 // lineBreakTolerance is how far, in user space units, a run may start
-// across the baseline from the run before it and still continue its line.
-// It mirrors the tolerance of the PDF.js reference generator
-// (test/integration/corpus/lib/gen-references.mjs, joinLines), which breaks
+// across the baseline from the run before it and still continue its line,
+// once the glyph that starts it is within the font size of the glyph
+// before it ([leavesLine], [runTracker.endsLine]). It mirrors the
+// tolerance of the PDF.js reference generator
+// (test/integration/corpus/lib/join-lines.mjs, joinLines), which breaks
 // a line between two of PDF.js's text items whose origins differ in Y by
 // more than it. ISO 32000-1, 14.8.2.5 leaves line breaks to the consumer,
 // so the value is the reference's, not the specification's.
 const lineBreakTolerance = 2.0
+
+// backwardLineRatio is how far across the baseline, as a fraction of the
+// font size, a glyph that moves back along the line may sit from the glyph
+// before it and still be on its line. PDF.js ends the line past it
+// (src/core/evaluator.js, compareWithLastPosition, "not the same line"),
+// where a glyph that moves forward ends it only past the whole font size.
+const backwardLineRatio = 0.5
+
+// leavesLine reports whether a glyph across moves away from the glyph
+// before it, which was set at size, leaves that glyph's line: past the
+// font size, where PDF.js ends the line (compareWithLastPosition), or past
+// [lineBreakTolerance], where the reference generator breaks the lines
+// PDF.js leaves open. ISO 32000-1, 14.8.2.5 leaves line breaks to the
+// consumer, so both bounds are the reference's.
+func leavesLine(across, size float64) bool {
+	return across > lineBreakTolerance || across > math.Abs(size)
+}
 
 // Run segmentation factors, after PDF.js's text-item builder
 // (src/core/evaluator.js, compareWithLastPosition), as fractions of the
@@ -211,13 +234,18 @@ const (
 // baseline moves by more than [verticalShiftRatio] of that glyph's size,
 // its size changes, its marked-content sequence changes, or the gap
 // between them falls outside [negativeRunGapFactor] and
-// [spaceInFlowMaxFactor]. A glyph that continues a run never breaks the
-// line. One that starts a run breaks it when its origin sits more than
-// [lineBreakTolerance] across the baseline from the start of the run before
-// it, or, after a jump, from the glyph it jumped from, where PDF.js places
-// the space run. A superscript set in a smaller size therefore stays on its
-// line while it sits within the tolerance, and a baseline that wanders
-// inside one run does not break it at all.
+// [spaceInFlowMaxFactor]. Every glyph first meets the test PDF.js puts each
+// glyph to against the one before it ([runTracker.endsLine]), which ends
+// the line past the font size across the baseline. A glyph that passes it
+// and continues a run does not break the line. One that starts a run breaks
+// it when its origin sits more than [lineBreakTolerance] across the
+// baseline from the start of the run before it, or, after a jump, from the
+// glyph it jumped from, where PDF.js places the space run: the reference
+// generator breaks the lines of text items PDF.js leaves open by that
+// tolerance. A superscript set in a smaller size therefore stays on its
+// line while it sits within the tolerance, a baseline that wanders inside
+// one run by less than the font size does not break it at all, and the
+// lines of a font smaller than the tolerance still break.
 //
 // Space glyphs carry no position of their own in PDF.js (they only advance
 // the text matrix), so they neither start nor continue a run. One breaks the
@@ -239,6 +267,15 @@ const (
 //   - govdocs thread_000_000266.pdf, thread_100_100174.pdf and 13 more: a
 //     text matrix that scales a 1-point Tf sets the size on the page, and
 //     comparing that size started runs PDF.js does not start.
+//   - govdocs thread_400_400561.pdf page 18: lines of a 0.2-unit font set
+//     0.22 apart read as one line under the fixed tolerance alone.
+//   - pdfjs bug857031.pdf: a horizontally compressed map label moving back
+//     1.75 units across a 4.2-unit font stays on its line in PDF.js, which
+//     measures the move against the size across the line, not along it.
+//   - All corpora: words match PDF.js on 1 more file (govdocs
+//     thread_400_400561.pdf) and on none fewer, and on 2 more pages of files
+//     that still differ (govdocs thread_000_000282.pdf page 84, pdfjs
+//     issue19624.pdf page 1); facturx, pdf20 and pdfcpu do not move.
 type runTracker struct {
 	startY float64
 	last   models.TextElement
@@ -249,11 +286,17 @@ type runTracker struct {
 }
 
 // runFont names the font an element was shown in: the resource name and
-// the size Tf selected, and the font the name resolved to.
+// the size Tf selected, and the font the name resolved to. It also carries
+// rise, how far up the page the text rise (ISO 32000-1, 9.3.7) lifted the
+// element, which its position already includes, and height, the size of
+// the font across the line on the page: the Tf size scaled by the text
+// space y axis, where the element's FontSize is scaled by the x axis.
 type runFont struct {
-	name string
-	font *Font
-	size float64
+	name   string
+	font   *Font
+	size   float64
+	rise   float64
+	height float64
 }
 
 // fontChanged reports whether the glyph at i was shown in another font
@@ -287,12 +330,16 @@ func (r *runTracker) breaksLine(i int, prev, el models.TextElement) bool {
 	if isSpaceGlyph(el.Text) {
 		return math.Abs(el.Y-prev.Y) > lineBreakTolerance
 	}
-	last := r.last
+	last, lastIdx := r.last, r.lastIdx
 	fontChanged := r.fontChanged(i, last, el)
 	r.last = el
 	r.lastIdx = i
 	size := math.Abs(last.FontSize)
 	gap := computeLineGap(last, el)
+	if r.endsLine(lastIdx, i, last, el, gap, size) {
+		r.startY = el.Y
+		return true
+	}
 	ref := r.startY
 	switch {
 	case gap > spaceInFlowMaxFactor*size:
@@ -306,6 +353,38 @@ func (r *runTracker) breaksLine(i int, prev, el models.TextElement) bool {
 	}
 	r.startY = el.Y
 	return math.Abs(el.Y-ref) > lineBreakTolerance
+}
+
+// endsLine reports whether el, the element i, ends the line of last, the
+// glyph lastIdx painted before it at size, the way PDF.js compares every
+// glyph with the one before it whatever run each belongs to
+// (compareWithLastPosition): a glyph that moves back along the line, gap
+// below [negativeRunGapFactor], ends it past [backwardLineRatio] of the
+// size across the baseline, and any other glyph past the whole size, once
+// the change of text rise between the two is taken out, so a superscript
+// that drops back to the baseline stays on its line. The bound follows the
+// font size, so the lines of a tiny font break where a fixed tolerance
+// glues them.
+func (r *runTracker) endsLine(lastIdx, i int, last, el models.TextElement, gap, size float64) bool {
+	dy := el.Y - last.Y
+	height := r.height(lastIdx, last)
+	if gap < negativeRunGapFactor*size {
+		return math.Abs(dy) > backwardLineRatio*height
+	}
+	if r.fonts != nil {
+		dy -= r.fonts[i].rise - r.fonts[lastIdx].rise
+	}
+	return math.Abs(dy) > height
+}
+
+// height returns the size across its line of the font el, the element i,
+// was shown in ([runFont] height), or its FontSize when the fonts are
+// unknown.
+func (r *runTracker) height(i int, el models.TextElement) float64 {
+	if r.fonts != nil && r.fonts[i].height > 0 {
+		return r.fonts[i].height
+	}
+	return math.Abs(el.FontSize)
 }
 
 // isRunningHeadReset reports whether the transition from prev to el is

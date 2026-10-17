@@ -303,7 +303,8 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// named by the recursion, against the fonts of its own resources;
 		// whatever it did not name takes the font selected out here.
 		if runFonts != nil {
-			key := runFont{name: currentFontName, font: currentFont, size: machine.Current().Text.Tfs}
+			cur := machine.Current()
+			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur)}
 			for len(*runFonts) < len(*elements) {
 				*runFonts = append(*runFonts, key)
 			}
@@ -1142,4 +1143,21 @@ func elementInsideAnyBead(el models.TextElement, beads []semantics.Bead) bool {
 		}
 	}
 	return false
+}
+
+// riseOnPage returns how far up the page the text rise of state lifts a
+// glyph: the image of (0, Trise) in text space under Tm and the CTM, less
+// that of the origin (ISO 32000-1, 9.4.4).
+func riseOnPage(state *graphics.State) float64 {
+	tm, ctm := state.Text.Tm, state.CTM
+	return state.Text.Ts * (tm[2]*ctm[1] + tm[3]*ctm[3])
+}
+
+// heightOnPage returns the size of the font of state across the line on
+// the page: the length of the image of the text space y axis under Tm and
+// the CTM, times the Tf size (ISO 32000-1, 9.4.4). PDF.js measures a line
+// change against this size (src/core/evaluator.js, ensureTextContentItem).
+func heightOnPage(state *graphics.State) float64 {
+	tm, ctm := state.Text.Tm, state.CTM
+	return math.Abs(state.Text.Tfs) * math.Hypot(tm[2]*ctm[0]+tm[3]*ctm[2], tm[2]*ctm[1]+tm[3]*ctm[3])
 }

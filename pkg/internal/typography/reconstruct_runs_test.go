@@ -3,6 +3,7 @@ package typography
 import (
 	"bytes"
 	"context"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -178,6 +179,42 @@ func TestExtractElements_RunFontsPairWithElements(t *testing.T) {
 	}
 }
 
+// TestExtractElements_RunFontsCarryRiseAndHeight pins that extraction
+// records, for each element, the text rise it was lifted by and the size of
+// its font across the line, both on the page.
+func TestExtractElements_RunFontsCarryRiseAndHeight(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	doc, page, ops := runsPage(t)
+
+	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{runFonts: true})
+	if err != nil {
+		t.Fatalf("extractElements: %v", err)
+	}
+	if len(ex.runFonts) != len(ex.elements) {
+		t.Fatalf("got %d run fonts for %d elements, want one each", len(ex.runFonts), len(ex.elements))
+	}
+	found := false
+	for i, el := range ex.elements {
+		f := ex.runFonts[i]
+		switch el.Text {
+		case "E":
+			if f.rise != 0 || f.height != 10 {
+				t.Errorf("E: rise %v, height %v, want 0 and 10", f.rise, f.height)
+			}
+		case "2":
+			found = true
+			if f.rise != 4 || f.height != 6 {
+				t.Errorf("2: rise %v, height %v, want 4 and 6", f.rise, f.height)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no superscript element in %d elements", len(ex.elements))
+	}
+}
+
 // TestExtractText_TextRiseSuperscript pins the two halves end to end: Ts
 // lifts the superscript 4 units, past the line tolerance, so it reads as a
 // word of its own, as PDF.js reads it.
@@ -198,5 +235,106 @@ func TestExtractText_TextRiseSuperscript(t *testing.T) {
 	}
 	if words := strings.Fields(got); len(words) < 3 || words[0] != "E=mc" || words[1] != "2" || words[2] != "holds" {
 		t.Errorf("got %q, want the words E=mc, 2, holds", got)
+	}
+}
+
+// TestReconstructText_TinyFontLinesBreak pins that the lines of a font
+// smaller than the 2-unit tolerance break once the next glyph moves across
+// the line by more than the font size, as PDF.js breaks them, whether the
+// text runs upright, rotated a quarter turn or rotated by another angle.
+// Each case matches the text PDF.js at the pinned revision reads from a
+// page that sets the same glyphs.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400561.pdf page 18: a 0.2-unit font with lines
+//     0.22 apart read as one line.
+func TestReconstructText_TinyFontLinesBreak(t *testing.T) {
+	t.Parallel()
+	sin, cos := math.Sincos(math.Pi / 6)
+	for _, tc := range []struct {
+		name string
+		in   []models.TextElement
+	}{
+		{"upright", []models.TextElement{
+			{Text: "a", X: 100, Y: 500, Width: 0.1, FontSize: 0.2},
+			{Text: "b", X: 100, Y: 499.78, Width: 0.1, FontSize: 0.2},
+		}},
+		{"quarter turn", []models.TextElement{
+			{Text: "a", X: 100, Y: 500, Width: 0.1, FontSize: 0.2, Angle: math.Pi / 2},
+			{Text: "b", X: 100.22, Y: 500, Width: 0.1, FontSize: 0.2, Angle: math.Pi / 2},
+		}},
+		{"thirty degrees", []models.TextElement{
+			{Text: "a", X: 100, Y: 500, Width: 0.1, FontSize: 0.2, Angle: math.Pi / 6},
+			{Text: "b", X: 100 + 0.22*sin, Y: 500 - 0.22*cos, Width: 0.1, FontSize: 0.2, Angle: math.Pi / 6},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ReconstructText(context.Background(), tc.in, nil); got != "a\nb" {
+				t.Errorf("got %q, want %q", got, "a\nb")
+			}
+		})
+	}
+}
+
+// TestReconstructText_RiseReturnKeepsLine pins that the change of text
+// rise is taken out of the move a glyph makes across the line. A 1-unit
+// superscript raised 1.5 units by Ts sits more than its size above the
+// baseline it drops back to, yet PDF.js keeps "xx2yy" on one line; the same
+// move made by the text matrix ends the line.
+func TestReconstructText_RiseReturnKeepsLine(t *testing.T) {
+	t.Parallel()
+	f := &Font{}
+	in := []models.TextElement{
+		{Text: "x", X: 100, Y: 500, Width: 5, FontSize: 10},
+		{Text: "2", X: 105, Y: 501.5, Width: 0.5, FontSize: 1},
+		{Text: "y", X: 105.5, Y: 500, Width: 5, FontSize: 10},
+	}
+	for _, tc := range []struct {
+		name string
+		rise float64
+		want string
+	}{
+		{"text rise", 1.5, "x2y"},
+		{"text matrix", 0, "x2\ny"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fonts := []runFont{
+				{name: "F1", font: f, size: 10, height: 10},
+				{name: "F1", font: f, size: 1, height: 1, rise: tc.rise},
+				{name: "F1", font: f, size: 10, height: 10},
+			}
+			if got := reconstructText(context.Background(), in, fonts, nil); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestReconstructText_BackwardMoveAgainstHeight pins that a glyph moving
+// back along the line ends it only past half the size of the font across
+// the line, which a horizontally compressed font sets apart from the size
+// along it.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug857031.pdf: "Lovisa" then "PORVOO", 1.75 units higher and
+//     back to the left, at 3.4 units along the line and 4.2 across it,
+//     which PDF.js reads as "LovisaPORVOO".
+func TestReconstructText_BackwardMoveAgainstHeight(t *testing.T) {
+	t.Parallel()
+	f := &Font{}
+	in := []models.TextElement{
+		{Text: "a", X: 450, Y: 419.23, Width: 8, FontSize: 3.4},
+		{Text: "P", X: 436, Y: 420.98, Width: 2, FontSize: 3.4},
+	}
+	fonts := []runFont{
+		{name: "F1", font: f, size: 1, height: 4.2},
+		{name: "F1", font: f, size: 1, height: 4.2},
+	}
+	if got := reconstructText(context.Background(), in, fonts, nil); got != "aP" {
+		t.Errorf("got %q, want %q", got, "aP")
 	}
 }
