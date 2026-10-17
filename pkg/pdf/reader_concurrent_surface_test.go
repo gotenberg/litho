@@ -57,6 +57,7 @@ func TestConcurrentReaderSurface(t *testing.T) {
 		{"Metadata", func(c context.Context) { _, _ = r.Metadata(c) }},
 		{"PageCount", func(c context.Context) { _, _ = r.PageCount(c) }},
 		{"UndecodableStreams", func(c context.Context) { _, _ = r.UndecodableStreams(c) }},
+		{"SalvagedStreams", func(c context.Context) { _, _ = r.SalvagedStreams(c) }},
 		{"ValidateFacturX", func(c context.Context) { _, _ = r.ValidateFacturX(c) }},
 		{"ValidateFacturXReport", func(c context.Context) { _, _ = r.ValidateFacturXReport(c) }},
 		{"XMPMetadata", func(c context.Context) { _, _ = r.XMPMetadata(c) }},

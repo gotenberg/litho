@@ -29,6 +29,7 @@ type infoResult struct {
 	HasForms           bool                      `json:"has_forms"`
 	IsPortfolio        bool                      `json:"is_portfolio"`
 	UndecodableStreams []models.StreamDiagnostic `json:"undecodableStreams,omitempty"`
+	SalvagedStreams    []models.StreamDiagnostic `json:"salvagedStreams,omitempty"`
 	Permissions        *permsInfo                `json:"permissions,omitempty"`
 }
 
@@ -37,7 +38,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
-	checkStreams := fs.Bool("streams", false, "Report streams litho cannot decode (unknown filters)")
+	checkStreams := fs.Bool("streams", false, "Report streams litho cannot decode (unknown filters), and those whose damaged data it salvages")
 	checkPerms := fs.Bool("permissions", false, "Show the document permission flags")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
@@ -73,6 +74,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		if *checkStreams {
 			res.UndecodableStreams, _ = r.UndecodableStreams(ctx)
+			res.SalvagedStreams, _ = r.SalvagedStreams(ctx)
 		}
 		if *checkPerms {
 			p := r.Permissions()
@@ -114,6 +116,14 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 				} else {
 					fmt.Fprintf(stdout, "Undecodable: %d stream(s)\n", len(res.UndecodableStreams))
 					for _, s := range res.UndecodableStreams {
+						fmt.Fprintf(stdout, "  obj %d: %s\n", s.ObjectNum, strings.Join(s.Filters, ", "))
+					}
+				}
+				if len(res.SalvagedStreams) == 0 {
+					fmt.Fprintln(stdout, "Salvaged:    none")
+				} else {
+					fmt.Fprintf(stdout, "Salvaged:    %d stream(s)\n", len(res.SalvagedStreams))
+					for _, s := range res.SalvagedStreams {
 						fmt.Fprintf(stdout, "  obj %d: %s\n", s.ObjectNum, strings.Join(s.Filters, ", "))
 					}
 				}

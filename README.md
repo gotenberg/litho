@@ -270,7 +270,7 @@ A command that reached a verdict before its deadline expired keeps that verdict:
 
 ## Filter plugins
 
-litho decodes the standard PDF stream filters in pure Go, JBIG2Decode and JPXDecode included. A stream behind a filter litho cannot decode, such as an unknown one, is reported through `Reader.UndecodableStreams`, or `litho info --streams`. To decode such a filter, or to replace a built-in decoder, implement `plugins.FilterDecoder` and register it when opening a document; it takes precedence over the built-in decoder for its filter name:
+litho decodes the standard PDF stream filters in pure Go, JBIG2Decode and JPXDecode included. A stream behind a filter litho cannot decode, such as an unknown one, is reported through `Reader.UndecodableStreams`, or `litho info --streams`. A damaged stream, one cut short or with a wrong or missing checksum, decodes as a viewer renders it; `Reader.SalvagedStreams` and `litho info --streams` list it, and `pdf.WithStrictStreams` refuses it with `pdf.ErrDamagedStream`. To decode such a filter, or to replace a built-in decoder, implement `plugins.FilterDecoder` and register it when opening a document; it takes precedence over the built-in decoder for its filter name:
 
 ```go
 r, err := pdf.OpenFile(ctx, "doc.pdf", pdf.WithFilterPlugin(myDecoder))

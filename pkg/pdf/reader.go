@@ -59,6 +59,7 @@ type openOpts struct {
 	lenient   bool   // relax Factur-X/ZUGFeRD consumer-path tolerances
 	cmyk      []byte // nil unless WithDefaultCMYKProfile was supplied
 	limits    Limits // zero fields keep their defaults (WithLimits)
+	strict    bool   // refuse salvaged stream data (WithStrictStreams)
 }
 
 // WithLogger injects a structured logger for debug-level diagnostic output.
@@ -164,6 +165,29 @@ func WithSchematron(fsys fs.FS, rootPath string, phase string) OpenOption {
 func WithLenient() OpenOption {
 	return func(o *openOpts) {
 		o.lenient = true
+	}
+}
+
+// WithStrictStreams refuses stream data litho would otherwise salvage. By
+// default litho reads a damaged stream as a viewer renders it: the bytes a
+// filter decoded before damaged data stand for the stream, and data that
+// breaks a rule of its format that does not delimit it, a zlib checksum
+// missing or wrong, a damaged zlib header, deflate data stopped at a sync
+// flush, LZWDecode data without its EOD code, decodes whole.
+// [Reader.SalvagedStreams] lists those streams. With WithStrictStreams, every
+// method that decodes such a stream for the caller fails, or leaves it out
+// where it already leaves out a stream it cannot decode, with an error
+// wrapping [ErrDamagedStream], so a damaged stream cannot pass for a whole
+// one.
+//
+// It governs the streams of the document's content: pages, fonts, images,
+// embedded files and the like. The cross-reference and object streams that
+// make up the file's structure are read as by default: they decode through
+// the built-in decoders alone, as [WithFilterPlugin] leaves them, and a
+// damaged one is repaired as the file's structure is.
+func WithStrictStreams() OpenOption {
+	return func(o *openOpts) {
+		o.strict = true
 	}
 }
 
@@ -607,6 +631,9 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 	if len(o.filters) > 0 {
 		doc.Filters = filter.NewDecoder(o.filters, doc.Limits())
 	}
+	if o.strict {
+		doc.Filters = doc.Filters.RefuseSalvaged()
+	}
 	doc.CMYKProfile = o.cmyk
 
 	return &Reader{
@@ -621,7 +648,8 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 
 // adoptConfiguration gives r, a reader just opened on a rewrite of src's
 // document, the reading configuration src was opened with: its filter
-// plugins, default CMYK profile, OCR engine, loaded schemas and leniency. A
+// plugins and [WithStrictStreams], default CMYK profile, OCR engine, loaded
+// schemas and leniency. A
 // [Pipeline] reads back every intermediate file it writes, and a stage after
 // that must read the document as the caller asked. The password is not
 // carried: every file read back this way is written in the clear, the
@@ -1792,9 +1820,10 @@ func imageDecodeError(pageNum int, name string, err error) error {
 		return fmt.Errorf("page %d, image %q: %w", pageNum, name, err)
 	case errors.Is(err, pdfimage.ErrImageNotFound):
 		return fmt.Errorf("page %d, image %q: %w", pageNum, name, ErrImageNotFound)
-	case errors.Is(err, ErrImageTooLarge) || errors.Is(err, ErrStreamTooLarge):
-		// A budget the caller can raise ([Limits]) refused the image, and its
-		// sentinel is public, so the cause is wrapped alongside the contract.
+	case errors.Is(err, ErrImageTooLarge) || errors.Is(err, ErrStreamTooLarge) || errors.Is(err, ErrDamagedStream):
+		// A budget the caller can raise ([Limits]), or [WithStrictStreams],
+		// refused the image, and its sentinel is public, so the cause is
+		// wrapped alongside the contract.
 		return fmt.Errorf("page %d, image %q: %w: %w", pageNum, name, ErrImageNotDecodable, err)
 	}
 	// The cause is formatted rather than wrapped: its sentinels are internal,
@@ -1923,6 +1952,36 @@ func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) (_ []mode
 func (r *Reader) UndecodableStreams(ctx context.Context) (_ []models.StreamDiagnostic, err error) {
 	defer recoverToError(r.logger(), "Reader.UndecodableStreams", &err)
 	diags, err := r.doc.UndecodableStreams(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]models.StreamDiagnostic, 0, len(diags))
+	for _, d := range diags {
+		out = append(out, models.StreamDiagnostic{ObjectNum: d.ObjectNum, Filters: d.Filters})
+	}
+	return out, nil
+}
+
+// SalvagedStreams reports in-use stream objects whose data litho salvages,
+// listing for each the filters of its /Filter chain that do: a filter that met
+// damaged data and kept what it decoded before the damage, and one whose data
+// breaks a rule of its format that does not delimit it and decodes whole all
+// the same, such as a zlib checksum missing or wrong, a damaged zlib header,
+// deflate data stopped at a sync flush, or LZWDecode data without its EOD
+// code. Text, image and validation results read such a stream as a viewer
+// renders it, and may lack content its producer wrote. [WithStrictStreams]
+// refuses them instead. Returns an empty slice when every stream decodes
+// sound.
+//
+// The call decodes each stream's chain up to its first image codec
+// (DCTDecode, JPXDecode, JBIG2Decode) or its first filter a plugin claims, so
+// it decodes the content, fonts and other streams of the document, and the
+// filters in front of its images, but no image itself. A cross-reference or
+// object stream is listed too, although [WithStrictStreams] does not refuse
+// it.
+func (r *Reader) SalvagedStreams(ctx context.Context) (_ []models.StreamDiagnostic, err error) {
+	defer recoverToError(r.logger(), "Reader.SalvagedStreams", &err)
+	diags, err := r.doc.SalvagedStreams(ctx)
 	if err != nil {
 		return nil, err
 	}

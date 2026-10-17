@@ -115,7 +115,7 @@
 //   - [Open] / [OpenFile] take [OpenOption]: [WithLogger], [WithPassword],
 //     [WithOCREngine], [WithFilterPlugin], [WithCIISchemas],
 //     [WithSchematron], [WithLenient], [WithDefaultCMYKProfile],
-//     [WithLimits].
+//     [WithLimits], [WithStrictStreams].
 //   - [Reader.ExtractText] and [Reader.ExtractAllText] take
 //     [ExtractTextOption]: [WithHiddenText], [WithInvisibleText],
 //     [WithClipPathText], [WithClippedText], [WithArtifacts].
