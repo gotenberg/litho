@@ -56,6 +56,11 @@ type Font struct {
 	DW2                [2]float64         // Default vertical metrics [vY w1] (default: [880 -1000])
 	CIDVerticalMetrics map[int][3]float64 // CID → [w1Y vX vY] from /W2 array
 
+	// encodingCIDs maps a Type 0 font's character codes to the CIDs its /W
+	// and /W2 arrays are indexed by, when its /Encoding is an embedded or a
+	// predefined non-Identity CMap; nil otherwise. See [Font.metricCID].
+	encodingCIDs *encodingCIDs
+
 	CIDIdentityFallback bool // True when CIDToGIDMap is /Identity and no ToUnicode/embedded font
 	CIDOffset           int  // Offset to add to CID values before treating as Unicode (detected from /W array)
 
@@ -876,6 +881,7 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 func resolveType0Metrics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
 	// Default vertical metrics per PDF spec Table 117.
 	font.DW2 = [2]float64{880, -1000}
+	font.encodingCIDs = resolveEncodingCIDs(ctx, doc, fontDict)
 
 	// CIDFont metrics live in the first element of /DescendantFonts.
 	if dfObj, ok := fontDict["DescendantFonts"]; ok {

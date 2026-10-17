@@ -124,6 +124,17 @@ func (m *CIDMap) Codes(data []byte) []uint32 {
 	return out
 }
 
+// MappedCID returns the CID the cidchar and cidrange mappings of the CMap
+// and of its bases give the character code whose big-endian value is code
+// (ISO 32000-1, 9.7.6.2), and false when none covers it. Notdef mappings are
+// left out, and so is the CID 0 an unmapped code selects (9.7.6.3): this is
+// the reading of a viewer's metrics lookup, which PDF.js performs
+// (fonts.js, _charToGlyph) by taking the width of the code itself when its
+// CMap does not contain it. A validator decodes through [CIDMap.Decode].
+func (m *CIDMap) MappedCID(code int) (int, bool) {
+	return m.mappedCID(code)
+}
+
 // next decodes one character code from the front of data, mirroring the
 // codespace handling in [CMap.mapWithCodeSpaces]: it prefers the longest
 // codespace width that fits, falls back to a shorter mapped prefix, and for a

@@ -70,7 +70,11 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			charCode = int(data[0])<<8 | int(data[1])
 		}
 
-		pageWidth := computeGlyphPageWidth(state, font, fontSize, char, charCode)
+		// Metrics are keyed by CID, which the encoding CMap gives the code
+		// (ISO 32000-1, 9.7.4.3 and 9.7.6.2); see [Font.metricCID].
+		cid := font.metricCID(data[:min(n, len(data))], charCode)
+
+		pageWidth := computeGlyphPageWidth(state, font, fontSize, char, cid)
 
 		// Compute text direction angle from the effective transform
 		// (Tm × CTM). The text baseline direction (1,0) in text space
@@ -103,7 +107,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			ExpansionText: mcExpansion,
 		})
 
-		advanceTextMatrix(state, font, fontSize, n, charCode)
+		advanceTextMatrix(state, font, fontSize, n, charCode, cid)
 
 		data = data[n:]
 	}
@@ -130,7 +134,7 @@ func computeTextScale(state *graphics.State, font *Font, fontSize float64) (effe
 
 	// Space advance in page-space units, used by ReconstructText for
 	// font-aware space inference.
-	spaceGlyphWidth := font.GlyphWidth(0x20)
+	spaceGlyphWidth := font.GlyphWidth(font.metricCID([]byte{0x20}, 0x20))
 	spaceAdvance = (spaceGlyphWidth / 1000.0) * fontSize * scale * (state.Text.Tz / 100.0)
 	return effectiveFontSize, spaceAdvance
 }
@@ -296,17 +300,17 @@ func textIsClipped(state *graphics.State, x, y float64) bool {
 //
 // Horizontal scaling (Tz) is folded in because it scales the painted
 // glyph itself, not the inter-glyph gap.
-func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, _char string, charCode int) float64 {
+func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, _char string, cid int) float64 {
 	tm := state.Text.Tm
 	ctm := state.CTM
 	if font.WMode == 1 {
-		w1, _, _ := font.VerticalMetrics(charCode)
+		w1, _, _ := font.VerticalMetrics(cid)
 		advance := (w1 / 1000.0) * fontSize
 		awx := advance * (tm[2]*ctm[0] + tm[3]*ctm[2])
 		awy := advance * (tm[2]*ctm[1] + tm[3]*ctm[3])
 		return math.Sqrt(awx*awx + awy*awy)
 	}
-	glyphWidth := font.GlyphWidth(charCode)
+	glyphWidth := font.GlyphWidth(cid)
 	advance := (glyphWidth / 1000.0) * fontSize * (state.Text.Tz / 100.0)
 	awx := advance * (tm[0]*ctm[0] + tm[1]*ctm[2])
 	awy := advance * (tm[0]*ctm[1] + tm[1]*ctm[3])
@@ -323,26 +327,27 @@ func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, 
 // Tw applies to the single-byte character code 32 alone, whatever glyph
 // or character it selects (ISO 32000-1, 9.3.3): a two-byte code that maps
 // to a space, as Identity-H fonts give, takes no word spacing. codeLen is
-// the byte length of the code.
+// the byte length of the code, charCode its value, and cid the key its
+// metrics are read by ([Font.metricCID]).
 //
 // # Corpus evidence
 //
 //   - pdfjs issue6127.pdf: an Identity-H Times New Roman sets Tw -0.35
 //     at 12 pt and shows its spaces as <0003>. Applying Tw to them pulled
 //     every word 4.2 points back over the space before it.
-func advanceTextMatrix(state *graphics.State, font *Font, fontSize float64, codeLen, charCode int) {
+func advanceTextMatrix(state *graphics.State, font *Font, fontSize float64, codeLen, charCode, cid int) {
 	wordSpace := 0.0
 	if codeLen == 1 && charCode == ' ' {
 		wordSpace = state.Text.Tw
 	}
 	if font.WMode == 1 {
-		w1, _, _ := font.VerticalMetrics(charCode)
+		w1, _, _ := font.VerticalMetrics(cid)
 		advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
 		state.Text.Tm[4] += advance * state.Text.Tm[2]
 		state.Text.Tm[5] += advance * state.Text.Tm[3]
 		return
 	}
-	glyphWidth := font.GlyphWidth(charCode)
+	glyphWidth := font.GlyphWidth(cid)
 	advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
 	state.Text.Tm[4] += advance * state.Text.Tm[0]
 	state.Text.Tm[5] += advance * state.Text.Tm[1]

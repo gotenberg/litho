@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
@@ -536,25 +537,17 @@ func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict a
 }
 
 // maxUseCMapChainDepth bounds how far the embedded usecmap/UseCMap chain is
-// followed when reading attacker-controlled CMap stream data. Anti-DoS guard,
-// not spec-mandated: real usecmap chains are 1-2 deep.
-const maxUseCMapChainDepth = 5
+// followed when reading attacker-controlled CMap stream data. It is
+// [typography.MaxUseCMapChainDepth], the cap text extraction reads the same
+// chains under, so the two readers stop at the same depth.
+const maxUseCMapChainDepth = typography.MaxUseCMapChainDepth
 
 // embeddedEncodingCIDMap reads the embedded encoding CMap stream encObj of a
-// Type 0 font into the code-to-CID map veraPDF builds for it
-// (PDCMap.getCMapFile): the stream's own mappings over the bases it names,
-// in-program by usecmap and in its dictionary by /UseCMap (ISO 32000-1,
-// 9.7.5.3, Table 120). A /UseCMap name is a predefined CMap
-// ([cmap.NamedBase]); a /UseCMap stream is read the same way, recursively, up
-// to [maxUseCMapChainDepth].
-//
-// It returns nil when encObj is no stream litho can decode, so the caller
-// leaves the font's codes unchecked. A base litho cannot read, past the depth
-// cap or reached again through a cycle, leaves the codes it could map unknown
-// rather than unmapped ([cmap.CIDMap.UnmappedNotdef]): veraPDF raises a
-// LoopedException on the cycle, and litho does not guess its verdict.
+// Type 0 font into the code-to-CID map veraPDF builds for it; see
+// [typography.EmbeddedEncodingCIDMap]. It returns nil when encObj is no
+// stream litho can decode, so the caller leaves the font's codes unchecked.
 func embeddedEncodingCIDMap(ctx context.Context, doc *document.Document, encObj ast.PdfObject) *cmap.CIDMap {
-	return embeddedEncodingCIDMapAt(ctx, doc, encObj, make(map[int]bool), 0)
+	return typography.EmbeddedEncodingCIDMap(ctx, doc, encObj)
 }
 
 // type0MappedCIDZeroAbsent reports whether a Type 0 font's embedded encoding
@@ -595,38 +588,6 @@ func type0MappedCIDZeroAbsent(ctx context.Context, doc *document.Document, fontD
 	}
 	subtype, _ := document.ResolveName(ctx, doc, cidFontDict["Subtype"])
 	return subtype == "CIDFontType2"
-}
-
-// embeddedEncodingCIDMapAt is [embeddedEncodingCIDMap] carrying the CMap
-// streams the chain has already read, and how deep it is.
-func embeddedEncodingCIDMapAt(ctx context.Context, doc *document.Document, encObj ast.PdfObject, visited map[int]bool, depth int) *cmap.CIDMap {
-	if ctx.Err() != nil || depth > maxUseCMapChainDepth || document.VisitedBefore(encObj, visited) {
-		return nil
-	}
-	stream, err := document.ResolveStream(ctx, doc, encObj)
-	if err != nil {
-		doc.Logger.Debug("compliance: fonts: cannot resolve Type0 encoding CMap", "error", err)
-		return nil
-	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		doc.Logger.Debug("compliance: fonts: cannot decode Type0 encoding CMap", "error", err)
-		return nil
-	}
-	var base cmap.Base
-	if useObj, ok := stream.Dict["UseCMap"]; ok {
-		resolved, _ := document.ResolveObject(ctx, doc, useObj)
-		// veraPDF's PDCMap reads any value but a name or a stream, a missing
-		// object included, as naming no CMap, and CMap.useCMap ignores it.
-		switch v := resolved.(type) {
-		case ast.PdfName:
-			base = cmap.NamedBase(string(v))
-		case ast.PdfStream:
-			base.Map = embeddedEncodingCIDMapAt(ctx, doc, useObj, visited, depth+1)
-			base.Unresolved = base.Map == nil
-		}
-	}
-	return cmap.ParseEmbeddedCIDMapOver(ctx, data, base)
 }
 
 // findNonPredefinedUseCMap checks a CMap (stream data + dict) for references to
