@@ -1,5 +1,7 @@
 package encodings
 
+import "maps"
+
 // WinAnsiEncoding maps byte values to Unicode runes according to the
 // Windows ANSI (CP1252) encoding used by many PDF fonts.
 var WinAnsiEncoding = map[byte]rune{
@@ -35,6 +37,44 @@ var WinAnsiEncoding = map[byte]rune{
 	0xEE: 0x00EE, 0xEF: 0x00EF, 0xF0: 0x00F0, 0xF1: 0x00F1, 0xF2: 0x00F2, 0xF3: 0x00F3, 0xF4: 0x00F4,
 	0xF5: 0x00F5, 0xF6: 0x00F6, 0xF7: 0x00F7, 0xF8: 0x00F8, 0xF9: 0x00F9, 0xFA: 0x00FA, 0xFB: 0x00FB,
 	0xFC: 0x00FC, 0xFD: 0x00FD, 0xFE: 0x00FE, 0xFF: 0x00FF,
+}
+
+// winAnsiBulletFloor is the highest WinAnsiEncoding code that stays undefined
+// when [WinAnsiEncoding] leaves it unused. Above it, ISO 32000-1, Annex D.2
+// maps every unused code to the bullet character.
+const winAnsiBulletFloor = 0o40
+
+// bullet is U+2022 BULLET, the character ISO 32000-1, Annex D.2 assigns to
+// the unused WinAnsiEncoding codes.
+const bullet = 0x2022
+
+// WinAnsiDecoding returns a fresh copy of [WinAnsiEncoding] that also maps
+// every code the table leaves unused above octal 40 (0x7F, 0x81, 0x8D, 0x8F,
+// 0x90 and 0x9D) to U+2022 BULLET. Per ISO 32000-1, Annex D.2 (the notes to
+// Table D.2), all unused WinAnsiEncoding codes greater than octal 40 map to
+// the bullet character; only octal 225 is assigned to it by name. Use it
+// where a font states WinAnsiEncoding, not where litho falls back to the
+// table for a font that names no encoding: the rule belongs to the encoding.
+// PDF.js reads the same codes as bullets (src/core/encodings.js,
+// WinAnsiEncoding).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200213.pdf, thread_300_300076.pdf: Helvetica with
+//     /WinAnsiEncoding shows its list bullets as code 0x7F, and extraction
+//     dropped every one of them.
+//   - All corpora: text matches PDF.js word for word on 10 more files
+//     (govdocs 9, pdfcpu 1) and character for character on 19 more, on none
+//     fewer.
+func WinAnsiDecoding() map[byte]rune {
+	m := make(map[byte]rune, len(WinAnsiEncoding)+6)
+	maps.Copy(m, WinAnsiEncoding)
+	for code := winAnsiBulletFloor + 1; code <= 0xFF; code++ {
+		if _, ok := m[byte(code)]; !ok {
+			m[byte(code)] = bullet
+		}
+	}
+	return m
 }
 
 // MacRomanEncoding maps byte values to Unicode runes according to the

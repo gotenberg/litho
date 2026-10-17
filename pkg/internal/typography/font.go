@@ -638,7 +638,7 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 	case ast.PdfName:
 		switch enc {
 		case "WinAnsiEncoding":
-			font.Encoding = copyEncoding(encodings.WinAnsiEncoding)
+			font.Encoding = encodings.WinAnsiDecoding()
 		case "MacRomanEncoding":
 			font.Encoding = copyEncoding(encodings.MacRomanEncoding)
 		case "StandardEncoding":
@@ -658,7 +658,7 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 			if baseName != "" {
 				switch baseName {
 				case "WinAnsiEncoding":
-					baseMap = encodings.WinAnsiEncoding
+					baseMap = encodings.WinAnsiDecoding()
 					haveNamedBase = true
 				case "MacRomanEncoding":
 					baseMap = encodings.MacRomanEncoding
@@ -1571,7 +1571,7 @@ func swapType1NamedEncoding(font *Font, name string) {
 	case "StandardEncoding":
 		font.Encoding = copyEncoding(encodings.StandardEncoding)
 	case "WinAnsiEncoding":
-		font.Encoding = copyEncoding(encodings.WinAnsiEncoding)
+		font.Encoding = encodings.WinAnsiDecoding()
 	case "MacRomanEncoding":
 		font.Encoding = copyEncoding(encodings.MacRomanEncoding)
 	case "MacExpertEncoding":

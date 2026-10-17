@@ -111,9 +111,10 @@ func TestFixSimpleFontToUnicodeNeedsNoFontProgram(t *testing.T) {
 func TestFixSimpleFontToUnicodeRefusesPartialCoverage(t *testing.T) {
 	t.Parallel()
 
-	// 0x81 is one of the codes WinAnsiEncoding leaves undefined, so no glyph
-	// name and no Unicode value can be derived for it.
-	cmap, _ := generatedToUnicode(t, encodedType1PDF("/Encoding /WinAnsiEncoding"), codes('A', 0x81))
+	// 0x1F is a code WinAnsiEncoding leaves undefined, so no glyph name and no
+	// Unicode value can be derived for it. The unused codes above octal 40
+	// would not do: ISO 32000-1, Annex D.2 reads them as the bullet.
+	cmap, _ := generatedToUnicode(t, encodedType1PDF("/Encoding /WinAnsiEncoding"), codes('A', 0x1F))
 	if cmap != "" {
 		t.Errorf("a CMap was attached that does not map every shown code:\n%s", cmap)
 	}

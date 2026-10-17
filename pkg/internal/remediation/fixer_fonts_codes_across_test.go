@@ -117,14 +117,14 @@ func TestFixFontIssuesAccumulatesShownCodesAcrossUses(t *testing.T) {
 			want: true,
 		},
 		{
-			// 0x81 is a code WinAnsiEncoding leaves undefined, so no mapping
+			// 0x1F is a code WinAnsiEncoding leaves undefined, so no mapping
 			// can cover it, and a CMap covering the page's codes alone is
 			// partial.
 			name: "a form shows a code no mapping covers",
 			data: fontUsesPDF(
 				catalog, onePage,
 				page("<< /Font << /F1 9 0 R >> /XObject << /Fm1 4 0 R >> >>", "/Contents 5 0 R"),
-				formStream("<< /Font << /F1 9 0 R >> >>", "BT /F1 12 Tf <81> Tj ET"),
+				formStream("<< /Font << /F1 9 0 R >> >>", "BT /F1 12 Tf <1F> Tj ET"),
 				contentObj("BT /F1 12 Tf (A) Tj ET q /Fm1 Do Q"),
 			),
 			want: false,
