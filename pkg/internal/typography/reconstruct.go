@@ -43,7 +43,8 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 	if len(fonts) != len(elements) {
 		fonts = nil
 	}
-	runs := runTracker{startY: elements[0].Y, last: elements[0], fonts: fonts}
+	items := textItemStarts(elements, fonts)
+	runs := newRunTracker(elements, fonts, items)
 
 	for i := 1; i < len(elements); i++ {
 		if i%500 == 0 {
@@ -95,6 +96,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		if lineFonts != nil {
 			lineFonts = fonts[lineStart : lineStart+len(ln.elems)]
 		}
+		base := lineStart
 		lineStart += len(ln.elems)
 
 		// Bidi reorder: reverse RTL runs that are in visual order (X
@@ -150,6 +152,21 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 				}
 				prevIdx = idx
 				continue
+			}
+			if prevIdx == idx-1 && items != nil && items[base+idx] != continuesItem {
+				if space, ok := itemSpace(&runs, items[base+idx], base+idx, el); ok {
+					switch {
+					case space == itemDropsSpace:
+						pendingSpace = ""
+					case space == itemAddsSpace && pendingSpace == "":
+						pendingSpace = " "
+					}
+					writeSpace(&sb, pendingSpace)
+					pendingSpace = ""
+					sb.WriteString(el.Text)
+					prevIdx, visIdx = idx, idx
+					continue
+				}
 			}
 			if prevIdx >= 0 {
 				prev := ln.elems[prevIdx]
@@ -261,6 +278,10 @@ const (
 // the element before it, which keeps a space with the text it was shown
 // beside.
 //
+// A glyph that begins a text item at the edge of a form XObject, or after
+// any Do, is compared across that edge as PDF.js compares it
+// ([runTracker.breaksItem]).
+//
 // # Corpus evidence
 //
 //   - All corpora: with the text rise on the glyph origins, words match
@@ -291,6 +312,69 @@ type runTracker struct {
 	lastIdx int
 	// fonts is the font of each element, or nil when unknown.
 	fonts []runFont
+	// elements are the elements fonts pairs with.
+	elements []models.TextElement
+	// items is the [textItemStarts] of elements, or nil when the fonts are
+	// unknown.
+	items []int
+}
+
+// newRunTracker starts tracking runs at the first of elements. fonts is
+// the font of each element, or nil when unknown, and items their
+// [textItemStarts].
+func newRunTracker(elements []models.TextElement, fonts []runFont, items []int) runTracker {
+	return runTracker{startY: elements[0].Y, last: elements[0], fonts: fonts, elements: elements, items: items}
+}
+
+// advance makes el, the element i, the last glyph of its run.
+func (r *runTracker) advance(i int, el models.TextElement) {
+	r.last = el
+	r.lastIdx = i
+}
+
+// Values of [textItemStarts] that name no element.
+const (
+	// continuesItem marks a glyph that continues the text item of the glyph
+	// before it.
+	continuesItem = -2
+	// opensStream marks the first glyph a stream shows: the glyph begins a
+	// text item and has no glyph to compare with.
+	opensStream = -1
+)
+
+// textItemStarts returns, for each element, whether PDF.js begins a text
+// item at it because the item before it ended at the start of a stream or
+// at a Do ([runFont] segment), and what PDF.js compares it with there: the
+// index of the last glyph its own stream showed before it, [opensStream]
+// when that stream showed none, or [continuesItem] for a glyph inside an
+// item. A form's first glyph opens its stream, and the glyph after the
+// form is compared with the glyph before it (src/core/evaluator.js,
+// getTextContent, OPS.paintXObject, where the form's text is read with a
+// builder of its own). Space glyphs carry no position in PDF.js, so they
+// neither begin an item nor end one. It returns nil without fonts.
+func textItemStarts(elements []models.TextElement, fonts []runFont) []int {
+	if fonts == nil {
+		return nil
+	}
+	starts := make([]int, len(elements))
+	lastIn := make(map[int]int)
+	last := -1
+	for i, el := range elements {
+		starts[i] = continuesItem
+		if isSpaceGlyph(el.Text) {
+			continue
+		}
+		f := fonts[i]
+		if last >= 0 && f.segment != fonts[last].segment {
+			starts[i] = opensStream
+			if p, ok := lastIn[f.stream]; ok {
+				starts[i] = p
+			}
+		}
+		lastIn[f.stream] = i
+		last = i
+	}
+	return starts
 }
 
 // runFont names the font an element was shown in: the resource name and
@@ -299,12 +383,37 @@ type runTracker struct {
 // element, which its position already includes, and height, the size of
 // the font across the line on the page: the Tf size scaled by the text
 // space y axis, where the element's FontSize is scaled by the x axis.
+//
+// stream and segment say where the element sat in the content streams
+// PDF.js reads as separate text runs. stream names the invocation of the
+// content stream that showed it: the page's own, or one painting of a form
+// XObject. PDF.js reads a form's text with a builder of its own, so the
+// form's first glyph has no previous glyph to compare with, and the glyph
+// after the form compares with the last glyph its own stream showed before
+// it (src/core/evaluator.js, getTextContent, OPS.paintXObject). segment
+// changes wherever PDF.js ends the text item it was building: at the start
+// of each stream and after every Do, a form or an image.
 type runFont struct {
-	name   string
-	font   *Font
-	size   float64
-	rise   float64
-	height float64
+	name    string
+	font    *Font
+	size    float64
+	rise    float64
+	height  float64
+	stream  int
+	segment int
+}
+
+// runRecorder collects the [runFont] of each element extraction appends,
+// and numbers the streams and segments it names.
+type runRecorder struct {
+	fonts []runFont
+	ids   int
+}
+
+// next returns a stream or segment number no element has been given yet.
+func (r *runRecorder) next() int {
+	r.ids++
+	return r.ids
 }
 
 // fontChanged reports whether the glyph at i was shown in another font
@@ -326,8 +435,7 @@ func (r *runTracker) fontChanged(i int, prev, el models.TextElement) bool {
 // rule did not decide.
 func (r *runTracker) restart(i int, el models.TextElement) {
 	r.startY = el.Y
-	r.last = el
-	r.lastIdx = i
+	r.advance(i, el)
 }
 
 // breaksLine reports whether el, the element i, starts a new line after
@@ -338,10 +446,12 @@ func (r *runTracker) breaksLine(i int, prev, el models.TextElement) bool {
 	if isSpaceGlyph(el.Text) {
 		return math.Abs(el.Y-prev.Y) > lineBreakTolerance
 	}
+	if r.items != nil && r.items[i] != continuesItem {
+		return r.breaksItem(i, el)
+	}
 	last, lastIdx := r.last, r.lastIdx
 	fontChanged := r.fontChanged(i, last, el)
-	r.last = el
-	r.lastIdx = i
+	r.advance(i, el)
 	size := math.Abs(last.FontSize)
 	gap := computeLineGap(last, el)
 	if r.endsLine(lastIdx, i, last, el, gap, size) {
@@ -362,6 +472,129 @@ func (r *runTracker) breaksLine(i int, prev, el models.TextElement) bool {
 	r.startY = el.Y
 	return math.Abs(el.Y-ref) > lineBreakTolerance
 }
+
+// breaksItem reports whether el, the element i, starts a new line as the
+// first glyph of a text item PDF.js began because the item before it ended
+// at the start of a stream or at a Do ([textItemStarts]), and advances the
+// run state past it.
+//
+// PDF.js compares the glyph with the last glyph its own stream showed, the
+// glyph before the form it follows, and never with the glyphs of a form:
+// the first glyph of a form has nothing to compare with
+// (src/core/evaluator.js, getTextContent, OPS.paintXObject and
+// compareWithLastPosition). The glyph starts a text item whatever that
+// comparison finds, and the reference generator then breaks the line when
+// the item sits more than [lineBreakTolerance] across the baseline from the
+// item before it, the run the last glyph belongs to
+// (test/integration/corpus/lib/join-lines.mjs, joinLines). When the
+// comparison ends the line, PDF.js flags it, and the reference breaks it
+// only past [sameBaselineRatio] of the size of that last glyph. When it
+// finds a gap past [trackingSpaceFactor], PDF.js places a space item at the
+// glyph it compared with, and the reference measures from there as well.
+// ISO 32000-1, 8.10.1 paints a form as a unit and 14.8.2.5 leaves line
+// breaks to the consumer, so the boundary is the reference's, not the
+// specification's.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300849.pdf pages 20, 27 and 35: a figure label
+//     drawn by a form joined the caption line after it, "(b)Jochen", where
+//     PDF.js breaks the line.
+func (r *runTracker) breaksItem(i int, el models.TextElement) bool {
+	before := r.items[i]
+	from, fromIdx := r.last, r.lastIdx
+	startY := r.startY
+	r.advance(i, el)
+	r.startY = el.Y
+	if before == opensStream {
+		return math.Abs(el.Y-startY) > lineBreakTolerance
+	}
+	prev := r.elements[before]
+	size := math.Abs(prev.FontSize)
+	gap := computeLineGap(prev, el)
+	if r.endsLine(before, i, prev, el, gap, size) {
+		return math.Abs(el.Y-startY) > min(lineBreakTolerance, sameBaselineRatio*r.height(fromIdx, from))
+	}
+	if gap > trackingSpaceFactor*size {
+		return math.Abs(prev.Y-startY) > lineBreakTolerance || math.Abs(el.Y-prev.Y) > lineBreakTolerance
+	}
+	return math.Abs(el.Y-startY) > lineBreakTolerance
+}
+
+// What PDF.js writes before the glyph that begins a text item after a
+// stream boundary ([itemSpace]).
+const (
+	// itemKeepsSpace writes a literal space shown before the glyph, and
+	// nothing else.
+	itemKeepsSpace = iota
+	// itemDropsSpace writes nothing, a literal space included.
+	itemDropsSpace
+	// itemAddsSpace writes a space.
+	itemAddsSpace
+)
+
+// itemSpace returns what PDF.js writes before el, the element i, on the
+// line of the glyph before it, when el begins a text item after a stream
+// boundary and before is its [textItemStarts]. ok is false when the word
+// space heuristic decides instead: for vertical and rotated text, and for
+// a glyph PDF.js flags as ending the line of the glyph it compares with,
+// where the reference measures the gap from the text item before el
+// rather than from that glyph.
+//
+// The first glyph of a form has no glyph to compare with, so PDF.js writes
+// nothing before it, not even a space glyph the stream before it showed
+// (src/core/evaluator.js, getTextContent, a builder of its own per form).
+// The glyph after a form is compared with the glyph before the form: PDF.js
+// writes a space when the gap between the two passes [trackingSpaceFactor]
+// of its size (compareWithLastPosition, addFakeSpaces and pushWhitespace,
+// since the item it would join has ended), drops a space glyph after a move
+// back past [negativeRunGapFactor], and otherwise writes the space glyph
+// shown between them, if any (shouldAddWhitepsace). ISO 32000-1, 14.8.2.5
+// leaves word breaks to the consumer, so the rule is the reference's.
+//
+// # Corpus evidence
+//
+//   - All corpora: words match PDF.js on 3 more files (govdocs
+//     thread_100_100591.pdf, pdfjs issue14301.pdf, issue19234.pdf) and on
+//     none fewer, and 141 pages of 11 files that change come closer to
+//     PDF.js with none farther; facturx and pdf20 do not move.
+//   - pdfjs issue14301.pdf, issue19234.pdf, pdfcpu CenterOfWhy.pdf: text
+//     a form XObject draws beside the page's text read with a space before
+//     it, "Prénom: 1/20", where PDF.js reads "Prénom:1/20".
+//   - govdocs thread_400_400566.pdf page 58: an image Do between "3 " and
+//     a "/" set back over the space read "G2G3 /S2/D" until a space glyph
+//     the next glyph abuts was dropped here as everywhere else.
+func itemSpace(r *runTracker, before, i int, el models.TextElement) (space int, ok bool) {
+	if el.Vertical || isRotated(el.Angle) || isOrthogonalRotation(el.Angle) {
+		return 0, false
+	}
+	if before == opensStream {
+		return itemDropsSpace, true
+	}
+	prev := r.elements[before]
+	if prev.Vertical || isRotated(prev.Angle) || isOrthogonalRotation(prev.Angle) {
+		return 0, false
+	}
+	size := math.Abs(prev.FontSize)
+	gap := computeLineGap(prev, el)
+	if r.endsLine(before, i, prev, el, gap, size) {
+		return 0, false
+	}
+	switch {
+	case gap > trackingSpaceFactor*size:
+		return itemAddsSpace, true
+	case gap < negativeRunGapFactor*size, suppressesLiteralSpace(prev, el, gap):
+		return itemDropsSpace, true
+	}
+	return itemKeepsSpace, true
+}
+
+// sameBaselineRatio is how far across the baseline, as a fraction of the
+// font size, the text after a line PDF.js flagged as ended may sit from
+// the text before the flag and still continue its line, after the
+// reference generator (test/integration/corpus/lib/join-lines.mjs,
+// sameBaselineRatio).
+const sameBaselineRatio = 0.1
 
 // endsLine reports whether el, the element i, ends the line of last, the
 // glyph lastIdx painted before it at size, the way PDF.js compares every

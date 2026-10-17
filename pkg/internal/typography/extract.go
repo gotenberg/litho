@@ -122,7 +122,7 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 //
 // When origins is non-nil, one entry is appended to it per element appended to
 // elements, naming the index in ops of the operation that drew it.
-func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int, fontRefs *[]int, runFonts *[]runFont) error {
+func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int, fontRefs *[]int, runs *runRecorder) error {
 	if depth > doc.Limits().MaxFormDepth {
 		if doc != nil {
 			doc.Logger.Debug("form xobject max depth reached",
@@ -143,6 +143,14 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 	machine.FormDepth = depth
 
 	populateOCsFromResources(ctx, doc, machine, resources)
+
+	// This stream starts a text item of its own, and so does every Do in it:
+	// see [runFont] stream and segment.
+	var stream, segment int
+	if runs != nil {
+		stream = runs.next()
+		segment = runs.next()
+	}
 
 	var currentFont *Font
 	var currentFontName string
@@ -250,7 +258,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 				return err
 			}
 		case "Do":
-			if err := handleDoOp(ctx, doc, machine, resources, op, elements, visited, depth, annotAppearances, runFonts); err != nil {
+			if err := handleDoOp(ctx, doc, machine, resources, op, elements, visited, depth, annotAppearances, runs); err != nil {
 				return err
 			}
 		}
@@ -302,11 +310,17 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// tell where a change of font starts a new run. A form's elements were
 		// named by the recursion, against the fonts of its own resources;
 		// whatever it did not name takes the font selected out here.
-		if runFonts != nil {
+		if runs != nil {
 			cur := machine.Current()
-			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur)}
-			for len(*runFonts) < len(*elements) {
-				*runFonts = append(*runFonts, key)
+			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur), stream: stream, segment: segment}
+			for len(runs.fonts) < len(*elements) {
+				runs.fonts = append(runs.fonts, key)
+			}
+			// PDF.js ends the text item before it paints any XObject, an
+			// image as well as a form (src/core/evaluator.js, getTextContent,
+			// OPS.paintXObject), so the glyphs after a Do start one.
+			if op.Operator == "Do" {
+				segment = runs.next()
 			}
 		}
 	}
@@ -547,7 +561,7 @@ func applyTJKerning(machine *graphics.Machine, currentFont *Font, numVal float64
 // from the current resource dict. Non-Form XObjects (images, for example)
 // are silently skipped. Only Form streams carry content-stream ops the
 // extractor can recurse into.
-func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, op content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, runFonts *[]runFont) error {
+func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, op content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, runs *runRecorder) error {
 	if len(op.Operands) != 1 {
 		return nil
 	}
@@ -660,7 +674,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// different font than the one that drew them. The run fonts do pass
 	// down: they name the font by what the form selected, not by an object
 	// a caller could act on.
-	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil, nil, runFonts)
+	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil, nil, runs)
 	machine.Resources = prevResources
 	machine.FormDepth = prevDepth
 	machine.OpIndex = prevOpIndex
@@ -715,13 +729,11 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 		fontRefs = make([]int, 0, estimatedCap)
 		fontRefsPtr = &fontRefs
 	}
-	var runFonts []runFont
-	var runFontsPtr *[]runFont
+	var runs *runRecorder
 	if record.runFonts {
-		runFonts = make([]runFont, 0, estimatedCap)
-		runFontsPtr = &runFonts
+		runs = &runRecorder{fonts: make([]runFont, 0, estimatedCap)}
 	}
-	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr, runFontsPtr); err != nil {
+	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr, runs); err != nil {
 		return extraction{}, err
 	}
 
@@ -795,6 +807,10 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 		}
 	}
 
+	var runFonts []runFont
+	if runs != nil {
+		runFonts = runs.fonts
+	}
 	return extraction{elements: elements, origins: origins, fontRefs: fontRefs, runFonts: runFonts}, nil
 }
 
