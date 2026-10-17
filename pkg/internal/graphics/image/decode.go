@@ -632,13 +632,14 @@ func decodeSeparation(
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, 1), 1)
 
 	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict), cc))
+	cal := alternateCal(ctx, doc, cs[2], altComps)
 	var lut [256]color.RGBA
 	for s := range 256 {
 		out, err := tint.Eval([]float64{float64(dec[0][s]) / 255})
 		if err != nil {
 			return nil, fmt.Errorf("evaluating separation tint transform: %w", err)
 		}
-		lut[s] = alternateToRGB(alternate, conv, out)
+		lut[s] = alternateToRGB(alternate, conv, cal, out)
 	}
 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -732,6 +733,7 @@ func decodeDeviceN(
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, colorants), colorants)
 
 	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict), cc))
+	cal := alternateCal(ctx, doc, cs[2], altComps)
 	memo := make(map[string]color.RGBA)
 	inputs := make([]float64, colorants)
 	tuple := make([]byte, colorants)
@@ -755,7 +757,7 @@ func decodeDeviceN(
 				if err != nil {
 					return nil, fmt.Errorf("evaluating devicen tint transform: %w", err)
 				}
-				rgb = alternateToRGB(alternate, conv, out)
+				rgb = alternateToRGB(alternate, conv, cal, out)
 				if len(memo) < maxTintMemo {
 					memo[key] = rgb
 				}
@@ -794,6 +796,7 @@ func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, col
 			tint.Inputs(), tint.Outputs(), colorants, alternate)
 	}
 	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, intent, cc))
+	cal := alternateCal(ctx, doc, cs[2], altComps)
 	out := make([]byte, 0, len(table)/colorants*3)
 	in := make([]float64, colorants)
 	for i := 0; i+colorants <= len(table); i += colorants {
@@ -804,16 +807,42 @@ func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, col
 		if err != nil {
 			return nil, fmt.Errorf("evaluating tint transform: %w", err)
 		}
-		rgb := alternateToRGB(alternate, conv, v)
+		rgb := alternateToRGB(alternate, conv, cal, v)
 		out = append(out, rgb.R, rgb.G, rgb.B)
 	}
 	return out, nil
 }
 
-// alternateToRGB converts one colour expressed in a device alternate space to
-// RGB, through conv when the alternate space is colour managed. Values arrive
-// in [0, 1] as the tint transform's /Range defines them.
-func alternateToRGB(alternate string, conv *converter, v []float64) color.RGBA {
+// alternateCal returns the CalGray or CalRGB space the alternate obj of a
+// Separation or DeviceN space names, or nil for any other alternate or one
+// whose component count is not comps.
+//
+// ISO 32000-1, 8.6.6.4 lets the alternate be any device or CIE-based space,
+// and [resolveColorSpace] names a CalRGB or CalGray one DeviceRGB or
+// DeviceGray for its component count. Reading the transform's output in that
+// device space drops the gamma and the matrix, the colour the alternate
+// actually states.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9940.pdf: two images indexed over a DeviceN space whose
+//     alternate is a CalRGB with XYZ for its primaries came out up to 17
+//     levels off PDF.js read as DeviceRGB, and within 3 read through it.
+//   - govdocs thread_200_200169.pdf: Separation /Black images over an sRGB-like
+//     CalRGB alternate moved from 3.4 levels off PDF.js to within 3.
+func alternateCal(ctx context.Context, doc *document.Document, obj ast.PdfObject, comps int) *calSpace {
+	cal, ok := resolveCalSpace(ctx, doc, obj)
+	if !ok || calComponents(cal) != comps {
+		return nil
+	}
+	return cal
+}
+
+// alternateToRGB converts one colour expressed in an alternate space to RGB,
+// through conv when the alternate space is colour managed and through cal
+// when it is CalGray or CalRGB. Values arrive in [0, 1] as the tint
+// transform's /Range defines them.
+func alternateToRGB(alternate string, conv *converter, cal *calSpace, v []float64) color.RGBA {
 	unit := func(f float64) uint8 {
 		return uint8(min(max(f, 0), 1)*255 + 0.5)
 	}
@@ -823,6 +852,14 @@ func alternateToRGB(alternate string, conv *converter, v []float64) color.RGBA {
 			px[i] = unit(v[i])
 		}
 		r, g, b := conv.convert(px[:conv.t.Components()])
+		return color.RGBA{R: r, G: g, B: b, A: 255}
+	}
+	if cal != nil {
+		if cal.grey {
+			g := cal.convertGrey(unit(v[0]))
+			return color.RGBA{R: g, G: g, B: g, A: 255}
+		}
+		r, g, b := cal.convertRGB(unit(v[0]), unit(v[1]), unit(v[2]))
 		return color.RGBA{R: r, G: g, B: b, A: 255}
 	}
 	switch alternate {
