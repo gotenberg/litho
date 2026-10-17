@@ -200,6 +200,8 @@ one deliberately rather than diffing it against a fresh build.
 | `stdremap_ua2.pdf`     | PDF/UA-2     | A standard type the root `/RoleMap` sends to a private dead end  |
 | `remapchain_ua2.pdf`   | PDF/UA-2     | Standard types mapped through a private type to a standard one   |
 | `imagecolour_2b.pdf`   | PDF/A-2b     | Images over the colorant None; JPX CIELab, ROMM-RGB, e-sRGB      |
+| `redactrefs_ua1.pdf`   | PDF/UA-1     | Copies of page text behind objects a redaction cannot read       |
+| `redactcopies_2b.pdf`  | PDF/A-2b     | Copies of page text no decoded value spells                      |
 
 ### Must-not-fire controls
 
@@ -558,6 +560,8 @@ which are covered under [Known divergences](#known-divergences).
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `remapchain_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 4    | 0    |
+| `redactcopies_2b.pdf`  | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
+| `redactrefs_ua1.pdf`   | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 4    | 5    |
 | `remreach_2b.pdf`      | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 6    | 6    | 10   | 8    |
 | `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
 | `repairroom_2b.pdf`    | 5    | 2    | 7    | 3    | 5    | 8    | 4    | 6    | 8   | 8    | 9    | 10   | 9    |
@@ -6244,16 +6248,47 @@ rule reads the colorant name or the enumerated JPX space beyond CIEJab (ISO
 19005-2, 6.2.8.3 test 4); the sets are the DeviceGray alternates without an
 output intent (`6.2.4.3/4`), the missing metadata and the tagging rules.
 
+### `redactrefs_ua1.pdf` and `redactcopies_2b.pdf`
+
+Redaction clears the copies of removed text a file holds outside the page, then
+scans what a full rewrite writes for every removed string and refuses when one
+survives. Neither half had a fixture: the `mutate-redact` cell redacts all of
+page 1, and no file in the corpus quoted its page 1 text behind an object the
+scrub cannot read, or where no decoded value spells it. Both fixtures draw
+`the secret plan` on page 1 and `page two` on page 2.
+
+`redactrefs_ua1` holds two copies behind objects the scrub cannot read, and a
+rewrite copies both. The structure element of page 1's paragraph holds the words
+in `/ActualText`, and the `/ParentTree` slot for its MCID is null, so the entry
+names no element; the element is still in the tree, reached from the root's `/K`
+with `/Pg` naming page 1 (ISO 32000-1, 14.7.4). The outline's `/First` is a
+number rather than an outline item, and its `/Last` is the item whose title
+quotes the paragraph (Table 153). The redaction now finds the element through
+`/K` and the item through `/Last` and `/Prev`, and the output holds neither
+copy. Before, it refused, reading the null slot as an element written directly
+into the array.
+
+`redactcopies_2b` holds two copies a rewrite copies and no decoded value spells.
+The catalog's `/PieceInfo` holds a FlateDecode stream that decodes to other
+words, with the paragraph stored after its zlib checksum (RFC 1950, 2.2), and
+the catalog's `/Dests` names a destination after the paragraph (12.3.2.3).
+Before, the redaction succeeded and wrote both out, which pikepdf reads back as
+the stored stream data and a name key. Now it refuses with
+`ErrRedactionIncomplete` and names both survivors.
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells of
+each file.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 148 x 8 = 1184 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 148 x 13 = 1924 cells. litho
+runner scores 150 x 8 = 1200 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 150 x 13 = 1950 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1922 of the 1924 cells. The two
+fixtures exist to protect, and it holds in 1948 of the 1950 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -6265,7 +6300,7 @@ ten is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1184 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 1200 and moves only `ruleset_mismatch`, and on
 those ten cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
