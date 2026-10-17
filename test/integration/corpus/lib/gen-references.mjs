@@ -68,6 +68,16 @@ if (!fs.existsSync(buildPath)) {
 
 const pdfjsLib = await import("file://" + buildPath);
 
+// PDF.js reads a predefined CMap (ISO 32000-1, 9.7.5.2, Table 118) and the
+// Adobe <Ordering>-UCS2 tables from cMapUrl. Without it every font naming one
+// fails to load and its text comes out empty, whatever the file says.
+const cMapUrl =
+  path.resolve(pdfjsDir, "build", "generic-legacy", "web", "cmaps") + "/";
+if (!fs.existsSync(cMapUrl)) {
+  console.error(`pdf.js CMaps not found at ${cMapUrl}.`);
+  process.exit(1);
+}
+
 fs.mkdirSync(textOut, { recursive: true });
 fs.mkdirSync(metaOut, { recursive: true });
 
@@ -91,8 +101,12 @@ for (const name of pdfs) {
 
   try {
     const data = new Uint8Array(fs.readFileSync(pdfPath));
-    const doc = await pdfjsLib.getDocument({ data, useSystemFonts: true })
-      .promise;
+    const doc = await pdfjsLib.getDocument({
+      data,
+      useSystemFonts: true,
+      cMapUrl,
+      cMapPacked: true,
+    }).promise;
 
     const result = {
       id,
