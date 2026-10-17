@@ -72,7 +72,9 @@ func TestDocGoListsEveryFunctionalOption(t *testing.T) {
 	}
 
 	// The second control: a parser that silently matched nothing would report
-	// no drift. Measured at 26 constructors across four option types.
+	// no drift. The floor sits well below the package's constructor count, so
+	// it catches a parser that reads nothing without needing an update each
+	// time an option is added.
 	if found < 20 {
 		t.Errorf("found only %d option constructors, so the parser is not reading the package", found)
 	}
