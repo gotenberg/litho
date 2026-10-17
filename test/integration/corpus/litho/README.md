@@ -206,6 +206,7 @@ one deliberately rather than diffing it against a fresh build.
 | `rolecycle_ua2.pdf`    | PDF/UA-2     | Role-map cycles through the root `/RoleMap` and namespaces       |
 | `type0nodesc_2b.pdf`   | PDF/A-2b     | Type 0 fonts whose `/DescendantFonts` holds no dictionary        |
 | `fnlimits_1b.pdf`      | PDF/A-1b     | Type 4 functions past the limits, reached and unreached          |
+| `oirgb_2b.pdf`         | PDF/A-2b     | Device colour images under a non-sRGB RGB output intent          |
 
 ### Must-not-fire controls
 
@@ -562,6 +563,7 @@ which are covered under [Known divergences](#known-divergences).
 | `namereads_1b.pdf`     | 10   | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 7   | 7    | 8    | 6    | 6    |
 | `noresources_4.pdf`    | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 2   | 3    | 4    | 10   | 7    |
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
+| `oirgb_2b.pdf`         | 3    | 1    | 3    | 1    | 1    | 3    | 1    | 1    | 2   | 2    | 3    | 5    | 6    |
 | `outlinedest_ua2.pdf`  | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 0    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `pageboxes_2b.pdf`     | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 4   | 4    | 5    | 5    | 5    |
@@ -6401,16 +6403,42 @@ report the same rule set in all thirteen cells, and the same `6.1.12` and
 `6.1.13` counts. No corpus file holds a type 4 function past a limit, nor a
 direct tint transform naming another object.
 
+### `oirgb_2b.pdf`
+
+The document's output intent holds an RGB monitor profile of the sRGB colorants
+over a 1.8 gamma, and the page draws a DeviceRGB image, an Indexed image over
+DeviceRGB and a DeviceGray image. An output intent's destination profile
+characterises the device a document was prepared for (ISO 32000-1, 14.11.5),
+and ISO 19005-2, 6.2.4.3 admits DeviceRGB on the strength of an RGB destination
+profile, so litho reads DeviceRGB, the Indexed base included, through it, as it
+reads DeviceCMYK through a CMYK one. DeviceGray stays an sRGB grey: the profile
+is not a Gray profile. Every RGB destination profile in the other corpora is
+sRGB, which gives each colour back as it came, so no other file shows the
+reading.
+
+| Image  | Colour                    | Decodes as                     |
+| ------ | ------------------------- | ------------------------------ |
+| `RGB`  | `/DeviceRGB`, blue 128    | blue 146, through the intent   |
+| `Idx`  | Indexed over `/DeviceRGB` | (200, 80, 40) as (210, 99, 53) |
+| `Gray` | `/DeviceGray`             | the grey levels as they are    |
+
+MuPDF 1.26.7 decodes every pixel of the three images as litho does, and as it
+does the samples themselves with ICC off. PDF.js reads no output intent.
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells: the
+missing metadata and the tagging rules. No colour rule fires, since every
+device space the page uses has an output intent to stand on.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 154 x 8 = 1232 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 154 x 13 = 2002 cells. litho
+runner scores 155 x 8 = 1240 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 155 x 13 = 2015 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2000 of the 2002 cells. The two
+fixtures exist to protect, and it holds in 2013 of the 2015 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -6422,7 +6450,7 @@ ten is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1232 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 1240 and moves only `ruleset_mismatch`, and on
 those ten cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
