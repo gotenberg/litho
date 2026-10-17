@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-17T13:40:16Z",
+  "captured_at": "2026-10-17T14:40:16Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -100,12 +100,12 @@
           "skipped": 0
         },
         "text": {
-          "matched": 672,
-          "mismatched": 419,
+          "matched": 681,
+          "mismatched": 410,
           "skipped": 0,
           "metrics": {
-            "chars_match": 1005,
-            "words_match": 672
+            "chars_match": 1023,
+            "words_match": 681
           }
         }
       }
@@ -113,7 +113,7 @@
     "litho": {
       "features": {
         "compliance": {
-          "matched": 1232,
+          "matched": 1240,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -121,15 +121,15 @@
           }
         },
         "determinism": {
-          "matched": 1078,
+          "matched": 1085,
           "mismatched": 0,
-          "skipped": 154,
+          "skipped": 155,
           "metrics": {
             "nondeterministic": 0
           }
         },
         "mutate-autotag": {
-          "matched": 1232,
+          "matched": 1240,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -143,7 +143,7 @@
           }
         },
         "mutate-encrypt": {
-          "matched": 1232,
+          "matched": 1240,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -157,7 +157,7 @@
           }
         },
         "mutate-flatten": {
-          "matched": 1232,
+          "matched": 1240,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -171,7 +171,7 @@
           }
         },
         "mutate-pages": {
-          "matched": 1226,
+          "matched": 1234,
           "mismatched": 6,
           "skipped": 0,
           "metrics": {
@@ -185,7 +185,7 @@
           }
         },
         "mutate-redact": {
-          "matched": 784,
+          "matched": 792,
           "mismatched": 0,
           "skipped": 448,
           "metrics": {
@@ -198,7 +198,7 @@
           }
         },
         "mutate-sign": {
-          "matched": 1216,
+          "matched": 1224,
           "mismatched": 0,
           "skipped": 16,
           "metrics": {
@@ -215,7 +215,7 @@
           }
         },
         "mutate-stamp": {
-          "matched": 1226,
+          "matched": 1234,
           "mismatched": 6,
           "skipped": 0,
           "metrics": {
@@ -229,38 +229,38 @@
           }
         },
         "remediation": {
-          "matched": 410,
+          "matched": 418,
           "mismatched": 822,
           "skipped": 0,
           "metrics": {
             "disagreement": 0,
-            "fully_fixed": 410,
-            "litho_fixed": 6304,
+            "fully_fixed": 418,
+            "litho_fixed": 6324,
             "litho_post": 1792,
-            "litho_pre": 8096,
+            "litho_pre": 8116,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 6302,
+            "verapdf_fixed": 6322,
             "verapdf_post": 1792,
-            "verapdf_pre": 8094,
+            "verapdf_pre": 8114,
             "verapdf_regressed": 0
           }
         },
         "remediation-aggressive": {
-          "matched": 459,
+          "matched": 467,
           "mismatched": 773,
           "skipped": 0,
           "metrics": {
             "disagreement": 0,
-            "fully_fixed": 459,
-            "litho_fixed": 6566,
+            "fully_fixed": 467,
+            "litho_fixed": 6586,
             "litho_post": 1530,
-            "litho_pre": 8096,
+            "litho_pre": 8116,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 6564,
+            "verapdf_fixed": 6584,
             "verapdf_post": 1530,
-            "verapdf_pre": 8094,
+            "verapdf_pre": 8114,
             "verapdf_regressed": 0
           }
         }
@@ -328,12 +328,12 @@
           }
         },
         "text": {
-          "matched": 34,
-          "mismatched": 17,
+          "matched": 35,
+          "mismatched": 16,
           "skipped": 0,
           "metrics": {
-            "chars_match": 46,
-            "words_match": 34
+            "chars_match": 47,
+            "words_match": 35
           }
         }
       }
@@ -368,12 +368,12 @@
           "skipped": 1
         },
         "text": {
-          "matched": 1046,
-          "mismatched": 144,
+          "matched": 1048,
+          "mismatched": 142,
           "skipped": 1,
           "metrics": {
             "chars_match": 1126,
-            "words_match": 1046
+            "words_match": 1048
           }
         }
       }
