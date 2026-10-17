@@ -151,11 +151,14 @@ func codeValue(b []byte) uint64 {
 }
 
 // conformEntries splits every entry that crosses a first-byte boundary. It
-// reports false when no entry needed it, or when one spans more codes than
-// [Parse] expands, since a rewrite could then not match the parse.
+// reports false when no entry needed it, when one spans more codes than
+// [Parse] expands, since a rewrite could then not match the parse, or when
+// the entries split span more than [maxCMapRangeCodes] codes together, the
+// budget [Parse] holds the same program to.
 func conformEntries(entries []bfRangeEntry) ([]bfRangeEntry, bool) {
 	out := make([]bfRangeEntry, 0, len(entries))
 	split := false
+	spanned := uint64(0)
 	for _, e := range entries {
 		// A reversed range maps nothing, and one inside a single first-byte
 		// block already conforms: both are kept as written.
@@ -164,6 +167,9 @@ func conformEntries(entries []bfRangeEntry) ([]bfRangeEntry, bool) {
 			continue
 		}
 		if e.hi-e.lo >= maxRangeEntries {
+			return nil, false
+		}
+		if spanned += e.hi - e.lo + 1; spanned > maxCMapRangeCodes {
 			return nil, false
 		}
 		split = true
@@ -178,6 +184,10 @@ func conformEntries(entries []bfRangeEntry) ([]bfRangeEntry, bool) {
 // runs map exactly what e does.
 func appendConformingRuns(out []bfRangeEntry, e bfRangeEntry) []bfRangeEntry {
 	count := int(e.hi-e.lo) + 1 //nolint:gosec // e.hi-e.lo < maxRangeEntries, checked by conformEntries.
+	if e.isArray {
+		// Parse maps no code past the array's end, so the runs stop there.
+		count = min(count, len(e.dstArr))
+	}
 	dst := bytes.Clone(e.dst)
 	start, startDst := 0, bytes.Clone(dst)
 	flush := func(end int) {

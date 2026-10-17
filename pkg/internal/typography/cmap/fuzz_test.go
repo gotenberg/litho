@@ -15,6 +15,10 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte("1 begincodespacerange <00> <ff> endcodespacerange\n"))
 	f.Add([]byte("2 beginbfchar <0041> <0041> <0042> <0042> endbfchar\n"))
 	f.Add([]byte("1 beginbfrange <0000> <005e> <0020> endbfrange\n"))
+	f.Add(rangeBomb(maxCMapRangeCodes>>16+1, false))
+	f.Add(bfrangeArrayBomb())
+	f.Add(codeSpaceBomb(maxCodeSpaceRanges + 1))
+	f.Add(useCMapChain())
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
@@ -29,6 +33,8 @@ func FuzzParseCID(f *testing.F) {
 	f.Add([]byte("begincmap\nendcmap\n"))
 	f.Add([]byte("1 begincidrange <0000> <00ff> 0 endcidrange\n"))
 	f.Add([]byte("1 begincidchar <0041> 65 endcidchar\n"))
+	f.Add(rangeBomb(maxCMapRangeCodes>>16+1, true))
+	f.Add(useCMapChain())
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
@@ -45,6 +51,8 @@ func FuzzConformBfRanges(f *testing.F) {
 	f.Add([]byte("1 beginbfrange <01ED> <0206> <0061> endbfrange\n"))
 	f.Add([]byte("1 beginbfrange <01FE> <0201> [<0041> <0042> <0043> <0044>] endbfrange\n"))
 	f.Add([]byte("1 beginbfrange <01ED> <02"))
+	f.Add(rangeBomb(maxCMapRangeCodes>>16+1, false))
+	f.Add(bfrangeArrayBomb())
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {

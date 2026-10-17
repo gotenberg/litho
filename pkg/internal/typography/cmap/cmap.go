@@ -17,7 +17,8 @@ import (
 // maxRangeEntries caps how many codes one bfrange expands to. It is an
 // anti-DoS guard, not spec-mandated: a two-byte range spans at most 65536
 // codes, so no real ToUnicode CMap reaches it, while a crafted four-byte range
-// would otherwise expand to billions of entries.
+// would otherwise expand to billions of entries. [maxCMapRangeCodes] bounds
+// the codes every range of one program expands to together.
 const maxRangeEntries = 1 << 16
 
 // CodeSpaceRange defines a valid range of character codes with a specific byte length.
@@ -133,7 +134,9 @@ func incrementBytes(b []byte) {
 	}
 }
 
-// Parse extracts mapping data from a CMap stream payload.
+// Parse extracts mapping data from a CMap stream payload. A program past its
+// parse budget ([maxCMapRangeCodes], [maxCodeSpaceRanges]) fails with
+// [ErrCMapTooLarge].
 //
 // # Corpus evidence
 //
@@ -141,6 +144,11 @@ func incrementBytes(b []byte) {
 //     whose S became a ">", and veraPDF reports ISO 14289-1, 7.21.7 t1 on
 //     every code the page shows, the codes its bfchar list maps included.
 func Parse(ctx context.Context, data []byte) (*CMap, error) {
+	return parse(ctx, data, newParseBudget())
+}
+
+// parse is [Parse] under budget b.
+func parse(ctx context.Context, data []byte, b *parseBudget) (*CMap, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
 
@@ -173,6 +181,9 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 					}
 					break
 				}
+				if err := b.step(ctx); err != nil {
+					return nil, err
+				}
 				lowObj, err := p.ParseObject(ctx)
 				if err != nil {
 					break
@@ -189,6 +200,9 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 				// makes every later lookup consume no bytes. The bfrange
 				// handler below applies the same floor.
 				if ok1 && ok2 && len(lowStr) > 0 {
+					if err := b.codeSpace(); err != nil {
+						return nil, err
+					}
 					c.CodeSpaceRanges = append(c.CodeSpaceRanges, CodeSpaceRange{
 						Low:  []byte(lowStr),
 						High: []byte(highStr),
@@ -209,6 +223,9 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 						}
 					}
 					break
+				}
+				if err := b.step(ctx); err != nil {
+					return nil, err
 				}
 
 				srcObj, err := p.ParseObject(ctx)
@@ -240,6 +257,9 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 						}
 					}
 					break
+				}
+				if err := b.step(ctx); err != nil {
+					return nil, err
 				}
 
 				startObj, err := p.ParseObject(ctx)
@@ -280,10 +300,8 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 							copy(currDst, dstBytes)
 
 							for n := 0; n < maxRangeEntries && bytes.Compare(current, endBytes) <= 0; n++ {
-								if n%1000 == 0 && n > 0 {
-									if err := ctx.Err(); err != nil {
-										return nil, err
-									}
+								if err := b.rangeCode(ctx); err != nil {
+									return nil, err
 								}
 								c.set(string(current), decodeUTF16BE(currDst), bytes.Compare(current, strictEnd) <= 0)
 								prev := make([]byte, len(current))
@@ -315,6 +333,9 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 
 							arrIdx := 0
 							for bytes.Compare(current, endBytes) <= 0 && arrIdx < len(dstArr) {
+								if err := b.step(ctx); err != nil {
+									return nil, err
+								}
 								if dStr, ok4 := dstArr[arrIdx].(ast.PdfString); ok4 {
 									c.set(string(current), decodeUTF16BE([]byte(dStr)), bytes.Compare(current, strictEnd) <= 0)
 								}

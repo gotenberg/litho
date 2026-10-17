@@ -52,8 +52,17 @@ func strToInt(s ast.PdfString) int {
 // ParseCID extracts CID mapping data from a CMap stream payload.
 // It handles begincidchar/endcidchar and begincidrange/endcidrange sections,
 // and records the notdefchar and notdefrange sections and the usecmap
-// operators [ParseEmbeddedCIDMap] resolves.
+// operators [ParseEmbeddedCIDMap] resolves. A program whose cidrange entries
+// expand past [maxCMapRangeCodes] fails with [ErrCMapTooLarge].
+//
+// An entry whose code is not one to four bytes wide or whose CID is negative
+// or overflows maps nothing; see [codeInt] and [cidValue].
 func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
+	return parseCID(ctx, data, newParseBudget())
+}
+
+// parseCID is [ParseCID] under budget b.
+func parseCID(ctx context.Context, data []byte, b *parseBudget) (*CIDCMap, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
 
@@ -86,6 +95,9 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 					}
 					break
 				}
+				if err := b.step(ctx); err != nil {
+					return nil, err
+				}
 
 				srcObj, err := p.ParseObject(ctx)
 				if err != nil {
@@ -98,8 +110,13 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 
 				srcStr, ok1 := srcObj.(ast.PdfString)
 				dstInt, ok2 := dstObj.(ast.PdfInt)
-				if ok1 && ok2 {
-					c.Mapping[strToInt(srcStr)] = int(dstInt)
+				if !ok1 || !ok2 {
+					continue
+				}
+				code, okCode := codeInt([]byte(srcStr))
+				cid, okCID := cidValue(int64(dstInt), 0)
+				if okCode && okCID {
+					c.Mapping[code] = cid
 				}
 			}
 		case tok.Type == lexer.TokenKeyword && tok.Value == "begincidrange":
@@ -115,6 +132,9 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 						}
 					}
 					break
+				}
+				if err := b.step(ctx); err != nil {
+					return nil, err
 				}
 
 				lowObj, err := p.ParseObject(ctx)
@@ -133,23 +153,30 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 				lowStr, ok1 := lowObj.(ast.PdfString)
 				highStr, ok2 := highObj.(ast.PdfString)
 				dstInt, ok3 := dstObj.(ast.PdfInt)
-				if ok1 && ok2 && ok3 {
-					low := strToInt(lowStr)
-					high := strToInt(highStr)
-					dst := int(dstInt)
-					if low > high {
-						continue
+				if !ok1 || !ok2 || !ok3 {
+					continue
+				}
+				low, okLow := codeInt([]byte(lowStr))
+				high, okHigh := codeInt([]byte(highStr))
+				if !okLow || !okHigh || low > high {
+					continue
+				}
+				// One cidrange expands to at most maxRangeEntries codes, and
+				// the program's ranges together to maxCMapRangeCodes.
+				span := min(high-low, maxRangeEntries-1)
+				dst, okCID := cidValue(int64(dstInt), span)
+				if !okCID {
+					continue
+				}
+				for i := 0; i <= span; i++ {
+					if err := b.rangeCode(ctx); err != nil {
+						return nil, err
 					}
-					// Mirrors the package-level maxRangeEntries: an anti-DoS
-					// guard on one cidrange's expansion, not spec-mandated.
-					const maxRangeEntries = 1 << 16
-					for i := 0; i <= high-low && i < maxRangeEntries; i++ {
-						c.Mapping[low+i] = dst + i
-					}
+					c.Mapping[low+i] = dst + i
 				}
 			}
 		case tok.Type == lexer.TokenKeyword && (tok.Value == "beginnotdefchar" || tok.Value == "beginnotdefrange"):
-			if err := parseNotdefBlock(ctx, p, c, tok.Value == "beginnotdefrange"); err != nil {
+			if err := parseNotdefBlock(ctx, p, c, b, tok.Value == "beginnotdefrange"); err != nil {
 				return nil, err
 			}
 		default:
@@ -179,7 +206,7 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 // code and a notdefrange entry a span of codes, every one of them to the
 // single CID the entry gives (Adobe Technical Note #5014, notdefrange): unlike a
 // cidrange, the CID does not increment across the span.
-func parseNotdefBlock(ctx context.Context, p *parser.Parser, c *CIDCMap, isRange bool) error {
+func parseNotdefBlock(ctx context.Context, p *parser.Parser, c *CIDCMap, b *parseBudget, isRange bool) error {
 	if _, err := p.Consume(); err != nil {
 		return err
 	}
@@ -194,6 +221,9 @@ func parseNotdefBlock(ctx context.Context, p *parser.Parser, c *CIDCMap, isRange
 		}
 		if t.Type == lexer.TokenKeyword && t.Value == end {
 			_, err := p.Consume()
+			return err
+		}
+		if err := b.step(ctx); err != nil {
 			return err
 		}
 		lowObj, err := p.ParseObject(ctx)
@@ -216,15 +246,17 @@ func parseNotdefBlock(ctx context.Context, p *parser.Parser, c *CIDCMap, isRange
 		if !ok1 || !ok2 || !ok3 {
 			continue
 		}
-		low, high := strToInt(lowStr), strToInt(highStr)
-		if low > high {
+		low, okLow := codeInt([]byte(lowStr))
+		high, okHigh := codeInt([]byte(highStr))
+		cid, okCID := cidValue(int64(dstInt), 0)
+		if !okLow || !okHigh || !okCID || low > high {
 			continue
 		}
 		if len(c.notdefs) >= maxNotdefEntries {
 			c.incomplete = true
 			continue
 		}
-		c.notdefs = append(c.notdefs, notdefSpan{lo: low, hi: high, cid: int(dstInt)})
+		c.notdefs = append(c.notdefs, notdefSpan{lo: low, hi: high, cid: cid})
 	}
 }
 

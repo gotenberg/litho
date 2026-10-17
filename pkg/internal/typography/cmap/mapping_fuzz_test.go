@@ -59,6 +59,8 @@ func FuzzCMapMapping(f *testing.F) {
 	f.Add([]byte("begincmap\nendcmap\n"), []byte("abc"))                      // no codespace at all
 	f.Add([]byte(zeroWidthCMapSrc), []byte("AB"))                             // "<>" declares no code at all
 	f.Add([]byte{}, []byte{})
+	f.Add(rangeBomb(maxCMapRangeCodes>>16+1, true), []byte("\x00\x41"))
+	f.Add(useCMapChain(), []byte("\x00\x41\x30\x42"))
 
 	f.Fuzz(func(t *testing.T, cmapSrc, codes []byte) {
 		if len(cmapSrc) > 1<<20 || len(codes) > 1<<16 {
