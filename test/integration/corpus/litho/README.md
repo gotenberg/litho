@@ -6333,8 +6333,15 @@ counts now match.
 Remediation breaks the root `/RoleMap` cycle at its standard type: it drops the
 `Sect` entry, so `Book` leads to `Sect` and a `Sect` stays one. Before, it sent
 `Book` to `P`, so at PDF/UA-2 the `Sect` of `rolecycle_ua2` read as a `P`. Both
-tools find every remediated `rolecycle_ua1` clean. The namespace cycles of
-`rolecycle_ua2` stay: no fixer edits a `/RoleMapNS`.
+tools find every remediated `rolecycle_ua1` clean. Remediation also breaks the
+`/RoleMapNS` loops an element closes, by the same rule: a loop through a
+standard type loses that type's entry, and a loop of private types has its
+closing entry sent to a standard namespace the chain has not left. `Box` and
+`Panel` of `rolecycle_ua2` now map to the PDF 2.0 `Div`, since neither element
+holds content directly, and the unused `Note` entry stays. Both tools find every
+remediated `rolecycle_ua2` clean at PDF/UA-2 and both WTPDF levels, default and
+aggressive; before, all six outputs kept `8.2.4/1`, `8.2.4/2` and `8.2.4/3` on
+both tools.
 
 ## Scope
 
