@@ -249,3 +249,17 @@ func TestInjectStandard14Widths_SymbolBuiltinNames(t *testing.T) {
 		t.Errorf("Symbol second width: got %g, want 411", w)
 	}
 }
+
+// TestInjectStandard14Widths_SymbolDifferences pins that a Symbol code a
+// /Differences entry moves to another glyph takes that glyph's width:
+// code 4 named phi is 521 units, theta at code 8 is 521.
+func TestInjectStandard14Widths_SymbolDifferences(t *testing.T) {
+	font := &Font{Encoding: map[byte]rune{4: 0x03C6, 8: 0x03B8}}
+	injectStandard14Widths(font, "Symbol")
+	if w := font.GlyphWidth(4); w != 521 {
+		t.Errorf("Symbol phi width: got %g, want 521", w)
+	}
+	if w := font.GlyphWidth(8); w != 521 {
+		t.Errorf("Symbol theta width: got %g, want 521", w)
+	}
+}

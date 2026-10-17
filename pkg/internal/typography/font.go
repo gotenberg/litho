@@ -9,8 +9,10 @@ import (
 	"maps"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -2388,7 +2390,7 @@ func injectStandard14Widths(font *Font, baseFont string) {
 		if glyphWidths == nil {
 			return
 		}
-		builtin, builtinUnicode := builtinGlyphNames(name)
+		builtin, builtinUnicode, builtinByRune := builtinGlyphNames(name)
 		for code := range 256 {
 			r, ok := font.Encoding[byte(code)] //nolint:gosec // code is 0-255
 			if !ok {
@@ -2403,16 +2405,21 @@ func injectStandard14Widths(font *Font, baseFont string) {
 				continue
 			}
 			// Symbol and ZapfDingbats name their glyphs outside the Adobe
-			// Glyph List ("minute", "a1"), so the name the code's character
-			// maps back to misses their metrics. The built-in encoding's
-			// name for the code holds them, when the code still shows that
-			// glyph (ISO 32000-1, 9.6.6.1 and Annex D.5, D.6).
-			if builtin != nil {
-				if n := builtin[code]; n != "" && builtinUnicode[n] == r {
-					if w, ok := glyphWidths[n]; ok {
-						widths[code] = float64(w)
-					}
-				}
+			// Glyph List ("phi", "minute", "a1"), so the name the code's
+			// character maps back to misses their metrics. The font's own
+			// glyph names hold them (ISO 32000-1, Annex D.5, D.6): the
+			// built-in encoding's name for the code when the code still
+			// shows that glyph, else the glyph that carries the character,
+			// as a /Differences entry naming it gives.
+			if builtin == nil {
+				continue
+			}
+			n := builtin[code]
+			if n == "" || builtinUnicode[n] != r {
+				n = builtinByRune[r]
+			}
+			if w, ok := glyphWidths[n]; ok {
+				widths[code] = float64(w)
 			}
 		}
 	}
@@ -2422,25 +2429,48 @@ func injectStandard14Widths(font *Font, baseFont string) {
 	font.Widths = widths
 }
 
-// builtinGlyphNames returns the built-in encoding of the Standard 14 font
-// name (code to glyph name) and the Unicode value of each of its glyphs, for
-// the two fonts whose glyph names the Adobe Glyph List does not carry:
-// Symbol and ZapfDingbats (ISO 32000-1, Annex D.5 and D.6). Other fonts
-// return nil maps.
+// symbolByRune and dingbatsByRune invert the glyph-name to Unicode maps of
+// Symbol and ZapfDingbats. Where two names carry one character, the first
+// in sorted order wins, so the lookup is deterministic.
+var (
+	symbolByRune   = sync.OnceValue(func() map[rune]string { return invertGlyphUnicode(encodings.SymbolGlyphsUnicode) })
+	dingbatsByRune = sync.OnceValue(func() map[rune]string { return invertGlyphUnicode(encodings.DingbatsGlyphsUnicode) })
+)
+
+func invertGlyphUnicode(m map[string]rune) map[rune]string {
+	names := slices.Sorted(maps.Keys(m))
+	out := make(map[rune]string, len(names))
+	for _, n := range names {
+		if _, ok := out[m[n]]; !ok {
+			out[m[n]] = n
+		}
+	}
+	return out
+}
+
+// builtinGlyphNames returns, for the two Standard 14 fonts whose glyph
+// names the Adobe Glyph List does not carry, Symbol and ZapfDingbats
+// (ISO 32000-1, Annex D.5 and D.6): the built-in encoding (code to glyph
+// name), the Unicode value of each glyph, and the glyph name of each
+// Unicode value. Other fonts return nil.
 //
 // # Corpus evidence
 //
 //   - govdocs thread_400_400739.pdf: Symbol's 0xA2 (minute, 247 units)
 //     read as 1000 units, so the space after the two primes of 35′′ fell
 //     11 points before the next word started.
-func builtinGlyphNames(name string) (*[256]string, map[string]rune) {
+//   - govdocs thread_400_400392.pdf: a Symbol font whose /Differences name
+//     phi and theta read both as 1000 units wide.
+//   - govdocs: with both lookups, 5 more files extract the words PDF.js
+//     does, none fewer, and 15 files come closer to it, none further.
+func builtinGlyphNames(name string) (*[256]string, map[string]rune, map[rune]string) {
 	switch name {
 	case "Symbol":
-		return &encodings.SymbolSetEncoding, encodings.SymbolGlyphsUnicode
+		return &encodings.SymbolSetEncoding, encodings.SymbolGlyphsUnicode, symbolByRune()
 	case "ZapfDingbats":
-		return &encodings.ZapfDingbatsEncoding, encodings.DingbatsGlyphsUnicode
+		return &encodings.ZapfDingbatsEncoding, encodings.DingbatsGlyphsUnicode, dingbatsByRune()
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 // extractType3GlyphWidth parses a Type 3 CharProc stream and returns the
