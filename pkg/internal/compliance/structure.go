@@ -245,6 +245,7 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// PDF/A level 'a': validate /RoleMap (§6.7.3.4 / §6.8.3.4).
 	if level == 'a' && !ua && structTreeRoot != nil {
 		checkRoleMap(ctx, doc, structTreeRoot, profile, &results)
+		checkCircularRoleMappings(ctx, doc, structTreeRoot, profile, &results)
 		checkUnmappedStructTypes(ctx, doc, structTreeRoot, profile, &results)
 	}
 
@@ -266,6 +267,7 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// Check /RoleMap for both PDF/UA-1 and PDF/UA-2 (legacy RoleMap
 		// can still appear in PDF/UA-2 files and must not have cycles).
 		checkRoleMap(ctx, doc, structTreeRoot, profile, &results)
+		checkCircularRoleMappings(ctx, doc, structTreeRoot, profile, &results)
 		walkStructureTree(ctx, doc, structTreeRoot, profile, &results)
 
 		// PDF/UA-2 §8.4.3: /ActualText (t02) and /Alt (t03) shall not contain PUA.
@@ -381,8 +383,8 @@ func legacyChainReachesStandard(mapping map[ast.PdfName]ast.PdfName, src ast.Pdf
 }
 
 // checkRoleMap validates the /RoleMap dictionary in the structure tree root.
-// Non-standard tags must map to standard types, standard tags must not be
-// remapped, and no circular mappings may exist.
+// Non-standard tags must map to standard types and standard tags must not be
+// remapped. Circular mappings are [checkCircularRoleMappings]'s.
 func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
 	rmObj, ok := structTreeRoot["RoleMap"]
 	if !ok {
@@ -463,24 +465,16 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		}
 	}
 
-	// Check for self-mappings (A→A) which are always circular. veraPDF scopes the
-	// circular-mapping rule to non-standard structure elements under PDF/A
-	// (6.7.3.4 / 6.8.3.4 t2, object SENonStandard) but to ALL structure elements
-	// under PDF/UA (ISO 14289-1 §7.1 t6 / ISO 14289-2 §8.2.4 t2, object
-	// PDStructElem). A standard type's identity self-map is therefore circular
-	// only under PDF/UA; PDF/A treats a standard-type RoleMap entry as inert.
-	for _, src := range srcNames {
-		if src != mapping[src] {
-			continue
-		}
-		if isStandardStructType(src, profile) && !IsPDFUA(profile) {
-			continue
-		}
-		*results = append(*results, failf(roleMapCircularRule(profile),
-			"circular mapping for %s", src)...)
+	// PDF/UA-2 is the one profile with no element walk for the non-standard
+	// rule: checkUnmappedStructTypes is not called for it, because its
+	// namespace-aware walk owns every element that declares a namespace. That
+	// walk skips namespace-less types, which resolve through the legacy
+	// /RoleMap, so they are answered here. A chain that closes on a visited
+	// type is the circular rule's, which [checkCircularRoleMappings] reports
+	// per element.
+	if PDFUAPart(profile) != 2 {
+		return
 	}
-
-	// Check non-standard types resolve to standard type (no circularity).
 	for _, src := range srcNames {
 		if ctx.Err() != nil {
 			return
@@ -488,20 +482,134 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 		if isStandardStructType(src, profile) {
 			continue
 		}
-		if resolveToStandard(src, mapping, results, profile) {
-			continue
-		}
-		// PDF/UA-2 is the one profile with no element walk for the
-		// non-standard rule: checkUnmappedStructTypes is not called for it,
-		// because its namespace-aware walk owns every element that declares a
-		// namespace. That walk skips namespace-less types, which resolve
-		// through the legacy /RoleMap, so they are answered here.
-		if IsPDFUA(profile) && PDFUAPart(profile) == 2 &&
-			classifyRoleChain(src, mapping, profile) == roleChainUnmapped {
+		if classifyRoleChain(src, mapping, profile) == roleChainUnmapped {
 			*results = append(*results, failf(roleMapNonStandardRule(profile),
 				"non-standard type %s is not mapped to a standard type", src)...)
 		}
 	}
+}
+
+// checkCircularRoleMappings validates the circular-mapping rule of every
+// tagged profile: ISO 14289-1, 7.1 t6, ISO 14289-2, 8.2.4 t2 and ISO
+// 19005-1/2/3, 6.8.3.4/6.7.3.4 t2. Under ISO 14289-2 it also validates 8.2.4
+// t3, which reads the same namespace chain. Each rule judges a structure
+// element, so each element that fails is reported once, and a mapping no
+// element uses has no element to answer for it.
+//
+// It mirrors veraPDF 1.30.2 (GFPDStructElem.getcircularMappingExist). An
+// element is in a circular mapping when following the structure tree root's
+// /RoleMap from its type name, whatever namespace the element declares,
+// revisits a name ([legacyRoleMapCycle]): the chain does not stop on a
+// standard type, so a Sect the map sends to Book and Book back to Sect is
+// circular, and so is an element whose chain only enters that cycle. Under
+// ISO 14289-2 an element is also in one when its namespace chain comes back
+// to the type it left a namespace from ([namespaceRoleLoop]). PDF/UA judges
+// every element (veraPDF's object is PDStructElem); PDF/A judges only an
+// element that reaches no standard type (SENonStandard, [legacyStandardType]).
+//
+// # Corpus evidence
+//
+//   - litho rolecycle_ua1: veraPDF reports 7.1 t6 on the Sect in a Sect, Book
+//     cycle and on the Item mapped into it, 8.2.4 t2 on both at PDF/UA-2, and
+//     6.7.3.4 t2 on the Sect alone at PDF/A-2a and PDF/A-3a; litho, judging
+//     only non-standard /RoleMap entries, reported none of them.
+//   - litho rolecycle_ua2: veraPDF reports 8.2.4 t2 on a Callout whose
+//     namespace chain returns to it through a second namespace and 8.2.4 t3 on
+//     a Panel whose chain stays in its own; litho reported t3 on every entry of
+//     both cycles and t2 on a self-mapped /RoleMapNS entry no element uses.
+func checkCircularRoleMappings(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
+	rule := roleMapCircularRule(profile)
+	if rule.Specification == "" {
+		return
+	}
+	roleMap := LoadRoleMap(ctx, doc, structTreeRoot)
+	ua := IsPDFUA(profile)
+	ua2 := PDFUAPart(profile) == 2
+
+	type verdict struct{ circular, sameNS bool }
+	memo := make(map[string]verdict)
+	walkStructureElements(ctx, doc, structTreeRoot, func(elem ast.PdfDict, _ string) {
+		sType, _ := document.ResolveName(ctx, doc, elem["S"])
+		if sType == "" {
+			return
+		}
+		if !ua {
+			if _, ok := legacyStandardType(roleMap, sType, profile); ok {
+				return
+			}
+		}
+		t := newStructTypeRef(ctx, doc, sType, elem["NS"])
+		key := t.key()
+		v, seen := memo[key]
+		if !seen {
+			v.circular = legacyRoleMapCycle(roleMap, sType)
+			if ua2 {
+				nsCircular, sameNS := namespaceRoleLoop(ctx, doc, t)
+				v.circular = v.circular || nsCircular
+				v.sameNS = sameNS
+			}
+			memo[key] = v
+		}
+		if v.circular {
+			*results = append(*results, failf(rule,
+				"circular mapping exists for structure type %s", sType)...)
+		}
+		if v.sameNS {
+			uri, _ := t.uri(ctx, doc)
+			*results = append(*results, failf(Rule_14289_2_8_2_4_t03,
+				"namespace %q: type %s is role mapped to another type in the same namespace",
+				uri, sType)...)
+		}
+	})
+}
+
+// legacyRoleMapCycle reports whether following the /RoleMap from name, one name
+// at a time, revisits a name. Every hop is taken, standard types included, as
+// veraPDF 1.30.2 reads a circular mapping (TaggedPDFRoleMapHelper
+// .circularMappingExist). Each hop either revisits a name or visits a new key
+// of mapping, so the walk ends within len(mapping)+1 hops.
+func legacyRoleMapCycle(mapping map[ast.PdfName]ast.PdfName, name ast.PdfName) bool {
+	visited := map[ast.PdfName]bool{name: true}
+	cur, ok := mapping[name]
+	for range len(mapping) + 1 {
+		if !ok {
+			return false
+		}
+		if visited[cur] {
+			return true
+		}
+		visited[cur] = true
+		cur, ok = mapping[cur]
+	}
+	return false
+}
+
+// legacyStandardType returns the standard type the /RoleMap gives name under a
+// PDF 1.7-based profile, and false when it gives none: what decides whether a
+// PDF/A element is veraPDF's SENonStandard (TaggedPDFRoleMapHelper
+// .getStandardType). A standard type the map does not map, or maps straight
+// back to itself, keeps its own type, and so does every standard type under
+// PDF/A-1, which judges the name alone. Otherwise the chain is followed to the
+// first standard type it meets (ISO 32000-1:2008, 14.7.3), and a chain that
+// ends, or closes on a visited name, before meeting one gives none: a Sect the
+// map sends to Book and Book back to Sect has no standard type.
+func legacyStandardType(mapping map[ast.PdfName]ast.PdfName, name ast.PdfName, profile string) (ast.PdfName, bool) {
+	cur, ok := mapping[name]
+	if (PDFAPart(profile) == 1 || !ok || cur == name) && isStandardStructType(name, profile) {
+		return name, true
+	}
+	visited := map[ast.PdfName]bool{name: true}
+	for range len(mapping) + 1 {
+		if !ok || visited[cur] {
+			return "", false
+		}
+		if isStandardStructType(cur, profile) {
+			return cur, true
+		}
+		visited[cur] = true
+		cur, ok = mapping[cur]
+	}
+	return "", false
 }
 
 // collectUsedStructTypes returns every type a structure element in the tree
@@ -591,26 +699,6 @@ func classifyRoleChain(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, pro
 	}
 
 	return roleChainDepth
-}
-
-// resolveToStandard follows the role map chain from src and returns true if it
-// terminates at a standard type. It reports a circular chain, which every
-// profile scopes to the map entry. It does NOT report a chain that ends at a
-// non-standard type: that rule is scoped to the structure element, so
-// [checkUnmappedStructTypes] owns it and reports once per element.
-func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, results *[]Violation, profile string) bool {
-	switch classifyRoleChain(src, mapping, profile) {
-	case roleChainStandard:
-		return true
-	case roleChainCircular:
-		*results = append(*results, failf(roleMapCircularRule(profile),
-			"circular mapping for %s", src)...)
-	case roleChainDepth:
-		*results = append(*results, failf(roleMapCircularRule(profile),
-			"role map chain for %s exceeds depth limit", src)...)
-	case roleChainUnmapped:
-	}
-	return false
 }
 
 // walkStructureTree recursively walks the structure tree to validate element

@@ -29,8 +29,10 @@ const defaultStandardNamespaceURI = "http://iso.org/pdf2/ssn"
 
 // checkNamespaceRoleMapping validates PDF/UA-2 §8.2.4:
 // - t1: all structure elements must belong to or be role-mapped to a standard namespace
-// - t3: within a namespace, types shall not be role-mapped to types in the same namespace
 // - t4: a standard type shall not be remapped to a non-standard one ([checkRemappedStandardTypes])
+//
+// t2 (no circular mapping) and t3 (no mapping within a namespace) are
+// [checkCircularRoleMappings]'s.
 func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
@@ -60,51 +62,14 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 		}
 	}
 
-	// t3: check each namespace's RoleMapNS. Follow chains through intermediate
-	// namespaces. If the final target resolves back to the source namespace
-	// (directly or indirectly), it's a same-namespace mapping violation.
-	var results []Violation
-	for _, nsObj := range nsArr {
-		nsDict, _ := document.ResolveDict(ctx, doc, nsObj)
-		if nsDict == nil {
-			continue
-		}
-		srcURI, _ := document.ResolveString(ctx, doc, nsDict["NS"])
-		rmns, _ := document.ResolveDict(ctx, doc, nsDict["RoleMapNS"])
-		if rmns == nil {
-			continue
-		}
-		for _, typeName := range sortedNames(rmns) {
-			mappingObj := rmns[typeName]
-			// A type mapped to ITSELF within the same namespace is a circular
-			// mapping (ISO 14289-2 §8.2.4 t2), which veraPDF reports distinctly
-			// from a same-namespace remap to a DIFFERENT type (t3). Detect the
-			// direct self-map first and skip the t3/t4 paths for it.
-			if targetArr, _ := document.ResolveArray(ctx, doc, mappingObj); len(targetArr) >= 2 {
-				targetType, _ := document.ResolveName(ctx, doc, targetArr[0])
-				targetNSDict, _ := document.ResolveDict(ctx, doc, targetArr[1])
-				targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
-				if string(targetType) == string(typeName) && string(targetURI) == string(srcURI) {
-					results = append(results, failf(Rule_14289_2_8_2_4_t02,
-						"namespace %q: type %s maps to itself", string(srcURI), typeName)...)
-					continue
-				}
-			}
-			// t03: same-namespace circular mapping (chain returns through a
-			// different type).
-			if roleMapChainReturnsSameNS(ctx, doc, string(srcURI), string(typeName), nsByURI) {
-				results = append(results, failf(Rule_14289_2_8_2_4_t03,
-					"namespace %q: type %s maps back to same namespace through chain",
-					string(srcURI), typeName)...)
-			}
-		}
-	}
+	// t2 and t3 judge each element's role-map chain, which
+	// checkCircularRoleMappings reads in one walk for every tagged profile.
 
 	// The legacy /RoleMap lets a non-standard type name (in any namespace) be
 	// mapped to a standard type, which veraPDF honours for §8.2.4 t1.
 	classicRoleMap := LoadRoleMap(ctx, doc, treeRoot)
 
-	results = append(results, checkRemappedStandardTypes(ctx, doc, treeRoot, classicRoleMap)...)
+	results := checkRemappedStandardTypes(ctx, doc, treeRoot, classicRoleMap)
 
 	// t1: walk structure tree, check each element resolves to a standard namespace.
 	// Elements with no explicit /NS use the first namespace in the array. When the
@@ -307,6 +272,51 @@ func reachesNoStandardType(ctx context.Context, doc *document.Document, t struct
 	return false
 }
 
+// namespaceRoleLoop follows the namespace role mapping of t, one /RoleMapNS hop
+// at a time (ISO 32000-2:2020, 14.8.6), and reports how it comes back to a
+// namespace it has left: circular when it arrives on the very type it last
+// left that namespace from, a cycle that ISO 14289-2, 8.2.4 t2 forbids, and
+// sameNS when the first such arrival is on a different type, which 8.2.4 t3
+// forbids (within a namespace, a type is not mapped to another type of it).
+// A direct self-map, a type of a namespace mapped to itself, is circular.
+//
+// It mirrors veraPDF 1.30.2 (TaggedPDFHelper.isCircularMappingExist and
+// getRoleMapToSameNamespaceTag), which follow the chain through /RoleMapNS
+// alone: a type in no namespace, or in the PDF 1.7 namespace without a
+// /RoleMapNS, has no equivalent here, since the legacy /RoleMap is read by
+// [legacyRoleMapCycle]. A chain that revisits a type without such an arrival,
+// or that ends, is neither. A chain longer than maxRoleMapNSDepth gets no
+// verdict, so the cap can hide a cycle but never invent one.
+func namespaceRoleLoop(ctx context.Context, doc *document.Document, t structTypeRef) (circular, sameNS bool) {
+	visited := map[string]bool{t.key(): true}
+	left := make(map[string]ast.PdfName)
+	prev := t
+	cur, ok := prev.equivalent(ctx, doc, nil)
+	for range maxRoleMapNSDepth {
+		if !ok {
+			return false, sameNS
+		}
+		if uri, has := prev.uri(ctx, doc); has {
+			left[uri] = prev.name
+		}
+		if uri, has := cur.uri(ctx, doc); has {
+			if from, back := left[uri]; back {
+				if from == cur.name {
+					return true, sameNS
+				}
+				sameNS = true
+			}
+		}
+		if visited[cur.key()] {
+			return false, sameNS
+		}
+		visited[cur.key()] = true
+		prev = cur
+		cur, ok = prev.equivalent(ctx, doc, nil)
+	}
+	return false, sameNS
+}
+
 // typeInLegacyRoleMap reports whether typeName is a key in the structure tree
 // root's legacy /RoleMap. Such a type IS mapped per ISO 32000-2 §14.8.4, even
 // when the mapping is circular or same-namespace; those defects are reported by
@@ -456,6 +466,9 @@ const (
 	nsChainStandard
 	// nsChainCircular: the chain revisits a (namespace, type) pair.
 	nsChainCircular
+	// nsChainDepth: the chain is longer than [maxRoleMapNSDepth] and gets no
+	// verdict.
+	nsChainDepth
 )
 
 // roleMapNSChainOutcome follows the /RoleMapNS chain starting at typeName in
@@ -464,12 +477,13 @@ const (
 // time, so a chain that only ever names types in non-standard namespaces never
 // reaches a standard structure type: that is ISO 14289-2 §8.2.4 t1
 // (veraPDF SENonStandard, isNotMappedToStandardType). Merely appearing as a
-// /RoleMapNS key does not make a type mapped. A chain that loops is reported by
-// §8.2.4 t2 instead, so it is classified separately and must not also trip t1.
+// /RoleMapNS key does not make a type mapped. A chain that loops reaches no
+// standard type either, and is classified separately because t1 spares only an
+// element §8.2.4 t2 reports ([elementInCircularMapping]).
 //
 // nsRoleMaps holds only namespaces that declare a /RoleMapNS, so a namespace
-// absent from it ends the chain. Exhausting [maxRoleMapNSDepth] counts as
-// circular: a chain that long is pathological, and treating it as unmapped
+// absent from it ends the chain. Exhausting [maxRoleMapNSDepth] gets no
+// verdict: a chain that long is pathological, and treating it as unmapped
 // would report t1 on input the depth guard, not the document, cut short.
 func roleMapNSChainOutcome(ctx context.Context, doc *document.Document, typeName ast.PdfName, nsURI string, nsRoleMaps map[string]ast.PdfDict) nsChainOutcome {
 	curType, curNS := typeName, nsURI
@@ -505,7 +519,40 @@ func roleMapNSChainOutcome(ctx context.Context, doc *document.Document, typeName
 		visited[key] = true
 		curType, curNS = targetType, string(targetURI)
 	}
-	return nsChainCircular
+	return nsChainDepth
+}
+
+// nsChainLeavesUnmapped reports whether a /RoleMapNS chain outcome leaves an
+// element unmapped for ISO 14289-2, 8.2.4 t1: veraPDF's isNotMappedToStandardType
+// holds for an element that reaches no standard type unless t2 reports it
+// (GFSENonStandard), so a chain that loops leaves an element unmapped when the
+// loop is not the circular mapping t2 reads, such as one that stays within a
+// namespace, which is t3's.
+func nsChainLeavesUnmapped(ctx context.Context, doc *document.Document, outcome nsChainOutcome, elem ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName) bool {
+	switch outcome {
+	case nsChainUnmapped:
+		return true
+	case nsChainCircular:
+		return !elementInCircularMapping(ctx, doc, elem, roleMap)
+	case nsChainStandard, nsChainDepth:
+	}
+	return false
+}
+
+// elementInCircularMapping reports whether ISO 14289-2, 8.2.4 t2 reports elem:
+// its type name closes a cycle in the legacy /RoleMap ([legacyRoleMapCycle]) or
+// its namespace chain returns to the type it left a namespace from
+// ([namespaceRoleLoop]).
+func elementInCircularMapping(ctx context.Context, doc *document.Document, elem ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName) bool {
+	sType, _ := document.ResolveName(ctx, doc, elem["S"])
+	if sType == "" {
+		return false
+	}
+	if legacyRoleMapCycle(roleMap, sType) {
+		return true
+	}
+	circular, _ := namespaceRoleLoop(ctx, doc, newStructTypeRef(ctx, doc, sType, elem["NS"]))
+	return circular
 }
 
 // roleMapChainReachesStandard reports whether typeName, declared in namespace
@@ -579,9 +626,11 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			// a STANDARD type, not merely when it carries no mapping: a
 			// /RoleMapNS chain that stays inside non-standard namespaces leaves
 			// the type unmapped for ISO 14289-2 §8.2.4 t1. A circular chain, by
-			// contrast, is reported by t02/t03, so it is excluded here to avoid a
-			// double-fire. The standard-namespace branch below reads the same way.
-			if roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps) == nsChainUnmapped &&
+			// contrast, is excluded when t02 reports the element, which is how
+			// veraPDF reads it ([nsChainLeavesUnmapped]). The standard-namespace
+			// branch below reads the same way.
+			outcome := roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps)
+			if nsChainLeavesUnmapped(ctx, doc, outcome, node, roleMap) &&
 				!legacyRoleMapMaps(roleMap, sType, declaredNSURI, nsRoleMaps) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in namespace %q is not mapped to a standard namespace",
@@ -601,9 +650,10 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			// Each namespace carries its own vocabulary (ISO 32000-2:2020,
 			// 14.8.6), so BlockQuote fails here in the PDF 2.0 namespace and
 			// FENote fails in the PDF 1.7 one.
-			// t01 fires when the type does not reach a standard type; a circular
-			// chain is reported by t02/t03, not t01, so exclude it here.
-			if roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps) == nsChainUnmapped &&
+			// t01 fires when the type does not reach a standard type; an element
+			// t02 reports is excluded.
+			outcome := roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps)
+			if nsChainLeavesUnmapped(ctx, doc, outcome, node, roleMap) &&
 				!legacyRoleMapMaps(roleMap, sType, declaredNSURI, nsRoleMaps) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in standard namespace %q is not a standard type and is not role-mapped",
@@ -1125,50 +1175,6 @@ func checkPDFUA2FENoteRefs(ctx context.Context, doc *document.Document, catalog 
 		}
 	}
 	return results
-}
-
-// roleMapChainReturnsSameNS follows a RoleMapNS chain starting from typeName
-// in srcNSURI and returns true if the chain eventually maps back to the
-// source namespace (directly or through intermediates).
-func roleMapChainReturnsSameNS(ctx context.Context, doc *document.Document, srcNSURI string, typeName string, nsByURI map[string]ast.PdfDict) bool {
-	currentType := typeName
-	currentNS := srcNSURI
-	visited := map[string]bool{currentNS + ":" + currentType: true}
-
-	for range 10 {
-		rmns, ok := nsByURI[currentNS]
-		if !ok {
-			return false
-		}
-		mappingObj, ok := rmns[ast.PdfName(currentType)]
-		if !ok {
-			return false
-		}
-		arr, _ := document.ResolveArray(ctx, doc, mappingObj)
-		if len(arr) < 2 {
-			return false
-		}
-		targetType, _ := document.ResolveName(ctx, doc, arr[0])
-		targetNSDict, _ := document.ResolveDict(ctx, doc, arr[1])
-		if targetNSDict == nil {
-			return false
-		}
-		targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
-		targetNS := string(targetURI)
-
-		if targetNS == srcNSURI {
-			return true // Chain resolves back to source namespace.
-		}
-
-		key := targetNS + ":" + string(targetType)
-		if visited[key] {
-			return false // Cycle without returning to source NS.
-		}
-		visited[key] = true
-		currentType = string(targetType)
-		currentNS = targetNS
-	}
-	return false
 }
 
 // checkAnnotArtifactFlags validates ISO 14289-2 §8.9.2.2: an annotation that is

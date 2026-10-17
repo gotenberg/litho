@@ -118,7 +118,13 @@ func TestCheckNamespaceRoleMapping_RoleMapNSChain(t *testing.T) {
 			"<< /Type /Namespace /NS (http://litho.example/nsA) /RoleMapNS "+rmnsA+" >>",
 			"<< /Type /Namespace /NS (http://litho.example/nsB) /RoleMapNS "+rmnsB+" >>",
 		)
-		return checkNamespaceRoleMapping(ctx, doc, cat, "PDF/UA-2")
+		results := checkNamespaceRoleMapping(ctx, doc, cat, "PDF/UA-2")
+		root, err := document.ResolveDict(ctx, doc, cat["StructTreeRoot"])
+		if err != nil {
+			t.Fatalf("resolving the structure tree root: %v", err)
+		}
+		checkCircularRoleMappings(ctx, doc, root, "PDF/UA-2", &results)
+		return results
 	}
 
 	t.Run("chain stays non-standard", func(t *testing.T) {
@@ -165,6 +171,38 @@ func TestCheckNamespaceRoleMapping_RoleMapNSChain(t *testing.T) {
 		got := build(t, "<< /Alpha [/Beta 7 0 R] >>", "<< /Beta [/Alpha 6 0 R] >>")
 		if hasRule(got, Rule_14289_2_8_2_4_t01) {
 			t.Error("circular /RoleMapNS chain: want no §8.2.4 t1 (cycle is t2)")
+		}
+		if !hasRule(got, Rule_14289_2_8_2_4_t02) {
+			t.Error("circular /RoleMapNS chain through a second namespace: want §8.2.4 t2")
+		}
+		if hasRule(got, Rule_14289_2_8_2_4_t03) {
+			t.Error("chain that returns to the type it left nsA from: want no §8.2.4 t3")
+		}
+	})
+
+	// A cycle that never leaves the element's namespace is the same-namespace
+	// mapping of t3, not the circular mapping of t2, so it leaves the element
+	// unmapped for t1 as well, as veraPDF reads it (GFSENonStandard).
+	t.Run("same namespace cycle is t3", func(t *testing.T) {
+		t.Parallel()
+		got := build(t, "<< /Alpha [/Gamma 6 0 R] /Gamma [/Alpha 6 0 R] >>", "<< /Zeta [/P 5 0 R] >>")
+		if !hasRule(got, Rule_14289_2_8_2_4_t03) {
+			t.Error("cycle within nsA: want §8.2.4 t3")
+		}
+		if hasRule(got, Rule_14289_2_8_2_4_t02) {
+			t.Error("cycle within nsA: want no §8.2.4 t2")
+		}
+		if !hasRule(got, Rule_14289_2_8_2_4_t01) {
+			t.Error("cycle within nsA: want §8.2.4 t1")
+		}
+	})
+
+	// The rules judge elements, so an entry no element uses reports nothing.
+	t.Run("unused self map reports nothing", func(t *testing.T) {
+		t.Parallel()
+		got := build(t, "<< /Alpha [/P 5 0 R] /Omega [/Omega 6 0 R] >>", "<< /Zeta [/P 5 0 R] >>")
+		if hasRule(got, Rule_14289_2_8_2_4_t02) {
+			t.Error("self map no element uses: want no §8.2.4 t2")
 		}
 	})
 }

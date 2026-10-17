@@ -442,86 +442,67 @@ func TestValidateListContainment(t *testing.T) {
 	}
 }
 
-func TestResolveToStandard(t *testing.T) {
+func TestLegacyRoleMapCycle(t *testing.T) {
 	t.Parallel()
 
-	t.Run("direct standard target", func(t *testing.T) {
-		t.Parallel()
-		mapping := map[ast.PdfName]ast.PdfName{
-			"MyTag": "P",
+	mapping := map[ast.PdfName]ast.PdfName{
+		"Sect":    "Book",
+		"Book":    "Sect",
+		"Item":    "Sect",
+		"Self":    "Self",
+		"Custom1": "Custom2",
+		"Custom2": "Table",
+	}
+	for _, tc := range []struct {
+		name ast.PdfName
+		want bool
+	}{
+		{"Sect", true},     // a standard type in a cycle: no stop on Sect
+		{"Item", true},     // a chain that enters the cycle
+		{"Self", true},     // a self-map
+		{"Custom1", false}, // ends on a type nothing maps
+		{"P", false},       // nothing maps it
+	} {
+		if got := legacyRoleMapCycle(mapping, tc.name); got != tc.want {
+			t.Errorf("legacyRoleMapCycle(%s) = %v, want %v", tc.name, got, tc.want)
 		}
-		var results []Violation
-		ok := resolveToStandard("MyTag", mapping, &results, "PDF/UA-1")
-		if !ok {
-			t.Error("expected true for mapping to standard type")
-		}
-		if len(results) != 0 {
-			t.Errorf("expected no violations, got %d", len(results))
-		}
-	})
+	}
+}
 
-	t.Run("chain to standard", func(t *testing.T) {
-		t.Parallel()
-		mapping := map[ast.PdfName]ast.PdfName{
-			"Custom1": "Custom2",
-			"Custom2": "Table",
-		}
-		var results []Violation
-		ok := resolveToStandard("Custom1", mapping, &results, "PDF/UA-1")
-		if !ok {
-			t.Error("expected true for chain resolving to standard type")
-		}
-		if len(results) != 0 {
-			t.Errorf("expected no violations, got %d", len(results))
-		}
-	})
+func TestLegacyStandardType(t *testing.T) {
+	t.Parallel()
 
-	t.Run("circular mapping", func(t *testing.T) {
-		t.Parallel()
-		mapping := map[ast.PdfName]ast.PdfName{
-			"A": "B",
-			"B": "A",
+	mapping := map[ast.PdfName]ast.PdfName{
+		"Sect":    "Book",
+		"Book":    "Sect",
+		"Item":    "Sect",
+		"LI":      "LI",
+		"Custom1": "Custom2",
+		"Custom2": "Table",
+		"A":       "B",
+		"B":       "A",
+	}
+	for _, tc := range []struct {
+		profile string
+		name    ast.PdfName
+		want    ast.PdfName
+		ok      bool
+	}{
+		{"PDF/A-2a", "Sect", "", false},        // the chain closes on Sect
+		{"PDF/A-1a", "Sect", "Sect", true},     // PDF/A-1 judges the name alone
+		{"PDF/A-2a", "Item", "Sect", true},     // the first standard type met
+		{"PDF/A-2a", "LI", "LI", true},         // a self-map keeps the type
+		{"PDF/A-2a", "Custom1", "Table", true}, // a chain to a standard type
+		{"PDF/A-2a", "A", "", false},           // a cycle of private types
+		{"PDF/A-2a", "P", "P", true},           // nothing maps it
+		{"PDF/A-2a", "Nope", "", false},        // a private type nothing maps
+	} {
+		got, ok := legacyStandardType(mapping, tc.name, tc.profile)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("%s: legacyStandardType(%s) = %s, %v, want %s, %v",
+				tc.profile, tc.name, got, ok, tc.want, tc.ok)
 		}
-		var results []Violation
-		ok := resolveToStandard("A", mapping, &results, "PDF/UA-1")
-		if ok {
-			t.Error("expected false for circular mapping")
-		}
-		if len(results) == 0 {
-			t.Error("expected violation for circular mapping")
-		}
-	})
-
-	// The non-standard rule is scoped to the structure element, so this
-	// function only answers the question: checkUnmappedStructTypes reports it,
-	// once per element rather than once per chain.
-	t.Run("unmapped non-standard", func(t *testing.T) {
-		t.Parallel()
-		mapping := map[ast.PdfName]ast.PdfName{
-			"Custom": "AlsoCustom",
-		}
-		var results []Violation
-		ok := resolveToStandard("Custom", mapping, &results, "PDF/UA-1")
-		if ok {
-			t.Error("expected false for unmapped non-standard type")
-		}
-		if len(results) != 0 {
-			t.Errorf("expected no violations from the chain walk, got %d", len(results))
-		}
-	})
-
-	t.Run("self-mapping handled by caller", func(t *testing.T) {
-		// resolveToStandard sees A→A as a circular mapping.
-		t.Parallel()
-		mapping := map[ast.PdfName]ast.PdfName{
-			"Custom": "Custom",
-		}
-		var results []Violation
-		ok := resolveToStandard("Custom", mapping, &results, "PDF/UA-1")
-		if ok {
-			t.Error("expected false for self-mapping")
-		}
-	})
+	}
 }
 
 // TestCheckRoleMap_StandardRemapTargetScope pins ISO 19005-2/3 §6.7.3.4 t3
@@ -574,6 +555,7 @@ func TestCheckRoleMap_UA1SelfMapNotStandardRemap(t *testing.T) {
 		var results []Violation
 		root := ast.PdfDict{"RoleMap": rm, "K": ast.PdfDict{"S": used}}
 		checkRoleMap(ctx, doc, root, "PDF/UA-1", &results)
+		checkCircularRoleMappings(ctx, doc, root, "PDF/UA-1", &results)
 		return results
 	}
 
@@ -605,6 +587,7 @@ func TestCheckRoleMap_StandardSelfMapCircularScope(t *testing.T) {
 		var results []Violation
 		root := ast.PdfDict{"RoleMap": rm, "K": ast.PdfDict{"S": used}}
 		checkRoleMap(ctx, doc, root, profile, &results)
+		checkCircularRoleMappings(ctx, doc, root, profile, &results)
 		return results
 	}
 
@@ -619,5 +602,28 @@ func TestCheckRoleMap_StandardSelfMapCircularScope(t *testing.T) {
 	nonStdSelf := ast.PdfDict{"Foo": ast.PdfName("Foo")}
 	if got := mk("PDF/A-2a", nonStdSelf, ast.PdfName("Foo")); !hasRule(got, Rule_19005_2_6_7_3_4_t02) {
 		t.Errorf("PDF/A-2a: non-standard self-map /Foo->/Foo must fire §6.7.3.4 t2, got %v", got)
+	}
+
+	// A standard type in a cycle through a private type reaches no standard
+	// type, so PDF/A judges it too; PDF/A-1 judges the name alone, and an
+	// element whose chain stops on a standard type before the cycle is no
+	// SENonStandard. PDF/UA judges both elements.
+	cycle := ast.PdfDict{"Sect": ast.PdfName("Book"), "Book": ast.PdfName("Sect"), "Item": ast.PdfName("Sect")}
+	if got := mk("PDF/A-2a", cycle, ast.PdfName("Sect")); !hasRule(got, Rule_19005_2_6_7_3_4_t02) {
+		t.Errorf("PDF/A-2a: /Sect in a /Sect->/Book->/Sect cycle must fire §6.7.3.4 t2, got %v", got)
+	}
+	if got := mk("PDF/A-1a", cycle, ast.PdfName("Sect")); hasRule(got, Rule_19005_1_6_8_3_4_t02) {
+		t.Errorf("PDF/A-1a: /Sect keeps its own type and must NOT fire §6.8.3.4 t2, got %v", got)
+	}
+	if got := mk("PDF/A-2a", cycle, ast.PdfName("Item")); hasRule(got, Rule_19005_2_6_7_3_4_t02) {
+		t.Errorf("PDF/A-2a: /Item reaches /Sect and must NOT fire §6.7.3.4 t2, got %v", got)
+	}
+	for _, used := range []ast.PdfName{"Sect", "Item"} {
+		if got := mk("PDF/UA-1", cycle, used); !hasRule(got, Rule_14289_1_7_1_t06) {
+			t.Errorf("PDF/UA-1: /%s on a /Sect->/Book->/Sect cycle must fire §7.1 t6, got %v", used, got)
+		}
+		if got := mk("PDF/UA-2", cycle, used); !hasRule(got, Rule_14289_2_8_2_4_t02) {
+			t.Errorf("PDF/UA-2: /%s on a /Sect->/Book->/Sect cycle must fire §8.2.4 t2, got %v", used, got)
+		}
 	}
 }
