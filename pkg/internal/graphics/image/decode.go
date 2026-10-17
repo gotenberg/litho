@@ -1465,6 +1465,9 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	if jpxCol.ycc && !bool(isMask) {
 		yccToRGB(decodedData, jpxCol.neutral)
 	}
+	if jpxCol.convert != nil && !bool(isMask) {
+		jpxCol.convert(decodedData)
+	}
 
 	// Resolved before the samples are unpacked, because an indexed image holds
 	// ONE sample per pixel whatever its base space is, while resolveColorSpace

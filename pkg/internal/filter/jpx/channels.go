@@ -6,14 +6,18 @@ import (
 	"slices"
 )
 
-// Enumerated colour spaces, T.800 Table I.10. ISO/IEC 15444-2 adds CMYK (12)
-// and CIEJab (19), which ISO 32000-1, 7.4.9 admits in a PDF.
+// Enumerated colour spaces, T.800 Table I.10. ISO/IEC 15444-2, Table M.25
+// adds the others, which ISO 32000-1, 7.4.9 admits in a PDF.
 const (
 	ColourCMYK      = 12
+	ColourCIELab    = 14
 	ColourSRGB      = 16
 	ColourGreyscale = 17
 	ColourSYCC      = 18
 	ColourCIEJab    = 19
+	ColourESRGB     = 20
+	ColourROMMRGB   = 21
+	ColourESYCC     = 24
 )
 
 // Colour is one colour specification of the image (T.800, I.5.3.3).
@@ -23,6 +27,44 @@ type Colour struct {
 	Enumerated int
 	// ICC is the profile of an ICC specification, and nil otherwise.
 	ICC []byte
+	// Lab holds the parameters of an enumerated CIELab specification, and is
+	// nil otherwise.
+	Lab *LabParams
+}
+
+// LabParams are the EP fields of an enumerated CIELab colour specification
+// (ISO/IEC 15444-2, M.11.7.4.1): the range and offset of L*, a* and b*, and
+// the illuminant. A box that carries no EP fields takes the defaults of
+// ITU-T T.42, which [DefaultLab] fills in.
+type LabParams struct {
+	// Range and Offset are RL, RA, RB and OL, OA, OB. A sample v of a p-bit
+	// channel stands for Range * (v - Offset) / (2^p - 1).
+	Range, Offset [3]float64
+	// Illuminant is IL: 0x00443530 ("D50") or another four-byte code.
+	Illuminant uint32
+	// Default marks a box without EP fields, whose offsets depend on each
+	// channel's depth.
+	Default bool
+}
+
+// IlluminantD50 and IlluminantD65 are the IL codes of CIE illuminants D50 and
+// D65 (ISO/IEC 15444-2, M.11.7.4.1).
+const (
+	IlluminantD50 = 0x00443530
+	IlluminantD65 = 0x00443635
+)
+
+// DefaultLab returns the parameters of a CIELab specification without EP
+// fields, for channels of the given depths: L* from 0 to 100, a* from -85 to
+// 85 and b* from -75 to 125 under D50, the defaults of ITU-T T.42 that
+// ISO/IEC 15444-2, M.11.7.4.1 takes.
+func DefaultLab(depths [3]int) LabParams {
+	pow := func(n int) float64 { return float64(int64(1) << max(n, 0)) }
+	return LabParams{
+		Range:      [3]float64{100, 170, 200},
+		Offset:     [3]float64{0, pow(depths[1] - 1), pow(depths[2]-2) + pow(depths[2]-3)},
+		Illuminant: IlluminantD50,
+	}
 }
 
 // rankColours returns the colour specifications in the order ISO 32000-1,
@@ -44,6 +86,7 @@ func rankColours(specs []colourSpec) []Colour {
 		switch c.method {
 		case methodEnumerated:
 			colours[i].Enumerated = int(c.enumerated)
+			colours[i].Lab = c.lab
 		case methodICC, methodAnyICC:
 			colours[i].ICC = c.profile
 		}
@@ -132,6 +175,21 @@ func (img *Image) Channels() ([]Channel, error) {
 		chs[d.channel].Kind, chs[d.channel].Association = d.kind, d.association
 	}
 	return chs, nil
+}
+
+// Signed reports whether the values channel ch carries are signed: its
+// palette column's when it looks one up, else its component's.
+func (img *Image) Signed(ch Channel) bool {
+	if ch.Component < 0 || ch.Component >= len(img.Components) {
+		return false
+	}
+	if ch.PaletteColumn < 0 {
+		return img.Components[ch.Component].Signed
+	}
+	if img.header == nil || img.header.palette == nil || ch.PaletteColumn >= len(img.header.palette.columns) {
+		return false
+	}
+	return img.header.palette.columns[ch.PaletteColumn].signed
 }
 
 // Depth returns the bit depth of the values channel ch carries: its palette

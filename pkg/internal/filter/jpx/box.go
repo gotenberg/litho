@@ -106,7 +106,14 @@ type colourSpec struct {
 	enumerated uint32
 	// profile is the ICC profile when method is methodICC or methodAnyICC.
 	profile []byte
+	// lab holds the EP fields of an enumerated CIELab specification.
+	lab *LabParams
 }
+
+// labEPBytes is the size of the EP fields of an enumerated CIELab
+// specification: RL, OL, RA, OA, RB, OB and IL, four bytes each (ISO/IEC
+// 15444-2, M.11.7.4.1).
+const labEPBytes = 7 * 4
 
 // palette is a Palette box (T.800, I.5.3.4): entries rows of one value per
 // column.
@@ -274,12 +281,32 @@ func readColour(body []byte) (colourSpec, bool, error) {
 			return colourSpec{}, false, fmt.Errorf("%w: enumerated Colour Specification box of %d bytes", ErrMalformed, len(body))
 		}
 		c.enumerated = binary.BigEndian.Uint32(body[3:])
+		if c.enumerated == ColourCIELab {
+			c.lab = readLabEP(body[7:])
+		}
 	case methodICC, methodAnyICC:
 		c.profile = body[3:]
 	default:
 		return colourSpec{}, false, nil
 	}
 	return c, true, nil
+}
+
+// readLabEP reads the EP fields of an enumerated CIELab specification
+// (ISO/IEC 15444-2, M.11.7.4.1). A box without them takes the defaults, whose
+// offsets depend on the channels' depths and are filled in by the reader of
+// the samples (see [DefaultLab]). A box holding some but not all of them
+// states no parameters a reader could apply and is read as holding none.
+func readLabEP(ep []byte) *LabParams {
+	if len(ep) < labEPBytes {
+		return &LabParams{Default: true, Illuminant: IlluminantD50}
+	}
+	u := func(i int) float64 { return float64(binary.BigEndian.Uint32(ep[4*i:])) }
+	return &LabParams{
+		Range:      [3]float64{u(0), u(2), u(4)},
+		Offset:     [3]float64{u(1), u(3), u(5)},
+		Illuminant: binary.BigEndian.Uint32(ep[24:]),
+	}
 }
 
 // maxPaletteEntries is the largest NE a Palette box may state (T.800, Table
