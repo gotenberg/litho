@@ -54,6 +54,9 @@ func StampImage(
 		return err
 	}
 	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
+	if err := stampPagesInRange(pages, pageNums); err != nil {
+		return err
+	}
 
 	var (
 		imgStream ast.PdfStream

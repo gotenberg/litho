@@ -829,7 +829,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		fontSize := fs.Float64("font-size", 36, "Font size")
 		x := fs.Float64("x", 0, "X position")
 		y := fs.Float64("y", 0, "Y position")
-		pages := fs.String("pages", "", "Page range")
+		pages := fs.String("pages", "", "Page range (default: all)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
@@ -889,7 +889,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		y := fs.Float64("y", 0, "Y position")
 		width := fs.Float64("width", 0, "Width")
 		height := fs.Float64("height", 0, "Height")
-		pages := fs.String("pages", "", "Page range")
+		pages := fs.String("pages", "", "Page range (default: all)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}

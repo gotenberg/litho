@@ -61,6 +61,9 @@ func StampText(
 		return err
 	}
 	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
+	if err := stampPagesInRange(pages, pageNums); err != nil {
+		return err
+	}
 
 	fontSize := opts.FontSize
 	if fontSize == 0 {

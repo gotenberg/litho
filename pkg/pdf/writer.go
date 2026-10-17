@@ -1680,7 +1680,9 @@ func (w *Writer) FlattenForm() {
 // stamp is queued: pages inserted on it before are stamped, pages deleted on
 // it before are not. A diagonal, semi-transparent watermark is a [TextStamp]
 // with a Rotation and an Opacity below 1. Uses incremental update. The
-// mutation is queued and applied when [Writer.WriteTo] is called.
+// mutation is queued and applied when [Writer.WriteTo] is called, which
+// returns [ErrInvalidPageNumber] and writes nothing when a page named lies
+// outside the Reader's pages.
 //
 // The stamp is marked as an /Artifact, which ISO 32000-1, 14.8.2.2 names a
 // watermark to be and which keeps a tagged document conformant with
@@ -1718,7 +1720,8 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 // which name the Reader's pages. If no pages are specified, the stamp is
 // applied to every page the Writer holds when it is queued, as
 // [Writer.StampText] describes. Uses incremental update. The mutation is
-// queued and applied when [Writer.WriteTo] is called.
+// queued and applied when [Writer.WriteTo] is called, which refuses a page out
+// of range as [Writer.StampText] does.
 //
 // The stamp is marked as an /Artifact, so it does not cost a tagged document
 // its ISO 14289-1, 7.1 conformance.
@@ -1757,7 +1760,9 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 // 1-based pages, which name the Reader's pages. If no pages are specified, the
 // stamp is applied to every page the Writer holds when it is queued, as
 // [Writer.StampText] describes. Uses incremental update. The mutation is
-// queued and applied when [Writer.WriteTo] is called.
+// queued and applied when [Writer.WriteTo] is called, which refuses a page out
+// of range as [Writer.StampText] does, and a [PDFStamp.Page] outside the
+// source's pages the same way.
 //
 // The stamp is marked as an /Artifact, so it does not cost a tagged document
 // its ISO 14289-1, 7.1 conformance, and any text it carries is omitted from

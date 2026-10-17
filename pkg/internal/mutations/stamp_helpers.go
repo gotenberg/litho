@@ -63,6 +63,22 @@ func stampOriginShift(page *document.Page) (dx, dy float64, ok bool) {
 	return x0, y0, true
 }
 
+// stampPagesInRange refuses a stamp that names a page outside [1,
+// len(pages)], as every other page operation does. A stamp used to skip such a
+// page with a debug log, so a caller that asked for page 9 of a five-page
+// document got an unstamped output and no error. It runs before a builder
+// allocates anything, so a refused stamp leaves nothing behind in the
+// allocator. An empty pageNums never reaches here empty: [pagesToEdit] expands
+// it to every staged page.
+func stampPagesInRange(pages []*document.Page, pageNums []int) error {
+	for _, pageNum := range pageNums {
+		if pageNum < 1 || pageNum > len(pages) {
+			return fmt.Errorf("stamping page %d: %w (document has %d pages)", pageNum, ErrInvalidPageNumber, len(pages))
+		}
+	}
+	return nil
+}
+
 // applyStampToPages appends a content stream of operations to each selected
 // page, and merges the given named resources into each page's /Resources
 // dictionary. All updates for a page are applied in a single AllocAt call so
@@ -113,12 +129,11 @@ func applyStampToPages(
 	brackets := newContentBrackets(alloc)
 
 	for _, pageNum := range pageNums {
+		// The builders refuse an out-of-range page before allocating anything
+		// (see [stampPagesInRange]); this keeps the index below safe for a
+		// caller that skipped them.
 		if pageNum < 1 || pageNum > len(pages) {
-			doc.Logger.Debug("skipping out-of-range stamp page",
-				slog.Int("page", pageNum),
-				slog.Int("total", len(pages)),
-			)
-			continue
+			return fmt.Errorf("stamping page %d: %w (document has %d pages)", pageNum, ErrInvalidPageNumber, len(pages))
 		}
 		page := pages[pageNum-1]
 

@@ -73,8 +73,9 @@ var (
 	// ErrInvalidPageNumber is returned when a page number is outside the
 	// valid range [1, pageCount]: by the [Reader] methods that take one, by
 	// [Writer.Redact] and [Split], and by [Writer.WriteTo] for a page
-	// [Writer.RotatePages], [Writer.DeletePages] or [Writer.InsertPages]
-	// named, or an insertion position outside [0, pageCount].
+	// [Writer.RotatePages], [Writer.DeletePages], [Writer.InsertPages],
+	// [Writer.StampText], [Writer.StampImage] or [Writer.StampPDF] named, or
+	// an insertion position outside [0, pageCount].
 	ErrInvalidPageNumber = mutations.ErrInvalidPageNumber
 
 	// ErrInvalidRotation is returned when a rotation value is not a

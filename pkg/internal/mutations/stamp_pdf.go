@@ -54,14 +54,17 @@ func StampPDF(
 		return fmt.Errorf("pdf stamp: source has no pages")
 	}
 	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
+	if err := stampPagesInRange(pages, pageNums); err != nil {
+		return err
+	}
 
 	pageIdx := opts.Page - 1
 	if opts.Page == 0 {
 		pageIdx = 0
 	}
 	if pageIdx < 0 || pageIdx >= len(opts.SourcePages) {
-		return fmt.Errorf("pdf stamp: page %d out of range (source has %d)",
-			opts.Page, len(opts.SourcePages))
+		return fmt.Errorf("pdf stamp: source page %d: %w (source has %d pages)",
+			opts.Page, ErrInvalidPageNumber, len(opts.SourcePages))
 	}
 
 	srcPage := opts.SourcePages[pageIdx]
