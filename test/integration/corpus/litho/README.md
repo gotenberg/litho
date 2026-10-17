@@ -204,6 +204,8 @@ one deliberately rather than diffing it against a fresh build.
 | `redactcopies_2b.pdf`  | PDF/A-2b     | Copies of page text no decoded value spells                      |
 | `rolecycle_ua1.pdf`    | PDF/UA-1     | A standard type in a `/RoleMap` cycle, and a type mapped into it |
 | `rolecycle_ua2.pdf`    | PDF/UA-2     | Role-map cycles through the root `/RoleMap` and namespaces       |
+| `type0nodesc_2b.pdf`   | PDF/A-2b     | Type 0 fonts whose `/DescendantFonts` holds no dictionary        |
+| `fnlimits_1b.pdf`      | PDF/A-1b     | Type 4 functions past the limits, reached and unreached          |
 
 ### Must-not-fire controls
 
@@ -443,6 +445,10 @@ violation but is exempt, so a firing is a false positive.
 | `rolecycle_ua1`                           | `Item` at PDF/A-2a: mapped into a cycle, its chain stops on `Sect`     | ISO 19005-2, 6.7.3.4 t2      |
 | `rolecycle_ua2`                           | A PDF 2.0 `/RoleMapNS` self-map of `Note`, which no element uses       | ISO 14289-2, 8.2.4 t2        |
 | `rolecycle_ua2`                           | `Panel`: a `/RoleMapNS` cycle that never leaves its namespace          | ISO 14289-2, 8.2.4 t2        |
+| `type0nodesc_2b`                          | `C1`: a Type 0 font over a CIDFontType2 dictionary                     | ISO 32000-1, Table 121       |
+| `fnlimits_1b`                             | `C`: a type 4 function past both limits as a shading's `/Function`     | GFPDShading, veraPDF 1.30    |
+| `fnlimits_1b`                             | `F`: a type 4 function past both limits behind an unused Separation    | ISO 19005-1, 6.1.12          |
+| `fnlimits_1b`                             | `/Two`: a direct stitching tint transform compared with itself         | ISO 19005-2, 6.2.4.4 t2      |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -506,6 +512,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fenote_ua2.pdf`       | 4    | 3    | 5    | 4    | 4    | 5    | 4    | 4    | 3   | 3    | 4    | 5    | 6    |
 | `fieldkids_2b.pdf`     | 6    | 3    | 5    | 2    | 3    | 6    | 3    | 4    | 5   | 5    | 6    | 8    | 6    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
+| `fnlimits_1b.pdf`      | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 5   | 5    | 6    | 6    | 6    |
 | `fontclaims_2b.pdf`    | 9    | 6    | 9    | 6    | 7    | 9    | 6    | 7    | 7   | 7    | 8    | 11   | 11   |
 | `fontcopies_2b.pdf`    | 14   | 11   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 13   | 13   |
 | `fontdict_2b.pdf`      | 9    | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 8   | 8    | 9    | 7    | 7    |
@@ -594,6 +601,7 @@ which are covered under [Known divergences](#known-divergences).
 | `treekids_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
+| `type0nodesc_2b.pdf`   | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 7    | 7    |
 | `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
@@ -6342,6 +6350,56 @@ holds content directly, and the unused `Note` entry stays. Both tools find every
 remediated `rolecycle_ua2` clean at PDF/UA-2 and both WTPDF levels, default and
 aggressive; before, all six outputs kept `8.2.4/1`, `8.2.4/2` and `8.2.4/3` on
 both tools.
+
+### `type0nodesc_2b.pdf`
+
+veraPDF builds a Type 0 font over its descendant's dictionary and reads the
+font's `/Type` and `/BaseFont` there (PDType0Font.getDescendantCOSDictionary,
+veraPDF 1.30.2). When the first entry of `/DescendantFonts` is no dictionary, or
+the entry is absent, empty or not an array, it substitutes an empty dictionary,
+so the font fails the `/Type` test (`6.3.2/1`, `6.2.11.2/1`, `6.2.10.2/1`) as
+well as the `/BaseFont` test (`t3`), although its own dictionary writes both.
+litho stated `t3` alone. The file shows one code through each of five fonts:
+
+| Font | `/DescendantFonts`                    | Verdict             |
+| ---- | ------------------------------------- | ------------------- |
+| `C1` | an array of a CIDFontType2 dictionary | silent, the control |
+| `N1` | `[ null ]`                            | `t1` and `t3`       |
+| `N2` | absent                                | `t1` and `t3`       |
+| `N3` | `[ ]`                                 | `t1` and `t3`       |
+| `N4` | a CIDFontType2 dictionary, no array   | `t1` and `t3`       |
+
+litho and veraPDF 1.30.2 report the same rule set in all thirteen cells, and
+both fail `t1` and `t3` four times at every PDF/A part. Over every corpus only
+`pdfjs` `issue12823`, outside the gated corpora, writes such a font.
+
+### `fnlimits_1b.pdf`
+
+A type 4 function writes its program as a stream of numbers (ISO 32000-1,
+7.10.5), which the implementation limits of ISO 19005-1, 6.1.12 and ISO
+19005-2, 6.1.13 constrain like every other number. veraPDF parses the program
+of every type 4 function its model reaches, one CosInteger or CosReal per
+number, and reaches a function through a Separation or DeviceN tint transform,
+a graphics state's `/TR` and `/TR2`, a halftone's `/TransferFunction` and a
+stitching function's `/Functions`, but never through a shading's `/Function`.
+litho judged no function program at all.
+
+| Function | Reached as                                                     | Verdict at PDF/A-1b |
+| -------- | -------------------------------------------------------------- | ------------------- |
+| `A`      | tint transform of the Separation `/Spot` that `cs` selects     | `t1` and `t2`       |
+| `B`      | `/TransferFunction` of the `/Spot` component of a type 5 `/HT` | `t2`                |
+| `E`      | inside the direct stitching tint transform of `/Two`           | `t1`                |
+| `C`      | `/Function` of the shading `sh` paints                         | silent              |
+| `F`      | tint transform of a Separation nothing selects                 | silent              |
+
+Each counts once for the whole document. At PDF/A-2b and PDF/A-3b only `A` and
+`E` fail, the integer limit; part 4 states no limit. The direct stitching tint
+transform of `/Two` also exposed a false `6.2.4.4/2`: litho compared it with
+itself at every link and found it different, since the comparison read no
+stream, so the one Separation failed three times. litho and veraPDF 1.30.2 now
+report the same rule set in all thirteen cells, and the same `6.1.12` and
+`6.1.13` counts. No corpus file holds a type 4 function past a limit, nor a
+direct tint transform naming another object.
 
 ## Scope
 
