@@ -111,8 +111,16 @@ func New(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*Funct
 	if len(f.domain)/2 > maxInputs {
 		return nil, fmt.Errorf("%w: /Domain declares more than %d inputs", ErrMalformed, maxInputs)
 	}
-	// /Range is required for types 0 and 4 and optional for type 2.
-	f.rng, _ = floats(ctx, doc, dict["Range"])
+	// /Range is required for types 0 and 4 and optional for type 2, so an
+	// absent one stays nil and the type's own initialiser decides. A present
+	// one must be an array of numbers (ISO 32000-1, 7.10.1, Table 38): a
+	// malformed /Range is reported rather than read as absent, which would
+	// let a type 2 function guess its output count from /C0.
+	if rangeObj, present := dict["Range"]; present {
+		if f.rng, err = floats(ctx, doc, rangeObj); err != nil {
+			return nil, fmt.Errorf("%w: /Range: %w", ErrMalformed, err)
+		}
+	}
 	if len(f.rng)%2 != 0 {
 		return nil, fmt.Errorf("%w: /Range does not hold pairs", ErrMalformed)
 	}

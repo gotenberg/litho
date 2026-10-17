@@ -288,6 +288,8 @@ func TestMalformedFunctionsAreRefused(t *testing.T) {
 		{"type 0 as a dict", "<< /FunctionType 0 /Domain [0 1] /Range [0 1] /Size [2] /BitsPerSample 8 >>"},
 		{"type 2 without /N", "<< /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] >>"},
 		{"type 2 mismatched /C0 and /C1", "<< /FunctionType 2 /Domain [0 1] /C0 [0 0] /C1 [1] /N 1 >>"},
+		{"/Range holding a name", "<< /FunctionType 2 /Domain [0 1] /Range [0 /One] /N 1 >>"},
+		{"/Range not an array", "<< /FunctionType 2 /Domain [0 1] /Range 1 /N 1 >>"},
 	} {
 		ctx, doc := funcPDF(t, []string{
 			"<< /Type /Catalog /Pages 2 0 R >>",
