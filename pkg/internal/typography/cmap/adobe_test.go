@@ -127,3 +127,47 @@ func TestLoadPredefinedCMap_NewlyCovered(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadPredefinedCMap_UnifiedIdeograph is a regression guard: the
+// CID→Unicode side used to invert the Uni*-UCS2-H CMaps, keeping the lowest
+// code point that selects a CID, so <4E00> came back as U+2F00 KANGXI RADICAL
+// ONE through UniGB-UCS2-H and UniJIS-UCS2-H. The collection's UCS2 CMap
+// (ISO 32000-1, 9.10.2) names the ideograph, and a code selecting the same
+// CID through the radical maps to it too, as PDF.js reads it.
+func TestLoadPredefinedCMap_UnifiedIdeograph(t *testing.T) {
+	t.Parallel()
+	for _, enc := range []string{"UniGB-UCS2-H", "UniGB-UCS2-V", "UniGB-UTF16-H", "UniCNS-UCS2-H", "UniJIS-UCS2-H", "UniKS-UCS2-H"} {
+		t.Run(enc, func(t *testing.T) {
+			t.Parallel()
+			cm := LoadPredefinedCMap(enc)
+			if cm == nil {
+				t.Fatalf("LoadPredefinedCMap(%q) returned nil", enc)
+			}
+			if _, got, ok := cm.Map([]byte{0x4E, 0x00}); !ok || got != "一" {
+				t.Errorf("<4E00> maps to %q (%v), want U+4E00", got, ok)
+			}
+		})
+	}
+	if _, got, _ := LoadPredefinedCMap("UniGB-UCS2-H").Map([]byte{0x2F, 0x00}); got != "一" {
+		t.Errorf("UniGB-UCS2-H <2F00> maps to %q, want U+4E00, the character of the CID it selects", got)
+	}
+}
+
+// TestAdobeCIDToUnicode_Sequences checks the two kinds of CID the rune map
+// leaves out and the string map keeps: one mapped to a sequence, Adobe-Japan1
+// CID 11136 to "89", and CID 0, mapped to U+FFFD.
+func TestAdobeCIDToUnicode_Sequences(t *testing.T) {
+	t.Parallel()
+	if got := adobeCIDToUnicodeStrings("Japan1")[11136]; got != "89" {
+		t.Errorf("Japan1 CID 11136: got %q, want \"89\"", got)
+	}
+	if r, ok := AdobeCIDToUnicode("Japan1")[11136]; ok {
+		t.Errorf("Japan1 CID 11136 in the rune map as U+%04X, want absent", r)
+	}
+	if got := adobeCIDToUnicodeStrings("GB1")[0]; got != "�" {
+		t.Errorf("GB1 CID 0: got %q, want U+FFFD", got)
+	}
+	if r, ok := AdobeCIDToUnicode("GB1")[0]; ok {
+		t.Errorf("GB1 CID 0 in the rune map as U+%04X, want absent", r)
+	}
+}

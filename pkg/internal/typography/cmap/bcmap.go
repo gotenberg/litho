@@ -1,9 +1,6 @@
 package cmap
 
-import (
-	"fmt"
-	"io"
-)
+import "io"
 
 // ucs2DataSize is the fixed data size (bytes minus 1) for UCS-2 keys in
 // bfchar/bfrange records. A value of 1 means 2-byte (UCS-2) character codes.
@@ -80,75 +77,6 @@ func (s *bcmapStream) skipString() error {
 		}
 	}
 	return nil
-}
-
-// parseBCMapCIDToUnicode parses a binary CMap (.bcmap) file containing
-// Unicode→CID mappings (e.g., UniJIS-UCS2-H) and returns the inverted
-// CID→Unicode map. When multiple Unicode values map to the same CID, the
-// lowest Unicode value wins.
-func parseBCMapCIDToUnicode(data []byte) (map[int]rune, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("empty bcmap data")
-	}
-
-	s := &bcmapStream{data: data, pos: 1} // skip header byte (type<<1 | wmode)
-	uni2cid := make(map[int]int, 16384)   //nolint:mnd // typical CMap size
-
-	for s.pos < len(s.data) {
-		tag, err := s.readByte()
-		if err != nil {
-			break
-		}
-
-		recType := int(tag >> 5)
-
-		// Metadata records (type 7): comment (0xE0) or usecmap (0xE1).
-		if recType == 7 {
-			if err := s.skipString(); err != nil {
-				return nil, fmt.Errorf("bcmap metadata: %w", err)
-			}
-			continue
-		}
-
-		seq := tag&0x10 != 0
-		dataSize := int(tag & 0x0F)
-
-		count, err := s.readNumber()
-		if err != nil {
-			return nil, fmt.Errorf("bcmap record count: %w", err)
-		}
-
-		switch recType {
-		case 0:
-			err = s.advanceCodespace(count, dataSize)
-		case 1:
-			err = s.advanceNotdef(count, dataSize)
-		case 2:
-			err = s.collectCIDChar(count, dataSize, seq, uni2cid)
-		case 3:
-			err = s.collectCIDRange(count, dataSize, seq, uni2cid)
-		case 4:
-			err = s.advanceBFChar(count, dataSize, seq)
-		case 5:
-			err = s.advanceBFRange(count, dataSize, seq)
-		default:
-			err = fmt.Errorf("unknown record type %d", recType)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("bcmap record type %d: %w", recType, err)
-		}
-	}
-
-	// Invert to CID→Unicode. Lowest Unicode value wins.
-	cid2uni := make(map[int]rune, len(uni2cid))
-	for uni, cid := range uni2cid {
-		r := rune(uni) //nolint:gosec // UCS-2 values fit in int32.
-		if existing, ok := cid2uni[cid]; !ok || r < existing {
-			cid2uni[cid] = r
-		}
-	}
-
-	return cid2uni, nil
 }
 
 // collectCodespace parses codespace range entries (type 0) and returns them.
@@ -250,7 +178,7 @@ func (s *bcmapStream) advanceNotdef(count, dataSize int) error {
 	return nil
 }
 
-// collectCIDChar parses cidchar entries (type 2) into Unicode→CID mappings.
+// collectCIDChar parses cidchar entries (type 2) into code→CID mappings.
 // Each entry maps a single character code to a CID. Entries are
 // delta-encoded: subsequent char codes and CIDs are offsets from the previous.
 func (s *bcmapStream) collectCIDChar(count, dataSize int, seq bool, dst map[int]int) error {
@@ -288,7 +216,7 @@ func (s *bcmapStream) collectCIDChar(count, dataSize int, seq bool, dst map[int]
 	return nil
 }
 
-// collectCIDRange parses cidrange entries (type 3) into Unicode→CID mappings.
+// collectCIDRange parses cidrange entries (type 3) into code→CID mappings.
 // Each entry maps a contiguous range [start, end] to CIDs starting at code.
 func (s *bcmapStream) collectCIDRange(count, dataSize int, seq bool, dst map[int]int) error {
 	var prevEnd int
