@@ -160,12 +160,12 @@ func TestFontEmbedFixture(t *testing.T) {
 		}
 	}
 
-	// The embedded LithoMincho maps U+3042 through its program, so the output
-	// extracts a character the source did not: the source's elements are
-	// the ones compared.
+	// LithoMincho names a predefined CMap of a known Adobe collection, so the
+	// source extracts U+3042 unembedded (ISO 32000-1, 9.10.2) and the output
+	// keeps it in place once the program is embedded.
 	src, got := textPositions(t, data), textPositions(t, out)
-	if len(src) != 9 {
-		t.Fatalf("the source extracts %d text elements, want 9", len(src))
+	if len(src) != 10 {
+		t.Fatalf("the source extracts %d text elements, want 10", len(src))
 	}
 	for key, was := range src {
 		now, ok := got[key]

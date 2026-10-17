@@ -56,9 +56,9 @@ type Font struct {
 	CIDIdentityFallback bool // True when CIDToGIDMap is /Identity and no ToUnicode/embedded font
 	CIDOffset           int  // Offset to add to CID values before treating as Unicode (detected from /W array)
 
-	// SuppressExtraction marks a font whose text cannot be decoded
-	// without the system font that would render it (reference-only
-	// CJK Type0 with a predefined CMap /Encoding and no /FontFile).
+	// SuppressExtraction marks a reference-only Type0 font that ISO
+	// 32000-1, 9.10.2 gives no route to Unicode: a CMap name outside
+	// Table 118, or an Adobe CJK collection litho holds no UCS2 table for.
 	// [decodeNextChar] consumes the CID width and emits no element.
 	SuppressExtraction bool
 
@@ -292,17 +292,14 @@ func copyEncoding(src map[byte]rune) map[byte]rune {
 //
 //   - govdocs: fonts that ship only a Mac Roman cmap subtable are common in
 //     its older Mac-authored scanned filings.
-//   - pdfjs noembed-eucjp.pdf, noembed-sjis.pdf: synthesising text for their
-//     reference-only Type0 fonts from the bundled predefined CMaps produces
-//     characters that do not match the glyphs drawn.
 //   - pdfjs noembed-eucjp.pdf, noembed-sjis.pdf, noembed-jis7.pdf,
-//     noembed-identity.pdf: synthesising through Adobe-Japan1/GB1/CNS1/Korea1
-//     emits characters that do not match what the host's system font would
-//     draw.
-//   - pdfjs SimFang-variant.pdf, issue20489.pdf: reference-only fonts with a
-//     CJK BaseFont name (font "Fcpdf0" in issue20489.pdf), which emit
-//     WinAnsi-decoded garbage or synthesised Chinese that does not match the
-//     rendered glyph unless the encoding is cleared.
+//     noembed-identity.pdf, noembed-identity-2.pdf: reference-only Adobe-Japan1
+//     Type0 fonts under a predefined or Identity CMap. Read through 9.10.2,
+//     their text matches PDF.js given its CMaps. Suppressed, it matched only
+//     the text goldens PDF.js wrote without them, which were empty.
+//   - All corpora: 29 files change text once unembedded composite fonts read
+//     through 9.10.2, 22 of them pdfjs files that then match PDF.js, and none
+//     moves away from it.
 func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (*Font, error) {
 	subtypeObj, ok := fontDict["Subtype"]
 	if !ok {
@@ -445,21 +442,21 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 
 	// Predefined CJK encoding CMap fallback for Type0 fonts: when the
 	// /Encoding is a predefined CMap name (e.g., GBK-EUC-H, EUC-H), load
-	// the byte→CID mapping from the embedded bcmap and compose with the
-	// Adobe CID→Unicode table to synthesize a ToUnicode CMap.
+	// the byte→CID mapping from the bundled bcmap and compose with the
+	// Adobe CID→Unicode table to synthesize a ToUnicode CMap. Per ISO
+	// 32000-1, 9.10.2, steps a-e, the character code maps to a CID through
+	// the predefined CMap and the CID to Unicode through the
+	// <Registry>-<Ordering>-UCS2 CMap: the font program takes no part, so an
+	// unembedded font decodes as an embedded one does.
 	if subtypeName == "Type0" && font.ToUnicode == nil && !font.CIDIdentityFallback {
-		if encName := encodingCMapName(ctx, doc, fontDict); encName != "" {
-			// Gated on embedded font: a reference-only Type0 font uses
-			// the host's system font to render glyphs, so the byte
-			// stream carries no information litho can decode without
-			// that font. Synthesising text from bundled predefined
-			// CMaps produces characters that do not match the glyphs
-			// actually drawn.
-			if hasEmbeddedFontFile(ctx, doc, fontDict) {
-				if cm := cmap.LoadPredefinedCMap(encName); cm != nil {
-					font.ToUnicode = cm
-				}
-			} else if encName != "Identity-H" && encName != "Identity-V" {
+		if encName := encodingCMapName(ctx, doc, fontDict); encName != "" && encName != "Identity-H" && encName != "Identity-V" {
+			if cm := cmap.LoadPredefinedCMap(encName); cm != nil {
+				font.ToUnicode = cm
+			} else if !hasEmbeddedFontFile(ctx, doc, fontDict) {
+				// A name outside Table 118, or a collection without a UCS2
+				// table, leaves 9.10.2 no route to Unicode, and no font
+				// program offers one either: any character litho emitted
+				// would be invented.
 				font.SuppressExtraction = true
 			}
 		}
@@ -504,22 +501,27 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		applyType1CharStringWidths(ctx, doc, fontDict, font)
 	}
 
-	// Adobe predefined CID→Unicode fallback for Type0 fonts. Gated on
-	// an embedded font program. Reference-only CJK fonts carry no
-	// glyph data, so synthesising through Adobe-Japan1/GB1/CNS1/Korea1
-	// emits characters that do not match what the host's system font
-	// would draw.
+	// Adobe predefined CID→Unicode fallback for Type0 fonts. ISO 32000-1,
+	// 9.10.2 extends steps a-e to a descendant CIDFont of the Adobe-GB1,
+	// Adobe-CNS1, Adobe-Japan1 or Adobe-Korea1 collection under any CMap,
+	// Identity-H and Identity-V included: the CID indexes the collection,
+	// whose UCS2 CMap names its character whether the font is embedded or
+	// left to the host. The table is keyed by the two-byte code, which is
+	// the CID only under Identity-H or Identity-V (9.7.5.2, Table 118), so a
+	// reference-only font under an embedded CMap stream stays out: litho
+	// would index the collection with codes, not CIDs.
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
-		if hasEmbeddedFontFile(ctx, doc, fontDict) {
+		if isIdentityEncoding(ctx, doc, fontDict) || hasEmbeddedFontFile(ctx, doc, fontDict) {
 			applyAdobeCIDFallback(ctx, doc, fontDict, font)
 		}
 	}
 
 	// Identity-H/V fallback: last resort for Type0 fonts with no other
 	// mapping. Treats 2-byte character codes as direct Unicode codepoints.
-	// Reference-only CJK fonts (Adobe-Japan1/GB1/CNS1/Korea1 with no
-	// /FontFile*) would decode to garbage through the +29 heuristic;
-	// suppress extraction instead.
+	// A reference-only font of an Adobe CJK collection reaches this branch
+	// only when its collection's UCS2 table is unavailable; its CIDs index
+	// the collection (ISO 32000-1, 9.7.3), not Unicode, so the +29
+	// heuristic would decode to garbage and extraction is suppressed.
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback && !font.SuppressExtraction {
 		if isIdentityEncoding(ctx, doc, fontDict) && isCJKOrdering(ctx, doc, fontDict) && !hasEmbeddedFontFile(ctx, doc, fontDict) {
 			font.SuppressExtraction = true
@@ -533,19 +535,22 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// ToUnicode CMap and the BaseFont name contains CJK characters, the font
 	// is likely mis-declared with WinAnsiEncoding but actually uses GBK byte
 	// encoding. Embedded fonts get a synthesised GBK ToUnicode so their
-	// Chinese text extracts; reference-only fonts (no embedded program)
-	// cannot be extracted without a host CJK font, so clearing Encoding
-	// avoids emitting WinAnsi-decoded garbage or synthesised Chinese that
-	// does not match the rendered glyph.
+	// Chinese text extracts. A reference-only font gets it too when it
+	// states WinAnsiEncoding under one of the Chinese face names of
+	// [isChineseFaceName]. Every reference-only CJK-named font has its
+	// Encoding cleared, which avoids emitting WinAnsi-decoded garbage and
+	// keeps that encoding out of the /ToUnicode remediation writes.
 	if font.ToUnicode == nil && (subtypeName == "TrueType" || subtypeName == "Type1") {
 		if bfObj, ok := fontDict["BaseFont"]; ok {
 			bfName, _ := document.ResolveName(ctx, doc, bfObj)
 			if hasCJKFontName(string(bfName)) {
-				if hasEmbeddedFontFile(ctx, doc, fontDict) {
+				embedded := hasEmbeddedFontFile(ctx, doc, fontDict)
+				if embedded || isChineseFaceName(string(bfName)) && simpleBaseEncodingName(ctx, doc, fontDict) == "WinAnsiEncoding" {
 					if cm := cmap.LoadPredefinedCMap("GBK-EUC-H"); cm != nil {
 						font.ToUnicode = cm
 					}
-				} else {
+				}
+				if !embedded {
 					font.Encoding = nil
 				}
 			}
@@ -1939,9 +1944,8 @@ func hasEmbeddedFontFile(ctx context.Context, doc *document.Document, fontDict a
 
 // isCJKOrdering reports whether a Type0 font's CIDSystemInfo /Ordering
 // identifies one of Adobe's CJK character collections (Japan1, GB1, CNS1,
-// Korea1 / GB-Chinese, KR). Used as a signal that a non-embedded font
-// would need the host's system CJK font to render: without one, any
-// fallback would emit host-dependent text.
+// Korea1 / GB-Chinese, KR). A CID of such a collection indexes the
+// collection (ISO 32000-1, 9.7.3), so it is never read as a code point.
 func isCJKOrdering(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
 	dfObj, ok := fontDict["DescendantFonts"]
 	if !ok {
@@ -1991,6 +1995,68 @@ func hasCJKFontName(s string) bool {
 		}
 	}
 	return false
+}
+
+// chineseFaceNames lists the GBK-coded BaseFont names of the Chinese faces a
+// producer leaves unembedded under a WinAnsiEncoding its codes do not follow.
+// It mirrors the list PDF.js (evaluator.js, extractDataStructures) builds from
+// PDFium's and MuPDF's tables.
+var chineseFaceNames = map[string]struct{}{
+	"\xCB\xCE\xCC\xE5":         {}, // SimSun
+	"\xBA\xDA\xCC\xE5":         {}, // SimHei
+	"\xBF\xAC\xCC\xE5":         {}, // SimKai
+	"\xB7\xC2\xCB\xCE":         {}, // SimFang
+	"\xBF\xAC\xCC\xE5_GB2312":  {}, // SimKai
+	"\xB7\xC2\xCB\xCE_GB2312":  {}, // SimFang
+	"\xC1\xA5\xCA\xE9":         {}, // SimLi
+	"\xD0\xC2\xCB\xCE":         {}, // SimSun
+	"\xB7\xC2\xCB\xCE\xCC\xE5": {}, // SimFang variant
+	"\xD0\xA1\xB1\xEA\xCB\xCE": {}, // XiaoBiaoSong
+}
+
+// isChineseFaceName reports whether baseFont is one of [chineseFaceNames].
+//
+// ISO 32000-1, 9.6.6.1 makes a stated WinAnsiEncoding the byte-to-glyph map of
+// a simple font, so a code reads as Annex D.2 says. litho relaxes that clause
+// for these faces, as PDF.js does: their producers write WinAnsiEncoding over
+// two-byte GBK codes, so Annex D.2 yields Latin-1 garbage where GBK-EUC-H
+// (Table 118) yields the Chinese the host's face draws.
+//
+// # Corpus evidence
+//
+//   - pdfjs SimFang-variant.pdf, XiaoBiaoSong.pdf, issue20489.pdf: each
+//     draws its Chinese text through an unembedded TrueType face named here,
+//     under /WinAnsiEncoding. Cleared, the text is lost. Read through
+//     GBK-EUC-H, issue20489.pdf matches PDF.js given its CMaps, and the other
+//     two carry its characters with a space between each.
+func isChineseFaceName(baseFont string) bool {
+	_, ok := chineseFaceNames[baseFont]
+	return ok
+}
+
+// simpleBaseEncodingName returns the base encoding a simple font states:
+// its /Encoding name, or the /BaseEncoding of an /Encoding dictionary
+// (ISO 32000-1, 9.6.6.1, Table 114). It returns "" when the font states none.
+func simpleBaseEncodingName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) string {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return ""
+	}
+	if name, err := document.ResolveName(ctx, doc, encObj); err == nil && name != "" {
+		return string(name)
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil {
+		doc.Logger.Debug("resolving simple font /Encoding dictionary", slog.Any("err", err))
+	}
+	if encDict == nil {
+		return ""
+	}
+	name, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"])
+	if err != nil {
+		doc.Logger.Debug("resolving simple font /BaseEncoding", slog.Any("err", err))
+	}
+	return string(name)
 }
 
 // applyCIDIdentityHeuristics fills in what the identity CID fallback needs to

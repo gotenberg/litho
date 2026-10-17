@@ -152,10 +152,9 @@ func currentMCIDFromStack(stack []graphics.MarkedContentState) (mcid int, lang, 
 // should not produce visible output).
 func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	if font.SuppressExtraction {
-		// Font is a reference-only CJK Type0 without an embedded
-		// program. Any decoding would diverge from the glyph the host's
-		// system font renders. Consume the codespace width without
-		// emitting.
+		// No route to Unicode exists for this font (see
+		// [Font.SuppressExtraction]), so any character would be invented.
+		// Consume the codespace width without emitting.
 		consume := min(len(data), 2)
 		return "", consume, true
 	}
@@ -208,6 +207,8 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	}
 	if font.Subtype == "Type0" && font.CIDIdentityFallback {
 		char = resolveGlyphFallback(font, data, &n)
+	} else if r, ok := type0TableRune(font, data); ok {
+		char, n = string(r), 2
 	} else if r, ok := font.Encoding[data[0]]; ok {
 		char = string(r)
 	} else {
@@ -217,6 +218,21 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 		n = 1
 	}
 	return char, n, false
+}
+
+// type0TableRune looks a two-byte Type 0 code up in [Font.GIDToUnicode].
+//
+// A Type 0 font's codes select CIDs through its CMap (ISO 32000-1, 9.7.6.2),
+// never through a simple font's single-byte encoding, so a code the table
+// names reads as that character before the default WinAnsi map can split it
+// and read each byte as Latin-1. A code the table does not name keeps the
+// single-byte reading: under an embedded CMap stream a code can be one byte.
+func type0TableRune(font *Font, data []byte) (rune, bool) {
+	if font.Subtype != "Type0" || font.GIDToUnicode == nil || len(data) < 2 {
+		return 0, false
+	}
+	r, ok := font.GIDToUnicode[uint16(data[0])<<8|uint16(data[1])]
+	return r, ok
 }
 
 // textIsInvisible combines the two rendering-mode-3 and white-on-white
