@@ -140,11 +140,13 @@ func checkRemappedStandardTypes(ctx context.Context, doc *document.Document, tre
 // structTypeRef is one structure type as ISO 32000-2:2020, 14.8.6 names it: a
 // type name and the namespace dictionary it belongs to, nil for none. nsKey
 // identifies the namespace, by object number when it is an indirect object
-// and by URI otherwise, and is empty when ns is nil.
+// and by URI otherwise, and is empty when ns is nil. nsRef is the namespace's
+// reference when it is an indirect object, and zero otherwise.
 type structTypeRef struct {
 	name  ast.PdfName
 	ns    ast.PdfDict
 	nsKey string
+	nsRef ast.PdfIndirectRef
 }
 
 // newStructTypeRef builds the structure type naming name in the namespace
@@ -162,6 +164,7 @@ func newStructTypeRef(ctx context.Context, doc *document.Document, name ast.PdfN
 	t.ns = ns
 	if ref, ok := nsObj.(ast.PdfIndirectRef); ok {
 		t.nsKey = fmt.Sprintf("obj %d", ref.ObjectNum)
+		t.nsRef = ref
 	} else {
 		uri, _ := document.ResolveString(ctx, doc, ns["NS"])
 		t.nsKey = "uri " + string(uri)
@@ -288,33 +291,127 @@ func reachesNoStandardType(ctx context.Context, doc *document.Document, t struct
 // or that ends, is neither. A chain longer than maxRoleMapNSDepth gets no
 // verdict, so the cap can hide a cycle but never invent one.
 func namespaceRoleLoop(ctx context.Context, doc *document.Document, t structTypeRef) (circular, sameNS bool) {
+	c := namespaceRoleChain(ctx, doc, t)
+	return c.circular, c.sameNS
+}
+
+// nsRoleChain is the namespace role mapping of one type as
+// [namespaceRoleChain] reads it. hops runs from the type itself to the last
+// type the walk reached. firstReturn is the index in hops of the first type
+// that arrives back in a namespace the chain had left, and returnFrom the
+// index of the type that last left it; both are zero when no type does. cycle
+// reports whether the walk stopped on a type it had visited, so the chain
+// never ends.
+type nsRoleChain struct {
+	hops                    []structTypeRef
+	firstReturn, returnFrom int
+	circular, sameNS, cycle bool
+}
+
+// namespaceRoleChain walks the chain [namespaceRoleLoop] judges, keeping the
+// types it passes so a repair can name the entry that closes the loop.
+func namespaceRoleChain(ctx context.Context, doc *document.Document, t structTypeRef) nsRoleChain {
+	c := nsRoleChain{hops: []structTypeRef{t}}
 	visited := map[string]bool{t.key(): true}
-	left := make(map[string]ast.PdfName)
+	// left holds, per namespace URI, the index in c.hops of the type the
+	// chain last left that namespace from.
+	left := make(map[string]int)
 	prev := t
 	cur, ok := prev.equivalent(ctx, doc, nil)
 	for range maxRoleMapNSDepth {
 		if !ok {
-			return false, sameNS
+			return c
 		}
 		if uri, has := prev.uri(ctx, doc); has {
-			left[uri] = prev.name
+			left[uri] = len(c.hops) - 1
 		}
+		c.hops = append(c.hops, cur)
 		if uri, has := cur.uri(ctx, doc); has {
 			if from, back := left[uri]; back {
-				if from == cur.name {
-					return true, sameNS
+				if c.firstReturn == 0 {
+					c.firstReturn, c.returnFrom = len(c.hops)-1, from
 				}
-				sameNS = true
+				if c.hops[from].name == cur.name {
+					c.circular, c.cycle = true, true
+					return c
+				}
+				c.sameNS = true
 			}
 		}
 		if visited[cur.key()] {
-			return false, sameNS
+			c.cycle = true
+			return c
 		}
 		visited[cur.key()] = true
 		prev = cur
 		cur, ok = prev.equivalent(ctx, doc, nil)
 	}
-	return false, sameNS
+	return c
+}
+
+// NamespaceRoleHop is one structure type along a /RoleMapNS chain, as
+// [NamespaceRoleLoop] reports it.
+type NamespaceRoleHop struct {
+	// Name is the type name.
+	Name ast.PdfName
+	// NS is the namespace object the type belongs to, and zero when the
+	// namespace is a direct dictionary or the type has none.
+	NS ast.PdfIndirectRef
+	// NSURI is the namespace's /NS string, and empty when the type has no
+	// namespace or the namespace no /NS.
+	NSURI string
+	// Standard reports whether the type is one a standard namespace defines,
+	// a type in no namespace being read in the PDF 1.7 one.
+	Standard bool
+}
+
+// NamespaceRoleReturn is the first return of a /RoleMapNS chain to a namespace
+// it has left, as [NamespaceRoleLoop] reports it.
+type NamespaceRoleReturn struct {
+	// Hops runs from the element's own type to the first type that comes
+	// back.
+	Hops []NamespaceRoleHop
+	// Loop is the index in Hops of the type that last left that namespace:
+	// the /RoleMapNS entries of Hops[Loop:len(Hops)-1] close the return, the
+	// last of them mapping its type back into the namespace Hops[Loop]
+	// belongs to.
+	Loop int
+	// Cycle reports whether the chain revisits a type, so it never ends; a
+	// chain that only comes back to another type of a namespace and then ends
+	// is no cycle.
+	Cycle bool
+	// Resolves is the first type a standard namespace defines that the chain
+	// meets from the type that comes back on, where the mapping of every type
+	// before it ends (ISO 32000-2:2020, 14.8.6), and empty when it meets none.
+	Resolves ast.PdfName
+}
+
+// NamespaceRoleLoop reads the /RoleMapNS chain of elem's type as ISO 14289-2,
+// 8.2.4 t2 and t3 judge it ([checkCircularRoleMappings]), so a remediation
+// fixer repairs exactly the elements this validator reports. ok is false when
+// the chain never comes back to a namespace it has left.
+func NamespaceRoleLoop(ctx context.Context, doc *document.Document, elem ast.PdfDict) (NamespaceRoleReturn, bool) {
+	sType, _ := document.ResolveName(ctx, doc, elem["S"])
+	if sType == "" {
+		return NamespaceRoleReturn{}, false
+	}
+	c := namespaceRoleChain(ctx, doc, newStructTypeRef(ctx, doc, sType, elem["NS"]))
+	if c.firstReturn == 0 {
+		return NamespaceRoleReturn{}, false
+	}
+	hops := make([]NamespaceRoleHop, 0, c.firstReturn+1)
+	for _, h := range c.hops[:c.firstReturn+1] {
+		uri, _ := h.uri(ctx, doc)
+		hops = append(hops, NamespaceRoleHop{Name: h.name, NS: h.nsRef, NSURI: uri, Standard: h.isStandard(ctx, doc)})
+	}
+	ret := NamespaceRoleReturn{Hops: hops, Loop: c.returnFrom, Cycle: c.cycle}
+	for _, h := range c.hops[c.firstReturn:] {
+		if h.isStandard(ctx, doc) {
+			ret.Resolves = h.name
+			break
+		}
+	}
+	return ret, true
 }
 
 // typeInLegacyRoleMap reports whether typeName is a key in the structure tree

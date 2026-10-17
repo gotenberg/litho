@@ -22,6 +22,9 @@ func matchRoleMap(v compliance.Violation) bool {
 		// unmapped in a namespace that map does not govern
 		// ([repairUngovernedRoles]).
 		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.2.4" && v.Rule.TestNumber == 1) ||
+		// ISO 14289-2 §8.2.4 t3: a /RoleMapNS chain that maps a type to
+		// another type of its own namespace ([repairNamespaceRoleLoops]).
+		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.2.4" && v.Rule.TestNumber == 3) ||
 		// ISO 14289-2 §8.2.4 t4: a standard type the /RoleMap leads to no
 		// standard type.
 		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.2.4" && v.Rule.TestNumber == 4)
@@ -76,7 +79,9 @@ func standardMembers(members []ast.PdfName, profile string) []ast.PdfName {
 // the standard-type drop does not apply on name alone. Under ISO 14289-2 it
 // gives a type the map maps, declared in a namespace the map does not govern,
 // the type the map gives it ([repairUngovernedRoles]), and drops an entry that
-// leads a standard type to no standard type (ISO 14289-2 §8.2.4 t4).
+// leads a standard type to no standard type (ISO 14289-2 §8.2.4 t4). It also
+// breaks the /RoleMapNS loops a namespaced PDF/UA-2 document's elements close
+// ([repairNamespaceRoleLoops]), by the same rule as a /RoleMap cycle.
 //
 // # Corpus evidence
 //
@@ -137,14 +142,18 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 
 	part1 := compliance.PDFAPart(profile) == 1
 
+	// A namespaced PDF/UA-2 document can close a role-map loop through its
+	// namespaces' /RoleMapNS alone, with no legacy /RoleMap at all.
+	_, namespaced := stDict["Namespaces"]
+	nsLoops := namespaced && compliance.PDFUAPart(profile) == 2
+
 	roleMap, _ := document.ResolveDict(ctx, doc, stDict["RoleMap"]) // Best-effort: nil means no existing map.
-	if roleMap == nil && !part1 {
+	if roleMap == nil && !part1 && !nsLoops {
 		return nil, nil
 	}
 
 	// Resolve every target name once. The RoleMap is a functional graph: each
 	// source name maps to a single target name.
-	_, namespaced := stDict["Namespaces"]
 	targets := make(map[ast.PdfName]ast.PdfName, len(roleMap))
 	keep := make(ast.PdfDict, len(roleMap))
 	for src, dstObj := range roleMap {
@@ -231,7 +240,7 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	// mapped to that source stopped there already, since a mapping ends on
 	// the first standard type it meets (ISO 32000-2:2020, 14.8.6).
 	deadEnds := 0
-	if namespaced && compliance.PDFUAPart(profile) == 2 {
+	if nsLoops {
 		for _, src := range srcs {
 			if _, ok := keep[src]; !ok {
 				continue
@@ -313,8 +322,18 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	// A namespaced element the legacy map does not govern is judged by the map
 	// as it stands after the passes above, so a broken cycle leads it where it
 	// leads every governed element.
-	var ungovernedFixes []string
 	stChanged := mapChanged
+	var loopFixes []string
+	if nsLoops {
+		var withNS ast.PdfDict
+		loopFixes, withNS = repairNamespaceRoleLoops(ctx, alloc, doc, stRef, newST)
+		if withNS != nil {
+			newST = withNS
+			stChanged = true
+		}
+	}
+
+	var ungovernedFixes []string
 	if compliance.PDFUAPart(profile) == 2 && len(keep) > 0 {
 		var withNS ast.PdfDict
 		ungovernedFixes, withNS = repairUngovernedRoles(ctx, alloc, doc, stRef, newST)
@@ -324,7 +343,7 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		}
 	}
 
-	if !stChanged && len(ungovernedFixes) == 0 {
+	if !stChanged && len(ungovernedFixes) == 0 && len(loopFixes) == 0 {
 		return nil, nil
 	}
 	if stChanged && stRef.ObjectNum > 0 {
@@ -347,6 +366,7 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	if annotMapped > 0 {
 		fixes = append(fixes, "mapped Annot structure elements to Link for PDF/A-1")
 	}
+	fixes = append(fixes, loopFixes...)
 	return append(fixes, ungovernedFixes...), nil
 }
 
@@ -472,54 +492,26 @@ func mapUngovernedTypes(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		if ctx.Err() != nil {
 			break
 		}
-		nsRef := ast.PdfIndirectRef{ObjectNum: num}
-		nsDict := resolveFromAllocOrDoc(ctx, alloc, doc, nsRef)
-		if nsDict == nil {
-			continue
-		}
-		rmObj, hasRM := nsDict["RoleMapNS"]
-		rmRef, rmIndirect := rmObj.(ast.PdfIndirectRef)
-		var rmns ast.PdfDict
-		if rmIndirect {
-			rmns = resolveFromAllocOrDoc(ctx, alloc, doc, rmRef)
-		} else if hasRM {
-			rmns, _ = rmObj.(ast.PdfDict)
-		}
-		if hasRM && rmns == nil {
-			doc.Logger.Debug("remediation.rolemap: namespace /RoleMapNS is no dictionary; left alone",
-				"namespace", num)
-			continue
-		}
-		newRMNS := make(ast.PdfDict, len(rmns)+len(entries[num]))
-		maps.Copy(newRMNS, rmns)
 		added := 0
-		for _, typ := range slices.Sorted(maps.Keys(entries[num])) {
-			if _, exists := newRMNS[typ]; exists {
-				continue
+		editRoleMapNS(ctx, alloc, doc, num, func(rmns ast.PdfDict) bool {
+			for _, typ := range slices.Sorted(maps.Keys(entries[num])) {
+				if _, exists := rmns[typ]; exists {
+					continue
+				}
+				target := entries[num][typ]
+				targetURI := pdf1NamespaceURI
+				if compliance.IsStandardStructTypeInNS(target, pdf2NamespaceURI) {
+					targetURI = pdf2NamespaceURI
+				}
+				targetRef, withNS := ensureNamespace(ctx, alloc, doc, st, targetURI)
+				if withNS != nil {
+					st, newST = withNS, withNS
+				}
+				rmns[typ] = ast.PdfArray{target, targetRef}
+				added++
 			}
-			target := entries[num][typ]
-			targetURI := pdf1NamespaceURI
-			if compliance.IsStandardStructTypeInNS(target, pdf2NamespaceURI) {
-				targetURI = pdf2NamespaceURI
-			}
-			targetRef, withNS := ensureNamespace(ctx, alloc, doc, st, targetURI)
-			if withNS != nil {
-				st, newST = withNS, withNS
-			}
-			newRMNS[typ] = ast.PdfArray{target, targetRef}
-			added++
-		}
-		if added == 0 {
-			continue
-		}
-		if rmIndirect && rmRef.ObjectNum > 0 {
-			alloc.AllocAt(rmRef.ObjectNum, newRMNS)
-		} else {
-			newNS := make(ast.PdfDict, len(nsDict)+1)
-			maps.Copy(newNS, nsDict)
-			newNS["RoleMapNS"] = newRMNS
-			alloc.AllocAt(num, newNS)
-		}
+			return added > 0
+		})
 		mapped += added
 	}
 	return mapped, newST
