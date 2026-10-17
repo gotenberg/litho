@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -66,7 +67,7 @@ type PKI struct {
 	Root, Intermediate, Leaf, TSA             *x509.Certificate
 	RootKey, IntermediateKey, LeafKey, TSAKey *ecdsa.PrivateKey
 
-	t      testing.TB
+	report func(format string, args ...any)
 	server *httptest.Server
 
 	mu       sync.Mutex
@@ -77,54 +78,93 @@ type PKI struct {
 	serial   int64
 }
 
-// New starts a PKI whose server stops when t ends. The certificates are
-// valid from a year before now to ten years after.
+// New starts a PKI whose server stops when t ends, and that reports what its
+// servers fail at as errors of t. The certificates are valid from a year
+// before now to ten years after.
 func New(t testing.TB) *PKI {
 	t.Helper()
-	p := &PKI{t: t, revoked: make(map[string]time.Time), requests: make(map[string]int), serial: 100}
+	p, err := Start(t.Errorf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(p.Close)
+	return p
+}
+
+// Start starts a PKI outside a test, as [New] does: report receives what its
+// servers fail at, and [PKI.Close] stops them.
+func Start(report func(format string, args ...any)) (*PKI, error) {
+	p := &PKI{report: report, revoked: make(map[string]time.Time), requests: make(map[string]int), serial: 100}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/tsa", p.serveTSA)
 	mux.HandleFunc("/ocsp", p.serveOCSP)
 	mux.HandleFunc("/crl/", p.serveCRL)
 	mux.HandleFunc("/cert/", p.serveCert)
 	p.server = httptest.NewServer(p.count(mux))
-	t.Cleanup(p.server.Close)
 
+	if err := p.issueAll(); err != nil {
+		p.server.Close()
+		return nil, err
+	}
+	return p, nil
+}
+
+// Close stops the PKI's server.
+func (p *PKI) Close() { p.server.Close() }
+
+// issueAll makes the keys and certificates of the hierarchy.
+func (p *PKI) issueAll() error {
+	var firstErr error
+	fail := func(err error) {
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
 	key := func() *ecdsa.PrivateKey {
 		k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
-			t.Fatal(err)
+			fail(err)
 		}
 		return k
 	}
 	p.RootKey, p.IntermediateKey, p.LeafKey, p.TSAKey = key(), key(), key(), key()
+	if firstErr != nil {
+		return firstErr
+	}
 	notBefore := time.Now().AddDate(-1, 0, 0).UTC().Truncate(time.Second)
 	notAfter := notBefore.AddDate(11, 0, 0)
 	issue := func(tmpl, parent *x509.Certificate, pub crypto.PublicKey, parentKey crypto.Signer) *x509.Certificate {
+		if firstErr != nil {
+			return nil
+		}
 		tmpl.NotBefore, tmpl.NotAfter = notBefore, notAfter
 		// RFC 5280, 4.2.1.2, method (1): the SHA-1 of the public key bits,
 		// which OCSP clients match a byKey ResponderID against; crypto/x509
 		// derives it from SHA-256 instead.
 		spki, err := x509.MarshalPKIXPublicKey(pub)
 		if err != nil {
-			t.Fatal(err)
+			fail(err)
+			return nil
 		}
 		var info struct {
 			Algorithm pkix.AlgorithmIdentifier
 			PublicKey asn1.BitString
 		}
 		if _, err := asn1.Unmarshal(spki, &info); err != nil {
-			t.Fatal(err)
+			fail(err)
+			return nil
 		}
 		keyID := sha1.Sum(info.PublicKey.Bytes) //nolint:gosec // RFC 5280, 4.2.1.2 key identifier.
 		tmpl.SubjectKeyId = keyID[:]
 		der, err := x509.CreateCertificate(rand.Reader, tmpl, parent, pub, parentKey)
 		if err != nil {
-			t.Fatalf("issuing %s: %v", tmpl.Subject.CommonName, err)
+			fail(fmt.Errorf("issuing %s: %w", tmpl.Subject.CommonName, err))
+			return nil
 		}
 		cert, err := x509.ParseCertificate(der)
 		if err != nil {
-			t.Fatal(err)
+			fail(err)
+			return nil
 		}
 		return cert
 	}
@@ -134,6 +174,9 @@ func New(t testing.TB) *PKI {
 		KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign, BasicConstraintsValid: true, IsCA: true,
 	}
 	p.Root = issue(rootTmpl, rootTmpl, p.RootKey.Public(), p.RootKey)
+	if p.Root == nil {
+		return firstErr
+	}
 	p.Intermediate = issue(&x509.Certificate{
 		SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "pkitest intermediate"},
 		KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign, BasicConstraintsValid: true, IsCA: true,
@@ -158,7 +201,7 @@ func New(t testing.TB) *PKI {
 		OCSPServer: []string{url + "/ocsp"}, CRLDistributionPoints: []string{url + "/crl/root"},
 		IssuingCertificateURL: []string{url + "/cert/root"},
 	}, p.Root, p.TSAKey.Public(), p.RootKey)
-	return p
+	return firstErr
 }
 
 // URL returns the base URL of the PKI's server.
@@ -269,7 +312,7 @@ func (p *PKI) serveTSA(w http.ResponseWriter, r *http.Request) {
 		// PKIStatusInfo { rejection (2), statusString } (RFC 3161, 2.4.2).
 		text, err := asn1.MarshalWithParams("refused by pkitest", "utf8")
 		if err != nil {
-			p.t.Errorf("pkitest: %v", err)
+			p.report("pkitest: %v", err)
 		}
 		status := p.wrap(asn1.ClassUniversal, asn1.TagSequence, slices.Concat(p.der(2), p.wrap(asn1.ClassUniversal, asn1.TagSequence, text)))
 		p.write(w, p.wrap(asn1.ClassUniversal, asn1.TagSequence, status))
@@ -324,7 +367,7 @@ func (p *PKI) signedData(contentType asn1.ObjectIdentifier, content []byte, cert
 	h := sha256.Sum256(attrSet)
 	sig, err := key.Sign(rand.Reader, h[:], crypto.SHA256)
 	if err != nil {
-		p.t.Errorf("pkitest: signing: %v", err)
+		p.report("pkitest: signing: %v", err)
 	}
 	signedAttrs := slices.Clone(attrSet)
 	signedAttrs[0] = 0xA0 // [0] IMPLICIT, constructed
@@ -462,7 +505,7 @@ func (p *PKI) serveCRL(w http.ResponseWriter, r *http.Request) {
 func (p *PKI) CRL(issuer *x509.Certificate) []byte {
 	der, err := p.crl(issuer)
 	if err != nil {
-		p.t.Errorf("pkitest: %v", err)
+		p.report("pkitest: %v", err)
 	}
 	return der
 }
@@ -505,7 +548,7 @@ func (p *PKI) publicKeyBits(cert *x509.Certificate) []byte {
 		PublicKey asn1.BitString
 	}
 	if _, err := asn1.Unmarshal(cert.RawSubjectPublicKeyInfo, &spki); err != nil {
-		p.t.Errorf("pkitest: reading the public key of %s: %v", cert.Subject.CommonName, err)
+		p.report("pkitest: reading the public key of %s: %v", cert.Subject.CommonName, err)
 	}
 	return spki.PublicKey.Bytes
 }
@@ -513,7 +556,7 @@ func (p *PKI) publicKeyBits(cert *x509.Certificate) []byte {
 // write sends data as the answer, failing the test when it cannot.
 func (p *PKI) write(w http.ResponseWriter, data []byte) {
 	if _, err := w.Write(data); err != nil {
-		p.t.Errorf("pkitest: answering: %v", err)
+		p.report("pkitest: answering: %v", err)
 	}
 }
 
@@ -521,7 +564,7 @@ func (p *PKI) write(w http.ResponseWriter, data []byte) {
 func (p *PKI) der(v any) []byte {
 	der, err := asn1.Marshal(v)
 	if err != nil {
-		p.t.Errorf("pkitest: encoding %T: %v", v, err)
+		p.report("pkitest: encoding %T: %v", v, err)
 	}
 	return der
 }
@@ -530,7 +573,7 @@ func (p *PKI) der(v any) []byte {
 func (p *PKI) generalized(t time.Time) []byte {
 	der, err := asn1.MarshalWithParams(t.UTC(), "generalized")
 	if err != nil {
-		p.t.Errorf("pkitest: encoding %v: %v", t, err)
+		p.report("pkitest: encoding %v: %v", t, err)
 	}
 	return der
 }

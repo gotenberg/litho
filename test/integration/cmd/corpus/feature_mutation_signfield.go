@@ -136,6 +136,9 @@ func readQPDFForm(ctx context.Context, qpdf string, data []byte) (*qpdfForm, err
 	form := &qpdfForm{objects: make(map[string]any, len(raw))}
 	for key, obj := range raw {
 		ref, ok := strings.CutPrefix(key, "obj:")
+		if key == qpdfTrailer {
+			ref, ok = key, true
+		}
 		if !ok {
 			continue
 		}
@@ -159,6 +162,24 @@ func readQPDFForm(ctx context.Context, qpdf string, data []byte) (*qpdfForm, err
 
 // qpdfRef matches a reference as qpdf's JSON writes it.
 var qpdfRef = regexp.MustCompile(`^\d+ \d+ R$`)
+
+// qpdfTrailer is the key qpdf's JSON lists the trailer under, beside the
+// "obj:N G R" keys, and the key [qpdfForm.objects] keeps it under.
+const qpdfTrailer = "trailer"
+
+// catalogRefs returns the references, as qpdf writes them, of the catalog and
+// of the form dictionary when the catalog names it by reference.
+func (q *qpdfForm) catalogRefs() []string {
+	root, _ := q.dict(q.objects[qpdfTrailer])["/Root"].(string)
+	var refs []string
+	if qpdfRef.MatchString(root) {
+		refs = append(refs, root)
+	}
+	if form, ok := q.dict(root)["/AcroForm"].(string); ok && qpdfRef.MatchString(form) {
+		refs = append(refs, form)
+	}
+	return refs
+}
 
 // resolve returns v with the references it names followed.
 func (q *qpdfForm) resolve(v any) any {
@@ -547,6 +568,9 @@ func (f *mutationFeature) checkSignedField(ctx context.Context, in *mutationInpu
 	}
 	if msg := checkFieldMDP(out, sig, lock); msg != "" {
 		failures = append(failures, broken("%s", msg))
+	}
+	if lock.present {
+		failures = append(failures, f.checkLockFollowUps(ctx, in, form, out, t, lock)...)
 	}
 
 	if j, ok := form.judgeSeed(t.name); ok {

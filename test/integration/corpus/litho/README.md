@@ -6049,7 +6049,9 @@ and elsewhere the identification, tagging, title and language rules the
 part-2, level-B claim draws, which no signature field changes. Remediated at the
 eight manifest profiles, default and aggressive, every output conforms on both
 tools. Under `mutate-sign` the four fields signed in place keep their promises,
-read with qpdf, and `seedunmet` is the cell's one documented refusal.
+read with qpdf, and `seedunmet` is the cell's one documented refusal. Each of the three locked signatures is followed by a signature in every other
+unsigned field and in a new one, refused with `ErrSignatureFieldLocked` where
+the lock reaches the field, and by a document timestamp that rewrites no field.
 
 ## Scope
 
