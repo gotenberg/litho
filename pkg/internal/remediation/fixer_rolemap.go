@@ -21,7 +21,35 @@ func matchRoleMap(v compliance.Violation) bool {
 		// ISO 14289-2 §8.2.4 t1: a type the legacy /RoleMap maps can still be
 		// unmapped in a namespace that map does not govern
 		// ([repairUngovernedRoles]).
-		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.2.4" && v.Rule.TestNumber == 1)
+		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.2.4" && v.Rule.TestNumber == 1) ||
+		// ISO 14289-2 §8.2.4 t4: a standard type the /RoleMap leads to no
+		// standard type.
+		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.2.4" && v.Rule.TestNumber == 4)
+}
+
+// roleChainReachesNoStandard reports whether the /RoleMap chain from src, as
+// keep still holds it, ends without meeting a type of the PDF 1.7 vocabulary,
+// which is what every /RoleMap target belongs to (ISO 32000-2:2020, 14.8.6):
+// the chain stops on a type nothing maps, or closes on a type already
+// visited. targets holds each source's target name. The walk is bounded by the
+// number of entries, since each step visits a new one.
+func roleChainReachesNoStandard(src ast.PdfName, targets map[ast.PdfName]ast.PdfName, keep ast.PdfDict) bool {
+	visited := map[ast.PdfName]bool{src: true}
+	cur := targets[src]
+	for range len(targets) + 1 {
+		if visited[cur] {
+			return true
+		}
+		if compliance.IsStandardStructTypeInNS(cur, "") {
+			return false
+		}
+		visited[cur] = true
+		if _, ok := keep[cur]; !ok {
+			return true
+		}
+		cur = targets[cur]
+	}
+	return true
 }
 
 // fixRoleMap cleans up the StructTreeRoot /RoleMap. It breaks every circular
@@ -32,10 +60,22 @@ func matchRoleMap(v compliance.Violation) bool {
 // *name* there may belong to a custom namespace and still need its mapping, so
 // the standard-type drop does not apply on name alone. Under ISO 14289-2 it
 // gives a type the map maps, declared in a namespace the map does not govern,
-// the type the map gives it ([repairUngovernedRoles]).
+// the type the map gives it ([repairUngovernedRoles]), and drops an entry that
+// leads a standard type to no standard type (ISO 14289-2 §8.2.4 t4).
 //
 // # Corpus evidence
 //
+//   - verapdf PDF_UA-2__8.2.4-t04-fail-a: maps /H1 to a private type nothing
+//     maps further; dropping the entry leaves both tools reporting nothing on
+//     the PDF/UA-2 and WTPDF-1.0-Accessibility outputs, default and
+//     aggressive, where both reported 8.2.4 t4 before.
+//   - litho complex_2a: maps /Div to /Custom. With the entry gone its Div,
+//     which holds a content item, passes through to the Document for ISO/TS
+//     32005 Table 5, and both tools report Document-content in place of
+//     8.2.4 t4: the private mapping hid the defect, it did not repair it.
+//   - All corpora: 35 files map a standard type to no standard type; only
+//     those two are namespaced when the fixer runs, and the other 33 keep the
+//     residual rule set they had at PDF/UA-2 and WTPDF-1.0-Accessibility.
 //   - verapdf 7.1-t05-fail-d: dropping a cycle-closing source left another
 //     entry pointing at an unmapped name, failing ISO 14289-1 §7.1 t5.
 //   - verapdf PDF_UA-2__8.2.4-t02-fail-a: its self-mapping /LI -> /LI became
@@ -157,6 +197,27 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		}
 	}
 
+	// A namespaced PDF/UA-2 document keeps its standard-type mappings but one:
+	// a standard type whose /RoleMap chain reaches no standard type is a
+	// remapped standard type (ISO 14289-2 §8.2.4 t4). Dropping the entry is
+	// the whole repair, as for /Document -> /Book below: every element it
+	// governed reads as the standard type its /S names, and a private type
+	// mapped to that source stopped there already, since a mapping ends on
+	// the first standard type it meets (ISO 32000-2:2020, 14.8.6).
+	deadEnds := 0
+	if namespaced && compliance.PDFUAPart(profile) == 2 {
+		for _, src := range srcs {
+			if _, ok := keep[src]; !ok {
+				continue
+			}
+			if compliance.IsStandardStructTypeInNS(src, "") && roleChainReachesNoStandard(src, targets, keep) {
+				delete(keep, src)
+				delete(targets, src)
+				deadEnds++
+			}
+		}
+	}
+
 	// The standard-type pass drops redundant standard-type sources only in
 	// non-namespaced documents. Standardness is profile-aware and shared with
 	// the compliance checker (compliance.IsStandardStructType): a PDF 2.0 type
@@ -212,7 +273,7 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		annotMapped++
 	}
 
-	mapChanged := cyclesBroken > 0 || standardsDropped > 0 || annotMapped > 0
+	mapChanged := cyclesBroken > 0 || standardsDropped > 0 || deadEnds > 0 || annotMapped > 0
 	newST := make(ast.PdfDict, len(stDict))
 	maps.Copy(newST, stDict)
 	if mapChanged {
@@ -250,6 +311,9 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	}
 	if standardsDropped > 0 {
 		fixes = append(fixes, fmt.Sprintf("removed %d standard-type role mapping(s)", standardsDropped))
+	}
+	if deadEnds > 0 {
+		fixes = append(fixes, fmt.Sprintf("removed %d role mapping(s) that led a standard type to no standard type", deadEnds))
 	}
 	if retagged > 0 {
 		fixes = append(fixes, fmt.Sprintf("retagged %d element(s) to the role their dropped mapping declared", retagged))

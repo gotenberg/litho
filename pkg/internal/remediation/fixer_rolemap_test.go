@@ -159,3 +159,38 @@ func TestFixRoleMap_CycleRemapAvoidsOrphan(t *testing.T) {
 		t.Errorf("Title is non-standard under PDF/UA-1; Title->P must be kept: %v", rm)
 	}
 }
+
+// TestFixRoleMap_DropsDeadEndStandardRemap_Namespaced pins the PDF/UA-2 repair
+// of ISO 14289-2 §8.2.4 t4 in a namespaced document: a standard type whose
+// /RoleMap chain reaches no standard type (Sect -> Book, Div -> Foo -> Bar)
+// loses its entry, while one whose chain ends on a standard type
+// (Note -> Foo2 -> P) and a private type's mapping keep theirs.
+//
+// # Corpus evidence
+//
+//   - litho stdremap_ua2: its PDF 1.7 Sect read as Book until the entry went,
+//     and veraPDF reported 8.2.4 t4 on every PDF/UA-2 and WTPDF output.
+func TestFixRoleMap_DropsDeadEndStandardRemap_Namespaced(t *testing.T) {
+	data := roleMapPDF("<< /Sect /Book /Div /Foo /Foo /Bar /Note /Foo2 /Foo2 /P /Custom /P >>", true)
+	doc, alloc := newTestDoc(t, data)
+
+	fixes, err := fixRoleMap(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2")
+	if err != nil {
+		t.Fatalf("fixRoleMap: %v", err)
+	}
+	rm := resolvedRoleMap(t, alloc)
+
+	for _, gone := range []ast.PdfName{"Sect", "Div"} {
+		if _, ok := rm[gone]; ok {
+			t.Errorf("%s leads to no standard type and should be dropped: %v", gone, rm)
+		}
+	}
+	for src, want := range map[ast.PdfName]ast.PdfName{"Note": "Foo2", "Foo2": "P", "Custom": "P", "Foo": "Bar"} {
+		if rm[src] != want {
+			t.Errorf("%s -> %s should be kept: %v", src, want, rm)
+		}
+	}
+	if !anyFixContains(fixes, "no standard type") {
+		t.Errorf("expected a dead-end fix description, got %v", fixes)
+	}
+}

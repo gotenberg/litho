@@ -6210,9 +6210,10 @@ on the first hop of each mapping and only for an element in no namespace: it
 missed the PDF 1.7 `Sect` of `stdremap_ua2` and reported both the `Div` and the
 PDF 1.7 `Sect` of `remapchain_ua2`, and at PDF/A-2a and PDF/A-3a it reported
 the `Div` as `6.7.3.4/3`. Remediation at the manifest profiles and both WTPDF
-levels, default and aggressive, leaves the same rule set on both tools; on
-`stdremap_ua2` at PDF/UA-2 and both WTPDF levels that set is `8.2.4/4`, which no
-repair removes yet.
+levels, default and aggressive, leaves the same rule set on both tools. Before
+the repair that set was `8.2.4/4` on `stdremap_ua2` at PDF/UA-2 and both WTPDF
+levels; now remediation drops the `/RoleMap` entry that leads `Sect` nowhere,
+the PDF 1.7 `Sect` reads as a `Sect`, and both tools report nothing there.
 
 ## Scope
 
