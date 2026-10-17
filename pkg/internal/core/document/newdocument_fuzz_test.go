@@ -72,6 +72,12 @@ func FuzzNewDocument(f *testing.F) {
 	// until the bytes are assembled.
 	f.Add(linearizedWithHintStream())
 
+	// A trailer /Encrypt naming a null object, and one naming an object that
+	// does not parse (the pdfjs PDFBOX-4352-0.pdf shape): both open
+	// unencrypted (see resolveEncryptDict).
+	f.Add(nullEncryptPDF("4 0 R"))
+	f.Add(bytes.Replace(nullEncryptPDF("4 0 R"), []byte("4 0 obj\nnull\n"), []byte("4 0 obj\nE< >\n"), 1))
+
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 64*1024 {
 			return

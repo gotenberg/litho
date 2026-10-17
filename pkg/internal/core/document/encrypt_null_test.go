@@ -35,7 +35,8 @@ func nullEncryptPDF(value string) []byte {
 // TestNullEncryptIsAbsent pins that a trailer /Encrypt written as the null
 // object is no /Encrypt at all (ISO 32000-1, 7.3.7): the document opens
 // unencrypted, as veraPDF opens it, where litho refused to open it. A /Encrypt
-// naming a null object still fails, and veraPDF refuses that file too.
+// naming a null object is the null object too (7.3.10) and opens unencrypted,
+// as pdf.js and poppler open it, though veraPDF refuses that file.
 func TestNullEncryptIsAbsent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -50,7 +51,11 @@ func TestNullEncryptIsAbsent(t *testing.T) {
 	}
 
 	data = nullEncryptPDF("4 0 R")
-	if _, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil); err == nil {
-		t.Errorf("/Encrypt naming a null object: NewDocument succeeded, want an error")
+	doc, err = NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("/Encrypt naming a null object: NewDocument: %v", err)
+	}
+	if doc.IsEncrypted || doc.Crypto != nil {
+		t.Errorf("/Encrypt naming a null object: IsEncrypted=%v Crypto=%v, want an unencrypted document", doc.IsEncrypted, doc.Crypto)
 	}
 }

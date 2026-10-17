@@ -1079,33 +1079,11 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		slog.Bool("linearized", doc.Linearization != nil),
 	)
 
-	// Initialize Crypto if Encrypt dictionary is present. An /Encrypt written as
-	// the null object is absent (ISO 32000-1, 7.3.7), so the file is not
-	// encrypted: veraPDF opens it as such. A reference to a null object still
-	// fails below, as veraPDF also refuses that file.
-	encObj, ok := doc.Index.Trailer["Encrypt"]
-	if _, isNull := encObj.(ast.PdfNull); isNull {
-		ok = false
+	encDict, err := doc.resolveEncryptDict(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if ok {
-		var encDict ast.PdfDict
-		if ref, ok := encObj.(ast.PdfIndirectRef); ok {
-			// Resolving without Crypto is safe because Encrypt dict values are never encrypted
-			obj, err := doc.Resolve(ctx, ref)
-			if err != nil {
-				return nil, fmt.Errorf("failed to resolve /Encrypt reference: %w", err)
-			}
-			encDict, ok = obj.(ast.PdfDict)
-			if !ok {
-				return nil, fmt.Errorf("resolved /Encrypt is not a dictionary")
-			}
-		} else {
-			encDict, ok = encObj.(ast.PdfDict)
-			if !ok {
-				return nil, fmt.Errorf("/Encrypt is not a dictionary")
-			}
-		}
-
+	if encDict != nil {
 		doc.IsEncrypted = true
 		encEntries := doc.resolveEncryptEntries(ctx, encDict)
 		handler, err := crypto.NewHandler(encEntries, doc.Index.Trailer)
@@ -1153,6 +1131,59 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	)
 
 	return doc, nil
+}
+
+// resolveEncryptDict returns the encryption dictionary the trailer's /Encrypt
+// names, or nil when the document is not encrypted.
+//
+// ISO 32000-1, 7.5.5, Table 15 requires /Encrypt to be a dictionary when the
+// document is encrypted. A value written as the null object, or a reference to
+// one or to an object the file does not define, is the entry's absence (7.3.7,
+// 7.3.10). Any other value that yields no dictionary, an object that does not
+// parse among them, is relaxed the same way: the document opens unencrypted,
+// with a warning, because no security handler can be built from it. pdf.js
+// (XRef.parse builds a cipher only for an /Encrypt that is a Dict, and logs an
+// unreadable reference) and poppler (PDFDoc::checkEncryption) open such a file
+// unencrypted, where a refusal leaves the caller nothing to read. veraPDF
+// refuses it as encrypted. The trailer still carries the key, so the PDF/A
+// check of 6.1.3 still fires on it.
+//
+// # Corpus evidence
+//
+//   - pdfjs PDFBOX-4352-0.pdf: /Encrypt names an object whose body starts
+//     "E<" and does not parse. pdf.js and poppler open its one page; litho
+//     refused the file.
+func (d *Document) resolveEncryptDict(ctx context.Context) (ast.PdfDict, error) {
+	encObj, ok := d.Index.Trailer["Encrypt"]
+	if !ok {
+		return nil, nil
+	}
+	if ref, isRef := encObj.(ast.PdfIndirectRef); isRef {
+		// Resolving without Crypto is safe because Encrypt dict values are never encrypted.
+		obj, err := d.Resolve(ctx, ref)
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
+			if !errors.Is(err, ErrObjectNotFound) {
+				d.Logger.Warn("ignoring an /Encrypt that does not resolve: the document opens unencrypted",
+					slog.Int("object", ref.ObjectNum),
+					slog.String("error", err.Error()))
+			}
+			return nil, nil
+		}
+		encObj = obj
+	}
+	switch v := encObj.(type) {
+	case ast.PdfDict:
+		return v, nil
+	case ast.PdfNull:
+		return nil, nil
+	default:
+		d.Logger.Warn("ignoring an /Encrypt that is not a dictionary: the document opens unencrypted",
+			slog.String("type", fmt.Sprintf("%T", encObj)))
+		return nil, nil
+	}
 }
 
 // Authenticate attempts to authenticate an encrypted document with the given password.
