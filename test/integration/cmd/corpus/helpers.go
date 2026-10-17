@@ -98,6 +98,64 @@ func normalizeWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// verticalForms maps each vertical presentation form PDF.js substitutes to
+// the character it substitutes it for. PDF.js draws an unembedded vertical
+// font with a system font, and to make that font draw a punctuation mark or
+// bracket upright in a column it replaces the character by its vertical form
+// (src/core/fonts.js, the missingFile && vertical branch, which reads
+// getVerticalPresentationForm in src/core/fonts_utils.js). The text it
+// reports carries the replacement, while the font maps the code to the base
+// character. Each form is the base character in the Unicode compatibility
+// sense (UnicodeData.txt, `<vertical>` decompositions, which NFKC applies),
+// except U+FE34, which PDF.js substitutes for U+FE4F where Unicode decomposes
+// it to U+005F. The table is the inverse of getVerticalPresentationForm.
+//
+//nolint:gochecknoglobals // static lookup table mirroring PDF.js
+var verticalForms = map[rune]rune{
+	0xFE10: 0xFF0C, // FULLWIDTH COMMA
+	0xFE11: 0x3001, // IDEOGRAPHIC COMMA
+	0xFE12: 0x3002, // IDEOGRAPHIC FULL STOP
+	0xFE13: 0xFF1A, // FULLWIDTH COLON
+	0xFE14: 0xFF1B, // FULLWIDTH SEMICOLON
+	0xFE15: 0xFF01, // FULLWIDTH EXCLAMATION MARK
+	0xFE16: 0xFF1F, // FULLWIDTH QUESTION MARK
+	0xFE17: 0x3016, // LEFT WHITE LENTICULAR BRACKET
+	0xFE18: 0x3017, // RIGHT WHITE LENTICULAR BRACKET
+	0xFE19: 0x2026, // HORIZONTAL ELLIPSIS
+	0xFE30: 0x2025, // TWO DOT LEADER
+	0xFE31: 0x2014, // EM DASH
+	0xFE32: 0x2013, // EN DASH
+	0xFE34: 0xFE4F, // WAVY LOW LINE
+	0xFE35: 0xFF08, // FULLWIDTH LEFT PARENTHESIS
+	0xFE36: 0xFF09, // FULLWIDTH RIGHT PARENTHESIS
+	0xFE39: 0x3014, // LEFT TORTOISE SHELL BRACKET
+	0xFE3A: 0x3015, // RIGHT TORTOISE SHELL BRACKET
+	0xFE3B: 0x3010, // LEFT BLACK LENTICULAR BRACKET
+	0xFE3C: 0x3011, // RIGHT BLACK LENTICULAR BRACKET
+	0xFE3D: 0x300A, // LEFT DOUBLE ANGLE BRACKET
+	0xFE3E: 0x300B, // RIGHT DOUBLE ANGLE BRACKET
+	0xFE3F: 0x3008, // LEFT ANGLE BRACKET
+	0xFE40: 0x3009, // RIGHT ANGLE BRACKET
+	0xFE41: 0x300C, // LEFT CORNER BRACKET
+	0xFE42: 0x300D, // RIGHT CORNER BRACKET
+	0xFE43: 0x300E, // LEFT WHITE CORNER BRACKET
+	0xFE44: 0x300F, // RIGHT WHITE CORNER BRACKET
+}
+
+// foldVerticalForms replaces each vertical presentation form PDF.js
+// substitutes by the character it stands for (see [verticalForms]). The word
+// comparison folds both sides, so a form a file's own ToUnicode maps to stays
+// equal to itself. The content comparison needs no fold: NFKC already sends
+// each form and its base to the same string.
+func foldVerticalForms(s string) string {
+	return strings.Map(func(r rune) rune {
+		if base, ok := verticalForms[r]; ok {
+			return base
+		}
+		return r
+	}, s)
+}
+
 // comparePageTextContent returns true when two texts match after all
 // whitespace and zero-width characters are stripped and the remaining
 // runes are NFKC-normalised.

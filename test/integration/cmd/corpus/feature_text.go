@@ -316,10 +316,11 @@ func textMismatchRaw(file string, page, pos int, expected, got string) json.RawM
 }
 
 // comparePageText emits a mismatch for the first differing rune between
-// litho and the golden after whitespace collapsing.
+// litho and the golden after whitespace collapsing and the fold of the
+// vertical presentation forms PDF.js substitutes ([foldVerticalForms]).
 func comparePageText(file string, pageNum int, goldenText, lithoText string) *textMismatch {
-	goldenNorm := normalizeWhitespace(goldenText)
-	lithoNorm := normalizeWhitespace(lithoText)
+	goldenNorm := normalizeWhitespace(foldVerticalForms(goldenText))
+	lithoNorm := normalizeWhitespace(foldVerticalForms(lithoText))
 	if lithoNorm == goldenNorm {
 		return nil
 	}
