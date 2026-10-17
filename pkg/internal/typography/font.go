@@ -43,6 +43,7 @@ type Font struct {
 	LastChar           int                // Simple fonts: last defined char code
 	Widths             []float64          // Simple fonts: Widths[charCode-FirstChar] in 1/1000 text-space units
 	MissingWidth       float64            // Fallback width for codes outside the defined range
+	DWStated           bool               // CIDFont (Type0): the CIDFont dictionary states /DW
 	CIDWidths          map[int]float64    // CIDFont (Type0): CID → width in 1/1000 units
 	FontMatrix         [6]float64         // Type 3: maps glyph space to text space (default: [0.001 0 0 0.001 0 0])
 	Type3Widths        map[string]float64 // Type 3: glyph name → width from d0/d1 operators (in glyph space)
@@ -107,10 +108,15 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 		if w, ok := f.CIDWidths[charCode]; ok && w > 0 {
 			return w
 		}
-		// Try hmtx before DW: many CIDFonts have /DW=1000 (spec default) but the
-		// embedded font program has the real per-glyph widths. Using the binary
-		// hmtx widths produces much better spatial reconstruction.
-		if f.HmtxWidths != nil && f.UnitsPerEm > 0 {
+		// Try hmtx before an implied DW: many CIDFonts leave /DW to its
+		// default of 1000 while the embedded font program has the real
+		// per-glyph widths, and the binary hmtx widths reconstruct their
+		// spacing much better. A stated /DW is the width ISO 32000-1,
+		// 9.7.4.3 gives every CID /W omits, and PDF.js reads it, so it wins:
+		// the hmtx lookup indexes by CID, which names another glyph when a
+		// /CIDToGIDMap stream reorders them (pdfjs issue19494.pdf, /DW 556,
+		// read 278 for "e" and spaced every word).
+		if !f.DWStated && f.HmtxWidths != nil && f.UnitsPerEm > 0 {
 			gid := uint16(charCode) //nolint:gosec // CID≈GID for Identity-mapped CIDFonts
 			if advance, ok := f.HmtxWidths[gid]; ok && advance > 0 {
 				return float64(advance) * 1000.0 / float64(f.UnitsPerEm)
@@ -236,6 +242,48 @@ func parseCIDVerticalWidths(w2Arr ast.PdfArray) map[int][3]float64 {
 		}
 	}
 	return metrics
+}
+
+// resolveMetricsArray returns a copy of a /W or /W2 array whose elements,
+// and the elements of the arrays it nests, are direct objects. ISO 32000-1,
+// 7.3.10 lets any array element be an indirect reference, and a /W array
+// whose individual form holds its widths in an indirect array, [0 14 0 R],
+// is one producers write. The parsers read direct objects only, so without
+// this they skipped such an entry and every CID it covered fell back to the
+// default width. Only the two levels the /W and /W2 forms define are
+// resolved, so the walk needs no depth bound, and an element that does not
+// resolve is kept as it was, which the parsers skip.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16300.pdf: Nunito CIDFonts state /W [0 14 0 R], and each
+//     glyph took /DW 1000, so "SIRET N°" read "SIRETN°" where PDF.js reads
+//     the widths and the space.
+func resolveMetricsArray(ctx context.Context, doc *document.Document, arr ast.PdfArray) ast.PdfArray {
+	resolve := func(obj ast.PdfObject) ast.PdfObject {
+		if _, ok := obj.(ast.PdfIndirectRef); !ok {
+			return obj
+		}
+		resolved, err := document.ResolveObject(ctx, doc, obj)
+		if err != nil {
+			doc.Logger.Debug("resolving CIDFont metrics entry", slog.Any("err", err))
+			return obj
+		}
+		return resolved
+	}
+	out := make(ast.PdfArray, len(arr))
+	for i, obj := range arr {
+		obj = resolve(obj)
+		if nested, ok := obj.(ast.PdfArray); ok {
+			direct := make(ast.PdfArray, len(nested))
+			for j, el := range nested {
+				direct[j] = resolve(el)
+			}
+			obj = direct
+		}
+		out[i] = obj
+	}
+	return out
 }
 
 // parseCIDWidths decodes a CIDFont /W array into a flat CID → width map.
@@ -845,6 +893,7 @@ func resolveType0Metrics(ctx context.Context, doc *document.Document, fontDict a
 				font.MissingWidth = 1000.0
 				if dwObj, ok := cidDict["DW"]; ok {
 					font.MissingWidth = document.Float(dwObj)
+					font.DWStated = true
 				}
 				// /W encodes per-CID or range widths.
 				if wObj, ok := cidDict["W"]; ok {
@@ -853,7 +902,7 @@ func resolveType0Metrics(ctx context.Context, doc *document.Document, fontDict a
 						doc.Logger.Debug("resolving CIDFont /W array", slog.Any("err", err))
 					}
 					if wArr != nil {
-						font.CIDWidths = parseCIDWidths(wArr)
+						font.CIDWidths = parseCIDWidths(resolveMetricsArray(ctx, doc, wArr))
 					}
 				}
 				// /WMode: 0 = horizontal, 1 = vertical.
@@ -877,7 +926,7 @@ func resolveType0Metrics(ctx context.Context, doc *document.Document, fontDict a
 						doc.Logger.Debug("resolving CIDFont /W2 array", slog.Any("err", err))
 					}
 					if w2Arr != nil {
-						font.CIDVerticalMetrics = parseCIDVerticalWidths(w2Arr)
+						font.CIDVerticalMetrics = parseCIDVerticalWidths(resolveMetricsArray(ctx, doc, w2Arr))
 					}
 				}
 			}
