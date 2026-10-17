@@ -160,6 +160,48 @@ func TestFixRoleMap_CycleRemapAvoidsOrphan(t *testing.T) {
 	}
 }
 
+// TestFixRoleMap_BreaksCycleAtItsStandardType pins the repair of a cycle
+// through a standard and a private type, /Sect -> /Book -> /Sect, which the
+// sorted walk enters at the private /Book. The cycle is broken by dropping the
+// standard /Sect entry, so a Sect reads as the Sect it names and /Book leads to
+// it; sending /Book to /P sent every Sect on to a type it never claimed.
+//
+// # Corpus evidence
+//
+//   - litho rolecycle_ua1 and rolecycle_ua2: carry this cycle.
+func TestFixRoleMap_BreaksCycleAtItsStandardType(t *testing.T) {
+	for _, tc := range []struct {
+		profile    string
+		namespaced bool
+	}{
+		{"PDF/UA-1", false},
+		{"PDF/A-2a", false},
+		{"PDF/UA-2", true},
+	} {
+		data := roleMapPDF("<< /Sect /Book /Book /Sect /Item /Sect >>", tc.namespaced)
+		doc, alloc := newTestDoc(t, data)
+
+		fixes, err := fixRoleMap(context.Background(), alloc, doc, Options{}, nil, tc.profile)
+		if err != nil {
+			t.Fatalf("%s: fixRoleMap: %v", tc.profile, err)
+		}
+		rm := resolvedRoleMap(t, alloc)
+
+		if _, ok := rm["Sect"]; ok {
+			t.Errorf("%s: the standard /Sect entry closing the cycle should be dropped: %v", tc.profile, rm)
+		}
+		if rm["Book"] != ast.PdfName("Sect") {
+			t.Errorf("%s: /Book -> /Sect should be kept, ending on the standard /Sect: %v", tc.profile, rm)
+		}
+		if rm["Item"] != ast.PdfName("Sect") {
+			t.Errorf("%s: /Item -> /Sect should be kept: %v", tc.profile, rm)
+		}
+		if !anyFixContains(fixes, "circular") {
+			t.Errorf("%s: expected a circular-mapping fix description, got %v", tc.profile, fixes)
+		}
+	}
+}
+
 // TestFixRoleMap_DropsDeadEndStandardRemap_Namespaced pins the PDF/UA-2 repair
 // of ISO 14289-2 §8.2.4 t4 in a namespaced document: a standard type whose
 // /RoleMap chain reaches no standard type (Sect -> Book, Div -> Foo -> Bar)

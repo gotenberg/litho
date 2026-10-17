@@ -52,8 +52,23 @@ func roleChainReachesNoStandard(src ast.PdfName, targets map[ast.PdfName]ast.Pdf
 	return true
 }
 
+// standardMembers returns the members of a /RoleMap cycle that are standard
+// structure types under profile, in the order the walk met them.
+func standardMembers(members []ast.PdfName, profile string) []ast.PdfName {
+	var out []ast.PdfName
+	for _, m := range members {
+		if compliance.IsStandardStructType(m, profile) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 // fixRoleMap cleans up the StructTreeRoot /RoleMap. It breaks every circular
-// mapping (a self-loop or a multi-hop cycle, forbidden in PDF/A and PDF/UA), and
+// mapping (a self-loop or a multi-hop cycle, forbidden in PDF/A and PDF/UA):
+// a cycle through standard types loses their entries, so no element is given a
+// standard type its content never claimed, and a cycle of private types has
+// the entry that closes it remapped to /P. It
 // in non-namespaced documents also drops entries that remap a standard structure
 // type (ISO 32000-1 §14.8.4, forbidden by PDF/A-2a §7.1). A namespaced
 // (PDF 2.0 / PDF/UA-2) document is left to its namespace mechanism: a standard
@@ -82,6 +97,10 @@ func roleChainReachesNoStandard(src ast.PdfName, targets map[ast.PdfName]ast.Pdf
 //     /LI -> /P, which litho reported as a remapped standard type and which
 //     turned every list item into a paragraph, so <L> then held <P> and <P>
 //     held <LBody>.
+//   - litho rolecycle_ua2: its /Sect -> /Book -> /Sect cycle was broken by
+//     sending /Book to /P, so the Sect in no namespace read as a P at
+//     PDF/UA-2; dropping the /Sect entry keeps it a Sect, and both tools
+//     report no circular mapping on it.
 //   - litho complex_ua1: repaired at PDF/UA-2, breaking /Bar -> /Foo by
 //     deletion left /MyType -> /Foo -> /Bar dangling.
 //   - verapdf PDF_UA-1__7.1-t07-fail-a.pdf: maps /Document to /Book, a
@@ -164,6 +183,7 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			continue
 		}
 		cur := targets[src]
+		members := []ast.PdfName{src}
 		for steps := 0; steps < len(targets); steps++ {
 			if cur == src {
 				// A standard type in the cycle is dropped, not redirected.
@@ -173,10 +193,15 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 				// which is exactly where it should end. Redirecting a
 				// self-mapping such as /LI -> /LI to /P made litho report a
 				// remapped standard type and turned every list item into a
-				// paragraph.
-				if compliance.IsStandardStructType(src, profile) {
-					delete(keep, src)
-					delete(targets, src)
+				// paragraph. Every standard type of the cycle goes, wherever
+				// the walk entered it: in /Sect -> /Book -> /Sect, breaking at
+				// the private /Book by sending it to /P sent every Sect on to
+				// /P, a type the content never claimed.
+				if standard := standardMembers(members, profile); len(standard) > 0 {
+					for _, m := range standard {
+						delete(keep, m)
+						delete(targets, m)
+					}
 					cyclesBroken++
 					break
 				}
@@ -193,6 +218,7 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			if _, ok := keep[cur]; !ok {
 				break // chain terminates (standard type or unmapped): no cycle
 			}
+			members = append(members, cur)
 			cur = targets[cur]
 		}
 	}
