@@ -164,6 +164,9 @@ func ExtractEncoding(data []byte) map[byte]string {
 	// additional byte code directly to a glyph SID, independent of
 	// GID order. TeX CMR fonts rely on this to expose ligatures (ff,
 	// fi, fl, ffi) at positions like 0xAE outside the primary range.
+	// Per Adobe Technical Note #5176, section 12, Table 14, the entry
+	// holds a SID, which names the glyph: veraPDF 1.30.2 reads it as a GID
+	// index instead, and judges such a code by another glyph.
 	if hasSupplement && encOff < len(data) {
 		nSupp := int(data[encOff])
 		encOff++
