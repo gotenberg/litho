@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -85,7 +84,7 @@ func fixWTPDFDeclaration(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		return nil, nil
 	}
 
-	if declarationPresent(xmp, uri) {
+	if compliance.WTPDFDeclares(xmp, uri) {
 		return nil, nil
 	}
 
@@ -100,7 +99,10 @@ func fixWTPDFDeclaration(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		doc.Logger.Debug("remediation: wtpdf: cannot splice the declaration", "error", err)
 		return nil, nil
 	}
-	if bytes.Equal(patched, xmp) {
+	// Claim the fix only when the validator reads the declaration back: a
+	// declaration spliced anywhere but a document property states nothing.
+	if bytes.Equal(patched, xmp) || !compliance.WTPDFDeclares(patched, uri) {
+		doc.Logger.Debug("remediation: wtpdf: spliced declaration does not read back", "uri", uri)
 		return nil, nil
 	}
 
@@ -124,60 +126,6 @@ func fixWTPDFDeclaration(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	return []string{fmt.Sprintf("declared WTPDF conformance %s in XMP", uri)}, nil
 }
 
-// declarationPresent reports whether the packet already states the URI as a
-// pdfd:conformsTo value. The prefix bound to the declarations namespace is
-// not assumed to be "pdfd": XMP binds prefixes to namespace URIs, and the
-// validator reads every prefix bound to that URI.
-func declarationPresent(xmp []byte, uri string) bool {
-	raw := string(xmp)
-	for _, prefix := range xmpDeclarationPrefixes(raw) {
-		open := "<" + prefix + ":conformsTo>"
-		for i := 0; ; {
-			j := strings.Index(raw[i:], open)
-			if j < 0 {
-				break
-			}
-			start := i + j + len(open)
-			end := strings.Index(raw[start:], "</"+prefix+":conformsTo>")
-			if end < 0 {
-				break
-			}
-			if strings.TrimSpace(raw[start:start+end]) == uri {
-				return true
-			}
-			i = start + end
-		}
-	}
-	return false
-}
-
-// xmpDeclarationPrefixes returns every namespace prefix the packet binds to
-// the PDF Declarations namespace.
-func xmpDeclarationPrefixes(raw string) []string {
-	var out []string
-	needle := `="` + compliance.WTPDFDeclarationNamespace + `"`
-	for i := 0; ; {
-		j := strings.Index(raw[i:], needle)
-		if j < 0 {
-			break
-		}
-		at := i + j
-		start := strings.LastIndex(raw[:at], "xmlns:")
-		if start < 0 {
-			break
-		}
-		prefix := raw[start+len("xmlns:") : at]
-		if prefix != "" && !strings.ContainsAny(prefix, " \t\r\n<>\"") {
-			out = append(out, prefix)
-		}
-		i = at + len(needle)
-	}
-	if len(out) == 0 {
-		out = append(out, "pdfd")
-	}
-	return out
-}
-
 // declarationsCloseRe matches the closing tag pair of a pdfd:declarations
 // container across the whitespace real producers write between them.
 var declarationsCloseRe = regexp.MustCompile(`</rdf:Bag>\s*</pdfd:declarations>`)
@@ -195,12 +143,20 @@ func insertWTPDFDeclaration(xmp []byte, uri string) ([]byte, error) {
 	// tolerantly. A byte-exact search missed every real packet and fell
 	// through to inserting a SECOND pdfd:declarations container beside the
 	// first, which is not a shape any producer writes.
+	//
+	// The extended container must be a document property for the new item to
+	// count. A container that sits anywhere else, such as inside an item of
+	// pdfaExtension:schemas, states nothing (see compliance.WTPDFDeclares), so
+	// when the item does not read back a fresh container goes on the document
+	// instead.
 	if loc := declarationsCloseRe.FindIndex(xmp); loc != nil {
 		out := make([]byte, 0, len(xmp)+len(item))
 		out = append(out, xmp[:loc[0]]...)
 		out = append(out, item...)
 		out = append(out, xmp[loc[0]:]...)
-		return out, nil
+		if compliance.WTPDFDeclares(out, uri) {
+			return out, nil
+		}
 	}
 
 	block := "<pdfd:declarations><rdf:Bag>" + item + "</rdf:Bag></pdfd:declarations>"

@@ -44,26 +44,27 @@ func TestMatchWTPDFDeclaration(t *testing.T) {
 	}
 }
 
-func TestDeclarationPresent(t *testing.T) {
+func TestWTPDFDeclares(t *testing.T) {
 	t.Parallel()
 	withReuse := packetWith(`<pdfd:declarations><rdf:Bag><rdf:li rdf:parseType="Resource">` +
 		`<pdfd:conformsTo>` + testReuURI + `</pdfd:conformsTo></rdf:li></rdf:Bag></pdfd:declarations>`)
-	if !declarationPresent(withReuse, testReuURI) {
+	if !compliance.WTPDFDeclares(withReuse, testReuURI) {
 		t.Error("the declared reuse URI must be found")
 	}
-	if declarationPresent(withReuse, testAccURI) {
+	if compliance.WTPDFDeclares(withReuse, testAccURI) {
 		t.Error("an undeclared URI must not be reported as present")
 	}
 }
 
-func TestDeclarationPresent_NonCanonicalPrefix(t *testing.T) {
+func TestWTPDFDeclares_NonCanonicalPrefix(t *testing.T) {
 	t.Parallel()
 	// XMP binds prefixes to namespace URIs; the prefix itself is arbitrary.
-	xmp := []byte(`<rdf:Description xmlns:decl="http://pdfa.org/declarations/">` +
+	xmp := []byte(`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description xmlns:decl="http://pdfa.org/declarations/">` +
 		`<decl:declarations><rdf:Bag><rdf:li rdf:parseType="Resource">` +
 		`<decl:conformsTo>` + testReuURI + `</decl:conformsTo></rdf:li></rdf:Bag></decl:declarations>` +
-		`</rdf:Description>`)
-	if !declarationPresent(xmp, testReuURI) {
+		`</rdf:Description></rdf:RDF>`)
+	if !compliance.WTPDFDeclares(xmp, testReuURI) {
 		t.Error("a declaration under a non-canonical prefix must be found")
 	}
 }
@@ -82,7 +83,7 @@ func TestInsertWTPDFDeclaration_FreshContainer(t *testing.T) {
 		t.Error(`rdf:parseType="Resource" is required: without it veraPDF fails the ` +
 			`declaration rule AND the unrelated ISO 14289-2 8.11.1 metadata rule`)
 	}
-	if !declarationPresent(out, testReuURI) {
+	if !compliance.WTPDFDeclares(out, testReuURI) {
 		t.Error("the inserted declaration must be readable back")
 	}
 }
@@ -103,7 +104,7 @@ func TestInsertWTPDFDeclaration_ExtendsExistingContainer(t *testing.T) {
 	if n := strings.Count(s, "<pdfd:declarations>"); n != 1 {
 		t.Errorf("must extend the existing container, got %d containers", n)
 	}
-	if !declarationPresent(out, testAccURI) || !declarationPresent(out, testReuURI) {
+	if !compliance.WTPDFDeclares(out, testAccURI) || !compliance.WTPDFDeclares(out, testReuURI) {
 		t.Errorf("both declarations must be present after extending: %s", s)
 	}
 }
@@ -125,18 +126,55 @@ func TestWTPDFDeclarationURI_NonWTPDFProfileIsNoop(t *testing.T) {
 	}
 }
 
-func TestXMPDeclarationPrefixes(t *testing.T) {
+// extensionSchemaPacket is a packet whose only rdf:Description holds the
+// pdfaExtension:schemas item veraPDF's test builder writes, itself an
+// rdf:Description, ahead of the description's own close tag.
+func extensionSchemaPacket() []byte {
+	return packetWith(`<pdfaExtension:schemas xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" ` +
+		`xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"><rdf:Bag><rdf:li>` +
+		`<rdf:Description pdfaSchema:prefix="pdfuaid" pdfaSchema:namespaceURI="http://www.aiim.org/pdfua/ns/id/">` +
+		`</rdf:Description></rdf:li></rdf:Bag></pdfaExtension:schemas>`)
+}
+
+// TestInsertWTPDFDeclaration_NestedDescription pins that the declaration
+// becomes a document property when the packet nests an rdf:Description
+// inside the top-level one: spliced before the first close tag met, it
+// became a field of the extension schema item and stated nothing.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-2__5-t02-fail-a, 5-t02-pass-a, 5-t03-fail-a,
+//     5-t04-fail-a and 5-t05-fail-a: every remediated WTPDF output failed
+//     veraPDF's declaration rule at both levels.
+func TestInsertWTPDFDeclaration_NestedDescription(t *testing.T) {
 	t.Parallel()
-	raw := `<rdf:Description xmlns:pdfd="http://pdfa.org/declarations/" ` +
-		`xmlns:decl="http://pdfa.org/declarations/" xmlns:dc="http://purl.org/dc/elements/1.1/">`
-	got := xmpDeclarationPrefixes(raw)
-	if len(got) != 2 {
-		t.Fatalf("expected both prefixes bound to the declarations namespace, got %v", got)
+	out, err := insertWTPDFDeclaration(extensionSchemaPacket(), testAccURI)
+	if err != nil {
+		t.Fatalf("insertWTPDFDeclaration: %v", err)
 	}
-	// A packet with no binding still yields the canonical prefix so a fresh
-	// insertion can proceed.
-	if got := xmpDeclarationPrefixes(`<rdf:Description rdf:about=""/>`); len(got) != 1 || got[0] != "pdfd" {
-		t.Errorf("expected the canonical fallback prefix, got %v", got)
+	if !compliance.WTPDFDeclares(out, testAccURI) {
+		t.Errorf("the declaration must be a document property: %s", out)
+	}
+}
+
+// TestInsertWTPDFDeclaration_MisplacedContainer pins that a declarations
+// container that is not a document property is not extended: the new item
+// would state nothing, so a fresh container goes on the document instead.
+func TestInsertWTPDFDeclaration_MisplacedContainer(t *testing.T) {
+	t.Parallel()
+	misplaced := packetWith(`<pdfaExtension:schemas xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/">` +
+		`<rdf:Bag><rdf:li><rdf:Description><pdfd:declarations><rdf:Bag>` +
+		`<rdf:li rdf:parseType="Resource"><pdfd:conformsTo>` + testReuURI + `</pdfd:conformsTo></rdf:li>` +
+		`</rdf:Bag></pdfd:declarations></rdf:Description></rdf:li></rdf:Bag></pdfaExtension:schemas>`)
+	if compliance.WTPDFDeclares(misplaced, testReuURI) {
+		t.Fatal("precondition: the nested container must not count")
+	}
+	out, err := insertWTPDFDeclaration(misplaced, testAccURI)
+	if err != nil {
+		t.Fatalf("insertWTPDFDeclaration: %v", err)
+	}
+	if !compliance.WTPDFDeclares(out, testAccURI) {
+		t.Errorf("the declaration must be a document property: %s", out)
 	}
 }
 

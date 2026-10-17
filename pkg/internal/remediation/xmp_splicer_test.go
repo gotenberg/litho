@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/xml"
 	"io"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 )
 
 // pdfaidNS is defined in fixer_xmp.go. The test file reuses it.
@@ -181,6 +184,35 @@ func TestInsertChildElement_IntoDescription(t *testing.T) {
 	loc := findXMPProperty(out, pdfaidNS, "conformance")
 	if loc.Form != xmpPropertyAsElement {
 		t.Errorf("injected property not found: %v", loc)
+	}
+}
+
+// TestInsertChildElement_NestedDescription pins that the element closes into
+// the first rdf:Description itself, not into an rdf:Description nested inside
+// it: a pdfaExtension:schemas item is one, and a property spliced before its
+// close tag becomes a field of the schema structure instead of a document
+// property.
+func TestInsertChildElement_NestedDescription(t *testing.T) {
+	xmp := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" ` +
+		`xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#">` +
+		`<pdfaExtension:schemas><rdf:Bag><rdf:li><rdf:Description pdfaSchema:prefix="pdfuaid">` +
+		`</rdf:Description></rdf:li></rdf:Bag></pdfaExtension:schemas>` +
+		`</rdf:Description></rdf:RDF></x:xmpmeta>`)
+
+	out, err := insertChildElement(xmp, `<pdfaid:part>2</pdfaid:part>`)
+	if err != nil {
+		t.Fatalf("insertChildElement: %v", err)
+	}
+	if !strings.Contains(string(out), `</pdfaExtension:schemas><pdfaid:part>2</pdfaid:part>`) {
+		t.Errorf("element not spliced as a document property:\n%s", out)
+	}
+	var top []string
+	for _, p := range compliance.XMPProperties(out) {
+		top = append(top, p.Name)
+	}
+	if !slices.Contains(top, "part") {
+		t.Errorf("pdfaid:part is not a top-level property, got %v", top)
 	}
 }
 

@@ -803,13 +803,23 @@ func findRDFDescriptionOpenRange(xmp []byte) (int, int, error) {
 }
 
 // findRDFDescriptionCloseOffset returns the byte offset of the `<`
-// starting the first matching `</rdf:Description>` close tag in xmp.
-// This is the insertion point for appending a new child element.
+// starting the `</rdf:Description>` tag that closes the first
+// rdf:Description in xmp. This is the insertion point for appending a new
+// property to that description.
+//
+// The close tag is the one matching the first start tag, not the first
+// close tag met: an rdf:Description can hold nested ones (the items of
+// pdfaExtension:schemas are rdf:Description structures), and a property
+// spliced before a nested close tag becomes a field of that structure
+// instead of a property of the document (ISO 16684-1, 7.4: the properties
+// are the children of a top-level rdf:Description).
 func findRDFDescriptionCloseOffset(xmp []byte) (int, error) {
 	dec := xml.NewDecoder(bytes.NewReader(xmp))
 	dec.Strict = false
 	dec.Entity = xml.HTMLEntity
-	seenOpen := false
+	// depth counts the elements open inside the first rdf:Description, the
+	// description itself included; 0 means it has not been met yet.
+	depth := 0
 	for {
 		tokStart := dec.InputOffset()
 		tok, err := dec.Token()
@@ -818,11 +828,15 @@ func findRDFDescriptionCloseOffset(xmp []byte) (int, error) {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			if isRDFDescription(t.Name) {
-				seenOpen = true
+			if depth > 0 || isRDFDescription(t.Name) {
+				depth++
 			}
 		case xml.EndElement:
-			if seenOpen && isRDFDescription(t.Name) {
+			if depth == 0 {
+				continue
+			}
+			depth--
+			if depth == 0 && isRDFDescription(t.Name) {
 				return int(tokStart), nil
 			}
 		}
