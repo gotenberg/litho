@@ -175,6 +175,11 @@ func isStandardStructType(name ast.PdfName, profile string) bool {
 // fixer walks to the same depth as validation: a repair shallower than the
 // check would flag structure elements it could not reach to fix. A visited set
 // independently breaks reference cycles.
+//
+// The mutations bound their structure-tree walks at 64 instead
+// (maxStructTreeDepth in pkg/internal/mutations, which states what the
+// difference does): a tree deeper than that validates here while a page
+// deletion refuses it and a split or merge drops it.
 const MaxStructTreeWalkDepth = 200
 
 // maxStructTreeDepth is the recursion limit for walking the structure tree.

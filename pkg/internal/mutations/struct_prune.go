@@ -11,10 +11,18 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// maxStructTreeDepth caps the structure tree walk in [structPrune].
-// Anti-DoS guard, not spec-mandated: a real tree nests a few dozen levels at
-// most, and a crafted /K cycle must not hang the writer. It matches
-// maxDestTreeDepth for the same reason.
+// maxStructTreeDepth caps the structure tree walks of this package,
+// [structPrune] among them. Anti-DoS guard, not spec-mandated: a real tree
+// nests a few dozen levels at most, and a crafted /K cycle must not hang the
+// writer. It matches maxDestTreeDepth for the same reason.
+//
+// The same conceptual limit is compliance.MaxStructTreeWalkDepth, at 200, which
+// validation and the remediation fixers walk to. The values differ, and the
+// difference is observable: these walks stop short conservatively, a page
+// deletion refusing with [ErrPagePruneIncomplete] and a split or merge leaving
+// the structure out, so a tree nested between 65 and 200 levels validates and
+// remediates whole while a page operation declines to carry it. Keep the two
+// consts and this note in step when either moves.
 const maxStructTreeDepth = 64
 
 // structPrune decides which elements of a structure tree outlive the pages an
