@@ -84,10 +84,18 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 	lines = append(lines, cur)
 
 	var sb strings.Builder
+	// Lines are consecutive runs of elements, so lineStart indexes the first
+	// element of the current line in elements, and in fonts.
+	lineStart := 0
 	for lineIdx, ln := range lines {
 		if lineIdx > 0 {
 			sb.WriteString("\n")
 		}
+		lineFonts := fonts
+		if lineFonts != nil {
+			lineFonts = fonts[lineStart : lineStart+len(ln.elems)]
+		}
+		lineStart += len(ln.elems)
 
 		// Bidi reorder: reverse RTL runs that are in visual order (X
 		// decreasing) to restore logical reading order.
@@ -170,7 +178,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el)) {
 						pendingSpace = ""
 					}
-				case prev.Text != "" && shouldInsertSpace(prev, gap, spaceThreshold, sameChunk):
+				case prev.Text != "" && shouldInsertSpace(prev, gap, wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
 					sb.WriteString(" ")
 				}
 			}
@@ -811,7 +819,8 @@ func computeLineGap(prev, curr models.TextElement) float64 {
 // breaks. A fixed 0.102 × fontSize fraction (the canonical tracking
 // cutoff for typeset text) is authoritative regardless of the line's
 // gap histogram, so the threshold is a constant fraction of the
-// line's average font size.
+// line's average font size. Content-stream order reads it only where the
+// fonts of the line are unknown ([wordSpaceThreshold]).
 func computeSpaceThreshold(elems []models.TextElement, indices []int) float64 {
 	if len(indices) == 0 {
 		return 1.0
@@ -825,6 +834,57 @@ func computeSpaceThreshold(elems []models.TextElement, indices []int) float64 {
 	}
 	avgFontSize := math.Abs(totalFontSize / float64(len(indices)-1))
 	return 0.102 * avgFontSize
+}
+
+// trackingSpaceFactor is the fraction of the font size at or below which a
+// gap between two glyphs is tracking, not a word space. It mirrors PDF.js's
+// TRACKING_SPACE_FACTOR (src/core/evaluator.js), the reference litho's
+// extraction is measured against; ISO 32000-1, 14.8.2.5 leaves word breaks
+// to the consumer, so the value is a heuristic, not a spec value.
+const trackingSpaceFactor = 0.102
+
+// wordSpaceThreshold returns the gap above which a word space separates the
+// element at i from the one at p, the elements of one line and their fonts
+// (nil when unknown). PDF.js measures the gap in the text space of the text
+// item the previous glyph belongs to and compares it with
+// [trackingSpaceFactor] times the size Tf set for that item
+// (compareWithLastPosition, ensureTextContentItem), so the threshold follows
+// the glyphs on either side of the gap, not the average size of the line:
+//
+//   - Within an item the size is the Tf operand, scaled by the text matrix
+//     in force when the glyph is shown, since a Tm that changes the scale
+//     rescales the item (updateAdvanceScale). A Tf that selects another size
+//     or font starts a new item only once the glyph is shown, so the gap
+//     before it still takes the previous size, at the new glyph's scale.
+//   - A marked-content boundary ends the item before the operators that
+//     follow it, so a Tm after it no longer rescales anything: the gap takes
+//     the previous glyph's size and scale, its size on the page.
+//
+// Without fonts, lineThreshold, the line's [computeSpaceThreshold], stands.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17232.pdf: "__/__/____" sets each underscore run and slash
+//     by its own Tm and marked-content sequence, at 25.6 and 8 points; the
+//     slash's size put a space PDF.js does not read after each run.
+//   - govdocs thread_300_300083.pdf: small capitals set by a 9-point Tm read
+//     "THEM ...." where the leaders' 11-point Tm keeps PDF.js at "THEM....".
+//   - All corpora: words match PDF.js on 33 more files (govdocs 28, pdfjs 5)
+//     and on none fewer, the line average having spaced or joined glyphs set
+//     in a size of their own.
+func wordSpaceThreshold(elems []models.TextElement, fonts []runFont, p, i int, lineThreshold float64) float64 {
+	prev, el := elems[p], elems[i]
+	if prev.MCID != el.MCID {
+		return trackingSpaceFactor * math.Abs(prev.FontSize)
+	}
+	if fonts == nil {
+		return lineThreshold
+	}
+	prevSize, size := math.Abs(fonts[p].size), math.Abs(fonts[i].size)
+	if prevSize == 0 || size == 0 {
+		return lineThreshold
+	}
+	return trackingSpaceFactor * prevSize * math.Abs(el.FontSize) / size
 }
 
 // needsSpace decides whether to insert a space between two consecutive glyphs.
