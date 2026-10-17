@@ -3,10 +3,12 @@ package filter
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -163,5 +165,28 @@ func TestDecodeDCT_Lenient(t *testing.T) {
 	dict := ast.PdfDict{"Height": ast.PdfInt(16)}
 	if got, err := decodeDCT(context.Background(), tall, nil, dict, dct.DefaultMaxSamples); err != nil || len(got) != 64*16*3 {
 		t.Errorf("placeholder height: %d bytes, %v; want %d", len(got), err, 64*16*3)
+	}
+}
+
+// TestDecodeDCT_BothDecodersFail reports both refusals when neither decoder
+// reads the data. The error once carried image/jpeg's alone, so a stream the
+// lenient decoder also refused showed only the fault it had been called in to
+// read through.
+func TestDecodeDCT_BothDecodersFail(t *testing.T) {
+	t.Parallel()
+
+	_, err := decodeDCT(context.Background(), []byte("not JPEG data at all"), nil, nil, dct.DefaultMaxSamples)
+	if err == nil {
+		t.Fatal("decodeDCT accepted data that holds no JPEG")
+	}
+	var formatErr jpeg.FormatError
+	if !errors.As(err, &formatErr) {
+		t.Errorf("error %q does not carry image/jpeg's refusal", err)
+	}
+	if !errors.Is(err, dct.ErrMalformed) {
+		t.Errorf("error %q does not carry the lenient decoder's refusal", err)
+	}
+	if !strings.Contains(err.Error(), "lenient decoder") {
+		t.Errorf("error %q does not name the lenient decoder", err)
 	}
 }

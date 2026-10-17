@@ -98,7 +98,14 @@ func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict, maxSam
 		if errors.Is(lerr, dct.ErrUnsupported) {
 			return nil, fmt.Errorf("%w: DCTDecode: %w", ErrUnsupportedFilter, lerr)
 		}
-		return nil, fmt.Errorf("dct decode: %w", err)
+		// Both decoders failed, and each names a different fault: a stream
+		// image/jpeg refuses over damage the lenient decoder reads through
+		// fails there for a reason of its own, and that reason is the one
+		// that says why litho rendered nothing.
+		return nil, fmt.Errorf("dct decode: %w", errors.Join(
+			fmt.Errorf("image/jpeg: %w", err),
+			fmt.Errorf("lenient decoder: %w", lerr),
+		))
 	}
 
 	bounds := img.Bounds()
