@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -116,6 +117,25 @@ func TestFixStreamFileKeys_RemovesOnlyTheKeysTheDetectorFound(t *testing.T) {
 	}
 	if _, present := s.Dict["Subtype"]; !present {
 		t.Error("the repair removed more than /F")
+	}
+}
+
+// TestFixStreamFileKeys_ReportsCancellation pins that a cancelled run fails
+// rather than returning as a repair that ran: the per-object loop is the
+// fixer's last statement, and breaking out of it returned a nil error.
+func TestFixStreamFileKeys_ReportsCancellation(t *testing.T) {
+	t.Parallel()
+
+	doc, alloc := newTestDoc(t, streamFileKeysPDF())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	violations := []compliance.Violation{{
+		Rule:    compliance.Rule{Specification: "ISO_19005_2", Clause: "6.1.7.1", TestNumber: 3},
+		Context: "object 4: stream dict contains [F FFilter FDecodeParms]",
+	}}
+	fixes, err := fixStreamFileKeys(ctx, alloc, doc, Options{}, violations, "PDF/A-2b")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("fixStreamFileKeys on a cancelled context = (%v, %v), want context.Canceled", fixes, err)
 	}
 }
 

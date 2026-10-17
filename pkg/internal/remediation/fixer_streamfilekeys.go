@@ -116,8 +116,10 @@ func fixStreamFileKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 
 	var fixes []string
 	for _, objNum := range objNums {
-		if ctx.Err() != nil {
-			break
+		// The loop is the fixer's last statement, so breaking out of it
+		// reported a cancelled run as a completed repair.
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("removing external-file keys: %w", err)
 		}
 
 		// Alloc-first: both rules bind on every stream and lzw runs first, so
