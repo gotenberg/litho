@@ -188,3 +188,93 @@ func TestReconstructText_WithBeads(t *testing.T) {
 		t.Errorf("with beads: got %q, want both tokens present", got)
 	}
 }
+
+// TestReconstructText_LiteralSpaceOverlappedDropped pins that a literal
+// space whose following glyph starts before the end of the glyph ahead of
+// it reads as no word break: the space advanced the text matrix and the
+// producer moved it back.
+func TestReconstructText_LiteralSpaceOverlappedDropped(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "者", X: 100, Y: 500, Width: 12, FontSize: 12},
+		{Text: " ", X: 112, Y: 500, Width: 6, FontSize: 12},
+		{Text: "，", X: 111.4, Y: 500, Width: 12, FontSize: 12},
+	}
+	if got := ReconstructText(context.Background(), in, nil); got != "者，" {
+		t.Errorf("got %q, want %q", got, "者，")
+	}
+}
+
+// TestReconstructText_LiteralSpaceWithGapKept pins that a literal space
+// followed by a real gap stays a single space.
+func TestReconstructText_LiteralSpaceWithGapKept(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "全", X: 100, Y: 500, Width: 12, FontSize: 12},
+		{Text: " ", X: 112, Y: 500, Width: 12, FontSize: 12},
+		{Text: "世", X: 116, Y: 500, Width: 12, FontSize: 12},
+	}
+	if got := ReconstructText(context.Background(), in, nil); got != "全 世" {
+		t.Errorf("got %q, want %q", got, "全 世")
+	}
+}
+
+// TestReconstructText_LiteralSpaceExactAbutmentKept pins that a literal
+// space stays when the next glyph starts exactly at the end of the
+// previous one: the producer placed the word itself and the space is the
+// only break it signals.
+func TestReconstructText_LiteralSpaceExactAbutmentKept(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "9", X: 100, Y: 500, Width: 4.5, FontSize: 8},
+		{Text: " ", X: 104.5, Y: 500, Width: 2.25, FontSize: 8},
+		{Text: "a", X: 104.5, Y: 500, Width: 4.5, FontSize: 8},
+	}
+	if got := ReconstructText(context.Background(), in, nil); got != "9 a" {
+		t.Errorf("got %q, want %q", got, "9 a")
+	}
+}
+
+// TestReconstructText_LiteralSpaceKeptOnMarkedLine pins that a line
+// carrying a nonspacing mark keeps its literal spaces whatever the gap,
+// since shaped text places glyphs by positions the advance does not give.
+func TestReconstructText_LiteralSpaceKeptOnMarkedLine(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "ก", X: 100, Y: 500, Width: 6, FontSize: 12},
+		{Text: "ิ", X: 106, Y: 500, Width: 4, FontSize: 12},
+		{Text: " ", X: 110, Y: 500, Width: 3, FontSize: 12},
+		{Text: "ม", X: 105, Y: 500, Width: 6, FontSize: 12},
+	}
+	if got := ReconstructText(context.Background(), in, nil); got != "กิ ม" {
+		t.Errorf("got %q, want %q", got, "กิ ม")
+	}
+}
+
+// TestReconstructText_LiteralSpaceSmallerFontKept pins that the cutoff
+// follows the smaller of the two font sizes, so a drop cap does not
+// swallow the space before the body text that follows it.
+func TestReconstructText_LiteralSpaceSmallerFontKept(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "M", X: 100, Y: 500, Width: 30, FontSize: 37.5},
+		{Text: " ", X: 130, Y: 500, Width: 9, FontSize: 37.5},
+		{Text: "a", X: 131, Y: 500, Width: 5, FontSize: 11},
+	}
+	if got := ReconstructText(context.Background(), in, nil); got != "M a" {
+		t.Errorf("got %q, want %q", got, "M a")
+	}
+}
+
+// TestReconstructText_IdeographicSpace pins that U+3000 reads as a word
+// break: it folds to U+0020 and two in a row read as one.
+func TestReconstructText_IdeographicSpace(t *testing.T) {
+	t.Parallel()
+	var in []models.TextElement
+	for i, s := range []string{"目", "　", "　", "录"} {
+		in = append(in, models.TextElement{Text: s, X: 100 + float64(i)*15.78, Y: 500, Width: 15.78, FontSize: 15.78})
+	}
+	if got := ReconstructText(context.Background(), in, nil); got != "目 录" {
+		t.Errorf("got %q, want %q", got, "目 录")
+	}
+}

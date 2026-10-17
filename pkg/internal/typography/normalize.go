@@ -10,15 +10,21 @@ import (
 // isNormalizable reports whether r belongs to the narrow character set
 // that wants NFKC folding when surfaced as extracted text: Latin
 // ligatures, Arabic presentation forms, Ohm and Micro signs, and the
-// Unicode space block. Everything outside this set passes through
-// [normalizeExtractionUnicode] unchanged.
+// Unicode spaces, the CJK ideographic space U+3000 among them. Everything
+// outside this set passes through [normalizeExtractionUnicode] unchanged.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1905623.pdf, issue15139.pdf: U+3000 indents paragraphs and
+//     pads 請 求 書; kept as U+3000, their text differed from PDF.js's
+//     even with every whitespace run stripped.
 func isNormalizable(r rune) bool {
 	switch {
 	case r == 0x00A0, r == 0x00B5, r == 0x037E, r == 0x0EB3:
 		return true
 	case r >= 0x2000 && r <= 0x200A:
 		return true
-	case r == 0x202F, r == 0x2126:
+	case r == 0x202F, r == 0x2126, r == ideographicSpace:
 		return true
 	case r >= 0xFB00 && r <= 0xFB04, r == 0xFB05, r == 0xFB06:
 		return true

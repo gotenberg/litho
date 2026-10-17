@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 	"github.com/gotenberg/litho/pkg/models"
@@ -86,6 +87,7 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 
 		// Compute adaptive space threshold from the gap histogram.
 		spaceThreshold := computeSpaceThreshold(ln.elems, indices)
+		hasMarks := lineHasNonspacingMark(ln.elems)
 
 		// Phantom anchors: unresolved glyphs reach this point with
 		// Text == "". They still occupy layout space, so their
@@ -102,10 +104,26 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 		// into spaces. Large gaps inside a chunk (e.g. a sizeable TJ
 		// numeric adjustment) still cross the gap heuristic so the
 		// visible word break survives.
-		prevIdx := -1
+		//
+		// Literal space glyphs: a space glyph is held back rather than
+		// written, and the gap to the next glyph is measured from the
+		// last glyph that painted something, so a literal space and a
+		// cursor move form one word break. See [suppressesLiteralSpace]
+		// for when the held space is dropped.
+		// prevIdx is the previous element, space glyphs included; visIdx
+		// the previous element that is not a space glyph.
+		prevIdx, visIdx := -1, -1
+		pendingSpace := ""
 		for _, idx := range indices {
 			el := ln.elems[idx]
 			if el.Text == "" {
+				prevIdx, visIdx = idx, idx
+				continue
+			}
+			if isSpaceGlyph(el.Text) {
+				if pendingSpace == "" {
+					pendingSpace = el.Text
+				}
 				prevIdx = idx
 				continue
 			}
@@ -113,7 +131,8 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 				prev := ln.elems[prevIdx]
 				gap := computeLineGap(prev, el)
 				sameChunk := prev.Chunk == el.Chunk && el.Chunk != 0
-				if prev.Text != "" && isRunningHeadReset(prev, el, gap) {
+				switch {
+				case prev.Text != "" && isRunningHeadReset(prev, el, gap):
 					// A running-head reset (page header at the right
 					// of a line, then a deliberate Tm reset to the
 					// left margin for the title on the same line)
@@ -122,31 +141,29 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 					// so RTL flow (Hebrew, Arabic) and orthogonal
 					// column layouts (90°-rotated body text) keep
 					// their literal spaces.
+					pendingSpace = ""
 					if b := sb.String(); len(b) > 0 && b[len(b)-1] == ' ' {
 						buf := []byte(b)
 						sb.Reset()
 						sb.Write(buf[:len(buf)-1])
 					}
-				} else if prev.Text != "" && shouldInsertSpace(prev, gap, spaceThreshold, sameChunk) {
+				case pendingSpace != "":
+					if visIdx < 0 || hasMarks {
+						break
+					}
+					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el)) {
+						pendingSpace = ""
+					}
+				case prev.Text != "" && shouldInsertSpace(prev, gap, spaceThreshold, sameChunk):
 					sb.WriteString(" ")
 				}
 			}
-			// Collapse consecutive whitespace. A producer that bakes
-			// two literal spaces into a Tj (one from word-spacing,
-			// one from a degenerate Tm reset that places it backward
-			// over the previous glyph) would otherwise leak two
-			// spaces into the output. Skip el.Text when it is
-			// whitespace and the accumulated output already ends in
-			// whitespace.
-			emit := el.Text
-			if isAllWhitespace(emit) {
-				if b := sb.String(); len(b) > 0 && isWhitespaceByte(b[len(b)-1]) {
-					emit = ""
-				}
-			}
-			sb.WriteString(emit)
-			prevIdx = idx
+			writeSpace(&sb, pendingSpace)
+			pendingSpace = ""
+			sb.WriteString(el.Text)
+			prevIdx, visIdx = idx, idx
 		}
+		writeSpace(&sb, pendingSpace)
 	}
 
 	return normalizeExtractionUnicode(normalizeSoftHyphens(sb.String()))
@@ -200,16 +217,143 @@ const (
 	negativeSpaceJumpMin = 50.0
 )
 
-func isAllWhitespace(s string) bool {
+// ideographicSpace is U+3000, the full-width space of CJK typesetting.
+// Producers paint it as a fixed-width spacer (paragraph indents, padding
+// between characters), so extraction reads it as a word break.
+const ideographicSpace = 0x3000
+
+// notASpaceFactor bounds, as a fraction of the font size, the gap at or
+// below which a literal space glyph marks no word break: the next glyph
+// starts where the previous one ends, or before it. It mirrors PDF.js's
+// NOT_A_SPACE_FACTOR (src/core/evaluator.js, buildTextContentItem), the
+// reference litho's extraction is measured against. ISO 32000-1, 14.8.2.5
+// leaves word breaks to the consumer once the content stream carries
+// none it can trust, so the cutoff is a heuristic, not a spec value.
+const notASpaceFactor = 0.03
+
+// exactAbutment is the gap, in user-space units, below which the next
+// glyph starts exactly where the previous one ends. A producer that sets
+// each word by its own Tm at the computed end of the previous glyph, and
+// still shows a space between them, signals the break by the space
+// alone, so the space stays. PDF.js keeps it on the same condition
+// (compareWithLastPosition returns before the NOT_A_SPACE test when the
+// two positions are equal). The bound absorbs float rounding only.
+const exactAbutment = 1e-6
+
+// isSpaceGlyph reports whether s is made only of space glyphs: U+0020,
+// a tab, or [ideographicSpace].
+func isSpaceGlyph(s string) bool {
 	if s == "" {
 		return false
 	}
-	for i := 0; i < len(s); i++ {
-		if !isWhitespaceByte(s[i]) {
+	for _, r := range s {
+		if r != ' ' && r != '\t' && r != ideographicSpace {
 			return false
 		}
 	}
 	return true
+}
+
+// suppressesLiteralSpace reports whether a literal space glyph shown
+// between prev and el marks no word break. The next glyph starts at or
+// before the end of the last painted glyph (gap at most
+// [notASpaceFactor] × the smaller font size), so the space advanced the
+// text matrix and the producer moved it back over itself: the two glyphs
+// abut on the page and no reader sees a gap between them. The smaller
+// size keeps a drop cap from swallowing the space after it.
+//
+// The gap is only read for horizontal left-to-right text at a positive
+// font size: vertical, rotated, mirrored and right-to-left runs measure
+// their gaps along other axes or in visual order, and keep their literal
+// spaces. So does an exact abutment ([exactAbutment]).
+//
+// # Corpus evidence
+//
+//   - pdfjs SimFang-variant.pdf, XiaoBiaoSong.pdf: every Chinese glyph is
+//     shown with a trailing space by a Td that lands on the next glyph,
+//     so emitting the spaces read a space after each character.
+//   - pdfjs issue15139.pdf: "2", " ", "/", " ", "2" each placed by its own
+//     Tm, one em apart, read "2 / 2" for the "2/2" the page shows.
+//   - facturx: 26 invoices end "von" and a date with a space the next Tm
+//     overprints, where PDF.js reads "von1" and "05.03.2018Nr.".
+//   - All corpora: words match PDF.js on 83 more files (facturx 26, govdocs
+//     43, pdfcpu 2, pdfjs 12) and on none fewer.
+//   - govdocs thread_100_100451.pdf (drop cap), pdfjs prefilled_f1040.pdf
+//     (exact abutment), issue269_2.pdf (180° text), issue14415.pdf (negative
+//     font size), issue9186.pdf (U+200B around each space): each lost
+//     spaces PDF.js keeps until the guard above that names its case.
+func suppressesLiteralSpace(prev, el models.TextElement, gap float64) bool {
+	if prev.Vertical || el.Vertical || math.Abs(prev.Angle) >= math.Pi/180 || math.Abs(el.Angle) >= math.Pi/180 {
+		return false
+	}
+	if stringHasRTL(prev.Text) || stringHasRTL(el.Text) {
+		return false
+	}
+	// A format character (U+200B ZERO WIDTH SPACE and the rest of Unicode
+	// category Cf) paints nothing, so it does not anchor a gap.
+	if isFormatOnly(prev.Text) || isFormatOnly(el.Text) {
+		return false
+	}
+	// A negative font size runs the glyphs leftward (ISO 32000-1, 9.4.4),
+	// so the gap, read rightward, says nothing about whether they abut.
+	if prev.FontSize <= 0 || el.FontSize <= 0 {
+		return false
+	}
+	if math.Abs(gap) < exactAbutment {
+		return false
+	}
+	return gap <= notASpaceFactor*min(prev.FontSize, el.FontSize)
+}
+
+// isFormatOnly reports whether s is made only of format characters
+// (Unicode category Cf).
+func isFormatOnly(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.Is(unicode.Cf, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// lineHasNonspacingMark reports whether any element of a line carries a
+// nonspacing mark (Unicode category Mn). Producers that shape such text
+// (Thai vowel and tone marks, Indic matras) place the glyph after a mark
+// by its shaped position, while the text matrix advances by the mark's
+// /Widths entry (ISO 32000-1, 9.4.4). The two disagree, so a gap read
+// from the advance on such a line says nothing about whether glyphs
+// abut, and [suppressesLiteralSpace] is not consulted.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue13211.pdf: Thai syllables placed by Tm overlap their
+//     predecessor by up to 1.4 em in the advance litho computes, though
+//     the page shows a word space between them.
+func lineHasNonspacingMark(elems []models.TextElement) bool {
+	for _, el := range elems {
+		for _, r := range el.Text {
+			if unicode.Is(unicode.Mn, r) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// writeSpace writes the held space glyph s to sb, unless sb already ends
+// in whitespace. Collapsing keeps two literal spaces, or
+// a space next to an inferred one, from leaking into the output as two.
+func writeSpace(sb *strings.Builder, s string) {
+	if s == "" {
+		return
+	}
+	if b := sb.String(); len(b) > 0 && isWhitespaceByte(b[len(b)-1]) {
+		return
+	}
+	sb.WriteString(s)
 }
 
 func isWhitespaceByte(b byte) bool {
