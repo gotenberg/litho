@@ -639,13 +639,24 @@ func (e *fontEmbedder) buildSimple(ctx context.Context, s *simpleFont, prog *sup
 		if names == nil || len(prog.unicode) == 0 {
 			return nil, fmt.Errorf("%w: the codes of %s cannot reach the Unicode cmap of %s", ErrFontKind, baseFont, prog.psName)
 		}
-		if subtype == "Type1" {
+		switch {
+		case subtype == "Type1":
 			// ISO 32000-1, 9.6.6.4: a non-symbolic TrueType font names its
 			// codes through MacRomanEncoding or WinAnsiEncoding, with
 			// /Differences, and a conforming reader looks the names up in
 			// the (3,1) cmap. Every code the Type 1 font named keeps its
 			// name.
 			cand["Subtype"] = ast.PdfName("TrueType")
+			cand["Encoding"] = trueTypeEncoding(ctx, e.doc, font, names, shownSet)
+		case !namesSurviveEmbedding(ctx, e.doc, font):
+			// The names came from the implicit base of an unembedded font,
+			// StandardEncoding ([compliance.UnembeddedFontGlyphNames]), which
+			// an embedded non-symbolic TrueType font no longer takes: ISO
+			// 32000-1, 9.6.6.4 reads its codes through the program's cmap or
+			// WinAnsiEncoding, and ISO 19005-2, 6.2.11.6 admits only
+			// MacRomanEncoding or WinAnsiEncoding as its /Encoding. Writing
+			// the names the glyphs were chosen by, as /Differences over
+			// WinAnsiEncoding, keeps every shown code on its glyph.
 			cand["Encoding"] = trueTypeEncoding(ctx, e.doc, font, names, shownSet)
 		}
 		glyph = func(code byte) (uint16, bool) { return prog.nameToGID(names[code]) }
@@ -1243,6 +1254,35 @@ func trueTypeEncoding(ctx context.Context, doc *document.Document, font ast.PdfD
 		return ast.PdfName("WinAnsiEncoding")
 	}
 	return ast.PdfDict{"Type": ast.PdfName("Encoding"), "BaseEncoding": ast.PdfName("WinAnsiEncoding"), "Differences": diffs}
+}
+
+// namesSurviveEmbedding reports whether a non-symbolic TrueType font's own
+// /Encoding names its codes the same once its program is embedded: a
+// predefined base it states, as a name or as the /BaseEncoding of an encoding
+// dictionary, holds whether or not the program is there. Without one the
+// unembedded font reads its codes through StandardEncoding (ISO 32000-1,
+// 9.6.6.1, Table 114), and the embedded one does not.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7580.pdf: its ArialMT has no /Encoding and shows 0xF1 and
+//     0xF9 for "æ" and "ø", which WinAnsiEncoding names ntilde and ugrave.
+//     With --system-fonts at PDF/A-2b the font was refused; over
+//     /Differences it embeds, the text is unchanged and veraPDF 1.30.2
+//     passes the output.
+//   - pdfjs issue6127.pdf: its TimesNewRomanPS-BoldItalicMT gains
+//     /WinAnsiEncoding, which clears 6.2.11.6 t2 under veraPDF 1.30.2.
+//   - govdocs: no file has a non-embedded non-symbolic TrueType font without
+//     /Encoding.
+func namesSurviveEmbedding(ctx context.Context, doc *document.Document, font ast.PdfDict) bool {
+	if name := nameOf(ctx, doc, font["Encoding"]); compliance.PredefinedEncodingNames(name) != nil {
+		return true
+	}
+	enc, err := document.ResolveDict(ctx, doc, font["Encoding"])
+	if err != nil || enc == nil {
+		return false
+	}
+	return compliance.PredefinedEncodingNames(nameOf(ctx, doc, enc["BaseEncoding"])) != nil
 }
 
 // type1CEncoding returns the /Encoding a Type 1 font over a CFF program takes
