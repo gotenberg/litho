@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-17T17:00:14Z",
+  "captured_at": "2026-10-17T19:00:06Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -100,12 +100,12 @@
           "skipped": 0
         },
         "text": {
-          "matched": 877,
-          "mismatched": 214,
+          "matched": 887,
+          "mismatched": 204,
           "skipped": 0,
           "metrics": {
-            "chars_match": 1029,
-            "words_match": 877
+            "chars_match": 1034,
+            "words_match": 887
           }
         }
       }
@@ -328,12 +328,12 @@
           }
         },
         "text": {
-          "matched": 40,
-          "mismatched": 11,
+          "matched": 41,
+          "mismatched": 10,
           "skipped": 0,
           "metrics": {
-            "chars_match": 49,
-            "words_match": 40
+            "chars_match": 51,
+            "words_match": 41
           }
         }
       }
@@ -368,12 +368,12 @@
           "skipped": 1
         },
         "text": {
-          "matched": 1095,
-          "mismatched": 95,
+          "matched": 1099,
+          "mismatched": 91,
           "skipped": 1,
           "metrics": {
-            "chars_match": 1142,
-            "words_match": 1095
+            "chars_match": 1147,
+            "words_match": 1099
           }
         }
       }
