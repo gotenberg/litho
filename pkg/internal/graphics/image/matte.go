@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"log/slog"
+	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -52,6 +53,7 @@ func unpreblend(ctx context.Context, doc *document.Document, name ast.PdfName, d
 			slog.String("image", string(name)), slog.Int("components", len(matte)))
 		return img
 	}
+	smask.Dict = matteMaskDimensions(ctx, doc, smask.Dict, img.Bounds())
 	// A soft mask holds opacity, not colour, so no default colour space or
 	// output intent applies to it.
 	alphaImg, err := decodeImagePixels(ctx, doc, name+" soft mask", smask, colorContext{})
@@ -139,4 +141,38 @@ func allNumbers(ctx context.Context, doc *document.Document, obj ast.PdfObject) 
 		return nil, false
 	}
 	return numbers(ctx, doc, arr, len(arr))
+}
+
+// matteMaskDimensions returns the dictionary of a soft mask carrying a /Matte,
+// its /Width or /Height taken from the image it masks where the entry is not
+// a positive integer.
+//
+// Per ISO 32000-1, 11.6.5.3 a soft mask with a /Matte has the dimensions of its
+// parent image, so an entry that states none still has exactly one value it
+// can hold. Reading it as absent left the matte undone and the image dark
+// where its mask is transparent. PDF.js reads such an entry the same way,
+// taking the parent's dimensions for a mask whose own are invalid. A copy is
+// returned, since the dictionary belongs to the document.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19611.pdf: the soft mask of IM19 states /Height /Length, and
+//     leaving the matte undone painted the image near black where PDF.js
+//     paints it white.
+func matteMaskDimensions(ctx context.Context, doc *document.Document, dict ast.PdfDict, parent image.Rectangle) ast.PdfDict {
+	var out ast.PdfDict
+	for key, want := range map[ast.PdfName]int{"Width": parent.Dx(), "Height": parent.Dy()} {
+		if v, err := resolveInt(ctx, doc, dict, key); err == nil && v > 0 {
+			continue
+		}
+		if out == nil {
+			out = maps.Clone(dict)
+		}
+		out[key] = ast.PdfInt(want)
+	}
+	if out == nil {
+		return dict
+	}
+	doc.Logger.Debug("taking a matted soft mask's dimensions from its image")
+	return out
 }
