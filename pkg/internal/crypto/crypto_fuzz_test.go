@@ -81,6 +81,9 @@ func FuzzNewHandler(f *testing.F) {
 func FuzzDecryptFunc(f *testing.F) {
 	f.Add(make([]byte, 5), 1, 4, "V2", 1, 0, []byte("ciphertext"))
 	f.Add(make([]byte, 16), 4, 4, "AESV2", 5, 0, make([]byte, 48))
+	// A /V 4 RC4 handler with a 40-bit key, the issue19484 shape whose key
+	// objKeyBase zero-extends.
+	f.Add(make([]byte, 5), 4, 40, "V2", 13, 0, []byte("ciphertext"))
 	f.Add(make([]byte, 32), 5, 6, "AESV3", 1, 0, make([]byte, 32))
 	f.Add([]byte(""), 0, 0, "", 0, 0, []byte(""))
 

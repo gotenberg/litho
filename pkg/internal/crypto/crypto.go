@@ -486,9 +486,13 @@ func (h *Handler) SameParameters(other *Handler) bool {
 // or V=5/AESV3); RC4 cipher methods (V<4, V=4 with /CFM V2) MUST NOT
 // salt the per-object key, otherwise the resulting RC4 stream
 // decrypts content streams to garbage.
+//
+// A /V 4 file key shorter than [minV4ObjKeyBase] bytes is zero-extended to
+// that length before it enters Algorithm 1 (see [Handler.objKeyBase]).
 func (h *Handler) ObjKey(objNum, genNum int) []byte {
+	base := h.objKeyBase()
 	md := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
-	md.Write(h.EncryptionKey)
+	md.Write(base)
 	md.Write([]byte{byte(objNum), byte(objNum >> 8), byte(objNum >> 16)}) //nolint:gosec // Expected truncation
 	md.Write([]byte{byte(genNum), byte(genNum >> 8)})                     //nolint:gosec // Expected truncation
 
@@ -497,8 +501,38 @@ func (h *Handler) ObjKey(objNum, genNum int) []byte {
 	}
 
 	key := md.Sum(nil)
-	keyLen := min(len(h.EncryptionKey)+5, 16)
+	keyLen := min(len(base)+5, 16)
 	return key[:keyLen]
+}
+
+// minV4ObjKeyBase is the length a /V 4 file key is zero-extended to before
+// Algorithm 1 derives an object key from it.
+const minV4ObjKeyBase = 16
+
+// objKeyBase returns the file key Algorithm 1 starts from.
+//
+// ISO 32000-1, 7.6.3.1, Algorithm 1 step b hashes the n-byte file key as
+// computed. A /V 4 handler whose key is shorter than 16 bytes (a 40-bit
+// /Length with /CFM /V2) is relaxed: Acrobat hashes the key zero-extended to
+// 16 bytes, so its files decrypt to garbage under the n-byte reading. pdf.js
+// (CipherTransformFactory, "Extend key to 16 byte minimum (undocumented)")
+// reads them the same way. litho never writes such a handler: its /V 4 output
+// is AES-128 with a 16-byte key, which the extension leaves untouched.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19484_1.pdf, issue19484_2.pdf: Adobe Acrobat Pro 24.5, /V 4
+//     /R 4 /Length 40, /CFM /V2. Their object streams decrypt to zlib data only
+//     with the extended key; pdf.js extracts their text, poppler 26.09 fails
+//     on them the way the n-byte reading does.
+//   - All corpora: no other /V 4 file declares a key under 128 bits.
+func (h *Handler) objKeyBase() []byte {
+	if h.V != 4 || len(h.EncryptionKey) >= minV4ObjKeyBase {
+		return h.EncryptionKey
+	}
+	base := make([]byte, minV4ObjKeyBase)
+	copy(base, h.EncryptionKey)
+	return base
 }
 
 // DecryptFunc returns a closure that decrypts data for a specific object.
