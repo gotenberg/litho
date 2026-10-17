@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -34,7 +35,10 @@ type CodeSpaceRange struct {
 // Mapping expands every bfrange in full, including one that crosses a
 // first-byte boundary, because a viewer extracting text reads it that way.
 // [CMap.StrictMapping] is the conforming view a validator judges against.
-// A CMap is read-only once [Parse] returns and safe for concurrent reads.
+// A CMap is read-only once [Parse] returns and safe for concurrent reads. A
+// CMap built as a literal is read-only from its first [CMap.Map] call on: the
+// lookup index that call builds is not rebuilt when Mapping or
+// CodeSpaceRanges change.
 type CMap struct {
 	Mapping         map[string]string
 	CodeSpaceRanges []CodeSpaceRange
@@ -52,6 +56,28 @@ type CMap struct {
 	// program maps after it; see [CMap.WithBase].
 	useCMap  string
 	afterUse map[string]bool
+
+	// indexOnce guards index, which the first [CMap.Map] call builds.
+	indexOnce sync.Once
+	index     lookupIndex
+}
+
+// lookupIndex is what [CMap.Map] reads of a CMap beyond one mapping entry.
+// Deriving it per lookup cost a scan of the whole mapping for every shown code
+// the mapping lacks, so a 65536-entry CMap multiplied the cost of every glyph.
+type lookupIndex struct {
+	// lengths are the distinct codespace widths, ascending.
+	lengths []int
+	// shortKeys marks a mapping holding a one-byte source code.
+	shortKeys bool
+}
+
+// lookupIndex returns c's lookup index, building it on the first call.
+func (c *CMap) lookupIndex() *lookupIndex {
+	c.indexOnce.Do(func() {
+		c.index = lookupIndex{lengths: c.codeLengths(), shortKeys: c.hasShortKeys()}
+	})
+	return &c.index
 }
 
 // StrictMapping returns the mapping without the codes that only a
@@ -404,9 +430,9 @@ func (c *CMap) Map(data []byte) (int, string, bool) {
 func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 	// Collect distinct byte lengths from codespace ranges and try each,
 	// preferring longer matches (more specific).
-	lengths := c.codeLengths()
+	idx := c.lookupIndex()
 
-	for _, n := range slices.Backward(lengths) {
+	for _, n := range slices.Backward(idx.lengths) {
 		// A malformed CMap can declare a zero-width codespace, which
 		// would match the empty prefix of any string and report a
 		// mapping that consumes nothing. CIDMap.next mirrors this
@@ -440,7 +466,7 @@ func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 		// hand-authored PDFs), consuming the full codespace width would
 		// swallow the next byte, which the mapping can likely decode on
 		// its own. Advance by one instead so the caller re-aligns.
-		if n > 1 && c.hasShortKeys() {
+		if n > 1 && idx.shortKeys {
 			return 1, "", false
 		}
 		return n, "", false
@@ -487,7 +513,8 @@ func (c *CMap) codeLengths() []int {
 // hasShortKeys reports whether any mapping entry uses a single-byte source
 // code. Used to detect mixed-width CMaps (1-byte bfchar entries inside a
 // 2-byte codespace), where unmapped multi-byte codes should advance by one
-// byte so mappable bytes are not inadvertently skipped.
+// byte so mappable bytes are not inadvertently skipped. [CMap.Map] reads it
+// through [CMap.lookupIndex], once per CMap.
 func (c *CMap) hasShortKeys() bool {
 	for k := range c.Mapping {
 		if len(k) == 1 {
