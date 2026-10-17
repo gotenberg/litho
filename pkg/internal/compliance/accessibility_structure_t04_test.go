@@ -5,91 +5,134 @@ import (
 	"testing"
 )
 
-// TestCheckNamespaceRoleMapping_T04KnownDivergences characterises what litho
-// reports for ISO 14289-2 §8.2.4 t4 on two shapes a previous session measured
-// against veraPDF and found litho disagreeing on, in opposite directions.
+// TestCheckNamespaceRoleMapping_T04 pins ISO 14289-2 §8.2.4 t4 to veraPDF
+// 1.30.2's reading: each element whose type is standard in its own namespace
+// fires when following its mapping to the end reaches no standard type, and
+// only then.
 //
-// It asserts TODAY'S behaviour, not the desired behaviour. Both shapes are
-// believed wrong, and neither is fixed here, because nothing available in this
-// repository can adjudicate THESE SHAPES. veraPDF itself is not invoked by any
-// target here, so its verdict on these two shapes comes from an earlier
-// session's live run and cannot be re-checked locally. Changing a compliance
-// verdict on that basis alone would be guessing.
-//
-// The two shapes, and why each is believed wrong:
-//
-//   - ns17_to_Book. The element declares the PDF 1.7 namespace, which is the
-//     vocabulary the legacy /RoleMap governs, so veraPDF resolves it through
-//     that /RoleMap and reports t4. litho stays silent because
-//     usedTypesWithoutNS skips every element carrying an /NS entry at all.
-//     Recorded as a litho FALSE NEGATIVE. The recorded fix is to admit
-//     elements whose /NS is pdf1NamespaceURI. That would not reintroduce the
-//     false positive the comment in checkNamespaceRoleMapping warns about,
-//     because every fixer that writes /NS onto an element writes the PDF 2.0
-//     namespace (fixer_structtree.go, fixer_listcontent.go), never PDF 1.7.
-//
-//   - noNS_chain_Foo_Sect. A standard type maps to a non-standard name that
-//     maps on to a standard one. litho judges only the first hop and fires;
-//     veraPDF follows the chain to a standard type and stays silent. Recorded
-//     as a litho FALSE POSITIVE. [roleMapChainReachesStandard] already follows
-//     a legacy /RoleMap chain and is the shape the fix wants.
-//
-//     A dead end worth not re-walking: that helper is NOT evidence litho
-//     contradicts itself. Its only callers are the two t01 sites, where it
-//     answers a different question, "does a NON-standard name eventually reach
-//     a standard type", as the escape from t01. t04 asks whether a STANDARD
-//     type is remapped to a non-standard one, and judging the first hop is
-//     defensible there on its own terms: /Document -> /Foo is a remap to a
-//     non-standard name whatever /Foo points at next. So the FP rests on the
-//     unverifiable veraPDF record alone, which is why it is not fixed here.
-//
-// Keeping this as a test rather than a note means a later session with a
-// veraPDF oracle sees the exact inputs, and any change to either verdict has
-// to be deliberate rather than silent.
+// The structure tree root holds one Document in the PDF 2.0 namespace (object
+// 5), which no mapping reaches, and one child element under test. Object 6 is
+// the PDF 1.7 namespace and object 7 a custom one, so a case can hang a
+// /RoleMapNS on either.
 //
 // # Corpus evidence
 //
-//   - verapdf PDF_UA-2__8.2.4-t04-fail-a.pdf, PDF_UA-2__8.2.4-t04-pass-a.pdf:
-//     cover the rule, provisioned, with veraPDF 1.30.1's verdicts recorded in
-//     the PDF_UA-2 golden, and litho already agrees there.
-//   - verapdf: the suite contains neither ns17_to_Book nor
-//     noNS_chain_Foo_Sect, so `make corpus-check` guards against a regression
-//     on the real fixtures while saying nothing about a change aimed at these
-//     two shapes.
-func TestCheckNamespaceRoleMapping_T04KnownDivergences(t *testing.T) {
+//   - litho stdremap_ua2: the PDF 1.7 Sect the /RoleMap sends to Book, which
+//     veraPDF 1.30.2 reports once and litho missed.
+//   - litho remapchain_ua2: a legacy chain Div -> Section -> Sect and a
+//     namespace chain Sect -> Section -> Sect, which veraPDF passes and litho
+//     reported twice.
+func TestCheckNamespaceRoleMapping_T04(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
-	build := func(roleMap, docElem, nsURI string) []Violation {
-		t.Helper()
-		doc, cat := tableDoc(t, 1,
-			"<< /Type /Catalog /StructTreeRoot 2 0 R >>",
-			"<< /Type /StructTreeRoot /RoleMap "+roleMap+" /Namespaces [4 0 R] /K [3 0 R] >>",
-			docElem,
-			"<< /Type /Namespace /NS ("+nsURI+") >>",
-		)
-		return checkNamespaceRoleMapping(ctx, doc, cat, "PDF/UA-2")
+	cases := []struct {
+		name    string
+		roleMap string
+		elem    string
+		ns17    string
+		custom  string
+		want    int
+	}{
+		{
+			name:    "PDF 1.7 namespace element remapped by the legacy map",
+			roleMap: "<< /Document /Book >>",
+			elem:    "/S /Document /NS 6 0 R",
+			want:    1,
+		},
+		{
+			name:    "no-namespace element remapped by the legacy map",
+			roleMap: "<< /Document /Book >>",
+			elem:    "/S /Document",
+			want:    1,
+		},
+		{
+			name:    "PDF 2.0 namespace element leaves the legacy map inert",
+			roleMap: "<< /Document /Book >>",
+			elem:    "/S /Document /NS 5 0 R",
+		},
+		{
+			name:    "legacy chain through a private type to a standard one",
+			roleMap: "<< /Document /Foo /Foo /Sect >>",
+			elem:    "/S /Document",
+		},
+		{
+			name:    "legacy chain closing on its own start",
+			roleMap: "<< /Document /Foo /Foo /Document >>",
+			elem:    "/S /Document",
+			want:    1,
+		},
+		{
+			// The cycle returns to Document in no namespace, a type distinct
+			// from the PDF 1.7 Document it started from, and that one is
+			// standard.
+			name:    "PDF 1.7 element whose legacy cycle returns in no namespace",
+			roleMap: "<< /Document /Foo /Foo /Document >>",
+			elem:    "/S /Document /NS 6 0 R",
+		},
+		{
+			name:    "standard type mapped to itself keeps its type",
+			roleMap: "<< /Sect /Sect >>",
+			elem:    "/S /Sect",
+		},
+		{
+			name:    "legacy entry no element uses",
+			roleMap: "<< /Sect /Book >>",
+			elem:    "/S /P",
+		},
+		{
+			name:   "namespace chain through a custom type to a standard one",
+			elem:   "/S /Sect /NS 6 0 R",
+			ns17:   "/RoleMapNS << /Sect [/Section 7 0 R] >>",
+			custom: "/RoleMapNS << /Section [/Sect 5 0 R] >>",
+		},
+		{
+			name: "namespace map to a custom type mapped no further",
+			elem: "/S /Sect /NS 6 0 R",
+			ns17: "/RoleMapNS << /Sect [/Section 7 0 R] >>",
+			want: 1,
+		},
+		{
+			name: "namespace entry no element uses",
+			elem: "/S /P /NS 6 0 R",
+			ns17: "/RoleMapNS << /Sect [/Section 7 0 R] >>",
+		},
+		{
+			name:    "a PDF 1.7 namespace with a /RoleMapNS leaves the legacy map inert",
+			roleMap: "<< /Sect /Book >>",
+			elem:    "/S /Sect /NS 6 0 R",
+			ns17:    "/RoleMapNS << /Note [/Aside 5 0 R] >>",
+		},
+		{
+			name:   "custom namespace defines no standard type",
+			elem:   "/S /Sect /NS 7 0 R",
+			custom: "/RoleMapNS << /Sect [/Book 7 0 R] >>",
+		},
 	}
-
-	// Believed a false negative: veraPDF fires t4 here.
-	ns17 := build(
-		"<< /Document /Book >>",
-		"<< /Type /StructElem /S /Document /NS 4 0 R /P 2 0 R >>",
-		"http://iso.org/pdf/ssn",
-	)
-	if hasRule(ns17, Rule_14289_2_8_2_4_t04) {
-		t.Error("element in the PDF 1.7 namespace now fires §8.2.4 t4: the recorded false negative " +
-			"is fixed, so update this test and the note above")
-	}
-
-	// Believed a false positive: veraPDF stays silent here.
-	chain := build(
-		"<< /Document /Foo /Foo /Sect >>",
-		"<< /Type /StructElem /S /Document /P 2 0 R >>",
-		"http://iso.org/pdf2/ssn",
-	)
-	if !hasRule(chain, Rule_14289_2_8_2_4_t04) {
-		t.Error("a /RoleMap chain ending at a standard type no longer fires §8.2.4 t4: the recorded " +
-			"false positive is fixed, so update this test and the note above")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			roleMap := ""
+			if tc.roleMap != "" {
+				roleMap = " /RoleMap " + tc.roleMap
+			}
+			doc, cat := tableDoc(t, 1,
+				"<< /Type /Catalog /StructTreeRoot 2 0 R >>",
+				"<< /Type /StructTreeRoot"+roleMap+" /Namespaces [5 0 R 6 0 R 7 0 R] /K [3 0 R] >>",
+				"<< /Type /StructElem /S /Document /NS 5 0 R /P 2 0 R /K [4 0 R] >>",
+				"<< /Type /StructElem "+tc.elem+" /P 3 0 R >>",
+				"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+				"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) "+tc.ns17+" >>",
+				"<< /Type /Namespace /NS (http://litho.example/ns) "+tc.custom+" >>",
+			)
+			got := 0
+			for _, v := range checkNamespaceRoleMapping(context.Background(), doc, cat, "PDF/UA-2") {
+				if v.Rule == Rule_14289_2_8_2_4_t04 {
+					got++
+				}
+			}
+			if got != tc.want {
+				t.Errorf("§8.2.4 t4 fired %d time(s), want %d", got, tc.want)
+			}
+		})
 	}
 }

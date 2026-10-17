@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -533,20 +534,29 @@ func TestCheckRoleMap_StandardRemapTargetScope(t *testing.T) {
 	doc, _ := objsDocPDF(t, "<< /Type /Catalog >>")
 	// The rule is scoped to the element, so the tree must hold one that uses
 	// the remapped type; see TestRoleMapRulesAreElementScoped.
-	mk := func(target ast.PdfName) []Violation {
+	mk := func(target ast.PdfName, more ast.PdfDict) []Violation {
+		roleMap := ast.PdfDict{"Caption": target}
+		maps.Copy(roleMap, more)
 		str := ast.PdfDict{
-			"RoleMap": ast.PdfDict{"Caption": target},
+			"RoleMap": roleMap,
 			"K":       ast.PdfDict{"S": ast.PdfName("Caption")},
 		}
 		var results []Violation
 		checkRoleMap(ctx, doc, str, "PDF/A-2a", &results)
 		return results
 	}
-	if got := mk(ast.PdfName("P")); hasRule(got, Rule_19005_2_6_7_3_4_t03) {
+	if got := mk(ast.PdfName("P"), nil); hasRule(got, Rule_19005_2_6_7_3_4_t03) {
 		t.Errorf("standard->standard remap (/Caption->/P) must not fire §6.7.3.4 t3, got %v", got)
 	}
-	if got := mk(ast.PdfName("Foo")); !hasRule(got, Rule_19005_2_6_7_3_4_t03) {
+	if got := mk(ast.PdfName("Foo"), nil); !hasRule(got, Rule_19005_2_6_7_3_4_t03) {
 		t.Errorf("standard->non-standard remap (/Caption->/Foo) must fire §6.7.3.4 t3, got %v", got)
+	}
+	// The mapping is followed to its end, as veraPDF follows it.
+	if got := mk(ast.PdfName("Foo"), ast.PdfDict{"Foo": ast.PdfName("P")}); hasRule(got, Rule_19005_2_6_7_3_4_t03) {
+		t.Errorf("chain reaching a standard type (/Caption->/Foo->/P) must not fire §6.7.3.4 t3, got %v", got)
+	}
+	if got := mk(ast.PdfName("Foo"), ast.PdfDict{"Foo": ast.PdfName("Caption")}); !hasRule(got, Rule_19005_2_6_7_3_4_t03) {
+		t.Errorf("chain closing on its start (/Caption->/Foo->/Caption) must fire §6.7.3.4 t3, got %v", got)
 	}
 }
 

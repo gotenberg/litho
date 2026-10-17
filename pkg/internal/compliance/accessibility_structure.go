@@ -28,8 +28,9 @@ var standardNamespaceURIs = map[string]bool{
 const defaultStandardNamespaceURI = "http://iso.org/pdf2/ssn"
 
 // checkNamespaceRoleMapping validates PDF/UA-2 §8.2.4:
-// - t1/t4: all structure elements must belong to or be role-mapped to a standard namespace
+// - t1: all structure elements must belong to or be role-mapped to a standard namespace
 // - t3: within a namespace, types shall not be role-mapped to types in the same namespace
+// - t4: a standard type shall not be remapped to a non-standard one ([checkRemappedStandardTypes])
 func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
@@ -96,54 +97,16 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 					"namespace %q: type %s maps back to same namespace through chain",
 					string(srcURI), typeName)...)
 			}
-			// t04: standard type remapped to non-standard.
-			if standardNamespaceURIs[string(srcURI)] && isStandardStructType(typeName, "PDF/UA-2") {
-				// Verify the target is also in a standard namespace type.
-				targetArr, _ := document.ResolveArray(ctx, doc, mappingObj)
-				if len(targetArr) >= 2 {
-					targetNSDict, _ := document.ResolveDict(ctx, doc, targetArr[1])
-					if targetNSDict != nil {
-						targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
-						targetType, _ := document.ResolveName(ctx, doc, targetArr[0])
-						if !standardNamespaceURIs[string(targetURI)] || !isStandardStructType(targetType, "PDF/UA-2") {
-							results = append(results, failf(Rule_14289_2_8_2_4_t04,
-								"standard type %s remapped to %s in namespace %q",
-								typeName, targetType, string(targetURI))...)
-						}
-					}
-				}
-			}
 		}
 	}
 
-	// t04: also check the StructTreeRoot's old-style /RoleMap for standard types
-	// remapped to non-standard types. veraPDF keys §8.2.4 t4 on the SENonStandard
-	// structure element (test remappedStandardType == null), not the /RoleMap
-	// entry: it fires only when a USED element of the standard type actually
-	// resolves to a non-standard type through the legacy /RoleMap. An element
-	// resolves through the legacy /RoleMap only when it carries no explicit /NS; an
-	// element of the same type with an explicit /NS resolves through that
-	// namespace, leaving the /RoleMap entry inert. Gating on a used no-/NS element
-	// of the source type matches veraPDF exactly and avoids a false positive when
-	// remediation adds /Namespaces and an explicit /NS to every element while
-	// leaving the now-inert legacy /RoleMap in place.
-	roleMap, _ := document.ResolveDict(ctx, doc, treeRoot["RoleMap"])
-	if len(roleMap) > 0 {
-		usedNoNS := usedTypesWithoutNS(ctx, doc, treeRoot)
-		for _, src := range sortedNames(roleMap) {
-			if !usedNoNS[src] || !isStandardStructType(src, "PDF/UA-2") {
-				continue
-			}
-			dstName, _ := document.ResolveName(ctx, doc, roleMap[src])
-			if dstName != "" && !isStandardStructType(dstName, "PDF/UA-2") {
-				results = append(results, failf(Rule_14289_2_8_2_4_t04,
-					"standard type %s remapped to non-standard type %s in StructTreeRoot /RoleMap",
-					src, dstName)...)
-			}
-		}
-	}
+	// The legacy /RoleMap lets a non-standard type name (in any namespace) be
+	// mapped to a standard type, which veraPDF honours for §8.2.4 t1.
+	classicRoleMap := LoadRoleMap(ctx, doc, treeRoot)
 
-	// t1/t4: walk structure tree, check each element resolves to a standard namespace.
+	results = append(results, checkRemappedStandardTypes(ctx, doc, treeRoot, classicRoleMap)...)
+
+	// t1: walk structure tree, check each element resolves to a standard namespace.
 	// Elements with no explicit /NS use the first namespace in the array. When the
 	// document declares no /Namespaces array, an NS-less element belongs to the
 	// default standard structure namespace (ISO 32000-2 §14.8.6), so a non-standard
@@ -160,32 +123,188 @@ func checkNamespaceRoleMapping(ctx context.Context, doc *document.Document, cata
 		}
 	}
 
-	// The legacy /RoleMap lets a non-standard type name (in any namespace) be
-	// mapped to a standard type, which veraPDF honours for §8.2.4 t1.
-	classicRoleMap := LoadRoleMap(ctx, doc, treeRoot)
-
 	walkNSCheck(ctx, doc, treeRoot, defaultNSURI, nsByURI, classicRoleMap, &results, make(map[int]bool), 0)
 	return results
 }
 
-// usedTypesWithoutNS returns the structure types that have at least one used
-// element with no explicit /NS entry. Such an element resolves its type through
-// the legacy /RoleMap rather than a namespace's /RoleMapNS (ISO 32000-2 §14.8.6),
-// which is what makes a standard type remapped to a non-standard one in the
-// legacy /RoleMap an SENonStandard element under ISO 14289-2 §8.2.4 t4. An
-// element of the same type carrying an explicit /NS resolves through that
-// namespace instead, so the legacy /RoleMap entry does not apply to it.
-func usedTypesWithoutNS(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict) map[ast.PdfName]bool {
-	out := make(map[ast.PdfName]bool)
+// checkRemappedStandardTypes validates ISO 14289-2 §8.2.4 t4: a structure
+// element whose type is standard in the namespace it belongs to shall not be
+// role mapped to a type that is not. The test judges each element, not each
+// role-map entry, and judges where its mapping ENDS: per ISO 32000-2:2020,
+// 14.7.4 and 14.8.6 a mapping is followed until it reaches a type a standard namespace
+// defines, so a chain such as Div -> Section -> Sect leaves the element a
+// standard Sect, while Sect -> Book with nothing mapping Book leaves it on no
+// standard type at all. Each element that fires is reported once.
+//
+// It mirrors veraPDF 1.30.2, whose rule object is SENonStandard with test
+// remappedStandardType == null: an element is SENonStandard when following
+// its mapping reaches no standard type, and remappedStandardType names the
+// element's own type when that type is standard. A type with no mapping, or
+// whose first hop is already visited, keeps its own type, which is why a
+// standard type mapped to itself does not fire here (that is t2).
+//
+// roleMap is the structure tree root's legacy /RoleMap.
+func checkRemappedStandardTypes(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName) []Violation {
+	var results []Violation
+	memo := make(map[string]bool)
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
-		if _, hasNS := elem["NS"]; hasNS {
+		sType, _ := document.ResolveName(ctx, doc, elem["S"])
+		if sType == "" {
 			return
 		}
-		if sType, _ := document.ResolveName(ctx, doc, elem["S"]); sType != "" {
-			out[sType] = true
+		t := newStructTypeRef(ctx, doc, sType, elem["NS"])
+		if !t.isStandard(ctx, doc) {
+			return
+		}
+		key := t.key()
+		remapped, seen := memo[key]
+		if !seen {
+			remapped = reachesNoStandardType(ctx, doc, t, roleMap)
+			memo[key] = remapped
+		}
+		if remapped {
+			uri, _ := t.uri(ctx, doc)
+			results = append(results, failf(Rule_14289_2_8_2_4_t04,
+				"standard type %s in namespace %q is remapped to a non-standard type",
+				sType, uri)...)
 		}
 	})
-	return out
+	return results
+}
+
+// structTypeRef is one structure type as ISO 32000-2:2020, 14.8.6 names it: a
+// type name and the namespace dictionary it belongs to, nil for none. nsKey
+// identifies the namespace, by object number when it is an indirect object
+// and by URI otherwise, and is empty when ns is nil.
+type structTypeRef struct {
+	name  ast.PdfName
+	ns    ast.PdfDict
+	nsKey string
+}
+
+// newStructTypeRef builds the structure type naming name in the namespace
+// nsObj. A namespace that does not resolve to a dictionary is no namespace, as
+// veraPDF reads it.
+func newStructTypeRef(ctx context.Context, doc *document.Document, name ast.PdfName, nsObj ast.PdfObject) structTypeRef {
+	t := structTypeRef{name: name}
+	if nsObj == nil {
+		return t
+	}
+	ns, err := document.ResolveDict(ctx, doc, nsObj)
+	if err != nil || ns == nil {
+		return t
+	}
+	t.ns = ns
+	if ref, ok := nsObj.(ast.PdfIndirectRef); ok {
+		t.nsKey = fmt.Sprintf("obj %d", ref.ObjectNum)
+	} else {
+		uri, _ := document.ResolveString(ctx, doc, ns["NS"])
+		t.nsKey = "uri " + string(uri)
+	}
+	return t
+}
+
+// key identifies the type for a visited set.
+func (t structTypeRef) key() string {
+	return string(t.name) + "\x00" + t.nsKey
+}
+
+// uri returns the namespace URI, and false when the type has no namespace or
+// its namespace carries no /NS string.
+func (t structTypeRef) uri(ctx context.Context, doc *document.Document) (string, bool) {
+	if t.ns == nil {
+		return "", false
+	}
+	uri, err := document.ResolveString(ctx, doc, t.ns["NS"])
+	if err != nil {
+		return "", false
+	}
+	return string(uri), true
+}
+
+// isStandard reports whether the type is one its namespace defines. A type in
+// no namespace, or in a namespace dictionary with no /NS, is judged against
+// the PDF 1.7 vocabulary (ISO 32000-1:2008, 14.8.4); a custom namespace
+// defines no standard type (ISO 32000-2:2020, 14.8.6).
+func (t structTypeRef) isStandard(ctx context.Context, doc *document.Document) bool {
+	uri, ok := t.uri(ctx, doc)
+	if !ok {
+		return standardStructTypesPDF17[t.name]
+	}
+	if uri == "" {
+		return false
+	}
+	return isStandardStructTypeInNS(t.name, uri)
+}
+
+// equivalent returns the type t is role mapped to, or false when nothing maps
+// it. A namespace with a /RoleMapNS maps its types through that dictionary
+// alone (ISO 32000-2:2020, 14.7.4); the legacy /RoleMap maps a type in no
+// namespace, or in a PDF 1.7 namespace without a /RoleMapNS, and its targets
+// belong to no namespace.
+func (t structTypeRef) equivalent(ctx context.Context, doc *document.Document, roleMap map[ast.PdfName]ast.PdfName) (structTypeRef, bool) {
+	if t.ns != nil {
+		if rmns, _ := document.ResolveDict(ctx, doc, t.ns["RoleMapNS"]); rmns != nil {
+			value, ok := rmns[t.name]
+			if !ok {
+				return structTypeRef{}, false
+			}
+			return roleMapNSTargetType(ctx, doc, value)
+		}
+		if uri, ok := t.uri(ctx, doc); !ok || uri != pdf1NamespaceURI {
+			return structTypeRef{}, false
+		}
+	}
+	target, ok := roleMap[t.name]
+	if !ok {
+		return structTypeRef{}, false
+	}
+	return structTypeRef{name: target}, true
+}
+
+// roleMapNSTargetType reads one /RoleMapNS value, an array of a name and the
+// namespace it belongs to (ISO 32000-2:2020, Table 353). A bare name is read
+// too, as a type in no namespace: veraPDF 1.30.2 reads it so
+// (StructureType.createStructureType), and t4 follows veraPDF's chain.
+func roleMapNSTargetType(ctx context.Context, doc *document.Document, value ast.PdfObject) (structTypeRef, bool) {
+	if name, err := document.ResolveName(ctx, doc, value); err == nil && name != "" {
+		return structTypeRef{name: name}, true
+	}
+	arr, _ := document.ResolveArray(ctx, doc, value)
+	if len(arr) < 2 {
+		return structTypeRef{}, false
+	}
+	name, err := document.ResolveName(ctx, doc, arr[0])
+	if err != nil || name == "" {
+		return structTypeRef{}, false
+	}
+	return newStructTypeRef(ctx, doc, name, arr[1]), true
+}
+
+// reachesNoStandardType reports whether following the role mapping of the
+// standard type t ends on no standard type: every hop lands on a type no
+// standard namespace defines until the chain stops or closes on a type
+// already visited. A type with no mapping, or whose first hop is already
+// visited, keeps its own standard type and does not count. A chain longer than
+// maxRoleMapNSDepth gets no verdict and does not count either, so the cap can
+// hide a remap but never invent one.
+func reachesNoStandardType(ctx context.Context, doc *document.Document, t structTypeRef, roleMap map[ast.PdfName]ast.PdfName) bool {
+	visited := map[string]bool{t.key(): true}
+	cur, ok := t.equivalent(ctx, doc, roleMap)
+	if !ok || visited[cur.key()] {
+		return false
+	}
+	for range maxRoleMapNSDepth {
+		if cur.isStandard(ctx, doc) {
+			return false
+		}
+		visited[cur.key()] = true
+		cur, ok = cur.equivalent(ctx, doc, roleMap)
+		if !ok || visited[cur.key()] {
+			return true
+		}
+	}
+	return false
 }
 
 // typeInLegacyRoleMap reports whether typeName is a key in the structure tree

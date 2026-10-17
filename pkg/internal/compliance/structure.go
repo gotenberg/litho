@@ -350,6 +350,36 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 	return st
 }
 
+// legacyChainReachesStandard reports whether following the /RoleMap from the
+// standard type src lands on a standard type, for ISO 19005-2/3 §6.7.3.4 t3.
+// The rule forbids remapping a standard type to a non-standard one, and a
+// mapping is followed to its end (ISO 32000-1:2008, 14.7.3), so /Div -> /Section
+// -> /Sect leaves the element a Sect and conforms, while a chain that closes
+// back on src without meeting a standard type does not. veraPDF 1.30.2 reads
+// it so (TaggedPDFRoleMapHelper.getStandardType, which does not stop at the
+// first hop outside PDF/A-1). A chain longer than maxRoleMapNSDepth counts as
+// reaching one, so the cap can hide a remap but never invent one.
+//
+// # Corpus evidence
+//
+//   - litho remapchain_ua2: /Div -> /Section -> /Sect, which veraPDF passes at
+//     PDF/A-2a and PDF/A-3a and litho, judging the first hop, reported.
+func legacyChainReachesStandard(mapping map[ast.PdfName]ast.PdfName, src ast.PdfName, profile string) bool {
+	visited := map[ast.PdfName]bool{src: true}
+	cur, ok := mapping[src]
+	for range maxRoleMapNSDepth {
+		if !ok || visited[cur] {
+			return false
+		}
+		if isStandardStructType(cur, profile) {
+			return true
+		}
+		visited[cur] = true
+		cur, ok = mapping[cur]
+	}
+	return true
+}
+
 // checkRoleMap validates the /RoleMap dictionary in the structure tree root.
 // Non-standard tags must map to standard types, standard tags must not be
 // remapped, and no circular mappings may exist.
@@ -425,7 +455,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 				if src == mapping[src] {
 					continue
 				}
-				if targetMustBeNonStandard && isStandardStructType(mapping[src], profile) {
+				if targetMustBeNonStandard && legacyChainReachesStandard(mapping, src, profile) {
 					continue
 				}
 				*results = append(*results, failf(remapRule, "standard type %s is remapped to %s", src, mapping[src])...)
