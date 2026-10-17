@@ -475,6 +475,14 @@ func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (i
 	return d.Filters.NewStreamReader(ctx, stream)
 }
 
+// StoredTail returns the bytes of stream's stored data that its first filter
+// never reads, reading at most limit decoded bytes to find them. See
+// [filter.StoredTail].
+func (d *Document) StoredTail(ctx context.Context, stream ast.PdfStream, limit int64) ([]byte, error) {
+	stream = d.resolveStreamFilterKeys(ctx, stream)
+	return filter.StoredTail(ctx, stream, limit)
+}
+
 // NewStreamReaderChecked is [Document.NewStreamReader] that fails, with
 // [filter.ErrUnsupportedFilter], on a filter litho cannot decode instead of
 // handing its input on still encoded. [Document.UndecodableFilters] lists a

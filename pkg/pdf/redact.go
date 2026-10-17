@@ -37,7 +37,8 @@ type RedactionHit struct {
 	ObjectNum int
 	// Token is the string that survived.
 	Token string
-	// Where is "string" for a text string, or "stream" for decoded stream data.
+	// Where is "string" for a string, "stream" for a stream's data, decoded or
+	// as stored, or "name" for a destination name.
 	Where string
 }
 
