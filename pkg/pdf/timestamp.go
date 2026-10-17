@@ -48,6 +48,13 @@ func WithTimestampField(name string) TimestampOption {
 // [WithTimestampAuthority] describes, and one that gives no usable token
 // fails the write with [ErrTimestampAuthority]. A later call replaces an
 // earlier one.
+//
+// A signature whose field carried a /Lock does not stop the timestamp: in a
+// new field it changes no field the signature's FieldMDP transform locked
+// (ISO 32000-1, 12.8.2.4), and the update writes only the catalog, the form
+// dictionary, the invisible field and its /DocTimeStamp dictionary. A field
+// [WithTimestampField] names that the lock reaches is refused with
+// [ErrSignatureFieldLocked], since signing it would change it.
 func (w *Writer) Timestamp(tsaURL string, opts ...TimestampOption) {
 	w.timestamp = &timestampOpts{url: tsaURL}
 	for _, o := range opts {

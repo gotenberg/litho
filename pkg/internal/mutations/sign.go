@@ -230,6 +230,9 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 			return err
 		}
 	}
+	if err := refuseLockedField(ctx, alloc, doc, fields, fieldName, existing.dict != nil, info.DocTimeStamp); err != nil {
+		return err
+	}
 	// The field's seed values settle what the signature is before its
 	// dictionary is written (ISO 32000-1, 12.7.4.5, Table 234).
 	if existing.sv != nil {

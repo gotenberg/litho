@@ -301,7 +301,9 @@ func WithTimestampAuthority(url string) SignOption {
 // adds by default. Without it,
 // the signature goes in a new field named Signature1, Signature2 or the first
 // such name no field holds. [Writer.WriteTo] returns
-// [ErrSignatureFieldUnavailable] for a name the signature cannot take.
+// [ErrSignatureFieldUnavailable] for a name the signature cannot take, and
+// [ErrSignatureFieldLocked] with it for a field, existing or new, that the
+// FieldMDP lock of a signature the document holds reaches.
 //
 // A field signed in place is honoured as ISO 32000-1, 12.7.4.5 describes. Its
 // /Lock (Table 233) turns the fields it names read-only in the signed

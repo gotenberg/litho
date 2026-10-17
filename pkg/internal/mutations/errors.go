@@ -411,6 +411,12 @@ var ErrAttachmentTreeIncomplete = errors.New("embedded-files tree nests deeper t
 // is not one a new root field can take.
 var ErrSignatureFieldUnavailable = errors.New("signature field unavailable")
 
+// ErrSignatureFieldLocked reports a signature field a signature the document
+// holds locked (ISO 32000-1, 12.8.2.4, Table 256): signing it would change a
+// field that signature's FieldMDP transform forbids changing. It is returned
+// with [ErrSignatureFieldUnavailable].
+var ErrSignatureFieldLocked = errors.New("signature field locked by an earlier signature")
+
 // ErrSeedValueUnmet reports a signature field whose seed value dictionary
 // (ISO 32000-1, 12.7.4.5, Table 234) requires what the signature cannot be:
 // another signature handler, subfilter or digest, a reason other than the

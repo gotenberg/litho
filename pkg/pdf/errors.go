@@ -163,6 +163,16 @@ var (
 	// 32000-1, 12.7.3.2). Nothing is written.
 	ErrSignatureFieldUnavailable = mutations.ErrSignatureFieldUnavailable
 
+	// ErrSignatureFieldLocked is returned by [Writer.WriteTo], with
+	// [ErrSignatureFieldUnavailable], when a signature the document holds
+	// locked the field the new signature would go in: its FieldMDP transform
+	// (ISO 32000-1, 12.8.2.4, Table 256) names the field, or locks All, or
+	// locks every field but the ones it excludes, a new field among them.
+	// Signing the field would change it and invalidate that signature. A
+	// document timestamp ([Writer.Timestamp]) in a new field is not refused:
+	// it changes no field of the signed revision. Nothing is written.
+	ErrSignatureFieldLocked = mutations.ErrSignatureFieldLocked
+
 	// ErrSeedValueUnmet is returned by [Writer.WriteTo] when the signature
 	// field [WithSignatureField] names requires, through its seed value
 	// dictionary (ISO 32000-1, 12.7.4.5, Tables 234 and 235), what the
