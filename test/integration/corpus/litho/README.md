@@ -199,6 +199,7 @@ one deliberately rather than diffing it against a fresh build.
 | `cmapusevert_1b.pdf`   | PDF/A-1b     | An encoding CMap whose `/UseCMap` names the vertical CMap V      |
 | `stdremap_ua2.pdf`     | PDF/UA-2     | A standard type the root `/RoleMap` sends to a private dead end  |
 | `remapchain_ua2.pdf`   | PDF/UA-2     | Standard types mapped through a private type to a standard one   |
+| `imagecolour_2b.pdf`   | PDF/A-2b     | Images over the colorant None; JPX CIELab, ROMM-RGB, e-sRGB      |
 
 ### Must-not-fire controls
 
@@ -521,6 +522,7 @@ which are covered under [Known divergences](#known-divergences).
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
 | `idfields_ua2.pdf`     | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 4    | 6    |
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
+| `imagecolour_2b.pdf`   | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
 | `imagedraws_2b.pdf`    | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 10   | 7    |
 | `imagereach_2b.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
@@ -6215,16 +6217,43 @@ the repair that set was `8.2.4/4` on `stdremap_ua2` at PDF/UA-2 and both WTPDF
 levels; now remediation drops the `/RoleMap` entry that leads `Sect` nowhere,
 the PDF 1.7 `Sect` reads as a `Sect`, and both tools report nothing there.
 
+### `imagecolour_2b.pdf`
+
+Two image colours no corpus file states. A Separation space over the colorant
+None, and a DeviceN space naming only None, never produce visible output (ISO
+32000-1, 8.6.6.4 and 8.6.6.5): litho decodes such an image fully transparent,
+and a redaction that clears part of it keeps the space and its tints, where
+writing the transparent decode back as DeviceRGB painted the placement black.
+A JPXDecode image without `/ColorSpace` takes its colour from the JPEG 2000
+data (ISO 32000-1, 7.4.9): litho reads enumerated CIELab, with and without EP
+fields (ISO/IEC 15444-2, M.11.7.4.1), and ROMM-RGB (ISO 22028-2) as colour,
+and e-sRGB, whose integer encoding the JPEG 2000 text leaves to PIMA 7667, in
+DeviceRGB by its channel count.
+
+| Image     | Colour                                    | Decodes as              |
+| --------- | ----------------------------------------- | ----------------------- |
+| `SepNone` | `[/Separation /None /DeviceGray f]`       | transparent             |
+| `DevNone` | `[/DeviceN [/None /None] /DeviceGray f2]` | transparent             |
+| `JLabDef` | JPX, enumerated CIELab, no EP fields      | sRGB (0, 213, 255)      |
+| `JLabEP`  | JPX, enumerated CIELab, EP fields, D50    | sRGB (0, 223, 255)      |
+| `JROMM`   | JPX, enumerated ROMM-RGB                  | sRGB (255, 15, 35)      |
+| `JESRGB`  | JPX, enumerated e-sRGB                    | DeviceRGB (200, 80, 40) |
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells. No
+rule reads the colorant name or the enumerated JPX space beyond CIEJab (ISO
+19005-2, 6.2.8.3 test 4); the sets are the DeviceGray alternates without an
+output intent (`6.2.4.3/4`), the missing metadata and the tagging rules.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 147 x 8 = 1176 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 147 x 13 = 1911 cells. litho
+runner scores 148 x 8 = 1184 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 148 x 13 = 1924 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1909 of the 1911 cells. The two
+fixtures exist to protect, and it holds in 1922 of the 1924 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -6236,7 +6265,7 @@ ten is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1176 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 1184 and moves only `ruleset_mismatch`, and on
 those ten cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
