@@ -1336,6 +1336,9 @@ func descendantTypeViolations(ctx context.Context, doc *document.Document, cid a
 //     /BaseFont, /CIDSystemInfo, /CIDToGIDMap, /FontDescriptor, /Subtype and
 //     /W but no /Type, confirmed in the file's own bytes, and veraPDF reports
 //     §6.2.11.2 t1 against it.
+//   - pdfjs issue12823.pdf: its NotoColorEmoji Type0 font writes
+//     /DescendantFonts [null], and veraPDF 1.30.2 reports §6.2.11.2 t1 against
+//     it at PDF/A-2a with the /Type read as "", where litho was silent.
 //   - All corpora: the descendant CIDFont's t3 fires on no file.
 func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool) []Violation {
 	var results []Violation
@@ -1362,12 +1365,17 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 		if rule.Specification == "" || slices.ContainsFunc(required, func(v Violation) bool { return v.Rule == rule }) {
 			return results
 		}
-		if descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"]); err == nil && len(descArr) > 0 {
-			if cid, err := document.ResolveDict(ctx, doc, descArr[0]); err == nil && cid != nil {
-				results = append(results, descendantTypeViolations(ctx, doc, cid, rule, "Type0 font read through its descendant CIDFont: ")...)
-			}
+		// A Type0 font with no descendant dictionary, /DescendantFonts absent,
+		// empty, or holding a non-dictionary such as null, is modelled over an
+		// empty dictionary (PDType0Font.getDescendantCOSDictionary returns
+		// null, and PDFont substitutes an empty COSDictionary), whose /Type
+		// reads as the empty string, so the Type0 font fails t1 just as
+		// [type0NameDict] makes it fail t3.
+		cid := type0NameDict(ctx, doc, fontDict)
+		if cid == nil {
+			return append(results, failf(rule, "Type0 font has no descendant CIDFont dictionary to read /Type from")...)
 		}
-		return results
+		return append(results, descendantTypeViolations(ctx, doc, cid, rule, "Type0 font read through its descendant CIDFont: ")...)
 	}
 
 	// Required keys for simple fonts: /FirstChar, /LastChar, /Widths. These are

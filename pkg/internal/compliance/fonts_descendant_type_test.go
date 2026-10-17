@@ -63,15 +63,77 @@ func TestDescendantCIDFontRequiresType(t *testing.T) {
 		}
 	})
 
-	t.Run("a null descendant is not reported", func(t *testing.T) {
+	t.Run("a null descendant is reported against the Type0 font", func(t *testing.T) {
 		t.Parallel()
-		// /DescendantFonts [null] resolves to no dictionary, so there is no
-		// CIDFont to judge and the missing-/Type report would name an object
-		// the file does not contain.
-		if fires(t, "null") {
-			t.Error("a null descendant has no CIDFont dictionary to judge")
+		// /DescendantFonts [null] resolves to no dictionary, and veraPDF models
+		// the Type0 font over an empty one, whose /Type reads as "".
+		if !fires(t, "null") {
+			t.Error("a Type0 font with a null descendant must fire, as veraPDF reads its /Type from no dictionary")
 		}
 	})
+}
+
+// TestType0WithoutDescendantDictRequiresType pins that a Type0 font whose
+// /DescendantFonts yields no dictionary fails ISO 19005-1, 6.3.2 t1, ISO
+// 19005-2, 6.2.11.2 t1 and ISO 19005-4, 6.2.10.2 t1 once, against the Type0
+// font. veraPDF builds PDType0Font over its descendant's dictionary and
+// substitutes an empty one when the first entry is not a dictionary, so its
+// /Type reads as "" whatever the Type0 dictionary itself declares.
+//
+// Every case was measured with veraPDF 1.30.2 at PDF/A-1b, PDF/A-2b and
+// PDF/A-4: each shape fires t1 and t3 once, and a well-formed descendant fires
+// neither.
+func TestType0WithoutDescendantDictRequiresType(t *testing.T) {
+	t.Parallel()
+
+	content := "BT /F1 12 Tf 10 50 Td <0001> Tj ET"
+	build := func(descendants string) []string {
+		return []string{
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] " +
+				"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+			"<< /Type /Font /Subtype /Type0 /BaseFont /Test /Encoding /Identity-H " + descendants + " >>",
+			"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Test " +
+				"/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /DW 1000 >>",
+			"[1 2]",
+		}
+	}
+	for _, tc := range []struct {
+		name        string
+		descendants string
+		want        int
+	}{
+		{"null entry", "/DescendantFonts [null]", 1},
+		{"absent", "", 1},
+		{"empty array", "/DescendantFonts []", 1},
+		{"integer entry", "/DescendantFonts [7]", 1},
+		{"entry resolving to an array", "/DescendantFonts [7 0 R]", 1},
+		{"a dictionary, not an array", "/DescendantFonts 6 0 R", 1},
+		{"well formed", "/DescendantFonts [6 0 R]", 0},
+	} {
+		for _, p := range []struct {
+			profile models.PDFAProfile
+			rule    Rule
+		}{
+			{models.PDFA1b, Rule_19005_1_6_3_2_t01},
+			{models.PDFA2b, Rule_19005_2_6_2_11_2_t01},
+			{models.PDFA4, Rule_19005_4_6_2_10_2_t01},
+		} {
+			t.Run(string(p.profile)+" "+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t, build(tc.descendants)...)
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != tc.want {
+					t.Errorf("%s test %d fired %d times, want %d", p.rule.Clause, p.rule.TestNumber, got, tc.want)
+				}
+			})
+		}
+	}
 }
 
 // TestDescendantTypeCounts pins how often ISO 19005-1, 6.3.2 t1 and ISO
