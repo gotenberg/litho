@@ -1101,22 +1101,20 @@ func type0ShownGlyphs(ctx context.Context, doc *document.Document, font ast.PdfD
 			}
 			return out
 		}
-	case "":
-		embedded := embeddedEncodingCIDMap(ctx, doc, font["Encoding"])
-		if embedded == nil {
-			return nil
-		}
-		return func(s ast.PdfString) []shownGlyph {
-			return zipCodesAndCIDs(embedded, []byte(s), embedded.UnmappedNotdef())
-		}
-	default:
-		predefined := cmap.LoadPredefinedCIDMap(string(encName))
-		if predefined == nil {
-			return nil
-		}
-		return func(s ast.PdfString) []shownGlyph {
-			return zipCodesAndCIDs(predefined, []byte(s), false)
-		}
+	}
+	// A predefined CMap reads as an embedded one, its usecmap chain and notdef
+	// mappings resolved; see [collectType0CIDs].
+	var m *cmap.CIDMap
+	if encName == "" {
+		m = embeddedEncodingCIDMap(ctx, doc, font["Encoding"])
+	} else {
+		m = cmap.LoadPredefinedCIDMap(string(encName))
+	}
+	if m == nil {
+		return nil
+	}
+	return func(s ast.PdfString) []shownGlyph {
+		return zipCodesAndCIDs(m, []byte(s), m.UnmappedNotdef())
 	}
 }
 

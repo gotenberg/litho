@@ -151,19 +151,6 @@ func parseBCMapCIDToUnicode(data []byte) (map[int]rune, error) {
 	return cid2uni, nil
 }
 
-// parseBCMapCharToCID parses a binary CMap (.bcmap) encoding file
-// (e.g., GBK-EUC-H) and returns the character-code→CID map. Codespace
-// ranges are also collected to determine valid byte lengths. The notdef
-// mappings and the usecmap base, which [parseBCMapCIDProgram] also reads, are
-// left out.
-func parseBCMapCharToCID(data []byte) (charToCID map[int]int, codespaces []CodeSpaceRange, err error) {
-	prog, err := parseBCMapCIDProgram(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	return prog.charToCID, prog.codespaces, nil
-}
-
 // collectCodespace parses codespace range entries (type 0) and returns them.
 func (s *bcmapStream) collectCodespace(count, dataSize int) ([]CodeSpaceRange, error) {
 	var ranges []CodeSpaceRange

@@ -24,6 +24,49 @@ func TestCIDMap_Codes(t *testing.T) {
 	}
 }
 
+// TestLoadPredefined_FollowsTheUseCMapChain pins that a -V CMap reads through
+// its -H base, as veraPDF's PDCMap and PDF.js's extendCMap read it. 90ms-RKSJ-V
+// holds only the vertical forms and no codespace of its own, so a reader
+// skipping the chain split no code of it at all.
+func TestLoadPredefined_FollowsTheUseCMapChain(t *testing.T) {
+	t.Parallel()
+
+	v := LoadPredefinedCIDMap("90ms-RKSJ-V")
+	if v == nil {
+		t.Fatal("90ms-RKSJ-V does not resolve")
+	}
+	got := v.Decode([]byte{0x41, 0x81, 0x41})
+	if len(got) != 2 || !got[0].Mapped || got[0].CID != 264 || !got[1].Mapped || got[1].CID != 7887 {
+		t.Errorf("want <41> from the base as CID 264 and the vertical <8141> as CID 7887, got %+v", got)
+	}
+	if v.WMode() != 1 {
+		t.Errorf("90ms-RKSJ-V declares /WMode %d, want 1", v.WMode())
+	}
+
+	uni := LoadPredefinedCMap("UniJIS-UCS2-V")
+	if uni == nil {
+		t.Fatal("UniJIS-UCS2-V has no ToUnicode composition")
+	}
+	if n, s, ok := uni.Map([]byte{0x00, 0x41}); !ok || n != 2 || s != "A" {
+		t.Errorf("<0041> of UniJIS-UCS2-V, which UniJIS-UCS2-H maps, reads as (%d, %q, %v), want (2, \"A\", true)", n, s, ok)
+	}
+}
+
+// TestLoadPredefinedCMap_LeavesNotdefRangesOut pins the PDF.js reading: a
+// notdefrange code names no character. 90ms-RKSJ-H maps <01> to CID 231, the
+// CID of a real character, which composing would emit for a control byte.
+func TestLoadPredefinedCMap_LeavesNotdefRangesOut(t *testing.T) {
+	t.Parallel()
+
+	uni := LoadPredefinedCMap("90ms-RKSJ-H")
+	if uni == nil {
+		t.Fatal("90ms-RKSJ-H has no ToUnicode composition")
+	}
+	if _, s, ok := uni.Map([]byte{0x01}); ok && s != "" {
+		t.Errorf("notdefrange code <01> reads as %q, want no character", s)
+	}
+}
+
 func TestLoadPredefinedCIDMap_Unknown(t *testing.T) {
 	if m := LoadPredefinedCIDMap("Not-A-CMap"); m != nil {
 		t.Errorf("unknown encoding name must return nil, got %+v", m)

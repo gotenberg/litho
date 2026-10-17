@@ -3,6 +3,8 @@ package cmap
 import (
 	"fmt"
 	"io/fs"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -66,6 +68,34 @@ func (m *CIDMap) lookup(code int) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+// cidMappings returns every code m's cidchar and cidrange mappings and its
+// bases' give a CID, as [CIDMap.mappedCID] reads them: a mapping of m
+// overrides one of a base, and an earlier base one of a later base. Notdef
+// mappings are left out. It reports false for a map holding a span, the
+// Identity CMaps, whose 65536 codes no caller enumerates.
+func (m *CIDMap) cidMappings() (map[int]int, bool) {
+	if len(m.spans) > 0 {
+		return nil, false
+	}
+	out := make(map[int]int, len(m.charToCID))
+	for _, b := range slices.Backward(m.bases) {
+		bm, ok := b.cidMappings()
+		if !ok {
+			return nil, false
+		}
+		maps.Copy(out, bm)
+	}
+	maps.Copy(out, m.charToCID)
+	return out, true
+}
+
+// WMode returns the writing mode the CMap declares: 0 horizontal, 1 vertical
+// (ISO 32000-1, 9.7.5.3, Table 120). A predefined CMap's comes from its
+// bundled data, and the -V CMaps declare 1.
+func (m *CIDMap) WMode() int {
+	return m.wmode
 }
 
 // addBase makes b a base of m, consulted after the bases m already has, and
@@ -183,11 +213,15 @@ func predefinedCIDBase(name string, depth int) *CIDMap {
 
 func loadPredefinedCIDBase(name string, depth int) *CIDMap {
 	if name == "Identity-H" || name == "Identity-V" {
-		return &CIDMap{
+		m := &CIDMap{
 			spans:          []cidSpan{{lo: 0, hi: 0xFFFF, cid: 0}},
 			cs:             &CMap{CodeSpaceRanges: []CodeSpaceRange{{Low: []byte{0x00, 0x00}, High: []byte{0xFF, 0xFF}}}},
 			unmappedNotdef: true,
 		}
+		if name == "Identity-V" {
+			m.wmode = 1
+		}
+		return m
 	}
 	path := "bcmaps/" + name + ".bcmap"
 	if name == "" || !fs.ValidPath(path) {
@@ -206,6 +240,7 @@ func loadPredefinedCIDBase(name string, depth int) *CIDMap {
 		notdefs:        prog.notdefs,
 		cs:             &CMap{CodeSpaceRanges: prog.codespaces},
 		unmappedNotdef: true,
+		wmode:          prog.wmode,
 	}
 	if prog.useCMap != "" {
 		m.addBase(predefinedCIDBase(prog.useCMap, depth+1))
@@ -217,12 +252,14 @@ func loadPredefinedCIDBase(name string, depth int) *CIDMap {
 }
 
 // bcmapCIDProgram is the code-to-CID content of one binary CMap: its cidchar
-// and cidrange mappings, notdef mappings, codespaces, and the base it names.
+// and cidrange mappings, notdef mappings, codespaces, the base it names, and
+// its writing mode.
 type bcmapCIDProgram struct {
 	charToCID  map[int]int
 	notdefs    []notdefSpan
 	codespaces []CodeSpaceRange
 	useCMap    string
+	wmode      int
 }
 
 // parseBCMapCIDProgram decodes the code-to-CID records of a binary CMap, the
@@ -233,9 +270,10 @@ func parseBCMapCIDProgram(data []byte) (*bcmapCIDProgram, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("empty bcmap data")
 	}
-	// Position 1 skips the header byte (type<<1 | wmode).
+	// Position 1 skips the header byte (type<<1 | wmode), whose low bit is
+	// the CMap's /WMode, as PDF.js's BinaryCMapReader reads it.
 	s := &bcmapStream{data: data, pos: 1}
-	prog := &bcmapCIDProgram{charToCID: make(map[int]int, 8192)} //nolint:mnd // typical CMap size
+	prog := &bcmapCIDProgram{charToCID: make(map[int]int, 8192), wmode: int(data[0] & 1)} //nolint:mnd // typical CMap size
 	for s.pos < len(s.data) {
 		tag, tagErr := s.readByte()
 		if tagErr != nil {

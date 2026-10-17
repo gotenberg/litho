@@ -2251,17 +2251,24 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 //     CMap stream it could not parse, or an unrecognized predefined CMap); the
 //     caller skips the check rather than risk a false positive.
 //   - notdef is true when decoding reached a character code that unambiguously
-//     renders as the .notdef glyph (an Identity odd-length tail, or an embedded
-//     CMap mapping a code to a CID beyond 65535).
-//   - unmappedZero is true when an embedded CMap leaves a shown code other
+//     renders as the .notdef glyph (an Identity odd-length tail, or a CMap
+//     mapping a code to a CID beyond 65535).
+//   - unmappedZero is true when the encoding CMap leaves a shown code other
 //     than 0 unmapped, which selects CID 0.
 //
 // Identity-H/V treats each 2-byte unit as the CID directly. An embedded CMap
-// stream is decoded through embedded. A predefined CMap
-// (Adobe-Japan1 etc.) is decoded codespace-aware through its bundled bcmap; the
-// resolvable CIDs are returned for the caller's embedded-font charset check,
-// while unmapped codes are skipped to stay free of false positives.
+// stream is decoded through embedded. A predefined CMap (UniJIS-UCS2-H and the
+// like) is decoded through [cmap.LoadPredefinedCIDMap], its usecmap chain and
+// notdef mappings resolved, and read exactly as an embedded one: veraPDF's
+// PDCMap parses the bundled CMap a name denotes with the parser it runs on an
+// embedded stream (ISO 32000-1, 9.7.5.2 and 9.7.6.3).
 func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInfo) (cids map[uint16]bool, notdef, unmappedZero, ok bool) {
+	if encName != "" && encName != "Identity-H" && encName != "Identity-V" {
+		if embedded = cmap.LoadPredefinedCIDMap(encName); embedded == nil {
+			return nil, false, false, false
+		}
+		encName = ""
+	}
 	// An embedded CMap stream resolves to an empty name; decode through the
 	// parsed stream instead so the used-glyph checks cover fonts that map
 	// codes to CIDs with a custom CMap. Without this, a font whose /Encoding
@@ -2319,31 +2326,7 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 		}
 		return cids, false, false, true
 	default:
-		// Any other named encoding is a predefined CMap, decoded through its
-		// bundled bcmap. A nil map means the name is not a recognized
-		// predefined CMap (or /Encoding is an embedded stream, which resolves
-		// to an empty name here), so the check is skipped.
-		//
-		// An unmapped code is NOT treated as .notdef here: litho does not
-		// resolve a bcmap's usecmap base, so a code could be unmapped merely
-		// because its mapping lives in an unresolved base CMap. Flagging it
-		// would be a false positive. Only the CIDs litho can resolve are
-		// collected and verified against the embedded font program by the
-		// caller, which is independent of CMap completeness. This trades a
-		// possibly missed .notdef (a false negative) for zero false positives.
-		cm := cmap.LoadPredefinedCIDMap(encName)
-		if cm == nil {
-			return nil, false, false, false
-		}
-		cids = make(map[uint16]bool)
-		for _, s := range usage.rawStrings {
-			for _, c := range cm.Decode([]byte(s)) {
-				if c.Mapped && c.CID >= 0 && c.CID <= 0xFFFF {
-					cids[uint16(c.CID)] = true
-				}
-			}
-		}
-		return cids, false, false, true
+		return nil, false, false, false
 	}
 }
 

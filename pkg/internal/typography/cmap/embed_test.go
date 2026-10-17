@@ -104,9 +104,9 @@ func TestEmbedPredefined_Declines(t *testing.T) {
 
 	ctx := context.Background()
 	for _, tc := range []struct{ name, why string }{
-		// Bundled as a file, but it defers to H through usecmap, which the
-		// bcmap reader skips, so it yields no mapping at all.
-		{"V", "bundled but parses to no codes"},
+		// Uniform width once its usecmap base is resolved, but flattened over
+		// UniGB-UCS2-H it takes 13849 cidrange entries, past the cap.
+		{"UniGB-UCS2-V", "a flattened chain past the range cap"},
 		// Mixes one- and two-byte codespace ranges; CIDCMap keys codes by
 		// integer value, so <41> and <0041> would collide.
 		{"90ms-RKSJ-H", "mixed-width codespace"},
@@ -126,6 +126,49 @@ func TestEmbedPredefined_Declines(t *testing.T) {
 			t.Errorf("%s: embedded %d bytes for a CMap it must decline (%s)",
 				tc.name, len(prog), tc.why)
 		}
+	}
+}
+
+// TestEmbedPredefined_FlattensAVerticalCMap pins the usecmap chain. V holds
+// only the vertical forms and takes every other mapping, and its codespace,
+// from H through usecmap. A copy of V's own records would map 53 codes and
+// split none, so every other code of a font naming V would turn into .notdef.
+func TestEmbedPredefined_FlattensAVerticalCMap(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	prog, ok, err := EmbedPredefined(ctx, "V")
+	if err != nil || !ok {
+		t.Fatalf("EmbedPredefined(V): ok=%v err=%v", ok, err)
+	}
+	h, v := LoadPredefinedCIDMap("H"), LoadPredefinedCIDMap("V")
+	if h == nil || v == nil {
+		t.Fatal("H or V does not resolve, so the test proves nothing")
+	}
+	if len(v.charToCID) == 0 || len(v.charToCID) >= len(h.charToCID) {
+		t.Fatalf("V holds %d codes of its own and H %d: V no longer defers to H, pick another fixture",
+			len(v.charToCID), len(h.charToCID))
+	}
+
+	got := ParseEmbeddedCIDMap(ctx, prog)
+	if got == nil {
+		t.Fatal("the generated program does not read back as an encoding CMap")
+	}
+	for code, cid := range h.charToCID {
+		want := cid
+		if vc, own := v.charToCID[code]; own {
+			want = vc
+		}
+		dec := got.Decode([]byte{byte(code >> 8), byte(code)})
+		if len(dec) != 1 || !dec[0].Mapped || dec[0].CID != want {
+			t.Fatalf("code %#04x decodes to %+v, want CID %d", code, dec, want)
+		}
+	}
+	if !strings.Contains(string(prog), "/WMode 1 def") {
+		t.Errorf("V is a vertical CMap, but the program does not declare /WMode 1:\n%s", firstLines(string(prog), 8))
+	}
+	if strings.Contains(string(prog), "usecmap") {
+		t.Error("the program still names a usecmap base for a reader to resolve")
 	}
 }
 

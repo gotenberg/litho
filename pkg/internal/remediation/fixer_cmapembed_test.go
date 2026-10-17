@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -129,8 +130,8 @@ func TestFixCMapFlatten_EmbedsOnlyUnderPart1(t *testing.T) {
 // TestFixCMapFlatten_EmbedsOnlyWhatLithoShips pins the other refusal. A name
 // litho has no bundled data for cannot be embedded, because writing a CMap it
 // cannot read would fabricate the mapping the font depends on. V is the
-// interesting case: it ships as a file yet parses to no codes, since it defers
-// to H through usecmap.
+// interesting case: its own records hold only the vertical forms and it takes
+// the rest from H through usecmap, which litho resolves, so it embeds.
 func TestFixCMapFlatten_EmbedsOnlyWhatLithoShips(t *testing.T) {
 	t.Parallel()
 
@@ -141,7 +142,7 @@ func TestFixCMapFlatten_EmbedsOnlyWhatLithoShips(t *testing.T) {
 		why     string
 	}{
 		{"H", true, "bundled, uniform width"},
-		{"V", false, "bundled as a file but parses to no codes"},
+		{"V", true, "bundled, uniform width once its usecmap base H is resolved"},
 		{"90ms-RKSJ-H", false, "mixed-width codespace would merge one- and two-byte codes"},
 		{"Identity-H", false, "exempt from the embedding rule"},
 		{"NotACMapName", false, "litho ships no such CMap"},
@@ -160,5 +161,40 @@ func TestFixCMapFlatten_EmbedsOnlyWhatLithoShips(t *testing.T) {
 		if !tc.embed && written {
 			t.Errorf("/UseCMap /%s was embedded, but %s: %v", tc.useName, tc.why, fixes)
 		}
+	}
+}
+
+// TestFixCMapFlatten_EmbedsAVerticalUseCMapWithItsWMode pins that the stream
+// written for V says what V says: the 6879 codes it takes from H, and /WMode 1
+// in both the dictionary and the program, which ISO 19005-2, 6.2.11.3.3
+// requires identical.
+func TestFixCMapFlatten_EmbedsAVerticalUseCMapWithItsWMode(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, namedUseCMapPDF("V"))
+	if _, err := fixCMapFlatten(ctx, alloc, doc, Options{}, nil, "PDF/A-1b"); err != nil {
+		t.Fatalf("fixCMapFlatten: %v", err)
+	}
+	base, ok := embeddedBase(t, alloc)
+	if !ok {
+		t.Fatal("/UseCMap /V was not embedded")
+	}
+	if w, _ := base.Dict["WMode"].(ast.PdfInt); w != 1 {
+		t.Errorf("the embedded V stream's dictionary declares /WMode %v, want 1", base.Dict["WMode"])
+	}
+	data, err := base.Bytes(ctx)
+	if err != nil {
+		t.Fatalf("reading the embedded CMap: %v", err)
+	}
+	got, err := ParseCIDForTest(ctx, data)
+	if err != nil {
+		t.Fatalf("the embedded CMap does not parse: %v", err)
+	}
+	if len(got) != hCodeCount {
+		t.Errorf("the embedded V maps %d codes, want the %d it takes from H", len(got), hCodeCount)
+	}
+	if !bytes.Contains(data, []byte("/WMode 1 def")) {
+		t.Error("the embedded V program does not declare /WMode 1")
 	}
 }

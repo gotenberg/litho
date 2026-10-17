@@ -19,12 +19,19 @@ const maxEmbeddedCIDRanges = 1024
 // be written into a file as a stream, so a reference to it satisfies the
 // embedding requirement of ISO 19005-1, 6.3.3.3.
 //
+// The program carries what [LoadPredefinedCIDMap] resolves: the CMap's own
+// mappings over those of the base its usecmap names, its codespaces and its
+// /WMode. A -V CMap holds only its vertical forms and takes the rest from its
+// -H base, so it is written flattened, with no usecmap left for a reader to
+// resolve.
+//
 // It returns false, writing nothing, whenever the result would not be a
 // faithful copy of the named CMap:
 //
-//   - the name resolves to no bundled data. A bundled .bcmap file is not
-//     enough: V ships as a file but defers to H through usecmap, which the
-//     reader skips, so it yields no mapping at all.
+//   - the name resolves to no bundled data, or to a chain litho cannot follow.
+//   - the CMap or its base declares notdef mappings, which the program would
+//     have to carry too. No bundled CMap the other arms accept declares one:
+//     every one that does is past [maxEmbeddedCIDRanges].
 //   - the codespace mixes code widths. [CIDCMap] keys codes by their integer
 //     value, so a one-byte <41> and a two-byte <0041> collide and the merged
 //     map would silently map one to the other's CID.
@@ -35,7 +42,11 @@ const maxEmbeddedCIDRanges = 1024
 // decode.
 func EmbedPredefined(ctx context.Context, name string) ([]byte, bool, error) {
 	m := LoadPredefinedCIDMap(name)
-	if m == nil || m.cs == nil || len(m.charToCID) == 0 {
+	if m == nil || m.cs == nil || len(m.notdefs) > 0 {
+		return nil, false, nil
+	}
+	charToCID, ok := m.cidMappings()
+	if !ok || len(charToCID) == 0 {
 		return nil, false, nil
 	}
 
@@ -43,7 +54,7 @@ func EmbedPredefined(ctx context.Context, name string) ([]byte, bool, error) {
 	if !ok {
 		return nil, false, nil
 	}
-	runs := compressCID(m.charToCID)
+	runs := compressCID(charToCID)
 	if len(runs) == 0 || len(runs) > maxEmbeddedCIDRanges {
 		return nil, false, nil
 	}
@@ -64,7 +75,7 @@ func EmbedPredefined(ctx context.Context, name string) ([]byte, bool, error) {
 	buf.WriteString("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n")
 	fmt.Fprintf(&buf, "/CIDSystemInfo 3 dict dup begin /Registry (%s) def /Ordering (%s) def /Supplement %d def end def\n",
 		reg, ord, sup)
-	fmt.Fprintf(&buf, "/CMapName /%s def\n/CMapType 1 def\n/WMode 0 def\n", name)
+	fmt.Fprintf(&buf, "/CMapName /%s def\n/CMapType 1 def\n/WMode %d def\n", name, m.wmode)
 	writeCodeSpaces(&buf, spans, width)
 	writeCIDRanges(&buf, runs, width)
 	buf.WriteString("endcmap\n")
@@ -78,7 +89,7 @@ func EmbedPredefined(ctx context.Context, name string) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, fmt.Errorf("re-reading the generated %s CMap: %w", name, err)
 	}
-	if !maps.Equal(back.Mapping, m.charToCID) {
+	if !maps.Equal(back.Mapping, charToCID) || len(back.notdefs) > 0 {
 		return nil, false, nil
 	}
 	return buf.Bytes(), true, nil

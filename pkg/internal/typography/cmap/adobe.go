@@ -2,6 +2,7 @@ package cmap
 
 import (
 	"embed"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -121,6 +122,13 @@ var predefinedCMapCache sync.Map
 // and composes it with the corresponding Adobe CID→Unicode table to produce a
 // ToUnicode-style CMap that maps byte sequences directly to Unicode strings.
 // Results are cached. Returns nil if the encoding name is not recognized.
+//
+// The code→CID side is [LoadPredefinedCIDMap], so a CMap's usecmap chain
+// supplies the mappings and codespaces it inherits, as PDF.js's extendCMap
+// does: UniJIS-UCS2-V holds 251 vertical forms and takes the rest of
+// UniJIS-UCS2-H. Notdef mappings are left out, as PDF.js's BinaryCMapReader
+// skips them: a code they cover names no character, so composing their CID
+// with the CID→Unicode table would invent one.
 func LoadPredefinedCMap(name string) *CMap {
 	if cached, ok := predefinedCMapCache.Load(name); ok {
 		cm, _ := cached.(*CMap)
@@ -138,16 +146,17 @@ func loadPredefinedCMapUncached(name string) *CMap {
 		return nil
 	}
 
-	bcmapPath := "bcmaps/" + name + ".bcmap"
-	data, err := bcmapFS.ReadFile(bcmapPath)
-	if err != nil {
+	cidMap := LoadPredefinedCIDMap(name)
+	if cidMap == nil {
 		return nil
 	}
-
-	charToCID, codespaces, err := parseBCMapCharToCID(data)
-	if err != nil || len(charToCID) == 0 {
+	charToCID, ok := cidMap.cidMappings()
+	if !ok || len(charToCID) == 0 {
 		return nil
 	}
+	// A copy: the CIDMap is shared through the cache, and a CMap is the
+	// caller's to keep.
+	codespaces := slices.Clone(cidMap.cs.CodeSpaceRanges)
 
 	cid2uni := AdobeCIDToUnicode(ordering)
 	if cid2uni == nil {

@@ -2,7 +2,6 @@ package cmap
 
 import (
 	"slices"
-	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -40,6 +39,8 @@ type CIDMap struct {
 	// unmappedNotdef marks a map whose every mapping litho holds, so a code it
 	// leaves unmapped selects CID 0; see [CIDMap.UnmappedNotdef].
 	unmappedNotdef bool
+	// wmode is the writing mode the CMap declares; see [CIDMap.WMode].
+	wmode int
 }
 
 // UnmappedNotdef reports whether a code the map leaves unmapped is known to
@@ -50,41 +51,35 @@ func (m *CIDMap) UnmappedNotdef() bool {
 	return m.unmappedNotdef
 }
 
-// predefinedCIDCache caches loaded predefined CID maps by encoding name.
+// LoadPredefinedCIDMap loads the code->CID mapping of a predefined encoding
+// CMap a Type 0 font's /Encoding names (for example "UniGB-UCS2-H"): the
+// [PredefinedCIDBase] of that name, its usecmap chain, notdef mappings and
+// codespaces resolved through the bundled CMaps. veraPDF's PDCMap reads a
+// named encoding the same way, parsing its bundled CMap file with the parser
+// that runs usecmap and the notdef blocks, and PDF.js follows the chain too
+// (extendCMap). A -V CMap holds only its vertical forms and takes every other
+// mapping and its codespaces from its -H base, so a reader that skipped the
+// chain would split no code at all.
 //
-//nolint:gochecknoglobals // process-wide cache of immutable parsed CMaps.
-var predefinedCIDCache sync.Map
-
-// LoadPredefinedCIDMap loads the code->CID mapping of a predefined encoding CMap
-// (for example "UniGB-UCS2-H") from the bundled Adobe bcmaps. It returns nil
-// when the name is not a recognized predefined CMap or the data cannot be read.
-// Results are cached.
+// It returns nil for Identity-H and Identity-V, which callers read as two
+// bytes per CID, for a name outside the predefined set of ISO 32000-1,
+// 9.7.5.2, Table 118, and when the bundled data cannot be read. The map is cached,
+// read-only and safe for concurrent use.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1905623.pdf: names UniJIS-UTF16-V for an unembedded font.
+//     Read without its chain, litho split no code of it and reported ISO
+//     19005-1, 6.3.8 t1 63 times at PDF/A-1a, where veraPDF reports 1504.
+//   - All corpora: 26 files give a Type 0 font a predefined non-Identity
+//     /Encoding, bug1905623.pdf the only -V one. The other 25 validate,
+//     remediate and extract alike whether the chain is read or not, so the
+//     litho fixture cmappredef_2b.pdf plants the codes that tell them apart.
 func LoadPredefinedCIDMap(name string) *CIDMap {
-	if cached, ok := predefinedCIDCache.Load(name); ok {
-		cm, _ := cached.(*CIDMap)
-		return cm
-	}
-	cm := loadPredefinedCIDMapUncached(name)
-	predefinedCIDCache.Store(name, cm)
-	return cm
-}
-
-func loadPredefinedCIDMapUncached(name string) *CIDMap {
 	if orderingFromEncodingName(name) == "" {
 		return nil
 	}
-	data, err := bcmapFS.ReadFile("bcmaps/" + name + ".bcmap")
-	if err != nil {
-		return nil
-	}
-	charToCID, codespaces, err := parseBCMapCharToCID(data)
-	if err != nil || len(charToCID) == 0 || len(codespaces) == 0 {
-		return nil
-	}
-	return &CIDMap{
-		charToCID: charToCID,
-		cs:        &CMap{CodeSpaceRanges: codespaces},
-	}
+	return PredefinedCIDBase(name)
 }
 
 // Decode splits data into character codes using the CMap's codespace ranges and

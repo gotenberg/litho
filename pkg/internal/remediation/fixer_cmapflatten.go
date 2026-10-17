@@ -247,10 +247,17 @@ func embedNamedUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	if !ok {
 		return false
 	}
+	// The dictionary's /WMode states the program's, which EmbedPredefined
+	// writes from the named CMap: ISO 19005-2, 6.2.11.3.3 requires the two
+	// identical, and a -V CMap declares 1.
+	base := cmap.LoadPredefinedCIDMap(string(name))
+	if base == nil {
+		return false
+	}
 	baseRef := alloc.Alloc(ast.NewStream(ast.PdfDict{
 		"Type":     ast.PdfName("CMap"),
 		"CMapName": name,
-		"WMode":    ast.PdfInt(0),
+		"WMode":    ast.PdfInt(base.WMode()),
 		"CIDSystemInfo": ast.PdfDict{
 			"Registry":   ast.PdfString(reg),
 			"Ordering":   ast.PdfString(ord),
