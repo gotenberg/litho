@@ -766,12 +766,32 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 	return normalizeExtractionUnicode(normalizeSoftHyphens(sb.String()))
 }
 
-// computeLineGap computes the inter-glyph gap (delta - prevWidth) for a pair.
+// computeLineGap computes the inter-glyph gap (delta - prevWidth) for a pair,
+// with delta measured along the direction the text advances. Vertical
+// writing advances down the page (ISO 32000-1, 9.7.4.3, a negative w1), and
+// text rotated by 90° advances up it or, rotated by -90°, down it, so the
+// sign of the advance's Y component decides which way a gap is positive.
+// PDF.js measures the same advance in the text's own direction
+// (src/core/evaluator.js, compareWithLastPosition, which swaps and negates
+// the coordinates for each orthogonal rotation).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5747.pdf, govdocs thread_000_000262.pdf and 9 more: text
+//     rotated by -90° read every gap as negative, so no word space was ever
+//     inserted ("dolorsitamet,").
+//   - pdfjs issue20930.pdf, bug1905623.pdf: vertical writing read "ABCDE"
+//     for glyphs PDF.js reads "A B C D E".
 func computeLineGap(prev, curr models.TextElement) float64 {
 	var delta float64
 	switch {
-	case curr.Vertical || isOrthogonalRotation(curr.Angle):
+	case curr.Vertical:
+		delta = prev.Y - curr.Y
+	case isOrthogonalRotation(curr.Angle):
 		delta = curr.Y - prev.Y
+		if math.Sin(curr.Angle) < 0 {
+			delta = -delta
+		}
 	case isRotated(curr.Angle):
 		delta = alongDist(prev, curr)
 	default:
