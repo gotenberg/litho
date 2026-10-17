@@ -136,13 +136,32 @@ func reverseInts(s []int) {
 	}
 }
 
-// normalizeSoftHyphens converts soft hyphens (U+00AD) to regular hyphens
-// (U+002D) for searchability. At line boundaries, soft hyphens followed by
-// a newline rejoin the split word: the hyphen was discretionary. Unicode
-// U+2010 HYPHEN is preserved as-is: removing it at line ends silently
-// dropped real hyphens from compound words.
+// normalizeSoftHyphens drops every soft hyphen (U+00AD) and keeps the line
+// break after one. A soft hyphen is a format character (Unicode category
+// Cf) that marks where a word may break, not text: a /ToUnicode CMap that
+// maps a code to it states that the glyph it draws carries no character of
+// its own (ISO 32000-1, 9.10.3). PDF.js skips every format character its
+// glyphs map to (src/core/evaluator.js, buildTextContentItem,
+// isInvisibleFormatMark), the reference litho's extraction is measured
+// against, so the two halves of a word hyphenated across lines stay on
+// their lines. Rejoining them would guess at a hyphenation the page leaves
+// visible. U+2010 HYPHEN and U+002D, the WinAnsiEncoding hyphen at octal 255
+// included, are text and stay.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300867.pdf: a /ToUnicode CMap maps code 0x7F, which
+//     draws the hyphen ending "treat-", to U+00AD, and PDF.js reads "treat"
+//     and "ment" on two lines where litho rejoined "treatment".
+//   - pdfjs issue9084.pdf, govdocs thread_000_000142.pdf: a mid-line soft
+//     hyphen read as "-" ("SS-2541-03-M", "long-term") where PDF.js reads
+//     nothing.
+//   - govdocs thread_300_300483.pdf, thread_100_100791.pdf: a WinAnsi
+//     octal 255 ending a line read as a soft hyphen and rejoined the word,
+//     where PDF.js reads "commu-" and "non-".
+//   - All corpora, with the WinAnsiEncoding hyphen at octal 255: words match
+//     PDF.js on 21 more files (govdocs 18, pdfcpu 1, pdfjs 2) and characters
+//     on 12 more, on none fewer.
 func normalizeSoftHyphens(text string) string {
-	text = strings.ReplaceAll(text, "\u00AD\n", "")
-	text = strings.ReplaceAll(text, "\u00AD", "-")
-	return text
+	return strings.ReplaceAll(text, "\u00AD", "")
 }

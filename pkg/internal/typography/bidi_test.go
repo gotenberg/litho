@@ -104,9 +104,9 @@ func TestNormalizeSoftHyphens(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "soft hyphen at line break",
+			name:  "soft hyphen at line break keeps the break",
 			input: "docu\u00AD\nment",
-			want:  "document",
+			want:  "docu\nment",
 		},
 		{
 			name:  "unicode hyphen preserved at line break",
@@ -114,9 +114,14 @@ func TestNormalizeSoftHyphens(t *testing.T) {
 			want:  "docu\u2010\nment",
 		},
 		{
-			name:  "standalone soft hyphens become regular hyphens",
+			name:  "hyphen-minus preserved at line break",
+			input: "docu-\nment",
+			want:  "docu-\nment",
+		},
+		{
+			name:  "mid-line soft hyphens are dropped",
 			input: "soft\u00ADhyphen",
-			want:  "soft-hyphen",
+			want:  "softhyphen",
 		},
 		{
 			name:  "no hyphens unchanged",
@@ -126,7 +131,7 @@ func TestNormalizeSoftHyphens(t *testing.T) {
 		{
 			name:  "multiple soft hyphens at line breaks",
 			input: "un\u00AD\nbreak\u00AD\nable",
-			want:  "unbreakable",
+			want:  "un\nbreak\nable",
 		},
 	}
 
@@ -156,6 +161,8 @@ func TestReconstructText_BidiLine(t *testing.T) {
 	}
 }
 
+// TestReconstructText_SoftHyphenAcrossLines pins that a soft hyphen ending a
+// line is dropped and the line break kept, as PDF.js reads it.
 func TestReconstructText_SoftHyphenAcrossLines(t *testing.T) {
 	elements := []models.TextElement{
 		{Text: "d", X: 10, Y: 100, FontSize: 12},
@@ -170,7 +177,7 @@ func TestReconstructText_SoftHyphenAcrossLines(t *testing.T) {
 	}
 
 	got := ReconstructText(context.Background(), elements, nil)
-	want := "document"
+	want := "docu\nment"
 	if got != want {
 		t.Errorf("ReconstructText soft hyphen: got %q, want %q", got, want)
 	}

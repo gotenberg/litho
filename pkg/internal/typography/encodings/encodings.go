@@ -48,14 +48,22 @@ const winAnsiBulletFloor = 0o40
 // the unused WinAnsiEncoding codes.
 const bullet = 0x2022
 
-// WinAnsiDecoding returns a fresh copy of [WinAnsiEncoding] that also maps
-// every code the table leaves unused above octal 40 (0x7F, 0x81, 0x8D, 0x8F,
-// 0x90 and 0x9D) to U+2022 BULLET. Per ISO 32000-1, Annex D.2 (the notes to
-// Table D.2), all unused WinAnsiEncoding codes greater than octal 40 map to
-// the bullet character; only octal 225 is assigned to it by name. Use it
-// where a font states WinAnsiEncoding, not where litho falls back to the
-// table for a font that names no encoding: the rule belongs to the encoding.
-// PDF.js reads the same codes as bullets (src/core/encodings.js,
+// winAnsiSecondHyphen is octal 255, the second WinAnsiEncoding code of the
+// hyphen glyph. ISO 32000-1, Annex D.2 (Table D.2 and its notes) names it
+// "hyphen", the glyph of octal 55, where CP1252 puts U+00AD SOFT HYPHEN.
+const winAnsiSecondHyphen = 0o255
+
+// WinAnsiDecoding returns a fresh copy of [WinAnsiEncoding] that reads the
+// codes as ISO 32000-1, Annex D.2 names them where they differ from CP1252.
+// Every code the table leaves unused above octal 40 (0x7F, 0x81, 0x8D, 0x8F,
+// 0x90 and 0x9D) maps to U+2022 BULLET: per the notes to Table D.2, all
+// unused WinAnsiEncoding codes greater than octal 40 map to the bullet
+// character; only octal 225 is assigned to it by name. Octal 255
+// ([winAnsiSecondHyphen]) maps to U+002D HYPHEN-MINUS, the Unicode value of
+// the glyph name the table gives it, not to the soft hyphen extraction drops.
+// Use it where a font states WinAnsiEncoding, not where litho falls back to
+// the table for a font that names no encoding: the rule belongs to the
+// encoding. PDF.js reads the same codes the same way (src/core/encodings.js,
 // WinAnsiEncoding).
 //
 // # Corpus evidence
@@ -66,6 +74,8 @@ const bullet = 0x2022
 //   - All corpora: text matches PDF.js word for word on 10 more files
 //     (govdocs 9, pdfcpu 1) and character for character on 19 more, on none
 //     fewer.
+//   - pdfjs issue9650.pdf, govdocs thread_400_400900.pdf: code 0xAD ends a
+//     hyphenated line or opens a list item, and PDF.js reads a hyphen there.
 func WinAnsiDecoding() map[byte]rune {
 	m := make(map[byte]rune, len(WinAnsiEncoding)+6)
 	maps.Copy(m, WinAnsiEncoding)
@@ -74,6 +84,7 @@ func WinAnsiDecoding() map[byte]rune {
 			m[byte(code)] = bullet
 		}
 	}
+	m[winAnsiSecondHyphen] = '-'
 	return m
 }
 

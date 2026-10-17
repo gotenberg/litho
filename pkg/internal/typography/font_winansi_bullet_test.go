@@ -83,6 +83,19 @@ func TestResolveFont_WinAnsiUnusedCodesReadAsBullet(t *testing.T) {
 		}
 	})
 
+	// Annex D.2 names WinAnsiEncoding octal 255 "hyphen", where CP1252 has
+	// a soft hyphen extraction drops (pdfjs issue9650.pdf ends a line on it).
+	t.Run("octal 255 reads as a hyphen", func(t *testing.T) {
+		doc := &document.Document{Logger: document.NopLogger()}
+		font, err := ResolveFont(ctx, doc, build(ast.PdfName("WinAnsiEncoding")))
+		if err != nil {
+			t.Fatalf("ResolveFont: %v", err)
+		}
+		if got := decode(t, font, 0o255); got != "-" {
+			t.Errorf("code 0xAD = %q, want %q", got, "-")
+		}
+	})
+
 	t.Run("codes at or below octal 40 stay undefined", func(t *testing.T) {
 		doc := &document.Document{Logger: document.NopLogger()}
 		font, err := ResolveFont(ctx, doc, build(ast.PdfName("WinAnsiEncoding")))
