@@ -48,8 +48,10 @@ var (
 // they were in, which is what lets a JPX or DCT image be cleared at all: there
 // is no encoder for those filters, so the blanked image has to be written in a
 // filter litho can produce. A picture in DeviceGray, DeviceRGB, DeviceCMYK, an
-// ICCBased, CalGray or CalRGB space keeps that space (see [blankNative]); an
-// indexed, Separation, DeviceN or Lab picture is written as DeviceRGB. Any /SMask is carried over untouched, because a
+// ICCBased, CalGray or CalRGB space keeps that space (see [blankNative]), and
+// so does one in a Separation or DeviceN space naming only the colorant None,
+// which paints nothing (ISO 32000-1, 8.6.6.4); any other indexed, Separation,
+// DeviceN or Lab picture is written as DeviceRGB. Any /SMask is carried over untouched, because a
 // soft mask is a separate grayscale image that stays valid against the new
 // samples and dropping it would change transparency outside the region.
 //
@@ -144,6 +146,14 @@ func blankImage(
 	// Work on NRGBA for a predictable byte order, matching buildPNGXObject.
 	canvas := image.NewNRGBA(bounds)
 	draw.Draw(canvas, bounds, img, bounds.Min, draw.Src)
+
+	// The DeviceRGB replacement is opaque, so a picture whose pixels are not
+	// would start painting where it painted nothing: an image in a space over
+	// the colorant None decodes fully transparent (ISO 32000-1, 8.6.6.4), and
+	// rewritten as RGB it would cover its whole placement in black.
+	if !isStencil && !canvas.Opaque() {
+		return 0, fmt.Errorf("%w: %q does not paint every sample it holds", ErrImageNotDecodable, box.Name)
+	}
 
 	fill := blankedPicture
 	if isStencil {

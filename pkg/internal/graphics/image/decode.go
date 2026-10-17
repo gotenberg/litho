@@ -496,6 +496,78 @@ func tintedColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfD
 	return nil, "", 0, false
 }
 
+// paintsNothing reports whether a Separation or DeviceN colour space names
+// only the colorant None.
+//
+// Per ISO 32000-1, 8.6.6.4 the special colorant name None never produces
+// visible output: painting in a Separation space over it has no effect on the
+// page. Per 8.6.6.5 a DeviceN space whose colorant names are all None
+// discards its output the same way and never invokes its tint transform. A
+// DeviceN space that names None alongside real colorants still paints, its
+// None components ignored on separations only, so it is not one of these.
+func paintsNothing(ctx context.Context, doc *document.Document, cs ast.PdfArray, family string) bool {
+	if len(cs) < 2 {
+		return false
+	}
+	switch family {
+	case "Separation":
+		name, err := document.ResolveName(ctx, doc, cs[1])
+		return err == nil && name == "None"
+	case "DeviceN":
+		names, err := document.ResolveArray(ctx, doc, cs[1])
+		if err != nil || len(names) == 0 {
+			return false
+		}
+		for _, obj := range names {
+			name, err := document.ResolveName(ctx, doc, obj)
+			if err != nil || name != "None" {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// decodeNoneColorant decodes an image in a colour space that paints nothing
+// (see [paintsNothing]). The picture is fully transparent: every pixel has
+// zero alpha, which is what the page shows of it. The samples still exist in
+// the file, so a native read returns them, one byte per colorant, with the
+// /Decode array applied (ISO 32000-1, 8.9.5.2): a caller that writes them back under the same
+// /ColorSpace keeps the image painting nothing, where an RGB rewrite of the
+// transparent picture would paint it black.
+func decodeNoneColorant(
+	ctx context.Context,
+	doc *document.Document,
+	dict ast.PdfDict,
+	data []byte,
+	width, height, bitsPerComp, colorants int,
+	jpeg bool,
+	native *NativeSamples,
+) (image.Image, error) {
+	if native == nil {
+		return image.NewNRGBA(image.Rect(0, 0, width, height)), nil
+	}
+	if colorants < 1 || colorants > maxTintColorants {
+		return nil, errNotNative
+	}
+	// A JPEG's shape is its codestream's (see jpegSampleSpace): one that does
+	// not hold one component per colorant has no tints to return.
+	if jpeg && len(data) != width*height*colorants {
+		return nil, errNotNative
+	}
+	data, validRows := padShortSamples(data, width, height, colorants, bitsPerComp)
+	if validRows == 0 {
+		return nil, fmt.Errorf("decoded data too short for one row of the %dx%d image: got %d bytes", width, height, len(data))
+	}
+	unpacked, err := unpackSamples(data, width, height, colorants, bitsPerComp, true)
+	if err != nil {
+		return nil, err
+	}
+	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, colorants), colorants)
+	return nil, captureNative(native, unpacked, dec, colorants, width, height, validRows)
+}
+
 // decodeSeparation builds the image of a Separation colour space by mapping
 // each one-byte tint through the space's tint transform into its alternate
 // space, then to RGB.
@@ -1119,9 +1191,10 @@ var errNotNative = errors.New("image samples are not in a device colour space")
 
 // DecodeImageNative decodes a named Image XObject into the samples of its own
 // colour space, where that space is DeviceGray, DeviceRGB, DeviceCMYK, an
-// ICCBased space over one, three or four components, CalGray or CalRGB, and
-// reports false for any other image: indexed, Separation, DeviceN and Lab
-// images, stencil masks, and an image whose data does not hold the components
+// ICCBased space over one, three or four components, CalGray or CalRGB, or a
+// Separation or DeviceN space naming only the colorant None, and reports false
+// for any other image: indexed and Lab images, any other Separation or DeviceN
+// image, stencil masks, and an image whose data does not hold the components
 // its space names. A caller that writes the samples back under the same
 // /ColorSpace changes no colour, where going through [DecodeImage]'s RGB
 // converts them.
@@ -1193,6 +1266,13 @@ func nativeComponents(ctx context.Context, doc *document.Document, dict ast.PdfD
 			return 3, true
 		case "CalGray":
 			return 1, true
+		case "Separation", "DeviceN":
+			// A space that paints nothing keeps its samples as tints, and
+			// writing them back under the same /ColorSpace keeps it painting
+			// nothing (see decodeNoneColorant).
+			if arr, family, colorants, ok := tintedColorSpace(ctx, doc, dict); ok && paintsNothing(ctx, doc, arr, family) {
+				return colorants, colorants <= maxTintColorants
+			}
 		}
 	}
 	return 0, false
@@ -1464,6 +1544,9 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// base count sizes the colour TABLE, not the stride.
 	if !isIndexed {
 		if arr, family, colorants, ok := tintedColorSpace(ctx, doc, stream.Dict); ok {
+			if paintsNothing(ctx, doc, arr, family) {
+				return decodeNoneColorant(ctx, doc, stream.Dict, decodedData, width, height, bitsPerComp, colorants, filterName == "DCTDecode", native)
+			}
 			switch {
 			case family == "Separation":
 				return decodeSeparation(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp, cc)
