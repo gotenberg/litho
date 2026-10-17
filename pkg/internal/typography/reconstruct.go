@@ -154,11 +154,8 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 				continue
 			}
 			if prevIdx == idx-1 && items != nil && items[base+idx] != continuesItem {
-				if space, ok := itemSpace(&runs, items[base+idx], base+idx, el); ok {
-					switch {
-					case space == itemDropsSpace:
-						pendingSpace = ""
-					case space == itemAddsSpace && pendingSpace == "":
+				if spacesItem(&runs, items[base+idx], base+idx, el) {
+					if pendingSpace == "" {
 						pendingSpace = " "
 					}
 					writeSpace(&sb, pendingSpace)
@@ -521,72 +518,44 @@ func (r *runTracker) breaksItem(i int, el models.TextElement) bool {
 	return math.Abs(el.Y-startY) > lineBreakTolerance
 }
 
-// What PDF.js writes before the glyph that begins a text item after a
-// stream boundary ([itemSpace]).
-const (
-	// itemKeepsSpace writes a literal space shown before the glyph, and
-	// nothing else.
-	itemKeepsSpace = iota
-	// itemDropsSpace writes nothing, a literal space included.
-	itemDropsSpace
-	// itemAddsSpace writes a space.
-	itemAddsSpace
-)
-
-// itemSpace returns what PDF.js writes before el, the element i, on the
-// line of the glyph before it, when el begins a text item after a stream
-// boundary and before is its [textItemStarts]. ok is false when the word
-// space heuristic decides instead: for vertical and rotated text, and for
-// a glyph PDF.js flags as ending the line of the glyph it compares with,
-// where the reference measures the gap from the text item before el
-// rather than from that glyph.
+// spacesItem reports whether a space goes before el, the element i, when
+// el begins a text item after a stream boundary on the line of the glyph
+// before it, and before is its [textItemStarts]. It only adds spaces: where
+// it reports false, the word space rule of every other glyph decides
+// ([wordSpaceThreshold], against the element before el), so a form never
+// glues its text to the page's.
 //
-// The first glyph of a form has no glyph to compare with, so PDF.js writes
-// nothing before it, not even a space glyph the stream before it showed
-// (src/core/evaluator.js, getTextContent, a builder of its own per form).
-// The glyph after a form is compared with the glyph before the form: PDF.js
-// writes a space when the gap between the two passes [trackingSpaceFactor]
-// of its size (compareWithLastPosition, addFakeSpaces and pushWhitespace,
-// since the item it would join has ended), drops a space glyph after a move
-// back past [negativeRunGapFactor], and otherwise writes the space glyph
-// shown between them, if any (shouldAddWhitepsace). ISO 32000-1, 14.8.2.5
-// leaves word breaks to the consumer, so the rule is the reference's.
+// PDF.js compares the glyph after a form with the glyph before the form,
+// and writes a space when the gap between the two passes
+// [trackingSpaceFactor] of its size (src/core/evaluator.js,
+// compareWithLastPosition, addFakeSpaces and pushWhitespace, since the item
+// it would join has ended). litho does the same. It departs from PDF.js at
+// the first glyph of a form, which PDF.js compares with nothing and so
+// writes no space before, whatever the gap: litho measures that gap by its
+// word space rule, and keeps the space a reader sees. Readable text over
+// agreement with the reference is a user decision (2026-10-17). Vertical
+// and rotated text, and a glyph that ends the line of the glyph before the
+// form, are left to the word space rule. ISO 32000-1, 14.8.2.5 leaves word
+// breaks to the consumer.
 //
 // # Corpus evidence
 //
-//   - All corpora: words match PDF.js on 3 more files (govdocs
-//     thread_100_100591.pdf, pdfjs issue14301.pdf, issue19234.pdf) and on
-//     none fewer, and 141 pages of 11 files that change come closer to
-//     PDF.js with none farther; facturx and pdf20 do not move.
-//   - pdfjs issue14301.pdf, issue19234.pdf, pdfcpu CenterOfWhy.pdf: text
-//     a form XObject draws beside the page's text read with a space before
-//     it, "Prénom: 1/20", where PDF.js reads "Prénom:1/20".
-//   - govdocs thread_400_400566.pdf page 58: an image Do between "3 " and
-//     a "/" set back over the space read "G2G3 /S2/D" until a space glyph
-//     the next glyph abuts was dropped here as everywhere else.
-func itemSpace(r *runTracker, before, i int, el models.TextElement) (space int, ok bool) {
-	if el.Vertical || isRotated(el.Angle) || isOrthogonalRotation(el.Angle) {
-		return 0, false
-	}
-	if before == opensStream {
-		return itemDropsSpace, true
+//   - pdfjs issue14301.pdf, govdocs thread_100_100591.pdf, pdfcpu
+//     CenterOfWhy.pdf: text a form XObject draws beside the page's text
+//     reads "Prénom: 1/20", "Information Reports" and "M-2004-002 1",
+//     where PDF.js glues it, "Prénom:1/20", so the goldens of those files
+//     do not match by decision.
+func spacesItem(r *runTracker, before, i int, el models.TextElement) bool {
+	if before == opensStream || el.Vertical || isRotated(el.Angle) || isOrthogonalRotation(el.Angle) {
+		return false
 	}
 	prev := r.elements[before]
 	if prev.Vertical || isRotated(prev.Angle) || isOrthogonalRotation(prev.Angle) {
-		return 0, false
+		return false
 	}
 	size := math.Abs(prev.FontSize)
 	gap := computeLineGap(prev, el)
-	if r.endsLine(before, i, prev, el, gap, size) {
-		return 0, false
-	}
-	switch {
-	case gap > trackingSpaceFactor*size:
-		return itemAddsSpace, true
-	case gap < negativeRunGapFactor*size, suppressesLiteralSpace(prev, el, gap):
-		return itemDropsSpace, true
-	}
-	return itemKeepsSpace, true
+	return !r.endsLine(before, i, prev, el, gap, size) && gap > trackingSpaceFactor*size
 }
 
 // sameBaselineRatio is how far across the baseline, as a fraction of the

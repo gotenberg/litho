@@ -87,17 +87,16 @@ func TestReconstructText_FormBoundaryLines(t *testing.T) {
 	}
 }
 
-// TestReconstructText_FormBoundarySpaces pins the word spaces PDF.js writes
-// at the edge of a form XObject. Before the form's first glyph it writes
-// none, not even a space glyph shown before the form. After the form it
-// measures the gap from the glyph before the form, writes a space past the
-// tracking threshold, and drops a space glyph the next glyph sets back
-// over, as it does after a Do that paints an image.
+// TestReconstructText_FormBoundarySpaces pins the word spaces at the edge
+// of a form XObject. Before the form's first glyph the word space rule
+// decides, as for any glyph, where PDF.js writes no space: litho departs
+// from PDF.js there by a user decision (2026-10-17). After the form the gap
+// is also measured from the glyph before the form, as PDF.js measures it,
+// and a space past the tracking threshold is written. A space glyph the
+// next glyph sets back over after a Do that paints an image is dropped.
 //
 // # Corpus evidence
 //
-//   - pdfjs issue14301.pdf: text a form XObject draws after a label read
-//     "Prénom: 1/20" where PDF.js reads "Prénom:1/20".
 //   - govdocs thread_400_400566.pdf page 58: "G2G3/S2/D", an image Do
 //     between "3 " and a "/" set back over the space.
 func TestReconstructText_FormBoundarySpaces(t *testing.T) {
@@ -110,7 +109,7 @@ func TestReconstructText_FormBoundarySpaces(t *testing.T) {
 		want     string
 	}{
 		{
-			name: "no space before a form",
+			name: "space glyph before a form",
 			in: []models.TextElement{
 				{Text: "a", X: 100, Y: 500, Width: 6, FontSize: 10},
 				{Text: " ", X: 106, Y: 500, Width: 3, FontSize: 10},
@@ -118,7 +117,7 @@ func TestReconstructText_FormBoundarySpaces(t *testing.T) {
 			},
 			streams:  []int{1, 1, 3},
 			segments: []int{2, 2, 4},
-			want:     "ab",
+			want:     "a b",
 		},
 		{
 			name: "space after a form measured from the glyph before it",
@@ -129,7 +128,7 @@ func TestReconstructText_FormBoundarySpaces(t *testing.T) {
 			},
 			streams:  []int{1, 3, 1},
 			segments: []int{2, 4, 5},
-			want:     "ab c",
+			want:     "a b c",
 		},
 		{
 			name: "space glyph set back over after an image",
@@ -146,6 +145,82 @@ func TestReconstructText_FormBoundarySpaces(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			if got := reconstructText(context.Background(), tc.in, streamFonts(1, tc.streams, tc.segments), nil); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestReconstructText_FormEdgeKeepsWordSpace pins that text a form XObject
+// draws beside other text keeps the word space a reader sees, where PDF.js
+// glues it: PDF.js compares the first glyph of a form with nothing and
+// writes no space before it, and litho departs from PDF.js there by a user
+// decision (2026-10-17), readable text over agreement with the golden.
+// Each case is the glyphs on either side of the edge as the file sets
+// them.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14301.pdf page 1: a footer label drawn by a form, then the
+//     page number the page shows, "Prénom: 1/20".
+//   - govdocs thread_100_100591.pdf page 2: a running head drawn by two
+//     forms, "Information Reports".
+//   - pdfcpu CenterOfWhy.pdf page 2: a footer and the page number of
+//     another form, "M-2004-002 1".
+func TestReconstructText_FormEdgeKeepsWordSpace(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		in       []models.TextElement
+		size     float64
+		streams  []int
+		segments []int
+		want     string
+	}{
+		{
+			name: "issue14301",
+			in: []models.TextElement{
+				{Text: "m", X: 339.704, Y: 24.86, Width: 8.33, FontSize: 10},
+				{Text: ":", X: 348.034, Y: 24.86, Width: 2.78, FontSize: 10},
+				{Text: "1", X: 535.372, Y: 24.006, Width: 5.56, FontSize: 10},
+				{Text: "/", X: 540.932, Y: 24.006, Width: 2.78, FontSize: 10},
+				{Text: "2", X: 543.712, Y: 24.006, Width: 5.56, FontSize: 10},
+				{Text: "0", X: 549.272, Y: 24.006, Width: 5.56, FontSize: 10},
+			},
+			size:     1,
+			streams:  []int{3, 3, 1, 1, 1, 1},
+			segments: []int{4, 4, 5, 5, 5, 5},
+			want:     "m: 1/20",
+		},
+		{
+			name: "thread_100_100591",
+			in: []models.TextElement{
+				{Text: "o", X: 154.82, Y: 770.63, Width: 5, FontSize: 10},
+				{Text: "n", X: 159.82, Y: 770.63, Width: 5, FontSize: 10},
+				{Text: "R", X: 241.415, Y: 770.63, Width: 6.67, FontSize: 10},
+				{Text: "e", X: 248.085, Y: 770.63, Width: 4.44, FontSize: 10},
+			},
+			size:     1,
+			streams:  []int{3, 3, 6, 6},
+			segments: []int{4, 4, 7, 7},
+			want:     "on Re",
+		},
+		{
+			name: "CenterOfWhy",
+			in: []models.TextElement{
+				{Text: "0", X: 151.576, Y: 29.684, Width: 4.448, FontSize: 8},
+				{Text: "2", X: 156.024, Y: 29.684, Width: 4.448, FontSize: 8},
+				{Text: "1", X: 535.55, Y: 29.684, Width: 4.448, FontSize: 8},
+			},
+			size:     8,
+			streams:  []int{7, 7, 10},
+			segments: []int{8, 8, 11},
+			want:     "02 1",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := reconstructText(context.Background(), tc.in, streamFonts(tc.size, tc.streams, tc.segments), nil); got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
@@ -231,10 +306,11 @@ func TestExtractElements_RunFontsNameStreams(t *testing.T) {
 	}
 }
 
-// TestExtractText_FormFieldValueJoinsLabel pins the two halves end to end:
-// the form's "John" to the right of "Name:" takes no space, as PDF.js reads
-// it, and "Doe" below starts its own line.
-func TestExtractText_FormFieldValueJoinsLabel(t *testing.T) {
+// TestExtractText_FormValueKeepsSpace pins the two halves end to end: the
+// form's "John" to the right of "Name:" keeps its word space, where PDF.js
+// glues it (a user decision, 2026-10-17), and "Doe" below starts its own
+// line.
+func TestExtractText_FormValueKeepsSpace(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc, page, ops := formEdgePage(t)
@@ -244,7 +320,7 @@ func TestExtractText_FormFieldValueJoinsLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExtractText: %v", err)
 	}
-	if want := "Name:John\nDoe"; got != want {
+	if want := "Name: John\nDoe"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
