@@ -71,8 +71,11 @@ var (
 	ErrImageNotDecodable = errors.New("image cannot be decoded")
 
 	// ErrInvalidPageNumber is returned when a page number is outside the
-	// valid range [1, pageCount].
-	ErrInvalidPageNumber = errors.New("page number out of bounds")
+	// valid range [1, pageCount]: by the [Reader] methods that take one, by
+	// [Writer.Redact] and [Split], and by [Writer.WriteTo] for a page
+	// [Writer.RotatePages], [Writer.DeletePages] or [Writer.InsertPages]
+	// named, or an insertion position outside [0, pageCount].
+	ErrInvalidPageNumber = mutations.ErrInvalidPageNumber
 
 	// ErrInvalidRotation is returned when a rotation value is not a
 	// multiple of 90.

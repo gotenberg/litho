@@ -34,7 +34,7 @@ func RotatePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			return err
 		}
 		if pageNum < 1 || pageNum > len(pages) {
-			return fmt.Errorf("page %d is out of bounds (document has %d pages)", pageNum, len(pages))
+			return fmt.Errorf("rotating page %d: %w (document has %d pages)", pageNum, ErrInvalidPageNumber, len(pages))
 		}
 		p := pages[pageNum-1]
 

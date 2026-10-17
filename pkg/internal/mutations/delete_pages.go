@@ -23,7 +23,7 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	deleteSet := make(map[int]bool, len(pagesToDelete))
 	for _, p := range pagesToDelete {
 		if p < 1 || p > len(allPages) {
-			return fmt.Errorf("page %d out of range [1, %d]", p, len(allPages))
+			return fmt.Errorf("deleting page %d: %w (document has %d pages)", p, ErrInvalidPageNumber, len(allPages))
 		}
 		deleteSet[p] = true
 	}

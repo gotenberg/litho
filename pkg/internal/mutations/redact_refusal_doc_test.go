@@ -30,6 +30,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrScanTokenEmpty":                "ScanOutputForTokens",
 	"ErrSanitizationIncomplete":        "SanitizeDocument",
 	"ErrPagePruneIncomplete":           "DeletePages",
+	"ErrInvalidPageNumber":             "RotatePages, Split, DeletePages and InsertPages; pdf.Writer.Redact checks its pages itself",
 	"ErrAttachmentTreeIncomplete":      "the attachment walks",
 	"ErrImageShared":                   "CheckBlankedImageUses, document-wide rather than per page",
 	"ErrSignatureFieldUnavailable":     "WriteWithSignature",

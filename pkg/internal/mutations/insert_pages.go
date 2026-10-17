@@ -37,7 +37,7 @@ func InsertPages(
 	sourcePageNums []int,
 ) error {
 	if pos < 0 || pos > len(targetPages) {
-		return fmt.Errorf("insert position %d out of range [0, %d]", pos, len(targetPages))
+		return fmt.Errorf("inserting at position %d: %w (positions run 0 to %d)", pos, ErrInvalidPageNumber, len(targetPages))
 	}
 	// A copied page with no media box a viewer uses is sized from the pages of
 	// both documents, as the source reads it. The caller's default page size
@@ -57,7 +57,7 @@ func InsertPages(
 		srcIndices = make([]int, len(sourcePageNums))
 		for i, num := range sourcePageNums {
 			if num < 1 || num > len(srcPages) {
-				return fmt.Errorf("source page %d out of range [1, %d]", num, len(srcPages))
+				return fmt.Errorf("inserting source page %d: %w (source has %d pages)", num, ErrInvalidPageNumber, len(srcPages))
 			}
 			pagesToInsert[i] = srcPages[num-1]
 			srcIndices[i] = num - 1

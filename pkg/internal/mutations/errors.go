@@ -12,6 +12,12 @@ import "errors"
 // leaving the caller believing the edit landed.
 var ErrPageNotAddressable = errors.New("page has no indirect reference")
 
+// ErrInvalidPageNumber reports a page number outside [1, pageCount], or an
+// insertion position outside [0, pageCount], of the document a page operation
+// edits. pdf.ErrInvalidPageNumber is this value, so a caller matches it with
+// errors.Is without importing pkg/internal.
+var ErrInvalidPageNumber = errors.New("page number out of bounds")
+
 // ErrCatalogUnreadable reports a catalog that neither the trailer reference nor
 // the reader's recovery could produce entries for.
 //

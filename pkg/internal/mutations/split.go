@@ -37,7 +37,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	// Validate page numbers.
 	for _, p := range pages {
 		if p < 1 || p > len(allPages) {
-			return fmt.Errorf("page %d is out of bounds (document has %d pages)", p, len(allPages))
+			return fmt.Errorf("splitting page %d: %w (document has %d pages)", p, ErrInvalidPageNumber, len(allPages))
 		}
 	}
 
