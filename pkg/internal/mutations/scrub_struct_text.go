@@ -118,11 +118,11 @@ func pageParentTreeEntries(ctx context.Context, doc *document.Document, page *do
 
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil || catalog == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // No readable catalog holds no structure text to scrub.
 	}
 	root, err := document.ResolveDict(ctx, doc, catalog.Dict["StructTreeRoot"])
 	if err != nil || root == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /StructTreeRoot is null (ISO 32000-1, 7.3.10): no structure text to scrub.
 	}
 	parentTree, ok := root["ParentTree"]
 	if !ok {
@@ -135,7 +135,7 @@ func pageParentTreeEntries(ctx context.Context, doc *document.Document, page *do
 	}
 	entries, err := document.ResolveArray(ctx, doc, value)
 	if err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /ParentTree entry is null (ISO 32000-1, 7.3.10): it indexes no element to scrub.
 	}
 	return entries, nil
 }

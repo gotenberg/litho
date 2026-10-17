@@ -592,7 +592,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 
 	formOps, err := content.ParsePageContent(ctx, doc, stream, content.SplitGluedOperators())
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // A form whose content does not parse contributes no text.
 	}
 
 	// Determine the Form's own /Resources; inherit the parent's on absence.

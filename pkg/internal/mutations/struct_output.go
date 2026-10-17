@@ -136,7 +136,7 @@ func newTargetStructOutput(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	}
 	root, err := resolveDictAllocFirst(ctx, alloc, doc, rootObj)
 	if err != nil || root == nil {
-		return nil, true, nil
+		return nil, true, nil //nolint:nilerr // An unresolvable /StructTreeRoot is null (ISO 32000-1, 7.3.10): no structure tree to write.
 	}
 	entries, maxKey, ok := readStructParentTree(ctx, alloc, doc, root["ParentTree"])
 	if !ok {

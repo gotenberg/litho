@@ -38,15 +38,15 @@ import (
 func insertOptionalContent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogRef ast.PdfIndirectRef, srcDoc *document.Document, copier *writer.Copier) error {
 	srcCatalog, err := document.ResolveCatalog(ctx, srcDoc)
 	if err != nil || srcCatalog == nil {
-		return nil
+		return nil //nolint:nilerr // A source without a readable catalog has no optional content to carry over.
 	}
 	srcOCP, err := document.ResolveDict(ctx, srcDoc, srcCatalog.Dict["OCProperties"])
 	if err != nil || srcOCP == nil {
-		return nil
+		return nil //nolint:nilerr // An unresolvable /OCProperties is null (ISO 32000-1, 7.3.10): no group list to carry over.
 	}
 	groups, err := document.ResolveArray(ctx, srcDoc, srcOCP["OCGs"])
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // An unresolvable /OCGs is null (ISO 32000-1, 7.3.10): no group list to carry over.
 	}
 	hidden := hiddenOptionalContent(ctx, srcDoc, srcOCP, groups)
 	var added, shown, off ast.PdfArray

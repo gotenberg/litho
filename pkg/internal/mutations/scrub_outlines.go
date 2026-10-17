@@ -69,12 +69,12 @@ func scrubOutlineTitles(
 	}
 	catalog, err := LiveCatalogDict(ctx, alloc, doc, catalogRef)
 	if err != nil || catalog == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // No readable catalog holds no outline to scrub.
 	}
 	root, err := resolveDictAllocFirst(ctx, alloc, doc, catalog["Outlines"])
 	if err != nil || root == nil {
 		// No outline tree, so no bookmark can be quoting anything.
-		return nil, nil
+		return nil, nil //nolint:nilerr // A deliberate fallback, see above.
 	}
 
 	scrubbed := make(map[int]bool)
@@ -131,7 +131,7 @@ func scrubOutlineItems(
 
 		item, err := resolveDictAllocFirst(ctx, alloc, doc, current)
 		if err != nil || item == nil {
-			return nil
+			return nil //nolint:nilerr // An unresolvable outline item is null (ISO 32000-1, 7.3.10) and ends this branch.
 		}
 		if outlineTitleQuotes(ctx, alloc, doc, item, tokens) {
 			newItem := make(ast.PdfDict, len(item))

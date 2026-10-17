@@ -345,11 +345,11 @@ func RemoveAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 func removeAttachmentAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string) error {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
-		return nil // No catalog: the name-tree pass reports the real problem.
+		return nil //nolint:nilerr // No catalog: the name-tree pass reports the real problem.
 	}
 	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // No page tree holds no annotation to drop; the name-tree pass reports the real problem.
 	}
 
 	for _, page := range pages {
@@ -438,11 +438,11 @@ func removeAssociatedFiles(ctx context.Context, alloc *writer.ObjAllocator, doc 
 
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // No catalog: the name-tree pass reports the real problem.
 	}
 	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // No page tree holds no annotation to strip; the name-tree pass reports the real problem.
 	}
 	for _, page := range pages {
 		if err := ctx.Err(); err != nil {

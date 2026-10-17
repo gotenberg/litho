@@ -145,7 +145,7 @@ func parseXFADatasets(xmlData []byte) (map[string]string, error) {
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return nil, nil
+			return nil, nil //nolint:nilerr // A packet that ends or breaks before <xfa:data> holds no dataset values.
 		}
 
 		switch t := tok.(type) {
@@ -174,7 +174,7 @@ func walkXFADataTree(decoder *xml.Decoder, prefix string, result map[string]stri
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // A packet that ends mid-tree keeps the fields read so far.
 		}
 
 		switch t := tok.(type) {
@@ -215,7 +215,7 @@ func collectXFAElement(decoder *xml.Decoder, path string, result map[string]stri
 			// buffer raw stored an untrimmed value in a map whose every other
 			// value is trimmed, so one field's spacing depended on where the
 			// file happened to be cut.
-			return strings.TrimSpace(textBuf.String()), nil
+			return strings.TrimSpace(textBuf.String()), nil //nolint:nilerr // A deliberate fallback, see above.
 		}
 
 		switch t := tok.(type) {

@@ -286,7 +286,7 @@ func parseBCMapCIDProgram(data []byte) (*bcmapCIDProgram, error) {
 			return nil, fmt.Errorf("bcmap record type %d: %w", recType, err)
 		}
 	}
-	return prog, nil
+	return prog, nil //nolint:nilerr // A truncated bcmap ends at its last whole record.
 }
 
 // readString reads a VLQ-length-prefixed string, each character a VLQ number,

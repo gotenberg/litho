@@ -99,7 +99,7 @@ func extractEncapContent(raw asn1.RawValue) ([]byte, error) {
 	if err != nil {
 		// Try using the raw bytes directly (some implementations don't
 		// wrap in an additional OCTET STRING).
-		return eci.Content.Bytes, nil
+		return eci.Content.Bytes, nil //nolint:nilerr // A deliberate fallback, see above.
 	}
 
 	return content, nil

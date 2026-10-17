@@ -169,7 +169,7 @@ func decode(ctx context.Context, data []byte, p Params, block bool, maxRows int)
 			}
 		}
 	}
-	return out, min((d.r.pos+7)/8, len(data)), nil
+	return out, min((d.r.pos+7)/8, len(data)), nil //nolint:nilerr // A missing or damaged EOFB does not void the rows decoded before it.
 }
 
 // decoder holds the state that runs from one row to the next.

@@ -120,7 +120,7 @@ func fixOutputIntentCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc
 	}
 	arr, err := document.ResolveArray(ctx, doc, oiObj)
 	if err != nil || len(arr) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /OutputIntents is null (ISO 32000-1, 7.3.10): no intent to repair.
 	}
 
 	var fixes []string

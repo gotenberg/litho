@@ -81,7 +81,7 @@ func scrubPageWidgets(
 	}
 	annots, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil || annots == nil {
-		return nil
+		return nil //nolint:nilerr // An unresolvable /Annots is null (ISO 32000-1, 7.3.10): the page has no field to scrub.
 	}
 
 	for _, entry := range annots {

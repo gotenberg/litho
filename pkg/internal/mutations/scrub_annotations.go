@@ -87,7 +87,7 @@ func scrubPageAnnotations(
 	}
 	annots, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil || annots == nil {
-		return nil
+		return nil //nolint:nilerr // An unresolvable /Annots is null (ISO 32000-1, 7.3.10): the page has no annotation to scrub.
 	}
 
 	for _, entry := range annots {
@@ -166,7 +166,7 @@ func appearancePaintsText(ctx context.Context, doc *document.Document, annot ast
 	}
 	apDict, err := document.ResolveDict(ctx, doc, apObj)
 	if err != nil || apDict == nil {
-		return false, nil
+		return false, nil //nolint:nilerr // An unresolvable /AP is null (ISO 32000-1, 7.3.10): no appearance paints text.
 	}
 	normal, ok := apDict["N"]
 	if !ok {
@@ -176,11 +176,11 @@ func appearancePaintsText(ctx context.Context, doc *document.Document, annot ast
 	if err != nil || stream.Dict == nil {
 		// A /N that is a sub-dictionary of states rather than a stream, or one
 		// that will not resolve: unread, so not provably clean.
-		return true, nil
+		return true, nil //nolint:nilerr // A deliberate fallback, see above.
 	}
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return true, nil
+		return true, nil //nolint:nilerr // An appearance that does not decode is not provably clean.
 	}
 	return bytes.Contains(data, []byte("Tj")) || bytes.Contains(data, []byte("TJ")), nil
 }

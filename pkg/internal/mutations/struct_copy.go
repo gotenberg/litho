@@ -97,7 +97,7 @@ func newStructSource(ctx context.Context, doc *document.Document, overrides map[
 	}
 	catalog, err := LiveCatalogDict(ctx, view, doc, catalogRef)
 	if err != nil {
-		return nil, overrides, nil
+		return nil, overrides, nil //nolint:nilerr // An unreadable catalog carries no structure tree to copy.
 	}
 	rootObj, has := catalog["StructTreeRoot"]
 	if !has {
@@ -105,7 +105,7 @@ func newStructSource(ctx context.Context, doc *document.Document, overrides map[
 	}
 	root, err := resolveDictAllocFirst(ctx, view, doc, rootObj)
 	if err != nil || root == nil {
-		return nil, overrides, nil
+		return nil, overrides, nil //nolint:nilerr // An unresolvable /StructTreeRoot is null (ISO 32000-1, 7.3.10): no structure tree to copy.
 	}
 	entries, maxKey, ok := readStructParentTree(ctx, view, doc, root["ParentTree"])
 	if !ok {

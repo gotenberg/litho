@@ -114,11 +114,11 @@ func FlattenUseCMap(ctx context.Context, using []byte, bases [][]byte) ([]byte, 
 	// gone.
 	back, err := ParseCID(ctx, out)
 	if err != nil || !maps.Equal(back.Mapping, merged) {
-		return using, false, nil
+		return using, false, nil //nolint:nilerr // A rewrite that does not round-trip keeps the CMap as written.
 	}
 	full, err := Parse(ctx, out)
 	if err != nil || len(full.CodeSpaceRanges) != len(spaces) {
-		return using, false, nil
+		return using, false, nil //nolint:nilerr // A rewrite that does not round-trip keeps the CMap as written.
 	}
 	if bytes.Contains(out, []byte("usecmap")) {
 		return using, false, nil

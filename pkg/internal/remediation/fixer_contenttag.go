@@ -53,11 +53,11 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // No catalog holds no content to tag; validation reports the broken document.
 	}
 	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil || len(pages) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilerr // No page tree holds no content to tag; validation reports the broken document.
 	}
 
 	// Find the StructTreeRoot and Document element.

@@ -131,7 +131,7 @@ func (d *Decoder) UndecodableFilters(ctx context.Context, stream ast.PdfStream) 
 	names, err := streamFilterNames(stream.Dict)
 	if err != nil {
 		// Decoding fails on an invalid /Filter rather than skip a filter.
-		return nil, nil
+		return nil, nil //nolint:nilerr // Decoding reports an invalid /Filter; this report names only filters it cannot decode.
 	}
 	unknown := d.unknownFilters(names)
 	if !slices.ContainsFunc(names, refusesUnsupported) {

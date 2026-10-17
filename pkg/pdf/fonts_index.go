@@ -285,7 +285,7 @@ func describeCFF(p string, fh fs.File, budget *int64) ([]fontFile, error) {
 	*budget -= int64(len(data))
 	info, err := cff.ReadInfo(data)
 	if err != nil || info.CID {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unreadable or CID-keyed CFF program names no face to index.
 	}
 	// A bare CFF program states its style in its name alone.
 	family, style := splitFontName(info.FontName)

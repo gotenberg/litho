@@ -42,11 +42,11 @@ func fixSignatureStrip(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	}
 	acroForm, err := document.ResolveDict(ctx, doc, catalogDict["AcroForm"])
 	if err != nil || acroForm == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /AcroForm is null (ISO 32000-1, 7.3.10): no signature field to strip.
 	}
 	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
 	if err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /Fields is null (ISO 32000-1, 7.3.10): no signature field to strip.
 	}
 
 	count := 0

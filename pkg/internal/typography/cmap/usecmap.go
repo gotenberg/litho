@@ -246,7 +246,7 @@ func parseBCMapBFMappings(data []byte) (chars, ranges map[string]string, err err
 			return nil, nil, fmt.Errorf("bcmap record type %d: %w", recType, recErr)
 		}
 	}
-	return chars, ranges, nil
+	return chars, ranges, nil //nolint:nilerr // A truncated bcmap ends at its last whole record.
 }
 
 // readHexBytes reads n raw bytes, a big-endian number n bytes wide.

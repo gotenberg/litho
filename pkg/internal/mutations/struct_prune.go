@@ -146,7 +146,7 @@ func pruneStructTree(
 	}
 	root, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["StructTreeRoot"])
 	if err != nil || root == nil {
-		return nil
+		return nil //nolint:nilerr // An unresolvable /StructTreeRoot is null (ISO 32000-1, 7.3.10): no structure tree to prune.
 	}
 
 	p := newStructPrune(alloc, doc, func(ref ast.PdfIndirectRef) bool { return removed[ref.ObjectNum] },

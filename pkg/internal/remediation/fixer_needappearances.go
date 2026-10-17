@@ -42,7 +42,7 @@ func fixNeedAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	if acroForm == nil {
 		resolved, err := document.ResolveDict(ctx, doc, acroFormObj)
 		if err != nil || resolved == nil {
-			return nil, nil
+			return nil, nil //nolint:nilerr // An unresolvable /AcroForm is null (ISO 32000-1, 7.3.10): no flag to clear.
 		}
 		acroForm = resolved
 	}

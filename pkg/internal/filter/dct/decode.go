@@ -500,7 +500,7 @@ func (d *decoder) scan(ctx context.Context, b []byte, dataStart int) (int, error
 			break
 		}
 	}
-	return r.nextMarker(), nil
+	return r.nextMarker(), nil //nolint:nilerr // Damaged scan data ends the scan, keeping the blocks decoded (see above).
 }
 
 // baseline decodes one block of a sequential scan (T.81, F.2.2).

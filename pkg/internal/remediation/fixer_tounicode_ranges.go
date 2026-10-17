@@ -29,11 +29,11 @@ func matchToUnicodeRanges(v compliance.Violation) bool {
 func fixToUnicodeRangeIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // No catalog holds no font to repair; validation reports the broken document.
 	}
 	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // No page tree holds no font to repair; validation reports the broken document.
 	}
 
 	var fixes []string

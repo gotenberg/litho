@@ -49,7 +49,7 @@ func GenerateFromStructTree(
 	}
 	catalog, err := document.ResolveDict(ctx, doc, catalogRef)
 	if err != nil || catalog == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable catalog is null (ISO 32000-1, 7.3.10): no structure tree to draw bookmarks from.
 	}
 	strTreeObj, ok := catalog["StructTreeRoot"]
 	if !ok {
@@ -57,7 +57,7 @@ func GenerateFromStructTree(
 	}
 	strTree, err := document.ResolveDict(ctx, doc, strTreeObj)
 	if err != nil || strTree == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /StructTreeRoot is null (ISO 32000-1, 7.3.10): no structure tree to draw bookmarks from.
 	}
 
 	// Resolve RoleMap if present: non-standard type → standard type.

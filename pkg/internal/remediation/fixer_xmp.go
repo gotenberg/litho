@@ -1982,7 +1982,7 @@ func SyncXMPWithDocInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	}
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // A packet that does not decode has no values to sync; validation reports it.
 	}
 	// The packet must be UTF-8 before any splicing, for the reason given in
 	// fixXMP: a UTF-16 packet defeats the byte-range editor silently.

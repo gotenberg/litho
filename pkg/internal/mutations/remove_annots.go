@@ -47,7 +47,7 @@ func removeRegionAnnotations(
 	}
 	annots, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil || annots == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /Annots is null (ISO 32000-1, 7.3.10): the page has no annotation to remove.
 	}
 
 	kept := make(ast.PdfArray, 0, len(annots))
@@ -294,7 +294,7 @@ func pruneRootFields(
 	// day and this becomes the same bug the read above exists to avoid.
 	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
 	if err != nil || fields == nil {
-		return nil
+		return nil //nolint:nilerr // An unresolvable /Fields is null (ISO 32000-1, 7.3.10): no field to prune.
 	}
 
 	dropping := make(map[int]bool, len(rootWidgets))

@@ -171,7 +171,7 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 		}
 	}
 
-	return c, nil
+	return c, nil //nolint:nilerr // A lexer error ends the CMap, keeping the mappings read before it.
 }
 
 // parseNotdefBlock reads the entries of one notdefchar or notdefrange block,
@@ -190,7 +190,7 @@ func parseNotdefBlock(ctx context.Context, p *parser.Parser, c *CIDCMap, isRange
 	for {
 		t, err := p.Peek(0)
 		if err != nil || t.Type == lexer.TokenEOF {
-			return nil
+			return nil //nolint:nilerr // A lexer error ends the block, as in the cidchar and cidrange blocks.
 		}
 		if t.Type == lexer.TokenKeyword && t.Value == end {
 			_, err := p.Consume()
@@ -198,17 +198,17 @@ func parseNotdefBlock(ctx context.Context, p *parser.Parser, c *CIDCMap, isRange
 		}
 		lowObj, err := p.ParseObject(ctx)
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // A garbled entry ends the block, as in the cidchar and cidrange blocks.
 		}
 		highObj := lowObj
 		if isRange {
 			if highObj, err = p.ParseObject(ctx); err != nil {
-				return nil
+				return nil //nolint:nilerr // A garbled entry ends the block, as in the cidchar and cidrange blocks.
 			}
 		}
 		dstObj, err := p.ParseObject(ctx)
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // A garbled entry ends the block, as in the cidchar and cidrange blocks.
 		}
 		lowStr, ok1 := lowObj.(ast.PdfString)
 		highStr, ok2 := highObj.(ast.PdfString)

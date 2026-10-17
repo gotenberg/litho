@@ -243,7 +243,7 @@ func XMPOpen(ctx context.Context, doc *document.Document) (func(context.Context)
 	// through its object-pool fallback.
 	resolved, err := document.ResolveCatalog(ctx, doc)
 	if err != nil || resolved == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // No readable catalog holds no XMP packet.
 	}
 	catalog := resolved.Dict
 	if catalog == nil {
@@ -257,7 +257,7 @@ func XMPOpen(ctx context.Context, doc *document.Document) (func(context.Context)
 
 	stream, err := document.ResolveStream(ctx, doc, metaRef)
 	if err != nil || stream.Dict == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /Metadata is null (ISO 32000-1, 7.3.10): the document has no XMP packet.
 	}
 	return doc.OpenFunc(stream), nil
 }

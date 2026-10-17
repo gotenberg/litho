@@ -39,7 +39,7 @@ func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	}
 	acroForm, err := document.ResolveDict(ctx, doc, acroFormObj)
 	if err != nil || acroForm == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /AcroForm is null (ISO 32000-1, 7.3.10): no field to repair.
 	}
 
 	fieldsObj, ok := acroForm["Fields"]
@@ -48,7 +48,7 @@ func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	}
 	fields, err := document.ResolveArray(ctx, doc, fieldsObj)
 	if err != nil || len(fields) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /Fields is null (ISO 32000-1, 7.3.10): no field to repair.
 	}
 
 	// An annotation's /StructParent keys the structure tree's /ParentTree to

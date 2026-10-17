@@ -353,7 +353,7 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 		}
 	}
 
-	return c, nil
+	return c, nil //nolint:nilerr // A lexer error ends the CMap, keeping the mappings read before it.
 }
 
 // Map looks up a character code from the beginning of data and returns the

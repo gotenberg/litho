@@ -17,7 +17,7 @@ func ExtractFormulas(ctx context.Context, doc *document.Document) ([]models.Form
 	// which a reference-based lookup cannot represent.
 	resolved, err := document.ResolveCatalog(ctx, doc)
 	if err != nil || resolved == nil || resolved.Dict == nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // No readable catalog holds no structure tree.
 	}
 	catalog := resolved.Dict
 
@@ -27,7 +27,7 @@ func ExtractFormulas(ctx context.Context, doc *document.Document) ([]models.Form
 	}
 	strRes, err := resolve(ctx, doc, strObj)
 	if err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /StructTreeRoot is null (ISO 32000-1, 7.3.10): no formula to extract.
 	}
 	strDict, ok := strRes.(ast.PdfDict)
 	if !ok {

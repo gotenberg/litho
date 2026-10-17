@@ -149,11 +149,11 @@ func setPageWidgetField(
 ) (ast.PdfIndirectRef, bool, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
-		return ast.PdfIndirectRef{}, false, nil
+		return ast.PdfIndirectRef{}, false, nil //nolint:nilerr // No catalog holds no widget, and the caller reports the field as not found.
 	}
 	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
-		return ast.PdfIndirectRef{}, false, nil
+		return ast.PdfIndirectRef{}, false, nil //nolint:nilerr // No page tree holds no widget, and the caller reports the field as not found.
 	}
 
 	for _, page := range pages {

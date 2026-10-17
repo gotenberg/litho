@@ -87,7 +87,7 @@ func ConformBfRanges(ctx context.Context, data []byte) ([]byte, bool, error) {
 	// read whole fails the second test and keeps the whole CMap as written.
 	got, err := Parse(ctx, rewritten)
 	if err != nil || got.strict != nil || !maps.Equal(got.Mapping, orig.Mapping) {
-		return data, false, nil
+		return data, false, nil //nolint:nilerr // A rewrite that does not round-trip keeps the CMap as written.
 	}
 	return rewritten, true, nil
 }

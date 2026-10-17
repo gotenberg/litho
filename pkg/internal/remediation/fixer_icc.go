@@ -33,7 +33,7 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	}
 	oiArr, err := document.ResolveArray(ctx, doc, oiObj)
 	if err != nil || len(oiArr) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilerr // An unresolvable /OutputIntents is null (ISO 32000-1, 7.3.10): no profile to repair.
 	}
 
 	var fixes []string

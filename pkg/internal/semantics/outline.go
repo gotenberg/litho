@@ -174,5 +174,5 @@ func parseOutlineItems[T any](ctx context.Context, doc *document.Document, itemO
 		}
 	}
 
-	return items, nil
+	return items, nil //nolint:nilerr // An unresolvable sibling is null (ISO 32000-1, 7.3.10) and ends the item list.
 }

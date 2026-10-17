@@ -35,7 +35,7 @@ func scrubDocumentPages(
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil || catalog == nil {
 		// No catalog means no page tree to walk, and nothing to clean.
-		return nil, nil
+		return nil, nil //nolint:nilerr // A deliberate fallback, see above.
 	}
 	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {

@@ -1547,7 +1547,7 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 		}
 		arr = append(arr, obj)
 	}
-	return arr, nil
+	return arr, nil //nolint:nilerr // An element that cannot be skipped ends the lenient array, keeping the ones parsed.
 }
 
 func (p *Parser) parseString(val string) (ast.PdfString, error) {
