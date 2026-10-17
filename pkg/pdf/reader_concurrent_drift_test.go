@@ -61,6 +61,23 @@ func TestConcurrentSurfaceCoversEveryUniformReader(t *testing.T) {
 				"so -race never checks it against the documented contract", name)
 		}
 	}
+	for _, name := range racedOptionReaders {
+		if !exercised[name] {
+			t.Errorf("Reader.%s has a fixture-backed race test that no concurrent test file "+
+				"calls any more, so -race no longer checks it", name)
+		}
+	}
+}
+
+// racedOptionReaders lists the readers outside the uniform shapes that a race
+// test of their own covers, with a fixture that makes them do real work. The
+// shape scan cannot require them, so this list keeps a deleted or renamed
+// test from silently dropping them.
+var racedOptionReaders = []string{
+	// TestConcurrentGenerateBookmarks, over a document with headings.
+	"GenerateBookmarks",
+	// TestConcurrentVerifySignatures, over a document litho signed.
+	"VerifySignatures",
 }
 
 // readerMethodsByShape parses the package and groups exported *Reader methods
@@ -135,8 +152,9 @@ func paramShape(fn *ast.FuncDecl) string {
 }
 
 // concurrentlyExercised reports which Reader methods are called inside a test
-// file that spawns goroutines. A method named only by a sequential test does
-// not count: -race reports a race on concurrent paths.
+// file that spawns goroutines, with a go statement or [sync.WaitGroup.Go]. A
+// method named only by a sequential test does not count: -race reports a race
+// on concurrent paths.
 func concurrentlyExercised(t *testing.T) map[string]bool {
 	t.Helper()
 
@@ -152,7 +170,7 @@ func concurrentlyExercised(t *testing.T) map[string]bool {
 		if err != nil {
 			t.Fatalf("reading %s: %v", f, err)
 		}
-		if !strings.Contains(string(src), "go func") {
+		if !strings.Contains(string(src), "go func") && !strings.Contains(string(src), ".Go(func") {
 			continue
 		}
 		for _, m := range call.FindAllStringSubmatch(string(src), -1) {
