@@ -47,6 +47,7 @@ func init() {
 		"Tw": handleTextWordSpacing,
 		"Tz": handleTextHorizontalScaling,
 		"TL": handleTextLeading,
+		"Ts": handleTextRise,
 		"Tf": handleTextFont,
 		"Tm": handleTextMatrix,
 		"Td": handleTextMove,
@@ -529,6 +530,16 @@ func handleTextHorizontalScaling(_ context.Context, _ *Machine, state *State, op
 func handleTextLeading(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) == 1 {
 		state.Text.Tl = document.Float(op.Operands[0])
+	}
+}
+
+// handleTextRise sets the text rise. Per ISO 32000-1, 9.3.7, Trise moves
+// the baseline up (positive) or down (negative) in unscaled text space
+// units, and it persists across text objects like the other text state
+// parameters of Table 104.
+func handleTextRise(_ context.Context, _ *Machine, state *State, op content.Operation) {
+	if len(op.Operands) == 1 {
+		state.Text.Ts = document.Float(op.Operands[0])
 	}
 }
 

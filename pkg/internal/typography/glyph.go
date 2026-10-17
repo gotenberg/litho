@@ -14,6 +14,13 @@ import (
 // concern (decoding, MCID inheritance, visibility checks, glyph metrics,
 // matrix advance) lives in its own helper so the main loop reads
 // top-down without deeply nested branches.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000578.pdf: footnote marks set with 4.9 Ts read
+//     glued to the word before them while the rise was ignored.
+//   - All corpora: honouring the rise alone makes words match PDF.js on 7
+//     more files and on none fewer.
 func processText(ctx context.Context, str ast.PdfString, font *Font, machine *graphics.Machine, elements *[]models.TextElement) error {
 	data := []byte(str)
 	state := machine.Current()
@@ -50,7 +57,11 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 
 		tm := state.Text.Tm
 		ctm := state.CTM
-		tx, ty := tm[4], tm[5]
+		// The text rendering matrix of ISO 32000-1, 9.4.4 places the
+		// glyph origin at (0, Trise) in text space, so a rise set by Ts
+		// (9.3.7) lifts a superscript off the baseline it was shown on.
+		rise := state.Text.Ts
+		tx, ty := rise*tm[2]+tm[4], rise*tm[3]+tm[5]
 		x := tx*ctm[0] + ty*ctm[2] + ctm[4]
 		y := tx*ctm[1] + ty*ctm[3] + ctm[5]
 

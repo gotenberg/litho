@@ -11,6 +11,7 @@ type TextState struct {
 	Tw    float64    // Word spacing
 	Tz    float64    // Horizontal scaling (default 100)
 	Tl    float64    // Leading
+	Ts    float64    // Text rise (ISO 32000-1, 9.3.7)
 	Tf    string     // Font name
 	Tfs   float64    // Font size
 	Tmode int        // Text rendering mode (0=Fill, 1=Stroke, 3=Invisible, etc)
