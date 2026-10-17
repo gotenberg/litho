@@ -192,6 +192,9 @@ one deliberately rather than diffing it against a fresh build.
 | `fontembed_2b.pdf`     | PDF/A-2b     | Unembedded fonts a supplied program embeds, wherever they sit    |
 | `defaultbox_2b.pdf`    | PDF/A-2b     | Pages missing their media box in an A4 document, under rewrites  |
 | `siglock_2b.pdf`       | PDF/A-2b     | Unsigned signature fields carrying a `/Lock` or seed values      |
+| `cmapusecmap_2b.pdf`   | PDF/A-2b     | Encoding CMaps whose usecmap base maps the codes they show       |
+| `cmapusestream_2b.pdf` | PDF/A-2b     | An encoding CMap built on an embedded `/UseCMap` base            |
+| `cmapnotdef_2b.pdf`    | PDF/A-2b     | Encoding CMaps whose notdef ranges map the codes they show       |
 
 ### Must-not-fire controls
 
@@ -420,6 +423,9 @@ violation but is exempt, so a firing is a false positive.
 | `gotochain_ua2`                           | A GoTo action run through `/Next` whose `/SD` names page 1's heading   | ISO 14289-2, 8.8 t2          |
 | `gotochain_ua2`                           | The GoTo action two chains share, a second time                        | one action per object        |
 | `sharedk_ua1`                             | The Figure the two Sects' shared `/K` array holds, a second time       | one element per array read   |
+| `cmapusecmap_2b`                          | `U2`: codes an `/Identity-H usecmap` base maps to glyphs present       | ISO 32000-1, 9.7.5.4         |
+| `cmapusestream_2b`                        | `S1`: a code only the embedded `/UseCMap` base maps, to a glyph        | ISO 32000-1, 9.7.5.3         |
+| `cmapnotdef_2b`                           | `N2`: a code a notdef range maps to a CID the program holds            | ISO 32000-1, 9.7.6.3         |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -447,7 +453,10 @@ which are covered under [Known divergences](#known-divergences).
 | `blendcs_4.pdf`        | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 6    | 6    |
 | `boxorigin_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
 | `charset_1b.pdf`       | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 3   | 3    | 4    | 9    | 7    |
+| `cmapnotdef_2b.pdf`    | 6    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
 | `cmaps_2b.pdf`         | 9    | 6    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
+| `cmapusecmap_2b.pdf`   | 6    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
+| `cmapusestream_2b.pdf` | 5    | 2    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
 | `colouroff_2b.pdf`     | 4    | 1    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `complex_1b.pdf`       | 26   | 23   | 22   | 19   | 20   | 24   | 21   | 22   | 19  | 18   | 18   | 14   | 11   |
 | `complex_2a.pdf`       | 18   | 15   | 21   | 17   | 17   | 22   | 18   | 18   | 17  | 17   | 18   | 12   | 11   |
@@ -1733,6 +1742,17 @@ page painting `0 0 0 rg` under one output intent whose profile header carries
 `prtr` and `Lab `. Both tools agree once the profile declares `RGB `, `CMYK` or
 `GRAY`, so the disagreement is about whether a Lab destination profile
 establishes a device colour space at all. Not planted in any fixture.
+
+**An encoding CMap built on a CMap only veraPDF bundles.** veraPDF 1.30.2
+bundles Adobe's character-collection CMaps (Adobe-Japan1-7, Adobe-KR-9 and the
+like, each an identity over the collection's CIDs) and UniAKR-UTF16-H, which
+litho does not. An embedded encoding CMap running `/Adobe-KR-9 usecmap` over a
+bfchar alone makes veraPDF report `6.2.11.4.1/2` and `6.2.11.8/1` for a code it
+maps past the program; litho leaves the code unknown and reports neither, a
+false negative. A base no reader bundles, such as `/No-Such-H`, names no base on
+both tools, and a `/UseCMap` chain that loops makes veraPDF raise "Loop inside
+CMap" and abandon the run, where litho leaves the codes unknown. Not planted in
+any fixture.
 
 **`6.2.4.3/2` when an uncoloured pattern is painted.** litho reports DeviceRGB
 used inside a coloured (`/PaintType 1`) tiling pattern; veraPDF does not, but
@@ -6053,16 +6073,58 @@ read with qpdf, and `seedunmet` is the cell's one documented refusal. Each of th
 unsigned field and in a new one, refused with `ErrSignatureFieldLocked` where
 the lock reaches the field, and by a document timestamp that rewrites no field.
 
+### `cmapusecmap_2b.pdf`, `cmapusestream_2b.pdf` and `cmapnotdef_2b.pdf`
+
+An embedded encoding CMap of a Type 0 font builds on a base CMap two ways (ISO
+32000-1, 9.7.5): the usecmap operator in its program names a predefined CMap,
+and a `/UseCMap` entry in its stream dictionary (Table 120) names a predefined
+CMap or an embedded stream. A notdefrange sends a range of codes to one CID
+(Adobe Technical Note #5014). veraPDF's `CMap.toCID` reads the program's own
+cidchar and cidrange mappings first, then those of its bases in the order they
+were added, a `/UseCMap` base last, then the notdef mappings, and sends a code
+still unmapped to CID 0 (9.7.6.3). litho resolved none of it: a CMap naming a
+base or holding a notdef range left every unmapped code unknown, and a
+`/UseCMap` base was never read, so its codes went to CID 0. No corpus file
+reaches a base or a notdef range that maps a shown code.
+
+Every font is a CIDFontType2 over the three-glyph TrueType program whose
+`/CIDToGIDMap` sends CIDs 1 to 6 to a glyph and stops there. A CID past it,
+and CID 0, which `CIDFontType2Program.containsCID` refuses, select no glyph,
+which veraPDF reads as absent and as `.notdef`; `GFGlyph` exempts only code 0.
+
+| Fixture            | Font | Encoding CMap                                        | Shows     | CIDs        |
+| ------------------ | ---- | ---------------------------------------------------- | --------- | ----------- |
+| `cmapusecmap_2b`   | `U1` | `/Identity-H usecmap`, bfchar alone                  | 0005 0009 | 5, 9 absent |
+| `cmapusecmap_2b`   | `U2` | `/Identity-H usecmap`, bfchar alone                  | 0001 0006 | 1, 6        |
+| `cmapusestream_2b` | `S1` | cidchar 0041 to 5, `/UseCMap` a stream: 0042 to 4    | 0041 0042 | 5, 4        |
+| `cmapnotdef_2b`    | `N1` | cidchar 0041 to 5, notdefrange 0000 to 00FF to 0     | 0041 0043 | 5, 0        |
+| `cmapnotdef_2b`    | `N2` | cidrange 0000 to 0006, notdefrange 0100 to 01FF to 3 | 0002 0150 | 2, 3        |
+
+`S1`'s base is a stream whose name is no predefined CMap, which 6.2.11.3.3 t3
+fails on both tools.
+
+| Rule at PDF/A-2b            | `cmapusecmap_2b` | `cmapusestream_2b` | `cmapnotdef_2b` |
+| --------------------------- | ---------------- | ------------------ | --------------- |
+| `6.2.11.3.3/3` UseCMap      | 0                | 1                  | 0               |
+| `6.2.11.4.1/2` glyph absent | 1                | 0                  | 1               |
+| `6.2.11.8/1` `.notdef`      | 1                | 0                  | 1               |
+
+veraPDF 1.30.2 and litho report these counts alike, and the same rule set in
+all thirteen cells of each file; at the PDF/UA levels veraPDF counts the
+untagged-content rules once per text show. Before the bases were resolved,
+litho missed the two glyph rules on `cmapusecmap_2b` and `cmapnotdef_2b` and
+reported both on `cmapusestream_2b`, in every cell.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 140 x 8 = 1120 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 140 x 13 = 1820 cells. litho
+runner scores 143 x 8 = 1144 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 143 x 13 = 1859 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1818 of the 1820 cells. The two
+fixtures exist to protect, and it holds in 1857 of the 1859 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
