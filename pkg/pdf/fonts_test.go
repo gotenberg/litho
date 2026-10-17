@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -219,6 +222,80 @@ func TestMatchFontFile(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s (%s): matched %q, want %q", tc.req.BaseFont, tc.req.Subtype, got, tc.want)
 		}
+	}
+}
+
+func TestMatchFontFiles_RanksEveryMatch(t *testing.T) {
+	t.Parallel()
+	files := []fontFile{
+		{path: "cn.ttf", psName: "couriernew", family: "couriernew"},
+		{path: "a.ttf", psName: "arial", family: "arial"},
+		{path: "c.ttf", psName: "courier", family: "courier"},
+		{path: "cb.ttf", psName: "courierbold", family: "courier", bold: true},
+		{path: "lm.ttf", psName: "liberationmono", family: "liberationmono"},
+		{path: "c2.ttf", psName: "courierstd", family: "courier"},
+	}
+	var got []string
+	for _, f := range matchFontFiles(files, FontRequest{BaseFont: "Courier", Subtype: "TrueType"}) {
+		got = append(got, f.path)
+	}
+	if want := []string{"c.ttf", "c2.ttf", "cn.ttf", "lm.ttf"}; !slices.Equal(got, want) {
+		t.Errorf("ranked %v, want %v: the face of the name, the family, then the metric-compatible families in index order", got, want)
+	}
+}
+
+// TestWithFontFiles_TriesTheNextMatch pins that a program refused for a font
+// gives way to the next file that matches it: Courier's own face, drawing B
+// narrower than the font declares, is refused, and Courier New, of a
+// metric-compatible family, serves.
+func TestWithFontFiles_TriesTheNextMatch(t *testing.T) {
+	t.Parallel()
+	data := unembeddedFontsDoc("<< /Type /Font /Subtype /TrueType /BaseFont /Courier /Encoding /WinAnsiEncoding /FirstChar 65 /LastChar 66" +
+		" /Widths [600 600] /FontDescriptor << /Type /FontDescriptor /FontName /Courier /Flags 33" +
+		" /FontBBox [0 0 1000 800] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 >> >>")
+	fonts := fstest.MapFS{
+		"a/Courier.ttf":    {Data: abProgram("Courier", "Courier", "Regular", 600, 400)},
+		"b/CourierNew.ttf": {Data: abProgram("CourierNewPSMT", "Courier New", "Regular", 600, 600)},
+	}
+	report, after := remediateFonts(t, data, WithFontFiles(fonts))
+	if after != 0 || len(report.FontRefusals) != 0 {
+		t.Fatalf("%d fonts stay unembedded: %v", after, report.FontRefusals)
+	}
+	if !slices.ContainsFunc(report.Fixed, func(f string) bool { return strings.HasPrefix(f, "embedded CourierNewPSMT") }) {
+		t.Errorf("fixes %v, want CourierNewPSMT embedded", report.Fixed)
+	}
+
+	only := fstest.MapFS{"a/Courier.ttf": fonts["a/Courier.ttf"]}
+	report, after = remediateFonts(t, data, WithFontFiles(only))
+	if after != 1 || len(report.FontRefusals) != 1 || !errors.Is(report.FontRefusals[0].Err, ErrFontWidths) {
+		t.Errorf("Courier's face alone: %d unembedded, refusals %v, want its widths refusal", after, report.FontRefusals)
+	}
+}
+
+// TestWithFontProvider_SystemFontsFollowARefusedProgram pins that the
+// operating system's fonts are tried for a font whose program from
+// [WithFontProvider] is refused, after it: the caller's program comes first.
+func TestWithFontProvider_SystemFontsFollowARefusedProgram(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "LiberationSans-Regular.ttf"), abProgram("LiberationSans", "Liberation Sans", "Regular", 667, 667), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	data := unembeddedFontsDoc("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+	var asked atomic.Int32
+	provider := FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) {
+		asked.Add(1)
+		return abProgram("Wrong", "Wrong", "Regular", 500, 500), nil
+	})
+	report, after := remediateFonts(t, data, WithFontProvider(provider), withSystemFontDirs([]string{dir}))
+	if after != 0 || len(report.FontRefusals) != 0 {
+		t.Fatalf("%d fonts stay unembedded: %v", after, report.FontRefusals)
+	}
+	if !slices.ContainsFunc(report.Fixed, func(f string) bool { return strings.HasPrefix(f, "embedded LiberationSans") }) {
+		t.Errorf("fixes %v, want LiberationSans embedded", report.Fixed)
+	}
+	if asked.Load() == 0 {
+		t.Errorf("the caller's provider was never asked")
 	}
 }
 

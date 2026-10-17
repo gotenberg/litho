@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -107,7 +108,7 @@ func TestFixFontEmbed_EmbedsSuppliedPrograms(t *testing.T) {
 		if embed, _, _ := embeddingFindings(t, doc, profile); embed != 3 {
 			t.Fatalf("%s precondition: %d embedding findings, want 3", profile, embed)
 		}
-		report, err := RemediatePDFA(context.Background(), doc, alloc, profile, Options{PreserveContent: true, Fonts: provider})
+		report, err := RemediatePDFA(context.Background(), doc, alloc, profile, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 		if err != nil {
 			t.Fatalf("%s: RemediatePDFA: %v", profile, err)
 		}
@@ -172,7 +173,7 @@ func TestFixFontEmbed_Refusals(t *testing.T) {
 		return nil, nil
 	}
 	doc, alloc := newTestDoc(t, data)
-	report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: provider})
+	report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 	if err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)
 	}
@@ -225,7 +226,7 @@ func TestFixFontEmbed_SharedAndUnreadableDescriptors(t *testing.T) {
 	)
 	provider := func(context.Context, FontRequest) ([]byte, error) { return sansProgram(0, 667, 667), nil }
 	doc, alloc := newTestDoc(t, data)
-	report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: provider})
+	report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 	if err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)
 	}
@@ -246,13 +247,118 @@ func TestFixFontEmbed_SharedAndUnreadableDescriptors(t *testing.T) {
 	}
 }
 
+// programFunc supplies one program for a font, or nil for none.
+type programFunc = func(ctx context.Context, req FontRequest) ([]byte, error)
+
+// oneProgram adapts f to a [FontProvider] offering the one program f returns.
+func oneProgram(f programFunc) FontProvider {
+	return func(ctx context.Context, req FontRequest) ([]FontCandidate, error) {
+		program, err := f(ctx, req)
+		if err != nil || program == nil {
+			return nil, err
+		}
+		return []FontCandidate{func(context.Context) ([]byte, error) { return program, nil }}, nil
+	}
+}
+
+// offering returns a [FontProvider] offering programs in order, counting in
+// reads how many it was asked to read.
+func offering(reads *atomic.Int32, programs ...[]byte) FontProvider {
+	return func(context.Context, FontRequest) ([]FontCandidate, error) {
+		out := make([]FontCandidate, len(programs))
+		for i, p := range programs {
+			out[i] = func(context.Context) ([]byte, error) { reads.Add(1); return p, nil }
+		}
+		return out, nil
+	}
+}
+
+// TestFixFontEmbed_Candidates pins how a font is planned over the programs a
+// provider offers: a program refused gives way to the next, a candidate
+// holding none or repeating one tried is passed over, the refusal of a font
+// none serves is the first program's and counts the others, and no more than
+// maxFontCandidates programs are read.
+func TestFixFontEmbed_Candidates(t *testing.T) {
+	t.Parallel()
+	wide, narrow, fits := sansProgram(0, 700, 700), sansProgram(0, 600, 600), sansProgram(0, 667, 667)
+	remediate := func(t *testing.T, provider FontProvider) *Report {
+		t.Helper()
+		doc, alloc := newTestDoc(t, unembeddedFontsPDF(trueTypeFont("ArialMT", 667, 667)))
+		report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: provider})
+		if err != nil {
+			t.Fatalf("RemediatePDFA: %v", err)
+		}
+		return report
+	}
+	t.Run("next serves", func(t *testing.T) {
+		t.Parallel()
+		var reads atomic.Int32
+		report := remediate(t, offering(&reads, wide, nil, wide, fits, narrow))
+		if len(report.FontRefusals) != 0 || len(report.FontsEmbedded) != 1 {
+			t.Fatalf("refusals %v, embedded %v, want the font embedded", report.FontRefusals, report.FontsEmbedded)
+		}
+		if got := reads.Load(); got != 4 {
+			t.Errorf("%d candidates read, want 4: the one after the program that serves is not", got)
+		}
+	})
+	t.Run("none serves", func(t *testing.T) {
+		t.Parallel()
+		var reads atomic.Int32
+		report := remediate(t, offering(&reads, wide, narrow, wide))
+		if len(report.FontRefusals) != 1 {
+			t.Fatalf("refusals %v, want one", report.FontRefusals)
+		}
+		err := report.FontRefusals[0].Err
+		if !errors.Is(err, ErrFontWidths) || !strings.Contains(err.Error(), "declares 667, program 700.0") || !strings.Contains(err.Error(), "(2 programs refused)") {
+			t.Errorf("refusal %v, want the first program's widths and the two distinct programs counted", err)
+		}
+	})
+	t.Run("nothing offered", func(t *testing.T) {
+		t.Parallel()
+		var reads atomic.Int32
+		report := remediate(t, offering(&reads, nil, []byte{}))
+		if len(report.FontRefusals) != 1 || !errors.Is(report.FontRefusals[0].Err, ErrFontNotSupplied) {
+			t.Errorf("refusals %v, want the font not supplied", report.FontRefusals)
+		}
+	})
+	t.Run("bounded", func(t *testing.T) {
+		t.Parallel()
+		programs := make([][]byte, 2*maxFontCandidates)
+		for i := range programs {
+			programs[i] = sansProgram(0, uint16(700+i), 700) //nolint:gosec // G115: i < 2*maxFontCandidates.
+		}
+		var reads atomic.Int32
+		report := remediate(t, offering(&reads, programs...))
+		if len(report.FontRefusals) != 1 || !errors.Is(report.FontRefusals[0].Err, ErrFontWidths) {
+			t.Errorf("refusals %v, want the widths refusal", report.FontRefusals)
+		}
+		if got := reads.Load(); got != maxFontCandidates {
+			t.Errorf("%d candidates read, want %d", got, maxFontCandidates)
+		}
+	})
+	t.Run("candidate error", func(t *testing.T) {
+		t.Parallel()
+		failure := errors.New("font file unreadable")
+		provider := func(context.Context, FontRequest) ([]FontCandidate, error) {
+			return []FontCandidate{
+				func(context.Context) ([]byte, error) { return wide, nil },
+				func(context.Context) ([]byte, error) { return nil, failure },
+			}, nil
+		}
+		doc, alloc := newTestDoc(t, unembeddedFontsPDF(trueTypeFont("ArialMT", 667, 667)))
+		if _, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: provider}); !errors.Is(err, failure) {
+			t.Errorf("RemediatePDFA error = %v, want the candidate's", err)
+		}
+	})
+}
+
 func TestFixFontEmbed_ProviderError(t *testing.T) {
 	t.Parallel()
 	failure := errors.New("font store unreachable")
 	doc, alloc := newTestDoc(t, unembeddedFontsPDF(trueTypeFont("ArialMT", 667, 667)))
 	_, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{
 		PreserveContent: true,
-		Fonts:           func(context.Context, FontRequest) ([]byte, error) { return nil, failure },
+		Fonts:           oneProgram(func(context.Context, FontRequest) ([]byte, error) { return nil, failure }),
 	})
 	if !errors.Is(err, failure) {
 		t.Errorf("RemediatePDFA error = %v, want the provider's", err)
@@ -304,7 +410,7 @@ func TestFixFontEmbed_CompositeFont(t *testing.T) {
 	}
 
 	doc, alloc := newTestDoc(t, compositePDF("UniJIS-UCS2-H", "Japan1"))
-	report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: provider})
+	report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 	if err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)
 	}
@@ -354,7 +460,7 @@ func TestFixFontEmbed_CompositeFont(t *testing.T) {
 			" /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 740 /StemV 80 >> >>] >>",
 	)
 	doc, alloc = newTestDoc(t, inline)
-	report, err = RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: provider})
+	report, err = RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 	if err != nil {
 		t.Fatalf("inline descendant: RemediatePDFA: %v", err)
 	}
@@ -370,7 +476,7 @@ func TestFixFontEmbed_CompositeFont(t *testing.T) {
 	}
 
 	doc, alloc = newTestDoc(t, compositePDF("Identity-H", "Identity"))
-	report, err = RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: provider})
+	report, err = RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 	if err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)
 	}

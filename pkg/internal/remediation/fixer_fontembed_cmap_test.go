@@ -69,7 +69,7 @@ func TestFixFontEmbed_FitsTheCmapOfAMacintoshProgram(t *testing.T) {
 	provider := func(_ context.Context, _ FontRequest) ([]byte, error) { return unicode, nil }
 	for _, profile := range []models.PDFAProfile{models.PDFA1b, models.PDFA2b} {
 		doc, alloc := newTestDoc(t, data)
-		report, err := RemediatePDFA(context.Background(), doc, alloc, profile, Options{PreserveContent: true, Fonts: provider})
+		report, err := RemediatePDFA(context.Background(), doc, alloc, profile, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 		if err != nil {
 			t.Fatalf("%s: RemediatePDFA: %v", profile, err)
 		}
@@ -124,7 +124,7 @@ func TestFixFontEmbed_SymbolicType1OverTrueType(t *testing.T) {
 		provider := func(_ context.Context, _ FontRequest) ([]byte, error) { return tc.prog, nil }
 		for _, profile := range []models.PDFAProfile{models.PDFA1b, models.PDFA2b} {
 			doc, alloc := newTestDoc(t, data)
-			report, err := RemediatePDFA(context.Background(), doc, alloc, profile, Options{PreserveContent: true, Fonts: provider})
+			report, err := RemediatePDFA(context.Background(), doc, alloc, profile, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 			if err != nil {
 				t.Fatalf("%s, %s: RemediatePDFA: %v", tc.name, profile, err)
 			}

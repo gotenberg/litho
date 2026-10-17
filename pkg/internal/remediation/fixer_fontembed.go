@@ -344,21 +344,31 @@ func (e *fontEmbedder) embed(ctx context.Context, order int, t fontTarget) error
 		return refused(fmt.Errorf("%w: the font carries a program validation cannot read, which litho does not replace", ErrFontKind))
 	}
 
-	var plan *embedPlan
+	var req FontRequest
+	var build func(ctx context.Context, prog *suppliedProgram) (*embedPlan, error)
 	var err error
 	if subtype == "Type0" {
-		plan, err = e.planComposite(ctx, font, shown)
+		var c *compositeFont
+		if c, req, err = e.prepareComposite(ctx, font, shown); err == nil {
+			build = func(_ context.Context, prog *suppliedProgram) (*embedPlan, error) { return e.buildComposite(c, prog) }
+		}
 	} else {
-		plan, err = e.planSimple(ctx, font, subtype, t.codes)
+		var s *simpleFont
+		if s, req, err = e.prepareSimple(ctx, font, subtype, t.codes); err == nil {
+			build = func(ctx context.Context, prog *suppliedProgram) (*embedPlan, error) {
+				return e.buildSimple(ctx, s, prog)
+			}
+		}
+	}
+	var plan *embedPlan
+	if err == nil {
+		plan, err = e.planCandidates(ctx, req, build, before, shown)
 	}
 	if err != nil {
 		if isFontRefusal(err) {
 			return refused(err)
 		}
 		return err
-	}
-	if err := e.judge(ctx, plan, before, shown); err != nil {
-		return refused(err)
 	}
 	key := programKey{sum: sha256.Sum256(plan.program.data), format: plan.program.format}
 	if prev, ours := e.written[fdNum]; ours && prev != key {
@@ -431,27 +441,120 @@ func (e *fontEmbedder) descendant(ctx context.Context, font ast.PdfDict) ast.Pdf
 	return liveDictValue(ctx, e.alloc, e.doc, arr[0])
 }
 
-// supply asks the provider for a program and reads it.
-func (e *fontEmbedder) supply(ctx context.Context, req FontRequest) (*suppliedProgram, error) {
-	data, err := e.provider(ctx, req)
+// maxFontCandidates bounds the programs one font is planned over. Cost guard,
+// not spec-mandated: each candidate is read whole, up to the stream budget,
+// then planned and judged, and a provider may offer any number. The
+// metric-compatible families a font may take hold at most seven names, each
+// with one face of the font's style, so eight candidates try every program
+// that may serve a font even on a system that installs them all.
+const maxFontCandidates = 8
+
+// planCandidates plans the font over the first program of the candidates the
+// provider offers for req that serves it: build plans a program, which
+// [fontEmbedder.judge] then judges against before. A program refused for the
+// font gives way to the next, so a face of a metric-compatible family serves
+// a font whose own face draws a glyph wider or narrower than the font
+// declares. A candidate repeating a program already tried is passed over.
+// When none serves, the refusal is the first candidate's, the best match's,
+// and counts the programs refused; it is [ErrFontNotSupplied] when the provider
+// offered no program at all.
+//
+// # Corpus evidence
+//
+//   - govdocs: remediated at PDF/A-2b with WithSystemFonts on macOS, 8 fonts
+//     of 7 files refused over the first program are embedded over a later
+//     one: 4 Courier fonts Apple's Courier drew with a degree sign of 400
+//     where they declare 600, now over Courier New, and 2 Times New Roman and
+//     2 Arial fonts declaring a periodcentered of 250 and 278, which
+//     Microsoft's programs draw at 333, now over Times and Helvetica. veraPDF
+//     1.30.2 reports 19 failures fewer on the 7 outputs (6.2.11.4.1 t1 and
+//     6.2.11.2 t4 to t6) and none more, pdf.js places their 35782 text items
+//     where it placed them before, and the 1084 other outputs are
+//     byte-identical.
+//   - govdocs: the 512 refusals left are 310 fonts no program serves, of
+//     families the system does not ship (Century, Melior, Book Antiqua, WP
+//     symbol fonts) or in styles it has no face of (Geneva,Bold,
+//     Symbol,Italic, Futura-Book); 174 whose widths no face shares (a
+//     producer's metrics off by a few units across the font, mu and
+//     plusminus at Adobe's 500 and 564); 15 a code no face has a glyph for (a
+//     control code, a .notdef space, an fi Symbol does not draw); and 13 of an
+//     Identity ordering.
+func (e *fontEmbedder) planCandidates(ctx context.Context, req FontRequest, build func(ctx context.Context, prog *suppliedProgram) (*embedPlan, error), before []compliance.Violation, shown []ast.PdfString) (*embedPlan, error) {
+	candidates, err := e.provider(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("font provider for %s: %w", req.BaseFont, err)
 	}
-	if len(data) == 0 {
-		return nil, ErrFontNotSupplied
+	var first error
+	tried := 0
+	seen := make(map[[sha256.Size]byte]bool)
+	for _, candidate := range candidates {
+		if tried == maxFontCandidates {
+			e.doc.Logger.Debug("remediation: font-embed: candidate bound reached", "font", req.BaseFont, "max", maxFontCandidates)
+			break
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("embedding font %s: %w", req.BaseFont, err)
+		}
+		data, err := candidate(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("font provider for %s: %w", req.BaseFont, err)
+		}
+		if len(data) == 0 {
+			continue
+		}
+		sum := sha256.Sum256(data)
+		if seen[sum] {
+			continue
+		}
+		seen[sum] = true
+		tried++
+		plan, err := e.planProgram(ctx, data, build, before, shown)
+		if err == nil {
+			return plan, nil
+		}
+		if !isFontRefusal(err) {
+			return nil, err
+		}
+		if first == nil {
+			first = err
+		}
 	}
-	return readSuppliedProgram(ctx, data, e.doc.Limits().MaxStreamBytes)
+	switch {
+	case first == nil:
+		return nil, ErrFontNotSupplied
+	case tried > 1:
+		return nil, fmt.Errorf("%w (%d programs refused)", first, tried)
+	}
+	return nil, first
 }
 
-// planSimple plans the embedding of a simple font: a TrueType font takes a
-// TrueType program, and a Type 1 font a CFF program as /Type1C or a TrueType
-// program, which makes it a TrueType font.
-func (e *fontEmbedder) planSimple(ctx context.Context, font ast.PdfDict, subtype string, shownSet map[byte]bool) (*embedPlan, error) {
+// planProgram reads a supplied program, plans the font over it with build,
+// and judges the plan.
+func (e *fontEmbedder) planProgram(ctx context.Context, data []byte, build func(ctx context.Context, prog *suppliedProgram) (*embedPlan, error), before []compliance.Violation, shown []ast.PdfString) (*embedPlan, error) {
+	prog, err := readSuppliedProgram(ctx, data, e.doc.Limits().MaxStreamBytes)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := build(ctx, prog)
+	if err != nil {
+		return nil, err
+	}
+	if err := e.judge(ctx, plan, before, shown); err != nil {
+		return nil, err
+	}
+	return plan, nil
+}
+
+// prepareSimple reads what planning a simple font takes, and the request the
+// provider answers: a TrueType font takes a TrueType program, and a Type 1
+// font a CFF program as /Type1C or a TrueType program, which makes it a
+// TrueType font.
+func (e *fontEmbedder) prepareSimple(ctx context.Context, font ast.PdfDict, subtype string, shownSet map[byte]bool) (*simpleFont, FontRequest, error) {
 	if subtype == "MMType1" {
 		// ISO 32000-1, 9.6.2.3 draws a multiple master instance from the
 		// master design a /FontFile program holds, which no other program
 		// stands in for.
-		return nil, fmt.Errorf("%w: a multiple master font", ErrFontKind)
+		return nil, FontRequest{}, fmt.Errorf("%w: a multiple master font", ErrFontKind)
 	}
 	fd := liveDictValue(ctx, e.alloc, e.doc, font["FontDescriptor"])
 	baseFont := nameOf(ctx, e.doc, font["BaseFont"])
@@ -462,7 +565,7 @@ func (e *fontEmbedder) planSimple(ctx context.Context, font ast.PdfDict, subtype
 
 	widths, err := e.declaredWidths(ctx, font, fd, baseFont, names)
 	if err != nil {
-		return nil, err
+		return nil, FontRequest{}, err
 	}
 	req := FontRequest{BaseFont: baseFont, Subtype: subtype, Flags: flags, Encoding: simpleEncodingName(ctx, e.doc, font)}
 	for _, code := range codes {
@@ -473,12 +576,8 @@ func (e *fontEmbedder) planSimple(ctx context.Context, font ast.PdfDict, subtype
 		}
 		req.Codes = append(req.Codes, fc)
 	}
-	prog, err := e.supply(ctx, req)
-	if err != nil {
-		return nil, err
-	}
 	s := &simpleFont{font: font, subtype: subtype, fd: fd, baseFont: baseFont, symbolic: symbolic, names: names, codes: codes, shownSet: shownSet, widths: widths}
-	return e.buildSimple(ctx, s, prog)
+	return s, req, nil
 }
 
 // simpleFont is what planning a simple font reads from the file, which
@@ -661,7 +760,8 @@ func symbolicToUnicode(ctx context.Context, doc *document.Document, font ast.Pdf
 // Unicode ([cmap.AdobeCIDToUnicode]).
 var adobeOrderings = map[string]bool{"Japan1": true, "GB1": true, "CNS1": true, "Korea1": true}
 
-// planComposite plans the embedding of a composite font. Its CIDs belong to a
+// prepareComposite reads what planning a composite font takes, and the
+// request the provider answers. Its CIDs belong to a
 // character collection, and a program another producer made numbers its
 // glyphs its own way, so the embedding maps each CID of an Adobe collection
 // to the Unicode value the collection gives it and that to the glyph the
@@ -670,22 +770,22 @@ var adobeOrderings = map[string]bool{"Japan1": true, "GB1": true, "CNS1": true, 
 // descendant takes: a CIDFontType0 descendant reads a CFF program's glyphs by
 // CID, which such a map cannot redirect. An Identity ordering names glyphs of
 // a program the file does not carry, so no mapping reaches another program.
-func (e *fontEmbedder) planComposite(ctx context.Context, font ast.PdfDict, shown []ast.PdfString) (*embedPlan, error) {
+func (e *fontEmbedder) prepareComposite(ctx context.Context, font ast.PdfDict, shown []ast.PdfString) (*compositeFont, FontRequest, error) {
 	desc := e.descendant(ctx, font)
 	if desc == nil {
-		return nil, fmt.Errorf("%w: a composite font with no descendant CIDFont", ErrFontKind)
+		return nil, FontRequest{}, fmt.Errorf("%w: a composite font with no descendant CIDFont", ErrFontKind)
 	}
 	baseFont := nameOf(ctx, e.doc, desc["BaseFont"])
 	info := liveDictValue(ctx, e.alloc, e.doc, desc["CIDSystemInfo"])
 	registry := stringOf(ctx, e.doc, info["Registry"])
 	ordering := stringOf(ctx, e.doc, info["Ordering"])
 	if registry != "Adobe" || !adobeOrderings[ordering] {
-		return nil, fmt.Errorf("%w: the %s-%s character collection maps no CID to a character", ErrFontKind, registry, ordering)
+		return nil, FontRequest{}, fmt.Errorf("%w: the %s-%s character collection maps no CID to a character", ErrFontKind, registry, ordering)
 	}
 	toUnicode := cmap.AdobeCIDToUnicode(ordering)
 	cids := compliance.Type0ShownCIDs(ctx, e.doc, font, shown)
 	if len(cids) == 0 {
-		return nil, fmt.Errorf("%w: the codes the document shows decode to no CID", ErrFontKind)
+		return nil, FontRequest{}, fmt.Errorf("%w: the codes the document shows decode to no CID", ErrFontKind)
 	}
 	fd := liveDictValue(ctx, e.alloc, e.doc, desc["FontDescriptor"])
 	req := FontRequest{
@@ -699,12 +799,8 @@ func (e *fontEmbedder) planComposite(ctx context.Context, font ast.PdfDict, show
 	for _, cid := range sorted {
 		req.Codes = append(req.Codes, FontCode{Code: uint32(cid), Unicode: toUnicode[int(cid)], Width: compliance.DeclaredCIDWidth(ctx, e.doc, desc, cid)})
 	}
-	prog, err := e.supply(ctx, req)
-	if err != nil {
-		return nil, err
-	}
 	c := &compositeFont{font: font, desc: desc, fd: fd, baseFont: baseFont, codes: req.Codes, toUnicode: toUnicode}
-	return e.buildComposite(c, prog)
+	return c, req, nil
 }
 
 // compositeFont is what planning a composite font reads from the file, which

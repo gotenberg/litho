@@ -93,7 +93,7 @@ func subsetSerif() []byte {
 }
 
 // subsetProvider supplies subsetSans, with fsType, and subsetSerif.
-func subsetProvider(fsType uint16) FontProvider {
+func subsetProvider(fsType uint16) programFunc {
 	return func(_ context.Context, req FontRequest) ([]byte, error) {
 		switch req.BaseFont {
 		case "Helvetica", "ArialMT":
@@ -107,9 +107,9 @@ func subsetProvider(fsType uint16) FontProvider {
 
 // remediateFontsAndReopen remediates data at profile with provider and returns the
 // report and the rewritten output, reopened.
-func remediateFontsAndReopen(t *testing.T, data []byte, profile string, provider FontProvider) (*Report, *document.Document, []byte) {
+func remediateFontsAndReopen(t *testing.T, data []byte, profile string, provider programFunc) (*Report, *document.Document, []byte) {
 	t.Helper()
-	return remediateWithOptionsAndReopen(t, data, profile, Options{PreserveContent: true, Fonts: provider})
+	return remediateWithOptionsAndReopen(t, data, profile, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 }
 
 // remediateWithOptionsAndReopen is [remediateFontsAndReopen] under opts.
@@ -279,7 +279,7 @@ func TestFixFontEmbed_WholeFontsOption(t *testing.T) {
 	})
 	for _, profile := range []string{string(models.PDFA1b), string(models.PDFA2b), string(models.PDFUA1)} {
 		report, doc, _ := remediateWithOptionsAndReopen(t, data, profile,
-			Options{PreserveContent: true, Fonts: subsetProvider(0), WholeFonts: true})
+			Options{PreserveContent: true, Fonts: oneProgram(subsetProvider(0)), WholeFonts: true})
 		if len(report.FontRefusals) != 0 {
 			t.Fatalf("%s: refusals %v", profile, report.FontRefusals)
 		}
@@ -342,7 +342,7 @@ func TestFixFontEmbed_SubsetsCompositeFonts(t *testing.T) {
 			},
 		}.Build()
 	}
-	provider := func(fsType uint16) FontProvider {
+	provider := func(fsType uint16) programFunc {
 		return func(context.Context, FontRequest) ([]byte, error) { return program(fsType), nil }
 	}
 	data := compositePDF("UniJIS-UCS2-H", "Japan1")
@@ -477,7 +477,7 @@ func TestFixFontEmbed_EncodingsKeepOwnPrograms(t *testing.T) {
 	)
 	provider := func(context.Context, FontRequest) ([]byte, error) { return subsetSans(0), nil }
 	for _, whole := range []bool{false, true} {
-		report, doc, _ := remediateWithOptionsAndReopen(t, data, string(models.PDFA2b), Options{PreserveContent: true, Fonts: provider, WholeFonts: whole})
+		report, doc, _ := remediateWithOptionsAndReopen(t, data, string(models.PDFA2b), Options{PreserveContent: true, Fonts: oneProgram(provider), WholeFonts: whole})
 		if len(report.FontRefusals) != 0 {
 			t.Fatalf("whole=%v: refusals %v", whole, report.FontRefusals)
 		}

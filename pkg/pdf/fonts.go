@@ -168,7 +168,10 @@ func WithFontProvider(p FontProvider) RemediateOption {
 // Roman, and Courier, Courier New, Cousine, Liberation Mono and Nimbus Mono
 // PS; Symbol takes Standard Symbols PS and ZapfDingbats D050000L. The width
 // check keeps a family that is not metric-compatible after all from moving
-// text, and [RemediationReport.Fixed] names the program each font received.
+// text. A program refused for the font gives way to the next file that
+// matches it, in that order, up to eight programs, so Courier New serves a
+// Courier whose own face draws a glyph of another width.
+// [RemediationReport.Fixed] names the program each font received.
 //
 // A program of more than 64 MiB, a collection of more than 256 MiB, or a file
 // no TrueType, OpenType or CFF reader accepts, is skipped. The index reads at
@@ -247,6 +250,19 @@ func metricFamilies(family string) []string {
 //     fonts) or styles it has no face of (Geneva,Bold, Symbol,Italic); none is
 //     a name the matching misreads.
 func matchFontFile(files []fontFile, req FontRequest) *fontFile {
+	if ranked := matchFontFiles(files, req); len(ranked) > 0 {
+		return ranked[0]
+	}
+	return nil
+}
+
+// matchFontFiles returns every file that serves req as [matchFontFile] judges
+// it, best first: by rank, then by distance from the weight, then in index
+// order. A program the remediation refuses for the font gives way to the next
+// one, so a face of a metric-compatible family stands for the font where the
+// face of its own name draws a glyph wider or narrower than the font
+// declares.
+func matchFontFiles(files []fontFile, req FontRequest) []*fontFile {
 	base := req.BaseFont
 	if tag, rest, ok := strings.Cut(base, "+"); ok && len(tag) == 6 {
 		base = rest
@@ -263,8 +279,11 @@ func matchFontFile(files []fontFile, req FontRequest) *fontFile {
 	families := metricFamilies(family)
 	target, tolerance := style.targetWeight()
 
-	var best *fontFile
-	bestRank, bestDist := 0, 0
+	type match struct {
+		file       *fontFile
+		rank, dist int
+	}
+	matches := make([]match, 0, len(files))
 	for i := range files {
 		file := &files[i]
 		dist := weightDistance(file.weight, target)
@@ -286,11 +305,20 @@ func matchFontFile(files []fontFile, req FontRequest) *fontFile {
 		if file.cffOutlines == (req.Subtype == "Type1") {
 			rank++
 		}
-		if rank > bestRank || rank == bestRank && dist < bestDist {
-			best, bestRank, bestDist = file, rank, dist
-		}
+		matches = append(matches, match{file: file, rank: rank, dist: dist})
 	}
-	return best
+	// A stable sort keeps index order between files that match alike.
+	slices.SortStableFunc(matches, func(a, b match) int {
+		if c := cmp.Compare(b.rank, a.rank); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.dist, b.dist)
+	})
+	ranked := make([]*fontFile, len(matches))
+	for i, m := range matches {
+		ranked[i] = m.file
+	}
+	return ranked
 }
 
 // fontFlagItalic is the Italic flag of a font descriptor's /Flags (ISO
@@ -450,14 +478,18 @@ func normalizeFontName(name string) string {
 }
 
 // fontProvider adapts providers to the remediation engine: each is asked in
-// turn, and the first program one returns, or the first error, answers. The
-// providers of [WithFontFiles] and [WithSystemFonts] log to logger what they
-// skip.
+// turn, and the programs they offer are the font's candidates, in provider
+// order, the first error aborting. A [FontProvider] offers the one program it
+// returns, and the providers of [WithFontFiles] and [WithSystemFonts] every
+// face that serves the font, best first, read when the engine reaches it and
+// logging to logger what they skip. The engine embeds the first candidate it
+// accepts, so a later provider serves a font only when no program an earlier
+// one offers does.
 func fontProvider(logger *slog.Logger, providers []FontProvider) remediation.FontProvider {
 	if len(providers) == 0 {
 		return nil
 	}
-	return func(ctx context.Context, req remediation.FontRequest) ([]byte, error) {
+	return func(ctx context.Context, req remediation.FontRequest) ([]remediation.FontCandidate, error) {
 		out := FontRequest{
 			BaseFont: req.BaseFont,
 			Subtype:  req.Subtype,
@@ -469,19 +501,25 @@ func fontProvider(logger *slog.Logger, providers []FontProvider) remediation.Fon
 		for i, c := range req.Codes {
 			out.Codes[i] = FontCode{Code: c.Code, Glyph: c.Glyph, Unicode: c.Unicode, Width: c.Width}
 		}
+		var candidates []remediation.FontCandidate
 		for _, p := range providers {
-			var program []byte
-			var err error
 			if files, ok := p.(*fontFiles); ok {
-				program, err = files.program(ctx, logger, out)
-			} else {
-				program, err = p.FontProgram(ctx, out)
+				offered, err := files.candidates(ctx, logger, out)
+				if err != nil {
+					return nil, err
+				}
+				candidates = append(candidates, offered...)
+				continue
 			}
-			if err != nil || program != nil {
-				return program, err
+			program, err := p.FontProgram(ctx, out)
+			if err != nil {
+				return nil, err
+			}
+			if program != nil {
+				candidates = append(candidates, func(context.Context) ([]byte, error) { return program, nil })
 			}
 		}
-		return nil, nil
+		return candidates, nil
 	}
 }
 

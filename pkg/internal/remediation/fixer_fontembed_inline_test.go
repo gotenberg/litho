@@ -71,7 +71,7 @@ func TestFixFontEmbed_InlineFonts(t *testing.T) {
 	for _, data := range [][]byte{inlineFontsPDF(), directResourcesPDF()} {
 		doc, alloc := newTestDoc(t, data)
 		before, _, _ := embeddingFindings(t, doc, models.PDFA2b)
-		report, err := RemediatePDFA(ctx, doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: inlineProvider})
+		report, err := RemediatePDFA(ctx, doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: oneProgram(inlineProvider)})
 		if err != nil {
 			t.Fatalf("RemediatePDFA: %v", err)
 		}
@@ -149,7 +149,7 @@ func TestFixFontEmbed_InlineFontUnwritable(t *testing.T) {
 	if embed, _, _ := embeddingFindings(t, doc, models.PDFA2b); embed != 1 {
 		t.Fatalf("precondition: %d embedding findings, want Helvetica's", embed)
 	}
-	report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: inlineProvider})
+	report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: oneProgram(inlineProvider)})
 	if err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)
 	}
@@ -169,9 +169,9 @@ func TestFixFontEmbed_ReportsFontsJudged(t *testing.T) {
 		opts Options
 		want bool
 	}{
-		{"provider", Options{PreserveContent: true, Fonts: inlineProvider}, true},
+		{"provider", Options{PreserveContent: true, Fonts: oneProgram(inlineProvider)}, true},
 		{"none", Options{PreserveContent: true}, false},
-		{"disabled", Options{PreserveContent: true, Fonts: inlineProvider, Disabled: []string{"font-embed"}}, false},
+		{"disabled", Options{PreserveContent: true, Fonts: oneProgram(inlineProvider), Disabled: []string{"font-embed"}}, false},
 	}
 	for _, tc := range cases {
 		doc, alloc := newTestDoc(t, directResourcesPDF())

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
@@ -113,18 +114,42 @@ func (f *fontFiles) program(ctx context.Context, logger *slog.Logger, req FontRe
 	if best == nil {
 		return nil, nil
 	}
-	data, err := f.read(best)
+	return f.load(logger, best)
+}
+
+// candidates returns a reader for the program of every indexed match for req,
+// best first ([matchFontFiles]), logging to logger what it skips. Each reads
+// its program when the remediation reaches it.
+func (f *fontFiles) candidates(ctx context.Context, logger *slog.Logger, req FontRequest) ([]remediation.FontCandidate, error) {
+	logger = orDiscard(logger)
+	files, err := f.index(ctx, logger)
+	if err != nil {
+		return nil, err
+	}
+	ranked := matchFontFiles(files, req)
+	out := make([]remediation.FontCandidate, len(ranked))
+	for i, file := range ranked {
+		out[i] = func(context.Context) ([]byte, error) { return f.load(logger, file) }
+	}
+	return out, nil
+}
+
+// load reads the program of file, or returns nil for a file it skips: one
+// past [maxFontFileBytes], one no reader accepts, and, for a lenient index,
+// one it cannot read.
+func (f *fontFiles) load(logger *slog.Logger, file *fontFile) ([]byte, error) {
+	data, err := f.read(file)
 	switch {
 	case err == nil:
 		return data, nil
 	case errors.Is(err, errFontFileTooLarge), isFontFormatError(err):
-		logger.Debug("font files: skipping a program", slog.String("file", best.path), slog.Any("err", err))
+		logger.Debug("font files: skipping a program", slog.String("file", file.path), slog.Any("err", err))
 		return nil, nil
 	case f.lenient:
-		logger.Debug("font files: skipping an unreadable file", slog.String("file", best.path), slog.Any("err", err))
+		logger.Debug("font files: skipping an unreadable file", slog.String("file", file.path), slog.Any("err", err))
 		return nil, nil
 	}
-	return nil, fmt.Errorf("reading font file %s: %w", best.path, err)
+	return nil, fmt.Errorf("reading font file %s: %w", file.path, err)
 }
 
 // read returns the program file names: the whole file, or the face of a

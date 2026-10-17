@@ -35,7 +35,8 @@ const maxFontDirDepth = 32
 // are indexed once, at the first font a remediation asks for, and the index is
 // kept for every remediation the option serves. A file the process cannot read
 // is skipped, and logged at Debug. [WithFontProvider] and [WithFontFiles] are
-// asked first: the system's fonts serve the fonts they supply no program for.
+// asked first: the system's fonts serve the fonts they supply no program for,
+// or none a remediation accepts.
 //
 // The output then depends on the fonts installed where litho runs, which
 // another host, or an update of the same one, changes. The option is off by

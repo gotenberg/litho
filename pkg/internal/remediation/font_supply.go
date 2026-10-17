@@ -50,10 +50,17 @@ type FontCode struct {
 	Width float64
 }
 
-// FontProvider returns the program to embed for a font, a TrueType or
-// OpenType program or a bare CFF one, or nil to supply none. An error aborts
-// the remediation.
-type FontProvider func(ctx context.Context, req FontRequest) ([]byte, error)
+// FontProvider returns the programs that may serve a font, best first, or
+// none. The engine embeds the first one it accepts for the font, and reads the
+// others only when it refuses the ones before. An error aborts the
+// remediation.
+type FontProvider func(ctx context.Context, req FontRequest) ([]FontCandidate, error)
+
+// FontCandidate reads one program a [FontProvider] offers: a TrueType or
+// OpenType program, or a bare CFF one. It returns nil for a program that turns
+// out to be no candidate after all, which the engine passes over. An error
+// aborts the remediation.
+type FontCandidate func(ctx context.Context) ([]byte, error)
 
 // FontRefusal records a font a remediation left unembedded although a
 // [FontProvider] was configured.
