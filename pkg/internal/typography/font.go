@@ -364,6 +364,9 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	if isType1Like && !symbolicByFlags {
 		defaultEncoding = copyEncoding(encodings.StandardEncoding)
 	}
+	if subtype == "TrueType" && trueTypeTakesStandardEncoding(ctx, doc, fontDict, symbolicByFlags) {
+		defaultEncoding = copyEncoding(encodings.StandardEncoding)
+	}
 	switch {
 	case isSymbolFont:
 		defaultEncoding = encodings.BuildSymbolEncoding()
@@ -2245,6 +2248,48 @@ func fontIsSymbolicByFlags(ctx context.Context, doc *document.Document, fontDict
 	}
 	const symbolicBit = 1 << 2 // bit 3 in Adobe's 1-indexed numbering
 	return int(flagsInt)&symbolicBit != 0
+}
+
+// trueTypeTakesStandardEncoding reports whether a TrueType font that states
+// no /Encoding reads its codes through StandardEncoding: a font that embeds
+// no program and sets the Nonsymbolic flag (ISO 32000-1, Table 123) without
+// the Symbolic one.
+//
+// ISO 32000-1, 9.6.6.1 makes StandardEncoding the encoding of a nonsymbolic
+// font that states no other, while 9.6.6.4 names only MacRomanEncoding and
+// WinAnsiEncoding for a nonsymbolic TrueType font and leaves an absent
+// /Encoding open. With no program there is no cmap to settle it, and litho
+// reads the font as PDF.js does (evaluator.js, extractDataStructures, which
+// cites Table 114): StandardEncoding when the Nonsymbolic flag is set, the
+// WinAnsiEncoding default otherwise. Compliance and the font-embedding
+// remediation already name such a font's codes through StandardEncoding
+// (compliance.UnembeddedFontGlyphNames), so extraction now reads the glyphs
+// they judge and embed. An embedded program keeps the
+// WinAnsiEncoding default and the cmap-derived reading
+// [applyTrueTypeBuiltinEncoding] gives it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7580.pdf: a non-embedded ArialMT with /Flags 32 and no
+//     /Encoding shows code 0xF1 for "æ" and 0xF9 for "ø", the
+//     StandardEncoding glyphs ae and oslash; WinAnsiEncoding read them as
+//     "ñ" and "ù". With StandardEncoding the page matches the PDF.js golden.
+//   - All corpora: applying the same reading to embedded TrueType programs
+//     changes no text cell.
+func trueTypeTakesStandardEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, symbolic bool) bool {
+	if _, ok := fontDict["Encoding"]; ok || symbolic {
+		return false
+	}
+	if hasEmbeddedFontFile(ctx, doc, fontDict) {
+		return false
+	}
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return false
+	}
+	flags, ok := fdDict["Flags"].(ast.PdfInt)
+	const nonsymbolicBit = 1 << 5 // bit 6 in Adobe's 1-indexed numbering
+	return ok && int(flags)&nonsymbolicBit != 0
 }
 
 // applyTrueTypeBuiltinEncoding switches font.Encoding to MacRomanEncoding
