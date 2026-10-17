@@ -116,20 +116,24 @@
 //     [WithOCREngine], [WithFilterPlugin], [WithCIISchemas],
 //     [WithSchematron], [WithLenient], [WithDefaultCMYKProfile],
 //     [WithLimits].
-//   - [Reader.ExtractText] takes [ExtractTextOption]: [WithHiddenText],
-//     [WithInvisibleText], [WithClipPathText], [WithClippedText],
-//     [WithArtifacts].
-//   - [Writer.WriteTo], [Split], and [Merge] take [WriteOption]:
+//   - [Reader.ExtractText] and [Reader.ExtractAllText] take
+//     [ExtractTextOption]: [WithHiddenText], [WithInvisibleText],
+//     [WithClipPathText], [WithClippedText], [WithArtifacts].
+//   - [Writer.WriteTo], [Split], [Merge], [Pipeline.WriteTo],
+//     [Pipeline.Split] and [Pipeline.Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
-//     [WithBookmarks], [WithPipelineTempDir], [WithEncryption],
-//     [WithObjectStreams], [WithDedup], [WithDroppedSignatures],
-//     [WithDefaultPageSize]. [NewWriter] takes them too, as defaults for the
-//     Writer's WriteTo, which overrides them with its own, and a
-//     [WithDefaultPageSize] given to it also reaches its remediation.
-//     [NewWriter], [Writer.WriteTo] and [Pipeline.WriteTo] also take
-//     [WithTempDir].
-//   - [Writer.RemediatePDFA], [Writer.RemediatePDFUA], and
-//     [Writer.RemediateFacturX] take [RemediateOption]: [WithLanguage],
+//     [WithBookmarks], [WithPipelineTempDir], [WithTempDir],
+//     [WithEncryption], [WithObjectStreams], [WithDedup],
+//     [WithDroppedSignatures], [WithDefaultPageSize]. [NewWriter] takes them
+//     too, as defaults for the Writer's WriteTo, which overrides them with
+//     its own, and a [WithDefaultPageSize] given to it also reaches its
+//     remediation. [WithTempDir] places the temp files of [NewWriter],
+//     [Writer.WriteTo] and [Pipeline.WriteTo], and [Split] and [Merge]
+//     ignore it. [Pipeline.Split] and [Pipeline.Merge] honour
+//     [WithBookmarks] on their stage.
+//   - [Writer.RemediatePDFA], [Writer.RemediatePDFUA],
+//     [Writer.RemediateWTPDF], [Writer.RemediateFacturX] and
+//     [Writer.RepairFacturX] take [RemediateOption]: [WithLanguage],
 //     [WithAggressiveFixes], [WithRegressionTolerance], [WithFigureAltText],
 //     [WithDocumentID], [WithFontProvider], [WithFontFiles],
 //     [WithSystemFonts], [WithWholeFontPrograms].
