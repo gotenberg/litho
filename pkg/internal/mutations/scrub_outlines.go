@@ -79,7 +79,7 @@ func scrubOutlineTitles(
 
 	scrubbed := make(map[int]bool)
 	visited := make(map[int]bool)
-	if err := scrubOutlineItems(ctx, alloc, doc, root["First"], tokens, visited, scrubbed, 0); err != nil {
+	if err := scrubOutlineChildren(ctx, alloc, doc, root, tokens, visited, scrubbed, 0); err != nil {
 		return nil, err
 	}
 
@@ -91,8 +91,39 @@ func scrubOutlineTitles(
 	return out, nil
 }
 
-// scrubOutlineItems walks one sibling chain and recurses into each item's
-// children, mirroring the traversal [pruneOutlineItems] uses.
+// scrubOutlineChildren walks the children of one outline node, the outline
+// dictionary or an item.
+//
+// The children are a chain doubly linked by /Next and /Prev, with /First and
+// /Last naming its ends (ISO 32000-1, Tables 152 and 153). The walk takes it
+// from /First. When an item on the way does not resolve, the items after it
+// are out of reach through /Next but not out of the output: the rewrite writes
+// the unresolvable item as null and copies the rest, reached from /Last. So the
+// chain is then taken again from /Last through /Prev, up to the items the
+// first pass reached, and a title past the gap is cleared rather than left for
+// the verification scan to refuse.
+func scrubOutlineChildren(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	node ast.PdfDict,
+	tokens []string,
+	visited map[int]bool,
+	scrubbed map[int]bool,
+	depth int,
+) error {
+	broken, err := scrubOutlineItems(ctx, alloc, doc, node["First"], "Next", tokens, visited, scrubbed, depth)
+	if err != nil || !broken {
+		return err
+	}
+	_, err = scrubOutlineItems(ctx, alloc, doc, node["Last"], "Prev", tokens, visited, scrubbed, depth)
+	return err
+}
+
+// scrubOutlineItems walks one sibling chain from itemObj along link, /Next or
+// /Prev, and recurses into each item's children, mirroring the traversal
+// [pruneOutlineItems] uses. It reports whether the chain ended on an item that
+// does not resolve, which leaves the items past it unwalked.
 //
 // visited is checked before it is marked and a repeat ends the chain: an
 // outline is a tree threaded by /Next and /Parent, so an item reached twice
@@ -102,19 +133,30 @@ func scrubOutlineItems(
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	itemObj ast.PdfObject,
+	link ast.PdfName,
 	tokens []string,
 	visited map[int]bool,
 	scrubbed map[int]bool,
 	depth int,
-) error {
+) (bool, error) {
 	if depth > maxOutlineDepth {
-		return nil
+		return false, nil
 	}
 	for current := itemObj; current != nil; {
 		if err := ctx.Err(); err != nil {
-			return err
+			return false, err
+		}
+		if _, isNull := current.(ast.PdfNull); isNull {
+			return false, nil
 		}
 		ref, isRef := current.(ast.PdfIndirectRef)
+		if _, isDict := current.(ast.PdfDict); !isRef && !isDict {
+			// No item at all: ISO 32000-1, Table 153 makes each link an
+			// indirect reference to an outline item, and a number or a name
+			// is neither. It holds no title and no link, so it ends this
+			// chain the way an unresolvable item does.
+			return true, nil
+		}
 		if !isRef {
 			// A direct item cannot be replaced, and the walk cannot continue
 			// past it either: /Next lives inside it, so every later sibling is
@@ -122,16 +164,20 @@ func scrubOutlineItems(
 			// only whether this one quotes a token and then returning would end
 			// the chain silently, hiding the titles of every sibling behind it.
 			// Refusing names the problem instead of reporting a clean outline.
-			return fmt.Errorf("%w: a direct item ends the chain", ErrOutlineItemNotAddressable)
+			return false, fmt.Errorf("%w: a direct item ends the chain", ErrOutlineItemNotAddressable)
 		}
 		if visited[ref.ObjectNum] {
-			return nil
+			return false, nil
 		}
 		visited[ref.ObjectNum] = true
 
 		item, err := resolveDictAllocFirst(ctx, alloc, doc, current)
 		if err != nil || item == nil {
-			return nil //nolint:nilerr // An unresolvable outline item is null (ISO 32000-1, 7.3.10) and ends this branch.
+			// An unresolvable item is null (ISO 32000-1, 7.3.10), and the
+			// rewrite writes it so: nothing of it reaches the output. The
+			// siblings past it still do, and the caller walks them from the
+			// other end.
+			return true, nil //nolint:nilerr // A deliberate fallback, see above.
 		}
 		if outlineTitleQuotes(ctx, alloc, doc, item, tokens) {
 			newItem := make(ast.PdfDict, len(item))
@@ -140,17 +186,17 @@ func scrubOutlineItems(
 			// Table 153).
 			newItem["Title"] = document.EncodePdfString("")
 			if !alloc.AllocAt(ref.ObjectNum, newItem) {
-				return fmt.Errorf("%w: object %d", ErrOutlineItemNotAddressable, ref.ObjectNum)
+				return false, fmt.Errorf("%w: object %d", ErrOutlineItemNotAddressable, ref.ObjectNum)
 			}
 			scrubbed[ref.ObjectNum] = true
 		}
 
-		if err := scrubOutlineItems(ctx, alloc, doc, item["First"], tokens, visited, scrubbed, depth+1); err != nil {
-			return err
+		if err := scrubOutlineChildren(ctx, alloc, doc, item, tokens, visited, scrubbed, depth+1); err != nil {
+			return false, err
 		}
-		current = item["Next"]
+		current = item[link]
 	}
-	return nil
+	return false, nil
 }
 
 // outlineTitleQuotes reports whether the item's /Title, read from alloc first,
