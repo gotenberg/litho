@@ -63,17 +63,27 @@ func TestWTPDFDropsRule_OnlyFiltersISO14289Part2(t *testing.T) {
 	}
 }
 
+// wtpdfPacket wraps the body of the top-level rdf:Description in a packet
+// that binds the declarations namespace to pdfd.
+func wtpdfPacket(body string) []byte {
+	return []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">` +
+		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description rdf:about="" xmlns:pdfd="http://pdfa.org/declarations/">` +
+		body + `</rdf:Description></rdf:RDF></x:xmpmeta>`)
+}
+
+// wtpdfDeclarationItem is one Declaration structure stating uri.
+func wtpdfDeclarationItem(uri string) string {
+	return `<rdf:li rdf:parseType="Resource"><pdfd:conformsTo>` + uri + `</pdfd:conformsTo></rdf:li>`
+}
+
 func TestWTPDFDeclarations_ElementForm(t *testing.T) {
 	t.Parallel()
-	xmp := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">
- <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-  <rdf:Description rdf:about="" xmlns:pdfd="http://pdfa.org/declarations/">
-   <pdfd:conformsTo>http://pdfa.org/declarations/wtpdf#accessibility1.0</pdfd:conformsTo>
-   <pdfd:conformsTo>http://pdfa.org/declarations/wtpdf#reuse1.0</pdfd:conformsTo>
-  </rdf:Description>
- </rdf:RDF>
-</x:xmpmeta>`)
-	got := wtpdfDeclarations(context.Background(), xmp)
+	xmp := wtpdfPacket(`<pdfd:declarations><rdf:Bag>` +
+		wtpdfDeclarationItem(wtpdfAccessibilityURI) +
+		wtpdfDeclarationItem(wtpdfReuseURI) +
+		`</rdf:Bag></pdfd:declarations>`)
+	got := wtpdfDeclarations(xmp)
 	if len(got) != 2 {
 		t.Fatalf("expected 2 declarations, got %v", got)
 	}
@@ -84,8 +94,8 @@ func TestWTPDFDeclarations_ElementForm(t *testing.T) {
 	}
 }
 
-// TestWTPDFDeclarations_AttributeForm pins that a pdfd:conformsTo declaration
-// written as an attribute of rdf:Description is read.
+// TestWTPDFDeclarations_AttributeForm pins that a Declaration structure
+// writing pdfd:conformsTo as an attribute of its rdf:li is read.
 //
 // # Corpus evidence
 //
@@ -93,11 +103,12 @@ func TestWTPDFDeclarations_ElementForm(t *testing.T) {
 //     only coverage.
 func TestWTPDFDeclarations_AttributeForm(t *testing.T) {
 	t.Parallel()
-	// XMP permits a simple property as an attribute of rdf:Description.
-	xmp := []byte(`<rdf:Description rdf:about="" xmlns:pdfd="http://pdfa.org/declarations/" ` +
-		`pdfd:conformsTo="http://pdfa.org/declarations/wtpdf#reuse1.0"/>`)
-	got := wtpdfDeclarations(context.Background(), xmp)
-	if !contains(got, wtpdfReuseURI) {
+	// RDF/XML permits the fields of a structure as property attributes of an
+	// empty element (ISO 16684-1, 7.9.2.3).
+	xmp := wtpdfPacket(`<pdfd:declarations><rdf:Bag>` +
+		`<rdf:li pdfd:conformsTo="` + wtpdfReuseURI + `"/>` +
+		`</rdf:Bag></pdfd:declarations>`)
+	if got := wtpdfDeclarations(xmp); !contains(got, wtpdfReuseURI) {
 		t.Errorf("attribute-form declaration not read: %v", got)
 	}
 }
@@ -106,11 +117,12 @@ func TestWTPDFDeclarations_NonCanonicalPrefix(t *testing.T) {
 	t.Parallel()
 	// XMP binds prefixes to namespace URIs; the prefix itself is arbitrary.
 	// A file binding the declarations URI to "decl" states the same thing.
-	xmp := []byte(`<rdf:Description xmlns:decl="http://pdfa.org/declarations/">` +
-		`<decl:conformsTo>http://pdfa.org/declarations/wtpdf#accessibility1.0</decl:conformsTo>` +
-		`</rdf:Description>`)
-	got := wtpdfDeclarations(context.Background(), xmp)
-	if !contains(got, wtpdfAccessibilityURI) {
+	xmp := []byte(`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description xmlns:decl="http://pdfa.org/declarations/">` +
+		`<decl:declarations><rdf:Bag><rdf:li rdf:parseType="Resource">` +
+		`<decl:conformsTo>` + wtpdfAccessibilityURI + `</decl:conformsTo>` +
+		`</rdf:li></rdf:Bag></decl:declarations></rdf:Description></rdf:RDF>`)
+	if got := wtpdfDeclarations(xmp); !contains(got, wtpdfAccessibilityURI) {
 		t.Errorf("declaration under a non-canonical prefix not read: %v", got)
 	}
 }
@@ -118,27 +130,69 @@ func TestWTPDFDeclarations_NonCanonicalPrefix(t *testing.T) {
 func TestWTPDFDeclarations_IgnoresOtherNamespace(t *testing.T) {
 	t.Parallel()
 	// A conformsTo property under a different namespace URI belongs to
-	// another schema (dcterms:conformsTo is a real one) and must not count.
-	xmp := []byte(`<rdf:Description xmlns:dcterms="http://purl.org/dc/terms/">` +
-		`<dcterms:conformsTo>http://pdfa.org/declarations/wtpdf#reuse1.0</dcterms:conformsTo>` +
-		`</rdf:Description>`)
-	if got := wtpdfDeclarations(context.Background(), xmp); len(got) != 0 {
+	// another schema (dcterms:conformsTo is a real one) and must not count,
+	// neither as a property nor as a field of a declaration.
+	xmp := wtpdfPacket(`<dcterms:conformsTo xmlns:dcterms="http://purl.org/dc/terms/">` +
+		wtpdfReuseURI + `</dcterms:conformsTo>` +
+		`<pdfd:declarations><rdf:Bag><rdf:li rdf:parseType="Resource">` +
+		`<dcterms:conformsTo xmlns:dcterms="http://purl.org/dc/terms/">` + wtpdfReuseURI +
+		`</dcterms:conformsTo></rdf:li></rdf:Bag></pdfd:declarations>`)
+	if got := wtpdfDeclarations(xmp); len(got) != 0 {
 		t.Errorf("a declaration under a foreign namespace must be ignored, got %v", got)
+	}
+}
+
+// TestWTPDFDeclarations_OnlyDeclarationFieldsCount pins that a
+// pdfd:conformsTo outside a top-level pdfd:declarations item states nothing.
+// WTPDF 1.0, 6.1.2 and 6.1.3 require the URI as the conformsTo entry of a PDF
+// Declaration, and veraPDF reads it only there.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-2__5-t02-pass-a: remediation wrote the declaration into
+//     the item of pdfaExtension:schemas, which a text scan credited and
+//     veraPDF reported as missing at both WTPDF levels.
+func TestWTPDFDeclarations_OnlyDeclarationFieldsCount(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		xmp  []byte
+	}{
+		{"bare property", wtpdfPacket(`<pdfd:conformsTo>` + wtpdfReuseURI + `</pdfd:conformsTo>`)},
+		{"bare attribute", []byte(`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+			`<rdf:Description rdf:about="" xmlns:pdfd="http://pdfa.org/declarations/" ` +
+			`pdfd:conformsTo="` + wtpdfReuseURI + `"/></rdf:RDF>`)},
+		{"inside an extension schema item", wtpdfPacket(
+			`<pdfaExtension:schemas xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"><rdf:Bag><rdf:li>` +
+				`<rdf:Description><pdfd:declarations><rdf:Bag>` + wtpdfDeclarationItem(wtpdfReuseURI) +
+				`</rdf:Bag></pdfd:declarations></rdf:Description>` +
+				`</rdf:li></rdf:Bag></pdfaExtension:schemas>`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := wtpdfDeclarations(tt.xmp); len(got) != 0 {
+				t.Errorf("got %v, want no declaration", got)
+			}
+			if WTPDFDeclares(tt.xmp, wtpdfReuseURI) {
+				t.Error("WTPDFDeclares must agree with the declaration check")
+			}
+		})
 	}
 }
 
 func TestWTPDFDeclarations_BoundedByCap(t *testing.T) {
 	t.Parallel()
-	// Anti-DoS guard: a crafted packet repeating the property must not be
+	// Anti-DoS guard: a crafted packet repeating the declaration must not be
 	// read without bound.
 	var b strings.Builder
-	b.WriteString(`<rdf:Description xmlns:pdfd="http://pdfa.org/declarations/">`)
+	b.WriteString(`<pdfd:declarations><rdf:Bag>`)
 	for range maxWTPDFDeclarations * 3 {
-		b.WriteString(`<pdfd:conformsTo>` + wtpdfReuseURI + `</pdfd:conformsTo>`)
+		b.WriteString(wtpdfDeclarationItem(wtpdfReuseURI))
 	}
-	b.WriteString(`</rdf:Description>`)
-	if got := wtpdfDeclarations(context.Background(), []byte(b.String())); len(got) > maxWTPDFDeclarations {
-		t.Errorf("read %d declarations, cap is %d", len(got), maxWTPDFDeclarations)
+	b.WriteString(`</rdf:Bag></pdfd:declarations>`)
+	if got := wtpdfDeclarations(wtpdfPacket(b.String())); len(got) != maxWTPDFDeclarations {
+		t.Errorf("read %d declarations, want the cap %d", len(got), maxWTPDFDeclarations)
 	}
 }
 

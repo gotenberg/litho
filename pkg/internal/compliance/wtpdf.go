@@ -104,64 +104,55 @@ const WTPDFDeclarationNamespace = wtpdfDeclarationNamespace
 // carries one entry per conformance level it claims.
 const maxWTPDFDeclarations = 64
 
-// wtpdfDeclarations collects every pdfd:conformsTo value in the XMP
-// packet. The prefix is not assumed to be "pdfd": XMP binds prefixes to
-// namespace URIs, so every prefix bound to the declarations namespace is
-// consulted, the same way the PDF/UA identification checks treat
-// pdfuaid. Both the element form (<pdfd:conformsTo>URI</pdfd:conformsTo>)
-// and the attribute form (pdfd:conformsTo="URI") are read.
-func wtpdfDeclarations(ctx context.Context, xmpData []byte) []string {
+// wtpdfDeclarations returns the conformance URIs the PDF Declarations of the
+// XMP packet state: the pdfd:conformsTo field of every item of the top-level
+// pdfd:declarations array. WTPDF 1.0, 6.1.2 and 6.1.3 require the URI as the
+// pdfd:conformsTo entry of a PDF Declaration, and the PDF Declarations
+// specification makes pdfd:declarations a Bag of Declaration structures. The
+// packet is read as XMP, not as text: the prefix is whatever the packet binds
+// to the namespace, a field may be an element or an attribute, and only a
+// document property counts (ISO 16684-1, 7.4: the properties are the children
+// of a top-level rdf:Description).
+//
+// A pdfd:conformsTo outside a declaration states nothing, whether it stands
+// alone as a property or sits inside another structure, such as an item of
+// pdfaExtension:schemas. veraPDF reads the same shape: VeraPDFMeta
+// getDeclarations walks the top-level declarations property, its items and
+// their conformsTo fields. It matches the field by local name only; litho
+// also requires the declarations namespace the specification names.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-2__5-t02-fail-a, 5-t02-pass-a, 5-t03-fail-a,
+//     5-t04-fail-a and 5-t05-fail-a: remediation spliced the declaration
+//     into the pdfaExtension:schemas item, a text scan credited it and
+//     veraPDF did not, 5 remediation disagreement points at each WTPDF level.
+func wtpdfDeclarations(xmpData []byte) []string {
 	var out []string
-	raw := string(xmpData)
-
-	for _, prefix := range xmpExtractAllPrefixesForURI(ctx, xmpData, wtpdfDeclarationNamespace) {
-		if ctx.Err() != nil {
-			return out
+	for _, prop := range XMPProperties(xmpData) {
+		if prop.NS != wtpdfDeclarationNamespace || prop.Name != "declarations" {
+			continue
 		}
-		tag := prefix + ":conformsTo"
-
-		for i := 0; len(out) < maxWTPDFDeclarations; {
-			j := strings.Index(raw[i:], "<"+tag)
-			if j < 0 {
-				break
+		for _, item := range prop.Children {
+			for _, field := range item.Children {
+				if len(out) >= maxWTPDFDeclarations {
+					return out
+				}
+				if field.NS == wtpdfDeclarationNamespace && field.Name == "conformsTo" {
+					out = append(out, strings.TrimSpace(field.Value))
+				}
 			}
-			openEnd := strings.IndexByte(raw[i+j:], '>')
-			if openEnd < 0 {
-				break
-			}
-			start := i + j + openEnd + 1
-			closeAt := strings.Index(raw[start:], "</"+tag)
-			if closeAt < 0 {
-				break
-			}
-			out = append(out, strings.TrimSpace(raw[start:start+closeAt]))
-			i = start + closeAt
-		}
-
-		for i := 0; len(out) < maxWTPDFDeclarations; {
-			j := strings.Index(raw[i:], tag+"=")
-			if j < 0 {
-				break
-			}
-			at := i + j + len(tag) + 1
-			if at >= len(raw) {
-				break
-			}
-			quote := raw[at]
-			if quote != '"' && quote != '\'' {
-				i = at
-				continue
-			}
-			end := strings.IndexByte(raw[at+1:], quote)
-			if end < 0 {
-				break
-			}
-			out = append(out, strings.TrimSpace(raw[at+1:at+1+end]))
-			i = at + 1 + end
 		}
 	}
-
 	return out
+}
+
+// WTPDFDeclares reports whether the XMP packet states uri as the
+// pdfd:conformsTo entry of one of its PDF Declarations, read the way the
+// WTPDF declaration check reads them. Remediation uses it to tell a
+// declaration that counts from one it still has to write.
+func WTPDFDeclares(xmpData []byte, uri string) bool {
+	return slices.Contains(wtpdfDeclarations(xmpData), uri)
 }
 
 // checkWTPDFDeclaration validates the one rule WTPDF states of its own:
@@ -200,7 +191,7 @@ func checkWTPDFDeclaration(ctx context.Context, doc *document.Document, profile 
 		return nil
 	}
 
-	if slices.Contains(wtpdfDeclarations(ctx, xmpData), uri) {
+	if WTPDFDeclares(xmpData, uri) {
 		return nil
 	}
 	return failf(rule, "XMP states no pdfd:conformsTo declaration %q", uri)
