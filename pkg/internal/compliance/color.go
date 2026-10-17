@@ -280,6 +280,14 @@ func pdfObjectEqualAt(ctx context.Context, doc *document.Document, a, b ast.PdfO
 	// value cannot name itself.
 	if aRef, ok := a.(ast.PdfIndirectRef); ok {
 		if bRef, ok := b.(ast.PdfIndirectRef); ok {
+			// One object is equal to itself, whatever it holds. The cases below
+			// compare no stream, so a direct tint transform naming a stream,
+			// such as a stitching function over a type 4 one, compared unequal
+			// to itself and failed ISO 19005-2, 6.2.4.4 t2 against the one
+			// Separation that holds it.
+			if aRef == bRef {
+				return true
+			}
 			key := [2]int{aRef.ObjectNum, bRef.ObjectNum}
 			if seen[key] {
 				return true
