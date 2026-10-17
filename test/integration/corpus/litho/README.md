@@ -202,6 +202,8 @@ one deliberately rather than diffing it against a fresh build.
 | `imagecolour_2b.pdf`   | PDF/A-2b     | Images over the colorant None; JPX CIELab, ROMM-RGB, e-sRGB      |
 | `redactrefs_ua1.pdf`   | PDF/UA-1     | Copies of page text behind objects a redaction cannot read       |
 | `redactcopies_2b.pdf`  | PDF/A-2b     | Copies of page text no decoded value spells                      |
+| `rolecycle_ua1.pdf`    | PDF/UA-1     | A standard type in a `/RoleMap` cycle, and a type mapped into it |
+| `rolecycle_ua2.pdf`    | PDF/UA-2     | Role-map cycles through the root `/RoleMap` and namespaces       |
 
 ### Must-not-fire controls
 
@@ -438,6 +440,9 @@ violation but is exempt, so a firing is a false positive.
 | `remapchain_ua2`                          | `Div`: a `/RoleMap` chain through `Section` that ends on `Sect`        | ISO 14289-2, 8.2.4 t4        |
 | `remapchain_ua2`                          | PDF 1.7 `Sect`: a `/RoleMapNS` chain through a custom `Section`        | ISO 14289-2, 8.2.4 t4        |
 | `stdremap_ua2`                            | PDF 2.0 `Sect`: an element the `/RoleMap` entry for `Sect` misses      | ISO 32000-2, 14.8.6          |
+| `rolecycle_ua1`                           | `Item` at PDF/A-2a: mapped into a cycle, its chain stops on `Sect`     | ISO 19005-2, 6.7.3.4 t2      |
+| `rolecycle_ua2`                           | A PDF 2.0 `/RoleMapNS` self-map of `Note`, which no element uses       | ISO 14289-2, 8.2.4 t2        |
+| `rolecycle_ua2`                           | `Panel`: a `/RoleMapNS` cycle that never leaves its namespace          | ISO 14289-2, 8.2.4 t2        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -568,6 +573,8 @@ which are covered under [Known divergences](#known-divergences).
 | `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
 | `rolemapns_ua2.pdf`    | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
 | `rolemapscope_ua2.pdf` | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 2    |
+| `rolecycle_ua1.pdf`    | 4    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 2    | 5    |
+| `rolecycle_ua2.pdf`    | 5    | 4    | 8    | 5    | 5    | 8    | 5    | 5    | 2   | 2    | 3    | 5    | 4    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
@@ -6278,6 +6285,56 @@ the stored stream data and a name key. Now it refuses with
 
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells of
 each file.
+
+### `rolecycle_ua1.pdf` and `rolecycle_ua2.pdf`
+
+A circular role mapping is forbidden by ISO 14289-1, 7.1 test 6, ISO 14289-2,
+8.2.4 test 2 and ISO 19005-1/2/3, 6.8.3.4/6.7.3.4 test 2. veraPDF 1.30.2 judges
+it per structure element. It follows the root `/RoleMap` from the element's
+type name, whatever namespace the element declares, without stopping on a
+standard type, and reports a chain that revisits a name. In a PDF 2.0 document
+it also follows the `/RoleMapNS` chain from the element's type and reports one
+that returns to the type it left a namespace from; a chain that comes back to a
+different type of a namespace is ISO 14289-2, 8.2.4 test 3 instead. PDF/UA
+judges every element. PDF/A judges only an element that reaches no standard
+type, and PDF/A-1 judges a standard type by its name alone. No corpus file puts
+a standard type in a cycle, so these two files do:
+
+| File            | Element   | Namespace | Mapping                                       | Read at PDF/UA |
+| --------------- | --------- | --------- | --------------------------------------------- | -------------- |
+| `rolecycle_ua1` | `Sect`    | none      | `/RoleMap` `Sect` to `Book`, `Book` to `Sect` | circular       |
+| `rolecycle_ua1` | `Item`    | none      | `/RoleMap` `Item` to `Sect`, into that cycle  | circular       |
+| `rolecycle_ua1` | `Div`     | none      | none                                          | `Div`          |
+| `rolecycle_ua2` | `Sect`    | none      | `/RoleMap` `Sect` to `Book`, `Book` to `Sect` | circular       |
+| `rolecycle_ua2` | `Callout` | custom    | `/RoleMapNS` to a second namespace and back   | circular       |
+| `rolecycle_ua2` | `Panel`   | custom    | `/RoleMapNS` `Panel` to `Frame` and back      | `8.2.4/3`      |
+| `rolecycle_ua2` | none      | PDF 2.0   | `/RoleMapNS` `Note` to itself, no element     | nothing        |
+
+Both files agree with veraPDF 1.30.2 on the rule set in all thirteen cells and
+both WTPDF levels, and on the count of every circular-mapping check. PDF/UA-1
+reports `7.1/6` on `Sect` and `Item` of `rolecycle_ua1`, PDF/UA-2 and both WTPDF
+levels `8.2.4/2` on the same two; parts 2 and 3 at level A report `6.7.3.4/2` on
+the `Sect` alone, whose chain closes on itself before meeting a standard type,
+while the chain of `Item` stops on `Sect`. At PDF/UA-2 `rolecycle_ua2` reports
+`8.2.4/2` on `Sect` and `Callout`, `8.2.4/3` and `8.2.4/1` on `Panel`, which
+the same-namespace cycle leaves mapped to no standard type, and nothing on the
+unused `Note` entry. The counts differ only where `stdremap_ua2` says: litho
+reports `7.1/7` once per `/RoleMap` entry.
+
+Measured before the fix, litho judged the circular rules on `/RoleMap` entries
+whose chain met no standard type and on `/RoleMapNS` self-maps: it reported no
+circular mapping on either file's `Sect` or `Item`, `8.2.4/2` on the unused
+`Note` entry, and `8.2.4/3` on all four entries of the two namespace cycles, and
+it missed `8.2.4/1` on `Panel`. Over every corpus, the tagged profiles change
+no rule set on any other file, and the circular-mapping counts change on 28
+files, one per element where litho counted entries; on the eight of them
+measured against veraPDF, `pdfjs` `issue16759` (1043 elements) among them, the
+counts now match.
+Remediation breaks the root `/RoleMap` cycle at its standard type: it drops the
+`Sect` entry, so `Book` leads to `Sect` and a `Sect` stays one. Before, it sent
+`Book` to `P`, so at PDF/UA-2 the `Sect` of `rolecycle_ua2` read as a `P`. Both
+tools find every remediated `rolecycle_ua1` clean. The namespace cycles of
+`rolecycle_ua2` stay: no fixer edits a `/RoleMapNS`.
 
 ## Scope
 
