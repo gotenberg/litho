@@ -122,7 +122,7 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 //
 // When origins is non-nil, one entry is appended to it per element appended to
 // elements, naming the index in ops of the operation that drew it.
-func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int, fontRefs *[]int) error {
+func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int, fontRefs *[]int, runFonts *[]runFont) error {
 	if depth > doc.Limits().MaxFormDepth {
 		if doc != nil {
 			doc.Logger.Debug("form xobject max depth reached",
@@ -250,7 +250,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 				return err
 			}
 		case "Do":
-			if err := handleDoOp(ctx, doc, machine, resources, op, elements, visited, depth, annotAppearances); err != nil {
+			if err := handleDoOp(ctx, doc, machine, resources, op, elements, visited, depth, annotAppearances, runFonts); err != nil {
 				return err
 			}
 		}
@@ -295,6 +295,17 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			}
 			for range len(*elements) - before {
 				*fontRefs = append(*fontRefs, fontRef)
+			}
+		}
+
+		// Name the font each new element was shown in, so reconstruction can
+		// tell where a change of font starts a new run. A form's elements were
+		// named by the recursion, against the fonts of its own resources;
+		// whatever it did not name takes the font selected out here.
+		if runFonts != nil {
+			key := runFont{name: currentFontName, font: currentFont, size: machine.Current().Text.Tfs}
+			for len(*runFonts) < len(*elements) {
+				*runFonts = append(*runFonts, key)
 			}
 		}
 	}
@@ -535,7 +546,7 @@ func applyTJKerning(machine *graphics.Machine, currentFont *Font, numVal float64
 // from the current resource dict. Non-Form XObjects (images, for example)
 // are silently skipped. Only Form streams carry content-stream ops the
 // extractor can recurse into.
-func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, op content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool) error {
+func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, op content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, runFonts *[]runFont) error {
 	if len(op.Operands) != 1 {
 		return nil
 	}
@@ -645,8 +656,10 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// content stream, and the caller's operation indices do not address it. No
 	// font references either, and for a sharper reason: the form selects its
 	// fonts from its own /Resources, so the reference held out here names a
-	// different font than the one that drew them.
-	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil, nil)
+	// different font than the one that drew them. The run fonts do pass
+	// down: they name the font by what the form selected, not by an object
+	// a caller could act on.
+	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil, nil, runFonts)
 	machine.Resources = prevResources
 	machine.FormDepth = prevDepth
 	machine.OpIndex = prevOpIndex
@@ -670,15 +683,16 @@ type ExtractionConfig struct {
 	StripArtifacts bool // If true, discards text inside /Artifact marked content (headers, footers, page numbers)
 }
 
-// extractElements does the work behind [ExtractElements] and
-// [ExtractElementsWithOrigins]. It reports origins only when asked, so the
-// common path allocates nothing extra.
+// extractElements does the work behind [ExtractElements],
+// [ExtractElementsWithOrigins], [ExtractElementsWithAttribution] and
+// [ExtractText]. It reports origins, font references and run fonts only
+// when asked, so the common path allocates nothing extra.
 //
 // # Corpus evidence
 //
 //   - pdfjs ShowText-ShadingPattern.pdf: repeats "Helvetica" many points past
 //     the right margin, and that runaway tail must stay clipped.
-func extractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, recordOrigins, recordFonts bool) ([]models.TextElement, []int, []int, error) {
+func extractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, record extractionRecord) (extraction, error) {
 	// Collect annotation appearance object numbers to skip them during text
 	// extraction. Annotation appearances are visual overlays, not page content.
 	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
@@ -690,18 +704,24 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 	elements := make([]models.TextElement, 0, estimatedCap)
 	var origins []int
 	var originsPtr *[]int
-	if recordOrigins {
+	if record.origins {
 		origins = make([]int, 0, estimatedCap)
 		originsPtr = &origins
 	}
 	var fontRefs []int
 	var fontRefsPtr *[]int
-	if recordFonts {
+	if record.fontRefs {
 		fontRefs = make([]int, 0, estimatedCap)
 		fontRefsPtr = &fontRefs
 	}
-	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr); err != nil {
-		return nil, nil, nil, err
+	var runFonts []runFont
+	var runFontsPtr *[]runFont
+	if record.runFonts {
+		runFonts = make([]runFont, 0, estimatedCap)
+		runFontsPtr = &runFonts
+	}
+	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr, runFontsPtr); err != nil {
+		return extraction{}, err
 	}
 
 	if doc != nil {
@@ -774,7 +794,24 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 		}
 	}
 
-	return elements, origins, fontRefs, nil
+	return extraction{elements: elements, origins: origins, fontRefs: fontRefs, runFonts: runFonts}, nil
+}
+
+// extractionRecord names what [extractElements] records beside the
+// elements.
+type extractionRecord struct {
+	origins  bool
+	fontRefs bool
+	runFonts bool
+}
+
+// extraction is what [extractElements] returns: the elements and, parallel
+// to them, whatever its [extractionRecord] asked for (nil otherwise).
+type extraction struct {
+	elements []models.TextElement
+	origins  []int
+	fontRefs []int
+	runFonts []runFont
 }
 
 // OriginUnattributable marks an element whose bytes are not in the operations
@@ -797,8 +834,8 @@ const FontUnattributable = -1
 // ExtractElements extracts text from a page's content [content.Operation]
 // values as raw spatial [models.TextElement] entries.
 func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
-	elements, _, _, err := extractElements(ctx, doc, machine, page, ops, false, false)
-	return elements, err
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{})
+	return ex.elements, err
 }
 
 // ExtractElementsWithOrigins extracts elements and, for each, the index in ops
@@ -818,8 +855,8 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 // The origins describe these elements as returned. [CoalesceElements] merges
 // and drops entries, so origins do not survive it; correlate first.
 func ExtractElementsWithOrigins(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, []int, error) {
-	elements, origins, _, err := extractElements(ctx, doc, machine, page, ops, true, false)
-	return elements, origins, err
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{origins: true})
+	return ex.elements, ex.origins, err
 }
 
 // ExtractElementsWithAttribution extracts elements and, for each, both the
@@ -835,7 +872,8 @@ func ExtractElementsWithOrigins(ctx context.Context, doc *document.Document, mac
 // [FontUnattributable]: its bytes are in the form's own stream, and the form
 // selects its fonts from its own resources.
 func ExtractElementsWithAttribution(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, []int, []int, error) {
-	return extractElements(ctx, doc, machine, page, ops, true, true)
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{origins: true, fontRefs: true})
+	return ex.elements, ex.origins, ex.fontRefs, err
 }
 
 // CoalesceElements merges consecutive per-glyph [models.TextElement]
@@ -1008,14 +1046,21 @@ func rectsIntersect(a, b [4]float64) bool {
 func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, config ExtractionConfig) (string, error) {
 	machine.StripArtifacts = config.StripArtifacts
 
-	elements, err := ExtractElements(ctx, doc, machine, page, ops)
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{runFonts: true})
 	if err != nil {
 		return "", err
 	}
+	elements, runFonts := ex.elements, ex.runFonts
 
-	// Filter elements based on config
+	// Filter elements based on config, keeping each element's run font
+	// beside it. Fonts that do not pair one to one with the elements are
+	// dropped rather than misattributed.
+	if len(runFonts) != len(elements) {
+		runFonts = nil
+	}
 	var filtered []models.TextElement
-	for _, el := range elements {
+	var filteredFonts []runFont
+	for i, el := range elements {
 		if config.StripInvisible && el.Invisible {
 			continue
 		}
@@ -1026,6 +1071,9 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 			continue
 		}
 		filtered = append(filtered, el)
+		if runFonts != nil {
+			filteredFonts = append(filteredFonts, runFonts[i])
+		}
 	}
 
 	if doc != nil {
@@ -1061,7 +1109,7 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 		pageBeads = nil
 	}
 
-	return ReconstructText(ctx, filtered, pageBeads), nil
+	return reconstructText(ctx, filtered, filteredFonts, pageBeads), nil
 }
 
 // beadsCoverAllElements reports whether every element in elements

@@ -16,6 +16,14 @@ import (
 // for maximum fidelity to the original document layout. When beads are provided,
 // it sorts elements by bead index to respect explicit multi-column reading order.
 func ReconstructText(ctx context.Context, elements []models.TextElement, beads []semantics.Bead) string {
+	return reconstructText(ctx, elements, nil, beads)
+}
+
+// reconstructText is [ReconstructText] with the font each element was shown
+// in, parallel to elements, so a change of font starts a new run the way it
+// does in PDF.js. Without fonts (nil, or not one per element) only a change
+// of size does.
+func reconstructText(ctx context.Context, elements []models.TextElement, fonts []runFont, beads []semantics.Bead) string {
 	if len(elements) == 0 {
 		return ""
 	}
@@ -32,6 +40,10 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 	}
 	var lines []line
 	cur := line{elems: []models.TextElement{elements[0]}}
+	if len(fonts) != len(elements) {
+		fonts = nil
+	}
+	runs := runTracker{startY: elements[0].Y, last: elements[0], fonts: fonts}
 
 	for i := 1; i < len(elements); i++ {
 		if i%500 == 0 {
@@ -49,14 +61,14 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 			if math.Abs(prev.X-el.X) > 2.0 {
 				newLine = true
 			}
+			runs.restart(i, el)
 		case isRotated(el.Angle):
 			// For arbitrarily rotated text, project positions onto the
 			// perpendicular axis of the text direction to detect line breaks.
 			newLine = perpDist(prev, el) > 2.0
+			runs.restart(i, el)
 		default:
-			if math.Abs(prev.Y-el.Y) > 2.0 {
-				newLine = true
-			}
+			newLine = runs.breaksLine(i, prev, el)
 		}
 		if newLine {
 			lines = append(lines, cur)
@@ -167,6 +179,133 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 	}
 
 	return normalizeExtractionUnicode(normalizeSoftHyphens(sb.String()))
+}
+
+// lineBreakTolerance is how far, in user space units, a run may start
+// across the baseline from the run before it and still continue its line.
+// It mirrors the tolerance of the PDF.js reference generator
+// (test/integration/corpus/lib/gen-references.mjs, joinLines), which breaks
+// a line between two of PDF.js's text items whose origins differ in Y by
+// more than it. ISO 32000-1, 14.8.2.5 leaves line breaks to the consumer,
+// so the value is the reference's, not the specification's.
+const lineBreakTolerance = 2.0
+
+// Run segmentation factors, after PDF.js's text-item builder
+// (src/core/evaluator.js, compareWithLastPosition), as fractions of the
+// font size: a glyph whose baseline moves more than verticalShiftRatio of
+// the previous glyph's size starts a new run (VERTICAL_SHIFT_RATIO), a gap
+// below negativeRunGapFactor is a move back that starts one
+// (NEGATIVE_SPACE_FACTOR), and a gap above spaceInFlowMaxFactor is a jump
+// PDF.js marks with a space run of its own (SPACE_IN_FLOW_MAX_FACTOR).
+const (
+	verticalShiftRatio   = 0.25
+	negativeRunGapFactor = -0.2
+	spaceInFlowMaxFactor = 0.6
+)
+
+// runTracker follows the runs of glyphs a horizontal line is made of, the
+// way PDF.js groups glyphs into text items, so a baseline shift breaks the
+// line in proportion to the font size rather than at a fixed distance.
+//
+// A glyph continues the run of the glyph painted before it unless its
+// baseline moves by more than [verticalShiftRatio] of that glyph's size,
+// its size changes, its marked-content sequence changes, or the gap
+// between them falls outside [negativeRunGapFactor] and
+// [spaceInFlowMaxFactor]. A glyph that continues a run never breaks the
+// line. One that starts a run breaks it when its origin sits more than
+// [lineBreakTolerance] across the baseline from the start of the run before
+// it, or, after a jump, from the glyph it jumped from, where PDF.js places
+// the space run. A superscript set in a smaller size therefore stays on its
+// line while it sits within the tolerance, and a baseline that wanders
+// inside one run does not break it at all.
+//
+// Space glyphs carry no position of their own in PDF.js (they only advance
+// the text matrix), so they neither start nor continue a run. One breaks the
+// line only when it sits more than the tolerance across the baseline from
+// the element before it, which keeps a space with the text it was shown
+// beside.
+//
+// # Corpus evidence
+//
+//   - All corpora: with the text rise on the glyph origins, words match
+//     PDF.js on 26 more files (govdocs 18, pdfcpu 3, pdfjs 5) and on none
+//     fewer; facturx and pdf20 do not move.
+//   - govdocs thread_000_000270.pdf: a space glyph that opened the next
+//     run, held on the superscript's line, raised that line's space
+//     threshold and dropped the space inside "3 )".
+//   - govdocs thread_100_100667.pdf, pdfjs issue20668.pdf: a superscript
+//     in a font of its own, or a bullet in another font before the line,
+//     breaks the line only when the font change starts the run.
+//   - govdocs thread_000_000266.pdf, thread_100_100174.pdf and 13 more: a
+//     text matrix that scales a 1-point Tf sets the size on the page, and
+//     comparing that size started runs PDF.js does not start.
+type runTracker struct {
+	startY float64
+	last   models.TextElement
+	// lastIdx indexes the glyph in last, to look up its font.
+	lastIdx int
+	// fonts is the font of each element, or nil when unknown.
+	fonts []runFont
+}
+
+// runFont names the font an element was shown in: the resource name and
+// the size Tf selected, and the font the name resolved to.
+type runFont struct {
+	name string
+	font *Font
+	size float64
+}
+
+// fontChanged reports whether the glyph at i was shown in another font
+// than the previous one. PDF.js starts a new text item when Tf selects
+// another size, or another resource name for another font
+// (buildTextContentItem), so a name that resolves to the same font
+// continues the run. The size compared is the operand of Tf: a text matrix
+// that scales the same size up does not start a run. Without fonts the
+// size compared is the size on the page.
+func (r *runTracker) fontChanged(i int, prev, el models.TextElement) bool {
+	if r.fonts == nil {
+		return el.FontSize != prev.FontSize
+	}
+	a, b := r.fonts[r.lastIdx], r.fonts[i]
+	return a.size != b.size || (a.name != b.name && a.font != b.font)
+}
+
+// restart begins a new run at the element i, for a line the horizontal
+// rule did not decide.
+func (r *runTracker) restart(i int, el models.TextElement) {
+	r.startY = el.Y
+	r.last = el
+	r.lastIdx = i
+}
+
+// breaksLine reports whether el, the element i, starts a new line after
+// prev, the element before it, and advances the run state past it. A run
+// is compared with the last glyph that was not a space, which prev need not
+// be.
+func (r *runTracker) breaksLine(i int, prev, el models.TextElement) bool {
+	if isSpaceGlyph(el.Text) {
+		return math.Abs(el.Y-prev.Y) > lineBreakTolerance
+	}
+	last := r.last
+	fontChanged := r.fontChanged(i, last, el)
+	r.last = el
+	r.lastIdx = i
+	size := math.Abs(last.FontSize)
+	gap := computeLineGap(last, el)
+	ref := r.startY
+	switch {
+	case gap > spaceInFlowMaxFactor*size:
+		ref = last.Y
+	case gap < negativeRunGapFactor*size,
+		math.Abs(el.Y-last.Y) > verticalShiftRatio*size,
+		fontChanged,
+		el.MCID != last.MCID:
+	default:
+		return false
+	}
+	r.startY = el.Y
+	return math.Abs(el.Y-ref) > lineBreakTolerance
 }
 
 // isRunningHeadReset reports whether the transition from prev to el is
