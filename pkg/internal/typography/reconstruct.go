@@ -488,10 +488,12 @@ func isSpaceGlyph(s string) bool {
 // abut on the page and no reader sees a gap between them. The smaller
 // size keeps a drop cap from swallowing the space after it.
 //
-// The gap is only read for horizontal left-to-right text at a positive
-// font size: vertical, rotated, mirrored and right-to-left runs measure
-// their gaps along other axes or in visual order, and keep their literal
-// spaces. So does an exact abutment ([exactAbutment]).
+// The gap is only read for left-to-right text at a positive font size,
+// horizontal or rotated by 90° or -90°, between two glyphs set in the same
+// direction: [computeLineGap] measures it along the advance of those
+// ([gapReadable]). Vertical, otherwise rotated, mirrored and right-to-left
+// runs measure their gaps along other axes or in visual order, and keep
+// their literal spaces. So does an exact abutment ([exactAbutment]).
 //
 // # Corpus evidence
 //
@@ -508,8 +510,16 @@ func isSpaceGlyph(s string) bool {
 //     (exact abutment), issue269_2.pdf (180° text), issue14415.pdf (negative
 //     font size), issue9186.pdf (U+200B around each space): each lost
 //     spaces PDF.js keeps until the guard above that names its case.
+//   - govdocs thread_000_000012.pdf, thread_000_000750.pdf and 6 more: text
+//     rotated a quarter turn read a space PDF.js drops ("$500,000y").
+//   - govdocs thread_200_200396.pdf: a tick label "100" and the rotated "y"
+//     after it read glued until both glyphs had to share a direction.
+//   - pdfjs issue20232.pdf: "и дата", rotated a quarter turn, read "идата"
+//     while the widths of its UTF-8 codes were read at the code, not the CID.
+//   - All corpora: dropping the space in ±90° text makes words match PDF.js
+//     on 8 more files and on none fewer.
 func suppressesLiteralSpace(prev, el models.TextElement, gap float64) bool {
-	if prev.Vertical || el.Vertical || math.Abs(prev.Angle) >= math.Pi/180 || math.Abs(el.Angle) >= math.Pi/180 {
+	if prev.Vertical || el.Vertical || !gapReadable(el.Angle) || math.Abs(prev.Angle-el.Angle) >= math.Pi/180 {
 		return false
 	}
 	if stringHasRTL(prev.Text) || stringHasRTL(el.Text) {
@@ -529,6 +539,14 @@ func suppressesLiteralSpace(prev, el models.TextElement, gap float64) bool {
 		return false
 	}
 	return gap <= notASpaceFactor*min(prev.FontSize, el.FontSize)
+}
+
+// gapReadable reports whether [computeLineGap] measures a gap along the
+// direction text at angle advances: horizontal text, and text rotated by 90°
+// or -90°. The gap means that only between two glyphs set in the same
+// direction.
+func gapReadable(angle float64) bool {
+	return math.Abs(angle) < math.Pi/180 || isOrthogonalRotation(angle)
 }
 
 // isFormatOnly reports whether s is made only of format characters
