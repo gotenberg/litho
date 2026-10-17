@@ -235,3 +235,17 @@ func TestStandard14GlyphWidths_Completeness(t *testing.T) {
 		t.Error("ZapfDingbats missing glyph a1")
 	}
 }
+
+// TestInjectStandard14Widths_SymbolBuiltinNames pins that Symbol glyphs
+// whose names lie outside the Adobe Glyph List take their AFM widths
+// through the built-in encoding: 0xA2 is minute (247), 0xB2 second (411).
+func TestInjectStandard14Widths_SymbolBuiltinNames(t *testing.T) {
+	font := &Font{Encoding: encodings.BuildSymbolEncoding()}
+	injectStandard14Widths(font, "Symbol")
+	if w := font.GlyphWidth(0xA2); w != 247 {
+		t.Errorf("Symbol minute width: got %g, want 247", w)
+	}
+	if w := font.GlyphWidth(0xB2); w != 411 {
+		t.Errorf("Symbol second width: got %g, want 411", w)
+	}
+}

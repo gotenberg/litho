@@ -2385,6 +2385,7 @@ func injectStandard14Widths(font *Font, baseFont string) {
 		if glyphWidths == nil {
 			return
 		}
+		builtin, builtinUnicode := builtinGlyphNames(name)
 		for code := range 256 {
 			r, ok := font.Encoding[byte(code)] //nolint:gosec // code is 0-255
 			if !ok {
@@ -2396,6 +2397,19 @@ func injectStandard14Widths(font *Font, baseFont string) {
 			}
 			if w, ok := glyphWidths[glyphName]; ok {
 				widths[code] = float64(w)
+				continue
+			}
+			// Symbol and ZapfDingbats name their glyphs outside the Adobe
+			// Glyph List ("minute", "a1"), so the name the code's character
+			// maps back to misses their metrics. The built-in encoding's
+			// name for the code holds them, when the code still shows that
+			// glyph (ISO 32000-1, 9.6.6.1 and Annex D.5, D.6).
+			if builtin != nil {
+				if n := builtin[code]; n != "" && builtinUnicode[n] == r {
+					if w, ok := glyphWidths[n]; ok {
+						widths[code] = float64(w)
+					}
+				}
 			}
 		}
 	}
@@ -2403,6 +2417,27 @@ func injectStandard14Widths(font *Font, baseFont string) {
 	font.FirstChar = 0
 	font.LastChar = 255
 	font.Widths = widths
+}
+
+// builtinGlyphNames returns the built-in encoding of the Standard 14 font
+// name (code to glyph name) and the Unicode value of each of its glyphs, for
+// the two fonts whose glyph names the Adobe Glyph List does not carry:
+// Symbol and ZapfDingbats (ISO 32000-1, Annex D.5 and D.6). Other fonts
+// return nil maps.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400739.pdf: Symbol's 0xA2 (minute, 247 units)
+//     read as 1000 units, so the space after the two primes of 35′′ fell
+//     11 points before the next word started.
+func builtinGlyphNames(name string) (*[256]string, map[string]rune) {
+	switch name {
+	case "Symbol":
+		return &encodings.SymbolSetEncoding, encodings.SymbolGlyphsUnicode
+	case "ZapfDingbats":
+		return &encodings.ZapfDingbatsEncoding, encodings.DingbatsGlyphsUnicode
+	}
+	return nil, nil
 }
 
 // extractType3GlyphWidth parses a Type 3 CharProc stream and returns the
