@@ -164,7 +164,10 @@ func unpackSamples(data []byte, width, height, samplesPerPixel, bpc int, scale b
 
 // padShortSamples returns data padded with zeros to the packed rows of a
 // width x height image, and how many whole rows data held. An unsupported
-// depth leaves data as it is, for unpackSamples to refuse.
+// depth leaves data as it is, for unpackSamples to refuse. Data short of one
+// whole row is returned as it is, with no rows, since the caller refuses it:
+// padding it first allocated the whole image for nothing, and the refusal then
+// reported the padded length instead of the stream's.
 func padShortSamples(data []byte, width, height, samplesPerPixel, bpc int) ([]byte, int) {
 	var rowBytes int
 	switch bpc {
@@ -181,9 +184,13 @@ func padShortSamples(data []byte, width, height, samplesPerPixel, bpc int) ([]by
 	if rowBytes == 0 || len(data) >= need {
 		return data, height
 	}
+	rows := len(data) / rowBytes
+	if rows == 0 {
+		return data, 0
+	}
 	padded := make([]byte, need)
 	copy(padded, data)
-	return padded, len(data) / rowBytes
+	return padded, rows
 }
 
 // indexDecode maps the indices of an indexed image through its /Decode array
