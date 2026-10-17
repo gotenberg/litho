@@ -87,10 +87,17 @@ type claimRow struct {
 	profile string
 }
 
+// collectPDFs returns every *.pdf file under dir. A walk error fails the scan,
+// as in [walkPDFs]: skipping it wrote a claims.csv that omits the files it
+// could not reach, or an empty one for a missing dir, and a later run reads
+// that file as the corpus's claims.
 func collectPDFs(dir string) ([]string, error) {
 	var out []string
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".pdf") {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(path, ".pdf") {
 			return nil
 		}
 		out = append(out, path)

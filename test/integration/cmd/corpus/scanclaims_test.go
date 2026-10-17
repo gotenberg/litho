@@ -1,12 +1,26 @@
 package main
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 )
+
+// TestCollectPDFsFailsOnAMissingDir pins that the claims scan fails on a
+// directory it cannot walk rather than writing an empty claims.csv.
+func TestCollectPDFsFailsOnAMissingDir(t *testing.T) {
+	pdfs, err := collectPDFs(filepath.Join(t.TempDir(), "missing"))
+	if err == nil {
+		t.Fatalf("collectPDFs on a missing dir returned %d files and no error", len(pdfs))
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("collectPDFs error = %v, want one wrapping fs.ErrNotExist", err)
+	}
+}
 
 func TestScanClaimsParallelDropsNoClaim(t *testing.T) {
 	// Stub PDFs are empty; detectClaimedProfile returns "" for every

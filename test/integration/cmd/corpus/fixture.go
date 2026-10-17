@@ -54,6 +54,10 @@ func LoadFixtures(m *Manifest) ([]Fixture, error) {
 }
 
 // walkPDFs collects every *.pdf file under the manifest's pdfRoot.
+//
+// A walk error fails the load. Skipping it scored a corpus whose pdfs/ tree
+// was missing or unreadable as zero fixtures, so every metric of that corpus
+// vanished from the run instead of failing it.
 func walkPDFs(m *Manifest) ([]string, error) {
 	pdfRoot := m.TestdataRoot()
 	if m.PDFRoot != "" {
@@ -61,7 +65,10 @@ func walkPDFs(m *Manifest) ([]string, error) {
 	}
 	var pdfs []string
 	if err := filepath.Walk(pdfRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".pdf") {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(path, ".pdf") {
 			return nil
 		}
 		pdfs = append(pdfs, path)

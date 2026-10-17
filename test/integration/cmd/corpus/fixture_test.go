@@ -1,12 +1,28 @@
 package main
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 )
+
+// TestWalkPDFsFailsOnAMissingRoot pins that an absent pdfs/ tree fails the
+// load. Skipping the walk error scored such a corpus as zero fixtures, so its
+// metrics vanished from the run instead of failing it.
+func TestWalkPDFsFailsOnAMissingRoot(t *testing.T) {
+	m := &Manifest{Name: "w35-no-such-corpus", PDFRoot: "pdfs"}
+	pdfs, err := walkPDFs(m)
+	if err == nil {
+		t.Fatalf("walkPDFs on a missing root returned %d files and no error", len(pdfs))
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("walkPDFs error = %v, want one wrapping fs.ErrNotExist", err)
+	}
+}
 
 func TestProfileFromXMP(t *testing.T) {
 	cases := []struct {
