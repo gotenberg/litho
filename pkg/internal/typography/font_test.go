@@ -2,6 +2,7 @@ package typography
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -120,6 +121,25 @@ func TestGlyphWidth_Type3_FallbackToWidths(t *testing.T) {
 	// Falls back to Widths array: 750
 	if w != 750 {
 		t.Errorf("got width %v, want 750", w)
+	}
+}
+
+// TestGlyphWidth_Type3_WidthsInGlyphSpace pins that a Type 3 /Widths
+// entry is read in glyph space and scaled by the FontMatrix (ISO 32000-1,
+// 9.6.5, Table 112): 96 units under a 0.00999 matrix is 959.04 text-space
+// thousandths, not 96.
+func TestGlyphWidth_Type3_WidthsInGlyphSpace(t *testing.T) {
+	font := &Font{
+		Subtype:     "Type3",
+		Encoding:    map[byte]rune{},
+		FontMatrix:  [6]float64{0.00999, 0, 0, 0.00999, 0, 0},
+		Type3Widths: map[string]float64{},
+		FirstChar:   65,
+		Widths:      []float64{96},
+	}
+
+	if w := font.GlyphWidth(65); math.Abs(w-959.04) > 1e-9 {
+		t.Errorf("got width %v, want 959.04", w)
 	}
 }
 

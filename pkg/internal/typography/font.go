@@ -87,9 +87,12 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 				return w * f.FontMatrix[0] * 1000
 			}
 		}
+		// A Type 3 /Widths entry is in glyph space (ISO 32000-1, 9.6.5,
+		// Table 112), so the FontMatrix maps it to text space as it maps
+		// the d0/d1 width above.
 		idx := charCode - f.FirstChar
 		if idx >= 0 && idx < len(f.Widths) && f.Widths[idx] > 0 {
-			return f.Widths[idx]
+			return f.Widths[idx] * f.FontMatrix[0] * 1000
 		}
 		if f.MissingWidth > 0 {
 			return f.MissingWidth
