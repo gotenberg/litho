@@ -76,16 +76,16 @@ func DefaultLab(depths [3]int) LabParams {
 func rankColours(specs []colourSpec) []Colour {
 	ranked := slices.Clone(specs)
 	slices.SortStableFunc(ranked, func(a, b colourSpec) int {
-		if a.precedence != b.precedence {
-			return b.precedence - a.precedence
+		if a.Precedence != b.Precedence {
+			return b.Precedence - a.Precedence
 		}
-		return approximationRank(a.approximation) - approximationRank(b.approximation)
+		return approximationRank(a.Approximation) - approximationRank(b.Approximation)
 	})
 	colours := make([]Colour, len(ranked))
 	for i, c := range ranked {
-		switch c.method {
+		switch c.Method {
 		case methodEnumerated:
-			colours[i].Enumerated = int(c.enumerated)
+			colours[i].Enumerated = int(c.EnumCS)
 			colours[i].Lab = c.lab
 		case methodICC, methodAnyICC:
 			colours[i].ICC = c.profile

@@ -294,3 +294,36 @@ func TestParseCodestream_ZeroPsot(t *testing.T) {
 		t.Errorf("tile data = % X", got)
 	}
 }
+
+// TestReadSIZ pins that [ReadSIZ] reads the component count and entries of a
+// SIZ marker segment without judging them, and rejects parameters too short
+// for the entries Csiz states.
+func TestReadSIZ(t *testing.T) {
+	t.Parallel()
+
+	body := make([]byte, sizFixedBytes+3*3)
+	binary.BigEndian.PutUint16(body[34:], 3)
+	for i := range 3 {
+		// The third component is 38 bits deep: ReadSIZ reports the entry as
+		// it stands, whatever T.800, Table A.11 allows.
+		body[sizFixedBytes+3*i] = byte(0x07 + 15*i)
+		body[sizFixedBytes+3*i+1], body[sizFixedBytes+3*i+2] = 1, 1
+	}
+	siz, err := ReadSIZ(body)
+	if err != nil {
+		t.Fatalf("ReadSIZ: %v", err)
+	}
+	if len(siz.Components) != 3 || siz.Components[0].Ssiz != 0x07 || siz.Components[2].Ssiz != 0x25 {
+		t.Errorf("components = %+v, want 3 with Ssiz 0x07, 0x16 and 0x25", siz.Components)
+	}
+	if siz.Components[0].XRsiz != 1 || siz.Components[0].YRsiz != 1 {
+		t.Errorf("component 0 separation = %dx%d, want 1x1", siz.Components[0].XRsiz, siz.Components[0].YRsiz)
+	}
+
+	if _, err := ReadSIZ(body[:sizFixedBytes+3*3-1]); !errors.Is(err, ErrMalformed) {
+		t.Errorf("ReadSIZ of truncated entries = %v, want %v", err, ErrMalformed)
+	}
+	if _, err := ReadSIZ(make([]byte, 30)); !errors.Is(err, ErrMalformed) {
+		t.Errorf("ReadSIZ of 30 bytes = %v, want %v", err, ErrMalformed)
+	}
+}

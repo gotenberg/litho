@@ -28,7 +28,7 @@ func FuzzDecode(f *testing.F) {
 	// and an exponent of 31 in the QCD, and code-blocks past maxPlanes, from
 	// an RGN shift of 255 after the SIZ.
 	f.Add(annexJ10)
-	f.Add(slices.Concat(signatureBox, fileTypeBox, boxOf(boxHeader, imageHeaderBox, greyBox), boxOf(boxCodestream, annexJ10)))
+	f.Add(slices.Concat(signatureBox, fileTypeBox, boxOf(BoxHeader, imageHeaderBox, greyBox), boxOf(boxCodestream, annexJ10)))
 	f.Add(annexJ10[:90])
 	wide := slices.Clone(annexJ10)
 	wide[49], wide[50] = 0xE0, 0xF8
@@ -101,5 +101,44 @@ func FuzzDecode(f *testing.F) {
 		if w, h := img.DefaultSize(); len(out) != w*h*len(chs) {
 			t.Fatalf("rendered %d bytes for %dx%d grid points of %d channels", len(out), w, h, len(chs))
 		}
+	})
+}
+
+// FuzzReadBoxes asserts the JP2 box walker never panics on crafted input, and
+// that every box it returns lies inside the data.
+func FuzzReadBoxes(f *testing.F) {
+	f.Add([]byte("\x00\x00\x00\x0cjP  \r\n\x87\n")) // JP2 signature box.
+	f.Add([]byte("\x00\x00"))                       // Truncated box header.
+	f.Fuzz(func(t *testing.T, data []byte) {
+		boxes, _ := ReadBoxes(data)
+		for _, b := range boxes {
+			if b.Offset < 0 || b.Offset+len(b.Body) > len(data) {
+				t.Fatalf("box %q at %d with %d bytes overruns %d bytes", boxName(b.Type), b.Offset, len(b.Body), len(data))
+			}
+		}
+	})
+}
+
+// FuzzReadColourSpec asserts the Colour Specification box reader never panics
+// on crafted input.
+func FuzzReadColourSpec(f *testing.F) {
+	f.Add([]byte{0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x10}) // METH 1, APPROX 1, EnumCS.
+	f.Add([]byte{0x01})                                     // Truncated.
+	f.Fuzz(func(_ *testing.T, data []byte) {
+		_, _ = ReadColourSpec(data)
+		_, _, _ = readColour(data)
+	})
+}
+
+// FuzzReadSIZ asserts the SIZ marker segment reader never panics on crafted
+// input. The seeds are a SIZ of one component and parameters cut before Csiz.
+func FuzzReadSIZ(f *testing.F) {
+	siz := make([]byte, sizFixedBytes+3)
+	siz[35] = 0x01 // Csiz = 1 component.
+	f.Add(siz)
+	f.Add(siz[:4])
+	f.Fuzz(func(_ *testing.T, data []byte) {
+		_, _ = ReadSIZ(data)
+		_, _ = ReadImageHeader(data)
 	})
 }

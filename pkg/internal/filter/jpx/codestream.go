@@ -262,27 +262,81 @@ type ppmSegment struct {
 	data []byte
 }
 
+// SIZ holds the fields of a SIZ marker segment (T.800, A.5.1).
+type SIZ struct {
+	// Rsiz states the capabilities a decoder needs (T.800, Table A.10).
+	Rsiz uint16
+	// Xsiz, Ysiz, XOsiz and YOsiz place the image area on the reference
+	// grid; XTsiz, YTsiz, XTOsiz and YTOsiz place the tiles.
+	Xsiz, Ysiz, XOsiz, YOsiz     uint32
+	XTsiz, YTsiz, XTOsiz, YTOsiz uint32
+	// Components holds one entry per component, Csiz of them.
+	Components []SIZComponent
+}
+
+// SIZComponent is what a SIZ marker segment says of one component (T.800,
+// Table A.11).
+type SIZComponent struct {
+	// Ssiz is the depth minus one in the low seven bits and the sign in the
+	// high bit.
+	Ssiz byte
+	// XRsiz and YRsiz are the component's sample separation.
+	XRsiz, YRsiz byte
+}
+
+// sizFixedBytes is the size of the SIZ parameters before the component
+// entries, Rsiz through Csiz (T.800, Table A.9).
+const sizFixedBytes = 36
+
+// ReadSIZ reads the parameters of a SIZ marker segment, the bytes after its
+// marker and Lsiz (T.800, A.5.1), without judging them. It fails when the
+// parameters are too short for Csiz or for the Csiz component entries it
+// states, and then holds the fixed fields when they are there. Bytes past the
+// last component entry are ignored.
+func ReadSIZ(body []byte) (SIZ, error) {
+	if len(body) < sizFixedBytes {
+		return SIZ{}, fmt.Errorf("%w: SIZ marker segment of %d bytes", ErrMalformed, len(body))
+	}
+	u := func(i int) uint32 { return binary.BigEndian.Uint32(body[2+4*i:]) }
+	siz := SIZ{
+		Rsiz: binary.BigEndian.Uint16(body),
+		Xsiz: u(0), Ysiz: u(1), XOsiz: u(2), YOsiz: u(3),
+		XTsiz: u(4), YTsiz: u(5), XTOsiz: u(6), YTOsiz: u(7),
+	}
+	n := int(binary.BigEndian.Uint16(body[34:]))
+	if len(body) < sizFixedBytes+3*n {
+		return siz, fmt.Errorf("%w: SIZ marker segment of %d bytes for %d components", ErrMalformed, len(body), n)
+	}
+	siz.Components = make([]SIZComponent, n)
+	for i := range siz.Components {
+		c := body[sizFixedBytes+3*i:]
+		siz.Components[i] = SIZComponent{Ssiz: c[0], XRsiz: c[1], YRsiz: c[2]}
+	}
+	return siz, nil
+}
+
 // parseSIZ reads the SIZ marker segment (T.800, A.5.1) and checks the
 // geometry constraints of B.2 and B.3.
 func parseSIZ(body []byte) (*codestream, error) {
-	if len(body) < 36 {
-		return nil, fmt.Errorf("%w: SIZ marker segment of %d bytes", ErrMalformed, len(body))
+	siz, err := ReadSIZ(body)
+	if len(body) < sizFixedBytes {
+		return nil, err
 	}
-	rsiz := binary.BigEndian.Uint16(body)
-	// T.800, Table A.10 NOTE 1: the two most significant bits of Rsiz signal
+	// Rsiz is judged before the component entries, so a codestream that
+	// needs capabilities this package lacks is refused as unsupported however
+	// its entries read. T.800, Table A.10 NOTE 1: the two most significant bits of Rsiz signal
 	// capabilities of ISO/IEC 15444-2 or extended capabilities, which change
 	// decoding in ways this package does not implement.
-	if rsiz&0xC000 != 0 {
-		return nil, fmt.Errorf("%w: Rsiz 0x%04X requires capabilities beyond ITU-T T.800", ErrUnsupported, rsiz)
-	}
-	u := func(i int) int { return int(binary.BigEndian.Uint32(body[2+4*i:])) }
-	cs := &codestream{
-		x1: u(0), y1: u(1), x0: u(2), y0: u(3),
-		tileW: u(4), tileH: u(5), tileX0: u(6), tileY0: u(7),
+	if siz.Rsiz&0xC000 != 0 {
+		return nil, fmt.Errorf("%w: Rsiz 0x%04X requires capabilities beyond ITU-T T.800", ErrUnsupported, siz.Rsiz)
 	}
 	n := int(binary.BigEndian.Uint16(body[34:]))
-	if n < 1 || n > maxComponents || len(body) != 36+3*n {
+	if err != nil || n < 1 || n > maxComponents || len(body) != sizFixedBytes+3*n {
 		return nil, fmt.Errorf("%w: SIZ marker segment of %d bytes for %d components", ErrMalformed, len(body), n)
+	}
+	cs := &codestream{
+		x1: int(siz.Xsiz), y1: int(siz.Ysiz), x0: int(siz.XOsiz), y0: int(siz.YOsiz),
+		tileW: int(siz.XTsiz), tileH: int(siz.YTsiz), tileX0: int(siz.XTOsiz), tileY0: int(siz.YTOsiz),
 	}
 	// T.800, B.2 and B.3: a non-empty image area, tiles of at least one grid
 	// point, a tile grid that starts no later than the image area (B-3) and a
@@ -301,16 +355,15 @@ func parseSIZ(body []byte) (*codestream, error) {
 		return nil, fmt.Errorf("%w: %dx%d tiles, more than tile indices can address", ErrMalformed, cs.tilesX, cs.tilesY)
 	}
 	cs.components = make([]component, n)
-	for i := range cs.components {
-		c := body[36+3*i:]
+	for i, c := range siz.Components {
 		cs.components[i] = component{
-			precision: int(c[0]&0x7F) + 1,
-			signed:    c[0]&0x80 != 0,
-			dx:        int(c[1]),
-			dy:        int(c[2]),
+			precision: int(c.Ssiz&0x7F) + 1,
+			signed:    c.Ssiz&0x80 != 0,
+			dx:        int(c.XRsiz),
+			dy:        int(c.YRsiz),
 		}
-		if cs.components[i].precision > maxPrecision || c[1] == 0 || c[2] == 0 {
-			return nil, fmt.Errorf("%w: component %d has Ssiz 0x%02X and separation %dx%d", ErrMalformed, i, c[0], c[1], c[2])
+		if cs.components[i].precision > maxPrecision || c.XRsiz == 0 || c.YRsiz == 0 {
+			return nil, fmt.Errorf("%w: component %d has Ssiz 0x%02X and separation %dx%d", ErrMalformed, i, c.Ssiz, c.XRsiz, c.YRsiz)
 		}
 	}
 	cs.tiles = make([]*tile, cs.tilesX*cs.tilesY)

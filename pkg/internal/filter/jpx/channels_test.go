@@ -40,8 +40,8 @@ func paletteFile(entries int, extra ...[]byte) []byte {
 	for j := range entries {
 		pclr = append(pclr, byte(j), byte(255-j), byte(j/2))
 	}
-	header := slices.Concat(append([][]byte{imageHeaderBox, boxOf(boxColour, []byte{methodEnumerated, 0, 0, 0, 0, 0, ColourSRGB}), boxOf(boxPalette, pclr)}, extra...)...)
-	return slices.Concat(signatureBox, fileTypeBox, boxOf(boxHeader, header), boxOf(boxCodestream, annexJ10))
+	header := slices.Concat(append([][]byte{imageHeaderBox, boxOf(BoxColour, []byte{methodEnumerated, 0, 0, 0, 0, 0, ColourSRGB}), boxOf(boxPalette, pclr)}, extra...)...)
+	return slices.Concat(signatureBox, fileTypeBox, boxOf(BoxHeader, header), boxOf(boxCodestream, annexJ10))
 }
 
 // TestChannels_Palette maps the single J.10 component through the three

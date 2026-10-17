@@ -2,12 +2,12 @@ package compliance
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 )
 
 // jpxRules holds the 5 rule constants for a given PDF/A part.
@@ -60,14 +60,14 @@ func checkJPXImage(ctx context.Context, doc *document.Document, stream ast.PdfSt
 		return nil
 	}
 
-	if isJP2Container(data) {
+	if jpx.IsJP2(data) {
 		// Per ISO 19005-2 §6.2.8.3, the colour-spec checks (t2/t3/t4) are
 		// waived when the image XObject supplies its own /ColorSpace.
-		return checkJP2Container(data, name, pageNum, rules, imageHasColorSpace(ctx, doc, stream.Dict))
+		return checkJP2Container(data, name, pageNum, rules, imageHasColorSpace(ctx, doc, stream.Dict), doc.Logger)
 	}
 	// Raw J2K codestream: FF 4F (SOC) FF 51 (SIZ).
 	if data[0] == 0xFF && data[1] == 0x4F && data[2] == 0xFF && data[3] == 0x51 {
-		return checkRawJ2K(data, name, pageNum, rules)
+		return checkRawJ2K(data, name, pageNum, rules, doc.Logger)
 	}
 
 	return nil
@@ -91,72 +91,6 @@ func imageHasColorSpace(ctx context.Context, doc *document.Document, dict ast.Pd
 	return resolved != nil
 }
 
-// isJP2Container checks for the JP2 signature box: 00 00 00 0C 6A 50 20 20 0D 0A 87 0A.
-func isJP2Container(data []byte) bool {
-	return len(data) >= 12 &&
-		data[0] == 0x00 && data[1] == 0x00 && data[2] == 0x00 && data[3] == 0x0C &&
-		data[4] == 0x6A && data[5] == 0x50 && data[6] == 0x20 && data[7] == 0x20 &&
-		data[8] == 0x0D && data[9] == 0x0A && data[10] == 0x87 && data[11] == 0x0A
-}
-
-// JP2 box type constants.
-const (
-	boxTypeJP2H = 0x6A703268 // 'jp2h'
-	boxTypeIHDR = 0x69686472 // 'ihdr'
-	boxTypeCOLR = 0x636F6C72 // 'colr'
-	boxTypeBPCC = 0x62706363 // 'bpcc'
-)
-
-type jp2Box struct {
-	boxType uint32
-	payload []byte
-}
-
-func parseJP2Boxes(data []byte) []jp2Box {
-	var boxes []jp2Box
-	off := 0
-	for off+8 <= len(data) {
-		length := int(binary.BigEndian.Uint32(data[off : off+4]))
-		btype := binary.BigEndian.Uint32(data[off+4 : off+8])
-
-		headerSize := 8
-		if length == 1 && off+16 <= len(data) {
-			// Extended length.
-			length = int(binary.BigEndian.Uint64(data[off+8 : off+16])) //nolint:gosec // G115: JP2 box lengths are bounded by file size.
-			headerSize = 16
-		}
-		if length == 0 {
-			// Box extends to end of data.
-			boxes = append(boxes, jp2Box{boxType: btype, payload: data[off+headerSize:]})
-			break
-		}
-		if length < headerSize || off+length > len(data) {
-			break // Truncated or invalid.
-		}
-		boxes = append(boxes, jp2Box{boxType: btype, payload: data[off+headerSize : off+length]})
-		off += length
-	}
-	return boxes
-}
-
-// colrInfo holds parsed data from a colr box.
-type colrInfo struct {
-	meth   byte
-	approx byte
-	enumCS uint32
-}
-
-func parseCOLR(payload []byte) (colrInfo, bool) {
-	if len(payload) < 3 {
-		return colrInfo{}, false
-	}
-	ci := colrInfo{meth: payload[0], approx: payload[2]}
-	if ci.meth == 0x01 && len(payload) >= 7 {
-		ci.enumCS = binary.BigEndian.Uint32(payload[3:7])
-	}
-	return ci, true
-}
-
 // selectedColr is the effective colour specification for a JP2 container.
 // Per ISO 19005-2 §6.2.8.3, a conforming reader uses the colour spec whose
 // APPROX field is 0x01; its METH and enumerated colour space are the effective
@@ -164,27 +98,34 @@ func parseCOLR(payload []byte) (colrInfo, bool) {
 // spec is used; otherwise no effective colour space is defined (methSet false).
 type selectedColr struct {
 	methSet   bool
-	meth      byte
+	meth      int
 	enumCSSet bool
 	enumCS    uint32
 }
 
-func selectColr(boxes []colrInfo) selectedColr {
+// selectColr picks the effective colour specification the way veraPDF does
+// (veraPDF-parser, JPEG2000.parseHeader): METH from the first box with APPROX
+// 0x01, EnumCS from the first such box of METH 1, and the sole box when none
+// has APPROX 0x01. This is compliance's reading on purpose, not the decoder's:
+// [jpx.Image.Colours] ranks the boxes by PREC, then APPROX, as ISO 32000-1,
+// 7.4.9 has a PDF reader try them, and drops a method it cannot read, while
+// ISO 19005-2, 6.2.8.3 names the APPROX 0x01 box and judges every METH.
+func selectColr(boxes []jpx.ColourSpec) selectedColr {
 	var s selectedColr
 	anyApprox := false
 	for _, c := range boxes {
-		if c.approx != 0x01 {
+		if c.Approximation != 0x01 {
 			continue
 		}
 		anyApprox = true
 		if !s.methSet {
 			s.methSet = true
-			s.meth = c.meth
+			s.meth = c.Method
 		}
 		// An enumerated colour space exists only for METH 0x01.
-		if c.meth == 0x01 && !s.enumCSSet {
+		if c.Method == 0x01 && !s.enumCSSet {
 			s.enumCSSet = true
-			s.enumCS = c.enumCS
+			s.enumCS = c.EnumCS
 		}
 	}
 	if anyApprox {
@@ -192,54 +133,79 @@ func selectColr(boxes []colrInfo) selectedColr {
 	}
 	if len(boxes) == 1 {
 		s.methSet = true
-		s.meth = boxes[0].meth
-		if boxes[0].meth == 0x01 {
+		s.meth = boxes[0].Method
+		if boxes[0].Method == 0x01 {
 			s.enumCSSet = true
-			s.enumCS = boxes[0].enumCS
+			s.enumCS = boxes[0].EnumCS
 		}
 	}
 	return s
 }
 
-func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRules, hasColorSpace bool) []Violation {
-	boxes := parseJP2Boxes(data)
+// checkJP2Container judges the JP2 Header box of a JP2 file.
+//
+// The boxes are read with [jpx.ReadBoxes], and a malformed box header ends the
+// walk without discarding the boxes before it: the rules judge what the
+// header states, so a file damaged after its header is still judged on it.
+// The first JP2 Header box is judged wherever it sits among the top-level
+// boxes, and a Colour Specification box is counted whatever its method, since
+// t2 and t3 judge the count and the METH of every box (ISO 19005-2,
+// 6.2.8.3), where a decoder skips a method it does not know (T.800, Table
+// I.9). An XLBox of 0, which T.800, I.4 does not define, ends the walk as any
+// other malformed length does.
+//
+// # Corpus evidence
+//
+//   - All corpora: the 341 JPXDecode streams in 55 files judge identically,
+//     at every PDF/A-2, -3 and -4 profile, under this walk and under the
+//     compliance-only walk it replaced.
+func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRules, hasColorSpace bool, logger *slog.Logger) []Violation {
+	boxes, err := jpx.ReadBoxes(data)
+	if err != nil {
+		logger.Debug("compliance.jpx: JP2 box walk stopped", "xobject", name, "page", pageNum, "error", err)
+	}
 
-	// Find jp2h superbox.
-	var jp2hPayload []byte
+	var (
+		jp2h      []byte
+		foundJP2H bool
+	)
 	for _, b := range boxes {
-		if b.boxType == boxTypeJP2H {
-			jp2hPayload = b.payload
+		if b.Type == jpx.BoxHeader {
+			jp2h, foundJP2H = b.Body, true
 			break
 		}
 	}
-	if jp2hPayload == nil {
+	if !foundJP2H {
 		return nil
 	}
 
-	inner := parseJP2Boxes(jp2hPayload)
-
-	// Parse ihdr box.
-	var numComponents int
-	var ihdrBPC byte
-	var bpccSsiz []byte
-	for _, b := range inner {
-		switch b.boxType {
-		case boxTypeIHDR:
-			if len(b.payload) >= 14 {
-				numComponents = int(binary.BigEndian.Uint16(b.payload[8:10]))
-				ihdrBPC = b.payload[10]
-			}
-		case boxTypeBPCC:
-			bpccSsiz = b.payload
-		}
+	inner, err := jpx.ReadBoxes(jp2h)
+	if err != nil {
+		logger.Debug("compliance.jpx: JP2 Header box walk stopped", "xobject", name, "page", pageNum, "error", err)
 	}
 
-	// Parse all colr boxes.
-	var colrBoxes []colrInfo
+	var (
+		numComponents int
+		ihdrBPC       byte
+		bpccSsiz      []byte
+		colrBoxes     []jpx.ColourSpec
+	)
 	for _, b := range inner {
-		if b.boxType == boxTypeCOLR {
-			if ci, ok := parseCOLR(b.payload); ok {
-				colrBoxes = append(colrBoxes, ci)
+		switch b.Type {
+		case jpx.BoxImageHeader:
+			// A short Image Header box states nothing; the last readable one
+			// stands.
+			if h, err := jpx.ReadImageHeader(b.Body); err == nil {
+				numComponents = h.Components
+				ihdrBPC = h.BPC
+			}
+		case jpx.BoxBitsPerComponent:
+			bpccSsiz = b.Body
+		case jpx.BoxColour:
+			// A box too short for METH, PREC and APPROX states no colour
+			// specification and is not counted.
+			if c, err := jpx.ReadColourSpec(b.Body); err == nil {
+				colrBoxes = append(colrBoxes, c)
 			}
 		}
 	}
@@ -255,7 +221,7 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 	// The colour-spec rules (t2/t3/t4) defer to an explicit image /ColorSpace.
 	approxCount := 0
 	for _, c := range colrBoxes {
-		if c.approx == 0x01 {
+		if c.Approximation == 0x01 {
 			approxCount++
 		}
 	}
@@ -280,7 +246,7 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 	}
 
 	// t4: the effective enumerated colour space must not be 19 (CIEJab).
-	if !hasColorSpace && sel.enumCSSet && sel.enumCS == 19 {
+	if !hasColorSpace && sel.enumCSSet && sel.enumCS == jpx.ColourCIEJab {
 		results = append(results, failf(rules.t4,
 			"page %d, XObject %s: CIEJab colour space", pageNum, name)...)
 	}
@@ -299,16 +265,27 @@ func checkJP2Container(data []byte, name ast.PdfName, pageNum int, rules jpxRule
 	return results
 }
 
-func checkRawJ2K(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []Violation {
-	numComponents, ssiz, err := parseJ2KSIZMarker(data)
-	if err != nil {
-		// Pure-data helper: no *document.Document in scope, so the
-		// parse-failure log goes to the package-level slog rather than
-		// the document logger. Malformed JPX codestreams produce a
-		// silent skip; a higher-level check will emit a rule violation
-		// if a JPX image is expected to parse.
-		slog.Debug("compliance.jpx: cannot parse J2K SIZ marker", "error", err)
+// checkRawJ2K judges a bare codestream by its SIZ marker segment.
+//
+// The SIZ parameters are read from where T.800, A.5.1 puts them, right after
+// SOC, the SIZ marker and Lsiz, and are not bounded by Lsiz: Csiz and the
+// component entries the rules judge are the ones the codestream states, and a
+// wrong Lsiz does not change them.
+func checkRawJ2K(data []byte, name ast.PdfName, pageNum int, rules jpxRules, logger *slog.Logger) []Violation {
+	const sizParams = 6 // SOC, the SIZ marker and Lsiz.
+	if len(data) < sizParams {
 		return nil
+	}
+	siz, err := jpx.ReadSIZ(data[sizParams:])
+	if err != nil || len(siz.Components) == 0 {
+		// A codestream whose SIZ cannot be read states no channels to judge.
+		logger.Debug("compliance.jpx: cannot read the J2K SIZ marker segment", "xobject", name, "page", pageNum, "error", err)
+		return nil
+	}
+	numComponents := len(siz.Components)
+	ssiz := make([]byte, numComponents)
+	for i, c := range siz.Components {
+		ssiz[i] = c.Ssiz
 	}
 
 	var results []Violation
@@ -324,49 +301,6 @@ func checkRawJ2K(data []byte, name ast.PdfName, pageNum int, rules jpxRules) []V
 
 	return results
 }
-
-// parseJ2KSIZMarker parses the SIZ marker from a raw J2K codestream.
-// Layout: [FF 4F] SOC [FF 51] SIZ marker
-//
-//	Lsiz(2) Rsiz(2) Xsiz(4) Ysiz(4) XOsiz(4) YOsiz(4)
-//	XTsiz(4) YTsiz(4) XTOsiz(4) YTOsiz(4) Csiz(2)
-//	then per component: Ssiz(1) XRsiz(1) YRsiz(1)
-func parseJ2KSIZMarker(data []byte) (int, []byte, error) {
-	// SIZ marker starts at offset 2 (after SOC).
-	// Csiz at offset 2+2+2+2+4*8 = 40 from data start? No:
-	// offset 0: FF 4F (SOC)
-	// offset 2: FF 51 (SIZ marker)
-	// offset 4: Lsiz (2 bytes)
-	// offset 6: Rsiz (2 bytes)
-	// offset 8: Xsiz (4 bytes)
-	// ...
-	// offset 38: Csiz (2 bytes) = 4 + 2 + 2 + 4*8 = 4+2+2+32 = 40... let me recount:
-	// After FF 51: Lsiz(2), Rsiz(2), Xsiz(4), Ysiz(4), XOsiz(4), YOsiz(4),
-	//              XTsiz(4), YTsiz(4), XTOsiz(4), YTOsiz(4), Csiz(2)
-	// = 2+2+4+4+4+4+4+4+4+4+2 = 38 bytes from start of Lsiz
-	// The Lsiz field is at data[4], so Csiz is at data[4+2+2+4*8] = data[4+36] = data[40]
-	const csizOffset = 40
-	if len(data) < csizOffset+2 {
-		return 0, nil, errTruncated
-	}
-	csiz := int(binary.BigEndian.Uint16(data[csizOffset : csizOffset+2]))
-	compStart := csizOffset + 2
-	needed := compStart + csiz*3
-	if len(data) < needed || csiz == 0 {
-		return 0, nil, errTruncated
-	}
-	ssiz := make([]byte, csiz)
-	for i := range csiz {
-		ssiz[i] = data[compStart+i*3]
-	}
-	return csiz, ssiz, nil
-}
-
-var errTruncated = &truncatedError{}
-
-type truncatedError struct{}
-
-func (e *truncatedError) Error() string { return "truncated JPEG2000 data" }
 
 // checkBitDepths validates t5: all channels must have bit depth 1-38 and
 // all channels must have the same bit depth.

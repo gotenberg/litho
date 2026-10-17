@@ -6,11 +6,15 @@ import (
 	"fmt"
 )
 
-// Box types, ITU-T T.800, Table I.2.
+// Box types, ITU-T T.800, Table I.2. The exported ones are those a reader of
+// the file structure needs beside the decoder, such as the PDF/A checks of
+// ISO 19005-2, 6.2.8.3.
 const (
 	boxSignature         = 0x6A502020 // 'jP\040\040'
-	boxHeader            = 0x6A703268 // 'jp2h'
-	boxColour            = 0x636F6C72 // 'colr'
+	BoxHeader            = 0x6A703268 // 'jp2h'
+	BoxImageHeader       = 0x69686472 // 'ihdr'
+	BoxBitsPerComponent  = 0x62706363 // 'bpcc'
+	BoxColour            = 0x636F6C72 // 'colr'
 	boxPalette           = 0x70636C72 // 'pclr'
 	boxComponentMapping  = 0x636D6170 // 'cmap'
 	boxChannelDefinition = 0x63646566 // 'cdef'
@@ -20,27 +24,45 @@ const (
 // signature is the content of the JPEG 2000 Signature box (T.800, I.5.1).
 var signature = []byte{0x0D, 0x0A, 0x87, 0x0A}
 
+// wholeSignatureBox is the whole Signature box, LBox 12 included, as T.800, I.5.1
+// fixes it.
+var wholeSignatureBox = []byte{0x00, 0x00, 0x00, 0x0C, 0x6A, 0x50, 0x20, 0x20, 0x0D, 0x0A, 0x87, 0x0A}
+
 // codestreamStart is the SOC marker followed by the SIZ marker, which T.800,
 // A.4.1 and A.5.1 require at the start of every codestream.
 var codestreamStart = []byte{0xFF, 0x4F, 0xFF, 0x51}
 
-// box is one box of a JP2 file (T.800, I.4): its type and its contents.
-type box struct {
-	kind uint32
-	body []byte
+// IsJP2 reports whether data starts with the 12-byte Signature box of a JP2
+// file (T.800, I.5.1).
+func IsJP2(data []byte) bool {
+	return bytes.HasPrefix(data, wholeSignatureBox)
 }
 
-// readBoxes splits b into consecutive boxes (T.800, I.4). A box whose LBox is
+// Box is one box of a JP2 file (T.800, I.4).
+type Box struct {
+	// Type is TBox, the box type.
+	Type uint32
+	// Offset is where the box header starts in the bytes it was read from.
+	Offset int
+	// Body is the box contents, after LBox, TBox and XLBox.
+	Body []byte
+}
+
+// ReadBoxes splits b into consecutive boxes (T.800, I.4). A box whose LBox is
 // 0 extends to the end of b.
+//
+// When a box header is malformed, ReadBoxes returns the boxes before it with
+// an error wrapping [ErrMalformed], so a reader that judges the file structure
+// rather than decoding it can still look at what precedes the damage.
 //
 // The loop is bounded by len(b): every box header is at least 8 bytes and
 // each iteration consumes one.
-func readBoxes(b []byte) ([]box, error) {
-	var boxes []box
+func ReadBoxes(b []byte) ([]Box, error) {
+	var boxes []Box
 	for off := 0; off < len(b); {
 		rest := b[off:]
 		if len(rest) < 8 {
-			return nil, fmt.Errorf("%w: %d stray bytes after the last box", ErrMalformed, len(rest))
+			return boxes, fmt.Errorf("%w: %d stray bytes after the last box", ErrMalformed, len(rest))
 		}
 		length := uint64(binary.BigEndian.Uint32(rest))
 		kind := binary.BigEndian.Uint32(rest[4:])
@@ -50,7 +72,7 @@ func readBoxes(b []byte) ([]box, error) {
 			length = uint64(len(rest))
 		case 1:
 			if len(rest) < 16 {
-				return nil, fmt.Errorf("%w: box at offset %d has a truncated XLBox", ErrMalformed, off)
+				return boxes, fmt.Errorf("%w: box at offset %d has a truncated XLBox", ErrMalformed, off)
 			}
 			length = binary.BigEndian.Uint64(rest[8:])
 			head = 16
@@ -58,10 +80,10 @@ func readBoxes(b []byte) ([]box, error) {
 		// Per T.800, Table I.1, LBox 2 to 7 are reserved and any length counts
 		// the header it sits in.
 		if length < head || length > uint64(len(rest)) {
-			return nil, fmt.Errorf("%w: box %q at offset %d declares %d bytes, %d remain", ErrMalformed, boxName(kind), off, length, len(rest))
+			return boxes, fmt.Errorf("%w: box %q at offset %d declares %d bytes, %d remain", ErrMalformed, boxName(kind), off, length, len(rest))
 		}
 		whole := rest[:length]
-		boxes = append(boxes, box{kind: kind, body: whole[head:]})
+		boxes = append(boxes, Box{Type: kind, Offset: off, Body: whole[head:]})
 		off += len(whole)
 	}
 	return boxes, nil
@@ -70,6 +92,74 @@ func readBoxes(b []byte) ([]box, error) {
 // boxName renders a box type as its four characters.
 func boxName(kind uint32) string {
 	return string(binary.BigEndian.AppendUint32(nil, kind))
+}
+
+// ImageHeader holds the fields of an Image Header box (T.800, I.5.3.1).
+type ImageHeader struct {
+	Height, Width uint32
+	// Components is NC, the number of components.
+	Components int
+	// BPC is the bits-per-component byte: the depth minus one in the low
+	// seven bits and the sign in the high bit, or 0xFF when the depths
+	// differ and a Bits Per Component box states them (T.800, Table I.5).
+	BPC byte
+	// Compression, UnknownColourspace and IPR are C, UnkC and IPR.
+	Compression, UnknownColourspace, IPR byte
+}
+
+// imageHeaderBytes is the size of an Image Header box's contents (T.800,
+// I.5.3.1).
+const imageHeaderBytes = 14
+
+// ReadImageHeader reads the contents of an Image Header box (T.800, I.5.3.1).
+// Bytes past the 14 the box holds are ignored.
+func ReadImageHeader(body []byte) (ImageHeader, error) {
+	if len(body) < imageHeaderBytes {
+		return ImageHeader{}, fmt.Errorf("%w: Image Header box of %d bytes", ErrMalformed, len(body))
+	}
+	return ImageHeader{
+		Height:             binary.BigEndian.Uint32(body),
+		Width:              binary.BigEndian.Uint32(body[4:]),
+		Components:         int(binary.BigEndian.Uint16(body[8:])),
+		BPC:                body[10],
+		Compression:        body[11],
+		UnknownColourspace: body[12],
+		IPR:                body[13],
+	}, nil
+}
+
+// ColourSpec holds the fields of one Colour Specification box, whatever its
+// method (T.800, I.5.3.3; ISO/IEC 15444-2, M.11.7).
+type ColourSpec struct {
+	// Method is METH.
+	Method int
+	// Precedence is PREC, a signed byte (ISO/IEC 15444-2, Table M.24).
+	Precedence int
+	// Approximation is APPROX.
+	Approximation int
+	// EnumCS is the enumerated colour space of a method 1 box that holds
+	// one, and 0 otherwise.
+	EnumCS uint32
+	// Params is what follows APPROX: EnumCS and the EP fields for method 1,
+	// the ICC profile for methods 2 and 3.
+	Params []byte
+}
+
+// ReadColourSpec reads the fields of a Colour Specification box (T.800,
+// I.5.3.3). It fails only on a box too short for METH, PREC and APPROX: what
+// a method requires of the rest is for the reader of that method to check.
+func ReadColourSpec(body []byte) (ColourSpec, error) {
+	if len(body) < 3 {
+		return ColourSpec{}, fmt.Errorf("%w: Colour Specification box of %d bytes", ErrMalformed, len(body))
+	}
+	c := ColourSpec{Method: int(body[0]), Precedence: int(body[1]), Approximation: int(body[2]), Params: body[3:]}
+	if c.Precedence >= 128 {
+		c.Precedence -= 256
+	}
+	if c.Method == methodEnumerated && len(c.Params) >= 4 {
+		c.EnumCS = binary.BigEndian.Uint32(c.Params)
+	}
+	return c, nil
 }
 
 // fileHeader holds what the JP2 Header box says about turning codestream
@@ -95,16 +185,12 @@ const (
 	methodAnyICC     = 3
 )
 
-// colourSpec is one Colour Specification box (T.800, I.5.3.3).
+// colourSpec is one Colour Specification box (T.800, I.5.3.3) of a method
+// this package knows. PREC and APPROX, which a JP2 file sets to 0, rank a JPX
+// file's boxes (ISO/IEC 15444-2, M.11.7.2).
 type colourSpec struct {
-	method int
-	// precedence and approximation are the PREC and APPROX fields, which a
-	// JP2 file sets to 0 and a JPX file uses to rank its boxes (ISO/IEC
-	// 15444-2, M.11.7.2).
-	precedence, approximation int
-	// enumerated is the EnumCS value when method is methodEnumerated.
-	enumerated uint32
-	// profile is the ICC profile when method is methodICC or methodAnyICC.
+	ColourSpec
+	// profile is the ICC profile when Method is methodICC or methodAnyICC.
 	profile []byte
 	// lab holds the EP fields of an enumerated CIELab specification.
 	lab *LabParams
@@ -164,12 +250,12 @@ func readFile(data []byte) ([]byte, *fileHeader, error) {
 	if bytes.HasPrefix(data, codestreamStart) {
 		return data, nil, nil
 	}
-	boxes, err := readBoxes(data)
+	boxes, err := ReadBoxes(data)
 	if err != nil {
 		return nil, nil, err
 	}
 	// T.800, I.5.1: the signature box is first, 12 bytes long.
-	if len(boxes) == 0 || boxes[0].kind != boxSignature || !bytes.Equal(boxes[0].body, signature) {
+	if len(boxes) == 0 || boxes[0].Type != boxSignature || !bytes.Equal(boxes[0].Body, signature) {
 		return nil, nil, fmt.Errorf("%w: data is neither a JP2 file nor a codestream", ErrMalformed)
 	}
 	var (
@@ -177,20 +263,20 @@ func readFile(data []byte) ([]byte, *fileHeader, error) {
 		codestream []byte
 	)
 	for _, b := range boxes[1:] {
-		switch b.kind {
-		case boxHeader:
+		switch b.Type {
+		case BoxHeader:
 			// T.800, I.5.3: one JP2 Header box, before the codestream.
 			if hdr != nil {
 				return nil, nil, fmt.Errorf("%w: more than one JP2 Header box", ErrMalformed)
 			}
-			if hdr, err = readHeader(b.body); err != nil {
+			if hdr, err = readHeader(b.Body); err != nil {
 				return nil, nil, err
 			}
 		case boxCodestream:
 			// T.800, I.2.2 allows several codestreams and a JP2 reader decodes
 			// the first.
 			if codestream == nil {
-				codestream = b.body
+				codestream = b.Body
 			}
 		}
 		if codestream != nil {
@@ -213,15 +299,15 @@ func readFile(data []byte) ([]byte, *fileHeader, error) {
 //   - govdocs: six streams put the Component Mapping box outside the JP2
 //     Header box. Each is an /Indexed image, and pdf.js decodes them.
 func readHeader(body []byte) (*fileHeader, error) {
-	boxes, err := readBoxes(body)
+	boxes, err := ReadBoxes(body)
 	if err != nil {
 		return nil, fmt.Errorf("JP2 Header box: %w", err)
 	}
 	hdr := &fileHeader{}
 	for _, b := range boxes {
-		switch b.kind {
-		case boxColour:
-			c, ok, err := readColour(b.body)
+		switch b.Type {
+		case BoxColour:
+			c, ok, err := readColour(b.Body)
 			if err != nil {
 				return nil, err
 			}
@@ -234,21 +320,21 @@ func readHeader(body []byte) (*fileHeader, error) {
 			if hdr.palette != nil {
 				return nil, fmt.Errorf("%w: more than one Palette box", ErrMalformed)
 			}
-			if hdr.palette, err = readPalette(b.body); err != nil {
+			if hdr.palette, err = readPalette(b.Body); err != nil {
 				return nil, err
 			}
 		case boxComponentMapping:
 			if hdr.mapping != nil {
 				return nil, fmt.Errorf("%w: more than one Component Mapping box", ErrMalformed)
 			}
-			if hdr.mapping, err = readMapping(b.body); err != nil {
+			if hdr.mapping, err = readMapping(b.Body); err != nil {
 				return nil, err
 			}
 		case boxChannelDefinition:
 			if hdr.channels != nil {
 				return nil, fmt.Errorf("%w: more than one Channel Definition box", ErrMalformed)
 			}
-			if hdr.channels, err = readChannels(b.body); err != nil {
+			if hdr.channels, err = readChannels(b.Body); err != nil {
 				return nil, err
 			}
 		}
@@ -267,25 +353,21 @@ func readHeader(body []byte) (*fileHeader, error) {
 // readColour reads a Colour Specification box (T.800, I.5.3.3) and reports
 // whether its method is one this package knows.
 func readColour(body []byte) (colourSpec, bool, error) {
-	if len(body) < 3 {
-		return colourSpec{}, false, fmt.Errorf("%w: Colour Specification box of %d bytes", ErrMalformed, len(body))
+	spec, err := ReadColourSpec(body)
+	if err != nil {
+		return colourSpec{}, false, err
 	}
-	c := colourSpec{method: int(body[0]), precedence: int(body[1]), approximation: int(body[2])}
-	// PREC is a signed byte (ISO/IEC 15444-2, Table M.24).
-	if c.precedence >= 128 {
-		c.precedence -= 256
-	}
-	switch c.method {
+	c := colourSpec{ColourSpec: spec}
+	switch c.Method {
 	case methodEnumerated:
 		if len(body) < 7 {
 			return colourSpec{}, false, fmt.Errorf("%w: enumerated Colour Specification box of %d bytes", ErrMalformed, len(body))
 		}
-		c.enumerated = binary.BigEndian.Uint32(body[3:])
-		if c.enumerated == ColourCIELab {
+		if c.EnumCS == ColourCIELab {
 			c.lab = readLabEP(body[7:])
 		}
 	case methodICC, methodAnyICC:
-		c.profile = body[3:]
+		c.profile = c.Params
 	default:
 		return colourSpec{}, false, nil
 	}

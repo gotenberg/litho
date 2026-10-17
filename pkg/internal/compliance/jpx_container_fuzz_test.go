@@ -3,6 +3,9 @@ package compliance
 import (
 	"encoding/binary"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 )
 
 // FuzzJPXContainer feeds arbitrary bytes to the JPEG 2000 container checks and
@@ -10,7 +13,7 @@ import (
 //
 // The bytes are an image XObject's stream, so they are file-controlled, and
 // these walk the JP2 box tree and the raw J2K codestream markers to decide
-// whether the colour specification conforms. [FuzzParseJP2Boxes] beside this
+// whether the colour specification conforms. FuzzReadBoxes in the jpx package
 // covers the box walker alone; measured against the fuzz corpora, the three
 // container-level checks were reached by nothing.
 //
@@ -27,17 +30,17 @@ func FuzzJPXContainer(f *testing.F) {
 	// the walker must not read it as an empty box and spin.
 	f.Add(append(jp2Signature(), []byte{0x00, 0x00, 0x00, 0x00, 'j', 'p', '2', 'c'}...))
 
+	logger := document.NopLogger()
 	f.Fuzz(func(_ *testing.T, data []byte) {
 		if len(data) > 1<<20 {
 			return
 		}
-		_ = isJP2Container(data)
 		for _, part := range []int{2, 3, 4} {
 			rules := jpxRulesForPart(part)
 			for _, hasCS := range []bool{false, true} {
-				_ = checkJP2Container(data, "Im0", 1, rules, hasCS)
+				_ = checkJP2Container(data, "Im0", 1, rules, hasCS, logger)
 			}
-			_ = checkRawJ2K(data, "Im0", 1, rules)
+			_ = checkRawJ2K(data, "Im0", 1, rules, logger)
 		}
 	})
 }
@@ -101,16 +104,16 @@ func TestMinimalJP2IsWalked(t *testing.T) {
 	t.Parallel()
 
 	data := minimalJP2()
-	if !isJP2Container(data) {
+	if !jpx.IsJP2(data) {
 		t.Fatal("the seed was not recognised as a JP2 container")
 	}
-	boxes := parseJP2Boxes(data)
-	if len(boxes) == 0 {
-		t.Fatal("the box walker found no boxes in the seed")
+	boxes, err := jpx.ReadBoxes(data)
+	if err != nil || len(boxes) == 0 {
+		t.Fatalf("the box walker found %d boxes in the seed: %v", len(boxes), err)
 	}
 	var sawHeader bool
 	for _, b := range boxes {
-		if b.boxType == boxTypeJP2H {
+		if b.Type == jpx.BoxHeader {
 			sawHeader = true
 		}
 	}
