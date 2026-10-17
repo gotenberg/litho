@@ -50,13 +50,95 @@ type imagePageGroup struct {
 // green and blue of each cell of a grid of at most maxSignatureCells by
 // maxSignatureCells, row by row. Failed marks an image litho could not
 // decode, which carries no signature.
+//
+// Rows is set only on a golden whose PDF.js buffer held fewer than Height
+// complete rows: the cells reaching past it carry no mean (see
+// [cellMeans]).
 type imageSignature struct {
 	Width  int       `json:"width"`
 	Height int       `json:"height"`
 	Grid   [2]int    `json:"grid"`
-	Sig    []float64 `json:"sig"`
+	Sig    cellMeans `json:"sig"`
+	Rows   int       `json:"rows,omitempty"`
 	Name   string    `json:"name,omitempty"`
 	Failed string    `json:"failed,omitempty"`
+}
+
+// cellMeans holds a signature's cell means. A JSON null, which gen-images.mjs
+// writes for a cell PDF.js supplied no complete samples for, decodes to NaN
+// instead of the 0 encoding/json would store, so the cell cannot pass for a
+// black one. [imageDecodeFeature.LoadGoldens] keeps NaN only where the
+// golden's Rows accounts for it, and [signatureDistance] skips it there.
+type cellMeans []float64
+
+// UnmarshalJSON decodes a null cell as NaN.
+func (m *cellMeans) UnmarshalJSON(data []byte) error {
+	var cells []*float64
+	if err := json.Unmarshal(data, &cells); err != nil {
+		return fmt.Errorf("decode cell means: %w", err)
+	}
+	if cells == nil {
+		*m = nil
+		return nil
+	}
+	out := make(cellMeans, len(cells))
+	for i, c := range cells {
+		if c == nil {
+			out[i] = math.NaN()
+			continue
+		}
+		out[i] = *c
+	}
+	*m = out
+	return nil
+}
+
+// MarshalJSON encodes a NaN cell as null, which encoding/json refuses to
+// encode as a number.
+func (m cellMeans) MarshalJSON() ([]byte, error) {
+	if m == nil {
+		return []byte("null"), nil
+	}
+	cells := make([]*float64, len(m))
+	for i := range m {
+		if !math.IsNaN(m[i]) {
+			cells[i] = &m[i]
+		}
+	}
+	data, err := json.Marshal(cells)
+	if err != nil {
+		return nil, fmt.Errorf("encode cell means: %w", err)
+	}
+	return data, nil
+}
+
+// sanctionGaps keeps a golden image's NaN cells only where PDF.js did not
+// supply them: Rows lies below Height and the cell's row of the grid reaches
+// row Rows or past it, by the split gen-images.mjs makes. Any other NaN, and
+// every NaN of an image with no supplied cell left, becomes +Inf, which no
+// decoded image lies within tolerance of: an unexplained gap fails the image
+// rather than vanish from the comparison.
+func sanctionGaps(im *imageSignature) {
+	gw, gh := im.Grid[0], im.Grid[1]
+	short := im.Rows > 0 && im.Rows < im.Height && gw > 0 && gh > 0 && len(im.Sig) == gw*gh*3
+	supplied := 0
+	for i, v := range im.Sig {
+		if !math.IsNaN(v) {
+			supplied++
+			continue
+		}
+		cy := i / 3 / max(gw, 1)
+		// The last image row of grid row cy is ceil((cy+1)*Height/gh)-1.
+		if short && ((cy+1)*im.Height+gh-1)/gh-1 >= im.Rows {
+			continue
+		}
+		im.Sig[i] = math.Inf(1)
+	}
+	if supplied == 0 {
+		for i := range im.Sig {
+			im.Sig[i] = math.Inf(1)
+		}
+	}
 }
 
 // maxSignatureCells is the grid size along each axis, matching gen-images.mjs.
@@ -89,6 +171,11 @@ func (f *imageDecodeFeature) LoadGoldens(dir string) error {
 		var g imageGolden
 		if err := json.Unmarshal(data, &g); err != nil {
 			continue
+		}
+		for p := range g.Pages {
+			for i := range g.Pages[p].Images {
+				sanctionGaps(&g.Pages[p].Images[i])
+			}
 		}
 		id := strings.TrimSuffix(e.Name(), ".json")
 		f.mu.Lock()
@@ -377,15 +464,19 @@ func nearestImage(want imageSignature, got []imageSignature) (int, float64) {
 	return best, bestDiff
 }
 
-// signatureDistance returns the largest difference between two signatures'
-// cell means.
-func signatureDistance(a, b []float64) float64 {
-	if len(a) != len(b) {
+// signatureDistance returns the largest difference between a decoded
+// image's cell means, got, and a golden's, want. A NaN cell of want is one
+// PDF.js did not supply (see [sanctionGaps]) and takes no part.
+func signatureDistance(got, want []float64) float64 {
+	if len(got) != len(want) {
 		return math.Inf(1)
 	}
 	d := 0.0
-	for i := range a {
-		d = math.Max(d, math.Abs(a[i]-b[i]))
+	for i := range got {
+		if math.IsNaN(want[i]) {
+			continue
+		}
+		d = math.Max(d, math.Abs(got[i]-want[i]))
 	}
 	return d
 }

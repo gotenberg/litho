@@ -96,6 +96,15 @@ const imageTimeout = 30000;
 const maxCells = 4;
 
 // signature returns the grid of cell means for decoded PDF.js image data.
+//
+// PDF.js can hand over fewer samples than width x height: a stream that ends
+// early leaves the rows past its end out of the buffer rather than padding
+// them. Only the rows the buffer holds in full count. When it holds fewer
+// than height rows, the signature records that number as rows, and a cell
+// reaching a row PDF.js did not supply has no mean: it is stored as null,
+// which the comparator skips rather than reading as a level. A cell is not
+// averaged over its supplied rows alone, since a decoder that pads the
+// missing rows would then disagree with PDF.js by what it padded with.
 function signature(img) {
   const { width, height, kind, data } = img;
   const gw = Math.min(maxCells, width);
@@ -103,7 +112,17 @@ function signature(img) {
   const sums = new Float64Array(gw * gh * 3);
   const counts = new Float64Array(gw * gh);
   const rowBytes = (width + 7) >> 3;
-  for (let y = 0; y < height; y++) {
+  const stride = kind === pdfjsLib.ImageKind.RGBA_32BPP ? 4 : 3;
+  const bytesPerRow =
+    kind === pdfjsLib.ImageKind.GRAYSCALE_1BPP ? rowBytes : width * stride;
+  const rows = Math.min(height, Math.floor(data.length / bytesPerRow));
+  // A cell row is complete when its last image row lies below rows.
+  const completeCellRows = [];
+  for (let cy = 0; cy < gh; cy++) {
+    const lastRow = Math.ceil(((cy + 1) * height) / gh) - 1;
+    completeCellRows.push(lastRow < rows);
+  }
+  for (let y = 0; y < rows; y++) {
     const cy = Math.floor((y * gh) / height);
     for (let x = 0; x < width; x++) {
       const cx = Math.floor((x * gw) / width);
@@ -112,7 +131,6 @@ function signature(img) {
         const v = ((data[y * rowBytes + (x >> 3)] >> (7 - (x & 7))) & 1) * 255;
         r = g = b = v;
       } else {
-        const stride = kind === pdfjsLib.ImageKind.RGBA_32BPP ? 4 : 3;
         const i = (y * width + x) * stride;
         r = data[i];
         g = data[i + 1];
@@ -127,9 +145,15 @@ function signature(img) {
   }
   const sig = [];
   for (let c = 0; c < gw * gh; c++) {
+    const complete = completeCellRows[Math.floor(c / gw)];
     for (let k = 0; k < 3; k++) {
-      sig.push(Math.round((sums[c * 3 + k] / counts[c]) * 10) / 10);
+      sig.push(
+        complete ? Math.round((sums[c * 3 + k] / counts[c]) * 10) / 10 : null,
+      );
     }
+  }
+  if (rows < height) {
+    return { grid: [gw, gh], sig, rows };
   }
   return { grid: [gw, gh], sig };
 }
@@ -196,10 +220,14 @@ for (const name of pdfs) {
           // PDF.js draws an image at the size of its /SMask or /Mask when that
           // is larger, so the samples no longer line up with the image's own.
           if (img.width !== width || img.height !== height) continue;
+          const sig = signature(img);
+          // A buffer short of one complete cell row leaves nothing to
+          // compare with.
+          if (sig.sig.every((v) => v === null)) continue;
           images.push({
             width: img.width,
             height: img.height,
-            ...signature(img),
+            ...sig,
           });
         } catch {
           // An image PDF.js could not decode has no golden to compare with.

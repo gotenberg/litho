@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -202,5 +203,76 @@ func TestPairImages(t *testing.T) {
 		if got := pairImages(tc.want, tc.got); !slices.Equal(got, tc.pairs) {
 			t.Errorf("%s: pairs %v, want %v", tc.name, got, tc.pairs)
 		}
+	}
+}
+
+// TestImageDecodeFeature_ShortBuffer scores a golden whose PDF.js buffer held
+// 2 of an image's 3 rows: gen-images.mjs stores its last grid row as null.
+// Those cells take no part, while a difference in a supplied cell still
+// fails, and a null the golden's rows do not explain fails the image.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11678: PDF.js hands Image31 (1192x331) over about 1.2 rows
+//     short, and reading its null cells as 0 failed an image litho decodes.
+func TestImageDecodeFeature_ShortBuffer(t *testing.T) {
+	const supplied = `[10,10,10,20,20,20,30,30,30,40,40,40,null,null,null,null,null,null]`
+	decoded := []float64{10, 10, 10, 20, 20, 20, 30, 30, 30, 40, 40, 40, 200, 200, 200, 7, 7, 7}
+	for _, tc := range []struct {
+		name   string
+		golden string
+		got    []float64
+		match  bool
+	}{
+		{"unsupplied cells skipped", `{"width":2,"height":3,"grid":[2,3],"rows":2,"sig":` + supplied + `}`, decoded, true},
+		{
+			"planted difference in a supplied cell", `{"width":2,"height":3,"grid":[2,3],"rows":2,"sig":` + supplied + `}`,
+			slices.Concat([]float64{10, 10, 10, 20, 20, 20, 30, 30, 30, 40, 40, 90}, decoded[12:]), false,
+		},
+		{"null with no rows", `{"width":2,"height":3,"grid":[2,3],"sig":` + supplied + `}`, decoded, false},
+		{"null in a supplied grid row", `{"width":2,"height":3,"grid":[2,3],"rows":2,"sig":[null,10,10,20,20,20,30,30,30,40,40,40,null,null,null,null,null,null]}`, decoded, false},
+		{"no supplied cell", `{"width":2,"height":3,"grid":[2,1],"rows":2,"sig":[null,null,null,null,null,null]}`, decoded[:6], false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			golden := `{"id":"doc","pages":[{"page":1,"images":[` + tc.golden + `]}]}`
+			if err := os.WriteFile(filepath.Join(dir, "doc.json"), []byte(golden), 0o644); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			f := newImageDecodeFeature()
+			if err := f.LoadGoldens(dir); err != nil {
+				t.Fatalf("LoadGoldens: %v", err)
+			}
+			want := f.golden("doc").Pages[0].Images[0]
+			output, err := json.Marshal(imageGolden{Pages: []imagePageGroup{{
+				Page:   1,
+				Images: []imageSignature{{Width: want.Width, Height: want.Height, Grid: want.Grid, Sig: tc.got, Name: "Im0"}},
+			}}})
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if v := f.Compare("doc", output); v.Match != tc.match {
+				t.Errorf("Match: got %v, want %v (%s, %s)", v.Match, tc.match, v.Reason, v.Mismatches)
+			}
+		})
+	}
+}
+
+// TestCellMeans_RoundTrip decodes a null cell as NaN, not 0, and encodes it
+// back as null.
+func TestCellMeans_RoundTrip(t *testing.T) {
+	var m cellMeans
+	if err := json.Unmarshal([]byte(`[1.5,null]`), &m); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if len(m) != 2 || m[0] != 1.5 || !math.IsNaN(m[1]) {
+		t.Fatalf("cells: got %v, want [1.5 NaN]", m)
+	}
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(data) != `[1.5,null]` {
+		t.Errorf("Marshal: got %s, want [1.5,null]", data)
 	}
 }
