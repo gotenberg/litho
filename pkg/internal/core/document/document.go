@@ -443,13 +443,17 @@ func (d *Document) DecodeStreamReport(ctx context.Context, stream ast.PdfStream)
 	// A nil d.Filters consults no plugin, so one call covers both paths and
 	// a skipped filter is logged whether or not plugins are registered.
 	data, report, err := d.Filters.DecodeStreamReport(ctx, stream)
-	if report.Incomplete() {
+	switch {
+	case report.Incomplete():
 		// The bytes are only partially decoded: a skipped filter left them
 		// filter-encoded, or a filter met damaged data and handed on what it
 		// decoded before the damage. Surface it at Debug rather than silently
 		// returning them as the whole stream.
 		d.Logger.Debug("stream only partially decoded",
-			slog.Any("skipped", report.Skipped), slog.Any("damaged", report.Damaged))
+			slog.Any("skipped", report.Skipped), slog.Any("damaged", report.Damaged),
+			slog.Any("salvaged", report.Salvaged))
+	case !report.Clean():
+		d.Logger.Debug("stream decoded whole from salvaged data", slog.Any("salvaged", report.Salvaged))
 	}
 	return data, report, err
 }
@@ -469,10 +473,48 @@ func (d *Document) DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, s
 	return d.Filters.DecodeStreamUpTo(ctx, stream, stop)
 }
 
-// NewStreamReader returns a lazy [io.ReadCloser] using the document's filter decoder.
+// NewStreamReader returns a lazy [io.ReadCloser] using the document's filter
+// decoder. A stream whose data the reader salvaged is logged at Debug when it
+// is closed, as [Document.DecodeStreamReport] logs one.
 func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	stream = d.resolveStreamFilterKeys(ctx, stream)
-	return d.Filters.NewStreamReader(ctx, stream)
+	return d.logSalvage(d.Filters.NewStreamReader(ctx, stream))
+}
+
+// salvageRecorder is a stream reader that records the defects it forgave in
+// the data it decoded (see [filter.Decoder.NewStreamReader]).
+type salvageRecorder interface {
+	Salvage() error
+}
+
+// salvageLogger is a stream reader that logs at Debug, when closed, the
+// salvage its reader recorded.
+type salvageLogger struct {
+	io.ReadCloser
+	logger *slog.Logger
+}
+
+// Close closes the reader and logs the salvage it recorded.
+func (s salvageLogger) Close() error {
+	err := s.ReadCloser.Close()
+	if rec, ok := s.ReadCloser.(salvageRecorder); ok {
+		if salvage := rec.Salvage(); salvage != nil {
+			s.logger.Debug("stream decoded from salvaged data", slog.Any("salvage", salvage))
+		}
+	}
+	return err
+}
+
+// logSalvage wraps a stream reader that records salvage so that closing it
+// logs what it recorded.
+func (d *Document) logSalvage(rc io.ReadCloser, err error) (io.ReadCloser, error) {
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := rc.(salvageRecorder); !ok {
+		return rc, nil
+	}
+	return salvageLogger{ReadCloser: rc, logger: d.Logger}, nil
 }
 
 // StoredTail returns the bytes of stream's stored data that its first filter
@@ -491,7 +533,7 @@ func (d *Document) StoredTail(ctx context.Context, stream ast.PdfStream, limit i
 // [filter.Decoder.NewStreamReaderChecked].
 func (d *Document) NewStreamReaderChecked(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	stream = d.resolveStreamFilterKeys(ctx, stream)
-	return d.Filters.NewStreamReaderChecked(ctx, stream)
+	return d.logSalvage(d.Filters.NewStreamReaderChecked(ctx, stream))
 }
 
 // builtinFilters returns a decoder that consults no plugin and decodes under

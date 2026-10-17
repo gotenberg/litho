@@ -110,7 +110,7 @@ func probeChain(ctx context.Context, stream ast.PdfStream, d *Decoder) ([]ast.Pd
 			data = out
 		case errors.Is(ferr, errUnsettled):
 			return skipped, errUnsettled
-		case keepsDamagedPrefix(out, ferr):
+		case keepsDecoded(out, ferr):
 			data = out
 		case skipsFilter(ferr):
 			skipped = append(skipped, f)

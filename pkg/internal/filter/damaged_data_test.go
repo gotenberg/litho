@@ -309,7 +309,7 @@ func TestDecodeFlateDecode_SameBytesAsCompressZlib(t *testing.T) {
 	for _, in := range inputs {
 		got, err := decodeFlateDecode(ctx, in, limits.DefaultMaxStreamBytes)
 		want, wantErr := zlibReference(in)
-		if errors.Is(err, errDamagedData) {
+		if errors.Is(err, errDamagedData) || errors.Is(err, errSalvagedData) {
 			err = nil
 		}
 		if !bytes.Equal(got, want) || (err == nil) != (wantErr == nil) || (err != nil && err.Error() != wantErr.Error()) {
@@ -322,7 +322,7 @@ func TestDecodeFlateDecode_SameBytesAsCompressZlib(t *testing.T) {
 // compress/zlib: every byte that inflated, with no error, and an error only
 // when nothing inflated.
 func zlibReference(data []byte) ([]byte, error) {
-	r, err := openFlate(data)
+	r, _, err := openFlate(data)
 	if err != nil {
 		return nil, err
 	}

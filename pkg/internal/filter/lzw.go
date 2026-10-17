@@ -29,6 +29,9 @@ type lzwReader struct {
 	prevCode int    // previous code (-1 means none)
 	buf      []byte // pending output bytes not yet consumed by Read
 	err      error
+	// eod reports that the data ended with the EOD code, rather than where
+	// its bytes ran out.
+	eod bool
 }
 
 const (
@@ -142,6 +145,7 @@ func (r *lzwReader) Read(p []byte) (int, error) {
 
 		case code == lzwEODCode:
 			r.err = io.EOF
+			r.eod = true
 			return 0, io.EOF
 
 		case r.prevCode == lzwNoCode:

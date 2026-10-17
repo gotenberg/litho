@@ -25,6 +25,9 @@ import (
 type Decoder struct {
 	plugins map[ast.PdfName]plugins.FilterDecoder
 	lim     limits.Limits
+	// refuse fails a stream whose data a filter salvaged or kept only the
+	// prefix of (see [Decoder.RefuseSalvaged]).
+	refuse bool
 }
 
 // NewDecoder creates a Decoder with the given filter plugins, bounding every
@@ -50,9 +53,40 @@ func (d *Decoder) limits() limits.Limits {
 }
 
 // builtin returns a Decoder that consults no plugin and decodes under d's
-// budgets.
+// budgets, refusing salvaged data when d does.
 func (d *Decoder) builtin() *Decoder {
-	return &Decoder{lim: d.limits()}
+	return &Decoder{lim: d.limits(), refuse: d.refusesSalvaged()}
+}
+
+// RefuseSalvaged returns a Decoder that decodes as d does, with its plugins
+// and budgets, but fails with [ErrSalvagedStream] a stream d hands on
+// salvaged: one a filter met damaged data in and kept the prefix of
+// ([DecodeReport.Damaged]), or one whose data broke a rule of its format and
+// decoded whole all the same ([DecodeReport.Salvaged]). A filter that cannot
+// decode at all is still skipped, as d skips it.
+//
+// It reads the filters as ISO 32000-1 states them, without the leniency
+// [keepsDamagedPrefix], [endsAtSyncFlush] and [decodeLZW] name: FlateDecode
+// data is a zlib stream (7.4.4), whose header and Adler-32 checksum RFC 1950,
+// 2.2 requires and whose deflate data ends with a final block (RFC 1951,
+// 3.2.3); LZWDecode data ends with its EOD code (7.4.4.2); and the ASCII
+// filters' data holds only the characters 7.4.2 and 7.4.3 define.
+//
+// Such a decoder streams nothing: [Decoder.NewStreamReader] decodes every
+// stream eagerly, under the stream budget, so it refuses a stream before
+// handing on any of its bytes.
+func (d *Decoder) RefuseSalvaged() *Decoder {
+	out := &Decoder{lim: d.limits(), refuse: true}
+	if d != nil {
+		out.plugins = d.plugins
+	}
+	return out
+}
+
+// refusesSalvaged reports whether d fails a stream whose data a filter
+// salvaged. A nil *Decoder does not.
+func (d *Decoder) refusesSalvaged() bool {
+	return d != nil && d.refuse
 }
 
 // Handles reports whether a plugin is registered for the named filter.
@@ -158,6 +192,58 @@ func (d *Decoder) UndecodableFilters(ctx context.Context, stream ast.PdfStream) 
 	return out, nil
 }
 
+// SalvagedFilters returns, in chain order, the filters of stream's chain
+// whose data decoding salvages: those [Decoder.DecodeStreamReport] lists as
+// Damaged or Salvaged. It decodes the chain up to its first image codec,
+// DCTDecode, JPXDecode or JBIG2Decode, or its first filter a plugin claims,
+// and no further: those keep no damaged prefix and record no salvage (see
+// [keepsDamagedPrefix]), and decoding them would cost the call the image's
+// decoding. A filter that fails or that litho cannot decode ends the walk, and
+// the filters before it are listed.
+//
+// The error is only ever the context's.
+func (d *Decoder) SalvagedFilters(ctx context.Context, stream ast.PdfStream) ([]ast.PdfName, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	filters, err := streamFilterNames(stream.Dict)
+	if err != nil {
+		return nil, nil //nolint:nilerr // Decoding fails on an invalid /Filter; this report names only filters whose data it salvages.
+	}
+	parms := extractDecodeParms(stream.Dict, len(filters))
+	data, err := stream.Bytes(ctx)
+	if err != nil {
+		return nil, ctx.Err()
+	}
+	lim := d.limits()
+	var out []ast.PdfName
+	for i, f := range filters {
+		if d.Handles(f) || endsSalvageWalk(f) {
+			break
+		}
+		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i], stream.Dict, lim)
+		if derr != nil && !keepsDecoded(decoded, derr) {
+			break
+		}
+		if derr != nil {
+			out = append(out, f)
+		}
+		data = decoded
+	}
+	return out, ctx.Err()
+}
+
+// endsSalvageWalk reports whether [Decoder.SalvagedFilters] stops before the
+// named filter: an image codec, which keeps no damaged prefix and records no
+// salvage.
+func endsSalvageWalk(name ast.PdfName) bool {
+	switch name {
+	case "DCTDecode", "DCT", "JPXDecode", "JBIG2Decode":
+		return true
+	}
+	return false
+}
+
 // unknownFilters returns the names neither a built-in decoder nor a plugin
 // of d decodes.
 func (d *Decoder) unknownFilters(names []ast.PdfName) []ast.PdfName {
@@ -191,8 +277,11 @@ func (d *Decoder) DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, st
 			return data, true, nil
 		}
 		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i], stream.Dict, lim)
-		if derr != nil && !keepsDamagedPrefix(decoded, derr) {
+		if derr != nil && !keepsDecoded(decoded, derr) {
 			return nil, false, fmt.Errorf("decoding %s before %s: %w", f, stop, derr)
+		}
+		if derr != nil && d.refusesSalvaged() {
+			return nil, false, fmt.Errorf("%w: decoding %s before %s: %w", ErrSalvagedStream, f, stop, derr)
 		}
 		data = decoded
 	}
@@ -223,7 +312,8 @@ func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io
 // unless the data fails decoding first, damaged or past a decoding limit.
 //
 // Damaged data is not refused: the bytes a filter decoded before the damage
-// are read as NewStreamReader reads them.
+// are read as NewStreamReader reads them, unless d refuses salvaged data
+// ([Decoder.RefuseSalvaged]).
 func (d *Decoder) NewStreamReaderChecked(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	return d.newStreamReader(ctx, stream, true)
 }
@@ -263,18 +353,24 @@ func (d *Decoder) newStreamReader(ctx context.Context, stream ast.PdfStream, str
 	parms := extractDecodeParms(stream.Dict, len(filters))
 
 	// Fast path: single Flate or LZW filter without predictor, true streaming.
-	if len(filters) == 1 && extractPredictorParams(parms[0]) == nil {
+	// A decoder that refuses salvaged data decodes eagerly instead, so that it
+	// refuses a stream before handing on any of its bytes.
+	if len(filters) == 1 && extractPredictorParams(parms[0]) == nil && !d.refusesSalvaged() {
 		switch filters[0] {
 		case "FlateDecode", "Fl":
 			raw, err := stream.Bytes(ctx)
 			if err != nil {
 				return nil, err
 			}
-			r, err := openFlate(raw)
+			r, framed, err := openFlate(raw)
 			if err != nil {
 				return nil, err
 			}
-			return &tolerantReader{r: r, c: r, tolerate: func(error) bool { return true }}, nil
+			t := &tolerantReader{r: r, c: r, filter: filters[0], tolerate: func(error) bool { return true }}
+			if !framed {
+				t.endDefect = func() error { return errZlibHeaderDamaged }
+			}
+			return t, nil
 		case "LZWDecode", "LZW":
 			earlyChange := 1
 			if parms[0] != nil {
@@ -286,9 +382,17 @@ func (d *Decoder) newStreamReader(ctx context.Context, stream ast.PdfStream, str
 			if err != nil {
 				return nil, err
 			}
+			lr := newLZWReader(bytes.NewReader(raw), earlyChange)
 			return &tolerantReader{
-				r:        newLZWReader(bytes.NewReader(raw), earlyChange),
+				r:        lr,
+				filter:   filters[0],
 				tolerate: func(err error) bool { return err == io.ErrUnexpectedEOF },
+				endDefect: func() error {
+					if lr.eod {
+						return nil
+					}
+					return errLZWNoEOD
+				},
 			}, nil
 		case "BrotliDecode":
 			raw, err := stream.Bytes(ctx)

@@ -8,14 +8,16 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 )
 
-// StreamDiagnostic identifies an in-use stream object whose /Filter chain
-// contains one or more filters litho cannot decode.
+// StreamDiagnostic identifies an in-use stream object and the filters of its
+// /Filter chain a diagnostic reports: the filters litho cannot decode
+// ([Document.UndecodableStreams]), or those whose data decoding salvages
+// ([Document.SalvagedStreams]).
 type StreamDiagnostic struct {
 	// ObjectNum is the stream's object number.
 	ObjectNum int
-	// Filters are the undecodable filter names in the chain, such as a
-	// filter name no decoder knows, or a filter whose built-in decoder
-	// refuses a feature the stream uses.
+	// Filters are the reported filter names in the chain, such as a filter
+	// name no decoder knows, a filter whose built-in decoder refuses a
+	// feature the stream uses, or a filter whose data is damaged.
 	Filters []string
 }
 
@@ -81,6 +83,76 @@ func (d *Document) UndecodableStreams(ctx context.Context) ([]StreamDiagnostic, 
 			return diags, err
 		}
 		if len(bad) > 0 {
+			diags = append(diags, StreamDiagnostic{ObjectNum: objNum, Filters: bad})
+		}
+	}
+	sort.Slice(diags, func(i, j int) bool { return diags[i].ObjectNum < diags[j].ObjectNum })
+	return diags, nil
+}
+
+// SalvagedStreams reports in-use stream objects whose data decoding salvages:
+// a filter of the chain met damaged data and kept what it decoded before the
+// damage, or decoded the data whole although it breaks a rule of its format
+// that does not delimit it, such as a zlib checksum missing or wrong or
+// LZWDecode data without its EOD code. Filters lists those filters (see
+// [filter.Decoder.SalvagedFilters]). Results are sorted by object number.
+//
+// litho reads such a stream as a viewer renders it, so nothing else reports
+// it: its decoded bytes are whatever the data holds, and they may lack
+// content the producer wrote. Compliance issues no verdict on it either. ISO
+// 19005-2, 6.1.7 constrains the dictionary of a stream and the filters it may
+// name, not the soundness of its encoded data, and veraPDF reads the data
+// leniently too.
+//
+// The chain of each stream is decoded up to its first image codec, so the call
+// decodes the content, fonts and other streams of the document, and the
+// general filters in front of its images, but not the images themselves.
+//
+// # Corpus evidence
+//
+//   - All corpora: the 148,245 filtered streams, cut before their image
+//     codec, decode to the bytes they decoded to before salvage was recorded,
+//     eagerly and through the streaming reader.
+//   - pdfjs, pdfcpu: 91 streams in 18 files are salvaged, all in pdfjs but
+//     one: 56 FlateDecode streams miss their zlib checksum, 16 carry a wrong
+//     one, 16 stop at a sync flush, 1 has a damaged zlib header, and 2
+//     LZWDecode streams end without their EOD code.
+//   - pdfjs issue17169.pdf, pdfcpu pkg_testdata__Paclitaxel.pdf: the two
+//     LZWDecode streams without their EOD code.
+//   - pdfjs, verapdf: 148 streams keep the prefix of damaged data, 109 behind
+//     an ASCII filter and 39 behind FlateDecode; verapdf
+//     PDF_A-2b__veraPDF_test_suite_6-2-3-t01-fail-b.pdf and
+//     PDF_A-4__veraPDF_test_suite_6-2-3-t01-fail-b.pdf hold the two outside
+//     pdfjs.
+//   - govdocs, facturx, litho, pdf20: no stream is salvaged or damaged.
+//   - All corpora: the call lists exactly the streams whose decode reports
+//     a damaged or salvaged filter.
+func (d *Document) SalvagedStreams(ctx context.Context) ([]StreamDiagnostic, error) {
+	var diags []StreamDiagnostic
+	for objNum, entry := range d.XRefEntriesSnapshot() {
+		if err := ctx.Err(); err != nil {
+			return diags, err
+		}
+		if entry.Free || entry.Type != xref.XRefTypeNormal {
+			continue
+		}
+		obj, err := d.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
+		if err != nil {
+			continue
+		}
+		stream, ok := obj.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		names, err := d.Filters.SalvagedFilters(ctx, d.resolveStreamFilterKeys(ctx, stream))
+		if err != nil {
+			return diags, err
+		}
+		if len(names) > 0 {
+			bad := make([]string, len(names))
+			for i, n := range names {
+				bad[i] = string(n)
+			}
 			diags = append(diags, StreamDiagnostic{ObjectNum: objNum, Filters: bad})
 		}
 	}

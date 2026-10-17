@@ -49,9 +49,38 @@ var (
 	// CCITTFaxDecode filter returns it alongside the rows before a row in a
 	// coding its decoder lacks, whose rest it cannot read. The filter chain
 	// keeps those bytes and reports the stream incomplete (see
-	// keepsDamagedPrefix), so the error reaches no caller. When nothing decoded
+	// keepsDamagedPrefix), so the error reaches no caller unless the decoder
+	// refuses salvaged data, wrapped in ErrSalvagedStream. When nothing decoded
 	// before the damage the filter returns the damage's own error instead.
 	errDamagedData = errors.New("damaged data")
+
+	// ErrSalvagedStream is returned, wrapped in an error naming the filter and
+	// the defect, by a [Decoder] that refuses salvaged data (see
+	// [Decoder.RefuseSalvaged]) for a stream a filter would otherwise salvage:
+	// data damaged after some of it decoded, whose prefix the filter keeps
+	// ([DecodeReport.Damaged]), or data that decodes whole despite breaking a
+	// rule of its format, such as a zlib checksum missing or wrong
+	// ([DecodeReport.Salvaged]). pkg/pdf re-exports it as
+	// pdf.ErrDamagedStream.
+	ErrSalvagedStream = errors.New("stream data is damaged")
+
+	// errSalvagedData marks the error a FlateDecode or LZWDecode filter
+	// returns alongside the whole of its decoded bytes when the data breaks a
+	// rule of its format that does not delimit it: a zlib header that is
+	// damaged, a zlib checksum missing or wrong, deflate data stopped at a
+	// sync flush without its final block, or LZWDecode data without its EOD
+	// code. The filter chain keeps the bytes and records the filter in
+	// [DecodeReport.Salvaged], so the error reaches no caller unless the
+	// decoder refuses salvaged data.
+	errSalvagedData = errors.New("salvaged data")
+
+	// The defects of data a filter salvages, which errSalvagedData wraps.
+	errZlibHeaderDamaged = errors.New("the zlib header is damaged")
+	errChecksumMissing   = errors.New("the zlib checksum is missing")
+	errChecksumCut       = errors.New("the zlib checksum is cut short")
+	errChecksumMismatch  = errors.New("the zlib checksum does not match the decoded bytes")
+	errNoFinalBlock      = errors.New("the deflate data stops at a sync flush, without its final block")
+	errLZWNoEOD          = errors.New("the data ends without its EOD code")
 
 	// errPluginDeclined marks, alongside [ErrUnsupportedFilter], a stream a
 	// plugin declined for a filter litho has no built-in decoder for. It

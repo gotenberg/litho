@@ -127,12 +127,26 @@ type DecodeReport struct {
 	// handed on only the bytes decoded before the damage (see
 	// [keepsDamagedPrefix]).
 	Damaged []ast.PdfName
+	// Salvaged lists, in chain order, the filters whose data broke a rule of
+	// its format that does not delimit it, and decoded whole all the same: a
+	// FlateDecode stream whose zlib header is damaged, whose checksum is
+	// missing or wrong, or whose deflate data stops at a sync flush, and an
+	// LZWDecode stream without its EOD code. Nothing tells such data from
+	// data cut where it happens to end, so its bytes are whole as far as
+	// litho can tell, and the stream is not [DecodeReport.Incomplete].
+	Salvaged []ast.PdfName
 }
 
 // Incomplete reports whether the decoded bytes fall short of the whole
 // decoded stream, either still encoded by a skipped filter or cut at damage.
 func (r DecodeReport) Incomplete() bool {
 	return len(r.Skipped) > 0 || len(r.Damaged) > 0
+}
+
+// Clean reports whether every filter decoded its data whole and sound: none
+// was skipped, cut at damage or salvaged.
+func (r DecodeReport) Clean() bool {
+	return !r.Incomplete() && len(r.Salvaged) == 0
 }
 
 // decodeChain runs the /Filter chain of stream under the budgets of d,
@@ -145,7 +159,9 @@ func (r DecodeReport) Incomplete() bool {
 //
 // strict fails the stream on a filter decoding would skip, with the error
 // that filter's decoder returned, which wraps [ErrUnsupportedFilter]: see
-// [Decoder.NewStreamReaderChecked].
+// [Decoder.NewStreamReaderChecked]. A d that refuses salvaged data fails the
+// stream on a filter that kept the prefix of damaged data or salvaged it,
+// with [ErrSalvagedStream].
 func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict bool) (data []byte, report DecodeReport, err error) {
 	filters, err := streamFilterNames(stream.Dict)
 	if err != nil {
@@ -162,9 +178,16 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict b
 	}
 	for i, f := range filters {
 		decoded, derr := d.applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
-		if derr != nil && keepsDamagedPrefix(decoded, derr) {
+		if derr != nil && keepsDecoded(decoded, derr) {
+			if d.refusesSalvaged() {
+				return nil, report, fmt.Errorf("%w: %w", ErrSalvagedStream, derr)
+			}
 			data = decoded
-			report.Damaged = append(report.Damaged, f)
+			if errors.Is(derr, errSalvagedData) {
+				report.Salvaged = append(report.Salvaged, f)
+			} else {
+				report.Damaged = append(report.Damaged, f)
+			}
 			continue
 		}
 		if derr != nil {
@@ -248,6 +271,13 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict b
 //     uncompressed mode in any row, so none is reported incomplete for it.
 func keepsDamagedPrefix(decoded []byte, err error) bool {
 	return len(decoded) > 0 && (errors.Is(err, ErrInvalidASCIIHex) || errors.Is(err, ErrInvalidASCII85) || errors.Is(err, errDamagedData))
+}
+
+// keepsDecoded reports whether a filter that failed with err handed on
+// decoded for the chain to keep: the prefix of damaged data
+// ([keepsDamagedPrefix]), or the whole of data it salvaged (errSalvagedData).
+func keepsDecoded(decoded []byte, err error) bool {
+	return errors.Is(err, errSalvagedData) || keepsDamagedPrefix(decoded, err)
 }
 
 // streamFilterNames returns the stream's /Filter entries in the order they
@@ -399,10 +429,11 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 
 // predict applies the predictor of the parameter dictionary parms to decoded,
 // the output of a FlateDecode or LZWDecode filter that returned err with it.
-// The bytes such a filter keeps before damaged data ([keepsDamagedPrefix]) are
-// predicted as a whole stream's are, and err stays with them.
+// The bytes such a filter keeps before damaged data, or salvages
+// ([keepsDecoded]), are predicted as a whole stream's are, and err stays with
+// them.
 func predict(decoded []byte, err error, parms ast.PdfDict) ([]byte, error) {
-	if err != nil && !keepsDamagedPrefix(decoded, err) {
+	if err != nil && !keepsDecoded(decoded, err) {
 		return nil, err
 	}
 	out, perr := applyPredictor(decoded, extractPredictorParams(parms))
@@ -419,9 +450,13 @@ func predict(decoded []byte, err error, parms ast.PdfDict) ([]byte, error) {
 // Damaged deflate data, corrupt or ending before its final block, yields the
 // bytes decoded before the damage with an error wrapping errDamagedData (see
 // [keepsDamagedPrefix]), unless the data stops at a sync flush
-// ([endsAtSyncFlush]). The zlib checksum is not read once deflate data yields
-// bytes: it follows the deflate data rather than delimiting it, and a missing
-// or wrong one leaves every byte decoded.
+// ([endsAtSyncFlush]). The zlib checksum does not decide what decodes once
+// deflate data yields bytes: it follows the deflate data rather than
+// delimiting it, and a missing or wrong one leaves every byte decoded. Data
+// that decodes whole despite a defect, a damaged zlib header, a missing or
+// wrong checksum or a stop at a sync flush, yields every byte with an error
+// wrapping errSalvagedData, so the chain records the salvage
+// ([DecodeReport.Salvaged]).
 //
 // When nothing decodes, the stream fails on any error, the checksum's
 // included, as compress/zlib, which read the data before, made it fail.
@@ -463,10 +498,35 @@ func decodeFlateDecode(ctx context.Context, data []byte, limit int64) ([]byte, e
 	}
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())
-	if copyErr == nil || (errors.Is(copyErr, io.ErrUnexpectedEOF) && endsAtSyncFlush(body)) {
-		return result, nil
+	switch {
+	case copyErr != nil && (!errors.Is(copyErr, io.ErrUnexpectedEOF) || !endsAtSyncFlush(body)):
+		return result, fmt.Errorf("%w: FlateDecode: %w", errDamagedData, copyErr)
+	case copyErr != nil:
+		return result, fmt.Errorf("%w: FlateDecode: %w", errSalvagedData, errNoFinalBlock)
+	case !framed:
+		return result, fmt.Errorf("%w: FlateDecode: %w", errSalvagedData, errZlibHeaderDamaged)
 	}
-	return result, fmt.Errorf("%w: FlateDecode: %w", errDamagedData, copyErr)
+	if defect := checksumDefect(result, body[len(body)-src.Len():]); defect != nil {
+		return result, fmt.Errorf("%w: FlateDecode: %w", errSalvagedData, defect)
+	}
+	return result, nil
+}
+
+// checksumDefect returns what is wrong with the Adler-32 checksum (RFC 1950,
+// 2.2) that trailer, the bytes after a zlib stream's deflate data, opens with
+// for the decoded bytes, or nil when it is sound. Bytes after the checksum are
+// not read: a producer that counts an end-of-line in /Length leaves one there.
+func checksumDefect(decoded, trailer []byte) error {
+	const checksumLen = 4
+	switch {
+	case len(trailer) == 0:
+		return errChecksumMissing
+	case len(trailer) < checksumLen:
+		return errChecksumCut
+	case binary.BigEndian.Uint32(trailer) != adler32.Checksum(decoded):
+		return errChecksumMismatch
+	}
+	return nil
 }
 
 // emptyFlateError returns the error of FlateDecode data that decodes to
@@ -575,22 +635,22 @@ func zlibHeaderLen(data []byte) (int, error) {
 
 // openFlate returns a reader of FlateDecode data: zlib, or raw deflate when
 // the zlib header is damaged but deflate data follows it, as in some corrupt
-// PDFs.
-func openFlate(data []byte) (io.ReadCloser, error) {
+// PDFs. framed reports a zlib stream: raw deflate data is salvaged.
+func openFlate(data []byte) (rc io.ReadCloser, framed bool, err error) {
 	r, err := zlib.NewReader(bytes.NewReader(data))
 	if err == nil {
-		return r, nil
+		return r, true, nil
 	}
 	fr := flate.NewReader(bytes.NewReader(data))
 	// Verify that at least some data reads.
 	probe := make([]byte, 1)
 	if _, probeErr := fr.Read(probe); probeErr != nil {
 		fr.Close()
-		return nil, err // return original zlib error
+		return nil, false, err // return original zlib error
 	}
 	// Reset: re-create reader to include the probed byte.
 	fr.Close()
-	return flate.NewReader(bytes.NewReader(data)), nil
+	return flate.NewReader(bytes.NewReader(data)), false, nil
 }
 
 // tolerantReader ends a stream where its decoder fails, once the decoder has
@@ -600,11 +660,21 @@ func openFlate(data []byte) (io.ReadCloser, error) {
 // failed through NewStreamReader, which every image decode takes: an image
 // whose FlateDecode data stops short, or ends in a wrong checksum, failed with
 // "unexpected EOF" where PDF.js paints it.
+//
+// The reader records what it forgave, as the chain records a damaged or
+// salvaged filter in its [DecodeReport]: see [tolerantReader.Salvage].
 type tolerantReader struct {
 	r        io.Reader
 	c        io.Closer
 	tolerate func(error) bool
+	// endDefect, when set, returns the defect of data the decoder read to its
+	// end without an error, or nil when its end is sound. It runs once the
+	// decoder produced data.
+	endDefect func() error
+	// filter names the filter for the record of a salvage.
+	filter   ast.PdfName
 	produced bool
+	salvage  error
 }
 
 func (t *tolerantReader) Read(p []byte) (int, error) {
@@ -612,7 +682,13 @@ func (t *tolerantReader) Read(p []byte) (int, error) {
 	if n > 0 {
 		t.produced = true
 	}
+	if err == io.EOF && t.produced && t.endDefect != nil {
+		if defect := t.endDefect(); defect != nil {
+			t.note(defect)
+		}
+	}
 	if err != nil && err != io.EOF && t.produced && t.tolerate(err) {
+		t.note(err)
 		return n, io.EOF
 	}
 	return n, err
@@ -624,10 +700,29 @@ func (t *tolerantReader) Close() error {
 	if t.c == nil {
 		return nil
 	}
-	if err := t.c.Close(); err != nil && (!t.produced || !t.tolerate(err)) {
-		return err
+	if err := t.c.Close(); err != nil {
+		if !t.produced || !t.tolerate(err) {
+			return err
+		}
+		t.note(err)
 	}
 	return nil
+}
+
+// note records defect as the salvage of the stream, keeping the first one.
+func (t *tolerantReader) note(defect error) {
+	if t.salvage == nil {
+		t.salvage = fmt.Errorf("%w: %s: %w", ErrSalvagedStream, t.filter, defect)
+	}
+}
+
+// Salvage returns, wrapping [ErrSalvagedStream], the first defect the reader
+// forgave in the data read so far: the error its decoder met once it had
+// produced data, or a defect of data it read to the end, such as LZWDecode
+// data without its EOD code or deflate data without its zlib header. It
+// returns nil while the data read is whole and sound.
+func (t *tolerantReader) Salvage() error {
+	return t.salvage
 }
 
 // decodeLZW implements the LZWDecode filter (ISO 32000-1, 7.4.4.2). A code
@@ -638,7 +733,9 @@ func (t *tolerantReader) Close() error {
 // Leniency: data that ends without the EOD code of 7.4.4.2 is read as whole,
 // as an ASCII filter's data without its EOD marker is. Nothing tells a
 // producer that omits the code from data cut short, and the producers seen
-// omitting it write whole images.
+// omitting it write whole images. Such data yields every byte with an error
+// wrapping errSalvagedData, so the chain records the salvage
+// ([DecodeReport.Salvaged]).
 //
 // # Corpus evidence
 //
@@ -674,6 +771,9 @@ func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict, limit int64)
 	copy(result, buf.Bytes())
 	if err != nil {
 		return result, fmt.Errorf("%w: LZWDecode: %w", errDamagedData, err)
+	}
+	if len(result) > 0 && !r.eod {
+		return result, fmt.Errorf("%w: LZWDecode: %w", errSalvagedData, errLZWNoEOD)
 	}
 	return result, nil
 }

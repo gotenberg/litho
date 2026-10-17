@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -797,6 +798,12 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 			return nil, ctx.Err()
 		}
 		data, err := doc.DecodeStream(ctx, s)
+		if errors.Is(err, filter.ErrSalvagedStream) {
+			// The document's decoder refuses salvaged data
+			// (pdf.WithStrictStreams): skipping the stream would hand on a
+			// page that passes for whole without it.
+			return nil, fmt.Errorf("decoding page content: %w", err)
+		}
 		if err != nil {
 			// Pages can legitimately split content across many small
 			// streams and leave one or two truncated or missing past
