@@ -1678,9 +1678,9 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	}
 
 	// An ICCBased image is read through its profile, a JPEG 2000 image with
-	// no /ColorSpace through the profile its own data carries, and a
-	// DeviceCMYK one through the document's CMYK profile (see
-	// colorTransform). A stencil mask holds coverage, not colour, whatever
+	// no /ColorSpace through the profile its own data carries, a DeviceCMYK
+	// one through the document's CMYK profile, and a DeviceRGB or DeviceGray
+	// one through an output intent of its family (see colorTransform). A stencil mask holds coverage, not colour, whatever
 	// /ColorSpace it wrongly states.
 	var conv *converter
 	if !isMask {

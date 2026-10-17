@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
 // flatTable builds a lut16Type table over n inputs whose two-point grid holds
@@ -424,6 +425,116 @@ func TestDecodeImage_PageOutputIntents(t *testing.T) {
 			ctx, doc, page := contextPDF(t, tc.pc, "/DeviceCMYK", "", 1, []byte{255, 0, 0, 0}, profiles...)
 			wantPixels(t, ctx, doc, page, tc.want)
 		})
+	}
+}
+
+// TestDecodeImage_DeviceRGBAndGrayReadTheOutputIntent pins that DeviceRGB
+// and DeviceGray are read through an output intent's destination profile of
+// their own colour family (ISO 32000-1, 14.11.5; ISO 19005-2, 6.2.4.3), the
+// page's before the document's, wherever the device space stands: as the
+// image's space, the base of an Indexed space or the alternate of a
+// Separation space. A profile of another family, and a default colour space
+// (ISO 32000-1, 8.6.5.6), leave the output intent unused.
+func TestDecodeImage_DeviceRGBAndGrayReadTheOutputIntent(t *testing.T) {
+	t.Parallel()
+
+	intents := func(objs ...int) string {
+		s := "/OutputIntents ["
+		for _, obj := range objs {
+			s += fmt.Sprintf("<< /Type /OutputIntent /S /GTS_PDFA1 /DestOutputProfile %d 0 R >>", obj)
+		}
+		return s + "]"
+	}
+	rgb25, rgb50 := profileObj(3, flatProfile("RGB ", 25)), profileObj(3, flatProfile("RGB ", 50))
+	gray25, cmyk25 := profileObj(1, flatProfile("GRAY", 25)), profileObj(4, flatProfile("CMYK", 25))
+	tint := "<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1] /C0 [0 0 0] /C1 [1 0 0] /N 1 >>"
+	for _, tc := range []struct {
+		name    string
+		pc      pdfContext
+		cs      string
+		samples []byte
+		extra   []string
+		want    [3]int
+	}{
+		{"DeviceRGB through an RGB profile", pdfContext{catalog: intents(5)}, "/DeviceRGB",
+			[]byte{10, 20, 30}, []string{rgb25}, grey25},
+		{"DeviceGray through a Gray profile", pdfContext{catalog: intents(5)}, "/DeviceGray",
+			[]byte{10}, []string{gray25}, grey25},
+		{"the first profile of the family", pdfContext{catalog: intents(5, 6)}, "/DeviceRGB",
+			[]byte{10, 20, 30}, []string{cmyk25, rgb25}, grey25},
+		{"the page's before the document's", pdfContext{catalog: intents(5), page: intents(6)}, "/DeviceRGB",
+			[]byte{10, 20, 30}, []string{rgb50, rgb25}, grey25},
+		{"an Indexed base", pdfContext{catalog: intents(5)}, "[/Indexed /DeviceRGB 0 <0A141E>]",
+			[]byte{0}, []string{rgb25}, grey25},
+		{"a Separation alternate", pdfContext{catalog: intents(5)}, "[/Separation /Spot /DeviceRGB 6 0 R]",
+			[]byte{255}, []string{rgb25, tint}, grey25},
+		{"an ICCBased space whose profile cannot be used", pdfContext{catalog: intents(5)}, "[/ICCBased 6 0 R]",
+			[]byte{10, 20, 30}, []string{rgb25, "<< /N 3 /Length 3 >>\nstream\nbad\nendstream"}, grey25},
+		{"DeviceRGB past a CMYK profile", pdfContext{catalog: intents(5)}, "/DeviceRGB",
+			[]byte{10, 20, 30}, []string{cmyk25}, [3]int{10, 20, 30}},
+		{"DeviceGray past an RGB profile", pdfContext{catalog: intents(5)}, "/DeviceGray",
+			[]byte{10}, []string{rgb25}, [3]int{10, 10, 10}},
+		{"a default colour space first", pdfContext{catalog: intents(5), resources: "/ColorSpace << /DefaultRGB [/ICCBased 6 0 R] >>"},
+			"/DeviceRGB", []byte{10, 20, 30}, []string{rgb25, rgb50}, grey50},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, doc, page := contextPDF(t, tc.pc, tc.cs, "", 1, tc.samples, tc.extra...)
+			wantPixels(t, ctx, doc, page, tc.want)
+		})
+	}
+}
+
+// TestColorTransform_SRGBOutputIntentReadsAsIs pins that an sRGB destination
+// profile, which gives every colour back as it came, leaves DeviceRGB samples
+// unconverted rather than rounded through the profile.
+func TestColorTransform_SRGBOutputIntentReadsAsIs(t *testing.T) {
+	t.Parallel()
+
+	ctx, doc, page := managedPDF(t, "/OutputIntents [<< /Type /OutputIntent /S /GTS_PDFA1 /DestOutputProfile 5 0 R >>]",
+		"/DeviceRGB", "", 1, []byte{0, 175, 255}, profileObj(3, icc.SRGBProfile()))
+	cc := colorContext{resources: page.Resources, page: page.Dict}
+	if tr := colorTransform(ctx, doc, ast.PdfName("DeviceRGB"), "DeviceRGB", 3, icc.RelativeColorimetric, cc); tr != nil {
+		t.Errorf("an sRGB output intent gave a transform, want none")
+	}
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	if r, g, b, _ := img.At(0, 0).RGBA(); [3]uint32{r >> 8, g >> 8, b >> 8} != [3]uint32{0, 175, 255} {
+		t.Errorf("pixel = %d %d %d, want 0 175 255", r>>8, g>>8, b>>8)
+	}
+}
+
+// TestDecodeImage_CIEBasedSpacesIgnoreTheOutputIntent pins that a CIE-based
+// space, which litho reads in the device space of its component count, keeps
+// its own reading under an output intent of that family: the space is
+// characterised by its own dictionary (ISO 32000-1, 8.6.5.2-8.6.5.4).
+func TestDecodeImage_CIEBasedSpacesIgnoreTheOutputIntent(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		cs, profile string
+		samples     []byte
+	}{
+		{"[/CalRGB << /WhitePoint [0.9505 1 1.089] /Gamma [2.2 2.2 2.2] >>]", profileObj(3, flatProfile("RGB ", 25)), []byte{10, 20, 30}},
+		{"[/CalGray << /WhitePoint [0.9505 1 1.089] /Gamma 2.2 >>]", profileObj(1, flatProfile("GRAY", 25)), []byte{10}},
+		{"[/Lab << /WhitePoint [0.9505 1 1.089] /Range [-100 100 -100 100] >>]", profileObj(3, flatProfile("RGB ", 25)), []byte{128, 100, 160}},
+	} {
+		pixel := func(catalog string) [3]uint32 {
+			ctx, doc, page := managedPDF(t, catalog, tc.cs, "", 1, tc.samples, tc.profile)
+			img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+			if err != nil {
+				t.Fatalf("%s: DecodeImage: %v", tc.cs, err)
+			}
+			r, g, b, _ := img.At(0, 0).RGBA()
+			return [3]uint32{r >> 8, g >> 8, b >> 8}
+		}
+		without := pixel("")
+		with := pixel("/OutputIntents [<< /Type /OutputIntent /S /GTS_PDFA1 /DestOutputProfile 5 0 R >>]")
+		if with != without {
+			t.Errorf("%s: %v under the output intent, %v without", tc.cs, with, without)
+		}
 	}
 }
 

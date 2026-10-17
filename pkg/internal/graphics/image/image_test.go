@@ -12,7 +12,7 @@ import (
 )
 
 func TestResolveColorSpace_DirectName(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfName("DeviceGray"),
 	}
@@ -23,7 +23,7 @@ func TestResolveColorSpace_DirectName(t *testing.T) {
 }
 
 func TestResolveColorSpace_Missing(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	dict := ast.PdfDict{}
 	got := resolveColorSpace(context.Background(), doc, dict)
 	if got != "DeviceRGB" {
@@ -32,7 +32,7 @@ func TestResolveColorSpace_Missing(t *testing.T) {
 }
 
 func TestResolveColorSpace_ICCBased(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfArray{ast.PdfName("ICCBased"), ast.PdfNull{}},
 	}
@@ -43,7 +43,7 @@ func TestResolveColorSpace_ICCBased(t *testing.T) {
 }
 
 func TestResolveColorSpace_CalGray(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfArray{ast.PdfName("CalGray"), ast.PdfNull{}},
 	}
@@ -54,7 +54,7 @@ func TestResolveColorSpace_CalGray(t *testing.T) {
 }
 
 func TestResolveColorSpace_Indexed(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfArray{
 			ast.PdfName("Indexed"),
@@ -70,7 +70,7 @@ func TestResolveColorSpace_Indexed(t *testing.T) {
 }
 
 func TestResolveColorSpace_Separation(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfArray{ast.PdfName("Separation"), ast.PdfName("Spot1")},
 	}
@@ -81,7 +81,7 @@ func TestResolveColorSpace_Separation(t *testing.T) {
 }
 
 func TestResolveColorSpace_EmptyArray(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	dict := ast.PdfDict{
 		"ColorSpace": ast.PdfArray{},
 	}
@@ -102,7 +102,7 @@ func TestDecodeImage_DeviceGray(t *testing.T) {
 		"BitsPerComponent": ast.PdfInt(8),
 	}, pixels)
 
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	page := &document.Page{
 		Resources: ast.PdfDict{
 			"XObject": ast.PdfDict{
@@ -227,7 +227,7 @@ func TestDecodeImage_DeviceRGB(t *testing.T) {
 		"BitsPerComponent": ast.PdfInt(8),
 	}, pixels)
 
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	page := &document.Page{
 		Resources: ast.PdfDict{
 			"XObject": ast.PdfDict{
@@ -249,7 +249,7 @@ func TestDecodeImage_DeviceRGB(t *testing.T) {
 }
 
 func TestDecodeImage_NotFound(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	page := &document.Page{
 		Resources: ast.PdfDict{
 			"XObject": ast.PdfDict{},
@@ -263,7 +263,7 @@ func TestDecodeImage_NotFound(t *testing.T) {
 }
 
 func TestDecodeImage_NoXObject(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	page := &document.Page{
 		Resources: ast.PdfDict{},
 	}
@@ -283,7 +283,7 @@ func TestExtractImages_Basic(t *testing.T) {
 		"BitsPerComponent": ast.PdfInt(8),
 	}, []byte{})
 
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	page := &document.Page{
 		Resources: ast.PdfDict{
 			"XObject": ast.PdfDict{
@@ -305,7 +305,7 @@ func TestExtractImages_Basic(t *testing.T) {
 }
 
 func TestExtractImages_NoXObject(t *testing.T) {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	page := &document.Page{
 		Resources: ast.PdfDict{},
 	}
@@ -324,7 +324,7 @@ func TestExtractImages_SkipsNonImage(t *testing.T) {
 		"Height":  ast.PdfInt(100),
 	}, []byte{})
 
-	doc := &document.Document{}
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
 	page := &document.Page{
 		Resources: ast.PdfDict{
 			"XObject": ast.PdfDict{

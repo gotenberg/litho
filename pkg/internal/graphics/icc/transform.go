@@ -43,6 +43,8 @@ type Transform struct {
 	colorant [9]float64
 	labGrey  bool
 	srgb     *srgbTable
+	// identity caches what [Transform.Identity] finds, computed on first use.
+	identity func() bool
 }
 
 // NewTransform builds the transform from the profile's data colour space to
@@ -58,6 +60,7 @@ func (p *Profile) NewTransform(intent Intent) (*Transform, error) {
 		return nil, fmt.Errorf("%w: connection space %q", ErrUnsupported, p.PCS)
 	}
 	t := &Transform{n: n, srgb: srgb()}
+	t.identity = sync.OnceValue(t.readsAsIdentity)
 	tag := [4]string{"A2B0", "A2B1", "A2B2", "A2B1"}[intent&3]
 	b, ok := p.tags[tag]
 	if !ok {
@@ -138,6 +141,71 @@ func (p *Profile) curveTag(sig string) (curve, error) {
 // Components returns the number of input components the transform takes.
 func (t *Transform) Components() int {
 	return t.n
+}
+
+// identityGridStep spaces the colours [Transform.Identity] samples off the
+// grey and single-channel ramps: every 17th level, so 0 and 255 included,
+// 16 levels per channel.
+const identityGridStep = 17
+
+// identityTolerance is how many levels a colour may come back off itself
+// for [Transform.Identity] to count it as given back. The colorants of an
+// ICC profile are s15Fixed16 numbers (ICC.1:2010, 4.6), so even the sRGB
+// profile's matrix is rounded, and it brings a few saturated colours back a
+// level off, the rounding two colour engines differ by.
+const identityTolerance = 1
+
+// Identity reports whether the transform gives every colour back as it came,
+// to within identityTolerance, so that its colours already are sRGB values,
+// as they are under an sRGB profile. Only a grey or an RGB profile of tone
+// curves and colorants qualifies: its result is a smooth function of each
+// channel. Such a transform is taken for the identity when every grey, every
+// level of each channel alone and every colour of a 16-level grid come back
+// as they came. The check runs once per transform.
+func (t *Transform) Identity() bool {
+	return t.identity()
+}
+
+// readsAsIdentity computes what [Transform.Identity] reports.
+func (t *Transform) readsAsIdentity() bool {
+	if t.lut != nil {
+		return false
+	}
+	near := func(a, b uint8) bool {
+		return int(a)-int(b) <= identityTolerance && int(b)-int(a) <= identityTolerance
+	}
+	same := func(in []byte, want [3]byte) bool {
+		r, g, b := t.Convert(in)
+		return near(r, want[0]) && near(g, want[1]) && near(b, want[2])
+	}
+	for v := range 256 {
+		c := byte(v)
+		if t.n == 1 {
+			if !same([]byte{c}, [3]byte{c, c, c}) {
+				return false
+			}
+			continue
+		}
+		for _, px := range [][3]byte{{c, c, c}, {c, 0, 0}, {0, c, 0}, {0, 0, c}} {
+			if !same(px[:], px) {
+				return false
+			}
+		}
+	}
+	if t.n == 1 {
+		return true
+	}
+	for r := 0; r < 256; r += identityGridStep {
+		for g := 0; g < 256; g += identityGridStep {
+			for b := 0; b < 256; b += identityGridStep {
+				px := [3]byte{byte(r), byte(g), byte(b)}
+				if !same(px[:], px) {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }
 
 // Size returns roughly how many bytes the transform holds, for a cache that

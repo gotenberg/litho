@@ -127,6 +127,41 @@ func TestNewTransform_Limits(t *testing.T) {
 	}
 }
 
+// TestTransform_Identity pins that the sRGB profile and a grey profile of the
+// sRGB tone curve read as the identity, and that a profile of another tone
+// curve or of a table does not.
+func TestTransform_Identity(t *testing.T) {
+	t.Parallel()
+
+	sGrey := buildProfile("GRAY", "XYZ ", 2, map[string][]byte{
+		"kTRC": paraCurve(3, 2.4, 1/1.055, 0.055/1.055, 1/12.92, 0.04045),
+		"wtpt": xyzType(0.9642, 1, 0.8249),
+	})
+	for _, tc := range []struct {
+		name    string
+		profile []byte
+		want    bool
+	}{
+		{"sRGB", SRGBProfile(), true},
+		{"a grey of the sRGB tone curve", sGrey, true},
+		{"RGB of other tone curves", rgbProfile(), false},
+		{"a grey of another tone curve", greyProfile(), false},
+		{"a CMYK table", cmykProfile(), false},
+	} {
+		p, err := Parse(tc.profile)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		tr, err := p.NewTransform(RelativeColorimetric)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if got := tr.Identity(); got != tc.want {
+			t.Errorf("%s: Identity() = %t, want %t", tc.name, got, tc.want)
+		}
+	}
+}
+
 // TestBuiltinCMYK converts through the built-in CMYK profile under every
 // intent and matches LittleCMS 2.17 to within one level: the process inks
 // land on the familiar SWOP cyan, magenta, yellow and rich black.
