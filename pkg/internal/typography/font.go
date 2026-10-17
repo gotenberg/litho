@@ -1784,7 +1784,7 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	if mapName == "Identity" {
 		if !isCJKOrdering(ctx, doc, fontDict) {
 			font.CIDIdentityFallback = true
-			applyCalibriGlyphMap(ctx, doc, fontDict, cidDict, font)
+			applyStandardFontGlyphMap(ctx, doc, fontDict, cidDict, font)
 		}
 		return
 	}
@@ -1795,25 +1795,38 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	applyCIDToGIDStream(ctx, doc, fontDict, font, mapObj)
 }
 
-// applyCalibriGlyphMap overlays PDF.js's glyph table for Calibri on a Type0
-// font that draws a non-embedded Calibri face through /CIDToGIDMap /Identity.
+// applyStandardFontGlyphMap gives a Type0 font that draws a non-embedded
+// standard face through an Identity CMap PDF.js's glyph table for that face,
+// and reports whether it did.
 //
-// Under /Identity a CID is the glyph index of the font program (ISO 32000-1,
-// 9.7.4.2), so the codes of such a font are glyph IDs of the Calibri program
-// installed where the file was produced, and the file does not ship that
-// program. [ResolveFont] comes here only when no /ToUnicode CMap parsed, and
-// then none of the methods of ISO 32000-1, 9.10.2 applies: the font is
-// composite, and its Identity-H or Identity-V CMap and Identity ordering are
-// excluded from the predefined CMap route. The clause leaves the character to
-// the reader. litho follows PDF.js (fonts.js, fallbackToSystemFont), the
-// reader its text extraction is measured against: its glyph table for
-// Calibri resolves the glyph IDs, where reading each code as a code point,
-// as the Identity fallback does otherwise, yields unrelated characters.
+// Under an Identity CMap the code is the CID (ISO 32000-1, 9.7.5.2), and with
+// no /CIDToGIDMap stream the CID is the glyph index of the font program
+// (9.7.4.2), so the codes of such a font are glyph IDs of the program
+// installed where the file was produced, which the file does not ship.
+// [ResolveFont] comes here only when no /ToUnicode CMap parsed, and then none
+// of the methods of ISO 32000-1, 9.10.2 applies: the font is composite, and
+// its Identity-H or Identity-V CMap and Identity ordering are excluded from
+// the predefined CMap route. The clause leaves the character to the reader.
+// litho follows PDF.js (fonts.js, fallbackToSystemFont), the reader its text
+// extraction is measured against. PDF.js reads such a font through a glyph
+// table of the Arial glyph order (standard_fonts.js,
+// getGlyphMapForStandardFonts), with supplements for Arial Black and Calibri,
+// whose orders differ; [stdfonts] carries the tables, generated from PDF.js
+// at the revision of the text goldens. The table is a relaxation of 9.10.2,
+// grounded in the glyph order of the named host font rather than in the
+// file. A code the table does not name reads as the code point PDF.js gives
+// it, the code itself, with no offset.
 //
 // The gate is PDF.js's own: no embedded program, a CIDFontType2 under an
-// Identity CMap, and a Calibri face name. litho also accepts the name with a
-// subset prefix, as [normalizeBase14Name] does for widths, where PDF.js
-// requires the bare face name.
+// Identity CMap, and the name PDF.js identifies the font by
+// ([stdfonts.PDFJSFontName]) naming a standard font or one PDF.js maps to a
+// standard font ([stdfonts.IdentityGlyphMap]). litho removes a subset tag
+// first, as [normalizeBase14Name] does for widths, where PDF.js requires the
+// bare face name: ISO 32000-1, 9.6.4 gives the tag to an embedded subset, so
+// on a font that embeds nothing it names no other face. The font must not
+// belong to an Adobe CJK collection:
+// PDF.js reads such a font's codes through the collection's UCS2 CMap first,
+// and so does litho, before reaching here.
 //
 // # Corpus evidence
 //
@@ -1822,46 +1835,49 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 //     /CIDToGIDMap /Identity and carry a /ToUnicode CMap written in UTF-16,
 //     which litho does not parse. The page matched 1 of the 151 words of the
 //     PDF.js golden and matches all 151 with the table.
-//   - All corpora: the three faces of issue9195.pdf are the only non-embedded
-//     Calibri faces under an explicit /CIDToGIDMap /Identity, and no
-//     non-embedded Calibri face carries a subset prefix.
-func applyCalibriGlyphMap(ctx context.Context, doc *document.Document, fontDict, cidDict ast.PdfDict, font *Font) {
-	if cidFontHasEmbeddedProgram(ctx, doc, fontDict) || !isIdentityEncoding(ctx, doc, fontDict) {
-		return
+//   - pdfjs issue19550.pdf, issue20453.pdf: a non-embedded Arial under
+//     Identity-H shows Cyrillic at the glyph IDs of the Arial order (У is
+//     589). Reading them as CID + 29 gave IPA letters ("ɪɺʂʅɹɷʖ" for
+//     "Угловая"); with the table both pages match the PDF.js golden.
+//   - pdfjs issue5801.pdf: a non-embedded ArialBlack,Bold whose /ToUnicode
+//     is a copy of the Identity-H CMap, which PDF.js reads as no mapping at
+//     all. The table matches its golden.
+//   - pdfjs issue15044.pdf (ArialUnicodeMS), issue13916.pdf (ArialMT),
+//     bug921760.pdf and issue6127.pdf (TimesNewRoman): non-embedded faces
+//     under Identity-H. The first matches its golden, and the other three
+//     now differ from theirs only in spacing or, for issue13916.pdf, in the
+//     U+0000 PDF.js emits for glyph ID 0.
+func applyStandardFontGlyphMap(ctx context.Context, doc *document.Document, fontDict, cidDict ast.PdfDict, font *Font) bool {
+	if cidFontHasEmbeddedProgram(ctx, doc, fontDict) || !isIdentityEncoding(ctx, doc, fontDict) || isCJKOrdering(ctx, doc, fontDict) {
+		return false
 	}
 	subtype, err := document.ResolveName(ctx, doc, cidDict["Subtype"])
 	if err != nil {
-		doc.Logger.Debug("resolving CIDFont Subtype for the Calibri glyph map", slog.Any("err", err))
-		return
+		doc.Logger.Debug("resolving CIDFont Subtype for the standard font glyph map", slog.Any("err", err))
+		return false
 	}
 	if subtype != "CIDFontType2" {
-		return
+		return false
 	}
-	name, err := document.ResolveName(ctx, doc, fontDict["BaseFont"])
+	baseFont, err := document.ResolveName(ctx, doc, cidDict["BaseFont"])
 	if err != nil {
-		doc.Logger.Debug("resolving BaseFont for the Calibri glyph map", slog.Any("err", err))
-		return
+		doc.Logger.Debug("resolving CIDFont BaseFont for the standard font glyph map", slog.Any("err", err))
 	}
-	if !isCalibriFace(string(name)) {
-		return
+	var fontName ast.PdfName
+	if fd, err := document.ResolveDict(ctx, doc, cidDict["FontDescriptor"]); err == nil && fd != nil {
+		if fontName, err = document.ResolveName(ctx, doc, fd["FontName"]); err != nil {
+			doc.Logger.Debug("resolving FontName for the standard font glyph map", slog.Any("err", err))
+		}
 	}
-	m := stdfonts.CMap(string(name))
+	m := stdfonts.IdentityGlyphMap(stdfonts.PDFJSFontName(stripSubsetTag(string(fontName)), stripSubsetTag(string(baseFont))))
+	if m == nil {
+		return false
+	}
 	if font.GIDToUnicode == nil {
 		font.GIDToUnicode = make(map[uint16]rune, len(m))
 	}
 	maps.Copy(font.GIDToUnicode, m)
-}
-
-// isCalibriFace reports whether baseFont names one of the four Calibri faces
-// of [stdFontMap] (Calibri, Calibri-Bold, Calibri-Italic, Calibri-BoldItalic),
-// the four PDF.js maps to a standard font, once [canonicalFontName] has
-// removed a subset prefix and turned a comma style suffix into a hyphen one.
-func isCalibriFace(baseFont string) bool {
-	name := canonicalFontName(baseFont)
-	if _, ok := stdFontMap[name]; !ok {
-		return false
-	}
-	return name == "Calibri" || strings.HasPrefix(name, "Calibri-")
+	return true
 }
 
 // cidFontHasEmbeddedProgram reports whether a Type0 font's descendant
@@ -1881,6 +1897,31 @@ func cidFontHasEmbeddedProgram(ctx context.Context, doc *document.Document, font
 		}
 	}
 	return false
+}
+
+// stripSubsetTag removes the subset tag of ISO 32000-1, 9.6.4, six
+// uppercase letters and a plus sign, from the front of a font name.
+func stripSubsetTag(name string) string {
+	tag, rest, ok := strings.Cut(name, "+")
+	if !ok || len(tag) != 6 || strings.IndexFunc(tag, func(r rune) bool { return r < 'A' || r > 'Z' }) >= 0 {
+		return name
+	}
+	return rest
+}
+
+// descendantCIDFont returns the CIDFont dictionary a Type0 font names first
+// in /DescendantFonts, or nil when it names none.
+func descendantCIDFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfDict {
+	dfArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
+	if err != nil || len(dfArr) == 0 {
+		return nil
+	}
+	cidDict, err := document.ResolveDict(ctx, doc, dfArr[0])
+	if err != nil {
+		doc.Logger.Debug("resolving the descendant CIDFont", slog.Any("err", err))
+		return nil
+	}
+	return cidDict
 }
 
 // hasCIDToGIDMapStream reports whether a Type0 font's descendant CIDFont
@@ -2111,8 +2152,9 @@ func simpleBaseEncodingName(ctx context.Context, doc *document.Document, fontDic
 }
 
 // applyCIDIdentityHeuristics fills in what the identity CID fallback needs to
-// read text: the CID-to-Unicode offset, and a partial GID table for the
-// standard faces a PDF may reference without embedding.
+// read text: PDF.js's glyph table for a standard face a PDF references
+// without embedding ([applyStandardFontGlyphMap]), or else the CID-to-Unicode
+// offset.
 //
 // TODO: [applyCIDToGIDIdentityFallback] turns [Font.CIDIdentityFallback] on for
 // an explicit /CIDToGIDMap /Identity without calling this, so that path reads a
@@ -2138,6 +2180,11 @@ func applyCIDIdentityHeuristics(ctx context.Context, doc *document.Document, fon
 	if hasCIDToGIDMapStream(ctx, doc, fontDict) {
 		return
 	}
+	// A non-embedded standard face reads through PDF.js's glyph table for
+	// it, and a code the table does not name as the code itself.
+	if cidDict := descendantCIDFont(ctx, doc, fontDict); cidDict != nil && applyStandardFontGlyphMap(ctx, doc, fontDict, cidDict, font) {
+		return
+	}
 	// Many non-embedded fonts use GIDs where the first printable character
 	// (space, U+0020) starts at GID 3 (offset 29). If /W starts at CID 3,
 	// assume CID + 29 = Unicode.
@@ -2151,28 +2198,6 @@ func applyCIDIdentityHeuristics(ctx context.Context, doc *document.Document, fon
 	if font.CIDOffset == 0 && !cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
 		font.CIDOffset = 29
 	}
-	// Overlay a partial GID→Unicode table for the handful of Windows
-	// standard fonts (Arial, Helvetica) that PDFs reference by name without
-	// embedding. The CID + 29 heuristic covers ASCII; extended-Latin
-	// positions (e.g. GID 207 = Ó in Arial, GID 179-182 = smart quotes) do
-	// not follow a linear offset and need an explicit lookup.
-	// stdfonts.CMap provides the curated subset.
-	if cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
-		return
-	}
-	bf, ok := fontDict["BaseFont"]
-	if !ok {
-		return
-	}
-	name, _ := document.ResolveName(ctx, doc, bf)
-	m := stdfonts.CMap(string(name))
-	if m == nil {
-		return
-	}
-	if font.GIDToUnicode == nil {
-		font.GIDToUnicode = make(map[uint16]rune, len(m))
-	}
-	maps.Copy(font.GIDToUnicode, m)
 }
 
 // detectCIDOffset infers the CID-to-Unicode offset from the /W (widths) map.

@@ -33,6 +33,27 @@ const getSupplementalGlyphMapForCalibri = getLookupTableFactory(function (t) {
   t[4] = 65;
   t[1004] = 48;
 });
+
+const getStdFontMap = getLookupTableFactory(function (t) {
+  // The standard 14 fonts:
+  t["Times-Roman"] = "Times-Roman";
+  t.Helvetica = "Helvetica";
+  t.Arial = "Helvetica";
+});
+
+const getNonStdFontMap = getLookupTableFactory(function (t) {
+  t.Calibri = "Helvetica";
+  t["MS-Gothic"] = "MS Gothic";
+});
+
+const getSerifFonts = getLookupTableFactory(function (t) {
+  t["Adobe Jenson"] = true;
+  t.Albertus = true;
+});
+
+const getSymbolsFonts = getLookupTableFactory(function (t) {
+  t.Symbol = true;
+});
 `
 
 func TestParseLookupTable(t *testing.T) {
@@ -100,9 +121,13 @@ func TestGenerate(t *testing.T) {
 		t.Errorf("missing the generated-code marker:\n%s", src)
 	}
 	for _, want := range []string{
-		"Copyright 2015 Mozilla", "LICENSE-pdfjs", pdfjsTag, pdfjsCommit,
+		"Copyright 2015 Mozilla", "LICENSE-pdfjs", pdfjsCommit,
 		"var pdfjsStandardFontGlyphs = map[uint16]rune{", "var pdfjsCalibriGlyphs = map[uint16]rune{",
 		"1004: 0x0030, // 0",
+		"var pdfjsArialBlackGlyphs = map[uint16]rune{",
+		"var pdfjsStdFontMap = map[string]string{", `"Times-Roman": "Times-Roman",`,
+		`"MS-Gothic": "MS Gothic",`, "var pdfjsSerifFonts = map[string]bool{", `"Adobe Jenson": true,`,
+		"var pdfjsSymbolsFonts = map[string]bool{",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("output lacks %q", want)
@@ -114,6 +139,39 @@ func TestGenerate(t *testing.T) {
 
 	if _, err := generate(strings.Replace(sampleJS, "Mozilla Foundation", "Someone", 1)); !errors.Is(err, errNoCopyright) {
 		t.Errorf("source without the Mozilla copyright: err = %v, want %v", err, errNoCopyright)
+	}
+}
+
+func TestParseNameTable(t *testing.T) {
+	t.Parallel()
+
+	got, err := parseNameTable(sampleJS, "getNonStdFontMap", false)
+	if err != nil || len(got) != 2 || got["Calibri"] != "Helvetica" || got["MS-Gothic"] != "MS Gothic" {
+		t.Errorf("getNonStdFontMap = %v (err %v)", got, err)
+	}
+	flags, err := parseNameTable(sampleJS, "getSerifFonts", true)
+	if _, ok := flags["Adobe Jenson"]; err != nil || len(flags) != 2 || !ok {
+		t.Errorf("getSerifFonts = %v (err %v)", flags, err)
+	}
+
+	table := func(body string) string {
+		return "const getX = getLookupTableFactory(function (t) {\n" + body + "\n});\n"
+	}
+	for _, tc := range []struct {
+		desc string
+		js   string
+		flag bool
+		want error
+	}{
+		{"absent", sampleJS, false, errTableNotFound},
+		{"flag in a name table", table(`  t.Arial = true;`), false, errUnexpectedStmt},
+		{"name in a flag table", table(`  t.Arial = "Helvetica";`), true, errUnexpectedStmt},
+		{"computed value", table(`  t.Arial = t.Helvetica;`), false, errUnexpectedStmt},
+		{"duplicate", table("  t.Arial = \"Helvetica\";\n  t[\"Arial\"] = \"Times-Roman\";"), false, errDuplicateName},
+	} {
+		if _, err := parseNameTable(tc.js, "getX", tc.flag); !errors.Is(err, tc.want) {
+			t.Errorf("%s: err = %v, want %v", tc.desc, err, tc.want)
+		}
 	}
 }
 

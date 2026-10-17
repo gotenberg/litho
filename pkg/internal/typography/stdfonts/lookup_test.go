@@ -2,80 +2,83 @@ package stdfonts
 
 import "testing"
 
-// TestCMapNormalisesTheBaseFontName pins the name handling [CMap] documents: a
-// PDF /BaseFont carries subset prefixes and style suffixes, and the lookup has
-// to see through both to the family keyword.
-func TestCMapNormalisesTheBaseFontName(t *testing.T) {
+// TestIdentityGlyphMapFollowsPDFJSNames pins the gate PDF.js applies
+// (fonts.js, fallbackToSystemFont): a font that is standard or mapped to a
+// standard font once its name is normalised gets a table, every other name
+// none. A subset prefix is not removed, as it is not in PDF.js.
+func TestIdentityGlyphMapFollowsPDFJSNames(t *testing.T) {
 	t.Parallel()
 
 	for _, name := range []string{
 		"Arial",
-		"ABCDEF+Arial",     // subset prefix
-		"ArialMT",          // PostScript suffix
-		"Arial,Bold",       // style suffix
-		"Arial-ItalicMT",   // both
-		"arial",            // lower case
-		"ABCDEF+ArialPSMT", // prefix and suffix together
-		"Helvetica",        // the alias the switch treats as Arial
-		"XYZABC+Helvetica", // alias with a prefix
+		"ArialMT",
+		"Arial,Bold",        // comma style suffix
+		"Arial_Bold",        // underscore style suffix
+		"Arial-BoldMT",      // standard map entry
+		"Helvetica",         // standard 14
+		"Times New Roman",   // white space dropped: TimesNewRoman
+		"TimesNewRomanPSMT", // a serif face PDF.js reads in the same order
+		"CourierNew",
+		"Calibri",
+		"Calibri,Bold",
+		"Impact",          // non-standard map entry mapped to Helvetica
+		"ArialBlack,Bold", // standard map entry
 	} {
-		if got := CMap(name); got == nil {
-			t.Errorf("CMap(%q) = nil, want the Arial table", name)
+		if IdentityGlyphMap(name) == nil {
+			t.Errorf("IdentityGlyphMap(%q) = nil, want a table", name)
+		}
+	}
+	for _, name := range []string{
+		"",
+		"ABCDEF+Arial", // subset prefix
+		"ArialMT,Bold", // ArialMT-Bold is in neither map
+		"ComicSansMS",  // mapped, but to a font that is not standard
+		"Tahoma",       // in neither map
+		"MS-Gothic",    // mapped to MS Gothic, not standard
+		"SomeFontNobodyShips",
+	} {
+		if got := IdentityGlyphMap(name); got != nil {
+			t.Errorf("IdentityGlyphMap(%q) returned a table of %d entries, want nil", name, len(got))
 		}
 	}
 }
 
-// TestCMapSeparatesTheBundledFamilies pins that the two tables are distinct:
-// matching the wrong family would resolve a CID to the wrong character.
-func TestCMapSeparatesTheBundledFamilies(t *testing.T) {
+// TestIdentityGlyphMapPicksTheSupplement pins the supplement order of
+// fallbackToSystemFont: Arial Black first, then Calibri, else the standard map
+// alone.
+func TestIdentityGlyphMapPicksTheSupplement(t *testing.T) {
 	t.Parallel()
 
-	arial, calibri := CMap("Arial"), CMap("Calibri")
-	if arial == nil || calibri == nil {
-		t.Fatal("one of the bundled families is missing")
+	arial, black, calibri := IdentityGlyphMap("Arial"), IdentityGlyphMap("Arial-Black"), IdentityGlyphMap("Calibri")
+	// GID 227 is ł in Arial Black only, GID 4 is A in Calibri only, and both
+	// keep the standard map's ! elsewhere.
+	if arial[227] == black[227] || black[227] != 'ł' {
+		t.Errorf("GID 227: Arial %q, Arial Black %q, want the supplement's ł in Arial Black only", arial[227], black[227])
 	}
-	if len(arial) == len(calibri) {
-		// Not a correctness requirement in itself, but equal sizes would make
-		// the check below vacuous if the two ever became the same map.
-		t.Logf("both tables hold %d entries", len(arial))
+	if arial[4] != '!' || black[4] != '!' || calibri[4] != 'A' {
+		t.Errorf("GID 4: Arial %q, Arial Black %q, Calibri %q, want ! ! A", arial[4], black[4], calibri[4])
 	}
-	// Arial GID 179 is the left double quotation mark. The Calibri table
-	// takes that GID from PDF.js's standard map too, but not GID 4, where
-	// Arial draws "!" (the CID + 29 path) and Calibri draws "A", which is the
-	// whole reason for two tables.
-	if arial[179] != '“' {
-		t.Errorf("Arial GID 179 = %q, want %q", arial[179], '“')
-	}
-	if _, ok := arial[4]; ok {
-		t.Errorf("the Arial table keys GID 4 (%q), which the CID + 29 path covers", arial[4])
-	}
-	if calibri[4] != 'A' {
-		t.Errorf("Calibri GID 4 = %q, want %q", calibri[4], 'A')
+	// The Cyrillic of the Arial order (GID 590 is Ф).
+	if arial[590] != 'Ф' {
+		t.Errorf("Arial GID 590 = %q, want Ф", arial[590])
 	}
 }
 
-// TestCMapReturnsNilForAnUnbundledFamily pins the contract the caller depends
-// on: nil means "fall back to the CID identity offset path", so a family with
-// no table must not resolve to another family's.
-//
-// Times New Roman is the case to watch. The package doc named it for a while
-// although no table for it is bundled, and a caller trusting that would have
-// taken Arial's answers for Times glyph IDs.
-func TestCMapReturnsNilForAnUnbundledFamily(t *testing.T) {
+// TestPDFJSFontName pins the /FontName and /BaseFont choice of
+// translateFont (evaluator.js).
+func TestPDFJSFontName(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{
-		"",
-		"TimesNewRoman",
-		"TimesNewRomanPSMT",
-		"ABCDEF+TimesNewRoman",
-		"Courier",
-		"CourierNew",
-		"Georgia",
-		"SomeFontNobodyShips",
+	for _, tc := range []struct{ fontName, baseFont, want string }{
+		{"Arial", "Arial", "Arial"},
+		{"", "Arial", "Arial"},
+		{"Arial", "Arial,Bold", "Arial,Bold"},                // the base font extends the font name
+		{"wg09np", "Wingdings-Regular", "Wingdings-Regular"}, // only the base font is known
+		{"Arial", "Helvetica", "Arial"},                      // both known: the font name wins
+		{"Foo", "Bar", "Foo"},                                // neither known
 	} {
-		if got := CMap(name); got != nil {
-			t.Errorf("CMap(%q) returned a table of %d entries, want nil", name, len(got))
+		if got := PDFJSFontName(tc.fontName, tc.baseFont); got != tc.want {
+			t.Errorf("PDFJSFontName(%q, %q) = %q, want %q", tc.fontName, tc.baseFont, got, tc.want)
 		}
 	}
 }

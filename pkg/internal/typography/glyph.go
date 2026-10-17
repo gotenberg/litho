@@ -366,10 +366,13 @@ func decomposeLigature(s string) string {
 // from emitted text rather than printing a "?" placeholder that would
 // surface in extracted content.
 func resolveGlyphFallback(font *Font, data []byte, n *int) string {
-	if font.GIDToUnicode != nil && font.CIDWidths != nil && len(data) >= 2 {
+	if font.GIDToUnicode != nil && (font.Subtype == "Type0" || font.CIDWidths != nil) && len(data) >= 2 {
 		// CIDFonts (Type0) feed 2-byte CIDs to the embedded font's
-		// GID→Unicode cmap. Single-byte simple fonts must not follow
-		// this path: their byte codes are char codes that need to go
+		// GID→Unicode cmap, or to the glyph table of a non-embedded
+		// standard face, whether or not the CIDFont states /W, which
+		// ISO 32000-1, Table 117 makes optional. Single-byte simple
+		// fonts must not follow this path: their byte codes are char
+		// codes that need to go
 		// through Font.Encoding → glyph-name lookups, and treating
 		// those bytes as raw GIDs resurrects ghost glyphs (e.g. byte
 		// 0x0D, which WinAnsiEncoding leaves unmapped, would resolve

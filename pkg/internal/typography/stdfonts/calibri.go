@@ -9,8 +9,8 @@ import "maps"
 // such text the way PDF.js, the reader its text extraction is measured
 // against, does.
 //
-// Calibri does not follow the Arial glyph order the standard map describes
-// (the map agrees with every entry of [arialGIDToUnicode]): each accented
+// Calibri does not follow the Arial glyph order the standard map describes:
+// each accented
 // Latin capital follows its base letter (À at GID 5, right after A at
 // GID 4), and ASCII digits and punctuation sit far above GID 128. The
 // supplement, which PDF.js calls incomplete, corrects part of them. Every
@@ -22,8 +22,8 @@ import "maps"
 // there: non-embedded Calibri text can carry GID 1 where a space belongs,
 // and PDF.js maps it to space for that reason.
 //
-// Glyph IDs missing from the table fall through to the CID-offset path
-// handled by [typography.Font.CIDIdentityFallback].
+// A glyph ID missing from the table reads as the code itself, as it does in
+// PDF.js.
 //
 // # Corpus evidence
 //
