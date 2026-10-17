@@ -761,12 +761,21 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 			return nil, nil // Empty page
 		}
 
+		// A reference to an object the file does not define is the null
+		// object (ISO 32000-1, 7.3.10), and a null value is the entry's
+		// absence (7.3.7): both are a page with no content, as pdf.js
+		// (Page.getContentStream) and poppler read them.
 		contentsResolved, err := document.ResolveObject(ctx, doc, contentsObj)
+		if errors.Is(err, document.ErrObjectNotFound) {
+			return nil, nil
+		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve /Contents: %w", err)
 		}
 
 		switch c := contentsResolved.(type) {
+		case ast.PdfNull:
+			return nil, nil
 		case ast.PdfStream:
 			streams = append(streams, c)
 		case ast.PdfArray:
