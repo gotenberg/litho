@@ -195,6 +195,8 @@ one deliberately rather than diffing it against a fresh build.
 | `cmapusecmap_2b.pdf`   | PDF/A-2b     | Encoding CMaps whose usecmap base maps the codes they show       |
 | `cmapusestream_2b.pdf` | PDF/A-2b     | An encoding CMap built on an embedded `/UseCMap` base            |
 | `cmapnotdef_2b.pdf`    | PDF/A-2b     | Encoding CMaps whose notdef ranges map the codes they show       |
+| `cmappredef_2b.pdf`    | PDF/A-2b     | Fonts naming predefined CMaps, through their bases and notdefs   |
+| `cmapusevert_1b.pdf`   | PDF/A-1b     | An encoding CMap whose `/UseCMap` names the vertical CMap V      |
 
 ### Must-not-fire controls
 
@@ -426,6 +428,8 @@ violation but is exempt, so a firing is a false positive.
 | `cmapusecmap_2b`                          | `U2`: codes an `/Identity-H usecmap` base maps to glyphs present       | ISO 32000-1, 9.7.5.4         |
 | `cmapusestream_2b`                        | `S1`: a code only the embedded `/UseCMap` base maps, to a glyph        | ISO 32000-1, 9.7.5.3         |
 | `cmapnotdef_2b`                           | `N2`: a code a notdef range maps to a CID the program holds            | ISO 32000-1, 9.7.6.3         |
+| `cmappredef_2b`                           | `P2`: codes `/UniJIS-UCS2-V` takes from its base, to glyphs present    | ISO 32000-1, 9.7.5.2         |
+| `cmappredef_2b`                           | `P5`: a code `/90ms-RKSJ-H`'s notdef range maps to a CID present       | ISO 32000-1, 9.7.6.3         |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -454,9 +458,11 @@ which are covered under [Known divergences](#known-divergences).
 | `boxorigin_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
 | `charset_1b.pdf`       | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 3   | 3    | 4    | 9    | 7    |
 | `cmapnotdef_2b.pdf`    | 6    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
+| `cmappredef_2b.pdf`    | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 8    | 8    |
 | `cmaps_2b.pdf`         | 9    | 6    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
 | `cmapusecmap_2b.pdf`   | 6    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
 | `cmapusestream_2b.pdf` | 5    | 2    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
+| `cmapusevert_1b.pdf`   | 5    | 3    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `colouroff_2b.pdf`     | 4    | 1    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `complex_1b.pdf`       | 26   | 23   | 22   | 19   | 20   | 24   | 21   | 22   | 19  | 18   | 18   | 14   | 11   |
 | `complex_2a.pdf`       | 18   | 15   | 21   | 17   | 17   | 22   | 18   | 18   | 17  | 17   | 18   | 12   | 11   |
@@ -6115,16 +6121,60 @@ untagged-content rules once per text show. Before the bases were resolved,
 litho missed the two glyph rules on `cmapusecmap_2b` and `cmapnotdef_2b` and
 reported both on `cmapusestream_2b`, in every cell.
 
+### `cmappredef_2b.pdf` and `cmapusevert_1b.pdf`
+
+A Type 0 font's `/Encoding` can name a predefined CMap, and a predefined CMap
+can build on another through usecmap and declare notdef ranges (ISO 32000-1,
+9.7.5.2). veraPDF's `PDCMap` parses the bundled CMap a name denotes with the
+parser it runs on an embedded stream, so it follows the chain, applies the
+ranges, and sends a code nothing maps to CID 0 (9.7.6.3); PDF.js follows the
+chain too (`extendCMap`). Every -V CMap holds only its vertical forms and takes
+the rest of its mappings, and its code space, from its -H base. litho read a
+named CMap from its own records alone: a -V CMap split no code, so no glyph
+rule saw the font, a notdef-range code and a code nothing maps were left
+unknown, and remediation declined to embed `/UseCMap /V` because V's own
+records map 53 codes. No corpus file embeds the program of a font that names a
+predefined CMap, and none names a base through `/UseCMap`.
+
+The fonts are CIDFontType2 over the three-glyph TrueType program, declaring the
+Adobe-Japan1 supplement their CMap declares. The `/CIDToGIDMap` sends CIDs 1 to
+6 to a glyph, and `P5`'s CID 231 too.
+
+| Fixture          | Font | Encoding                                    | Shows     | CIDs              |
+| ---------------- | ---- | ------------------------------------------- | --------- | ----------------- |
+| `cmappredef_2b`  | `P1` | `/UniJIS-UCS2-V`                            | 0021 0041 | 2, 34 absent      |
+| `cmappredef_2b`  | `P2` | `/UniJIS-UCS2-V`                            | 0021 0022 | 2, 3              |
+| `cmappredef_2b`  | `P3` | `/90ms-RKSJ-H`, notdefrange 00 to 1F to 231 | 01        | 231 absent        |
+| `cmappredef_2b`  | `P4` | `/UniJIS-UCS2-H`                            | E000      | 0, mapped nowhere |
+| `cmappredef_2b`  | `P5` | `/90ms-RKSJ-H`, notdefrange 00 to 1F to 231 | 01        | 231               |
+| `cmappredef_2b`  | `P6` | `/EUC-V`                                    | 41 A4A2   | 34, 843 absent    |
+| `cmapusevert_1b` | `V1` | embedded, cidchar 2121 to 1, `/UseCMap /V`  | 2121      | 1                 |
+
+| Rule                        | `cmappredef_2b` at PDF/A-2b | `cmapusevert_1b` at PDF/A-1b |
+| --------------------------- | --------------------------- | ---------------------------- |
+| `6.2.11.4.1/2` glyph absent | 5                           | not in part 1                |
+| `6.2.11.8/1` `.notdef`      | 5                           | not in part 1                |
+| `6.3.3.3/1` CMap embedded   | not at this level           | 1                            |
+
+veraPDF 1.30.2 and litho report these counts alike, and the same rule set in
+all thirteen cells of each file. Before, litho reported neither glyph rule on
+`cmappredef_2b` in any cell, and its remediation called the PDF/A-2b output
+conforming where veraPDF reports both rules on it. `P6` also extracts as `A`
+and U+3042 through EUC-H, where litho read the codes as UTF-16 and returned
+two unrelated characters. Remediation of `cmapusevert_1b` at PDF/A-1b now
+embeds V flattened over H, with `/WMode 1` in its dictionary and program, and
+both tools find the output conforming; before, 6.3.3.3 stayed.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 143 x 8 = 1144 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 143 x 13 = 1859 cells. litho
+runner scores 145 x 8 = 1160 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 145 x 13 = 1885 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1857 of the 1859 cells. The two
+fixtures exist to protect, and it holds in 1883 of the 1885 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -6136,7 +6186,7 @@ nine is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2` and `structcopy_ua2` at
 PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1120 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 1160 and moves only `ruleset_mismatch`, and on
 those nine cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
