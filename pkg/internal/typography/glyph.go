@@ -92,7 +92,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			ExpansionText: mcExpansion,
 		})
 
-		advanceTextMatrix(state, font, fontSize, char, charCode)
+		advanceTextMatrix(state, font, fontSize, n, charCode)
 
 		data = data[n:]
 	}
@@ -305,13 +305,23 @@ func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, 
 // advanceTextMatrix shifts the text matrix by the FULL per-glyph advance
 // after emitting its [models.TextElement]. Per ISO 32000-1 §9.4.4, the
 // advance is `(glyph_width × Tfs + Tc + Tw) × Th` (horizontal) or
-// `glyph_width × Tfs + Tc + Tw` (vertical), Tw applying only when the
-// glyph is a space. This is the spec-correct Tm update; it differs from
-// [computeGlyphPageWidth] which excludes Tc/Tw from the painted Width
-// reported to consumers.
-func advanceTextMatrix(state *graphics.State, font *Font, fontSize float64, char string, charCode int) {
+// `glyph_width × Tfs + Tc + Tw` (vertical). This is the spec-correct Tm
+// update; it differs from [computeGlyphPageWidth] which excludes Tc/Tw
+// from the painted Width reported to consumers.
+//
+// Tw applies to the single-byte character code 32 alone, whatever glyph
+// or character it selects (ISO 32000-1, 9.3.3): a two-byte code that maps
+// to a space, as Identity-H fonts give, takes no word spacing. codeLen is
+// the byte length of the code.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6127.pdf: an Identity-H Times New Roman sets Tw -0.35
+//     at 12 pt and shows its spaces as <0003>. Applying Tw to them pulled
+//     every word 4.2 points back over the space before it.
+func advanceTextMatrix(state *graphics.State, font *Font, fontSize float64, codeLen, charCode int) {
 	wordSpace := 0.0
-	if char == " " {
+	if codeLen == 1 && charCode == ' ' {
 		wordSpace = state.Text.Tw
 	}
 	if font.WMode == 1 {
