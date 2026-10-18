@@ -269,16 +269,67 @@ func signatureOf(img image.Image) imageSignature {
 	gw, gh := min(maxSignatureCells, w), min(maxSignatureCells, h)
 	sums := make([]float64, gw*gh*3)
 	counts := make([]float64, gw*gh)
-	for y := range h {
-		cy := y * gh / h
-		for x := range w {
-			cx := x * gw / w
-			r, g, bl, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
-			c := cy*gw + cx
-			sums[3*c] += float64(r >> 8)
-			sums[3*c+1] += float64(g >> 8)
-			sums[3*c+2] += float64(bl >> 8)
-			counts[c]++
+	// The decoder returns Gray and RGBA images, whose stored bytes are what
+	// RGBA()>>8 reports, so their rows are summed from Pix, one run of
+	// columns per cell: going through At boxed every pixel in a color.Color
+	// and divided for its cell, which took 7 of the 18 seconds a file of 23
+	// page-sized scans spent, past the per-file budget. The sums are of
+	// integers, so they come out as the per-pixel loop's.
+	//
+	// Column x lies in cell floor(x*gw/w), so cell cx starts at
+	// ceil(cx*w/gw).
+	starts := make([]int, gw+1)
+	for cx := range starts {
+		starts[cx] = (cx*w + gw - 1) / gw
+	}
+	switch m := img.(type) {
+	case *image.Gray:
+		for y := range h {
+			base := (y * gh / h) * gw
+			row := m.Pix[m.PixOffset(b.Min.X, b.Min.Y+y):]
+			for cx := range gw {
+				var s uint64
+				for _, v := range row[starts[cx]:starts[cx+1]] {
+					s += uint64(v)
+				}
+				c := base + cx
+				sums[3*c] += float64(s)
+				sums[3*c+1] += float64(s)
+				sums[3*c+2] += float64(s)
+				counts[c] += float64(starts[cx+1] - starts[cx])
+			}
+		}
+	case *image.RGBA:
+		for y := range h {
+			base := (y * gh / h) * gw
+			row := m.Pix[m.PixOffset(b.Min.X, b.Min.Y+y):]
+			for cx := range gw {
+				var r, g, bl uint64
+				run := row[4*starts[cx] : 4*starts[cx+1]]
+				for i := 0; i+3 < len(run); i += 4 {
+					r += uint64(run[i])
+					g += uint64(run[i+1])
+					bl += uint64(run[i+2])
+				}
+				c := base + cx
+				sums[3*c] += float64(r)
+				sums[3*c+1] += float64(g)
+				sums[3*c+2] += float64(bl)
+				counts[c] += float64(starts[cx+1] - starts[cx])
+			}
+		}
+	default:
+		for y := range h {
+			cy := y * gh / h
+			for x := range w {
+				cx := x * gw / w
+				r, g, bl, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
+				c := cy*gw + cx
+				sums[3*c] += float64(r >> 8)
+				sums[3*c+1] += float64(g >> 8)
+				sums[3*c+2] += float64(bl >> 8)
+				counts[c]++
+			}
 		}
 	}
 	sig := make([]float64, len(sums))

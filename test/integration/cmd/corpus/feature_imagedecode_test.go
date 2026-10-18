@@ -93,6 +93,35 @@ func TestSignatureOf(t *testing.T) {
 	}
 }
 
+// opaqueImage hides an image's concrete type, so signatureOf reads it through
+// At.
+type opaqueImage struct{ image.Image }
+
+// TestSignatureOf_PixMatchesAt pins that the Pix reads of Gray and RGBA images
+// give the signature At gives, sub-images with an offset origin and a
+// translucent RGBA pixel included.
+func TestSignatureOf_PixMatchesAt(t *testing.T) {
+	gray := image.NewGray(image.Rect(0, 0, 9, 7))
+	rgba := image.NewRGBA(image.Rect(0, 0, 9, 7))
+	for y := range 7 {
+		for x := range 9 {
+			gray.SetGray(x, y, color.Gray{Y: uint8(x*29 + y*13)})
+			rgba.SetRGBA(x, y, color.RGBA{R: uint8(x * 27), G: uint8(y * 31), B: uint8(x*y*5 + 3), A: 255})
+		}
+	}
+	rgba.SetRGBA(4, 3, color.RGBA{R: 40, G: 30, B: 20, A: 128})
+	for _, img := range []image.Image{
+		gray, rgba,
+		gray.SubImage(image.Rect(2, 1, 8, 6)),
+		rgba.SubImage(image.Rect(3, 2, 9, 7)),
+	} {
+		got, want := signatureOf(img), signatureOf(opaqueImage{img})
+		if !slices.Equal(got.Sig, want.Sig) || got.Grid != want.Grid {
+			t.Errorf("%T %v: Pix read %v %v, At read %v %v", img, img.Bounds(), got.Grid, got.Sig, want.Grid, want.Sig)
+		}
+	}
+}
+
 func TestImageDecodeFeature_RunAndCompare(t *testing.T) {
 	dir := t.TempDir()
 	pdfPath := filepath.Join(dir, "doc.pdf")
