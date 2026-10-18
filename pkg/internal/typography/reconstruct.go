@@ -1375,7 +1375,11 @@ const trackingSpaceFactor = 0.102
 //     before it still takes the previous size, at the new glyph's scale.
 //   - A marked-content boundary ends the item before the operators that
 //     follow it, so a Tm after it no longer rescales anything: the gap takes
-//     the previous glyph's size and scale, its size on the page.
+//     the previous glyph's size and scale, its size on the page. That holds
+//     at every BMC, BDC and EMC ([runFont] marked), whether or not the
+//     sequence carries an MCID (src/core/evaluator.js, getTextContent, which
+//     flushes the item there and leaves its metrics for the next glyph's
+//     comparison).
 //
 // Without fonts, lineThreshold, the line's [computeSpaceThreshold], stands.
 //
@@ -1389,9 +1393,15 @@ const trackingSpaceFactor = 0.102
 //   - All corpora: words match PDF.js on 33 more files (govdocs 28, pdfjs 5)
 //     and on none fewer, the line average having spaced or joined glyphs set
 //     in a size of their own.
+//   - govdocs thread_000_000152.pdf page 38: a 13-point "^" then "Riverine"
+//     at 7.4 points, each in a marked-content sequence of its own with no
+//     MCID, read "^ Riverine" against the 7.4-point size, where PDF.js
+//     measures the gap at 13 points and reads "^Riverine". Taking the size
+//     of the glyph before a marked-content operator makes words match PDF.js
+//     on that page and on none fewer; no file moves.
 func wordSpaceThreshold(elems []models.TextElement, fonts []runFont, p, i int, lineThreshold float64) float64 {
 	prev, el := elems[p], elems[i]
-	if prev.MCID != el.MCID {
+	if prev.MCID != el.MCID || (fonts != nil && fonts[p].marked != fonts[i].marked) {
 		return trackingSpaceFactor * math.Abs(prev.FontSize)
 	}
 	if fonts == nil {
