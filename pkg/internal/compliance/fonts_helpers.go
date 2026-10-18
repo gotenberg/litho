@@ -567,6 +567,23 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 // bytes under "OpenType"; a /TrueType font passes an sfnt under "Type1C" and
 // fails a bare CFF there.
 //
+// The font decides the reading of an "OpenType" program too. A TrueType or
+// CIDFontType2 font reads it as a TrueType program, which needs the 'hhea' and
+// 'hmtx' tables ([sfntMetricsReadable]); a Type 1 or CIDFontType0 font builds
+// OpenTypeFontProgram as a CFF one, which needs a 'CFF ' table
+// ([openTypeCFFReadable]) and throws "Can't locate "CFF " table" without one.
+// A 'CFF2' table (OpenType 1.8) is not one. Measured against veraPDF 1.30.2
+// at PDF/A-2b: an "OTTO" with 'CFF2' outlines and metrics is not embedded in a
+// /Type1 or a /CIDFontType0 font and is embedded in a /TrueType or a
+// /CIDFontType2 one; a version-1.0 sfnt with no 'CFF ' table is not embedded
+// in a /Type1 or a /CIDFontType0 font; an "OTTO" with 'CFF ' outlines and no
+// 'hhea' or 'hmtx' is not embedded in a /TrueType or a /CIDFontType2 font.
+// litho fontcff2_2b.pdf plants each.
+//
+// The verdict is the embedding rule's alone. The glyph rules read the program
+// through [extractFontProgramData], which knows the descriptor and not the
+// font, so they still weigh such a program by the outlines it carries.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue7598.pdf: embeds an OTTO under "Type1C" in a /Type1 font, the
@@ -576,6 +593,8 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 //     measurement.
 //   - pdfjs issue4668.pdf: embeds an sfnt under "Type1C" in a /TrueType font,
 //     the source of the /TrueType measurement.
+//   - All corpora: no "OpenType" program lacks the tables its font reads,
+//     and none carries a 'CFF2' table, so the OpenType readings move no cell.
 func fontFile3ParsesForFont(ctx context.Context, doc *document.Document, fontSub, declared string, obj ast.PdfObject, stream ast.PdfStream) bool {
 	data, err := decodeFontProgram(ctx, doc, obj, stream)
 	if err != nil || len(data) == 0 {
@@ -584,11 +603,17 @@ func fontFile3ParsesForFont(ctx context.Context, doc *document.Document, fontSub
 		return true
 	}
 	if fontSub == "TrueType" {
-		return isSfntFontProgram(data)
+		return isSfntFontProgram(data) && sfntMetricsReadable(data)
 	}
 	switch declared {
 	case "OpenType":
-		return isSfntFontProgram(data)
+		if !isSfntFontProgram(data) {
+			return false
+		}
+		if fontSub == "CIDFontType2" {
+			return sfntMetricsReadable(data)
+		}
+		return openTypeCFFReadable(data)
 	case "Type1C", "CIDFontType0C":
 		return isCFFFontProgram(data)
 	}

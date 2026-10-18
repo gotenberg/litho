@@ -22,7 +22,9 @@ import (
 // parses /FontFile3 as an sfnt whatever the subtype says, while the /Type1 font
 // this fixture builds dispatches on the subtype and cannot read the other
 // container: see [fontFile3ParsesForFont] and
-// [TestFontFile3ContainerMatchesFont], where every pairing was measured.
+// [TestFontFile3ContainerMatchesFont], where every pairing was measured. Under
+// "OpenType" that /Type1 font reads the program's 'CFF ' table, so a
+// TrueType-outline sfnt there embeds nothing ([TestOpenTypeProgramReadByTheFont]).
 //
 // # Corpus evidence
 //
@@ -58,6 +60,7 @@ func TestFontEmbedding_FontFile3Container(t *testing.T) {
 		cff  = readableCFF()
 		cff2 = "\x02" + cff[1:]
 		sfnt = readableTrueType()
+		otto = string(testOTTO(t, []byte(sfnt), []byte(cff)))
 	)
 
 	cases := []struct {
@@ -74,7 +77,8 @@ func TestFontEmbedding_FontFile3Container(t *testing.T) {
 		{"a header reaching past the program does not", "Type1C", "\x01\x00\x64\x02rest", true},
 		{"an offset size out of range does not", "Type1C", "\x01\x00\x04\x05rest", true},
 		{"a Type1 font cannot read an sfnt in a Type1C slot", "Type1C", sfnt, true},
-		{"an sfnt program embeds an OpenType font", "OpenType", sfnt, false},
+		{"an OTTO with a CFF table embeds an OpenType font", "OpenType", otto, false},
+		{"a Type1 font cannot read a TrueType sfnt in an OpenType slot", "OpenType", sfnt, true},
 		{"a Type1 font cannot read a bare CFF in an OpenType slot", "OpenType", cff, true},
 		{"zero bytes in an OpenType slot do not", "OpenType", "\x00\x00\x00\x00", true},
 	}

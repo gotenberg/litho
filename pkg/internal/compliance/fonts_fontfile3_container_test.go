@@ -19,7 +19,9 @@ import (
 // Every row was measured against veraPDF 1.30.2 by moving the same program
 // bytes between declarations. The /TrueType rows matter most: veraPDF reports
 // a TrueType sfnt declared "Type1C" as embedded, so that pairing shall stay
-// silent.
+// silent. Under "OpenType" a /Type1 font and a CIDFontType0 read the 'CFF '
+// table, so a TrueType sfnt there is not embedded, and an "OTTO" carrying one
+// is.
 //
 // # Corpus evidence
 //
@@ -37,6 +39,7 @@ func TestFontFile3ContainerMatchesFont(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read CFF fixture: %v", err)
 	}
+	otto := testOTTO(t, sfnt, cff)
 
 	simple := func(fontSub, declared string, program []byte) []byte {
 		const content = "BT /F1 12 Tf 10 50 Td (A) Tj ET"
@@ -76,7 +79,8 @@ func TestFontFile3ContainerMatchesFont(t *testing.T) {
 	}{
 		{"a Type1 font reads Type1C as CFF", simple("Type1", "Type1C", cff), false},
 		{"a Type1 font cannot read an sfnt as Type1C", simple("Type1", "Type1C", sfnt), true},
-		{"a Type1 font reads OpenType as an sfnt", simple("Type1", "OpenType", sfnt), false},
+		{"a Type1 font reads an OTTO as OpenType", simple("Type1", "OpenType", otto), false},
+		{"a Type1 font cannot read a TrueType sfnt as OpenType", simple("Type1", "OpenType", sfnt), true},
 		{"a Type1 font cannot read a CFF as OpenType", simple("Type1", "OpenType", cff), true},
 		// A TrueType font parses /FontFile3 as an sfnt whatever the subtype
 		// names, so this pairing stays embedded.
@@ -84,7 +88,9 @@ func TestFontFile3ContainerMatchesFont(t *testing.T) {
 		{"a TrueType font cannot read a CFF", simple("TrueType", "Type1C", cff), true},
 		{"a CIDFont reads CIDFontType0C as CFF", composite("CIDFontType0C", cff), false},
 		{"a CIDFont cannot read an sfnt as CIDFontType0C", composite("CIDFontType0C", sfnt), true},
-		{"a CIDFont reads OpenType as an sfnt", composite("OpenType", sfnt), false},
+		{"a CIDFont reads an OTTO as OpenType", composite("OpenType", otto), false},
+		{"a CIDFont cannot read a TrueType sfnt as OpenType", composite("OpenType", sfnt), true},
+		{"a TrueType font reads a TrueType sfnt as OpenType", simple("TrueType", "OpenType", sfnt), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
