@@ -21,7 +21,7 @@ byte for byte.
 ```
 corpus/litho/
 ├── download.sh     Provisioning step: copies pdfs/ into the output dir
-├── manifest.json   Corpus manifest (profile_mode=expand over 8 profiles)
+├── manifest.json   Corpus manifest (profile_mode=expand over 10 profiles)
 ├── build/          pikepdf builders, one per fixture, plus _common.py
 ├── pdfs/           The committed fixtures
 └── README.md       This file
@@ -3208,7 +3208,7 @@ the default remediation leaves their findings as residuals, and the aggressive
 one clears everything on both tools. At PDF/UA-1 the default remediation removes
 the `/Lang`, which clears `7.2/29` on both, and the aggressive one strips the
 control byte as well, leaving `7.1/3` alone, reported once by litho and four
-times by veraPDF. Every output of the eight profiles `manifest.json` lists,
+times by veraPDF. Every output of the first eight profiles `manifest.json` lists,
 default and aggressive, carries both images byte for byte, and litho and
 veraPDF agree on each one's rule set.
 
@@ -4006,7 +4006,7 @@ The two tools return the same rule set and the same count for every rule in
 all thirteen cells. The Links carry `/Contents` and the page draws nothing, so
 the PDF/UA levels judge the annotations and not the content.
 
-Remediation at the eight manifest profiles leaves the same rule set on both
+Remediation at the first eight manifest profiles leaves the same rule set on both
 tools in every cell. The aggressive mode leaves nothing but `7.18.5/1` at
 PDF/UA-1, the Links the auto-tagger nests in an Artifact. The normal mode
 also keeps the embedded files, which the part 1 prohibition (`6.1.11/1`) and
@@ -4350,7 +4350,7 @@ When the page's map order put `/X1` before `/X2`, and A's put B before C, the
 scan met B from A, cached "no text" for it and swept `/X2` into an `/Artifact`.
 The name C shows then stopped extracting, and the integrity probe refused the
 remediation. Measured on veraPDF 1.30.2 and litho, eight runs of each of the
-eight profiles `manifest.json` lists, default and aggressive:
+first eight profiles `manifest.json` lists, default and aggressive:
 
 | Profile  | Runs refused before the fix       | Rules left after it, litho / veraPDF |
 | -------- | --------------------------------- | ------------------------------------ |
@@ -4516,7 +4516,7 @@ An `/Encoding` that is neither a name, a dictionary nor null stops veraPDF
 
 Before the fix every one of the thirteen cells disagreed. After it the rule
 sets and the counts of every rule equal veraPDF 1.30.2's in all thirteen, and
-in the remediated output of the eight profiles `manifest.json` lists, default
+in the remediated output of the first eight profiles `manifest.json` lists, default
 and aggressive. Remediation used to leave the language rules at PDF/UA-1,
 PDF/UA-2, PDF/A-1a and PDF/A-2a on both tools, since the `/Lang` repair walked
 the structure tree alone. It now strips the tags of the elements the
@@ -4618,7 +4618,7 @@ The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
 counts but for `7.1/3` and `7.2/34` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the
 family described under
 [Instance counts](#instance-counts-which-the-corpus-does-not-pin). Remediated
-at the eight profiles `manifest.json` lists, default and aggressive, every
+at the first eight profiles `manifest.json` lists, default and aggressive, every
 output leaves the font alone at the PDF/A levels, `6.3.4/1` at PDF/A-1b, and
 `7.18.1/2` and `7.21.4.1/1` at PDF/UA-1 and `8.4.5.5.1/1` at PDF/UA-2, where no
 interpolation rule applies, and veraPDF agrees on each one's rule set and
@@ -4685,7 +4685,7 @@ and 3, `6.7.3/1` at part 4), the `%PDF-1.7` header and, at 4f, the missing
 two NoView widgets (`8.9.2.2/2`) and the five tagged widgets with neither a
 `Lbl` element nor `/Contents` (`8.10.2.3/1`).
 
-Remediation at the eight manifest profiles, normal and aggressive, leaves
+Remediation at the first eight manifest profiles, normal and aggressive, leaves
 nothing on either tool except `8.10.2.3/1` three times at PDF/UA-2, on both.
 The PDF/A remediations remove `secret`, `draft` and `note`, which show neither
 on screen nor in print, with their fields and the Form elements and
@@ -4731,7 +4731,7 @@ thirteen cells, rule for rule and count for count. From part 2 it fails
 PDF/A-2b claim read at the other levels and the absent structure tree at the
 accessible ones.
 
-Remediation at the eight manifest profiles, normal and aggressive, leaves
+Remediation at the first eight manifest profiles, normal and aggressive, leaves
 nothing on either tool at the six PDF/A profiles: 13 annotations become 5 and 4
 fields become 2. Before the removal each of those cells kept `6.3.2/2`, or
 `6.5.3/2` twice at PDF/A-1b, for the hidden pop-up the flag repair skips, and
@@ -4775,7 +4775,7 @@ rule set and the same count for every rule in all thirteen cells.
 Measured on veraPDF 1.30.2 and litho alike, the PDF/A-1b outputs kept all six
 findings in both modes before the fix, and the PDF/A-2a, 2b, 2u, 3b and 4
 outputs kept `6.2.2/2` for `Kid` and `6.2.5/1` for `Own`. Every output of the
-eight manifest profiles now passes both tools in both modes; the PDF/UA ones
+first eight manifest profiles now passes both tools in both modes; the PDF/UA ones
 passed before too.
 
 The mutations missed the two direct pages as well. `mutate-stamp` left `Kid`
@@ -4839,7 +4839,7 @@ claim (`5/2`, `5/5`), the Document element outside the PDF 2.0 namespace
 (`8.2.5.2/2`) and the three widgets with neither a `Lbl` element nor `/Contents`
 (`8.10.2.3/1`).
 
-Remediation at the eight manifest profiles, default and aggressive, leaves
+Remediation at the first eight manifest profiles, default and aggressive, leaves
 nothing on either tool except `8.10.2.3/1` at PDF/UA-2, on both. The PDF/A-4
 remediation writes `%PDF-2.0` in a full rewrite, which drops the signature; the
 others update the file incrementally and keep it.
@@ -4885,7 +4885,7 @@ refused, `mutate-flatten` left the field's widget on page 2, and
 of the two pages untagged (`7.1/3`, `8.2.2/1`) and their `/Tabs` unset
 (`7.18.3/1`, `8.9.3.3/1`), on both tools. Now every `mutate-*` cell passes but
 `mutate-redact`, which refuses by design, and every remediation output of the
-eight manifest profiles, default and aggressive, passes both tools but the
+first eight manifest profiles, default and aggressive, passes both tools but the
 PDF/UA-2 ones, where both report `8.8/2` for the destination of page 2's GoTo
 action. qpdf reads each output without a warning.
 
@@ -4927,7 +4927,7 @@ properties no extension schema declares and the missing PDF/A identification
 parts 2 and 3, `6.7.3/1` at part 4), the `%PDF-1.7` header at part 4 and, at 4f,
 the missing `/EmbeddedFiles`.
 
-Remediation at the eight manifest profiles, default and aggressive, leaves
+Remediation at the first eight manifest profiles, default and aggressive, leaves
 nothing on either tool but `7.1/1` and `7.1/2` at PDF/UA-1, on both: no repair
 reaches into a form. The flattened output reports the input's rule set at every
 manifest profile.
@@ -4978,7 +4978,7 @@ part 4), beside the identification and tagging rules a part-2 claim draws at the
 other levels. veraPDF judges the attachment's file specification in the array
 object, which it sweeps as an indirect object.
 
-Remediation at the eight manifest profiles, default and aggressive, leaves, on
+Remediation at the first eight manifest profiles, default and aggressive, leaves, on
 both tools and count for count, the unembedded fonts at the PDF/A profiles
 (`6.3.4/1`, `6.2.11.4.1/1` or `6.2.10.4.1/1`), `7.1/3`, `7.18.1/2` and
 `7.21.4.1/1` at PDF/UA-1, and `8.2.2/1`, `8.4.5.5.1/1` and `8.9.2.4.12/1` at
@@ -5043,7 +5043,7 @@ US Letter box every reader assumes, and qpdf reads it without a warning. An
 incremental update writes only what it edits: a remediation that repairs no
 page leaves pages 3, 4 and 5 as the source has them. The outputs report the
 input's rule set on both tools, and the stamp adds only its unembedded font and
-DeviceRGB. Remediation at the eight manifest profiles, default and aggressive,
+DeviceRGB. Remediation at the first eight manifest profiles, default and aggressive,
 leaves nothing on either tool, before the fix and after.
 
 ### `namedmcid_ua1.pdf`
@@ -5100,7 +5100,7 @@ the page defines (`6.2.2/2` from part 2), the `pdfuaid` properties no extension
 schema declares and the missing PDF/A identification, the `%PDF-1.7` header at
 part 4 and, at 4f, the missing `/EmbeddedFiles`.
 
-Remediation at the eight manifest profiles, default and aggressive, leaves the
+Remediation at the first eight manifest profiles, default and aggressive, leaves the
 same rule set and counts on both tools in every cell: the unembedded font
 everywhere, and at PDF/UA-1 the inline Link's three rules besides. Before the
 fix litho also left `7.1/3` at PDF/UA-1 and `8.2.2/1` and `8.4.3/1` at
@@ -5145,14 +5145,14 @@ identification and tagging rules a part-2 claim draws.
 
 Before the fix, every write of the file held the direct streams inline: split,
 merge, insert, rotation, stamping, flattening, auto-tagging, encryption, and
-remediation at the eight manifest profiles, default and aggressive. qpdf failed
+remediation at the first eight manifest profiles, default and aggressive. qpdf failed
 every output, and a split with `--compact` held them inside an object stream.
 Now each output holds every stream as an object of its own, qpdf reads it
 without a warning, and its pages show the four texts. The gate's qpdf check
 tells the two apart in `mutate-encrypt` alone: the input already carries the
 warning classes an output writing the streams inline draws, so the other cells
 read the same either way, and the Go tests of each writer path pin the rest.
-Remediation at the eight manifest profiles, default and aggressive, leaves
+Remediation at the first eight manifest profiles, default and aggressive, leaves
 nothing at the PDF/A profiles on either tool, and `7.1/3` at PDF/UA-1 and
 `8.2.2/1` at PDF/UA-2 on both, veraPDF counting two and litho one, before the
 fix and after.
@@ -5201,7 +5201,7 @@ pages 3 to 6, a merge with an unlabelled document, an insertion of one at page
 in their sources, the unlabelled pages their page numbers, and report the
 input's rule set on both tools, the move in all thirteen cells. The move that
 repeats page 1 does too on veraPDF 1.30.2, in all thirteen cells. Remediation
-at the eight manifest profiles, default and aggressive, leaves nothing on
+at the first eight manifest profiles, default and aggressive, leaves nothing on
 either tool and keeps every label.
 
 ### `annotshare_ua1.pdf`
@@ -5265,7 +5265,7 @@ header at part 4 (`6.1.2/1`), the Document element outside the PDF 2.0
 namespace (`8.2.5.2/2`) and the part-1 claim (`5/2`, `5/5`) at PDF/UA-2, and,
 at PDF/A-4f, the missing `/EmbeddedFiles`.
 
-Remediation at the eight manifest profiles, default and aggressive, leaves the
+Remediation at the first eight manifest profiles, default and aggressive, leaves the
 same rule set and counts on both tools in every cell: nothing at the PDF/A
 levels, where the page box repair now drops the short crop and art boxes it
 used to leave alone, the Link's and the Text's missing descriptions at
@@ -5321,7 +5321,7 @@ and after it, and the page move all pass PDF/UA-2 on both tools. At PDF/UA-1
 each reports the input's rules, or, with no `Callout` on the pages it keeps,
 the input's without `7.1/5`, which the merge counts once per `Callout`. Every
 `mutate-*` cell passes, the page move under the allowance that lets no rule go.
-Remediation at the eight manifest profiles, default and aggressive, leaves the
+Remediation at the first eight manifest profiles, default and aggressive, leaves the
 same rule set on both tools in every cell: `6.7.3.4/1` at PDF/A-2a and `7.1/5`
 at PDF/UA-1, the `Callout` a PDF 1.7 reading cannot map.
 
@@ -5366,7 +5366,7 @@ the `%PDF-2.0` header at parts 2 and 3 and, at level A, the missing structure.
 PDF/A-4e and 4f add their own identification, 4f the missing `/EmbeddedFiles`,
 and the PDF/UA cells report the untagged document and its annotation.
 
-Remediation at the eight manifest profiles, default and aggressive, leaves
+Remediation at the first eight manifest profiles, default and aggressive, leaves
 nothing on either tool in any cell: every rewrite writes the `/Resources`
 Table 31 requires, an empty dictionary on a page that inherits none. So does a
 stamp, a page move and an encryption, measured through the litho commands they
@@ -5414,7 +5414,7 @@ configuration unnamed; and page 1 inserted in front of the file or after it left
 its copied groups out of `/OCProperties`, so a viewer drew the hidden layer. Now
 every page alone, pages 2 to 3, the merge with itself, page 1 inserted in front
 and after, and the page move pass PDF/UA-2 on both tools, and report the input's
-rules at PDF/UA-1 and PDF/A-2b. Remediation at the eight manifest profiles,
+rules at PDF/UA-1 and PDF/A-2b. Remediation at the first eight manifest profiles,
 default and aggressive, leaves nothing on either tool.
 
 ### `pageboxes_2b.pdf`
@@ -5469,7 +5469,7 @@ trim and bleed boxes as written, and failed `6.1.13/11`. The PDF/A-2b
 remediation, which repairs the boxes itself, dropped page 1's crop box and the
 node's, and the root's then cropped pages 1 and 3 to 500 by 700. Now every one
 of those outputs passes `6.1.13/11` on both tools, and each page shows the
-region the table gives. Remediation at the eight manifest profiles, default and
+region the table gives. Remediation at the first eight manifest profiles, default and
 aggressive, leaves nothing on either tool.
 
 The fix wrote each box veraPDF measures as the rectangle it measures, where the
@@ -5479,7 +5479,7 @@ and page 2 at 400 by 500, and kept page 1's trim and bleed boxes as the
 rectangles of their first four entries, boxes no viewer had drawn the page by.
 Now every output shows each page at US Letter and states no trim or bleed box,
 as the table gives; `6.1.13/11` still passes on both tools, and remediation at
-the eight manifest profiles, default and aggressive, still leaves nothing on
+the first eight manifest profiles, default and aggressive, still leaves nothing on
 either tool.
 
 ### `rolemapscope_ua2.pdf`
@@ -5523,7 +5523,7 @@ off from the map, and the single-Document repair then wrapped it in a second
 PDF 2.0 namespace `P`, the type the map gives every other `Para` (see
 `rolemapns_ua2.pdf`): both tools report nothing, default and aggressive, and
 before that rename both reported `8.2.4/1` for the `Para` alone. Remediation at
-the seven other manifest profiles leaves nothing on either tool, and every
+the seven other profiles of the first eight in the manifest leaves nothing on either tool, and every
 `mutate-*` cell passes.
 
 ### `destforms_ua2.pdf`
@@ -5566,7 +5566,7 @@ default and aggressive, left all eight destinations as they were, and both
 tools reported `8.8/1` three times and `8.8/2` five times on the output. Now
 each is a GoTo action carrying `/SD`, a name kept under `/D` and the dictionary
 under `/Dest` moved to `/A`, and PDF.js opens the page each opened before.
-Remediation at the eight manifest profiles, default and aggressive, leaves
+Remediation at the first eight manifest profiles, default and aggressive, leaves
 nothing on either tool, and every `mutate-*` cell passes.
 
 ### `rolemapns_ua2.pdf`
@@ -5599,7 +5599,7 @@ declaration. PDF/UA-1 and the level-A cells read the file as PDF 1.7, where the
 Measured on litho and veraPDF 1.30.2 before the repair, PDF/UA-2 remediation,
 default and aggressive, left `8.2.4/1` on both tools, five checks each, and so
 did remediation to either WTPDF level. Now each of those outputs passes on both
-tools. Remediation at the seven other manifest profiles leaves nothing on
+tools. Remediation at the seven other profiles of the first eight in the manifest leaves nothing on
 either tool.
 
 ### `viewerboxes_2b.pdf`
@@ -5649,7 +5649,7 @@ as the rectangle veraPDF measures: page 1 became a page 290 by 10 points, pages
 by 792, 600 by 800, 612 by 792, 600 by 800 and 400 by 500. The split wrote the
 same but for page 5, which it copied without the node above it. litho read page
 3 at 600 by 800 and page 4 at 300 by 400. Now litho reads the pages as pdf.js
-shows them, and the full rewrite, the split and remediation at the eight
+shows them, and the full rewrite, the split and remediation at the first eight
 manifest profiles, default and aggressive, show each page as the source shows
 it. The rewrites pass PDF/A-2b on both tools, and the remediations leave nothing
 on either.
@@ -5694,7 +5694,7 @@ destination and left the four run through `/Next`, which veraPDF reported and
 litho did not. Now litho judges every GoTo action of the tree, each object once,
 and remediation walks the tree: each of the seven carries `/SD`, the Named and
 URI actions keep their entries, and PDF.js opens the page the outline item, the
-links and the `/OpenAction` opened before. Remediation at the eight manifest
+links and the `/OpenAction` opened before. Remediation at the first eight manifest
 profiles, default and aggressive, leaves nothing on either tool, and every
 `mutate-*` cell passes.
 
@@ -5748,7 +5748,7 @@ WTPDF-1.0 Accessibility outputs failed `8.8/2` once on both, the action to
 page 2 left without its `/SD`. Now eight go and F10, K2 and K3 keep the
 placeholder: the PDF/UA-1, PDF/UA-2 and WTPDF-1.0 Accessibility outputs pass
 both tools. The default mode leaves the eleven findings on both tools, as
-before. Remediation at the six PDF/A manifest profiles and at WTPDF-1.0 Reuse,
+before. Remediation at the six PDF/A profiles among the first eight manifest profiles and at WTPDF-1.0 Reuse,
 default and aggressive, leaves nothing on either tool.
 
 ### `sharedk_ua1.pdf`
@@ -5783,7 +5783,7 @@ the `%PDF-1.7` header (`6.1.2/1`), and PDF/A-4f the missing `/EmbeddedFiles`.
 
 Measured on litho before the fix, the walks read the array under each `Sect`
 and reported the `Figure` twice, `7.3/1`, `8.2.5.28.2/1` and `Table 5.
-Sect-Span/1` each twice, against veraPDF's once. Remediation at the eight
+Sect-Span/1` each twice, against veraPDF's once. Remediation at the first eight
 manifest profiles, default and aggressive, leaves nothing at the six PDF/A
 profiles on either tool. At PDF/UA-1 and PDF/UA-2 the default mode leaves the
 `Figure` on both, as it leaves every `Figure` lacking alternate text. Aggressive
@@ -5832,7 +5832,7 @@ levels it does not match: identification, tagging, and at part 4 the
 `check` through the arrays. Measured on litho and veraPDF 1.30.2, `set-form`,
 `split`, `merge` and `autotag` outputs report on both tools what the file does,
 `set-form` adding `6.4.1/3` for the `/NeedAppearances` it sets, and the
-`flatten-form` output passes both. Remediation at the eight manifest profiles,
+`flatten-form` output passes both. Remediation at the first eight manifest profiles,
 default and aggressive, leaves nothing on either tool; at PDF/UA-1 it adds a
 `/TU` to the four fields written as objects of their own, `group.note` being
 written directly. Every output litho wrote before the walks read each array
@@ -5867,7 +5867,7 @@ Pages 5 and 6 state `/MediaBox [0 0 612 792]`. No page draws anything.
 The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
 count for count, and PDF/A-2b reports nothing: every rule is one the file draws
 at a level it does not claim, as on `viewerboxes_2b.pdf`. Remediation at the
-eight manifest profiles, default and aggressive, leaves nothing on either tool.
+first eight manifest profiles, default and aggressive, leaves nothing on either tool.
 
 `mutate-stamp` reads where the stamp's text lands on each page and requires it
 10 points right of and above the visible corner. Its stamp reads there on every
@@ -5875,8 +5875,8 @@ page, and poppler's `pdftotext -bbox` places it at the same points. Planted in
 turn, each misplacement fails the cell on this file: the cell adding the box
 origin to X and Y (page 1 reads at `(110, 130)`), `stampOriginShift` reading the
 crop box's first two entries (page 3 at `(210, 310)`), and no shift at all (page
-1 at `(10, 10)`). The six other `mutate-*` cells pass the file at all eight
-profiles.
+1 at `(10, 10)`). The six other `mutate-*` cells pass the file at all ten
+manifest profiles.
 
 ### `treekids_ua1.pdf`
 
@@ -6025,7 +6025,7 @@ at PDF/A-2b with such programs and pins what each font becomes.
 The two tools return the same rule set in all thirteen cells, and the same
 count for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts
 the untagged-content rules once per text show. Remediated without a program at
-the eight manifest profiles, default and aggressive, each output fails the
+the first eight manifest profiles, default and aggressive, each output fails the
 embedding rule nine times on both tools, beside PDF/A-1b's `6.3.3.3/1`, PDF/UA-1's
 `7.1/3` and PDF/UA-2's `8.2.2/1`, the same on both. Remediated with the test's
 programs at PDF/A-1b, PDF/A-2b (default and aggressive), PDF/A-4 and PDF/UA-1,
@@ -6068,7 +6068,7 @@ own `/Resources`.
 The two tools return the same rule set in all thirteen cells: `6.1.13/11` at
 every part-2 and part-3 level, and the identification, tagging, title and
 language rules the part-2, level-B claim draws elsewhere. Remediated at the
-eight manifest profiles, default and aggressive, every output conforms on both
+first eight manifest profiles, default and aggressive, every output conforms on both
 tools. Every remediation but PDF/A-1b's shows every page at A4 but pages 4
 and 5: the PDF/A-2 and PDF/A-3 ones repair the node's box to US Letter in an
 incremental update and give pages 3, 5 and 6 each a box of its own, and the
@@ -6114,7 +6114,7 @@ the text widgets' appearances paint nothing, and the page shows nothing.
 The two tools return the same rule set in all thirteen cells: none at PDF/A-2b,
 and elsewhere the identification, tagging, title and language rules the
 part-2, level-B claim draws, which no signature field changes. Remediated at the
-eight manifest profiles, default and aggressive, every output conforms on both
+first eight manifest profiles, default and aggressive, every output conforms on both
 tools. Under `mutate-sign` the four fields signed in place keep their promises,
 read with qpdf, and `seedunmet` is the cell's one documented refusal. Each of the three locked signatures is followed by a signature in every other
 unsigned field and in a new one, refused with `ErrSignatureFieldLocked` where
@@ -6561,8 +6561,8 @@ modes, where it reported test 2 three times before.
 
 ## Scope
 
-`manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 159 x 8 = 1272 cells. The hand-measured matrix is wider: all
+`manifest.json` expands every fixture across the ten profiles it lists, so the
+runner scores 159 x 10 = 1590 cells. The hand-measured matrix is wider: all
 thirteen conformance levels veraPDF validates, so 159 x 13 = 2067 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
@@ -6580,7 +6580,7 @@ ten is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1240 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 1590 and moves only `ruleset_mismatch`, and on
 those ten cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
@@ -6592,6 +6592,31 @@ remediated output with both tools, and their `disagreement` metric sums, over
 the cells, the difference between the numbers of rules each reports. It reads 0
 on this corpus in both modes, so any cell that moves it is a regression or a
 divergence to cover under Known divergences.
+
+PDF/A-4e and PDF/A-4f are the manifest's last two profiles, after the eight it
+listed first. Appended rather than sorted in, they leave the determinism
+feature dealing each fixture's operations over the same first seven profiles,
+and the mutation anchor on PDF/A-1b. The fixture sections that say "the first
+eight manifest profiles" were measured before the two joined. At both, live
+veraPDF 1.30.2 reports the rule set the counts table gives in all 318 cells, and
+litho the same set in each. Remediated at both, every output carries the same
+rule set on both tools, no rule appears that the input did not fail, and the
+fully fixed cells are:
+
+| Profile  | Default | Aggressive | Rules left most often                          |
+| -------- | ------- | ---------- | ---------------------------------------------- |
+| PDF/A-4e | 63      | 67         | `6.2.10.4.1/1`, the unembedded fonts (76)      |
+| PDF/A-4f | 1       | 1          | `6.9/5`, no `/EmbeddedFiles` (152), then fonts |
+
+ISO 19005-4, 6.9 requires a PDF/A-4f file to name its embedded files in an
+`/EmbeddedFiles` entry of the catalog's name dictionary, and remediation cannot
+write a file the document does not have, so `6.9/5` stays on the 152 fixtures
+without one. Under PDF/A-4e remediation keeps the `/3D` and `/RichMedia`
+annotations of `annotkinds_ua2`, `threed_4e`, `threedcs_4` and `afref_3b` (ISO
+19005-4, 6.3.1 and Annex B). Under PDF/A-4f it keeps every `FileAttachment`
+annotation but the hidden one of `laterreads_2u`, which it removes at every
+profile as it removes every annotation no viewer shows, and in aggressive mode
+it keeps the embedded files of other formats that it strips at PDF/A-4.
 
 The thirteen-level figures are measured by hand against a live veraPDF. The
 thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2` on the veraPDF

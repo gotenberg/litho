@@ -11,7 +11,9 @@
     "PDF_A-3b",
     "PDF_A-4",
     "PDF_UA-1",
-    "PDF_UA-2"
+    "PDF_UA-2",
+    "PDF_A-4e",
+    "PDF_A-4f"
   ],
   "goldens": {
     "compliance": "goldens/compliance",

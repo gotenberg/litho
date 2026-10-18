@@ -220,6 +220,7 @@ var lithoHomeProfiles = map[string]string{
 	"3b":  "PDF_A-3b",
 	"4":   "PDF_A-4",
 	"4e":  "PDF_A-4e",
+	"4f":  "PDF_A-4f",
 	"ua1": "PDF_UA-1",
 	"ua2": "PDF_UA-2",
 	// forbidden_mix mixes forbidden constructs and is listed at PDF/A-2b.

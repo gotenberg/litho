@@ -309,12 +309,13 @@ const mutationRedactReach = 1e6
 //     ErrRedactionRefused (content a form XObject draws, an inline image, a
 //     stroked path) and 9 with ErrRedactionIncomplete; the 2 encrypted
 //     fixtures refuse the signature.
-//   - litho imagereach_2b: 6 ruleset_changed cells under mutate-stamp and 6
-//     under mutate-pages. veraPDF judges a content stream two pages share once,
-//     through the first page's resources, and the stamp's /Contents arrays and
-//     the page move change which page that is, so an image the second page
-//     draws is judged. veraPDF reports the same rule set on the outputs. Not a
-//     mutation defect.
+//   - litho imagereach_2b: 8 ruleset_changed cells under mutate-stamp and 8
+//     under mutate-pages, one per PDF/A profile of the manifest; at PDF/A-4e
+//     and PDF/A-4f both outputs add 6.2.7.1 test 3 on both tools. veraPDF
+//     judges a content stream two pages share once, through the first page's
+//     resources, and the stamp's /Contents arrays and the page move change
+//     which page that is, so an image the second page draws is judged.
+//     veraPDF reports the same rule set on the outputs. Not a mutation defect.
 //   - litho namedmcid_ua1, structcopy_ua2: while the copy of a tagged first
 //     page carried its content and not its structure, its MCIDs mapped to no
 //     element, and mutate-pages added 7.1 test 3 at PDF/UA-1 and 8.2.2 test 1
@@ -323,7 +324,8 @@ const mutationRedactReach = 1e6
 //     structure elements now, and the cells pass.
 //   - litho: with the deletion no longer allowed to pass any rule at the
 //     tagged profiles, the 33 fixtures whose first page moves to the end
-//     count no ruleset_changed cell but imagereach_2b's six.
+//     count no ruleset_changed cell but imagereach_2b's, six of them before
+//     PDF/A-4e and PDF/A-4f joined the manifest.
 //   - litho: naming page 1 twice moves no mutate-pages cell: the 124 fixtures
 //     count the 986 matched cells and imagereach_2b's 6 ruleset_changed ones
 //     that the single copy counted.
