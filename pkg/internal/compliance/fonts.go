@@ -1253,7 +1253,8 @@ func (j *fontJudgements) singleFont(ctx context.Context, doc *document.Document,
 
 // descendantRules states the rules veraPDF holds a composite font's descendant
 // CIDFont to, as opposed to the composite font itself: its /Type (ISO 19005-1,
-// 6.3.2 t1, ISO 19005-2, 6.2.11.2 t1), its embedding (ISO 19005-1, 6.3.4 t1,
+// 6.3.2 t1, ISO 19005-2, 6.2.11.2 t1), its program's /Subtype (ISO 19005-1,
+// 6.3.2 t7, ISO 19005-2, 6.2.11.2 t7), its embedding (ISO 19005-1, 6.3.4 t1,
 // ISO 19005-2, 6.2.11.4.1 t1, whose test exempts a Type0 font and so falls to
 // its descendant) and its /CIDToGIDMap (ISO 19005-1, 6.3.3.2 t1, ISO 19005-2,
 // 6.2.11.3.2 t1). veraPDF judges the descendant once, so composite fonts that
@@ -1306,12 +1307,13 @@ func (j *fontJudgements) descendantRules(ctx context.Context, doc *document.Docu
 	results := fontNameLimits(ctx, doc, cidFontDict, "descendant CIDFont of font "+fontName, profile)
 	// ISO 32000-1, 9.7.4, Table 117 requires /Type /Font on a CIDFont, and
 	// veraPDF states ISO 19005-2, 6.2.11.2 t1 on the descendant as a PDFont of
-	// its own. Only /Type is judged: both CIDFont subtypes are valid, so t2
-	// cannot fire, t3 is left out, and t7 reads the descriptor
-	// [document.ResolveFontDescriptor] already reaches through the descendant,
-	// so the whole check would judge one descriptor twice.
+	// its own. /Type and the program's /Subtype are judged: both CIDFont
+	// subtypes are valid, so t2 cannot fire, and t3 is left out. veraPDF
+	// states t7 on the descendant and again on the Type0 font, which reads the
+	// same descriptor, so one forbidden program counts twice.
 	if rule := fontReqKeyRule(PDFAPart(profile), 1); rule.Specification != "" {
 		results = append(results, descendantTypeViolations(ctx, doc, cidFontDict, rule, "descendant CIDFont ")...)
+		results = append(results, fontFileSubtypeViolations(ctx, doc, cidFontDict, PDFAPart(profile), "descendant CIDFont: ")...)
 	}
 
 	// The rendering-mode-3 exemption is not scoped to simple fonts: ISO 19005-1

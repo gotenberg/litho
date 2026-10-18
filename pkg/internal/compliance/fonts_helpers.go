@@ -446,19 +446,43 @@ func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict
 		}
 	}
 
-	// t7: an embedded FontFile3 program /Subtype must be a permitted value.
-	if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil {
-		if ff3, ok := fd["FontFile3"]; ok {
-			if stream, err := document.ResolveStream(ctx, doc, ff3); err == nil {
-				ffSubtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-				if ffSubtype != "" && !isValidFontFileSubtype(part, string(ffSubtype)) {
-					results = append(results, failf(fontReqKeyRule(part, 7),
-						"embedded font program /Subtype %q is not permitted", string(ffSubtype))...)
-				}
-			}
-		}
+	return append(results, fontFileSubtypeViolations(ctx, doc, fontDict, part, "")...)
+}
+
+// fontFileSubtypeViolations states t7 when the FontFile3 program the font's
+// descriptor embeds names a /Subtype the part does not permit, prefixing the
+// context with subject. A Type0 font reads the descriptor of its descendant
+// ([document.ResolveFontDescriptor]), as veraPDF's PDType0Font does, and the
+// descendant CIDFont is a PDFont of its own, so one program fails the rule
+// for both ([fontJudgements.descendantRules]).
+//
+// # Corpus evidence
+//
+//   - litho fontcff2_2b.pdf and fontotread_2b.pdf: four Type0 fonts each over
+//     an /OpenType program, and veraPDF 1.30.2 fails ISO 19005-1, 6.3.2 t7 14
+//     and 12 times at PDF/A-1a and 1b, where litho failed it 10 and 8 times.
+//   - litho, verapdf and facturx corpora: no other count of the rule moves
+//     at any level.
+func fontFileSubtypeViolations(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, part int, subject string) []Violation {
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		return nil
 	}
-	return results
+	ff3, ok := fd["FontFile3"]
+	if !ok {
+		return nil
+	}
+	stream, err := document.ResolveStream(ctx, doc, ff3)
+	if err != nil {
+		return nil
+	}
+	// Best-effort: a /Subtype that is no name reads as absent, which the
+	// test passes.
+	ffSubtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+	if ffSubtype == "" || isValidFontFileSubtype(part, string(ffSubtype)) {
+		return nil
+	}
+	return failf(fontReqKeyRule(part, 7), "%sembedded font program /Subtype %q is not permitted", subject, string(ffSubtype))
 }
 
 // isStandard14Type1Font reports whether the font is one of the 14 standard
