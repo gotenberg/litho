@@ -115,10 +115,16 @@ func ElementZone(el models.TextElement) Zone {
 
 	// Perpendicular reach on either side of the baseline. Horizontal text
 	// rises to the ascender and dips to the descender; vertical text centres
-	// its glyphs on the baseline instead.
-	near, far := -el.FontSize*glyphDescenderFraction, el.FontSize
+	// its glyphs on the baseline instead. The reach is the size's magnitude:
+	// a negative font size turns the advance, which [models.TextElement.Angle]
+	// already carries, so the ink rises on the left of the advance as it does
+	// for any glyph the rendering matrix does not reflect (ISO 32000-1, 9.4.4).
+	// A reflected glyph, set at a negative Th under an unflipped CTM, inks the
+	// other side, which the element does not record.
+	size := math.Abs(el.FontSize)
+	near, far := -size*glyphDescenderFraction, size
 	if el.Vertical {
-		near, far = -el.FontSize/2, el.FontSize/2
+		near, far = -size/2, size/2
 	}
 
 	xs := [4]float64{

@@ -79,9 +79,14 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 
 		// Compute text direction angle from the effective transform
 		// (Tm × CTM). The text baseline direction (1,0) in text space
-		// maps to (Tm[0]*CTM[0]+Tm[1]*CTM[2], Tm[0]*CTM[1]+Tm[1]*CTM[3]).
+		// maps to (Tm[0]*CTM[0]+Tm[1]*CTM[2], Tm[0]*CTM[1]+Tm[1]*CTM[3]),
+		// and the glyph advances along it or against it as Tfs × Th has
+		// it ([advancesBackward]).
 		dirX := tm[0]*ctm[0] + tm[1]*ctm[2]
 		dirY := tm[0]*ctm[1] + tm[1]*ctm[3]
+		if advancesBackward(state, font, fontSize) {
+			dirX, dirY = -dirX, -dirY
+		}
 		angle := math.Atan2(dirY, dirX)
 
 		// Unresolved single-byte glyphs (char == "") still get a
@@ -113,6 +118,31 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		data = data[n:]
 	}
 	return nil
+}
+
+// advancesBackward reports whether a horizontal glyph advances against the
+// text-space X axis: ISO 32000-1, 9.4.4 gives its horizontal displacement as
+// tx = ((w0 - Tj/1000) × Tfs + Tc + Tw) × Th, so a negative font size or a
+// negative horizontal scaling, one of the two and not both, runs the glyphs
+// the other way. The rendering matrix then turns the glyphs a half turn
+// (both its diagonal terms negative) or mirrors them, and the text reads
+// along the reversed axis. PDF.js reads the direction off the same product,
+// the first column of Tfs × Th × Tm × CTM (src/core/evaluator.js,
+// getCurrentTextTransform and compareWithLastPosition). A vertical font's
+// advance takes no Th and keeps the direction its metrics give it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14415.pdf: words set at -9 to -15 Tf on a page turned by
+//     /Rotate 180 advance leftward.
+//   - pdfcpu pkg_testdata__Paclitaxel.pdf: -12 Tf with -100 Tz under a CTM
+//     that flips Y advances rightward, so the font size alone does not give
+//     the direction.
+func advancesBackward(state *graphics.State, font *Font, fontSize float64) bool {
+	if font.WMode == 1 {
+		return false
+	}
+	return fontSize*state.Text.Tz < 0
 }
 
 // computeTextScale returns the effective page-space font size and the

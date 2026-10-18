@@ -1065,12 +1065,14 @@ func isWhitespaceRune(r rune) bool {
 // saveLastChar), so the next glyph, moved back over the spaces to within
 // tracking of the text before them, is read without one.
 //
-// The gap is only read for left-to-right text at a positive font size,
-// horizontal or rotated by 90° or -90°, between two glyphs set in the same
+// The gap is only read for left-to-right text, horizontal, turned a half
+// turn or rotated by 90° or -90°, between two glyphs set in the same
 // direction: [computeLineGap] measures it along the advance of those
-// ([gapReadable]). Vertical, otherwise rotated, mirrored and right-to-left
-// runs measure their gaps along other axes or in visual order, and keep
-// their literal spaces. So does an exact abutment after one space glyph
+// ([gapReadable]). A negative font size or horizontal scaling turns that
+// advance, and the angle carries it ([advancesBackward]), so the bounds take
+// the size's magnitude. Vertical, otherwise rotated and right-to-left runs
+// measure their gaps along other axes or in visual order, and keep their
+// literal spaces. So does an exact abutment after one space glyph
 // ([exactAbutment]).
 //
 // # Corpus evidence
@@ -1085,9 +1087,21 @@ func isWhitespaceRune(r rune) bool {
 //   - All corpora: words match PDF.js on 83 more files (facturx 26, govdocs
 //     43, pdfcpu 2, pdfjs 12) and on none fewer.
 //   - govdocs thread_100_100451.pdf (drop cap), pdfjs prefilled_f1040.pdf
-//     (exact abutment), issue269_2.pdf (180° text), issue14415.pdf (negative
-//     font size), issue9186.pdf (U+200B around each space): each lost
-//     spaces PDF.js keeps until the guard above that names its case.
+//     (exact abutment), issue269_2.pdf (180° text, while its gaps were read
+//     rightward), issue9186.pdf (U+200B around each space): each lost spaces
+//     PDF.js keeps until the guard above that names its case.
+//   - pdfjs issue14415.pdf: words set at -9 to -15 Tf, advancing leftward,
+//     each with a trailing space, and "on" set by a Tm 0.02 past the "t" of
+//     "agreement ", which PDF.js reads "agreementon". govdocs
+//     thread_000_000150.pdf: words turned a half turn by their Tm, each
+//     after a space the next Tm overprints.
+//   - pdfcpu pkg_testdata__Paclitaxel.pdf: -12 Tf with -100 Tz under a CTM
+//     that flips Y advances rightward. Turning the gap by the font size alone
+//     read it backward there.
+//   - All corpora: reading the gap of half-turned text along its advance,
+//     with the advance turned by Tfs × Th, makes words match PDF.js on 2 more
+//     files (govdocs thread_000_000150.pdf, pdfjs issue14415.pdf) and on none
+//     fewer; facturx, pdf20 and pdfcpu do not move.
 //   - govdocs thread_000_000012.pdf, thread_000_000750.pdf and 6 more: text
 //     rotated a quarter turn read a space PDF.js drops ("$500,000y").
 //   - govdocs thread_200_200396.pdf: a tick label "100" and the rotated "y"
@@ -1117,11 +1131,9 @@ func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64, spac
 	if isFormatOnly(prev.Text) || isFormatOnly(el.Text) {
 		return false
 	}
-	// A negative font size runs the glyphs leftward (ISO 32000-1, 9.4.4),
-	// so the gap, read rightward, says nothing about whether they abut.
-	if prev.FontSize <= 0 || el.FontSize <= 0 {
-		return false
-	}
+	// The sign of a negative size turns the advance, which the angle
+	// carries; the gap that counts as none is a fraction of its magnitude.
+	size = math.Abs(size)
 	if spaces >= 2 {
 		return gap <= trackingSpaceFactor*size
 	}
@@ -1198,11 +1210,11 @@ func literalSpaceSize(elems []models.TextElement, fonts []runFont, p, i int) flo
 }
 
 // gapReadable reports whether [computeLineGap] measures a gap along the
-// direction text at angle advances: horizontal text, and text rotated by 90°
-// or -90°. The gap means that only between two glyphs set in the same
-// direction.
+// direction text at angle advances: horizontal text, text turned a half
+// turn, and text rotated by 90° or -90°. The gap means that only between two
+// glyphs set in the same direction.
 func gapReadable(angle float64) bool {
-	return math.Abs(angle) < math.Pi/180 || isOrthogonalRotation(angle)
+	return math.Abs(angle) < math.Pi/180 || isHalfTurn(angle) || isOrthogonalRotation(angle)
 }
 
 // isFormatOnly reports whether s is made only of format characters
