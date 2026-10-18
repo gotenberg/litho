@@ -118,3 +118,119 @@ func LoadConformanceCIDMap(name string) *CIDMap {
 	}
 	return ConformanceCIDBase(name)
 }
+
+// ConformanceCMap is a CMap program as veraPDF 1.30.2 bundles it, with the
+// CIDSystemInfo and writing mode the program declares, so a stream carrying it
+// can state them in its dictionary (ISO 32000-1, 9.7.5.3, Table 120).
+type ConformanceCMap struct {
+	// Program is the CMap file byte for byte.
+	Program []byte
+	// Registry, Ordering and Supplement are the program's /CIDSystemInfo.
+	Registry, Ordering string
+	Supplement         int
+	// WMode is the program's /WMode: 0 horizontal, 1 vertical.
+	WMode int
+}
+
+// ConformanceProgram returns the program of the CMap name exactly as veraPDF
+// 1.30.2 bundles it, for a repair to embed: the file [ConformanceCIDBase] reads
+// under the name, so a stream carrying it maps every code to the CID the
+// conformance checks gave it while the font named it. It covers the CMaps the
+// verapdfcmaps resources hold, and reports false for any other name.
+//
+// It also reports false when the program runs a usecmap operator, since the
+// embedded copy would then still reference a CMap by name (ISO 19005-2,
+// 6.2.11.3.3 test 3), and when the program declares no complete
+// CIDSystemInfo, which the stream dictionary must state (ISO 32000-1, 9.7.5.3,
+// Table 120).
+func ConformanceProgram(name string) (ConformanceCMap, bool, error) {
+	if _, ok := veraPDFCMapDigests[name]; !ok {
+		return ConformanceCMap{}, false, nil
+	}
+	data, _, err := veraPDFCMapSource(name)
+	if err != nil {
+		return ConformanceCMap{}, false, fmt.Errorf("reading veraPDF's %s CMap: %w", name, err)
+	}
+	m := ConformanceCIDBase(name)
+	if m == nil || len(m.bases) > 0 {
+		return ConformanceCMap{}, false, nil
+	}
+	reg, ord, sup, ok := programCIDSystemInfo(data)
+	if !ok {
+		return ConformanceCMap{}, false, nil
+	}
+	return ConformanceCMap{
+		Program:    data,
+		Registry:   reg,
+		Ordering:   ord,
+		Supplement: sup,
+		WMode:      m.wmode,
+	}, true, nil
+}
+
+// programCIDSystemInfo returns the Registry, Ordering and Supplement the
+// /CIDSystemInfo dictionary of a CMap program defines (Adobe Technical Note
+// #5014, CIDSystemInfo), reading the literal-string and integer form Adobe's
+// CMap files use, and reports false when one of the three is missing.
+func programCIDSystemInfo(data []byte) (string, string, int, bool) {
+	_, after, ok := bytes.Cut(data, []byte("/CIDSystemInfo"))
+	if !ok {
+		return "", "", 0, false
+	}
+	body, _, ok := bytes.Cut(after, []byte("end"))
+	if !ok {
+		return "", "", 0, false
+	}
+	reg, okReg := programStringAfter(body, "/Registry")
+	ord, okOrd := programStringAfter(body, "/Ordering")
+	sup, okSup := programIntAfter(body, "/Supplement")
+	if !okReg || !okOrd || !okSup {
+		return "", "", 0, false
+	}
+	return reg, ord, sup, true
+}
+
+// programStringAfter returns the literal string that follows key in body. The
+// strings it reads are Adobe's registry and ordering names, which hold no
+// parenthesis or escape.
+func programStringAfter(body []byte, key string) (string, bool) {
+	_, after, ok := bytes.Cut(body, []byte(key))
+	if !ok {
+		return "", false
+	}
+	after = bytes.TrimLeft(after, " \t\r\n")
+	if len(after) == 0 || after[0] != '(' {
+		return "", false
+	}
+	value, _, ok := bytes.Cut(after[1:], []byte(")"))
+	if !ok || len(value) == 0 {
+		return "", false
+	}
+	return string(value), true
+}
+
+// maxSupplementDigits bounds the digits [programIntAfter] reads, so the value
+// cannot overflow. It is an implementation limit, not spec-mandated: Adobe's
+// supplements take one or two digits.
+const maxSupplementDigits = 6
+
+// programIntAfter returns the non-negative integer that follows key in body.
+func programIntAfter(body []byte, key string) (int, bool) {
+	_, after, ok := bytes.Cut(body, []byte(key))
+	if !ok {
+		return 0, false
+	}
+	after = bytes.TrimLeft(after, " \t\r\n")
+	n, digits := 0, 0
+	for _, c := range after {
+		if c < '0' || c > '9' {
+			break
+		}
+		if digits == maxSupplementDigits {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+		digits++
+	}
+	return n, digits > 0
+}

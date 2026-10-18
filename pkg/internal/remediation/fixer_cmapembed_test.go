@@ -198,3 +198,84 @@ func TestFixCMapFlatten_EmbedsAVerticalUseCMapWithItsWMode(t *testing.T) {
 		t.Error("the embedded V program does not declare /WMode 1")
 	}
 }
+
+// namedEncodingPDF builds two Type 0 fonts whose /Encoding names
+// UniAKR-UTF16-H, outside ISO 32000-1, 9.7.5.2, Table 118, and a third naming
+// UniGB-UTF16-H, inside it.
+func namedEncodingPDF() []byte {
+	return buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "+
+			"/Resources << /Font << /F1 4 0 R /F2 6 0 R /F3 7 0 R >> >> >>",
+		"<< /Type /Font /Subtype /Type0 /BaseFont /Probe /Encoding /UniAKR-UTF16-H "+
+			"/DescendantFonts [5 0 R] >>",
+		"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Probe "+
+			"/CIDSystemInfo << /Registry (Adobe) /Ordering (KR) /Supplement 9 >> >>",
+		"<< /Type /Font /Subtype /Type0 /BaseFont /Probe /Encoding /UniAKR-UTF16-H "+
+			"/DescendantFonts [5 0 R] >>",
+		"<< /Type /Font /Subtype /Type0 /BaseFont /Probe /Encoding /UniGB-UTF16-H "+
+			"/DescendantFonts [5 0 R] >>",
+	)
+}
+
+// TestFixCMapFlatten_EmbedsAnEncodingNamedOutsideTable118 pins that a font
+// naming a CMap no reader is required to hold gets the file veraPDF reads
+// under the name, byte for byte, with the CIDSystemInfo it declares, that two
+// fonts naming it share one stream, and that a Table 118 name stays a name.
+func TestFixCMapFlatten_EmbedsAnEncodingNamedOutsideTable118(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, namedEncodingPDF())
+	fixes, err := fixCMapFlatten(ctx, alloc, doc, Options{}, nil, "PDF/A-2b")
+	if err != nil {
+		t.Fatalf("fixCMapFlatten: %v", err)
+	}
+	if len(fixes) != 2 {
+		t.Fatalf("reported %d fixes, want 2: %v", len(fixes), fixes)
+	}
+	if _, rewritten := alloc.Pending()[7]; rewritten {
+		t.Error("the font naming UniGB-UTF16-H, a Table 118 CMap, was rewritten")
+	}
+
+	var refs []ast.PdfIndirectRef
+	for _, objNum := range []int{4, 6} {
+		font, ok := alloc.Pending()[objNum].(ast.PdfDict)
+		if !ok {
+			t.Fatalf("font %d was not rewritten", objNum)
+		}
+		ref, isRef := font["Encoding"].(ast.PdfIndirectRef)
+		if !isRef {
+			t.Fatalf("font %d: /Encoding is %v, want a stream reference", objNum, font["Encoding"])
+		}
+		refs = append(refs, ref)
+	}
+	if refs[0] != refs[1] {
+		t.Errorf("the two fonts got streams %v and %v, want one shared", refs[0], refs[1])
+	}
+
+	stream, ok := alloc.Pending()[refs[0].ObjectNum].(ast.PdfStream)
+	if !ok {
+		t.Fatal("the /Encoding reference points at no pending stream")
+	}
+	info, _ := stream.Dict["CIDSystemInfo"].(ast.PdfDict)
+	if info["Registry"] != ast.PdfString("Adobe") || info["Ordering"] != ast.PdfString("KR") ||
+		info["Supplement"] != ast.PdfInt(9) {
+		t.Errorf("the stream declares CIDSystemInfo %v, want Adobe KR 9", info)
+	}
+	if stream.Dict["CMapName"] != ast.PdfName("UniAKR-UTF16-H") {
+		t.Errorf("the stream declares /CMapName %v", stream.Dict["CMapName"])
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		t.Fatalf("decoding the embedded CMap: %v", err)
+	}
+	want, ok, err := cmap.ConformanceProgram("UniAKR-UTF16-H")
+	if err != nil || !ok {
+		t.Fatalf("ConformanceProgram: ok=%v err=%v", ok, err)
+	}
+	if !bytes.Equal(data, want.Program) {
+		t.Errorf("the embedded program is %d bytes, not veraPDF's %d", len(data), len(want.Program))
+	}
+}

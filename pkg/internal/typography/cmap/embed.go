@@ -19,9 +19,11 @@ const maxEmbeddedCIDRanges = 1024
 // be written into a file as a stream, so a reference to it satisfies the
 // embedding requirement of ISO 19005-1, 6.3.3.3.
 //
-// The program carries what [LoadPredefinedCIDMap] resolves: the CMap's own
-// mappings over those of the base its usecmap names, its codespaces and its
-// /WMode. A -V CMap holds only its vertical forms and takes the rest from its
+// The program carries what [LoadConformanceCIDMap] resolves, the copy the
+// conformance checks judge: the CMap's own mappings over those of the base its
+// usecmap names, its codespaces and its /WMode. Where veraPDF 1.30.2 bundles
+// another copy than PDF.js does, a program written from PDF.js's would state
+// mappings the checker does not read under the name. A -V CMap holds only its vertical forms and takes the rest from its
 // -H base, so it is written flattened, with no usecmap left for a reader to
 // resolve.
 //
@@ -41,7 +43,7 @@ const maxEmbeddedCIDRanges = 1024
 // spans <2121> to <7E7E>, and a wider one would change how bytes outside it
 // decode.
 func EmbedPredefined(ctx context.Context, name string) ([]byte, bool, error) {
-	m := LoadPredefinedCIDMap(name)
+	m := LoadConformanceCIDMap(name)
 	if m == nil || m.cs == nil || len(m.notdefs) > 0 {
 		return nil, false, nil
 	}

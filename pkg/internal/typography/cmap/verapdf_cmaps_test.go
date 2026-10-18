@@ -2,8 +2,10 @@ package cmap
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"testing"
 )
 
@@ -124,6 +126,80 @@ func TestLoadConformanceCIDMap(t *testing.T) {
 	for _, name := range []string{"Identity-H", "Identity-V", "No-Such-CMap"} {
 		if LoadConformanceCIDMap(name) != nil {
 			t.Errorf("LoadConformanceCIDMap(%s) resolved", name)
+		}
+	}
+}
+
+// TestConformanceProgramIsWhatTheCheckerReads pins that the program a repair
+// embeds for a name decodes, read back as an embedded CMap stream, exactly as
+// the conformance checks decoded the name: UniAKR-UTF16-H sends <0041> to CID
+// 34, a surrogate pair to its supplementary-plane CID, and <0000> through its
+// notdefrange.
+func TestConformanceProgramIsWhatTheCheckerReads(t *testing.T) {
+	t.Parallel()
+	got, ok, err := ConformanceProgram("UniAKR-UTF16-H")
+	if err != nil || !ok {
+		t.Fatalf("ConformanceProgram(UniAKR-UTF16-H): ok=%v err=%v", ok, err)
+	}
+	if got.Registry != "Adobe" || got.Ordering != "KR" || got.Supplement != 9 || got.WMode != 0 {
+		t.Errorf("declared %s-%s-%d WMode %d, want Adobe-KR-9 WMode 0",
+			got.Registry, got.Ordering, got.Supplement, got.WMode)
+	}
+	embedded := ParseEmbeddedCIDMap(context.Background(), got.Program)
+	named := LoadConformanceCIDMap("UniAKR-UTF16-H")
+	if embedded == nil || named == nil {
+		t.Fatalf("embedded=%v named=%v, want both read", embedded != nil, named != nil)
+	}
+	codes := []byte{0x00, 0x41, 0xD8, 0x3C, 0xDD, 0x70, 0x00, 0x00, 0xAC, 0x00}
+	want := named.Decode(codes)
+	if have := embedded.Decode(codes); !slices.Equal(have, want) {
+		t.Errorf("the embedded program decodes %v, the name %v", have, want)
+	}
+	if len(want) == 0 || want[0].CID != 34 {
+		t.Errorf("<0041> decodes as %v, want CID 34 first", want)
+	}
+}
+
+// TestConformanceProgramDeclines pins the names no faithful copy stands for:
+// a CMap PDF.js alone bundles, the UCS2 CMap veraPDF shares with it, a
+// program that still names its base, and a name nothing bundles.
+func TestConformanceProgramDeclines(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"H", "Adobe-KR-UCS2", "UniJIS-UTF16-V", "UniXX-UTF16-H"} {
+		if _, ok, err := ConformanceProgram(name); ok || err != nil {
+			t.Errorf("ConformanceProgram(%s): ok=%v err=%v, want declined", name, ok, err)
+		}
+	}
+}
+
+// TestConformanceProgramReadsEveryCIDSystemInfo pins that every program the
+// verapdfcmaps resources hold, but UniJIS-UTF16-V, which runs usecmap, yields
+// a CIDSystemInfo, and the registry and ordering veraPDF tabulates wherever
+// it tabulates the name.
+func TestConformanceProgramReadsEveryCIDSystemInfo(t *testing.T) {
+	t.Parallel()
+	for name := range veraPDFCMapDigests {
+		got, ok, err := ConformanceProgram(name)
+		if name == "UniJIS-UTF16-V" {
+			if ok {
+				t.Errorf("%s: embedded with its usecmap", name)
+			}
+			continue
+		}
+		if err != nil || !ok {
+			t.Errorf("%s: ok=%v err=%v", name, ok, err)
+			continue
+		}
+		if got.Registry != "Adobe" || got.Ordering == "" {
+			t.Errorf("%s: CIDSystemInfo %s-%s-%d", name, got.Registry, got.Ordering, got.Supplement)
+		}
+		// ISO 32000-2 moved UniKS-UTF16-H to Adobe-KR, so the program may
+		// match either generation's row.
+		reg1, ord1, _, known := PredefinedCMapCIDSystemInfo(name, false)
+		reg2, ord2, _, _ := PredefinedCMapCIDSystemInfo(name, true)
+		if known && (reg1 != got.Registry || ord1 != got.Ordering) && (reg2 != got.Registry || ord2 != got.Ordering) {
+			t.Errorf("%s: the program declares %s-%s, the table %s-%s and %s-%s",
+				name, got.Registry, got.Ordering, reg1, ord1, reg2, ord2)
 		}
 	}
 }

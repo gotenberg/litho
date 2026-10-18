@@ -24,10 +24,11 @@ const maxCMapChainDepth = 5
 // The chain rule rejects a reference to a CMap ISO 32000-1, 9.7.5.2, Table 118
 // does not name (ISO 19005-2 and 19005-3, 6.2.11.3.3 test 3, ISO 19005-4,
 // 6.2.10.3.3 test 3, ISO 14289-1, 7.21.3.3 test 3, ISO 14289-2, 8.4.5.4 test
-// 3). The embedding rule requires the base CMap to be embedded or predefined,
-// filed under the same clauses at test 1, and ISO 19005-1 states it at 6.3.3.3.
+// 3). The embedding rule requires the base CMap, and the CMap a font's
+// /Encoding names, to be embedded or predefined, filed under the same clauses
+// at test 1, and ISO 19005-1 states it at 6.3.3.3.
 //
-// All three repairs edit one dictionary entry, so one fixer owns them. The
+// Every repair edits one dictionary entry, so one fixer owns them. The
 // context gate separates them from the WMode disagreement filed under the same
 // clauses, which [matchCIDSystemInfo] claims and settles differently.
 func matchCMapFlatten(v compliance.Violation) bool {
@@ -35,12 +36,15 @@ func matchCMapFlatten(v compliance.Violation) bool {
 		return false
 	}
 	return contextContains(v, "references non-predefined") ||
-		contextContains(v, "uses non-embedded CMap")
+		contextContains(v, "uses non-embedded CMap") ||
+		contextContains(v, "is not predefined and not embedded")
 }
 
 // fixCMapFlatten repairs the /UseCMap entry and the usecmap operators of every
-// embedded encoding CMap a Type 0 font uses. Four shapes, four repairs, and
-// the difference between them is what keeps the repair honest:
+// embedded encoding CMap a Type 0 font uses, and the /Encoding of a font
+// naming a CMap outside Table 118, which [embedNamedEncoding] embeds. Four
+// shapes of /UseCMap, four repairs, and the difference between them is what
+// keeps the repair honest:
 //
 //   - a chain of embedded streams is inlined, so nothing is referenced.
 //   - a base named outside Table 118, which a reader resolves
@@ -59,6 +63,7 @@ func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	// across runs.
 	var fixes []string
 	done := make(map[int]bool)
+	embedded := make(map[ast.PdfName]ast.PdfIndirectRef)
 	for objNum, entry := range sweptObjects(doc) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -78,6 +83,11 @@ func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			continue
 		}
 		if subtype, _ := fontDict["Subtype"].(ast.PdfName); subtype != "Type0" {
+			continue
+		}
+		if embedNamedEncoding(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}, embedded) {
+			fixes = append(fixes, fmt.Sprintf(
+				"embedded the encoding CMap font %s named outside the predefined set", fontBaseName(fontDict)))
 			continue
 		}
 		encRef, isRef := fontDict["Encoding"].(ast.PdfIndirectRef)
@@ -286,10 +296,10 @@ func dropUnresolvableUseCMap(ctx context.Context, alloc *writer.ObjAllocator, do
 // for no compliance gain. Hence the part check: it follows the rule, not
 // litho's checker.
 //
-// The mapping comes from litho's bundled copy of the CMap, so the stream says
-// exactly what the name said. A name litho does not ship is left alone:
-// writing a CMap it cannot read would fabricate the mapping the font depends
-// on.
+// The mapping comes from the copy the conformance checks read under the name
+// ([cmap.EmbedPredefined]), so the stream says exactly what the name said. A
+// name litho does not ship is left alone: writing a CMap it cannot read would
+// fabricate the mapping the font depends on.
 func embedNamedUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, encRef ast.PdfIndirectRef, profile string) bool {
 	if compliance.PDFAPart(profile) != 1 {
 		return false
@@ -336,7 +346,7 @@ func embedNamedUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	// The dictionary's /WMode states the program's, which EmbedPredefined
 	// writes from the named CMap: ISO 19005-2, 6.2.11.3.3 requires the two
 	// identical, and a -V CMap declares 1.
-	base := cmap.LoadPredefinedCIDMap(string(name))
+	base := cmap.LoadConformanceCIDMap(string(name))
 	if base == nil {
 		return false
 	}
@@ -363,6 +373,65 @@ func embedNamedUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	maps.Copy(dict, stream.Dict)
 	dict["UseCMap"] = baseRef
 	return alloc.AllocAt(encRef.ObjectNum, ast.NewStream(dict, raw))
+}
+
+// embedNamedEncoding embeds the CMap the /Encoding of the Type 0 font at ref
+// names, when the name lies outside ISO 32000-1, 9.7.5.2, Table 118, and
+// points the entry at the stream, reporting whether it did. embedded holds the
+// stream already written for a name, so fonts naming one CMap share it.
+//
+// ISO 19005-2 and 19005-3, 6.2.11.3.3 test 1, ISO 19005-4, 6.2.10.3.3 test 1,
+// ISO 14289-1, 7.21.3.3 test 1, ISO 14289-2, 8.4.5.4 test 1 and ISO 19005-1,
+// 6.3.3.3 require a CMap that is not predefined to be embedded. veraPDF still
+// decodes the font through the file it bundles under such a name, but nothing
+// requires a reader to hold one: PDF.js ships no UniAKR-UTF16-H. The stream
+// carries that file byte for byte ([cmap.ConformanceProgram]), so every code
+// keeps the CID the checks gave it, and its dictionary states the
+// CIDSystemInfo the program declares, which the name alone cannot supply
+// (6.2.11.3.1).
+//
+// Unlike [embedNamedUseCMap], the repair embeds a program past the range cap
+// [cmap.EmbedPredefined] keeps: a Table 118 name resolves in every conforming
+// reader, so its bulk would buy only a rule, while a name outside the table
+// resolves only where a reader happens to bundle it. A Table 118 name, which
+// part 1 alone requires embedded, is left as written, as is a name litho
+// holds no faithful copy of.
+func embedNamedEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef, embedded map[ast.PdfName]ast.PdfIndirectRef) bool {
+	font := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	if font == nil {
+		return false
+	}
+	// A stream fails to resolve as a name, so only a named encoding goes on.
+	name, err := document.ResolveName(ctx, doc, font["Encoding"])
+	if err != nil || name == "" || compliance.IsPredefinedCMapName(string(name)) {
+		return false
+	}
+	encRef, done := embedded[name]
+	if !done {
+		prog, ok, err := cmap.ConformanceProgram(string(name))
+		if err != nil {
+			doc.Logger.Debug("remediation: cannot read the named encoding CMap, /Encoding left as written",
+				slog.String("cmap", string(name)), slog.Any("err", err))
+			return false
+		}
+		if !ok {
+			return false
+		}
+		encRef = alloc.Alloc(flateStream(ast.PdfDict{
+			"Type":     ast.PdfName("CMap"),
+			"CMapName": name,
+			"WMode":    ast.PdfInt(prog.WMode),
+			"CIDSystemInfo": ast.PdfDict{
+				"Registry":   ast.PdfString(prog.Registry),
+				"Ordering":   ast.PdfString(prog.Ordering),
+				"Supplement": ast.PdfInt(prog.Supplement),
+			},
+		}, prog.Program))
+		embedded[name] = encRef
+	}
+	newFont := maps.Clone(font)
+	newFont["Encoding"] = encRef
+	return alloc.AllocAt(ref.ObjectNum, newFont)
 }
 
 // useCMapChain returns the programs a CMap builds on, nearest first. It stops
