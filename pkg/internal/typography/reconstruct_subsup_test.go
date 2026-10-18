@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // subsupPDF builds a one-page document whose page shows body, with /F1
@@ -88,5 +89,27 @@ func TestExtractText_MarkedContentEndsRun(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestReconstructText_RunGapAtItemScale pins that the move back that
+// starts a run is measured at the scale the text matrix gives the glyph
+// after it. "1" is shown in the Tf of "f" through a smaller text matrix,
+// 3.24 units back: more than a fifth of its own size, so it starts a run,
+// and the run breaks the line 3.67 units below. Against the size of "f"
+// the move would be too small to start one.
+func TestReconstructText_RunGapAtItemScale(t *testing.T) {
+	t.Parallel()
+	f := &Font{}
+	in := []models.TextElement{
+		{Text: "f", X: 150.48, Y: 100.3, Width: 9.9, FontSize: 18},
+		{Text: "1", X: 157.14, Y: 96.63, Width: 7.61, FontSize: 13.14},
+	}
+	fonts := []runFont{
+		{name: "C2_0", font: f, size: 1, height: 18},
+		{name: "C2_0", font: f, size: 1, height: 13.14},
+	}
+	if got := reconstructText(context.Background(), in, fonts, nil); got != "f\n1" {
+		t.Errorf("got %q, want %q", got, "f\n1")
 	}
 }

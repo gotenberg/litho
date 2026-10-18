@@ -551,6 +551,43 @@ func (r *runTracker) fontChanged(i int, prev, el models.TextElement) bool {
 	return a.size != b.size || (a.name != b.name && a.font != b.font)
 }
 
+// gapSize returns the font size, on the page, that the gap from last, the
+// glyph lastIdx, to el, the glyph i, is measured against when it tells
+// whether el starts a run: a move back past [negativeRunGapFactor] or a
+// jump past [spaceInFlowMaxFactor]. PDF.js measures the move in the text
+// space of the text item last belongs to and compares it with those factors
+// times the Tf size of the item (src/core/evaluator.js,
+// compareWithLastPosition, advanceX against negativeSpaceMax and
+// addFakeSpaces against spaceInFlowMax). A Tm shown while the item is open
+// rescales the item (updateAdvanceScale), so the size is the Tf size of
+// last at the scale the text matrix gives el, as for a word space
+// ([wordSpaceThreshold]). Across a marked-content boundary, which ends the
+// item before the Tm can rescale it, and without fonts, it is the size of
+// last on the page.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16800.pdf page 5: "𝑓𝑓" set at 18 points, then its
+//     subscript "1" by a 13.14-point Tm 3.24 units back and 3.67 below.
+//     Against 18 points the move back was too small to start a run and
+//     the shift too small to start one across the line, so "1" read glued
+//     to "𝑓𝑓", where PDF.js, which measures the move at 13.14 points, ends
+//     its item and breaks the line.
+//   - All corpora: words match PDF.js on 1 more file (govdocs
+//     thread_100_100831.pdf) and on 1 more page of a file that still
+//     differs (pdfjs issue16800.pdf page 5), and on none fewer; facturx,
+//     pdf20 and pdfcpu do not move.
+func (r *runTracker) gapSize(lastIdx, i int, last, el models.TextElement) float64 {
+	if r.fonts == nil || last.MCID != el.MCID || r.markedChanged(lastIdx, i) {
+		return math.Abs(last.FontSize)
+	}
+	prevSize, size := math.Abs(r.fonts[lastIdx].size), math.Abs(r.fonts[i].size)
+	if prevSize == 0 || size == 0 {
+		return math.Abs(last.FontSize)
+	}
+	return prevSize * math.Abs(el.FontSize) / size
+}
+
 // markedChanged reports whether a marked-content operator came between the
 // glyph lastIdx and the glyph i ([runFont] marked). Without fonts only a
 // change of MCID tells.
@@ -578,7 +615,7 @@ func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 	last, lastIdx := r.last, r.lastIdx
 	fontChanged := r.fontChanged(i, last, el)
 	r.advance(i, el)
-	size := math.Abs(last.FontSize)
+	size := r.gapSize(lastIdx, i, last, el)
 	gap := computeLineGap(last, el)
 	if r.endsLine(lastIdx, i, last, el, gap, size) {
 		r.start, r.startIdx = el, i
