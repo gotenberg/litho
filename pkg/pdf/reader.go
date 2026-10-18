@@ -74,6 +74,10 @@ func WithLogger(logger *slog.Logger) OpenOption {
 
 // WithPassword supplies the password for an encrypted PDF document.
 // If the document is not encrypted, the password is ignored.
+//
+// An AES-256 document is tried with the password prepared by SASLprep (RFC
+// 4013), as ISO 32000-2, 7.6.4.3.3 requires, then with its UTF-8 bytes as
+// given, which is what producers that skip SASLprep hashed.
 func WithPassword(password string) OpenOption {
 	return func(o *openOpts) {
 		o.password = password

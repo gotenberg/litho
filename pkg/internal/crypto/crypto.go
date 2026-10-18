@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/crypto/saslprep"
 )
 
 var paddingString = []byte{
@@ -234,12 +235,13 @@ func hash2B(password, salt, udata []byte) []byte {
 // on success, sets h.EncryptionKey and h.Authenticated. It reports
 // [ErrInvalidPassword] when neither matches, and leaves h.Authenticated false.
 //
-// V=5 follows ISO 32000-2, 7.6.4.3 Algorithm 2.A: the password is UTF-8
-// truncated to 127 bytes, validated against /U and then /O, with the file key
-// recovered from /UE or /OE. A /U, /O or /UE too short to carry the hash and
-// its two salts yields [ErrUnsupportedEncryption] rather than a false
-// rejection, because the dictionary is malformed rather than the password
-// wrong.
+// V=5 follows ISO 32000-2, 7.6.4.3 Algorithm 2.A: the password is prepared
+// with SASLprep, encoded as UTF-8 and truncated to 127 bytes, validated
+// against /U and then /O, with the file key recovered from /UE or /OE. The
+// raw UTF-8 bytes are tried too, for the producers that skip SASLprep (see
+// [v5Passwords]). A /U, /O or /UE too short to carry the hash and its two
+// salts yields [ErrUnsupportedEncryption] rather than a false rejection,
+// because the dictionary is malformed rather than the password wrong.
 //
 // V<5 follows ISO 32000-1 Algorithms 3.3 then 3.1 and 3.2 (3.4/3.5 for R>=3).
 // Owner recovery runs first, and both the recovered string AND the supplied
@@ -252,55 +254,7 @@ func (h *Handler) Authenticate(password string) error {
 	pwBytes := []byte(password)
 
 	if h.V == 5 {
-		// AES-256 (ISO 32000-2 §7.6.4.3, Algorithm 2.A). The password is UTF-8,
-		// truncated to 127 bytes. The 48-byte /U and /O values each split into a
-		// 32-byte hash, an 8-byte validation salt (bytes 32-39), and an 8-byte key
-		// salt (bytes 40-47).
-		if len(pwBytes) > 127 {
-			pwBytes = pwBytes[:127]
-		}
-		if len(h.uVal) < 48 || len(h.oVal) < 48 || len(h.ueVal) < 32 {
-			return ErrUnsupportedEncryption
-		}
-
-		// deriveKey decrypts a 32-byte encryption string (/UE or /OE) with an
-		// intermediate key computed from the key salt: AES-256-CBC, no padding,
-		// zero IV, per Algorithm 2.A.
-		deriveKey := func(intermediate, enc []byte) ([]byte, error) {
-			block, err := aes.NewCipher(intermediate)
-			if err != nil {
-				return nil, fmt.Errorf("creating AES cipher for V5 key decryption: %w", err)
-			}
-			fileKey := make([]byte, len(enc))
-			cipher.NewCBCDecrypter(block, make([]byte, aes.BlockSize)).CryptBlocks(fileKey, enc)
-			return fileKey, nil
-		}
-
-		// User password: validate against /U, then recover the key from /UE.
-		if bytes.Equal(h.hashV5(pwBytes, h.uVal[32:40], nil), h.uVal[:32]) {
-			fileKey, err := deriveKey(h.hashV5(pwBytes, h.uVal[40:48], nil), h.ueVal)
-			if err != nil {
-				return err
-			}
-			h.EncryptionKey = fileKey
-			h.Authenticated = true
-			return nil
-		}
-
-		// Owner password: the owner hash additionally salts with the full 48-byte
-		// /U value, and the key is recovered from /OE.
-		if len(h.oeVal) >= 32 && bytes.Equal(h.hashV5(pwBytes, h.oVal[32:40], h.uVal[:48]), h.oVal[:32]) {
-			fileKey, err := deriveKey(h.hashV5(pwBytes, h.oVal[40:48], h.uVal[:48]), h.oeVal)
-			if err != nil {
-				return err
-			}
-			h.EncryptionKey = fileKey
-			h.Authenticated = true
-			return nil
-		}
-
-		h.Authenticated = false
-		return ErrInvalidPassword
+		return h.authenticateV5(password)
 	}
 
 	// Legacy V<5 logic below
@@ -450,6 +404,79 @@ func (h *Handler) Authenticate(password string) error {
 			h.EncryptionKey = candidateKey
 			h.Authenticated = true
 			return nil
+		}
+	}
+
+	h.Authenticated = false
+	return ErrInvalidPassword
+}
+
+// maxV5PasswordBytes is the length an AES-256 password is truncated to after
+// its UTF-8 encoding, per ISO 32000-2, 7.6.4.3.3.
+const maxV5PasswordBytes = 127
+
+// v5Passwords returns the byte strings an AES-256 password is tried as, in
+// order.
+//
+// ISO 32000-2, 7.6.4.3.3 prepares the password with SASLprep (RFC 4013) before
+// encoding it as UTF-8 and truncating it to [maxV5PasswordBytes], so the
+// prepared form comes first. It is prepared as a query (RFC 3454, 7), since
+// opening matches the password against a value already stored.
+//
+// The raw UTF-8 bytes follow whenever they differ, which relaxes 7.6.4.3.3
+// for producers that skip SASLprep: qpdf hashes the password as given (its
+// QPDF_encryption.cc says "We are supposed to process the input string with
+// the SASLprep (RFC 4013) profile ... most viewers don't"), and PDFium's
+// CPDF_SecurityHandler applies none either. PDF.js tries both forms the same
+// way. A
+// password SASLprep rejects is tried raw alone: it cannot have keyed a
+// document through SASLprep, but such a producer can have hashed it.
+func v5Passwords(password string) [][]byte {
+	raw := truncate([]byte(password), maxV5PasswordBytes)
+	prepared, err := saslprep.Query(password)
+	if err != nil {
+		return [][]byte{raw}
+	}
+	prep := truncate([]byte(prepared), maxV5PasswordBytes)
+	if bytes.Equal(prep, raw) {
+		return [][]byte{raw}
+	}
+	return [][]byte{prep, raw}
+}
+
+// authenticateV5 is [Handler.Authenticate] for the AES-256 handler (ISO
+// 32000-2, 7.6.4.3.3, Algorithm 2.A). The 48-byte /U and /O values each split
+// into a 32-byte hash, an 8-byte validation salt (bytes 32-39) and an 8-byte
+// key salt (bytes 40-47).
+func (h *Handler) authenticateV5(password string) error {
+	if len(h.uVal) < 48 || len(h.oVal) < 48 || len(h.ueVal) < 32 {
+		return ErrUnsupportedEncryption
+	}
+
+	// deriveKey decrypts a 32-byte encryption string (/UE or /OE) with an
+	// intermediate key computed from the key salt: AES-256-CBC, no padding,
+	// zero IV, per Algorithm 2.A.
+	deriveKey := func(intermediate, enc []byte) error {
+		block, err := aes.NewCipher(intermediate)
+		if err != nil {
+			return fmt.Errorf("creating AES cipher for V5 key decryption: %w", err)
+		}
+		fileKey := make([]byte, len(enc))
+		cipher.NewCBCDecrypter(block, make([]byte, aes.BlockSize)).CryptBlocks(fileKey, enc)
+		h.EncryptionKey = fileKey
+		h.Authenticated = true
+		return nil
+	}
+
+	for _, pw := range v5Passwords(password) {
+		// User password: validate against /U, then recover the key from /UE.
+		if bytes.Equal(h.hashV5(pw, h.uVal[32:40], nil), h.uVal[:32]) {
+			return deriveKey(h.hashV5(pw, h.uVal[40:48], nil), h.ueVal)
+		}
+		// Owner password: the owner hash additionally salts with the full
+		// 48-byte /U value, and the key is recovered from /OE.
+		if len(h.oeVal) >= 32 && bytes.Equal(h.hashV5(pw, h.oVal[32:40], h.uVal[:48]), h.oVal[:32]) {
+			return deriveKey(h.hashV5(pw, h.oVal[40:48], h.uVal[:48]), h.oeVal)
 		}
 	}
 

@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/crypto/saslprep"
 )
 
 // Algorithm enumerates supported encryption algorithms, from the strongest
@@ -120,7 +121,15 @@ func NewEncryptor(cfg EncryptConfig, documentID []byte) (*Encryptor, ast.PdfDict
 	pVal := int(permissionsEntry(cfg.Permissions))
 
 	if v == 5 {
-		return newEncryptorV5(cfg.UserPassword, ownerPw, pVal, keyLen, documentID)
+		userBytes, err := v5StoredPassword(cfg.UserPassword)
+		if err != nil {
+			return nil, nil, fmt.Errorf("user password: %w", err)
+		}
+		ownerBytes, err := v5StoredPassword(ownerPw)
+		if err != nil {
+			return nil, nil, fmt.Errorf("owner password: %w", err)
+		}
+		return newEncryptorV5(userBytes, ownerBytes, pVal, keyLen, documentID)
 	}
 	return newEncryptorLegacy(cfg.UserPassword, ownerPw, v, r, keyLen, cfm, pVal, documentID)
 }
@@ -185,17 +194,34 @@ func aesEncrypt(key, plaintext []byte) ([]byte, error) {
 	return result, nil
 }
 
-// newEncryptorV5 implements AES-256 (V=5, R=6) encryption setup per ISO 32000-2.
-func newEncryptorV5(userPw, ownerPw string, pVal, keyLen int, docID []byte) (*Encryptor, ast.PdfDict, error) {
+// v5StoredPassword returns the bytes an AES-256 handler hashes for password:
+// its SASLprep form, encoded as UTF-8 and truncated to [maxV5PasswordBytes]
+// (ISO 32000-2, 7.6.4.4.7, Algorithm 8, step a, which prepares the password
+// as 7.6.4.3.3 does).
+//
+// The password is prepared as a stored string (RFC 3454, 7), since the
+// document keeps its hash. A password SASLprep rejects yields
+// [ErrPasswordRejected] and no document: hashing its raw bytes would key the
+// file to a value that no reader preparing the password, as 7.6.4.3.3
+// requires, can ever reproduce. Opening stays lenient instead (see
+// [v5Passwords]).
+func v5StoredPassword(password string) ([]byte, error) {
+	prepared, err := saslprep.Stored(password)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrPasswordRejected, err)
+	}
+	return truncate([]byte(prepared), maxV5PasswordBytes), nil
+}
+
+// newEncryptorV5 implements AES-256 (V=5, R=6) encryption setup per ISO
+// 32000-2. userBytes and ownerBytes are the passwords as hashed: prepared
+// and truncated by [v5StoredPassword].
+func newEncryptorV5(userBytes, ownerBytes []byte, pVal, keyLen int, docID []byte) (*Encryptor, ast.PdfDict, error) {
 	// Generate random file encryption key.
 	fileKey := make([]byte, keyLen)
 	if _, err := rand.Read(fileKey); err != nil {
 		return nil, nil, fmt.Errorf("generating file key: %w", err)
 	}
-
-	// Truncate passwords to 127 bytes.
-	userBytes := truncate([]byte(userPw), 127)
-	ownerBytes := truncate([]byte(ownerPw), 127)
 
 	// Generate independent 8-byte validation and key salts for the user and owner
 	// entries (ISO 32000-2 §7.6.4.4.7, Algorithm 8/9).

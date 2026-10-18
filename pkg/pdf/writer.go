@@ -1541,6 +1541,12 @@ type EncryptConfig struct {
 	// value from [EncryptConfig.UserPassword]; callers that supply identical
 	// passwords get the same effective permissions as an
 	// empty-user-password doc.
+	//
+	// Under [EncryptAES256] both passwords are prepared with SASLprep (RFC
+	// 4013) before they are hashed, as ISO 32000-2, 7.6.4.3.3 requires, so
+	// "Ⅸ" and "IX" name the same password. A password SASLprep rejects
+	// yields [ErrPasswordRejected]. The other algorithms hash the password
+	// bytes as given (ISO 32000-1, 7.6.3.3).
 	OwnerPassword string
 	// Algorithm selects the standard security handler variant. The zero
 	// value selects [EncryptAES256]; [EncryptRC4_40] and the other weaker
