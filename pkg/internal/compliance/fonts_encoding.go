@@ -1428,7 +1428,17 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	}
 
 	if !hasToUnicode(ctx, doc, fontDict) {
-		return missingUnicodeFaults(rule, fontName, pageNum, shownCodesWithoutUnicodeName(ctx, doc, fontDict, usage))
+		codes := shownCodesWithoutUnicodeName(ctx, doc, fontDict, usage)
+		// A code the program names .notdef has the value U+0000, which the value
+		// rule judges ([programNotdefCodes]), so it passes this one. Once every
+		// such code is set aside, a font none of whose codes is left passes.
+		if notdef := programNotdefCodes(ctx, doc, fontDict, usage); len(notdef) > 0 && len(codes) > 0 {
+			codes = slices.DeleteFunc(codes, func(c byte) bool { return notdef[c] })
+			if len(codes) == 0 {
+				return nil
+			}
+		}
+		return missingUnicodeFaults(rule, fontName, pageNum, codes)
 	}
 	faults := newGlyphFaults(rule)
 	for _, out := range shownCodesOutsideToUnicode(ctx, doc, fontDict, usage) {
@@ -1977,6 +1987,32 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		return nil
 	}
 
+	out := toUnicodeValueFaults(ctx, doc, fontDict, fontName, pageNum, profile, rule, usage)
+	// A code the font's program names .notdef where its encoding names nothing
+	// has the value U+0000 too ([programNotdefCodes]), whatever else the CMap
+	// maps.
+	notdef := programNotdefCodes(ctx, doc, fontDict, usage)
+	if len(notdef) == 0 {
+		return out
+	}
+	stated := make(map[uint32]bool, len(out))
+	for _, v := range out {
+		if v.glyph.named {
+			stated[v.glyph.code] = true
+		}
+	}
+	for _, code := range sortedByteKeys(notdef) {
+		if !stated[uint32(code)] {
+			out = append(out, glyphFailf(rule, uint32(code), "font %s on page %d: code %d is named .notdef by the font program, whose Unicode value is U+0000",
+				fontName, pageNum, code)...)
+		}
+	}
+	return out
+}
+
+// toUnicodeValueFaults is [checkToUnicodeCMapValues] for the codes the CMap or
+// the font's encoding values, rule being the value rule of profile.
+func toUnicodeValueFaults(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, rule Rule, usage *fontUsageInfo) []Violation {
 	// A simple font that embeds no program gives a code the CMap leaves out
 	// the value of the name its encoding gives it, U+0000 for .notdef; see
 	// [unembeddedUnicodeFaults]. names states those for the codes outside
