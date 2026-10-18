@@ -219,6 +219,8 @@ one deliberately rather than diffing it against a fresh build.
 | `fontcff2_2b.pdf`      | PDF/A-2b     | OpenType programs, `CFF2` among them, read by the embedding font |
 | `fontotread_2b.pdf`    | PDF/A-2b     | OpenType programs the glyph rules read by the embedding font     |
 | `aakeys_4.pdf`         | PDF/A-4      | Catalog and page `/AA` holding a permitted and a forbidden key   |
+| `patternshade_2b.pdf`  | PDF/A-2b     | Shadings a tiling cell or a Type 3 glyph reaches                 |
+| `patternglyph_2b.pdf`  | PDF/A-2b     | Type 3 glyphs a tiling cell shows, nested once                   |
 
 ### Must-not-fire controls
 
@@ -477,6 +479,9 @@ violation but is exempt, so a firing is a false positive.
 | `fontcff2_2b`                             | `OK`: a Type 1 font over an `OTTO` with `CFF ` outlines                | ISO 19005-2, 6.2.11.4.1 t1   |
 | `fontotread_2b`                           | `W1`, `W3`, `W4`: CFF fonts declaring the `CFF ` widths, not `hmtx`'s  | ISO 19005-2, 6.2.11.5        |
 | `fontotread_2b`                           | `W5`, `H1`: TrueType fonts over an `OTTO` declaring `hmtx`'s widths    | ISO 19005-2, 6.2.11.5        |
+| `patternshade_2b`                         | every shading's `/Function`: a type 4 program past both number limits  | ISO 19005-2, 6.1.13 t1       |
+| `patternshade_2b`                         | `SH1`'s own `/ExtGState`, setting `/TR /Identity` and `/BM /Foo`       | ISO 19005-2, 6.2.5, 6.2.10   |
+| `patternglyph_2b`                         | page 4: a Type 3 font a cell selects with `Tf` and shows nothing in    | ISO 19005-2, 6.2.6 t1        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -608,6 +613,8 @@ which are covered under [Known divergences](#known-divergences).
 | `paintop_2b.pdf`       | 7    | 4    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
 | `parentreach_2b.pdf`   | 7    | 3    | 7    | 3    | 4    | 8    | 4    | 5    | 7   | 7    | 8    | 7    | 7    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
+| `patternglyph_2b.pdf`  | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 7    | 7    |
+| `patternshade_2b.pdf`  | 8    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 7    | 6    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `remapchain_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 4    | 0    |
 | `redactcopies_2b.pdf`  | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
@@ -6940,6 +6947,93 @@ it requires). At parts 1 to 3 every `/AA` goes, as before. At PDF/UA-2 the
 output keeps both GoTo actions, which point at a page with no structure
 element to name, and both tools report `8.8/2` twice. Every other output is
 conforming on both tools.
+
+### `patternshade_2b.pdf`
+
+A shading reaches a page through a shading pattern an `scn` selects (ISO
+32000-1, 8.7.4.1) or through `sh` (8.7.4.2), and either can sit in a tiling
+pattern's cell (8.7.3.1) or in a Type 3 glyph description (9.6.5). veraPDF
+1.30.2 judges the colour space of every such shading, a Separation or DeviceN
+tint transform included, and judges neither the shading's `/Function` nor a
+shading pattern's own `/ExtGState`. No corpus file reaches a shading through a
+cell or a glyph, so this fixture plants one path per page, each answering a
+rule nothing else in the file fires. A CMYK OutputIntent covers DeviceCMYK and
+the DeviceGray a glyph shows in:
+
+| Page | Path                                 | Shading colour space               | Answers at PDF/A-2b     |
+| ---- | ------------------------------------ | ---------------------------------- | ----------------------- |
+| 1    | tiling cell, `/SH1 scn`              | DeviceRGB                          | `6.2.4.3/2`             |
+| 2    | Type 3 glyph on the page, `/SH2 scn` | Separation, type 4 tint 2147483648 | `6.1.13/1`              |
+| 3    | tiling cell, Type 3 glyph, `/Sh3 sh` | DeviceN of 33 colorants            | `6.1.13/9`, `6.2.4.4/1` |
+
+Every shading's `/Function` is a type 4 program holding 2147483649 and
+40000.5, and `SH1` carries an `/ExtGState` setting `/TR /Identity` and `/BM
+/Foo`. Neither tool judges any of them, so `6.1.13/1` counts the tint transform
+alone, `6.2.5` and `6.2.10` stay silent, and at PDF/A-1b `6.1.12/2` stays
+silent. The same graphics state set by a page's `gs` fails `6.2.5/1`, `6.2.5/2`,
+`6.2.10/1` and `6.2.10/2` on both tools, so the silence is the oracle's reading
+and not a planting mistake. Page 3's DeviceN has no `/Colorants`, which
+`6.2.4.4/1` answers.
+
+| Rule at PDF/A-2b                  | veraPDF | litho |
+| --------------------------------- | ------- | ----- |
+| `6.1.13/1` integer, page 2's tint | 1       | 1     |
+| `6.1.13/9` 33 colorants           | 1       | 1     |
+| `6.2.4.3/2` DeviceRGB             | 1       | 1     |
+| `6.2.4.4/1` no `/Colorants`       | 1       | 1     |
+
+litho already reached every path, so the fixture pins the reading rather than
+a fix. veraPDF 1.30.2 and litho report the same rule set in all thirteen cells,
+with the same counts but for `7.1/3` and `8.2.2/1` at PDF/UA, the family
+described under [Instance counts](#instance-counts-which-the-corpus-does-not-pin).
+
+Remediated at every level in both modes, both tools report the same rule set
+on every output, and both PDF/UA outputs are conforming. At the PDF/A levels
+the type 4 tint's integer stays (no fixer rewrites a program), the default mode
+keeps the 33-colorant DeviceN where the aggressive mode clears it, and one
+DeviceCMYK finding appears, `6.2.4.3/3` (`6.2.3.3/2` at PDF/A-1): remediation
+replaces the CMYK OutputIntent with an sRGB one to cover page 1's DeviceRGB and
+injects a `/DefaultCMYK`, which veraPDF does not take as covering a Separation's
+DeviceCMYK alternate. A one-page file whose page itself selects such a shading
+pattern beside a DeviceRGB fill keeps the same finding, so that residual is
+remediation's and not this reach.
+
+### `patternglyph_2b.pdf`
+
+A tiling pattern's cell can show text in a Type 3 font (ISO 32000-1, 8.7.3.1,
+9.6.5), and the glyph description paints images, shows text in other fonts,
+selects colours and selects patterns of its own. veraPDF 1.30.2 judges what
+such a glyph draws once an `scn` selects the pattern and text is shown with the
+font, and never through a `Tf` alone. No corpus file shows Type 3 text in a
+pattern cell, so this fixture plants one path per page, each answering a rule
+nothing else in the file fires. A CMYK OutputIntent covers the DeviceGray every
+cell and glyph shows text in:
+
+| Page | Path                                                 | Glyph draws                         | Answers at PDF/A-2b |
+| ---- | ---------------------------------------------------- | ----------------------------------- | ------------------- |
+| 1    | tiling cell, Type 3 glyph                            | an image with `/Interpolate true`   | `6.2.8/3`           |
+| 2    | tiling cell, Type 3 glyph                            | text in an unembedded TrueType font | `6.2.11.4.1/1`      |
+| 3    | tiling cell, Type 3 glyph, tiling cell, Type 3 glyph | a DeviceRGB fill                    | `6.2.4.3/2`         |
+| 4    | tiling cell selecting the font with `Tf` alone       | an image with `/Intent /Bogus`      | nothing             |
+
+| Rule at PDF/A-2b                 | veraPDF | litho |
+| -------------------------------- | ------- | ----- |
+| `6.2.11.4.1/1` font not embedded | 1       | 1     |
+| `6.2.4.3/2` DeviceRGB            | 2       | 2     |
+| `6.2.8/3` `/Interpolate` true    | 1       | 1     |
+
+litho already reached every path, so the fixture pins the reading rather than
+a fix. The paths ride different walks: with the drawn-stream walk's pattern
+descent cut, litho loses `6.2.8/3` and keeps the other two, which the font and
+colour walks reach on their own. veraPDF 1.30.2 and litho report the same rule
+set in all thirteen cells, with the same counts but for `7.1/3` and `8.2.2/1` at
+PDF/UA.
+
+Remediated at every level in both modes, both tools report the same rule set
+on every output. What stays is the unembedded TrueType font, which litho ships
+no program for (`6.2.11.4.1/1`, `6.3.4/1` at PDF/A-1, `6.2.10.4.1/1` at part 4,
+`7.21.4.1/1` and `8.4.5.5.1/1` at PDF/UA), with `6.3.8/1` at PDF/A-1a and
+`6.9/5` at PDF/A-4f beside it.
 
 ## Scope
 
