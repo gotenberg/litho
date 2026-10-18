@@ -23,7 +23,7 @@ func descriptorAfterType0Repair(t *testing.T, createCIDSet bool) (ast.PdfDict, [
 		t.Fatalf("resolving the Type0 font: %v", err)
 	}
 	fixes := fixType0Font(ctx, doc, alloc, fontDict, ast.PdfIndirectRef{ObjectNum: 4},
-		false, newCIDSetRepair(false, createCIDSet))
+		false, newCIDSetRepair(false, createCIDSet), nil)
 	fd, _ := alloc.Pending()[6].(ast.PdfDict)
 	return fd, fixes
 }

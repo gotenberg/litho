@@ -83,6 +83,14 @@ type Font struct {
 	// only hold a single rune per byte, so glyph decoding consults this
 	// map first and returns the stored string verbatim when present.
 	LigatureOverrides map[byte]string
+
+	// ProgramGlyphRunes holds the characters the embedded program of a
+	// symbolic TrueType font that states no /Encoding gives its codes
+	// ([applySymbolicTrueTypeGlyphs]), and only those; nil for any other
+	// font. [Font.Encoding] also carries the default encoding's reading of
+	// every code the program leaves unnamed, a guess a caller that persists
+	// a mapping must not write.
+	ProgramGlyphRunes map[byte]rune
 }
 
 // GlyphWidth returns the advance width (in 1/1000 text-space units) for the
@@ -2145,23 +2153,10 @@ func hasCIDToGIDMapStream(ctx context.Context, doc *document.Document, fontDict 
 // when the font's encoding CMap maps codes to other CIDs
 // ([Font.encodingCIDKeyed]), the CID-keyed [Font.GIDToUnicode] table.
 func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, mapObj ast.PdfObject) {
-	stream, err := document.ResolveStream(ctx, doc, mapObj)
-	if err != nil || stream.Dict == nil {
+	table := cidToGIDStreamUnicode(ctx, doc, mapObj, ExtractGIDToUnicode(ctx, decodeFontStreamFromDescriptor(ctx, doc, fontDict)))
+	if len(table) == 0 {
 		return
 	}
-	mapData, err := doc.DecodeStream(ctx, stream)
-	if err != nil || len(mapData) < 2 {
-		return
-	}
-
-	// Extract GID→Unicode from the embedded font.
-	gidToUni := ExtractGIDToUnicode(ctx, decodeFontStreamFromDescriptor(ctx, doc, fontDict))
-	if len(gidToUni) == 0 {
-		return
-	}
-
-	// Build CID→Unicode: CIDToGIDMap[CID] → GID, gidToUni[GID] → Unicode.
-	numCIDs := len(mapData) / 2
 
 	// The table is keyed by CID, which a two-byte code is only under
 	// Identity-H or Identity-V (ISO 32000-1, 9.7.5.2). Under an encoding CMap
@@ -2169,43 +2164,70 @@ func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict a
 	// the CMap gives each code ([encodingCIDTableChar]): written as a
 	// /ToUnicode CMap it would be read at the code.
 	if font.encodingCIDKeyed() {
-		table := make(map[uint16]rune)
-		for cid := range min(numCIDs, math.MaxUint16+1) {
-			gid := uint16(mapData[cid*2])<<8 | uint16(mapData[cid*2+1])
-			if uni, ok := gidToUni[gid]; ok && gid != 0 && uni != 0 {
-				table[uint16(cid)] = uni //nolint:gosec // cid <= math.MaxUint16 above.
-			}
-		}
-		if len(table) > 0 {
-			font.GIDToUnicode = table
-		}
+		font.GIDToUnicode = table
 		return
 	}
 
-	mapping := make(map[string]string, 4096) //nolint:mnd // Capacity hint sized for a large CMap, not a limit; the map grows freely.
-	for cid := range numCIDs {
-		gid := uint16(mapData[cid*2])<<8 | uint16(mapData[cid*2+1])
-		if gid == 0 {
-			continue
-		}
-		uni, ok := gidToUni[gid]
-		if !ok || uni == 0 {
-			continue
-		}
+	mapping := make(map[string]string, len(table))
+	for cid, uni := range table {
 		key := string([]byte{byte(cid >> 8), byte(cid)}) //nolint:gosec // splits a uint16 CID into its two bytes; truncation is the intent
 		mapping[key] = string(uni)
 	}
-
-	if len(mapping) == 0 {
-		return
-	}
-
 	font.ToUnicode = &cmap.CMap{
 		Mapping: mapping,
 		CodeSpaceRanges: []cmap.CodeSpaceRange{
 			{Low: []byte{0x00, 0x00}, High: []byte{0xFF, 0xFF}},
 		},
 	}
+}
+
+// cidToGIDStreamUnicode composes the /CIDToGIDMap stream mapObj, two-byte
+// big-endian GIDs indexed by CID (ISO 32000-1, 9.7.4.2, Table 117), with
+// gidToUni, the program's glyph-to-Unicode table, into a CID-keyed table. A
+// CID the stream sends to GID 0, the .notdef glyph, or whose glyph the table
+// gives U+0000 or nothing, stays out. CIDs past the two-byte range stay out
+// too: no code of a two-byte codespace selects them.
+func cidToGIDStreamUnicode(ctx context.Context, doc *document.Document, mapObj ast.PdfObject, gidToUni map[uint16]rune) map[uint16]rune {
+	if len(gidToUni) == 0 {
+		return nil
+	}
+	stream, err := document.ResolveStream(ctx, doc, mapObj)
+	if err != nil || stream.Dict == nil {
+		return nil
+	}
+	mapData, err := doc.DecodeStream(ctx, stream)
+	if err != nil || len(mapData) < 2 {
+		return nil
+	}
+	numCIDs := min(len(mapData)/2, math.MaxUint16+1)
+	table := make(map[uint16]rune)
+	for cid := range numCIDs {
+		gid := uint16(mapData[cid*2])<<8 | uint16(mapData[cid*2+1])
+		if uni, ok := gidToUni[gid]; ok && gid != 0 && uni != 0 {
+			table[uint16(cid)] = uni //nolint:gosec // cid <= math.MaxUint16 above.
+		}
+	}
+	return table
+}
+
+// ProgramCIDToUnicode returns the CID-keyed character table a Type 0 font's
+// /CIDToGIDMap stream and embedded program state: the stream takes a CID to a
+// glyph (ISO 32000-1, 9.7.4.2) and the program's Unicode cmap subtable or
+// glyph names take the glyph to its character
+// ([ExtractGIDToUnicodeAuthoritative]). It is the composition text extraction
+// reads such a font through ([applyCIDToGIDStream]), restricted to a program
+// that states Unicode, for a caller that persists the mapping. It returns nil
+// when the descendant CIDFont has no /CIDToGIDMap stream or the program states
+// no Unicode.
+func ProgramCIDToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[uint16]rune {
+	if !hasCIDToGIDMapStream(ctx, doc, fontDict) {
+		return nil
+	}
+	cidDict := descendantCIDFont(ctx, doc, fontDict)
+	if cidDict == nil {
+		return nil
+	}
+	return cidToGIDStreamUnicode(ctx, doc, cidDict["CIDToGIDMap"], ExtractGIDToUnicodeAuthoritative(ctx, decodeFontStreamFromDescriptor(ctx, doc, fontDict)))
 }
 
 // decodeFontStreamFromDescriptor extracts and decodes the embedded font binary
@@ -2640,6 +2662,9 @@ func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, f
 // So does a code they place in the Private Use Area or among the control
 // characters while the reading it has is a graphic character: neither area
 // names a character a reader can recover (Unicode 16.0, 23.1 and 23.5).
+// Every reading the program gives is also recorded in
+// [Font.ProgramGlyphRunes], apart from the default encoding's, so a caller
+// that persists a mapping writes the program's reading and nothing else.
 //
 // A font with only a (1,0) subtable stays out: that subtable's codes are Mac
 // OS Roman characters by the subtable's own declaration (OpenType, 'cmap',
@@ -2706,6 +2731,10 @@ func applySymbolicTrueTypeGlyphs(ctx context.Context, doc *document.Document, fo
 			continue
 		}
 		font.Encoding[c] = r
+		if font.ProgramGlyphRunes == nil {
+			font.ProgramGlyphRunes = make(map[byte]rune, len(codeToGID))
+		}
+		font.ProgramGlyphRunes[c] = r
 	}
 }
 

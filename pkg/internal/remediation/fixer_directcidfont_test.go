@@ -116,7 +116,7 @@ func TestFixType0Font_PersistsWidthsThroughADirectCIDFont(t *testing.T) {
 			t.Fatalf("%s: resolving the font dictionary: %v", tc.name, err)
 		}
 
-		fixes := fixType0Font(context.Background(), doc, alloc, fontDict, fontRef, true, nil)
+		fixes := fixType0Font(context.Background(), doc, alloc, fontDict, fontRef, true, nil, nil)
 		if len(fixes) == 0 {
 			t.Fatalf("%s: no fix reported for a font whose /W disagrees with its program", tc.name)
 		}

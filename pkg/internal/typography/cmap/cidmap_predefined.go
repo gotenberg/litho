@@ -150,6 +150,16 @@ func (m *CIDMap) MappedCID(code int) (int, bool) {
 	return m.mappedCID(code)
 }
 
+// CodeSpaceRanges returns a copy of the codespace ranges the CMap and its
+// bases declare (ISO 32000-1, 9.7.6.2), the ranges [CIDMap.CodeLength] splits
+// codes by.
+func (m *CIDMap) CodeSpaceRanges() []CodeSpaceRange {
+	if m == nil || m.cs == nil {
+		return nil
+	}
+	return slices.Clone(m.cs.CodeSpaceRanges)
+}
+
 // next decodes one character code from the front of data, mirroring the
 // codespace handling in [CMap.mapWithCodeSpaces]: it prefers the longest
 // codespace width that fits, falls back to a shorter mapped prefix, and for a

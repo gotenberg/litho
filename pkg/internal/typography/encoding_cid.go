@@ -219,3 +219,58 @@ func (f *Font) nextEncodingCode(data []byte) (code encodingCode, ok bool) {
 	code.cid = f.metricCID(data[:code.n], code.value)
 	return code, true
 }
+
+// EncodingCode is one character code of a shown string as a Type 0 font's
+// encoding CMap splits it ([Font.MappedEncodingCodes]).
+type EncodingCode struct {
+	// Code holds the bytes of the code.
+	Code []byte
+	// CID is the CID the CMap's cidchar and cidrange mappings give the code,
+	// meaningful only when Mapped holds.
+	CID int
+	// Mapped reports whether such a mapping covers the code.
+	Mapped bool
+}
+
+// MappedEncodingCodes splits data into the character codes of a Type 0 font's
+// encoding CMap, by its codespace ranges (ISO 32000-1, 9.7.6.2), and gives
+// each the CID its cidchar and cidrange mappings, or those of its bases, state
+// ([cmap.CIDMap.MappedCID]).
+//
+// It is the split [Font.nextEncodingCode] performs, without the readings text
+// extraction adds for a code no such mapping covers: the destination of a
+// bfchar entry read as a CID, and the code's own value. Those follow PDF.js,
+// not the file, so a code they would give a CID is returned with Mapped
+// false, and so are bytes no codespace range holds. ok is false when the
+// encoding states no CIDs litho reads: an Identity CMap, whose code is the CID
+// (9.7.5.2, Table 118), an embedded CMap written with bfchar alone, or an
+// encoding litho cannot read.
+func (f *Font) MappedEncodingCodes(data []byte) (codes []EncodingCode, ok bool) {
+	if !f.encodingCIDKeyed() {
+		return nil, false
+	}
+	for len(data) > 0 {
+		n, undefined := f.encodingCIDs.cids.CodeLength(data)
+		n = min(max(n, 1), len(data))
+		code := EncodingCode{Code: data[:n]}
+		if !undefined && n <= maxEncodingCodeBytes {
+			value := 0
+			for _, b := range data[:n] {
+				value = value<<8 | int(b)
+			}
+			code.CID, code.Mapped = f.encodingCIDs.cids.MappedCID(value)
+		}
+		codes = append(codes, code)
+		data = data[n:]
+	}
+	return codes, true
+}
+
+// EncodingCodeSpaceRanges returns the codespace ranges of a Type 0 font's
+// encoding CMap when [Font.MappedEncodingCodes] reads it, and nil otherwise.
+func (f *Font) EncodingCodeSpaceRanges() []cmap.CodeSpaceRange {
+	if !f.encodingCIDKeyed() {
+		return nil
+	}
+	return f.encodingCIDs.cids.CodeSpaceRanges()
+}
