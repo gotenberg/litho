@@ -115,21 +115,26 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		base := lineStart
 		lineStart += len(ln.elems)
 
-		// Bidi reorder: reverse RTL runs that are in visual order (X
-		// decreasing) to restore logical reading order.
-		texts := make([]string, len(ln.elems))
-		xPos := make([]float64, len(ln.elems))
 		indices := make([]int, len(ln.elems))
-		for i, el := range ln.elems {
-			texts[i] = el.Text
-			xPos[i] = el.X
+		for i := range ln.elems {
 			indices[i] = i
 		}
-		indices = reorderBidiIndices(texts, indices, xPos)
 
 		// Compute adaptive space threshold from the gap histogram.
 		spaceThreshold := computeSpaceThreshold(ln.elems, indices)
 		hasMarks := lineHasNonspacingMark(ln.elems)
+
+		// Bidi reorder: a line that shows right-to-left text in visual
+		// order is read back in logical order, with the word gaps read in
+		// visual order beside it ([reorderBidiIndices]).
+		indices, reordered := reorderBidiIndices(ln.elems, indices, func(left, right int) bool {
+			prev, el := ln.elems[left], ln.elems[right]
+			return shouldInsertSpace(prev, computeLineGap(prev, el), wordSpaceThreshold(ln.elems, lineFonts, left, right, spaceThreshold), prev.Chunk == el.Chunk && el.Chunk != 0)
+		})
+		if reordered {
+			writeReorderedLine(&sb, ln.elems, indices)
+			continue
+		}
 
 		// Phantom anchors: unresolved glyphs reach this point with
 		// Text == "". They still occupy layout space, so their
@@ -232,6 +237,37 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 	}
 
 	return normalizeExtractionUnicode(normalizeSoftHyphens(sb.String()))
+}
+
+// writeReorderedLine writes a line [reorderBidiIndices] set in logical
+// order. Its word spaces are the space glyphs it shows and the
+// [bidiSpace] entries read from its gaps, each run of them written once.
+// No other gap is read: two elements the order sets side by side may sit
+// apart on the page, or in the reverse order.
+func writeReorderedLine(sb *strings.Builder, elems []models.TextElement, order []int) {
+	pendingSpace := ""
+	for _, idx := range order {
+		if idx == bidiSpace {
+			if pendingSpace == "" {
+				pendingSpace = " "
+			}
+			continue
+		}
+		text := elems[idx].Text
+		if text == "" {
+			continue
+		}
+		if isSpaceGlyph(text) {
+			if pendingSpace == "" {
+				pendingSpace = text
+			}
+			continue
+		}
+		writeSpace(sb, pendingSpace)
+		pendingSpace = ""
+		sb.WriteString(text)
+	}
+	writeSpace(sb, pendingSpace)
 }
 
 // lineBreakTolerance is how far, in user space units, a run may start
@@ -1003,15 +1039,13 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 
 	var sb strings.Builder
 	for lineIdx, line := range lines {
-		texts := make([]string, len(line.elements))
-		xPos := make([]float64, len(line.elements))
+		lineElems := make([]models.TextElement, len(line.elements))
 		indices := make([]int, len(line.elements))
-		for i, el := range line.elements {
-			texts[i] = el.Text
-			xPos[i] = el.X
+		for i, e := range line.elements {
+			lineElems[i] = e.TextElement
 			indices[i] = i
 		}
-		indices = reorderBidiIndices(texts, indices, xPos)
+		indices, _ = reorderBidiIndices(lineElems, indices, nil)
 
 		if lineIdx > 0 {
 			prevLine := lines[lineIdx-1]
@@ -1024,11 +1058,6 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 			}
 		}
 
-		// Extract TextElements for threshold computation.
-		lineElems := make([]models.TextElement, len(line.elements))
-		for j, e := range line.elements {
-			lineElems[j] = e.TextElement
-		}
 		spaceThreshold := computeSpaceThreshold(lineElems, indices)
 
 		for i, idx := range indices {
