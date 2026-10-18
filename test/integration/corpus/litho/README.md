@@ -212,6 +212,8 @@ one deliberately rather than diffing it against a fresh build.
 | `ttmaccopy_2b.pdf`     | PDF/A-2b     | Symbolic TrueType whose (1,0) `cmap` copies (3,1), and a control |
 | `nestedpattern_2b.pdf` | PDF/A-2b     | Names a pattern cell or a form's `scn` finds only on the page    |
 | `symbolname_2u.pdf`    | PDF/A-2u     | A font whose name holds "Symbol", and a Symbol-only `/CharSet`   |
+| `fontunread_2b.pdf`    | PDF/A-2b     | Font programs in their container that no parser can finish       |
+| `type1notdef_2u.pdf`   | PDF/A-2u     | Codes a Type 1 encoding leaves to a program naming them .notdef  |
 
 ### Must-not-fire controls
 
@@ -458,6 +460,9 @@ violation but is exempt, so a firing is a false positive.
 | `ocgconfigs_2b`                           | `/D` and `/Configs[1]`: an `/Order` naming both OCGs, one in a group   | ISO 19005-2, 6.9 t3          |
 | `nestedpattern_2b`                        | `P2`: a tiling pattern holding the `/GS0` its cell sets                | ISO 19005-2, 6.2.2 t2        |
 | `nestedpattern_2b`                        | `X1`: a form XObject holding the `/P3` its `scn` selects               | ISO 19005-2, 6.2.2 t2        |
+| `fontunread_2b`                           | `CN`: a CFF whose Name INDEX is empty, which still reads               | ISO 19005-2, 6.2.11.4.1 t1   |
+| `fontunread_2b`                           | `OK`, `TK`: the whole programs `U1`, `U2`, `T2` and `T3` are cut from  | ISO 19005-2, 6.2.11.4.1 t1   |
+| `type1notdef_2u`                          | `NC`: codes the program's encoding vector names `A` and `B`            | ISO 19005-2, 6.2.11.7.2      |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -529,6 +534,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fontembed_2b.pdf`     | 6    | 4    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `fontkeys_1b.pdf`      | 13   | 10   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 8    | 8    |
 | `fontleft_2b.pdf`      | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 14   | 13   |
+| `fontunread_2b.pdf`    | 6    | 4    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `forbidden_mix.pdf`    | 14   | 12   | 14   | 12   | 12   | 16   | 14   | 14   | 14  | 13   | 13   | 11   | 9    |
 | `formcs_2b.pdf`        | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 7    | 7    |
 | `formcycle_ua1.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
@@ -617,6 +623,7 @@ which are covered under [Known divergences](#known-divergences).
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
 | `ttmaccopy_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `type0nodesc_2b.pdf`   | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 7    | 7    |
+| `type1notdef_2u.pdf`   | 7    | 4    | 8    | 4    | 6    | 8    | 4    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
@@ -6602,6 +6609,95 @@ litho left the Unicode rule out at PDF/A-1a (`6.3.8/1`), PDF/A-2a, 2u, 3a and
 now report the same rule set and the same counts in all thirteen cells.
 Remediation writes the font a `/ToUnicode` CMap and leaves the encoding rule,
 which both tools report on the output at every manifest profile in both modes.
+
+### `fontunread_2b.pdf`
+
+ISO 19005-2, 6.2.11.4.1 t1 asks that every font program be embedded (ISO
+32000-1, 9.9), and veraPDF answers it with its own parse of the program
+(`GFPDFont.getcontainsFontFile`: a program, and one that parsed). Bytes in the
+container their key declares that its parser cannot finish embed nothing: the
+font is reported as not embedded, and no rule weighs its glyphs, its widths or
+its cmap. litho judged the container alone. Each font shows `41 42` through
+`/WinAnsiEncoding`:
+
+| Font | Program                                                        | veraPDF-parser 1.30 stops at         |
+| ---- | -------------------------------------------------------------- | ------------------------------------ |
+| `U1` | Type 1 `/FontFile`, the clear-text portion alone, no eexec     | no `/CharStrings` entry              |
+| `U2` | Type 1 `/FontFile` whose Private dictionary has no CharStrings | no `/CharStrings` entry              |
+| `U3` | `/FontFile3 /Type1C` whose Top DICT INDEX is empty             | the empty Top DICT INDEX             |
+| `U4` | `/FontFile3 /Type1C` whose Top DICT states no CharStrings      | a CharStrings INDEX read at offset 0 |
+| `T1` | TrueType `/FontFile2`, an sfnt with no table                   | no `hhea` table                      |
+| `T2` | TrueType `/FontFile2` with every table but `hmtx`              | no `hmtx` table                      |
+| `T3` | TrueType `/FontFile2` with every table but `hhea`              | no `hhea` table                      |
+| `O1` | `/FontFile3 /OpenType`, an `OTTO` with no table                | neither a `CFF ` nor an `hhea` table |
+
+`OK` and `TK` embed the whole programs the Type 1 and TrueType fonts are cut
+from, and `CN` a CFF whose Name INDEX is empty, which veraPDF reads. All three
+are embedded on both tools.
+
+| Rule at PDF/A-2b                      | veraPDF | litho | litho before |
+| ------------------------------------- | ------- | ----- | ------------ |
+| `6.2.11.4.1/1` font not embedded      | 8       | 8     | 0            |
+| `6.2.11.6/1` non-symbolic cmap (`T1`) | 0       | 0     | 1            |
+| `6.2.4.3/4` DeviceGray                | 11      | 11    | 11           |
+| `6.6.2.1/1` no metadata               | 1       | 1     | 1            |
+
+The embedding rule moves the same way at PDF/A-1a and 1b (`6.3.4/1`), PDF/A-4,
+4e and 4f (`6.2.10.4.1/1`), PDF/UA-1 (`7.21.4.1/1`) and PDF/UA-2
+(`8.4.5.5.1/1`), and the cmap rule with it (`6.2.10.6/1`, `7.21.6/1`,
+`8.4.5.7/1`). veraPDF 1.30.2 and litho report the same rule set in all thirteen
+cells. Remediation cannot embed a program the fixture does not supply, so the
+embedding rule stays on the output at every manifest profile in both modes, on
+both tools, and no rule appears that the input did not fail.
+
+Two shapes veraPDF reads differently stay out of the fixture. A TrueType with
+no `head` table takes veraPDF's default of 1000 units per em, so its widths fail
+`6.2.11.5/1` there; a CFF whose CharStrings INDEX is empty fails
+`6.2.11.4.1/2` for each glyph shown. litho reports neither.
+
+### `type1notdef_2u.pdf`
+
+ISO 32000-1, 9.10.2 derives a simple font's Unicode value from the glyph name
+a code selects, and Table 114 makes the program's built-in encoding the base
+of an `/Encoding` that names no table. veraPDF reads it that way
+(`PDSimpleFont.toUnicode`): the name the encoding gives the code, or, when it
+gives none, the name the program gives it. A program that names the code
+`.notdef` gives it U+0000, its value in veraPDF's glyph list, which fails the
+value rule, ISO 19005-2, 6.2.11.7.2 t2, and passes the presence rule, t1. litho
+read the code as unnamed and reported t1. Each font embeds a readable program,
+carries no `/ToUnicode`, and shows `41` and one code its encoding leaves
+unnamed:
+
+| Font | Program and `/Encoding`                                            | Shows   | The program names the code |
+| ---- | ------------------------------------------------------------------ | ------- | -------------------------- |
+| `N1` | Type 1, vector filled with `.notdef`, naming `A` and `B`; none     | `41 43` | `.notdef`                  |
+| `N2` | `N1` with the vector left unfilled; none                           | `41 43` | nothing                    |
+| `N3` | Type 1 on `StandardEncoding`; `/Differences [65 /A]`, no base      | `41 80` | `.notdef`                  |
+| `N4` | `/FontFile3 /Type1C` on the Standard encoding; none                | `41 80` | `.notdef`                  |
+| `N5` | `N1`'s program; `/StandardEncoding`, a table veraPDF holds none of | `41 43` | `.notdef`                  |
+| `N6` | `N4`'s program; `/StandardEncoding`                                | `41 80` | `.notdef`                  |
+
+`NC` shows `41 42` through `N1`'s program, both named, and passes.
+
+| Rule at PDF/A-2u                    | veraPDF | litho | litho before |
+| ----------------------------------- | ------- | ----- | ------------ |
+| `6.2.11.7.2/2` U+0000               | 5       | 5     | 0            |
+| `6.2.11.7.2/1` no Unicode value     | 1       | 1     | 5            |
+| `6.2.11.4.1/2` glyph not in program | 4       | 4     | 4            |
+| `6.2.11.5/1` width (`N2`)           | 1       | 1     | 1            |
+| `6.2.4.3/4` DeviceGray              | 7       | 7     | 7            |
+| `6.6.2.1/1` no metadata             | 1       | 1     | 1            |
+
+The glyph rule fires for `N1`, `N2`, `N3` and `N5` alone: a Type 1 program holds
+no glyph its encoding names `.notdef` (`Type1FontProgram.containsGlyph`), where
+a CFF holds `.notdef` at GID 0. The value rule moves the same way at PDF/A-2a,
+3a and 3u, at PDF/A-4, 4e and 4f (`6.2.10.7/1`, the one Unicode rule part 4
+states), at PDF/UA-1 (`7.21.7/2`) and at PDF/UA-2 (`8.4.5.8/2`). At PDF/A-1a
+`.notdef` passes `6.3.8/1`, since veraPDF only asks there whether its glyph list
+holds the name, so `N2` alone fails it, where litho reported five fonts. veraPDF
+1.30.2 and litho report the same rule set in all thirteen cells. Remediation
+leaves the value rule on the output at every manifest profile in both modes, on
+both tools: no `/ToUnicode` entry gives `.notdef` a value other than its own.
 
 ## Scope
 
