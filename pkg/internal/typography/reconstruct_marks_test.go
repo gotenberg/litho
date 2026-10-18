@@ -9,7 +9,7 @@ import (
 
 // combiningSolidus is U+0338 COMBINING LONG SOLIDUS OVERLAY, a nonspacing
 // mark.
-const combiningSolidus = "̸"
+const combiningSolidus = "\u0338"
 
 // TestReconstructText_NonspacingMarks pins how a glyph whose character is a
 // nonspacing mark reads: no word space before it, whatever the gap, no line

@@ -10,13 +10,13 @@ import (
 // zeroWidthSpace is U+200B ZERO WIDTH SPACE and softHyphen U+00AD SOFT
 // HYPHEN, two format characters (Unicode category Cf).
 const (
-	zeroWidthSpace = "​"
-	softHyphen     = "­"
+	zeroWidthSpace = "\u200b"
+	softHyphen     = "\u00ad"
 )
 
 // TestReconstructText_FormatCharacters pins how a glyph whose character is a
-// format character reads: written where it stands, it passes a held space on
-// to the next glyph, and the glyphs after it in its run sit its advance
+// format character reads: it is not written, it passes a held space on to
+// the next glyph, and the glyphs after it in its run sit its advance
 // earlier, so a gap is measured from the glyph before it.
 func TestReconstructText_FormatCharacters(t *testing.T) {
 	t.Parallel()
@@ -35,7 +35,7 @@ func TestReconstructText_FormatCharacters(t *testing.T) {
 				{Text: zeroWidthSpace, X: 108, Y: 500, Width: 0, FontSize: 10, Chunk: 1},
 				{Text: "b", X: 108, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
 			},
-			want: "a" + zeroWidthSpace + " " + zeroWidthSpace + "b",
+			want: "a b",
 		},
 		{
 			name: "gap measured past a soft hyphen",
@@ -54,7 +54,7 @@ func TestReconstructText_FormatCharacters(t *testing.T) {
 				{Text: "b", X: 108, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
 				{Text: "c", X: 113.5, Y: 500, Width: 5, FontSize: 10, Chunk: 2},
 			},
-			want: "a" + zeroWidthSpace + "b c",
+			want: "ab c",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -64,11 +64,13 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //     text after it is set by a Td past the hyphen. Measured from the
 //     hyphen, which litho drops, "Cross-reactivity" read "Crossreactivity",
 //     where PDF.js, which measures from the "s", reads "Cross reactivity".
-//   - pdfjs issue9186.pdf: U+200B sits on either side of every space glyph,
-//     and the space it held was written before the first of them.
+//   - pdfjs issue9186.pdf, bug1392647.pdf, bug911034.pdf: U+200B sits on
+//     either side of every space glyph or between letters, and was written
+//     into the words PDF.js reads without it.
 //   - All corpora: passing over format characters as PDF.js does makes
-//     words match PDF.js on 3 more files (govdocs thread_400_400568.pdf,
-//     pdfjs issue14685.pdf, issue14928.pdf) and on 96 more pages of files
+//     words match PDF.js on 6 more files (govdocs thread_400_400568.pdf,
+//     pdfjs bug1392647.pdf, bug911034.pdf, issue14685.pdf, issue14928.pdf,
+//     issue9186.pdf) and on 96 more pages of files
 //     that still differ (govdocs thread_300_300224.pdf 93, pdfjs
 //     bug1755201.pdf 3), and on none fewer; facturx, pdf20 and pdfcpu do
 //     not move. On issue14928.pdf it reads "ap rès" as PDF.js does: a
@@ -233,15 +235,14 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		// is a format character (Unicode category Cf: U+00AD SOFT HYPHEN,
 		// U+200B ZERO WIDTH SPACE and the rest), and does not advance past
 		// it (src/core/evaluator.js, buildTextContentItem,
-		// isInvisibleFormatMark). Such a glyph is written where it stands
-		// and is otherwise passed over: a space held before it waits for
-		// the next glyph, and the glyphs after it sit its advance earlier
-		// ([markAdvances]).
+		// isInvisibleFormatMark). Such a glyph is passed over: it is not
+		// written, a space held before it waits for the next glyph, and the
+		// glyphs after it sit its advance earlier ([markAdvances]).
 		//
 		// prevIdx is the previous element, space glyphs included; visIdx
 		// the previous element that is not a space glyph.
 		prevIdx, visIdx := -1, -1
-		pendingSpace, heldFormat := "", ""
+		pendingSpace := ""
 		for _, idx := range indices {
 			el := ln.elems[idx]
 			if el.Text == "" {
@@ -261,11 +262,6 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 				continue
 			}
 			if isFormatOnly(el.Text) {
-				if pendingSpace == "" {
-					sb.WriteString(el.Text)
-				} else {
-					heldFormat += el.Text
-				}
 				continue
 			}
 			if isSpaceGlyph(el.Text) {
@@ -282,8 +278,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					}
 					writeSpace(&sb, pendingSpace)
 					pendingSpace = ""
-					sb.WriteString(heldFormat + el.Text)
-					heldFormat = ""
+					sb.WriteString(el.Text)
 					prevIdx, visIdx = idx, idx
 					if advances(el) {
 						advAt = base + idx
@@ -338,15 +333,13 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 			}
 			writeSpace(&sb, pendingSpace)
 			pendingSpace = ""
-			sb.WriteString(heldFormat + el.Text)
-			heldFormat = ""
+			sb.WriteString(el.Text)
 			prevIdx, visIdx = idx, idx
 			if advances(el) {
 				advAt = base + idx
 			}
 		}
 		writeSpace(&sb, pendingSpace)
-		sb.WriteString(heldFormat)
 	}
 
 	return normalizeExtractionUnicode(normalizeSoftHyphens(sb.String()))
