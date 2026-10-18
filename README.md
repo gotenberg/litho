@@ -2,7 +2,7 @@
 
 A pure-Go PDF Conforming Processor. Read, validate, remediate, and produce PDF documents with no C dependencies.
 
-litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text and structured content, validates documents against PDF/A, PDF/UA, Factur-X, and ZUGFeRD, repairs non-conformant files, and applies transformations such as rotate, split, merge, stamp, encrypt, and sign. Two rules govern the codebase: every output is a valid PDF that viewers can open, and every public type honors its documented concurrency contract under `-race`.
+litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text and structured content, validates documents against PDF/A, PDF/UA, WTPDF, Factur-X, and ZUGFeRD, repairs non-conformant files, and applies transformations such as rotate, split, merge, stamp, encrypt, and sign. Two rules govern the codebase: every output is a valid PDF that viewers can open, and every public type honors its documented concurrency contract under `-race`.
 
 - Module: `github.com/gotenberg/litho`
 - Go: 1.27.0+
@@ -24,12 +24,13 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 
 - PDF/A: every part and level (1a/1b, 2a/2b/2u, 3a/3b/3u, 4/4e/4f).
 - PDF/UA: UA-1 and UA-2.
+- WTPDF 1.0 (Well-Tagged PDF): the Accessibility and Reuse levels, judged by the PDF/UA-2 rules each level states and the PDF Declaration it requires.
 - Factur-X 1.0+ and ZUGFeRD 1.0 / 2.0 / 2.1, including the embedded Cross-Industry Invoice spine, its XSD, and the EN 16931 and XRechnung Schematron rules.
 - Each violation carries a structured clause, test number, and severity.
 
 ### Remediate
 
-- Repair PDF/A and PDF/UA violations behind a regression-bounded integrity probe that rolls back a content-modifying fix if it degrades the document.
+- Repair PDF/A, PDF/UA, and WTPDF violations behind a regression-bounded integrity probe that rolls back a content-modifying fix if it degrades the document.
 - Two modes: content-preserving by default, or aggressive via `WithAggressiveFixes`.
 - Embed the fonts a document leaves unembedded from programs you supply (`WithFontProvider`, `WithFontFiles`, `--font-dir`) or from the operating system's fonts (`WithSystemFonts`, `--system-fonts`). litho ships no font program: it embeds one only when it holds every glyph the document shows at the widths the document declares, subsets it to those glyphs (`WithWholeFontPrograms`, `--no-font-subset` embed the whole program, for text you will edit later), and reports every font it refuses.
 - Build Factur-X and ZUGFeRD hybrid invoices by embedding a Cross-Industry Invoice payload and remediating the PDF/A-3 base.
@@ -122,7 +123,7 @@ A remediation is the last edit on a `Writer`. Queue every other edit before it: 
 
 ### Embedding fonts
 
-Every PDF/A and PDF/UA profile requires the fonts a document shows to be embedded. litho ships no font program, so a remediation embeds only the programs you supply, and the licence to embed them is yours. Three options supply them:
+Every PDF/A, PDF/UA, and WTPDF profile requires the fonts a document shows to be embedded. litho ships no font program, so a remediation embeds only the programs you supply, and the licence to embed them is yours. Three options supply them:
 
 - `pdf.WithFontFiles(fsys)` reads every `.ttf`, `.otf`, `.ttc`, `.otc` and `.cff` file under an `fs.FS`, each face of a TrueType or OpenType Collection standing as a program of its own, such as `os.DirFS("/usr/share/fonts")` or an `embed.FS`. A font takes the program whose PostScript name is its `/BaseFont`, else one of its family and style, else one of a metric-compatible family: Helvetica, Arial, Arimo, Liberation Sans and Nimbus Sans stand for one another, as do Times, Times New Roman, Tinos, Liberation Serif and Nimbus Roman, and Courier, Courier New, Cousine, Liberation Mono and Nimbus Mono PS. Symbol takes Standard Symbols PS, and ZapfDingbats takes D050000L.
 - `pdf.WithSystemFonts()` is `pdf.WithFontFiles` over the operating system's font directories: `~/Library/Fonts`, `/Library/Fonts` and `/System/Library/Fonts` on macOS; the per-user fonts directory and `%WINDIR%\Fonts` on Windows; `$XDG_DATA_HOME/fonts`, `~/.fonts`, the `fonts` directory of each `$XDG_DATA_DIRS` entry, `/usr/local/share/fonts` and `/usr/share/fonts` elsewhere. litho reads the files itself, in pure Go, with no fontconfig. The directories are indexed once, at the first font a remediation asks for, from the header tables of each file only. `WithFontProvider` and `WithFontFiles` are asked first, and the system's fonts serve the fonts they supply no program for. The output then depends on the fonts of the host (see [Reproducible output](#reproducible-output)).
@@ -184,6 +185,7 @@ litho images -f json document.pdf
 
 # Validate compliance.
 litho validate --profile PDF/A-2b document.pdf
+litho validate --profile WTPDF-1.0-Accessibility document.pdf
 litho validate --profile Factur-X invoice.pdf
 
 # Remediate.

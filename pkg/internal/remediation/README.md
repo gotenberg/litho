@@ -1,6 +1,6 @@
 # Remediation Engine
 
-Applies targeted fixes to a parsed PDF so it satisfies PDF/A or PDF/UA compliance. Consumes a `[]compliance.Violation` from the compliance engine and produces a report of what was fixed and what remains.
+Applies targeted fixes to a parsed PDF so it satisfies PDF/A, PDF/UA, or WTPDF compliance. Consumes a `[]compliance.Violation` from the compliance engine and produces a report of what was fixed and what remains.
 
 ## Architecture
 

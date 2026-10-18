@@ -1,6 +1,8 @@
 # Compliance Engine
 
-Validates PDFs against ISO 19005 (PDF/A) and ISO 14289 (PDF/UA) using rules derived from [veraPDF validation profiles](https://github.com/veraPDF/veraPDF-validation-profiles).
+Validates PDFs against ISO 19005 (PDF/A), ISO 14289 (PDF/UA), and Well-Tagged PDF 1.0 (WTPDF) using rules derived from [veraPDF validation profiles](https://github.com/veraPDF/veraPDF-validation-profiles).
+
+WTPDF has no profile of its own: both levels adopt ISO 14289-2, so `ValidateWTPDF` (`wtpdf.go`) runs the PDF/UA-2 check groups, drops the rules a level does not state, and adds the PDF Declaration the level requires.
 
 ## Architecture
 

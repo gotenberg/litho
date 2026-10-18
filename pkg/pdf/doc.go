@@ -62,11 +62,16 @@
 //		}
 //	}
 //
-// # PDF/A and PDF/UA
+// # PDF/A, PDF/UA and WTPDF
 //
-// Use [Reader.ValidatePDFA] or [Reader.ValidatePDFUA] to report compliance
-// against a profile, and [Writer.RemediatePDFA] or [Writer.RemediatePDFUA]
-// to queue automatic repairs for the violations the engine can fix. A
+// Use [Reader.ValidatePDFA], [Reader.ValidatePDFUA] or [Reader.ValidateWTPDF]
+// to report compliance against a profile, and [Writer.RemediatePDFA],
+// [Writer.RemediatePDFUA] or [Writer.RemediateWTPDF] to queue automatic
+// repairs for the violations the engine can fix. Well-Tagged PDF 1.0 has two
+// levels, [models.WTPDF1Accessibility] and [models.WTPDF1Reuse]. Both adopt
+// the ISO 14289-2 (PDF/UA-2) requirements, so a WTPDF run reports PDF/UA-2
+// clauses, without the rules the level does not state, plus the PDF
+// Declaration the level requires, which a WTPDF remediation writes. A
 // remediated Writer holds its output in a temp file until [Writer.WriteTo]
 // streams it or [Writer.Close] removes it.
 //
