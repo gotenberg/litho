@@ -201,8 +201,17 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 				prev := ln.elems[prevIdx]
 				gap := computeLineGap(prev, el)
 				sameChunk := prev.Chunk == el.Chunk && el.Chunk != 0
+				// The reset is read from the last glyph that painted
+				// something: a space glyph has no extent a reader sees,
+				// and one left at the far end of the line would read
+				// any word gap after the text as a jump back.
+				anchor, anchorGap := prev, gap
+				if isSpaceGlyph(prev.Text) && visIdx >= 0 && ln.elems[visIdx].Text != "" {
+					anchor = ln.elems[visIdx]
+					anchorGap = computeLineGap(anchor, el)
+				}
 				switch {
-				case prev.Text != "" && isRunningHeadReset(prev, el, gap):
+				case anchor.Text != "" && isRunningHeadReset(anchor, el, anchorGap):
 					// A running-head reset (page header at the right
 					// of a line, then a deliberate Tm reset to the
 					// left margin for the title on the same line)
@@ -703,6 +712,19 @@ func (r *runTracker) height(i int, el models.TextElement) float64 {
 // The combined check captures the running-head pattern (Federal
 // Register-style filings) without dropping the literal space in RTL
 // paragraphs or in vertically-set columns.
+//
+// prev is the last glyph that painted something: after a space glyph the
+// caller passes the glyph before it, which PDF.js measures every move from
+// (src/core/evaluator.js, compareWithLastPosition, against the position
+// of the last visible glyph).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400907.pdf page 3: a space glyph at x 533, right of
+//     "Original Signature on File", read the "Date:" at x 408 after it as a
+//     reset and dropped the word space PDF.js reads ("File Date:"). Reading
+//     the reset from "File" makes words match PDF.js on that file and on
+//     none fewer; facturx, pdf20, pdfcpu and pdfjs do not move.
 func isRunningHeadReset(prev, el models.TextElement, gap float64) bool {
 	if prev.Vertical || el.Vertical {
 		return false

@@ -80,6 +80,30 @@ func TestReconstructText_RunningHeadResetDropsTrailingSpace(t *testing.T) {
 	}
 }
 
+// TestReconstructText_RunningHeadResetFromPaintedGlyph pins where the
+// running-head jump is read from: the last glyph that painted something. A
+// space glyph left at the far right of the line, after the text, is no
+// running head, so the word gap between the text and the glyph after it
+// keeps its space.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400907.pdf page 3: "Original Signature on File",
+//     a space glyph at x 533, then "Date:" at x 408, which PDF.js reads
+//     "File Date:".
+func TestReconstructText_RunningHeadResetFromPaintedGlyph(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "l", X: 294, Y: 290, Width: 3, FontSize: 11},
+		{Text: "e", X: 297, Y: 290, Width: 6, FontSize: 11},
+		{Text: " ", X: 533, Y: 290, Width: 3, FontSize: 11},
+		{Text: "D", X: 408, Y: 290, Width: 8, FontSize: 11},
+	}
+	if got, want := ReconstructText(context.Background(), in, nil), "le D"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 // TestReconstructText_RTLBackwardFlowKeepsSpace guards the running-head
 // drop's RTL gate: Hebrew/Arabic glyphs naturally decrease in X as
 // the run progresses, so the literal space between two RTL words must
