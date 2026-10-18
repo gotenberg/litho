@@ -88,8 +88,8 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		// models.TextElement so downstream layout code sees the
 		// width they occupy. CoalesceElements drops them before the
 		// public API returns, and ReconstructText treats them as
-		// phantom anchors for the gap heuristic without emitting
-		// characters or word boundaries.
+		// phantom anchors for the gap heuristic: they emit no
+		// character, and the word gaps around them still read as spaces.
 		*elements = append(*elements, models.TextElement{
 			Text:          char,
 			X:             x,

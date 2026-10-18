@@ -23,6 +23,17 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 // in, parallel to elements, so a change of font starts a new run the way it
 // does in PDF.js. Without fonts (nil, or not one per element) only a change
 // of size does.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000839.pdf, thread_200_200150.pdf and 19 more: a
+//     math font's parentheses carry glyph names no table maps, so they read
+//     as no character, and the word gaps around them vanished with them,
+//     "time-domainFDTDprogram". PDF.js shows each such glyph as its code
+//     (src/core/fonts.js, _charToGlyph) and spaces around it. Keeping the
+//     gaps leaves those pages differing from PDF.js by the codes alone, and
+//     makes words match on 1 more file (govdocs thread_200_200676.pdf) and
+//     on none fewer.
 func reconstructText(ctx context.Context, elements []models.TextElement, fonts []runFont, beads []semantics.Bead) string {
 	if len(elements) == 0 {
 		return ""
@@ -126,7 +137,9 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		// surrounding resolved runs. Walk the line, tracking the
 		// previous emitted element for the space heuristic, and let
 		// phantoms push that anchor forward without contributing
-		// characters or triggering space insertion.
+		// characters. A word gap on either side of a phantom still
+		// reads as a space, as it does around the code PDF.js shows
+		// for such a glyph.
 		//
 		// Chunk segmentation: elements that share a
 		// models.TextElement.Chunk came from the same content-stream
@@ -148,6 +161,15 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		for _, idx := range indices {
 			el := ln.elems[idx]
 			if el.Text == "" {
+				// A glyph with no character still paints, so a word gap
+				// before it is a word gap in the text: hold a space for
+				// the next character rather than let the glyph swallow it.
+				if pendingSpace == "" && prevIdx >= 0 {
+					if prev := ln.elems[prevIdx]; prev.Text != "" && !isSpaceGlyph(prev.Text) &&
+						shouldInsertSpace(prev, computeLineGap(prev, el), wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), prev.Chunk == el.Chunk && el.Chunk != 0) {
+						pendingSpace = " "
+					}
+				}
 				prevIdx, visIdx = idx, idx
 				continue
 			}
@@ -197,7 +219,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el)) {
 						pendingSpace = ""
 					}
-				case prev.Text != "" && shouldInsertSpace(prev, gap, wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
+				case shouldInsertSpace(prev, gap, wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
 					sb.WriteString(" ")
 				}
 			}

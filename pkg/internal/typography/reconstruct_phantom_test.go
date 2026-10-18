@@ -1,0 +1,30 @@
+package typography
+
+import (
+	"context"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
+)
+
+// TestReconstructText_UnmappedGlyphKeepsWordGaps pins that a glyph with no
+// character keeps the word gaps around it: "(" and ")" here map to nothing,
+// as a symbol font's parentheses with unknown glyph names do, and the gap
+// before "(" and after ")" still reads as a space.
+func TestReconstructText_UnmappedGlyphKeepsWordGaps(t *testing.T) {
+	t.Parallel()
+	el := func(s string, x, w float64) models.TextElement {
+		return models.TextElement{Text: s, X: x, Y: 500, Width: w, FontSize: 10}
+	}
+	in := []models.TextElement{
+		el("n", 100, 5),
+		el("", 107.5, 3),
+		el("F", 110.5, 6),
+		el("D", 116.5, 6),
+		el("", 122.5, 3),
+		el("p", 128, 5),
+	}
+	if got, want := ReconstructText(context.Background(), in, nil), "n FD p"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
