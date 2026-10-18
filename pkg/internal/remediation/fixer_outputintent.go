@@ -480,7 +480,8 @@ func addOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 // XObject and Pattern resource dict, adding /Default{RGB,CMYK,Gray} where
 // missing. Patterns and Form XObjects have their own /Resources that PDF/A
 // §6.2.3.3 treats as independent scopes, so a page-only fix leaves
-// "used in pattern/form" violations behind.
+// "used in pattern/form" violations behind. A shading pattern has none, so
+// its shading takes the Default space in place of the device family itself.
 //
 // # Corpus evidence
 //
@@ -666,7 +667,9 @@ func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, d
 }
 
 // recurseColorSpacePatch walks a named resource sub-dict (XObject or
-// Pattern) and updates each entry that carries its own /Resources.
+// Pattern) and updates each entry that carries its own /Resources, and the
+// shading of each shading pattern, which carries none (see
+// [patchShadingPatternSpace]).
 //
 // The entries are walked in sorted name order. visited marks each object the
 // walk reaches, so of two entries sharing one indirect /Resources only the
@@ -684,13 +687,28 @@ func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc
 	if !ok {
 		return false
 	}
-	subDict, err := document.ResolveDict(ctx, doc, subObj)
-	if err != nil || subDict == nil {
+	subDict := liveDictValue(ctx, alloc, doc, subObj)
+	if subDict == nil {
 		return false
 	}
 	changed := false
+	var directPatterns ast.PdfDict
 	for _, entryName := range slices.Sorted(maps.Keys(subDict)) {
 		ref, isRef := subDict[entryName].(ast.PdfIndirectRef)
+		if !isRef && name == "Pattern" {
+			// A shading pattern written directly into /Pattern is rewritten
+			// in the copy of the sub-dictionary below.
+			if pattern, ok := subDict[entryName].(ast.PdfDict); ok {
+				if newPattern, _ := patchShadingPatternSpace(ctx, alloc, doc, pattern, key, csArr, visited); newPattern != nil {
+					if directPatterns == nil {
+						directPatterns = make(ast.PdfDict, len(subDict))
+						maps.Copy(directPatterns, subDict)
+					}
+					directPatterns[entryName] = newPattern
+				}
+			}
+			continue
+		}
 		if !isRef || ref.ObjectNum == 0 {
 			continue
 		}
@@ -741,6 +759,16 @@ func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc
 			continue
 		}
 		if target, ok := rawObj.(ast.PdfDict); ok {
+			if name == "Pattern" {
+				newPattern, wrote := patchShadingPatternSpace(ctx, alloc, doc, target, key, csArr, visited)
+				if newPattern != nil {
+					alloc.AllocAt(ref.ObjectNum, newPattern)
+				}
+				if wrote {
+					changed = true
+					continue
+				}
+			}
 			resObj, hasRes := target["Resources"]
 			if !hasRes {
 				continue
@@ -755,6 +783,14 @@ func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc
 			alloc.AllocAt(ref.ObjectNum, newTarget)
 			changed = true
 		}
+	}
+	if directPatterns != nil {
+		if subRef, ok := subObj.(ast.PdfIndirectRef); ok && subRef.ObjectNum > 0 {
+			alloc.AllocAt(subRef.ObjectNum, directPatterns)
+		} else {
+			newRes[name] = directPatterns
+		}
+		changed = true
 	}
 	return changed
 }
