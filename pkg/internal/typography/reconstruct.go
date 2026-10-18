@@ -34,6 +34,17 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //     gaps leaves those pages differing from PDF.js by the codes alone, and
 //     makes words match on 1 more file (govdocs thread_200_200676.pdf) and
 //     on none fewer.
+//   - pdfjs issue13915.pdf, govdocs thread_300_300849.pdf and 4 more: "≠" is
+//     a zero-width slash, read as "6", set over "=" after a word gap. Read
+//     from the slash, the gap vanished before "=" ("σ1(e) 6= 0"), where
+//     PDF.js, which measures it from the glyph before the slash, reads
+//     "σ1(e) 6 = 0".
+//   - All corpora: measuring the gap after a zero-width glyph from the last
+//     glyph that advanced makes words match PDF.js on 1 more file (govdocs
+//     thread_000_000159.pdf) and on 18 more pages of files that still differ
+//     (pdfjs issue13915.pdf 14, govdocs thread_300_300849.pdf 2,
+//     thread_300_300511.pdf 1, pdfjs issue20722.pdf 1), and on none fewer;
+//     facturx, pdf20 and pdfcpu do not move.
 func reconstructText(ctx context.Context, elements []models.TextElement, fonts []runFont, beads []semantics.Bead) string {
 	if len(elements) == 0 {
 		return ""
@@ -167,9 +178,19 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		// last glyph that painted something, so a literal space and a
 		// cursor move form one word break. See [suppressesLiteralSpace]
 		// for when the held space is dropped.
+		//
+		// Zero-width glyphs: a glyph the font gives no advance moves the
+		// text position nowhere (ISO 32000-1, 9.4.4), so the gap to the
+		// glyph after it is measured from the last glyph that advanced, as
+		// PDF.js measures it: its text builder records the position after
+		// a glyph only when the glyph advanced (src/core/evaluator.js,
+		// buildTextContentItem, prevTransform). A zero-width glyph set over
+		// the next one after a word gap leaves that gap before both.
+		//
 		// prevIdx is the previous element, space glyphs included; visIdx
-		// the previous element that is not a space glyph.
-		prevIdx, visIdx := -1, -1
+		// the previous element that is not a space glyph; advIdx the
+		// previous element that advanced the text position.
+		prevIdx, visIdx, advIdx := -1, -1, -1
 		pendingSpace := ""
 		for _, idx := range indices {
 			el := ln.elems[idx]
@@ -184,6 +205,9 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					}
 				}
 				prevIdx, visIdx = idx, idx
+				if el.Width != 0 {
+					advIdx = idx
+				}
 				continue
 			}
 			if isSpaceGlyph(el.Text) {
@@ -202,6 +226,9 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					pendingSpace = ""
 					sb.WriteString(el.Text)
 					prevIdx, visIdx = idx, idx
+					if el.Width != 0 {
+						advIdx = idx
+					}
 					continue
 				}
 			}
@@ -241,6 +268,11 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el), literalSpaceSize(ln.elems, lineFonts, visIdx, idx), spaceGlyphsBetween(ln.elems, visIdx, idx)) {
 						pendingSpace = ""
 					}
+				case prev.Width == 0 && advIdx >= 0 && advIdx != prevIdx:
+					adv := ln.elems[advIdx]
+					if shouldInsertSpace(adv, computeLineGap(adv, el), wordSpaceThreshold(ln.elems, lineFonts, advIdx, idx, spaceThreshold), adv.Chunk == el.Chunk && el.Chunk != 0) {
+						sb.WriteString(" ")
+					}
 				case shouldInsertSpace(prev, gap, wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
 					sb.WriteString(" ")
 				}
@@ -249,6 +281,9 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 			pendingSpace = ""
 			sb.WriteString(el.Text)
 			prevIdx, visIdx = idx, idx
+			if el.Width != 0 {
+				advIdx = idx
+			}
 		}
 		writeSpace(&sb, pendingSpace)
 	}
@@ -369,6 +404,12 @@ const (
 // any Do, is compared across that edge as PDF.js compares it
 // ([runTracker.breaksItem]).
 //
+// A glyph is compared with the last glyph that advanced the text position
+// ([runTracker.anchor]): PDF.js records the position after a glyph only when
+// the glyph advanced (src/core/evaluator.js, buildTextContentItem,
+// prevTransform), so a zero-width glyph between the two moves neither the
+// gap nor the shift across the line.
+//
 // # Corpus evidence
 //
 //   - All corpora: with the text rise on the glyph origins, words match
@@ -427,6 +468,10 @@ const (
 //     space, each letter broke its line, "( A )". Reading a rotated line past
 //     its space glyphs makes words match PDF.js on that file and on none
 //     fewer; facturx, pdf20, pdfcpu and pdfjs do not move.
+//   - pdfjs issue5874.pdf: a glyph 5.7 units above the last glyph that
+//     advanced, 3.6 above the zero-width glyph between them, ends the run
+//     where PDF.js ends its text item, a quarter of the 14.3-point size away,
+//     and so starts a new line as it does in PDF.js.
 type runTracker struct {
 	// start is the glyph that started the current run, and startIdx its
 	// index.
@@ -442,19 +487,39 @@ type runTracker struct {
 	// items is the [textItemStarts] of elements, or nil when the fonts are
 	// unknown.
 	items []int
+	// adv is the last glyph that advanced the text position, and advIdx its
+	// index, or -1 before any did.
+	adv    models.TextElement
+	advIdx int
 }
 
 // newRunTracker starts tracking runs at the first of elements. fonts is
 // the font of each element, or nil when unknown, and items their
 // [textItemStarts].
 func newRunTracker(elements []models.TextElement, fonts []runFont, items []int) runTracker {
-	return runTracker{start: elements[0], last: elements[0], fonts: fonts, elements: elements, items: items}
+	r := runTracker{start: elements[0], last: elements[0], fonts: fonts, elements: elements, items: items, advIdx: -1}
+	if elements[0].Width != 0 {
+		r.adv, r.advIdx = elements[0], 0
+	}
+	return r
 }
 
 // advance makes el, the element i, the last glyph of its run.
 func (r *runTracker) advance(i int, el models.TextElement) {
 	r.last = el
 	r.lastIdx = i
+	if el.Width != 0 {
+		r.adv, r.advIdx = el, i
+	}
+}
+
+// anchor returns the glyph a move is measured from, and its index: the last
+// glyph that advanced the text position, or the last glyph when none did.
+func (r *runTracker) anchor() (models.TextElement, int) {
+	if r.advIdx >= 0 {
+		return r.adv, r.advIdx
+	}
+	return r.last, r.lastIdx
 }
 
 // Values of [textItemStarts] that name no element.
@@ -628,19 +693,20 @@ func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 	}
 	last, lastIdx := r.last, r.lastIdx
 	fontChanged := r.fontChanged(i, last, el)
+	from, fromIdx := r.anchor()
 	r.advance(i, el)
-	size := r.gapSize(lastIdx, i, last, el)
-	gap := computeLineGap(last, el)
-	if r.endsLine(lastIdx, i, last, el, gap, size) {
+	size := r.gapSize(fromIdx, i, from, el)
+	gap := computeLineGap(from, el)
+	if r.endsLine(fromIdx, i, from, el, gap, size) {
 		r.start, r.startIdx = el, i
 		return true
 	}
 	ref := r.start
 	switch {
 	case gap > spaceInFlowMaxFactor*size:
-		ref = last
+		ref = from
 	case gap < negativeRunGapFactor*size,
-		acrossLine(last, el) > verticalShiftRatio*r.height(r.startIdx, r.start),
+		acrossLine(from, el) > verticalShiftRatio*r.height(r.startIdx, r.start),
 		fontChanged,
 		el.MCID != last.MCID,
 		r.markedChanged(lastIdx, i):
@@ -1170,9 +1236,11 @@ func beadContains(bead semantics.Bead, el models.TextElement) bool {
 //
 // A width of 0 is a glyph the font gives no advance (a /W or /Widths entry
 // of 0, ISO 32000-1, 9.6.2.1 and 9.7.4.3), so the gap is measured from its
-// own position, as PDF.js measures it. No element is ever 0 wide for want
-// of metrics: [Font.GlyphWidth] falls back to a non-zero width. Only a
-// negative width, which no glyph is drawn with, takes half an em.
+// own position. Callers measure the glyph after it from the last glyph that
+// advanced instead ([runTracker.anchor]), as PDF.js does. No element is ever
+// 0 wide for want of metrics: [Font.GlyphWidth] falls back to a non-zero
+// width. Only a negative width, which no glyph is drawn with, takes half an
+// em.
 //
 // # Corpus evidence
 //
