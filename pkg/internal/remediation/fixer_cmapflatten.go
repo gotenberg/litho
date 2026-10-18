@@ -38,11 +38,14 @@ func matchCMapFlatten(v compliance.Violation) bool {
 		contextContains(v, "uses non-embedded CMap")
 }
 
-// fixCMapFlatten repairs the /UseCMap entry of every embedded encoding CMap a
-// Type 0 font uses. Three shapes, three repairs, and the difference between
-// them is what keeps the repair honest:
+// fixCMapFlatten repairs the /UseCMap entry and the usecmap operators of every
+// embedded encoding CMap a Type 0 font uses. Four shapes, four repairs, and
+// the difference between them is what keeps the repair honest:
 //
 //   - a chain of embedded streams is inlined, so nothing is referenced.
+//   - a base named outside Table 118, which a reader resolves
+//     (Adobe-KR-9, Adobe-Korea1-2), is inlined from the copy veraPDF reads,
+//     so every code keeps its CID.
 //   - a name that can never denote a CMap is dropped: it resolves to nothing,
 //     so it contributes nothing.
 //   - a name that denotes a real predefined CMap litho ships is EMBEDDED,
@@ -88,6 +91,9 @@ func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		case flattenOneCMap(ctx, alloc, doc, encRef):
 			fixes = append(fixes, fmt.Sprintf(
 				"inlined the /UseCMap chain into the embedded CMap of font %s", name))
+		case inlineNamedBases(ctx, alloc, doc, encRef):
+			fixes = append(fixes, fmt.Sprintf(
+				"inlined the base CMaps a usecmap or /UseCMap named into the embedded CMap of font %s", name))
 		case dropUnresolvableUseCMap(ctx, alloc, doc, encRef):
 			fixes = append(fixes, fmt.Sprintf(
 				"dropped a /UseCMap naming no CMap from the embedded CMap of font %s", name))
@@ -134,18 +140,95 @@ func flattenOneCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	if !changed {
 		return false
 	}
+	return alloc.AllocAt(encRef.ObjectNum, ast.NewStream(flattenedCMapDict(stream.Dict), merged))
+}
 
-	// The new stream carries decoded bytes, so the entries describing how the
-	// old bytes were stored go (ISO 32000-1, Table 5). /UseCMap goes because
-	// the mapping it contributed is now written out in full. Everything that
-	// names the CMap stays, so the font still declares the collection it did.
-	dict := make(ast.PdfDict, len(stream.Dict))
-	maps.Copy(dict, stream.Dict)
+// inlineNamedBases folds into one encoding CMap stream the bases its usecmap
+// operators and its /UseCMap name, when one of them is no predefined CMap
+// of ISO 32000-1, 9.7.5.2, Table 118 ([compliance.IsPredefinedCMapName]),
+// reporting whether it rewrote the stream.
+//
+// ISO 19005-2, 6.2.11.3.3 test 3 rejects the reference, not the mapping: a
+// base such as Adobe-KR-9 or Adobe-Korea1-2 is a real CMap veraPDF 1.30.2
+// loads and decodes the font's codes through, so dropping it would send every
+// code it maps to CID 0 (ISO 32000-1, 9.7.6.3). Each base is rendered from
+// the copy the checker reads ([cmap.ConformanceBaseProgram]) and folded in by
+// [cmap.FlattenUseCMap], which keeps the rewrite only when it reads back as
+// the merged mapping. A base litho cannot render leaves the stream as written.
+func inlineNamedBases(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, encRef ast.PdfIndirectRef) bool {
+	if _, pending := alloc.Pending()[encRef.ObjectNum]; pending {
+		return false
+	}
+	stream, err := document.ResolveStream(ctx, doc, encRef)
+	if err != nil || stream.Dict == nil {
+		return false
+	}
+	using, err := doc.DecodeStream(ctx, stream)
+	if err != nil || len(using) == 0 {
+		return false
+	}
+	program, err := cmap.ParseCID(ctx, using)
+	if err != nil {
+		doc.Logger.Debug("remediation: encoding CMap unreadable, usecmap operators left as written",
+			slog.Int("obj", encRef.ObjectNum), slog.Any("err", err))
+		return false
+	}
+	names, ok := program.UseCMapOperands()
+	if !ok {
+		return false
+	}
+	_, hasUseCMap := stream.Dict["UseCMap"]
+	if hasUseCMap {
+		// A /UseCMap stream is flattenOneCMap's, and a value that is neither a
+		// name nor a stream is left as written.
+		name, err := document.ResolveName(ctx, doc, stream.Dict["UseCMap"])
+		if err != nil || name == "" {
+			return false
+		}
+		names = append(names, string(name))
+	}
+	refused := false
+	for _, name := range names {
+		if !compliance.IsPredefinedCMapName(name) {
+			refused = true
+		}
+	}
+	if !refused {
+		return false
+	}
+	bases := make([][]byte, 0, len(names))
+	for _, name := range names {
+		prog, ok, err := cmap.ConformanceBaseProgram(ctx, name)
+		if err != nil || !ok {
+			doc.Logger.Debug("remediation: cannot render a named base CMap, reference left as written",
+				slog.String("cmap", name), slog.Any("err", err))
+			return false
+		}
+		bases = append(bases, prog)
+	}
+	merged, changed, err := cmap.FlattenUseCMap(ctx, using, bases)
+	if err != nil || !changed {
+		doc.Logger.Debug("remediation: named base CMaps not inlined, reference left as written",
+			slog.Int("obj", encRef.ObjectNum), slog.Any("err", err))
+		return false
+	}
+	return alloc.AllocAt(encRef.ObjectNum, ast.NewStream(flattenedCMapDict(stream.Dict), merged))
+}
+
+// flattenedCMapDict returns the dictionary of an encoding CMap stream whose
+// program a repair rewrote with its bases inlined. The new stream carries
+// decoded bytes, so the entries describing how the old bytes were stored go
+// (ISO 32000-1, Table 5). /UseCMap goes because the mapping it contributed is
+// now written out in full. Everything that names the CMap stays, so the font
+// still declares the collection it did.
+func flattenedCMapDict(old ast.PdfDict) ast.PdfDict {
+	dict := make(ast.PdfDict, len(old))
+	maps.Copy(dict, old)
 	delete(dict, "UseCMap")
 	for _, k := range []ast.PdfName{"Length", "Filter", "DecodeParms", "DL", "F", "FFilter", "FDecodeParms"} {
 		delete(dict, k)
 	}
-	return alloc.AllocAt(encRef.ObjectNum, ast.NewStream(dict, merged))
+	return dict
 }
 
 // dropUnresolvableUseCMap removes a /UseCMap whose value is a name that can
@@ -154,8 +237,11 @@ func flattenOneCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 // ISO 19005-1, 6.3.3.3 and the test 1 of its restatements require the base
 // CMap to be embedded or predefined. A name shaped
 // "Adobe-<Registry>-<Supplement>" is a character collection, not one of the
-// CMaps ISO 32000-1, 9.7.5.2, Table 118 names, so no reader resolves it: the
-// entry contributes no mapping and dropping it costs none.
+// CMaps ISO 32000-1, 9.7.5.2, Table 118 names. Adobe publishes such a CMap
+// for each supplement of its collections, and veraPDF bundles them, so
+// [inlineNamedBases] inlines every one litho can render first; a name that
+// reaches this repair resolves to nothing on either side, and dropping the
+// entry costs no mapping.
 //
 // Only that shape is dropped. H, Identity-H and UniKS-UTF16-H are real
 // predefined CMaps whose mappings a reader does resolve, and removing one

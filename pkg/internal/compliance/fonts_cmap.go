@@ -638,7 +638,7 @@ func findNonPredefinedUseCMap(ctx context.Context, doc *document.Document, data 
 		return ""
 	}
 
-	predefined := isPredefinedCMap(usedCMap)
+	predefined := IsPredefinedCMapName(usedCMap)
 	if profile == "PDF/UA-2" {
 		predefined = usedCMap == "Identity-H" || usedCMap == "Identity-V"
 	}
@@ -646,6 +646,16 @@ func findNonPredefinedUseCMap(ctx context.Context, doc *document.Document, data 
 		return usedCMap
 	}
 	return ""
+}
+
+// IsPredefinedCMapName reports whether name is one of the predefined CMaps of
+// ISO 32000-1, 9.7.5.2, Table 118, the only CMaps ISO 19005-2, 6.2.11.3.3
+// test 3 and its restatements let a CMap name as its base.
+//
+// Remediation asks this before inlining a named base, so the repair reaches
+// only references the check reports.
+func IsPredefinedCMapName(name string) bool {
+	return isPredefinedCMap(name)
 }
 
 // extractCMapName extracts the CMap name from an embedded CMap stream.

@@ -149,11 +149,13 @@ func TestFixCMapFlatten_InlinesTheChain(t *testing.T) {
 // TestFixCMapFlatten_DropsOnlyAnUnresolvableUseCMapName is the arm that keeps
 // this repair honest.
 //
-// A /UseCMap naming a character collection resolves to nothing, so dropping it
-// costs no mapping. A /UseCMap naming a real predefined CMap resolves to
-// mappings a reader uses, and dropping it would take them away. veraPDF cannot
-// tell the two apart: it is satisfied by the entry being gone either way, and
-// under ISO 19005-1, 6.3.3.3 it reports even the legitimate names. A fixer that
+// A /UseCMap naming a character collection CMap no reader holds resolves to
+// nothing, so dropping it costs no mapping. A /UseCMap naming a CMap a reader
+// resolves contributes mappings, and dropping it would take them away: a
+// Table 118 name stays, and a collection CMap veraPDF bundles (Adobe-Korea1-2,
+// Adobe-KR-9) is inlined, every code keeping its CID. veraPDF cannot tell the
+// three apart: it is satisfied by the entry being gone either way, and under
+// ISO 19005-1, 6.3.3.3 it reports even the legitimate names. A fixer that
 // deleted every name would therefore score HIGHER against veraPDF while
 // corrupting files. Only this test separates them.
 //
@@ -161,6 +163,10 @@ func TestFixCMapFlatten_InlinesTheChain(t *testing.T) {
 //
 //   - All corpora: a fixer that deleted every name would score HIGHER on the
 //     corpus while corrupting files.
+//   - verapdf PDF_UA-1__7.21.3.3-t03-fail-a.pdf and
+//     PDF_UA-2__8.4.5.4-t03-fail-a.pdf: name Adobe-Korea1-2, and remediate to
+//     a file both tools call conforming at all thirteen levels whether the
+//     base is dropped or inlined; only inlining keeps the codes' CIDs.
 func TestFixCMapFlatten_DropsOnlyAnUnresolvableUseCMapName(t *testing.T) {
 	t.Parallel()
 
@@ -169,15 +175,17 @@ func TestFixCMapFlatten_DropsOnlyAnUnresolvableUseCMapName(t *testing.T) {
 		name    string
 		useName string
 		drop    bool
+		inline  bool
 	}{
-		{"a character collection names no CMap", "Adobe-Korea1-2", true},
-		{"another collection identifier", "Adobe-Japan1-4", true},
+		{"a collection CMap no reader holds names nothing", "Adobe-Foo1-3", true, false},
+		{"a collection CMap veraPDF bundles is inlined", "Adobe-Korea1-2", false, true},
+		{"a collection CMap only veraPDF bundles is inlined", "Adobe-KR-9", false, true},
 		// ISO 32000-1, Table 118 names all of these, and litho bundles H and V.
-		{"H is a real predefined CMap", "H", false},
-		{"Identity-H is predefined", "Identity-H", false},
-		{"UniKS-UTF16-H is predefined", "UniKS-UTF16-H", false},
+		{"H is a real predefined CMap", "H", false, false},
+		{"Identity-H is predefined", "Identity-H", false, false},
+		{"UniKS-UTF16-H is predefined", "UniKS-UTF16-H", false, false},
 		// Shaped like a collection but not Adobe's, so not the case this claims.
-		{"a three-part name that is not Adobe's", "Foo-Bar-2", false},
+		{"a three-part name that is not Adobe's", "Foo-Bar-2", false, false},
 	} {
 		src := namedUseCMapPDF(tc.useName)
 		doc, alloc := newTestDoc(t, src)
@@ -189,6 +197,32 @@ func TestFixCMapFlatten_DropsOnlyAnUnresolvableUseCMapName(t *testing.T) {
 		}
 
 		stream, written := flattenedCMap(t, alloc)
+		if tc.inline {
+			if !written {
+				t.Errorf("%s: /UseCMap /%s was left in place", tc.name, tc.useName)
+				continue
+			}
+			if _, still := stream.Dict["UseCMap"]; still {
+				t.Errorf("%s: the program was inlined but /UseCMap survived", tc.name)
+			}
+			got, err := stream.Bytes(ctx)
+			if err != nil {
+				t.Errorf("%s: reading the rewritten CMap: %v", tc.name, err)
+				continue
+			}
+			mapping, err := ParseCIDForTest(ctx, got)
+			if err != nil {
+				t.Errorf("%s: parsing the rewritten CMap: %v", tc.name, err)
+				continue
+			}
+			// The program maps 0000 to 00FF itself; the base maps 0100 to CID
+			// 256, as the identity over the collection's CIDs.
+			if mapping[0x0010] != 0x10 || mapping[0x0100] != 0x100 {
+				t.Errorf("%s: codes 0010 and 0100 map to %d and %d, want 16 and 256",
+					tc.name, mapping[0x0010], mapping[0x0100])
+			}
+			continue
+		}
 		if !tc.drop {
 			if written {
 				t.Errorf("%s: /UseCMap /%s was removed, taking the mappings it resolves to with it",
@@ -221,6 +255,83 @@ func TestFixCMapFlatten_DropsOnlyAnUnresolvableUseCMapName(t *testing.T) {
 		want := chainCMapProgram("MyCMap", 0x0000, 0x00FF, 0)
 		if !bytes.Equal(bytes.TrimSpace(got), bytes.TrimSpace([]byte(want))) {
 			t.Errorf("%s: the CMap program changed; dropping a name must not touch the body", tc.name)
+		}
+	}
+}
+
+// TestFixCMapFlatten_InlinesAUseCMapOperand pins the repair of a usecmap
+// operator whose operand is no Table 118 CMap, the shape ISO 19005-2,
+// 6.2.11.3.3 test 3 rejects in litho's reading: Adobe-KR-9, which veraPDF
+// 1.30.2 loads, is inlined, so the program maps what the base mapped and runs
+// no usecmap. A Table 118 operand is left alone.
+//
+// # Corpus evidence
+//
+//   - litho cmapverabase_2b.pdf: K1 to K3 run usecmap on Adobe-KR-9 and
+//     Adobe-Japan1-7. Without the repair litho kept 6.2.11.3.3 t3 after
+//     remediation at eleven levels, where veraPDF, which judges /UseCMap
+//     only, called the base gone.
+func TestFixCMapFlatten_InlinesAUseCMapOperand(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for _, tc := range []struct {
+		operand string
+		inline  bool
+	}{
+		{"Adobe-KR-9", true},
+		{"Identity-H", false},
+	} {
+		prog := "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n" +
+			"/CIDSystemInfo 3 dict dup begin /Registry (Adobe) def /Ordering (KR) def /Supplement 9 def end def\n" +
+			"/CMapName /MyCMap def\n/CMapType 1 def\n/WMode 0 def\n" +
+			"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n" +
+			"/" + tc.operand + " usecmap\n1 beginbfchar\n<0041> <0041>\nendbfchar\n" +
+			"endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n"
+		src := buildStructPDF(
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "+
+				"/Resources << /Font << /F1 4 0 R >> >> >>",
+			"<< /Type /Font /Subtype /Type0 /BaseFont /Probe /Encoding 6 0 R "+
+				"/DescendantFonts [5 0 R] >>",
+			"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Probe "+
+				"/CIDSystemInfo << /Registry (Adobe) /Ordering (KR) /Supplement 9 >> >>",
+			fmt.Sprintf("<< /Type /CMap /CMapName /MyCMap /WMode 0 "+
+				"/CIDSystemInfo << /Registry (Adobe) /Ordering (KR) /Supplement 9 >> "+
+				"/Length %d >>\nstream\n%s\nendstream", len(prog), prog),
+		)
+		doc, alloc := newTestDoc(t, src)
+		if _, err := fixCMapFlatten(ctx, alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
+			t.Fatalf("%s: fixCMapFlatten: %v", tc.operand, err)
+		}
+		stream, written := flattenedCMap(t, alloc)
+		if !tc.inline {
+			if written {
+				t.Errorf("%s: a Table 118 operand was rewritten", tc.operand)
+			}
+			continue
+		}
+		if !written {
+			t.Fatalf("%s: the usecmap operand was left in place", tc.operand)
+		}
+		got, err := stream.Bytes(ctx)
+		if err != nil {
+			t.Fatalf("%s: reading the rewritten CMap: %v", tc.operand, err)
+		}
+		if strings.Contains(string(got), "usecmap") {
+			t.Errorf("%s: a usecmap invocation survived the inlining", tc.operand)
+		}
+		mapping, err := ParseCIDForTest(ctx, got)
+		if err != nil {
+			t.Fatalf("%s: parsing the rewritten CMap: %v", tc.operand, err)
+		}
+		if mapping[0x0005] != 5 || mapping[0x5970] != 22896 {
+			t.Errorf("%s: codes 0005 and 5970 map to %d and %d, want 5 and 22896",
+				tc.operand, mapping[0x0005], mapping[0x5970])
+		}
+		if _, mapped := mapping[0x5971]; mapped {
+			t.Errorf("%s: code 5971, past Adobe-KR-9's CIDs, gained a mapping", tc.operand)
 		}
 	}
 }

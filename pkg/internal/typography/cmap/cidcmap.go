@@ -38,6 +38,18 @@ type useCMapCall struct {
 	notdefAt int
 }
 
+// UseCMapOperands returns the bases the usecmap operators of the program
+// name, in program order. ok is false for a program litho did not read
+// whole ([CIDCMap.incomplete]), whose operands past [maxUseCMapOps] it does
+// not hold.
+func (c *CIDCMap) UseCMapOperands() (names []string, ok bool) {
+	names = make([]string, 0, len(c.useCMaps))
+	for _, u := range c.useCMaps {
+		names = append(names, u.name)
+	}
+	return names, !c.incomplete
+}
+
 // strToInt converts a PDF hex string (byte sequence) to an integer by
 // treating each byte as a big-endian digit (b[0]<<8 | b[1] for 2 bytes, etc.).
 func strToInt(s ast.PdfString) int {

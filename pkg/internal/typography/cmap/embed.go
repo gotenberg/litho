@@ -118,3 +118,44 @@ func uniformCodeSpaces(ranges []CodeSpaceRange) (int, []codeSpan, bool) {
 	}
 	return width, mergeSpans(spans), true
 }
+
+// ConformanceBaseProgram renders the base CMap name as veraPDF 1.30.2 reads
+// it ([ConformanceCIDBase]), as the codespace and cidrange groups of a CMap
+// program, for [FlattenUseCMap] to fold into a CMap that names it. A usecmap
+// operand or a /UseCMap name outside ISO 32000-1, 9.7.5.2, Table 118 breaks
+// ISO 19005-2, 6.2.11.3.3 test 3, and inlining what it maps removes the
+// reference without changing a code's CID.
+//
+// It returns false, writing nothing, under the conditions [EmbedPredefined]
+// states: no resolvable data, notdef mappings, mixed code widths, more runs
+// than [maxEmbeddedCIDRanges], or a program that does not read back as the
+// mapping it was built from.
+func ConformanceBaseProgram(ctx context.Context, name string) ([]byte, bool, error) {
+	m := ConformanceCIDBase(name)
+	if m == nil || m.cs == nil || len(m.notdefs) > 0 {
+		return nil, false, nil
+	}
+	charToCID, ok := m.cidMappings()
+	if !ok || len(charToCID) == 0 {
+		return nil, false, nil
+	}
+	width, spans, ok := uniformCodeSpaces(m.cs.CodeSpaceRanges)
+	if !ok {
+		return nil, false, nil
+	}
+	runs := compressCID(charToCID)
+	if len(runs) == 0 || len(runs) > maxEmbeddedCIDRanges {
+		return nil, false, nil
+	}
+	var buf bytes.Buffer
+	writeCodeSpaces(&buf, spans, width)
+	writeCIDRanges(&buf, runs, width)
+	back, err := ParseCID(ctx, buf.Bytes())
+	if err != nil {
+		return nil, false, fmt.Errorf("re-reading the rendered %s CMap: %w", name, err)
+	}
+	if !maps.Equal(back.Mapping, charToCID) {
+		return nil, false, nil
+	}
+	return buf.Bytes(), true, nil
+}
