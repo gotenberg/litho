@@ -582,10 +582,8 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 				// conservative "check every declared font" fallback exists for the
 				// dictionary rules, and judging glyphs there reports a .notdef
 				// against recovered bytes veraPDF never reads.
-				if descArr, err := document.ResolveArray(ctx, doc, font["DescendantFonts"]); err == nil && len(descArr) > 0 && !parseFailed {
-					if cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0]); err == nil && cidFontDict != nil {
-						fontResults = append(fontResults, checkType0UsageRules(ctx, doc, font, cidFontDict, fontKey, pageNum, profile, usage, withoutMalformedCodes)...)
-					}
+				if !parseFailed {
+					fontResults = append(fontResults, checkGlyphUsageRules(ctx, doc, font, fontKey, pageNum, profile, usage)...)
 				}
 			} else {
 				fontResults = append(fontResults, judged.descendantRules(ctx, doc, id, font, fontKey, pageNum, profile, isVisible)...)
@@ -1055,13 +1053,39 @@ func checkGlyphUsageRules(ctx context.Context, doc *document.Document, font ast.
 	}
 	descArr, err := document.ResolveArray(ctx, doc, font["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
-		return nil
+		return type0ToUnicodeWithoutDescendant(ctx, doc, font, fontName, pageNum, profile, usage, withoutMalformedCodes)
 	}
 	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
 	if err != nil || cidFontDict == nil {
-		return nil
+		return type0ToUnicodeWithoutDescendant(ctx, doc, font, fontName, pageNum, profile, usage, withoutMalformedCodes)
 	}
 	return checkType0UsageRules(ctx, doc, font, cidFontDict, fontName, pageNum, profile, usage, withoutMalformedCodes)
+}
+
+// type0ToUnicodeWithoutDescendant states the ToUnicode presence rule (ISO
+// 19005-2, 6.2.11.7.2 t1 and its restatements) for a Type 0 font whose
+// /DescendantFonts holds no CIDFont dictionary.
+//
+// veraPDF builds such a font over an empty dictionary
+// (PDType0Font.getDescendantCOSDictionary, veraPDF 1.30.2). It names no
+// character collection, so the exemption for the Adobe CJK collections cannot
+// hold, and each glyph the font shows without a /ToUnicode goes without a
+// Unicode value. The font's other glyph rules read the descendant, and state
+// nothing.
+//
+// # Corpus evidence
+//
+//   - litho type0nodesc_2b.pdf: veraPDF reports four glyphs of its four
+//     descendant-less fonts at PDF/A-2u. The control font's glyph, also
+//     reported, hid the gap until remediation mapped it.
+func type0ToUnicodeWithoutDescendant(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo, malformed judgeMalformedCodes) []Violation {
+	var results []Violation
+	for _, v := range checkType0ToUnicode(ctx, doc, fontDict, ast.PdfDict{}, fontName, pageNum, profile, usage) {
+		if v.glyph.named || bool(malformed) {
+			results = append(results, v)
+		}
+	}
+	return results
 }
 
 // streamSite returns the [showSite] of the content stream ref names, whose
@@ -1963,7 +1987,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 			"font", fontName, "error", err)
 		// Without descendants no further checks are possible, but the font is
 		// still subject to embedding checks at the Type0 level.
-		return results
+		return append(results, type0ToUnicodeWithoutDescendant(ctx, doc, fontDict, fontName, pageNum, profile, usage, withMalformedCodes)...)
 	}
 
 	// PDF spec requires exactly one descendant CIDFont.
@@ -1971,7 +1995,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	if err != nil || cidFontDict == nil {
 		doc.Logger.Debug("compliance: fonts: failed to resolve descendant CIDFont",
 			"font", fontName, "error", err)
-		return results
+		return append(results, type0ToUnicodeWithoutDescendant(ctx, doc, fontDict, fontName, pageNum, profile, usage, withMalformedCodes)...)
 	}
 
 	// CIDSystemInfo consistency.
