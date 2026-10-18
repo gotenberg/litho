@@ -1843,10 +1843,13 @@ rules, `6.2.11.7.2/1` at A-2a, A-2u, A-3a, A-3u, `7.21.7/1`, `8.4.5.8/1` and
 and ISO 19005-1, 6.3.8 exempt the Adobe-GB1, Adobe-CNS1, Adobe-Japan1 and
 Adobe-Korea1 collections by name, and veraPDF also maps Adobe-KR through its
 Adobe-KR-UCS2. litho is right on the letter of both clauses, so no code
-changed. Remediation inlines the operators' bases, after which both tools agree
-on every output. A `/UseCMap` chain that loops still makes veraPDF raise "Loop
-inside CMap" and abandon the run, where litho leaves the codes unknown; that
-is not planted in any fixture.
+changed. Remediation inlines the operators' bases and embeds `K5`'s CMap, whose
+program declares Adobe-KR-9, so on the outputs at A-2a, A-2u, A-3a, A-3u, UA-1
+and UA-2 the Unicode rule stays on litho only, for `K1` and `K5`, for the same
+reason; every other rule agrees. Before the embedding, veraPDF still reported
+it for `K5`, whose name gave it no collection to map through. A `/UseCMap`
+chain that loops still makes veraPDF raise "Loop inside CMap" and abandon the
+run, where litho leaves the codes unknown; that is not planted in any fixture.
 
 **`6.2.4.3/2` when an uncoloured pattern is painted.** litho reports DeviceRGB
 used inside a coloured (`/PaintType 1`) tiling pattern; veraPDF does not, but
@@ -6313,9 +6316,15 @@ veraPDF knows no CIDSystemInfo for UniAKR-UTF16-H, which `6.2.11.3.1/1`
 reports. Remediation used to drop `K4`'s `/UseCMap` as naming nothing, which
 sent code 0007 to CID 0, and left the operators of `K1` to `K3` in place, so
 litho kept `6.2.11.3.3/3` after it at eleven levels where veraPDF did not. It
-now inlines every such base from veraPDF's copy, each code keeping its CID, and
-both tools report the same rules on every output, default and aggressive, at
-all thirteen levels.
+now inlines every such base from veraPDF's copy, each code keeping its CID.
+It also embeds the file veraPDF reads for `K5`'s `/UniAKR-UTF16-H`, byte for
+byte with the Adobe-KR-9 CIDSystemInfo the file declares, since PDF/A requires
+a CMap outside Table 118 embedded and PDF.js ships none. That settles `K5`'s
+embedding and CIDSystemInfo rules (`6.2.11.3.3/1` and `6.2.11.3.1/1` and their
+restatements) on both tools with no rule added, default and aggressive, at all
+thirteen levels. Both tools then report the same rules on every output but the
+Unicode rule under [Known divergences](#known-divergences). `K6` and `K7` keep
+`6.3.3.3/1` at part 1, which requires even a Table 118 CMap embedded.
 
 ### `cmapcidtext_2b.pdf`
 
