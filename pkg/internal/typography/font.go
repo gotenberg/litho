@@ -111,7 +111,11 @@ type Font struct {
 //
 // A /W entry of 0 is a width and stands: only the CIDs /W omits fall through.
 // So is a /Widths entry of 0: only the entries that are not numbers fall
-// through ([Font.simpleWidth]).
+// through ([Font.simpleWidth]). A simple font that states a /Widths array
+// gives every code it does not cover its /MissingWidth, 0 when the
+// descriptor states none (ISO 32000-1, 9.8.1, Table 122), as PDF.js reads it
+// (src/core/evaluator.js, extractWidths, defaultWidth): such a code never
+// reaches the font program or the bounding box.
 //
 // # Corpus evidence
 //
@@ -126,6 +130,12 @@ type Font struct {
 //   - pdfjs issue18208.pdf: 72 Helvetica-Bold dictionaries state /Widths 0
 //     for 246 of their codes. Read at a fallback width, those glyphs ran the
 //     words together ("TorredeMonsanto") where PDF.js reads the spaces.
+//   - govdocs thread_100_100945.pdf page 2: a Univers subset states /Widths
+//     from code 48 and shows its column spaces as code 32, which its program
+//     does not hold. Read at the 1.16-em bounding box, each space pushed the
+//     digits after it a column right, and "9 8" read "98". Giving the code
+//     its missing width of 0 makes words match PDF.js on that page and on
+//     none fewer; no file moves.
 func (f *Font) GlyphWidth(charCode int) float64 {
 	// Type 3 fonts: look up glyph name via encoding, then apply FontMatrix.
 	if f.Type3Widths != nil && charCode >= 0 && charCode <= 255 {
@@ -186,6 +196,9 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 
 	if f.MissingWidth > 0 {
 		return f.MissingWidth
+	}
+	if f.widthStated != nil {
+		return 0
 	}
 
 	return f.resolveWidth(charCode)
