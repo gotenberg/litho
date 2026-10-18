@@ -27,6 +27,16 @@ func matchFormTooltip(v compliance.Violation) bool {
 // accept the same entry: §8.10.2.3 test 1 is answered by a Lbl structure
 // element or by /Contents on the annotation and NOT by /TU, so a widget given
 // only a tooltip still fails it. That is why /Contents is written below as well.
+//
+// A signed signature field is repaired like any other. The entries go on the
+// field dictionary, never on the signature dictionary its /V names, whose
+// /ByteRange fixes the bytes the digest covers (ISO 32000-1, 12.8.1): an
+// incremental update keeps the signed revision byte for byte, so the signature
+// still verifies, and a full rewrite drops the signed field whole. That is the
+// line [fixSignatureReferences] draws too: in standard mode it leaves a signed
+// signature DICTIONARY alone, not the field holding it. annot-nesting writes
+// /StructParent on the same widget in the same run, so skipping the tooltip
+// would leave the field written and the ISO 14289-1, 7.18.1 violation standing.
 func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
