@@ -197,6 +197,7 @@ one deliberately rather than diffing it against a fresh build.
 | `cmapnotdef_2b.pdf`    | PDF/A-2b     | Encoding CMaps whose notdef ranges map the codes they show       |
 | `cmappredef_2b.pdf`    | PDF/A-2b     | Fonts naming predefined CMaps, through their bases and notdefs   |
 | `cmapusevert_1b.pdf`   | PDF/A-1b     | An encoding CMap whose `/UseCMap` names the vertical CMap V      |
+| `cmapverabase_2b.pdf`  | PDF/A-2b     | Encoding CMaps only veraPDF's bundle maps, as bases and by name  |
 | `cmapcidtext_2b.pdf`   | PDF/A-2b     | Text of codes an encoding CMap sends to other CIDs, no ToUnicode |
 | `stdremap_ua2.pdf`     | PDF/UA-2     | A standard type the root `/RoleMap` sends to a private dead end  |
 | `remapchain_ua2.pdf`   | PDF/UA-2     | Standard types mapped through a private type to a standard one   |
@@ -457,6 +458,8 @@ violation but is exempt, so a firing is a false positive.
 | `cmapnotdef_2b`                           | `N2`: a code a notdef range maps to a CID the program holds            | ISO 32000-1, 9.7.6.3         |
 | `cmappredef_2b`                           | `P2`: codes `/UniJIS-UCS2-V` takes from its base, to glyphs present    | ISO 32000-1, 9.7.5.2         |
 | `cmappredef_2b`                           | `P5`: a code `/90ms-RKSJ-H`'s notdef range maps to a CID present       | ISO 32000-1, 9.7.6.3         |
+| `cmapverabase_2b`                         | `K2`: codes an `/Adobe-KR-9 usecmap` base maps to glyphs present       | ISO 32000-1, 9.7.5.4         |
+| `cmapverabase_2b`                         | `K6`: U+2002, which veraPDF's `/UniGB-UTF16-H` maps to a CID present   | ISO 32000-1, 9.7.5.2         |
 | `remapchain_ua2`                          | `Div`: a `/RoleMap` chain through `Section` that ends on `Sect`        | ISO 14289-2, 8.2.4 t4        |
 | `remapchain_ua2`                          | PDF 1.7 `Sect`: a `/RoleMapNS` chain through a custom `Section`        | ISO 14289-2, 8.2.4 t4        |
 | `stdremap_ua2`                            | PDF 2.0 `Sect`: an element the `/RoleMap` entry for `Sect` misses      | ISO 32000-2, 14.8.6          |
@@ -518,6 +521,7 @@ which are covered under [Known divergences](#known-divergences).
 | `cmapusecmap_2b.pdf`   | 6    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
 | `cmapusestream_2b.pdf` | 5    | 2    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
 | `cmapusevert_1b.pdf`   | 5    | 3    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
+| `cmapverabase_2b.pdf`  | 8    | 5    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
 | `colouroff_2b.pdf`     | 4    | 1    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `complex_1b.pdf`       | 26   | 23   | 22   | 19   | 20   | 24   | 21   | 22   | 19  | 18   | 18   | 14   | 11   |
 | `complex_2a.pdf`       | 18   | 15   | 21   | 17   | 17   | 22   | 18   | 18   | 17  | 17   | 18   | 12   | 11   |
@@ -1827,16 +1831,22 @@ page painting `0 0 0 rg` under one output intent whose profile header carries
 `GRAY`, so the disagreement is about whether a Lab destination profile
 establishes a device colour space at all. Not planted in any fixture.
 
-**An encoding CMap built on a CMap only veraPDF bundles.** veraPDF 1.30.2
-bundles Adobe's character-collection CMaps (Adobe-Japan1-7, Adobe-KR-9 and the
-like, each an identity over the collection's CIDs) and UniAKR-UTF16-H, which
-litho does not. An embedded encoding CMap running `/Adobe-KR-9 usecmap` over a
-bfchar alone makes veraPDF report `6.2.11.4.1/2` and `6.2.11.8/1` for a code it
-maps past the program; litho leaves the code unknown and reports neither, a
-false negative. A base no reader bundles, such as `/No-Such-H`, names no base on
-both tools, and a `/UseCMap` chain that loops makes veraPDF raise "Loop inside
-CMap" and abandon the run, where litho leaves the codes unknown. Not planted in
-any fixture.
+**Counts on `cmapverabase_2b.pdf`.** The rule sets agree in all thirteen
+cells, and two counts do not. `6.2.11.3.3/3` (`6.2.10.3.3/3`, `7.21.3.3/3`,
+`8.4.5.4/3`) reads 4 on litho and 1 on veraPDF at the eleven levels past part
+1: veraPDF builds its `PDReferencedCMap` from the `/UseCMap` entry alone
+(`GFPDCmap.getUseCMap`), so `K4` counts and the usecmap operators of `K1`, `K2`
+and `K3` do not, where litho reads the clause's "a CMap shall not reference any
+other CMap" as covering the operator too (ISO 32000-1, 9.7.5.4). The Unicode
+rules, `6.2.11.7.2/1` at A-2a, A-2u, A-3a, A-3u, `7.21.7/1`, `8.4.5.8/1` and
+`6.3.8/1` at A-1a, count `K1` and `K2` on litho only: ISO 19005-2, 6.2.11.7.2
+and ISO 19005-1, 6.3.8 exempt the Adobe-GB1, Adobe-CNS1, Adobe-Japan1 and
+Adobe-Korea1 collections by name, and veraPDF also maps Adobe-KR through its
+Adobe-KR-UCS2. litho is right on the letter of both clauses, so no code
+changed. Remediation inlines the operators' bases, after which both tools agree
+on every output. A `/UseCMap` chain that loops still makes veraPDF raise "Loop
+inside CMap" and abandon the run, where litho leaves the codes unknown; that
+is not planted in any fixture.
 
 **`6.2.4.3/2` when an uncoloured pattern is painted.** litho reports DeviceRGB
 used inside a coloured (`/PaintType 1`) tiling pattern; veraPDF does not, but
@@ -5076,7 +5086,15 @@ counts in the eleven PDF/A ones: nothing at PDF/A-2b, and at the other levels
 the identification and tagging rules a part-2 claim draws. At PDF/UA-1 veraPDF
 counts `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, twice, once per
 untagged text of the four pages its `/Count` lets it read, and litho three
-times, once per untagged text of the five pages its walk reads.
+times, once per untagged text of the five pages its walk reads. veraPDF's
+`PDDocument.getPages` asks for as many pages as the root's `/Count` states and
+finds each by descending the `/Count` of every node (`PDPageTreeBranch`), so
+every page-scoped rule sees four pages, while its COS-level rules still reach
+the fifth page's objects through the document's indirect objects
+(`GFCosDocument.getIndirectObjects`). ISO 32000-1, 7.7.3.2 makes `/Count` the
+number of leaves, so the tree contradicts itself, and litho keeps reading the
+leaves, as its rewrites do: the reading veraPDF applies is not one every rule
+shares, and no corpus file but this one states a `/Count` short of its leaves.
 
 Measured on litho and veraPDF 1.30.2 before the fix, `mutate-pages` refused the
 file (`/Pages is not an indirect reference`), and the stamp, flattening,
@@ -6250,6 +6268,54 @@ and U+3042 through EUC-H, where litho read the codes as UTF-16 and returned
 two unrelated characters. Remediation of `cmapusevert_1b` at PDF/A-1b now
 embeds V flattened over H, with `/WMode 1` in its dictionary and program, and
 both tools find the output conforming; before, 6.3.3.3 stayed.
+
+### `cmapverabase_2b.pdf`
+
+veraPDF's `PDCMap` loads the CMap file it bundles under a name, whether a
+font's `/Encoding`, a usecmap operand or a `/UseCMap` entry names it, and
+decodes the font's codes through it (ISO 32000-1, 9.7.5.2 and 9.7.5.4). Its
+bundle (veraPDF-parser `font/cmap`) holds 118 CMaps. Fifteen are missing from
+the PDF.js copies litho reads for text: the character-collection CMaps of the
+newest supplements (Adobe-CNS1-7, Adobe-GB1-6, Adobe-Japan1-7, Adobe-Japan2-0,
+Adobe-KR-0 to Adobe-KR-9, each an identity over the collection's CIDs) and
+UniAKR-UTF16-H. Eight more map other codes than PDF.js's: GBK2K-H, the UniGB
+UTF-8, UTF-16 and UTF-32 CMaps, UniCNS-UTF16-H, UniJIS-UTF16-H and -V add
+mappings, and UniKS-UTF16-H holds three fewer. litho left a base it did not
+bundle unresolved and its codes unknown, did not decode an `/Encoding` naming
+such a CMap at all, and read the eight through PDF.js's mappings. No corpus
+file names a base only veraPDF bundles, and none shows a code where the copies
+differ.
+
+Every font is a CIDFontType2 over the three-glyph TrueType program, whose
+`/CIDToGIDMap` sends CIDs 1 to 6 to a glyph; `K6`'s also sends 7716 and `K7`'s 4419.
+
+| Font | Encoding                          | Shows     | CIDs              |
+| ---- | --------------------------------- | --------- | ----------------- |
+| `K1` | `/Adobe-KR-9 usecmap`, bfchar     | 0005 0009 | 5, 9 absent       |
+| `K2` | `/Adobe-KR-9 usecmap`, bfchar     | 0001 0006 | 1, 6              |
+| `K3` | `/Adobe-Japan1-7 usecmap`, bfchar | 5A20      | 0, past CIDCount  |
+| `K4` | `/UseCMap /Adobe-GB1-6`, bfchar   | 0007      | 7 absent          |
+| `K5` | `/UniAKR-UTF16-H`                 | 0041      | 34 absent         |
+| `K6` | `/UniGB-UTF16-H`                  | 2002      | 7716              |
+| `K7` | `/UniKS-UTF16-H`                  | FA2E      | 0, mapped nowhere |
+
+| Rule at PDF/A-2b            | litho before | litho now and veraPDF |
+| --------------------------- | ------------ | --------------------- |
+| `6.2.11.4.1/2` glyph absent | 1, on `K6`   | 5                     |
+| `6.2.11.8/1` `.notdef`      | 1, on `K6`   | 5                     |
+
+Before, litho read `K6`'s U+2002 as unmapped through PDF.js's UniGB-UTF16-H, a
+false positive, and missed the other five, so the rule sets agreed by chance.
+Now both tools report the same rule set in all thirteen cells; the two counts
+that differ are under [Known divergences](#known-divergences). `K4`'s and
+`K5`'s names are no CMap of Table 118, which `6.2.11.3.3/3` and `/1` report, and
+veraPDF knows no CIDSystemInfo for UniAKR-UTF16-H, which `6.2.11.3.1/1`
+reports. Remediation used to drop `K4`'s `/UseCMap` as naming nothing, which
+sent code 0007 to CID 0, and left the operators of `K1` to `K3` in place, so
+litho kept `6.2.11.3.3/3` after it at eleven levels where veraPDF did not. It
+now inlines every such base from veraPDF's copy, each code keeping its CID, and
+both tools report the same rules on every output, default and aggressive, at
+all thirteen levels.
 
 ### `cmapcidtext_2b.pdf`
 
