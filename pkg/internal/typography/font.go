@@ -71,6 +71,13 @@ type Font struct {
 	CIDIdentityFallback bool // True when CIDToGIDMap is /Identity and no ToUnicode/embedded font
 	CIDOffset           int  // Offset to add to CID values before treating as Unicode (detected from /W array)
 
+	// type3BBoxHeight is the height of a Type 3 font's bounding box in glyph
+	// space, and type3CharBBox reports that it was read off the glyphs
+	// because /FontBBox is empty ([resolveType3Font]). See
+	// [Font.type3HeightScale].
+	type3BBoxHeight float64
+	type3CharBBox   bool
+
 	// SuppressExtraction marks a reference-only Type0 font that ISO
 	// 32000-1, 9.10.2 gives no route to Unicode: a CMap name outside
 	// Table 118, or an Adobe CJK collection litho holds no UCS2 table for.
@@ -906,12 +913,50 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 	}
 }
 
+// defaultFontMatrix is the matrix of a font whose glyph space is 1000 units
+// to the text space unit (ISO 32000-1, 9.2.4), the /FontMatrix every font
+// type but Type 3 has.
+//
+//nolint:gochecknoglobals // constant matrix, arrays cannot be const
+var defaultFontMatrix = [6]float64{0.001, 0, 0, 0.001, 0, 0}
+
+// type3HeightScale returns the factor PDF.js scales the height of the text
+// of a Type 3 font by, set at size by Tf, and 1 for any other font. PDF.js
+// sizes a Type 3 glyph across its line by the height of the font's bounding
+// box, mapped to text space by /FontMatrix, when the size is at most 1 or
+// the box was read off the glyphs, and the matrix is not the default one
+// (src/core/evaluator.js, getTextContent, getCurrentTextTransform). A font
+// shown at size 1 and drawn in glyph space units through an identity
+// matrix otherwise reads as a fraction of a unit high. ISO 32000-1, 9.6.5
+// leaves the size across the line of a Type 3 glyph to its description, so
+// the factor is the reference's, not the specification's.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19624.pdf page 2: drawing labels in Type 3 fonts with an
+//     empty /FontBBox and an identity /FontMatrix, shown at 0.43 units on
+//     the page. Each label that jumps back to the left of the one before it
+//     on the same line, 0.36 units lower, broke the line at half that size
+//     ("AMINE SERVICE"), where PDF.js, which sizes the glyphs from the
+//     32-unit bounds of their paths, keeps the line ("AMINESERVICE").
+//   - All corpora: words match PDF.js on 1 more file (pdfjs issue19624.pdf)
+//     and on none fewer; facturx, pdf20 and pdfcpu do not move.
+func (f *Font) type3HeightScale(size float64) float64 {
+	if f == nil || f.Subtype != "Type3" || f.type3BBoxHeight <= 0 || f.FontMatrix == defaultFontMatrix {
+		return 1
+	}
+	if size > 1 && !f.type3CharBBox {
+		return 1
+	}
+	return math.Abs(f.type3BBoxHeight * f.FontMatrix[3])
+}
+
 // resolveType3Font extracts Type 3 font metrics: /FontMatrix, /CharProcs
 // glyph widths from d0/d1 operators, and /FirstChar, /LastChar, /Widths
 // as a fallback.
 func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
 	// /FontMatrix maps glyph space → text space. Default is [0.001 0 0 0.001 0 0].
-	font.FontMatrix = [6]float64{0.001, 0, 0, 0.001, 0, 0}
+	font.FontMatrix = defaultFontMatrix
 	if fmObj, ok := fontDict["FontMatrix"]; ok {
 		fmArr, err := document.ResolveArray(ctx, doc, fmObj)
 		if err != nil {
@@ -924,7 +969,21 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 		}
 	}
 
+	var bbox [4]float64
+	if bbObj, ok := fontDict["FontBBox"]; ok {
+		bbArr, err := document.ResolveArray(ctx, doc, bbObj)
+		if err != nil {
+			doc.Logger.Debug("resolving Type3 FontBBox", slog.Any("err", err))
+		}
+		if len(bbArr) == 4 {
+			for i := range 4 {
+				bbox[i] = document.Float(bbArr[i])
+			}
+		}
+	}
+
 	// /CharProcs maps glyph names → streams containing d0/d1 width operators.
+	var guessed *[4]float64
 	if cpObj, ok := fontDict["CharProcs"]; ok {
 		cpDict, err := document.ResolveDict(ctx, doc, cpObj)
 		if err != nil {
@@ -943,13 +1002,37 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 				if stream.Dict == nil {
 					continue
 				}
-				w, err := extractType3GlyphWidth(ctx, doc, stream)
+				w, glyphBox, err := extractType3Glyph(ctx, doc, stream)
 				if err != nil {
 					continue
 				}
 				font.Type3Widths[string(name)] = w
+				if glyphBox != nil {
+					if guessed == nil {
+						guessed = glyphBox
+					} else {
+						guessed[0] = min(guessed[0], glyphBox[0])
+						guessed[1] = min(guessed[1], glyphBox[1])
+						guessed[2] = max(guessed[2], glyphBox[2])
+						guessed[3] = max(guessed[3], glyphBox[3])
+					}
+				}
 			}
 		}
+	}
+
+	// The height of the font's bounding box comes from /FontBBox (ISO
+	// 32000-1, 9.6.5, Table 112), or, when the box it states is empty, from
+	// the paths of the glyphs that begin with d0, as PDF.js reads it
+	// (src/core/evaluator.js, TranslatedFont, loadType3Data and
+	// #guessType3FontBBox). See [Font.type3HeightScale].
+	if math.Hypot(bbox[2]-bbox[0], bbox[3]-bbox[1]) == 0 {
+		if guessed != nil {
+			font.type3BBoxHeight = guessed[3] - guessed[1]
+			font.type3CharBBox = true
+		}
+	} else {
+		font.type3BBoxHeight = bbox[3] - bbox[1]
 	}
 
 	// Also extract /FirstChar, /LastChar, /Widths as fallback.
@@ -3069,38 +3152,153 @@ func builtinGlyphNames(name string) (*[256]string, map[string]rune, map[rune]str
 	return nil, nil, nil
 }
 
-// extractType3GlyphWidth parses a Type 3 CharProc stream and returns the
-// glyph width from the d0 or d1 operator.
+// extractType3Glyph parses a Type 3 CharProc stream and returns the glyph
+// width from the d0 or d1 operator.
 //
 // d0 (setcharwidth): wx wy d0 sets the glyph width.
 // d1 (setcachedevice): wx wy llx lly urx ury d1 sets width and cache bbox.
 //
 // The first operand (wx) is the horizontal advance width in glyph space units.
-func extractType3GlyphWidth(ctx context.Context, doc *document.Document, stream ast.PdfStream) (float64, error) {
+//
+// It also returns the bounds of the paths a glyph description that begins
+// with d0 constructs, in glyph space, or nil for one that begins otherwise
+// or constructs none. PDF.js reads those bounds as the font's bounding box
+// when the font states an empty /FontBBox (src/core/evaluator.js,
+// TranslatedFont, #guessType3FontBBox): see [Font.type3HeightScale].
+func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.PdfStream) (float64, *[4]float64, error) {
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	ops, err := content.ParseStreamData(ctx, data, content.SplitGluedOperators())
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
-	for _, op := range ops {
+	for i, op := range ops {
 		switch op.Operator {
 		case "d0":
 			if len(op.Operands) >= 1 {
-				return document.Float(op.Operands[0]), nil
+				var bbox *[4]float64
+				if i == 0 {
+					bbox = type3PathBounds(ops[1:])
+				}
+				return document.Float(op.Operands[0]), bbox, nil
 			}
 		case "d1":
 			if len(op.Operands) >= 1 {
-				return document.Float(op.Operands[0]), nil
+				return document.Float(op.Operands[0]), nil, nil
 			}
 		}
 	}
 
-	return 0, fmt.Errorf("no d0/d1 operator found in CharProc stream")
+	return 0, nil, fmt.Errorf("no d0/d1 operator found in CharProc stream")
+}
+
+// type3PathBounds returns the bounds of the points the path construction
+// operators of ops pass through, in the coordinates they are given in, or
+// nil when ops construct no path. A Bezier segment counts by its own
+// extent, not by its control points, as PDF.js bounds it
+// (src/core/evaluator.js, buildPath, Util.bezierBoundingBox).
+func type3PathBounds(ops []content.Operation) *[4]float64 {
+	bounds := [4]float64{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
+	found := false
+	add := func(x, y float64) {
+		bounds[0] = min(bounds[0], x)
+		bounds[1] = min(bounds[1], y)
+		bounds[2] = max(bounds[2], x)
+		bounds[3] = max(bounds[3], y)
+		found = true
+	}
+	var cx, cy float64
+	for _, op := range ops {
+		v, ok := pathOperands(op)
+		if !ok {
+			continue
+		}
+		switch op.Operator {
+		case "m", "l":
+			cx, cy = v[0], v[1]
+			add(cx, cy)
+		case "re":
+			cx, cy = v[0], v[1]
+			add(v[0], v[1])
+			add(v[0]+v[2], v[1]+v[3])
+		case "c":
+			bezierBounds([4][2]float64{{cx, cy}, {v[0], v[1]}, {v[2], v[3]}, {v[4], v[5]}}, add)
+			cx, cy = v[4], v[5]
+		case "v":
+			bezierBounds([4][2]float64{{cx, cy}, {cx, cy}, {v[0], v[1]}, {v[2], v[3]}}, add)
+			cx, cy = v[2], v[3]
+		case "y":
+			bezierBounds([4][2]float64{{cx, cy}, {v[0], v[1]}, {v[2], v[3]}, {v[2], v[3]}}, add)
+			cx, cy = v[2], v[3]
+		}
+	}
+	if !found {
+		return nil
+	}
+	return &bounds
+}
+
+// pathOperandCounts is how many numbers each path construction operator
+// takes (ISO 32000-1, 8.5.2.1, Table 59).
+//
+//nolint:gochecknoglobals // static lookup table mirroring ISO 32000-1 Table 59
+var pathOperandCounts = map[string]int{"m": 2, "l": 2, "re": 4, "c": 6, "v": 4, "y": 4}
+
+// pathOperands returns the operands of op, a path construction operator,
+// as numbers, or false when op is not one or carries too few.
+func pathOperands(op content.Operation) ([]float64, bool) {
+	n, ok := pathOperandCounts[op.Operator]
+	if !ok || len(op.Operands) < n {
+		return nil, false
+	}
+	v := make([]float64, n)
+	for k := range n {
+		v[k] = document.Float(op.Operands[k])
+	}
+	return v, true
+}
+
+// bezierBounds passes add the end points of the cubic Bezier segment p,
+// from p[0] through the control points p[1] and p[2] to p[3], and every
+// point where it turns along either axis.
+func bezierBounds(p [4][2]float64, add func(x, y float64)) {
+	add(p[0][0], p[0][1])
+	add(p[3][0], p[3][1])
+	at := func(t float64) {
+		u := 1 - t
+		a, b, c, d := u*u*u, 3*u*u*t, 3*u*t*t, t*t*t
+		add(a*p[0][0]+b*p[1][0]+c*p[2][0]+d*p[3][0], a*p[0][1]+b*p[1][1]+c*p[2][1]+d*p[3][1])
+	}
+	for axis := range 2 {
+		p0, p1, p2, p3 := p[0][axis], p[1][axis], p[2][axis], p[3][axis]
+		// The derivative of the segment along one axis is the quadratic
+		// a t^2 + b t + c, whose roots in (0, 1) are where it turns.
+		a := 3 * (-p0 + 3*p1 - 3*p2 + p3)
+		b := 6 * (p0 - 2*p1 + p2)
+		c := 3 * (p1 - p0)
+		if a == 0 {
+			if b != 0 {
+				if t := -c / b; t > 0 && t < 1 {
+					at(t)
+				}
+			}
+			continue
+		}
+		disc := b*b - 4*a*c
+		if disc < 0 {
+			continue
+		}
+		sq := math.Sqrt(disc)
+		for _, t := range [2]float64{(-b + sq) / (2 * a), (-b - sq) / (2 * a)} {
+			if t > 0 && t < 1 {
+				at(t)
+			}
+		}
+	}
 }
 
 // resolveGlyphRune maps a glyph name to a Unicode rune. For Dingbats and

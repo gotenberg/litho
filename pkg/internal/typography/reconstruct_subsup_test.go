@@ -138,3 +138,71 @@ func TestReconstructText_RotatedLinePastSpaceGlyph(t *testing.T) {
 		t.Errorf("got %q, want %q", got, "(A)")
 	}
 }
+
+// type3PDF shows body on a page whose /T3 is a Type 3 font with an empty
+// /FontBBox and an identity /FontMatrix, as a drawing program writes one:
+// four glyphs 21 units wide whose paths run 32 units high.
+func type3PDF(body string) []byte {
+	proc := "21 0 d0 0 0 m 10 32 l S"
+	stream := "<< /Length " + strconv.Itoa(len(proc)) + " >>\nstream\n" + proc + "\nendstream"
+	font := "<< /Type /Font /Subtype /Type3 /FontBBox [0 0 0 0] /FontMatrix [1 0 0 1 0 0] " +
+		"/CharProcs << /A 11 0 R /B 11 0 R /C 11 0 R /D 11 0 R >> " +
+		"/Encoding << /Type /Encoding /Differences [65 /A /B /C /D] >> " +
+		"/FirstChar 65 /LastChar 68 /Widths [21 21 21 21] >>"
+	return subsupPDF(body, "/T3 10 0 R", font, stream)
+}
+
+// TestExtractText_Type3HeightFromGlyphBounds pins that a Type 3 font with
+// an empty /FontBBox is sized across its line by the bounds of its glyphs'
+// paths, mapped by its /FontMatrix, as PDF.js sizes it. Shown at 0.43 units
+// on the page, "CD" jumps back to the left of "AB" 0.36 units lower: more
+// than half of 0.43, which would end the line, but well within the 13.8
+// units the 32-unit glyphs stand on the page.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19624.pdf page 2: "AMINESERVICE" read "AMINE SERVICE".
+func TestExtractText_Type3HeightFromGlyphBounds(t *testing.T) {
+	t.Parallel()
+	body := "BT /T3 1.29 Tf 0.33 0 0 0.33 100 500 Tm (AB) Tj 0.33 0 0 0.33 50 500.36 Tm (CD) Tj ET"
+	if got := subsupExtract(t, type3PDF(body)); got != "ABCD" {
+		t.Errorf("got %q, want %q", got, "ABCD")
+	}
+}
+
+// TestType3PathBounds pins that the bounds of a glyph's paths take a Bezier
+// segment by its extent, not by its control points, and that a description
+// that constructs no path has none.
+func TestType3PathBounds(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name string
+		data string
+		want *[4]float64
+	}{
+		{"curve", "0 0 m 0 10 10 10 10 0 c f", &[4]float64{0, 0, 10, 7.5}},
+		{"lines and rectangle", "5 0 m 6 1 l S -1 -2 3 4 re f", &[4]float64{-1, -2, 6, 2}},
+		{"no path", "1 0 0 rg", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ops, err := content.ParseStreamData(ctx, []byte(tc.data), content.SplitGluedOperators())
+			if err != nil {
+				t.Fatalf("ParseStreamData: %v", err)
+			}
+			got := type3PathBounds(ops)
+			if (got == nil) != (tc.want == nil) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			if got == nil {
+				return
+			}
+			for i := range got {
+				if math.Abs(got[i]-tc.want[i]) > 1e-9 {
+					t.Fatalf("got %v, want %v", *got, *tc.want)
+				}
+			}
+		})
+	}
+}
