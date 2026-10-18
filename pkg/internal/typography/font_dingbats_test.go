@@ -69,9 +69,9 @@ func TestResolveFont_ZapfDingbatsBuiltinEncoding(t *testing.T) {
 // TestResolveFont_ZapfDingbatsSubsetPrefix pins that a subset-tagged BaseFont
 // still selects the built-in encoding.
 //
-// The detection lowercases the name and asks whether it CONTAINS "dingbat", so
-// the six-letter subset prefix a producer prepends does not have to be stripped
-// first. Real files carry this spelling: the compliance suite's fixtures use
+// The detection strips the six-letter subset prefix a producer prepends
+// (ISO 32000-1, 9.6.4) before it compares the name with "ZapfDingbats". Real
+// files carry this spelling: the compliance suite's fixtures use
 // MHHIBN+ZapfDingbats.
 func TestResolveFont_ZapfDingbatsSubsetPrefix(t *testing.T) {
 	font, err := ResolveFont(context.Background(),

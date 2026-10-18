@@ -404,7 +404,8 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// their own built-in encoding; the standard 14 base fonts already
 	// fall in the StandardEncoding bucket. Custom Type 1 fonts (e.g.
 	// /Melior, /Minion-Pro) hit the same StandardEncoding default.
-	// [readsAsStandardSymbol] says which fonts Symbol's encoding is.
+	// [readsAsStandardSymbol] and [readsAsStandardDingbats] say which fonts
+	// those two built-in encodings are.
 	isSymbolFont := false
 	isDingbatsFont := false
 	if bfObj, ok := fontDict["BaseFont"]; ok {
@@ -413,9 +414,9 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 			doc.Logger.Debug("resolving font BaseFont name", slog.Any("err", err))
 		}
 		if bfName != "" {
-			name := strings.ToLower(string(bfName))
-			isSymbolFont = readsAsStandardSymbol(string(bfName), symbolicByFlags, hasEmbeddedFontFile(ctx, doc, fontDict))
-			isDingbatsFont = strings.Contains(name, "dingbat") || strings.Contains(name, "zapfdingbats")
+			embedded := hasEmbeddedFontFile(ctx, doc, fontDict)
+			isSymbolFont = readsAsStandardSymbol(string(bfName), symbolicByFlags, embedded)
+			isDingbatsFont = readsAsStandardDingbats(string(bfName), symbolicByFlags, embedded)
 		}
 	}
 
@@ -2231,6 +2232,43 @@ func readsAsStandardSymbol(baseFont string, symbolic, embedded bool) bool {
 		return true
 	}
 	return !embedded && symbolic && strings.Contains(strings.ToLower(baseFont), "symbol")
+}
+
+// readsAsStandardDingbats reports whether a simple font reads its codes as the
+// standard ZapfDingbats font does: through its built-in encoding and the
+// ZapfDingbats glyph table.
+//
+// The reasoning of [readsAsStandardSymbol] holds unchanged. ISO 32000-1,
+// 9.6.2.2 names one ZapfDingbats among the standard 14, and its built-in
+// encoding (Annex D.6) is a fact about the font of that name once
+// [canonicalFontName] strips the subset tag (9.6.4) and a style suffix. An
+// embedded "ZapfDingbatsITC" or "Dingbats" program states its own encoding,
+// cmap and glyph names, which 9.6.6.1 and 9.6.6.4 read instead.
+//
+// An unembedded font keeps the reading PDF.js gives it (evaluator.js,
+// extractDataStructures, at the pinned revision): a symbolic font, or one
+// named in its symbol-font list, whose name holds "Dingbats" in any case takes
+// ZapfDingbatsEncoding. "Dingbats" is the one name of that list the standard
+// name does not already cover.
+//
+// # Corpus evidence
+//
+//   - All corpora: the fonts that no longer read as ZapfDingbats are embedded
+//     ZapfDingbatsITC, ZapfDingbatsStd and Dingbats programs in nine files,
+//     one govdocs and eight pdfjs. Text changes on one file alone, compliance
+//     verdicts and rule sets on none, and remediated output on none of the
+//     nine at PDF/A-2u and PDF/UA-1 in either mode.
+//   - govdocs thread_100_100852.pdf: an embedded AEJJAA+ZapfDingbatsITC Type 1
+//     subset read an end-of-article mark as "■" through the ZapfDingbats
+//     table. Its own /ToUnicode CMap answers instead, which reads no visible
+//     character there, as PDF.js does. The file now matches PDF.js on the
+//     character comparison; its words still differ elsewhere.
+func readsAsStandardDingbats(baseFont string, symbolic, embedded bool) bool {
+	name, _, _ := strings.Cut(canonicalFontName(baseFont), "-")
+	if name == "ZapfDingbats" {
+		return true
+	}
+	return !embedded && (symbolic || name == "Dingbats") && strings.Contains(strings.ToLower(baseFont), "dingbats")
 }
 
 // hasEmbeddedFontFile reports whether a font dict's FontDescriptor carries
