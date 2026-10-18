@@ -1236,13 +1236,6 @@ func encodingGlyphNames(name string, table map[byte]rune) map[byte]string {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100601.pdf: shows code 1 of an embedded
-//     MHHIBN+ZapfDingbats named /a73 with no /ToUnicode. veraPDF reports that
-//     glyph at PDF/A-1a and passes it at PDF/A-2u, where the rule runs and
-//     succeeds rather than going unapplied (142 passed rules against 121 at
-//     1a). It backs the Part 1 only ZapfDingbats carve-out.
-//   - All corpora: extending the ZapfDingbats carve-out to Parts 2 and later
-//     reported four files veraPDF passes.
 //   - pdfjs bug1727053.pdf: shows an unembedded Arial,Bold with no /ToUnicode,
 //     and veraPDF reports neither 7.21.7 nor 8.4.5.8. It backs extending the
 //     glyph-name exemption to TrueType.
@@ -1294,6 +1287,18 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		return unembeddedUnicodeFaults(ctx, doc, fontDict, subtype, fontName, pageNum, profile, rule, Rule{}, usage, toUnicodeMappedCodes(ctx, doc, fontDict))
 	}
 
+	// A PDF/A-1 Type 1 glyph named only by the ZapfDingbats glyph list has no
+	// Unicode value, whatever the font is called and whichever exemption below
+	// it would otherwise earn; see [pdfa1DingbatsNamedCodes].
+	if codes := pdfa1DingbatsNamedCodes(ctx, doc, fontDict, profile, usage); len(codes) > 0 {
+		faults := newGlyphFaults(rule)
+		for _, out := range codes {
+			faults.add(uint32(out.code), "font %s on page %d: code %d is named %s, which carries no Unicode value at PDF/A-1",
+				fontName, pageNum, out.code, out.name)
+		}
+		return faults.violations()
+	}
+
 	// Exemption (a): standard encoding with Adobe Glyph List coverage.
 	// This covers MacRomanEncoding, WinAnsiEncoding, and MacExpertEncoding.
 	if hasStandardEncoding(ctx, doc, fontDict) {
@@ -1316,27 +1321,13 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// parse them), so this stays free of false positives; usage-less checks stay
 	// exempt for the same reason. A /ToUnicode CMap vouches only for the codes it
 	// maps, see [shownCodeOutsideToUnicode].
-	// ZapfDingbats earns no name-based exemption, for the reason
-	// [allGlyphNamesAGLResolvable] states: its glyphs are named a1 to a191, and
-	// ISO 32000-1, 9.10.2 admits "the Adobe standard Latin character set or the
-	// set of named characters in the Symbol font" and no third set, so those
-	// names carry no Unicode value here. The ZapfDingbats glyph list published
-	// beside the AGL does map them, which is why [glyphNameHasUnicode] answers
-	// true and every name survey below would pass the font.
-	// [allGlyphNamesAGLResolvable] already excluded the standard 14 spelling;
-	// an embedded subset reaches the surveys below instead.
-	//
-	// Part 1 only, and measured rather than assumed: veraPDF answers the very
-	// same test (`toUnicode != null` on a Glyph) differently by flavour,
-	// reporting such a glyph at PDF/A-1a and passing it at PDF/A-2u, where the
-	// rule runs and succeeds rather than going unapplied. Parts 2 and later
-	// admit the ZapfDingbats glyph list entry that 9.10.2 does not (veraPDF's
-	// PDSimpleFont.toUnicode consults ZapfDingbats.hasGlyphName, and the part 1
-	// PDType1Font.toUnicodePDFA1 does not), so the exemption stands there.
-	dingbats := PDFAPart(profile) == 1 && isZapfDingbatsByName(ctx, doc, fontDict)
-
+	// The ZapfDingbats glyph names a1 to a191 pass the name surveys below:
+	// [glyphNameHasUnicode] admits the ZapfDingbats glyph list published beside
+	// the AGL, as veraPDF's PDSimpleFont.toUnicode does at every part but the
+	// first. At PDF/A-1 a Type 1 glyph so named never reaches them, since
+	// [pdfa1DingbatsNamedCodes] states it first, whatever the font is called.
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
-	if isSymbolicFont(ctx, doc, fd) && !dingbats {
+	if isSymbolicFont(ctx, doc, fd) {
 		if _, hasEncoding := fontDict["Encoding"]; hasEncoding {
 			if usage == nil || usedGlyphNamesResolvable(ctx, doc, fontDict, usage) {
 				return nil
@@ -1406,7 +1397,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	trueTypeWithUsage := subtype == "TrueType" && usage != nil && len(usage.charCodes) > 0 &&
 		fontEncodingIsDict(ctx, doc, fontDict)
 
-	if !dingbats && (subtype == "Type1" || subtype == "MMType1" || trueTypeWithUsage) {
+	if subtype == "Type1" || subtype == "MMType1" || trueTypeWithUsage {
 		// No exemption follows from the font's name or its /CharSet. ISO
 		// 19005-2, 6.2.11.7.2 (with ISO 19005-1, 6.3.8 and ISO 14289-1,
 		// 7.21.7) judges the glyph each shown code selects, whose Unicode
@@ -1451,6 +1442,84 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 			fontName, pageNum, out.code, out.name)
 	}
 	return faults.violations()
+}
+
+// pdfa1DingbatsNamedCodes returns, sorted, the codes a Type 1 font shows at
+// PDF/A-1 that its /ToUnicode CMap leaves out and whose glyph name has no
+// Unicode value there, provided one of them is named only by the ZapfDingbats
+// glyph list; otherwise it returns nil and the font is judged as at any part.
+//
+// ISO 19005-1, 6.3.8 asks that every character a level A font shows map to
+// Unicode, and admits a glyph name only where ISO 32000-1, 9.10.2 derives a
+// value from it: "the Adobe standard Latin character set or the set of named
+// characters in the Symbol font". The a1 to a191 names of ZapfDingbats are in
+// neither. veraPDF draws the line on the glyph, not the font: at PDF/A-1 its
+// Glyph of a Type1 or MMType1 font takes PDType1Font.toUnicodePDFA1, which
+// reads the /ToUnicode CMap, then the name the encoding or the program gives
+// the code, and accepts the name only from its Adobe Glyph List or Symbol
+// set. Its later parts, and every TrueType at part 1, take
+// PDSimpleFont.toUnicode, which also accepts a ZapfDingbats name; so does
+// [glyphNameHasUnicode], which the exemptions of [checkToUnicode] consult.
+// Measured with veraPDF 1.30.2 at PDF/A-1a on one-glyph fixtures with an
+// embedded Type 1 program: a73 fails under a font named XYZABC+Dingbats as
+// under MHHIBN+ZapfDingbats, symbolic or not, through /Differences or the
+// program's own encoding alone; A and alpha pass under MHHIBN+ZapfDingbats; a73
+// mapped by /ToUnicode, and a73 through an embedded TrueType, pass.
+//
+// Once a dingbats-only name fires, every shown code whose name carries no
+// value at part 1 is listed with it, as veraPDF reports each such glyph. A
+// code the encoding leaves unnamed, or names .notdef, is the business of the
+// other checks, which read what this one does not.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100601.pdf: shows code 1 of an embedded
+//     MHHIBN+ZapfDingbats named /a73 with no /ToUnicode, on pages 49 and 50.
+//     veraPDF reports that glyph once at PDF/A-1a and passes it at PDF/A-2u,
+//     where the rule runs and succeeds rather than going unapplied (142
+//     passed rules against 121 at 1a). The check keyed on the font's name
+//     reported the font once per page.
+//   - govdocs thread_100_100852.pdf: shows a73 and a35 through an embedded
+//     AEJJAA+ZapfDingbatsITC, and veraPDF reports both glyphs at PDF/A-1a. A
+//     check keyed on the name ZapfDingbats reported neither.
+//   - govdocs thread_400_400578.pdf: shows code 2 of an embedded
+//     KLAIOM+ZapfDingbats named a73 by /Differences, beside a /ToUnicode
+//     CMap, and veraPDF reports it at PDF/A-1a. The survey of the codes
+//     outside that CMap admitted the name.
+//   - All corpora: at PDF/A-1a and 1b those three are the only files whose
+//     counts moved, each onto veraPDF's. Admitting no ZapfDingbats name past
+//     part 1 reported four files veraPDF passes.
+func pdfa1DingbatsNamedCodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, profile string, usage *fontUsageInfo) []outsideCode {
+	if PDFAPart(profile) != 1 || usage == nil || len(usage.charCodes) == 0 {
+		return nil
+	}
+	if st := fontSubtype(ctx, doc, fontDict); st != "Type1" && st != "MMType1" {
+		return nil
+	}
+	enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	if len(enc) == 0 {
+		return nil
+	}
+	mapped := toUnicodeMappedCodes(ctx, doc, fontDict)
+	var out []outsideCode
+	dingbatsOnly := false
+	for _, c := range sortedByteKeys(usage.charCodes) {
+		if mapped[int(c)] {
+			continue
+		}
+		name := enc[c]
+		if name == "" || name == ".notdef" || unembeddedNameHasUnicode(name, true) || symbolEncodingNames[name] {
+			continue
+		}
+		if glyphNameHasUnicode(name) {
+			dingbatsOnly = true
+		}
+		out = append(out, outsideCode{code: c, name: name})
+	}
+	if !dingbatsOnly {
+		return nil
+	}
+	return out
 }
 
 // missingUnicodeFaults states the ToUnicode presence rule for a font that gives
