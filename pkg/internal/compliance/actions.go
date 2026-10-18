@@ -909,6 +909,21 @@ func FieldAAForbidden(profile string) bool {
 	return fieldAARule(PDFAPart(profile)) != (Rule{})
 }
 
+// WidgetAAForbidden reports whether profile forbids the /AA key on a widget
+// annotation whatever actions it holds, the verdict [checkWidgetActions]
+// reaches: ISO 19005-1 §6.6.2 t1 and ISO 19005-2/3 §6.4.1 t1 forbid it. ISO
+// 19005-4 §6.4.1 t1 forbids only /A, and §6.6.3 exempts a widget's /AA from
+// its key restriction, so part 4 permits it at every conformance level.
+// Remediation asks it so its removal follows the validator.
+func WidgetAAForbidden(profile string) bool {
+	switch PDFAPart(profile) {
+	case 1, 2, 3:
+		return true
+	default:
+		return false
+	}
+}
+
 // actionKeysPresent returns a human-readable string listing which of /A and
 // /AA keys are present.
 func actionKeysPresent(hasA, hasAA bool) string {

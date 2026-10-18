@@ -480,14 +480,16 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 		isWidget := subtype == "Widget"
 
-		// Remove /A and /AA from widget annotations (sections 6.4.1, 6.6.1, 6.6.2).
+		// Remove /A and /AA from widget annotations (sections 6.4.1, 6.6.1,
+		// 6.6.2). Every part forbids /A, but part 4 permits /AA (ISO 19005-4
+		// §6.4.1 t1 and §6.6.3), so it stays wherever the validator keeps it.
 		if isWidget {
 			if _, hasA := newAnnot["A"]; hasA {
 				delete(newAnnot, "A")
 				changed = true
 				fixes = append(fixes, fmt.Sprintf("removed /A from widget annotation on page %d", pageNum))
 			}
-			if _, hasAA := newAnnot["AA"]; hasAA {
+			if _, hasAA := newAnnot["AA"]; hasAA && compliance.WidgetAAForbidden(profile) {
 				delete(newAnnot, "AA")
 				changed = true
 				fixes = append(fixes, fmt.Sprintf("removed /AA from widget annotation on page %d", pageNum))
