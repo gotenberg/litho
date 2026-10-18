@@ -217,6 +217,7 @@ one deliberately rather than diffing it against a fresh build.
 | `fontnohead_2b.pdf`    | PDF/A-2b     | TrueType programs with no `head` table, weighed at 2048 units    |
 | `fontemptycs_2b.pdf`   | PDF/A-2b     | CFF programs whose CharStrings INDEX holds no glyph              |
 | `fontcff2_2b.pdf`      | PDF/A-2b     | OpenType programs, `CFF2` among them, read by the embedding font |
+| `aakeys_4.pdf`         | PDF/A-4      | Catalog and page `/AA` holding a permitted and a forbidden key   |
 
 ### Must-not-fire controls
 
@@ -331,6 +332,8 @@ violation but is exempt, so a firing is a false positive.
 | `a4syntax_4`                              | An inline image declaring `/AHx`, one of the permitted filters         | ISO 19005-4, 6.1.9 t1        |
 | `a4syntax_4`                              | A third optional content configuration whose `/Name` is distinct       | ISO 19005-4, 6.10 t2         |
 | `a4syntax_4`                              | A Separation whose colorant name is plain ASCII                        | ISO 19005-4, 6.1.7 t1        |
+| `aakeys_4`                                | `/E` and `/X`, permitted keys beside a forbidden one in the same `/AA` | ISO 19005-4, 6.6.3 t1        |
+| `aakeys_4`                                | A page `/AA` holding `/D` alone                                        | ISO 19005-4, 6.6.3 t1        |
 | `a4syntax_4`                              | A `/NextPage` named action, one of the four permitted                  | ISO 19005-4, 6.6.1 t2        |
 | `a4syntax_4`                              | A widget with no `/A`, beside one that carries an action               | ISO 19005-4, 6.4.1 t1        |
 | `glyphs_2b`                               | A composite font painting a present, named glyph                       | ISO 19005-2, 6.2.11.4.1 t2   |
@@ -486,6 +489,7 @@ which are covered under [Known divergences](#known-divergences).
 | Fixture                | A-1a | A-1b | A-2a | A-2b | A-2u | A-3a | A-3b | A-3u | A-4 | A-4e | A-4f | UA-1 | UA-2 |
 | ---------------------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- | ---- | ---- |
 | `a4syntax_4.pdf`       | 17   | 15   | 21   | 19   | 19   | 21   | 19   | 19   | 16  | 17   | 18   | 13   | 8    |
+| `aakeys_4.pdf`         | 4    | 2    | 6    | 4    | 4    | 6    | 4    | 4    | 2   | 2    | 3    | 5    | 6    |
 | `afref_3b.pdf`         | 5    | 2    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 10   | 7    |
 | `annothidden_2b.pdf`   | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 11   | 6    |
 | `annotkinds_ua2.pdf`   | 7    | 7    | 8    | 8    | 8    | 8    | 8    | 8    | 5   | 5    | 6    | 8    | 10   |
@@ -6836,6 +6840,47 @@ carries, which no font here makes visible. Remediation cannot embed a program
 the fixture does not supply, so the embedding rule stays on the output at
 every manifest profile in both modes, on both tools, and no rule appears that
 the input did not fail.
+
+### `aakeys_4.pdf`
+
+ISO 19005-4, 6.6.3 does not forbid the `/AA` entry of a document catalog or a
+page, as ISO 19005-1, 6.6.2 t3 and ISO 19005-2/3, 6.5.2 t1 and t2 do. It
+restricts the keys of the additional-actions dictionary to `E`, `X`, `D`, `U`,
+`Fo` and `Bl`, and veraPDF judges each such dictionary by the keys it holds.
+litho's remediation dropped the catalog and page `/AA` whole at every part, so
+at part 4 it lost the permitted entries with the forbidden ones. No corpus file
+holds a permitted key beside a forbidden one in a catalog or page `/AA`, so
+this fixture plants it. Every action is a GoTo to page 1, which no PDF/A part
+forbids:
+
+| Owner   | `/AA` keys                           | Answers at PDF/A-4 |
+| ------- | ------------------------------------ | ------------------ |
+| catalog | `/WC`, `/E`, in an object of its own | `6.6.3/1`          |
+| page 1  | `/O`, `/X`                           | `6.6.3/1`          |
+| page 2  | `/D` alone, the control              | nothing            |
+
+| Rule                                    | veraPDF | litho | litho before |
+| --------------------------------------- | ------- | ----- | ------------ |
+| `6.6.3/1` at PDF/A-4, 4e, 4f            | 2       | 2     | 2            |
+| `6.6.2/3` catalog `/AA` at PDF/A-1a, 1b | 1       | 1     | 1            |
+| `6.5.2/1` catalog `/AA` at parts 2, 3   | 1       | 1     | 1            |
+| `6.5.2/2` page `/AA` at parts 2, 3      | 2       | 2     | 2            |
+| `8.8/2` GoTo at PDF/UA-2                | 2       | 2     | 1            |
+
+The UA-2 row is a second finding: litho judged the GoTo actions of a page's
+`/O` and `/C` under ISO 14289-2, 8.8 t2 and never those of the catalog's
+document-level triggers (ISO 32000-1, Table 197), which veraPDF builds and
+judges. Neither tool counts the GoTo under the catalog's `/E`, which names no
+catalog action. veraPDF 1.30.2 and litho report the same rule set and the
+same counts in all thirteen cells.
+
+Remediated at PDF/A-4, 4e and 4f, in both modes, the output keeps the catalog
+`/AA` holding `/E` alone, page 1's holding `/X` alone and page 2's untouched,
+and both tools find it conforming (PDF/A-4f keeps `6.9/5`, the embedded file
+it requires). At parts 1 to 3 every `/AA` goes, as before. At PDF/UA-2 the
+output keeps both GoTo actions, which point at a page with no structure
+element to name, and both tools report `8.8/2` twice. Every other output is
+conforming on both tools.
 
 ## Scope
 
