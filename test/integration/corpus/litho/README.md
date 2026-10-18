@@ -6703,12 +6703,12 @@ both tools: no `/ToUnicode` entry gives `.notdef` a value other than its own.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-160 x 13 = 2080 cells, the whole hand-measured matrix. litho and veraPDF return
+162 x 13 = 2106 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2078 of the 2080 cells. The two
+fixtures exist to protect, and it holds in 2104 of the 2106 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -6720,7 +6720,7 @@ ten is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2080 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 2106 and moves only `ruleset_mismatch`, and on
 those ten cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
@@ -6759,12 +6759,13 @@ profile as it removes every annotation no viewer shows, and in aggressive mode
 it keeps the embedded files of other formats that it strips at PDF/A-4.
 
 PDF/A-1a, 3a and 3u follow them, appended for the same reason. At the three,
-live veraPDF 1.30.2 reports the rule set the counts table gives in all 480
+live veraPDF 1.30.2 reports the rule set the counts table gives in all 486
 cells, and litho the same set in each. The instance counts differ only in the
 families described under
 [Instance counts](#instance-counts-which-the-corpus-does-not-pin). Remediated
 at the three, every output carries the same rule set on both tools, no rule
-appears that the input did not fail, and the fully fixed cells are:
+appears that the input did not fail, and the fully fixed cells, measured
+before `fontunread_2b` and `type1notdef_2u` joined, are:
 
 | Profile  | Default | Aggressive | Rules left most often                     |
 | -------- | ------- | ---------- | ----------------------------------------- |
