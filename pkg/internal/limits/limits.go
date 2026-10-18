@@ -241,7 +241,7 @@ func (l Limits) Validate() error {
 // configuration returns base exactly and every codec admits the images it
 // always admitted, while a raised or lowered budget moves each codec cap with
 // it. The product stays within int64 for any base up to 2^32, the codec caps
-// being 2^27 at most, under [MaxImagePixelsCeiling].
+// being 4 x 10^8 samples at most, under [MaxImagePixelsCeiling].
 func (l Limits) ScaleImageCap(base int64) int64 {
 	pixels := l.WithDefaults().MaxImagePixels
 	return max(base*pixels/DefaultMaxImagePixels, 1)

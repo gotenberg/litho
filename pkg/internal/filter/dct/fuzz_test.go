@@ -11,6 +11,12 @@ import (
 // fuzzSmallSamples is the lowered sample cap [FuzzDecode] also decodes under.
 const fuzzSmallSamples = 1 << 12
 
+// fuzzMaxSamples is the cap [FuzzDecode] checks and decodes under, a third
+// of [DefaultMaxSamples], so that a fuzzed header near the default cap costs a
+// worker some 540 MB rather than 1.6 GB on every run. The agreement between
+// Check and Decode it pins holds under any cap they share.
+const fuzzMaxSamples = 1 << 27
+
 // FuzzDecode feeds arbitrary data to the decoder. The contract is
 // crash-freedom: every input either decodes to one sample per component per
 // pixel or returns an error carrying a sentinel. [Check] agrees with it: it
@@ -35,13 +41,13 @@ func FuzzDecode(f *testing.F) {
 		}
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
-		settled, checkErr := Check(context.Background(), data, 0, DefaultMaxSamples)
+		settled, checkErr := Check(context.Background(), data, 0, fuzzMaxSamples)
 		// A small cap takes the refusals a lowered image budget moves: what
 		// decodes under it holds no more samples than it allows.
 		if small, _, _, _, err := Decode(context.Background(), data, -1, 0, fuzzSmallSamples); err == nil && int64(len(small)) > fuzzSmallSamples {
 			t.Fatalf("%d samples decoded under a %d-sample cap", len(small), int64(fuzzSmallSamples))
 		}
-		out, n, w, h, err := Decode(context.Background(), data, -1, 0, DefaultMaxSamples)
+		out, n, w, h, err := Decode(context.Background(), data, -1, 0, fuzzMaxSamples)
 		switch {
 		case checkErr != nil && (err == nil || errors.Is(err, ErrUnsupported) != errors.Is(checkErr, ErrUnsupported)):
 			t.Fatalf("Check = %v, Decode = %v", checkErr, err)

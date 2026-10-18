@@ -6,20 +6,33 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // DefaultMaxSamples bounds the samples of one image, over all components,
 // under the default image budget. It is an anti-DoS guard, not spec-mandated:
 // a JPEG header of a few bytes can declare 65535 x 65535 pixels, and every
 // sample costs two bytes of coefficients, a byte of reconstructed plane and a
-// byte of output. 2^27 is the bound package jpx sets for the same reason, and
-// admits the largest JPEG real documents carry. [Decode] takes the cap scaled
-// with the document's image budget (limits.Limits.ScaleImageCap).
+// byte of output, so the cap bounds the lenient decoder near 1.6 GB.
+//
+// The cap is four samples a pixel of [limits.DefaultMaxImagePixels], the
+// most components a frame Decode reads holds (T.81, B.2.2; ISO 32000-1,
+// 7.4.8). The image budget is the bound pdf.Limits documents for a
+// codestream whatever its dictionary declares, and the image decoder reads
+// up to four bytes a pixel of it, so the codec refuses no frame the budget
+// admits. [Decode] takes the cap scaled with the document's image budget
+// (limits.Limits.ScaleImageCap).
 //
 // # Corpus evidence
 //
-//   - All corpora: the largest JPEG is 10248 x 3712 in three components.
-const DefaultMaxSamples = 1 << 27
+//   - pdfjs issue10989.pdf: the largest JPEG, 10308 x 6304 in three
+//     components, 195M samples. Under a cap of 2^27 the lenient decoder,
+//     the only one that reads it, refused it, and PDF.js renders it.
+const DefaultMaxSamples = maxComponents * limits.DefaultMaxImagePixels
+
+// maxComponents is the most components of a frame [Decode] reads: CMYK.
+const maxComponents = 4
 
 // maxCategory is the largest DC difference category a Huffman value may
 // name. T.81, Table F.1 goes to 11 for 8-bit samples; the value is a byte of
