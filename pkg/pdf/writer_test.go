@@ -11,8 +11,7 @@ import (
 	"image/color"
 	"image/png"
 	"io"
-	"os"
-	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -3347,21 +3346,6 @@ func buildCmapTestOnly(platformID, encodingID uint16, subtable []byte) []byte {
 	return append(header, subtable...)
 }
 
-// pages12Fixture loads the 12-page corpus fixture. Skips the test when
-// the file is not present (e.g. sparse checkout without test corpora).
-func pages12Fixture(t *testing.T) []byte {
-	t.Helper()
-	abs, err := filepath.Abs("../../test/integration/testdata/litho/pages_12.pdf")
-	if err != nil {
-		t.Skipf("resolve fixture path: %v", err)
-	}
-	data, err := os.ReadFile(abs) //nolint:gosec // fixed test corpus path.
-	if err != nil {
-		t.Skipf("read fixture %s: %v", abs, err)
-	}
-	return data
-}
-
 // stripRandomID redacts the hex /ID arrays emitted by the trailer-id
 // fixer. Every successful remediation rolls two fresh 16-byte random
 // values; byte-level comparisons must excise them to test everything
@@ -3600,13 +3584,14 @@ func TestWriter_RemediatePDFA_IntegrityProbe_HappyPath(t *testing.T) {
 }
 
 // TestRemediate_Pages12_PDFA4_then_PDFUA2 pipelines two profiles on the
-// same source and asserts the second pass leaves no residual. Before
-// the validator fix, PDF/A-4's required pdfaid:rev=2020 tripped the
-// PDF/UA-2 rev-prefix check because the check matched any ":rev" local
-// name regardless of namespace URI.
+// same source and asserts the second pass leaves no residual in the PDF/UA-2
+// identification clause (ISO 14289-2, clause 5). Before the validator fix,
+// PDF/A-4's required pdfaid:rev=2020 tripped the PDF/UA-2 rev-prefix check
+// because the check matched any ":rev" local name regardless of namespace URI.
+// The fixture shows an unembedded font, so other residuals remain.
 func TestRemediate_Pages12_PDFA4_then_PDFUA2(t *testing.T) {
 	ctx := context.Background()
-	data := pages12Fixture(t)
+	data := pages12PDF()
 
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -3623,6 +3608,9 @@ func TestRemediate_Pages12_PDFA4_then_PDFUA2(t *testing.T) {
 		t.Fatalf("WriteTo: %v", err)
 	}
 	r.Close()
+	if !bytes.Contains(a4.Bytes(), []byte("pdfaid:rev")) {
+		t.Fatal("the PDF/A-4 output carries no pdfaid:rev, so the second pass cannot trip on it")
+	}
 
 	r2, err := Open(ctx, bytes.NewReader(a4.Bytes()), int64(a4.Len()))
 	if err != nil {
@@ -3630,47 +3618,47 @@ func TestRemediate_Pages12_PDFA4_then_PDFUA2(t *testing.T) {
 	}
 	defer r2.Close()
 
+	// The second pass writes nothing, so Close removes the temp file its
+	// remediation serialized.
 	w2 := NewWriter(r2)
+	defer func() {
+		if err := w2.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	}()
 	report, err := w2.RemediatePDFUA(ctx, models.PDFUA2)
 	if err != nil {
 		t.Fatalf("RemediatePDFUA: %v", err)
 	}
-	if len(report.Residual) != 0 {
-		for _, v := range report.Residual {
-			t.Errorf("unexpected residual: %v", v)
+	for _, v := range report.ResidualViolations() {
+		if v.Specification == "ISO_14289_2" && v.Clause == "5" {
+			t.Errorf("unexpected identification residual: %v", v)
 		}
 	}
 }
 
-// TestWriter_RemediatePDFA_Pages12_NoSilentBreakage is the motivating
-// regression test: applying PDF/A-4 with aggressive fixes to the 12-page
-// fixture must not silently leave an output that yields no extractable text.
-// The safety net must surface such a loss either as a successful remediation
-// with text preserved (rollback may have kicked in) or as
-// ErrRemediationBrokePDF. A successful call that returned no text is not
-// acceptable.
-//
-// # Corpus evidence
-//
-//   - litho pages_12.pdf: applying PDF/A-4 with aggressive fixes historically
-//     left the output unable to yield any extractable text.
+// TestWriter_RemediatePDFA_Pages12_NoSilentBreakage pins that the default
+// regression tolerance keeps a content-tier repair whose text loss stays
+// within it. Applying PDF/A-4 with aggressive fixes to [pages12PDF] strips
+// the control byte on page 12, a character out of some 400: the remediation
+// succeeds, rolls nothing back, keeps the strip in Fixed, and the output keeps
+// every page and all but that character of the text.
 func TestWriter_RemediatePDFA_Pages12_NoSilentBreakage(t *testing.T) {
 	ctx := context.Background()
-	data := pages12Fixture(t)
+	data := pages12PDF()
 
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	// Extraction errors (missing fonts, OCR-only pages) are acceptable
-	// here; the test only needs whatever text the fixture actually
-	// yields. An empty string is a valid baseline.
-	baselineText, _ := r.ExtractAllText(ctx) //nolint:errcheck // baseline-only.
+	baselineText, err := r.ExtractAllText(ctx)
+	if err != nil {
+		t.Fatalf("ExtractAllText: %v", err)
+	}
 	baselinePages, err := r.PageCount(ctx)
 	if err != nil {
 		t.Fatalf("PageCount: %v", err)
 	}
-	t.Logf("baseline: %d pages, %d text bytes", baselinePages, len(baselineText))
 	r.Close()
 
 	r2, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -3680,22 +3668,21 @@ func TestWriter_RemediatePDFA_Pages12_NoSilentBreakage(t *testing.T) {
 	defer r2.Close()
 
 	w := NewWriter(r2)
-	report, remErr := w.RemediatePDFA(ctx, models.PDFA4, WithAggressiveFixes())
-	if remErr != nil {
-		if !errors.Is(remErr, ErrRemediationBrokePDF) {
-			t.Fatalf("RemediatePDFA returned unexpected error: %v", remErr)
-		}
-		t.Logf("hard-failed as expected: %v", remErr)
-		return
+	report, err := w.RemediatePDFA(ctx, models.PDFA4, WithAggressiveFixes())
+	if err != nil {
+		t.Fatalf("RemediatePDFA: %v", err)
 	}
-	t.Logf("fixed: %d, rolled back: %d, residual: %d",
-		len(report.Fixed), len(report.RolledBack), len(report.Residual))
+	if len(report.RolledBack) != 0 {
+		t.Errorf("RolledBack = %q, want nothing under the default tolerance", report.RolledBack)
+	}
+	if !slices.ContainsFunc(report.Fixed, func(d string) bool { return strings.Contains(d, "control-byte") }) {
+		t.Errorf("Fixed = %q, want the control-byte strip kept", report.Fixed)
+	}
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
-
 	r3, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
 	if err != nil {
 		t.Fatalf("reopen remediated: %v", err)
@@ -3709,37 +3696,36 @@ func TestWriter_RemediatePDFA_Pages12_NoSilentBreakage(t *testing.T) {
 	if postPages != baselinePages {
 		t.Errorf("page count regressed: before=%d after=%d", baselinePages, postPages)
 	}
-	// Tolerate extraction errors on the post side: the test asserts
-	// text is not silently wiped, an empty post string is a valid
-	// comparison input.
-	postText, _ := r3.ExtractAllText(ctx) //nolint:errcheck // post-check only.
-	t.Logf("post: %d pages, %d text bytes", postPages, len(postText))
-
-	if len(baselineText) > 0 && strings.TrimSpace(postText) == "" {
-		t.Fatalf("silent text loss: baseline had %d bytes, post has none; rollback field=%v",
-			len(baselineText), report.RolledBack)
+	postText, err := r3.ExtractAllText(ctx)
+	if err != nil {
+		t.Fatalf("post ExtractAllText: %v", err)
+	}
+	if len(postText) >= len(baselineText) {
+		t.Errorf("post text is %d bytes, want fewer than the %d before: the strip did not reach the output", len(postText), len(baselineText))
+	}
+	if minText := int(float64(len(baselineText)) * (1 - DefaultRegressionTolerance.MaxTextDropRatio)); len(postText) < minText {
+		t.Errorf("post text is %d bytes, below the %d the default tolerance allows", len(postText), minText)
 	}
 }
 
-// TestWriter_RemediatePDFA_Pages12_StrictTolerance exercises the
-// rollback branch: any text drop is treated as regression. The call
-// must either return ErrRemediationBrokePDF or produce an output whose
-// text length is within the strict bound after rolling back
-// content-tier fixes.
+// TestWriter_RemediatePDFA_Pages12_StrictTolerance exercises the rollback
+// branch: with any text drop treated as a regression, the PDF/A-4 aggressive
+// remediation of [pages12PDF] rolls the control-byte strip back and still
+// succeeds, and its output keeps every byte of the text.
+// [TestWriterRemediateRollbackReportsTheOutput] pins the report against the
+// output.
 func TestWriter_RemediatePDFA_Pages12_StrictTolerance(t *testing.T) {
 	ctx := context.Background()
-	data := pages12Fixture(t)
+	data := pages12PDF()
 
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	// The test skips on empty baseline, so extraction failure is
-	// treated the same as no text. The err is intentionally ignored.
-	baselineText, _ := r.ExtractAllText(ctx) //nolint:errcheck // baseline-only.
+	baselineText, err := r.ExtractAllText(ctx)
 	r.Close()
-	if len(baselineText) == 0 {
-		t.Skip("fixture has no extractable text; cannot exercise text-drop path")
+	if err != nil {
+		t.Fatalf("ExtractAllText: %v", err)
 	}
 
 	r2, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -3749,19 +3735,15 @@ func TestWriter_RemediatePDFA_Pages12_StrictTolerance(t *testing.T) {
 	defer r2.Close()
 
 	w := NewWriter(r2)
-	report, remErr := w.RemediatePDFA(ctx, models.PDFA4,
+	report, err := w.RemediatePDFA(ctx, models.PDFA4,
 		WithAggressiveFixes(),
-		WithRegressionTolerance(RegressionTolerance{
-			MaxTextDropRatio:  0.0,
-			MaxImageDropRatio: 1.0,
-		}),
+		WithRegressionTolerance(strictTextTolerance),
 	)
-	if remErr != nil {
-		if !errors.Is(remErr, ErrRemediationBrokePDF) {
-			t.Fatalf("RemediatePDFA returned unexpected error: %v", remErr)
-		}
-		t.Logf("strict tolerance hard-failed as expected: %v", remErr)
-		return
+	if err != nil {
+		t.Fatalf("RemediatePDFA: %v", err)
+	}
+	if len(report.RolledBack) == 0 {
+		t.Error("RolledBack is empty, want the control-byte strip the strict tolerance refuses")
 	}
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -3772,10 +3754,12 @@ func TestWriter_RemediatePDFA_Pages12_StrictTolerance(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer r3.Close()
-	// Extraction errors count as zero text for the comparison below.
-	postText, _ := r3.ExtractAllText(ctx) //nolint:errcheck // post-check only.
-	if len(postText) < len(baselineText) {
-		t.Errorf("strict tolerance did not enforce text parity: before=%d after=%d rolled_back=%v",
+	postText, err := r3.ExtractAllText(ctx)
+	if err != nil {
+		t.Fatalf("post ExtractAllText: %v", err)
+	}
+	if postText != baselineText {
+		t.Errorf("strict tolerance did not keep the text: before=%d bytes after=%d rolled_back=%q",
 			len(baselineText), len(postText), report.RolledBack)
 	}
 }
