@@ -230,7 +230,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					if visIdx < 0 || hasMarks {
 						break
 					}
-					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el)) {
+					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el), literalSpaceSize(ln.elems, lineFonts, visIdx, idx)) {
 						pendingSpace = ""
 					}
 				case shouldInsertSpace(prev, gap, wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
@@ -808,10 +808,10 @@ func isSpaceGlyph(s string) bool {
 // suppressesLiteralSpace reports whether a literal space glyph shown
 // between prev and el marks no word break. The next glyph starts at or
 // before the end of the last painted glyph (gap at most
-// [notASpaceFactor] × the smaller font size), so the space advanced the
-// text matrix and the producer moved it back over itself: the two glyphs
-// abut on the page and no reader sees a gap between them. The smaller
-// size keeps a drop cap from swallowing the space after it.
+// [notASpaceFactor] × size, the size [literalSpaceSize] measures the gap
+// in), so the space advanced the text matrix and the producer moved it
+// back over itself: the two glyphs abut on the page and no reader sees a
+// gap between them.
 //
 // The gap is only read for left-to-right text at a positive font size,
 // horizontal or rotated by 90° or -90°, between two glyphs set in the same
@@ -843,7 +843,7 @@ func isSpaceGlyph(s string) bool {
 //     while the widths of its UTF-8 codes were read at the code, not the CID.
 //   - All corpora: dropping the space in ±90° text makes words match PDF.js
 //     on 8 more files and on none fewer.
-func suppressesLiteralSpace(prev, el models.TextElement, gap float64) bool {
+func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64) bool {
 	if prev.Vertical || el.Vertical || !gapReadable(el.Angle) || math.Abs(prev.Angle-el.Angle) >= math.Pi/180 {
 		return false
 	}
@@ -863,7 +863,42 @@ func suppressesLiteralSpace(prev, el models.TextElement, gap float64) bool {
 	if math.Abs(gap) < exactAbutment {
 		return false
 	}
-	return gap <= notASpaceFactor*min(prev.FontSize, el.FontSize)
+	return gap <= notASpaceFactor*size
+}
+
+// literalSpaceSize returns the font size, on the page, that the gap between
+// the element at p, the last painted glyph before a literal space, and the
+// one at i is measured against, the elements of one line and their fonts
+// (nil when unknown). PDF.js compares that gap with NOT_A_SPACE_FACTOR
+// times the Tf size of the text item p belongs to, in the text space of the
+// glyph at i: a Tm that rescales the text rescales the item before the
+// glyph is compared (src/core/evaluator.js, updateAdvanceScale and
+// compareWithLastPosition). So the size is the Tf size of p at the scale
+// the text matrix gives i, as for a word space ([wordSpaceThreshold]).
+// Across a marked-content boundary, which ends the item, and without fonts,
+// the smaller size of the two stands: it keeps a drop cap from swallowing
+// the space after it.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300829.pdf: "c", a space, then "j" set by a Tm
+//     at 21.3 points after 11.8: the 0.5-point gap passed 0.03 of the
+//     smaller size and kept a space PDF.js drops ("cj").
+//   - govdocs thread_400_400566.pdf page 4: "5", a space, then a "." set
+//     at 14.4 points after 9.75, read "5 ." for "5.".
+//   - All corpora: words match PDF.js on 2 more files (both govdocs) and
+//     on 2 more pages of files that still differ (govdocs
+//     thread_000_000282.pdf, thread_300_300695.pdf), and on none fewer;
+//     facturx, pdf20, pdfcpu and pdfjs do not move.
+func literalSpaceSize(elems []models.TextElement, fonts []runFont, p, i int) float64 {
+	prev, el := elems[p], elems[i]
+	if fonts != nil && prev.MCID == el.MCID {
+		prevSize, size := math.Abs(fonts[p].size), math.Abs(fonts[i].size)
+		if prevSize > 0 && size > 0 {
+			return prevSize * el.FontSize / size
+		}
+	}
+	return min(prev.FontSize, el.FontSize)
 }
 
 // gapReadable reports whether [computeLineGap] measures a gap along the

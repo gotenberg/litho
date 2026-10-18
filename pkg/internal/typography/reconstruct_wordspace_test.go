@@ -7,6 +7,34 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
+// TestReconstructText_LiteralSpaceFollowsTheGlyphSize pins the size a gap
+// after a literal space is measured against: the Tf size of the glyph
+// before the space, at the scale the text matrix gives the glyph after it,
+// as PDF.js rescales a text item at a Tm. A glyph set larger by its Tm and
+// placed back over the space drops it.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300829.pdf: "c", a space, then "j" set at 21.3
+//     points after 11.8, 0.5 apart, which PDF.js reads "cj".
+func TestReconstructText_LiteralSpaceFollowsTheGlyphSize(t *testing.T) {
+	t.Parallel()
+	f := &Font{}
+	elems := []models.TextElement{
+		{Text: "c", X: 157, Y: 611.8, Width: 5.9, FontSize: 11.8},
+		{Text: " ", X: 162.9, Y: 611.8, Width: 3.28, FontSize: 11.8},
+		{Text: "j", X: 163.4, Y: 611.8, Width: 4.73, FontSize: 21.3},
+	}
+	fonts := []runFont{
+		{name: "F9", font: f, size: 1},
+		{name: "F9", font: f, size: 1},
+		{name: "F9", font: f, size: 1},
+	}
+	if got, want := reconstructText(context.Background(), elems, fonts, nil), "cj"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 // TestReconstructText_WordSpaceFollowsTheGlyphSize pins that the gap a word
 // space needs is a fraction of the size of the glyphs beside it, as PDF.js
 // measures it, not of the line's average size. Every glyph is shown by a
