@@ -93,13 +93,13 @@ func TestReconstructText_VerticalCJK(t *testing.T) {
 	// Simulate two vertical columns of CJK text.
 	// Column 1 (rightmost, X=100): 漢 字 (top-to-bottom)
 	// Column 2 (X=80): 文 字 (top-to-bottom)
-	// Y spacing: 6pt with fontSize 12, so gap = 6-6=0, no space inserted.
+	// Y spacing: 6pt and each glyph 6pt tall, so gap = 6-6=0, no space inserted.
 	// Expected reading order: 漢字\n文字
 	elements := []models.TextElement{
-		{Text: "漢", X: 100, Y: 200, FontSize: 12, Vertical: true},
-		{Text: "字", X: 100, Y: 194, FontSize: 12, Vertical: true},
-		{Text: "文", X: 80, Y: 200, FontSize: 12, Vertical: true},
-		{Text: "字", X: 80, Y: 194, FontSize: 12, Vertical: true},
+		{Text: "漢", X: 100, Y: 200, Width: 6, FontSize: 12, Vertical: true},
+		{Text: "字", X: 100, Y: 194, Width: 6, FontSize: 12, Vertical: true},
+		{Text: "文", X: 80, Y: 200, Width: 6, FontSize: 12, Vertical: true},
+		{Text: "字", X: 80, Y: 194, Width: 6, FontSize: 12, Vertical: true},
 	}
 
 	got := ReconstructText(context.Background(), elements, nil)
@@ -111,11 +111,11 @@ func TestReconstructText_VerticalCJK(t *testing.T) {
 
 func TestReconstructText_VerticalSingleColumn(t *testing.T) {
 	// Single vertical column: 日 本 語
-	// Y spacing: 6pt with fontSize 12 → no space inserted.
+	// Y spacing: 6pt and each glyph 6pt tall → no space inserted.
 	elements := []models.TextElement{
-		{Text: "日", X: 50, Y: 300, FontSize: 12, Vertical: true},
-		{Text: "本", X: 50, Y: 294, FontSize: 12, Vertical: true},
-		{Text: "語", X: 50, Y: 288, FontSize: 12, Vertical: true},
+		{Text: "日", X: 50, Y: 300, Width: 6, FontSize: 12, Vertical: true},
+		{Text: "本", X: 50, Y: 294, Width: 6, FontSize: 12, Vertical: true},
+		{Text: "語", X: 50, Y: 288, Width: 6, FontSize: 12, Vertical: true},
 	}
 
 	got := ReconstructText(context.Background(), elements, nil)

@@ -205,10 +205,10 @@ func TestNormalizeSoftHyphens(t *testing.T) {
 func TestReconstructText_BidiLine(t *testing.T) {
 	// Visual order: Hebrew glyphs with X increasing (leftmost first in stream).
 	elements := []models.TextElement{
-		{Text: "ם", X: 10, Y: 100, FontSize: 12},
-		{Text: "ו", X: 16, Y: 100, FontSize: 12},
-		{Text: "ל", X: 22, Y: 100, FontSize: 12},
-		{Text: "ש", X: 28, Y: 100, FontSize: 12},
+		{Text: "ם", X: 10, Y: 100, Width: 6, FontSize: 12},
+		{Text: "ו", X: 16, Y: 100, Width: 6, FontSize: 12},
+		{Text: "ל", X: 22, Y: 100, Width: 6, FontSize: 12},
+		{Text: "ש", X: 28, Y: 100, Width: 6, FontSize: 12},
 	}
 
 	got := ReconstructText(context.Background(), elements, nil)
@@ -260,15 +260,15 @@ func TestReconstructText_BidiRunBoundary(t *testing.T) {
 // line is dropped and the line break kept, as PDF.js reads it.
 func TestReconstructText_SoftHyphenAcrossLines(t *testing.T) {
 	elements := []models.TextElement{
-		{Text: "d", X: 10, Y: 100, FontSize: 12},
-		{Text: "o", X: 16, Y: 100, FontSize: 12},
-		{Text: "c", X: 22, Y: 100, FontSize: 12},
-		{Text: "u", X: 28, Y: 100, FontSize: 12},
-		{Text: "\u00AD", X: 34, Y: 100, FontSize: 12},
-		{Text: "m", X: 10, Y: 80, FontSize: 12},
-		{Text: "e", X: 16, Y: 80, FontSize: 12},
-		{Text: "n", X: 22, Y: 80, FontSize: 12},
-		{Text: "t", X: 28, Y: 80, FontSize: 12},
+		{Text: "d", X: 10, Y: 100, Width: 6, FontSize: 12},
+		{Text: "o", X: 16, Y: 100, Width: 6, FontSize: 12},
+		{Text: "c", X: 22, Y: 100, Width: 6, FontSize: 12},
+		{Text: "u", X: 28, Y: 100, Width: 6, FontSize: 12},
+		{Text: "\u00AD", X: 34, Y: 100, Width: 6, FontSize: 12},
+		{Text: "m", X: 10, Y: 80, Width: 6, FontSize: 12},
+		{Text: "e", X: 16, Y: 80, Width: 6, FontSize: 12},
+		{Text: "n", X: 22, Y: 80, Width: 6, FontSize: 12},
+		{Text: "t", X: 28, Y: 80, Width: 6, FontSize: 12},
 	}
 
 	got := ReconstructText(context.Background(), elements, nil)

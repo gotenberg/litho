@@ -1086,6 +1086,12 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 // (src/core/evaluator.js, compareWithLastPosition, which swaps and negates
 // the coordinates for each orthogonal rotation).
 //
+// A width of 0 is a glyph the font gives no advance (a /W or /Widths entry
+// of 0, ISO 32000-1, 9.6.2.1 and 9.7.4.3), so the gap is measured from its
+// own position, as PDF.js measures it. No element is ever 0 wide for want
+// of metrics: [Font.GlyphWidth] falls back to a non-zero width. Only a
+// negative width, which no glyph is drawn with, takes half an em.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue5747.pdf, govdocs thread_000_000262.pdf and 9 more: text
@@ -1093,6 +1099,11 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 //     inserted ("dolorsitamet,").
 //   - pdfjs issue20930.pdf, bug1905623.pdf: vertical writing read "ABCDE"
 //     for glyphs PDF.js reads "A B C D E".
+//   - govdocs thread_300_300516.pdf: a /blank glyph states /Widths 0 and a
+//     TJ gap of 0.287 em follows it. Half an em taken off that gap lost the
+//     space PDF.js reads ("Jeff␣Sherwood").
+//   - pdfjs issue7020.pdf: half an em taken off the gap after a /Widths 0
+//     glyph lost the space PDF.js reads ("æè").
 func computeLineGap(prev, curr models.TextElement) float64 {
 	var delta float64
 	switch {
@@ -1108,7 +1119,7 @@ func computeLineGap(prev, curr models.TextElement) float64 {
 	default:
 		delta = curr.X - prev.X
 	}
-	if prev.Width > 0 {
+	if prev.Width >= 0 {
 		return delta - prev.Width
 	}
 	return delta - 0.5*curr.FontSize
