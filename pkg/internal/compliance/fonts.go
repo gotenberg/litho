@@ -2043,10 +2043,7 @@ func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict,
 		if fontData != nil {
 			binaryWidths := typography.ExtractCIDBinaryWidths(ctx, fontData)
 			if binaryWidths != nil {
-				unitsPerEm := typography.ReadUnitsPerEm(fontData)
-				if unitsPerEm < minUnitsPerEm || unitsPerEm > maxUnitsPerEm {
-					unitsPerEm = defaultUnitsPerEm
-				}
+				unitsPerEm := FontProgramUnitsPerEm(fontData)
 				rule := glyphWidthRule(profile)
 				if rule.Specification != "" {
 					usedCIDs := type0UsedCIDs(ctx, doc, fontDict, usage)

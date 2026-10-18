@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
+	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // WidthMismatchContext is the wording every glyph-width failure carries in
@@ -134,6 +135,51 @@ const (
 	defaultUnitsPerEm = 1000
 )
 
+// headlessUnitsPerEm is the em veraPDF weighs a TrueType program's advances
+// against when the program carries no 'head' table. The OpenType spec makes
+// 'head' a required table and states unitsPerEm there alone, so such a program
+// states no em and no value is mandated. veraPDF's TrueTypeHeadTable starts
+// its unitsPerEm at 2048 and keeps it when there is no table to read, and
+// litho takes the same em so the two agree on ISO 19005-2, 6.2.11.5 and its
+// restatements.
+// Measured with veraPDF 1.30.2 at PDF/A-2b on headless programs: advances of
+// 1229 pass /Widths 600 and fail 1229, advances of 1000 pass 488 and fail
+// 1000 and 490, advances of 2048 pass 1000, and a CIDFontType2 advancing 600
+// passes /W 293 and fails 600. litho fontnohead_2b.pdf plants both kinds.
+//
+// # Corpus evidence
+//
+//   - All corpora: no TrueType program a font reads lacks 'head', so no cell
+//     moves.
+const headlessUnitsPerEm = 2048
+
+// FontProgramUnitsPerEm returns the units per em the width rules scale an
+// embedded font program's advances by: the program's own, read from 'head'
+// or from a CFF /FontMatrix, and [defaultUnitsPerEm] for a value outside
+// the range the OpenType head table allows. A TrueType-outline program with
+// no 'head' takes [headlessUnitsPerEm]; an OpenType program with CFF outlines
+// keeps the CFF scale it carries. Remediation scales the widths it writes by
+// the same value, so the repair and the check agree.
+func FontProgramUnitsPerEm(fontData []byte) uint16 {
+	if isSfntFontProgram(fontData) && string(fontData[:4]) != "OTTO" && !sfntHasTable(fontData, "head") {
+		return headlessUnitsPerEm
+	}
+	unitsPerEm := typography.ReadUnitsPerEm(fontData)
+	if unitsPerEm < minUnitsPerEm || unitsPerEm > maxUnitsPerEm {
+		return defaultUnitsPerEm
+	}
+	return unitsPerEm
+}
+
+// sfntHasTable reports whether an sfnt's table directory reads and lists tag.
+func sfntHasTable(data []byte, tag string) bool {
+	records, err := truetype.ParseTableDirectory(data)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(records, func(r truetype.TableRecord) bool { return r.Tag == tag })
+}
+
 // resolveSimpleFontGlyphs does the work of [simpleFontGlyphMetrics] and also
 // reports whether a symbol cmap subtable decided the codes.
 //
@@ -163,10 +209,7 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 		return simpleFontGlyphs{}, false
 	}
 
-	unitsPerEm := typography.ReadUnitsPerEm(fontData)
-	if unitsPerEm < minUnitsPerEm || unitsPerEm > maxUnitsPerEm {
-		unitsPerEm = defaultUnitsPerEm
-	}
+	unitsPerEm := FontProgramUnitsPerEm(fontData)
 
 	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
 	charCodeToGID := typography.ExtractCharCodeToGID(ctx, fontData)
@@ -965,10 +1008,7 @@ func ExpectedCIDFontWidths(ctx context.Context, doc *document.Document, cidFontD
 	if binaryWidths == nil {
 		return nil, false
 	}
-	unitsPerEm := typography.ReadUnitsPerEm(fontData)
-	if unitsPerEm < minUnitsPerEm || unitsPerEm > maxUnitsPerEm {
-		unitsPerEm = defaultUnitsPerEm
-	}
+	unitsPerEm := FontProgramUnitsPerEm(fontData)
 
 	out := make(map[int]int, len(binaryWidths))
 	for cid, bw := range binaryWidths {

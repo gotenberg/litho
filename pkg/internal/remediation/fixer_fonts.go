@@ -385,10 +385,9 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	if len(binaryWidths) == 0 {
 		return nil
 	}
-	upm := typography.ReadUnitsPerEm(fontData)
-	if upm == 0 {
-		upm = 1000
-	}
+	// The scale the width check applies, a headless TrueType's 2048 included,
+	// so the repaired /W and /DW are the widths the check then accepts.
+	upm := compliance.FontProgramUnitsPerEm(fontData)
 
 	var fixes []string
 	baseName := fontBaseName(fontDict)
