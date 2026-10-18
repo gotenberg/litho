@@ -1990,6 +1990,23 @@ standard. PDF 1.5 added them, so the PDF Reference 1.4 table the clause names
 (9.7.4) does not list them, and litho now reports each of the 19 elements
 beside the two `math` ones. From PDF/A-2a both tools take them for standard.
 
+A fifth family is closed. ISO 14289-1, 7.1 t3 and ISO 14289-2, 8.2.2 t1 take
+`SESimpleContentItem` as their object, one per painting operator or image, and
+7.2 t34 takes `SETextItem`, one per text show; litho stated each once per
+document. It now counts one check per item, and reads each content stream once,
+as veraPDF validates each object once: two pages sharing a content stream
+(`imagereach_2b.pdf`), or a form two pages draw (`fontcopies_2b.pdf`), count
+their items on the first page only, and a PostScript XObject is no item
+(`multipage_2b.pdf`). Across the litho corpus at its thirteen levels and the
+veraPDF corpus at its fifteen, the counts equal veraPDF's in 7500 of the 7502
+cells where `7.1/3` or `8.2.2/1` fires (5814 before) and in 350 of the 352
+where `7.2/34` does (238 before), and no rule set moves. What is left is
+`baretree_2b.pdf`, whose root `/Count` lets veraPDF read four of its five pages,
+and `7.2/34` on `complex_ua2.pdf`, whose element with no `/P` veraPDF drops
+(see [Known divergences](#known-divergences)). ISO 19005-1, 6.3.2 t7 joins the
+descendant rules: veraPDF states it on a Type 0 font and again on its
+descendant, which `fontcff2_2b.pdf` and `fontotread_2b.pdf` show.
+
 ## Closed since, not planted
 
 Six constructs were divergences when the fixtures around them were built. Each
@@ -3248,8 +3265,7 @@ Each cell reads litho / veraPDF. The three content repairs are aggressive, so
 the default remediation leaves their findings as residuals, and the aggressive
 one clears everything on both tools. At PDF/UA-1 the default remediation removes
 the `/Lang`, which clears `7.2/29` on both, and the aggressive one strips the
-control byte as well, leaving `7.1/3` alone, reported once by litho and four
-times by veraPDF. Every output of the first eight profiles `manifest.json` lists,
+control byte as well, leaving `7.1/3` alone, reported four times by both. Every output of the first eight profiles `manifest.json` lists,
 default and aggressive, carries both images byte for byte, and litho and
 veraPDF agree on each one's rule set.
 
@@ -3372,10 +3388,9 @@ of its glyphs is judged, and annotations come first as at PDF/A-1, so the
 presence rule counts 5. `TM` inherits rendering mode 3 from the page, which
 exempts it from the presence rule everywhere.
 
-The per-rule instance counts equal veraPDF 1.30.2's in all thirteen cells,
-except ISO 14289-1, 7.1 t3 and 7.2 t34 and ISO 14289-2, 8.2.2 t1, which veraPDF
-states once per untagged operator (10) and litho once per page (1), the family
-described under [Instance counts](#instance-counts-which-the-corpus-does-not-pin).
+The per-rule instance counts equal veraPDF 1.30.2's in all thirteen cells.
+ISO 14289-1, 7.1 t3 and 7.2 t34 and ISO 14289-2, 8.2.2 t1 count once per
+untagged operator (10) on both tools.
 
 ### `namereads_1b.pdf`
 
@@ -3511,11 +3526,9 @@ at PDF/A-4, which answers on each annotation's own object.
 | `6.3.1/1` annotation subtype | 9       | 9     | 9            |
 | `6.7.2.1/1` no metadata      | 1       | 1     | 1            |
 
-The four files return the same rule set as veraPDF 1.30.2 in all thirteen
-cells each. Their counts agree at every level but the two PDF/UA ones, where
-veraPDF counts `7.1/3` and `8.2.2/1` once per untagged content item, and `7.2/34`
-once per text show, and litho once each, as for every untagged fixture,
-`usedcs_2b.pdf` among them.
+The four files return the same rule set and the same counts as veraPDF 1.30.2
+in all thirteen cells each. At the PDF/UA levels both tools count `7.1/3` and
+`8.2.2/1` once per untagged content item and `7.2/34` once per text show.
 
 ### `undecodable_2b.pdf`
 
@@ -3570,10 +3583,9 @@ width, where litho read 500.
 | `6.2.11.5/1` glyph width mismatch | 1       | 1     | 0            |
 | `6.6.2.1/1` no XMP                | 1       | 1     | 1            |
 
-The file returns the same rule set as veraPDF 1.30.2 in all thirteen cells,
-and the same counts in the eleven PDF/A ones. At PDF/UA-1 veraPDF counts `7.1/3`
-and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged content item, and
-litho once each.
+The file returns the same rule set and the same counts as veraPDF 1.30.2 in
+all thirteen cells. At PDF/UA-1 both tools count `7.1/3` and `7.2/34`, and at
+PDF/UA-2 `8.2.2/1`, once per untagged content item.
 
 ### `fontclaims_2b.pdf`
 
@@ -3617,9 +3629,8 @@ Unicode rules off the glyph.
 | `6.6.2.1/1` no metadata           | 1       | 1     | 1            |
 
 The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
-counts, but at PDF/UA, where veraPDF counts `7.1/3`, `7.2/34` and `8.2.2/1`
-once per untagged content item and litho once, the family described under
-[Instance counts](#instance-counts-which-the-corpus-does-not-pin). At PDF/UA the
+counts: at PDF/UA both tools count `7.1/3`, `7.2/34` and `8.2.2/1` once per
+untagged content item. At PDF/UA the
 form claims its fonts without its glyphs being judged, so `TF` does not answer
 the presence rule there, which counts 3.
 
@@ -3649,7 +3660,7 @@ three times.
 | `6.6.2.1/1` no metadata       | 1       | 1     | 1            |
 
 The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
-counts but for `7.1/3` and `8.2.2/1` at PDF/UA, the same family.
+counts.
 
 ### `csnames_2b.pdf`
 
@@ -3702,8 +3713,8 @@ of time or stack on both.
 | `6.6.2.1/1` no metadata  | 1       | 1     |
 
 The two tools return the same rule set in all thirteen cells, and the same count
-for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts `7.1/3`
-and `8.2.2/1` once per untagged content item.
+for every rule at every level; at the PDF/UA levels both count `7.1/3` and
+`8.2.2/1` once per untagged content item.
 
 ### `offlimits_1b.pdf`
 
@@ -3753,9 +3764,8 @@ width reads as 0 against `/Widths` 1000, `6.3.6/1`.
 | `6.7.2/1` no metadata  | 1       | 1     |
 
 The two tools return the same rule set in all thirteen cells. Their counts agree
-at every PDF/A level but PDF/A-1a, where veraPDF states `6.3.8/1` once per
-rendered glyph and litho once per font, and at the PDF/UA levels, where
-veraPDF counts `7.1/3`, `7.2/34` and `8.2.2/1` once per untagged item (see
+at every level but PDF/A-1a, where veraPDF states `6.3.8/1` once per rendered
+glyph and litho once per font (see
 [Instance counts](#instance-counts-which-the-corpus-does-not-pin)).
 
 ### `xrefstm_2b.pdf`
@@ -3899,7 +3909,7 @@ fixed their counts, which `6.2.11.2/1` answers once per descendant and once
 more per composite font read through it.
 
 The two tools return the same rule set in all thirteen cells, and the same count
-for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts the
+for every rule at every level; at the PDF/UA levels both count the
 untagged-content rules once per text show.
 
 Remediated at PDF/A-1b, in both modes, the output gives `C`'s descendant a
@@ -4215,9 +4225,7 @@ in for `ApRef`, and `Stencil` for `Base`.
 | `6.6.2.1/1` no metadata        | 1       | 1     | 1            |
 
 The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
-counts but for `7.1/3` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the family
-described under
-[Instance counts](#instance-counts-which-the-corpus-does-not-pin).
+counts.
 
 ### `unembednames_2u.pdf`
 
@@ -4258,8 +4266,7 @@ mode that showed it.
 | `6.6.2.1/1` no metadata        | 1       | 1     | 1            |
 
 The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
-counts but for `7.1/3` and `7.2/34` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the
-same family.
+counts.
 
 ### `exttypes_2b.pdf`
 
@@ -4396,26 +4403,26 @@ first eight profiles `manifest.json` lists, default and aggressive:
 | Profile  | Runs refused before the fix       | Rules left after it, litho / veraPDF |
 | -------- | --------------------------------- | ------------------------------------ |
 | PDF/A-2a | 6 of 8, both modes                | none / none                          |
-| PDF/UA-1 | 6 of 8, both modes                | `7.1/3`: 1 / 2                       |
-| PDF/UA-2 | 6 of 8 default, 8 of 8 aggressive | `8.2.2/1`: 1 / 2                     |
+| PDF/UA-1 | 6 of 8, both modes                | `7.1/3`: 2 / 2                       |
+| PDF/UA-2 | 6 of 8 default, 8 of 8 aggressive | `8.2.2/1`: 2 / 2                     |
 
 After the fix every run of every profile writes the same bytes. PDF/A-1b, 2b,
 2u, 3b and 4 do not tag, write the same bytes before and after, and leave no
 rule on either tool. The rule left at PDF/UA is honest: `/X2` and `/X3` draw
 real text the classifier does not tag, and leaving their regions unmarked keeps
-it readable rather than hiding it inside an `/Artifact`. litho reports the page
-once, and veraPDF each of the two regions.
+it readable rather than hiding it inside an `/Artifact`. Both tools report each
+of the two regions.
 
 Before remediation the file agrees with veraPDF in all thirteen cells:
 
 | Rule at PDF/UA-1               | veraPDF | litho |
 | ------------------------------ | ------- | ----- |
 | `6.2/1` no `/MarkInfo`         | 1       | 1     |
-| `7.1/3` unmarked content       | 6       | 1     |
+| `7.1/3` unmarked content       | 6       | 6     |
 | `7.1/8` no metadata stream     | 1       | 1     |
 | `7.1/10` no `/DisplayDocTitle` | 1       | 1     |
 | `7.1/11` no structure tree     | 1       | 1     |
-| `7.2/34` no natural language   | 5       | 1     |
+| `7.2/34` no natural language   | 5       | 5     |
 
 ### `formflat_ua1.pdf`
 
@@ -4495,9 +4502,7 @@ veraPDF alike. A CMYK OutputIntent covers the DeviceCMYK alternates.
 | `6.8/5` embedded file not PDF/A | 1       | 1     |
 
 At PDF/A-3b the file fails `6.8/4` once in place of `6.8/5`. The rule sets
-equal veraPDF 1.30.2's in all thirteen cells, and so do the counts but for
-`7.1/3` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the family described under
-[Instance counts](#instance-counts-which-the-corpus-does-not-pin).
+equal veraPDF 1.30.2's in all thirteen cells, and so do the counts.
 
 The remediation at PDF/A-2a, 2b and 2u now leaves `6.8/5` alone, at PDF/A-4
 `6.9/3` alone, the embedded file no repair can make conforming, and at
@@ -4656,9 +4661,7 @@ does not.
 | `6.6.2.1/1` no metadata          | 1       | 1     | 0                |
 
 The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
-counts but for `7.1/3` and `7.2/34` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the
-family described under
-[Instance counts](#instance-counts-which-the-corpus-does-not-pin). Remediated
+counts. Remediated
 at the first eight profiles `manifest.json` lists, default and aggressive, every
 output leaves the font alone at the PDF/A levels, `6.3.4/1` at PDF/A-1b, and
 `7.18.1/2` and `7.21.4.1/1` at PDF/UA-1 and `8.4.5.5.1/1` at PDF/UA-2, where no
@@ -4911,10 +4914,9 @@ Page 2's `/AA` holds a permitted GoTo action and fails `6.5.2/2` at parts 2 and
 `6.3.2/1` from part 2. Every appearance paints nothing. The other cells report
 the identification and tagging rules a part-2 claim draws at the other levels.
 
-The two tools return the same rule set in all thirteen cells, and the same
-counts in the eleven PDF/A ones. At PDF/UA-1 veraPDF counts `7.1/3` and
-`7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged content item, and litho
-once each.
+The two tools return the same rule set and the same counts in all thirteen
+cells. At PDF/UA-1 both count `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`,
+once per untagged content item.
 
 Measured on litho and veraPDF 1.30.2 before the numbering, the Writer missed
 both direct pages. `mutate-stamp` left them unstamped, `mutate-pages` wrote a
@@ -5003,10 +5005,10 @@ the `/Resources` page 1 lacks and report the device family as an undefined name
 (`6.2.2/3` at part 4), and a repair of device colour gives the page `/Resources`
 before the graphics repair runs.
 
-Measured on veraPDF 1.30.2 and litho, the file returns the same rule set in all
-thirteen cells, and the same counts in the eleven PDF/A ones. At PDF/UA-1
-veraPDF counts `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per
-untagged content item, and litho once each. The PDF/A cells report the three
+Measured on veraPDF 1.30.2 and litho, the file returns the same rule set and
+the same counts in all thirteen cells. At PDF/UA-1 both count `7.1/3` and
+`7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged content item. The PDF/A
+cells report the three
 unembedded fonts (`6.3.4/1` at part 1, `6.2.11.4.1/1` at parts 2 and 3,
 `6.2.10.4.1/1` at part 4), their six codes with no Unicode mapping (`6.3.8/1`
 at PDF/A-1a, `6.2.11.7.2/1` at the A and U levels of parts 2 and 3), the
@@ -5071,7 +5073,8 @@ The two tools return the same rule set in all thirteen cells, and the same
 counts in the eleven PDF/A ones: nothing at PDF/A-2b, and at the other levels
 the identification and tagging rules a part-2 claim draws. At PDF/UA-1 veraPDF
 counts `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, twice, once per
-untagged text of the four pages its `/Count` lets it read, and litho once each.
+untagged text of the four pages its `/Count` lets it read, and litho three
+times, once per untagged text of the five pages its walk reads.
 
 Measured on litho and veraPDF 1.30.2 before the fix, `mutate-pages` refused the
 file (`/Pages is not an indirect reference`), and the stamp, flattening,
@@ -5180,8 +5183,8 @@ indirect, so the page is appended by hand in an incremental update.
 Measured on veraPDF 1.30.2 and litho, the file returns the same rule set in all
 thirteen cells. Both tools read every stream. veraPDF counts the four text
 paints in DeviceGray (`6.2.3.3/3` at part 1, `6.2.4.3/4` from part 2) and litho
-two; at PDF/UA-1 veraPDF counts `7.1/3` and `7.2/34`, and at PDF/UA-2
-`8.2.2/1`, once per stream, and litho once each. The other cells report the
+two; at PDF/UA-1 both count `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`,
+once per stream. The other cells report the
 identification and tagging rules a part-2 claim draws.
 
 Before the fix, every write of the file held the direct streams inline: split,
@@ -5195,8 +5198,7 @@ warning classes an output writing the streams inline draws, so the other cells
 read the same either way, and the Go tests of each writer path pin the rest.
 Remediation at the first eight manifest profiles, default and aggressive, leaves
 nothing at the PDF/A profiles on either tool, and `7.1/3` at PDF/UA-1 and
-`8.2.2/1` at PDF/UA-2 on both, veraPDF counting two and litho one, before the
-fix and after.
+`8.2.2/1` at PDF/UA-2 on both, both counting two, before the fix and after.
 
 ### `pagelabels_2b.pdf`
 
@@ -5228,9 +5230,9 @@ of `ttcmap_2b.pdf`, in DeviceGray under a CMYK OutputIntent, as in
 `baretree_2b.pdf`. No PDF/A or PDF/UA rule reads page labels. The two tools
 return the same rule set in all thirteen cells, and the same counts in the
 eleven PDF/A ones: nothing at PDF/A-2b, and at the other levels the
-identification and tagging rules a part-2 claim draws. At PDF/UA-1 veraPDF
-counts `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged text
-of the eight pages, and litho once each.
+identification and tagging rules a part-2 claim draws. At PDF/UA-1 both count
+`7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged text of the
+eight pages.
 
 `mutate-pages` moves page 1 to the end and repeats it there, and its label
 promise, read with qpdf, wants the output to show
@@ -6064,8 +6066,8 @@ at PDF/A-2b with such programs and pins what each font becomes.
 | `6.6.2.1/1` no metadata     | 1       | 1     |
 
 The two tools return the same rule set in all thirteen cells, and the same
-count for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts
-the untagged-content rules once per text show. Remediated without a program at
+count for every rule at every level; at the PDF/UA levels both count the
+untagged-content rules once per text show. Remediated without a program at
 the first eight manifest profiles, default and aggressive, each output fails the
 embedding rule nine times on both tools, beside PDF/A-1b's `6.3.3.3/1`, PDF/UA-1's
 `7.1/3` and PDF/UA-2's `8.2.2/1`, the same on both. Remediated with the test's
@@ -6197,8 +6199,8 @@ fails on both tools.
 | `6.2.11.4.1/2` glyph absent | 1                | 0                  | 1               |
 | `6.2.11.8/1` `.notdef`      | 1                | 0                  | 1               |
 
-veraPDF 1.30.2 and litho report these counts alike, and the same rule set in
-all thirteen cells of each file; at the PDF/UA levels veraPDF counts the
+veraPDF 1.30.2 and litho report these counts alike, and the same rule set and
+counts in all thirteen cells of each file; at the PDF/UA levels both count the
 untagged-content rules once per text show. Before the bases were resolved,
 litho missed the two glyph rules on `cmapusecmap_2b` and `cmapnotdef_2b` and
 reported both on `cmapusestream_2b`, in every cell.
@@ -6268,8 +6270,8 @@ Before, litho extracted U+6162 for `G1`, the two bytes read as one CID, and
 "ab" for `G2`. `G1` embeds the three-glyph program, so its glyph rules stay
 silent; `G2` fails the embedding rules (6.3.4 t1, 6.2.11.4.1 t1, 6.2.10.4.1
 t1). veraPDF 1.30.2 and litho report the same rule set in all thirteen cells,
-with the same counts at every PDF/A level; at the PDF/UA levels veraPDF counts
-the untagged-content rules once per text show. The text change moves no
+with the same counts at every level; at the PDF/UA levels both count the
+untagged-content rules once per text show. The text change moves no
 validation or remediation result: litho reports and remediates the file alike
 before and after.
 
@@ -6295,8 +6297,8 @@ Before, litho extracted "ƒ‰" for `M1`. `M2` is the control: any reading but
 Mac OS Roman gives "€Š". Both programs declare two subtables and no (3,0), so
 6.2.11.6 t4 fires once per font, and neither declares `/Encoding`, so t3 stays
 silent. veraPDF 1.30.2 and litho report the same rule set in all thirteen
-cells, with the same counts at every PDF/A level; at the PDF/UA levels veraPDF
-counts the untagged-content rules once per text show. The text change moves no
+cells, with the same counts at every level; at the PDF/UA levels both count the
+untagged-content rules once per text show. The text change moves no
 validation or remediation result: litho reports and remediates the file alike
 before and after, and remediation writes no `/ToUnicode` for either font.
 
@@ -6844,8 +6846,9 @@ The embedding rule moves the same way at PDF/A-1a and 1b (`6.3.4/1`), PDF/A-4,
 4e and 4f (`6.2.10.4.1/1`), PDF/UA-1 (`7.21.4.1/1`) and PDF/UA-2
 (`8.4.5.5.1/1`). veraPDF 1.30.2 and litho report the same rule set in all
 thirteen cells. At PDF/A-1a and 1b both report `6.3.2/7`, the `/OpenType`
-subtype PDF 1.4 does not define, for every font; veraPDF counts each Type 0
-font and its descendant, 14 checks to litho's 10. The glyph rules take the
+subtype PDF 1.4 does not define, for every font, and both count each Type 0
+font and its descendant, 14 checks (litho counted 10 before). The glyph rules
+take the
 same reading, which [`fontotread_2b.pdf`](#fontotread_2bpdf) makes visible.
 Remediation cannot embed a program the fixture does not supply, so the
 embedding rule stays on the output at every manifest profile in both modes, on
@@ -6893,11 +6896,11 @@ The same rules move at PDF/A-1a and 1b (`6.3.6/1`, `6.3.5/1`), PDF/A-2a, 2u,
 3a, 3b and 3u, PDF/A-4, 4e and 4f (`6.2.10.5/1`, `6.2.10.4.1/2`,
 `6.2.10.9/1`), PDF/UA-1 (`7.21.5/1`, `7.21.4.1/2`, `7.21.8/1`) and PDF/UA-2
 (`8.4.5.6/1`, `8.4.5.5.1/2`, `8.4.5.9/1`). veraPDF 1.30.2 and litho report the
-same rule set in all thirteen cells. Three counts differ inside an agreed rule:
-at PDF/A-1a and 1b veraPDF counts `6.3.2/7` for each Type 0 font and its
-descendant, 12 checks to litho's 8, as in `fontcff2_2b.pdf`; for the untagged
-content, veraPDF counts PDF/UA-1 `7.1/3` and `7.2/34` and PDF/UA-2 `8.2.2/1`
-8 times each and litho once.
+same rule set and the same counts in all thirteen cells. At PDF/A-1a and 1b
+both count `6.3.2/7` for each Type 0 font and its descendant, 12 checks, as in
+`fontcff2_2b.pdf`; for the untagged content, both count PDF/UA-1 `7.1/3` and
+`7.2/34` and PDF/UA-2 `8.2.2/1` 8 times each. Before, litho counted 8 checks
+and 1 each.
 
 Remediation repairs the widths from the same reading: it writes `W2` 600 and
 `W6` 500 and leaves the other fonts alone. Before, it repaired from the
@@ -6983,9 +6986,9 @@ and not a planting mistake. Page 3's DeviceN has no `/Colorants`, which
 | `6.2.4.4/1` no `/Colorants`       | 1       | 1     |
 
 litho already reached every path, so the fixture pins the reading rather than
-a fix. veraPDF 1.30.2 and litho report the same rule set in all thirteen cells,
-with the same counts but for `7.1/3` and `8.2.2/1` at PDF/UA, the family
-described under [Instance counts](#instance-counts-which-the-corpus-does-not-pin).
+a fix. veraPDF 1.30.2 and litho report the same rule set and the same counts in
+all thirteen cells; at PDF/UA both count `7.1/3` and `8.2.2/1` three times, once
+per page's untagged item.
 
 Remediated at every level in both modes, both tools report the same rule set
 on every output, and both PDF/UA outputs are conforming. At the PDF/A levels
@@ -7026,8 +7029,8 @@ litho already reached every path, so the fixture pins the reading rather than
 a fix. The paths ride different walks: with the drawn-stream walk's pattern
 descent cut, litho loses `6.2.8/3` and keeps the other two, which the font and
 colour walks reach on their own. veraPDF 1.30.2 and litho report the same rule
-set in all thirteen cells, with the same counts but for `7.1/3` and `8.2.2/1` at
-PDF/UA.
+set and the same counts in all thirteen cells; at PDF/UA both count `7.1/3` and
+`8.2.2/1` four times, once per page's untagged item.
 
 Remediated at every level in both modes, both tools report the same rule set
 on every output. What stays is the unembedded TrueType font, which litho ships
