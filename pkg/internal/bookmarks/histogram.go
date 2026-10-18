@@ -30,11 +30,14 @@ func detectBodyFontSize(elements []models.TextElement) float64 {
 		return 0
 	}
 
-	// Find the size with the maximum weight.
+	// Find the size with the maximum weight. Map order is random, so a tie
+	// breaks by size: without it, two sizes of equal weight make the outline
+	// change from run to run. The smaller size wins, since body text is set
+	// smaller than the headings it runs under.
 	var bodySize float64
 	var maxWeight int
 	for size, weight := range hist {
-		if weight > maxWeight {
+		if weight > maxWeight || (weight == maxWeight && size < bodySize) {
 			maxWeight = weight
 			bodySize = size
 		}
