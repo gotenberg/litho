@@ -117,19 +117,6 @@ func isStandard14(name string) bool {
 	return ok
 }
 
-// isSerifFont returns true if the font name suggests a serif typeface,
-// used for the Helvetica/Times-Roman fallback decision.
-func isSerifFont(name string) bool {
-	lower := strings.ToLower(name)
-	return strings.Contains(lower, "times") ||
-		strings.Contains(lower, "serif") ||
-		strings.Contains(lower, "georgia") ||
-		strings.Contains(lower, "cambria") ||
-		strings.Contains(lower, "garamond") ||
-		strings.Contains(lower, "palatino") ||
-		strings.Contains(lower, "bookman")
-}
-
 //nolint:dupl // Font metric data tables. Each is unique Adobe-defined data.
 var helveticaWidths = map[string]int{
 	"space": 278, "exclam": 278, "quotedbl": 355, "numbersign": 556, "dollar": 556,

@@ -53,7 +53,7 @@ func TestInjectStandard14Widths_Helvetica(t *testing.T) {
 		MissingWidth: 1000,
 	}
 
-	injectStandard14Widths(font, "Helvetica")
+	injectStandard14Widths(font, "Helvetica", false)
 
 	if len(font.Widths) != 256 {
 		t.Fatalf("expected 256 widths, got %d", len(font.Widths))
@@ -83,7 +83,7 @@ func TestInjectStandard14Widths_Courier(t *testing.T) {
 		MissingWidth: 1000,
 	}
 
-	injectStandard14Widths(font, "Courier")
+	injectStandard14Widths(font, "Courier", false)
 
 	if len(font.Widths) != 256 {
 		t.Fatalf("expected 256 widths, got %d", len(font.Widths))
@@ -104,7 +104,7 @@ func TestInjectStandard14Widths_CourierBold(t *testing.T) {
 		MissingWidth: 1000,
 	}
 
-	injectStandard14Widths(font, "Courier-Bold")
+	injectStandard14Widths(font, "Courier-Bold", false)
 
 	// All Courier-Bold widths should be 600 (monospaced).
 	if w := font.GlyphWidth(65); w != 600 {
@@ -118,7 +118,7 @@ func TestInjectStandard14Widths_SubsetPrefix(t *testing.T) {
 		MissingWidth: 1000,
 	}
 
-	injectStandard14Widths(font, "ABCDEF+Helvetica-Bold")
+	injectStandard14Widths(font, "ABCDEF+Helvetica-Bold", false)
 
 	if len(font.Widths) != 256 {
 		t.Fatalf("expected 256 widths, got %d", len(font.Widths))
@@ -136,7 +136,7 @@ func TestInjectStandard14Widths_NonStandard(t *testing.T) {
 		MissingWidth: 1000,
 	}
 
-	injectStandard14Widths(font, "CustomFont")
+	injectStandard14Widths(font, "CustomFont", false)
 
 	// Non-standard fonts now get Helvetica fallback widths.
 	if len(font.Widths) != 256 {
@@ -150,7 +150,7 @@ func TestInjectStandard14Widths_TimesRoman(t *testing.T) {
 		MissingWidth: 1000,
 	}
 
-	injectStandard14Widths(font, "Times-Roman")
+	injectStandard14Widths(font, "Times-Roman", false)
 
 	// Times-Roman 'A' (code 65) should be 722.
 	if w := font.GlyphWidth(65); w != 722 {
@@ -168,7 +168,7 @@ func TestInjectStandard14Widths_HelveticaOblique(t *testing.T) {
 		MissingWidth: 1000,
 	}
 
-	injectStandard14Widths(font, "Helvetica-Oblique")
+	injectStandard14Widths(font, "Helvetica-Oblique", false)
 
 	// Helvetica-Oblique shares widths with Helvetica.
 	// 'A' should be 667.
@@ -183,7 +183,7 @@ func TestInjectStandard14Widths_CommaVariant(t *testing.T) {
 		MissingWidth: 1000,
 	}
 
-	injectStandard14Widths(font, "Helvetica,Bold")
+	injectStandard14Widths(font, "Helvetica,Bold", false)
 
 	if len(font.Widths) != 256 {
 		t.Fatalf("expected 256 widths for comma variant, got %d", len(font.Widths))
@@ -196,7 +196,7 @@ func TestInjectStandard14Widths_ExtendedChars(t *testing.T) {
 		MissingWidth: 1000,
 	}
 
-	injectStandard14Widths(font, "Helvetica")
+	injectStandard14Widths(font, "Helvetica", false)
 
 	// WinAnsiEncoding 0xC4 (196) = Ä (Adieresis) → should be 667.
 	if w := font.GlyphWidth(0xC4); w != 667 {
@@ -241,7 +241,7 @@ func TestStandard14GlyphWidths_Completeness(t *testing.T) {
 // through the built-in encoding: 0xA2 is minute (247), 0xB2 second (411).
 func TestInjectStandard14Widths_SymbolBuiltinNames(t *testing.T) {
 	font := &Font{Encoding: encodings.BuildSymbolEncoding()}
-	injectStandard14Widths(font, "Symbol")
+	injectStandard14Widths(font, "Symbol", false)
 	if w := font.GlyphWidth(0xA2); w != 247 {
 		t.Errorf("Symbol minute width: got %g, want 247", w)
 	}
@@ -255,7 +255,7 @@ func TestInjectStandard14Widths_SymbolBuiltinNames(t *testing.T) {
 // code 4 named phi is 521 units, theta at code 8 is 521.
 func TestInjectStandard14Widths_SymbolDifferences(t *testing.T) {
 	font := &Font{Encoding: map[byte]rune{4: 0x03C6, 8: 0x03B8}}
-	injectStandard14Widths(font, "Symbol")
+	injectStandard14Widths(font, "Symbol", false)
 	if w := font.GlyphWidth(4); w != 521 {
 		t.Errorf("Symbol phi width: got %g, want 521", w)
 	}

@@ -42,7 +42,7 @@ func fallbackFont() *Font {
 		Subtype:  "Type1",
 		Encoding: copyEncoding(encodings.WinAnsiEncoding),
 	}
-	injectStandard14Widths(font, "Helvetica")
+	injectStandard14Widths(font, "Helvetica", false)
 	return font
 }
 

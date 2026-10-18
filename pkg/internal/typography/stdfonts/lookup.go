@@ -30,7 +30,7 @@ var (
 // removed, so "ABCDEF+Arial" names no standard font. Every caller must treat
 // the result as read-only: the tables are shared.
 func IdentityGlyphMap(name string) map[uint16]rune {
-	if !mapsToStandardFont(normalizeFontName(name)) {
+	if !mapsToStandardFont(NormalizeFontName(name)) {
 		return nil
 	}
 	switch {
@@ -60,11 +60,29 @@ func PDFJSFontName(fontName, baseFont string) string {
 	return fontName
 }
 
-// normalizeFontName mirrors PDF.js's normalizeFontName (fonts_utils.js):
+// NormalizeFontName mirrors PDF.js's normalizeFontName (fonts_utils.js):
 // commas and underscores become hyphens, and white space is dropped.
-func normalizeFontName(name string) string {
+func NormalizeFontName(name string) string {
 	name = strings.NewReplacer(",", "-", "_", "-").Replace(name)
 	return strings.Join(strings.Fields(name), "")
+}
+
+// serifRE is the test PDF.js's isSerifFont applies to a name its serif
+// table does not list.
+var serifRE = regexp.MustCompile(`(?i)serif`)
+
+// IsSerifFont reports whether PDF.js takes the Times-Roman metrics rather
+// than Helvetica's for a font whose widths it has to guess, as it does for a
+// simple font with no /Widths whose name is no standard font's (evaluator.js,
+// getBaseFontMetrics through isSerifFont): the name up to its first hyphen
+// is a family the serif table lists ([pdfjsSerifFonts]), or contains
+// "serif" in any case. PDF.js reads no /Flags for this choice, and its
+// pattern makes "SansSerif" a serif face. name is the name PDF.js passes:
+// the /BaseFont as written when the font has a font descriptor, and the
+// [NormalizeFontName] form of it when it has none (translateFont).
+func IsSerifFont(name string) bool {
+	family, _, _ := strings.Cut(name, "-")
+	return pdfjsSerifFonts[family] || serifRE.MatchString(family)
 }
 
 // mapsToStandardFont reports whether PDF.js treats the normalised name as a
@@ -83,7 +101,7 @@ func mapsToStandardFont(name string) bool {
 
 // isKnownFontName mirrors PDF.js's isKnownFontName (standard_fonts.js).
 func isKnownFontName(name string) bool {
-	name = normalizeFontName(name)
+	name = NormalizeFontName(name)
 	_, std := pdfjsStdFontMap[name]
 	_, nonStd := pdfjsNonStdFontMap[name]
 	return std || nonStd || pdfjsSerifFonts[name] || pdfjsSymbolsFonts[name]

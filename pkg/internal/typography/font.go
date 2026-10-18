@@ -1129,7 +1129,8 @@ func resolveSimpleFontMetrics(ctx context.Context, doc *document.Document, fontD
 				doc.Logger.Debug("resolving BaseFont for Standard 14 fallback", slog.Any("err", err))
 			}
 			if bfName != "" {
-				injectStandard14Widths(font, string(bfName))
+				_, described := fontDict["FontDescriptor"]
+				injectStandard14Widths(font, string(bfName), substituteIsSerif(string(bfName), described))
 			}
 		}
 	}
@@ -2905,13 +2906,15 @@ func decodeFontStream(ctx context.Context, doc *document.Document, fdDict ast.Pd
 // injectStandard14Widths populates font.Widths from the Standard 14 Adobe
 // Font Metrics if the base font name matches. It iterates over char codes
 // 0-255, uses the font's encoding to map each code to a glyph name, and
-// looks up that glyph's width in the canonical AFM table.
-func injectStandard14Widths(font *Font, baseFont string) {
+// looks up that glyph's width in the canonical AFM table. A name no standard
+// font answers to takes Times-Roman's metrics when serif is set, and
+// Helvetica's otherwise ([substituteIsSerif]).
+func injectStandard14Widths(font *Font, baseFont string, serif bool) {
 	name := normalizeBase14Name(baseFont)
 	if !isStandard14(name) {
 		// Last resort: use Helvetica (sans-serif) or Times-Roman (serif)
 		// metrics as a best-effort fallback for width-based space inference.
-		if isSerifFont(baseFont) {
+		if serif {
 			name = "Times-Roman"
 		} else {
 			name = "Helvetica"
@@ -2966,6 +2969,31 @@ func injectStandard14Widths(font *Font, baseFont string) {
 	font.LastChar = 255
 	font.Widths = widths
 	font.widthStated = nil
+}
+
+// substituteIsSerif reports whether a simple font with no /Widths, named
+// baseFont, takes Times-Roman's metrics rather than Helvetica's. The widths
+// are a guess either way: ISO 32000-1, 9.6.2.1, Table 111 requires /Widths
+// of every simple font but the standard 14. litho guesses as PDF.js does, so
+// the spaces it infers from the widths are the ones PDF.js infers
+// (evaluator.js, extractWidths and translateFont through getBaseFontMetrics
+// and isSerifFont). PDF.js reads the name alone, never the Serif flag of
+// /Flags (9.8.2, Table 123), which it consults only to pick a rendering
+// fallback, and it counts "SansSerif" as serif, so litho does too. It reads
+// the /BaseFont as written when the font has a font descriptor (described),
+// and in its normalised form when it has none. See [stdfonts.IsSerifFont].
+//
+// # Corpus evidence
+//
+//   - govdocs, pdfjs, pdfcpu, facturx, pdf20: one font reaches this choice
+//     with a name no standard font answers to (pdfjs issue2391-2.pdf,
+//     Monaco, no font descriptor). It is sans under the former substring
+//     list and under PDF.js's rule, so no extracted text changes.
+func substituteIsSerif(baseFont string, described bool) bool {
+	if !described {
+		baseFont = stdfonts.NormalizeFontName(baseFont)
+	}
+	return stdfonts.IsSerifFont(baseFont)
 }
 
 // symbolByRune and dingbatsByRune invert the glyph-name to Unicode maps of
