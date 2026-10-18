@@ -81,16 +81,26 @@ const (
 // separationDef is the definition a Separation colour space gives its
 // colourant: the family of its alternate space and its tint transform. An
 // alternate that names a /ColorSpace entry is the family of that entry (see
-// [resolveColorSpaceName]).
+// [resolveColorSpaceName]), and a device family a Default colour space
+// replaces is the family of that Default (see [separationDefOf]).
 type separationDef struct {
 	alternate string
 	tint      ast.PdfObject
 }
 
 // separationDefOf returns the colourant a Separation array arr names and the
-// definition it gives it, or false when arr names no colourant. colorSpaces is
-// the /ColorSpace dictionary a name the array holds resolves against.
-func separationDefOf(ctx context.Context, doc *document.Document, arr ast.PdfArray, colorSpaces ast.PdfDict) (string, separationDef, bool) {
+// definition it gives it, or false when arr names no colourant. defaults are
+// the Default colour spaces in force where the array is read, whose
+// /ColorSpace dictionary a name the array holds resolves against.
+//
+// veraPDF compares the alternate spaces it builds, and builds a device family
+// a Default colour space replaces as that Default (ISO 32000-1, 8.6.5.6;
+// veraPDF-validation 1.30, the parser's ColorSpaceFactory). Measured with
+// veraPDF 1.30.2 at PDF/A-2b: a page's /CS0, a Separation over DeviceCMYK
+// under the page's /DefaultCMYK, and the same Separation as the shading of a
+// shading pattern, which no Default reaches, fail the test; with the
+// shading's alternate the Default's ICCBased space they pass.
+func separationDefOf(ctx context.Context, doc *document.Document, arr ast.PdfArray, defaults defaultCS) (string, separationDef, bool) {
 	if len(arr) < 4 {
 		return "", separationDef{}, false
 	}
@@ -98,7 +108,10 @@ func separationDefOf(ctx context.Context, doc *document.Document, arr ast.PdfArr
 	if err != nil || name == "" {
 		return "", separationDef{}, false
 	}
-	alternate := resolveCSName(ctx, doc, resolveColorSpaceName(ctx, doc, arr[2], colorSpaces))
+	alternate := resolveCSName(ctx, doc, resolveColorSpaceName(ctx, doc, arr[2], defaults.colorSpaces))
+	if e := defaults.entry(deviceFamily(alternate)); e.readable {
+		alternate = resolveCSName(ctx, doc, resolveColorSpaceName(ctx, doc, e.obj, defaults.colorSpaces))
+	}
 	return string(name), separationDef{alternate: alternate, tint: arr[3]}, true
 }
 
@@ -143,8 +156,8 @@ func checkSeparationLinks(ctx context.Context, doc *document.Document, pages []p
 	same := func(a, b separationDef) bool {
 		return a.alternate == b.alternate && tintTransformEqual(ctx, doc, a.tint, b.tint)
 	}
-	record := func(arr ast.PdfArray, colorSpaces ast.PdfDict) (string, separationDef, bool) {
-		name, def, ok := separationDefOf(ctx, doc, arr, colorSpaces)
+	record := func(arr ast.PdfArray, defaults defaultCS) (string, separationDef, bool) {
+		name, def, ok := separationDefOf(ctx, doc, arr, defaults)
 		if !ok {
 			return "", separationDef{}, false
 		}
@@ -160,7 +173,7 @@ func checkSeparationLinks(ctx context.Context, doc *document.Document, pages []p
 		if n.kind != "Separation" {
 			return
 		}
-		name, def, ok := record(n.arr, n.colorSpaces)
+		name, def, ok := record(n.arr, n.defaults)
 		if !ok {
 			return
 		}
@@ -182,8 +195,8 @@ func checkSeparationLinks(ctx context.Context, doc *document.Document, pages []p
 			*results = append(*results, failf(rule,
 				"page %d: Separation colorant %q has different tintTransform or alternateSpace than another", n.page+1, name)...)
 		}
-	}, func(arr ast.PdfArray, colorSpaces ast.PdfDict) {
-		record(arr, colorSpaces)
+	}, func(arr ast.PdfArray, defaults defaultCS) {
+		record(arr, defaults)
 	})
 }
 

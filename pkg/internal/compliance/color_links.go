@@ -47,7 +47,8 @@ const maxColorSpaceNameLinks = 256
 // indirect object, and mode is the overprint mode the link reached it under
 // (see [overprintMode]). colorSpaces is the /ColorSpace dictionary a name a
 // Separation or DeviceN array holds resolves against (see
-// [colorLinkWalk.judgeFamilyName]).
+// [colorLinkWalk.judgeFamilyName]), and defaults, for a Separation, the
+// Default colour spaces that replace a device family its alternate is.
 type colorNode struct {
 	page        int
 	in          *linkStream
@@ -59,6 +60,7 @@ type colorNode struct {
 	direct      bool
 	mode        overprintMode
 	colorSpaces ast.PdfDict
+	defaults    defaultCS
 }
 
 // linkStream is one content stream [colorLinkWalk] walks: a page's content,
@@ -348,9 +350,10 @@ type colorLinkWalk struct {
 	// a DeviceN's /Colorants, before any of them is judged, and, through pre,
 	// those the operators of a page's content and annotations select, with
 	// the forms and tiling patterns they paint, before any link of the page
-	// is judged. It also gets the /ColorSpace dictionary a name the array
-	// holds resolves against.
-	declare func(ast.PdfArray, ast.PdfDict)
+	// is judged. It also gets the Default colour spaces in force where the
+	// array is read, whose /ColorSpace dictionary a name the array holds
+	// resolves against.
+	declare func(ast.PdfArray, defaultCS)
 	// naming holds the /ColorSpace entry names the current link's walk of a
 	// colour space is resolving, so a name that reaches itself again is a
 	// cycle, and nameLinks counts the names that walk resolved, which
@@ -386,7 +389,7 @@ func walkColorLinks(ctx context.Context, doc *document.Document, pages []pageCtx
 // or by an annotation's appearance stream, every link fails; with the second
 // the base of an /Indexed space the page selects after the first, or on a
 // later page, only the three links to it do.
-func walkColorLinksDeclaring(ctx context.Context, doc *document.Document, pages []pageCtx, part int, visit func(colorNode), declare func(ast.PdfArray, ast.PdfDict)) {
+func walkColorLinksDeclaring(ctx context.Context, doc *document.Document, pages []pageCtx, part int, visit func(colorNode), declare func(ast.PdfArray, defaultCS)) {
 	newWalk := func(visit func(colorNode)) *colorLinkWalk {
 		w := &colorLinkWalk{doc: doc, part: part, visit: visit, declare: declare, judged: make(map[int]bool), judgedCMYK: make(map[cmykLink]bool), streams: make(map[string]*linkStream), naming: make(map[string]bool)}
 		// A stream that is some page's content is judged as that page's
@@ -791,22 +794,23 @@ func (w *colorLinkWalk) declareSeparations(ctx context.Context, ops []content.Op
 		},
 		link: func(ref csRef, _ int, _ string, _ overprintMode) {
 			if def := w.streams[ref.scope]; def != nil && ref.name != "" {
-				w.declareSeparation(ctx, def.colorSpaces[ast.PdfName(ref.name)], def.colorSpaces)
+				w.declareSeparation(ctx, def.colorSpaces[ast.PdfName(ref.name)], def.defaults)
 			}
 		},
 	})
 }
 
 // declareSeparation declares obj when it is a Separation array, or a name of
-// the /ColorSpace dictionary colorSpaces that reads as one (see
-// [resolveColorSpaceName]).
-func (w *colorLinkWalk) declareSeparation(ctx context.Context, obj ast.PdfObject, colorSpaces ast.PdfDict) {
-	arr, err := document.ResolveArray(ctx, w.doc, resolveColorSpaceName(ctx, w.doc, obj, colorSpaces))
+// the /ColorSpace dictionary of defaults that reads as one (see
+// [resolveColorSpaceName]), read where the Default colour spaces defaults are
+// in force.
+func (w *colorLinkWalk) declareSeparation(ctx context.Context, obj ast.PdfObject, defaults defaultCS) {
+	arr, err := document.ResolveArray(ctx, w.doc, resolveColorSpaceName(ctx, w.doc, obj, defaults.colorSpaces))
 	if err != nil || len(arr) == 0 {
 		return
 	}
 	if kind, _ := document.ResolveName(ctx, w.doc, arr[0]); kind == "Separation" { // Best-effort: an unreadable family is no Separation.
-		w.declare(arr, colorSpaces)
+		w.declare(arr, defaults)
 	}
 }
 
@@ -1019,7 +1023,7 @@ func (w *colorLinkWalk) judgeSpaceAs(ctx context.Context, obj ast.PdfObject, s *
 			w.judgeSpace(ctx, arr[1], s, defaults.outside(), true, nesting+1)
 		}
 	case "Separation":
-		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr, colorSpaces: defaults.colorSpaces})
+		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr, colorSpaces: defaults.colorSpaces, defaults: defaults})
 		if len(arr) >= 3 {
 			w.judgeSpace(ctx, arr[2], s, defaults, true, nesting+1)
 		}
@@ -1178,7 +1182,7 @@ func (w *colorLinkWalk) judgeDeviceNAttributes(ctx context.Context, attrsObj ast
 	colorants, _ := document.ResolveDict(ctx, w.doc, attrs["Colorants"]) // Best-effort: unreadable colorants hold nothing.
 	if w.declare != nil && !w.declareOps {
 		for _, name := range sortedNames(colorants) {
-			w.declareSeparation(ctx, colorants[name], defaults.colorSpaces)
+			w.declareSeparation(ctx, colorants[name], defaults.outside())
 		}
 	}
 	for _, name := range sortedNames(colorants) {
