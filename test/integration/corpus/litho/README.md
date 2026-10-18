@@ -211,6 +211,7 @@ one deliberately rather than diffing it against a fresh build.
 | `ocgconfigs_2b.pdf`    | PDF/A-2b     | An optional content `/Order` incomplete in `/Configs` alone      |
 | `ttmaccopy_2b.pdf`     | PDF/A-2b     | Symbolic TrueType whose (1,0) `cmap` copies (3,1), and a control |
 | `nestedpattern_2b.pdf` | PDF/A-2b     | Names a pattern cell or a form's `scn` finds only on the page    |
+| `symbolname_2u.pdf`    | PDF/A-2u     | A font whose name holds "Symbol", and a Symbol-only `/CharSet`   |
 
 ### Must-not-fire controls
 
@@ -603,6 +604,7 @@ which are covered under [Known divergences](#known-divergences).
 | `structcopy_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 0    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
 | `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 30   |
+| `symbolname_2u.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
 | `tableregular_ua2.pdf` | 4    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 2    | 5    |
@@ -6559,16 +6561,52 @@ leaves `P2` and `X1` as they are. veraPDF 1.30.2 finds the output fully
 conforming at PDF/A-2a, PDF/A-2b, PDF/A-2u, PDF/A-3b and PDF/A-4 in both
 modes, where it reported test 2 three times before.
 
+### `symbolname_2u.pdf`
+
+ISO 19005-2, 6.2.11.7.2 asks a Unicode value of every shown glyph, which ISO
+32000-1, 9.10.2 derives from the glyph name the encoding gives the code, and
+veraPDF asks it of every Glyph (`toUnicode != null`) whatever the font is
+called. litho exempted a font whose `/BaseFont` holds "Symbol" twice over: when
+its `/CharSet` lists only Symbol-font names, and when the shown codes its
+encoding names all resolve, skipping the codes it leaves unnamed. No corpus
+file reaches either exemption at PDF/A-1a, 2u, 3u, 4 or its own profile, so
+this fixture plants the first:
+
+| Font | Construct                                                                         | Answers at PDF/A-2u          |
+| ---- | --------------------------------------------------------------------------------- | ---------------------------- |
+| `MS` | nonsymbolic TrueType `MdSymbolA-Regular`, `/CharSet (/alpha/beta)`, shows `41 42` | `6.2.11.7.2/1`, `6.2.11.6/2` |
+
+Its `/Differences` name `41 A 42 H20850` over no `/BaseEncoding`, and the
+program holds the glyphs `A` and `H20850`, so both codes select a glyph.
+`H20850` has no Unicode value in the Adobe Glyph List, the Symbol font or
+ZapfDingbats, so code `42` fails `6.2.11.7.2/1`. A `/CharSet` is meaningful for
+Type 1 fonts alone (ISO 32000-1, Table 122), and veraPDF reads none for a
+TrueType. The `/Encoding` dictionary names no `/BaseEncoding`, which a
+nonsymbolic TrueType fails under `6.2.11.6/2` on both tools.
+
+| Rule at PDF/A-2u                  | veraPDF | litho | litho before |
+| --------------------------------- | ------- | ----- | ------------ |
+| `6.2.11.6/2` nonsymbolic encoding | 1       | 1     | 1            |
+| `6.2.11.7.2/1` no Unicode         | 1       | 1     | 0            |
+| `6.2.4.3/4` DeviceGray            | 1       | 1     | 1            |
+| `6.6.2.1/1` no metadata           | 1       | 1     | 1            |
+
+litho left the Unicode rule out at PDF/A-1a (`6.3.8/1`), PDF/A-2a, 2u, 3a and
+3u, PDF/UA-1 (`7.21.7/1`) and PDF/UA-2 (`8.4.5.8/1`). veraPDF 1.30.2 and litho
+now report the same rule set and the same counts in all thirteen cells.
+Remediation writes the font a `/ToUnicode` CMap and leaves the encoding rule,
+which both tools report on the output at every manifest profile in both modes.
+
 ## Scope
 
 `manifest.json` expands every fixture across the ten profiles it lists, so the
-runner scores 159 x 10 = 1590 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 159 x 13 = 2067 cells. litho
+runner scores 160 x 10 = 1600 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 160 x 13 = 2080 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2065 of the 2067 cells. The two
+fixtures exist to protect, and it holds in 2078 of the 2080 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -6580,7 +6618,7 @@ ten is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1590 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 1600 and moves only `ruleset_mismatch`, and on
 those ten cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
@@ -6598,10 +6636,10 @@ listed first. Appended rather than sorted in, they leave the determinism
 feature dealing each fixture's operations over the same first seven profiles,
 and the mutation anchor on PDF/A-1b. The fixture sections that say "the first
 eight manifest profiles" were measured before the two joined. At both, live
-veraPDF 1.30.2 reports the rule set the counts table gives in all 318 cells, and
+veraPDF 1.30.2 reports the rule set the counts table gives in all 320 cells, and
 litho the same set in each. Remediated at both, every output carries the same
 rule set on both tools, no rule appears that the input did not fail, and the
-fully fixed cells are:
+fully fixed cells, measured before `symbolname_2u` joined, are:
 
 | Profile  | Default | Aggressive | Rules left most often                          |
 | -------- | ------- | ---------- | ---------------------------------------------- |
