@@ -56,6 +56,11 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		el := elements[i]
 		var newLine bool
 		switch {
+		case quarterTurnLine(runs.last, el) && quarterTurnLine(prev, el):
+			// A line turned a quarter round keeps the runs of an upright
+			// one, across the page X axis ([acrossLine]), so a subscript
+			// shifted by less than the run ratio stays on its line.
+			newLine = runs.breaksLine(i, prev, el)
 		case el.Vertical || isOrthogonalRotation(el.Angle):
 			// Vertical WMode or 90°/270° rotated text: characters progress
 			// along Y, so line breaks are detected by X changes.
@@ -238,7 +243,9 @@ func leavesLine(across, size float64) bool {
 // Run segmentation factors, after PDF.js's text-item builder
 // (src/core/evaluator.js, compareWithLastPosition), as fractions of the
 // font size: a glyph whose baseline moves more than verticalShiftRatio of
-// the previous glyph's size starts a new run (VERTICAL_SHIFT_RATIO), a gap
+// the size across the line of the glyph that started the run starts a new
+// run (VERTICAL_SHIFT_RATIO, against the height PDF.js gives a text item
+// when it begins one, ensureTextContentItem), a gap
 // below negativeRunGapFactor is a move back that starts one
 // (NEGATIVE_SPACE_FACTOR), and a gap above spaceInFlowMaxFactor is a jump
 // PDF.js marks with a space run of its own (SPACE_IN_FLOW_MAX_FACTOR).
@@ -250,10 +257,13 @@ const (
 
 // runTracker follows the runs of glyphs a horizontal line is made of, the
 // way PDF.js groups glyphs into text items, so a baseline shift breaks the
-// line in proportion to the font size rather than at a fixed distance.
+// line in proportion to the font size rather than at a fixed distance. A
+// line turned a quarter round is read the same way across the page X axis
+// ([acrossLine]), as PDF.js swaps the axes of such a line.
 //
 // A glyph continues the run of the glyph painted before it unless its
-// baseline moves by more than [verticalShiftRatio] of that glyph's size,
+// baseline moves by more than [verticalShiftRatio] of the size across the
+// line of the glyph that started the run,
 // its size changes, its marked-content sequence changes, or the gap
 // between them falls outside [negativeRunGapFactor] and
 // [spaceInFlowMaxFactor]. Every glyph first meets the test PDF.js puts each
@@ -302,9 +312,23 @@ const (
 //     thread_400_400561.pdf) and on none fewer, and on 2 more pages of files
 //     that still differ (govdocs thread_000_000282.pdf page 84, pdfjs
 //     issue19624.pdf page 1); facturx, pdf20 and pdfcpu do not move.
+//   - govdocs thread_200_200088.pdf, thread_200_200404.pdf, thread_400_400385.pdf
+//     and 10 more: slides set a quarter turn round broke the line at every
+//     subscript shifted across it by more than 2 units, "SO 2" and "C L"
+//     where PDF.js reads "SO2" and "CL". Reading those lines by runs makes
+//     words match PDF.js on 13 more files (all govdocs) and on none fewer.
+//   - govdocs thread_000_000547.pdf page 2: a bullet in a smaller size
+//     starts the run of "CH4", and PDF.js measures the subscript's shift
+//     against the bullet's size, so it breaks the line there and not on
+//     page 3, where the bullet has the size of the text. Measuring the
+//     shift against the glyph that started the run makes words match PDF.js
+//     on 7 more files (govdocs 6, pdfjs 1) and on none fewer.
 type runTracker struct {
-	startY float64
-	last   models.TextElement
+	// start is the glyph that started the current run, and startIdx its
+	// index.
+	start    models.TextElement
+	startIdx int
+	last     models.TextElement
 	// lastIdx indexes the glyph in last, to look up its font.
 	lastIdx int
 	// fonts is the font of each element, or nil when unknown.
@@ -320,7 +344,7 @@ type runTracker struct {
 // the font of each element, or nil when unknown, and items their
 // [textItemStarts].
 func newRunTracker(elements []models.TextElement, fonts []runFont, items []int) runTracker {
-	return runTracker{startY: elements[0].Y, last: elements[0], fonts: fonts, elements: elements, items: items}
+	return runTracker{start: elements[0], last: elements[0], fonts: fonts, elements: elements, items: items}
 }
 
 // advance makes el, the element i, the last glyph of its run.
@@ -431,7 +455,7 @@ func (r *runTracker) fontChanged(i int, prev, el models.TextElement) bool {
 // restart begins a new run at the element i, for a line the horizontal
 // rule did not decide.
 func (r *runTracker) restart(i int, el models.TextElement) {
-	r.startY = el.Y
+	r.start, r.startIdx = el, i
 	r.advance(i, el)
 }
 
@@ -441,7 +465,7 @@ func (r *runTracker) restart(i int, el models.TextElement) {
 // be.
 func (r *runTracker) breaksLine(i int, prev, el models.TextElement) bool {
 	if isSpaceGlyph(el.Text) {
-		return math.Abs(el.Y-prev.Y) > lineBreakTolerance
+		return acrossLine(prev, el) > lineBreakTolerance
 	}
 	if r.items != nil && r.items[i] != continuesItem {
 		return r.breaksItem(i, el)
@@ -452,22 +476,22 @@ func (r *runTracker) breaksLine(i int, prev, el models.TextElement) bool {
 	size := math.Abs(last.FontSize)
 	gap := computeLineGap(last, el)
 	if r.endsLine(lastIdx, i, last, el, gap, size) {
-		r.startY = el.Y
+		r.start, r.startIdx = el, i
 		return true
 	}
-	ref := r.startY
+	ref := r.start
 	switch {
 	case gap > spaceInFlowMaxFactor*size:
-		ref = last.Y
+		ref = last
 	case gap < negativeRunGapFactor*size,
-		math.Abs(el.Y-last.Y) > verticalShiftRatio*size,
+		acrossLine(last, el) > verticalShiftRatio*r.height(r.startIdx, r.start),
 		fontChanged,
 		el.MCID != last.MCID:
 	default:
 		return false
 	}
-	r.startY = el.Y
-	return math.Abs(el.Y-ref) > lineBreakTolerance
+	r.start, r.startIdx = el, i
+	return acrossLine(ref, el) > lineBreakTolerance
 }
 
 // breaksItem reports whether el, the element i, starts a new line as the
@@ -500,22 +524,22 @@ func (r *runTracker) breaksLine(i int, prev, el models.TextElement) bool {
 func (r *runTracker) breaksItem(i int, el models.TextElement) bool {
 	before := r.items[i]
 	from, fromIdx := r.last, r.lastIdx
-	startY := r.startY
+	start := r.start
 	r.advance(i, el)
-	r.startY = el.Y
+	r.start, r.startIdx = el, i
 	if before == opensStream {
-		return math.Abs(el.Y-startY) > lineBreakTolerance
+		return acrossLine(start, el) > lineBreakTolerance
 	}
 	prev := r.elements[before]
 	size := math.Abs(prev.FontSize)
 	gap := computeLineGap(prev, el)
 	if r.endsLine(before, i, prev, el, gap, size) {
-		return math.Abs(el.Y-startY) > min(lineBreakTolerance, sameBaselineRatio*r.height(fromIdx, from))
+		return acrossLine(start, el) > min(lineBreakTolerance, sameBaselineRatio*r.height(fromIdx, from))
 	}
 	if gap > trackingSpaceFactor*size {
-		return math.Abs(prev.Y-startY) > lineBreakTolerance || math.Abs(el.Y-prev.Y) > lineBreakTolerance
+		return acrossLine(start, prev) > lineBreakTolerance || acrossLine(prev, el) > lineBreakTolerance
 	}
-	return math.Abs(el.Y-startY) > lineBreakTolerance
+	return acrossLine(start, el) > lineBreakTolerance
 }
 
 // spacesItem reports whether a space goes before el, the element i, when
@@ -576,11 +600,19 @@ const sameBaselineRatio = 0.1
 // font size, so the lines of a tiny font break where a fixed tolerance
 // glues them.
 func (r *runTracker) endsLine(lastIdx, i int, last, el models.TextElement, gap, size float64) bool {
-	dy := el.Y - last.Y
 	height := r.height(lastIdx, last)
 	if gap < negativeRunGapFactor*size {
-		return math.Abs(dy) > backwardLineRatio*height
+		return acrossLine(last, el) > backwardLineRatio*height
 	}
+	if quarterTurnLine(last, el) {
+		// The text rise of a quarter-turned glyph lifts it along the page
+		// X axis, which [runFont] rise does not record, and PDF.js takes
+		// no rise out of a move across a rotated line: it scales the rise
+		// change by the Y axis of the text transform, zero at a quarter
+		// turn (compareWithLastPosition).
+		return acrossLine(last, el) > height
+	}
+	dy := el.Y - last.Y
 	if r.fonts != nil {
 		dy -= r.fonts[i].rise - r.fonts[lastIdx].rise
 	}
@@ -1160,6 +1192,29 @@ func isRotated(angle float64) bool {
 		return false // ~180° (mirrored horizontal)
 	}
 	return true
+}
+
+// quarterTurnLine reports whether a and b are set along the same line
+// direction rotated a quarter turn, 90° or -90°, so their lines run along
+// the page Y axis.
+func quarterTurnLine(a, b models.TextElement) bool {
+	return !a.Vertical && !b.Vertical && isOrthogonalRotation(a.Angle) && isOrthogonalRotation(b.Angle) &&
+		math.Abs(a.Angle-b.Angle) < math.Pi/180
+}
+
+// acrossLine returns how far b sits from a across the line they are set
+// on: along the page X axis for two glyphs set a quarter turn round
+// ([quarterTurnLine]), along the page Y axis otherwise. PDF.js swaps the
+// axes of a quarter-turned line before it compares two glyphs
+// (src/core/evaluator.js, compareWithLastPosition), and the reference
+// generator measures a rotated line along the normal of its baseline
+// (test/integration/corpus/lib/join-lines.mjs, acrossLine), so both read
+// the X distance there.
+func acrossLine(a, b models.TextElement) float64 {
+	if quarterTurnLine(a, b) {
+		return math.Abs(b.X - a.X)
+	}
+	return math.Abs(b.Y - a.Y)
 }
 
 // perpDist returns the absolute distance between two elements projected onto
