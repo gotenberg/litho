@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/semantics"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -204,5 +205,32 @@ func TestType3PathBounds(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestReconstructText_BeadReadsContentOrder pins that the text inside one
+// bead reads in content-stream order, its lines broken as on a page without
+// beads, and that the beads follow one another in thread order. The
+// superscript "1" sits 4.8 units above the name before it, so it ends that
+// line; the second bead, listed first, comes first.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200417.pdf page 1: "Xu 1 ," read "Xu1,".
+func TestReconstructText_BeadReadsContentOrder(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "X", X: 180, Y: 535.84, Width: 8, FontSize: 12},
+		{Text: "u", X: 188, Y: 535.84, Width: 6, FontSize: 12},
+		{Text: "1", X: 195.6, Y: 540.64, Width: 4.8, FontSize: 9.6},
+		{Text: ",", X: 200.4, Y: 535.84, Width: 3, FontSize: 12},
+		{Text: "T", X: 72, Y: 100, Width: 7, FontSize: 12},
+	}
+	beads := []semantics.Bead{
+		{Rect: [4]float64{50, 50, 300, 150}},
+		{Rect: [4]float64{50, 500, 300, 600}},
+	}
+	if got, want := ReconstructText(context.Background(), in, beads), "T\n\nXu\n1\n,"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

@@ -3,7 +3,6 @@ package typography
 import (
 	"context"
 	"math"
-	"sort"
 	"strings"
 	"unicode"
 
@@ -14,7 +13,8 @@ import (
 // ReconstructText takes spatial text elements and reassembles them into a string.
 // When no article thread beads are provided, it preserves content stream order
 // for maximum fidelity to the original document layout. When beads are provided,
-// it sorts elements by bead index to respect explicit multi-column reading order.
+// it reads the text of each bead in turn, in thread order
+// ([reconstructWithBeads]).
 func ReconstructText(ctx context.Context, elements []models.TextElement, beads []semantics.Bead) string {
 	return reconstructText(ctx, elements, nil, beads)
 }
@@ -39,9 +39,9 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		return ""
 	}
 
-	// When beads are present, use bead-aware spatial sorting.
+	// Beads order the text across them, not within one.
 	if len(beads) > 0 {
-		return reconstructWithBeads(ctx, elements, beads)
+		return reconstructWithBeads(ctx, elements, fonts, beads)
 	}
 
 	// Content stream order: group elements into lines, apply bidi reordering
@@ -1090,172 +1090,70 @@ func stringHasRTL(s string) bool {
 	return false
 }
 
-// reconstructWithBeads handles the bead-aware spatial sorting path for PDFs
-// that have article threads defining explicit reading order.
-func reconstructWithBeads(ctx context.Context, elements []models.TextElement, beads []semantics.Bead) string {
-	type elementWithBead struct {
-		models.TextElement
-		BeadIndex int
+// reconstructWithBeads reads a page whose text the beads of its article
+// threads cover ([ReconstructText]), elements paired with fonts as for
+// [reconstructText]. An article orders its beads, not the text inside one
+// (ISO 32000-1, 12.4.3): the text of each bead is read in content-stream
+// order, as a page without beads is, and the beads follow one another in
+// thread order, a blank line between two. An element in no bead follows
+// them all.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200417.pdf page 1: one bead covers the page.
+//     Sorting its text into rows 5 units tall put each superscript "1" on
+//     the line of the author name before it and glued them, "Xu1,", where
+//     PDF.js, which reads no beads, breaks the line at each. Reading the
+//     text inside a bead in content order makes words match PDF.js on that
+//     file and on none fewer; facturx, pdf20, pdfcpu and pdfjs do not move.
+func reconstructWithBeads(ctx context.Context, elements []models.TextElement, fonts []runFont, beads []semantics.Bead) string {
+	if len(fonts) != len(elements) {
+		fonts = nil
 	}
-
-	// Detect whether the page contains vertical text.
-	verticalCount := 0
-	for _, el := range elements {
-		if el.Vertical {
-			verticalCount++
-		}
-	}
-	isVerticalPage := verticalCount > len(elements)/2
-
-	ewb := make([]elementWithBead, len(elements))
+	groups := make([][]int, len(beads)+1)
 	for i, el := range elements {
-		assignedBead := -1
-		for bIdx, bead := range beads {
-			minX := bead.Rect[0]
-			maxX := bead.Rect[2]
-			if minX > maxX {
-				minX, maxX = maxX, minX
-			}
-			minY := bead.Rect[1]
-			maxY := bead.Rect[3]
-			if minY > maxY {
-				minY, maxY = maxY, minY
-			}
-
-			if el.X >= minX && el.X <= maxX && el.Y >= minY && el.Y <= maxY {
-				assignedBead = bIdx
+		group := len(beads)
+		for b, bead := range beads {
+			if beadContains(bead, el) {
+				group = b
 				break
 			}
 		}
-		ewb[i] = elementWithBead{TextElement: el, BeadIndex: assignedBead}
+		groups[group] = append(groups[group], i)
 	}
-
-	if isVerticalPage {
-		sort.SliceStable(ewb, func(i, j int) bool {
-			if ewb[i].BeadIndex != ewb[j].BeadIndex {
-				if ewb[i].BeadIndex == -1 {
-					return false
-				}
-				if ewb[j].BeadIndex == -1 {
-					return true
-				}
-				return ewb[i].BeadIndex < ewb[j].BeadIndex
-			}
-			if ewb[i].X > ewb[j].X+2.0 {
-				return true
-			} else if ewb[i].X < ewb[j].X-2.0 {
-				return false
-			}
-			return ewb[i].Y > ewb[j].Y
-		})
-	} else {
-		sort.SliceStable(ewb, func(i, j int) bool {
-			if ewb[i].BeadIndex != ewb[j].BeadIndex {
-				if ewb[i].BeadIndex == -1 {
-					return false
-				}
-				if ewb[j].BeadIndex == -1 {
-					return true
-				}
-				return ewb[i].BeadIndex < ewb[j].BeadIndex
-			}
-			// Y-tolerance sized for sub/superscripts. Typical drops
-			// are 20-30% of font size (e.g., 7.98 vs 9.96 baseline ≈
-			// 2.5 pt). A 5 pt tolerance keeps the subscript glyphs
-			// sorted in document order with the baseline run instead
-			// of forming a separate "row" that the gap heuristic then
-			// reads as a word break ("0 -Tl" → "0 -T l"). Real line
-			// breaks are 10+ pt (line height ≈ 1.2 × font size for
-			// 10+ pt fonts), well above this threshold.
-			const sameRowDY = 5.0
-			if ewb[i].Y > ewb[j].Y+sameRowDY {
-				return true
-			} else if ewb[i].Y < ewb[j].Y-sameRowDY {
-				return false
-			}
-			return ewb[i].X < ewb[j].X
-		})
-	}
-
-	// Group sorted elements into lines.
-	type lineGroup struct {
-		elements []elementWithBead
-	}
-	var lines []lineGroup
-	currentLine := lineGroup{elements: []elementWithBead{ewb[0]}}
-
-	for i := 1; i < len(ewb); i++ {
-		if i%500 == 0 {
-			if ctx.Err() != nil {
-				return ""
-			}
-		}
-		prev := ewb[i-1]
-		curr := ewb[i]
-
-		isNewLine := false
-		switch {
-		case prev.BeadIndex != curr.BeadIndex:
-			isNewLine = true
-		case isVerticalPage:
-			dx := prev.X - curr.X
-			if dx > 0.5*curr.FontSize || dx < -0.5*curr.FontSize {
-				isNewLine = true
-			}
-		default:
-			dy := prev.Y - curr.Y
-			if dy > 0.5*curr.FontSize || dy < -0.5*curr.FontSize {
-				isNewLine = true
-			}
-		}
-
-		if isNewLine {
-			lines = append(lines, currentLine)
-			currentLine = lineGroup{elements: []elementWithBead{curr}}
-		} else {
-			currentLine.elements = append(currentLine.elements, curr)
-		}
-	}
-	lines = append(lines, currentLine)
-
 	var sb strings.Builder
-	for lineIdx, line := range lines {
-		lineElems := make([]models.TextElement, len(line.elements))
-		indices := make([]int, len(line.elements))
-		for i, e := range line.elements {
-			lineElems[i] = e.TextElement
-			indices[i] = i
+	for _, group := range groups {
+		if len(group) == 0 {
+			continue
 		}
-		indices, _ = reorderBidiIndices(lineElems, indices, nil)
-
-		if lineIdx > 0 {
-			prevLine := lines[lineIdx-1]
-			lastPrev := prevLine.elements[len(prevLine.elements)-1]
-			firstCurr := line.elements[0]
-			if lastPrev.BeadIndex != firstCurr.BeadIndex {
-				sb.WriteString("\n\n")
-			} else {
-				sb.WriteString("\n")
+		if ctx.Err() != nil {
+			return ""
+		}
+		groupElements := make([]models.TextElement, len(group))
+		var groupFonts []runFont
+		if fonts != nil {
+			groupFonts = make([]runFont, len(group))
+		}
+		for k, i := range group {
+			groupElements[k] = elements[i]
+			if fonts != nil {
+				groupFonts[k] = fonts[i]
 			}
 		}
-
-		spaceThreshold := computeSpaceThreshold(lineElems, indices)
-
-		for i, idx := range indices {
-			if i > 0 {
-				prev := line.elements[indices[i-1]].TextElement
-				curr := line.elements[idx].TextElement
-				sameChunk := prev.Chunk == curr.Chunk && curr.Chunk != 0
-				gap := computeLineGap(prev, curr)
-				if shouldInsertSpace(prev, gap, spaceThreshold, sameChunk) {
-					sb.WriteString(" ")
-				}
-			}
-			sb.WriteString(line.elements[idx].Text)
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
 		}
+		sb.WriteString(reconstructText(ctx, groupElements, groupFonts, nil))
 	}
+	return sb.String()
+}
 
-	return normalizeExtractionUnicode(normalizeSoftHyphens(sb.String()))
+// beadContains reports whether the origin of el lies in the rectangle of
+// bead, whichever corners the rectangle names.
+func beadContains(bead semantics.Bead, el models.TextElement) bool {
+	minX, maxX := min(bead.Rect[0], bead.Rect[2]), max(bead.Rect[0], bead.Rect[2])
+	minY, maxY := min(bead.Rect[1], bead.Rect[3]), max(bead.Rect[1], bead.Rect[3])
+	return el.X >= minX && el.X <= maxX && el.Y >= minY && el.Y <= maxY
 }
 
 // computeLineGap computes the inter-glyph gap (delta - prevWidth) for a pair,

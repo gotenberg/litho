@@ -1152,15 +1152,7 @@ func beadsCoverAllElements(elements []models.TextElement, beads []semantics.Bead
 
 func elementInsideAnyBead(el models.TextElement, beads []semantics.Bead) bool {
 	for _, bead := range beads {
-		minX, maxX := bead.Rect[0], bead.Rect[2]
-		if minX > maxX {
-			minX, maxX = maxX, minX
-		}
-		minY, maxY := bead.Rect[1], bead.Rect[3]
-		if minY > maxY {
-			minY, maxY = maxY, minY
-		}
-		if el.X >= minX && el.X <= maxX && el.Y >= minY && el.Y <= maxY {
+		if beadContains(bead, el) {
 			return true
 		}
 	}
