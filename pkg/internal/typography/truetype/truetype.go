@@ -244,6 +244,42 @@ func CmapSubtables(data []byte) ([]CmapSubtable, error) {
 	return out, nil
 }
 
+// SubtableCodeToGID returns the character code to glyph ID map of the cmap
+// subtable st names, read in the subtable's own code space. Unlike
+// [CharCodeToGID], which reads the preferred Unicode subtable, it lets a caller
+// compare two subtables code by code. It returns an error wrapping
+// [ErrTableNotFound] when the font declares no such subtable, and supports
+// formats 0, 4, 6 and 12.
+func SubtableCodeToGID(ctx context.Context, data []byte, st CmapSubtable) (map[uint32]uint16, error) {
+	records, err := ParseTableDirectory(data)
+	if err != nil {
+		return nil, err
+	}
+	cmapData, err := TableData(data, records, "cmap")
+	if err != nil {
+		return nil, err
+	}
+	sources, err := cmapRecords(cmapData)
+	if err != nil {
+		return nil, err
+	}
+	idx := slices.IndexFunc(sources, func(r cmapSubtableRecord) bool {
+		return r.platform == st.PlatformID && r.encoding == st.EncodingID
+	})
+	if idx < 0 {
+		return nil, fmt.Errorf("%w: no cmap record (%d,%d)", ErrTableNotFound, st.PlatformID, st.EncodingID)
+	}
+	off := sources[idx].offset
+	if int64(off) >= int64(len(cmapData)) {
+		return nil, fmt.Errorf("%w: cmap subtable offset out of bounds", ErrInvalidFont)
+	}
+	codes, _, err := decodeCmapSubtable(ctx, cmapData[off:])
+	if err != nil {
+		return nil, fmt.Errorf("decoding cmap subtable (%d,%d): %w", st.PlatformID, st.EncodingID, err)
+	}
+	return codes, nil
+}
+
 // PostGlyphNames extracts glyph names from the post (PostScript) table.
 // Returns a map of glyph ID → glyph name. Only post table formats 1.0 and
 // 2.0 are supported; other formats return an empty map.

@@ -206,6 +206,35 @@ func TestCmapSubtables_Enumerates(t *testing.T) {
 	}
 }
 
+func TestSubtableCodeToGIDReadsTheNamedSubtable(t *testing.T) {
+	t.Parallel()
+	mac := buildCmapFormat0(map[uint8]uint8{0x80: 7, 0xE4: 9})
+	win := buildCmapFormat4(map[uint16]uint16{0xC4: 7, 0xE4: 8})
+	font := buildTableDirectory(map[string][]byte{"cmap": buildCmapTableMultiple(
+		[]CmapSubtable{{PlatformID: 1, EncodingID: 0}, {PlatformID: 3, EncodingID: 1}},
+		[][]byte{mac, win},
+	)})
+	ctx := context.Background()
+
+	got, err := SubtableCodeToGID(ctx, font, CmapSubtable{PlatformID: 1, EncodingID: 0})
+	if err != nil {
+		t.Fatalf("SubtableCodeToGID (1,0): %v", err)
+	}
+	if len(got) != 2 || got[0x80] != 7 || got[0xE4] != 9 {
+		t.Errorf("(1,0) codes = %v, want 0x80->7 and 0xE4->9", got)
+	}
+	got, err = SubtableCodeToGID(ctx, font, CmapSubtable{PlatformID: 3, EncodingID: 1})
+	if err != nil {
+		t.Fatalf("SubtableCodeToGID (3,1): %v", err)
+	}
+	if got[0xC4] != 7 || got[0xE4] != 8 {
+		t.Errorf("(3,1) codes = %v, want 0xC4->7 and 0xE4->8", got)
+	}
+	if _, err := SubtableCodeToGID(ctx, font, CmapSubtable{PlatformID: 3, EncodingID: 0}); !errors.Is(err, ErrTableNotFound) {
+		t.Errorf("SubtableCodeToGID (3,0) error = %v, want ErrTableNotFound", err)
+	}
+}
+
 func TestGlyphToUnicode_Format12(t *testing.T) {
 	// Build a Format 12 subtable with one group: U+1F600 (😀) → GID 100.
 	numGroups := 1

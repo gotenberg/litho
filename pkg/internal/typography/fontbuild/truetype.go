@@ -18,6 +18,9 @@ type Glyph struct {
 	// Symbol, when non-zero, is the code the TrueType (3,0) symbol cmap maps
 	// to the glyph, already offset into the 0xF000 range.
 	Symbol uint16
+	// Mac, when non-zero, is the code the TrueType (1,0) Macintosh cmap maps
+	// to the glyph.
+	Mac byte
 	// Advance is the glyph's advance width in font units.
 	Advance uint16
 	// Empty leaves the glyph without an outline, as a space is.
@@ -179,12 +182,20 @@ func compositeGlyph(gids []uint16) []byte {
 }
 
 // cmap returns a cmap table with a (3,1) format 4 subtable over the glyphs'
-// code points and, when any glyph has one, a (3,0) format 4 subtable over
-// their symbol codes.
+// code points, when any glyph has one a (3,0) format 4 subtable over their
+// symbol codes, and when any glyph has one a (1,0) format 0 subtable over their
+// Macintosh codes.
 func (TrueType) cmap(glyphs []Glyph) []byte {
 	uni := make(map[uint16]uint16)
 	sym := make(map[uint16]uint16)
+	var mac []byte
 	for gid, g := range glyphs {
+		if g.Mac != 0 {
+			if mac == nil {
+				mac = make([]byte, 256)
+			}
+			mac[g.Mac] = byte(gid) //nolint:gosec // G115: test programs hold few glyphs.
+		}
 		if g.Unicode > 0 && g.Unicode <= 0xFFFF {
 			uni[uint16(g.Unicode)] = uint16(gid) //nolint:gosec // G115: bounded to the BMP and to few glyphs.
 		}
@@ -193,22 +204,26 @@ func (TrueType) cmap(glyphs []Glyph) []byte {
 		}
 	}
 	type sub struct {
+		platform uint16
 		encoding uint16
 		data     []byte
 	}
 	var subs []sub
+	if mac != nil {
+		subs = append(subs, sub{1, 0, format0(mac)})
+	}
 	if len(sym) > 0 {
-		subs = append(subs, sub{0, format4(sym)})
+		subs = append(subs, sub{3, 0, format4(sym)})
 	}
 	if len(uni) > 0 || len(sym) == 0 {
-		subs = append(subs, sub{1, format4(uni)})
+		subs = append(subs, sub{3, 1, format4(uni)})
 	}
 	var b bytes.Buffer
 	be16(&b, 0)
-	be16(&b, uint16(len(subs))) //nolint:gosec // G115: at most two subtables.
+	be16(&b, uint16(len(subs))) //nolint:gosec // G115: at most three subtables.
 	offset := 4 + 8*len(subs)
 	for _, s := range subs {
-		be16(&b, 3)
+		be16(&b, s.platform)
 		be16(&b, s.encoding)
 		be32(&b, uint32(offset)) //nolint:gosec // G115: test tables stay small.
 		offset += len(s.data)
@@ -216,6 +231,16 @@ func (TrueType) cmap(glyphs []Glyph) []byte {
 	for _, s := range subs {
 		b.Write(s.data)
 	}
+	return b.Bytes()
+}
+
+// format0 returns a format 0 cmap subtable over the 256 glyph IDs of gids.
+func format0(gids []byte) []byte {
+	var b bytes.Buffer
+	be16(&b, 0)
+	be16(&b, uint16(6+len(gids))) //nolint:gosec // G115: 262 bytes.
+	be16(&b, 0)
+	b.Write(gids)
 	return b.Bytes()
 }
 

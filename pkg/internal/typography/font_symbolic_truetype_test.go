@@ -93,3 +93,76 @@ func TestResolveFont_SymbolicTrueTypeReadsItsGlyphs(t *testing.T) {
 		})
 	}
 }
+
+// TestResolveFont_SymbolicTrueTypeWithACopiedMacSubtable pins that a symbolic
+// TrueType font with no /Encoding and no (3,0) subtable reads its codes as the
+// glyphs they select only when its (1,0) subtable copies the (3,1) subtable
+// over 0x80-0xFF, and keeps the Mac OS Roman reading of a genuine (1,0)
+// subtable.
+func TestResolveFont_SymbolicTrueTypeWithACopiedMacSubtable(t *testing.T) {
+	copied := []fontbuild.Glyph{
+		{Name: "glyph00001", Unicode: 0xE4, Mac: 0xE4, Advance: 500},
+		{Name: "glyph00002", Unicode: 0x80, Mac: 0x80, Advance: 500},
+	}
+	for _, c := range []struct {
+		name   string
+		glyphs []fontbuild.Glyph
+		code   byte
+		want   string
+	}{
+		{
+			// Mac OS Roman reads 0xE4 as "‰"; the glyph is the one (3,1) maps
+			// U+00E4 to.
+			name:   "copied subtable reads the Unicode subtable",
+			glyphs: copied,
+			code:   0xE4,
+			want:   "ä",
+		},
+		{
+			// U+0080 is a control character: the code keeps the WinAnsi
+			// reading, not the Mac OS Roman "Ä".
+			name:   "copied subtable keeps the default for a control character",
+			glyphs: copied,
+			code:   0x80,
+			want:   "€",
+		},
+		{
+			name: "genuine subtable keeps Mac OS Roman",
+			glyphs: []fontbuild.Glyph{
+				{Name: "glyph00001", Unicode: 0x2030, Mac: 0xE4, Advance: 500},
+				{Name: "glyph00002", Unicode: 0xC4, Mac: 0x80, Advance: 500},
+			},
+			code: 0xE4,
+			want: "‰",
+		},
+		{
+			// One code that disagrees makes the subtable a Mac mapping.
+			name: "one independent code keeps Mac OS Roman",
+			glyphs: []fontbuild.Glyph{
+				{Name: "glyph00001", Unicode: 0xE4, Mac: 0xE4, Advance: 500},
+				{Name: "glyph00002", Unicode: 0xC4, Mac: 0x80, Advance: 500},
+			},
+			code: 0xE4,
+			want: "‰",
+		},
+		{
+			// Below 0x80 the two encodings agree, so a copy there says nothing.
+			name:   "copy below 0x80 keeps Mac OS Roman",
+			glyphs: []fontbuild.Glyph{{Name: "glyph00001", Unicode: 0x41, Mac: 0x41, Advance: 500}},
+			code:   0xE4,
+			want:   "‰",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			font, err := ResolveFont(context.Background(),
+				&document.Document{Logger: document.NopLogger()}, symbolicTrueTypeFont("ABCDEF+Arial", c.glyphs))
+			if err != nil {
+				t.Fatalf("ResolveFont: %v", err)
+			}
+			got, _, skip := decodeNextChar(font, []byte{c.code})
+			if skip || got != c.want {
+				t.Errorf("code 0x%02X = %q (skip %v), want %q", c.code, got, skip, c.want)
+			}
+		})
+	}
+}

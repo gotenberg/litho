@@ -52,6 +52,8 @@ func FuzzTrueType(f *testing.F) {
 		_, _ = GlyphToUnicode(ctx, data)
 		_, _ = PostGlyphNames(ctx, data)
 		_, _ = SymbolCharCodeToGID(ctx, data)
+		_, _ = SubtableCodeToGID(ctx, data, CmapSubtable{PlatformID: 1, EncodingID: 0})
+		_, _ = SubtableCodeToGID(ctx, data, CmapSubtable{PlatformID: 3, EncodingID: 1})
 	})
 }
 

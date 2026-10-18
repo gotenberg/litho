@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -495,7 +496,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// MacRomanEncoding on the cmap signal surfaces those bytes as
 	// real characters instead of WinAnsi look-alikes.
 	if !hasExplicitEncoding && subtypeName == "TrueType" && !isSymbolFont && !isDingbatsFont {
-		applyTrueTypeBuiltinEncoding(ctx, doc, fontDict, font)
+		applyTrueTypeBuiltinEncoding(ctx, doc, fontDict, font, symbolicByFlags)
 	}
 	if !hasExplicitEncoding && subtypeName == "TrueType" && symbolicByFlags {
 		applySymbolicTrueTypeGlyphs(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont)
@@ -2430,11 +2431,15 @@ func trueTypeTakesStandardEncoding(ctx context.Context, doc *document.Document, 
 // 0xD0 = en-dash). Without this override these bytes surface as WinAnsi
 // look-alikes on Mac-authored documents.
 //
+// A symbolic font whose (1,0) subtable copies its (3,1) subtable keeps the
+// encoding it has: [macSubtableCopiesUnicode] says why that subtable is no
+// Mac OS Roman mapping, and [applySymbolicTrueTypeGlyphs] reads its codes.
+//
 // # Corpus evidence
 //
 //   - govdocs: its Mac-authored filings surface these bytes as WinAnsi
 //     look-alikes without this override.
-func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, symbolic bool) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
@@ -2454,7 +2459,7 @@ func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, f
 			break
 		}
 	}
-	if hasMacRoman {
+	if hasMacRoman && (!symbolic || !macSubtableCopiesUnicode(ctx, doc, fontData)) {
 		font.Encoding = copyEncoding(encodings.MacRomanEncoding)
 	}
 }
@@ -2481,7 +2486,9 @@ func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, f
 // OS Roman characters by the subtable's own declaration (OpenType, 'cmap',
 // platform 1 encoding 0), which [applyTrueTypeBuiltinEncoding] reads, and a
 // post name or Unicode mapping that disagrees contradicts the font rather than
-// completing it.
+// completing it. A (1,0) subtable that copies the (3,1) subtable does not stay
+// out: [macSubtableCopiesUnicode] says why its declaration means nothing, and
+// its codes then read as the glyphs they select, as a (3,0) font's do.
 //
 // This departs from PDF.js, which reads these codes through MacRomanEncoding,
 // or WinAnsiEncoding when every name record is a Windows one
@@ -2500,7 +2507,9 @@ func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, f
 //   - pdfjs bug894572.pdf: TSCInaimathi, a legacy Tamil font with (1,0) and
 //     (3,1) subtables, names its glyphs as Windows Latin characters. Read
 //     through those names, its Mac Roman codes came out as Latin text no
-//     reader could use either, and the page no longer matched PDF.js.
+//     reader could use either, and the page no longer matched PDF.js. Its
+//     (1,0) subtable maps 24 of its 120 codes in 0x80-0xFF to other glyphs
+//     than (3,1), so it is no copy and stays out.
 func applySymbolicTrueTypeGlyphs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol bool) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
@@ -2510,7 +2519,7 @@ func applySymbolicTrueTypeGlyphs(ctx context.Context, doc *document.Document, fo
 	if fontData == nil {
 		return
 	}
-	if !hasSymbolCmapSubtable(fontData) {
+	if !hasSymbolCmapSubtable(fontData) && !macSubtableCopiesUnicode(ctx, doc, fontData) {
 		return
 	}
 	codeToGID := ExtractSymbolCharCodeToGID(ctx, fontData)
@@ -2555,6 +2564,71 @@ func hasSymbolCmapSubtable(fontData []byte) bool {
 		}
 	}
 	return false
+}
+
+// macDivergentCodesStart is the first single-byte code Mac OS Roman and the
+// Windows reading of a code (WinAnsiEncoding, or the code point a (3,1)
+// subtable takes the code as) give different characters. Below it both read
+// the printable codes as ASCII (ISO 32000-1, Annex D.2), so a (1,0) subtable
+// agreeing with (3,1) there says nothing about which encoding it follows.
+const macDivergentCodesStart = 0x80
+
+// macSubtableCopiesUnicode reports whether a TrueType program's (1,0)
+// Macintosh subtable is a copy of its (3,1) Microsoft Unicode subtable: it maps
+// at least one code from 0x80 to 0xFF to a glyph, and maps every such code to
+// the glyph (3,1) maps the code point of the same value to.
+//
+// ISO 32000-1, 9.6.6.4 has a symbolic font with no (3,0) subtable select
+// glyphs through (1,0), whose codes are Mac OS Roman characters by the
+// subtable's own declaration. A copy relaxes that reading: a producer that
+// writes the (3,1) mapping under the (1,0) record declares a Mac table without
+// building one, so the declaration carries no meaning the (3,1) subtable lacks.
+// The glyph a code selects is the same through either table. Only its
+// character changes: Mac OS Roman would name code 0xE4 "‰" where the glyph the
+// font draws there is the one it maps U+00E4 "ä" to.
+//
+// The test runs over the codes the subtable covers in 0x80-0xFF, not over the
+// codes a page shows: a font is read before any content stream that uses it,
+// and below [macDivergentCodesStart] the two readings agree. A single code
+// mapped to a different glyph makes the subtable a Mac mapping of its own.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15910.pdf: an Amyuni Document Converter subset of Arial maps
+//     all 128 codes in 0x80-0xFF through (1,0) to the glyphs (3,1) maps them
+//     to. Read as Mac OS Roman, "Käferhofen" came out "K‰ferhofen"; PDF.js
+//     reads "ä".
+//   - All corpora: 7 embedded symbolic TrueType fonts in 4 files state no
+//     /Encoding and carry (1,0) and (3,1) subtables without (3,0).
+//     issue15910's is the only copy, and text extraction changes on no other
+//     file.
+func macSubtableCopiesUnicode(ctx context.Context, doc *document.Document, fontData []byte) bool {
+	mac, err := truetype.SubtableCodeToGID(ctx, fontData, truetype.CmapSubtable{PlatformID: 1, EncodingID: 0})
+	if err != nil {
+		if !errors.Is(err, truetype.ErrTableNotFound) {
+			doc.Logger.Debug("reading the (1,0) cmap subtable", slog.Any("err", err))
+		}
+		return false
+	}
+	uni, err := truetype.SubtableCodeToGID(ctx, fontData, truetype.CmapSubtable{PlatformID: 3, EncodingID: 1})
+	if err != nil {
+		if !errors.Is(err, truetype.ErrTableNotFound) {
+			doc.Logger.Debug("reading the (3,1) cmap subtable", slog.Any("err", err))
+		}
+		return false
+	}
+	compared := 0
+	for code := uint32(macDivergentCodesStart); code <= 0xFF; code++ {
+		gid := mac[code]
+		if gid == 0 {
+			continue
+		}
+		if uni[code] != gid {
+			return false
+		}
+		compared++
+	}
+	return compared > 0
 }
 
 // unreadableRune reports whether r is a control character or a Private Use
