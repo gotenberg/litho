@@ -21,7 +21,7 @@ byte for byte.
 ```
 corpus/litho/
 ├── download.sh     Provisioning step: copies pdfs/ into the output dir
-├── manifest.json   Corpus manifest (profile_mode=expand over 10 profiles)
+├── manifest.json   Corpus manifest (profile_mode=expand over 13 profiles)
 ├── build/          pikepdf builders, one per fixture, plus _common.py
 ├── pdfs/           The committed fixtures
 └── README.md       This file
@@ -1950,6 +1950,12 @@ an unmapped `/Annot` type, litho deduplicated by type name, and the rule is
 scoped to the element. It now counts per element. The four families above stay
 because litho's granularity is the one its violation contexts promise, not
 because a count is unimportant.
+
+The same rule at PDF/A-1a was a second defect. `structkinds_ua2.pdf` drew 21
+checks from veraPDF and 2 from litho, which took the Ruby and Warichu types for
+standard. PDF 1.5 added them, so the PDF Reference 1.4 table the clause names
+(9.7.4) does not list them, and litho now reports each of the 19 elements
+beside the two `math` ones. From PDF/A-2a both tools take them for standard.
 
 ## Closed since, not planted
 
@@ -6599,11 +6605,11 @@ which both tools report on the output at every manifest profile in both modes.
 
 ## Scope
 
-`manifest.json` expands every fixture across the ten profiles it lists, so the
-runner scores 160 x 10 = 1600 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 160 x 13 = 2080 cells. litho
-and veraPDF return the same verdict in all of them: in each cell either both
-report nothing or both report something.
+`manifest.json` expands every fixture across the thirteen profiles it lists,
+every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
+160 x 13 = 2080 cells, the whole hand-measured matrix. litho and veraPDF return
+the same verdict in all of them: in each cell either both report nothing or both
+report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
 fixtures exist to protect, and it holds in 2078 of the 2080 cells. The two
@@ -6618,7 +6624,7 @@ ten is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
 `pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 1600 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 2080 and moves only `ruleset_mismatch`, and on
 those ten cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
@@ -6631,7 +6637,7 @@ the cells, the difference between the numbers of rules each reports. It reads 0
 on this corpus in both modes, so any cell that moves it is a regression or a
 divergence to cover under Known divergences.
 
-PDF/A-4e and PDF/A-4f are the manifest's last two profiles, after the eight it
+PDF/A-4e and PDF/A-4f are the manifest's ninth and tenth profiles, after the eight it
 listed first. Appended rather than sorted in, they leave the determinism
 feature dealing each fixture's operations over the same first seven profiles,
 and the mutation anchor on PDF/A-1b. The fixture sections that say "the first
@@ -6655,6 +6661,40 @@ annotations of `annotkinds_ua2`, `threed_4e`, `threedcs_4` and `afref_3b` (ISO
 annotation but the hidden one of `laterreads_2u`, which it removes at every
 profile as it removes every annotation no viewer shows, and in aggressive mode
 it keeps the embedded files of other formats that it strips at PDF/A-4.
+
+PDF/A-1a, 3a and 3u follow them, appended for the same reason. At the three,
+live veraPDF 1.30.2 reports the rule set the counts table gives in all 480
+cells, and litho the same set in each. The instance counts differ only in the
+families described under
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin). Remediated
+at the three, every output carries the same rule set on both tools, no rule
+appears that the input did not fail, and the fully fixed cells are:
+
+| Profile  | Default | Aggressive | Rules left most often                     |
+| -------- | ------- | ---------- | ----------------------------------------- |
+| PDF/A-1a | 50      | 54         | `6.3.4/1`, the unembedded fonts (76)      |
+| PDF/A-3a | 53      | 58         | `6.2.11.4.1/1`, the unembedded fonts (76) |
+| PDF/A-3u | 57      | 62         | `6.2.11.4.1/1`, the unembedded fonts (76) |
+
+Remediation removes at the three what it removes at PDF/A-1b and PDF/A-3b, and
+at level A also the invalid `/Lang` entries and a role mapping that remaps a
+standard type. At PDF/A-3a and 3u the aggressive mode keeps the embedded files
+of other formats that it strips at PDF/A-2a and 2u, since ISO 19005-3, 6.8
+permits them. At PDF/A-1a `6.8.3.4/1` stays on `structnest_ua1` and
+`tableregular_ua2`, on both tools, beside the seven fixtures it stays on at
+PDF/A-2a: PDF Reference 1.4, 9.7.4 has no row group types, and remediation maps
+no type it has no standard equivalent for, so `THead`, `TBody` and `TFoot`
+stay unmapped.
+
+WTPDF-1.0 Accessibility and WTPDF-1.0 Reuse stay out of the manifest. Their
+rules are the PDF/UA-2 ones with WTPDF's identification in place of clause 5,
+and Reuse drops some more: 75 of the 160 Accessibility cells report PDF/UA-2's
+set exactly, and the other 85 differ from it only in `6.1.3/1` and the clause-5
+rules, so the fixtures exercise little that the PDF/UA-2 cells and the veraPDF
+corpus, which runs both levels, do not. Measured on veraPDF 1.30.2, the
+two levels agree with litho in 318 of their 320 cells; the exceptions are
+`complex_ua2` at both, the `/P`-less element of `8.2.1/2` described under Known
+divergences, which would add two cells to `ruleset_mismatch`.
 
 The thirteen-level figures are measured by hand against a live veraPDF. The
 thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2` on the veraPDF

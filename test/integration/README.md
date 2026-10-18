@@ -222,7 +222,7 @@ The rule-set comparison is litho against litho: the `compliance` cell already co
 
 The `determinism` feature guards the reproducible-output rule of `CONTRIBUTING.md`: it runs each operation twice on the same litho fixture and compares what the two runs write, the output bytes and, for a remediation, the report. A difference counts one `nondeterministic` cell, a cost metric, and the verdict names the operation and the two digests. Nothing is pinned: remediation derives a missing trailer `/ID` from the content, so the cell holds the default options to the rule.
 
-The operations are the remediation at the fixture's home profile, the one its file name ends with, in the default and the aggressive mode, and the five `mutate-*` mutations that draw no randomness. `mutate-sign` and `mutate-encrypt` are left out, since a signature and an encryption carry the nonces, keys, salts and IVs their cryptography requires. A fixture has one cell per manifest profile, and the seven operations are dealt out over the first seven, so each cell runs one operation twice; the other three skip. A planted serializer that writes dictionary keys unsorted counts 787 of the 966 cells, and a random `/ID` counts the two remediations of `filestruct_1b.pdf`, the fixture without one. The feature takes 2 s with 4 workers.
+The operations are the remediation at the fixture's home profile, the one its file name ends with, in the default and the aggressive mode, and the five `mutate-*` mutations that draw no randomness. `mutate-sign` and `mutate-encrypt` are left out, since a signature and an encryption carry the nonces, keys, salts and IVs their cryptography requires. A fixture has one cell per manifest profile, and the seven operations are dealt out over the first seven, so each cell runs one operation twice; the other six skip. A planted serializer that writes dictionary keys unsorted counts 787 of the 966 cells, and a random `/ID` counts the two remediations of `filestruct_1b.pdf`, the fixture without one. The feature takes 2 s with 4 workers.
 
 ### Comparison notes
 
@@ -272,7 +272,7 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
 | `pdf20`   | 7 PDFs (1 fixture per claim)         | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                        |
 | `pdfcpu`  | ~50 PDFs (1 fixture each)            | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)                                                                                                          |
 | `facturx` | ~150 PDFs (1 fixture per claim)      | ZUGFeRD/corpus (Apache-2.0): real, sample and intentionally-broken Factur-X / ZUGFeRD invoices, flattened from the `ZUGFeRDv2`, `XML-Rechnung` and `ZUGFeRDv1` subtrees |
-| `litho`   | 160 PDFs × 10 profiles (1,600 cells) | Self-authored, committed in-tree; see `corpus/litho/README.md`                                                                                                          |
+| `litho`   | 160 PDFs × 13 profiles (2,080 cells) | Self-authored, committed in-tree; see `corpus/litho/README.md`                                                                                                          |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 

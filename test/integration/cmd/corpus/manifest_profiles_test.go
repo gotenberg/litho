@@ -14,7 +14,7 @@ import (
 // writes the golden named after it, a litho validator, and the remediation
 // engine. A profile one of them misses scores silently: compliance calls every
 // cell compliant, and remediation skips the profile with "no verapdf flavour".
-// PDF/A-4e and PDF/A-4f joined the litho manifest under this guard.
+// PDF/A-4e, 4f, 1a, 3a and 3u joined the litho manifest under this guard.
 func TestManifestProfilesAreMapped(t *testing.T) {
 	t.Parallel()
 
