@@ -221,6 +221,7 @@ one deliberately rather than diffing it against a fresh build.
 | `aakeys_4.pdf`         | PDF/A-4      | Catalog and page `/AA` holding a permitted and a forbidden key   |
 | `patternshade_2b.pdf`  | PDF/A-2b     | Shadings a tiling cell or a Type 3 glyph reaches                 |
 | `patternglyph_2b.pdf`  | PDF/A-2b     | Type 3 glyphs a tiling cell shows, nested once                   |
+| `shadedefault_2b.pdf`  | PDF/A-2b     | Shading patterns over DeviceCMYK beside DeviceRGB, CMYK intent   |
 
 ### Must-not-fire controls
 
@@ -628,6 +629,7 @@ which are covered under [Known divergences](#known-divergences).
 | `rolecycle_ua1.pdf`    | 4    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 2    | 5    |
 | `rolecycle_ua2.pdf`    | 5    | 4    | 8    | 5    | 5    | 8    | 5    | 5    | 2   | 2    | 3    | 5    | 4    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
+| `shadedefault_2b.pdf`  | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
 | `siglock_2b.pdf`       | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
@@ -6993,13 +6995,14 @@ per page's untagged item.
 Remediated at every level in both modes, both tools report the same rule set
 on every output, and both PDF/UA outputs are conforming. At the PDF/A levels
 the type 4 tint's integer stays (no fixer rewrites a program), the default mode
-keeps the 33-colorant DeviceN where the aggressive mode clears it, and one
-DeviceCMYK finding appears, `6.2.4.3/3` (`6.2.3.3/2` at PDF/A-1): remediation
-replaces the CMYK OutputIntent with an sRGB one to cover page 1's DeviceRGB and
-injects a `/DefaultCMYK`, which veraPDF does not take as covering a Separation's
-DeviceCMYK alternate. A one-page file whose page itself selects such a shading
-pattern beside a DeviceRGB fill keeps the same finding, so that residual is
-remediation's and not this reach.
+keeps the 33-colorant DeviceN where the aggressive mode clears it, and the
+PDF/A-4 and 4e outputs are conforming. Remediation replaces the CMYK
+OutputIntent with an sRGB one to cover page 1's DeviceRGB and gives page 2's
+Separation the `/DefaultCMYK` it injects as its alternate, since no Default
+reaches the shading of a shading pattern (see
+[`shadedefault_2b.pdf`](#shadedefault_2bpdf)). Before that, one DeviceCMYK
+finding stayed on both tools at every PDF/A level, `6.2.4.3/3` (`6.2.3.3/2` at
+PDF/A-1).
 
 ### `patternglyph_2b.pdf`
 
@@ -7037,6 +7040,51 @@ on every output. What stays is the unembedded TrueType font, which litho ships
 no program for (`6.2.11.4.1/1`, `6.3.4/1` at PDF/A-1, `6.2.10.4.1/1` at part 4,
 `7.21.4.1/1` and `8.4.5.5.1/1` at PDF/UA), with `6.3.8/1` at PDF/A-1a and
 `6.9/5` at PDF/A-4f beside it.
+
+### `shadedefault_2b.pdf`
+
+A Default colour space replaces a device family the content stream selects
+through its own resources (ISO 32000-1, 8.6.5.6), and a shading pattern has no
+resources of its own (8.7.4.1, Table 76). veraPDF 1.30.2 builds the shading of
+a shading pattern with no resources to read a Default from, so it judges the
+shading's device family against the output intent alone. The sole intent here
+is a CMYK one, which covers every DeviceCMYK, and page 1 paints DeviceRGB,
+which it does not. Remediation covers DeviceRGB by replacing the intent with an
+sRGB one and covers DeviceCMYK with a `/DefaultCMYK`, which reached none of
+these shadings. No corpus file paints such a shading beside DeviceRGB under a
+CMYK intent, so this fixture plants one per shape:
+
+| Page | Path                                  | Shading colour space                               |
+| ---- | ------------------------------------- | -------------------------------------------------- |
+| 1    | `rg` fill, `/P1 scn`                  | Separation `/Spot` over DeviceCMYK, both indirect  |
+| 2    | `/P2 scn`, pattern and shading direct | DeviceCMYK                                         |
+| 3    | `/P3 scn`                             | DeviceN `/Spot2` over DeviceCMYK, `/Colorants` too |
+| 4    | `/CS0 cs`, `k` fill, `/P1 scn`        | the page's `/CS0` is page 1's Separation `/Spot`   |
+| 5    | a form whose own resources hold `/P5` | Separation `/Spot` over DeviceCMYK                 |
+
+The source fails `6.2.4.3/2` twice at PDF/A-2b (`6.2.3.3/1` at PDF/A-1) on
+both tools, and nothing else in the colour rules. veraPDF 1.30.2 and litho
+report the same rule set in all thirteen cells, with the same counts but for
+`7.1/3` and `8.2.2/1` at PDF/UA, the family described under
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin).
+
+Remediated before the fix, every PDF/A output in both modes failed `6.2.4.3/3`
+six times (`6.2.3.3/2` at PDF/A-1) on both tools, for the DeviceCMYK the
+shadings hold. veraPDF also failed `6.2.4.4/2` once from part 2 on, where litho
+stayed silent: page 4's `/CS0`, read under the page's `/DefaultCMYK`, has the
+Default's space as its alternate, and page 5's direct Separation `/Spot`, which
+no Default reaches, has DeviceCMYK, two alternates for one colourant. litho now compares a
+Separation's alternate as the Default that replaces it where the Separation is
+read, as veraPDF builds it.
+
+Remediation now gives each shading's colour space the `/DefaultCMYK` space in
+place of DeviceCMYK, as the space itself, an alternate or a `/Colorants`
+entry's alternate, so every DeviceCMYK the output paints is characterised by
+the one profile. Every output is conforming on both tools in both modes, but
+PDF/A-4f's, which keeps `6.9/5`, the embedded file it requires, and both
+PDF/UA outputs were conforming before and stay so. Page 4's `/CS0` and the
+shadings naming `/Spot` then read as one alternate, so `6.2.4.4/2` stays silent
+on the output.
 
 ## Scope
 
