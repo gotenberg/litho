@@ -3,6 +3,7 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -273,6 +274,43 @@ func TestISO32005_PassThroughContent(t *testing.T) {
 			)
 			if !iso32005HasClause(vs, tc.clause) {
 				t.Errorf("content inside %s inside Document: want %q; got %v", tc.wrapper, tc.clause, vs)
+			}
+		})
+	}
+}
+
+// TestISO32005_DocumentContentNamesTheCarrier pins the context of "Table 5.
+// Document-content": a finding a pass-through kid causes names that kid, so a
+// reader can find content the Document never lists, and a direct content item
+// is named as the Document's own.
+func TestISO32005_DocumentContentNamesTheCarrier(t *testing.T) {
+	for _, tc := range []struct {
+		name, kids, want string
+	}{
+		{"through a div", "[6 0 R 7 0 R]", "its /Div (object 6), which Table 5 looks through"},
+		{"direct", "[7 0 R 0]", "it holds a content item itself"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vs := iso32005Violations(t,
+				"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+				"<< /Type /StructTreeRoot /K 5 0 R >>",
+				"<< /Type /StructElem /S /Document /P 4 0 R /K "+tc.kids+" >>",
+				"<< /Type /StructElem /S /Div /P 5 0 R /K 1 >>",
+				"<< /Type /StructElem /S /P /P 5 0 R /K 2 >>",
+			)
+			found := false
+			for _, v := range vs {
+				if v.Rule.Clause == "Table 5. Document-content" {
+					found = true
+					if !strings.Contains(v.Context, tc.want) {
+						t.Errorf("context %q, want it to contain %q", v.Context, tc.want)
+					}
+				}
+			}
+			if !found {
+				t.Errorf("want Table 5. Document-content; got %v", vs)
 			}
 		})
 	}

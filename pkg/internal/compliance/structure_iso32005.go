@@ -2,7 +2,9 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -456,11 +458,75 @@ func validateISO32005(ctx context.Context, state *walkState, elem ast.PdfDict, t
 			// Evaluated at the structure tree root by
 			// [validateISO32005Root]; the root has no walkElement visit.
 		}
-		if violated {
-			*state.results = append(*state.results,
-				failf(e.Rule, "%s violates Table 5 inclusion for %s", typeName, e.Child)...)
+		if !violated {
+			continue
 		}
+		if e.Kind == "noContent" {
+			*state.results = append(*state.results,
+				failf(e.Rule, "%s violates Table 5 inclusion for %s: %s", typeName, e.Child, iso32005ContentCarrier(ctx, state, elem))...)
+			continue
+		}
+		*state.results = append(*state.results,
+			failf(e.Rule, "%s violates Table 5 inclusion for %s", typeName, e.Child)...)
 	}
+}
+
+// iso32005ContentCarrier names where the content items [iso32005Kids] found
+// for elem come from: elem's own /K, or the first pass-through kid whose
+// subtree holds them. ISO/TS 32005 Table 5 (ISO 32000-2:2020, Annex L) looks
+// through Div, Part and NonStruct, so a Document fails "Document-content" for
+// an MCID its Div holds, and the finding has to name the Div for a reader to
+// find the content.
+//
+// # Corpus evidence
+//
+//   - litho complex_2a: remediated at PDF/UA-2, its Div (object 19) holds
+//     MCID 1 directly, a painted rectangle, once remediation drops the
+//     /Div -> /Custom entry that kept it non-standard. Moving that MCID under
+//     a P inside the Div clears the rule on veraPDF 1.30.2, so the Div is the
+//     one carrier. The element to give it (a P, a Figure needing /Alt, an
+//     artifact) is a reading of the content, so remediation leaves it to this
+//     finding.
+//   - litho typedreads_1b: its Document lists a marked-content reference
+//     itself.
+func iso32005ContentCarrier(ctx context.Context, state *walkState, elem ast.PdfDict) string {
+	items, err := document.ResolveArray(ctx, state.doc, elem["K"])
+	if err != nil {
+		items = ast.PdfArray{elem["K"]}
+	}
+	var via []string
+	for _, item := range items {
+		resolved, rerr := document.ResolveObject(ctx, state.doc, item)
+		if rerr != nil || resolved == nil {
+			continue
+		}
+		v, isDict := resolved.(ast.PdfDict)
+		if !isDict {
+			if _, isMCID := resolved.(ast.PdfInt); isMCID {
+				return "it holds a content item itself"
+			}
+			continue
+		}
+		if t, _ := document.ResolveName(ctx, state.doc, v["Type"]); t == "MCR" || t == "OBJR" {
+			return "it holds a content item itself"
+		}
+		s, serr := document.ResolveName(ctx, state.doc, v["S"])
+		if serr != nil || s == "" || !iso32005PassThroughTypes[iso32005Key(ctx, state, v, s)] {
+			continue
+		}
+		if _, has := iso32005KidsAt(ctx, state, v, 1, make(map[int]bool)); !has {
+			continue
+		}
+		name := string(s)
+		if ref, ok := item.(ast.PdfIndirectRef); ok {
+			name = fmt.Sprintf("%s (object %d)", s, ref.ObjectNum)
+		}
+		via = append(via, name)
+	}
+	if len(via) == 0 {
+		return "a kid it looks through holds a content item"
+	}
+	return "content items held by its " + strings.Join(via, ", ") + ", which Table 5 looks through"
 }
 
 // validateISO32005Root evaluates the StructTreeRoot-scoped Table 5
