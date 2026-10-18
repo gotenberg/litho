@@ -558,9 +558,10 @@ func (d *Document) builtinFilters() *filter.Decoder {
 // the same way: ISO 32000-1, Table 12 makes it a stream, so it is always an
 // indirect reference, and the JBIG2Decode filter reads the global segments
 // from it. So is the /ColorSpace of a JPXDecode image, which decides how that
-// filter reads the JPEG 2000 data (7.4.9). A Crypt filter naming the crypt
-// filter the security handler already applied reads as Identity (see
-// [Document.appliedCryptParms]).
+// filter reads the JPEG 2000 data (7.4.9), and the /Height of a DCTDecode
+// image, which bounds the lines that filter decodes. A Crypt filter naming
+// the crypt filter the security handler already applied reads as Identity
+// (see [Document.appliedCryptParms]).
 //
 // # Corpus evidence
 //
@@ -576,7 +577,8 @@ func (d *Document) resolveStreamFilterKeys(ctx context.Context, stream ast.PdfSt
 		parms, parmsChanged = crypt, true
 	}
 	cs, csChanged := d.resolveJPXColorSpace(ctx, stream.Dict)
-	if !parmsChanged && !csChanged {
+	height, heightChanged := d.resolveDCTHeight(ctx, stream.Dict)
+	if !parmsChanged && !csChanged && !heightChanged {
 		return stream
 	}
 	resolvedDict := make(ast.PdfDict, len(stream.Dict))
@@ -586,6 +588,9 @@ func (d *Document) resolveStreamFilterKeys(ctx context.Context, stream ast.PdfSt
 	}
 	if csChanged {
 		resolvedDict["ColorSpace"] = cs
+	}
+	if heightChanged {
+		resolvedDict["Height"] = height
 	}
 	stream.Dict = resolvedDict
 	return stream
@@ -697,6 +702,33 @@ func (d *Document) resolveJPXColorSpace(ctx context.Context, dict ast.PdfDict) (
 		}
 	}
 	return cs, changed
+}
+
+// resolveDCTHeight resolves an indirect /Height of a stream decoded by
+// DCTDecode, which the filter reads to bound a frame that declares more lines
+// than the image has (see filter.dctStatedHeight). ISO 32000-1, 7.3.10 lets
+// /Height (Table 89) be an indirect reference. Other streams, a direct value,
+// and a reference that does not resolve to an integer are left alone.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15492.pdf: writes /Height 5 0 R for a JPEG whose frame
+//     declares 65000 lines of the 10320 the image has.
+func (d *Document) resolveDCTHeight(ctx context.Context, dict ast.PdfDict) (ast.PdfObject, bool) {
+	ref, isRef := dict["Height"].(ast.PdfIndirectRef)
+	if !isRef || (!chainHas(dict["Filter"], "DCTDecode") && !chainHas(dict["Filter"], "DCT")) {
+		return nil, false
+	}
+	obj, err := d.Resolve(ctx, ref)
+	if err != nil {
+		d.Logger.Debug("cannot resolve the Height of a DCTDecode image", "error", err)
+		return nil, false
+	}
+	height, isInt := obj.(ast.PdfInt)
+	if !isInt {
+		return nil, false
+	}
+	return height, true
 }
 
 // chainHas reports whether a resolved /Filter value names filter.
