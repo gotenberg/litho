@@ -20,9 +20,10 @@ import (
 // # Corpus evidence
 //
 //   - litho complex_ua2: carries a /Configs configuration with its own
-//     incomplete /Order that litho never looks at. Claiming test 3 and
-//     completing /D alone silenced litho while veraPDF kept reporting: litho
-//     corpus disagreement moved from exactly 0 to 10 across two fixtures.
+//     incomplete /Order that an earlier detector never looked at. Claiming
+//     test 3 and completing /D alone silenced litho while veraPDF kept
+//     reporting: litho corpus disagreement moved from exactly 0 to 10 across
+//     two fixtures.
 //   - verapdf: the same test 3 false fix gained 8 cells and hid the litho
 //     corpus regression.
 //   - All corpora: written as `return v.Rule.Clause == "6.9"`, the OCG arm
@@ -31,12 +32,7 @@ import (
 func matchCatalogCleanup(v compliance.Violation) bool {
 	if (v.Rule.Clause == "6.1.3" && v.Rule.TestNumber == 2) || // Encrypt in trailer
 		clausePrefix(v, "6.4.2") || // NeedsRendering catalog key
-		// OCG config. ISO 19005-4 6.10 t3 is the /Order completeness rule and is
-		// excluded for the same reason the switch below excludes test 3 for
-		// every other spelling: nothing in fixOCGConfigs completes /Order.
-		// The ARM is narrowed rather than short-circuited with a negative, so
-		// evaluation still falls through to every arm after it.
-		(clausePrefix(v, "6.10") && v.Rule != compliance.Rule_19005_4_6_10_t03) ||
+		clausePrefix(v, "6.10") || // OCG config (part 4), PresSteps and AlternatePresentations (parts 2, 3)
 		clausePrefix(v, "6.11") || // AlternatePresentations
 		clausePrefix(v, "6.1.11") { // Perms dict (PDF/A-1)
 		return true
@@ -54,23 +50,16 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	// Only the part-4 spelling reached fixOCGConfigs, so the same file was
 	// repaired as PDF/A-4 and left flagged as PDF/A-2b.
 	//
-	// fixOCGConfigs repairs the /Name of test 1, the uniqueness of test 2 and
-	// the /AS ban of test 4, which the UA specifications spell as their own
-	// test 2. It does NOT repair the /Order array of test 3, so test 3 is not
-	// claimed: claiming a rule this fixer cannot complete would report it
-	// handled while it survives.
+	// fixOCGConfigs repairs the /Name of test 1, the uniqueness of test 2, the
+	// /Order completeness of test 3 and the /AS ban of test 4, which the UA
+	// specifications spell as their own test 2. The UA specifications state no
+	// /Order test.
 	//
-	// That exclusion reaches part 4 through the narrowed 6.10 arm above, not
-	// through this switch. Written only here it held for parts 2 and 3 and was
-	// bypassed for part 4, whose spelling matched the prefix first.
-	//
-	// Test 3 was implemented and MEASURED to be a false fix. litho's own
-	// compliance check inspects only /D and collects OCGs only from
-	// /OCProperties /OCGs; veraPDF requires more. A /Configs configuration can
-	// carry its own incomplete /Order that litho never looks at, so completing
-	// /D alone silenced litho while veraPDF kept reporting. Repairing to
-	// satisfy the DETECTOR rather than the rule is what made that look
-	// correct.
+	// Test 3 was once implemented for /D alone and MEASURED to be a false fix:
+	// a /Configs configuration carried its own incomplete /Order, so veraPDF
+	// kept reporting while litho, whose detector then read /D alone, went
+	// quiet. The repair now completes every configuration the rule names, as
+	// the widened detector judges them.
 	//
 	// The test numbers are written out rather than taken as a range, so a test
 	// this fixer does not implement cannot be claimed by arriving later.
@@ -90,7 +79,7 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	case "ISO_19005_2", "ISO_19005_3":
 		if v.Rule.Clause == "6.9" {
 			switch v.Rule.TestNumber {
-			case 1, 2, 4:
+			case 1, 2, 3, 4:
 				return true
 			}
 		}
@@ -351,20 +340,18 @@ func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc
 	return fixes
 }
 
-// fixOCGConfigs walks /OCProperties /D and /Configs and repairs three of the
-// four requirements the optional-content configuration clause states: a /Name
-// on each configuration, a name unique among them, and no /AS. Per ISO 32000-2,
-// Table 100.
+// fixOCGConfigs walks /OCProperties /D and /Configs and repairs the four
+// requirements the optional-content configuration clause states: a /Name on
+// each configuration, a name unique among them, an /Order referencing every
+// OCG, and no /AS. Per ISO 32000-2, Table 100.
 //
-// The /Order completeness of test 3 is deliberately NOT repaired; see
-// [matchCatalogCleanup] for the measurement that removed it.
-//
-// The /Name repair runs unconditionally. The other two run only when the
+// The /Name repair runs unconditionally. The other three run only when the
 // validation actually reported them, because the profiles do not all state
 // them: ISO 19005-4 6.10 has no AS test, so a PDF/A-4 file may legitimately
-// carry an /AS that a part-2 file may not. Reading that from the violations
-// rather than from the profile string keeps the part table in [compliance],
-// which is the only place that decides which rule a profile states.
+// carry an /AS that a part-2 file may not, and no PDF/UA part states the
+// /Order test. Reading that from the violations rather than from the profile
+// string keeps the part table in [compliance], which is the only place that
+// decides which rule a profile states.
 func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, catalogRef ast.PdfIndirectRef, ocpObj ast.PdfObject, violations []compliance.Violation) []string {
 	var ocpDict ast.PdfDict
 	var ocpRef ast.PdfIndirectRef
@@ -425,12 +412,15 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		}
 	}
 
-	// The other two requirements of the same clause. Each is gated on its own
-	// violation: see the function comment for why the profile string is not
-	// consulted here.
-	//
-	// /AS is stripped before the names are made unique, so a configuration is
-	// copied at most once per repair.
+	// The other three requirements of the same clause. Each is gated on its
+	// own violation: see the function comment for why the profile string is
+	// not consulted here.
+	if anyViolation(violations, ocgOrderCompleteViolation) {
+		if descs := completeOCGOrders(ctx, alloc, doc, newOCP); len(descs) > 0 {
+			fixes = append(fixes, descs...)
+			modified = true
+		}
+	}
 	if anyViolation(violations, ocgASViolation) {
 		if descs := stripOCGUsageApplication(ctx, alloc, doc, newOCP); len(descs) > 0 {
 			fixes = append(fixes, descs...)
@@ -491,6 +481,104 @@ func ocgNameUniqueViolation(r compliance.Rule) bool {
 // page-box size, tests 1 to 11). A prefix match would claim all of those.
 func forbiddenOCPropertiesViolation(r compliance.Rule) bool {
 	return r.Specification == "ISO_19005_1" && r.Clause == "6.1.13" && r.TestNumber == 1
+}
+
+// ocgOrderCompleteViolation matches "if an optional content configuration
+// dictionary contains the Order key, the array which is the value of this
+// Order key shall contain references to all OCGs in the conforming file":
+// ISO 19005-2/3 6.9 t3 and ISO 19005-4 6.10 t3. ISO 19005-4 6.9 t3 is an
+// embedded-file rule, so the part-4 spelling is matched on 6.10 alone.
+func ocgOrderCompleteViolation(r compliance.Rule) bool {
+	switch r.Specification {
+	case "ISO_19005_2", "ISO_19005_3":
+		return r.Clause == "6.9" && r.TestNumber == 3
+	case "ISO_19005_4":
+		return r.Clause == "6.10" && r.TestNumber == 3
+	}
+	return false
+}
+
+// completeOCGOrders appends to the /Order of every optional content
+// configuration the OCGs it leaves out, then gives a text-string /Name to
+// every OCG that lacks one. ISO 19005-2 6.9 t3 and ISO 19005-4 6.10 t3 name
+// every configuration dictionary carrying /Order, /D and each /Configs entry
+// alike.
+//
+// The missing set is what [compliance.OCGsMissingFromOrder] reports, so the
+// repair adds exactly what the check reads as absent and leaves an /Order the
+// check cannot read whole as it is. The OCGs are appended at the top level of
+// /Order, where ISO 32000-1, 8.11.4.3 lists them as ungrouped entries, and
+// the existing groupings keep their place.
+//
+// The /Name step relaxes nothing: ISO 32000-1, Table 98 makes an OCG's /Name a
+// required text string. It is part of this repair because veraPDF matches
+// /Order to the OCGs by /Name (GFPDOCConfig removes each referenced OCG's
+// name from the set of /OCGs names), and a nameless OCG enters that set as an
+// empty string a reference can never remove: the completed /Order of a file
+// whose OCG had no /Name stayed reported.
+//
+// # Corpus evidence
+//
+//   - litho complex_ua2.pdf: /Configs [ << /Order [ ] >> ] beside an
+//     incomplete /D; completing /D alone left veraPDF reporting the /Configs
+//     entry.
+//   - litho complex_2b.pdf: its OCG carries no /Name, and its completed
+//     /Order stayed reported by veraPDF until the OCG was named.
+func completeOCGOrders(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ocp ast.PdfDict) []string {
+	ocgs := compliance.DocumentOCGs(ctx, doc, ocp)
+	if len(ocgs) == 0 {
+		return nil
+	}
+
+	var fixes []string
+	eachOCGConfig(ctx, alloc, doc, ocp, func(label string, d ast.PdfDict) (ast.PdfDict, bool) {
+		missing := compliance.OCGsMissingFromOrder(ctx, doc, d, ocgs)
+		if len(missing) == 0 {
+			return nil, false
+		}
+		order, err := document.ResolveArray(ctx, doc, d["Order"])
+		if err != nil {
+			return nil, false
+		}
+		newOrder := make(ast.PdfArray, 0, len(order)+len(missing))
+		newOrder = append(newOrder, order...)
+		for _, ref := range missing {
+			newOrder = append(newOrder, ref)
+		}
+		newD := make(ast.PdfDict, len(d))
+		maps.Copy(newD, d)
+		newD["Order"] = newOrder
+		fixes = append(fixes, fmt.Sprintf("added %d OCG(s) missing from /Order of OCG %s", len(missing), label))
+		return newD, true
+	})
+
+	for _, ref := range ocgs {
+		if ctx.Err() != nil {
+			break
+		}
+		ocg := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+		if ocg == nil {
+			continue
+		}
+		label := fmt.Sprintf("Layer %d", ref.ObjectNum)
+		if nameObj, ok := ocg["Name"]; ok {
+			if _, err := document.ResolveString(ctx, doc, nameObj); err == nil {
+				continue
+			}
+			// A name object written where Table 98 wants a text string keeps
+			// its text.
+			if name, err := document.ResolveName(ctx, doc, nameObj); err == nil && name != "" {
+				label = string(name)
+			}
+		}
+		newOCG := make(ast.PdfDict, len(ocg)+1)
+		maps.Copy(newOCG, ocg)
+		newOCG["Name"] = ast.PdfString(label)
+		if alloc.AllocAt(ref.ObjectNum, newOCG) {
+			fixes = append(fixes, fmt.Sprintf("added /Name to OCG object %d", ref.ObjectNum))
+		}
+	}
+	return fixes
 }
 
 // ocgASViolation matches "the AS key shall not appear in any optional content

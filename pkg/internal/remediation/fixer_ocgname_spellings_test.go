@@ -93,10 +93,8 @@ func TestEnsureOCGConfigNameTreatsAnEmptyNameAsMissing(t *testing.T) {
 // proven by its own test in fixer_ocgfamily_test.go; a claim widened without
 // them would report these handled while they survive.
 //
-// Test 3, the /Order completeness, is NOT repaired and NOT claimed in any
-// spelling. An earlier revision of this comment credited it to a
-// completeOCGOrder helper, which does not exist: that repair was implemented,
-// measured as a false fix and removed, and the dangling reference outlived it.
+// Test 3, the /Order completeness, is claimed and repaired by
+// [completeOCGOrders]; fixer_ocgorder_test.go pins it.
 func TestMatchCatalogCleanup_ClaimsTheRestOfTheOCGClause(t *testing.T) {
 	t.Parallel()
 

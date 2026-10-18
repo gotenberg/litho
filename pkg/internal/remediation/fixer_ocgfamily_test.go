@@ -169,50 +169,6 @@ func TestFixCatalogCleanup_MakesDuplicateNamesUnique(t *testing.T) {
 	}
 }
 
-// TestMatchCatalogCleanup_DoesNotClaimTheOrderItCannotComplete pins the scope
-// this fixer deliberately gave up.
-//
-// The /Order completeness of test 3 WAS implemented, and it measured as a
-// false fix: litho's checker inspects only /D and collects OCGs only from
-// /OCProperties /OCGs, while veraPDF requires more, such as a /Configs
-// configuration with its own incomplete /Order. Completing /D alone silenced
-// litho while veraPDF kept reporting.
-//
-// Until the repair satisfies the RULE rather than litho's detector, the claim
-// must not be made: a claimed-but-unrepaired rule is reported handled while it
-// survives.
-//
-// ISO 19005-4 spells the same requirement 6.10 t3, and the exclusion did not
-// reach it: clausePrefix(v, "6.10") matches in an arm above the specification
-// switch, so part 4 returned true before the switch was ever consulted. The
-// same deliberate scope, applied to three specifications and bypassed on the
-// fourth.
-//
-// Asserted here now, with the measurement the earlier note asked for.
-// [fixOCGConfigs] calls only ensureOCGConfigName, stripOCGUsageApplication and
-// uniqueOCGConfigNames, none of which touches /Order.
-//
-// # Corpus evidence
-//
-//   - litho complex_ua2.pdf: carries a /Configs configuration with its own
-//     incomplete /Order.
-//   - litho: completing /D alone moved disagreement from exactly 0 to 10,
-//     hidden behind 8 newly matched cells on the verapdf corpus.
-func TestMatchCatalogCleanup_DoesNotClaimTheOrderItCannotComplete(t *testing.T) {
-	t.Parallel()
-
-	for _, rule := range []compliance.Rule{
-		compliance.Rule_19005_2_6_9_t03,
-		compliance.Rule_19005_3_6_9_t03,
-		compliance.Rule_19005_4_6_10_t03,
-	} {
-		if matchCatalogCleanup(compliance.Violation{Rule: rule}) {
-			t.Errorf("must not claim %s/%s t%d: fixOCGConfigs does not complete /Order",
-				rule.Specification, rule.Clause, rule.TestNumber)
-		}
-	}
-}
-
 // TestDisambiguateOCGConfigName keeps the derived label predictable.
 func TestDisambiguateOCGConfigName(t *testing.T) {
 	t.Parallel()

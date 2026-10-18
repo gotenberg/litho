@@ -20,10 +20,9 @@ import (
 // annotation that lacks one. That repairs no optional-content rule, and unlike
 // a no-op claim it MUTATES the document on an unrelated trigger.
 //
-// Test 3 is the sharpest of the four: it is the /Order completeness rule that
-// [matchCatalogCleanup] deliberately refuses because fixOCGConfigs cannot
-// complete /Order, and that refusal was extended to part 4 in an earlier
-// commit. There aggressive claimed it as the SOLE claimant.
+// Test 3 was the sharpest of the four: aggressive claimed the /Order
+// completeness rule as its SOLE claimant while it repaired nothing of it.
+// [matchCatalogCleanup] now owns it through [completeOCGOrders].
 func TestMatchAggressive_LeavesThePartsTwoAndThreeOptionalContentAlone(t *testing.T) {
 	t.Parallel()
 

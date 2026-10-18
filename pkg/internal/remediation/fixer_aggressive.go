@@ -43,9 +43,9 @@ func matchAggressive(v compliance.Violation) bool {
 		// annotation that lacks one. That repairs no optional-content or
 		// embedded-file rule, and unlike a claim on a no-op fixer it MUTATES
 		// the document on an unrelated trigger. Some of them had no other
-		// claimant at all: parts 2 and 3 test 3, the /Order completeness rule
-		// matchCatalogCleanup refuses for the same reason, and part 4 tests
-		// 1 and 5.
+		// claimant at the time: parts 2 and 3 test 3, the /Order
+		// completeness rule matchCatalogCleanup now repairs, and part 4
+		// tests 1 and 5.
 		//
 		// No negative arm here. Returning false would skip the Op_Undefined
 		// check below, the same short-circuit that once broke
