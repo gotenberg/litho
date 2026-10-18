@@ -54,6 +54,13 @@ func TestPageContentExtent(t *testing.T) {
 		{name: "nothing", ops: "", known: true},
 		{name: "text", ops: "BT /F1 20 Tf 100 700 Td (Hello) Tj ET", known: true, painted: true,
 			inside: [][2]float64{{100, 700}, {140, 715}}, outside: [][2]float64{{50, 600}}},
+		// Reflected glyphs advancing rightward ink below the baseline (ISO
+		// 32000-1, 9.4.4): a mirrored CTM, and a negative Th with a negative
+		// Tfs, which reverse the advance twice and reflect the glyph once.
+		{name: "text the CTM mirrors", ops: "q 1 0 0 -1 0 792 cm BT /F1 20 Tf 100 92 Td (Hello) Tj ET Q", known: true, painted: true,
+			inside: [][2]float64{{100, 700}, {140, 682}}, outside: [][2]float64{{50, 600}}},
+		{name: "text a negative Th mirrors", ops: "BT /F1 -20 Tf -100 Tz 100 700 Td (Hello) Tj ET", known: true, painted: true,
+			inside: [][2]float64{{100, 700}, {140, 682}}, outside: [][2]float64{{50, 600}}},
 		{name: "a path", ops: "10 20 30 40 re f", known: true, painted: true,
 			inside: [][2]float64{{10, 20}, {40, 60}}, outside: [][2]float64{{100, 100}}},
 		{name: "an image", ops: "q 50 0 0 50 300 400 cm /Im Do Q", known: true, painted: true,

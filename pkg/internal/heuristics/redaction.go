@@ -111,16 +111,23 @@ func quadToRect(qp [8]float64) Zone {
 // ink rises a font size above it. The returned box always contains the origin.
 func ElementZone(el models.TextElement) Zone {
 	dirX, dirY := baselineDirection(el)
+	// The ink rises on the left of the advance, unless the rendering matrix
+	// reflects the glyph (ISO 32000-1, 9.4.4) or a Type 3 font draws it below
+	// its baseline (9.6.5): then it rises on the right, which
+	// [models.TextElement.InkRight] records. Redaction is fail-closed, so a
+	// zone on the wrong side would leave the ink outside a region that covers
+	// it, and take a neighbour it does not.
 	perpX, perpY := -dirY, dirX
+	if el.InkRight {
+		perpX, perpY = dirY, -dirX
+	}
 
 	// Perpendicular reach on either side of the baseline. Horizontal text
 	// rises to the ascender and dips to the descender; vertical text centres
 	// its glyphs on the baseline instead. The reach is the size's magnitude:
 	// a negative font size turns the advance, which [models.TextElement.Angle]
-	// already carries, so the ink rises on the left of the advance as it does
-	// for any glyph the rendering matrix does not reflect (ISO 32000-1, 9.4.4).
-	// A reflected glyph, set at a negative Th under an unflipped CTM, inks the
-	// other side, which the element does not record.
+	// already carries, and turns the glyph with it, so the side the ink rises
+	// on depends on the reflection alone.
 	size := math.Abs(el.FontSize)
 	near, far := -size*glyphDescenderFraction, size
 	if el.Vertical {

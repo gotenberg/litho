@@ -199,5 +199,11 @@ func textElementBox(e models.TextElement) [4]float64 {
 	if x1 < x0 {
 		x0, x1 = x1, x0
 	}
-	return [4]float64{x0 - size*extentDescentFactor, e.Y - size*extentDescentFactor, x1 + size*extentDescentFactor, e.Y + size*extentAscentFactor}
+	// Text advancing along +X that inks the right of its advance inks below
+	// its baseline: see [models.TextElement.InkRight].
+	below, above := extentDescentFactor, extentAscentFactor
+	if e.InkRight {
+		below, above = above, below
+	}
+	return [4]float64{x0 - size*extentDescentFactor, e.Y - size*below, x1 + size*extentDescentFactor, e.Y + size*above}
 }

@@ -108,6 +108,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Hidden:        textIsClipped(state, x, y),
 			Vertical:      font.WMode == 1,
 			Angle:         angle,
+			InkRight:      glyphsInkRight(state, font),
 			PatternType:   state.FillPatternType,
 			Language:      mcLang,
 			ExpansionText: mcExpansion,
@@ -143,6 +144,38 @@ func advancesBackward(state *graphics.State, font *Font, fontSize float64) bool 
 		return false
 	}
 	return fontSize*state.Text.Tz < 0
+}
+
+// glyphsInkRight reports whether the glyphs font paints in state ink the
+// right of their advance in user space, which the advance direction alone
+// cannot tell: a negative Th reverses the advance and reflects the glyph,
+// while a negative Tfs reverses the advance and turns the glyph a half turn.
+//
+// The text rendering matrix of ISO 32000-1, 9.4.4, [Tfs×Th 0 0 Tfs 0 Trise]
+// × Tm × CTM, has the determinant Th × Tfs² × det(Tm) × det(CTM), and Tfs²
+// is never negative, so the sign of the other three factors says whether it
+// reflects text space. Every font but Type 3 inks above the text-space
+// baseline, which a reflection carries to the right of the advance. A Type 3
+// font may draw below that baseline instead ([Font.type3InkBelow]), which
+// crosses the ink to the other side once more.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1199237.pdf: "Éditorial" is drawn a second time through a Tm
+//     of [1 0 0 -1], a reflection hanging below the word.
+//   - govdocs thread_400_400243.pdf: a Type 3 font with an identity
+//     /FontMatrix shown through a Tm that flips Y inks below the baseline;
+//     rendered with poppler, 635 of the 657 runs whose side the rendering
+//     settles have their ink there.
+//   - pdfjs bug1001080.pdf, bug1245391_reduced.pdf: Type 3 bitmap fonts
+//     whose /FontMatrix flips Y and whose d1 boxes lie below the glyph-space
+//     baseline render upright above the text baseline. Reading the
+//     reflection off the matrices alone put their ink on the wrong side.
+func glyphsInkRight(state *graphics.State, font *Font) bool {
+	tm, ctm := state.Text.Tm, state.CTM
+	reflected := state.Text.Tz*(tm[0]*tm[3]-tm[1]*tm[2])*(ctm[0]*ctm[3]-ctm[1]*ctm[2]) < 0
+	below := font.Subtype == "Type3" && font.type3InkBelow
+	return reflected != below
 }
 
 // computeTextScale returns the effective page-space font size and the

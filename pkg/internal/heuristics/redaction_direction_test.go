@@ -30,3 +30,45 @@ func TestElementZone_HalfTurnedNegativeSize(t *testing.T) {
 		t.Errorf("zone %+v reaches past the glyph's origin side", z)
 	}
 }
+
+// TestElementZone_MirroredGlyphInksTheRightOfItsAdvance pins that the zone of
+// a reflected glyph lies on the right of its advance: a negative Th reverses
+// the advance and reflects the glyph, so its ink still rises above a leftward
+// baseline (ISO 32000-1, 9.4.4), and a Tm swapping the axes advances up the
+// page and inks to its right.
+func TestElementZone_MirroredGlyphInksTheRightOfItsAdvance(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		el              models.TextElement
+		inside, outside [][2]float64
+	}{
+		{
+			name:    "leftward",
+			el:      models.TextElement{X: 300, Y: 400, Width: 48, FontSize: 12, Angle: math.Pi, InkRight: true},
+			inside:  [][2]float64{{260, 410}, {299, 403}},
+			outside: [][2]float64{{260, 395}},
+		},
+		{
+			name:    "upward",
+			el:      models.TextElement{X: 300, Y: 400, Width: 48, FontSize: 12, Angle: math.Pi / 2, InkRight: true},
+			inside:  [][2]float64{{310, 440}, {303, 401}},
+			outside: [][2]float64{{295, 440}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			z := ElementZone(tc.el)
+			for _, p := range tc.inside {
+				if !ZonesOverlap(z, ZoneFromRect([4]float64{p[0], p[1], p[0], p[1]})) {
+					t.Errorf("painted point %v outside the zone %+v", p, z)
+				}
+			}
+			for _, p := range tc.outside {
+				if ZonesOverlap(z, ZoneFromRect([4]float64{p[0], p[1], p[0], p[1]})) {
+					t.Errorf("unpainted point %v inside the zone %+v", p, z)
+				}
+			}
+		})
+	}
+}

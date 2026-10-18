@@ -77,6 +77,14 @@ type Font struct {
 	// [Font.type3HeightScale].
 	type3BBoxHeight float64
 	type3CharBBox   bool
+	// type3InkBelow reports that a Type 3 font draws its glyphs below the
+	// text-space baseline: the centre of the ink its glyph descriptions
+	// state, or failing those its /FontBBox, maps through /FontMatrix to a
+	// negative text-space y (ISO 32000-1, 9.6.5). A Type 3 glyph may be drawn
+	// anywhere in glyph space, so its ink side is read off the font rather
+	// than assumed above the baseline as the ascender of every other font
+	// puts it. See [glyphsInkRight].
+	type3InkBelow bool
 
 	// SuppressExtraction marks a reference-only Type0 font that ISO
 	// 32000-1, 9.10.2 gives no route to Unicode: a CMap name outside
@@ -996,7 +1004,7 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 	}
 
 	// /CharProcs maps glyph names → streams containing d0/d1 width operators.
-	var guessed *[4]float64
+	var guessed, ink *[4]float64
 	if cpObj, ok := fontDict["CharProcs"]; ok {
 		cpDict, err := document.ResolveDict(ctx, doc, cpObj)
 		if err != nil {
@@ -1015,23 +1023,23 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 				if stream.Dict == nil {
 					continue
 				}
-				w, glyphBox, err := extractType3Glyph(ctx, doc, stream)
+				w, glyphBox, inkBox, err := extractType3Glyph(ctx, doc, stream)
 				if err != nil {
 					continue
 				}
 				font.Type3Widths[string(name)] = w
-				if glyphBox != nil {
-					if guessed == nil {
-						guessed = glyphBox
-					} else {
-						guessed[0] = min(guessed[0], glyphBox[0])
-						guessed[1] = min(guessed[1], glyphBox[1])
-						guessed[2] = max(guessed[2], glyphBox[2])
-						guessed[3] = max(guessed[3], glyphBox[3])
-					}
-				}
+				guessed = unionBox(guessed, glyphBox)
+				ink = unionBox(ink, inkBox)
 			}
 		}
+	}
+	if ink == nil && math.Hypot(bbox[2]-bbox[0], bbox[3]-bbox[1]) != 0 {
+		ink = &bbox
+	}
+	if ink != nil {
+		fm := font.FontMatrix
+		xc, yc := (ink[0]+ink[2])/2, (ink[1]+ink[3])/2
+		font.type3InkBelow = fm[1]*xc+fm[3]*yc+fm[5] < 0
 	}
 
 	// The height of the font's bounding box comes from /FontBBox (ISO
@@ -3178,35 +3186,62 @@ func builtinGlyphNames(name string) (*[256]string, map[string]rune, map[rune]str
 // or constructs none. PDF.js reads those bounds as the font's bounding box
 // when the font states an empty /FontBBox (src/core/evaluator.js,
 // TranslatedFont, #guessType3FontBBox): see [Font.type3HeightScale].
-func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.PdfStream) (float64, *[4]float64, error) {
+//
+// Last, it returns where the glyph's ink lies in glyph space, nil when
+// unknown: the bounding box d1 states (ISO 32000-1, 9.6.5, Table 113), or the
+// bounds of the paths drawn after d0. See [Font.type3InkBelow].
+func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.PdfStream) (width float64, pathBox, inkBox *[4]float64, err error) {
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 
 	ops, err := content.ParseStreamData(ctx, data, content.SplitGluedOperators())
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 
 	for i, op := range ops {
 		switch op.Operator {
 		case "d0":
 			if len(op.Operands) >= 1 {
-				var bbox *[4]float64
+				drawn := type3PathBounds(ops[i+1:])
 				if i == 0 {
-					bbox = type3PathBounds(ops[1:])
+					pathBox = drawn
 				}
-				return document.Float(op.Operands[0]), bbox, nil
+				return document.Float(op.Operands[0]), pathBox, drawn, nil
 			}
 		case "d1":
+			if len(op.Operands) >= 6 {
+				inkBox = &[4]float64{
+					document.Float(op.Operands[2]), document.Float(op.Operands[3]),
+					document.Float(op.Operands[4]), document.Float(op.Operands[5]),
+				}
+			}
 			if len(op.Operands) >= 1 {
-				return document.Float(op.Operands[0]), nil, nil
+				return document.Float(op.Operands[0]), nil, inkBox, nil
 			}
 		}
 	}
 
-	return 0, nil, fmt.Errorf("no d0/d1 operator found in CharProc stream")
+	return 0, nil, nil, fmt.Errorf("no d0/d1 operator found in CharProc stream")
+}
+
+// unionBox returns the smallest box holding acc and box, either of which may
+// be nil. It does not keep box: the result is acc, grown, or a copy.
+func unionBox(acc, box *[4]float64) *[4]float64 {
+	if box == nil {
+		return acc
+	}
+	if acc == nil {
+		c := *box
+		return &c
+	}
+	acc[0] = min(acc[0], box[0])
+	acc[1] = min(acc[1], box[1])
+	acc[2] = max(acc[2], box[2])
+	acc[3] = max(acc[3], box[3])
+	return acc
 }
 
 // type3PathBounds returns the bounds of the points the path construction

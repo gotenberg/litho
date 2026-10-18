@@ -109,18 +109,28 @@ type TextElement struct {
 	// value. Reconstruction uses the ID to suppress gap-based space
 	// insertion inside a single chunk, matching the operator-level
 	// segmentation a PDF viewer applies.
-	Chunk         int     `json:"chunk,omitempty"`
-	MCID          int     `json:"mcid"`
-	Hidden        bool    `json:"hidden,omitempty"`
-	Invisible     bool    `json:"invisible,omitempty"`
-	Vertical      bool    `json:"vertical,omitempty"`
-	Angle         float64 `json:"angle,omitempty"`
-	Redacted      bool    `json:"redacted,omitempty"`
-	IsClipped     bool    `json:"isClipped,omitempty"`
-	PatternType   string  `json:"patternType,omitempty"`
-	Language      string  `json:"language,omitempty"`
-	ExpansionText string  `json:"expansionText,omitempty"`
-	MathML        string  `json:"mathML,omitempty"`
+	Chunk     int     `json:"chunk,omitempty"`
+	MCID      int     `json:"mcid"`
+	Hidden    bool    `json:"hidden,omitempty"`
+	Invisible bool    `json:"invisible,omitempty"`
+	Vertical  bool    `json:"vertical,omitempty"`
+	Angle     float64 `json:"angle,omitempty"`
+	// InkRight reports that horizontal text inks the right of its advance,
+	// the side a quarter turn clockwise from it, rather than the left, where
+	// glyphs rise to their ascenders as the rendering matrix of ISO 32000-1,
+	// 9.4.4 sets them upright. A negative horizontal scaling, a mirrored text
+	// matrix and a mirrored CTM each reflect the glyphs onto the right, and
+	// any two of them cancel; so does a Type 3 font that draws its glyphs
+	// below its text-space baseline (9.6.5). A negative font size turns the
+	// glyphs a half turn without moving them across the advance, which Angle
+	// already carries.
+	InkRight      bool   `json:"inkRight,omitempty"`
+	Redacted      bool   `json:"redacted,omitempty"`
+	IsClipped     bool   `json:"isClipped,omitempty"`
+	PatternType   string `json:"patternType,omitempty"`
+	Language      string `json:"language,omitempty"`
+	ExpansionText string `json:"expansionText,omitempty"`
+	MathML        string `json:"mathML,omitempty"`
 }
 
 // Bookmark represents an item in the document outline.

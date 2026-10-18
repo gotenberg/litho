@@ -974,6 +974,7 @@ func coalesceTextElements(ctx context.Context, in []models.TextElement) []models
 func canMergeTextElements(a, b models.TextElement) bool {
 	if a.FontSize != b.FontSize ||
 		a.Vertical != b.Vertical ||
+		a.InkRight != b.InkRight ||
 		a.Hidden != b.Hidden ||
 		a.Invisible != b.Invisible ||
 		a.Redacted != b.Redacted ||
