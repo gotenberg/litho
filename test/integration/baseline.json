@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-18T18:02:17Z",
+  "captured_at": "2026-10-18T19:21:27Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -100,12 +100,12 @@
           "skipped": 0
         },
         "text": {
-          "matched": 940,
-          "mismatched": 151,
+          "matched": 941,
+          "mismatched": 150,
           "skipped": 0,
           "metrics": {
             "chars_match": 1037,
-            "words_match": 940
+            "words_match": 941
           }
         }
       }
@@ -113,7 +113,7 @@
     "litho": {
       "features": {
         "compliance": {
-          "matched": 2210,
+          "matched": 2223,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -121,15 +121,15 @@
           }
         },
         "determinism": {
-          "matched": 1190,
+          "matched": 1197,
           "mismatched": 0,
-          "skipped": 1020,
+          "skipped": 1026,
           "metrics": {
             "nondeterministic": 0
           }
         },
         "mutate-autotag": {
-          "matched": 2210,
+          "matched": 2223,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -143,7 +143,7 @@
           }
         },
         "mutate-encrypt": {
-          "matched": 2210,
+          "matched": 2223,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -157,7 +157,7 @@
           }
         },
         "mutate-flatten": {
-          "matched": 2210,
+          "matched": 2223,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -171,7 +171,7 @@
           }
         },
         "mutate-pages": {
-          "matched": 2199,
+          "matched": 2212,
           "mismatched": 11,
           "skipped": 0,
           "metrics": {
@@ -187,7 +187,7 @@
         "mutate-redact": {
           "matched": 1391,
           "mismatched": 0,
-          "skipped": 819,
+          "skipped": 832,
           "metrics": {
             "pages_wrong": 0,
             "qpdf_failed": 0,
@@ -198,7 +198,7 @@
           }
         },
         "mutate-sign": {
-          "matched": 2184,
+          "matched": 2197,
           "mismatched": 0,
           "skipped": 26,
           "metrics": {
@@ -215,7 +215,7 @@
           }
         },
         "mutate-stamp": {
-          "matched": 2199,
+          "matched": 2212,
           "mismatched": 11,
           "skipped": 0,
           "metrics": {
@@ -230,37 +230,37 @@
         },
         "remediation": {
           "matched": 708,
-          "mismatched": 1502,
+          "mismatched": 1515,
           "skipped": 0,
           "metrics": {
             "disagreement": 0,
             "fully_fixed": 708,
-            "litho_fixed": 11487,
-            "litho_post": 3137,
-            "litho_pre": 14624,
+            "litho_fixed": 11541,
+            "litho_post": 3195,
+            "litho_pre": 14736,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 11485,
-            "verapdf_post": 3137,
-            "verapdf_pre": 14622,
+            "verapdf_fixed": 11539,
+            "verapdf_post": 3195,
+            "verapdf_pre": 14734,
             "verapdf_regressed": 0
           }
         },
         "remediation-aggressive": {
           "matched": 775,
-          "mismatched": 1435,
+          "mismatched": 1448,
           "skipped": 0,
           "metrics": {
             "disagreement": 0,
             "fully_fixed": 775,
-            "litho_fixed": 11896,
-            "litho_post": 2728,
-            "litho_pre": 14624,
+            "litho_fixed": 11950,
+            "litho_post": 2786,
+            "litho_pre": 14736,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 11894,
-            "verapdf_post": 2728,
-            "verapdf_pre": 14622,
+            "verapdf_fixed": 11948,
+            "verapdf_post": 2786,
+            "verapdf_pre": 14734,
             "verapdf_regressed": 0
           }
         }
@@ -341,12 +341,12 @@
     "pdfjs": {
       "features": {
         "imagedecode": {
-          "matched": 344,
-          "mismatched": 16,
+          "matched": 345,
+          "mismatched": 15,
           "skipped": 831,
           "metrics": {
-            "decode_failed": 30,
-            "images_match": 4019
+            "decode_failed": 29,
+            "images_match": 4020
           }
         },
         "merge-catalog": {
@@ -368,12 +368,12 @@
           "skipped": 1
         },
         "text": {
-          "matched": 1120,
-          "mismatched": 70,
+          "matched": 1121,
+          "mismatched": 69,
           "skipped": 1,
           "metrics": {
             "chars_match": 1155,
-            "words_match": 1120
+            "words_match": 1121
           }
         }
       }
