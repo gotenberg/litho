@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -93,7 +94,7 @@ func TestCheckOCGOrderCompleteness_NamesTheLowestMissingOCG(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("violations = %d, want 1", len(got))
 		}
-		if msg := got[0].Context; msg != "OCG object 4 not referenced in Order array" {
+		if msg := got[0].Context; msg != "default config (D): OCG object 4 not referenced in Order array" {
 			t.Fatalf("message = %q, want the lowest missing OCG object number", msg)
 		}
 	}
@@ -161,7 +162,114 @@ func TestCheckOCGOrderCompleteness_CyclicOrderStillJudged(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("violations = %d, want 1: object 5 is an OCG /Order never names (%v)", len(got), got)
 	}
-	if msg := got[0].Context; msg != "OCG object 5 not referenced in Order array" {
+	if msg := got[0].Context; msg != "default config (D): OCG object 5 not referenced in Order array" {
 		t.Fatalf("message = %q, want object 5 named", msg)
+	}
+}
+
+// ocPropsViolations reports the Order-completeness verdict at the given part
+// for a catalog whose /OCProperties is the given dictionary, with objects 4
+// and 5 as the OCGs.
+func ocPropsViolations(t *testing.T, ctx context.Context, part int, ocProps string, extra ...string) []Violation {
+	t.Helper()
+
+	objs := append([]string{
+		"<< /Type /Catalog /Pages 2 0 R /OCProperties " + ocProps + " >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /OCG /Name (Layer 1) >>",
+		"<< /Type /OCG /Name (Layer 2) >>",
+	}, extra...)
+
+	doc, _ := objsDocPDF(t, objs...)
+	catalog, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 1})
+	if err != nil {
+		t.Fatalf("resolve catalog: %v", err)
+	}
+	return checkOCGOrderCompleteness(ctx, doc, catalog, part)
+}
+
+// TestCheckOCGOrderCompleteness_EveryConfiguration pins that /Order is judged
+// in every optional content configuration dictionary, /Configs included.
+//
+// ISO 19005-2 §6.9 t3 and ISO 19005-4 §6.10 t3 state the rule of "an optional
+// content configuration dictionary", and veraPDF tests it on every PDOCConfig:
+// the default /D and each /Configs entry. Reading /D alone missed a /Configs
+// configuration whose own /Order leaves an OCG out.
+//
+// # Corpus evidence
+//
+//   - litho complex_ua2.pdf: /Configs [ << /Order [ ] >> ], an incomplete
+//     /Order litho never inspected while /D also failed.
+func TestCheckOCGOrderCompleteness_EveryConfiguration(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cases := []struct {
+		name    string
+		ocProps string
+		extra   []string
+		want    []string
+	}{
+		{
+			name:    "a /Configs entry missing an OCG fires while /D passes",
+			ocProps: "<< /OCGs [4 0 R 5 0 R] /D << /Order [4 0 R 5 0 R] >> /Configs [ << /Order [4 0 R] >> ] >>",
+			want:    []string{"config 0: OCG object 5 not referenced in Order array"},
+		},
+		{
+			name:    "an indirect /Configs entry is judged",
+			ocProps: "<< /OCGs [4 0 R 5 0 R] /D << /Name (D) >> /Configs [6 0 R] >>",
+			extra:   []string{"<< /Name (Alt) /Order [] >>"},
+			want:    []string{"config 0: OCG object 4 not referenced in Order array"},
+		},
+		{
+			name:    "each failing configuration is reported once",
+			ocProps: "<< /OCGs [4 0 R 5 0 R] /D << /Order [5 0 R] >> /Configs [ << /Order [4 0 R 5 0 R] >> << /Order [] >> ] >>",
+			want: []string{
+				"default config (D): OCG object 4 not referenced in Order array",
+				"config 1: OCG object 4 not referenced in Order array",
+			},
+		},
+		{
+			name:    "a configuration without /Order passes",
+			ocProps: "<< /OCGs [4 0 R 5 0 R] /D << /Name (D) >> /Configs [ << /Name (Alt) >> ] >>",
+		},
+		{
+			name:    "a /Configs entry that is not a dictionary is ignored",
+			ocProps: "<< /OCGs [4 0 R 5 0 R] /D << /Order [4 0 R 5 0 R] >> /Configs [ (junk) 7 ] >>",
+		},
+		{
+			// veraPDF ignores an /Order that is not an array ("Invalid object
+			// type of Order entry"): the clause judges the contents of an
+			// Order array, not its type.
+			name:    "an /Order that is not an array is not judged",
+			ocProps: "<< /OCGs [4 0 R 5 0 R] /D << /Order 4 0 R >> /Configs [ << /Order /Bad >> ] >>",
+		},
+		{
+			// veraPDF validates an indirect object once however many paths
+			// reach it.
+			name:    "a configuration reached twice is reported once",
+			ocProps: "<< /OCGs [4 0 R 5 0 R] /D 6 0 R /Configs [6 0 R] >>",
+			extra:   []string{"<< /Name (D) /Order [4 0 R] >>"},
+			want:    []string{"default config (D): OCG object 5 not referenced in Order array"},
+		},
+	}
+	for _, part := range []int{2, 3, 4} {
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				got := ocPropsViolations(t, ctx, part, tc.ocProps, tc.extra...)
+				var msgs []string
+				for _, v := range got {
+					if v.Rule != ocgOrderCompletePDFARule(part) {
+						t.Errorf("part %d: rule = %v, want %v", part, v.Rule, ocgOrderCompletePDFARule(part))
+					}
+					msgs = append(msgs, v.Context)
+				}
+				if !slices.Equal(msgs, tc.want) {
+					t.Errorf("part %d: violations = %q, want %q", part, msgs, tc.want)
+				}
+			})
+		}
 	}
 }

@@ -527,39 +527,102 @@ func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog 
 }
 
 // checkOCGOrderCompleteness validates ISO 19005-2/3 §6.9 t3 and ISO 19005-4
-// §6.10 t3: if an OC config dict has an /Order key, the Order array must
-// reference all OCGs in the document.
+// §6.10 t3: if an optional content configuration dictionary has an /Order
+// key, the Order array must reference all OCGs in the document.
+//
+// The rule names any configuration dictionary, so the default /D and every
+// /Configs entry are judged (ISO 32000-1, Table 100), and each failing
+// configuration is reported once, as veraPDF reports one check per PDOCConfig.
+// An /Order that is not an array is not judged: the clause tests what the
+// Order array contains, and veraPDF ignores a non-array /Order the same way.
+//
+// # Corpus evidence
+//
+//   - litho complex_ua2.pdf: /Configs [ << /Order [ ] >> ], an incomplete
+//     /Order a /D-only read never inspected; veraPDF reports it.
 func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	ocProps, err := document.ResolveDict(ctx, doc, catalog["OCProperties"])
 	if err != nil || ocProps == nil {
 		return nil
 	}
-
-	// Collect all OCG references from /OCGs array.
-	ocgsArr, err := document.ResolveArray(ctx, doc, ocProps["OCGs"])
-	if err != nil || len(ocgsArr) == 0 {
+	ocgs := DocumentOCGs(ctx, doc, ocProps)
+	if len(ocgs) == 0 {
 		return nil
 	}
-	allOCGs := make([]int, 0, len(ocgsArr))
-	for _, ocg := range ocgsArr {
-		if ref, ok := ocg.(ast.PdfIndirectRef); ok {
-			allOCGs = append(allOCGs, ref.ObjectNum)
+
+	var results []Violation
+	// An indirect configuration reached from /D and from /Configs is one
+	// object, and veraPDF validates an object once however many paths reach
+	// it.
+	seen := make(map[int]bool)
+	judge := func(cfgObj ast.PdfObject, label string) {
+		if ref, isRef := cfgObj.(ast.PdfIndirectRef); isRef {
+			if seen[ref.ObjectNum] {
+				return
+			}
+			seen[ref.ObjectNum] = true
+		}
+		cfg, err := document.ResolveDict(ctx, doc, cfgObj)
+		if err != nil || cfg == nil {
+			return
+		}
+		// The missing set is sorted, so a file omitting several always names
+		// the same one.
+		if missing := OCGsMissingFromOrder(ctx, doc, cfg, ocgs); len(missing) > 0 {
+			results = append(results, failf(ocgOrderCompletePDFARule(part),
+				"%s: OCG object %d not referenced in Order array", label, missing[0].ObjectNum)...)
 		}
 	}
-	slices.Sort(allOCGs)
-	allOCGs = slices.Compact(allOCGs)
 
-	// Check default config (/D) for /Order key.
-	dObj, ok := ocProps["D"]
-	if !ok {
+	if dObj, ok := ocProps["D"]; ok {
+		judge(dObj, "default config (D)")
+	}
+	if configs, err := document.ResolveArray(ctx, doc, ocProps["Configs"]); err == nil {
+		for i, cfgObj := range configs {
+			if ctx.Err() != nil {
+				return results
+			}
+			judge(cfgObj, fmt.Sprintf("config %d", i))
+		}
+	}
+	return results
+}
+
+// DocumentOCGs returns the optional content groups an /OCProperties
+// dictionary lists in /OCGs, sorted by object number and without repeats.
+// ISO 32000-1, Table 100 makes /OCGs the array of every OCG in the document,
+// and it is the set ISO 19005-2 §6.9 t3 and ISO 19005-4 §6.10 t3 require
+// every /Order to reference. A direct entry has no object number for /Order
+// to reference and is skipped.
+func DocumentOCGs(ctx context.Context, doc *document.Document, ocProps ast.PdfDict) []ast.PdfIndirectRef {
+	arr, err := document.ResolveArray(ctx, doc, ocProps["OCGs"])
+	if err != nil {
 		return nil
 	}
-	dConfig, err := document.ResolveDict(ctx, doc, dObj)
-	if err != nil || dConfig == nil {
-		return nil
+	refs := make([]ast.PdfIndirectRef, 0, len(arr))
+	for _, ocg := range arr {
+		if ref, ok := ocg.(ast.PdfIndirectRef); ok {
+			refs = append(refs, ref)
+		}
 	}
-	orderObj, hasOrder := dConfig["Order"]
+	slices.SortFunc(refs, func(a, b ast.PdfIndirectRef) int { return a.ObjectNum - b.ObjectNum })
+	return slices.CompactFunc(refs, func(a, b ast.PdfIndirectRef) bool { return a.ObjectNum == b.ObjectNum })
+}
+
+// OCGsMissingFromOrder returns the OCGs of ocgs that the configuration's
+// /Order array never references, in the order of ocgs. It returns none for a
+// configuration without /Order, or whose /Order is not an array, since neither
+// states the requirement, and none when the depth bound stopped the read of
+// /Order, since a partial read cannot tell an omitted OCG from an unread one.
+//
+// [checkOCGOrderCompleteness] and the remediation that completes /Order both
+// read this, so the repair adds exactly what the check reports missing.
+func OCGsMissingFromOrder(ctx context.Context, doc *document.Document, cfg ast.PdfDict, ocgs []ast.PdfIndirectRef) []ast.PdfIndirectRef {
+	orderObj, hasOrder := cfg["Order"]
 	if !hasOrder {
+		return nil
+	}
+	if _, err := document.ResolveArray(ctx, doc, orderObj); err != nil {
 		return nil
 	}
 
@@ -573,15 +636,13 @@ func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, cata
 		return nil
 	}
 
-	// Check that all OCGs are referenced. Sorted so a file omitting several
-	// always names the same one.
-	for _, objNum := range allOCGs {
-		if !orderOCGs[objNum] {
-			return failf(ocgOrderCompletePDFARule(part),
-				"OCG object %d not referenced in Order array", objNum)
+	var missing []ast.PdfIndirectRef
+	for _, ref := range ocgs {
+		if !orderOCGs[ref.ObjectNum] {
+			missing = append(missing, ref)
 		}
 	}
-	return nil
+	return missing
 }
 
 // maxOCGOrderDepth bounds recursion into the attacker-nested /Order array of
