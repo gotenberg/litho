@@ -6525,13 +6525,13 @@ completed `/Order` stayed reported until its OCG was named.
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 156 x 8 = 1248 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 156 x 13 = 2028 cells. litho
+runner scores 158 x 8 = 1264 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 158 x 13 = 2054 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2026 of the 2028 cells. The two
+fixtures exist to protect, and it holds in 2052 of the 2054 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
