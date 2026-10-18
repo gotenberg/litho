@@ -61,4 +61,24 @@ type Element struct {
 	ActualText string
 	// Title is the /T human-readable title.
 	Title string
+	// Pagination, when set, makes the leaf page furniture rather than
+	// content: [Emit] builds no structure element for it and marks its Span
+	// as a pagination artifact of this subtype.
+	Pagination Pagination
 }
+
+// Pagination is the subtype of a pagination artifact, content that repeats
+// on pages as part of their layout rather than of the document's logical
+// content (ISO 32000-1, 14.8.2.2.2, Table 330). [Classify] marks running
+// headers and footers, page numbers among them, this way, since ISO 14289-1,
+// 7.8 asks that they be artifacts rather than part of the structure tree.
+type Pagination string
+
+// The pagination subtypes [Classify] produces. ISO 32000-1, Table 330 also
+// defines Watermark, which no pass detects. ISO 32000-2 keeps Header and
+// Footer and adds PageNum, which ISO 32000-1 readers do not know, so a page
+// number is a Header or a Footer by the margin it sits in.
+const (
+	PaginationHeader Pagination = "Header"
+	PaginationFooter Pagination = "Footer"
+)

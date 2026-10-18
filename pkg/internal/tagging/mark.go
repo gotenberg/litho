@@ -9,12 +9,15 @@ import (
 // MCID and a role tag and is wrapped in a BDC/EMC sequence linked to a
 // structure element; an artifact span (artifact == true) is wrapped in an
 // /Artifact BMC/EMC sequence so painting content outside the logical structure
-// is still marked, satisfying the "all content marked or artifact" rule.
+// is still marked, satisfying the "all content marked or artifact" rule. An
+// artifact span with a pagination subtype is wrapped in an /Artifact BDC
+// sequence whose property list names it (ISO 32000-1, 14.8.2.2.1).
 type markSpan struct {
 	start, end int
 	mcid       int
 	tag        Role
 	artifact   bool
+	pagination Pagination
 }
 
 // injectMarks wraps each span in content with a marked-content sequence:
@@ -53,9 +56,12 @@ func injectMarks(content []byte, spans []markSpan) ([]byte, error) {
 	cursor := 0
 	for _, s := range sorted {
 		out = append(out, content[cursor:s.start]...)
-		if s.artifact {
+		switch {
+		case s.artifact && s.pagination != "":
+			out = append(out, fmt.Sprintf("\n/Artifact <</Type /Pagination /Subtype /%s>> BDC\n", s.pagination)...)
+		case s.artifact:
 			out = append(out, "\n/Artifact BMC\n"...)
-		} else {
+		default:
 			out = append(out, fmt.Sprintf("\n/%s <</MCID %d>> BDC\n", s.tag, s.mcid)...)
 		}
 		out = append(out, content[s.start:s.end]...)

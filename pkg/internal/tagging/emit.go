@@ -49,7 +49,7 @@ func Emit(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Documen
 		return nil, err
 	}
 
-	e := &emitter{alloc: alloc, doc: doc, pages: pages, perPage: make(map[int][]leafEntry)}
+	e := &emitter{alloc: alloc, doc: doc, pages: pages, perPage: make(map[int][]leafEntry), furniture: make(map[int][]markSpan)}
 
 	// Reserve the StructTreeRoot object so child elements can name it as
 	// their ancestor /P, then build the element subtree.
@@ -80,9 +80,11 @@ func Emit(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Documen
 		return nil, err
 	}
 
-	return []string{
-		fmt.Sprintf("synthesized structure tree: %d element(s) across %d page(s)", e.elemCount, len(e.perPage)),
-	}, nil
+	desc := fmt.Sprintf("synthesized structure tree: %d element(s) across %d page(s)", e.elemCount, len(e.perPage))
+	if e.furnitureCount > 0 {
+		desc += fmt.Sprintf(", %d running header or footer line(s) marked as pagination artifacts", e.furnitureCount)
+	}
+	return []string{desc}, nil
 }
 
 // leafEntry pairs a leaf's marked-content span with the structure element
@@ -99,6 +101,28 @@ type emitter struct {
 	perPage      map[int][]leafEntry // page index -> leaves in MCID order
 	elemCount    int
 	maxParentKey int // highest StructParents key written, or -1
+	// furniture holds, per page index, the pagination artifact spans of the
+	// leaves that are page furniture (see [Element.Pagination]).
+	furniture      map[int][]markSpan
+	furnitureCount int
+}
+
+// paginate records a page-furniture leaf as a pagination artifact span of its
+// page. It builds no structure element: an artifact is not part of the
+// logical structure (ISO 32000-1, 14.8.2.2).
+func (e *emitter) paginate(node *Element) error {
+	if node.Span == nil || len(node.Kids) > 0 {
+		return fmt.Errorf("tagging: pagination artifact %q must be a leaf with a span", node.Pagination)
+	}
+	pi := node.Span.PageIndex
+	if pi < 0 || pi >= len(e.pages) {
+		return fmt.Errorf("tagging: pagination artifact references page %d of %d", pi, len(e.pages))
+	}
+	e.furniture[pi] = append(e.furniture[pi], markSpan{
+		start: node.Span.Start, end: node.Span.End, artifact: true, pagination: node.Pagination,
+	})
+	e.furnitureCount++
+	return nil
 }
 
 // build allocates a structure element for node and its subtree, returning the
@@ -156,6 +180,12 @@ func (e *emitter) build(ctx context.Context, node *Element, parentRef ast.PdfInd
 	default:
 		kids := make(ast.PdfArray, 0, len(node.Kids))
 		for _, child := range node.Kids {
+			if child.Pagination != "" {
+				if err := e.paginate(child); err != nil {
+					return ast.PdfIndirectRef{}, err
+				}
+				continue
+			}
 			childRef, err := e.build(ctx, child, selfRef, depth+1)
 			if err != nil {
 				return ast.PdfIndirectRef{}, err
@@ -192,7 +222,11 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 			continue
 		}
 
-		leaves := e.perPage[pi]
+		structLeaves := len(e.perPage[pi])
+		leaves := slices.Clone(e.perPage[pi])
+		for _, f := range e.furniture[pi] {
+			leaves = append(leaves, leafEntry{span: f})
+		}
 		sort.Slice(leaves, func(i, j int) bool { return leaves[i].span.start < leaves[j].span.start })
 
 		spans, elemRefs := pageSpans(data, leaves, textBearingXObjects(ctx, e.alloc, e.doc, e.pages[pi]))
@@ -214,7 +248,7 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		newPage := make(ast.PdfDict, len(baseDict)+2)
 		maps.Copy(newPage, baseDict)
 		newPage["Contents"] = streamRef
-		if len(leaves) > 0 {
+		if structLeaves > 0 {
 			newPage["StructParents"] = ast.PdfInt(pi)
 			nums = append(nums, ast.PdfInt(pi), elemRefs)
 			if pi > e.maxParentKey {
@@ -236,8 +270,10 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 
 // pageSpans builds the marked-content spans for one page: the structure leaves,
 // plus an /Artifact span over each non-blank gap before, between, and after
-// them, so no painting operator is left outside marked content. elemRefs maps
-// MCID to its structure element for the page's ParentTree entry.
+// them, so no painting operator is left outside marked content. A leaf whose
+// span is an artifact (a pagination artifact, see [Element.Pagination]) is
+// planned as it stands and owns no structure element. elemRefs maps MCID to
+// its structure element for the page's ParentTree entry.
 //
 // # Corpus evidence
 //
@@ -245,7 +281,13 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 //     XObjects, and sweeping them into an /Artifact dropped the document from
 //     11914 extractable characters to 2266.
 func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([]markSpan, ast.PdfArray) {
-	elemRefs := make(ast.PdfArray, len(leaves))
+	structLeaves := 0
+	for _, leaf := range leaves {
+		if !leaf.span.artifact {
+			structLeaves++
+		}
+	}
+	elemRefs := make(ast.PdfArray, structLeaves)
 	var spans []markSpan
 	cursor := 0
 	addArtifact := func(start, end int) {
@@ -267,7 +309,9 @@ func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([
 		s := leaf.span
 		addArtifact(cursor, s.start)
 		spans = append(spans, s)
-		elemRefs[s.mcid] = leaf.ref
+		if !s.artifact && s.mcid >= 0 && s.mcid < len(elemRefs) {
+			elemRefs[s.mcid] = leaf.ref
+		}
 		if s.end > cursor {
 			cursor = s.end
 		}

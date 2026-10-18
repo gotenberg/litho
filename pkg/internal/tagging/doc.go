@@ -4,8 +4,10 @@
 // litho already has a flat content-tag fixer that wraps each untagged page in
 // a single Document marked-content sequence, which clears the structural
 // PDF/UA bar but produces no real logical structure. This package emits a
-// populated tree: Document with H1..Hn / P / Figure / Table children, each
-// linked to its own marked-content sequence by a distinct MCID.
+// populated tree: Document with H1..Hn / P / L / Figure / Table children, each
+// linked to its own marked-content sequence by a distinct MCID. Running
+// headers, footers and page numbers are marked as pagination artifacts
+// instead (see [Element.Pagination]).
 //
 // Scope. This package is the emitter: it takes an in-memory logical tree
 // ([Element]) whose leaves carry byte-range [ContentSpan] values into a page's
