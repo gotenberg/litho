@@ -992,14 +992,18 @@ func canMergeTextElements(a, b models.TextElement) bool {
 
 	// Spatial adjacency projected onto the baseline direction. The
 	// along-baseline gap must be small (sub-space kerning only) and the
-	// perpendicular offset must be near zero.
-	spaceW := a.SpaceWidth
-	if spaceW <= 0 {
-		spaceW = a.FontSize * 0.25
+	// perpendicular offset must be near zero. Both tolerances are lengths,
+	// so they take magnitudes: a negative font size or horizontal scaling
+	// reverses the advance (ISO 32000-1, 9.4.4), which Angle carries, and
+	// signs the size and the space advance with it.
+	size := math.Abs(a.FontSize)
+	spaceW := math.Abs(a.SpaceWidth)
+	if spaceW == 0 {
+		spaceW = size * 0.25
 	}
 	const kernTolerance = 0.3 // up to 30% of a space counts as kerning.
 	maxGap := spaceW * kernTolerance
-	baselineTolerance := a.FontSize * 0.2
+	baselineTolerance := size * 0.2
 
 	dirX, dirY := baselineDirection(a)
 	perpX, perpY := -dirY, dirX

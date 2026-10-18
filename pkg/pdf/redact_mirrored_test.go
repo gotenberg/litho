@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/heuristics"
 )
 
 // mirroredCase is one way of setting text whose glyphs the rendering matrix
@@ -175,6 +177,54 @@ func TestWriter_Redact_ReflectedGlyphsRedactWhereTheirInkIs(t *testing.T) {
 			out := redactAndWrite(t, src, []RedactRegion{mirroredInkRegion(c)})
 			if got := pageLetters(t, out); got != "EEKP" {
 				t.Errorf("after redacting SECRET's ink the page reads %q, want only KEEP's letters", got)
+			}
+		})
+	}
+}
+
+// TestReader_ExtractTextElements_TurnedAndReflectedRunsCoalesce pins that
+// each run of [mirroredCases] comes out of extraction as one element that
+// says which side of its advance it inks, and whose zone meets the region
+// over its own ink and not its neighbour's: the zone
+// [heuristics.DetectUnappliedRedactions] tests a /Redact mark against.
+//
+// Glyphs coalesce within a tolerance proportional to the font size, and the
+// size is negative when Tfs is, so a run set at a negative Tfs stayed one
+// element per glyph.
+func TestReader_ExtractTextElements_TurnedAndReflectedRunsCoalesce(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for _, c := range mirroredCases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			src := mirroredRunPDF(c)
+			r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			elements, err := r.ExtractTextElements(ctx, 1)
+			if err != nil {
+				t.Fatalf("ExtractTextElements: %v", err)
+			}
+			if len(elements) != 2 || elements[0].Text != "SECRET" || elements[1].Text != "KEEP" {
+				var texts []string
+				for _, el := range elements {
+					texts = append(texts, el.Text)
+				}
+				t.Fatalf("elements = %q, want [SECRET KEEP]", texts)
+			}
+			// The ink rises clockwise from the advance exactly when the
+			// glyphs are reflected.
+			wantInkRight := c.adv[0]*c.ink[1]-c.adv[1]*c.ink[0] < 0
+			region := mirroredInkRegion(c).Rect
+			zone := heuristics.ZoneFromRect(region)
+			for i, el := range elements {
+				if el.InkRight != wantInkRight {
+					t.Errorf("%s: InkRight = %v, want %v", el.Text, el.InkRight, wantInkRight)
+				}
+				if got, want := heuristics.ZonesOverlap(heuristics.ElementZone(el), zone), i == 0; got != want {
+					t.Errorf("%s: zone meets the region over SECRET's ink = %v, want %v", el.Text, got, want)
+				}
 			}
 		})
 	}
