@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
@@ -2042,6 +2043,12 @@ func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict,
 		fontData := extractFontProgramData(ctx, doc, cidFd)
 		if fontData != nil {
 			binaryWidths := typography.ExtractCIDBinaryWidths(ctx, fontData)
+			// A CFF whose CharStrings INDEX is empty states no width, but each
+			// CID it lacks still has one the width rule weighs
+			// ([checkCFFMissingGlyphWidths]).
+			if _, _, empty := cff.EmptyCharStrings(fontData); binaryWidths == nil && empty {
+				binaryWidths = map[uint16]float64{}
+			}
 			if binaryWidths != nil {
 				unitsPerEm := FontProgramUnitsPerEm(fontData)
 				rule := glyphWidthRule(profile)

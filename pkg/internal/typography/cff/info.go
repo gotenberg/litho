@@ -121,6 +121,45 @@ func CharStringsReachable(data []byte) bool {
 	return err == nil
 }
 
+// EmptyCharStrings reports whether a bare CFF font program reaches a
+// CharStrings INDEX ([CharStringsReachable]) that holds no charstring at all,
+// so the program defines no glyph, .notdef included (Adobe Technical Note
+// #5176, 14, makes GID 0 the first entry of that INDEX). cidKeyed reports a
+// Top DICT carrying the ROS operator (section 18). For a name-keyed program,
+// defaultWidthX is the default width its Private DICT states, in font units,
+// 0 when it states none (Table 23).
+func EmptyCharStrings(data []byte) (defaultWidthX float64, cidKeyed, ok bool) {
+	if len(data) < 4 || data[0] != 1 {
+		return 0, false, false
+	}
+	nameEnd, err := skipINDEX(data, max(int(data[2]), 4))
+	if err != nil {
+		return 0, false, false
+	}
+	_, topDicts, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDicts) == 0 {
+		return 0, false, false
+	}
+	top := parseTopDict(topDicts[0])
+	if top.charStringsOffset < 0 || int(top.charStringsOffset) >= len(data) {
+		return 0, false, false
+	}
+	_, charStrings, err := parseINDEX(data, int(top.charStringsOffset))
+	if err != nil || len(charStrings) != 0 {
+		return 0, false, false
+	}
+	if top.isCID {
+		return 0, true, true
+	}
+	if top.privateDictOffset > 0 && top.privateDictSize > 0 {
+		start := int(top.privateDictOffset)
+		if end := start + int(top.privateDictSize); end <= len(data) {
+			_, defaultWidthX, _ = parsePrivateDict(data[start:end])
+		}
+	}
+	return defaultWidthX, false, true
+}
+
 // scanDict calls fn with each operator of a CFF DICT and the operands before
 // it, integers and reals alike, as float64 (Adobe Technical Note #5176, Table
 // 3). Two-byte operators come as 1200 plus their second byte. A number cut off

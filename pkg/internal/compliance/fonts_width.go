@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
@@ -206,7 +207,7 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 
 	binaryWidths := typography.ExtractBinaryWidths(ctx, fontData)
 	if binaryWidths == nil {
-		return simpleFontGlyphs{}, false
+		return emptyCFFGlyphs(ctx, doc, fontDict, fontData)
 	}
 
 	unitsPerEm := FontProgramUnitsPerEm(fontData)
@@ -340,6 +341,61 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 	}
 
 	return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: charCodeToGID, encodingNames: encNames, notdefNamed: notdefNamed}, true
+}
+
+// emptyCFFGlyphs resolves the glyphs of a simple font whose name-keyed bare
+// CFF program reaches a CharStrings INDEX holding no charstring
+// ([cff.EmptyCharStrings]). Such a program reads, so the font is embedded
+// ([fontProgramReadable]), but it defines no glyph: every code maps to GID 0
+// and none of them to a glyph the program holds, so each one shown fails ISO
+// 19005-2, 6.2.11.4.1 t2. A code the encoding names .notdef is the exception:
+// veraPDF finds that name in the charset (CFFType1FontProgram.containsGlyph)
+// and reports the code under 6.2.11.8 t1 instead.
+//
+// The width rule (6.2.11.5) still weighs each glyph, against the width veraPDF
+// reads for a glyph the program lacks: the defaultWidthX of the Private DICT,
+// as for any charstring that states no width (Adobe Technical Note #5177),
+// or, for a subset ([cffSubsetName]), whose widths veraPDF reads up front and
+// finds none of, the /MissingWidth the font dictionary declares (ISO 32000-1,
+// Table 111, default 0). Measured with veraPDF 1.30.2 at
+// PDF/A-2b on an empty INDEX under defaultWidthX 700: /Widths 700 passes and
+// 600 or 0 fails; under the name ABCDEF+S7, /Widths 0 passes, 700 fails, and
+// 300 passes beside /MissingWidth 300. litho fontemptycs_2b.pdf plants each.
+//
+// # Corpus evidence
+//
+//   - All corpora: no CFF program reaches an empty CharStrings INDEX, so no
+//     cell moves.
+func emptyCFFGlyphs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontData []byte) (simpleFontGlyphs, bool) {
+	defaultWidthX, cidKeyed, ok := cff.EmptyCharStrings(fontData)
+	if !ok || cidKeyed {
+		return simpleFontGlyphs{}, false
+	}
+	unitsPerEm := FontProgramUnitsPerEm(fontData)
+	advance := defaultWidthX
+	if cffSubsetName(fontBaseFont(ctx, doc, fontDict)) {
+		advance = simpleFontMissingWidth(ctx, doc, fontDict) * float64(unitsPerEm) / 1000
+	}
+	codeToGID := make(map[uint16]uint16, 256)
+	for code := range uint16(256) {
+		codeToGID[code] = 0
+	}
+	var notdefNamed map[byte]bool
+	for code, name := range resolveSimpleFontEncoding(ctx, doc, fontDict) {
+		if name != ".notdef" {
+			continue
+		}
+		if notdefNamed == nil {
+			notdefNamed = make(map[byte]bool)
+		}
+		notdefNamed[code] = true
+	}
+	return simpleFontGlyphs{
+		widths:      map[uint16]float64{0: advance},
+		unitsPerEm:  unitsPerEm,
+		codeToGID:   codeToGID,
+		notdefNamed: notdefNamed,
+	}, true
 }
 
 // encodingFullyPredefined reports whether a simple font's /Encoding names its
@@ -1530,6 +1586,16 @@ func checkType2MissingGlyphWidths(ctx context.Context, doc *document.Document, c
 //     moves at PDF/A-1b, PDF/A-2b or PDF/A-2u. litho fontclaims_2b.pdf shows
 //     one.
 func cidFontType0Glyphs(fontData []byte) (holds func(cid uint16) bool, nameKeyed bool, defaultWidthX float64, ok bool) {
+	// A program whose CharStrings INDEX is empty reads and holds no glyph,
+	// whichever way it is keyed ([emptyCFFGlyphs]): veraPDF reports every CID
+	// shown other than 0 under ISO 19005-2, 6.2.11.4.1 t2 and 6.2.11.8 t1,
+	// and weighs its width as it weighs any CID the program lacks. Measured
+	// with veraPDF 1.30.2 at PDF/A-2b on CIDs 1 and 2: a CID-keyed program
+	// fails /W 700 and 500 with no /DW, a name-keyed one under defaultWidthX
+	// 700 passes /W 700 and fails 1000 and 0.
+	if dw, cidKeyed, empty := cff.EmptyCharStrings(fontData); empty {
+		return func(uint16) bool { return false }, !cidKeyed, dw, true
+	}
 	if charset := typography.ExtractValidCIDs(fontData); charset != nil {
 		return func(cid uint16) bool { return charset[cid] }, false, 0, true
 	}
