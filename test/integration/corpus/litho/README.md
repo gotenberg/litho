@@ -208,6 +208,7 @@ one deliberately rather than diffing it against a fresh build.
 | `type0nodesc_2b.pdf`   | PDF/A-2b     | Type 0 fonts whose `/DescendantFonts` holds no dictionary        |
 | `fnlimits_1b.pdf`      | PDF/A-1b     | Type 4 functions past the limits, reached and unreached          |
 | `oirgb_2b.pdf`         | PDF/A-2b     | Device colour images under a non-sRGB RGB output intent          |
+| `ocgconfigs_2b.pdf`    | PDF/A-2b     | An optional content `/Order` incomplete in `/Configs` alone      |
 
 ### Must-not-fire controls
 
@@ -451,6 +452,7 @@ violation but is exempt, so a firing is a false positive.
 | `fnlimits_1b`                             | `C`: a type 4 function past both limits as a shading's `/Function`     | GFPDShading, veraPDF 1.30    |
 | `fnlimits_1b`                             | `F`: a type 4 function past both limits behind an unused Separation    | ISO 19005-1, 6.1.12          |
 | `fnlimits_1b`                             | `/Two`: a direct stitching tint transform compared with itself         | ISO 19005-2, 6.2.4.4 t2      |
+| `ocgconfigs_2b`                           | `/D` and `/Configs[1]`: an `/Order` naming both OCGs, one in a group   | ISO 19005-2, 6.9 t3          |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -564,6 +566,7 @@ which are covered under [Known divergences](#known-divergences).
 | `namedmcid_ua1.pdf`    | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 6   | 6    | 7    | 7    | 5    |
 | `namereads_1b.pdf`     | 10   | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 7   | 7    | 8    | 6    | 6    |
 | `noresources_4.pdf`    | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 2   | 3    | 4    | 10   | 7    |
+| `ocgconfigs_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 5    | 5    |
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
 | `oirgb_2b.pdf`         | 3    | 1    | 3    | 1    | 1    | 3    | 1    | 1    | 2   | 2    | 3    | 5    | 6    |
 | `outlinedest_ua2.pdf`  | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 0    |
@@ -6456,6 +6459,39 @@ does the samples themselves with ICC off. PDF.js reads no output intent.
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells: the
 missing metadata and the tagging rules. No colour rule fires, since every
 device space the page uses has an output intent to stand on.
+
+### `ocgconfigs_2b.pdf`
+
+ISO 19005-2, 6.9 t3 and ISO 19005-4, 6.10 t3 require the `/Order` of any
+optional content configuration dictionary to reference every OCG in the file,
+and veraPDF tests the default `/D` and every `/Configs` entry (ISO 32000-1,
+Table 100). litho read `/D` alone. The only other incomplete `/Configs`
+`/Order`, in `complex_ua2`, sits beside a `/D` that fails too, so the rule
+fired there anyway and nothing isolated the alternate configurations.
+
+| Configuration      | `/Order`                    | Verdict |
+| ------------------ | --------------------------- | ------- |
+| `/D` `Default`     | both OCGs                   | silent  |
+| `/Configs[0]`      | `Shown` alone               | `6.9/3` |
+| `/Configs[1]`      | both, in a `(Layers)` group | silent  |
+| `/Configs[2]`, ref | empty                       | `6.9/3` |
+
+veraPDF 1.30.2 reports `6.9/3` twice from part 2 and `6.10/3` twice at part 4,
+one check per failing configuration, and litho now does the same: the two
+tools report the same rule set and the same counts in all thirteen cells. The
+rest of each cell is the profile the PDF/A-2b claim does not match: the
+identification of another part or level, the missing tagging, the PDF/A-4
+identification and `%PDF-1.7` header, PDF/A-4f's missing `/EmbeddedFiles`,
+and at part 1 the optional content it forbids (`6.1.13/1`).
+
+PDF/A remediation appends the OCGs each `/Order` leaves out. veraPDF 1.30.2
+finds the output fully conforming at PDF/A-2b and PDF/A-4 in both modes, and at
+PDF/A-3b in the default mode.
+
+The repair also names an OCG that carries no `/Name`, which Table 98 requires.
+veraPDF matches `/Order` to the OCGs by `/Name`, and a nameless OCG enters its
+set as an empty name no reference removes, which is why `complex_2b`'s
+completed `/Order` stayed reported until its OCG was named.
 
 ## Scope
 
