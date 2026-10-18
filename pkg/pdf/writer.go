@@ -2301,6 +2301,20 @@ type integritySnap struct {
 // (missing fonts, OCR-only pages, decode errors) count as zero rather than
 // aborting the probe. The baseline may suffer the same failures, and the
 // comparison only needs relative movement between baseline and post.
+//
+// The text counted includes artifact text ([WithArtifacts]). An artifact is
+// still drawn on the page (ISO 32000-1, 14.8.2.2), so marking text as one, as
+// auto-tagging does a running header or a page number, loses nothing a viewer
+// shows, and pdf.js extracts it. Counting it as lost failed the whole
+// remediation of a document whose page furniture was most of its text.
+//
+// # Corpus evidence
+//
+//   - pdfjs basicapi.pdf, bug1749563.pdf, file_pdfjs_form.pdf, issue3214.pdf,
+//     litho defaultcs_4.pdf, offlimits_1b.pdf, govdocs thread_400_400397.pdf:
+//     the PDF/UA-1 and PDF/UA-2 remediations failed once auto-tagging marked
+//     their page numbers and running heads as pagination artifacts, which took
+//     13% to 100% of the text the default extraction keeps.
 func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 	snap := integritySnap{}
 	pages, err := r.PageCount(ctx)
@@ -2312,7 +2326,7 @@ func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 		if err := ctx.Err(); err != nil {
 			return snap, err
 		}
-		text, extractErr := r.ExtractText(ctx, p)
+		text, extractErr := r.ExtractText(ctx, p, WithArtifacts())
 		if extractErr == nil {
 			snap.textLen += len(text)
 		}
