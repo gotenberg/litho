@@ -145,11 +145,13 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 	populateOCsFromResources(ctx, doc, machine, resources)
 
 	// This stream starts a text item of its own, and so does every Do in it:
-	// see [runFont] stream and segment.
-	var stream, segment int
+	// see [runFont] stream and segment. Its marked-content operators end
+	// one: see [runFont] marked.
+	var stream, segment, marked int
 	if runs != nil {
 		stream = runs.next()
 		segment = runs.next()
+		marked = runs.next()
 	}
 
 	var currentFont *Font
@@ -195,6 +197,10 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// Errors from Execute are non-fatal: unknown/unsupported operators
 		// return errors but must not abort extraction of the rest.
 		_ = machine.ExecuteOne(ctx, op) //nolint:errcheck // Deliberate: an unsupported operator must not abort extraction of the rest, as the comment above says.
+
+		if runs != nil && (op.Operator == "BMC" || op.Operator == "BDC" || op.Operator == "EMC") {
+			marked = runs.next()
+		}
 
 		state := machine.Current()
 
@@ -312,7 +318,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// whatever it did not name takes the font selected out here.
 		if runs != nil {
 			cur := machine.Current()
-			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur), stream: stream, segment: segment}
+			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur), stream: stream, segment: segment, marked: marked}
 			for len(runs.fonts) < len(*elements) {
 				runs.fonts = append(runs.fonts, key)
 			}

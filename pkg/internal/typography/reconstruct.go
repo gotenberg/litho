@@ -331,7 +331,8 @@ const (
 // A glyph continues the run of the glyph painted before it unless its
 // baseline moves by more than [verticalShiftRatio] of the size across the
 // line of the glyph that started the run,
-// its size changes, its marked-content sequence changes, or the gap
+// its size changes, its MCID changes, a marked-content operator comes
+// between the two ([runFont] marked), or the gap
 // between them falls outside [negativeRunGapFactor] and
 // [spaceInFlowMaxFactor]. Every glyph first meets the test PDF.js puts each
 // glyph to against the one before it ([runTracker.endsLine]), which ends
@@ -394,6 +395,16 @@ const (
 //     page 3, where the bullet has the size of the text. Measuring the
 //     shift against the glyph that started the run makes words match PDF.js
 //     on 7 more files (govdocs 6, pdfjs 1) and on none fewer.
+//   - govdocs thread_000_000282.pdf: each subscript of "NOX" and "SO2" sits
+//     2.4 units below its line in a marked-content sequence of its own, with
+//     no MCID, set by the Tf of the text and a smaller text matrix. PDF.js
+//     ends its text item at the BDC and breaks the line there; litho kept
+//     the subscript in the run and glued it, "NOX burners". Ending the run
+//     at every marked-content operator makes words match PDF.js on 1 more
+//     file (govdocs thread_100_100516.pdf) and on 26 more pages of files
+//     that still differ (govdocs thread_000_000282.pdf 23, pdfjs
+//     issue16800.pdf 3), and on none fewer; facturx, pdf20 and pdfcpu do
+//     not move.
 //   - govdocs thread_400_400936.pdf page 216, pdfjs issue8022.pdf, pdfcpu
 //     xdp_2.0.pdf: space glyphs in empty table cells, blank paragraphs or a
 //     page header broke lines of their own, and the glyph after them, back
@@ -493,6 +504,14 @@ func textItemStarts(elements []models.TextElement, fonts []runFont) []int {
 // it (src/core/evaluator.js, getTextContent, OPS.paintXObject). segment
 // changes wherever PDF.js ends the text item it was building: at the start
 // of each stream and after every Do, a form or an image.
+//
+// marked changes at every marked-content operator, BMC, BDC and EMC, where
+// PDF.js ends the text item it was building as well, whether or not the
+// sequence carries an MCID (src/core/evaluator.js, getTextContent,
+// OPS.beginMarkedContent, OPS.beginMarkedContentProps and
+// OPS.endMarkedContent, each of which calls flushTextContentItem). Unlike
+// a Do, it leaves the glyph after it compared with the glyph before it, as
+// a change of font does.
 type runFont struct {
 	name    string
 	font    *Font
@@ -501,6 +520,7 @@ type runFont struct {
 	height  float64
 	stream  int
 	segment int
+	marked  int
 }
 
 // runRecorder collects the [runFont] of each element extraction appends,
@@ -529,6 +549,13 @@ func (r *runTracker) fontChanged(i int, prev, el models.TextElement) bool {
 	}
 	a, b := r.fonts[r.lastIdx], r.fonts[i]
 	return a.size != b.size || (a.name != b.name && a.font != b.font)
+}
+
+// markedChanged reports whether a marked-content operator came between the
+// glyph lastIdx and the glyph i ([runFont] marked). Without fonts only a
+// change of MCID tells.
+func (r *runTracker) markedChanged(lastIdx, i int) bool {
+	return r.fonts != nil && r.fonts[lastIdx].marked != r.fonts[i].marked
 }
 
 // restart begins a new run at the element i, for a line the horizontal
@@ -564,7 +591,8 @@ func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 	case gap < negativeRunGapFactor*size,
 		acrossLine(last, el) > verticalShiftRatio*r.height(r.startIdx, r.start),
 		fontChanged,
-		el.MCID != last.MCID:
+		el.MCID != last.MCID,
+		r.markedChanged(lastIdx, i):
 	default:
 		return false
 	}
