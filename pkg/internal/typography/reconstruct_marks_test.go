@@ -51,6 +51,16 @@ func TestReconstructText_NonspacingMarks(t *testing.T) {
 			want: "a" + combiningSolidus + "b",
 		},
 		{
+			name: "jump after a glyph a mark preceded",
+			elements: []models.TextElement{
+				{Text: "s", X: 100, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
+				{Text: combiningSolidus, X: 105, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
+				{Text: "t", X: 110, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
+				{Text: "|", X: 115.5, Y: 500, Width: 3, FontSize: 10, Chunk: 2},
+			},
+			want: "s" + combiningSolidus + "t |",
+		},
+		{
 			name: "word gap after the mark",
 			elements: []models.TextElement{
 				{Text: "a", X: 100, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
@@ -69,35 +79,35 @@ func TestReconstructText_NonspacingMarks(t *testing.T) {
 	}
 }
 
-// TestMarkAdvances_Between pins the advance [markAdvances] reads between two
-// elements: the widths of the marks strictly between them that share the
-// chunk of the second, and 0 for indices out of range.
-func TestMarkAdvances_Between(t *testing.T) {
+// TestMarkAdvances_Drift pins how much farther apart litho reads two
+// elements than PDF.js does: the advance of the marks before each in its run
+// of one chunk, and 0 for an index out of range.
+func TestMarkAdvances_Drift(t *testing.T) {
 	t.Parallel()
 
 	m := newMarkAdvances([]models.TextElement{
 		{Text: "a", Width: 5, Chunk: 1},
 		{Text: combiningSolidus, Width: 3, Chunk: 1},
-		{Text: "b", Width: 5, Chunk: 2},
+		{Text: "b", Width: 5, Chunk: 1},
+		{Text: "c", Width: 5, Chunk: 2},
 		{Text: combiningSolidus, Width: 4, Chunk: 2},
 		{Text: combiningSolidus, Width: 2, Chunk: 2},
-		{Text: "c", Width: 5, Chunk: 2},
+		{Text: "d", Width: 5, Chunk: 2},
 	})
 	for _, tc := range []struct {
-		from, to int
-		want     float64
+		a, b int
+		want float64
 	}{
-		{0, 2, 0},
-		{0, 5, 6},
-		{2, 5, 6},
-		{3, 5, 2},
-		{-1, 5, 6},
-		{5, 5, 0},
-		{0, 9, 0},
-		{-3, 2, 0},
+		{0, 2, 3},
+		{2, 3, -3},
+		{0, 6, 6},
+		{4, 6, 6},
+		{5, 6, 2},
+		{-1, 2, 3},
+		{2, 9, -3},
 	} {
-		if got := m.between(tc.from, tc.to); got != tc.want {
-			t.Errorf("between(%d, %d) = %v, want %v", tc.from, tc.to, got, tc.want)
+		if got := m.drift(tc.a, tc.b); got != tc.want {
+			t.Errorf("drift(%d, %d) = %v, want %v", tc.a, tc.b, got, tc.want)
 		}
 	}
 }

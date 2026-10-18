@@ -55,6 +55,11 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //     issue7426.pdf) and on 15 more pages of files that still differ (pdfjs
 //     issue20722.pdf 14, issue17689.pdf 1), and on none fewer; facturx,
 //     govdocs, pdf20 and pdfcpu do not move.
+//   - All corpora: reading the glyphs a run shows after a mark that much
+//     earlier, as PDF.js does, makes words match PDF.js on 1 more file (pdfjs
+//     complex_ttf_font.pdf) and on 2 more pages of files that still differ
+//     (pdfjs issue17689.pdf), and on none fewer; facturx, govdocs, pdf20 and
+//     pdfcpu do not move.
 func reconstructText(ctx context.Context, elements []models.TextElement, fonts []runFont, beads []semantics.Bead) string {
 	if len(elements) == 0 {
 		return ""
@@ -206,8 +211,8 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		// nonspacing mark (Unicode category Mn) without comparing its
 		// position, so no word gap is read before it, and gives it no
 		// advance, so the glyph after it is measured from the last glyph
-		// that advanced, the mark's own advance taken out
-		// ([markAdvances]). A mark combines with the character before it
+		// that advanced, and every glyph its run shows after it sits the
+		// mark's advance earlier ([markAdvances]). A mark combines with the character before it
 		// (Unicode, 3.6), so a space before it would set it on that space.
 		//
 		// prevIdx is the previous element, space glyphs included; visIdx
@@ -292,10 +297,10 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					}
 				case !advances(prev) && advAt >= 0 && advAt != base+prevIdx:
 					adv := elements[advAt]
-					if shouldInsertSpace(adv, computeLineGap(adv, el)-marks.between(advAt, base+idx), wordSpaceThreshold(elements, fonts, advAt, base+idx, spaceThreshold), adv.Chunk == el.Chunk && el.Chunk != 0) {
+					if shouldInsertSpace(adv, computeLineGap(adv, el)-marks.drift(advAt, base+idx), wordSpaceThreshold(elements, fonts, advAt, base+idx, spaceThreshold), adv.Chunk == el.Chunk && el.Chunk != 0) {
 						sb.WriteString(" ")
 					}
-				case shouldInsertSpace(prev, gap, wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
+				case shouldInsertSpace(prev, gap-marks.drift(base+prevIdx, base+idx), wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
 					sb.WriteString(" ")
 				}
 			}
@@ -732,7 +737,7 @@ func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 	from, fromIdx := r.anchor()
 	r.advance(i, el)
 	size := r.gapSize(fromIdx, i, from, el)
-	gap := computeLineGap(from, el) - r.marks.between(fromIdx, i)
+	gap := computeLineGap(from, el) - r.marks.drift(fromIdx, i)
 	if r.endsLine(fromIdx, i, from, el, gap, size) {
 		r.start, r.startIdx = el, i
 		return true
@@ -1579,14 +1584,19 @@ func hasNonspacingMark(s string) bool {
 	return false
 }
 
-// markAdvances answers, for a sequence of elements, how far the nonspacing
-// marks between two of them advanced the text position. It is built once per
-// sequence so each answer costs no walk of the elements between.
+// markAdvances records, for a sequence of elements, how far the nonspacing
+// marks among them advanced the text position. PDF.js advances past no such
+// mark (src/core/evaluator.js, buildTextContentItem, which zeroes the advance
+// of a zero-width diacritic), so it reads every glyph after a mark, until a
+// text-positioning operator sets the position again, that far before where
+// litho reads it. It is built once per sequence so each answer costs no walk
+// of the elements between.
 type markAdvances struct {
 	// sum holds, at k, the widths of the marks among the first k elements.
 	sum []float64
 	// chunkStart holds, for each element, the index of the first element of
-	// the run of consecutive elements that share its chunk.
+	// the run of consecutive elements that share its chunk, the glyphs shown
+	// since a text-positioning operator last set the position.
 	chunkStart []int
 }
 
@@ -1607,20 +1617,19 @@ func newMarkAdvances(elements []models.TextElement) markAdvances {
 	return m
 }
 
-// between returns how far the nonspacing marks strictly between the elements
-// from and to advanced the text position since a text-positioning operator
-// last set it, the marks in the run of elements that share the chunk of to.
-// PDF.js advances past no such mark (src/core/evaluator.js,
-// buildTextContentItem, which zeroes the advance of a zero-width diacritic),
-// so the position it reads to at lies that far before the one litho reads.
-// It returns 0 when either index is out of range.
-func (m markAdvances) between(from, to int) float64 {
-	if from < -1 || to < 0 || to >= len(m.chunkStart) || from >= to {
+// shift returns how far before litho's position PDF.js reads the element k:
+// the advance of the marks before it in its run. It returns 0 for an index
+// out of range.
+func (m markAdvances) shift(k int) float64 {
+	if k < 0 || k >= len(m.chunkStart) {
 		return 0
 	}
-	lo := max(from+1, m.chunkStart[to])
-	if lo >= to {
-		return 0
-	}
-	return m.sum[to] - m.sum[lo]
+	return m.sum[k] - m.sum[m.chunkStart[k]]
+}
+
+// drift returns how much farther along the line litho reads the element b
+// from the element a than PDF.js does, the amount a gap between the two is
+// corrected by.
+func (m markAdvances) drift(a, b int) float64 {
+	return m.shift(b) - m.shift(a)
 }
