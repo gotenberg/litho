@@ -213,3 +213,33 @@ def build(subtables, glyph_names=GLYPH_NAMES):
         len(tables[t]) + (-len(tables[t]) % 4) for t in tags[: tags.index(b"head")]
     )
     return font[: head_offset + 8] + struct.pack(">I", adjustment) + font[head_offset + 12 :]
+
+
+def tables_of(font):
+    """Split an sfnt into {tag: bytes}, the inverse of assemble."""
+    num = struct.unpack(">H", font[4:6])[0]
+    out = {}
+    for i in range(num):
+        tag, _, off, length = struct.unpack(">4sIII", font[12 + 16 * i: 28 + 16 * i])
+        out[tag] = font[off: off + length]
+    return out
+
+
+def assemble(version, tables):
+    """Lay {tag: bytes} out as an sfnt under the 4-byte version given.
+
+    The directory search fields are left at zero and no checkSumAdjustment is
+    patched: a fixture assembled here plants a structural defect, and no
+    consumer the corpus measures reads either value.
+    """
+    tags = sorted(tables)
+    offset = 12 + 16 * len(tags)
+    records = b""
+    body = b""
+    for tag in tags:
+        data = tables[tag]
+        records += struct.pack(">4sIII", tag, _checksum(data), offset, len(data))
+        padded = data + b"\0" * (-len(data) % 4)
+        body += padded
+        offset += len(padded)
+    return version + struct.pack(">HHHH", len(tags), 16, 0, 0) + records + body
