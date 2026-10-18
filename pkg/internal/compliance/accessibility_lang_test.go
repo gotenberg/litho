@@ -461,6 +461,16 @@ func TestXMPLangAltOnlyXDefault(t *testing.T) {
 	}
 }
 
+// mcidsShowingText reduces [mcidTextItems] to whether an enclosing /Lang
+// covers each identifier's text.
+func mcidsShowingText(ctx context.Context, ops []content.Operation, props *markedContentProps) map[int]bool {
+	found := make(map[int]bool)
+	for mcid, text := range mcidTextItems(ctx, ops, props) {
+		found[mcid] = text.covered
+	}
+	return found
+}
+
 // TestMcidsShowingText_InlineLangIsPerSequence pins that an inline /Lang covers
 // only the text inside the marked-content sequence carrying it, and the
 // sequences nested in that one. ISO 14289-1 §7.2 t34 is decided per text item,

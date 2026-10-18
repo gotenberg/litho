@@ -811,12 +811,22 @@ func checkFieldTULang(ctx context.Context, doc *document.Document, treeRoot ast.
 // tree, even when catalog /Lang is absent. An element inherits /Lang from its
 // nearest ancestor that carries a non-empty /Lang value.
 //
+// §7.2 t34 takes SETextItem as its object, so it is stated once per text item
+// whose language stays undetermined, each content stream counted once: an
+// element fails once for each such item it owns, and text no element owns
+// once per item ([documentUndeterminedText]).
+//
 // # Corpus evidence
 //
 //   - pdfjs issue16176.pdf: shows a Tj outside every marked-content sequence,
 //     and veraPDF reports it under §7.2 t34.
 //   - pdfjs bug1755507.pdf: shows three Tj inside a /Part with no /MCID, and
 //     veraPDF reports it under §7.2 t34.
+//   - litho and verapdf corpora: counting per text item puts §7.2 t34 on
+//     veraPDF's count in 350 of the 352 cells where either fires, up from
+//     238, and moves no rule set. The two left are litho baretree_2b.pdf,
+//     whose root /Count lets veraPDF read four of its five pages, and litho
+//     complex_ua2.pdf, whose element with no /P veraPDF drops from the tree.
 func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document, catalog ast.PdfDict, langRule, validRule Rule) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
@@ -831,10 +841,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 		// operator is the only source of a language, so the scan reads it per
 		// item rather than taking the document-wide answer the tree walk below
 		// has to settle for.
-		if documentShowsUndeterminedText(ctx, doc, catalog, false) {
-			return fail(langRule, "catalog")
-		}
-		return nil
+		return undeterminedTextViolations(langRule, "catalog", documentUndeterminedText(ctx, doc, catalog, false))
 	}
 
 	// Structure tree root /Lang provides fallback for all elements.
@@ -849,7 +856,7 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 	// resolved through the marked-content sequence that owns each element's
 	// text: a tag on one sequence leaves the text of every other sequence
 	// undetermined.
-	textElems, inlineLangElems := structElemsShowingText(ctx, doc, catalog, treeRoot)
+	textElems := structElemsShowingText(ctx, doc, catalog, treeRoot)
 
 	var results []Violation
 	walkStructureElementsWithLang(ctx, doc, treeRoot, hasStringKeyPresent(ctx, doc, treeRoot, "Lang"),
@@ -894,9 +901,13 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 			// Determinability is per element, never per document: veraPDF resolves
 			// an SETextItem's language from the /Lang of the structure element that
 			// owns its marked content or of one of that element's /P ancestors, so a
-			// /Lang on an unrelated sibling leaves this element undetermined.
-			if textElems[objNum] && !inlineLangElems[objNum] {
-				results = append(results, Violation{Rule: langRule, Context: path})
+			// /Lang on an unrelated sibling leaves this element undetermined. The
+			// test is stated once per text item, so an element no marked-content
+			// /Lang covers fails once for each text item it owns.
+			if owned := textElems[objNum]; owned.shows && !owned.covered {
+				for range max(owned.uncovered, 1) {
+					results = append(results, Violation{Rule: langRule, Context: path})
+				}
 			}
 		})
 
@@ -907,15 +918,30 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 	// marked-content sequence, or inside one with no /MCID, draws §7.2 t34.
 	// Text in an MCID-bearing sequence belongs to its owning element, which the
 	// walk above already judges, so the scan treats that sequence as covered.
-	if documentShowsUndeterminedText(ctx, doc, catalog, true) {
-		results = append(results, fail(langRule, "text outside the structure tree")...)
-	}
+	results = append(results, undeterminedTextViolations(langRule, "text outside the structure tree",
+		documentUndeterminedText(ctx, doc, catalog, true))...)
 
 	return results
 }
 
-// structElemsShowingText returns the object numbers of the structure elements
-// that own text shown by a page content stream.
+// undeterminedTextViolations states rule once per text item found counts, and
+// once when the scan found such text without counting an item: on a page
+// whose content litho cannot read, or in a stream veraPDF read on an earlier
+// page, litho keeps the finding it states for the document.
+func undeterminedTextViolations(rule Rule, subject string, found undeterminedText) []Violation {
+	if !found.shows {
+		return nil
+	}
+	results := make([]Violation, 0, max(found.items, 1))
+	for item := range max(found.items, 1) {
+		results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("%s, text item %d", subject, item+1)})
+	}
+	return results
+}
+
+// structElemsShowingText returns, keyed by object number, the structure
+// elements that own text shown by a page content stream, with what
+// [mcidText] says of that text.
 //
 // ISO 14289-1 §7.2 t34 has SETextItem as its object, so only an element that
 // owns a text-showing operator can carry one. Ownership follows the forward link
@@ -934,48 +960,80 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 //   - verapdf 7.2-t22-fail-a: the /Figure owning MCID 6 carries no /Lang, yet
 //     veraPDF reports no t34 because that sequence draws an image XObject
 //     rather than text.
-func structElemsShowingText(ctx context.Context, doc *document.Document, catalog, treeRoot ast.PdfDict) (elems, inlineLang map[int]bool) {
-	elems, inlineLang = make(map[int]bool), make(map[int]bool)
+func structElemsShowingText(ctx context.Context, doc *document.Document, catalog, treeRoot ast.PdfDict) map[int]mcidText {
+	elems := make(map[int]mcidText)
 	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
 	if err != nil || ptDict == nil {
-		return elems, inlineLang
+		return elems
 	}
 
+	// veraPDF validates each object once, so a content stream two pages share
+	// shows its text items once.
+	counted := make(map[int]bool)
 	forEachPageContentOps(ctx, doc, catalog, func(_ int, page *pageObject, ops []content.Operation) bool {
-		// Truncation empties arr, which drops elements from BOTH textElems and
-		// inlineLang. The caller tests textElems for PRESENCE, so the two shrink
-		// together and no finding is manufactured.
+		// Truncation empties arr, which drops elements from textElems
+		// entirely, so no finding is manufactured.
 		arr, _ := pageParentTreeEntries(ctx, doc, ptDict, page.dict)
 		props := &markedContentProps{doc: doc, page: page.dict, resources: page.effectiveResources(ctx, doc)}
-		for mcid, covered := range mcidsShowingText(ctx, ops, props) {
+		count := firstContentVisit(counted, page.dict["Contents"])
+		for mcid, text := range mcidTextItems(ctx, ops, props) {
 			if mcid >= len(arr) {
 				continue
 			}
 			if ref, ok := arr[mcid].(ast.PdfIndirectRef); ok {
-				elems[ref.ObjectNum] = true
-				if covered {
-					inlineLang[ref.ObjectNum] = true
+				owned := elems[ref.ObjectNum]
+				owned.shows = true
+				owned.covered = owned.covered || text.covered
+				if count {
+					owned.uncovered += text.uncovered
 				}
+				elems[ref.ObjectNum] = owned
 			}
 		}
 		return ctx.Err() != nil
 	})
-	return elems, inlineLang
+	return elems
 }
 
-// mcidsShowingText returns the marked-content identifiers whose sequence
-// contains a text-showing operator. A text-showing operator belongs to the
-// innermost enclosing sequence that carries an /MCID, matching how veraPDF
-// resolves a text item's owner through the enclosing marked content
-// (GFOpMarkedContent.getInheritedLang walks the same chain outwards).
+// mcidText is what the text a marked-content identifier, or a structure
+// element, owns says about its language: whether it shows text at all,
+// whether a marked-content /Lang covers any of it, and how many of its text
+// items none covers.
+type mcidText struct {
+	shows, covered bool
+	uncovered      int
+}
+
+// firstContentVisit reports whether the content stream obj names is met for
+// the first time, recording it in counted. A stream with no object number of
+// its own, written directly or in a /Contents array, is always new.
+func firstContentVisit(counted map[int]bool, obj ast.PdfObject) bool {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok || ref.ObjectNum == 0 {
+		return true
+	}
+	if counted[ref.ObjectNum] {
+		return false
+	}
+	counted[ref.ObjectNum] = true
+	return true
+}
+
+// mcidTextItems returns the marked-content identifiers whose sequence
+// contains a text-showing operator, with whether an enclosing /Lang covers any
+// of their text and how many of their text items none covers. A text-showing
+// operator belongs to the innermost enclosing sequence that carries an /MCID,
+// matching how veraPDF resolves a text item's owner through the enclosing
+// marked content (GFOpMarkedContent.getInheritedLang walks the same chain
+// outwards).
 //
 // The /MCID and the /Lang come from the sequence's property list, written
 // inline or named from the page's /Properties ([markedContentProps]), as veraPDF
 // reads both. Measured against veraPDF 1.30.2 at PDF/UA-1: text under a named
 // list carrying an /MCID and no /Lang, owned by an element with no /Lang in a
 // catalog with none, fails §7.2 t34, and the same list carrying a /Lang passes.
-func mcidsShowingText(ctx context.Context, ops []content.Operation, props *markedContentProps) map[int]bool {
-	found := make(map[int]bool)
+func mcidTextItems(ctx context.Context, ops []content.Operation, props *markedContentProps) map[int]mcidText {
+	found := make(map[int]mcidText)
 	// One entry per open marked-content sequence: its /MCID (or -1) and whether
 	// it carries a /Lang. Bounded by len(ops), which the caller already holds.
 	type openSeq struct {
@@ -1008,7 +1066,13 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation, props *marke
 			}
 			for _, o := range slices.Backward(open) {
 				if o.mcid >= 0 {
-					found[o.mcid] = found[o.mcid] || covered
+					text := found[o.mcid]
+					text.shows = true
+					text.covered = text.covered || covered
+					if !covered {
+						text.uncovered++
+					}
+					found[o.mcid] = text
 					break
 				}
 			}
@@ -1017,9 +1081,22 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation, props *marke
 	return found
 }
 
-// documentShowsUndeterminedText reports whether any page paints text that no
+// undeterminedText is what a scan for text no /Lang covers found: whether any
+// page shows such text, and how many text items veraPDF reaches it in.
+type undeterminedText struct {
+	shows bool
+	items int
+}
+
+// add merges what o found into u.
+func (u *undeterminedText) add(o undeterminedText) {
+	u.shows = u.shows || o.shows
+	u.items += o.items
+}
+
+// documentUndeterminedText reports whether any page paints text that no
 // enclosing marked-content /Lang covers, following a Do into the Form XObjects
-// the page invokes.
+// the page invokes, and counts the text items that show it.
 //
 // ISO 14289-1 §7.2 t34 takes SETextItem as its object and passes it on
 // Lang != null, so the rule has a subject only where text is shown and nothing
@@ -1035,7 +1112,11 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation, props *marke
 //
 // mcidCovers treats a marked-content sequence carrying an /MCID as covered, for
 // callers that judge MCID-owned text through the structure tree instead.
-func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, mcidCovers bool) bool {
+//
+// The test is stated once per text item, and veraPDF validates each object
+// once, so a page content stream or a form met before adds no item: a content
+// stream two pages share, or a form two streams draw, shows its text once.
+func documentUndeterminedText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, mcidCovers bool) undeterminedText {
 	var parentTree ast.PdfDict
 	if mcidCovers {
 		// Best-effort: a missing or unresolvable tree or ParentTree leaves it nil,
@@ -1045,15 +1126,18 @@ func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, 
 			parentTree, _ = document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
 		}
 	}
+	var found undeterminedText
+	counted := make(map[int]bool)
 	for _, po := range collectPageObjects(ctx, doc, catalog) {
 		page := po.dict
 		if ctx.Err() != nil {
-			return false
+			return found
 		}
 		data, err := resolvePageContentBytes(ctx, doc, page)
 		if err != nil {
 			doc.Logger.Debug("compliance.accessibility: cannot read page content", "error", err)
-			return true
+			found.shows = true
+			continue
 		}
 		if len(data) == 0 {
 			continue
@@ -1061,58 +1145,71 @@ func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, 
 		ops, err := content.ParseStreamData(ctx, data)
 		if err != nil {
 			doc.Logger.Debug("compliance.accessibility: cannot parse page content", "error", err)
-			return true
+			found.shows = true
+			continue
 		}
 		// The visited set is per page: a Form XObject with no /Resources of its
 		// own resolves its nested names against the invoking page's, so the same
-		// XObject can reach different content from two pages.
+		// XObject can reach different content from two pages. counted is the
+		// document's, and only decides what counts as an item.
 		res := po.effectiveResources(ctx, doc)
 		props := &markedContentProps{doc: doc, page: page, resources: res, parentTree: parentTree}
-		if opsShowUndeterminedText(ctx, doc, ops, props, res, false, mcidCovers, make(map[int]bool), 0) {
-			return true
-		}
+		scan := textLangScan{doc: doc, mcidCovers: mcidCovers, seen: make(map[int]bool), counted: counted}
+		found.add(scan.ops(ctx, ops, props, res, false, 0, firstContentVisit(counted, page["Contents"])))
 	}
-	return false
+	return found
 }
 
-// opsShowUndeterminedText reports whether ops paint text no /Lang covers,
-// directly or through a Form XObject they invoke. covered carries the enclosing
-// scope's answer into a nested stream, seen skips an XObject already scanned,
-// and depth caps the invocation chain at the form budget ([formTooDeep]), so
-// a cyclic or deeply nested chain cannot loop.
-func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []content.Operation, props *markedContentProps, res ast.PdfDict, covered, mcidCovers bool, seen map[int]bool, depth int) bool {
-	if formTooDeep(doc, depth) {
-		return false
+// textLangScan carries one page's [documentUndeterminedText] scan: whether an
+// /MCID covers its sequence, the forms the page already scanned, and the
+// document's content streams already counted.
+type textLangScan struct {
+	doc        *document.Document
+	mcidCovers bool
+	seen       map[int]bool
+	counted    map[int]bool
+}
+
+// ops reports whether ops paint text no /Lang covers, directly or through a
+// Form XObject they invoke, counting the text items when count is true.
+// covered carries the enclosing scope's answer into a nested stream, seen
+// skips an XObject already scanned, and depth caps the invocation chain at the
+// form budget ([formTooDeep]), so a cyclic or deeply nested chain cannot loop.
+func (s *textLangScan) ops(ctx context.Context, ops []content.Operation, props *markedContentProps, res ast.PdfDict, covered bool, depth int, count bool) undeterminedText {
+	var found undeterminedText
+	if formTooDeep(s.doc, depth) {
+		return found
 	}
 	// One entry per open marked-content sequence, true once the sequence or one
 	// enclosing it carries a /Lang. The bottom entry is the caller's scope.
 	stack := []bool{covered}
 	for i, op := range ops {
 		if i%contentOpCancelCheckInterval == 0 && ctx.Err() != nil {
-			return false
+			return found
 		}
 		cur := stack[len(stack)-1]
 		switch op.Operator {
 		case "BMC", "BDC":
 			stack = append(stack, cur || markedContentLangPresent(ctx, props, op) ||
-				(mcidCovers && markedContentHasMCID(ctx, props, op)))
+				(s.mcidCovers && markedContentHasMCID(ctx, props, op)))
 		case "EMC":
 			if len(stack) > 1 {
 				stack = stack[:len(stack)-1]
 			}
 		case "Tj", "TJ", "'", "\"":
 			if !cur {
-				return true
+				found.shows = true
+				if count {
+					found.items++
+				}
 			}
 		case "Do":
 			// The XObject paints inside the sequence the Do sits in (ISO 32000-1
 			// §14.6), so that sequence's /Lang covers its text too.
-			if formShowsUndeterminedText(ctx, doc, op, res, cur, mcidCovers, props, seen, depth) {
-				return true
-			}
+			found.add(s.form(ctx, op, res, cur, props, depth, count))
 		}
 	}
-	return false
+	return found
 }
 
 // markedContentHasMCID reports whether a BDC operator's property list carries an
@@ -1162,61 +1259,64 @@ func markedContentLangPresent(ctx context.Context, props *markedContentProps, op
 	return ok
 }
 
-// formShowsUndeterminedText reports whether the Form XObject a Do operator
-// invokes paints text no /Lang covers. A Do naming an absent or non-Form XObject
-// paints no text: per ISO 32000-1 §8.10.1 an unresolvable name makes the
-// operator a no-op. outer reads the invoking stream's property lists; the form
-// names its own through its resources and then the page's.
-func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op content.Operation, res ast.PdfDict, covered, mcidCovers bool, outer *markedContentProps, seen map[int]bool, depth int) bool {
+// form reports whether the Form XObject a Do operator invokes paints text no
+// /Lang covers, counting its text items when count is true and the form is
+// met for the first time in the document. A Do naming an absent or non-Form
+// XObject paints no text: per ISO 32000-1 §8.10.1 an unresolvable name makes
+// the operator a no-op. outer reads the invoking stream's property lists; the
+// form names its own through its resources and then the page's.
+func (s *textLangScan) form(ctx context.Context, op content.Operation, res ast.PdfDict, covered bool, outer *markedContentProps, depth int, count bool) undeterminedText {
+	var none undeterminedText
 	if res == nil || len(op.Operands) < 1 {
-		return false
+		return none
 	}
 	name, ok := op.Operands[0].(ast.PdfName)
 	if !ok {
-		return false
+		return none
 	}
-	xobjects, err := document.ResolveDict(ctx, doc, res["XObject"])
+	xobjects, err := document.ResolveDict(ctx, s.doc, res["XObject"])
 	if err != nil || xobjects == nil {
-		return false
+		return none
 	}
 	if ref, isRef := xobjects[name].(ast.PdfIndirectRef); isRef {
-		if seen[ref.ObjectNum] {
-			return false
+		if s.seen[ref.ObjectNum] {
+			return none
 		}
-		seen[ref.ObjectNum] = true
+		s.seen[ref.ObjectNum] = true
 	}
-	stream, err := document.ResolveStream(ctx, doc, xobjects[name])
+	stream, err := document.ResolveStream(ctx, s.doc, xobjects[name])
 	if err != nil {
-		doc.Logger.Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
-		return false
+		s.doc.Logger.Debug("compliance.accessibility: cannot resolve XObject stream", "error", err)
+		return none
 	}
 	if stream.Dict == nil {
-		return false
+		return none
 	}
 	// An image XObject paints no text, and an unreadable /Subtype names no
 	// content this scan can follow, so both leave the operator out of the answer.
-	if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
-		return false
+	if subtype, _ := document.ResolveName(ctx, s.doc, stream.Dict["Subtype"]); subtype != "Form" {
+		return none
 	}
 	// A stream veraPDF reads no operator from shows no text
 	// ([decodeContentStream]).
-	data, reads := decodeContentStream(ctx, doc, stream)
+	data, reads := decodeContentStream(ctx, s.doc, stream)
 	if !reads {
-		return false
+		return none
 	}
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
-		doc.Logger.Debug("compliance.accessibility: cannot parse Form XObject content stream", "error", err)
-		return true
+		s.doc.Logger.Debug("compliance.accessibility: cannot parse Form XObject content stream", "error", err)
+		return undeterminedText{shows: true}
 	}
+	count = count && firstContentVisit(s.counted, xobjects[name])
 	// A Form XObject without its own /Resources inherits the invoking stream's
 	// (ISO 32000-1 §8.10.2), so nested names still resolve.
-	subRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	subRes, err := document.ResolveDict(ctx, s.doc, stream.Dict["Resources"])
 	if err != nil || subRes == nil {
 		subRes = res
 	}
-	props := &markedContentProps{doc: doc, page: stream.Dict, pageResources: outer.pageRes(ctx), parentTree: outer.parentTree}
-	return opsShowUndeterminedText(ctx, doc, ops, props, subRes, covered, mcidCovers, seen, depth+1)
+	props := &markedContentProps{doc: s.doc, page: stream.Dict, pageResources: outer.pageRes(ctx), parentTree: outer.parentTree}
+	return s.ops(ctx, ops, props, subRes, covered, depth+1, count)
 }
 
 // walkStructureElementsWithLang is like walkStructureElements but tracks /Lang

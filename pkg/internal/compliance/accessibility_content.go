@@ -135,9 +135,14 @@ func topLevel(levels []markLevel) markLevel {
 
 // markingFindings holds what a content walk found against ISO 14289-1, 7.1.
 type markingFindings struct {
-	// untagged is real content neither tagged nor an artifact: 7.1 t3, and
-	// ISO 14289-2, 8.2.2 t1.
-	untagged bool
+	// paints is real content neither tagged nor an artifact: 7.1 t3, and ISO
+	// 14289-2, 8.2.2 t1.
+	paints bool
+	// untagged counts the content items behind paints. veraPDF states both
+	// tests on SESimpleContentItem, one object per painting operator or
+	// image, and reads each content stream once ([contentMarkingWalk]), so
+	// each item it reaches first is a check of its own.
+	untagged int
 	// artifactInTagged is an /Artifact sequence opened inside tagged
 	// content: 7.1 t1.
 	artifactInTagged bool
@@ -147,7 +152,8 @@ type markingFindings struct {
 
 // merge adds what o found to f.
 func (f *markingFindings) merge(o markingFindings) {
-	f.untagged = f.untagged || o.untagged
+	f.paints = f.paints || o.paints
+	f.untagged += o.untagged
 	f.artifactInTagged = f.artifactInTagged || o.artifactInTagged
 	f.taggedInArtifact = f.taggedInArtifact || o.taggedInArtifact
 }
@@ -159,12 +165,19 @@ type formMarkingKey struct {
 	objNum   int
 	tagged   bool
 	artifact bool
+	count    bool
 }
 
 // contentMarkingWalk carries one page's [checkContentMarking] walk: the page's
 // resources, which name the property lists a form's own leave out, the forms
 // already walked, per state around the Do, and the forms on the current chain,
 // so a form that draws itself is not walked again.
+//
+// counted holds, for the whole document, the content streams whose items have
+// been counted. veraPDF validates each object once, keyed by its object
+// number, so a page content stream or a form XObject it meets again, on
+// another page or through another Do, adds no content item: what it draws
+// was counted, or skipped, the first time.
 type contentMarkingWalk struct {
 	doc        *document.Document
 	structTree ast.PdfDict
@@ -172,6 +185,7 @@ type contentMarkingWalk struct {
 	partOne    bool
 	walked     map[formMarkingKey]markingFindings
 	onChain    map[int]bool
+	counted    map[int]bool
 }
 
 // checkContentMarking validates PDF/UA-1 §7.1:
@@ -201,6 +215,11 @@ type contentMarkingWalk struct {
 // t1 and t2 are PDF/UA-1 concepts. PDF/UA-2 has no equivalent rule: its §8.2.2
 // covers only unmarked content, so they stay gated to UA-1.
 //
+// Both profiles state t3 and 8.2.2 t1 on SESimpleContentItem, so each untagged
+// content item is a check of its own, counted once per content stream
+// ([contentMarkingWalk]). Every page is walked: stopping at the first untagged
+// one also left t1 and t2 unjudged on the pages after it.
+//
 // # Corpus evidence
 //
 //   - pdfjs bug1019475_1.pdf: wraps its text in /H1 <</MCID 0>> BDC under a
@@ -226,6 +245,17 @@ type contentMarkingWalk struct {
 //     PDF/UA-1, PDF/UA-2 or either WTPDF level. It lowers the t3 and 8.2.2 t1
 //     counts, from 2 to 1 on 25 files and from 4 to 1 on govdocs
 //     thread_200_200824.pdf.
+//   - litho and verapdf corpora: counting per content item puts t3 and 8.2.2
+//     t1 on veraPDF's count in 7500 of the 7502 cells where either fires, up
+//     from 5814, and moves no rule set. The two left are litho
+//     baretree_2b.pdf, whose root /Count lets veraPDF read four of its five
+//     pages.
+//   - litho imagereach_2b.pdf: two pages share one content stream, and
+//     veraPDF reports only the first page's items.
+//   - litho fontcopies_2b.pdf: forms two pages draw, which veraPDF reports
+//     under the first page only.
+//   - litho multipage_2b.pdf: a PostScript XObject drawn untagged, which
+//     veraPDF does not count.
 func checkContentMarking(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
@@ -235,7 +265,15 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 	structTree, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 
 	pages := collectPageObjects(ctx, doc, catalog)
+	counted := make(map[int]bool)
+	untaggedRule := Rule_14289_1_7_1_t03
+	if profile == "PDF/UA-2" {
+		untaggedRule = Rule_14289_2_8_2_2_t01
+	}
 	var results []Violation
+	// firstPainting is the first page painting untagged content, 0 when none
+	// does.
+	items, firstPainting := 0, 0
 	for i := range pages {
 		if ctx.Err() != nil {
 			return results
@@ -261,9 +299,10 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 			partOne:    profile == "PDF/UA-1",
 			walked:     make(map[formMarkingKey]markingFindings),
 			onChain:    make(map[int]bool),
+			counted:    counted,
 		}
 		props := &markedContentProps{doc: doc, page: page, resources: pageRes}
-		found := w.stream(ctx, ops, page, pageRes, props, nil, 0)
+		found := w.stream(ctx, ops, page, pageRes, props, nil, 0, firstContentVisit(counted, page["Contents"]))
 		if found.artifactInTagged {
 			results = append(results, failf(Rule_14289_1_7_1_t01,
 				"content marked as Artifact inside tagged content")...)
@@ -272,15 +311,21 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 			results = append(results, failf(Rule_14289_1_7_1_t02,
 				"tagged content inside content marked as Artifact")...)
 		}
-		if found.untagged {
-			rule := Rule_14289_1_7_1_t03
-			if profile == "PDF/UA-2" {
-				rule = Rule_14289_2_8_2_2_t01
-			}
-			results = append(results, failf(rule,
-				"page content not marked as Artifact or tagged")...)
-			return results
+		if found.paints && firstPainting == 0 {
+			firstPainting = i + 1
 		}
+		for range found.untagged {
+			items++
+			results = append(results, failf(untaggedRule,
+				"page %d content item %d not marked as Artifact or tagged", i+1, items)...)
+		}
+	}
+	// Untagged painting that left no item to count, a PostScript XObject or a
+	// stream veraPDF read on an earlier page, keeps the finding litho states
+	// for the document.
+	if items == 0 && firstPainting != 0 {
+		results = append(results, failf(untaggedRule,
+			"page %d content not marked as Artifact or tagged", firstPainting)...)
 	}
 	return results
 }
@@ -293,7 +338,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 //
 // A sequence the stream opens closes within it: an EMC with none of the
 // stream's own open closes nothing around the Do, as veraPDF reads it.
-func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation, holder, res ast.PdfDict, props *markedContentProps, outer []markLevel, depth int) markingFindings {
+func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation, holder, res ast.PdfDict, props *markedContentProps, outer []markLevel, depth int, count bool) markingFindings {
 	owners, complete := w.mcidOwners(ctx, holder)
 	levels := slices.Clone(outer)
 	floor := len(levels)
@@ -330,14 +375,17 @@ func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation
 				levels = levels[:len(levels)-1]
 			}
 		case "Do":
-			found.merge(w.do(ctx, op, res, topLevel(levels), depth))
+			found.merge(w.do(ctx, op, res, topLevel(levels), depth, count))
 		// BI is an inline image (ISO 32000-1, 8.9.7), which paints an image
 		// exactly as a Do naming an image XObject does; veraPDF builds a
 		// content item for it like any other.
 		case "f", "F", "f*", "S", "s", "B", "B*", "b", "b*",
 			"Tj", "TJ", "'", "\"", "sh", "BI":
 			if top := topLevel(levels); !top.tagged && !top.inArtifact {
-				found.untagged = true
+				found.paints = true
+				if count {
+					found.untagged++
+				}
 			}
 		}
 	}
@@ -356,10 +404,14 @@ func (w *contentMarkingWalk) mcidOwners(ctx context.Context, holder ast.PdfDict)
 
 // do judges the XObject a Do draws under the innermost open level, around. A
 // name the resources do not define draws nothing (ISO 32000-1 §8.10.1). A form
-// XObject draws its content, and any other XObject paints as one content item:
-// veraPDF 1.30.2 reports an image with a /StructParent as untagged, so only a
-// form draws a tag from one.
-func (w *contentMarkingWalk) do(ctx context.Context, op content.Operation, res ast.PdfDict, around markLevel, depth int) markingFindings {
+// XObject draws its content, and any other XObject paints: veraPDF 1.30.2
+// reports an image with a /StructParent as untagged, so only a form draws a
+// tag from one. Only an image is a content item to count (SEImageXObjectItem);
+// veraPDF builds none for a PostScript XObject (ISO 32000-1, 8.8.2), which
+// litho still judges as painting, so a page drawing one alone keeps the
+// finding it had. count says whether the stream holding the Do is read for
+// the first time ([contentMarkingWalk]).
+func (w *contentMarkingWalk) do(ctx context.Context, op content.Operation, res ast.PdfDict, around markLevel, depth int, count bool) markingFindings {
 	if res == nil || len(op.Operands) < 1 {
 		return markingFindings{}
 	}
@@ -382,10 +434,14 @@ func (w *contentMarkingWalk) do(ctx context.Context, op content.Operation, res a
 	}
 	// Best-effort: a /Subtype that is no name reads as absent.
 	if subtype, _ := document.ResolveName(ctx, w.doc, stream.Dict["Subtype"]); subtype != "Form" {
-		return markingFindings{untagged: !around.tagged && !around.inArtifact}
+		found := markingFindings{paints: !around.tagged && !around.inArtifact}
+		if found.paints && count && subtype == "Image" {
+			found.untagged = 1
+		}
+		return found
 	}
 	ref, _ := obj.(ast.PdfIndirectRef)
-	return w.form(ctx, stream, ref.ObjectNum, res, around.tagged, around.inArtifact, depth+1)
+	return w.form(ctx, stream, ref.ObjectNum, res, around.tagged, around.inArtifact, depth+1, count)
 }
 
 // form walks a form XObject drawn in a state that is tagged or not and an
@@ -400,23 +456,29 @@ func (w *contentMarkingWalk) do(ctx context.Context, op content.Operation, res a
 //
 // A form's findings are kept per state and reused within the page, whatever
 // resources the next invocation lends: a form with no /Resources of its own
-// resolves the names it borrows from the first stream that draws it.
+// resolves the names it borrows from the first stream that draws it. A form
+// met before counts no item ([contentMarkingWalk]).
 //
 // # Corpus evidence
 //
 //   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-12-t08-pass-c.pdf: paints
 //     untagged at the end of a chain of 33 forms, and veraPDF reports ISO
 //     14289-1, 7.1 t3 and ISO 14289-2, 8.2.2 t1.
-func (w *contentMarkingWalk) form(ctx context.Context, stream ast.PdfStream, objNum int, parentRes ast.PdfDict, tagged, artifact bool, depth int) markingFindings {
+func (w *contentMarkingWalk) form(ctx context.Context, stream ast.PdfStream, objNum int, parentRes ast.PdfDict, tagged, artifact bool, depth int, count bool) markingFindings {
 	if ctx.Err() != nil {
 		return markingFindings{}
 	}
 	if formTooDeep(w.doc, depth) {
-		return markingFindings{untagged: !tagged && !artifact}
+		found := markingFindings{paints: !tagged && !artifact}
+		if found.paints && count {
+			found.untagged = 1
+		}
+		return found
 	}
-	key := formMarkingKey{objNum: objNum, tagged: tagged, artifact: artifact}
+	key := formMarkingKey{objNum: objNum, tagged: tagged, artifact: artifact, count: count}
 	if objNum != 0 {
 		if found, ok := w.walked[key]; ok {
+			found.untagged = 0
 			return found
 		}
 		if w.onChain[objNum] {
@@ -424,6 +486,9 @@ func (w *contentMarkingWalk) form(ctx context.Context, stream ast.PdfStream, obj
 		}
 		w.onChain[objNum] = true
 		defer delete(w.onChain, objNum)
+	}
+	if count && objNum != 0 {
+		count = firstContentVisit(w.counted, ast.PdfIndirectRef{ObjectNum: objNum})
 	}
 	var found markingFindings
 	// veraPDF reads no operator from a form it cannot decode
@@ -447,7 +512,7 @@ func (w *contentMarkingWalk) form(ctx context.Context, stream ast.PdfStream, obj
 			// the stream that draws it.
 			own, _ := document.ResolveDict(ctx, w.doc, stream.Dict["Resources"])
 			props := &markedContentProps{doc: w.doc, page: stream.Dict, resources: own, pageResources: w.pageRes}
-			found = w.stream(ctx, ops, stream.Dict, appearanceResources(ctx, w.doc, own, parentRes), props, outer, depth)
+			found = w.stream(ctx, ops, stream.Dict, appearanceResources(ctx, w.doc, own, parentRes), props, outer, depth, count)
 		}
 	}
 	if objNum != 0 {
