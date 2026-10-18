@@ -197,6 +197,7 @@ one deliberately rather than diffing it against a fresh build.
 | `cmapnotdef_2b.pdf`    | PDF/A-2b     | Encoding CMaps whose notdef ranges map the codes they show       |
 | `cmappredef_2b.pdf`    | PDF/A-2b     | Fonts naming predefined CMaps, through their bases and notdefs   |
 | `cmapusevert_1b.pdf`   | PDF/A-1b     | An encoding CMap whose `/UseCMap` names the vertical CMap V      |
+| `cmapcidtext_2b.pdf`   | PDF/A-2b     | Text of codes an encoding CMap sends to other CIDs, no ToUnicode |
 | `stdremap_ua2.pdf`     | PDF/UA-2     | A standard type the root `/RoleMap` sends to a private dead end  |
 | `remapchain_ua2.pdf`   | PDF/UA-2     | Standard types mapped through a private type to a standard one   |
 | `imagecolour_2b.pdf`   | PDF/A-2b     | Images over the colorant None; JPX CIELab, ROMM-RGB, e-sRGB      |
@@ -477,6 +478,7 @@ which are covered under [Known divergences](#known-divergences).
 | `blendcs_4.pdf`        | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 6    | 6    |
 | `boxorigin_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
 | `charset_1b.pdf`       | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 3   | 3    | 4    | 9    | 7    |
+| `cmapcidtext_2b.pdf`   | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
 | `cmapnotdef_2b.pdf`    | 6    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
 | `cmappredef_2b.pdf`    | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 8    | 8    |
 | `cmaps_2b.pdf`         | 9    | 6    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
@@ -6194,6 +6196,32 @@ and U+3042 through EUC-H, where litho read the codes as UTF-16 and returned
 two unrelated characters. Remediation of `cmapusevert_1b` at PDF/A-1b now
 embeds V flattened over H, with `/WMode 1` in its dictionary and program, and
 both tools find the output conforming; before, 6.3.3.3 stayed.
+
+### `cmapcidtext_2b.pdf`
+
+A Type 0 font's encoding CMap sends a character code to a CID (ISO 32000-1,
+9.7.6.2), and a font with no `/ToUnicode` CMap reads its text through tables
+keyed by CID: the character collection's UCS2 CMap (9.10.2), or the
+`/CIDToGIDMap` stream with the embedded program's `cmap` behind it. litho read
+both tables at the code, which is the CID only under Identity-H and Identity-V
+(9.7.5.2), and left a reference-only Adobe font under an embedded CMap stream
+without the collection's table at all. No corpus file shows text this way
+without a `/ToUnicode` CMap answering first. Both fonts embed a one-byte code
+space and show <61> <62>:
+
+| Font | Encoding CMap              | CIDs   | Route                                      | Text |
+| ---- | -------------------------- | ------ | ------------------------------------------ | ---- |
+| `G1` | cidchar 61 to 2, 62 to 1   | 2, 1   | `/CIDToGIDMap` 1 to A, 2 to B, then `cmap` | BA   |
+| `G2` | cidchar 61 to 35, 62 to 34 | 35, 34 | Adobe-Japan1 UCS2, reference-only font     | BA   |
+
+Before, litho extracted U+6162 for `G1`, the two bytes read as one CID, and
+"ab" for `G2`. `G1` embeds the three-glyph program, so its glyph rules stay
+silent; `G2` fails the embedding rules (6.3.4 t1, 6.2.11.4.1 t1, 6.2.10.4.1
+t1). veraPDF 1.30.2 and litho report the same rule set in all thirteen cells,
+with the same counts at every PDF/A level; at the PDF/UA levels veraPDF counts
+the untagged-content rules once per text show. The text change moves no
+validation or remediation result: litho reports and remediates the file alike
+before and after.
 
 ### `stdremap_ua2.pdf` and `remapchain_ua2.pdf`
 

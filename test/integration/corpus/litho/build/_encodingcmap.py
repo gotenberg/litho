@@ -7,7 +7,8 @@ after CID 6, so a CID past it selects no glyph, which veraPDF reads as absent
 containsCID refuses it, and GFGlyph exempts only code 0. The /DW equals the
 program's advance, so no width rule answers.
 
-The encoding CMaps declare the two-byte code space <0000> <FFFF> and name
+The encoding CMaps declare the two-byte code space <0000> <FFFF> unless a
+builder passes another, and name
 themselves with a /CMapName that is no predefined CMap. A font or CMap over a
 predefined character collection passes its CIDSystemInfo, and a font whose
 CIDs lie elsewhere passes its own CID-to-glyph map (gid_map).
@@ -50,15 +51,16 @@ class Fixture:
         stream.Filter = Name.FlateDecode
         return self.pdf.make_indirect(stream)
 
-    def cmap(self, name, body, use_cmap=None, info=IDENTITY_SYSTEM_INFO):
-        """An embedded encoding CMap stream carrying body after its code space."""
+    def cmap(self, name, body, use_cmap=None, info=IDENTITY_SYSTEM_INFO, codespace=b"<0000> <FFFF>"):
+        """An embedded encoding CMap stream carrying body after its code space,
+        which codespace gives as one begincodespacerange entry."""
         program = (
             b"/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n"
             b"/CIDSystemInfo 3 dict dup begin /Registry (Adobe) def "
             b"/Ordering (" + str(info.Ordering).encode() + b") def /Supplement "
             + str(int(info.Supplement)).encode() + b" def end def\n"
             b"/CMapName /" + name.encode() + b" def\n/CMapType 1 def\n/WMode 0 def\n"
-            b"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n" + body
+            b"1 begincodespacerange\n" + codespace + b"\nendcodespacerange\n" + body
             + b"endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n"
         )
         stream = Stream(self.pdf, program)
