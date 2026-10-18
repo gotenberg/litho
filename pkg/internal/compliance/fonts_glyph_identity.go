@@ -136,13 +136,16 @@ const mcUnnamed = "none"
 // from; owner is the stream's [structureKey]; fonts names the /Font dictionary
 // of those resources ([fontDictKey]); mode is the text rendering mode the
 // stream starts in, which a Form XObject inherits from the Do that draws it
-// ([textStateWalk]).
+// ([textStateWalk]); cellsOff records that the stream is, or is drawn by, a
+// tiling cell whose colour operators are off, where the font walks follow no
+// pattern ([checkPatternFonts]).
 type showSite struct {
-	key   string
-	props ast.PdfDict
-	owner int32
-	fonts string
-	mode  int
+	key      string
+	props    ast.PdfDict
+	owner    int32
+	fonts    string
+	mode     int
+	cellsOff bool
 }
 
 // structureKey returns the value veraPDF tells the glyphs of one content stream
@@ -725,7 +728,7 @@ func (j *fontJudgements) claimPatternReads(ctx context.Context, doc *document.Do
 	if patternRef == nil {
 		return
 	}
-	pattern, ok := resolveFontPattern(ctx, doc, patternRef, walk.visited, walk.pageNum)
+	pattern, ok := resolveFontPattern(ctx, doc, patternRef, walk.visited, walk.pageNum, false)
 	if !ok {
 		return
 	}

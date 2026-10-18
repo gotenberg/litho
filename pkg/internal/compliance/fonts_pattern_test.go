@@ -45,7 +45,8 @@ func TestCheckPatternFonts_UnembeddedFontInCell(t *testing.T) {
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources"+
-			" << /Pattern << /P1 4 0 R /P2 5 0 R /Q 6 0 R /P3 10 0 R >> /XObject << /Fm 8 0 R >> >> >>",
+			" << /Pattern << /P1 4 0 R /P2 5 0 R /Q 6 0 R /P3 10 0 R /P4 11 0 R /P5 12 0 R >> /XObject << /Fm 8 0 R >>"+
+			" /ColorSpace << /CSp [/Pattern /DeviceRGB] >> >> >>",
 		tilingPattern(1, fontRes, text),
 		tilingPattern(2, fontRes, text),
 		tilingPattern(1, "<< /Pattern << /Q1 9 0 R >> >>", "/Pattern cs /Q1 scn 0 0 5 5 re f"),
@@ -53,6 +54,8 @@ func TestCheckPatternFonts_UnembeddedFontInCell(t *testing.T) {
 		formXObject("<< /Pattern << /P1 4 0 R >> >>", "/Pattern cs /P1 scn 0 0 5 5 re f"),
 		tilingPattern(1, fontRes, text),
 		tilingPattern(1, fontRes, "0 0 5 5 re f"),
+		tilingPattern(2, "<< /Pattern << /P1 4 0 R >> >>", "/Pattern cs /P1 scn 0 0 5 5 re f"),
+		tilingPattern(2, "<< >>", "0 0 5 5 re f"),
 	)
 
 	page, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 3})
@@ -73,7 +76,11 @@ func TestCheckPatternFonts_UnembeddedFontInCell(t *testing.T) {
 		{"a coloured pattern set by scn", "/Pattern cs /P1 scn 0 0 10 10 re f", false, true},
 		{"a coloured pattern set by SCN", "/Pattern CS /P1 SCN 0 0 10 10 re S", false, true},
 		{"a pattern declared but never set", "0 0 10 10 re f", false, false},
-		{"an uncoloured pattern", "[/Pattern /DeviceRGB] cs 1 0 0 /P2 scn 0 0 10 10 re f", false, false},
+		{"an uncoloured pattern in a Pattern space", "/CSp cs 1 0 0 /P2 scn 0 0 10 10 re f", false, true},
+		{"an uncoloured pattern in the bare Pattern space", "/Pattern cs /P2 scn 0 0 10 10 re f", false, true},
+		{"an uncoloured pattern outside a Pattern space", "[/Pattern /DeviceRGB] cs 1 0 0 /P2 scn 0 0 10 10 re f", false, false},
+		{"a pattern an uncoloured cell selects", "/CSp cs 1 0 0 /P4 scn 0 0 10 10 re f", false, false},
+		{"a pattern a coloured cell beside an uncoloured one selects", "/CSp cs 1 0 0 /P5 scn 0 0 10 10 re f /Pattern cs /Q scn 0 0 10 10 re f", false, false},
 		{"a cell that shows no text", "/Pattern cs /P3 scn 0 0 10 10 re f", false, false},
 		{"a pattern set inside another pattern's cell", "/Pattern cs /Q scn 0 0 10 10 re f", false, true},
 		{"a pattern set inside a Form XObject", "/Fm Do", true, true},
@@ -84,7 +91,7 @@ func TestCheckPatternFonts_UnembeddedFontInCell(t *testing.T) {
 			ops := parseOps(t, tt.src)
 			var got []Violation
 			if tt.form {
-				got = checkFormXObjectFonts(ctx, doc, ops, 0, res, nil, 1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
+				got = checkFormXObjectFonts(ctx, doc, ops, showSite{}, res, nil, 1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
 			} else {
 				got = checkPatternFonts(ctx, doc, ops, res, nil, 1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
 			}

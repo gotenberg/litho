@@ -29,7 +29,7 @@ func TestCheckFormXObjectFonts_NonEmbeddedFontInForm(t *testing.T) {
 	ops := []content.Operation{{Operator: "Do", Operands: []ast.PdfObject{ast.PdfName("Fm0")}}}
 	res := ast.PdfDict{"XObject": ast.PdfDict{"Fm0": ast.PdfIndirectRef{ObjectNum: 2}}}
 
-	results := checkFormXObjectFonts(ctx, doc, ops, 0, res, nil, 1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
+	results := checkFormXObjectFonts(ctx, doc, ops, showSite{}, res, nil, 1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
 	if !hasRule(results, fontEmbeddingRule("PDF/A-2b")) {
 		t.Errorf("non-embedded font used inside a Form XObject should fire the embedding rule, got %v", results)
 	}

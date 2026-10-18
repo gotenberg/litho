@@ -3,9 +3,11 @@ package remediation
 import (
 	"bytes"
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -108,5 +110,43 @@ func TestFixType3FontToUnicodeLeavesWhatItCannotGround(t *testing.T) {
 				t.Errorf("attached a /ToUnicode (fixes %v):\n%s", fixes, got)
 			}
 		})
+	}
+}
+
+// TestFixFontIssues_ReachesType3FontInUncolouredCell pins that a font only an
+// uncoloured tiling cell shows gets its /ToUnicode. veraPDF judges the glyphs
+// of such a cell (ISO 32000-1, 8.7.3.3 turns its colour operators off, not its
+// text), so the fixer's walk enters it as compliance's does.
+//
+// # Corpus evidence
+//
+//   - litho offlimits_1b.pdf: page 12's cell shows a Type 3 glyph named a, and
+//     the remediated PDF/A-1a output kept ISO 19005-1, 6.3.8 t1 on veraPDF.
+func TestFixFontIssues_ReachesType3FontInUncolouredCell(t *testing.T) {
+	t.Parallel()
+
+	const cell = "BT /T3 12 Tf 1 1 Td (a) Tj ET"
+	data := assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 7 0 R" +
+			" /Resources << /ColorSpace << /CSp [/Pattern /DeviceGray] >> /Pattern << /P2 4 0 R >> >> >>",
+		"<< /Type /Pattern /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10" +
+			" /Resources << /Font << /T3 5 0 R >> >> /Length " + strconv.Itoa(len(cell)) + " >>\nstream\n" + cell + "\nendstream",
+		"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1 1] /FontMatrix [0.001 0 0 0.001 0 0]" +
+			" /CharProcs << /a 6 0 R >> /Encoding << /Differences [97 /a] >> /FirstChar 97 /LastChar 97 /Widths [1000] /Resources << >> >>",
+		"<< /Length 8 >>\nstream\n1000 0 d0\nendstream",
+		"<< /Length 36 >>\nstream\n/CSp cs 0.5 /P2 scn 0 0 100 100 re f\nendstream",
+	})
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, data)
+	fixes, err := fixFontIssues(ctx, alloc, doc, Options{},
+		[]compliance.Violation{{Rule: compliance.Rule_19005_1_6_3_8_t01}}, "PDF/A-1a")
+	if err != nil {
+		t.Fatalf("fixFontIssues: %v", err)
+	}
+	font, _ := alloc.Pending()[5].(ast.PdfDict)
+	if _, ok := font["ToUnicode"]; !ok {
+		t.Errorf("the Type 3 font the uncoloured cell shows got no /ToUnicode; fixes=%v", fixes)
 	}
 }

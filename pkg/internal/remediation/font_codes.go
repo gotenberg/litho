@@ -220,11 +220,15 @@ func (s inlineFontSite) replace(ctx context.Context, alloc *writer.ObjAllocator,
 // mapping, and a font only such a stream names was never reached.
 //
 // The walk follows what compliance judges ([compliance.ShownCharCodes] for the
-// codes): a form a Do draws, a coloured tiling pattern an scn or SCN selects,
-// every glyph procedure of a Type 3 font a stream shows text with, and every
-// appearance stream of every annotation, under /N, /R and /D. A stream that
-// carries no /Resources of its own, or does not decode or parse, is left out
-// as compliance leaves it. Every object is read through the allocator, so a
+// codes): a form a Do draws, a tiling pattern an scn or SCN selects, coloured
+// or uncoloured (an uncoloured cell ignores its colour operators, not its
+// text, ISO 32000-1, 8.7.3.3), every glyph procedure of a Type 3 font a stream
+// shows text with, and every appearance stream of every annotation, under /N,
+// /R and /D. It also follows the patterns selected inside an uncoloured cell,
+// which compliance does not judge: a font reached only that way gains codes
+// that a generated map must also cover, so the gate stays the stricter one.
+// A stream that carries no /Resources of its own, or does not decode or parse,
+// is left out as compliance leaves it. Every object is read through the allocator, so a
 // stream an earlier fixer rewrote is read as it now stands. Each stream is
 // walked once, and the nesting below a page stops at the document's
 // form-nesting budget. A font dictionary written inline, which ISO 32000-1,
@@ -340,7 +344,7 @@ func (w *fontCodeWalk) stream(ctx context.Context, ops []content.Operation, res 
 			}
 		case "scn", "SCN":
 			if name, ok := lastName(op); ok {
-				w.child(ctx, patterns[name], isColouredTilingPattern, depth)
+				w.child(ctx, patterns[name], isTilingPattern, depth)
 			}
 		}
 	}
@@ -526,11 +530,4 @@ func lastName(op content.Operation) (ast.PdfName, bool) {
 	}
 	name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName)
 	return name, ok
-}
-
-// isColouredTilingPattern reports whether a pattern dictionary is a coloured
-// tiling pattern (ISO 32000-1, 8.7.3.1, Table 75: PatternType 1, PaintType 1).
-// compliance's font walk leaves an uncoloured one out, as veraPDF does.
-func isColouredTilingPattern(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
-	return isTilingPattern(ctx, doc, dict) && !isUncolouredPattern(ctx, doc, dict)
 }

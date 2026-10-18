@@ -279,7 +279,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			// stream and applies the same font rules there; litho matches by
 			// walking invoked forms.
 			xobjVisited := make(map[int]bool)
-			results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), 0, p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
+			results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), showSite{}, p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
 
 			// A tiling pattern's cell is another content stream the page walk
 			// above never enters. See checkPatternFonts.
@@ -615,8 +615,10 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 // visited guards resource cycles; judged deduplicates against fonts
 // already checked on the page and across forms. mode is the text rendering
 // mode ops starts in, which each form it draws inherits as the Do leaves it
-// ([textStateWalk]).
-func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, mode int, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
+// ([textStateWalk]). parent is the [showSite] of the stream ops comes from,
+// whose text rendering mode ops starts in and whose cellsOff each form
+// inherits.
+func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, parent showSite, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
@@ -626,7 +628,7 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 	}
 
 	var results []Violation
-	text := textStateWalk{mode: mode}
+	text := textStateWalk{mode: parent.mode}
 	for _, op := range ops {
 		text.step(op)
 		form, ok := resolveFontForm(ctx, doc, xobjDict, op, visited, pageNum)
@@ -635,6 +637,7 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 		}
 		site := streamSite(ctx, doc, form.ref, form.dict["Resources"], form.res)
 		site.mode = text.mode
+		site.cellsOff = parent.cellsOff
 		results = append(results, checkResourceFonts(ctx, doc, form.res, form.ops, site, pageNum, profile, judged)...)
 		results = append(results, checkFormPUA(ctx, doc, form.res, judged.pageRes, form.ops, form.data, form.dict, treeRoot, pageNum, profile)...)
 		results = append(results, checkDrawnStreamFonts(ctx, doc, form.ops, form.res, site, treeRoot, pageNum, profile, judged, visited, depth+1)...)
@@ -669,8 +672,10 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 //     profile for the verapdf files: reaching the fonts of these streams moves
 //     no other count. litho fontclaims_2b.pdf shows a Type 3 glyph in a form.
 func checkDrawnStreamFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, site showSite, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
-	results := checkFormXObjectFonts(ctx, doc, ops, site.mode, res, treeRoot, pageNum, profile, judged, visited, depth)
-	results = append(results, checkPatternFonts(ctx, doc, ops, res, treeRoot, pageNum, profile, judged, visited, depth)...)
+	results := checkFormXObjectFonts(ctx, doc, ops, site, res, treeRoot, pageNum, profile, judged, visited, depth)
+	if !site.cellsOff {
+		results = append(results, checkPatternFonts(ctx, doc, ops, res, treeRoot, pageNum, profile, judged, visited, depth)...)
+	}
 	return append(results, checkType3CharProcFonts(ctx, doc, ops, res, site, treeRoot, pageNum, profile, judged, visited, depth)...)
 }
 
@@ -730,24 +735,42 @@ func resolveFontForm(ctx context.Context, doc *document.Document, xobjDict ast.P
 }
 
 // checkPatternFonts checks fonts used for rendering inside the tiling patterns a
-// content stream selects as a colour. A coloured tiling pattern (ISO 32000-1,
-// 8.7.3.3, PatternType 1 with PaintType 1) paints its cell with a content stream
-// of its own, resolved against its own /Resources, and veraPDF descends into it
-// from the scn or SCN operator that selects it, applying the same font rules to
-// the glyphs the cell shows.
+// content stream selects as a colour. A tiling pattern (ISO 32000-1, 8.7.3.1,
+// PatternType 1) paints its cell with a content stream of its own, resolved
+// against its own /Resources, and veraPDF descends into it from the scn or SCN
+// operator that selects it, applying the same font rules to the glyphs the
+// cell shows.
 //
 // Only a pattern that scn or SCN names comes into scope: one merely declared in
-// /Resources/Pattern paints nothing. An uncoloured pattern (PaintType 2) is left
-// out, as veraPDF leaves it, and a cell that shows no text judges no font. A
+// /Resources/Pattern paints nothing, and a cell that shows no text judges no
+// font. A coloured pattern (PaintType 1) is reached from any scn or SCN naming
+// it. An uncoloured one (PaintType 2) is reached only where veraPDF builds it:
+// an scn or SCN in a Pattern colour space, named /Pattern or by a resource
+// holding [/Pattern base] (8.6.6.2), since an uncoloured cell takes its colour
+// from that space (8.7.3.3). Its cell ignores its colour operators, and once a
+// stream builds one, every cell it paints does, the coloured ones beside it
+// included. veraPDF builds no pattern an scn there selects, in the cell or in a
+// form or glyph it draws, so the walk follows none ([showSite] cellsOff). A
 // pattern selected inside a Form XObject is reached through the form walk.
-// Measured against veraPDF on a fixture of each shape. Recursion shares the Form
-// XObject walk's visited set and depth bound.
+// Recursion shares the Form XObject walk's visited set and depth bound.
+//
+// Measured with veraPDF 1.30.2 at PDF/A-1a, 2b and 2u on an uncoloured cell
+// showing an unembedded Helvetica and a Type 3 glyph with no /ToUnicode: after
+// a cs naming [/Pattern /DeviceGray], and after /Pattern cs with and without a
+// tint, ISO 19005-1, 6.3.4 t1 and 6.3.8 t1 fire at PDF/A-1a and ISO 19005-2,
+// 6.2.11.4.1 t1 at PDF/A-2b and 2u; after a cs whose operand is the array
+// itself, which names no resource, neither fires. A coloured cell showing the
+// unembedded font, selected inside an uncoloured cell or a form one draws,
+// fires nothing.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue15716.pdf: fills a rectangle with a pattern whose cell shows a
 //     glyph from an unembedded ZapfDingbats, which veraPDF reports under
 //     ISO 19005-2, 6.2.11.4.1 and litho never reached.
+//   - litho offlimits_1b.pdf: page 12 shows a Type 3 glyph in an uncoloured
+//     cell, which veraPDF reports under ISO 19005-1, 6.3.8 t1 and litho never
+//     reached.
 func checkPatternFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
@@ -756,6 +779,7 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 	if len(patternDict) == 0 {
 		return nil
 	}
+	built, cellsOff := builtUncolouredPatterns(ctx, doc, ops, res, patternDict)
 
 	var results []Violation
 	for _, op := range ops {
@@ -766,24 +790,65 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 		if patternRef == nil {
 			continue
 		}
-		pattern, ok := resolveFontPattern(ctx, doc, patternRef, visited, pageNum)
+		if _, uncoloured := tilingPatternKind(ctx, doc, patternRef); uncoloured && !built[lastNameOperand(op)] {
+			continue
+		}
+		pattern, ok := resolveFontPattern(ctx, doc, patternRef, visited, pageNum, true)
 		if !ok {
 			continue
 		}
 		site := streamSite(ctx, doc, pattern.ref, pattern.dict["Resources"], pattern.res)
+		site.cellsOff = cellsOff
 		results = append(results, checkResourceFonts(ctx, doc, pattern.res, pattern.ops, site, pageNum, profile, judged)...)
 		results = append(results, checkDrawnStreamFonts(ctx, doc, pattern.ops, pattern.res, site, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 	}
 	return results
 }
 
+// builtUncolouredPatterns returns the names of the uncoloured tiling patterns
+// ops builds, an scn or SCN selecting each in a Pattern colour space while the
+// stream processes its colour operators, and whether it builds any
+// ([checkPatternFonts]). res and patterns are the stream's resources and their
+// /Pattern dictionary.
+func builtUncolouredPatterns(ctx context.Context, doc *document.Document, ops []content.Operation, res, patterns ast.PdfDict) (map[string]bool, bool) {
+	built := make(map[string]bool)
+	colorSpaces, _ := document.ResolveDict(ctx, doc, res["ColorSpace"]) // Best-effort: unreadable colour spaces select no Pattern space.
+	// Only whether a space is a Pattern space and which pattern scn selects
+	// matter here, so every other space is DeviceGray.
+	other := csRef{family: "DeviceGray"}
+	walkColorSpaceLinksWith(ctx, ops, csPaintState{}, csLinkHooks{
+		resolve: func(name string) csRef {
+			if obj, ok := colorSpaces[ast.PdfName(name)]; ok && resolveCSName(ctx, doc, resolveColorSpaceName(ctx, doc, obj, colorSpaces)) == "Pattern" || name == "Pattern" {
+				return csRef{name: name, isPattern: true}
+			}
+			return other
+		},
+		pattern: func(name string) csRef {
+			if name == "" {
+				return other
+			}
+			return csRef{pattern: name, isPattern: true}
+		},
+		construct: func(ref csRef, _ csPaintState) {
+			if ref.pattern == "" {
+				return
+			}
+			if _, uncoloured := tilingPatternKind(ctx, doc, patterns[ast.PdfName(ref.pattern)]); uncoloured {
+				built[ref.pattern] = true
+			}
+		},
+		link: func(csRef, int, string, overprintMode) {},
+	})
+	return built, len(built) > 0
+}
+
 // resolveFontPattern returns the tiling pattern patternRef names, a /Pattern
 // resource, and marks it in visited, as [resolveFontForm] returns a form. ok
 // is false for a shading pattern, which is a dictionary and shows no glyph, an
-// uncoloured tiling pattern, which the font walks leave out as veraPDF leaves
-// it ([checkPatternFonts]), a pattern visited already, or one that carries no
-// /Resources or whose cell does not decode or parse.
-func resolveFontPattern(ctx context.Context, doc *document.Document, patternRef ast.PdfObject, visited map[int]bool, pageNum int) (fontForm, bool) {
+// uncoloured tiling pattern unless uncoloured admits it ([checkPatternFonts]),
+// a pattern visited already, or one that carries no /Resources or whose cell
+// does not decode or parse.
+func resolveFontPattern(ctx context.Context, doc *document.Document, patternRef ast.PdfObject, visited map[int]bool, pageNum int, uncoloured bool) (fontForm, bool) {
 	ref, isRef := patternRef.(ast.PdfIndirectRef)
 	if isRef && visited[ref.ObjectNum] {
 		return fontForm{}, false
@@ -794,10 +859,10 @@ func resolveFontPattern(ctx context.Context, doc *document.Document, patternRef 
 	}
 	// ISO 32000-1, 8.7.3.1, Table 75: PatternType 1 is a tiling pattern, and
 	// PaintType 2 an uncoloured one.
-	if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != 1 {
+	if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != tilingPatternType {
 		return fontForm{}, false
 	}
-	if paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"]); paintType == 2 {
+	if paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"]); paintType == uncolouredPaintType && !uncoloured {
 		return fontForm{}, false
 	}
 	if isRef {
@@ -938,6 +1003,7 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 			}
 			procSite := type3ProcSite(ctx, doc, fontRef, fontName, font, t3Res, site, procRef)
 			procSite.mode = mode
+			procSite.cellsOff = site.cellsOff
 			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, procSite, pageNum, profile, judged)...)
 			results = append(results, checkDrawnStreamFonts(ctx, doc, procOps, t3Res, procSite, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		}
