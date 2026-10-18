@@ -60,6 +60,20 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //     complex_ttf_font.pdf) and on 2 more pages of files that still differ
 //     (pdfjs issue17689.pdf), and on none fewer; facturx, govdocs, pdf20 and
 //     pdfcpu do not move.
+//   - govdocs thread_300_300224.pdf: every hyphen maps to U+00AD, and the
+//     text after it is set by a Td past the hyphen. Measured from the
+//     hyphen, which litho drops, "Cross-reactivity" read "Crossreactivity",
+//     where PDF.js, which measures from the "s", reads "Cross reactivity".
+//   - pdfjs issue9186.pdf: U+200B sits on either side of every space glyph,
+//     and the space it held was written before the first of them.
+//   - All corpora: passing over format characters as PDF.js does makes
+//     words match PDF.js on 3 more files (govdocs thread_400_400568.pdf,
+//     pdfjs issue14685.pdf, issue14928.pdf) and on 96 more pages of files
+//     that still differ (govdocs thread_300_300224.pdf 93, pdfjs
+//     bug1755201.pdf 3), and on none fewer; facturx, pdf20 and pdfcpu do
+//     not move. On issue14928.pdf it reads "ap rès" as PDF.js does: a
+//     soft hyphen earlier on the line moves the text after it back by its
+//     advance, until the Td that sets "rès" where the page shows it.
 func reconstructText(ctx context.Context, elements []models.TextElement, fonts []runFont, beads []semantics.Bead) string {
 	if len(elements) == 0 {
 		return ""
@@ -95,12 +109,12 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		// rotated line as on an upright one: a glyph after one is read
 		// against the last glyph that painted, and a space glyph set
 		// rotated does not break the line or restart a run.
-		if isSpaceGlyph(prev.Text) && !isSpaceGlyph(runs.last.Text) {
+		if carriesNoPosition(prev.Text) && !carriesNoPosition(runs.last.Text) {
 			prev = runs.last
 		}
 		var newLine bool
 		switch {
-		case isSpaceGlyph(el.Text) && (el.Vertical || isOrthogonalRotation(el.Angle) || isRotated(el.Angle)):
+		case carriesNoPosition(el.Text) && (el.Vertical || isOrthogonalRotation(el.Angle) || isRotated(el.Angle)):
 		case quarterTurnLine(runs.last, el) && quarterTurnLine(prev, el):
 			// A line turned a quarter round keeps the runs of an upright
 			// one, across the page X axis ([acrossLine]), so a subscript
@@ -215,10 +229,19 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		// mark's advance earlier ([markAdvances]). A mark combines with the character before it
 		// (Unicode, 3.6), so a space before it would set it on that space.
 		//
+		// Format characters: PDF.js does not show a glyph whose character
+		// is a format character (Unicode category Cf: U+00AD SOFT HYPHEN,
+		// U+200B ZERO WIDTH SPACE and the rest), and does not advance past
+		// it (src/core/evaluator.js, buildTextContentItem,
+		// isInvisibleFormatMark). Such a glyph is written where it stands
+		// and is otherwise passed over: a space held before it waits for
+		// the next glyph, and the glyphs after it sit its advance earlier
+		// ([markAdvances]).
+		//
 		// prevIdx is the previous element, space glyphs included; visIdx
 		// the previous element that is not a space glyph.
 		prevIdx, visIdx := -1, -1
-		pendingSpace := ""
+		pendingSpace, heldFormat := "", ""
 		for _, idx := range indices {
 			el := ln.elems[idx]
 			if el.Text == "" {
@@ -237,6 +260,14 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 				}
 				continue
 			}
+			if isFormatOnly(el.Text) {
+				if pendingSpace == "" {
+					sb.WriteString(el.Text)
+				} else {
+					heldFormat += el.Text
+				}
+				continue
+			}
 			if isSpaceGlyph(el.Text) {
 				if pendingSpace == "" {
 					pendingSpace = heldSpace(el.Text)
@@ -251,7 +282,8 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					}
 					writeSpace(&sb, pendingSpace)
 					pendingSpace = ""
-					sb.WriteString(el.Text)
+					sb.WriteString(heldFormat + el.Text)
+					heldFormat = ""
 					prevIdx, visIdx = idx, idx
 					if advances(el) {
 						advAt = base + idx
@@ -306,13 +338,15 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 			}
 			writeSpace(&sb, pendingSpace)
 			pendingSpace = ""
-			sb.WriteString(el.Text)
+			sb.WriteString(heldFormat + el.Text)
+			heldFormat = ""
 			prevIdx, visIdx = idx, idx
 			if advances(el) {
 				advAt = base + idx
 			}
 		}
 		writeSpace(&sb, pendingSpace)
+		sb.WriteString(heldFormat)
 	}
 
 	return normalizeExtractionUnicode(normalizeSoftHyphens(sb.String()))
@@ -583,7 +617,7 @@ func textItemStarts(elements []models.TextElement, fonts []runFont) []int {
 	last := -1
 	for i, el := range elements {
 		starts[i] = continuesItem
-		if isSpaceGlyph(el.Text) {
+		if carriesNoPosition(el.Text) {
 			continue
 		}
 		f := fonts[i]
@@ -717,7 +751,7 @@ func (r *runTracker) restart(i int, el models.TextElement) {
 // advances the run state past it. A run is compared with the last glyph that
 // was not a space, and a space glyph never starts a line ([runTracker]).
 func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
-	if isSpaceGlyph(el.Text) {
+	if carriesNoPosition(el.Text) {
 		return false
 	}
 	if r.items != nil && r.items[i] != continuesItem {
@@ -1589,7 +1623,15 @@ func alongDist(a, b models.TextElement) float64 {
 // mark (src/core/evaluator.js, buildTextContentItem, prevTransform, and
 // src/core/unicode.js, getCharUnicodeCategory, isZeroWidthDiacritic).
 func advances(el models.TextElement) bool {
-	return el.Width != 0 && !hasNonspacingMark(el.Text)
+	return el.Width != 0 && !hasNonspacingMark(el.Text) && !isFormatOnly(el.Text)
+}
+
+// carriesNoPosition reports whether a glyph showing s carries no position
+// PDF.js compares the glyphs around it with: a space glyph, or a format
+// character it does not show at all (src/core/evaluator.js,
+// buildTextContentItem, isInvisibleFormatMark).
+func carriesNoPosition(s string) bool {
+	return isSpaceGlyph(s) || isFormatOnly(s)
 }
 
 // hasNonspacingMark reports whether s holds a nonspacing mark (Unicode
@@ -1604,11 +1646,13 @@ func hasNonspacingMark(s string) bool {
 }
 
 // markAdvances records, for a sequence of elements, how far the nonspacing
-// marks among them advanced the text position. PDF.js advances past no such
-// mark (src/core/evaluator.js, buildTextContentItem, which zeroes the advance
-// of a zero-width diacritic), so it reads every glyph after a mark, until a
-// text-positioning operator sets the position again, that far before where
-// litho reads it. It is built once per sequence so each answer costs no walk
+// marks and format characters among them advanced the text position. PDF.js
+// advances past no such glyph (src/core/evaluator.js, buildTextContentItem,
+// which zeroes the advance of a zero-width diacritic and skips an invisible
+// format mark), so it reads every glyph after one, until a text-positioning
+// operator sets the position again, that far before where litho reads it.
+// ISO 32000-1, 9.4.4 advances the text position past every glyph shown, so
+// the difference is the reference's. It is built once per sequence so each answer costs no walk
 // of the elements between.
 type markAdvances struct {
 	// sum holds, at k, the widths of the marks among the first k elements.
@@ -1624,7 +1668,7 @@ func newMarkAdvances(elements []models.TextElement) markAdvances {
 	m := markAdvances{sum: make([]float64, len(elements)+1), chunkStart: make([]int, len(elements))}
 	for k, e := range elements {
 		m.sum[k+1] = m.sum[k]
-		if hasNonspacingMark(e.Text) {
+		if hasNonspacingMark(e.Text) || isFormatOnly(e.Text) {
 			m.sum[k+1] += e.Width
 		}
 		if k > 0 && elements[k-1].Chunk == e.Chunk {
