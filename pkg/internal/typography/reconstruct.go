@@ -71,7 +71,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 			// A line turned a quarter round keeps the runs of an upright
 			// one, across the page X axis ([acrossLine]), so a subscript
 			// shifted by less than the run ratio stays on its line.
-			newLine = runs.breaksLine(i, prev, el)
+			newLine = runs.breaksLine(i, el)
 		case el.Vertical || isOrthogonalRotation(el.Angle):
 			// Vertical WMode or 90°/270° rotated text: characters progress
 			// along Y, so line breaks are detected by X changes.
@@ -89,7 +89,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 			newLine = leavesLine(perpDist(prev, el), runs.height(i-1, prev))
 			runs.restart(i, el)
 		default:
-			newLine = runs.breaksLine(i, prev, el)
+			newLine = runs.breaksLine(i, el)
 		}
 		if newLine {
 			lines = append(lines, cur)
@@ -347,10 +347,14 @@ const (
 // lines of a font smaller than the tolerance still break.
 //
 // Space glyphs carry no position of their own in PDF.js (they only advance
-// the text matrix), so they neither start nor continue a run. One breaks the
-// line only when it sits more than the tolerance across the baseline from
-// the element before it, which keeps a space with the text it was shown
-// beside.
+// the text matrix), so they neither start nor continue a run, and never
+// break a line: PDF.js compares only the glyphs that paint something
+// (src/core/evaluator.js, buildTextContentItem, which moves past a space
+// without calling compareWithLastPosition). A space glyph shown away from
+// the text, in an empty table cell or a blank paragraph, stays on the line
+// of the glyph before it, and the glyph after it is read against the last
+// glyph that painted, so a jump back to the same baseline continues the
+// line as it does in PDF.js.
 //
 // A glyph that begins a text item at the edge of a form XObject, or after
 // any Do, is compared across that edge as PDF.js compares it
@@ -390,6 +394,14 @@ const (
 //     page 3, where the bullet has the size of the text. Measuring the
 //     shift against the glyph that started the run makes words match PDF.js
 //     on 7 more files (govdocs 6, pdfjs 1) and on none fewer.
+//   - govdocs thread_400_400936.pdf page 216, pdfjs issue8022.pdf, pdfcpu
+//     xdp_2.0.pdf: space glyphs in empty table cells, blank paragraphs or a
+//     page header broke lines of their own, and the glyph after them, back
+//     on the baseline of the text before them, read a space PDF.js does not
+//     ("psia #", "call .", "– – 1" for "psia#", "call.", "– –1").
+//   - All corpora: keeping space glyphs on the line makes words match
+//     PDF.js on 11 more files (govdocs 8, pdfcpu 2, pdfjs 1) and on none
+//     fewer; facturx and pdf20 do not move.
 type runTracker struct {
 	// start is the glyph that started the current run, and startIdx its
 	// index.
@@ -526,13 +538,12 @@ func (r *runTracker) restart(i int, el models.TextElement) {
 	r.advance(i, el)
 }
 
-// breaksLine reports whether el, the element i, starts a new line after
-// prev, the element before it, and advances the run state past it. A run
-// is compared with the last glyph that was not a space, which prev need not
-// be.
-func (r *runTracker) breaksLine(i int, prev, el models.TextElement) bool {
+// breaksLine reports whether el, the element i, starts a new line, and
+// advances the run state past it. A run is compared with the last glyph that
+// was not a space, and a space glyph never starts a line ([runTracker]).
+func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 	if isSpaceGlyph(el.Text) {
-		return acrossLine(prev, el) > lineBreakTolerance
+		return false
 	}
 	if r.items != nil && r.items[i] != continuesItem {
 		return r.breaksItem(i, el)

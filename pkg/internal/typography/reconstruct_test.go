@@ -104,6 +104,32 @@ func TestReconstructText_RunningHeadResetFromPaintedGlyph(t *testing.T) {
 	}
 }
 
+// TestReconstructText_SpaceGlyphsKeepTheLine pins that a space glyph never
+// starts a line. Space glyphs shown away from the text, in empty table
+// cells, sit on other baselines, and the glyph after them jumps back to the
+// baseline of the text before them. PDF.js compares that glyph with the last
+// glyph that painted, on its line, and writes no space after a jump back.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400936.pdf page 216: "Pressure, psia", space
+//     glyphs in two empty cells, then "#" back on the header's baseline,
+//     which PDF.js reads "psia#".
+func TestReconstructText_SpaceGlyphsKeepTheLine(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "i", X: 292, Y: 610, Width: 3, FontSize: 10},
+		{Text: "a", X: 295, Y: 610, Width: 6, FontSize: 10},
+		{Text: " ", X: 301, Y: 610, Width: 3, FontSize: 10},
+		{Text: " ", X: 267, Y: 598, Width: 3, FontSize: 10},
+		{Text: " ", X: 72, Y: 621, Width: 3, FontSize: 10},
+		{Text: "#", X: 72, Y: 610, Width: 6, FontSize: 10},
+	}
+	if got, want := ReconstructText(context.Background(), in, nil), "ia#"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 // TestReconstructText_RTLBackwardFlowKeepsSpace guards the running-head
 // drop's RTL gate: Hebrew/Arabic glyphs naturally decrease in X as
 // the run progresses, so the literal space between two RTL words must
