@@ -544,10 +544,10 @@ const maxUseCMapChainDepth = typography.MaxUseCMapChainDepth
 
 // embeddedEncodingCIDMap reads the embedded encoding CMap stream encObj of a
 // Type 0 font into the code-to-CID map veraPDF builds for it; see
-// [typography.EmbeddedEncodingCIDMap]. It returns nil when encObj is no
+// [typography.ConformanceEncodingCIDMap]. It returns nil when encObj is no
 // stream litho can decode, so the caller leaves the font's codes unchecked.
 func embeddedEncodingCIDMap(ctx context.Context, doc *document.Document, encObj ast.PdfObject) *cmap.CIDMap {
-	return typography.EmbeddedEncodingCIDMap(ctx, doc, encObj)
+	return typography.ConformanceEncodingCIDMap(ctx, doc, encObj)
 }
 
 // type0MappedCIDZeroAbsent reports whether a Type 0 font's embedded encoding

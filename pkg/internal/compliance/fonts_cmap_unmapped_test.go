@@ -195,14 +195,15 @@ func TestUnmappedCodeResolvesToNoGlyph(t *testing.T) {
 		},
 		{
 			// veraPDF bundles Adobe-KR-9, an identity CMap over the collection's
-			// CIDs, and litho does not, so litho leaves the code unresolved
-			// where veraPDF 1.30.2 reports both rules: a known false negative.
-			name:       "a usecmap base only veraPDF bundles leaves the code unresolved",
+			// CIDs, which PDF.js does not ship; the conformance checks read
+			// veraPDF's copy, so code 0043 reaches CID 67, past the program,
+			// and both rules fire as veraPDF 1.30.2 reports them.
+			name:       "a usecmap base only veraPDF bundles maps the code",
 			content:    showUnmapped,
 			encoding:   "8 0 R",
 			cmapBody:   "/Adobe-KR-9 usecmap\n" + bfcharOnly,
-			wantGlyph:  false,
-			wantNotdef: false,
+			wantGlyph:  true,
+			wantNotdef: true,
 		},
 		{
 			// The rule constrains embedded programs: "Embedded font programs

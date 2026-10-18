@@ -305,6 +305,20 @@ type Base struct {
 //   - pdfjs bug920426.pdf: gives a Type 0 font an encoding CMap written with
 //     bfchar alone, and veraPDF's CMap.toCID reads its codes as CID 0.
 func ParseEmbeddedCIDMapOver(ctx context.Context, data []byte, dictBase Base) *CIDMap {
+	return parseCIDMapOver(ctx, data, dictBase, NamedBase)
+}
+
+// ParseConformanceCIDMapOver is [ParseEmbeddedCIDMapOver] for the
+// conformance checks: the bases its usecmap operators name resolve through
+// [ConformanceNamedBase], the CMaps veraPDF 1.30.2 bundles, and dictBase is
+// expected to come from the same set.
+func ParseConformanceCIDMapOver(ctx context.Context, data []byte, dictBase Base) *CIDMap {
+	return parseCIDMapOver(ctx, data, dictBase, ConformanceNamedBase)
+}
+
+// parseCIDMapOver is [ParseEmbeddedCIDMapOver] resolving each usecmap
+// operand through named.
+func parseCIDMapOver(ctx context.Context, data []byte, dictBase Base, named func(string) Base) *CIDMap {
 	cidc, err := ParseCID(ctx, data)
 	if err != nil || cidc == nil {
 		return nil
@@ -322,7 +336,7 @@ func ParseEmbeddedCIDMapOver(ctx context.Context, data []byte, dictBase Base) *C
 	for _, op := range cidc.useCMaps {
 		m.notdefs = append(m.notdefs, cidc.notdefs[ownNotdefs:op.notdefAt]...)
 		ownNotdefs = op.notdefAt
-		m.useBase(NamedBase(op.name))
+		m.useBase(named(op.name))
 	}
 	m.notdefs = append(m.notdefs, cidc.notdefs[ownNotdefs:]...)
 	m.useBase(dictBase)

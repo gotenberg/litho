@@ -1108,7 +1108,7 @@ func type0ShownGlyphs(ctx context.Context, doc *document.Document, font ast.PdfD
 	if encName == "" {
 		m = embeddedEncodingCIDMap(ctx, doc, font["Encoding"])
 	} else {
-		m = cmap.LoadPredefinedCIDMap(string(encName))
+		m = cmap.LoadConformanceCIDMap(string(encName))
 	}
 	if m == nil {
 		return nil

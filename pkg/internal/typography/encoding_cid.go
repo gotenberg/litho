@@ -30,12 +30,23 @@ const MaxUseCMapChainDepth = 5
 // ([cmap.CIDMap.UnmappedNotdef]): veraPDF raises a LoopedException on the
 // cycle, and litho does not guess its verdict.
 func EmbeddedEncodingCIDMap(ctx context.Context, doc *document.Document, encObj ast.PdfObject) *cmap.CIDMap {
-	return embeddedEncodingCIDMapAt(ctx, doc, encObj, make(map[int]bool), 0)
+	return embeddedEncodingCIDMapAt(ctx, doc, encObj, false, make(map[int]bool), 0)
 }
 
-// embeddedEncodingCIDMapAt is [EmbeddedEncodingCIDMap] carrying the CMap
-// streams the chain has already read, and how deep it is.
-func embeddedEncodingCIDMapAt(ctx context.Context, doc *document.Document, encObj ast.PdfObject, visited map[int]bool, depth int) *cmap.CIDMap {
+// ConformanceEncodingCIDMap is [EmbeddedEncodingCIDMap] for the conformance
+// checks: a predefined base, named by usecmap or /UseCMap, resolves through
+// the CMaps veraPDF 1.30.2 bundles ([cmap.ConformanceNamedBase]), as
+// veraPDF's PDCMap and CMapParser load them, so that a base only veraPDF
+// bundles (Adobe-KR-9, Adobe-Japan1-7) maps the codes it maps there. Text
+// extraction keeps to [EmbeddedEncodingCIDMap].
+func ConformanceEncodingCIDMap(ctx context.Context, doc *document.Document, encObj ast.PdfObject) *cmap.CIDMap {
+	return embeddedEncodingCIDMapAt(ctx, doc, encObj, true, make(map[int]bool), 0)
+}
+
+// embeddedEncodingCIDMapAt is [EmbeddedEncodingCIDMap], reading predefined
+// bases through the conformance set when conformance is set, and carrying the
+// CMap streams the chain has already read, and how deep it is.
+func embeddedEncodingCIDMapAt(ctx context.Context, doc *document.Document, encObj ast.PdfObject, conformance bool, visited map[int]bool, depth int) *cmap.CIDMap {
 	if ctx.Err() != nil || depth > MaxUseCMapChainDepth || document.VisitedBefore(encObj, visited) {
 		return nil
 	}
@@ -60,11 +71,18 @@ func embeddedEncodingCIDMapAt(ctx context.Context, doc *document.Document, encOb
 		// object included, as naming no CMap, and CMap.useCMap ignores it.
 		switch v := resolved.(type) {
 		case ast.PdfName:
-			base = cmap.NamedBase(string(v))
+			if conformance {
+				base = cmap.ConformanceNamedBase(string(v))
+			} else {
+				base = cmap.NamedBase(string(v))
+			}
 		case ast.PdfStream:
-			base.Map = embeddedEncodingCIDMapAt(ctx, doc, useObj, visited, depth+1)
+			base.Map = embeddedEncodingCIDMapAt(ctx, doc, useObj, conformance, visited, depth+1)
 			base.Unresolved = base.Map == nil
 		}
+	}
+	if conformance {
+		return cmap.ParseConformanceCIDMapOver(ctx, data, base)
 	}
 	return cmap.ParseEmbeddedCIDMapOver(ctx, data, base)
 }

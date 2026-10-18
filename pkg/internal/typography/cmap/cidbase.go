@@ -154,12 +154,26 @@ func (m *CIDMap) useBase(b Base) {
 	}
 }
 
-// predefinedBaseCache caches [PredefinedCIDBase] by CMap name. Only a name
-// litho resolves is stored, so the cache is bounded by the bundled set however
-// many names documents invent.
+// baseSet selects the bundled copies a predefined CMap name resolves through.
+type baseSet uint8
+
+const (
+	// pdfjsBases reads PDF.js's binary CMaps, which text extraction keeps to
+	// so that it stays equal to PDF.js.
+	pdfjsBases baseSet = iota
+	// conformanceBases reads the copies veraPDF 1.30.2 bundles where their
+	// code-to-CID content differs from PDF.js's or PDF.js ships none, and
+	// PDF.js's copies elsewhere; see [ConformanceCIDBase].
+	conformanceBases
+)
+
+// predefinedBaseCache and conformanceBaseCache cache [PredefinedCIDBase] and
+// [ConformanceCIDBase] by CMap name. Only a name litho resolves is stored, so
+// each cache is bounded by the bundled set however many names documents
+// invent.
 //
-//nolint:gochecknoglobals // process-wide cache of immutable parsed CMaps.
-var predefinedBaseCache sync.Map
+//nolint:gochecknoglobals // process-wide caches of immutable parsed CMaps.
+var predefinedBaseCache, conformanceBaseCache sync.Map
 
 // PredefinedCIDBase returns the complete code-to-CID mapping of the predefined
 // CMap name, for use as the base of a CMap that names it: its cidchar and
@@ -172,7 +186,24 @@ var predefinedBaseCache sync.Map
 // so the caller treats the codes the base would map as unknown. The map is
 // read-only and safe for concurrent use.
 func PredefinedCIDBase(name string) *CIDMap {
-	return predefinedCIDBase(name, 0)
+	return predefinedCIDBase(pdfjsBases, name, 0)
+}
+
+// ConformanceCIDBase is [PredefinedCIDBase] read the way veraPDF 1.30.2
+// reads a predefined CMap, for the conformance checks: through the CMap file
+// veraPDF bundles (PDCMap.getCMapFile), whose code-to-CID mappings decide the
+// glyphs ISO 19005-2, 6.2.11.4.1 and 6.2.11.8 judge. Where that file maps what
+// PDF.js's copy maps, PDF.js's copy is read; the verapdfcmaps directory holds
+// the others, see verapdf_cmaps_sources.go. Those are the character-collection
+// CMaps of the newest supplements (Adobe-Japan1-7, Adobe-KR-9 and the like)
+// and UniAKR-UTF16-H, which PDF.js ships none of, and eight Unicode CMaps
+// Adobe has revised since PDF.js copied them. A usecmap chain resolves
+// through the same set. Text extraction keeps to [PredefinedCIDBase].
+//
+// It returns nil when neither litho nor veraPDF bundles the CMap or litho
+// cannot follow its chain. The map is read-only and safe for concurrent use.
+func ConformanceCIDBase(name string) *CIDMap {
+	return predefinedCIDBase(conformanceBases, name, 0)
 }
 
 // NamedBase resolves the base CMap a usecmap operator or a /UseCMap name
@@ -182,36 +213,56 @@ func PredefinedCIDBase(name string) *CIDMap {
 // using CMap's unmapped codes still select CID 0: ISO 32000-1, 9.7.5.2 makes
 // Table 118 the predefined set, and litho bundles every name in it.
 //
-// The exception is a name veraPDF 1.30 bundles and litho does not: Adobe's
+// The exception is a name veraPDF 1.30 bundles and PDF.js does not: Adobe's
 // character-collection CMaps (Adobe-Japan1-7, Adobe-KR-9 and the like) and
-// UniAKR-UTF16-H. veraPDF loads those, and litho cannot know what they map, so
-// the base comes back unresolved and the codes it could map stay unknown.
+// UniAKR-UTF16-H. The base comes back unresolved and the codes it could map
+// stay unknown; [ConformanceNamedBase] resolves them.
 func NamedBase(name string) Base {
-	if m := PredefinedCIDBase(name); m != nil {
+	return namedBase(pdfjsBases, name, 0)
+}
+
+// ConformanceNamedBase is [NamedBase] over [ConformanceCIDBase], for the
+// conformance checks: a name veraPDF 1.30.2 bundles resolves to the CMap
+// veraPDF loads for it (CMapParser runs PDCMap.getCMapFile on a usecmap
+// operand), and any other name litho cannot resolve gives the zero [Base],
+// which veraPDF ignores (setUsesNonPredefinedCMap).
+func ConformanceNamedBase(name string) Base {
+	return namedBase(conformanceBases, name, 0)
+}
+
+func namedBase(set baseSet, name string, depth int) Base {
+	if depth > maxPredefinedBaseDepth {
+		return Base{Unresolved: true}
+	}
+	if m := predefinedCIDBase(set, name, depth); m != nil {
 		return Base{Map: m}
 	}
-	if strings.HasPrefix(name, "Adobe-") || strings.HasPrefix(name, "UniAKR-") {
+	if set == pdfjsBases && (strings.HasPrefix(name, "Adobe-") || strings.HasPrefix(name, "UniAKR-")) {
 		return Base{Unresolved: true}
 	}
 	return Base{}
 }
 
-func predefinedCIDBase(name string, depth int) *CIDMap {
+func predefinedCIDBase(set baseSet, name string, depth int) *CIDMap {
 	if depth > maxPredefinedBaseDepth {
 		return nil
 	}
-	if cached, ok := predefinedBaseCache.Load(name); ok {
+	cache := &predefinedBaseCache
+	if set == conformanceBases {
+		cache = &conformanceBaseCache
+	}
+	if cached, ok := cache.Load(name); ok {
 		m, _ := cached.(*CIDMap)
 		return m
 	}
-	m := loadPredefinedCIDBase(name, depth)
+	m := loadPredefinedCIDBase(set, name, depth)
 	if m != nil {
-		predefinedBaseCache.Store(name, m)
+		cache.Store(name, m)
 	}
 	return m
 }
 
-func loadPredefinedCIDBase(name string, depth int) *CIDMap {
+func loadPredefinedCIDBase(set baseSet, name string, depth int) *CIDMap {
 	if name == "Identity-H" || name == "Identity-V" {
 		m := &CIDMap{
 			spans:          []cidSpan{{lo: 0, hi: 0xFFFF, cid: 0}},
@@ -222,6 +273,11 @@ func loadPredefinedCIDBase(name string, depth int) *CIDMap {
 			m.wmode = 1
 		}
 		return m
+	}
+	if set == conformanceBases {
+		if m, ok := loadVeraPDFCIDBase(name, depth); ok {
+			return m
+		}
 	}
 	path := "bcmaps/" + name + ".bcmap"
 	if name == "" || !fs.ValidPath(path) {
@@ -243,7 +299,7 @@ func loadPredefinedCIDBase(name string, depth int) *CIDMap {
 		wmode:          prog.wmode,
 	}
 	if prog.useCMap != "" {
-		m.addBase(predefinedCIDBase(prog.useCMap, depth+1))
+		m.addBase(predefinedCIDBase(set, prog.useCMap, depth+1))
 	}
 	if !m.unmappedNotdef || len(m.notdefs) > maxNotdefEntries {
 		return nil

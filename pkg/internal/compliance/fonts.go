@@ -1892,7 +1892,7 @@ func type0CodeSplitter(ctx context.Context, doc *document.Document, fontDict ast
 		}
 		return nil
 	default:
-		if m := cmap.LoadPredefinedCIDMap(string(encName)); m != nil {
+		if m := cmap.LoadConformanceCIDMap(string(encName)); m != nil {
 			return m.Codes
 		}
 		return nil
@@ -2296,13 +2296,13 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 //
 // Identity-H/V treats each 2-byte unit as the CID directly. An embedded CMap
 // stream is decoded through embedded. A predefined CMap (UniJIS-UCS2-H and the
-// like) is decoded through [cmap.LoadPredefinedCIDMap], its usecmap chain and
+// like) is decoded through [cmap.LoadConformanceCIDMap], its usecmap chain and
 // notdef mappings resolved, and read exactly as an embedded one: veraPDF's
 // PDCMap parses the bundled CMap a name denotes with the parser it runs on an
 // embedded stream (ISO 32000-1, 9.7.5.2 and 9.7.6.3).
 func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInfo) (cids map[uint16]bool, notdef, unmappedZero, ok bool) {
 	if encName != "" && encName != "Identity-H" && encName != "Identity-V" {
-		if embedded = cmap.LoadPredefinedCIDMap(encName); embedded == nil {
+		if embedded = cmap.LoadConformanceCIDMap(encName); embedded == nil {
 			return nil, false, false, false
 		}
 		encName = ""

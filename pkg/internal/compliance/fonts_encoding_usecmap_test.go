@@ -90,6 +90,7 @@ func TestEncodingCMapUseCMapEntry(t *testing.T) {
 		{"an embedded base's notdef range maps the code to CID 0", "10 0 R",
 			[][2]string{{"", "1 beginnotdefrange\n<0000> <00FF> 0\nendnotdefrange\n"}}, true, true},
 		{"a base no reader bundles names no base", "/No-Such-H", nil, true, true},
+		{"a base only veraPDF bundles maps the code past the program", "/Adobe-KR-9", nil, true, true},
 		{"a chain that loops leaves the code unknown", "8 0 R", nil, false, false},
 		{"a chain at the depth cap is read whole", "10 0 R", chain(maxUseCMapChainDepth), true, true},
 		{"a chain past the depth cap leaves the code unknown", "10 0 R", chain(maxUseCMapChainDepth + 1), false, false},
@@ -103,6 +104,38 @@ func TestEncodingCMapUseCMapEntry(t *testing.T) {
 			}
 			if got := firesRuleProfile(t, data, models.PDFA2b, "6.2.11.8", 1); got != tc.wantNotdef {
 				t.Errorf("6.2.11.8 t1 fired=%v, want %v", got, tc.wantNotdef)
+			}
+		})
+	}
+}
+
+// TestEncodingCMapVeraPDFOnlyBase pins a usecmap operand only veraPDF 1.30.2
+// bundles, Adobe-KR-9, which CMapParser loads from its own copy (ISO 32000-1,
+// 9.7.5.4): it maps code 0005 to CID 5, which the program holds, and 0043 to
+// CID 67, which it does not, and it leaves code 5A00, past its code space
+// <0000> <59FF>, to CID 0 (9.7.6.3). Measured against veraPDF 1.30.2 on the
+// litho fixture cmapverabase_2b.pdf.
+func TestEncodingCMapVeraPDFOnlyBase(t *testing.T) {
+	t.Parallel()
+
+	body := "/Adobe-KR-9 usecmap\n1 beginbfchar\n<0043> <0043>\nendbfchar\n"
+	for _, tc := range []struct {
+		name  string
+		shows string
+		want  bool
+	}{
+		{"a code the base maps to a glyph present", "0005", false},
+		{"a code the base maps to a glyph absent", "0043", true},
+		{"a code past the base's code space selects CID 0", "5A00", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			data := useCMapEntryPDF(t, "BT /F1 12 Tf 10 50 Td <"+tc.shows+"> Tj ET", body, "")
+			if got := firesRuleProfile(t, data, models.PDFA2b, "6.2.11.4.1", 2); got != tc.want {
+				t.Errorf("6.2.11.4.1 t2 fired=%v, want %v", got, tc.want)
+			}
+			if got := firesRuleProfile(t, data, models.PDFA2b, "6.2.11.8", 1); got != tc.want {
+				t.Errorf("6.2.11.8 t1 fired=%v, want %v", got, tc.want)
 			}
 		})
 	}
