@@ -99,6 +99,7 @@ var registry = []fixer{
 	{name: "struct-parent", safety: safetyStructural, matches: matchStructParent, apply: fixStructParent},
 	{name: "annot-nesting", safety: safetyStructural, matches: matchAnnotNesting, apply: fixAnnotNesting},
 	{name: "note-id", safety: safetyStructural, matches: matchNoteID, apply: fixNoteID},
+	{name: "note-namespace", safety: safetyStructural, matches: matchNoteNamespace, apply: fixNoteNamespace},
 	{name: "table-sections", safety: safetyStructural, matches: matchTableSections, apply: fixTableSections},
 	{name: "table-cells", safety: safetyStructural, matches: matchTableCells, apply: fixTableCells},
 	{name: "list-body", safety: safetyStructural, matches: matchListBody, apply: fixListBody},
