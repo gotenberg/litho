@@ -135,6 +135,9 @@ func resolveEncodingCIDs(ctx context.Context, doc *document.Document, fontDict a
 // extraction is measured against PDF.js, which reads both cases this way
 // (fonts.js, _charToGlyph and convertCidString), and so does charCode, which
 // also comes back unchanged for a simple font and under an Identity CMap.
+// The CID-keyed tables text falls back on are read at the same key
+// ([Font.nextEncodingCode]), so a glyph's width and its character come from
+// one CID.
 //
 // # Corpus evidence
 //
@@ -173,4 +176,46 @@ func (f *Font) metricCID(code []byte, charCode int) int {
 		}
 	}
 	return charCode
+}
+
+// encodingCIDKeyed reports whether a Type 0 font's CID-keyed fallback tables
+// ([Font.GIDToUnicode]) are read through its encoding CMap's cidchar and
+// cidrange mappings ([Font.nextEncodingCode]) rather than at the two-byte
+// code, which is the CID only under Identity-H and Identity-V (ISO 32000-1,
+// 9.7.5.2, Table 118).
+func (f *Font) encodingCIDKeyed() bool {
+	return f.encodingCIDs != nil && f.encodingCIDs.cids != nil
+}
+
+// encodingCode is one character code a Type 0 font's encoding CMap splits
+// off a shown string ([Font.nextEncodingCode]).
+type encodingCode struct {
+	// n is the byte length of the code and value its big-endian value.
+	n, value int
+	// cid is the CID the code selects, read as its metrics are
+	// ([Font.metricCID]).
+	cid int
+	// undefined marks bytes no codespace range holds (ISO 32000-1, 9.7.6.3),
+	// read one byte at a time.
+	undefined bool
+}
+
+// nextEncodingCode splits the character code at the front of data by the
+// codespace ranges of a Type 0 font's encoding CMap (ISO 32000-1, 9.7.6.2)
+// and returns it with the CID it selects, read as its metrics are
+// ([Font.metricCID]), so a code nothing maps keeps its value as PDF.js reads
+// it. ok is false when [Font.encodingCIDKeyed] does not hold: an encoding
+// CMap written with bfchar alone declares no CID, and the caller keeps
+// reading a two-byte code.
+func (f *Font) nextEncodingCode(data []byte) (code encodingCode, ok bool) {
+	if !f.encodingCIDKeyed() || len(data) == 0 {
+		return encodingCode{}, false
+	}
+	n, undefined := f.encodingCIDs.cids.CodeLength(data)
+	code.n, code.undefined = min(n, maxEncodingCodeBytes), undefined
+	for _, b := range data[:code.n] {
+		code.value = code.value<<8 | int(b)
+	}
+	code.cid = f.metricCID(data[:code.n], code.value)
+	return code, true
 }

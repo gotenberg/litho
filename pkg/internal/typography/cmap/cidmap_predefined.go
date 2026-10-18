@@ -124,6 +124,21 @@ func (m *CIDMap) Codes(data []byte) []uint32 {
 	return out
 }
 
+// CodeLength returns the byte length of the character code at the front of
+// data, split exactly as [CIDMap.Decode] and [CIDMap.Codes] split it: the
+// codespace ranges of the CMap and of its bases decide it (ISO 32000-1,
+// 9.7.6.2). It is at least 1 for non-empty data and 0 for empty data.
+// undefined reports bytes that match no codespace range, read one byte at a
+// time ([CIDCode.Undefined]).
+func (m *CIDMap) CodeLength(data []byte) (n int, undefined bool) {
+	if len(data) == 0 {
+		return 0, false
+	}
+	lengths := m.cs.codeLengths()
+	consumed, _, _, undefined := m.next(data, lengths, slices.Contains(lengths, 1))
+	return consumed, undefined
+}
+
 // MappedCID returns the CID the cidchar and cidrange mappings of the CMap
 // and of its bases give the character code whose big-endian value is code
 // (ISO 32000-1, 9.7.6.2), and false when none covers it. Notdef mappings are

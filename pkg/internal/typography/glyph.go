@@ -3,6 +3,7 @@ package typography
 import (
 	"context"
 	"math"
+	"unicode"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
@@ -188,6 +189,12 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 		return char, n, false
 	}
 
+	if font.Subtype == "Type0" && font.GIDToUnicode != nil {
+		if code, ok := font.nextEncodingCode(data); ok {
+			return encodingCIDTableChar(font, code)
+		}
+	}
+
 	if n > 1 {
 		// Multi-byte codespace consumed n>1 bytes but found no mapping.
 		// For Type0 Identity-H fonts, treat the unmapped 2-byte code as
@@ -235,6 +242,44 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	return char, n, false
 }
 
+// encodingCIDTableChar reads code, which a Type 0 font's encoding CMap splits
+// off a shown string ([Font.nextEncodingCode]), through the CID-keyed
+// [Font.GIDToUnicode]: the character collection's UCS2 CMap, or the
+// /CIDToGIDMap stream composed with the embedded program's cmap (ISO 32000-1,
+// 9.10.2). A CID the table does not name reads as the code's own value, the
+// identity reading PDF.js gives a composite font's code it has no character
+// for (evaluator.js, buildToUnicode, and fonts.js, _charToGlyph), and a value
+// in the C0 control range emits nothing, as an unmapped two-byte code does
+// under a /ToUnicode CMap. Bytes no codespace range holds select the .notdef
+// glyph (9.7.6.3), which names no character: they advance as a glyph and emit
+// none.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11768_reduced.pdf: shows <E0E0E0> under a UTF-8 encoding
+//     CMap whose codespace holds no such code byte by byte. Read at the code
+//     litho emitted "àààcm", and read through the cidchar <E0> the CMap
+//     writes outside its codespace "---cm"; it now emits "cm". PDF.js
+//     compares codespaces by value, reads the three bytes as one code it has
+//     no character for, and emits U+E0E0 then "cm".
+//   - All corpora: no other file's text changes, and no validation or
+//     remediation result moves on the 112 files whose Type 0 fonts name a
+//     non-Identity encoding.
+func encodingCIDTableChar(font *Font, code encodingCode) (char string, consumed int, skip bool) {
+	if code.undefined {
+		return "", code.n, false
+	}
+	if code.cid >= 0 && code.cid <= math.MaxUint16 {
+		if r, ok := font.GIDToUnicode[uint16(code.cid)]; ok { //nolint:gosec // code.cid is bounded to a uint16 above.
+			return string(r), code.n, false
+		}
+	}
+	if code.value > 0x1F && code.value <= unicode.MaxRune {
+		return string(rune(code.value)), code.n, false
+	}
+	return "", code.n, true
+}
+
 // type0TableRune looks a two-byte Type 0 code up in [Font.GIDToUnicode].
 //
 // A Type 0 font's codes select CIDs through its CMap (ISO 32000-1, 9.7.6.2),
@@ -242,6 +287,8 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 // names reads as that character before the default WinAnsi map can split it
 // and read each byte as Latin-1. A code the table does not name keeps the
 // single-byte reading: under an embedded CMap stream a code can be one byte.
+// A font whose encoding CMap gives its codes CIDs ([Font.encodingCIDKeyed])
+// never reaches it: [decodeNextChar] reads its table at those CIDs first.
 func type0TableRune(font *Font, data []byte) (rune, bool) {
 	if font.Subtype != "Type0" || font.GIDToUnicode == nil || len(data) < 2 {
 		return 0, false

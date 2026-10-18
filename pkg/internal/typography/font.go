@@ -567,12 +567,16 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// Adobe-CNS1, Adobe-Japan1 or Adobe-Korea1 collection under any CMap,
 	// Identity-H and Identity-V included: the CID indexes the collection,
 	// whose UCS2 CMap names its character whether the font is embedded or
-	// left to the host. The table is keyed by the two-byte code, which is
-	// the CID only under Identity-H or Identity-V (9.7.5.2, Table 118), so a
-	// reference-only font under an embedded CMap stream stays out: litho
-	// would index the collection with codes, not CIDs.
+	// left to the host. The table is keyed by CID. Under Identity-H or
+	// Identity-V the two-byte code is the CID (9.7.5.2, Table 118); under a
+	// CMap whose cidchar and cidrange mappings give the CIDs
+	// ([Font.encodingCIDKeyed]) the code is read at its CID
+	// ([encodingCIDTableChar]), as PDF.js composes the CMap with the
+	// collection's UCS2 CMap (evaluator.js, buildToUnicode). Otherwise only an
+	// embedded program takes the table, read at the two-byte code: an encoding
+	// CMap written with bfchar alone declares no CID litho could read it at.
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
-		if isIdentityEncoding(ctx, doc, fontDict) || hasEmbeddedFontFile(ctx, doc, fontDict) {
+		if isIdentityEncoding(ctx, doc, fontDict) || font.encodingCIDKeyed() || hasEmbeddedFontFile(ctx, doc, fontDict) {
 			applyAdobeCIDFallback(ctx, doc, fontDict, font)
 		}
 	}
@@ -2060,7 +2064,9 @@ func hasCIDToGIDMapStream(ctx context.Context, doc *document.Document, fontDict 
 }
 
 // applyCIDToGIDStream parses a CIDToGIDMap stream and combines it with the
-// embedded font's GID→Unicode cmap to build a synthetic ToUnicode CMap.
+// embedded font's GID→Unicode cmap to build a synthetic ToUnicode CMap, or,
+// when the font's encoding CMap maps codes to other CIDs
+// ([Font.encodingCIDKeyed]), the CID-keyed [Font.GIDToUnicode] table.
 func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, mapObj ast.PdfObject) {
 	stream, err := document.ResolveStream(ctx, doc, mapObj)
 	if err != nil || stream.Dict == nil {
@@ -2078,8 +2084,28 @@ func applyCIDToGIDStream(ctx context.Context, doc *document.Document, fontDict a
 	}
 
 	// Build CID→Unicode: CIDToGIDMap[CID] → GID, gidToUni[GID] → Unicode.
-	mapping := make(map[string]string, 4096) //nolint:mnd // Capacity hint sized for a large CMap, not a limit; the map grows freely.
 	numCIDs := len(mapData) / 2
+
+	// The table is keyed by CID, which a two-byte code is only under
+	// Identity-H or Identity-V (ISO 32000-1, 9.7.5.2). Under an encoding CMap
+	// that maps codes to other CIDs it stays a CID-keyed table, read at the CID
+	// the CMap gives each code ([encodingCIDTableChar]): written as a
+	// /ToUnicode CMap it would be read at the code.
+	if font.encodingCIDKeyed() {
+		table := make(map[uint16]rune)
+		for cid := range min(numCIDs, math.MaxUint16+1) {
+			gid := uint16(mapData[cid*2])<<8 | uint16(mapData[cid*2+1])
+			if uni, ok := gidToUni[gid]; ok && gid != 0 && uni != 0 {
+				table[uint16(cid)] = uni //nolint:gosec // cid <= math.MaxUint16 above.
+			}
+		}
+		if len(table) > 0 {
+			font.GIDToUnicode = table
+		}
+		return
+	}
+
+	mapping := make(map[string]string, 4096) //nolint:mnd // Capacity hint sized for a large CMap, not a limit; the map grows freely.
 	for cid := range numCIDs {
 		gid := uint16(mapData[cid*2])<<8 | uint16(mapData[cid*2+1])
 		if gid == 0 {
