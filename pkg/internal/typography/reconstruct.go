@@ -212,7 +212,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 			}
 			if isSpaceGlyph(el.Text) {
 				if pendingSpace == "" {
-					pendingSpace = el.Text
+					pendingSpace = heldSpace(el.Text)
 				}
 				prevIdx = idx
 				continue
@@ -311,7 +311,7 @@ func writeReorderedLine(sb *strings.Builder, elems []models.TextElement, order [
 		}
 		if isSpaceGlyph(text) {
 			if pendingSpace == "" {
-				pendingSpace = text
+				pendingSpace = heldSpace(text)
 			}
 			continue
 		}
@@ -938,18 +938,48 @@ const notASpaceFactor = 0.03
 // bound absorbs float rounding only.
 const exactAbutment = 1e-6
 
-// isSpaceGlyph reports whether s is made only of space glyphs: U+0020,
-// a tab, or [ideographicSpace].
+// isSpaceGlyph reports whether s is made only of whitespace, the characters
+// PDF.js reads as a space glyph ([isWhitespaceRune]).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200926.pdf: page numbers "-3-" set as "3", a
+//     glyph mapped to a line feed, then "-" moved back onto the end of "3"
+//     read "-3 -", where PDF.js reads the line feed as a space glyph the
+//     move cancels.
+//   - pdfcpu TheGoProgrammingLanguageCh1.pdf: headings set with U+00A0
+//     between letters, each moved back over the space, read "Cont ents".
+//   - All corpora: reading every whitespace character as a space glyph makes
+//     words match PDF.js on 6 more files (govdocs 3, pdfjs 2, pdfcpu 1) and
+//     on 2 more pages of files that still differ (govdocs
+//     thread_000_000150.pdf, thread_100_100896.pdf), and on none fewer;
+//     facturx and pdf20 do not move.
 func isSpaceGlyph(s string) bool {
 	if s == "" {
 		return false
 	}
 	for _, r := range s {
-		if r != ' ' && r != '\t' && r != ideographicSpace {
+		if !isWhitespaceRune(r) {
 			return false
 		}
 	}
 	return true
+}
+
+// isWhitespaceRune reports whether r is whitespace as PDF.js reads a glyph's
+// character: the JavaScript \s class (ECMA-262, CharacterClassEscape, the
+// WhiteSpace and LineTerminator characters), which PDF.js tests the
+// character with (src/core/unicode.js, getCharUnicodeCategory). Its text
+// builder shows no such glyph: it advances the text position by it and reads
+// it as a space, which the next glyph keeps or cancels
+// (src/core/evaluator.js, buildTextContentItem). ISO 32000-1, 14.8.2.5 leaves
+// word breaks to the consumer, so the set is the reference's.
+func isWhitespaceRune(r rune) bool {
+	switch r {
+	case '\t', '\n', '\v', '\f', '\r', ' ', 0xA0, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, ideographicSpace, 0xFEFF:
+		return true
+	}
+	return r >= 0x2000 && r <= 0x200A
 }
 
 // suppressesLiteralSpace reports whether the literal space glyphs shown
@@ -1124,6 +1154,19 @@ func lineHasNonspacingMark(elems []models.TextElement) bool {
 		}
 	}
 	return false
+}
+
+// heldSpace returns the space a held run of whitespace glyphs s is written
+// as: a space, a tab or an [ideographicSpace] as itself, and any other
+// whitespace, a line feed or U+00A0 among them, as U+0020, as PDF.js writes
+// every whitespace glyph (src/core/evaluator.js, buildTextContentItem).
+func heldSpace(s string) string {
+	for _, r := range s {
+		if r != ' ' && r != '\t' && r != ideographicSpace {
+			return " "
+		}
+	}
+	return s
 }
 
 // writeSpace writes the held space glyph s to sb, unless sb already ends
