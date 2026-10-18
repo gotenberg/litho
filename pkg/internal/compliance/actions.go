@@ -138,6 +138,15 @@ var allowedAAKeys = map[ast.PdfName]bool{
 	"Bl": true,
 }
 
+// PermittedPart4AAKey reports whether ISO 19005-4 §6.6.3 t1 permits key in the
+// additional-actions dictionary of a document catalog, a page or a non-widget
+// annotation: E, X, D, U, Fo and Bl, the list veraPDF's PDAdditionalActions
+// test checks every entry against. Remediation asks it so it removes exactly
+// the keys [checkAAKeyRestrictions] reports.
+func PermittedPart4AAKey(key ast.PdfName) bool {
+	return allowedAAKeys[key]
+}
+
 // maxActionChainDepth bounds how deep [walkActionChain] follows the /Next tree
 // of one action (ISO 32000-1, 12.6.2, Table 193), which it walks recursively.
 // Anti-DoS guard, not spec-mandated: the spec puts no length on a chain, and a

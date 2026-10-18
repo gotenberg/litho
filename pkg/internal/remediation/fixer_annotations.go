@@ -39,12 +39,6 @@ var permittedAnnotSubtypes = map[ast.PdfName]bool{
 	"Projection": true, // ISO 32000-2 Table 171, re-permitted by PDF/A-4 §6.3.1.
 }
 
-// permittedAAKeys lists the additional-actions keys allowed on catalog, page,
-// and non-widget annotation dicts in PDF/A-4 (ISO 19005-4, section 6.6.3).
-var permittedAAKeys = map[ast.PdfName]bool{
-	"E": true, "X": true, "D": true, "U": true, "Fo": true, "Bl": true,
-}
-
 func matchAnnotations(v compliance.Violation) bool {
 	return clausePrefix(v,
 		"6.3.1", // forbidden annotation types
@@ -68,14 +62,12 @@ func fixAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 
 	var fixes []string
 
-	// Remove /AA from catalog (section 6.5.2, 6.6.2, 6.6.3).
-	if _, ok := catalogDict["AA"]; ok {
-		newCatalog := make(ast.PdfDict, len(catalogDict))
-		maps.Copy(newCatalog, catalogDict)
-		delete(newCatalog, "AA")
+	// Remove the catalog /AA, or at part 4 its forbidden keys (ISO 19005-1
+	// §6.6.2 t3, ISO 19005-2/3 §6.5.2 t1, ISO 19005-4 §6.6.3 t1).
+	if newCatalog, fix := trimOwnerAA(ctx, alloc, doc, catalogDict, profile, "catalog"); newCatalog != nil {
 		catalogDict = newCatalog
 		alloc.AllocAt(catalogRef.ObjectNum, catalogDict)
-		fixes = append(fixes, "removed /AA from catalog")
+		fixes = append(fixes, fix)
 	}
 
 	// The field walk runs before the page walk, so a merged field and widget
@@ -154,15 +146,13 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 
 		pageDict := pe.dict
 
-		// Remove /AA from page dict (section 6.5.2). A page written directly
-		// in its parent's /Kids is written back there ([writeTreeNode]).
-		if _, hasAA := pageDict["AA"]; hasAA {
-			newPage := make(ast.PdfDict, len(pageDict))
-			maps.Copy(newPage, pageDict)
-			delete(newPage, "AA")
+		// Remove the page /AA, or at part 4 its forbidden keys (ISO 19005-2/3
+		// §6.5.2 t2, ISO 19005-4 §6.6.3 t1). A page written directly in its
+		// parent's /Kids is written back there ([writeTreeNode]).
+		if newPage, fix := trimOwnerAA(ctx, alloc, doc, pageDict, profile, fmt.Sprintf("page %d", i+1)); newPage != nil {
 			pageDict = newPage
 			if writeTreeNode(ctx, alloc, doc, pe, pageDict) {
-				fixes = append(fixes, fmt.Sprintf("removed /AA from page %d", i+1))
+				fixes = append(fixes, fix)
 			}
 		}
 
@@ -529,12 +519,44 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return fixes, removed
 }
 
+// trimOwnerAA returns a copy of owner, a document catalog or a page, rewritten
+// for the /AA rule of profile, and the fix it reports; it returns nil when
+// owner needs no change. ISO 19005-1 §6.6.2 t3 and ISO 19005-2/3 §6.5.2 t1 and
+// t2 forbid the dictionary itself, so it goes whole there. ISO 19005-4 §6.6.3
+// t1 forbids only the keys outside E, X, D, U, Fo and Bl, so part 4 keeps the
+// permitted ones and drops the /AA only when none is left, or none was there:
+// veraPDF's test accepts an empty dictionary, but an /AA with no action is
+// noise. The dictionary is read alloc-first, so an earlier fixer's edit to an
+// indirect /AA survives. A value that is no dictionary holds no action and
+// goes.
+func trimOwnerAA(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, owner ast.PdfDict, profile, location string) (ast.PdfDict, string) {
+	aaObj, ok := owner["AA"]
+	if !ok {
+		return nil, ""
+	}
+	newOwner := maps.Clone(owner)
+	if compliance.PDFAPart(profile) == 4 {
+		if aa := liveDictValue(ctx, alloc, doc, aaObj); len(aa) > 0 {
+			cleaned := cleanAADict(aa)
+			if cleaned == nil {
+				return nil, ""
+			}
+			if len(cleaned) > 0 {
+				newOwner["AA"] = cleaned
+				return newOwner, "removed non-permitted AA keys from " + location
+			}
+		}
+	}
+	delete(newOwner, "AA")
+	return newOwner, "removed /AA from " + location
+}
+
 // cleanAADict returns a new AA dict with only permitted keys, or nil if no
 // changes were needed.
 func cleanAADict(aa ast.PdfDict) ast.PdfDict {
 	needsCleaning := false
 	for k := range aa {
-		if !permittedAAKeys[k] {
+		if !compliance.PermittedPart4AAKey(k) {
 			needsCleaning = true
 			break
 		}
@@ -545,7 +567,7 @@ func cleanAADict(aa ast.PdfDict) ast.PdfDict {
 
 	cleaned := make(ast.PdfDict, len(aa))
 	for k, v := range aa {
-		if permittedAAKeys[k] {
+		if compliance.PermittedPart4AAKey(k) {
 			cleaned[k] = v
 		}
 	}
