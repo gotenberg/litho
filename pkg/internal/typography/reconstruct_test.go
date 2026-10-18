@@ -130,6 +130,52 @@ func TestReconstructText_SpaceGlyphsKeepTheLine(t *testing.T) {
 	}
 }
 
+// TestReconstructText_RepeatedSpacesWithinTracking pins the gap that drops
+// literal space glyphs the next glyph is moved back over. After one space,
+// a gap of 0.08 em keeps it, as PDF.js keeps it. After two, PDF.js reads
+// any gap up to its tracking bound, 0.102 em, without a space.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000338.pdf page 5: "References", two space
+//     glyphs, then leader dots 0.08 em after the "s", which PDF.js reads
+//     "References....".
+func TestReconstructText_RepeatedSpacesWithinTracking(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		in   []models.TextElement
+		want string
+	}{
+		{
+			name: "one space",
+			in: []models.TextElement{
+				{Text: "s", X: 123.73, Y: 51.23, Width: 3.66, FontSize: 9.5},
+				{Text: " ", X: 128, Y: 51.23, Width: 2.64, FontSize: 9.5},
+				{Text: ".", X: 128.18, Y: 51.23, Width: 2.08, FontSize: 9.5},
+			},
+			want: "s .",
+		},
+		{
+			name: "two spaces",
+			in: []models.TextElement{
+				{Text: "s", X: 123.73, Y: 51.23, Width: 3.66, FontSize: 9.5},
+				{Text: " ", X: 127.39, Y: 51.23, Width: 2.64, FontSize: 9.5},
+				{Text: " ", X: 128, Y: 51.23, Width: 2.64, FontSize: 9.5},
+				{Text: ".", X: 128.18, Y: 51.23, Width: 2.08, FontSize: 9.5},
+			},
+			want: "s.",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ReconstructText(context.Background(), tc.in, nil); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestReconstructText_RTLBackwardFlowKeepsSpace guards the running-head
 // drop's RTL gate: Hebrew/Arabic glyphs naturally decrease in X as
 // the run progresses, so the literal space between two RTL words must

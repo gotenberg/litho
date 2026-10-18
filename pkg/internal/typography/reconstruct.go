@@ -230,7 +230,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					if visIdx < 0 || hasMarks {
 						break
 					}
-					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el), literalSpaceSize(ln.elems, lineFonts, visIdx, idx)) {
+					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el), literalSpaceSize(ln.elems, lineFonts, visIdx, idx), spaceGlyphsBetween(ln.elems, visIdx, idx)) {
 						pendingSpace = ""
 					}
 				case shouldInsertSpace(prev, gap, wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
@@ -788,7 +788,9 @@ const notASpaceFactor = 0.03
 // still shows a space between them, signals the break by the space
 // alone, so the space stays. PDF.js keeps it on the same condition
 // (compareWithLastPosition returns before the NOT_A_SPACE test when the
-// two positions are equal). The bound absorbs float rounding only.
+// two positions are equal), for one space glyph: after two, the last two
+// characters it saw are spaces and it writes none (saveLastChar). The
+// bound absorbs float rounding only.
 const exactAbutment = 1e-6
 
 // isSpaceGlyph reports whether s is made only of space glyphs: U+0020,
@@ -805,20 +807,28 @@ func isSpaceGlyph(s string) bool {
 	return true
 }
 
-// suppressesLiteralSpace reports whether a literal space glyph shown
-// between prev and el marks no word break. The next glyph starts at or
-// before the end of the last painted glyph (gap at most
+// suppressesLiteralSpace reports whether the literal space glyphs shown
+// between prev and el, spaces of them, mark no word break. The next glyph
+// starts at or before the end of the last painted glyph (gap at most
 // [notASpaceFactor] × size, the size [literalSpaceSize] measures the gap
 // in), so the space advanced the text matrix and the producer moved it
 // back over itself: the two glyphs abut on the page and no reader sees a
 // gap between them.
+//
+// After two space glyphs or more the bound is [trackingSpaceFactor] × size,
+// the gap PDF.js reads as tracking: below it PDF.js writes a space only
+// when the last two characters it saw are a glyph and one space
+// (src/core/evaluator.js, compareWithLastPosition, shouldAddWhitepsace and
+// saveLastChar), so the next glyph, moved back over the spaces to within
+// tracking of the text before them, is read without one.
 //
 // The gap is only read for left-to-right text at a positive font size,
 // horizontal or rotated by 90° or -90°, between two glyphs set in the same
 // direction: [computeLineGap] measures it along the advance of those
 // ([gapReadable]). Vertical, otherwise rotated, mirrored and right-to-left
 // runs measure their gaps along other axes or in visual order, and keep
-// their literal spaces. So does an exact abutment ([exactAbutment]).
+// their literal spaces. So does an exact abutment after one space glyph
+// ([exactAbutment]).
 //
 // # Corpus evidence
 //
@@ -843,7 +853,16 @@ func isSpaceGlyph(s string) bool {
 //     while the widths of its UTF-8 codes were read at the code, not the CID.
 //   - All corpora: dropping the space in ±90° text makes words match PDF.js
 //     on 8 more files and on none fewer.
-func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64) bool {
+//   - govdocs thread_000_000338.pdf page 5: "References", a space glyph
+//     ending its TJ, another at the next Td, then the leader dots moved back
+//     to 0.08 em after the "s", read "References ...." for PDF.js's
+//     "References....".
+//   - govdocs thread_000_000208.pdf page 69: "effi", two space glyphs, then
+//     "ciency" at the exact end of the ligature, read "effi ciency".
+//   - All corpora: the tracking bound after two spaces or more makes words
+//     match PDF.js on 5 more files (govdocs 4, pdfjs 1) and on none fewer;
+//     facturx, pdf20 and pdfcpu do not move.
+func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64, spaces int) bool {
 	if prev.Vertical || el.Vertical || !gapReadable(el.Angle) || math.Abs(prev.Angle-el.Angle) >= math.Pi/180 {
 		return false
 	}
@@ -860,10 +879,25 @@ func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64) bool
 	if prev.FontSize <= 0 || el.FontSize <= 0 {
 		return false
 	}
+	if spaces >= 2 {
+		return gap <= trackingSpaceFactor*size
+	}
 	if math.Abs(gap) < exactAbutment {
 		return false
 	}
 	return gap <= notASpaceFactor*size
+}
+
+// spaceGlyphsBetween counts the space glyphs among the elements strictly
+// between p and i.
+func spaceGlyphsBetween(elems []models.TextElement, p, i int) int {
+	n := 0
+	for k := p + 1; k < i; k++ {
+		if isSpaceGlyph(elems[k].Text) {
+			n++
+		}
+	}
+	return n
 }
 
 // literalSpaceSize returns the font size, on the page, that the gap between
