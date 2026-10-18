@@ -1120,6 +1120,19 @@ func builtinProgramEncoding(ctx context.Context, doc *document.Document, fontDic
 	return nil
 }
 
+// DifferencesGlyphNames returns the glyph name the /Differences array of a
+// font's /Encoding dictionary gives each code, read as the checks read it.
+// Remediation shares it so a /ToUnicode it derives from glyph names reads the
+// same names the validator judges. A font whose /Encoding is not a dictionary
+// yields nil.
+func DifferencesGlyphNames(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[byte]string {
+	encDict, err := document.ResolveDict(ctx, doc, fontDict["Encoding"])
+	if err != nil || encDict == nil {
+		return nil
+	}
+	return differencesGlyphNames(ctx, doc, encDict)
+}
+
 // differencesGlyphNames returns the charCode → glyphName overrides an
 // /Encoding dictionary declares through its /Differences array. Per ISO 32000-1
 // 9.6.6.1, each number in the array starts a run of names at that code.

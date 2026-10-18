@@ -190,6 +190,8 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			// and every Type 1 font kept its missing Unicode mapping (ISO
 			// 19005-2, 6.2.11.7.2).
 			fixes = append(fixes, fixSimpleFontToUnicode(ctx, doc, alloc, fd, fontRef, uses.codes[fontRef.ObjectNum])...)
+		case "Type3":
+			fixes = append(fixes, fixType3FontToUnicode(ctx, doc, alloc, fd, fontRef, uses.codes[fontRef.ObjectNum])...)
 		}
 	}
 	for i := range pages {
@@ -1263,6 +1265,15 @@ func fixSimpleFontToUnicode(ctx context.Context, doc *document.Document, alloc *
 		mapping = encodingToUnicode(ctx, doc, fontDict)
 	}
 
+	return attachSimpleToUnicode(alloc, fontDict, fontRef, mapping, shownCodes)
+}
+
+// attachSimpleToUnicode writes mapping as the /ToUnicode CMap of the simple
+// font fontRef names, returning what it repaired. It writes nothing unless
+// mapping covers every code of shownCodes: ISO 19005-2, 6.2.11.7.2 asks for
+// the USED codes, and a partial map satisfies litho's own presence check
+// while veraPDF still reports the rule.
+func attachSimpleToUnicode(alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, mapping map[uint16]rune, shownCodes map[byte]bool) []string {
 	for code := range shownCodes {
 		if _, ok := mapping[uint16(code)]; !ok {
 			return nil
