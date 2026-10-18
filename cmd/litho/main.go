@@ -7,7 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -26,7 +28,29 @@ var logLevels = map[string]slog.Level{
 }
 
 func main() {
-	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
+	ctx, stop := interruptContext(context.Background())
+	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
+}
+
+// interruptContext returns a context that the first interrupt or termination
+// signal cancels, and the function that releases it.
+//
+// A signal used to end the process where it stood, with no deferred call run:
+// a remediation interrupted while it judged its output left the
+// litho-remediate-*.pdf it had written in the temp directory for good, and a
+// command writing to -o left the partial file. Cancelled instead, the command
+// returns through the paths a cancellation takes, which remove both. The
+// first signal also restores the default behaviour, so a second one ends a
+// command that does not stop at once.
+func interruptContext(parent context.Context) (context.Context, context.CancelFunc) {
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+	return ctx, stop
 }
 
 // run is the testable entry point. Every exit path returns a numeric
