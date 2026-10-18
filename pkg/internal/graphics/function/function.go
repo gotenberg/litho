@@ -47,6 +47,24 @@ const (
 	// one input and a DeviceN tint one per colorant (ISO 32000-1, 8.6.6.5),
 	// so the 32-colorant limit is also the widest input a function takes.
 	maxInputs = 32
+
+	// maxStitchDepth bounds how deep type 3 functions nest inside one
+	// another. A stitching function names its subfunctions by reference, so
+	// a file can chain them without end, and each level is a Go call frame.
+	// Anti-DoS, not spec-mandated: ISO 32000-1, 7.10.4 puts no bound on
+	// nesting. A gradient stitches plain type 2 or type 0 segments, one level
+	// deep; 8 leaves room for a producer that stitches stitched ramps.
+	maxStitchDepth = 8
+
+	// maxStitchFunctions bounds the functions compiled for one function
+	// object, across every nesting level. /Functions can name the same object
+	// in every slot at every level, so the tree a file describes grows as the
+	// fan-out raised to the depth while its bytes stay small: a depth bound
+	// alone does not stop that. Anti-DoS, not spec-mandated: ISO 32000-1,
+	// 7.10.4 puts no bound on k. A multi-stop gradient stitches one segment
+	// per pair of stops, a few dozen at most; 1024 leaves room for a ramp
+	// written one segment per sample of an 8-bit table, four times over.
+	maxStitchFunctions = 1024
 )
 
 // Function is a compiled PDF function, ready for repeated evaluation.
@@ -71,13 +89,51 @@ type Function struct {
 
 	// Type 4.
 	program *postscript.Program
+
+	// Type 3. encode is shared with type 0: here it holds one pair per part.
+	bounds []float64
+	parts  []*Function
+}
+
+// compileState tracks one [New] call across the subfunctions a type 3
+// function nests: the objects on the current descent, which detect a function
+// that names itself, and how many functions have been compiled, which
+// [maxStitchFunctions] bounds. A subfunction shared by two slots is legal and
+// compiled once per slot, so only the current descent is tracked, not every
+// object seen.
+type compileState struct {
+	onPath   map[int]bool
+	compiled int
 }
 
 // New compiles the PDF function object obj.
 //
 // Per ISO 32000-1, 7.10 a function is a dictionary or, for types 0 and 4, a
-// stream. Types 0, 2 and 4 are evaluated; type 3 returns [ErrUnsupportedType].
+// stream. Types 0, 2, 3 and 4 are evaluated; any other /FunctionType returns
+// [ErrUnsupportedType]. A type 3 function compiles its subfunctions too, at
+// most [maxStitchDepth] levels deep and [maxStitchFunctions] in all, and one
+// that names itself returns [ErrStitchCycle].
 func New(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*Function, error) {
+	return newAt(ctx, doc, obj, &compileState{onPath: make(map[int]bool)}, 0)
+}
+
+// newAt compiles obj at nesting level depth of the [New] call st tracks.
+func newAt(ctx context.Context, doc *document.Document, obj ast.PdfObject, st *compileState, depth int) (*Function, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("compiling function: %w", err)
+	}
+	st.compiled++
+	if st.compiled > maxStitchFunctions {
+		return nil, fmt.Errorf("%w: more than %d functions", ErrStitchTooLarge, maxStitchFunctions)
+	}
+	if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+		if st.onPath[ref.ObjectNum] {
+			return nil, fmt.Errorf("%w: object %d", ErrStitchCycle, ref.ObjectNum)
+		}
+		st.onPath[ref.ObjectNum] = true
+		defer delete(st.onPath, ref.ObjectNum)
+	}
+
 	resolved, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return nil, fmt.Errorf("resolving function object: %w", err)
@@ -134,6 +190,8 @@ func New(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*Funct
 		return f, f.initSampled(ctx, doc, dict, stream, isStream)
 	case 2:
 		return f, f.initExponential(ctx, doc, dict)
+	case 3:
+		return f, f.initStitching(ctx, doc, dict, st, depth)
 	case 4:
 		return f, f.initPostScript(ctx, doc, stream, isStream)
 	}
@@ -269,6 +327,81 @@ func (f *Function) initExponential(ctx context.Context, doc *document.Document, 
 	return nil
 }
 
+// initStitching reads a type 3 function and compiles its subfunctions.
+//
+// Per ISO 32000-1, 7.10.4, Table 39 a stitching function takes one input,
+// /Functions holds its k subfunctions, each of one input and all yielding the
+// same number of values, /Bounds holds the k-1 values that split /Domain into
+// k subdomains, in increasing order and within /Domain, and /Encode holds one
+// pair per subfunction mapping its subdomain onto that function's input.
+// /Range is optional, so an absent one leaves the output count to the
+// subfunctions.
+//
+// Equal adjacent bounds are accepted, relaxing 7.10.4's strict Domain0 <
+// Bounds0 < ... < Domain1: they describe an empty subdomain that
+// [Function.evalStitching] never selects, so the function stays well defined,
+// and pdf.js evaluates them the same way. A decreasing bound, or one outside
+// /Domain, describes no partition and is refused.
+func (f *Function) initStitching(ctx context.Context, doc *document.Document, dict ast.PdfDict, st *compileState, depth int) error {
+	if len(f.domain) != 2 {
+		return fmt.Errorf("%w: a type 3 function takes one input, /Domain declares %d", ErrMalformed, len(f.domain)/2)
+	}
+	if depth >= maxStitchDepth {
+		return fmt.Errorf("%w: nested deeper than %d", ErrStitchTooLarge, maxStitchDepth)
+	}
+	parts, err := document.ResolveArray(ctx, doc, dict["Functions"])
+	if err != nil {
+		return fmt.Errorf("%w: /Functions: %w", ErrMalformed, err)
+	}
+	k := len(parts)
+	if k == 0 {
+		return fmt.Errorf("%w: /Functions is empty", ErrMalformed)
+	}
+	if k > maxStitchFunctions {
+		return fmt.Errorf("%w: /Functions holds %d entries, more than %d", ErrStitchTooLarge, k, maxStitchFunctions)
+	}
+
+	// /Bounds is required even for k = 1, where it is the empty array.
+	if f.bounds, err = floats(ctx, doc, dict["Bounds"]); err != nil || len(f.bounds) != k-1 {
+		return fmt.Errorf("%w: /Bounds holds %d values for %d functions", ErrMalformed, len(f.bounds), k)
+	}
+	prev := f.domain[0]
+	for _, b := range f.bounds {
+		if b < prev || b > f.domain[1] {
+			return fmt.Errorf("%w: /Bounds %v is not increasing within /Domain %v", ErrMalformed, f.bounds, f.domain)
+		}
+		prev = b
+	}
+	if f.encode, err = floats(ctx, doc, dict["Encode"]); err != nil || len(f.encode) != 2*k {
+		return fmt.Errorf("%w: /Encode holds one pair per function", ErrMalformed)
+	}
+
+	outputs := 0
+	for i, part := range parts {
+		sub, err := newAt(ctx, doc, part, st, depth+1)
+		if err != nil {
+			return fmt.Errorf("stitching subfunction %d: %w", i, err)
+		}
+		if sub.Inputs() != 1 {
+			return fmt.Errorf("%w: subfunction %d takes %d inputs, want 1", ErrMalformed, i, sub.Inputs())
+		}
+		if i == 0 {
+			outputs = sub.Outputs()
+		} else if sub.Outputs() != outputs {
+			return fmt.Errorf("%w: subfunction %d yields %d values, subfunction 0 yields %d",
+				ErrMalformed, i, sub.Outputs(), outputs)
+		}
+		f.parts = append(f.parts, sub)
+	}
+	if f.outputs == 0 {
+		f.outputs = outputs
+	}
+	if f.outputs != outputs {
+		return fmt.Errorf("%w: /Range declares %d outputs and the subfunctions yield %d", ErrMalformed, f.outputs, outputs)
+	}
+	return nil
+}
+
 // initPostScript reads and compiles a type 4 function, whose program
 // [postscript.Program.Execute] runs.
 func (f *Function) initPostScript(ctx context.Context, doc *document.Document, stream ast.PdfStream, isStream bool) error {
@@ -305,6 +438,8 @@ func (f *Function) Eval(inputs []float64) ([]float64, error) {
 		return f.evalSampled(clamped), nil
 	case 2:
 		return f.evalExponential(clamped[0]), nil
+	case 3:
+		return f.evalStitching(clamped[0])
 	case 4:
 		out, err := f.program.Execute(clamped)
 		if err != nil {
@@ -374,6 +509,37 @@ func (f *Function) evalSampled(inputs []float64) []float64 {
 			f.rng[2*j], f.rng[2*j+1])
 	}
 	return out
+}
+
+// evalStitching picks the subfunction whose subdomain holds x, maps x through
+// that subfunction's /Encode pair and evaluates it.
+//
+// Per ISO 32000-1, 7.10.4 the subdomains are half-open, Bounds(i-1) <= x <
+// Bounds(i), except the last, which is closed at Domain1: a value equal to a
+// bound belongs to the subdomain it opens, and x = Domain1 to the last one. An
+// empty subdomain left by equal bounds is never selected, as in pdf.js.
+func (f *Function) evalStitching(x float64) ([]float64, error) {
+	i := 0
+	for i < len(f.bounds) && x >= f.bounds[i] {
+		i++
+	}
+	lo, hi := f.domain[0], f.domain[1]
+	if i > 0 {
+		lo = f.bounds[i-1]
+	}
+	if i < len(f.bounds) {
+		hi = f.bounds[i]
+	}
+	out, err := f.parts[i].Eval([]float64{interpolate(x, lo, hi, f.encode[2*i], f.encode[2*i+1])})
+	if err != nil {
+		return nil, fmt.Errorf("evaluating stitching subfunction %d: %w", i, err)
+	}
+	if len(f.rng) == 2*len(out) {
+		for j := range out {
+			out[j] = clamp(out[j], f.rng[2*j], f.rng[2*j+1])
+		}
+	}
+	return out, nil
 }
 
 // evalExponential computes C0 + x^N * (C1 - C0) per ISO 32000-1, 7.10.3.

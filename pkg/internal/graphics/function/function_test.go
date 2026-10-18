@@ -247,28 +247,22 @@ func TestPostScriptFunction_CompilesOnce(t *testing.T) {
 	}
 }
 
-// TestStitchingFunctionIsRefused pins that type 3 is refused rather than
-// silently mis-evaluated.
-//
-// Nothing real exercises type 3, so shipping an untested implementation would
-// be speculation. The refusal names the type.
-//
-// # Corpus evidence
-//
-//   - All corpora: no fixture uses a type 3 function. Across the 20 files
-//     holding Separation or DeviceN images, the functions measured are type 0
-//     x47, type 2 x6 and type 4 x3.
-func TestStitchingFunctionIsRefused(t *testing.T) {
+// TestUndefinedFunctionTypesAreRefused pins that a /FunctionType ISO 32000-1,
+// 7.10 does not define is refused by name rather than guessed at. Types 1 and
+// 5 fall between and after the defined ones.
+func TestUndefinedFunctionTypesAreRefused(t *testing.T) {
 	t.Parallel()
 
-	ctx, doc := funcPDF(t, []string{
-		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [] /Count 0 >>",
-		"<< /FunctionType 3 /Domain [0 1] /Range [0 1] /Bounds [] /Encode [0 1] /Functions [] >>",
-	})
-	_, err := New(ctx, doc, ast.PdfIndirectRef{ObjectNum: 3})
-	if !errors.Is(err, ErrUnsupportedType) {
-		t.Fatalf("New(type 3) = %v, want ErrUnsupportedType", err)
+	for _, kind := range []int{1, 5, -1} {
+		ctx, doc := funcPDF(t, []string{
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [] /Count 0 >>",
+			fmt.Sprintf("<< /FunctionType %d /Domain [0 1] /Range [0 1] >>", kind),
+		})
+		_, err := New(ctx, doc, ast.PdfIndirectRef{ObjectNum: 3})
+		if !errors.Is(err, ErrUnsupportedType) {
+			t.Errorf("New(type %d) = %v, want ErrUnsupportedType", kind, err)
+		}
 	}
 }
 

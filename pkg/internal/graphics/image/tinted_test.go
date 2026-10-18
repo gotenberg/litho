@@ -212,6 +212,45 @@ func TestDecodeImage_SeparationDecodesThroughItsTintTransform(t *testing.T) {
 	}
 }
 
+// TestDecodeImage_SeparationThroughAStitchingTint pins that a type 3 tint
+// transform decodes rather than refuses (ISO 32000-1, 7.10.4). The two
+// segments run paper white to red and red to black, so tint 64 lands halfway
+// down the first and tint 128 just past the bound, at the start of the second.
+func TestDecodeImage_SeparationThroughAStitchingTint(t *testing.T) {
+	t.Parallel()
+
+	const cs = "[/Separation /Spot1 /DeviceRGB 5 0 R]"
+	objs := append(tintedImagePDF(cs, []byte{0, 64, 128, 255}),
+		"<< /FunctionType 3 /Domain [0 1] /Functions [6 0 R 7 0 R] /Bounds [0.5] /Encode [0 1 0 1] >>",
+		"<< /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [1 0 0] /N 1 >>",
+		"<< /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 0] /N 1 >>")
+	ctx, doc, page := imagePDF(t, objs)
+
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage refused a stitching tint transform: %v", err)
+	}
+	for _, tc := range []struct {
+		x       int
+		r, g, b int
+	}{
+		{0, 255, 255, 255},
+		{1, 255, 127, 127},
+		{2, 253, 0, 0},
+		{3, 0, 0, 0},
+	} {
+		r, g, b, _ := img.At(tc.x, 0).RGBA()
+		got := [3]int{int(r >> 8), int(g >> 8), int(b >> 8)}
+		want := [3]int{tc.r, tc.g, tc.b}
+		for c := range got {
+			if d := got[c] - want[c]; d < -1 || d > 1 {
+				t.Errorf("pixel %d = %v, want %v within 1", tc.x, got, want)
+				break
+			}
+		}
+	}
+}
+
 // TestDecodeImage_SeparationOverCMYKAlternate pins the alternate-space
 // conversion, where the tint yields four values rather than three, read
 // through the built-in CMYK profile: LittleCMS 2.17 gives the same colours
@@ -291,7 +330,7 @@ func TestDecodeImage_SeparationRefusalsSurvive(t *testing.T) {
 			"unsupported alternate",
 		},
 		{
-			"a stitching tint transform, which this decoder does not evaluate",
+			"a stitching tint transform with no subfunctions",
 			"[/Separation /Spot1 /DeviceRGB 5 0 R]",
 			"<< /FunctionType 3 /Domain [0 1] /Range [0 1 0 1 0 1] /Bounds [] /Encode [0 1] /Functions [] >>",
 			"tint transform",

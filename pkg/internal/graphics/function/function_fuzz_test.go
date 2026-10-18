@@ -122,3 +122,48 @@ func FuzzEvalSampled(f *testing.F) {
 		}
 	})
 }
+
+// FuzzEvalStitching drives the type 3 evaluator with arbitrary bounds, encode
+// pairs and inputs.
+//
+// /Domain, /Bounds and /Encode all come from the file. Whatever partition
+// [Function.initStitching] accepts, evaluation must never panic, never index
+// past /Functions, and never return NaN or a value outside the parts' /Range.
+func FuzzEvalStitching(f *testing.F) {
+	f.Add(0.0, 1.0, 0.5, 0.5, 0.0, 1.0, 1.0, 0.0, 0.5)
+	f.Add(0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0)
+	f.Add(10.0, 20.0, 15.0, 20.0, -3.0, 4.0, 2.0, 2.0, 20.0)
+	f.Add(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0)
+
+	f.Fuzz(func(t *testing.T, d0, d1, b0, b1, e0, e1, e2, e3, x float64) {
+		for _, v := range []float64{d0, d1, b0, b1, e0, e1, e2, e3, x} {
+			if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e6 {
+				return
+			}
+		}
+		// Mirror initStitching's acceptance: bounds non-decreasing within
+		// /Domain.
+		if d0 > d1 || b0 < d0 || b1 < b0 || b1 > d1 {
+			return
+		}
+		part := func(c0, c1 float64) *Function {
+			return &Function{
+				kind: 2, domain: []float64{0, 1}, rng: []float64{0, 1}, outputs: 1,
+				c0: []float64{c0}, c1: []float64{c1}, expN: 1,
+			}
+		}
+		fn := &Function{
+			kind: 3, domain: []float64{d0, d1}, outputs: 1,
+			bounds: []float64{b0, b1},
+			encode: []float64{e0, e1, e2, e3, 0, 1},
+			parts:  []*Function{part(0, 1), part(1, 0), part(0.25, 0.75)},
+		}
+		out, err := fn.Eval([]float64{x})
+		if err != nil {
+			t.Fatalf("Eval returned %v for an accepted partition", err)
+		}
+		if len(out) != 1 || math.IsNaN(out[0]) || out[0] < 0 || out[0] > 1 {
+			t.Fatalf("Eval = %v, want one value in [0 1]", out)
+		}
+	})
+}
