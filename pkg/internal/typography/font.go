@@ -373,6 +373,15 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		return nil, fmt.Errorf("font /Subtype is not a name")
 	}
 
+	// FontDescriptor /Flags bit 3 (Symbolic) marks fonts whose glyph
+	// repertoire is bespoke. Custom glyph names (H11537, etc.) are
+	// laid out at WinAnsi-style byte positions for PostScript-printed
+	// docs (Universal-NewswithCommPi, OCR symbols, math notation), so
+	// those bytes need the WinAnsi fallback. Pulling the flag before
+	// defaultEncoding selection routes Type 1 symbolic fonts past the
+	// StandardEncoding default below.
+	symbolicByFlags := fontIsSymbolicByFlags(ctx, doc, fontDict)
+
 	// Detect Symbol, ZapfDingbats, and the other 14 standard Type 1
 	// fonts by BaseFont name to select the correct default encoding.
 	// Per ISO 32000-1 §9.6.6.1 a non-symbolic Type 1 font that omits
@@ -380,6 +389,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// their own built-in encoding; the standard 14 base fonts already
 	// fall in the StandardEncoding bucket. Custom Type 1 fonts (e.g.
 	// /Melior, /Minion-Pro) hit the same StandardEncoding default.
+	// [readsAsStandardSymbol] says which fonts Symbol's encoding is.
 	isSymbolFont := false
 	isDingbatsFont := false
 	if bfObj, ok := fontDict["BaseFont"]; ok {
@@ -389,19 +399,10 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		}
 		if bfName != "" {
 			name := strings.ToLower(string(bfName))
-			isSymbolFont = strings.Contains(name, "symbol")
+			isSymbolFont = readsAsStandardSymbol(string(bfName), symbolicByFlags, hasEmbeddedFontFile(ctx, doc, fontDict))
 			isDingbatsFont = strings.Contains(name, "dingbat") || strings.Contains(name, "zapfdingbats")
 		}
 	}
-
-	// FontDescriptor /Flags bit 3 (Symbolic) marks fonts whose glyph
-	// repertoire is bespoke. Custom glyph names (H11537, etc.) are
-	// laid out at WinAnsi-style byte positions for PostScript-printed
-	// docs (Universal-NewswithCommPi, OCR symbols, math notation), so
-	// those bytes need the WinAnsi fallback. Pulling the flag before
-	// defaultEncoding selection routes Type 1 symbolic fonts past the
-	// StandardEncoding default below.
-	symbolicByFlags := fontIsSymbolicByFlags(ctx, doc, fontDict)
 
 	// Default encoding selection. ISO 32000-1 §9.6.6.1 makes
 	// StandardEncoding the implicit base for non-symbolic Type 1
@@ -2146,6 +2147,55 @@ func decodeFontStreamFromDescriptor(ctx context.Context, doc *document.Document,
 		return data
 	}
 	return decodeFontStream(ctx, doc, fdDict, "FontFile3")
+}
+
+// readsAsStandardSymbol reports whether a simple font reads its codes as the
+// standard Symbol font does: through Symbol's built-in encoding and the
+// Symbol glyph table.
+//
+// ISO 32000-1, 9.6.2.2 names one Symbol font among the standard 14, and
+// 9.6.6.1 gives a font with no /Encoding its program's built-in encoding.
+// Symbol's own built-in encoding (Annex D.5) is therefore a fact about the
+// font named Symbol: once [canonicalFontName] strips the subset tag (9.6.4)
+// and a style suffix, the name is "Symbol". Any other name, "WPIconicSymbolsA"
+// or "AppleSymbols" or "ItcSymbol-Book" (a Latin text face), says nothing
+// about its glyphs, so an embedded program's built-in encoding, cmap and
+// glyph names, or the Adobe Glyph List, answer instead.
+//
+// An unembedded symbolic font whose name holds "symbol" in any case still
+// reads as Symbol. With no program, 9.6.6.1 leaves its built-in encoding
+// unknown, and PDF.js, which substitutes Symbol for such a font
+// (evaluator.js, extractDataStructures, at the pinned revision), reads its
+// codes through SymbolSetEncoding. Relaxing 9.6.6.1 there matches the reader
+// the text corpora are measured against rather than inventing a Latin reading.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300089.pdf: an embedded symbolic WPTypographicSymbols
+//     subset with no /Encoding and only a (1,0) cmap subtable read code 0x96
+//     through the Symbol encoding, which leaves it empty. Read as Mac OS Roman
+//     through that subtable (9.6.6.4), it is the "ñ" PDF.js reads, and the
+//     file matches PDF.js.
+//   - govdocs thread_200_200611.pdf: unembedded symbolic WPIconicSymbolsA and
+//     WPIconicSymbolsB read as PDF.js reads them only through the Symbol
+//     encoding. Read through WinAnsi, the file no longer matches PDF.js.
+//   - govdocs thread_400_400895.pdf: an embedded WPIconicSymbolsA Type 1
+//     program names code 0x8E "c142", which no glyph list resolves. The
+//     Symbol encoding left the code empty; the WinAnsi default of a symbolic
+//     Type 1 font reads "Ž", the /Zcaron its /CharSet lists, where PDF.js
+//     reads Mac OS Roman "é". The page matched PDF.js under neither.
+//   - All corpora: the fonts that no longer read as Symbol sit in 79 files,
+//     69 of which give them a /ToUnicode CMap. Text changes on the three
+//     files above alone, compliance verdicts and rule sets on none, and
+//     remediated output only on pdfjs issue14203.pdf, whose generated
+//     /ToUnicode CMaps change on codes no page shows: its text and veraPDF's
+//     verdicts on the output are unchanged.
+func readsAsStandardSymbol(baseFont string, symbolic, embedded bool) bool {
+	name, _, _ := strings.Cut(canonicalFontName(baseFont), "-")
+	if name == "Symbol" {
+		return true
+	}
+	return !embedded && symbolic && strings.Contains(strings.ToLower(baseFont), "symbol")
 }
 
 // hasEmbeddedFontFile reports whether a font dict's FontDescriptor carries
