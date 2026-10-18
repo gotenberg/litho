@@ -217,6 +217,7 @@ one deliberately rather than diffing it against a fresh build.
 | `fontnohead_2b.pdf`    | PDF/A-2b     | TrueType programs with no `head` table, weighed at 2048 units    |
 | `fontemptycs_2b.pdf`   | PDF/A-2b     | CFF programs whose CharStrings INDEX holds no glyph              |
 | `fontcff2_2b.pdf`      | PDF/A-2b     | OpenType programs, `CFF2` among them, read by the embedding font |
+| `fontotread_2b.pdf`    | PDF/A-2b     | OpenType programs the glyph rules read by the embedding font     |
 | `aakeys_4.pdf`         | PDF/A-4      | Catalog and page `/AA` holding a permitted and a forbidden key   |
 
 ### Must-not-fire controls
@@ -474,6 +475,8 @@ violation but is exempt, so a firing is a false positive.
 | `fontemptycs_2b`                          | `EK`, `CK`: the whole programs the empty ones are cut from             | ISO 19005-2, 6.2.11.4.1 t2   |
 | `fontcff2_2b`                             | `F3`, `F4`: a `CFF2` program a TrueType font reads through `hmtx`      | ISO 19005-2, 6.2.11.4.1 t1   |
 | `fontcff2_2b`                             | `OK`: a Type 1 font over an `OTTO` with `CFF ` outlines                | ISO 19005-2, 6.2.11.4.1 t1   |
+| `fontotread_2b`                           | `W1`, `W3`, `W4`: CFF fonts declaring the `CFF ` widths, not `hmtx`'s  | ISO 19005-2, 6.2.11.5        |
+| `fontotread_2b`                           | `W5`, `H1`: TrueType fonts over an `OTTO` declaring `hmtx`'s widths    | ISO 19005-2, 6.2.11.5        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -549,6 +552,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fontkeys_1b.pdf`      | 13   | 10   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 8    | 8    |
 | `fontleft_2b.pdf`      | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 14   | 13   |
 | `fontnohead_2b.pdf`    | 6    | 3    | 5    | 2    | 3    | 5    | 2    | 3    | 3   | 3    | 4    | 7    | 7    |
+| `fontotread_2b.pdf`    | 8    | 5    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `fontunread_2b.pdf`    | 6    | 4    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `forbidden_mix.pdf`    | 14   | 12   | 14   | 12   | 12   | 16   | 14   | 14   | 14  | 13   | 13   | 11   | 9    |
 | `formcs_2b.pdf`        | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 7    | 7    |
@@ -6834,12 +6838,67 @@ The embedding rule moves the same way at PDF/A-1a and 1b (`6.3.4/1`), PDF/A-4,
 (`8.4.5.5.1/1`). veraPDF 1.30.2 and litho report the same rule set in all
 thirteen cells. At PDF/A-1a and 1b both report `6.3.2/7`, the `/OpenType`
 subtype PDF 1.4 does not define, for every font; veraPDF counts each Type 0
-font and its descendant, 14 checks to litho's 10. The verdict is the embedding
-rule's alone: litho's glyph rules still read such a program by the outlines it
-carries, which no font here makes visible. Remediation cannot embed a program
-the fixture does not supply, so the embedding rule stays on the output at
-every manifest profile in both modes, on both tools, and no rule appears that
-the input did not fail.
+font and its descendant, 14 checks to litho's 10. The glyph rules take the
+same reading, which [`fontotread_2b.pdf`](#fontotread_2bpdf) makes visible.
+Remediation cannot embed a program the fixture does not supply, so the
+embedding rule stays on the output at every manifest profile in both modes, on
+both tools, and no rule appears that the input did not fail. Since the glyph
+rules read `F4`'s program through `hmtx`, remediation also writes `F4` a `/DW`
+of 600, which changes no rule on either tool.
+
+### `fontotread_2b.pdf`
+
+veraPDF reads an embedded sfnt by the font that embeds it for every rule, not
+only for the embedding verdict `fontcff2_2b.pdf` plants: a Type 1 or
+CIDFontType0 font reads its `CFF ` table and nothing else of the sfnt, a
+TrueType or CIDFontType2 font reads any sfnt, `OTTO` included, as a TrueType
+program. litho's glyph rules read the program by the outlines it carries, so a
+Type 1 font over an `OTTO` weighed `hmtx` and a CIDFontType2 font over one
+weighed the CFF charstrings. Every program is a `/FontFile3 /OpenType` whose
+CFF charstrings advance 600 and whose `hmtx` states 500. No corpus file holds
+a program whose two readings disagree, so this fixture plants them:
+
+| Font | Font type    | Program                                                   | Declares        |
+| ---- | ------------ | --------------------------------------------------------- | --------------- |
+| `W1` | Type1        | `OTTO`, `CFF ` outlines                                   | `/Widths` 600   |
+| `W2` | Type1        | `W1`'s                                                    | `/Widths` 500   |
+| `W3` | Type1        | a version-1.0 sfnt carrying `glyf` and a `CFF ` table     | `/Widths` 600   |
+| `W4` | CIDFontType0 | a version-1.0 sfnt carrying `glyf` and a CID-keyed `CFF ` | `/W` 600        |
+| `W5` | CIDFontType2 | `OTTO`, CID-keyed `CFF ` outlines                         | `/W` 500        |
+| `W6` | CIDFontType2 | `W5`'s                                                    | `/W` 600        |
+| `H1` | TrueType     | `OTTO`, `CFF ` outlines, no `head`, `hmtx` advancing 1000 | `/Widths` 488   |
+| `P1` | CIDFontType2 | `OTTO` whose `maxp` counts 3 glyphs, `CFF ` CIDs 1 to 3   | `/W` 500, CID 3 |
+
+`H1` weighs its advances against the 2048 units a TrueType program with no
+`head` takes ([`fontnohead_2b.pdf`](#fontnohead_2bpdf)). `P1` shows CID 3,
+which its `CFF ` charset holds and its `maxp` does not count, so the TrueType
+reading finds no glyph for it and draws `.notdef`.
+
+| Rule at PDF/A-2b                | veraPDF | litho | litho before |
+| ------------------------------- | ------- | ----- | ------------ |
+| `6.2.11.5/1` width (`W2`, `W6`) | 4       | 4     | 12           |
+| `6.2.11.4.1/2` glyph (`P1`)     | 1       | 1     | 0            |
+| `6.2.11.8/1` `.notdef` (`P1`)   | 1       | 1     | 0            |
+| `6.2.4.3/4` DeviceGray          | 8       | 8     | 8            |
+| `6.6.2.1/1` no metadata         | 1       | 1     | 1            |
+
+The same rules move at PDF/A-1a and 1b (`6.3.6/1`, `6.3.5/1`), PDF/A-2a, 2u,
+3a, 3b and 3u, PDF/A-4, 4e and 4f (`6.2.10.5/1`, `6.2.10.4.1/2`,
+`6.2.10.9/1`), PDF/UA-1 (`7.21.5/1`, `7.21.4.1/2`, `7.21.8/1`) and PDF/UA-2
+(`8.4.5.6/1`, `8.4.5.5.1/2`, `8.4.5.9/1`). veraPDF 1.30.2 and litho report the
+same rule set in all thirteen cells. Three counts differ inside an agreed rule:
+at PDF/A-1a and 1b veraPDF counts `6.3.2/7` for each Type 0 font and its
+descendant, 12 checks to litho's 8, as in `fontcff2_2b.pdf`; for the untagged
+content, veraPDF counts PDF/UA-1 `7.1/3` and `7.2/34` and PDF/UA-2 `8.2.2/1`
+8 times each and litho once.
+
+Remediation repairs the widths from the same reading: it writes `W2` 600 and
+`W6` 500 and leaves the other fonts alone. Before, it repaired from the
+outlines too, and its output failed the width rule for all eight fonts when
+read as the fonts read it. At every manifest profile in both modes the width
+rule leaves the output on both tools, the presence and `.notdef` rules for
+`P1` stay, since remediation cannot give a program a glyph it lacks, and no
+rule appears that the input did not fail.
 
 ### `aakeys_4.pdf`
 
