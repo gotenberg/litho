@@ -338,6 +338,18 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 		}
 	}
 
+	// The catalog /AA document-level triggers WC, WS, DS, WP and DP (ISO
+	// 32000-1, Table 197) carry actions as a page's O and C do, and veraPDF
+	// judges each GoTo among them (PDCatalogAdditionalActions); any other key
+	// names no catalog action.
+	if aa, err := document.ResolveDict(ctx, doc, catalog["AA"]); err == nil && aa != nil {
+		for _, key := range catalogAATriggers {
+			if v, ok := aa[key]; ok {
+				results = append(results, goToTreeViolations(ctx, doc, v, "catalog additional-action", 0, judged)...)
+			}
+		}
+	}
+
 	// ISO 14289-2 §8.8 requires every intra-document destination to be a
 	// structure destination, regardless of where it is reached from. That
 	// covers Link /Dest entries and GoTo actions hanging off any

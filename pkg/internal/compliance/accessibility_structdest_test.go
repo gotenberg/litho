@@ -117,3 +117,46 @@ func TestOutlineStructureDestination(t *testing.T) {
 		})
 	}
 }
+
+// TestCatalogAAStructureDestination pins ISO 14289-2, 8.8 t2 on the GoTo
+// actions of the catalog /AA. Its document-level triggers WC, WS, DS, WP and DP
+// (ISO 32000-1, Table 197) carry actions as a page's O and C do, and veraPDF
+// builds them (PDCatalogAdditionalActions) and judges each GoTo among them; a
+// key outside that list names no catalog action. Every case was measured with
+// veraPDF 1.30.2 on the same shape.
+func TestCatalogAAStructureDestination(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		aa   string // the catalog /AA
+		t2   int
+	}{
+		{"a GoTo under WC", "<< /WC << /S /GoTo /D [3 0 R /Fit] >> >>", 1},
+		{"GoTos under every document trigger", "<< /WC << /S /GoTo >> /WS << /S /GoTo >> /DS << /S /GoTo >> /WP << /S /GoTo >> /DP << /S /GoTo >> >>", 5},
+		{"a GoTo under WS with a structure destination", "<< /WS << /S /GoTo /D [3 0 R /Fit] /SD [5 0 R] >> >>", 0},
+		{"a GoTo under E, no catalog trigger", "<< /E << /S /GoTo /D [3 0 R /Fit] >> >>", 0},
+		{"a GoTo run through /Next after a WC action", "<< /WC << /S /JavaScript /JS (1) /Next << /S /GoTo >> >> >>", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc, _ := objsDocPDF(t,
+				"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R /MarkInfo << /Marked true >> /Lang (en) /AA "+tt.aa+" >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+				"<< /Type /StructTreeRoot /K 5 0 R /Namespaces [6 0 R] >>",
+				"<< /Type /StructElem /S /Document /NS 6 0 R /P 4 0 R >>",
+				"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+			)
+			viols, err := ValidatePDFUA(ctx, doc, models.PDFUA2)
+			if err != nil {
+				t.Fatalf("ValidatePDFUA: %v", err)
+			}
+			if got := countRuleErrs(t, viols, Rule_14289_2_8_8_t02); got != tt.t2 {
+				t.Errorf("8.8 t2 fired %d times, want %d", got, tt.t2)
+			}
+		})
+	}
+}
