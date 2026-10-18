@@ -1,0 +1,54 @@
+%PDF-1.4
+%¿÷¢þ
+1 0 obj
+<< /Pages 2 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /Count 1 /Kids [ 3 0 R ] /Type /Pages >>
+endobj
+3 0 obj
+<< /Contents 4 0 R /MediaBox [ 0 0 612 792 ] /Parent 2 0 R /Resources << /Font << /TN 5 0 R /TP 6 0 R >> >> /Type /Page >>
+endobj
+4 0 obj
+<< /Length 63 >>
+stream
+BT 10 700 Td
+/TN 12 Tf (ABCD) Tj
+0 -20 Td /TP 12 Tf (AB) Tj
+ET
+
+endstream
+endobj
+5 0 obj
+<< /CharProcs << /A 7 0 R /a12 7 0 R /alpha 7 0 R /uni00E9 7 0 R >> /Encoding << /Differences [ 65 /A /alpha /a12 /uni00E9 ] /Type /Encoding >> /FirstChar 65 /FontBBox [ 0 0 1000 1000 ] /FontMatrix [ 0.001 0 0 0.001 0 0 ] /LastChar 68 /Resources << >> /Subtype /Type3 /Type /Font /Widths [ 1000 1000 1000 1000 ] >>
+endobj
+6 0 obj
+<< /CharProcs << /A 8 0 R /g12 8 0 R >> /Encoding << /Differences [ 65 /A /g12 ] /Type /Encoding >> /FirstChar 65 /FontBBox [ 0 0 1000 1000 ] /FontMatrix [ 0.001 0 0 0.001 0 0 ] /LastChar 66 /Resources << >> /Subtype /Type3 /Type /Font /Widths [ 1000 1000 ] >>
+endobj
+7 0 obj
+<< /Length 42 >>
+stream
+1000 0 0 0 1000 1000 d1 0 0 1000 1000 re f
+endstream
+endobj
+8 0 obj
+<< /Length 42 >>
+stream
+1000 0 0 0 1000 1000 d1 0 0 1000 1000 re f
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000123 00000 n 
+0000000261 00000 n 
+0000000374 00000 n 
+0000000704 00000 n 
+0000000980 00000 n 
+0000001072 00000 n 
+trailer << /Root 1 0 R /Size 9 /ID [<5298ac48a74efbc2a604b02847c01c4a><5298ac48a74efbc2a604b02847c01c4a>] >>
+startxref
+1164
+%%EOF

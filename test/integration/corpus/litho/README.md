@@ -223,6 +223,7 @@ one deliberately rather than diffing it against a fresh build.
 | `patternshade_2b.pdf`  | PDF/A-2b     | Shadings a tiling cell or a Type 3 glyph reaches                 |
 | `patternglyph_2b.pdf`  | PDF/A-2b     | Type 3 glyphs a tiling cell shows, nested once                   |
 | `shadedefault_2b.pdf`  | PDF/A-2b     | Shading patterns over DeviceCMYK beside DeviceRGB, CMYK intent   |
+| `type3names_2u.pdf`    | PDF/A-2u     | Type 3 fonts with no `/ToUnicode`, glyph names their one meaning |
 
 ### Must-not-fire controls
 
@@ -656,6 +657,7 @@ which are covered under [Known divergences](#known-divergences).
 | `ttmaccopy_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `type0nodesc_2b.pdf`   | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 7    | 7    |
 | `type1notdef_2u.pdf`   | 7    | 4    | 8    | 4    | 6    | 8    | 4    | 6    | 6   | 6    | 7    | 10   | 10   |
+| `type3names_2u.pdf`    | 5    | 2    | 5    | 2    | 3    | 5    | 2    | 3    | 3   | 3    | 4    | 7    | 7    |
 | `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
@@ -6803,6 +6805,32 @@ holds the name, so `N2` alone fails it, where litho reported five fonts. veraPDF
 1.30.2 and litho report the same rule set in all thirteen cells. Remediation
 leaves the value rule on the output at every manifest profile in both modes, on
 both tools: no `/ToUnicode` entry gives `.notdef` a value other than its own.
+
+### `type3names_2u.pdf`
+
+A Type 3 font names its glyphs only through its `/Encoding` `/Differences`
+array (ISO 32000-1, 9.6.5), so with no `/ToUnicode` a glyph name is the one
+statement of what a glyph means. veraPDF's PDF/A-1 flavour reads a Type 3
+glyph's Unicode value from the CMap alone, so every shown code fails ISO
+19005-1, 6.3.8 t1 at PDF/A-1a. At PDF/A-2a, 2u, 3a and 3u, PDF/UA-1 and
+PDF/UA-2 it accepts a name the Adobe Glyph List, the Symbol font or
+ZapfDingbats lists, and refuses a `uniXXXX` spelling and a producer's own name.
+Neither font carries a `/ToUnicode`:
+
+| Font | `/Differences` from `41`, all shown | Answers at PDF/A-1a | Answers at PDF/A-2u |
+| ---- | ----------------------------------- | ------------------- | ------------------- |
+| `TN` | `A`, `alpha`, `a12`, `uni00E9`      | `6.3.8/1` x4        | `6.2.11.7.2/1` (44) |
+| `TP` | `A`, `g12`                          | `6.3.8/1` x2        | `6.2.11.7.2/1` (42) |
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+Remediation writes `TN` a `/ToUnicode` from its names (U+0041, U+03B1, U+261E,
+U+00E9) at PDF/A-1a, 2a, 2u, 3a, 3u, PDF/UA-1 and PDF/UA-2, in both modes, and
+writes `TP` none: `g12` states no value, and a map leaving `42` out would claim
+a repair veraPDF does not see. The outputs keep `TP`'s findings alone, the same
+rule set on both tools at every profile: `6.3.8/1` x2 at PDF/A-1a,
+`6.2.11.7.2/1` x1 at PDF/A-2a, 2u, 3a and 3u, `7.21.7/1` x1 at PDF/UA-1 and
+`8.4.5.8/1` x1 at PDF/UA-2. The other six profiles carry no Unicode rule and
+fully fix, but PDF/A-4f, which keeps `6.9/5`.
 
 ### `fontnohead_2b.pdf`
 
