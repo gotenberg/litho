@@ -95,7 +95,7 @@ def _name():
     return struct.pack(">HHH", 0, len(records), 6 + 12 * len(records)) + entries + storage
 
 
-def _post():
+def _post(glyph_names):
     """A 'post' table in format 2.0, which carries the glyph names.
 
     Format 3.0 would be shorter but stores no names, and a non-symbolic
@@ -109,10 +109,10 @@ def _post():
     # as Pascal strings, which the format numbers from 258 upwards.
     indices = [0]
     names = b""
-    for position, name in enumerate(GLYPH_NAMES[1:]):
+    for position, name in enumerate(glyph_names[1:]):
         indices.append(258 + position)
         names += bytes([len(name)]) + name.encode("ascii")
-    body = struct.pack(">H", len(GLYPH_NAMES))
+    body = struct.pack(">H", len(glyph_names))
     body += b"".join(struct.pack(">H", i) for i in indices)
     return header + body + names
 
@@ -122,15 +122,17 @@ def _checksum(data):
     return sum(struct.unpack(">%dI" % (len(padded) // 4), padded)) & 0xFFFFFFFF
 
 
-def build(subtables):
+def build(subtables, glyph_names=GLYPH_NAMES):
     """Return the bytes of a TrueType program carrying exactly subtables.
 
     subtables is a list of (platformID, encodingID, {charCode: glyphName}).
     Passing several lets a fixture choose the count and the platform pairs the
-    6.2.11.6 tests turn on.
+    6.2.11.6 tests turn on. glyph_names renames the three glyphs in the 'post'
+    table, `.notdef` first; the outlines stay the same.
     """
+    assert len(glyph_names) == len(GLYPH_NAMES) and glyph_names[0] == ".notdef"
     resolved = [
-        (pid, eid, {code: GLYPH_NAMES.index(name) for code, name in mapping.items()})
+        (pid, eid, {code: glyph_names.index(name) for code, name in mapping.items()})
         for pid, eid, mapping in subtables
     ]
 
@@ -169,7 +171,7 @@ def build(subtables):
     )
     maxp = struct.pack(">IHHHHHHHHHHHHHH", 0x00010000, len(GLYPH_NAMES), 4, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0)
     hmtx = b"".join(struct.pack(">Hh", ADVANCE_WIDTH, 50) for _ in GLYPH_NAMES)
-    post = _post()
+    post = _post(glyph_names)
 
     tables = {
         b"cmap": _cmap(resolved),

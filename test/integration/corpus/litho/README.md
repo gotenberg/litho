@@ -209,6 +209,7 @@ one deliberately rather than diffing it against a fresh build.
 | `fnlimits_1b.pdf`      | PDF/A-1b     | Type 4 functions past the limits, reached and unreached          |
 | `oirgb_2b.pdf`         | PDF/A-2b     | Device colour images under a non-sRGB RGB output intent          |
 | `ocgconfigs_2b.pdf`    | PDF/A-2b     | An optional content `/Order` incomplete in `/Configs` alone      |
+| `ttmaccopy_2b.pdf`     | PDF/A-2b     | Symbolic TrueType whose (1,0) `cmap` copies (3,1), and a control |
 
 ### Must-not-fire controls
 
@@ -608,6 +609,7 @@ which are covered under [Known divergences](#known-divergences).
 | `treekids_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
+| `ttmaccopy_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `type0nodesc_2b.pdf`   | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 7    | 7    |
 | `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
@@ -6225,6 +6227,33 @@ with the same counts at every PDF/A level; at the PDF/UA levels veraPDF counts
 the untagged-content rules once per text show. The text change moves no
 validation or remediation result: litho reports and remediates the file alike
 before and after.
+
+### `ttmaccopy_2b.pdf`
+
+ISO 32000-1, 9.6.6.4 has a symbolic TrueType font with no `/Encoding` and no
+(3,0) subtable select its glyphs through the (1,0) Macintosh subtable, whose
+codes are Mac OS Roman characters. Some producers write the (3,1) mapping under
+the (1,0) record instead, so the "Mac" table names nothing of its own. litho
+read such a copy as Mac OS Roman; it now reads a symbolic font whose (1,0)
+subtable maps every code it covers in 0x80-0xFF to the glyph (3,1) maps the
+same value to through the glyphs its codes select, and keeps Mac OS Roman for
+a genuine table. pdfjs `issue15910` is the one corpus file that reaches the
+construct. Both fonts embed the three-glyph program with the glyphs named
+Adieresis and adieresis:
+
+| Font | (1,0) subtable             | (3,1) subtable             | Shows | Text |
+| ---- | -------------------------- | -------------------------- | ----- | ---- |
+| `M1` | C4 Adieresis, E4 adieresis | C4 Adieresis, E4 adieresis | C4 E4 | Ää   |
+| `M2` | 80 Adieresis, 8A adieresis | C4 Adieresis, E4 adieresis | 80 8A | Ää   |
+
+Before, litho extracted "ƒ‰" for `M1`. `M2` is the control: any reading but
+Mac OS Roman gives "€Š". Both programs declare two subtables and no (3,0), so
+6.2.11.6 t4 fires once per font, and neither declares `/Encoding`, so t3 stays
+silent. veraPDF 1.30.2 and litho report the same rule set in all thirteen
+cells, with the same counts at every PDF/A level; at the PDF/UA levels veraPDF
+counts the untagged-content rules once per text show. The text change moves no
+validation or remediation result: litho reports and remediates the file alike
+before and after, and remediation writes no `/ToUnicode` for either font.
 
 ### `stdremap_ua2.pdf` and `remapchain_ua2.pdf`
 
