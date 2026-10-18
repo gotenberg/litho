@@ -646,7 +646,7 @@ func decodeSeparation(
 	idx := 0
 	for y := range height {
 		for x := range width {
-			img.Set(x, y, lut[unpacked[idx]])
+			img.SetRGBA(x, y, lut[unpacked[idx]])
 			idx++
 		}
 	}
@@ -762,7 +762,7 @@ func decodeDeviceN(
 					memo[key] = rgb
 				}
 			}
-			img.Set(x, y, rgb)
+			img.SetRGBA(x, y, rgb)
 		}
 	}
 	return img, nil
@@ -1154,10 +1154,10 @@ func decodeIndexed(data []byte, width, height int, pal palette) (image.Image, er
 			idx++
 			switch pal.base {
 			case "DeviceGray":
-				img.Set(x, y, color.RGBA{R: e[0], G: e[0], B: e[0], A: 255})
+				img.SetRGBA(x, y, color.RGBA{R: e[0], G: e[0], B: e[0], A: 255})
 			case "DeviceCMYK":
 				c, m, yy, k := float64(e[0])/255, float64(e[1])/255, float64(e[2])/255, float64(e[3])/255
-				img.Set(x, y, color.RGBA{
+				img.SetRGBA(x, y, color.RGBA{
 					R: uint8((1 - c) * (1 - k) * 255),
 					G: uint8((1 - m) * (1 - k) * 255),
 					B: uint8((1 - yy) * (1 - k) * 255),
@@ -1165,9 +1165,9 @@ func decodeIndexed(data []byte, width, height int, pal palette) (image.Image, er
 				})
 			case "Lab":
 				r, g, b := labEntryToRGB(e, pal.lab)
-				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
+				img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 			default:
-				img.Set(x, y, color.RGBA{R: e[0], G: e[1], B: e[2], A: 255})
+				img.SetRGBA(x, y, color.RGBA{R: e[0], G: e[1], B: e[2], A: 255})
 			}
 		}
 	}
@@ -1712,7 +1712,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 				case isCal:
 					r, g, b = cal.convertRGB(r, g, b)
 				}
-				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
+				img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 				idx += 3
 			}
 		}
@@ -1738,12 +1738,10 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 				grey[s] = cal.convertGrey(v)
 			}
 		}
-		idx := 0
-		for y := range height {
-			for x := range width {
-				img.Set(x, y, color.Gray{Y: grey[decodedData[idx]]})
-				idx++
-			}
+		// A Gray image at the origin stores its pixels row by row with no
+		// padding, in the order the samples come.
+		for i, s := range decodedData[:expectedLen] {
+			img.Pix[i] = grey[s]
 		}
 		return finishRows(img, validRows), nil
 
@@ -1762,14 +1760,14 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 				idx += 4
 				if conv != nil {
 					r, g, b := conv.convert(px[:])
-					img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
+					img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 					continue
 				}
 				c, m, yy, k := float64(px[0])/255, float64(px[1])/255, float64(px[2])/255, float64(px[3])/255
 				r := uint8((1 - c) * (1 - k) * 255)
 				g := uint8((1 - m) * (1 - k) * 255)
 				b := uint8((1 - yy) * (1 - k) * 255)
-				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
+				img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 			}
 		}
 		return finishRows(img, validRows), nil
