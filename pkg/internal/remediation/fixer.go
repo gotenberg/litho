@@ -100,6 +100,7 @@ var registry = []fixer{
 	{name: "annot-nesting", safety: safetyStructural, matches: matchAnnotNesting, apply: fixAnnotNesting},
 	{name: "note-id", safety: safetyStructural, matches: matchNoteID, apply: fixNoteID},
 	{name: "note-namespace", safety: safetyStructural, matches: matchNoteNamespace, apply: fixNoteNamespace},
+	{name: "heading-level", safety: safetyStructural, matches: matchHeadingLevel, apply: fixHeadingLevel},
 	{name: "table-sections", safety: safetyStructural, matches: matchTableSections, apply: fixTableSections},
 	{name: "table-cells", safety: safetyStructural, matches: matchTableCells, apply: fixTableCells},
 	{name: "list-body", safety: safetyStructural, matches: matchListBody, apply: fixListBody},
