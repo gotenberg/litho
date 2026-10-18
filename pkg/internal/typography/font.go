@@ -62,6 +62,12 @@ type Font struct {
 	// predefined non-Identity CMap; nil otherwise. See [Font.metricCID].
 	encodingCIDs *encodingCIDs
 
+	// widthStated marks the [Font.Widths] entries a simple font's /Widths
+	// array states as numbers, index for index; nil when [Font.Widths] came
+	// from elsewhere ([injectStandard14Widths]). It tells a stated width of
+	// 0 from an entry litho could not read. See [Font.simpleWidth].
+	widthStated []bool
+
 	CIDIdentityFallback bool // True when CIDToGIDMap is /Identity and no ToUnicode/embedded font
 	CIDOffset           int  // Offset to add to CID values before treating as Unicode (detected from /W array)
 
@@ -89,6 +95,8 @@ type Font struct {
 //   - /FontBBox average, then absolute fallback of 1000 (= 1 em).
 //
 // A /W entry of 0 is a width and stands: only the CIDs /W omits fall through.
+// So is a /Widths entry of 0: only the entries that are not numbers fall
+// through ([Font.simpleWidth]).
 //
 // # Corpus evidence
 //
@@ -97,6 +105,12 @@ type Font struct {
 //   - pdfjs, govdocs, pdfcpu, facturx, pdf20: honouring /W 0 changes three
 //     files, all toward PDF.js (complex_ttf_font, bug1046314,
 //     ThuluthFeatures), and no file moves away from it.
+//   - pdfjs issue7855.pdf: a Calibri subset states /Widths 0 for 154 codes,
+//     the space among them. Read at a fallback width, they pushed the tail
+//     of "28.11.2016" past the page clip, and litho read "28.11.2".
+//   - pdfjs issue18208.pdf: 72 Helvetica-Bold dictionaries state /Widths 0
+//     for 246 of their codes. Read at a fallback width, those glyphs ran the
+//     words together ("TorredeMonsanto") where PDF.js reads the spaces.
 func (f *Font) GlyphWidth(charCode int) float64 {
 	// Type 3 fonts: look up glyph name via encoding, then apply FontMatrix.
 	if f.Type3Widths != nil && charCode >= 0 && charCode <= 255 {
@@ -151,9 +165,8 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 	}
 
 	// Simple fonts: /Widths array.
-	idx := charCode - f.FirstChar
-	if idx >= 0 && idx < len(f.Widths) && f.Widths[idx] > 0 {
-		return f.Widths[idx]
+	if w, ok := f.simpleWidth(charCode); ok {
+		return w
 	}
 
 	if f.MissingWidth > 0 {
@@ -161,6 +174,26 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 	}
 
 	return f.resolveWidth(charCode)
+}
+
+// simpleWidth returns the /Widths entry of a simple font for charCode and
+// whether it gives the code a width. ISO 32000-1, 9.6.2.1, Table 111 gives
+// /Widths the width of every code from /FirstChar to /LastChar and leaves
+// /MissingWidth to the codes outside that range, so an entry the array states
+// as 0 is a width, not an omission. PDF.js keeps it too (src/core/evaluator.js
+// extractWidths, src/core/fonts.js _charToGlyph): only an entry that is not a
+// number falls to the default width. An entry [injectStandard14Widths] left
+// at 0 states nothing, and falls through as before.
+func (f *Font) simpleWidth(charCode int) (float64, bool) {
+	idx := charCode - f.FirstChar
+	if idx < 0 || idx >= len(f.Widths) {
+		return 0, false
+	}
+	w := f.Widths[idx]
+	if w > 0 {
+		return w, true
+	}
+	return 0, w == 0 && idx < len(f.widthStated) && f.widthStated[idx]
 }
 
 // resolveWidth implements steps 4-5 of the fallback chain.
@@ -265,7 +298,7 @@ func parseCIDVerticalWidths(w2Arr ast.PdfArray) map[int][3]float64 {
 	return metrics
 }
 
-// resolveMetricsArray returns a copy of a /W or /W2 array whose elements,
+// resolveMetricsArray returns a copy of a /W, /W2 or /Widths array whose elements,
 // and the elements of the arrays it nests, are direct objects. ISO 32000-1,
 // 7.3.10 lets any array element be an indirect reference, and a /W array
 // whose individual form holds its widths in an indirect array, [0 14 0 R],
@@ -573,7 +606,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	}
 
 	// Type1 CharStrings width fallback: fill in advance widths that the
-	// PDF-level /Widths array left at zero or did not cover. TeX-subset
+	// PDF-level /Widths array left unreadable or did not cover. TeX-subset
 	// Type 1 fonts commonly emit /FirstChar, /LastChar, and a /Widths
 	// array that only spans a narrow range, yet use byte codes outside
 	// that range for math/symbol glyphs. Reading the widths straight
@@ -1067,8 +1100,9 @@ func resolveSimpleFontMetrics(ctx context.Context, doc *document.Document, fontD
 		}
 		if wArr != nil {
 			font.Widths = make([]float64, len(wArr))
-			for i, item := range wArr {
-				font.Widths[i] = document.Float(item)
+			font.widthStated = make([]bool, len(wArr))
+			for i, item := range resolveMetricsArray(ctx, doc, wArr) {
+				font.Widths[i], font.widthStated[i] = document.Number(item)
 			}
 		}
 	}
@@ -1655,8 +1689,9 @@ func builtinNumericNameMisreads(name string, code int) bool {
 // name mapping comes from the same Type 1 encoding vector the
 // encoding-fill step uses, so the lookup does not rely on a lossy
 // Unicode round-trip that would miss symbol/dingbats names outside
-// the main Adobe Glyph List. Existing non-zero /Widths entries from
-// the PDF dictionary stay authoritative; only zeros get filled.
+// the main Adobe Glyph List. Every width the /Widths array states, 0
+// included, stays authoritative ([Font.simpleWidth]); only entries it
+// leaves unreadable get filled.
 func applyType1CharStringWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
@@ -1681,7 +1716,7 @@ func applyType1CharStringWidths(ctx context.Context, doc *document.Document, fon
 		if idx < 0 || idx >= len(font.Widths) {
 			continue
 		}
-		if font.Widths[idx] > 0 {
+		if _, stated := font.simpleWidth(code); stated {
 			continue
 		}
 		w, ok := widths[name]
@@ -2930,6 +2965,7 @@ func injectStandard14Widths(font *Font, baseFont string) {
 	font.FirstChar = 0
 	font.LastChar = 255
 	font.Widths = widths
+	font.widthStated = nil
 }
 
 // symbolByRune and dingbatsByRune invert the glyph-name to Unicode maps of
