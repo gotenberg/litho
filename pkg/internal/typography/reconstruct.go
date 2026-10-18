@@ -1125,9 +1125,12 @@ func spaceGlyphsBetween(elems []models.TextElement, p, i int) int {
 // glyph is compared (src/core/evaluator.js, updateAdvanceScale and
 // compareWithLastPosition). So the size is the Tf size of p at the scale
 // the text matrix gives i, as for a word space ([wordSpaceThreshold]).
-// Across a marked-content boundary, which ends the item, and without fonts,
-// the smaller size of the two stands: it keeps a drop cap from swallowing
-// the space after it.
+// A space glyph shown in another font or size than p ends the item where it
+// is shown (buildTextContentItem), before any Tm after it, so the item keeps
+// the scale the text matrix gives that space ([itemEndingSpace]). Across a
+// marked-content boundary, which ends the item, and without fonts, the
+// smaller size of the two stands: it keeps a drop cap from swallowing the
+// space after it.
 //
 // # Corpus evidence
 //
@@ -1140,10 +1143,26 @@ func spaceGlyphsBetween(elems []models.TextElement, p, i int) int {
 //     on 2 more pages of files that still differ (govdocs
 //     thread_000_000282.pdf, thread_300_300695.pdf), and on none fewer;
 //     facturx, pdf20, pdfcpu and pdfjs do not move.
+//   - govdocs thread_300_300653.pdf page 31: every letter of
+//     "angleOfAttack_d" set by an 8.9-point Tm in one font and every space
+//     glyph between two letters by a 12-point Tm in another, each letter
+//     placed where the space starts. Measured at 8.9 points, the 0.29-unit
+//     gap after "O" kept the space ("angleO fAttack_d"), where PDF.js
+//     measures it at the 12 points of the space and reads "angleOfAttack_d".
+//   - All corpora: taking the scale of a space glyph that ends the item
+//     makes words match PDF.js on 1 more file (govdocs
+//     thread_300_300653.pdf) and on 1 more page of a file that still differs
+//     (govdocs thread_300_300695.pdf), and on none fewer; facturx, pdf20,
+//     pdfcpu and pdfjs do not move.
 func literalSpaceSize(elems []models.TextElement, fonts []runFont, p, i int) float64 {
 	prev, el := elems[p], elems[i]
 	if fonts != nil && prev.MCID == el.MCID {
 		prevSize, size := math.Abs(fonts[p].size), math.Abs(fonts[i].size)
+		if k := itemEndingSpace(elems, fonts, p, i); k >= 0 {
+			if s := math.Abs(fonts[k].size); prevSize > 0 && s > 0 {
+				return prevSize * elems[k].FontSize / s
+			}
+		}
 		if prevSize > 0 && size > 0 {
 			return prevSize * el.FontSize / size
 		}
@@ -1632,4 +1651,22 @@ func (m markAdvances) shift(k int) float64 {
 // corrected by.
 func (m markAdvances) drift(a, b int) float64 {
 	return m.shift(b) - m.shift(a)
+}
+
+// itemEndingSpace returns the first space glyph strictly between the elements
+// p and i that PDF.js ends the text item of p at, or -1: one shown in another
+// size, or in a font of another resource name and another font, the change
+// PDF.js starts a new item on (src/core/evaluator.js, buildTextContentItem,
+// as [runTracker.fontChanged] reads it).
+func itemEndingSpace(elems []models.TextElement, fonts []runFont, p, i int) int {
+	for k := p + 1; k < i; k++ {
+		if !isSpaceGlyph(elems[k].Text) {
+			continue
+		}
+		a, b := fonts[p], fonts[k]
+		if a.size != b.size || (a.name != b.name && a.font != b.font) {
+			return k
+		}
+	}
+	return -1
 }
