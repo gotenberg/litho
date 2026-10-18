@@ -1082,9 +1082,12 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 // writing advances down the page (ISO 32000-1, 9.7.4.3, a negative w1), and
 // text rotated by 90° advances up it or, rotated by -90°, down it, so the
 // sign of the advance's Y component decides which way a gap is positive.
-// PDF.js measures the same advance in the text's own direction
-// (src/core/evaluator.js, compareWithLastPosition, which swaps and negates
-// the coordinates for each orthogonal rotation).
+// Text turned upside down, rotated by 180° ([isHalfTurn]), advances leftward
+// along the page X axis, so its gap is positive when the next glyph sits left
+// of the end of the previous one. PDF.js measures the same advance in the
+// text's own direction (src/core/evaluator.js, compareWithLastPosition,
+// which swaps and negates the coordinates for each orthogonal rotation and
+// negates both for a half turn).
 //
 // A width of 0 is a glyph the font gives no advance (a /W or /Widths entry
 // of 0, ISO 32000-1, 9.6.2.1 and 9.7.4.3), so the gap is measured from its
@@ -1094,6 +1097,14 @@ func reconstructWithBeads(ctx context.Context, elements []models.TextElement, be
 //
 // # Corpus evidence
 //
+//   - govdocs thread_100_100518.pdf, thread_000_000744.pdf and 7 more: chart
+//     labels and table headings set upside down read every gap as negative,
+//     so no word space was ever inserted: "TransferCargo", and "Mid-Atlantic"
+//     for a heading tracked letter by letter that PDF.js reads
+//     "M i d - A t l a n t i c".
+//     Reading the gap leftward makes words match PDF.js on 6 more files (all
+//     govdocs) and on none fewer; facturx, pdf20, pdfcpu and pdfjs do not
+//     move.
 //   - pdfjs issue5747.pdf, govdocs thread_000_000262.pdf and 9 more: text
 //     rotated by -90° read every gap as negative, so no word space was ever
 //     inserted ("dolorsitamet,").
@@ -1116,6 +1127,8 @@ func computeLineGap(prev, curr models.TextElement) float64 {
 		}
 	case isRotated(curr.Angle):
 		delta = alongDist(prev, curr)
+	case isHalfTurn(curr.Angle):
+		delta = prev.X - curr.X
 	default:
 		delta = curr.X - prev.X
 	}
@@ -1254,6 +1267,13 @@ func isRotated(angle float64) bool {
 		return false // ~180° (mirrored horizontal)
 	}
 	return true
+}
+
+// isHalfTurn reports whether the text angle is close to 180°: text turned
+// upside down, whose glyphs advance leftward along the page X axis.
+func isHalfTurn(angle float64) bool {
+	const threshold = math.Pi / 180 // 1 degree
+	return math.Abs(math.Abs(angle)-math.Pi) < threshold
 }
 
 // quarterTurnLine reports whether a and b are set along the same line
