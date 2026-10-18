@@ -87,6 +87,16 @@ type Font struct {
 //   - Simple font /MissingWidth from the /FontDescriptor.
 //   - TrueType binary hmtx: read advance width from the embedded font program.
 //   - /FontBBox average, then absolute fallback of 1000 (= 1 em).
+//
+// A /W entry of 0 is a width and stands: only the CIDs /W omits fall through.
+//
+// # Corpus evidence
+//
+//   - pdfjs complex_ttf_font.pdf: combining marks carry /W 0 under /DW 1000;
+//     reading 1000 clipped 85 of 395 characters off the page.
+//   - pdfjs, govdocs, pdfcpu, facturx, pdf20: honouring /W 0 changes three
+//     files, all toward PDF.js (complex_ttf_font, bug1046314,
+//     ThuluthFeatures), and no file moves away from it.
 func (f *Font) GlyphWidth(charCode int) float64 {
 	// Type 3 fonts: look up glyph name via encoding, then apply FontMatrix.
 	if f.Type3Widths != nil && charCode >= 0 && charCode <= 255 {
@@ -111,7 +121,12 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 
 	// CIDFont (Type0): check /W array.
 	if f.CIDWidths != nil {
-		if w, ok := f.CIDWidths[charCode]; ok && w > 0 {
+		// A /W entry of 0 is a width, not an omission: ISO 32000-1, 9.7.4.3
+		// gives /DW only to the CIDs /W does not list, and PDF.js keeps a
+		// listed 0 (src/core/evaluator.js extractWidths, fonts.js charToGlyph).
+		// Combining marks carry it, and reading /DW for them pushes the rest
+		// of the line past the page clip.
+		if w, ok := f.CIDWidths[charCode]; ok && w >= 0 {
 			return w
 		}
 		// Try hmtx before an implied DW: many CIDFonts leave /DW to its

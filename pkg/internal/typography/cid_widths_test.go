@@ -78,3 +78,29 @@ func TestGlyphWidth_StatedDWWinsOverTheFontProgram(t *testing.T) {
 		t.Errorf("GlyphWidth(1) = %v, want the /W entry 278", got)
 	}
 }
+
+// TestGlyphWidth_ZeroCIDWidthIsAWidth pins that a /W entry of 0 gives its CID
+// an advance of 0 rather than /DW or the font program's advance. ISO 32000-1,
+// 9.7.4.3 makes /DW the width of the CIDs /W omits, and an entry of 0 names
+// the CID. Combining marks in pdfjs complex_ttf_font.pdf carry /W 0 under /DW
+// 1000; reading 1000 pushed each line past the page clip and lost its tail.
+func TestGlyphWidth_ZeroCIDWidthIsAWidth(t *testing.T) {
+	t.Parallel()
+
+	for _, stated := range []bool{true, false} {
+		font := &Font{
+			Subtype:      "Type0",
+			CIDWidths:    map[int]float64{7: 0, 8: 250},
+			MissingWidth: 1000,
+			DWStated:     stated,
+			HmtxWidths:   map[uint16]uint16{7: 1024},
+			UnitsPerEm:   2048,
+		}
+		if got := font.GlyphWidth(7); got != 0 {
+			t.Errorf("DWStated=%v: GlyphWidth(7) = %v, want the /W entry 0", stated, got)
+		}
+		if got := font.GlyphWidth(8); got != 250 {
+			t.Errorf("DWStated=%v: GlyphWidth(8) = %v, want 250", stated, got)
+		}
+	}
+}
