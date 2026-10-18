@@ -277,7 +277,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 	// 19005-1 §6.3.8, and passes Helvetica in the same shape. An embedded
 	// Symbol still names its glyphs through its program, which the per-code
 	// check below reads.
-	symbolWithoutEncoding := isSymbolFontByName(ctx, doc, fontDict) && fontDict["Encoding"] == nil
+	symbolWithoutEncoding := isStandardSymbolByName(ctx, doc, fontDict) && fontDict["Encoding"] == nil
 	if standard14BuiltinEncodingApplies(ctx, doc, fontDict) && !isZapfDingbatsByName(ctx, doc, fontDict) && !symbolWithoutEncoding {
 		return usedDifferencesGlyphNamesResolvable(ctx, doc, fontDict, usage)
 	}
@@ -765,50 +765,17 @@ var symbolEncodingNames = map[string]bool{
 	".notdef": true,
 }
 
-// isSymbolFontByName returns true if the font's BaseFont name indicates it's
-// the Adobe Symbol font or a subset thereof. The Symbol font is specifically
-// exempt from ToUnicode per §6.3.8 condition 2.
-func isSymbolFontByName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
-	baseFontName, _ := document.ResolveName(ctx, doc, fontDict["BaseFont"])
-	name := string(baseFontName)
-	// Strip subset prefix (e.g., "ABCDEF+Symbol" → "Symbol")
-	if idx := strings.Index(name, "+"); idx >= 0 {
-		name = name[idx+1:]
+// isStandardSymbolByName reports whether the font is the standard Symbol font
+// ISO 32000-1, 9.6.2.2 names, allowing the "ABCDEF+" subset prefix 9.6.4
+// defines. A name that merely contains "Symbol" is a different font: its name
+// says nothing about the glyphs its codes select.
+func isStandardSymbolByName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	base, _ := document.ResolveName(ctx, doc, fontDict["BaseFont"])
+	name := string(base)
+	if _, suffix, ok := strings.Cut(name, "+"); ok {
+		name = suffix
 	}
-	// Accept exact "Symbol" or names containing "Symbol" as a word boundary
-	// (e.g., "MdSymbolA-Regular" contains "Symbol").
-	return strings.Contains(name, "Symbol")
-}
-
-// allGlyphNamesInSymbolEncoding returns true if all glyph names in a Type 1
-// font's CharSet are from the Symbol font encoding (PDF Reference Appendix D).
-func allGlyphNamesInSymbolEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
-	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
-	if fd == nil {
-		return false
-	}
-	charsetObj, ok := fd["CharSet"]
-	if !ok {
-		return false
-	}
-	charsetStr, err := document.ResolveString(ctx, doc, charsetObj)
-	if err != nil || len(charsetStr) == 0 {
-		return false
-	}
-	decoded := document.DecodePdfString(charsetStr)
-	names := strings.SplitSeq(decoded, "/")
-	count := 0
-	for name := range names {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		count++
-		if !symbolEncodingNames[name] {
-			return false
-		}
-	}
-	return count > 0
+	return name == "Symbol"
 }
 
 // everyUsedGlyphNameHasUnicode reports whether every character code the content
@@ -1293,6 +1260,10 @@ func encodingGlyphNames(name string, table map[byte]rune) map[byte]string {
 //     /Differences. veraPDF passes all 27 (passedChecks=27) while litho
 //     reported the font at PDF/A-2u, 2a, 3a and 3u and stayed silent at
 //     PDF/UA-1 and UA-2. It backs not scoping the TrueType disjunct to PDF/UA.
+//   - All corpora: the two exemptions a /BaseFont holding "Symbol" used to
+//     earn, by its /CharSet or by skipping the shown codes its encoding leaves
+//     unnamed, exempted no font at PDF/A-1a, 2u, 3u, 4 or a file's own
+//     profile. litho symbolname_2u.pdf plants the one shape that reached them.
 func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := toUnicodeRule(profile)
 	if rule.Specification == "" {
@@ -1436,26 +1407,16 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		fontEncodingIsDict(ctx, doc, fontDict)
 
 	if !dingbats && (subtype == "Type1" || subtype == "MMType1" || trueTypeWithUsage) {
+		// No exemption follows from the font's name or its /CharSet. ISO
+		// 19005-2, 6.2.11.7.2 (with ISO 19005-1, 6.3.8 and ISO 14289-1,
+		// 7.21.7) judges the glyph each shown code selects, whose Unicode
+		// value ISO 32000-1, 9.10.2 derives from its glyph name, and veraPDF
+		// asks the same of every Glyph (toUnicode != null) whatever /BaseFont
+		// says. A /CharSet is meaningful for Type 1 fonts alone (ISO 32000-1,
+		// Table 122) and lists the glyphs a program holds, not the ones a page
+		// shows.
 		if allGlyphNamesAGLResolvable(ctx, doc, fontDict, usage) {
 			return nil
-		}
-		// Exemption (b3): The Symbol font itself (BaseFont = Symbol or
-		// *+Symbol) is exempt when all CharSet names are in the standard
-		// Symbol encoding set.
-		if isSymbolFontByName(ctx, doc, fontDict) && allGlyphNamesInSymbolEncoding(ctx, doc, fontDict) {
-			return nil
-		}
-		// Exemption (b4): Symbol-type fonts where only the USED character
-		// codes map to resolvable glyph names. This handles fonts like
-		// MdSymbolA-Regular that have many custom glyphs in CharSet but
-		// only use standard Symbol/AGL glyphs in the content stream.
-		// Limited to Symbol-named fonts to avoid false exemptions for
-		// unrelated fonts (e.g., CMEX10) whose used chars happen to
-		// have resolvable names.
-		if isSymbolFontByName(ctx, doc, fontDict) && usage != nil && len(usage.charCodes) > 0 {
-			if usedGlyphNamesResolvable(ctx, doc, fontDict, usage) {
-				return nil
-			}
 		}
 	}
 
