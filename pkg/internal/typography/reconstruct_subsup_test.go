@@ -3,6 +3,7 @@ package typography
 import (
 	"bytes"
 	"context"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -111,5 +112,29 @@ func TestReconstructText_RunGapAtItemScale(t *testing.T) {
 	}
 	if got := reconstructText(context.Background(), in, fonts, nil); got != "f\n1" {
 		t.Errorf("got %q, want %q", got, "f\n1")
+	}
+}
+
+// TestReconstructText_RotatedLinePastSpaceGlyph pins that a line set a
+// quarter turn round reads past the space glyphs shown between its
+// glyphs, wherever those sit: a space set upright at the top of the page
+// between "(" and "A" neither breaks the line nor anchors the next glyph.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300493.pdf pages 6 and 8: "(A)" in rotated figure
+//     captions read "( A )".
+func TestReconstructText_RotatedLinePastSpaceGlyph(t *testing.T) {
+	t.Parallel()
+	quarter := math.Pi / 2
+	in := []models.TextElement{
+		{Text: "(", X: 539.69, Y: 381.53, Width: 2.5, FontSize: 9, Angle: quarter},
+		{Text: " ", X: 203, Y: 761, Width: 2, FontSize: 9},
+		{Text: "A", X: 539.69, Y: 383.99, Width: 5.5, FontSize: 9, Angle: quarter},
+		{Text: " ", X: 205, Y: 761, Width: 2, FontSize: 9},
+		{Text: ")", X: 539.69, Y: 389.47, Width: 2.5, FontSize: 9, Angle: quarter},
+	}
+	if got := ReconstructText(context.Background(), in, nil); got != "(A)" {
+		t.Errorf("got %q, want %q", got, "(A)")
 	}
 }

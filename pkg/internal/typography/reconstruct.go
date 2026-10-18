@@ -65,8 +65,16 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		}
 		prev := elements[i-1]
 		el := elements[i]
+		// Space glyphs carry no position in PDF.js ([runTracker]), on a
+		// rotated line as on an upright one: a glyph after one is read
+		// against the last glyph that painted, and a space glyph set
+		// rotated does not break the line or restart a run.
+		if isSpaceGlyph(prev.Text) && !isSpaceGlyph(runs.last.Text) {
+			prev = runs.last
+		}
 		var newLine bool
 		switch {
+		case isSpaceGlyph(el.Text) && (el.Vertical || isOrthogonalRotation(el.Angle) || isRotated(el.Angle)):
 		case quarterTurnLine(runs.last, el) && quarterTurnLine(prev, el):
 			// A line turned a quarter round keeps the runs of an upright
 			// one, across the page X axis ([acrossLine]), so a subscript
@@ -413,6 +421,12 @@ const (
 //   - All corpora: keeping space glyphs on the line makes words match
 //     PDF.js on 11 more files (govdocs 8, pdfcpu 2, pdfjs 1) and on none
 //     fewer; facturx and pdf20 do not move.
+//   - govdocs thread_300_300493.pdf pages 6 and 8: the letters of figure
+//     captions set a quarter turn round, "(A)", each have an upright space
+//     glyph shown at the top of the page between them. Read against that
+//     space, each letter broke its line, "( A )". Reading a rotated line past
+//     its space glyphs makes words match PDF.js on that file and on none
+//     fewer; facturx, pdf20, pdfcpu and pdfjs do not move.
 type runTracker struct {
 	// start is the glyph that started the current run, and startIdx its
 	// index.
