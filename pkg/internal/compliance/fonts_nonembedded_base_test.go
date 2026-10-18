@@ -40,8 +40,8 @@ func TestImplicitBaseNeedsAProgram(t *testing.T) {
 	// whether code 86 resolves to a name.
 	pdf := func(baseFont string, descriptor, embed bool) []byte {
 		const stream = "BT /F1 12 Tf 10 50 Td (V) Tj ET"
-		const prog = "%!PS-AdobeFont-1.0: Test 001.001\n/FontName /Test def\n" +
-			"currentdict end\ncurrentfile eexec\n"
+		prog := readableType1("%!PS-AdobeFont-1.0: Test 001.001\n/FontName /Test def\n" +
+			"currentdict end\ncurrentfile eexec\n")
 		font := "<< /Type /Font /Subtype /Type1 /BaseFont /" + baseFont +
 			" /Encoding << /Type /Encoding /Differences [219 /Zcaron] >>"
 		if descriptor {

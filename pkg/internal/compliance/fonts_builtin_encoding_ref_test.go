@@ -27,10 +27,10 @@ func TestBuiltinProgramEncoding_PredefinedReference(t *testing.T) {
 	// reference sits before the eexec-encrypted section, so no ciphertext is
 	// needed to read it.
 	program := func(encoding string) string {
-		return "%!PS-AdobeFont-1.0: Probe 001.001\n" +
+		return readableType1("%!PS-AdobeFont-1.0: Probe 001.001\n" +
 			"/FontName /Probe def\n" +
 			"/Encoding " + encoding + " def\n" +
-			"currentdict end\ncurrentfile eexec\n"
+			"currentdict end\ncurrentfile eexec\n")
 	}
 
 	// pdf shows code 97, which /Differences does not name, through an embedded
@@ -55,7 +55,7 @@ func TestBuiltinProgramEncoding_PredefinedReference(t *testing.T) {
 	}
 
 	// noEncoding is a program that names no encoding at all.
-	const noEncoding = "%!PS-AdobeFont-1.0: Probe 001.001\n/FontName /Probe def\ncurrentdict end\ncurrentfile eexec\n"
+	noEncoding := readableType1("%!PS-AdobeFont-1.0: Probe 001.001\n/FontName /Probe def\ncurrentdict end\ncurrentfile eexec\n")
 
 	// 61 is 'a', which StandardEncoding names; 18 is a control code no
 	// predefined encoding of Annex D names.
@@ -103,8 +103,8 @@ func TestBuiltinProgramEncoding_PredefinedReference(t *testing.T) {
 func TestBuiltinProgramEncoding_PFBContainerNamesNothing(t *testing.T) {
 	t.Parallel()
 
-	const cleartext = "%!PS-AdobeFont-1.0: Probe 001.001\n/FontName /Probe def\n" +
-		"/Encoding StandardEncoding def\ncurrentdict end\ncurrentfile eexec\n"
+	cleartext := readableType1("%!PS-AdobeFont-1.0: Probe 001.001\n/FontName /Probe def\n" +
+		"/Encoding StandardEncoding def\ncurrentdict end\ncurrentfile eexec\n")
 	// pfbSegment wraps the cleartext in the PFB ASCII segment header: 0x80, type
 	// 1, and a four-byte little-endian length.
 	pfbSegment := func(s string) string {

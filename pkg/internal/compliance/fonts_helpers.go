@@ -708,9 +708,11 @@ func deflateDataCorrupt(ctx context.Context, doc *document.Document, stream ast.
 // can read and leaves the font unembedded. veraPDF reports each of these under
 // ISO 19005-2 §6.2.11.4.1 t1.
 //
-// Only container-level mistakes are judged, never the program's internal
-// consistency: a truncated but well-formed program still embeds glyphs, and
-// deciding otherwise would turn every parser difference into a false positive.
+// Beyond the container, a program counts only when it holds the structure
+// veraPDF's parser needs before it reads a glyph ([fontProgramReadable]). Its
+// internal consistency past that point is not judged: a truncated but
+// well-formed program still embeds glyphs, and deciding otherwise would turn
+// every parser difference into a false positive.
 //
 // # Corpus evidence
 //
@@ -736,7 +738,12 @@ func streamHoldsFontProgram(ctx context.Context, doc *document.Document, key ast
 	if len(data) == 0 {
 		return false
 	}
+	return fontContainerMatches(key, data) && fontProgramReadable(key, data)
+}
 
+// fontContainerMatches reports whether data is in the container the font file
+// key declares; see [streamHoldsFontProgram].
+func fontContainerMatches(key ast.PdfName, data []byte) bool {
 	switch key {
 	case "FontFile":
 		// A Type 1 program is the clear, encrypted and fixed portions measured

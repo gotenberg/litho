@@ -1624,6 +1624,11 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 			doc.Logger.Debug("compliance: fonts: failed to decode font program stream", "key", key, "error", err)
 			continue
 		}
+		// A program veraPDF's parser cannot finish is no program to it: no rule
+		// weighs its glyphs, widths or cmap ([fontProgramReadable]).
+		if len(data) > 0 && !fontProgramReadable(key, data) {
+			continue
+		}
 		return data
 	}
 	return nil

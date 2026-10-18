@@ -25,6 +25,8 @@ import (
 func TestToUnicode_UnnamedCodeWithoutProgram(t *testing.T) {
 	t.Parallel()
 
+	program := readableTrueType()
+
 	// Maps <20> only, so any other shown code falls outside it.
 	const spaceOnly = "/CIDInit /ProcSet findresource begin 12 dict begin begincmap " +
 		"1 begincodespacerange <00> <ff> endcodespacerange " +
@@ -58,7 +60,7 @@ func TestToUnicode_UnnamedCodeWithoutProgram(t *testing.T) {
 					" /Ascent 700 /Descent -200 /CapHeight 700 /StemV 80 /FontBBox [0 0 1000 1000]"+
 					tt.fontFile+" >>",
 				fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(spaceOnly), spaceOnly),
-				"<< /Length 4 /Length1 4 >>\nstream\n\x00\x01\x00\x00\nendstream",
+				fmt.Sprintf("<< /Length %d /Length1 %d >>\nstream\n%s\nendstream", len(program), len(program), program),
 			)
 			fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
 			if err != nil {

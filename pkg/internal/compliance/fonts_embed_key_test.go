@@ -48,9 +48,9 @@ func TestFontFileKeys_CIDFontSubtypeMatrix(t *testing.T) {
 func TestIsFontEmbedded_CIDFontType0RejectsFontFile(t *testing.T) {
 	t.Parallel()
 	ctx := testCtx()
-	prog := ast.NewStream(ast.PdfDict{}, []byte("%!PS-AdobeFont-1.0"))
+	prog := ast.NewStream(ast.PdfDict{}, []byte(readableType1("%!PS-AdobeFont-1.0\n")))
 	// A /FontFile3 states its glyph format; the CFF one embeds a CIDFont.
-	cff := ast.NewStream(ast.PdfDict{"Subtype": ast.PdfName("CIDFontType0C")}, []byte("\x01\x00\x04\x01"))
+	cff := ast.NewStream(ast.PdfDict{"Subtype": ast.PdfName("CIDFontType0C")}, []byte(readableCFF()))
 
 	wrongKey := ast.PdfDict{"FontFile": prog}
 	if isFontEmbedded(ctx, nopDoc(), wrongKey, "CIDFontType0", 2) {

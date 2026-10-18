@@ -54,10 +54,10 @@ func TestFontEmbedding_FontFile3Container(t *testing.T) {
 		return hasRule(got, Rule_19005_2_6_2_11_4_1_t01)
 	}
 
-	const (
-		cff  = "\x01\x00\x04\x02rest-of-the-program"
-		cff2 = "\x02\x00\x04\x02rest-of-the-program"
-		sfnt = "\x00\x01\x00\x00rest-of-the-program"
+	var (
+		cff  = readableCFF()
+		cff2 = "\x02" + cff[1:]
+		sfnt = readableTrueType()
 	)
 
 	cases := []struct {

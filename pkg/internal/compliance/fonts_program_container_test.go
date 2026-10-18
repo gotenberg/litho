@@ -53,7 +53,7 @@ func TestFontEmbedding_ProgramContainer(t *testing.T) {
 		return hasRule(got, Rule_19005_2_6_2_11_4_1_t01)
 	}
 
-	sfnt := "\x00\x01\x00\x00rest-of-the-program"
+	sfnt := readableTrueType()
 
 	cases := []struct {
 		name    string
@@ -62,11 +62,11 @@ func TestFontEmbedding_ProgramContainer(t *testing.T) {
 		want    bool
 	}{
 		{"a TrueType sfnt embeds the font", "FontFile2", sfnt, false},
-		{"an OTTO sfnt embeds the font", "FontFile2", "OTTOrest-of-the-program", false},
+		{"an OTTO sfnt embeds the font", "FontFile2", "OTTO" + sfnt[4:], false},
 		{"a TrueType Collection does not", "FontFile2", "ttcf\x00\x02\x00\x00rest", true},
 		{"a non-sfnt /FontFile2 does not", "FontFile2", "\x01\x00\x04\x03rest", true},
 		{"an empty program does not", "FontFile2", "", true},
-		{"a raw Type 1 program embeds the font", "FontFile", "%!PS-AdobeFont-1.0\neexec\n", false},
+		{"a raw Type 1 program embeds the font", "FontFile", readableType1("%!PS-AdobeFont-1.0\n"), false},
 		{"a PFB-wrapped Type 1 program does not", "FontFile", "\x80\x01\xae\x04\x00\x00%!Font", true},
 	}
 	for _, tc := range cases {
@@ -127,7 +127,7 @@ func TestFontEmbedding_CutShortDeflateProgramIsJudged(t *testing.T) {
 		program string
 		fires   bool
 	}{
-		{"a cut sfnt embeds the font", "\x00\x01\x00\x00" + filler, false},
+		{"a cut sfnt embeds the font", readableTrueType() + filler, false},
 		{"a cut non-sfnt does not", "\x01\x00\x04\x03" + filler, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

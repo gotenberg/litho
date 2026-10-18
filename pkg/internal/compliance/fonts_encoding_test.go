@@ -273,6 +273,7 @@ func TestToUnicodeSymbolicNonResolvableDifferences(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
+	program := readableType1("%!PS\n")
 	build := func(diffs string, used byte, embedded bool) []Violation {
 		fd := "<< /Type /FontDescriptor /FontName /GNDPAG+MathematicalPi-Three /Flags 4 >>" // 4 = Symbolic
 		if embedded {
@@ -283,7 +284,7 @@ func TestToUnicodeSymbolicNonResolvableDifferences(t *testing.T) {
 			"<< /Type /Font /Subtype /Type1 /Name /F1 /FirstChar 0 /LastChar 255 /Encoding 3 0 R /FontDescriptor 4 0 R >>",
 			"<< /Type /Encoding /Differences "+diffs+" >>",
 			fd,
-			"<< /Length 4 >>\nstream\n%!PS\nendstream",
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(program), program),
 		)
 		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
 		if err != nil {

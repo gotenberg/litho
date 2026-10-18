@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -41,7 +42,8 @@ func TestToUnicodeTrueTypeBaseEncodingNamesTheRest(t *testing.T) {
 			"<< /Type /FontDescriptor /FontName /LithoSans /Flags 32" + fontFile + " >>",
 		}
 		if fontFile != "" {
-			objs = append(objs, "<< /Length 4 /Length1 4 >>\nstream\n\x00\x01\x00\x00\nendstream")
+			program := readableTrueType()
+			objs = append(objs, fmt.Sprintf("<< /Length %d /Length1 %d >>\nstream\n%s\nendstream", len(program), len(program), program))
 		}
 		doc, _ := objsDocPDF(t, objs...)
 		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})

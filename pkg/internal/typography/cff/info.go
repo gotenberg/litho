@@ -93,6 +93,34 @@ func ReadInfo(data []byte) (Info, error) {
 	return info, nil
 }
 
+// CharStringsReachable reports whether a bare CFF font program leads from its
+// header to a CharStrings INDEX that reads: the Name INDEX and the Top DICT
+// INDEX read, the Top DICT INDEX holds a font, and the offset its first Top
+// DICT gives the CharStrings operator (17) opens an INDEX inside the data
+// (Adobe Technical Note #5176, sections 6 to 9 and Table 9). A Top DICT that
+// states no such offset leaves it at 0, the header. Unlike [ReadInfo] this
+// accepts an empty Name INDEX and an empty CharStrings INDEX, which state no
+// font name or no glyph but still read.
+func CharStringsReachable(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	nameEnd, err := skipINDEX(data, max(int(data[2]), 4))
+	if err != nil {
+		return false
+	}
+	_, topDicts, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDicts) == 0 {
+		return false
+	}
+	offset := parseTopDict(topDicts[0]).charStringsOffset
+	if offset < 0 || int(offset) >= len(data) {
+		return false
+	}
+	_, _, err = parseINDEX(data, int(offset))
+	return err == nil
+}
+
 // scanDict calls fn with each operator of a CFF DICT and the operands before
 // it, integers and reals alike, as float64 (Adobe Technical Note #5176, Table
 // 3). Two-byte operators come as 1200 plus their second byte. A number cut off
