@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/heuristics"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -249,26 +250,32 @@ func normalizeTitle(s string, maxLength int) string {
 }
 
 // filterHeaderFooter removes candidates that appear to be running
-// headers/footers (same normalized text at similar Y on > 30% of pages).
+// headers/footers: the same text, case aside, more times than 30% of the
+// page count, wherever it sits (see [heuristics.RunningLines]). Auto-tagging
+// reads the same repeats more strictly, by position and on a majority of
+// pages, since it hides what it finds from a reader where this filter only
+// keeps it out of the outline.
+//
+// Every occurrence counts, repeats on one page included, so each candidate is
+// given a page of its own: a label a form repeats down one page ("Yes No") is
+// no heading either.
 func filterHeaderFooter(candidates []headingCandidate, pages []pageTextElements) []headingCandidate {
 	if len(pages) < 4 {
 		return candidates
 	}
 
-	// Count occurrences of each normalized text.
-	norm := func(s string) string {
-		return strings.ToLower(strings.TrimSpace(s))
+	lines := make([]heuristics.Line, len(candidates))
+	for i, c := range candidates {
+		lines[i] = heuristics.Line{Page: i, Text: c.text}
 	}
-	counts := make(map[string]int)
-	for _, c := range candidates {
-		counts[norm(c.text)]++
-	}
-
-	threshold := max(len(pages)*3/10, 2)
+	running := heuristics.RunningLines(lines, heuristics.RunningOptions{
+		MinPages: max(len(pages)*3/10, 2) + 1,
+		FoldCase: true,
+	})
 
 	filtered := candidates[:0]
-	for _, c := range candidates {
-		if counts[norm(c.text)] > threshold {
+	for i, c := range candidates {
+		if running[i] {
 			continue
 		}
 		filtered = append(filtered, c)
