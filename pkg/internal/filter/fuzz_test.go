@@ -16,10 +16,17 @@ var pureGoFilters = []ast.PdfName{
 	"JBIG2Decode", "JPXDecode",
 }
 
+// fuzzImageLimits is the budget [FuzzApplyDecodeFilter] decodes under: the
+// default but for an image budget of one million pixels. The image codecs
+// scale their caps from it, and at the default budget a few bytes of JPEG 2000
+// or DCT data can declare an image that takes gigabytes to decode, which
+// exhausts a fuzzing worker's memory rather than finding a crash.
+var fuzzImageLimits = limits.Limits{MaxImagePixels: 1 << 20}.WithDefaults()
+
 // FuzzApplyDecodeFilter feeds arbitrary bytes to each pure-Go stream
 // filter. The contract under test is crash-freedom on hostile input,
 // not a successful decode. Output size is bounded by the package's
-// decompression-bomb guard.
+// decompression-bomb guard, and image size by [fuzzImageLimits].
 func FuzzApplyDecodeFilter(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte("48656C6C6F>"))                // ASCIIHex
@@ -41,7 +48,7 @@ func FuzzApplyDecodeFilter(f *testing.F) {
 		for _, name := range pureGoFilters {
 			// Result and error are intentionally discarded: no input
 			// may make a decoder panic.
-			_, _ = applyDecodeFilter(ctx, data, name, ast.PdfDict{}, nil, limits.Default())
+			_, _ = applyDecodeFilter(ctx, data, name, ast.PdfDict{}, nil, fuzzImageLimits)
 		}
 	})
 }

@@ -12,6 +12,13 @@ import (
 // fuzzSmallSamples is the lowered sample cap [FuzzDecode] also decodes under.
 const fuzzSmallSamples = 1 << 12
 
+// fuzzMaxSamples is the sample cap [FuzzDecode] decodes under in place of
+// [DefaultMaxSamples]. A codestream of a few bytes can declare an image at the
+// default cap, whose decoding takes gigabytes, and a fuzzing worker running
+// such inputs in parallel would exhaust memory rather than find a crash. 2^22
+// samples, under 50 MB to decode, hold every seed whole.
+const fuzzMaxSamples = 1 << 22
+
 // FuzzDecode feeds arbitrary data to the decoder, then renders every channel
 // of what it decodes, as the JPXDecode filter does. The contract is
 // crash-freedom: every input either decodes to components whose sample planes
@@ -53,7 +60,7 @@ func FuzzDecode(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		ctx := context.Background()
-		if img, err := Describe(data, DefaultMaxSamples); err == nil {
+		if img, err := Describe(data, fuzzMaxSamples); err == nil {
 			if chs, err := img.Channels(); err == nil {
 				settled, checkErr := img.Check(ctx, chs)
 				_, renderErr := img.Render(ctx, chs, func(v int32, _ int, _ bool) byte { return byte(v) })
@@ -78,7 +85,7 @@ func FuzzDecode(f *testing.F) {
 				t.Fatalf("%d samples decoded under a %d-sample cap", n, int64(fuzzSmallSamples))
 			}
 		}
-		img, err := Decode(context.Background(), data, DefaultMaxSamples)
+		img, err := Decode(context.Background(), data, fuzzMaxSamples)
 		if err != nil {
 			sentinel(t, err)
 			return

@@ -33,7 +33,7 @@ func TestDefault_KeepsThePreviousCaps(t *testing.T) {
 	d := limits.Default()
 	for name, c := range map[string]struct{ base, was int64 }{
 		"jbig2 bitmap": {jbig2.DefaultMaxBitmapPixels, 100_000_000},
-		"jpx samples":  {jpx.DefaultMaxSamples, 1 << 27},
+		"jpx samples":  {jpx.DefaultMaxSamples, 4 * 100_000_000},
 		"dct samples":  {dct.DefaultMaxSamples, 4 * 100_000_000},
 	} {
 		if c.base != c.was {

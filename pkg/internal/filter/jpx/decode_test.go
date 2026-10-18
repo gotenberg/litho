@@ -10,7 +10,35 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
+
+// TestDescribe_AdmitsWhatTheImageBudgetAdmits pins the cap to the image
+// budget, as pdf.Limits documents it: a 100-megapixel image of three or four
+// components is described under the default budget, one more row of four
+// components is refused, and halving the budget halves the cap.
+func TestDescribe_AdmitsWhatTheImageBudgetAdmits(t *testing.T) {
+	t.Parallel()
+
+	describe := func(w, h uint32, comps int, maxSamples int64) error {
+		main := slices.Concat(seg(markerSIZ, sizBody(w, h, w, h, comps)...), seg(markerCOD, codBody...), seg(markerQCD, qcdBody...))
+		_, err := Describe(codestreamOf(main, tilePart(0, 0, nil, nil)), maxSamples)
+		return err
+	}
+	for _, comps := range []int{3, 4} {
+		if err := describe(10000, 10000, comps, DefaultMaxSamples); err != nil {
+			t.Errorf("10000x10000 in %d components: %v", comps, err)
+		}
+	}
+	if err := describe(10000, 10001, 4, DefaultMaxSamples); !errors.Is(err, ErrLimit) {
+		t.Errorf("10000x10001 in 4 components = %v, want %v", err, ErrLimit)
+	}
+	half := limits.Limits{MaxImagePixels: limits.DefaultMaxImagePixels / 2}.ScaleImageCap(DefaultMaxSamples)
+	if err := describe(10000, 10000, 3, half); !errors.Is(err, ErrLimit) {
+		t.Errorf("10000x10000 in 3 components under half the budget = %v, want %v", err, ErrLimit)
+	}
+}
 
 // TestDecode_AnnexJ10 decodes the J.10 codestream to the samples J.10.5
 // gives after the inverse 5-3 transformation and the DC level shift.

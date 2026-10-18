@@ -280,12 +280,12 @@ func TestRender_Tiled(t *testing.T) {
 // TestRender_GridLimit refuses a grid past DefaultMaxSamples before allocating it.
 // Components 254 and 255 apart share no separation, so the default grid is
 // the full image area while each component holds a few hundred samples a
-// side: a few hundred bytes would otherwise ask for gigabytes. The 8200x8200
+// side: a few hundred bytes would otherwise ask for gigabytes. The 14200x14200
 // grid fits under the limit alone but not across two channels.
 func TestRender_GridLimit(t *testing.T) {
 	t.Parallel()
 
-	for _, size := range []uint32{60000, 8200} {
+	for _, size := range []uint32{60000, 14200} {
 		b := sizBody(size, size, size, size, 2)
 		b[37], b[38], b[40], b[41] = 254, 254, 255, 255
 		img, err := Describe(codestreamOf(slices.Concat(seg(markerSIZ, b...), seg(markerCOD, codBody...), seg(markerQCD, qcdBody...)), tilePart(0, 0, nil, nil)), DefaultMaxSamples)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // DefaultMaxSamples bounds the samples an image holds, summed over its
@@ -11,18 +13,37 @@ import (
 // point, under the default image budget. It is an anti-DoS guard, not
 // spec-mandated: a codestream of a few hundred bytes can describe a huge flat
 // image, or components so unevenly subsampled that the default grid dwarfs
-// them, and every sample costs decoding time. 2^27 admits the largest image
-// real documents carry and a 400 dpi A3 page in colour. It is below the image
-// decoder's four bytes a pixel of the default budget, 400 million one-byte
-// samples, because Decode holds each sample in four bytes. [Describe] and
-// [Decode] take the cap scaled with the document's image budget
-// (limits.Limits.ScaleImageCap).
+// them, and every sample costs decoding time.
+//
+// The cap is four samples a pixel of [limits.DefaultMaxImagePixels], as the
+// DCT decoder's is: the image budget is the bound pdf.Limits documents for a
+// codestream whatever its dictionary declares, and the image decoder reads up
+// to four bytes a pixel of it, so the codec refuses no image of up to four
+// components the budget admits. [Describe] and [Decode] take the cap scaled
+// with the document's image budget (limits.Limits.ScaleImageCap).
+//
+// The JPXDecode filter renders tile by tile ([Image.Render]): the tile being
+// decoded holds four bytes of wavelet coefficients a sample, and the output one
+// byte a sample, so a single-tile image, the worst case, costs about five bytes
+// a sample. At the default budget the cap admits 400 million samples: a
+// generated 10000 x 10000 single-tile codestream of four components renders at
+// a peak of 1.9 GB of heap and 2.0 GB resident. The code-block and tag-tree
+// state of the code-blocks [maxCodeBlocks] admits, about a hundred bytes each,
+// adds at most about 0.4 GB, so one image stays under 2.5 GB. [Decode], which
+// keeps every component's samples, four bytes each, on top of the tile's,
+// takes about twice that; litho decodes through Render. A caller with less
+// memory lowers the image budget, and this cap with it.
 //
 // # Corpus evidence
 //
 //   - All corpora: the largest image decoded, 6642x5338 in three components,
 //     holds 106 million samples.
-const DefaultMaxSamples = 1 << 27
+const DefaultMaxSamples = samplesPerBudgetPixel * limits.DefaultMaxImagePixels
+
+// samplesPerBudgetPixel is the samples a pixel of the image budget
+// [DefaultMaxSamples] provides for: four, the RGBA and CMYK worst case of the
+// image decoder.
+const samplesPerBudgetPixel = 4
 
 // maxSampleBits is the deepest component this package returns: samples are
 // int32. It is an implementation limit, not spec-mandated; T.800, Table A.11
