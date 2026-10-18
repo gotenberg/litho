@@ -210,6 +210,7 @@ one deliberately rather than diffing it against a fresh build.
 | `oirgb_2b.pdf`         | PDF/A-2b     | Device colour images under a non-sRGB RGB output intent          |
 | `ocgconfigs_2b.pdf`    | PDF/A-2b     | An optional content `/Order` incomplete in `/Configs` alone      |
 | `ttmaccopy_2b.pdf`     | PDF/A-2b     | Symbolic TrueType whose (1,0) `cmap` copies (3,1), and a control |
+| `nestedpattern_2b.pdf` | PDF/A-2b     | Names a pattern cell or a form's `scn` finds only on the page    |
 
 ### Must-not-fire controls
 
@@ -454,6 +455,8 @@ violation but is exempt, so a firing is a false positive.
 | `fnlimits_1b`                             | `F`: a type 4 function past both limits behind an unused Separation    | ISO 19005-1, 6.1.12          |
 | `fnlimits_1b`                             | `/Two`: a direct stitching tint transform compared with itself         | ISO 19005-2, 6.2.4.4 t2      |
 | `ocgconfigs_2b`                           | `/D` and `/Configs[1]`: an `/Order` naming both OCGs, one in a group   | ISO 19005-2, 6.9 t3          |
+| `nestedpattern_2b`                        | `P2`: a tiling pattern holding the `/GS0` its cell sets                | ISO 19005-2, 6.2.2 t2        |
+| `nestedpattern_2b`                        | `X1`: a form XObject holding the `/P3` its `scn` selects               | ISO 19005-2, 6.2.2 t2        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -566,6 +569,7 @@ which are covered under [Known divergences](#known-divergences).
 | `multipage_2b.pdf`     | 12   | 10   | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 10   | 9    |
 | `namedmcid_ua1.pdf`    | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 6   | 6    | 7    | 7    | 5    |
 | `namereads_1b.pdf`     | 10   | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 7   | 7    | 8    | 6    | 6    |
+| `nestedpattern_2b.pdf` | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `noresources_4.pdf`    | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 2   | 3    | 4    | 10   | 7    |
 | `ocgconfigs_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 5    | 5    |
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
@@ -6521,6 +6525,39 @@ The repair also names an OCG that carries no `/Name`, which Table 98 requires.
 veraPDF matches `/Order` to the OCGs by `/Name`, and a nameless OCG enters its
 set as an empty name no reference removes, which is why `complex_2b`'s
 completed `/Order` stayed reported until its OCG was named.
+
+### `nestedpattern_2b.pdf`
+
+ISO 19005-2, 6.2.2 test 2 fails a content stream that resolves a name only
+through the page's resources. A tiling pattern's cell is a content stream with
+a `/Resources` entry of its own (ISO 32000-1, 8.7.3.1, Table 75), and an `scn`
+whose last operand is a name selects a pattern (8.6.8, Table 74). veraPDF
+1.30.2 fails test 2 on a cell that finds `/GS0` only on the page, with its
+`/Resources` empty or absent alike, and on a form XObject whose `/P3 scn` does.
+No corpus file reaches either construct, and litho's remediation gave form
+XObjects and Type 3 fonts the names they borrow, never a pattern cell, nor the
+pattern a form selects:
+
+| Object | Construct                                          | Answers   |
+| ------ | -------------------------------------------------- | --------- |
+| `P0`   | tiling pattern, `/Resources << >>`, `/GS0 gs`      | `6.2.2/2` |
+| `P1`   | tiling pattern, no `/Resources`, `/GS1 gs`         | `6.2.2/2` |
+| `P2`   | tiling pattern holding its own `/GS0`              | silent    |
+| `X0`   | form XObject, `/Resources << >>`, `/P3 scn`        | `6.2.2/2` |
+| `X1`   | form XObject holding its own `/P3`                 | silent    |
+| `P3`   | tiling pattern the two forms paint, naming nothing | silent    |
+
+`P2` and `X1` are the over-repair controls. Test 2 fails three times, once for
+each of `P0`, `P1` and `X0`. A CMYK OutputIntent covers the initial DeviceGray
+every cell paints in and the file draws no text, so at PDF/A-2b test 2 is the
+whole firing set. veraPDF 1.30.2 and litho report the same rule set in all
+thirteen cells, with the same counts at every PDF/A level; at the PDF/UA levels
+veraPDF counts the untagged-content rule once per painted path.
+
+PDF/A remediation copies each borrowed name into the stream that uses it and
+leaves `P2` and `X1` as they are. veraPDF 1.30.2 finds the output fully
+conforming at PDF/A-2a, PDF/A-2b, PDF/A-2u, PDF/A-3b and PDF/A-4 in both
+modes, where it reported test 2 three times before.
 
 ## Scope
 
