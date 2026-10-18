@@ -497,6 +497,9 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	if !hasExplicitEncoding && subtypeName == "TrueType" && !isSymbolFont && !isDingbatsFont {
 		applyTrueTypeBuiltinEncoding(ctx, doc, fontDict, font)
 	}
+	if !hasExplicitEncoding && subtypeName == "TrueType" && symbolicByFlags {
+		applySymbolicTrueTypeGlyphs(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont)
+	}
 
 	// Extract /FontBBox and embedded font metrics from the FontDescriptor.
 	extractFontDescriptorMetrics(ctx, doc, fontDict, font)
@@ -2454,6 +2457,111 @@ func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, f
 	if hasMacRoman {
 		font.Encoding = copyEncoding(encodings.MacRomanEncoding)
 	}
+}
+
+// applySymbolicTrueTypeGlyphs reads each code of an embedded symbolic
+// TrueType font that states no /Encoding and carries a (3,0) cmap subtable as
+// the glyph the code selects.
+//
+// ISO 32000-1, 9.6.6.4 maps such a font's single-byte codes to glyphs through
+// the program's (3,0) subtable, under the 0xF000, 0xF100 or 0xF200 range. The
+// Microsoft Symbol encoding gives those codes no character, and no base
+// encoding is in play, so neither the WinAnsi default nor a built-in encoding
+// picked by font name says which character a code shows. The program does:
+// its post table names the glyph, and a name the Adobe Glyph List carries is
+// the character (9.10.2 reads characters off glyph names). A glyph the post
+// table leaves unnamed, or names with an identifier like "glyph00074", reads
+// as the code point the program's Unicode subtable maps to it, (3,1), (3,10)
+// or platform 0. A code neither table characterises keeps the reading it has.
+// So does a code they place in the Private Use Area or among the control
+// characters while the reading it has is a graphic character: neither area
+// names a character a reader can recover (Unicode 16.0, 23.1 and 23.5).
+//
+// A font with only a (1,0) subtable stays out: that subtable's codes are Mac
+// OS Roman characters by the subtable's own declaration (OpenType, 'cmap',
+// platform 1 encoding 0), which [applyTrueTypeBuiltinEncoding] reads, and a
+// post name or Unicode mapping that disagrees contradicts the font rather than
+// completing it.
+//
+// This departs from PDF.js, which reads these codes through MacRomanEncoding,
+// or WinAnsiEncoding when every name record is a Windows one
+// (src/core/evaluator.js, extractDataStructures; src/core/fonts.js,
+// adjustTrueTypeToUnicode), and never consults the post table for them.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400935.pdf: WPTypographicSymbols names the glyph at
+//     code 0x53 "S" in its (1,0) and (3,0) subtables. Read through the Symbol
+//     built-in encoding its "Symbol"-bearing name selected, it came out "Σ".
+//   - govdocs thread_200_200393.pdf, thread_300_300082.pdf,
+//     thread_300_300237.pdf, thread_200_200149.pdf: Symbol subsets whose post
+//     tables name codes 0xB7, 0x6D and 0xD4 bullet, mu and trademarkserif, the
+//     readings the Symbol encoding gave them. PDF.js reads "∑", "m" and "‘".
+//   - pdfjs bug894572.pdf: TSCInaimathi, a legacy Tamil font with (1,0) and
+//     (3,1) subtables, names its glyphs as Windows Latin characters. Read
+//     through those names, its Mac Roman codes came out as Latin text no
+//     reader could use either, and the page no longer matched PDF.js.
+func applySymbolicTrueTypeGlyphs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol bool) {
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return
+	}
+	fontData := decodeFontStream(ctx, doc, fdDict, "FontFile2")
+	if fontData == nil {
+		return
+	}
+	if !hasSymbolCmapSubtable(fontData) {
+		return
+	}
+	codeToGID := ExtractSymbolCharCodeToGID(ctx, fontData)
+	if len(codeToGID) == 0 {
+		return
+	}
+	names := ExtractGlyphNames(ctx, fontData)
+	unicodeOf := ExtractGIDToUnicodeAuthoritative(ctx, fontData)
+	if font.Encoding == nil {
+		font.Encoding = make(map[byte]rune, len(codeToGID))
+	}
+	for code, gid := range codeToGID {
+		if code > 0xFF {
+			continue
+		}
+		r, ok := resolveGlyphRune(names[gid], isDingbats, isSymbol)
+		if !ok {
+			r, ok = unicodeOf[gid]
+		}
+		if !ok {
+			continue
+		}
+		c := byte(code)
+		if current, has := font.Encoding[c]; has && unreadableRune(r) && !unreadableRune(current) {
+			continue
+		}
+		font.Encoding[c] = r
+	}
+}
+
+// hasSymbolCmapSubtable reports whether a TrueType program declares the (3,0)
+// Microsoft Symbol cmap subtable, the one ISO 32000-1, 9.6.6.4 has a symbolic
+// font's codes select glyphs through first.
+func hasSymbolCmapSubtable(fontData []byte) bool {
+	subtables, err := truetype.CmapSubtables(fontData)
+	if err != nil {
+		return false
+	}
+	for _, s := range subtables {
+		if s.PlatformID == 3 && s.EncodingID == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// unreadableRune reports whether r is a control character or a Private Use
+// Area code point: neither names a character a reader can recover (Unicode
+// 16.0, 23.1 and 23.5).
+func unreadableRune(r rune) bool {
+	return r < 0x20 || (r >= 0x7F && r <= 0x9F) || (r >= 0xE000 && r <= 0xF8FF)
 }
 
 // extractCFFEncoding reads the CFF encoding from a /FontFile3 (Type1C) font
