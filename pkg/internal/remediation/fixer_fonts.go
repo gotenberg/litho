@@ -237,6 +237,11 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	if fontData == nil {
 		return nil
 	}
+	// The /CharSet regenerated below names the glyphs of the program as the
+	// font reads it, which the CharSet check weighs too: a Type 1 font reads
+	// an sfnt's 'CFF ' table.
+	fontSub, _ := document.ResolveName(ctx, doc, fontDict["Subtype"])
+	fontData = compliance.ProgramAsFontReadsIt(string(fontSub), fontData)
 
 	binaryWidths := typography.ExtractBinaryWidths(ctx, fontData)
 	if len(binaryWidths) == 0 {
@@ -378,6 +383,11 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	if fontData == nil {
 		return nil
 	}
+	// Repair from the program as the CIDFont reads it, which the width check
+	// weighs too: a CIDFontType0 reads an sfnt's 'CFF ' table, a CIDFontType2
+	// an "OTTO" as TrueType.
+	cidSub, _ := document.ResolveName(ctx, doc, cidFont["Subtype"])
+	fontData = compliance.ProgramAsFontReadsIt(string(cidSub), fontData)
 
 	// CID-keyed widths: /W is CID-indexed and CID-keyed CFF subsets
 	// renumber GIDs, so the GID-keyed map would repair the wrong entries.
