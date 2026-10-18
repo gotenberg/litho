@@ -32,6 +32,14 @@ var deviceColourSpaces = map[ast.PdfName]bool{
 	"DeviceRGB": true, "DeviceCMYK": true, "DeviceGray": true, "Pattern": true,
 }
 
+// colourResourceOperators are the colour operators that name a resource,
+// which a stream whose colour operators are off ignores. Mirrors the resource
+// naming half of compliance's colourOperators (ISO 32000-1, 9.6.5, Table 113,
+// and 8.7.3.3).
+var colourResourceOperators = map[string]bool{
+	"cs": true, "CS": true, "scn": true, "SCN": true, "sh": true,
+}
+
 // matchNestedResources claims ISO 19005-2/3/4 §6.2.2 test 2, the case where a
 // content stream resolves a resource name only through the page's resources.
 //
@@ -53,16 +61,27 @@ func matchNestedResources(v compliance.Violation) bool {
 
 // fixNestedResources gives a nested content stream the explicit /Resources
 // ISO 19005-2/3/4 §6.2.2 requires, copying from the page only the names the
-// stream actually references.
+// stream actually references. The nested streams are the form XObjects, the
+// tiling patterns and the Type 3 fonts the page declares: a tiling pattern's
+// cell is a content stream with resources of its own (ISO 32000-1, 8.7.3.1,
+// Table 75), and veraPDF 1.30.2 fails t2 on a name its cell finds only on the
+// page, with its /Resources empty or absent alike.
 //
-// A Form XObject shared by several pages may see a different binding for the
-// same name on each, so only a singly-referenced one is repaired. Deep-copying
-// per page would also be correct and reaches more documents.
+// A Form XObject or a pattern shared by several pages may see a different
+// binding for the same name on each, so only a singly-referenced one is
+// repaired. Deep-copying per page would also be correct and reaches more
+// documents.
 //
 // # Corpus evidence
 //
 //   - All corpora: every fixture carrying this violation is single-page, so the
 //     corpus cannot tell the singly-referenced repair from a per-page deep copy.
+//   - pdfjs issue6541.pdf, litho colouroff_2b.pdf: a tiling pattern cell
+//     resolves a name through the page, and veraPDF 1.30.2 reported 6.2.2 t2
+//     on each remediated output at PDF/A-2b and PDF/A-4, twice and once, and
+//     reports it on neither now.
+//   - litho nestedpattern_2b.pdf: the only file whose remediation copies the
+//     pattern a form XObject selects.
 func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -80,16 +99,20 @@ func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	var pages []annotPageEntry
 	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
 
-	// An XObject reachable from more than one page is left alone: the pages may
-	// bind the same name to different objects.
+	// An XObject or a pattern reachable from more than one page is left alone:
+	// the pages may bind the same name to different objects.
 	refCount := make(map[int]int)
 	for _, pe := range pages {
 		pageRes := pageResourcesFor(ctx, alloc, doc, pe)
 		if pageRes == nil {
 			continue
 		}
-		if xo, err := document.ResolveDict(ctx, doc, pageRes["XObject"]); err == nil && xo != nil {
-			for _, entry := range xo {
+		for _, category := range []ast.PdfName{"XObject", "Pattern"} {
+			sub, err := document.ResolveDict(ctx, doc, pageRes[category])
+			if err != nil || sub == nil {
+				continue
+			}
+			for _, entry := range sub {
 				if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
 					refCount[ref.ObjectNum]++
 				}
@@ -97,7 +120,7 @@ func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		}
 	}
 
-	forms, type3 := 0, 0
+	forms, patterns, type3 := 0, 0, 0
 	for _, pe := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -107,12 +130,16 @@ func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			continue
 		}
 		forms += fixFormXObjectResources(ctx, alloc, doc, pageRes, refCount)
+		patterns += fixTilingPatternResources(ctx, alloc, doc, pageRes, refCount)
 		type3 += fixType3FontResources(ctx, alloc, doc, pageRes)
 	}
 
 	var fixes []string
 	if forms > 0 {
 		fixes = append(fixes, fmt.Sprintf("gave %d form XObject(s) their own /Resources", forms))
+	}
+	if patterns > 0 {
+		fixes = append(fixes, fmt.Sprintf("gave %d tiling pattern(s) their own /Resources", patterns))
 	}
 	if type3 > 0 {
 		fixes = append(fixes, fmt.Sprintf("gave %d Type 3 font(s) their own /Resources", type3))
@@ -181,6 +208,56 @@ func fixFormXObjectResources(ctx context.Context, alloc *writer.ObjAllocator, do
 		// The dictionary changes, the bytes do not: a lazy stream carries the
 		// RAW bytes across, so a filtered stream is never decoded and
 		// re-encoded behind the caller's back.
+		alloc.AllocAt(ref.ObjectNum, ast.NewLazyStream(newDict, stream.Bytes))
+		fixed++
+	}
+	return fixed
+}
+
+// fixTilingPatternResources repairs every singly-referenced tiling pattern
+// the page declares. A shading pattern is a dictionary with no cell to resolve
+// names in (ISO 32000-1, 8.7.4.1), so only /PatternType 1 is a target.
+func fixTilingPatternResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageRes ast.PdfDict, refCount map[int]int) int {
+	patDict, err := document.ResolveDict(ctx, doc, pageRes["Pattern"])
+	if err != nil || patDict == nil {
+		return 0
+	}
+
+	fixed := 0
+	for _, entry := range patDict {
+		ref, isRef := entry.(ast.PdfIndirectRef)
+		if !isRef || ref.ObjectNum == 0 || refCount[ref.ObjectNum] != 1 {
+			continue
+		}
+		// Alloc-aware for the reason given in fixFormXObjectResources: an
+		// earlier fixer may have queued this stream already.
+		stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, entry)
+		if !ok || stream.Dict == nil {
+			continue
+		}
+		if patternType, err := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); err != nil || patternType != 1 {
+			continue
+		}
+
+		data, err := doc.DecodeStream(ctx, stream)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		// An uncoloured pattern's cell ignores its colour operators (ISO
+		// 32000-1, 8.7.3.3, /PaintType 2), so their names need no entry.
+		// Best-effort: an unreadable /PaintType reads as coloured, which
+		// copies every name the cell uses.
+		paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"])
+		own := liveDictValue(ctx, alloc, doc, stream.Dict["Resources"])
+		newRes, added := resourcesForStreamColour(ctx, alloc, doc, data, own, pageRes, paintType == 2)
+		if added == 0 {
+			continue
+		}
+
+		newDict := make(ast.PdfDict, len(stream.Dict)+1)
+		maps.Copy(newDict, stream.Dict)
+		newDict["Resources"] = newRes
+		// The bytes stay raw, as in fixFormXObjectResources.
 		alloc.AllocAt(ref.ObjectNum, ast.NewLazyStream(newDict, stream.Bytes))
 		fixed++
 	}
@@ -266,6 +343,15 @@ func fixType3FontResources(ctx context.Context, alloc *writer.ObjAllocator, doc 
 // names used after a stray "]" that validation reads no further than, so the
 // stream needs them in its resources as much as the others.
 func resourcesForStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, data []byte, own, pageRes ast.PdfDict) (ast.PdfDict, int) {
+	return resourcesForStreamColour(ctx, alloc, doc, data, own, pageRes, false)
+}
+
+// resourcesForStreamColour is [resourcesForStream] for a stream whose colour
+// operators are off when colourOff is set: the cell of an uncoloured tiling
+// pattern ignores them (ISO 32000-1, 8.7.3.3), and veraPDF resolves the name
+// of no cs, CS, sh, scn or SCN there, so the names they use are no inherited
+// reference to copy.
+func resourcesForStreamColour(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, data []byte, own, pageRes ast.PdfDict, colourOff bool) (ast.PdfDict, int) {
 	ops, err := content.ParseStreamData(ctx, data, content.WholeStream())
 	if err != nil {
 		doc.Logger.Debug("remediation.nestedresources: cannot parse content stream", "error", err)
@@ -277,23 +363,9 @@ func resourcesForStream(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	added := 0
 
 	for _, op := range ops {
-		category, ok := nestedResourceCategory[op.Operator]
-		if !ok || len(op.Operands) == 0 {
+		category, name, ok := streamResourceName(op)
+		if !ok || colourOff && colourResourceOperators[op.Operator] {
 			continue
-		}
-		name, ok := op.Operands[0].(ast.PdfName)
-		if !ok {
-			continue
-		}
-		// BDC and DP name a tag first and the properties second, and only a
-		// name operand needs a resource lookup: an inline dictionary does not.
-		if op.Operator == "BDC" || op.Operator == "DP" {
-			if len(op.Operands) < 2 {
-				continue
-			}
-			if name, ok = op.Operands[1].(ast.PdfName); !ok {
-				continue
-			}
 		}
 		// A cs/CS naming a device space resolves without any resource entry.
 		if (op.Operator == "cs" || op.Operator == "CS") && deviceColourSpaces[name] {
@@ -336,6 +408,39 @@ func resourcesForStream(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		return own, 0
 	}
 	return result, added
+}
+
+// streamResourceName returns the resource category and the name op looks up,
+// and false when it looks up none.
+//
+// BDC and DP name a tag first and the properties second, and only a name
+// operand needs a resource lookup: an inline dictionary does not. An scn or
+// SCN whose last operand is a name selects the pattern of that name, after the
+// components an uncoloured pattern takes (ISO 32000-1, 8.6.8, Table 74), and
+// veraPDF 1.30.2 fails ISO 19005-2, 6.2.2 t2 on a form XObject whose pattern
+// only the page defines. compliance looks the name up in a Pattern colour space
+// alone; copying it outside one adds an entry nothing reads.
+func streamResourceName(op content.Operation) (ast.PdfName, ast.PdfName, bool) {
+	if len(op.Operands) == 0 {
+		return "", "", false
+	}
+	if op.Operator == "scn" || op.Operator == "SCN" {
+		name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName)
+		return "Pattern", name, ok
+	}
+	category, ok := nestedResourceCategory[op.Operator]
+	if !ok {
+		return "", "", false
+	}
+	operand := op.Operands[0]
+	if op.Operator == "BDC" || op.Operator == "DP" {
+		if len(op.Operands) < 2 {
+			return "", "", false
+		}
+		operand = op.Operands[1]
+	}
+	name, ok := operand.(ast.PdfName)
+	return category, name, ok
 }
 
 // entryResolvesToNull reports whether a resource entry is null, which ISO
