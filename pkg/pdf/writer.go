@@ -706,9 +706,9 @@ type Signer interface {
 // A remediation writes its output to a temp file so it can revalidate it, in
 // [os.TempDir] unless [NewWriter] was given [WithTempDir], and fails with
 // [ErrRemediationUnverified] when it cannot. WriteTo streams that file to the
-// destination and removes it, and a remediation that fails or is cancelled
-// removes it itself. A Writer that is remediated and never written keeps the
-// file until [Writer.Close].
+// destination and removes it, and a remediation that fails, is cancelled or
+// panics removes it itself. A Writer that is remediated and never written
+// keeps the file until [Writer.Close].
 //
 // A page, or a page tree node, written directly in a /Kids array, which ISO
 // 32000-1, 7.7.3.2, Table 29 does not allow, gets an object number of its own
@@ -1036,35 +1036,49 @@ func (w *Writer) createTemp(pattern string) (*os.File, error) {
 // A file that cannot be created, written or closed is an error of the
 // environment, not of the document, and comes back wrapping
 // [ErrRemediationUnverified]; a failure of the serialization itself comes back
-// as it is. Either way the file is removed. Remediation used to treat a temp
-// file it could not create as a reason to skip its checks, and returned the
-// report the engine drew up before any output existed as a success.
+// as it is. Either way the file is removed, and so it is when the
+// serialization panics: the panic boundary of the public method turns the
+// panic into an error, and the file used to stay in the temp directory for
+// good. Remediation used to treat a temp file it could not create as a reason
+// to skip its checks, and returned the report the engine drew up before any
+// output existed as a success.
 func (w *Writer) writeTempFile(ctx context.Context, src *Writer, pattern string) (string, error) {
 	f, err := w.createTemp(pattern)
 	if err != nil {
 		return "", fmt.Errorf("%w: creating a temp file: %w", ErrRemediationUnverified, err)
 	}
 	path := f.Name()
+	logger := w.reader.doc.Logger
+	written, closed := false, false
+	defer func() {
+		if written {
+			return
+		}
+		if !closed {
+			if closeErr := f.Close(); closeErr != nil {
+				logger.Debug("remediate: closing an unfinished temp file failed",
+					slog.String("path", path), slog.Any("err", closeErr))
+			}
+		}
+		removeTempFile(logger, path)
+	}()
 	tf := &tempFileWriter{f: f}
 	encrypt := src.encryptCfg
 	src.encryptCfg = nil
 	writeErr := src.writeToInternal(ctx, tf, nil)
 	src.encryptCfg = encrypt
 	closeErr := f.Close()
+	closed = true
 
-	var failure error
 	switch {
 	case tf.err != nil:
-		failure = fmt.Errorf("%w: writing %s: %w", ErrRemediationUnverified, path, tf.err)
+		return "", fmt.Errorf("%w: writing %s: %w", ErrRemediationUnverified, path, tf.err)
 	case writeErr != nil:
-		failure = writeErr
+		return "", writeErr
 	case closeErr != nil:
-		failure = fmt.Errorf("%w: closing %s: %w", ErrRemediationUnverified, path, closeErr)
+		return "", fmt.Errorf("%w: closing %s: %w", ErrRemediationUnverified, path, closeErr)
 	}
-	if failure != nil {
-		removeTempFile(w.reader.doc.Logger, path)
-		return "", failure
-	}
+	written = true
 	return path, nil
 }
 
@@ -2409,12 +2423,21 @@ func (w *Writer) materialize(ctx context.Context) (undo func(), err error) {
 		return nil, fmt.Errorf("writing the edited document to remediate: %w", err)
 	}
 	logger := w.reader.doc.Logger
+	// The file is the Writer's once rebase makes it the document the Writer
+	// edits, and Close removes it from then on. Until then it is removed
+	// here, a panic in the reopening included.
+	owned := false
+	defer func() {
+		if !owned {
+			removeTempFile(logger, path)
+		}
+	}()
 	next, err := w.reader.reopenFile(ctx, path)
 	if err != nil {
 		w.droppedSignatures = prevDropped
-		removeTempFile(logger, path)
 		return nil, fmt.Errorf("reopening the edited document to remediate: %w", err)
 	}
+	owned = true
 	prevReader, prevMutations, prevOverrides := w.reader, w.mutations, w.rewriteOverrides
 	prevFolded, prevTrailerDirty := w.folded, w.trailerDirty
 	if err := w.rebase(next, path); err != nil {
@@ -2606,11 +2629,13 @@ func (w *Writer) remediate(
 		restoreTrailer()
 		unmaterialize()
 	}
+	temps := &remediationTemps{logger: doc.Logger}
+	defer temps.removeAll()
 	// cancelled ends a run whose caller gave up: nothing it serialized will
 	// be written, so its temp file goes now rather than at Close, and the
 	// Writer is put back as it was.
 	cancelled := func(tmpPath string, err error) (*RemediationReport, error) {
-		removeTempFile(doc.Logger, tmpPath)
+		temps.remove(tmpPath)
 		restorePreState()
 		return nil, fmt.Errorf("remediation canceled: %w", err)
 	}
@@ -2692,6 +2717,7 @@ func (w *Writer) remediate(
 				slog.Any("err", writeErr))
 			return "", nil, integritySnap{}, attemptBroken, nil
 		}
+		temps.add(tmpPath)
 
 		r2, openErr := w.reader.reopenFile(ctx, tmpPath)
 		if openErr != nil {
@@ -2742,7 +2768,7 @@ func (w *Writer) remediate(
 			slog.String("reason", trigger),
 			slog.Bool("rollback_eligible", report.ContentSnapshot != nil),
 		)
-		removeTempFile(doc.Logger, tmpPath)
+		temps.remove(tmpPath)
 		if report.ContentSnapshot == nil {
 			restorePreState()
 			return nil, fmt.Errorf("%w: %s", ErrRemediationBrokePDF, trigger)
@@ -2762,12 +2788,12 @@ func (w *Writer) remediate(
 			return nil, unverified2
 		}
 		if outcome2 == attemptBroken {
-			removeTempFile(doc.Logger, tmpPath2)
+			temps.remove(tmpPath2)
 			restorePreState()
 			return nil, fmt.Errorf("%w: output still unusable after rollback", ErrRemediationBrokePDF)
 		}
 		if reason2 := evaluateRegression(baseline, post2, tol); reason2 != "" {
-			removeTempFile(doc.Logger, tmpPath2)
+			temps.remove(tmpPath2)
 			restorePreState()
 			return nil, fmt.Errorf("%w: %s (persisted after rollback)", ErrRemediationBrokePDF, reason2)
 		}
@@ -2796,9 +2822,9 @@ func (w *Writer) remediate(
 	// gates; otherwise the previous round's output stands.
 	keptLater := false
 	for round := 2; round <= maxRemediationRounds && len(residual) > 0; round++ {
-		next, ok, err := w.remediationRound(ctx, tmpPath, run, disabled, revalidate, baseline, tol)
+		next, ok, err := w.remediationRound(ctx, temps, tmpPath, run, disabled, revalidate, baseline, tol)
 		if err != nil {
-			removeTempFile(doc.Logger, tmpPath)
+			temps.remove(tmpPath)
 			restorePreState()
 			return nil, err
 		}
@@ -2815,7 +2841,7 @@ func (w *Writer) remediate(
 			slog.Int("fixes", len(next.fixed)),
 			slog.Int("rolled_back", len(next.rolledBack)),
 			slog.Int("residual", len(next.residual)))
-		removeTempFile(doc.Logger, tmpPath)
+		temps.remove(tmpPath)
 		tmpPath, residual = next.path, next.residual
 		w.droppedSignatures = appendDroppedSignatures(w.droppedSignatures, next.dropped...)
 		fixed = append(fixed, next.fixed...)
@@ -2833,7 +2859,7 @@ func (w *Writer) remediate(
 		// writes that output from here on (see [Writer.rebase]).
 		next, err := w.reader.reopenFile(ctx, tmpPath)
 		if err != nil {
-			removeTempFile(doc.Logger, tmpPath)
+			temps.remove(tmpPath)
 			restorePreState()
 			return nil, fmt.Errorf("reopening the remediation output: %w", err)
 		}
@@ -2844,6 +2870,9 @@ func (w *Writer) remediate(
 			doc.Logger.Debug("remediate: releasing the previous remediation output failed", slog.Any("err", err))
 		}
 	}
+	// The Writer owns the output from here on: WriteTo streams it, and
+	// Close removes it when WriteTo does not.
+	temps.forget(tmpPath)
 	w.markPreSerialized(tmpPath)
 	w.remediation, w.pdfaClause, w.accessibilityClause = target.method, target.pdfaClause, target.accessibilityClause
 	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack), FontRefusals: fontRefusals(fonts)}, nil
@@ -2939,9 +2968,11 @@ type roundResult struct {
 // passes the gates, with those fixers named for the later rounds to disable.
 //
 // A temp file the round cannot write is returned as an error wrapping
-// [ErrRemediationUnverified], since it says nothing about the round.
+// [ErrRemediationUnverified], since it says nothing about the round. The
+// files the round writes are recorded in temps, the one it keeps included.
 func (w *Writer) remediationRound(
 	ctx context.Context,
+	temps *remediationTemps,
 	path string,
 	run remediationRun,
 	disabled []string,
@@ -2997,7 +3028,7 @@ func (w *Writer) remediationRound(
 	w2.forceRewrite = rep.NeedsFullRewrite
 	w2.requiredVersion = rep.RequiredVersion
 
-	tmpPath, res, reason, err := w.writeRound(ctx, w2, revalidate, baseline, tol)
+	tmpPath, res, reason, err := w.writeRound(ctx, temps, w2, revalidate, baseline, tol)
 	if err != nil {
 		return roundResult{}, false, err
 	}
@@ -3018,7 +3049,7 @@ func (w *Writer) remediationRound(
 	if countRepairs(kept) == 0 {
 		return discarded(), false, nil
 	}
-	tmpPath, res, reason, err = w.writeRound(ctx, w2, revalidate, baseline, tol)
+	tmpPath, res, reason, err = w.writeRound(ctx, temps, w2, revalidate, baseline, tol)
 	if err != nil {
 		return roundResult{}, false, err
 	}
@@ -3038,9 +3069,10 @@ func (w *Writer) remediationRound(
 // It returns the temp file and its residual validation findings, or a reason
 // the output was refused, after removing the file. A temp file that cannot be
 // written is no verdict on the round: it is returned as an error wrapping
-// [ErrRemediationUnverified].
+// [ErrRemediationUnverified]. The file is recorded in temps while it exists.
 func (w *Writer) writeRound(
 	ctx context.Context,
+	temps *remediationTemps,
 	w2 *Writer,
 	revalidate func(context.Context, *Reader) ([]error, error),
 	baseline integritySnap,
@@ -3056,10 +3088,11 @@ func (w *Writer) writeRound(
 		logger.Debug("remediate: round serialize failed", slog.Any("err", err))
 		return "", nil, "serialize failed", nil
 	}
+	temps.add(tmpPath)
 
 	r3, err := w.reader.reopenFile(ctx, tmpPath)
 	if err != nil {
-		removeTempFile(logger, tmpPath)
+		temps.remove(tmpPath)
 		logger.Debug("remediate: round reopen of output failed", slog.Any("err", err))
 		return "", nil, "output failed to reopen", nil
 	}
@@ -3067,16 +3100,16 @@ func (w *Writer) writeRound(
 
 	post, err := probeIntegrity(ctx, r3)
 	if err != nil {
-		removeTempFile(logger, tmpPath)
+		temps.remove(tmpPath)
 		return "", nil, "output failed the integrity probe", nil
 	}
 	if reason := evaluateRegression(baseline, post, tol); reason != "" {
-		removeTempFile(logger, tmpPath)
+		temps.remove(tmpPath)
 		return "", nil, reason, nil
 	}
 	res, err := revalidate(ctx, r3)
 	if err != nil {
-		removeTempFile(logger, tmpPath)
+		temps.remove(tmpPath)
 		return "", nil, "output failed to revalidate", nil
 	}
 	return tmpPath, res, "", nil
@@ -3102,6 +3135,47 @@ func keepFixedWithout(fixed, rolledBack []string) []string {
 		out = append(out, d)
 	}
 	return out
+}
+
+// remediationTemps records the temp files a remediation wrote and still owns,
+// the outputs it judges, rolls back and runs further rounds on, until it
+// removes each or hands the one it keeps to the Writer. [Writer.remediate]
+// removes whatever the record still holds when it returns, which only a panic
+// leaves there: every other way out removes its files itself. A panic
+// unwinding through the remediation used to skip every removal, and the panic
+// boundary of the public method turned it into an error with the files left
+// in the temp directory for good.
+type remediationTemps struct {
+	logger *slog.Logger
+	paths  []string
+}
+
+// add records path, a temp file the remediation wrote.
+func (t *remediationTemps) add(path string) {
+	if path != "" {
+		t.paths = append(t.paths, path)
+	}
+}
+
+// remove deletes path, a file the remediation no longer needs, and forgets
+// it.
+func (t *remediationTemps) remove(path string) {
+	t.forget(path)
+	removeTempFile(t.logger, path)
+}
+
+// forget stops recording path without deleting it, when the remediation hands
+// the file to the Writer.
+func (t *remediationTemps) forget(path string) {
+	t.paths = slices.DeleteFunc(t.paths, func(p string) bool { return p == path })
+}
+
+// removeAll deletes every file the remediation still owns.
+func (t *remediationTemps) removeAll() {
+	for _, path := range t.paths {
+		removeTempFile(t.logger, path)
+	}
+	t.paths = nil
 }
 
 // removeTempFile deletes path and logs a debug line if the removal fails.
