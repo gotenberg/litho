@@ -126,7 +126,7 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 			return nil
 		}
 
-		fontData := extractFontProgramData(ctx, doc, fd)
+		fontData := extractFontProgramData(ctx, doc, fd, subtype)
 		if fontData == nil {
 			// ISO 19005-1, 6.3.5 asks the /CharSet of a Type 1 subset to list
 			// the names the subset defines, and a file that does not embed the
@@ -213,7 +213,7 @@ func checkCharSetDeclaredCoverage(ctx context.Context, doc *document.Document, f
 	if completenessRule.Specification == "" {
 		return nil
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, programFontSubtype(ctx, doc, fontDict))
 	if fontData == nil {
 		return nil
 	}
@@ -406,7 +406,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 			// t2): a subset CIDFont with a /CIDSet but no embedded program cannot
 			// satisfy cidSetListsAllGlyphs, since there is no program to list, so
 			// veraPDF fires (alongside the separate not-embedded rule).
-			if extractFontProgramData(ctx, doc, fd) == nil {
+			if extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, cidFontDict)) == nil {
 				return failf(rule, "font %s on page %d: /CIDSet present but the CIDFont subset is not embedded", fontName, pageNum)
 			}
 			// CFF subsets: ValidCIDs enumerates the embedded subset charset.
@@ -465,7 +465,7 @@ func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document
 	if !ok {
 		return nil
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, cidFontDict))
 	if fontData == nil {
 		return nil
 	}
@@ -605,7 +605,7 @@ func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.
 	if usedCIDs == nil {
 		return nil
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, cidFontDict))
 	if fontData == nil {
 		return nil
 	}
@@ -726,7 +726,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 	if fd == nil {
 		return nil
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, cidFontDict))
 	if fontData == nil {
 		return nil
 	}
@@ -765,7 +765,7 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 	if fd == nil {
 		return nil
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, cidFontDict))
 	if fontData == nil {
 		return nil
 	}

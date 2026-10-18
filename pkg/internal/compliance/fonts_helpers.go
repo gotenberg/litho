@@ -12,6 +12,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // standard14Fonts is the set of PDF standard 14 font base names.
@@ -580,9 +581,9 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 // 'hhea' or 'hmtx' is not embedded in a /TrueType or a /CIDFontType2 font.
 // litho fontcff2_2b.pdf plants each.
 //
-// The verdict is the embedding rule's alone. The glyph rules read the program
-// through [extractFontProgramData], which knows the descriptor and not the
-// font, so they still weigh such a program by the outlines it carries.
+// The glyph rules take the same verdict: [extractFontProgramData] hands them
+// no program the font cannot read, and hands them the one it can as the font
+// reads it ([ProgramAsFontReadsIt]).
 //
 // # Corpus evidence
 //
@@ -618,6 +619,75 @@ func fontFile3ParsesForFont(ctx context.Context, doc *document.Document, fontSub
 		return isCFFFontProgram(data)
 	}
 	return true
+}
+
+// ProgramAsFontReadsIt returns an embedded program in the form the font whose
+// /Subtype is fontSub reads it, so every glyph rule weighs the tables veraPDF
+// weighs, not the outlines the bytes carry.
+//
+// A Type 1 or CIDFontType0 font reads an sfnt through its 'CFF ' table
+// (OpenTypeFontProgram, built with isCFF, hands every glyph, width and code
+// query to the CFFFontProgram it parses from that table), so such a program
+// is returned as that table, a bare CFF. Its 'hmtx' widths, 'cmap' and 'post'
+// names are then read by no rule, as veraPDF reads none of them.
+//
+// A TrueType or CIDFontType2 font reads any sfnt as a TrueType program
+// (TrueTypeFontProgram and CIDFontType2Program), its "OTTO" version tag
+// included, so such a program is returned under the TrueType version tag
+// 0x00010000: its 'cmap', 'hmtx', 'maxp' and 'post' answer, and its 'CFF '
+// table answers nothing. The table directory is unchanged, so the copy reads
+// exactly the tables the program carries. ISO 32000-1, 9.9 and Table 126 name
+// the container; the font's own type names the reading.
+//
+// Measured against veraPDF 1.30.2 at every PDF/A and PDF/UA level, on
+// programs whose CFF charstrings advance 600 and whose 'hmtx' states 500: a
+// Type 1 font over an "OTTO" passes /Widths 600 and fails /Widths 500; a Type
+// 1 font over a version-1.0 sfnt carrying 'glyf' and a 'CFF ' table passes
+// /Widths 600, and so does a CIDFontType0 font over the CID-keyed equivalent
+// under /W 600; a CIDFontType2 font over an "OTTO" passes /W 500 and fails
+// /W 600; a TrueType font over an "OTTO" with no 'head' weighs its advances
+// of 1000 against 2048 units and passes /Widths 488 ([headlessUnitsPerEm]);
+// and a CIDFontType2 font over an "OTTO" whose 'maxp' counts three glyphs
+// fails glyph presence and .notdef for CID 3, which its 'CFF ' charset holds.
+// litho fontotread_2b.pdf plants each.
+//
+// Any other program, and one whose reading needs no change, is returned as
+// it is. Remediation repairs widths and /CharSet from the same form, so the
+// repair and the check read one program.
+func ProgramAsFontReadsIt(fontSub string, data []byte) []byte {
+	if !isSfntFontProgram(data) {
+		return data
+	}
+	switch fontSub {
+	case "Type1", "MMType1", "CIDFontType0":
+		records, err := truetype.ParseTableDirectory(data)
+		if err != nil {
+			return data
+		}
+		if table, err := truetype.TableData(data, records, "CFF "); err == nil && len(table) > 0 {
+			return table
+		}
+	case "TrueType", "CIDFontType2":
+		if string(data[:4]) == "OTTO" {
+			read := slices.Clone(data)
+			copy(read, "\x00\x01\x00\x00")
+			return read
+		}
+	}
+	return data
+}
+
+// programFontSubtype returns the /Subtype of the font whose descriptor
+// [document.ResolveFontDescriptor] reads for fontDict: the font's own for a
+// simple font, the descendant CIDFont's for a Type 0 font, which is the font
+// that embeds the program ([extractFontProgramData]).
+func programFontSubtype(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) string {
+	if _, direct := fontDict["FontDescriptor"]; !direct {
+		if cid := type0NameDict(ctx, doc, fontDict); cid != nil {
+			return fontSubtype(ctx, doc, cid)
+		}
+	}
+	return fontSubtype(ctx, doc, fontDict)
 }
 
 // decodeFontProgram decodes an embedded font program, reusing the document's

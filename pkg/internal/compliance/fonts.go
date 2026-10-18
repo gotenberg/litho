@@ -2040,7 +2040,7 @@ func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict,
 	// CID-indexed, so a GID-keyed map reads the wrong charstrings.
 	cidFd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if cidFd != nil {
-		fontData := extractFontProgramData(ctx, doc, cidFd)
+		fontData := extractFontProgramData(ctx, doc, cidFd, fontSubtype(ctx, doc, cidFontDict))
 		if fontData != nil {
 			binaryWidths := typography.ExtractCIDBinaryWidths(ctx, fontData)
 			// A CFF whose CharStrings INDEX is empty states no width, but each
@@ -2114,7 +2114,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 	// 0x41, fails ISO 19005-2, 6.2.11.8 t1 once, for code 0.
 	embedsProgram := false
 	if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil {
-		embedsProgram = extractFontProgramData(ctx, doc, fd) != nil
+		embedsProgram = extractFontProgramData(ctx, doc, fd, programFontSubtype(ctx, doc, fontDict)) != nil
 	}
 	if (subtype == "Type1" || subtype == "MMType1" || subtype == "TrueType") && !embedsProgram {
 		checkUnembeddedNotdef(ctx, doc, fontDict, subtype, fontName, pageNum, faults, usage)
@@ -2185,7 +2185,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 	if subtype == "TrueType" {
 		fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 		if fd != nil {
-			fontData := extractFontProgramData(ctx, doc, fd)
+			fontData := extractFontProgramData(ctx, doc, fd, subtype)
 			if fontData != nil {
 				// A symbolic TrueType font (no /Encoding) resolves codes through
 				// its built-in (3,0)/(1,0) cmap, not glyph names (ISO 32000-1
@@ -2543,7 +2543,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 	if fd == nil {
 		return judged()
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, cidFontDict))
 	if fontData == nil {
 		return judged()
 	}
@@ -2681,7 +2681,7 @@ func type0HasEmbeddedProgram(ctx context.Context, doc *document.Document, fontDi
 	if fd == nil {
 		return false
 	}
-	return extractFontProgramData(ctx, doc, fd) != nil
+	return extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, cidFontDict)) != nil
 }
 
 // absentType0CIDs returns the set of used CIDs whose glyph is absent from the
@@ -2741,7 +2741,7 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 	if fd == nil {
 		return absent, subtype, notdef, true
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, subtype)
 	if fontData == nil {
 		return absent, subtype, notdef, true
 	}

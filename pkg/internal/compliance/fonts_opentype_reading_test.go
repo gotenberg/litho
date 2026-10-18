@@ -1,7 +1,9 @@
 package compliance
 
 import (
+	"bytes"
 	"encoding/binary"
+	"os"
 	"slices"
 	"testing"
 
@@ -84,4 +86,73 @@ func TestOpenTypeProgramReadByTheFont(t *testing.T) {
 			t.Errorf("width rule fired for %v, want %v", got, want)
 		}
 	})
+}
+
+// TestOpenTypeGlyphRulesReadByTheFont pins that the glyph rules read a
+// /FontFile3 /OpenType program as the font that embeds it reads it, not by the
+// outlines it carries: a Type 1 or CIDFontType0 font through its 'CFF '
+// table, a TrueType or CIDFontType2 font as a TrueType program. The litho
+// fixture fontotread_2b.pdf plants programs whose CFF charstrings advance 600
+// and whose 'hmtx' states 500. veraPDF 1.30.2 fails the width rule (ISO
+// 19005-2, 6.2.11.5 t1) for W2, a Type 1 font declaring 500, and W6, a
+// CIDFontType2 font declaring 600, and for no other font, and fails glyph
+// presence (6.2.11.4.1 t2) and .notdef (6.2.11.8 t1) for P1, a CIDFontType2
+// font showing a CID its 'maxp' does not count, which its 'CFF ' charset
+// holds.
+func TestOpenTypeGlyphRulesReadByTheFont(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		rule Rule
+		want []string
+	}{
+		{Rule_19005_2_6_2_11_5_t01, []string{"W2", "W2", "W6", "W6"}},
+		{Rule_19005_2_6_2_11_4_1_t02, []string{"P1"}},
+		{Rule_19005_2_6_2_11_8_t01, []string{"P1"}},
+	} {
+		t.Run(tt.rule.Clause, func(t *testing.T) {
+			t.Parallel()
+			if got := fixtureFontsFailing(t, "fontotread_2b.pdf", "PDF/A-2b", tt.rule); !slices.Equal(got, tt.want) {
+				t.Errorf("rule fired for %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestProgramAsFontReadsIt pins the form [ProgramAsFontReadsIt] hands the
+// glyph rules: the 'CFF ' table of an sfnt for a CFF font, the sfnt under the
+// TrueType version tag for a TrueType font, and anything else unchanged,
+// without writing into the shared decoded bytes.
+func TestProgramAsFontReadsIt(t *testing.T) {
+	t.Parallel()
+	sfnt, err := os.ReadFile("testdata/cidfont_notdef_min.ttf")
+	if err != nil {
+		t.Fatalf("read sfnt fixture: %v", err)
+	}
+	cff, err := os.ReadFile("testdata/lato_bold_subset.cff")
+	if err != nil {
+		t.Fatalf("read CFF fixture: %v", err)
+	}
+	otto := testOTTO(t, sfnt, cff)
+	original := slices.Clone(otto)
+
+	for _, fontSub := range []string{"Type1", "MMType1", "CIDFontType0"} {
+		if got := ProgramAsFontReadsIt(fontSub, otto); !bytes.Equal(got, cff) {
+			t.Errorf("%s over an OTTO: got %d bytes, want the %d-byte 'CFF ' table", fontSub, len(got), len(cff))
+		}
+	}
+	for _, fontSub := range []string{"TrueType", "CIDFontType2"} {
+		got := ProgramAsFontReadsIt(fontSub, otto)
+		if string(got[:4]) != "\x00\x01\x00\x00" || !bytes.Equal(got[4:], otto[4:]) {
+			t.Errorf("%s over an OTTO: want the same tables under version 0x00010000, got tag %q", fontSub, got[:4])
+		}
+	}
+	if !bytes.Equal(otto, original) {
+		t.Error("the shared program bytes were modified")
+	}
+	if got := ProgramAsFontReadsIt("CIDFontType0", sfnt); !bytes.Equal(got, sfnt) {
+		t.Error("an sfnt carrying no 'CFF ' table changed")
+	}
+	if got := ProgramAsFontReadsIt("TrueType", cff); !bytes.Equal(got, cff) {
+		t.Error("a bare CFF changed")
+	}
 }

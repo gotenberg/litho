@@ -1718,7 +1718,7 @@ func symbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool {
 //   - pdfjs issue13626.pdf: names uni0453 in /Differences, and veraPDF reports
 //     it.
 func nonSymbolicDifferencesProblem(ctx context.Context, doc *document.Document, fd ast.PdfDict, differences ast.PdfArray) string {
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, "TrueType")
 	if fontData == nil {
 		return ""
 	}
@@ -1866,7 +1866,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 		// Macintosh (1,0) encoding irrespective of the subtable count.
 		cmapRule := trueTypeSymbolicCmapRule(profile)
 		if cmapRule.Specification != "" {
-			if fontData := extractFontProgramData(ctx, doc, fd); len(fontData) > 0 {
+			if fontData := extractFontProgramData(ctx, doc, fd, "TrueType"); len(fontData) > 0 {
 				if subs, err := truetype.CmapSubtables(fontData); err == nil && symbolicCmapViolation(profile, subs) {
 					results = append(results, failf(cmapRule, "font %s on page %d: symbolic TrueType cmap subtable set is not permitted (%d subtables)", fontName, pageNum, len(subs))...)
 				}
@@ -1877,7 +1877,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 		// depends on the conformance level the same way the symbolic set does.
 		// PDF/A-1 states no such requirement, so the rule is empty there.
 		if cmapRule := trueTypeNonSymbolicCmapRule(profile); cmapRule.Specification != "" {
-			if fontData := extractFontProgramData(ctx, doc, fd); len(fontData) > 0 {
+			if fontData := extractFontProgramData(ctx, doc, fd, "TrueType"); len(fontData) > 0 {
 				subs, err := truetype.CmapSubtables(fontData)
 				switch {
 				case errors.Is(err, truetype.ErrTableNotFound):

@@ -200,7 +200,7 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 		return simpleFontGlyphs{}, false
 	}
 
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, programFontSubtype(ctx, doc, fontDict))
 	if fontData == nil {
 		return simpleFontGlyphs{}, false
 	}
@@ -478,7 +478,7 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 	if fd == nil {
 		return nil
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, fontDict))
 	if fontData == nil {
 		return nil
 	}
@@ -939,7 +939,7 @@ func checkType1GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 	if fd == nil {
 		return nil
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, fontDict))
 	if fontData == nil {
 		return nil
 	}
@@ -1053,7 +1053,7 @@ func ExpectedCIDFontWidths(ctx context.Context, doc *document.Document, cidFontD
 	if fd == nil {
 		return nil, false
 	}
-	fontData := extractFontProgramData(ctx, doc, fd)
+	fontData := extractFontProgramData(ctx, doc, fd, fontSubtype(ctx, doc, cidFontDict))
 	if fontData == nil {
 		return nil, false
 	}
@@ -1703,14 +1703,37 @@ func sortedCIDs(set map[uint16]bool) []uint16 {
 	return out
 }
 
-// extractFontProgramData gets the raw font program bytes from FontDescriptor.
+// extractFontProgramData gets the font program a descriptor embeds, in the
+// form the font whose /Subtype is fontSub reads it. fontSub is the
+// descriptor's own font: the simple font, or the CIDFont of a Type 0 font
+// ([programFontSubtype]).
+//
+// The font decides the reading, as it decides the embedding verdict
+// ([isFontEmbedded]). Only the keys [fontFileKeys] allows for the font hold
+// its program, and a /FontFile3 must name a program ([namesAFontProgram]) in
+// the container the font reads ([fontFile3ParsesForFont]); a program the font
+// cannot read is no program to the glyph rules either. The program that
+// remains is returned as the font reads it ([ProgramAsFontReadsIt]), so the
+// presence, width, .notdef, CIDSet, CharSet and cmap rules weigh the tables
+// veraPDF weighs rather than the outlines the bytes carry.
 //
 // The bytes come from [decodeFontProgram] and are shared with every other
 // caller, so they must not be modified.
-func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict ast.PdfDict) []byte {
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6782.pdf: embeds an "OTTO" under "CIDFontType0C" in a
+//     subset /CIDFontType0 with a /CIDSet. The font reads no program, so ISO
+//     19005-1, 6.3.5 t3 fails at PDF/A-1b alongside 6.3.4 t1, as veraPDF
+//     reports it; litho reported the embedding rule alone.
+//   - All corpora, every profile the compliance goldens hold, and PDF/A-1b,
+//     PDF/A-2b, PDF/A-4, PDF/UA-1 and PDF/UA-2 for the corpora that hold
+//     none: that cell is the only one the font-type reading moves.
+func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict ast.PdfDict, fontSub string) []byte {
+	allowed := fontFileKeys(fontSub)
 	for _, key := range []ast.PdfName{"FontFile2", "FontFile3", "FontFile"} {
 		ffObj, ok := fdDict[key]
-		if !ok {
+		if !ok || !slices.Contains(allowed, key) {
 			continue
 		}
 		stream, err := document.ResolveStream(ctx, doc, ffObj)
@@ -1719,6 +1742,12 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		}
 		if stream.Dict == nil {
 			continue
+		}
+		if key == "FontFile3" {
+			declared, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+			if !namesAFontProgram(string(declared)) || !fontFile3ParsesForFont(ctx, doc, fontSub, string(declared), ffObj, stream) {
+				continue
+			}
 		}
 		data, err := decodeFontProgram(ctx, doc, ffObj, stream)
 		if err != nil {
@@ -1735,7 +1764,7 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		if len(data) > 0 && !fontProgramReadable(key, data) {
 			continue
 		}
-		return data
+		return ProgramAsFontReadsIt(fontSub, data)
 	}
 	return nil
 }

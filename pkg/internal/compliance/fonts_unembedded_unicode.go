@@ -87,7 +87,7 @@ func unembeddedSimpleFont(ctx context.Context, doc *document.Document, fontDict 
 	if subtype != "Type1" && subtype != "MMType1" && subtype != "TrueType" {
 		return "", false
 	}
-	if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil && extractFontProgramData(ctx, doc, fd) != nil {
+	if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil && extractFontProgramData(ctx, doc, fd, programFontSubtype(ctx, doc, fontDict)) != nil {
 		return "", false
 	}
 	return subtype, true
