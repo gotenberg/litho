@@ -130,17 +130,29 @@ func isStandardStructTypeInNS(name ast.PdfName, nsURI string) bool {
 // structure-type table (PDF Reference 1.4, 9.7.4) lacks them, so under ISO
 // 19005-1 §6.8.3.4 such a type is non-standard and must be role-mapped.
 //
-// Annot, THead, TBody, and TFoot are PDF 1.5 additions absent from the PDF 1.4
-// table, hence non-standard for PDF/A-1. The Ruby/Warichu set
-// (Ruby/RB/RT/RP/Warichu/WT/WP) is also a PDF 1.5 addition but stays standard
-// until a fixture or profile extract confirms it.
+// Annot, THead, TBody and TFoot are PDF 1.5 additions absent from the PDF 1.4
+// table, and so are the ruby and warichu types (PDF Reference 1.5, 10.7.3,
+// "Ruby and Warichu Elements (PDF 1.5)"), hence non-standard for PDF/A-1.
+//
+// # Corpus evidence
+//
+//   - litho structkinds_ua2: veraPDF 1.30.2 reports 6.8.3.4/1 at PDF/A-1a for
+//     each of the 19 Ruby, RB, RT, RP, Warichu, WT and WP elements beside the
+//     two math ones, and nothing for them from PDF/A-2a.
 //
 //nolint:gochecknoglobals // constant set.
 var standardStructTypesPDF15Plus = map[ast.PdfName]bool{
-	"Annot": true,
-	"THead": true,
-	"TBody": true,
-	"TFoot": true,
+	"Annot":   true,
+	"THead":   true,
+	"TBody":   true,
+	"TFoot":   true,
+	"Ruby":    true,
+	"RB":      true,
+	"RT":      true,
+	"RP":      true,
+	"Warichu": true,
+	"WT":      true,
+	"WP":      true,
 }
 
 // IsStandardStructType reports whether name is a standard structure type for the

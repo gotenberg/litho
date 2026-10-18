@@ -105,6 +105,10 @@ func TestIsStandardStructType(t *testing.T) {
 		{"Title is not standard for UA1", "Title", "PDF/UA-1", false},
 		{"Em is PDF2 only - part 4", "Em", "PDF/A-4", true},
 		{"Em is not standard for part 2", "Em", "PDF/A-2a", false},
+		{"Ruby is a PDF 1.5 addition - part 1", "Ruby", "PDF/A-1a", false},
+		{"WP is a PDF 1.5 addition - part 1", "WP", "PDF/A-1a", false},
+		{"Ruby is standard for part 2", "Ruby", "PDF/A-2a", true},
+		{"Warichu is standard for UA1", "Warichu", "PDF/UA-1", true},
 		{"nonexistent type", "FooBar", "PDF/A-4", false},
 		{"empty name", "", "PDF/A-1a", false},
 	}
