@@ -91,3 +91,24 @@ func TestWithBase(t *testing.T) {
 		t.Errorf("WithBase changed the CMap it was called on: %q", c.Mapping)
 	}
 }
+
+// TestBuiltInUnicode pins that text extraction's view of a predefined
+// CID-to-Unicode CMap holds its bfrange mappings with its bfchar ones, from
+// the binary copy PDF.js ships: Adobe-Korea1-UCS2 maps CID 0A4B to 인, the
+// first code pdfjs issue5010.pdf shows.
+func TestBuiltInUnicode(t *testing.T) {
+	t.Parallel()
+
+	all := BuiltInUnicode("Adobe-Korea1-UCS2")
+	if got := all["\x0a\x4b"]; got != "인" {
+		t.Errorf("CID 0A4B maps to %q, want 인", got)
+	}
+	if got := all["\x00\x41"]; got != "`" {
+		t.Errorf("CID 41 maps to %q, want U+0060", got)
+	}
+	for _, name := range []string{"No-Such-CMap", "", "../bcmaps/Adobe-Korea1-UCS2"} {
+		if m := BuiltInUnicode(name); m != nil {
+			t.Errorf("BuiltInUnicode(%q) = %d mappings, want none", name, len(m))
+		}
+	}
+}

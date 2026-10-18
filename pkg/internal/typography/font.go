@@ -668,6 +668,17 @@ func parseAndCacheToUnicode(ctx context.Context, doc *document.Document, tuObj a
 // fallbacks (Identity, Adobe CID tables, font-file cmap) can take over
 // instead of being blocked by a hollow CMap that never resolves any
 // character code.
+//
+// A CMap that runs usecmap takes the named predefined CMap's mappings for the
+// codes it leaves unmapped, as PDF.js reads it. A /UseCMap entry in the stream
+// dictionary is not followed: PDF.js reads a /ToUnicode CMap without it.
+//
+// # Corpus evidence
+//
+//   - All corpora: two files change text. pdfjs issue5010.pdf, whose
+//     /ToUnicode runs /Adobe-Korea1-UCS2 usecmap over Identity-H codes, now
+//     reads 인터뷰●홍인혜카피라이터 as PDF.js does, where each code read as its
+//     own value. litho usecmap_2u.pdf's usecmap fonts read their base too.
 func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfObject) *cmap.CMap {
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil || stream.Dict == nil {
@@ -680,6 +691,15 @@ func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfOb
 	c, err := cmap.Parse(ctx, decoded)
 	if err != nil {
 		return nil
+	}
+	if c != nil && c.UseCMap() != "" {
+		// Per ISO 32000-1, 9.7.5.4, usecmap makes the named CMap's mappings
+		// part of this one. PDF.js's extendCMap fills each code the program
+		// leaves unmapped from the base, wherever the operator stands, so a
+		// code the program maps itself keeps its own value.
+		if base := cmap.BuiltInUnicode(c.UseCMap()); len(base) > 0 {
+			c = c.WithBase(nil, base, false)
+		}
 	}
 	if c == nil || len(c.Mapping) == 0 {
 		return nil

@@ -167,23 +167,61 @@ func PredefinedUnicode(name string) (chars, all map[string]string) {
 		predefinedUnicodeCache.Store(name, p)
 		return p.chars, p.all
 	}
+	p := bcmapUnicode(name)
+	if p == nil {
+		return nil, nil
+	}
+	return p.chars, p.all
+}
+
+// bcmapUnicodeCache caches [bcmapUnicode] by CMap name. Only a name litho
+// bundles is stored, so the cache is bounded by the bundled set.
+//
+//nolint:gochecknoglobals // process-wide cache of immutable parsed CMaps.
+var bcmapUnicodeCache sync.Map
+
+// BuiltInUnicode returns every code-to-Unicode mapping of the predefined CMap
+// name, such as Adobe-Korea1-UCS2, as the binary copy PDF.js ships holds it:
+// codes are two-byte strings, values Unicode strings. It is nil when litho
+// bundles no such CMap, and empty for a CMap that maps codes to CIDs.
+//
+// It serves text extraction, which reads a /ToUnicode CMap built on a
+// predefined one through usecmap (ISO 32000-1, 9.7.5.4) as PDF.js's
+// extendCMap does, from the same copies, so the text stays equal to PDF.js.
+// The conformance checks read Adobe's current resources through
+// [PredefinedUnicode] instead.
+func BuiltInUnicode(name string) map[string]string {
+	if p := bcmapUnicode(name); p != nil {
+		return p.all
+	}
+	return nil
+}
+
+// bcmapUnicode parses the bundled binary CMap name into its single-code and
+// all mappings, or returns nil when litho bundles no such CMap or it does not
+// parse.
+func bcmapUnicode(name string) *predefinedUnicode {
+	if cached, ok := bcmapUnicodeCache.Load(name); ok {
+		p, _ := cached.(*predefinedUnicode)
+		return p
+	}
 	path := "bcmaps/" + name + ".bcmap"
 	if name == "" || !fs.ValidPath(path) {
-		return nil, nil
+		return nil
 	}
 	data, err := bcmapFS.ReadFile(path)
 	if err != nil {
-		return nil, nil
+		return nil
 	}
 	chars, ranges, err := parseBCMapBFMappings(data)
 	if err != nil {
-		return nil, nil
+		return nil
 	}
-	all = maps.Clone(chars)
+	all := maps.Clone(chars)
 	maps.Copy(all, ranges)
 	p := &predefinedUnicode{chars: chars, all: all}
-	predefinedUnicodeCache.Store(name, p)
-	return p.chars, p.all
+	bcmapUnicodeCache.Store(name, p)
+	return p
 }
 
 // parseBCMapBFMappings decodes the bfchar (type 4) and bfrange (type 5)
