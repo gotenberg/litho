@@ -378,14 +378,40 @@ var texMathGlyphs = map[string]rune{
 	"Delta": 0x2206, // ∆
 }
 
+// aglAliases holds the Adobe Glyph List (glyphlist.txt, AGL 2.0) names that
+// share their code point with another listed name and that [extendedAGL] left
+// out, while keeping the other name: "nonbreakingspace", "softhyphen" and
+// "mu" stay, "nbspace", "sfthyphen" and "mu1" were dropped, and "hyphentwo"
+// with them. ISO 32000-1, 9.10.2 reads a glyph name through the list, so
+// each one names the character its list entry gives. They stay out of
+// [GlyphToRune], whose reverse map [RuneToGlyph] picks a code point's name.
+//
+// The list's 81 other unresolved names map to a sequence of code points
+// (Hebrew pointed letters, Arabic ligatures), which a rune cannot hold.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200424.pdf: the AccTimesItal program's built-in
+//     encoding names code 0xCA "nbspace", which the remediated /ToUnicode
+//     mapped to U+00CA, Ê, before it read the name.
+//   - pdfjs issue11385.pdf: three Helvetica /Differences arrays name code
+//     0xAD "sfthyphen", which the remediated /ToUnicode mapped to the
+//     standard encoding's U+203A, ›, before it read the name.
+//   - govdocs, pdfjs: the nine other files whose uncompressed bytes name one
+//     of them keep their violations and remediated output at all 13 levels.
+//   - All corpora: the five text corpora extract byte-identical text.
+var aglAliases = map[string]rune{
+	"nbspace":   0x00A0, // glyphlist.txt: nbspace;00A0
+	"sfthyphen": 0x00AD, // glyphlist.txt: sfthyphen;00AD
+	"mu1":       0x00B5, // glyphlist.txt: mu1;00B5
+	"hyphentwo": 0x2010, // glyphlist.txt: hyphentwo;2010
+}
+
 // GlyphToRuneFull resolves a glyph name to a Unicode rune using the core
 // [GlyphToRune] map, the extended AGL, and the "uniXXXX" / "uXXXXXXXX" naming
 // convention. Returns (rune, true) on success, (0, false) if unknown.
 func GlyphToRuneFull(name string) (rune, bool) {
-	if r, ok := GlyphToRune[name]; ok {
-		return r, true
-	}
-	if r, ok := extendedAGL[name]; ok {
+	if r, ok := GlyphToRuneSimple(name); ok {
 		return r, true
 	}
 	if r, ok := texMathGlyphs[name]; ok {
@@ -554,6 +580,9 @@ func GlyphToRuneSimple(name string) (rune, bool) {
 		return r, true
 	}
 	if r, ok := extendedAGL[name]; ok {
+		return r, true
+	}
+	if r, ok := aglAliases[name]; ok {
 		return r, true
 	}
 	return 0, false
