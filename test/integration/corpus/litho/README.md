@@ -7234,12 +7234,12 @@ on the output.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-172 x 13 = 2236 cells, the whole hand-measured matrix. litho and veraPDF return
+173 x 13 = 2249 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2234 of the 2236 cells. The two
+fixtures exist to protect, and it holds in 2247 of the 2249 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -7247,12 +7247,12 @@ non-empty set in each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-ten is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
-`pagelabels_2b`, `siglock_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
+eleven is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
+`pagelabels_2b`, `siglock_2b`, `sizetie_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2236 and moves only `ruleset_mismatch`, and on
-those ten cells it moves both. Both exceptions sit in the manifest's profiles,
+rule class leaves `matched` at 2249 and moves only `ruleset_mismatch`, and on
+those eleven cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
 the runner is a regression, or a divergence to cover under Known divergences and
