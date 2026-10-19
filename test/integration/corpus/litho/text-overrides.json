@@ -50,6 +50,13 @@
       "reason": "K1, K2 and K5 read through Adobe-KR, which ISO 32000-1, 9.10.2 does not list, and K3 and K4 send their codes to CID 0, .notdef (9.7.6.3). The readers differ only on those codes, where no reading is right."
     },
     {
+      "fixture": "complex_2u",
+      "page": 1,
+      "pdfjs": "A \u0000   A AB",
+      "expected": "\u0000   A AB",
+      "reason": "FNoUni's /Differences names code 65 lithoglyphone, which replaces the base encoding's A (ISO 32000-1, 9.6.6.1) and has no Unicode value, and the font has no /ToUnicode, so the code adds no character (9.10.2). PDF.js keeps the base encoding's A."
+    },
+    {
       "fixture": "complex_ua1",
       "page": 1,
       "pdfjs": "Heading One Skipped To Three Body text Customtype Untaggedrealcontent",
@@ -118,6 +125,13 @@
       "pdfjs": "AB\u0001 BA A\u0001BAB",
       "expected": "AB BA ABAB",
       "reason": "Code 01 has no glyph name under /WinAnsiEncoding (ISO 32000-1, Annex D.2) and adds no character (9.10.2). The -3000 TJ adjustment after it moves BA 36 points right, a word gap (9.4.3), while the second line's shows abut. PDF.js reports U+0001 twice."
+    },
+    {
+      "fixture": "symbolname_2u",
+      "page": 1,
+      "pdfjs": "AB",
+      "expected": "A",
+      "reason": "MS's /Differences names code 66 H20850, which replaces StandardEncoding's B (ISO 32000-1, 9.6.6.1) and has no Unicode value in the Adobe Glyph List, and the font has no /ToUnicode, so the code adds no character (9.10.2). PDF.js reads B, the Unicode value the embedded program's (3,1) cmap gives the glyph, which 9.10.2 does not list as a source."
     },
     {
       "fixture": "tables_ua1",
