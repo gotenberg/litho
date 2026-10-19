@@ -170,16 +170,7 @@ func convertOutputProfileToV2(ctx context.Context, alloc *writer.ObjAllocator, d
 	if ctx.Err() != nil {
 		return false
 	}
-	// The profile is encoded afresh, so the filter chain describing the old
-	// body no longer applies. A sampled curve is larger than the parametric
-	// one it replaces, and Flate, which every PDF/A part admits, keeps it
-	// near the source's size.
-	newDict := make(ast.PdfDict, len(stream.Dict))
-	maps.Copy(newDict, stream.Dict)
-	delete(newDict, "Filter")
-	delete(newDict, "DecodeParms")
-	delete(newDict, "DL")
-	newStream := flateStream(newDict, v2)
+	newStream := v2ProfileStream(stream.Dict, v2)
 	if isRef && dpRef.ObjectNum > 0 {
 		alloc.AllocAt(dpRef.ObjectNum, newStream)
 		converted[dpRef.ObjectNum] = true

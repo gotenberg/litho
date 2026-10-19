@@ -130,6 +130,9 @@ var registry = []fixer{
 	{name: "tounicode-ranges", safety: safetyResource, matches: matchToUnicodeRanges, apply: fixToUnicodeRangeIssues},
 	{name: "devicen", safety: safetyResource, matches: matchDeviceNColorants, apply: fixDeviceNColorants},
 	{name: "sep-canon", safety: safetyResource, matches: matchSepCanon, apply: fixSepCanon},
+	// Runs after corrupt-icc, which rewrites a destination profile an
+	// ICCBased space may share, so a profile is re-encoded once.
+	{name: "icc-space-v2", safety: safetyResource, matches: matchICCSpaceV2, apply: fixICCSpaceV2},
 	{name: "icc-dedup", safety: safetyResource, matches: matchICCDedup, apply: fixICCDedup},
 	{name: "file-structure", safety: safetyStructural, matches: matchFileStructure, apply: fixFileStructure},
 	{name: "catalog-cleanup", safety: safetyStructural, matches: matchCatalogCleanup, apply: fixCatalogCleanup},
