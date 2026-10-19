@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
 func matchCorruptICC(v compliance.Violation) bool {
@@ -17,7 +18,7 @@ func matchCorruptICC(v compliance.Violation) bool {
 	return clausePrefix(v, "6.2.3", "6.2.2", "6.5.3") && descriptionContains(v, "DestOutputProfile")
 }
 
-func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
@@ -38,6 +39,7 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	var fixes []string
 	newOIArr := make(ast.PdfArray, len(oiArr))
+	converted := make(map[int]bool)
 
 	for i, oiEntry := range oiArr {
 		var oiRef ast.PdfIndirectRef
@@ -124,6 +126,17 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			// space that is itself invalid falls through to sRGB.
 			replaceICCProfile(alloc, oiDict, oiRef, dpObj, colorSpace)
 			fixes = append(fixes, fmt.Sprintf("replaced invalid ICC profile in OutputIntent[%d] (version=%d, class=%q, cs=%q)", i, version, deviceClass, colorSpace))
+		} else if version != 2 && compliance.PDFAPart(profile) == 1 {
+			// PDF/A-1 rests on PDF 1.4, which predates ICC v4, so ISO
+			// 19005-1, 6.2.2 takes the destination profile of PDF Reference
+			// 1.4, 9.10.4, a version 2 one (veraPDF: "version < 3.0"). The
+			// output intent names a printing or display condition, which a
+			// stock profile of the same colour space does not characterize,
+			// so the profile is only ever re-encoded as version 2 with the
+			// same colour transforms, and kept as it is when it cannot be.
+			if convertOutputProfileToV2(ctx, alloc, doc, oiDict, oiRef, dpObj, stream, data, converted) {
+				fixes = append(fixes, fmt.Sprintf("re-encoded the version %d ICC profile of OutputIntent[%d] as version 2", version, i))
+			}
 		}
 
 		newOIArr[i] = oiEntry
@@ -132,20 +145,78 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return fixes, nil
 }
 
+// convertOutputProfileToV2 replaces an output intent's version 4 destination
+// profile with its version 2 re-encoding ([icc.ToV2]), which converts colours
+// as the source does. It reports whether it wrote one: a profile whose tags
+// version 2 cannot hold without resampling stays, and so does its violation.
+//
+// An indirect profile stream is rewritten at its own object number, so every
+// output intent and ICCBased colour space sharing it reads the version 2
+// profile, which ISO 19005-1, 6.2.3.2 asks of an ICCBased profile as well, and
+// the intents keep naming one indirect object (6.2.2 t2). converted records
+// the streams already rewritten, so an intent sharing one reports no second
+// fix.
+func convertOutputProfileToV2(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, oiDict ast.PdfDict, oiRef ast.PdfIndirectRef, dpObj ast.PdfObject, stream ast.PdfStream, data []byte, converted map[int]bool) bool {
+	dpRef, isRef := dpObj.(ast.PdfIndirectRef)
+	if isRef && converted[dpRef.ObjectNum] {
+		return false
+	}
+	v2, err := icc.ToV2(data)
+	if err != nil {
+		doc.Logger.Debug("remediation: corrupt-icc: version 4 output profile has no lossless version 2 form",
+			slog.Any("err", err))
+		return false
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	// The profile is encoded afresh, so the filter chain describing the old
+	// body no longer applies. A sampled curve is larger than the parametric
+	// one it replaces, and Flate, which every PDF/A part admits, keeps it
+	// near the source's size.
+	newDict := make(ast.PdfDict, len(stream.Dict))
+	maps.Copy(newDict, stream.Dict)
+	delete(newDict, "Filter")
+	delete(newDict, "DecodeParms")
+	delete(newDict, "DL")
+	newStream := flateStream(newDict, v2)
+	if isRef && dpRef.ObjectNum > 0 {
+		alloc.AllocAt(dpRef.ObjectNum, newStream)
+		converted[dpRef.ObjectNum] = true
+		return true
+	}
+	if oiRef.ObjectNum == 0 {
+		return false
+	}
+	newOI := make(ast.PdfDict, len(oiDict))
+	maps.Copy(newOI, oiDict)
+	newOI["DestOutputProfile"] = alloc.Alloc(newStream)
+	alloc.AllocAt(oiRef.ObjectNum, newOI)
+	return true
+}
+
 // replaceICCProfile replaces the DestOutputProfile stream with a stock profile
-// matching colorSpace: the embedded CMYK profile when it is "CMYK", sRGB
-// otherwise. An empty colorSpace means the original profile could not be read,
-// so sRGB is the only defensible choice.
+// matching colorSpace: the embedded CMYK profile when it is "CMYK", the
+// generated version 2 grey profile when it is "GRAY", sRGB otherwise. An empty
+// colorSpace means the original profile could not be read, so sRGB is the only
+// defensible choice. Every stock profile is version 2, which every PDF/A part
+// admits (ISO 19005-1, 6.2.2; ISO 19005-2, 6.2.3).
 //
 // Keeping the colour space matters because /OutputConditionIdentifier is left
 // untouched here. Substituting an RGB profile under a CMYK output condition
-// leaves the intent describing a destination it no longer converts to.
+// leaves the intent describing a destination it no longer converts to, and
+// under a grey one it also turns the intent into an RGB intent, which licenses
+// DeviceRGB content the source never did (ISO 19005-1, 6.2.3.3).
 func replaceICCProfile(alloc *writer.ObjAllocator, oiDict ast.PdfDict, oiRef ast.PdfIndirectRef, dpObj ast.PdfObject, colorSpace string) {
 	iccData := sRGBICCProfile
 	nComponents := 3
-	if colorSpace == "CMYK" {
+	switch colorSpace {
+	case "CMYK":
 		iccData = cmykICCProfile
 		nComponents = 4
+	case "GRAY":
+		iccData = sGrayICCProfile
+		nComponents = 1
 	}
 
 	// Create replacement stream.

@@ -20,6 +20,10 @@ import (
 // that state samples they produced in sRGB.
 var sRGBICCProfile = icc.SRGBProfile()
 
+// sGrayICCProfile is litho's generated version 2 grey profile, the stock
+// replacement for a grey destination profile (see [replaceICCProfile]).
+var sGrayICCProfile = icc.SGrayProfile()
+
 //go:embed cmyk.icc
 var cmykICCProfile []byte
 
