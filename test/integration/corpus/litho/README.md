@@ -225,6 +225,8 @@ one deliberately rather than diffing it against a fresh build.
 | `patternglyph_2b.pdf`  | PDF/A-2b     | Type 3 glyphs a tiling cell shows, nested once                   |
 | `shadedefault_2b.pdf`  | PDF/A-2b     | Shading patterns over DeviceCMYK beside DeviceRGB, CMYK intent   |
 | `type3names_2u.pdf`    | PDF/A-2u     | Type 3 fonts with no `/ToUnicode`, glyph names their one meaning |
+| `realglyphs_ua1.pdf`   | PDF/UA-1     | One Type 3 glyph shown in real content and beside it, per page   |
+| `type3cycle_2u.pdf`    | PDF/A-2u     | A Type 3 font shown again in a cell its own glyph selects        |
 | `sizetie_2b.pdf`       | PDF/A-2b     | Two font sizes of equal weight, under bookmark generation        |
 | `iccv4intent_1b.pdf`   | PDF/A-1b     | An output intent's ICC v4 destination profile at PDF/A-1         |
 | `drivetitle_1b.pdf`    | PDF/A-1b     | Info text entries that begin like a PDF date, against XMP        |
@@ -641,6 +643,7 @@ which are covered under [Known divergences](#known-divergences).
 | `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
 | `rolemapns_ua2.pdf`    | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
 | `rolemapscope_ua2.pdf` | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 2    |
+| `realglyphs_ua1.pdf`   | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 2   | 2    | 3    | 10   | 9    |
 | `rolecycle_ua1.pdf`    | 4    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 2    | 5    |
 | `rolecycle_ua2.pdf`    | 5    | 4    | 8    | 5    | 5    | 8    | 5    | 5    | 2   | 2    | 3    | 5    | 4    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
@@ -669,6 +672,7 @@ which are covered under [Known divergences](#known-divergences).
 | `type0nodesc_2b.pdf`   | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 7    | 7    |
 | `type1notdef_2u.pdf`   | 7    | 4    | 8    | 4    | 6    | 8    | 4    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `type3names_2u.pdf`    | 5    | 2    | 5    | 2    | 3    | 5    | 2    | 3    | 3   | 3    | 4    | 7    | 7    |
+| `type3cycle_2u.pdf`    | 5    | 2    | 4    | 0    | 1    | 5    | 1    | 2    | 4   | 4    | 5    | 8    | 7    |
 | `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `unclosedmc_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 4    |
@@ -7359,6 +7363,63 @@ PDF/A-4f's, which keeps `6.9/5`, the embedded file it requires, and both
 PDF/UA outputs were conforming before and stay so. Page 4's `/CS0` and the
 shadings naming `/Spot` then read as one alternate, so `6.2.4.4/2` stays silent
 on the output.
+
+### `realglyphs_ua1.pdf`
+
+veraPDF 1.30.2 keys a `Glyph` by whether the stream showing it is real content.
+A PDF/UA or WTPDF validation parses a page's content, and the forms it draws,
+as semantic content, and a tiling cell, a Type 3 glyph procedure, an
+annotation appearance and a form one of those draws as plain content. A glyph
+with no Unicode value shown in both is two glyphs there, and one at PDF/A,
+which parses nothing as semantic. Each page plants one shape through Type 3
+fonts of its own, whose glyph names carry no Unicode value. A CMYK OutputIntent
+covers the DeviceGray every glyph paints in:
+
+| Page | The page shows the glyph, and so does                                   | `7.21.7/1` | `6.2.11.7.2/1` |
+| ---- | ----------------------------------------------------------------------- | ---------- | -------------- |
+| 1    | a cell the page selects                                                 | 2          | 1              |
+| 2    | an annotation appearance                                                | 2          | 1              |
+| 3    | a procedure of a second Type 3 font the page shows                      | 3          | 2              |
+| 4    | a form a cell draws                                                     | 2          | 1              |
+| 5    | a form the page draws (control)                                         | 1          | 1              |
+| 6    | nothing; a cell the glyph's own procedure selects shows the other glyph | 2          | 2              |
+| 7    | a cell the glyph's own procedure selects, the page showing it in mode 2 | 2          | 1              |
+
+Page 3 counts the second font's glyph too. Pages 6 and 7 hold the cycle
+[`type3cycle_2u.pdf`](#type3cycle_2updf) isolates: the cell's other glyph is
+judged as any other, and the cell starts in the rendering mode its selecting
+procedure starts in, the page's mode 2 on page 7, so the page's glyph is the
+cell's at PDF/A.
+
+veraPDF and litho report the same rule set in all thirteen cells and the same
+counts: `7.21.7/1` and `8.4.5.8/1` 14 times (also at WTPDF 1.0), `6.2.11.7.2/1`
+and `6.3.8/1` 9 times. Before the fix litho counted 8 at each, the rule set
+unchanged, so the fixture pins counts the set comparison does not see (see
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin)).
+
+Remediated at every level in both modes, both tools report the same rule set
+and counts on every output. No fixer gives a glyph name with no Unicode value
+one, so the ToUnicode rule stays: 9 times at PDF/A-2u and 3u, 15 at PDF/A-1a,
+2a and 3a and at PDF/UA, where auto-tagging puts the page's glyphs in marked
+content of their own.
+
+### `type3cycle_2u.pdf`
+
+A Type 3 glyph procedure (ISO 32000-1, 9.6.5) can select a tiling pattern
+whose cell (8.7.3.1) shows text in the same font. The page shows code A,
+glyph `A`, which the Adobe Glyph List gives a Unicode value; `A`'s procedure
+fills with the pattern; the cell shows code B, glyph `r1`, which has none.
+veraPDF 1.30.2 judges the cell's glyphs as any other, so `6.2.11.7.2/1` (and
+`7.21.7/1`, `8.4.5.8/1` at PDF/UA) fails once, for `r1`, and `6.3.8/1` twice at
+PDF/A-1a, which wants a `/ToUnicode` for `A` as well.
+
+litho once judged no glyph of a Type 3 font in a stream its own procedures
+reach, read off a page showing the glyph in mode 2 whose cell showed it again:
+veraPDF judges that glyph once because the cell starts in the procedure's mode
+2, not because it skips the cell. The rule was silent at PDF/A-2a, 2u, 3a, 3u,
+UA-1 and UA-2, six rule-set cells. veraPDF and litho now report the same rule
+set and counts in all thirteen cells, and remediated at every level in both
+modes, on every output.
 
 ## Scope
 
