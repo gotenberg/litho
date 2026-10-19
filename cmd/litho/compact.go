@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -43,8 +44,7 @@ func registerCompactFlags(fs *flag.FlagSet) (compact, recompressImages *bool) {
 // byte-identical with the flag and without it. Refusing the flag there would
 // deny compaction to every input that does rewrite, so the help text states
 // the condition rather than promising a result the command cannot always
-// deliver. [pdf.Writer.WriteTo] logs the ignored option at Debug when it
-// happens.
+// deliver. Both warn on stderr when it happens (see [warnCompactIncremental]).
 func registerCompactFlag(fs *flag.FlagSet) *bool {
 	return fs.Bool("compact", false,
 		"Shrink the output by packing objects into object streams and merging "+
@@ -118,6 +118,60 @@ func warnPackingWithheld(stderr io.Writer, compact bool, profile string) {
 	fmt.Fprintf(stderr, "warning: --compact does not pack objects into object streams for %s, "+
 		"since ISO 19005-1, 6.1.4 forbids the cross-reference stream they require. "+
 		"Duplicate streams are still merged.\n", profile)
+}
+
+// warnCompactIncremental reports that --compact or --recompress-images was
+// asked for and did not happen, because the write appended an incremental
+// update, as [pdf.WithCompactionSkipped] reports it after the write.
+//
+// An update appends the edits to the input's bytes and keeps those bytes as
+// they are (ISO 32000-1, 7.5.6), and packing, dedup and image recompression
+// run on a full rewrite only, so the output is byte-identical to the one
+// written without the flag. pipe and remediate leave an update when nothing
+// they do needs a rewrite, a rotation or a remediation that repaired nothing
+// structural, and neither forces one for compaction: a rewrite drops every
+// signature the input carries (ISO 32000-1, 12.8.1), a trade the flag does not
+// ask for. decrypt always rewrites, so it is the remedy the warning names.
+//
+// For a profile that forbids packing (see [packingForbiddenByProfile]) the
+// remedy leaves --compact out: decrypt knows no profile and would pack the
+// output, costing it the conformance the remediation produced.
+//
+// A warning rather than an error, matching [warnCompactSkipped]: the command
+// still produced a correct document, only a larger one.
+func warnCompactIncremental(stderr io.Writer, compact, recompressImages, skipped bool, profile string) {
+	if !skipped {
+		return
+	}
+	var flags string
+	switch {
+	case compact && recompressImages:
+		flags = "--compact and --recompress-images do"
+	case compact:
+		flags = "--compact does"
+	case recompressImages:
+		flags = "--recompress-images does"
+	default:
+		return
+	}
+	var remedy []string
+	if compact && !packingForbiddenByProfile(profile) {
+		remedy = append(remedy, "--compact")
+	}
+	if recompressImages {
+		remedy = append(remedy, "--recompress-images")
+	}
+	fmt.Fprintf(stderr, "warning: %s not apply to an incremental update, so the output is not compacted: "+
+		"the edits were appended to the input's bytes, which an update keeps as they are.", flags)
+	if len(remedy) > 0 {
+		fmt.Fprintf(stderr, " Run the output through `litho decrypt %s`, which rewrites the whole file, to compact it.",
+			strings.Join(remedy, " "))
+	}
+	if compact && packingForbiddenByProfile(profile) {
+		fmt.Fprintf(stderr, " `litho decrypt --compact` would pack objects into object streams, which %s forbids: "+
+			"ISO 19005-1, 6.1.4 forbids the cross-reference stream they require.", profile)
+	}
+	fmt.Fprintln(stderr)
 }
 
 // warnRecompressSkipped reports that --recompress-images was asked for and

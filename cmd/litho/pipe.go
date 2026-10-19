@@ -251,6 +251,10 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// Pipeline.WriteTo hands it to each Writer and each intermediate split or
 	// merge, since a stage that gives a page a media box gives it for good.
 	finalOpts := append(profileCompactWriteOptions(compact, recompressImages, packingRefusedProfile), defaultPageSize.writeOptions()...)
+	// Whether the flags reached an incremental update, which carries no
+	// compaction, can only be known once the library has chosen the write.
+	var compactionSkipped bool
+	finalOpts = append(finalOpts, pdf.WithCompactionSkipped(&compactionSkipped))
 	result, err := pipeline.WriteTo(ctx, dst, finalOpts...)
 	if err != nil {
 		// Withdraw the file createOutput already made. Every other
@@ -277,6 +281,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		warnAutoTagSkipped(stderr, report)
 	}
 	warnSignaturesDropped(stderr, result.DroppedSignatures)
+	warnCompactIncremental(stderr, compact, recompressImages, compactionSkipped, packingRefusedProfile)
 
 	// A remediate stage asserts the profile in the output whatever it could
 	// not repair, exactly as the standalone command does, so a pipeline that

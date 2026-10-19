@@ -143,7 +143,9 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return exitError
 	}
 
-	if err := w.WriteTo(ctx, dst, profileCompactWriteOptions(*compact, *recompressImages, *profile)...); err != nil {
+	var compactionSkipped bool
+	writeOpts := append(profileCompactWriteOptions(*compact, *recompressImages, *profile), pdf.WithCompactionSkipped(&compactionSkipped))
+	if err := w.WriteTo(ctx, dst, writeOpts...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError
@@ -153,6 +155,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintf(stderr, "closing output: %v\n", err)
 		return exitError
 	}
+	warnCompactIncremental(stderr, *compact, *recompressImages, compactionSkipped, *profile)
 
 	result := remediateResult{
 		Profile: *profile,
