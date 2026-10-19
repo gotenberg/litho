@@ -134,3 +134,49 @@ func TestExtractLines_EndPathDiscards(t *testing.T) {
 		t.Fatalf("expected 0 lines after end-path, got %d", len(lines))
 	}
 }
+
+func TestExtractFilledBoxes_FilledRectangle(t *testing.T) {
+	t.Parallel()
+	ops := []content.Operation{
+		{Operator: "cm", Operands: []ast.PdfObject{
+			ast.PdfInt(1), ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(1), ast.PdfInt(10), ast.PdfInt(20),
+		}},
+		{Operator: "re", Operands: []ast.PdfObject{
+			ast.PdfInt(72), ast.PdfInt(600), ast.PdfInt(468), ast.PdfReal(0.4),
+		}},
+		{Operator: "f"},
+	}
+	boxes := ExtractFilledBoxes(ops)
+	if len(boxes) != 1 {
+		t.Fatalf("boxes: got %d, want 1", len(boxes))
+	}
+	want := [4]float64{82, 620, 550, 620.4}
+	for i := range want {
+		if math.Abs(boxes[0][i]-want[i]) > 0.01 {
+			t.Fatalf("box: got %v, want %v", boxes[0], want)
+		}
+	}
+}
+
+func TestExtractFilledBoxes_StrokedAndDiscardedPathsAreNotFilled(t *testing.T) {
+	t.Parallel()
+	ops := []content.Operation{
+		{Operator: "re", Operands: []ast.PdfObject{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(100), ast.PdfInt(1)}},
+		{Operator: "S"},
+		{Operator: "re", Operands: []ast.PdfObject{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(100), ast.PdfInt(1)}},
+		{Operator: "W"},
+		{Operator: "n"},
+		{Operator: "m", Operands: []ast.PdfObject{ast.PdfInt(0), ast.PdfInt(50)}},
+		{Operator: "c", Operands: []ast.PdfObject{
+			ast.PdfInt(10), ast.PdfInt(60), ast.PdfInt(20), ast.PdfInt(40), ast.PdfInt(30), ast.PdfInt(50),
+		}},
+		{Operator: "B"},
+	}
+	boxes := ExtractFilledBoxes(ops)
+	if len(boxes) != 1 {
+		t.Fatalf("boxes: got %v, want only the fill-and-stroke path", boxes)
+	}
+	if boxes[0] != [4]float64{0, 40, 30, 60} {
+		t.Errorf("box: got %v, want the control points' hull [0 40 30 60]", boxes[0])
+	}
+}
