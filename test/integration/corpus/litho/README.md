@@ -245,6 +245,8 @@ one deliberately rather than diffing it against a fresh build.
 | `patternreach_2b.pdf`  | PDF/A-2b     | DeviceRGB a pattern reaches, one path, cycle or sharing per page |
 | `iccbadgray_1b.pdf`    | PDF/A-1b     | A grey output intent whose ICC profile states version 5.0        |
 | `iccbadgray_2b.pdf`    | PDF/A-2b     | A direct grey output intent over a scanner-class ICC profile     |
+| `iccbadcmyk_1b.pdf`    | PDF/A-1b     | A CMYK output intent whose ICC profile states version 5.0        |
+| `iccbadcmyk_2b.pdf`    | PDF/A-2b     | Two output intents sharing one scanner-class CMYK ICC profile    |
 
 ### Must-not-fire controls
 
@@ -608,6 +610,8 @@ are covered under [Known divergences](#known-divergences).
 | `gstate_2b.pdf`        | 9    | 7    | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
+| `iccbadcmyk_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
+| `iccbadcmyk_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 6   | 6    | 7    | 7    | 6    |
 | `iccbadgray_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `iccbadgray_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
@@ -7093,7 +7097,7 @@ dedicates it to the public domain under CC0 1.0. A grey intent must keep a grey
 profile: sRGB under a grey output condition would license DeviceRGB content the
 source never had (ISO 19005-1, 6.2.3.3; ISO 19005-2, 6.2.4.3). No fixture
 reached that replacement before these two; `outputintent_2b.pdf` reaches the
-sRGB one, and no fixture reaches the CMYK one.
+sRGB one, and `iccbadcmyk_1b.pdf` and `iccbadcmyk_2b.pdf` the CMYK one.
 
 `iccbadgray_1b.pdf` has one indirect intent whose grey display profile states
 version 5.0, which no part admits. `iccbadgray_2b.pdf` has one intent written
@@ -7122,6 +7126,48 @@ stream in place after allocating the replacement once more under a number
 nothing referenced, so every output carried an orphan 2.7 KB copy of the grey
 profile, and two intents sharing one profile came back with two copies, which
 a later fixer had to unify.
+
+### `iccbadcmyk_1b.pdf` and `iccbadcmyk_2b.pdf`
+
+A CMYK destination profile that cannot be kept or re-encoded is replaced with
+litho's bundled CMYK profile, `pkg/internal/remediation/cmyk.icc`: 2228 bytes,
+version 2.1, class `prtr`, PCS `XYZ `, an `A2B0` tag only, desc "US Web Coated
+(SWOP) v2". A CMYK intent must keep a CMYK profile: sRGB under a CMYK output
+condition would stop covering the DeviceCMYK content the page paints (ISO
+19005-1, 6.2.3.3; ISO 19005-2, 6.2.4.3). No fixture reached that replacement
+before these two.
+
+`iccbadcmyk_1b.pdf` has one indirect intent whose CMYK output profile states
+version 5.0, which no part admits. `iccbadcmyk_2b.pdf` has a `GTS_PDFA1` and a
+`GTS_PDFX` intent, both indirect, naming one version 2.1 CMYK profile of the
+input device class `scnr`, and its page paints an ICCBased space over the same
+profile stream. Both profiles carry v2 `desc`, `cprt`, `wtpt`, and lut8 `A2B0`
+and `B2A0` tags over a Lab connection space, and each page paints DeviceCMYK
+and text in an embedded TrueType.
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells:
+`6.2.2/1` at PDF/A-1a and 1b, `6.2.3/1` at the other PDF/A levels, beside the
+tagging and identification rules each claim draws, and no ICC rule at PDF/UA-1
+and UA-2. `iccbadcmyk_2b.pdf` also fails `6.2.4.2/3` at PDF/A-4, 4e and 4f:
+its ICCBased space reads the CMYK profile of the current output intent (ISO
+19005-4, 6.2.4.2). Remediated at all thirteen, default and aggressive, every
+output carries the same rule set on both tools and fully fixes, but PDF/A-4f,
+which keeps `6.9/5`. At every PDF/A level the output intents read the bundled
+CMYK profile with `/N 4` and keep their `/OutputConditionIdentifier`; PDF/UA
+checks no output intent, so those outputs keep the source profile.
+
+The two files take the two branches of the replacement.
+`iccbadcmyk_1b.pdf` has its profile replaced at its own object number, so the
+output holds one ICC profile. `iccbadcmyk_2b.pdf` keeps the scanner profile for
+its ICCBased space, which admits one (ISO 19005-2, 6.2.4.2), and both intents
+name one new profile object, as ISO 19005-2, 6.2.3 t2 asks: the output holds
+two ICC profiles and no orphan. Pointing the intents away from the space's
+profile also clears `6.2.4.2/3` at PDF/A-4.
+
+litho's own colour engine cannot build a transform from `cmyk.icc` (an 8-bit
+table into the XYZ connection space), so an image decoded from a remediated
+output reads DeviceCMYK through the built-in CGATS001Compat profile instead,
+as it does a document with no CMYK intent.
 
 ### `drivetitle_1b.pdf`
 
