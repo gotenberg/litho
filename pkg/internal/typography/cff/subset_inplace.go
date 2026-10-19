@@ -17,13 +17,15 @@ const (
 
 // SubsetInPlace returns a CFF program in which every glyph but glyph 0
 // (.notdef), the glyphs of keep and the base and accent glyphs a kept glyph's
-// seac endchar draws has a charstring of a lone endchar, and every glyph keeps
+// seac endchar draws has a charstring of its width operand, if it has one, and
+// endchar, drawing nothing at the advance it had, and every glyph keeps
 // its glyph ID, its name or CID in the charset, its codes in the encoding and
 // its Font DICT. It is [Subset] for a program a document already references:
 // a CIDFontType0 font selects a glyph by its CID through the charset, or by a
 // glyph ID a CIDToGIDMap names, and a Type 1 font by the name its encoding
 // gives a code, and keeping every glyph ID keeps each of those routes on the
-// glyph it reached. A glyph left out draws nothing.
+// glyph it reached. A glyph whose width a scan of its charstring cannot
+// settle is kept whole.
 //
 // It reads name-keyed and CID-keyed programs. The Top DICT keeps every
 // operator but UniqueID and XUID, which identify the whole font (Adobe
@@ -45,6 +47,27 @@ func SubsetInPlace(ctx context.Context, data []byte, keep []uint16) ([]byte, err
 		return nil, err
 	}
 	n := len(src.charStrings)
+	// An emptied glyph keeps its advance: its charstring is the width
+	// operand its source charstring gives, if any, and endchar (Adobe
+	// Technical Note #5177, 3.1), so /Widths and /W stay consistent with the
+	// program. A glyph whose width the scan cannot settle is kept whole.
+	emptied := make([][]byte, n)
+	for gid, cs := range src.charStrings {
+		if gid%500 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+		width, settled := charstringWidth(cs, src.localSubrs(gid), src.globalSubrs)
+		switch {
+		case !settled:
+			keep = append(keep, uint16(gid)) //nolint:gosec // G115: gid indexes a Card16-counted CharStrings INDEX.
+		case width == nil:
+			emptied[gid] = []byte{csEndchar}
+		default:
+			emptied[gid] = append(appendCharstringNumber(nil, *width), csEndchar)
+		}
+	}
 	kept := make([]bool, n)
 	if src.fdSelect == nil {
 		// A name-keyed program: the subset source walks its seac and
@@ -72,19 +95,67 @@ func SubsetInPlace(ctx context.Context, data []byte, keep []uint16) ([]byte, err
 	}
 	charStrings := make([][]byte, n)
 	for gid, cs := range src.charStrings {
-		if gid%500 == 0 {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-		}
 		if kept[gid] {
 			charStrings[gid] = cs
 		} else {
-			charStrings[gid] = []byte{csEndchar}
+			charStrings[gid] = emptied[gid]
 		}
 	}
 	src.charStrings = charStrings
 	return src.assemble(), nil
+}
+
+// appendCharstringNumber appends v as a Type 2 charstring operand, in the
+// shortest form that holds it exactly (Adobe Technical Note #5177, 3.2): one
+// or two bytes for an integer in [-1131, 1131], three for one in the int16
+// range, and the 16.16 fixed form otherwise.
+func appendCharstringNumber(out []byte, v float64) []byte {
+	if i := int(v); float64(i) == v {
+		switch {
+		case i >= -107 && i <= 107:
+			return append(out, byte(i+139)) //nolint:gosec // G115: i+139 is in [32, 246].
+		case i >= 108 && i <= 1131:
+			i -= 108
+			return append(out, byte(i/256+247), byte(i%256)) //nolint:gosec // G115: i/256+247 is in [247, 250].
+		case i >= -1131 && i <= -108:
+			i = -i - 108
+			return append(out, byte(i/256+251), byte(i%256)) //nolint:gosec // G115: i/256+251 is in [251, 254].
+		case i >= math.MinInt16 && i <= math.MaxInt16:
+			return binary.BigEndian.AppendUint16(append(out, csShortInt), uint16(int16(i))) //nolint:gosec // G115: i is in the int16 range.
+		}
+	}
+	return binary.BigEndian.AppendUint32(append(out, csFixed), uint32(int32(math.Round(v*fixed1616Scale)))) //nolint:gosec // G115: a width read from a 16.16 operand fits it.
+}
+
+// localSubrs returns the local subroutines glyph gid calls into: the Private
+// DICT's of a name-keyed program, or those of the Font DICT the FDSelect of a
+// CID-keyed program gives the glyph (Adobe Technical Note #5176, section 19).
+func (s *inPlaceSource) localSubrs(gid int) [][]byte {
+	if s.fdSelect == nil {
+		return s.private.subrs
+	}
+	fd := -1
+	switch s.fdSelect[0] {
+	case 0:
+		if 1+gid < len(s.fdSelect) {
+			fd = int(s.fdSelect[1+gid])
+		}
+	case 3:
+		ranges := int(binary.BigEndian.Uint16(s.fdSelect[1:]))
+		for r := range ranges {
+			at := 3 + 3*r
+			first := int(binary.BigEndian.Uint16(s.fdSelect[at:]))
+			next := int(binary.BigEndian.Uint16(s.fdSelect[at+3:]))
+			if gid >= first && gid < next {
+				fd = int(s.fdSelect[at+2])
+				break
+			}
+		}
+	}
+	if fd < 0 || fd >= len(s.fds) {
+		return nil
+	}
+	return s.fds[fd].private.subrs
 }
 
 // inPlaceSource is a CFF program as [SubsetInPlace] reads and rewrites it:
@@ -520,4 +591,16 @@ func (p *privateBlock) dict() []byte {
 		out = append(out, opSubrs)
 	}
 	return out
+}
+
+// Charset returns the charset of a program [SubsetInPlace] reads: the SID of
+// each glyph's name in a name-keyed program, or the CID of each glyph in a
+// CID-keyed one, indexed by glyph ID, and whether the program is CID-keyed.
+// It fails where SubsetInPlace does.
+func Charset(data []byte) (entries []int, cidKeyed bool, err error) {
+	src, err := readInPlaceSource(data)
+	if err != nil {
+		return nil, false, err
+	}
+	return src.charset, src.fdSelect != nil, nil
 }

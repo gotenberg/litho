@@ -1240,6 +1240,10 @@ type widthScanner struct {
 	stack         []float64
 	width         *float64
 	done          bool
+	// settled reports a scan that reached the first stack-clearing
+	// operator, so width is the glyph's own: nil then means the glyph takes
+	// defaultWidthX, where an unsettled scan knows nothing.
+	settled bool
 }
 
 // push appends an operand, stopping the scan if the operand stack exceeds the
@@ -1260,6 +1264,7 @@ func (s *widthScanner) takeWidth(extra bool) {
 		s.width = &w
 	}
 	s.done = true
+	s.settled = true
 }
 
 // callSubr expands the subroutine indexed by the top operand (after bias),
@@ -1364,6 +1369,14 @@ func (s *widthScanner) scan(cs []byte, depth int) {
 // operator), expanding any subroutines it calls first. Returns nil if no
 // explicit width is present (the glyph then uses defaultWidthX).
 func extractCharstringWidth(cs []byte, localSubrs, globalSubrs [][]byte) *float64 {
+	width, _ := charstringWidth(cs, localSubrs, globalSubrs)
+	return width
+}
+
+// charstringWidth is [extractCharstringWidth] reporting, too, whether the
+// scan reached the first stack-clearing operator. When it did not, a nil
+// width says nothing about the glyph.
+func charstringWidth(cs []byte, localSubrs, globalSubrs [][]byte) (*float64, bool) {
 	s := &widthScanner{
 		local:  localSubrs,
 		global: globalSubrs,
@@ -1372,5 +1385,5 @@ func extractCharstringWidth(cs []byte, localSubrs, globalSubrs [][]byte) *float6
 		stack:  make([]float64, 0, 48), //nolint:mnd // typical charstring stack depth
 	}
 	s.scan(cs, 0)
-	return s.width
+	return s.width, s.settled
 }

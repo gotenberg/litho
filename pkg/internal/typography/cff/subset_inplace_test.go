@@ -15,7 +15,8 @@ import (
 
 // checkInPlace asserts that out keeps every glyph ID of src, with its name or
 // CID, its encoding codes and Font DICT, that the glyphs kept carry the
-// charstrings src gave them, and that every other glyph is a lone endchar.
+// charstrings src gave them, that every other glyph is its width operand and
+// endchar, and that every glyph keeps its advance.
 func checkInPlace(t *testing.T, src, out []byte, kept map[int]bool) {
 	t.Helper()
 	ctx := context.Background()
@@ -34,8 +35,19 @@ func checkInPlace(t *testing.T, src, out []byte, kept map[int]bool) {
 		switch {
 		case kept[gid] && !bytes.Equal(cs, before.charStrings[gid]):
 			t.Errorf("kept glyph %d changed its charstring", gid)
-		case !kept[gid] && !bytes.Equal(cs, []byte{csEndchar}):
+		case !kept[gid] && (len(cs) > 6 || cs[len(cs)-1] != csEndchar):
+			// The width operand takes five bytes at most (Adobe Technical
+			// Note #5177, 3.2), and endchar one.
 			t.Errorf("glyph %d keeps a charstring of %d bytes", gid, len(cs))
+		}
+	}
+	for _, widths := range []func(context.Context, []byte) (map[uint16]float64, error){GlyphWidths, CIDWidths} {
+		want, err := widths(ctx, src)
+		if err != nil {
+			t.Fatalf("widths of the source: %v", err)
+		}
+		if got, err := widths(ctx, out); err != nil || !maps.Equal(got, want) {
+			t.Errorf("widths %v (%v), source %v", got, err, want)
 		}
 	}
 	if !slices.Equal(after.charset, before.charset) {
