@@ -43,16 +43,19 @@ import (
 //
 // # Corpus evidence
 //
-//   - All corpora: two pages leave a sequence open, both one level deep,
-//     both painting after the opener, and no form XObject does.
+//   - All corpora: read whole, as remediation reads them, two pages leave
+//     a sequence open, both one level deep and painting after the opener,
+//     and no form XObject does.
 //   - litho unclosedmc_ua1.pdf: an /Artifact BMC before a stroked rule with
 //     no EMC kept ISO 14289-1, 7.1 t3 and ISO 14289-2, 8.2.2 t1 after
-//     remediation on both tools.
-//   - pdfjs bug1077808.pdf: the other page. Read as veraPDF reads it, the
-//     page stops 1.9 MB into its 10 MB of content inside a /Layer sequence,
-//     but read whole, as remediation reads it, every sequence closes, so the
-//     fixer leaves it. A closed /Layer sequence would tag nothing either, and
-//     both tools keep ISO 14289-1, 7.1 t3 on its output.
+//     remediation on both tools, and now fully fixes.
+//   - pdfjs issue11678.pdf: page 2 leaves its sequence open past where the
+//     veraPDF reading stops, so the closing EMC moves no rule set on either
+//     tool at any of the thirteen levels.
+//   - pdfjs bug1077808.pdf: the veraPDF reading stops 1.9 MB into the page's
+//     10 MB of content inside a /Layer sequence, but every sequence closes
+//     in the whole reading, so the fixer leaves it, and a /Layer sequence
+//     would tag nothing anyway.
 func fixMarkedContentClose(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
