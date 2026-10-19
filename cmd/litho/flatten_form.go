@@ -9,7 +9,7 @@ import (
 
 func runFlattenForm(ctx context.Context, args []string, _ io.Writer, stderr io.Writer) int {
 	return runSimpleMutation(ctx, args, stderr, "flatten-form",
-		"Usage: litho flatten-form <file> [--compact] -o out.pdf",
+		"Usage: litho flatten-form <file> [--compact] [--recompress-images] -o out.pdf",
 		func(w *pdf.Writer) { w.FlattenForm() },
 		withCompactFlag())
 }

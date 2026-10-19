@@ -239,7 +239,7 @@ func withAfterWrite(report func()) simpleMutationOption {
 	return func(c *simpleMutationConfig) { c.afterWrite = report }
 }
 
-// withCompactFlag gives the command a -compact flag.
+// withCompactFlag gives the command the -compact and -recompress-images flags.
 //
 // Opt-in rather than automatic because the three commands sharing this helper
 // do not agree: decrypt and flatten-form always rewrite the whole file, while
@@ -275,9 +275,9 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
-	var compact *bool
+	var compact, recompressImages *bool
 	if cmdCfg.compact {
-		compact = registerCompactFlag(fs)
+		compact, recompressImages = registerCompactFlags(fs)
 	}
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
@@ -314,7 +314,7 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 
 	var writeOpts []pdf.WriteOption
 	if compact != nil {
-		writeOpts = compactWriteOptions(*compact)
+		writeOpts = compactWriteOptions(*compact, *recompressImages)
 	}
 
 	if err := w.WriteTo(ctx, dst, writeOpts...); err != nil {

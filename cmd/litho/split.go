@@ -19,14 +19,14 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	userPwd := fs.String("user-password", "", "Encrypt the output with this user password")
 	ownerPwd := fs.String("owner-password", "", "Owner password for the encrypted output")
 	algorithm := fs.String("algorithm", "aes256", "Algorithm for the encrypted output: rc4-128, aes128, aes256")
-	compact := registerCompactFlag(fs)
+	compact, recompressImages := registerCompactFlags(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *pages == "" {
-		fmt.Fprintln(stderr, "Usage: litho split <file> --pages RANGE [--user-password X] [--compact] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho split <file> --pages RANGE [--user-password X] [--compact] [--recompress-images] -o out.pdf")
 		return exitError
 	}
 
@@ -42,7 +42,7 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	// alone would make it non-empty, which suppresses the encryption warning
 	// and fires the compaction one on a file that was compacted fine.
 	encrypting := len(writeOpts) > 0
-	writeOpts = append(writeOpts, compactWriteOptions(*compact)...)
+	writeOpts = append(writeOpts, compactWriteOptions(*compact, *recompressImages)...)
 	writeOpts = append(writeOpts, defaultPageSize.writeOptions()...)
 
 	r, closer, err := openPDF(ctx, fs.Arg(0), *password)
@@ -55,6 +55,7 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	warnEncryptionDroppedOfferingPassword(stderr, encrypting, r)
 	warnXFADropped(ctx, stderr, r)
 	warnCompactSkipped(stderr, *compact, encrypting)
+	warnRecompressSkipped(stderr, *recompressImages, encrypting)
 
 	pageCount, err := r.PageCount(ctx)
 	if err != nil {

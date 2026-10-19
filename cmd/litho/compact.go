@@ -9,6 +9,23 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
+// registerCompactFlags adds -compact and -recompress-images to fs and returns
+// their bound values. The two are registered together so that every command
+// offering one offers the other, and are independent: either may be given
+// alone or both together.
+//
+// -recompress-images stays out of -compact by decision. Recompressing images
+// at zlib's best level costs seconds on an image-heavy file that otherwise
+// writes in milliseconds, too much for the flag a caller reaches for first.
+func registerCompactFlags(fs *flag.FlagSet) (compact, recompressImages *bool) {
+	compact = registerCompactFlag(fs)
+	recompressImages = fs.Bool("recompress-images", false,
+		"Recompress Flate, LZW, RunLength and uncompressed images losslessly, keeping each "+
+			"recompression only when it is smaller, when the command rewrites the whole file. "+
+			"Slower than --compact, and independent of it")
+	return compact, recompressImages
+}
+
 // registerCompactFlag adds -compact to fs and returns the bound value.
 //
 // Object-stream packing, stream dedup and image recompression all run on the
@@ -30,9 +47,8 @@ import (
 // happens.
 func registerCompactFlag(fs *flag.FlagSet) *bool {
 	return fs.Bool("compact", false,
-		"Shrink the output losslessly by packing objects into object streams, merging "+
-			"duplicate streams and recompressing Flate, LZW, RunLength and uncompressed images, "+
-			"when the command rewrites the whole file")
+		"Shrink the output by packing objects into object streams and merging "+
+			"duplicate streams, when the command rewrites the whole file")
 }
 
 // warnCompactSkipped reports that --compact was asked for and will not happen,
@@ -97,26 +113,45 @@ func warnCompactProfileRefused(stderr io.Writer, compact bool, profile string) {
 		"ISO 19005-1, 6.1.4 forbids the cross-reference stream that object streams require.\n", profile)
 }
 
-// compactWriteOptions returns the write options -compact selects, or none when
-// it was not passed.
+// warnRecompressSkipped reports that --recompress-images was asked for and
+// will not happen, because the output is encrypted: encryption has replaced
+// every stream's data with ciphertext before the pass would run, so the write
+// engine declines it, as it declines packing and dedup.
+func warnRecompressSkipped(stderr io.Writer, recompressImages, encrypting bool) {
+	if !recompressImages || !encrypting {
+		return
+	}
+	fmt.Fprintln(stderr, "warning: --recompress-images does not apply to an encrypted output, so no image is recompressed. "+
+		"Recompress the document first, then encrypt the result.")
+}
+
+// compactWriteOptions returns the write options -compact and
+// -recompress-images select, or none when neither was passed.
 //
-// One flag drives the three passes because they are independently safe and
-// their savings add up rather than overlap. Callers wanting one without the
-// others use [pdf.WithObjectStreams], [pdf.WithDedup] and
-// [pdf.WithImageRecompression] directly.
+// No PDF/A profile forbids image recompression: it writes FlateDecode, which
+// ISO 19005 permits at every part, and needs no PDF 1.5 construct. A caller
+// that must withhold -compact for a profile still passes recompressImages as
+// given.
 //
-// No pass can enlarge a file or damage one: packing declines any batch it
-// cannot shrink, recompression keeps a re-encoding only when it is smaller
-// and decodes to the same samples, and all three refuse outright on an
-// encrypted output, where per-object encryption keys make them unsafe.
+// -compact drives both packing and dedup because they are independently safe and their
+// savings add up rather than overlap. Callers wanting one without the other
+// use [pdf.WithObjectStreams] and [pdf.WithDedup] directly.
+//
+// Neither pass can enlarge a file or damage one: packing declines any batch it
+// cannot shrink, and both refuse outright on an encrypted output, where
+// per-object encryption keys make merging and packing unsafe.
 //
 // # Corpus evidence
 //
 //   - All corpora, 37 files: packing saves 6.25% and dedup 0.76% against the
 //     same rewrite without them, and 7.00% together.
-func compactWriteOptions(compact bool) []pdf.WriteOption {
-	if !compact {
-		return nil
+func compactWriteOptions(compact, recompressImages bool) []pdf.WriteOption {
+	var opts []pdf.WriteOption
+	if compact {
+		opts = append(opts, pdf.WithObjectStreams(), pdf.WithDedup())
 	}
-	return []pdf.WriteOption{pdf.WithObjectStreams(), pdf.WithDedup(), pdf.WithImageRecompression()}
+	if recompressImages {
+		opts = append(opts, pdf.WithImageRecompression())
+	}
+	return opts
 }

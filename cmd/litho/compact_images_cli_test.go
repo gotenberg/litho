@@ -169,3 +169,18 @@ func TestRecompressImagesFlag_EveryCompactCommand(t *testing.T) {
 		}
 	}
 }
+
+// TestRecompressImagesFlag_WarnsOnEncryptedOutput checks that asking to
+// recompress an output the command encrypts says why nothing was recompressed.
+func TestRecompressImagesFlag_WarnsOnEncryptedOutput(t *testing.T) {
+	src := imageFixtureFile(t)
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	var stdout, stderr bytes.Buffer
+	args := []string{"encrypt", "--user-password", "u", "--recompress-images", "-o", out, src}
+	if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("encrypt: exit %d, stderr: %s", rc, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--recompress-images does not apply to an encrypted output") {
+		t.Errorf("no warning on stderr: %q", stderr.String())
+	}
+}

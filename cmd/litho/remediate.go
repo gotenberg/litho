@@ -52,7 +52,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	format := fs.String("f", "text", "Output format: text or json")
 	invoice := fs.String("invoice", "", "Cross-Industry Invoice XML to embed (Factur-X / ZUGFeRD profiles)")
 	level := fs.String("level", "", "Factur-X conformance level: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG")
-	compact := registerCompactFlag(fs)
+	compact, recompressImages := registerCompactFlags(fs)
 	fonts := registerFontFlags(fs)
 	documentID := registerDocumentIDFlag(fs)
 	strict := fs.Bool("strict", false,
@@ -63,7 +63,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--system-fonts] [--no-font-subset] [--document-id HEX] [--compact] [--strict] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--system-fonts] [--no-font-subset] [--document-id HEX] [--compact] [--recompress-images] [--strict] -o out.pdf")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
 		return exitError
@@ -144,7 +144,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return exitError
 	}
 
-	if err := w.WriteTo(ctx, dst, compactWriteOptions(compactOK)...); err != nil {
+	if err := w.WriteTo(ctx, dst, compactWriteOptions(compactOK, *recompressImages)...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError
