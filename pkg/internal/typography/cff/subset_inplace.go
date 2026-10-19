@@ -41,6 +41,13 @@ const (
 // synthetic font, or charstrings that are not Type 2, and with
 // [ErrInvalidCFF] or [ErrTruncated] on a program it cannot read or a glyph ID
 // of keep past the program's glyph count.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-12-t10-fail-a.pdf and its
+//     PDF/A-2b twin: a glyph emptied to a lone endchar took defaultWidthX,
+//     and the width litho reads for its CID no longer matched /W (ISO
+//     19005-1, 6.3.6; ISO 19005-2, 6.2.11.5). Hence the width operand.
 func SubsetInPlace(ctx context.Context, data []byte, keep []uint16) ([]byte, error) {
 	src, err := readInPlaceSource(data)
 	if err != nil {
