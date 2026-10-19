@@ -216,15 +216,7 @@ func TestFixCorruptICC_ReplacesGreyProfileWithGrey(t *testing.T) {
 	if len(fixes) == 0 {
 		t.Fatal("control: the version 5 profile was not replaced")
 	}
-	oi, ok := alloc.Pending()[4].(ast.PdfDict)
-	if !ok {
-		t.Fatalf("output intent is %T, want a pending dict", alloc.Pending()[4])
-	}
-	ref, _ := oi["DestOutputProfile"].(ast.PdfIndirectRef)
-	stream, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfStream)
-	if !ok {
-		t.Fatalf("replacement is %T, want a stream", alloc.Pending()[ref.ObjectNum])
-	}
+	stream := replacedIntentProfile(ctx, t, alloc, doc, 4)
 	data, err := stream.Bytes(ctx)
 	if err != nil {
 		t.Fatal(err)

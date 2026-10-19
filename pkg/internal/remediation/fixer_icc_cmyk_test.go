@@ -92,20 +92,7 @@ func TestFixCorruptICC_ReplacesCMYKProfileWithCMYK(t *testing.T) {
 		t.Fatal("a version-5 profile must be replaced even with a valid class and " +
 			"colour space; the fixture never reached replaceICCProfile")
 	}
-	newOI, ok := alloc.Pending()[4].(ast.PdfDict)
-	if !ok {
-		t.Fatalf("OutputIntent (obj 4) is %T, want a pending dict; the repair did not "+
-			"run as expected", alloc.Pending()[4])
-	}
-	dpRef, ok := newOI["DestOutputProfile"].(ast.PdfIndirectRef)
-	if !ok {
-		t.Fatalf("new /DestOutputProfile is %T, want PdfIndirectRef", newOI["DestOutputProfile"])
-	}
-	stream, ok := alloc.Pending()[dpRef.ObjectNum].(ast.PdfStream)
-	if !ok {
-		t.Fatalf("replacement profile at obj %d is %T, want PdfStream",
-			dpRef.ObjectNum, alloc.Pending()[dpRef.ObjectNum])
-	}
+	stream := replacedIntentProfile(ctx, t, alloc, doc, 4)
 	data, err := stream.Bytes(ctx)
 	if err != nil {
 		t.Fatalf("reading replacement profile bytes: %v", err)

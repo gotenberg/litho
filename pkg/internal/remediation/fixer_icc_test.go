@@ -56,9 +56,7 @@ func TestFixCorruptICC_ReplacesV5Profile(t *testing.T) {
 	if len(descs) == 0 {
 		t.Fatal("a version-5 ICC profile must be replaced even with a valid class and color space")
 	}
-	if _, ok := alloc.Pending()[4]; !ok {
-		t.Error("expected the OutputIntent (obj 4) to be rewritten with a replacement profile")
-	}
+	replacedIntentProfile(context.Background(), t, alloc, doc, 4)
 }
 
 func TestFixCorruptICC_KeepsValidV4Profile(t *testing.T) {

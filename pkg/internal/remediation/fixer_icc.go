@@ -40,6 +40,24 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	var fixes []string
 	newOIArr := make(ast.PdfArray, len(oiArr))
 	converted := make(map[int]bool)
+	replacements := make(map[int]ast.PdfIndirectRef)
+	// arrayChanged records a replacement on an intent that sits directly in
+	// the array, which has no object number of its own (ISO 32000-1,
+	// 7.3.10), so the array itself is rewritten.
+	arrayChanged := false
+	setIntent := func(i int, oiEntry ast.PdfObject, oiRef ast.PdfIndirectRef, newOI ast.PdfDict) {
+		if newOI == nil {
+			newOIArr[i] = oiEntry
+			return
+		}
+		if oiRef.ObjectNum > 0 {
+			alloc.AllocAt(oiRef.ObjectNum, newOI)
+			newOIArr[i] = oiEntry
+			return
+		}
+		newOIArr[i] = newOI
+		arrayChanged = true
+	}
 
 	for i, oiEntry := range oiArr {
 		var oiRef ast.PdfIndirectRef
@@ -73,9 +91,8 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			// No profile to inspect, so the destination colour space is
 			// unknown and sRGB is the only defensible stock choice. The
 			// identifier filled in just above says sRGB too.
-			replaceICCProfile(alloc, oiDict, oiRef, nil, "")
+			setIntent(i, oiEntry, oiRef, replaceICCProfile(alloc, oiDict, nil, "", false, replacements))
 			fixes = append(fixes, fmt.Sprintf("added DestOutputProfile to OutputIntent[%d]", i))
-			newOIArr[i] = oiEntry
 			continue
 		}
 
@@ -97,11 +114,10 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		data, err := doc.DecodeStream(ctx, stream)
 		if err != nil || len(data) < 128 {
 			// Corrupt or too short. Replace with a valid profile.
-			newOIArr[i] = oiEntry
 			// The profile did not decode, or is too short to carry a header,
 			// so byte 16 onward cannot be trusted to name a colour space.
 			// sRGB is the only safe stock replacement here.
-			replaceICCProfile(alloc, oiDict, oiRef, dpObj, "")
+			setIntent(i, oiEntry, oiRef, replaceICCProfile(alloc, oiDict, dpObj, "", false, replacements))
 			fixes = append(fixes, fmt.Sprintf("replaced corrupt ICC profile in OutputIntent[%d]", i))
 			continue
 		}
@@ -124,8 +140,18 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			// keeps it: a CMYK profile rejected for its version is replaced
 			// with a CMYK profile, not silently turned into RGB. A colour
 			// space that is itself invalid falls through to sRGB.
-			replaceICCProfile(alloc, oiDict, oiRef, dpObj, colorSpace)
+			//
+			// A version no part admits is a flaw of the profile wherever it
+			// is used: an ICCBased space sharing it fails ISO 19005-1,
+			// 6.2.3.2 or ISO 19005-2/3/4, 6.2.4.2 t1 as well. The profile is
+			// then replaced in place, so those spaces read the stock
+			// profile too. A device class or colour space an output intent
+			// rejects is admitted in an ICCBased space, so that profile
+			// stays for the spaces sharing it.
+			inPlace := !validVersion && validCS
+			setIntent(i, oiEntry, oiRef, replaceICCProfile(alloc, oiDict, dpObj, colorSpace, inPlace, replacements))
 			fixes = append(fixes, fmt.Sprintf("replaced invalid ICC profile in OutputIntent[%d] (version=%d, class=%q, cs=%q)", i, version, deviceClass, colorSpace))
+			continue
 		} else if version != 2 && compliance.PDFAPart(profile) == 1 {
 			// PDF/A-1 rests on PDF 1.4, which predates ICC v4, so ISO
 			// 19005-1, 6.2.2 takes the destination profile of PDF Reference
@@ -140,6 +166,17 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		}
 
 		newOIArr[i] = oiEntry
+	}
+
+	if arrayChanged {
+		if arrRef, ok := oiObj.(ast.PdfIndirectRef); ok {
+			alloc.AllocAt(arrRef.ObjectNum, newOIArr)
+		} else {
+			newCatalog := make(ast.PdfDict, len(catalogDict))
+			maps.Copy(newCatalog, catalogDict)
+			newCatalog["OutputIntents"] = newOIArr
+			alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+		}
 	}
 
 	return fixes, nil
@@ -186,45 +223,62 @@ func convertOutputProfileToV2(ctx context.Context, alloc *writer.ObjAllocator, d
 	return true
 }
 
-// replaceICCProfile replaces the DestOutputProfile stream with a stock profile
-// matching colorSpace: the embedded CMYK profile when it is "CMYK", the
-// generated version 2 grey profile when it is "GRAY", sRGB otherwise. An empty
-// colorSpace means the original profile could not be read, so sRGB is the only
-// defensible choice. Every stock profile is version 2, which every PDF/A part
-// admits (ISO 19005-1, 6.2.2; ISO 19005-2, 6.2.3).
+// replaceICCProfile replaces the /DestOutputProfile of the output intent
+// oiDict with a stock profile matching colorSpace: the embedded CMYK profile
+// when it is "CMYK", the generated version 2 grey profile when it is "GRAY",
+// sRGB otherwise. An empty colorSpace means the original profile could not be
+// read, so sRGB is the only defensible choice. Every stock profile is version
+// 2, which every PDF/A part admits (ISO 19005-1, 6.2.2; ISO 19005-2, 6.2.3).
 //
 // Keeping the colour space matters because /OutputConditionIdentifier is left
 // untouched here. Substituting an RGB profile under a CMYK output condition
 // leaves the intent describing a destination it no longer converts to, and
 // under a grey one it also turns the intent into an RGB intent, which licenses
 // DeviceRGB content the source never did (ISO 19005-1, 6.2.3.3).
-func replaceICCProfile(alloc *writer.ObjAllocator, oiDict ast.PdfDict, oiRef ast.PdfIndirectRef, dpObj ast.PdfObject, colorSpace string) {
-	iccData := sRGBICCProfile
-	nComponents := 3
-	switch colorSpace {
-	case "CMYK":
-		iccData = cmykICCProfile
-		nComponents = 4
-	case "GRAY":
-		iccData = sGrayICCProfile
-		nComponents = 1
+//
+// With inPlace, the stock profile is written at the source profile's own
+// object number, so every intent and ICCBased colour space sharing it reads
+// the replacement, and it returns nil: the intent is unchanged. Otherwise it
+// returns a copy of oiDict naming a new profile object, which the caller writes
+// where the intent lives, and the source profile stays for the ICCBased spaces
+// that may share it. Either way replacements maps a source profile's object
+// number to its replacement, so intents that shared one profile share one
+// replacement, as ISO 19005-2, 6.2.3 t2 asks of every intent's
+// /DestOutputProfile, and the replacement is written once.
+func replaceICCProfile(alloc *writer.ObjAllocator, oiDict ast.PdfDict, dpObj ast.PdfObject, colorSpace string, inPlace bool, replacements map[int]ast.PdfIndirectRef) ast.PdfDict {
+	dpRef, indirect := dpObj.(ast.PdfIndirectRef)
+	indirect = indirect && dpRef.ObjectNum > 0
+	newStreamRef, done := replacements[dpRef.ObjectNum]
+	if !indirect || !done {
+		iccData := sRGBICCProfile
+		nComponents := 3
+		switch colorSpace {
+		case "CMYK":
+			iccData = cmykICCProfile
+			nComponents = 4
+		case "GRAY":
+			iccData = sGrayICCProfile
+			nComponents = 1
+		}
+		newStream := ast.NewStream(ast.PdfDict{
+			"N": ast.PdfInt(nComponents),
+		}, iccData)
+		if inPlace && indirect {
+			alloc.AllocAt(dpRef.ObjectNum, newStream)
+			newStreamRef = dpRef
+		} else {
+			newStreamRef = alloc.Alloc(newStream)
+		}
+		if indirect {
+			replacements[dpRef.ObjectNum] = newStreamRef
+		}
+	}
+	if indirect && newStreamRef == dpRef {
+		return nil
 	}
 
-	// Create replacement stream.
-	newStream := ast.NewStream(ast.PdfDict{
-		"N": ast.PdfInt(nComponents),
-	}, iccData)
-	newStreamRef := alloc.Alloc(newStream)
-
-	// Update the OutputIntent dict.
 	newOI := make(ast.PdfDict, len(oiDict))
 	maps.Copy(newOI, oiDict)
 	newOI["DestOutputProfile"] = newStreamRef
-
-	if oiRef.ObjectNum > 0 {
-		alloc.AllocAt(oiRef.ObjectNum, newOI)
-	} else if dpRef, ok := dpObj.(ast.PdfIndirectRef); ok {
-		// Replace the stream object directly.
-		alloc.AllocAt(dpRef.ObjectNum, newStream)
-	}
+	return newOI
 }
