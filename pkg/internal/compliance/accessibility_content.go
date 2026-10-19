@@ -407,7 +407,9 @@ func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation
 // sequence at all. veraPDF reads them the same way: its semantic content
 // stream (GFPDSemanticContentStream.getContentItem) makes everything after
 // the last balanced EMC one unmarked group when the stream ends with a
-// sequence open. An EMC with no sequence open closes nothing.
+// sequence open. An EMC with no sequence open closes nothing. Remediation
+// closes the sequences a page leaves open with the same reading
+// ([content.UnclosedMarkedContent]).
 //
 // # Corpus evidence
 //
@@ -416,24 +418,7 @@ func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation
 //     lexed inside the string, and veraPDF reports the page's first three
 //     items under ISO 14289-1, 7.1 t3 and ISO 14289-2, 8.2.2 t1.
 func unclosedMarkedTail(ops []content.Operation) int {
-	depth, tail := 0, 0
-	for i, op := range ops {
-		switch op.Operator {
-		case "BMC", "BDC":
-			depth++
-		case "EMC":
-			if depth == 0 {
-				continue
-			}
-			depth--
-			if depth == 0 {
-				tail = i + 1
-			}
-		}
-	}
-	if depth == 0 {
-		return len(ops)
-	}
+	tail, _ := content.UnclosedMarkedContent(ops)
 	return tail
 }
 
