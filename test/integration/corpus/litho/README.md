@@ -225,6 +225,10 @@ one deliberately rather than diffing it against a fresh build.
 | `shadedefault_2b.pdf`  | PDF/A-2b     | Shading patterns over DeviceCMYK beside DeviceRGB, CMYK intent   |
 | `type3names_2u.pdf`    | PDF/A-2u     | Type 3 fonts with no `/ToUnicode`, glyph names their one meaning |
 | `sizetie_2b.pdf`       | PDF/A-2b     | Two font sizes of equal weight, under bookmark generation        |
+| `iccv4intent_1b.pdf`   | PDF/A-1b     | An output intent's ICC v4 destination profile at PDF/A-1         |
+| `drivetitle_1b.pdf`    | PDF/A-1b     | Info text entries that begin like a PDF date, against XMP        |
+| `unclosedmc_ua1.pdf`   | PDF/UA-1     | An artifact sequence the content stream never closes             |
+| `danglingstr_ua1.pdf`  | PDF/UA-1     | Auto-tagging a page that ends inside an unterminated string      |
 
 ### Must-not-fire controls
 
@@ -535,6 +539,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_ua2.pdf`      | 11   | 8    | 16   | 12   | 12   | 16   | 12   | 12   | 8   | 8    | 9    | 18\* | 18\* |
 | `contentstream_4.pdf`  | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 6   | 6    | 7    | 8    | 7    |
 | `csnames_2b.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 5    | 6    |
+| `danglingstr_ua1.pdf`  | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 3    | 5    |
 | `defaultbox_2b.pdf`    | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 4   | 4    | 5    | 7    | 6    |
 | `defaultcs_4.pdf`      | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 10   | 7    |
 | `destforms_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 2    |
@@ -543,6 +548,7 @@ which are covered under [Known divergences](#known-divergences).
 | `docinfo_1b.pdf`       | 11   | 8    | 4    | 1    | 2    | 4    | 1    | 2    | 6   | 6    | 7    | 5    | 5    |
 | `docmdp_2b.pdf`        | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 10   | 8    |
 | `docsync_1b.pdf`       | 11   | 9    | 6    | 4    | 4    | 6    | 4    | 4    | 6   | 6    | 7    | 9    | 8    |
+| `drivetitle_1b.pdf`    | 3    | 0    | 4    | 1    | 2    | 4    | 1    | 2    | 6   | 6    | 7    | 7    | 6    |
 | `emptyfig_ua2.pdf`     | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `encperm_ua1.pdf`      | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 2    | 4    |
 | `extguards_2b.pdf`     | 9    | 6    | 6    | 3    | 4    | 7    | 4    | 5    | 5   | 5    | 6    | 5    | 5    |
@@ -581,6 +587,7 @@ which are covered under [Known divergences](#known-divergences).
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
+| `iccv4intent_1b.pdf`   | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `idfields_ua2.pdf`     | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 4    | 6    |
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
 | `imagecolour_2b.pdf`   | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
@@ -662,6 +669,7 @@ which are covered under [Known divergences](#known-divergences).
 | `type3names_2u.pdf`    | 5    | 2    | 5    | 2    | 3    | 5    | 2    | 3    | 3   | 3    | 4    | 7    | 7    |
 | `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
+| `unclosedmc_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
 | `usecmap_2u.pdf`       | 5    | 2    | 8    | 3    | 5    | 8    | 3    | 5    | 5   | 5    | 6    | 9    | 10   |
 | `unembednames_2u.pdf`  | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 11   | 11   |
@@ -6872,6 +6880,88 @@ thirteen cells: nothing at PDF/A-2b, and at the other levels the
 identification and tagging rules a part-2 claim draws. Remediated at all
 thirteen, default and aggressive, every output carries the same rule set on both
 tools and fully fixes, but PDF/A-4f, which keeps `6.9/5` on both.
+
+### `iccv4intent_1b.pdf`
+
+PDF/A-1 rests on PDF 1.4, which predates ICC v4, so ISO 19005-1, 6.2.2 takes
+the destination profile of PDF Reference 1.4, 9.10.4, a v2 profile, and
+veraPDF's test reads "version < 3.0". ISO 19005-2, -3 and -4, 6.2.3 admit v4.
+The file's one output intent carries a CMYK printer profile whose header states
+version 4.2, and nothing else in it fails PDF/A-1b. litho accepted major
+versions 2 and 4 in every part until `9e4f95c7`, so the PDF/A-1b cell read
+conforming where veraPDF reports `6.2.2/1`; with that fix reverted the PDF/A-1a
+and 1b cells lose `6.2.2/1` and the remediated PDF/A-1a and 1b outputs read
+fully fixed on litho alone.
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells:
+`6.2.2/1` alone at PDF/A-1b, and at the other levels the tagging and
+identification rules a part-1 claim draws, with no ICC rule. Remediated at all
+thirteen, default and aggressive, every output carries the same rule set on both
+tools. litho writes no replacement destination profile, so the PDF/A-1a and 1b
+outputs keep `6.2.2/1`; the other levels fully fix, but PDF/A-4f, which keeps
+`6.9/5`.
+
+### `drivetitle_1b.pdf`
+
+ISO 19005-1, 6.7.3 makes each document information entry equal to its XMP
+analogue, and veraPDF compares a text entry as a string. Only `/CreationDate`
+and `/ModDate` are dates (ISO 32000-1, Table 317), and litho read every value
+starting `D:` as a date on the Info side alone until `bf06c896`. Two text
+entries begin that way, each equal to its XMP copy, on independent tests:
+
+| Info entry      | Value                      | XMP property     | Before `bf06c896` |
+| --------------- | -------------------------- | ---------------- | ----------------- |
+| `/Title`        | `D:\openkm\temp\okm25.pdf` | `dc:title`       | `6.7.3/2`         |
+| `/Subject`      | `D:20200101`               | `dc:description` | `6.7.3/4`         |
+| `/CreationDate` | `D:20200101120000Z`        | `xmp:CreateDate` | silent, a date    |
+
+`/CreationDate` is the control: a real date still compares as an instant. With
+the fix reverted, litho reports `6.7.3/2` and `6.7.3/4` at PDF/A-1a and 1b, on
+the input and on every remediated output. veraPDF 1.30.2 and litho report the
+same rule set in all thirteen cells: nothing at PDF/A-1b, and at the other
+levels the rules a part-1 claim draws. Remediated at all thirteen, default and
+aggressive, every output carries the same rule set on both tools and fully
+fixes, but PDF/A-4f, which keeps `6.9/5`.
+
+### `unclosedmc_ua1.pdf`
+
+ISO 32000-1, 14.6 delimits a marked-content sequence by its BMC or BDC and the
+matching EMC, so content after a BMC no EMC closes lies in no sequence. The page
+holds a closed `/P` sequence and then `/Artifact BMC` and a stroked rule with no
+EMC. ISO 14289-1, 7.1 t3 and ISO 14289-2, 8.2.2 t1 judge the rule unmarked, as
+veraPDF does: its semantic content stream makes everything after the last
+balanced EMC one unmarked group. litho counted the open artifact as marking what
+followed until `3e903ac2`; with that fix reverted the PDF/UA-1 cell reads
+conforming and the PDF/UA-2 cell loses `8.2.2/1`.
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells:
+`7.1/3` alone at PDF/UA-1, and at PDF/UA-2 `8.2.2/1` beside the `5/2`, `5/5`
+and `8.2.5.2/2` a part-1 claim and a Document element outside the PDF 2.0
+namespace draw.
+Remediated at all thirteen, default and aggressive, every output carries the
+same rule set on both tools. No fixer closes the sequence: the content-tag
+fixer leaves a page that already holds marked content, so the PDF/UA-1 output
+keeps `7.1/3` and the PDF/UA-2 output `8.2.2/1`. The PDF/A levels fully fix,
+but PDF/A-4f, which keeps `6.9/5`.
+
+### `danglingstr_ua1.pdf`
+
+A literal string runs until its balancing right parenthesis (ISO 32000-1,
+7.3.4.2), so one a stream never closes swallows every byte after it. The page is
+untagged: a line of text, a stroked rule, then `(dangling ( string` to the end
+of the stream. Auto-tagging wraps the trailing content in an `/Artifact`
+sequence, and until `dc543dfd` it appended the closing EMC after the last byte,
+inside the string, which left the sequence open. With that fix reverted the
+remediated PDF/UA-1 and PDF/UA-2 outputs keep `7.1/3` and `8.2.2/1` on both
+tools; with it, the EMC goes before the string.
+
+The rest of the document is ready for PDF/UA-1: `/Lang`, DisplayDocTitle, the
+pdfuaid claim and dc:title, the conforming embedded TrueType of
+`ttcmap_2b.pdf`. veraPDF 1.30.2 and litho report the same rule set in all
+thirteen cells, the untagged page's `6.2/1`, `7.1/11` and `7.1/3` at PDF/UA-1,
+and neither reports the string. Remediated at all thirteen, default and
+aggressive, every output carries the same rule set on both tools and fully
+fixes, but PDF/A-4f, which keeps `6.9/5`.
 
 ### `fontnohead_2b.pdf`
 
