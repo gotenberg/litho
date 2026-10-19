@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // lithoCorpusPDFs is the tracked litho corpus, which the determinism tests
@@ -103,7 +106,7 @@ func TestDeterminismFeature_LeavesOutTheRandomMutations(t *testing.T) {
 		names = append(names, op.name)
 	}
 	got := strings.Join(names, ",")
-	for _, want := range []string{"remediation", "remediation-aggressive", "mutate-stamp", "mutate-pages", "mutate-autotag", "mutate-flatten", "mutate-redact"} {
+	for _, want := range []string{"remediation", "remediation-aggressive", "mutate-stamp", "mutate-pages", "mutate-autotag", "mutate-flatten", "mutate-redact", "generate-bookmarks", "split-reconstruct"} {
 		if !strings.Contains(","+got+",", ","+want+",") {
 			t.Errorf("operations %s lack %s", got, want)
 		}
@@ -111,6 +114,85 @@ func TestDeterminismFeature_LeavesOutTheRandomMutations(t *testing.T) {
 	for _, unwanted := range []string{"mutate-sign", "mutate-encrypt"} {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("operations %s hold %s, whose output is random by design", got, unwanted)
+		}
+	}
+}
+
+// TestDeterminismFeature_BookmarkOperationsComeLast pins that the bookmark
+// generations take the fixture slots after every other operation, so adding
+// them moved no fixture's assignment, and that every operation runs at least
+// twice.
+func TestDeterminismFeature_BookmarkOperationsComeLast(t *testing.T) {
+	t.Parallel()
+
+	ops := newDeterminismFeature().ops
+	if len(ops) < 2 {
+		t.Fatalf("%d operations, want at least the two bookmark ones", len(ops))
+	}
+	if got := ops[len(ops)-2].name + "," + ops[len(ops)-1].name; got != "generate-bookmarks,split-reconstruct" {
+		t.Errorf("last operations %s, want generate-bookmarks,split-reconstruct", got)
+	}
+	for _, op := range ops {
+		if op.runs < 2 {
+			t.Errorf("%s runs %d times, want at least 2", op.name, op.runs)
+		}
+	}
+}
+
+// TestDeterminismFeature_RunsEveryTimeItSays pins that a cell runs its
+// operation op.runs times and fails on a run past the second that differs.
+func TestDeterminismFeature_RunsEveryTimeItSays(t *testing.T) {
+	t.Parallel()
+
+	path := writeDeterminismPDF(t, "plain_2b.pdf")
+	f := newDeterminismFeature()
+	calls := 0
+	f.ops = []determinismOp{{name: "third-differs", runs: 3, run: func(_ context.Context, data []byte, _ string) ([]byte, error) {
+		calls++
+		if calls == 3 {
+			return []byte("other"), nil
+		}
+		return data, nil
+	}}}
+	v := runDeterminism(t, f, path, "PDF_A-2b/plain_2b")
+	if calls != 3 {
+		t.Errorf("ran %d times, want 3", calls)
+	}
+	if v.Match || v.Metrics[metricNondeterministic] != 1 {
+		t.Errorf("verdict %+v, want one nondeterministic cell", v)
+	}
+}
+
+// TestDeterminismFeature_SizeTieFixtureReachesGeneration pins that
+// sizetie_2b.pdf, the fixture whose two font sizes tie, gives both bookmark
+// generations a heading to find, so a tie broken at random changes their
+// output and the cell sees it.
+func TestDeterminismFeature_SizeTieFixtureReachesGeneration(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile(filepath.Join(lithoCorpusPDFs, "sizetie_2b.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, run := range map[string]func(context.Context, []byte) ([]byte, error){
+		"generate-bookmarks": generateBookmarksForDeterminism,
+		"split-reconstruct":  splitReconstructForDeterminism,
+	} {
+		out, err := run(context.Background(), data)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		r, err := pdf.Open(context.Background(), bytes.NewReader(out), int64(len(out)))
+		if err != nil {
+			t.Fatalf("%s: reopening: %v", name, err)
+		}
+		bms, err := r.Bookmarks(context.Background())
+		r.Close()
+		if err != nil {
+			t.Fatalf("%s: reading the outline: %v", name, err)
+		}
+		if len(bms) != 1 || bms[0].Title != "AABB" {
+			t.Errorf("%s: outline %+v, want the one heading AABB", name, bms)
 		}
 	}
 }

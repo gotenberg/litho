@@ -7253,7 +7253,9 @@ divergence to cover under Known divergences.
 PDF/A-4e and PDF/A-4f are the manifest's ninth and tenth profiles, after the eight it
 listed first. Appended rather than sorted in, they leave the determinism
 feature dealing each fixture's operations over the same first seven profiles,
-and the mutation anchor on PDF/A-1b. The fixture sections that say "the first
+and the mutation anchor on PDF/A-1b. The two bookmark generations the feature
+gained later come after those seven operations, so they take the eighth and
+ninth profiles, PDF/UA-2 and PDF/A-4e, which skipped before them. The fixture sections that say "the first
 eight manifest profiles" were measured before the two joined. At both, live
 veraPDF 1.30.2 reports the rule set the counts table gives in all 320 cells, and
 litho the same set in each. Remediated at both, every output carries the same

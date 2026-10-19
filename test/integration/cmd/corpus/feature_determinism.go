@@ -14,29 +14,48 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// metricNondeterministic counts the (PDF, operation) cells whose two runs
-// wrote different bytes or a different report. It is a cost metric (see
+// metricNondeterministic counts the (PDF, operation) cells whose runs wrote
+// different bytes or a different report. It is a cost metric (see
 // costMetrics in baseline.go): a rise is the regression.
 const metricNondeterministic = "nondeterministic"
 
-// determinismOp is one operation the determinism feature runs twice.
+// determinismRuns is how many times the determinism feature runs an
+// operation. Three runs instead of two cost half as much time again and turn
+// a coin-flip nondeterminism, the kind a Go map's iteration order breeds, from
+// a one-in-two to a one-in-four chance of going unseen in a cell.
+const determinismRuns = 3
+
+// determinismBookmarkRuns is how many times the determinism feature runs a
+// bookmark generation. Generation reads a document's text once and decides
+// one thing from it, its body font size, so a tie it broke at random is one
+// coin flip a run, on the one cell a fixture assigns it: eight runs let such
+// a tie through once in 128.
+const determinismBookmarkRuns = 8
+
+// determinismOp is one operation the determinism feature runs several times.
 type determinismOp struct {
 	name string
+	// runs is how many times the cell runs the operation, at least two.
+	runs int
 	run  func(ctx context.Context, data []byte, home string) ([]byte, error)
 }
 
 // determinismFeature guards CONTRIBUTING "Deterministic output" over a whole
-// corpus: each operation runs twice on the same PDF, and the two runs must
-// write the same bytes and, for a remediation, the same report. Nothing is
+// corpus: each operation runs several times on the same PDF (see
+// [determinismRuns]), and every run must write the bytes the first wrote and,
+// for a remediation, the same report. Nothing is
 // pinned: remediation derives a missing /ID from the content, so the default
 // options are the ones the cell holds to it.
 //
 // The operations are the remediation at the PDF's home profile, the one its
 // file name ends with (see [lithoHomeProfile]), in the default and the
-// aggressive mode, and the mutate-* Writer mutations that draw no randomness.
-// mutate-sign and mutate-encrypt are left out, since a signature and an
-// encryption carry the random nonces, keys, salts and IVs their cryptography
-// requires.
+// aggressive mode, the mutate-* Writer mutations that draw no randomness, and
+// two bookmark generations: [pdf.Writer.GenerateBookmarks] with the CLI's
+// options in replace mode, and a [pdf.Split] of every page that reconstructs
+// the outline. mutate-sign and mutate-encrypt are left out, since a signature
+// and an encryption carry the random nonces, keys, salts and IVs their
+// cryptography requires. The bookmark generations come last, so they take
+// fixture slots that skipped before them and move no other assignment.
 //
 // A PDF has one fixture per profile of the manifest, and the operations are
 // dealt out over them in fixture order (see [determinismFeature.Prepare]), so
@@ -49,8 +68,12 @@ type determinismOp struct {
 //
 // # Corpus evidence
 //
-//   - litho: the 966 cells of the 138 fixtures take 2 s with 4 workers, and
-//     every operation writes the same bytes twice.
+//   - litho: the 1557 scored cells of the 173 fixtures, at three runs and
+//     eight for a bookmark generation, take 4 s with 4 workers, and every
+//     operation writes the same bytes each time.
+//   - litho sizetie_2b: planted, the tie in the body font size broken in map
+//     order again, as before 5688d5c6, counts its generate-bookmarks or its
+//     split-reconstruct cell nondeterministic, or both, in 10 of 10 runs.
 //   - litho: planted, a serializer that writes dictionary keys unsorted counts
 //     787 of the 966 cells nondeterministic.
 //   - litho filestruct_1b: planted, the random trailer /ID remediation drew
@@ -68,10 +91,10 @@ type determinismFeature struct {
 // and the randomness-free mutations.
 func newDeterminismFeature() *determinismFeature {
 	ops := []determinismOp{
-		{name: "remediation", run: func(ctx context.Context, data []byte, home string) ([]byte, error) {
+		{name: "remediation", runs: determinismRuns, run: func(ctx context.Context, data []byte, home string) ([]byte, error) {
 			return remediateForDeterminism(ctx, data, home, false)
 		}},
-		{name: "remediation-aggressive", run: func(ctx context.Context, data []byte, home string) ([]byte, error) {
+		{name: "remediation-aggressive", runs: determinismRuns, run: func(ctx context.Context, data []byte, home string) ([]byte, error) {
 			return remediateForDeterminism(ctx, data, home, true)
 		}},
 	}
@@ -80,10 +103,18 @@ func newDeterminismFeature() *determinismFeature {
 			continue
 		}
 		mf := newMutationFeature(spec)
-		ops = append(ops, determinismOp{name: "mutate-" + spec.name, run: func(ctx context.Context, data []byte, _ string) ([]byte, error) {
+		ops = append(ops, determinismOp{name: "mutate-" + spec.name, runs: determinismRuns, run: func(ctx context.Context, data []byte, _ string) ([]byte, error) {
 			return mutateForDeterminism(ctx, mf, data)
 		}})
 	}
+	ops = append(ops,
+		determinismOp{name: "generate-bookmarks", runs: determinismBookmarkRuns, run: func(ctx context.Context, data []byte, _ string) ([]byte, error) {
+			return generateBookmarksForDeterminism(ctx, data)
+		}},
+		determinismOp{name: "split-reconstruct", runs: determinismBookmarkRuns, run: func(ctx context.Context, data []byte, _ string) ([]byte, error) {
+			return splitReconstructForDeterminism(ctx, data)
+		}},
+	)
 	return &determinismFeature{ops: ops, assigned: make(map[string]int)}
 }
 
@@ -120,14 +151,16 @@ func (f *determinismFeature) Prepare(_ context.Context, fixtures []Fixture) erro
 type determinismOutput struct {
 	Op   string `json:"op,omitempty"`
 	Skip string `json:"skip,omitempty"`
-	// Same reports whether the two runs wrote the same bytes; First and
-	// Second are their SHA-256 digests.
+	// Same reports whether every run wrote the bytes the first wrote; First
+	// and Second are the SHA-256 digests of the first run and of the first
+	// run that differed from it.
 	Same   bool   `json:"same"`
 	First  string `json:"first,omitempty"`
 	Second string `json:"second,omitempty"`
 }
 
-// Run runs the fixture's operation twice and compares the two results.
+// Run runs the fixture's operation op.runs times and compares each result
+// with the first.
 func (f *determinismFeature) Run(ctx context.Context, pdfPath, fixtureID string) ([]byte, error) {
 	f.mu.Lock()
 	idx, ok := f.assigned[fixtureID]
@@ -152,14 +185,18 @@ func (f *determinismFeature) Run(ctx context.Context, pdfPath, fixtureID string)
 	}
 
 	first := determinismRun(ctx, op, data, home)
-	second := determinismRun(ctx, op, data, home)
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("running %s twice on %s: %w", op.name, pdfPath, err)
-	}
-	out := determinismOutput{Op: op.name, Same: bytes.Equal(first, second)}
-	if !out.Same {
-		out.First = fmt.Sprintf("%x", sha256.Sum256(first))
-		out.Second = fmt.Sprintf("%x", sha256.Sum256(second))
+	out := determinismOutput{Op: op.name, Same: true}
+	for range max(op.runs, 2) - 1 {
+		next := determinismRun(ctx, op, data, home)
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("running %s on %s: %w", op.name, pdfPath, err)
+		}
+		if !bytes.Equal(first, next) {
+			out.Same = false
+			out.First = fmt.Sprintf("%x", sha256.Sum256(first))
+			out.Second = fmt.Sprintf("%x", sha256.Sum256(next))
+			break
+		}
 	}
 	return json.Marshal(out)
 }
@@ -195,7 +232,7 @@ func (f *determinismFeature) Compare(fixtureID string, output []byte) Verdict {
 		return v
 	}
 	v.Metrics[metricNondeterministic] = 1
-	v.Reason = fmt.Sprintf("%s: two runs wrote %s and %s", got.Op, truncate(got.First, 12), truncate(got.Second, 12))
+	v.Reason = fmt.Sprintf("%s: the first run wrote %s and a later one %s", got.Op, truncate(got.First, 12), truncate(got.Second, 12))
 	if raw, err := json.Marshal(struct {
 		File   string `json:"file"`
 		Op     string `json:"op"`
@@ -303,4 +340,65 @@ func mutateForDeterminism(ctx context.Context, mf *mutationFeature, data []byte)
 		return []byte(skip), nil
 	}
 	return output, nil
+}
+
+// determinismBookmarkOptions are the options `litho bookmarks` and
+// `litho set-bookmarks --generate` generate with (defaultBookmarkGenOptions
+// in cmd/litho), so the cell holds the CLI's generation to its bytes.
+func determinismBookmarkOptions() pdf.BookmarkGenerationOptions {
+	return pdf.BookmarkGenerationOptions{
+		MaxDepth:              3,
+		MinFontSizeRatio:      1.15,
+		SkipHeaderFooter:      true,
+		MaxTitleLength:        200,
+		PreferStructureTree:   true,
+		DetectNumbering:       true,
+		HeadingScoreThreshold: 0.5,
+	}
+}
+
+// generateBookmarksForDeterminism replaces data's outline with the one
+// [pdf.Writer.GenerateBookmarks] detects, as `litho set-bookmarks --generate`
+// does, and returns the bytes written.
+func generateBookmarksForDeterminism(ctx context.Context, data []byte) ([]byte, error) {
+	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, fmt.Errorf("opening: %w", err)
+	}
+	defer r.Close()
+	w := pdf.NewWriter(r)
+	defer w.Close()
+	w.GenerateBookmarks(determinismBookmarkOptions(), pdf.BookmarkReplace)
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		return nil, fmt.Errorf("writing: %w", err)
+	}
+	return out.Bytes(), nil
+}
+
+// splitReconstructForDeterminism splits every page of data, in order, into a
+// document whose outline [pdf.Split] reconstructs from the detected headings,
+// and returns the bytes written.
+func splitReconstructForDeterminism(ctx context.Context, data []byte) ([]byte, error) {
+	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, fmt.Errorf("opening: %w", err)
+	}
+	defer r.Close()
+	n, err := r.PageCount(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting pages: %w", err)
+	}
+	pages := make([]int, n)
+	for i := range pages {
+		pages[i] = i + 1
+	}
+	var out bytes.Buffer
+	if err := pdf.Split(ctx, r, pages, &out, pdf.WithBookmarks(pdf.BookmarkOptions{
+		Handling:   pdf.BookmarkReconstruct,
+		Generation: determinismBookmarkOptions(),
+	})); err != nil {
+		return nil, fmt.Errorf("splitting: %w", err)
+	}
+	return out.Bytes(), nil
 }
