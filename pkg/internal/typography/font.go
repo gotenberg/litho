@@ -115,6 +115,12 @@ type Font struct {
 	// encoding's reading of every code the program leaves unnamed, a guess
 	// a caller that persists a mapping must not write.
 	ProgramGlyphRunes map[byte]rune
+
+	// differenceCodes holds the codes a /Encoding dictionary's /Differences
+	// array names. Each entry replaces the base encoding's name at its code
+	// (ISO 32000-1, 9.6.6.1), so a later fill from the font program's
+	// built-in encoding leaves these codes alone, mapped or not.
+	differenceCodes map[byte]bool
 }
 
 // GlyphWidth returns the advance width (in 1/1000 text-space units) for the
@@ -915,32 +921,118 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 					case ast.PdfInt:
 						currentIndex = int(v)
 					case ast.PdfName:
-						if r, ok := resolveGlyphRune(string(v), isDingbats, isSymbol); ok {
-							font.Encoding[byte(currentIndex)] = r
-						} else if decomposed, ok := decomposeGlyphName(string(v), isDingbats, isSymbol); ok {
-							// Type1 fonts stack ligature components with
-							// underscores ("f_t", "T_h"). When no single
-							// rune mapping exists the decomposed string
-							// lives in Font.LigatureOverrides and beats
-							// the byte's default-encoding rune during
-							// extraction.
-							if font.LigatureOverrides == nil {
-								font.LigatureOverrides = make(map[byte]string)
-							}
-							font.LigatureOverrides[byte(currentIndex)] = decomposed
-							// Anchor the encoding map at the first rune so
-							// width calculation and encoding-derived
-							// fallbacks still have a value.
-							if first, _ := utf8.DecodeRuneInString(decomposed); first != utf8.RuneError {
-								font.Encoding[byte(currentIndex)] = first
-							}
-						}
+						applyDifferencesName(font, byte(currentIndex), string(v), isDingbats, isSymbol)
 						currentIndex++
 					}
 				}
 			}
 		}
 	}
+}
+
+// applyDifferencesName lays one /Differences entry, name at code, over the
+// font's encoding. Per ISO 32000-1, 9.6.6.1 the entry replaces the base
+// encoding's name at the code, so the base's character goes whether or not
+// the new name maps to one: a name no glyph list maps leaves the code with no
+// character (9.10.2), and [decodeNextChar] reads it as nothing, or as a word
+// space at code 32 (9.3.3). Composite ligature names ("f_t", "T_h") read as
+// their components through [Font.LigatureOverrides].
+//
+// Three names keep the base encoding's reading of the code instead, each a
+// leniency toward producers PDF.js shares (src/core/evaluator.js,
+// _simpleFontToUnicode, and src/core/fonts.js, _charToGlyph):
+//
+//   - .notdef, which producers write over codes they still show, in a
+//     standard font they leave unembedded: PDF.js skips the entry and keeps
+//     the base name (issue5256.pdf, issue18208.pdf).
+//   - Any name in a Type 3 font. Its glyph names are only the keys of its
+//     /CharProcs (9.6.5, Table 112), which producers draw at the code of the
+//     character they show (dvips and pdfTeX bitmap fonts name code c "a<c>"),
+//     and PDF.js reads such a code as itself.
+//   - A numeric name ([differencesNameIsItsCode]) whose number is the code,
+//     which names the code rather than a character: PDF.js then reads the
+//     base encoding's glyph (issue5070.pdf, "c128" for the Euro sign).
+//
+// Before, every name no table maps kept the base encoding's character, so
+// litho read glyph-index names in a subset font as the punctuation the base
+// encoding puts at their codes.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400235.pdf, thread_400_400786.pdf, pdfjs
+//     TAMReview.pdf, bug1151216.pdf: subset fonts name their glyphs by index
+//     ("g88", "G41") at codes counted up from 33, which read as runs like
+//     `!"#$` and `f##2`. They now read as nothing, and in the first three
+//     files code 32 reads as a word space.
+//   - pdfcpu pkg_testdata__go-lecture.pdf: the Beamer bullet, MSAM7
+//     "trianglerightsld" at code 73, read as "I" before each item, as PDF.js
+//     reads it; it now reads as nothing. The words differ from PDF.js on 1
+//     more file, by decision: correct words over agreement (2026-10-19).
+//   - govdocs thread_300_300511.pdf: CMMI "lscript" (U+2113) at 0x60, read as
+//     "`" as PDF.js reads it, now reads as nothing.
+//   - pdfjs issue918.pdf, issue14999_reduced.pdf, french_diacritics.pdf and 6
+//     more Type 3 files, issue18208.pdf, issue4304.pdf (.notdef) and
+//     issue5070.pdf (c128): the three leniencies keep their text, which
+//     dropped or lost characters without them.
+//   - All corpora: words match PDF.js on 946 govdocs, 1122 pdfjs, 44 pdfcpu
+//     (45 before), 131 facturx and 7 pdf20 files. Compliance does not read
+//     this map; remediation's /ToUnicode leaves the unmapped codes out, so
+//     complex_2u (litho corpus) and go-lecture keep 6.2.11.7.2 at PDF/A-2u
+//     and 7.21.7 at PDF/UA-1 rather than map a glyph to a character it does
+//     not show.
+func applyDifferencesName(font *Font, code byte, name string, isDingbats, isSymbol bool) {
+	if name == ".notdef" {
+		return
+	}
+	if font.differenceCodes == nil {
+		font.differenceCodes = make(map[byte]bool)
+	}
+	font.differenceCodes[code] = true
+	delete(font.LigatureOverrides, code)
+	if r, ok := resolveGlyphRune(name, isDingbats, isSymbol); ok {
+		font.Encoding[code] = r
+		return
+	}
+	if decomposed, ok := decomposeGlyphName(name, isDingbats, isSymbol); ok {
+		if font.LigatureOverrides == nil {
+			font.LigatureOverrides = make(map[byte]string)
+		}
+		font.LigatureOverrides[code] = decomposed
+		// Anchor the encoding map at the first rune so width calculation
+		// and encoding-derived fallbacks still have a value.
+		if first, _ := utf8.DecodeRuneInString(decomposed); first != utf8.RuneError {
+			font.Encoding[code] = first
+		}
+		return
+	}
+	if font.Subtype == "Type3" || differencesNameIsItsCode(name, code) {
+		return
+	}
+	delete(font.Encoding, code)
+}
+
+// differencesNameIsItsCode reports whether name spells code in one of the
+// numeric conventions PDF.js recognises in a /Differences array
+// (src/core/evaluator.js, _simpleFontToUnicode): "Gxx" with two hexadecimal
+// digits, "g00xx" with four, and "Cdd" or "cdd" with two or three decimal
+// digits, or hexadecimal ones when the decimal reading fails.
+func differencesNameIsItsCode(name string, code byte) bool {
+	var value uint64
+	var err error
+	switch {
+	case len(name) == 3 && name[0] == 'G':
+		value, err = strconv.ParseUint(name[1:], 16, 8)
+	case len(name) == 5 && name[0] == 'g':
+		value, err = strconv.ParseUint(name[1:], 16, 16)
+	case (len(name) == 3 || len(name) == 4) && (name[0] == 'C' || name[0] == 'c'):
+		value, err = strconv.ParseUint(name[1:], 10, 16)
+		if err != nil {
+			value, err = strconv.ParseUint(name[1:], 16, 16)
+		}
+	default:
+		return false
+	}
+	return err == nil && value == uint64(code)
 }
 
 // defaultFontMatrix is the matrix of a font whose glyph space is 1000 units
@@ -1657,8 +1749,11 @@ func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict 
 		glyphName := string(match[2])
 		// When overwrite is false, only fill holes (PDF-level /Encoding
 		// takes precedence). When true, the font program is authoritative.
+		// A code a /Differences array names is not a hole even when its
+		// name maps no character: the entry replaced the built-in
+		// encoding's name there (ISO 32000-1, 9.6.6.1).
 		if !overwrite {
-			if _, exists := font.Encoding[byte(code)]; exists {
+			if _, exists := font.Encoding[byte(code)]; exists || font.differenceCodes[byte(code)] {
 				continue
 			}
 		}

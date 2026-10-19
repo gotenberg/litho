@@ -278,8 +278,11 @@ const spaceCharCode = 0x20
 //     glyph names no table maps, which PDF.js reads as word spaces. Reading them so would cut the space disagreements with
 //     PDF.js on files whose characters match from 7160 to 2915; litho
 //     keeps them as glyphs with no character by decision.
-//   - All corpora: no file shows an unmapped code 32, since every encoding
-//     litho builds for a simple font fills it; the rule moves nothing.
+//   - govdocs thread_400_400235.pdf, thread_400_400786.pdf, pdfjs
+//     TAMReview.pdf: subset fonts whose /Differences arrays name their glyphs
+//     by index ("g55", "G40") give code 32 a name no table maps. The rule
+//     reads those codes as the word spaces they separate; it reaches no
+//     other file of the five text corpora.
 func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	if font.SuppressExtraction {
 		// No route to Unicode exists for this font (see
