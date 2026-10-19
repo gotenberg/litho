@@ -85,6 +85,10 @@ var registry = []fixer{
 	{name: "struct-tree", safety: safetyStructural, matches: matchStructTree, apply: fixStructTree},
 	{name: "rolemap", safety: safetyStructural, matches: matchRoleMap, apply: fixRoleMap},
 	{name: "content-tag", safety: safetyStructural, matches: matchContentTag, apply: fixContentTag},
+	// marked-content-close repairs the pages content-tag leaves because they
+	// already hold marked content: it runs after auto-tag and content-tag so
+	// it closes what their rewrites leave open, not the source's content.
+	{name: "marked-content-close", safety: safetyStructural, matches: matchContentTag, apply: fixMarkedContentClose},
 	// parent-tree runs after every structure-producing fixer: marked content
 	// links to a structure element only through the page's /StructParents key
 	// indexing into the structure tree's /ParentTree, so structure they create
