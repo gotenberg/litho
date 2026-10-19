@@ -283,3 +283,37 @@ func TestXMPParseForSync_ContainerTypedProperties(t *testing.T) {
 		t.Errorf("pdf:Producer = %q, want %q", got.values["pdf:Producer"], "P")
 	}
 }
+
+// TestXMPCheckDocInfoSync_TextLooksLikeDate covers a text entry that begins
+// like a PDF date. ISO 19005-1, 6.7.3 compares a text entry with its XMP
+// analogue as a string (veraPDF's tests read "Title == XMPTitle"); only
+// /CreationDate and /ModDate are dates (ISO 32000-1, Table 317). litho
+// normalised every value starting "D:" as a date on the Info side alone, so a
+// /Title naming a Windows path on drive D failed against its own copy.
+func TestXMPCheckDocInfoSync_TextLooksLikeDate(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name, info, xmp string
+		wantFire        bool
+	}{
+		{name: "Windows path on drive D", info: `(D:\\openkm\\temp\\okm25.pdf)`, xmp: `D:\openkm\temp\okm25.pdf`, wantFire: false},
+		{name: "date-shaped title", info: `(D:20200101)`, xmp: `D:20200101`, wantFire: false},
+		{name: "different title", info: `(D:20200101)`, xmp: `2020-01-01`, wantFire: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, _ := objsDocPDF(t, "<< /Type /Catalog >>", "<< /Title "+tc.info+" >>")
+			doc.Index.Trailer["Info"] = ast.PdfIndirectRef{ObjectNum: 2}
+			packet := xmpPacket(`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">` +
+				`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">` + tc.xmp + `</rdf:li></rdf:Alt></dc:title></rdf:Description>`)
+
+			var results []Violation
+			xmpCheckDocInfoSync(ctx, doc, packet, 1, &results)
+			if fired := hasRule(results, Rule_19005_1_6_7_3_t02); fired != tc.wantFire {
+				t.Errorf("Title violation fired = %v, want %v: %v", fired, tc.wantFire, results)
+			}
+		})
+	}
+}

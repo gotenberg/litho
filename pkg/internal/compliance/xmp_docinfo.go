@@ -102,21 +102,36 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 			continue
 		}
 
+		// Non-date text fields compare exactly. The XMP parser already
+		// trims element-form text per XML rules and preserves attribute
+		// values as-is; the Info dict value is raw. §6.7.3 requires the
+		// Info entry and its XMP equivalent to be equal, so neither side is
+		// trimmed here: trimming the Info side hides a real non-equivalence
+		// (trailing whitespace in /Author vs trimmed dc:creator), and
+		// trimming the XMP side creates false positives when producers use
+		// attribute-form properties like pdf:Producer="value ". Nor is a
+		// text value read as a date: only /CreationDate and /ModDate are
+		// dates (ISO 32000-1, Table 317), and veraPDF compares the others
+		// as strings ("Title == XMPTitle"), so a /Title naming a path on
+		// drive D ("D:\...") equals its own copy.
+		if !isDateField {
+			if infoVal != xmpVal {
+				*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, xmpVal)...)
+			}
+			continue
+		}
+
 		normInfo := infoVal
 		normXMP := xmpVal
 		// Date fields: Info dict dates must use D: prefix format.
 		// A date in non-D: format (e.g., raw ISO 8601) is malformed and
 		// considered non-equivalent even if the time value matches.
-		if isDateField && !strings.HasPrefix(normInfo, "D:") && normInfo != "" {
+		if !strings.HasPrefix(normInfo, "D:") {
 			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, xmpVal)...)
 			continue
 		}
-		// Normalize dates for comparison.
-		infoHadTZ := true
-		if strings.HasPrefix(normInfo, "D:") {
-			normInfo = xmpNormalizePDFDate(normInfo)
-			infoHadTZ = xmpDateHasTimezone(normInfo)
-		}
+		normInfo = xmpNormalizePDFDate(normInfo)
+		infoHadTZ := xmpDateHasTimezone(normInfo)
 		normInfo = xmpNormalizeISO8601(normInfo)
 		normXMP = xmpNormalizeISO8601(normXMP)
 
@@ -127,10 +142,10 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		// values match: drop both timezones before the equality test when the
 		// Info date carries none. Example: /CreationDate "D:20150310" and
 		// xmp:CreateDate "2015-03-10T00:00:00Z" are treated as equivalent.
-		if isDateField && !infoHadTZ {
+		if !infoHadTZ {
 			normInfo = xmpStripTimezone(normInfo)
 			normXMP = xmpStripTimezone(normXMP)
-		} else if isDateField {
+		} else {
 			// Both sides carry a zone, so they denote absolute instants and the
 			// comparison is between those instants, not between their local
 			// wall-clock spellings.
@@ -141,14 +156,6 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 			}
 		}
 
-		// Non-date text fields compare exactly. The XMP parser already
-		// trims element-form text per XML rules and preserves attribute
-		// values as-is; the Info dict value is raw. §6.7.3 requires the
-		// Info entry and its XMP equivalent to be equal, so neither side is
-		// trimmed here: trimming the Info side hides a real non-equivalence
-		// (trailing whitespace in /Author vs trimmed dc:creator), and
-		// trimming the XMP side creates false positives when producers use
-		// attribute-form properties like pdf:Producer="value ".
 		if normInfo != normXMP {
 			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, xmpVal)...)
 		}
