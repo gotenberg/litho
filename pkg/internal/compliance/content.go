@@ -70,9 +70,10 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		if ctx.Err() != nil {
 			return results
 		}
-		// A content stream an earlier page shares is judged there alone; see
-		// [markJudgedContents].
-		if vctx.pages[i].contentJudged {
+		// A content stream an earlier page shares is judged there alone,
+		// under whatever resources: its operators, nesting and inline image
+		// filters are its bytes; see [markJudgedContents].
+		if vctx.pages[i].contentBytesJudged {
 			continue
 		}
 

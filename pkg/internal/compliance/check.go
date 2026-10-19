@@ -54,9 +54,16 @@ type pageCtx struct {
 	contentUnreadable bool
 
 	// contentJudged is true when an earlier page's /Contents is the same
-	// indirect object, which the content-stream rules judge on that page
-	// alone; see [markJudgedContents].
+	// indirect object, read under the same resources, which the
+	// content-stream rules judge on that page alone; see
+	// [markJudgedContents].
 	contentJudged bool
+
+	// contentBytesJudged is true when an earlier page's /Contents is the same
+	// indirect object, whatever resources it is read under. The rules that
+	// judge the stream's bytes alone, which no resource changes, key on it;
+	// see [markJudgedContents].
+	contentBytesJudged bool
 }
 
 // parsedOps returns the lazily-parsed content stream operations. The result is
@@ -201,21 +208,45 @@ func collectPageContexts(ctx context.Context, doc *document.Document, catalog as
 			contentUnreadable: contentErr != nil,
 		}
 	}
-	markJudgedContents(pages)
+	markJudgedContents(ctx, doc, pages)
 	return pages
 }
 
-// markJudgedContents sets [pageCtx.contentJudged] on every page whose
-// /Contents is an indirect object an earlier page's /Contents already is.
+// maxSharedContentReadings bounds how many distinct resource sets
+// [markJudgedContents] keeps for one shared content stream, each of which a
+// later page sharing the stream is compared against. Anti-DoS guard, not
+// spec-mandated: a page past the bound is judged under its own resources
+// rather than compared further, which costs what a page with a content stream
+// of its own costs and never hides a violation, while a crafted file of many
+// pages sharing one stream under as many resource sets cannot make the
+// comparisons quadratic.
+const maxSharedContentReadings = 16
+
+// markJudgedContents sets [pageCtx.contentBytesJudged] on every page whose
+// /Contents is an indirect object an earlier page's /Contents already is, and
+// [pageCtx.contentJudged] on those of them that read it under the same
+// resources as such an earlier page (see [sameContentReading]).
 //
-// ISO 32000-1, 7.7.3.3 lets pages share a content stream, and veraPDF judges it
-// once for the whole document, on the first page that draws it: the
-// content-stream rules state nothing for the later pages, and the streams the
-// content draws are reached from the first page alone, through its resources.
-// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on two-page fixtures, for
-// the hex string tests, the undefined-operator rule, the real limit, the q/Q
-// nesting limit, the inline image filter, interpolation and intent tests, the
-// ri test and the inherited-resource test:
+// ISO 32000-1, 7.7.3.3 lets pages share a content stream, and the names its
+// operators use resolve in each page's own resources (7.8.3), so one stream
+// read under two resource sets paints two different things: a /CS0 that
+// selects a valid ICCBased space on one page selects an abstract profile on
+// the other, which ISO 19005-2, 6.2.4.2 forbids there. A page that reads the
+// shared stream under resources of its own is judged again, with what it
+// draws through them. A page that reads it under the same resources paints the
+// same thing, and is judged once for the document. The rules that judge the
+// stream's bytes alone, its hex strings, operators, operand limits, nesting
+// and inline images, judge it once whatever the resources, since no resource
+// changes them.
+//
+// This departs from veraPDF, which judges a shared stream once for the whole
+// document, on the first page that draws it: the streams the content draws are
+// reached from the first page alone, through its resources, so a violation
+// only a later page's resources make goes unreported. Measured with veraPDF
+// 1.30 at PDF/A-1b and PDF/A-2b on two-page fixtures, for the hex string
+// tests, the undefined-operator rule, the real limit, the q/Q nesting limit,
+// the inline image filter, interpolation and intent tests, the ri test and the
+// inherited-resource test:
 //
 //   - Two pages whose /Contents is the same stream, or the same indirect array
 //     of streams, fail each test as often as one of them alone does.
@@ -223,24 +254,132 @@ func collectPageContexts(ctx context.Context, doc *document.Document, catalog as
 //     often, the arrays naming the same streams or not, and so do a page whose
 //     /Contents is a stream and one whose array holds it.
 //   - When the shared content paints /Fm0 and each page maps /Fm0 to its own
-//     form, only the first page's form is judged.
+//     form, veraPDF judges the first page's form alone, and litho both.
+//
+// Where the pages share their resources too, litho's counts are veraPDF's.
 //
 // # Corpus evidence
 //
-//   - pdfjs hello_world_rotated.pdf, issue14847.pdf, issue18042.pdf and
-//     pypdf2332.pdf: are the only files whose pages share a /Contents, and none
-//     of the content-stream rules fires in the shared streams, so no count
-//     moves at PDF/A-1b or PDF/A-2b.
-func markJudgedContents(pages []pageCtx) {
-	seen := make(map[int]bool)
+//   - All corpora: six of 5285 files have pages sharing a /Contents, and two
+//     of them read it under resources of their own: pdfjs pypdf2332.pdf and
+//     litho imagereach_2b.pdf. No other count moves at any of the thirteen
+//     levels.
+//   - pdfjs pypdf2332.pdf: pages 4, 11 and 12 share the content of pages 3, 7
+//     and 9 under a scanned DeviceGray image of their own, and the DeviceGray
+//     test fails 13 times, where veraPDF fails it 10 times; the rule sets
+//     agree.
+//   - litho imagereach_2b.pdf: the second page draws its own image through
+//     the shared stream, and its /Intent and /Interpolate fail at every PDF/A
+//     level, where veraPDF fails neither.
+//   - litho csnames_2b.pdf: rewritten with duplicate streams merged, five
+//     pages share one content stream and six another, each under resources of
+//     its own, and veraPDF stops failing the abstract profiles of pages 9, 10,
+//     18 and 19. litho still fails those of pages 9, 18 and 19; page 10 reads
+//     the stream under resources equal to page 9's.
+func markJudgedContents(ctx context.Context, doc *document.Document, pages []pageCtx) {
+	readings := make(map[int][]int)
 	for i := range pages {
 		ref, ok := pages[i].dict["Contents"].(ast.PdfIndirectRef)
 		if !ok {
 			continue
 		}
-		pages[i].contentJudged = seen[ref.ObjectNum]
-		seen[ref.ObjectNum] = true
+		earlier, shared := readings[ref.ObjectNum]
+		pages[i].contentBytesJudged = shared
+		for _, j := range earlier {
+			if sameContentReading(ctx, doc, &pages[j], &pages[i]) {
+				pages[i].contentJudged = true
+				break
+			}
+		}
+		if !pages[i].contentJudged && len(earlier) < maxSharedContentReadings {
+			readings[ref.ObjectNum] = append(earlier, i)
+		}
 	}
+}
+
+// sameContentReading reports whether pages a and b read a content stream they
+// share under the same resources: both state their own /Resources or both
+// inherit them (see [pageResourceScopes], which ISO 19005-2, 6.2.2 tells
+// apart), and the two dictionaries hold the same resources (see
+// [sameResourceObject]).
+func sameContentReading(ctx context.Context, doc *document.Document, a, b *pageCtx) bool {
+	ownA, _ := pageResourceScopes(a)
+	ownB, _ := pageResourceScopes(b)
+	if (ownA == nil) != (ownB == nil) {
+		return false
+	}
+	return sameResourceObject(ctx, doc, a.resources, b.resources, make(map[[2]int]bool), 0)
+}
+
+// maxResourceCompareDepth bounds how deeply [sameResourceObject] descends into
+// two resource dictionaries. Anti-DoS guard, not spec-mandated: a chain of
+// distinct indirect arrays, each naming the next, would otherwise recurse once
+// per object of the file. A resource dictionary reaches a colour space's
+// /Indexed base, alternate and /Colorants entries, a font's descendant and
+// descriptor, or a shading's function inside its category dictionary a handful
+// of levels down, so 64 leaves every conformant pair whole. Two values past
+// the bound compare different, which judges the later page again rather than
+// hiding what it paints.
+const maxResourceCompareDepth = 64
+
+// sameResourceObject reports whether a and b are the same resource: the same
+// indirect object, or direct values, or indirect ones resolved, that hold the
+// same resources entry by entry. A stream is the same only as the same
+// indirect object, which every stream is (ISO 32000-1, 7.3.8.1): two streams
+// whose bytes match can still differ in what their filters decode them to, and
+// comparing their data would read every image and font of both pages. seen
+// holds the pairs of indirect objects under comparison, so a cycle answers
+// equal unless something else proves otherwise (see [pdfObjectEqualAt]), and
+// depth counts the levels descended, which [maxResourceCompareDepth] bounds.
+func sameResourceObject(ctx context.Context, doc *document.Document, a, b ast.PdfObject, seen map[[2]int]bool, depth int) bool {
+	if ctx.Err() != nil || depth > maxResourceCompareDepth {
+		return false
+	}
+	aRef, aIsRef := a.(ast.PdfIndirectRef)
+	bRef, bIsRef := b.(ast.PdfIndirectRef)
+	if aIsRef && bIsRef {
+		if aRef == bRef {
+			return true
+		}
+		key := [2]int{aRef.ObjectNum, bRef.ObjectNum}
+		if seen[key] {
+			return true
+		}
+		seen[key] = true
+	}
+	// An object that does not resolve compares as written, so two references
+	// to different missing objects differ.
+	a, _ = document.ResolveObject(ctx, doc, a) // Best-effort dereference for comparison; unresolvable objects compare as-is.
+	b, _ = document.ResolveObject(ctx, doc, b) // Best-effort dereference for comparison; unresolvable objects compare as-is.
+
+	switch va := a.(type) {
+	case ast.PdfArray:
+		vb, ok := b.(ast.PdfArray)
+		if !ok || len(va) != len(vb) {
+			return false
+		}
+		for i := range va {
+			if !sameResourceObject(ctx, doc, va[i], vb[i], seen, depth+1) {
+				return false
+			}
+		}
+		return true
+	case ast.PdfDict:
+		vb, ok := b.(ast.PdfDict)
+		if !ok || len(va) != len(vb) {
+			return false
+		}
+		for k, valA := range va {
+			valB, exists := vb[k]
+			if !exists || !sameResourceObject(ctx, doc, valA, valB, seen, depth+1) {
+				return false
+			}
+		}
+		return true
+	case ast.PdfStream, ast.PdfIndirectRef:
+		return false
+	}
+	return a == b
 }
 
 // runCheckGroups executes the check groups concurrently and returns their

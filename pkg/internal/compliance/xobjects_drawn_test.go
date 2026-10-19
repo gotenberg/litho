@@ -112,12 +112,20 @@ func TestImageRulesJudgeDrawnXObjects(t *testing.T) {
 			map[int]string{20: exponentStream("", "0 0 1 1 re f"), 30: image("\x80"), 31: form("<< /XObject << /I1 30 0 R >> >>", draw)},
 			0,
 		},
-		// The second page shares the first page's content stream, which
-		// veraPDF judges once, through the first page's resources.
+		// The second page shares the first page's content stream under
+		// resources of its own, which name a second image, judged there too
+		// (see [markJudgedContents]); veraPDF judges the stream once, through
+		// the first page's resources, and fails the first image alone.
 		{
 			"a second image drawn by a shared content stream",
 			[]string{pageImage, page("<< /XObject << /I1 32 0 R >> >>", "20 0 R")},
 			map[int]string{20: exponentStream("", draw), 30: image("\x80"), 32: image("\x40")},
+			2,
+		},
+		{
+			"one image drawn by a shared content stream",
+			[]string{pageImage, page("<< /XObject << /I1 30 0 R >> >>", "20 0 R")},
+			map[int]string{20: exponentStream("", draw), 30: image("\x80")},
 			1,
 		},
 	} {

@@ -300,7 +300,10 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 			return results
 		}
 		// A page's content is judged whole even when another page's shares a
-		// part of it, and a part the page lists twice is judged once.
+		// part of it, and a part the page lists twice is judged once. A
+		// stream an earlier page shares has its operands judged there alone,
+		// and the resources its names read judged again only under resources
+		// of the page's own; see [markJudgedContents].
 		page := &vctx.pages[i]
 		if page.contentJudged || len(page.content) == 0 {
 			continue
@@ -311,7 +314,9 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 			continue
 		}
 		where := fmt.Sprintf("page %d (stream content)", i+1)
-		results = append(results, checkOperandLimits(ops, countOverflows(overflows), where, false, maxStr, profile)...)
+		if !page.contentBytesJudged {
+			results = append(results, checkOperandLimits(ops, countOverflows(overflows), where, false, maxStr, profile)...)
+		}
 		results = append(results, operatorNameLimits(ctx, doc, ops, func() ast.PdfDict { return page.resources }, judgedReads, where, profile)...)
 	}
 

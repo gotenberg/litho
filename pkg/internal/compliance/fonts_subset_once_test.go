@@ -183,15 +183,22 @@ func TestCIDSetRuleStatedOncePerDescendant(t *testing.T) {
 	}
 }
 
-// TestSharedPageContentSelectsTheFirstPageFonts pins that a content stream
-// two pages share selects its fonts through the first page's resources alone;
-// see [markJudgedContents]. Each page maps /F1 to its own unembedded font, and
-// veraPDF 1.30 fails the embedding rule for the first page's font alone when
-// the pages share the stream, and for both when each draws its own.
-func TestSharedPageContentSelectsTheFirstPageFonts(t *testing.T) {
+// TestSharedPageContentSelectsEachPageFonts pins that a content stream two
+// pages share selects its fonts through each page's resources; see
+// [markJudgedContents]. Each page maps /F1 to its own unembedded font, and the
+// embedding rule fails for both, whether the pages share the stream or each
+// draws its own; two pages mapping /F1 to one font fail it once.
+//
+// veraPDF 1.30 departs: it fails the embedding rule for the first page's font
+// alone when the pages share the stream.
+func TestSharedPageContentSelectsEachPageFonts(t *testing.T) {
 	t.Parallel()
 
-	objs := func(first, second string) []string {
+	objs := func(first, second string, secondFont ...string) []string {
+		font := "5 0 R"
+		if len(secondFont) > 0 {
+			font = secondFont[0]
+		}
 		const text = "BT /F1 12 Tf 10 50 Td (A) Tj ET"
 		return []string{
 			"<< /Type /Catalog /Pages 2 0 R >>",
@@ -200,7 +207,7 @@ func TestSharedPageContentSelectsTheFirstPageFonts(t *testing.T) {
 			"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 			"<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>",
 			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents " + first + " >>",
-			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents " + second + " >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 " + font + " >> >> /Contents " + second + " >>",
 			exponentStream("", text),
 		}
 	}
@@ -209,7 +216,8 @@ func TestSharedPageContentSelectsTheFirstPageFonts(t *testing.T) {
 		want int
 		objs []string
 	}{
-		{"shared stream", 1, objs("3 0 R", "3 0 R")},
+		{"shared stream", 2, objs("3 0 R", "3 0 R")},
+		{"shared stream and font", 1, objs("3 0 R", "3 0 R", "4 0 R")},
 		{"a stream each", 2, objs("3 0 R", "8 0 R")},
 	} {
 		for _, p := range []struct {

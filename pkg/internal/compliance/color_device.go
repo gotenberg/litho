@@ -158,10 +158,12 @@ func deviceFamilyIndex(family string) int {
 // ISO 19005-2/3, 6.2.4.3 conditions DeviceRGB and DeviceCMYK on the
 // OutputIntent alone, so a blending space covers nothing there.
 //
-// A page whose content stream an earlier page shares uses no colour through
-// it, since veraPDF judges that stream on the first page alone, with what it
-// draws (see [markJudgedContents]); the Separation and DeviceN walks and the
-// ICCBased walk skip it the same way.
+// A page whose content stream an earlier page shares under the same resources
+// uses no colour through it, since the stream paints the same there, with
+// what it draws (see [markJudgedContents]); the Separation and DeviceN walks
+// and the ICCBased walk skip it the same way. A page that reads it under
+// resources of its own is judged, where veraPDF judges the stream on the first
+// page alone.
 // Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: two pages sharing one
 // stream fail the device colour tests, the DeviceN colourant limit, the
 // ICCBased profile test and ISO 19005-2, 6.2.4.4 t1 and t2 as often as one of

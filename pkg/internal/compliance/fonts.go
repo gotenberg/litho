@@ -239,9 +239,9 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			return results
 		}
 		judged.pageRes = p.resources
-		// A content stream an earlier page shares is judged there alone, with
-		// the fonts that page's resources name, so this page selects no font
-		// through it; see [markJudgedContents].
+		// A content stream an earlier page shares under the same resources is
+		// judged there alone, with the fonts those resources name, so this page
+		// selects no font through it; see [markJudgedContents].
 		judgeContent := !p.contentJudged
 		site := pageSite(ctx, doc, p, pageIdx+1)
 
@@ -2930,8 +2930,8 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 // object, so it cannot ask a single page whether the font is visible: a font
 // drawn in rendering mode 3 on the page that happens to declare it first, and
 // normally on a later page, is embedded-or-not regardless of which page is
-// asked. A page whose content stream an earlier page shares renders nothing
-// through it; see [markJudgedContents].
+// asked. A page whose content stream an earlier page shares under the same
+// resources renders nothing through it; see [markJudgedContents].
 func collectVisibleFontObjects(ctx context.Context, doc *document.Document, vctx *validationCtx) map[string]bool {
 	visible := make(map[string]bool)
 	for pageIdx := range vctx.pages {

@@ -77,9 +77,9 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 		p := &vctx.pages[i]
 
-		// A content stream an earlier page shares is judged there alone, and
-		// what it draws is resolved through that page's resources; see
-		// [markJudgedContents].
+		// A content stream an earlier page shares under the same resources is
+		// judged there alone, and what it draws is resolved through that
+		// page's resources; see [markJudgedContents].
 		if !p.contentJudged {
 			ops := p.parsedOps(ctx)
 			results = append(results, checkDrawnXObjects(ctx, doc, p.resources, ops, i+1, part, profile, visited)...)
@@ -183,7 +183,9 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 //   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
 //     profile for the verapdf files: judging only the XObjects a form draws,
 //     and none through a page whose content an earlier page judged, moves no
-//     count; litho imagereach_2b.pdf plants both.
+//     count; litho imagereach_2b.pdf plants both. Its second page reads the
+//     shared content under resources of its own, and its image is judged
+//     since (see [markJudgedContents]), where veraPDF judges it not at all.
 //   - govdocs thread_400_400002.pdf and thread_000_000372.pdf: draw forms
 //     carrying /OPI more than once, and veraPDF states ISO 19005-1, 6.2.4 t2
 //     and ISO 19005-2, 6.2.9 t1 65 and 44 times, where litho stated 42 and 43.

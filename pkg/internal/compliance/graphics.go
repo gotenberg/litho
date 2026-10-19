@@ -43,8 +43,8 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 
 		res := p.resources
-		// A content stream an earlier page shares is judged there alone; see
-		// [markJudgedContents].
+		// A content stream an earlier page shares under the same resources is
+		// judged there alone; see [markJudgedContents].
 		hasContent := len(p.content) > 0 && !p.contentJudged
 
 		// §6.2.2 t2/t3: resource completeness; see [pageResourceScopes].
@@ -66,8 +66,12 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 				}
 				resourceResults = checkContentStreamResourcesOps(ctx, doc, ops, built, false, ownRes, inheritedRes, part, i+1, false, defaultUndefined)
 				results = append(results, resourceResults...)
-				// Check inline image /Intent values from parsed BI operations.
-				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
+				// Check inline image /Intent values from parsed BI operations,
+				// which are the stream's bytes, judged on the first page that
+				// shares it whatever the resources.
+				if !p.contentBytesJudged {
+					results = append(results, checkInlineImageIntent(ops, part, i+1)...)
+				}
 				// The inline image filters of a page's content are stated by
 				// checkPageContent, over the same operations.
 			}

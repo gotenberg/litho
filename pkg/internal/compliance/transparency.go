@@ -40,10 +40,10 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 // appearances, and what every content stream [drawnStreamWalk] reaches from
 // them draws.
 //
-// A page whose content stream an earlier page shares draws nothing more, since
-// veraPDF judges that stream on the first page alone, with what it draws (see
-// [markJudgedContents]). Measured with veraPDF 1.30 at PDF/A-1b: two pages
-// sharing one stream that paints a soft masked image and a form with a
+// A page whose content stream an earlier page shares under the same resources
+// draws nothing more, since the stream paints the same there, with what it
+// draws (see [markJudgedContents]). Measured with veraPDF 1.30 at PDF/A-1b:
+// two pages sharing one stream that paints a soft masked image and a form with a
 // transparency group and sets two graphics states with constant alpha fail
 // 6.4 t2, t3, t5 and t6 once each, as one of the pages alone does.
 //
@@ -554,8 +554,8 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		results = append(results, annotationBlendModes(ctx, doc, page, i+1, part, judged)...)
 
 		// The blend modes of the graphics states the page's own content sets.
-		// A content stream an earlier page shares sets its states there alone;
-		// see [markJudgedContents].
+		// A content stream an earlier page shares under the same resources
+		// sets its states there alone; see [markJudgedContents].
 		if !pages[i].contentJudged {
 			results = append(results, pageBlendModes(ctx, doc, &pages[i], i+1, part, judged)...)
 		}

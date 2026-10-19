@@ -294,7 +294,8 @@ func deviceFamily(name string) string {
 //   - pdfjs pypdf2332.pdf: twelve pages draw nine content streams in
 //     DeviceGray, and veraPDF fails ISO 19005-1, 6.2.3.3 t3 and ISO 19005-2,
 //     6.2.4.3 t4 ten times, once per link, where litho failed them once per
-//     page.
+//     page. litho fails them 13 times: three pages read a stream an earlier
+//     page shares under an image of their own (see [markJudgedContents]).
 //   - pdfjs issue1055r.pdf: draws a form with no /Resources whose stream
 //     invokes a second form by a name only the page declares, which fills
 //     after rg; veraPDF fails DeviceRGB four times.
@@ -448,9 +449,9 @@ func (w *colorLinkWalk) newStream(ctx context.Context, res ast.PdfDict, parent *
 	return s
 }
 
-// walkPage walks one page: its content unless an earlier page shares it (see
-// [markJudgedContents]), the appearance streams of its annotations, then its
-// transparency group.
+// walkPage walks one page: its content unless an earlier page shares it under
+// the same resources (see [markJudgedContents]), the appearance streams of its
+// annotations, then its transparency group.
 //
 // /Resources is an inheritable page attribute (ISO 32000-1, 7.7.3.4), so the
 // page's names and Default colour spaces are those of the nearest ancestor
@@ -476,8 +477,8 @@ func (w *colorLinkWalk) walkPage(ctx context.Context, p *pageCtx) {
 	w.judgeGroup(ctx, p.dict, &site, true)
 }
 
-// walkContent walks the content of page p unless an earlier page shares it,
-// and returns the page's content stream.
+// walkContent walks the content of page p unless an earlier page shares it
+// under the same resources, and returns the page's content stream.
 func (w *colorLinkWalk) walkContent(ctx context.Context, p *pageCtx) *linkStream {
 	page := w.newStream(ctx, p.resources, nil)
 	page.blendRef = resolvePageBlendingICCRef(ctx, w.doc, p.dict)

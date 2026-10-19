@@ -2,10 +2,58 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/models"
 )
+
+// TestSameResourceObjectBounds pins that comparing two pages' resources
+// survives a cycle, objects 3 and 4 being arrays naming each other, and stops
+// at [maxResourceCompareDepth] on two chains of distinct indirect arrays, each
+// naming the next, that end in the same name: they compare different, which
+// judges the later page again, where an unbounded walk would recurse once per
+// object of the file.
+func TestSameResourceObjectBounds(t *testing.T) {
+	t.Parallel()
+
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [] /Count 0 >>",
+		"[4 0 R]", "[3 0 R]",
+	}
+	// chain appends a chain of n arrays ending in /A, and returns the object
+	// number of its head.
+	chain := func(n int) int {
+		head := len(objs) + 1
+		for range n {
+			objs = append(objs, fmt.Sprintf("[%d 0 R]", len(objs)+2))
+		}
+		objs = append(objs, "/A")
+		return head
+	}
+	short1, short2 := chain(3), chain(3)
+	deep1, deep2 := chain(maxResourceCompareDepth*2), chain(maxResourceCompareDepth*2)
+	doc, _ := objsDocPDF(t, objs...)
+	ctx := context.Background()
+	ref := func(n int) ast.PdfObject { return ast.PdfIndirectRef{ObjectNum: n} }
+	same := func(a, b ast.PdfObject) bool {
+		return sameResourceObject(ctx, doc, a, b, make(map[[2]int]bool), 0)
+	}
+
+	if !same(ref(3), ref(4)) {
+		t.Error("two arrays naming each other compared different")
+	}
+	if !same(ref(short1), ref(short2)) {
+		t.Error("two short chains ending in one name compared different")
+	}
+	if same(ref(deep1), ref(deep2)) {
+		t.Error("two chains past the depth bound compared the same")
+	}
+	if !same(ref(deep1), ref(deep1)) {
+		t.Error("one object compared different from itself")
+	}
+}
 
 // sharedPageBad is a page content stream every content-stream rule fails: the
 // streams of [drawnBad], an ri naming no rendering intent, a name only the page
@@ -97,14 +145,17 @@ func TestPageContentJudgedOncePerDocument(t *testing.T) {
 	}
 }
 
-// TestSharedPageContentDrawsFromTheFirstPage pins that the streams a shared
-// content stream draws are reached from the first page that draws it alone:
-// its /Fm0 names a form each page maps differently, and only the first page's
-// form is judged. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a bad
-// form on the first page fails the hex string test once, and on the second
-// page not at all. Two pages drawing the stream through direct arrays each
-// judge their own form.
-func TestSharedPageContentDrawsFromTheFirstPage(t *testing.T) {
+// TestSharedPageContentDrawsThroughEachPage pins that the streams a shared
+// content stream draws are reached through the resources of each page that
+// reads it under resources of its own (see [markJudgedContents]): its /Fm0
+// names a form each page maps differently, and each page's form is judged,
+// while two pages mapping /Fm0 to one form judge it once.
+//
+// veraPDF 1.30 departs at PDF/A-1b and PDF/A-2b: it reaches the stream's
+// forms from the first page alone, so a bad form on the second page fails the
+// hex string test not at all. Two pages drawing the stream through direct
+// arrays each judge their own form there too.
+func TestSharedPageContentDrawsThroughEachPage(t *testing.T) {
 	t.Parallel()
 
 	var f drawnFixture
@@ -124,8 +175,10 @@ func TestSharedPageContentDrawsFromTheFirstPage(t *testing.T) {
 		want int
 		objs []string
 	}{
-		{"the first page's form plain", 0, objs("6", "7", "4 0 R")},
+		{"the first page's form plain", 1, objs("6", "7", "4 0 R")},
 		{"the first page's form bad", 1, objs("7", "6", "4 0 R")},
+		{"one bad form for both pages", 1, objs("7", "7", "4 0 R")},
+		{"one plain form for both pages", 0, objs("6", "6", "4 0 R")},
 		{"direct arrays", 1, objs("6", "7", "[4 0 R]")},
 	} {
 		for _, p := range []struct {

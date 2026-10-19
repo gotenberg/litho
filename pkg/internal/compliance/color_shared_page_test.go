@@ -133,3 +133,72 @@ func TestColorRulesJudgeSharedPageContentOnce(t *testing.T) {
 		})
 	}
 }
+
+// sharedICCObjs returns the objects of a PDF of two pages whose /Contents is
+// one stream (object 3) selecting /CS0 and filling with it. Each page maps
+// /CS0 to the indirect ICCBased space its argument names: object 6 over a
+// monitor profile, object 7 over an abstract one.
+func sharedICCObjs(first, second string) []string {
+	valid := iccHeaderOnly("mntr", "RGB ")
+	abstract := iccHeaderOnly("abst", "RGB ")
+	page := func(cs string) string {
+		return "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /ColorSpace << /CS0 " +
+			cs + " 0 R >> >> /Contents 3 0 R >>"
+	}
+	return []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [4 0 R 5 0 R] /Count 2 >>",
+		exponentStream("", "/CS0 cs 0.5 0.5 0.5 scn 0 0 10 10 re f"),
+		page(first),
+		page(second),
+		"[/ICCBased 8 0 R]",
+		"[/ICCBased 9 0 R]",
+		fmt.Sprintf("<< /N 3 /Length %d >>\nstream\n%s\nendstream", len(valid), valid),
+		fmt.Sprintf("<< /N 3 /Length %d >>\nstream\n%s\nendstream", len(abstract), abstract),
+	}
+}
+
+// TestSharedPageContentJudgesEachPageColorSpaces pins that a content stream
+// two pages share selects its colour spaces through each page's resources (see
+// [markJudgedContents]): the second page maps /CS0 to an ICCBased space over
+// an abstract profile, which ISO 19005-1, 6.2.3.2 and ISO 19005-2, 6.2.4.2
+// forbid, and the profile test fails although the first page's /CS0 is
+// valid. Merging duplicate streams on a write makes such pages: the fills of
+// two pages that each had a stream of their own become one stream.
+//
+// veraPDF 1.30 departs: it reaches the stream's colour spaces from the first
+// page alone, and fails nothing when the first page's space is the valid one.
+func TestSharedPageContentJudgesEachPageColorSpaces(t *testing.T) {
+	t.Parallel()
+
+	for _, p := range []struct {
+		profile models.PDFAProfile
+		rule    Rule
+	}{
+		{models.PDFA1b, Rule_19005_1_6_2_3_2_t01},
+		{models.PDFA2b, Rule_19005_2_6_2_4_2_t01},
+	} {
+		for _, tc := range []struct {
+			name          string
+			first, second string
+			want          int
+		}{
+			{"valid then abstract", "6", "7", 1},
+			{"abstract then valid", "7", "6", 1},
+			{"valid on both pages", "6", "6", 0},
+			{"abstract on both pages", "7", "7", 1},
+		} {
+			t.Run(string(p.profile)+" "+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t, sharedICCObjs(tc.first, tc.second)...)
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != tc.want {
+					t.Errorf("%s test %d fired %d times, want %d: %v", p.rule.Clause, p.rule.TestNumber, got, tc.want, viols)
+				}
+			})
+		}
+	}
+}

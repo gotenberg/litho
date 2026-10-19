@@ -87,8 +87,10 @@ type drawnStream struct {
 //     maps differently, reaches the form of the first page alone.
 //   - A stream that also serves as the content of a page is that page's, and
 //     is not judged again as a form. A page whose content an earlier page
-//     shares draws nothing the walk reaches through that content, since
-//     veraPDF walks it from the earlier page alone; see [markJudgedContents].
+//     shares under the same resources draws nothing the walk reaches through
+//     that content, since it paints the same there; under resources of its
+//     own, it draws what they name, where veraPDF walks the content from the
+//     earlier page alone; see [markJudgedContents].
 //   - A stream is reached only through the operator that draws it. A form no
 //     Do paints, a pattern no scn or SCN selects, a Type3 font no text is
 //     shown with, and the forms such a stream would paint, are never judged,
@@ -224,8 +226,8 @@ func ColourOffStreams(ctx context.Context, doc *document.Document, profile strin
 
 // walkPage reaches the streams page p, the pageNum-th, draws: those its
 // content draws, then its annotation appearance streams. A content stream an
-// earlier page shares was walked from that page alone; see
-// [markJudgedContents].
+// earlier page shares under the same resources was walked from that page
+// alone; see [markJudgedContents].
 func (w *drawnStreamWalk) walkPage(ctx context.Context, p *pageCtx, pageNum int) {
 	if !p.contentJudged {
 		w.descend(ctx, w.scan(ctx, p.parsedOps(ctx), p.resources, inheritedCSDefault(), false), p.resources, pageNum, 1)

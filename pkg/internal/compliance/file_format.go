@@ -67,7 +67,8 @@ const maxContentFormatViolationsPerStream = 64
 // answered t1 alone, where veraPDF answers both. A hex string answers only
 // where veraPDF reads it, see [contentStringJudged]; the other streams a page
 // draws are judged by [drawnStreamHexStrings]. A content stream an earlier page
-// shares is judged there alone; see [markJudgedContents].
+// shares is judged there alone, whatever resources the later page reads it
+// under, since its strings are its bytes; see [markJudgedContents].
 //
 // A number written with an exponent records nothing here. The parse reads the
 // stream as veraPDF does ([content.ParseStreamData]), which ends the number at
@@ -89,7 +90,7 @@ func checkContentStreamFormat(ctx context.Context, vctx *validationCtx) []Violat
 			return results
 		}
 		page := &vctx.pages[i]
-		if page.contentJudged || len(page.content) == 0 {
+		if page.contentBytesJudged || len(page.content) == 0 {
 			continue
 		}
 
