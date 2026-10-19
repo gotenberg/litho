@@ -9,6 +9,29 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
+// TestResolveFont_Type1BuiltInHoleReadsTheGlyphLists pins that a code a Type 1
+// font's stated /Encoding leaves undefined reads the glyph name its program's
+// built-in encoding gives it through the glyph lists every built-in encoding
+// reads through ([builtinGlyphRune]): "infinity" is the Adobe Glyph List's
+// U+221E (ISO 32000-1, 9.10.2), and a Dingbats name in a font that is not
+// ZapfDingbats names nothing.
+func TestResolveFont_Type1BuiltInHoleReadsTheGlyphLists(t *testing.T) {
+	t.Parallel()
+
+	names := map[int]string{0x01: "infinity", 0x02: "a3"}
+	font, err := ResolveFont(context.Background(),
+		&document.Document{Logger: document.NopLogger()}, numericNamedType1Font(names, ast.PdfName("WinAnsiEncoding")))
+	if err != nil {
+		t.Fatalf("ResolveFont: %v", err)
+	}
+	if got := font.Encoding[0x01]; got != '∞' {
+		t.Errorf("Encoding[0x01] = %q, want '∞'", got)
+	}
+	if got, ok := font.Encoding[0x02]; ok && got == '✄' {
+		t.Errorf("Encoding[0x02] = %q, the Dingbats reading of a font that is not ZapfDingbats", got)
+	}
+}
+
 // TestResolveFont_Type1ProgramGlyphRunes pins which codes of a Type 1 font
 // [Font.ProgramGlyphRunes] records: those the program's built-in encoding
 // names with a glyph-list name, when the font states no /Encoding (ISO

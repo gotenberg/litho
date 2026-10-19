@@ -573,7 +573,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// Embedded font program encoding. When the PDF-level /Encoding is absent,
 	// the font program's encoding is authoritative and overrides the default.
 	_, hasExplicitEncoding := fontDict["Encoding"]
-	extractType1Encoding(ctx, doc, fontDict, font, !hasExplicitEncoding)
+	extractType1Encoding(ctx, doc, fontDict, font, !hasExplicitEncoding, isDingbatsFont)
 	// Also try CFF/Type1C encoding from /FontFile3 for fonts like TeX CMR
 	// that use OT1 encoding internally.
 	if !hasExplicitEncoding {
@@ -1624,8 +1624,9 @@ var type1EncodingRe = regexp.MustCompile(`dup\s+(\d+)\s+/(\S+)\s+put`)
 // extractType1Encoding parses the encoding from an embedded Type1 font program
 // (/FontFile) and fills any holes in font.Encoding. This is needed when the
 // PDF font dictionary has no /Encoding or an incomplete /Differences array,
-// because the font program itself defines the authoritative encoding.
-func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, overwrite bool) {
+// because the font program itself defines the authoritative encoding. The
+// glyph names read through [builtinGlyphRune], as every built-in encoding's do.
+func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, overwrite, isDingbats bool) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
@@ -1661,10 +1662,7 @@ func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict 
 				continue
 			}
 		}
-		if builtinNumericNameMisreads(glyphName, code) {
-			continue
-		}
-		if r, ok := encodings.GlyphToRuneFull(glyphName); ok {
+		if r, ok := builtinGlyphRune(glyphName, code, isDingbats); ok {
 			if font.Encoding == nil {
 				font.Encoding = make(map[byte]rune)
 			}
@@ -1820,8 +1818,9 @@ func recordProgramGlyphRune(font *Font, code byte, name string, r rune) {
 // getGlyphsUnicode). An empty or .notdef name, and a numeric name that misreads
 // code ([builtinNumericNameMisreads]), name no character.
 //
-// The Type1C reading used [encodings.GlyphToRuneFull], the table compliance
-// checks consult, which leaves out the Adobe Glyph List's Greek and math names
+// The Type1C reading, and the Type 1 one that fills the codes a stated
+// /Encoding leaves undefined, used [encodings.GlyphToRuneFull], the table
+// compliance checks consult, which leaves out the Adobe Glyph List's Greek and math names
 // and reads ZapfDingbats "aNN" names in any font. [resolveGlyphRune] adds them
 // back through the Symbol glyph table and drops the Dingbats names, as PDF.js's
 // table does.
@@ -1848,6 +1847,11 @@ func recordProgramGlyphRune(font *Font, code byte, name string, r rune) {
 //     the words PDF.js does and link-annotation-border.pdf its characters.
 //   - govdocs thread_300_300228.pdf: a Symbol subset's "Delta" read through the
 //     Symbol table first came out U+0394, where PDF.js reads U+2206.
+//   - govdocs, pdfjs, pdfcpu: 27 files hold a Type 1 program whose built-in
+//     encoding the two readings take differently under a stated /Encoding.
+//     Neither the text the five text corpora extract nor the remediated
+//     output of any of the 27 at the 13 levels, in both modes, changes with
+//     the reading.
 func builtinGlyphRune(name string, code int, isDingbats bool) (rune, bool) {
 	if name == "" || name == ".notdef" || builtinNumericNameMisreads(name, code) {
 		return 0, false
