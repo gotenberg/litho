@@ -75,37 +75,9 @@ func Subset(ctx context.Context, data []byte, keep []uint16) ([]byte, map[uint16
 	if err != nil {
 		return nil, nil, err
 	}
-	numGlyphs := len(src.charStrings)
-	kept := make([]bool, numGlyphs)
-	kept[0] = true
-	queue := []int{0}
-	for _, gid := range keep {
-		if int(gid) >= numGlyphs {
-			return nil, nil, fmt.Errorf("%w: glyph %d past the program's %d glyphs", ErrInvalidCFF, gid, numGlyphs)
-		}
-		if !kept[gid] {
-			kept[gid] = true
-			queue = append(queue, int(gid))
-		}
-	}
-	usage := &subrUsage{local: make([]bool, len(src.localSubrs)), global: make([]bool, len(src.globalSubrs))}
-	for i := 0; i < len(queue); i++ {
-		if i%500 == 0 {
-			if err := ctx.Err(); err != nil {
-				return nil, nil, err
-			}
-		}
-		base, accent, ok := src.walk(queue[i], usage)
-		if !ok {
-			continue
-		}
-		for _, code := range []int{base, accent} {
-			gid, found := src.standardGlyph(code)
-			if found && !kept[gid] {
-				kept[gid] = true
-				queue = append(queue, gid)
-			}
-		}
+	kept, usage, err := src.keptGlyphs(ctx, keep)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	order, encoding, err := src.orderAndEncode(kept)
@@ -127,6 +99,46 @@ func Subset(ctx context.Context, data []byte, keep []uint16) ([]byte, map[uint16
 		src.globalSubrs = pruneSubrs(src.globalSubrs, usage.global)
 	}
 	return src.assemble(charset, encoding, charStrings), newGID, nil
+}
+
+// keptGlyphs returns, for each glyph of the program, whether a subset keeps
+// it: glyph 0 (.notdef), the glyphs of keep, and the base and accent glyphs a
+// kept glyph's seac endchar draws, at any depth, with the subroutines the kept
+// glyphs call. It fails on a glyph ID of keep past the program's glyph count.
+func (s *subsetSource) keptGlyphs(ctx context.Context, keep []uint16) ([]bool, *subrUsage, error) {
+	numGlyphs := len(s.charStrings)
+	kept := make([]bool, numGlyphs)
+	kept[0] = true
+	queue := []int{0}
+	for _, gid := range keep {
+		if int(gid) >= numGlyphs {
+			return nil, nil, fmt.Errorf("%w: glyph %d past the program's %d glyphs", ErrInvalidCFF, gid, numGlyphs)
+		}
+		if !kept[gid] {
+			kept[gid] = true
+			queue = append(queue, int(gid))
+		}
+	}
+	usage := &subrUsage{local: make([]bool, len(s.localSubrs)), global: make([]bool, len(s.globalSubrs))}
+	for i := 0; i < len(queue); i++ {
+		if i%500 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+		}
+		base, accent, ok := s.walk(queue[i], usage)
+		if !ok {
+			continue
+		}
+		for _, code := range []int{base, accent} {
+			gid, found := s.standardGlyph(code)
+			if found && !kept[gid] {
+				kept[gid] = true
+				queue = append(queue, gid)
+			}
+		}
+	}
+	return kept, usage, nil
 }
 
 // subsetSource is the part of a name-keyed CFF program a subset reads.
