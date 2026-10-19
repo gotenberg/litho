@@ -44,6 +44,12 @@ func TestGenerateIsVersion2GreyDisplayProfile(t *testing.T) {
 			t.Errorf("%s tag missing or not of type %q", sig, typ)
 		}
 	}
+	// The profile states its licence where a profile reader looks for one,
+	// its copyrightTag (ICC.1:2001-04, 6.4), as the CC0 profile beside it
+	// does.
+	if cprt := sigs["cprt"]; !bytes.Contains(cprt, []byte("CC0 1.0")) || cprt[len(cprt)-1] != 0 {
+		t.Errorf("cprt = %q, want a NUL-terminated CC0 1.0 dedication", cprt)
+	}
 	trc := sigs["kTRC"]
 	if n := binary.BigEndian.Uint32(trc[8:]); n != curveEntries {
 		t.Fatalf("kTRC holds %d entries", n)

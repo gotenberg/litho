@@ -12,6 +12,9 @@
 // constants and the ICC.1:2001-04 layout, copies no vendor profile, and writes
 // the same bytes on every run.
 //
+// The profile's copyright tag dedicates it to the public domain under CC0 1.0,
+// as profiles/README.md records.
+//
 // Usage:
 //
 //	go run ./cmd/gen-iccv2              # write pkg/internal/graphics/icc/profiles/sgray-v2.icc
