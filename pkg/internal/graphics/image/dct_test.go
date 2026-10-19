@@ -2,10 +2,12 @@ package image
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -132,6 +134,32 @@ func TestDecodeImage_JPEGShapeBeatsTheDeclaredColorSpace(t *testing.T) {
 	r, g, b, _ := img.At(4, 4).RGBA()
 	if !near(uint8(r>>8), 200) || !near(uint8(g>>8), 200) || !near(uint8(b>>8), 200) {
 		t.Errorf("pixel = (%d,%d,%d), want about (200,200,200)", r>>8, g>>8, b>>8)
+	}
+}
+
+// TestDecodeImage_JPEGBehindAnotherFilterIsMeasured wraps the codestream of
+// the test above in an ASCIIHexDecode layer, [/ASCIIHexDecode /DCTDecode]:
+// ISO 32000-1, 7.4.1 applies the array in order, so the samples are still the
+// JPEG's. Taking the image's filter from the first name skipped the JPEG
+// measurement, read the 64 grey bytes as RGB, and painted rows 2 to 7 black
+// with no error.
+func TestDecodeImage_JPEGBehindAnotherFilterIsMeasured(t *testing.T) {
+	t.Parallel()
+
+	data := hex.EncodeToString([]byte(solidJPEG(t, 8, color.Gray{Y: 200}, true))) + ">"
+	objs := jpegPDF("/DeviceRGB", 8, data)
+	objs[3] = strings.Replace(objs[3], "/Filter /DCTDecode", "/Filter [/ASCIIHexDecode /DCTDecode]", 1)
+	ctx, doc, page := imagePDF(t, objs)
+
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	for _, y := range []int{0, 4, 7} {
+		r, g, b, _ := img.At(4, y).RGBA()
+		if !near(uint8(r>>8), 200) || !near(uint8(g>>8), 200) || !near(uint8(b>>8), 200) {
+			t.Errorf("row %d pixel = (%d,%d,%d), want about (200,200,200)", y, r>>8, g>>8, b>>8)
+		}
 	}
 }
 

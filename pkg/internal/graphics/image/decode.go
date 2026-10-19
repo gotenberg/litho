@@ -235,8 +235,23 @@ func finishRows(img image.Image, row int) image.Image {
 	return img
 }
 
-// imageFilterName returns the name of the first filter an image declares, or
+// imageFilterName returns the name of the last filter an image declares, or
 // "" when it declares none.
+//
+// The last filter is the one whose output the samples are: ISO 32000-1, 7.4.1
+// applies a /Filter array in order, so a JPEG wrapped in an ASCII or Flate
+// layer, [/ASCIIHexDecode /DCTDecode], hands on decoded JPEG samples. Reading
+// the first name took such an image for ASCII-encoded samples shaped as the
+// dictionary states, so a greyscale JPEG declared /DeviceRGB read one byte a
+// pixel as three and came out a third painted and the rest black, with no
+// error.
+//
+// # Corpus evidence
+//
+//   - pdfjs, govdocs: of the images on pages PDF.js paints, only
+//     xobject-image.pdf wraps its JPEG this way, and no decoded pixel changes.
+//     Its 1x1 JPEG under a 200x100 dictionary is refused either way; the
+//     refusal now names the JPEG rather than a short sample row.
 func imageFilterName(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
 	filterObj, ok := dict["Filter"]
 	if !ok {
@@ -250,9 +265,12 @@ func imageFilterName(ctx context.Context, doc *document.Document, dict ast.PdfDi
 		return string(fn)
 	}
 	if fArr, ok := filterRes.(ast.PdfArray); ok && len(fArr) > 0 {
-		if fn, ok := fArr[0].(ast.PdfName); ok {
-			return string(fn)
+		last, err := document.ResolveName(ctx, doc, fArr[len(fArr)-1])
+		if err != nil {
+			doc.Logger.Debug("resolving the last image filter", slog.Any("err", err))
+			return ""
 		}
+		return string(last)
 	}
 	return ""
 }
