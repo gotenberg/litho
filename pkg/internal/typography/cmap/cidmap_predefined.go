@@ -150,6 +150,22 @@ func (m *CIDMap) MappedCID(code int) (int, bool) {
 	return m.mappedCID(code)
 }
 
+// NotdefCIDs returns, in order and once each, the CIDs the notdefchar and
+// notdefrange mappings of the CMap and of its bases select (ISO 32000-1,
+// 9.7.6.3): the CIDs a code no cidchar or cidrange maps can draw, besides
+// CID 0.
+func (m *CIDMap) NotdefCIDs() []int {
+	if m == nil {
+		return nil
+	}
+	out := make([]int, 0, len(m.notdefs))
+	for _, n := range m.notdefs {
+		out = append(out, n.cid)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // CodeSpaceRanges returns a copy of the codespace ranges the CMap and its
 // bases declare (ISO 32000-1, 9.7.6.2), the ranges [CIDMap.CodeLength] splits
 // codes by.
