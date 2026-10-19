@@ -40,6 +40,12 @@ type ContentSpan struct {
 	PageIndex int
 	// Start and End bound the marked range, [Start, End).
 	Start, End int
+	// InText reports that the range lies inside one text object, between
+	// its BT and its ET, as a part of a text object split in two does. ISO
+	// 32000-1, 14.6 asks a marked-content sequence and a text object to nest,
+	// so [Emit] keeps the sequences it writes around such a range, the
+	// artifacts beside it included, from crossing the BT or the ET.
+	InText bool
 }
 
 // Element is a node in the logical structure tree to emit. A leaf carries a
@@ -52,6 +58,14 @@ type Element struct {
 	Kids []*Element
 	// Span is the content a leaf node marks.
 	Span *ContentSpan
+	// Continued is further content the leaf marks, after Span in reading
+	// order, each span its own marked-content sequence on Span's page. A
+	// paragraph whose lines the content stream sets apart, around the lines
+	// of another column, is one element this way: ISO 32000-1, 14.7.4.1 and
+	// 14.7.4.2 let an element's /K list any number of marked-content
+	// sequences, in the order they are read. Only a leaf with a Span carries
+	// it.
+	Continued []ContentSpan
 	// Alt is the /Alt alternative text. Required on Figure for PDF/UA; an
 	// empty value leaves an auditable residual the caller fills later.
 	Alt string

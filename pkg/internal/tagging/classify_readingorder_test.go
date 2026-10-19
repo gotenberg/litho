@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
 // para returns one text object setting lines from (x, y) down at a 12-point
@@ -45,11 +47,13 @@ func classifiedIDs(t *testing.T, cs string, ids ...string) []string {
 	var walk func(e *Element) []string
 	walk = func(e *Element) []string {
 		if e.Span != nil {
-			text := cs[e.Span.Start:e.Span.End]
 			var got []string
-			for _, id := range ids {
-				if strings.Contains(text, "("+id+" ") {
-					got = append(got, id)
+			for _, span := range append([]ContentSpan{*e.Span}, e.Continued...) {
+				text := cs[span.Start:span.End]
+				for _, id := range ids {
+					if strings.Contains(text, "("+id+" ") {
+						got = append(got, id)
+					}
 				}
 			}
 			return got
@@ -81,6 +85,107 @@ func TestClassify_ColumnsReadColumnByColumn(t *testing.T) {
 	want := []string{"P:A1", "P:A2", "P:B1", "P:B2"}
 	if !slices.Equal(got, want) {
 		t.Errorf("elements: got %v, want %v", got, want)
+	}
+}
+
+// interleavedLines returns two columns of lines, each line its own text
+// object, set line by line across both: A0, B0, A1, B1 and so on. The right
+// column's baselines sit half a line below the left's, so no row of the two
+// reads as a table row.
+func interleavedLines(lines int) (string, []string) {
+	var sb strings.Builder
+	var ids []string
+	for i := range lines {
+		y := 700 - 12*i
+		fmt.Fprintf(&sb, "BT /F1 10 Tf 72 %d Td (A%d line of the left column, ten point.) Tj ET\n", y, i)
+		fmt.Fprintf(&sb, "BT /F1 10 Tf 320 %d Td (B%d line of the right column, ten point.) Tj ET\n", y-6, i)
+		ids = append(ids, fmt.Sprintf("A%d", i), fmt.Sprintf("B%d", i))
+	}
+	return sb.String(), ids
+}
+
+// TestClassify_InterleavedLinesFormOneParagraph pins ISO 32000-1, 14.7.4.1:
+// an element's content may be several marked-content sequences. The stream
+// sets the lines of two columns alternately, each line its own text object, so
+// no two lines of a column are adjacent in the content. Read in reading order,
+// each column used to be a run of one-line paragraphs; it is one paragraph
+// whose lines are its sequences, in reading order.
+func TestClassify_InterleavedLinesFormOneParagraph(t *testing.T) {
+	t.Parallel()
+	cs, ids := interleavedLines(5)
+	got := classifiedIDs(t, cs, ids...)
+	want := []string{"P:A0+A1+A2+A3+A4", "P:B0+B1+B2+B3+B4"}
+	if !slices.Equal(got, want) {
+		t.Errorf("elements: got %v, want %v", got, want)
+	}
+}
+
+// TestEmit_InterleavedLinesListTheirSequences pins the structure the emitter
+// writes for a paragraph of several sequences: its /K lists their MCIDs in
+// reading order (ISO 32000-1, 14.7.4.2), and the page's parent tree entry maps
+// each of them back to it (14.7.4.4).
+func TestEmit_InterleavedLinesListTheirSequences(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	cs, _ := interleavedLines(4)
+	data := buildTaggedTestPDF(cs)
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(5)
+	res, err := AutoTag(ctx, alloc, doc)
+	if err != nil || res.Skipped != nil {
+		t.Fatalf("AutoTag: %v, skipped %v", err, res.Skipped)
+	}
+	pending := alloc.Pending()
+	catalog := mustDict(t, pending[1], "catalog")
+	st := mustDict(t, pending[mustRef(t, catalog["StructTreeRoot"], "/StructTreeRoot").ObjectNum], "StructTreeRoot")
+	kids, _ := mustDict(t, pending[mustRef(t, st["K"], "/K").ObjectNum], "Document")["K"].(ast.PdfArray)
+	if len(kids) != 2 {
+		t.Fatalf("Document /K: got %d kids, want 2", len(kids))
+	}
+	var refs []ast.PdfIndirectRef
+	for i, k := range kids {
+		ref := mustRef(t, k, "kid")
+		refs = append(refs, ref)
+		mcids, ok := mustDict(t, pending[ref.ObjectNum], "P")["K"].(ast.PdfArray)
+		want := ast.PdfArray{ast.PdfInt(4 * i), ast.PdfInt(4*i + 1), ast.PdfInt(4*i + 2), ast.PdfInt(4*i + 3)}
+		if !ok || !slices.Equal(mcids, want) {
+			t.Errorf("P %d /K: got %v, want %v", i, mcids, want)
+		}
+	}
+	nums, _ := mustDict(t, st["ParentTree"], "ParentTree")["Nums"].(ast.PdfArray)
+	if len(nums) != 2 {
+		t.Fatalf("ParentTree /Nums: got %v", nums)
+	}
+	parents, _ := nums[1].(ast.PdfArray)
+	if len(parents) != 8 {
+		t.Fatalf("parent tree entry: got %d refs, want 8", len(parents))
+	}
+	for mcid, p := range parents {
+		if want := refs[mcid/4]; p != want {
+			t.Errorf("MCID %d parent: got %v, want %v", mcid, p, want)
+		}
+	}
+	page := mustDict(t, pending[3], "page")
+	stream, _ := pending[mustRef(t, page["Contents"], "/Contents").ObjectNum].(ast.PdfStream)
+	marked, err := stream.Bytes(ctx)
+	if err != nil {
+		t.Fatalf("content: %v", err)
+	}
+	// The left column's lines, A0 to A3, are MCIDs 0 to 3 wherever the
+	// stream draws them, and the right column's 4 to 7.
+	flat := strings.Join(strings.Fields(string(marked)), " ")
+	for i := range 4 {
+		for _, want := range []string{
+			fmt.Sprintf("/P <</MCID %d>> BDC BT /F1 10 Tf 72 %d Td (A%d ", i, 700-12*i, i),
+			fmt.Sprintf("/P <</MCID %d>> BDC BT /F1 10 Tf 320 %d Td (B%d ", 4+i, 694-12*i, i),
+		} {
+			if !strings.Contains(flat, want) {
+				t.Errorf("marked content lacks %q:\n%s", want, marked)
+			}
+		}
 	}
 }
 

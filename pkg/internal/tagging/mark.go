@@ -18,6 +18,9 @@ type markSpan struct {
 	tag        Role
 	artifact   bool
 	pagination Pagination
+	// inText reports that the span lies inside one text object (see
+	// [ContentSpan.InText]).
+	inText bool
 }
 
 // injectMarks wraps each span in content with a marked-content sequence:

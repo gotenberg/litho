@@ -18,13 +18,13 @@ func TestPageSpans_LeavesTextXObjectUnmarked(t *testing.T) {
 	data := []byte("q 1 0 0 1 0 0 cm /ARRS Do Q\n")
 
 	// With no text-bearing XObjects the gap is ordinary graphics: artifact it.
-	spans, _ := pageSpans(data, nil, nil)
+	spans, _ := pageSpans(data, nil, nil, nil)
 	if len(spans) != 1 || !spans[0].artifact {
 		t.Fatalf("graphics-only gap produced %d span(s) %+v, want one artifact", len(spans), spans)
 	}
 
 	// Once /ARRS is known to paint text, the same gap must be left alone.
-	spans, _ = pageSpans(data, nil, map[string]bool{"ARRS": true})
+	spans, _ = pageSpans(data, nil, map[string]bool{"ARRS": true}, nil)
 	for _, s := range spans {
 		if s.artifact {
 			t.Errorf("a region painting text-bearing /ARRS was marked as an artifact: %+v", s)

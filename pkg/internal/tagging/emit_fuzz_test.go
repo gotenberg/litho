@@ -1,6 +1,7 @@
 package tagging
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -61,7 +62,7 @@ func FuzzPageSpans(f *testing.F) {
 		}
 
 		textXObjects := map[string]bool{"Fm0": true, "Fm1": true}
-		spans, refs := pageSpans(data, leaves, textXObjects)
+		spans, refs := pageSpans(data, leaves, textXObjects, textObjectTokens(context.Background(), data))
 		if len(refs) != len(leaves) {
 			panic("pageSpans returned a ref array of the wrong length")
 		}
@@ -93,7 +94,7 @@ func TestPageSpansPlansWithinContent(t *testing.T) {
 		{span: markSpan{start: 0, end: 26, mcid: 0, tag: RoleP}, ref: ast.PdfIndirectRef{ObjectNum: 1}},
 	}
 
-	spans, refs := pageSpans(data, leaves, map[string]bool{"Fm0": true})
+	spans, refs := pageSpans(data, leaves, map[string]bool{"Fm0": true}, nil)
 	if len(refs) != len(leaves) {
 		t.Fatalf("got %d refs for %d leaves", len(refs), len(leaves))
 	}

@@ -2,6 +2,7 @@ package tagging
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -120,7 +121,7 @@ func (e *emitter) paginate(node *Element) error {
 		return fmt.Errorf("tagging: pagination artifact references page %d of %d", pi, len(e.pages))
 	}
 	e.furniture[pi] = append(e.furniture[pi], markSpan{
-		start: node.Span.Start, end: node.Span.End, artifact: true, pagination: node.Pagination,
+		start: node.Span.Start, end: node.Span.End, artifact: true, pagination: node.Pagination, inText: node.Span.InText,
 	})
 	e.furnitureCount++
 	return nil
@@ -138,6 +139,9 @@ func (e *emitter) build(ctx context.Context, node *Element, parentRef ast.PdfInd
 	}
 	if node.Span != nil && len(node.Kids) > 0 {
 		return ast.PdfIndirectRef{}, fmt.Errorf("tagging: element %q has both a span and children", node.Role)
+	}
+	if node.Span == nil && len(node.Continued) > 0 {
+		return ast.PdfIndirectRef{}, fmt.Errorf("tagging: element %q continues a span it does not have", node.Role)
 	}
 
 	selfRef := e.alloc.Alloc(ast.PdfDict{}) // reserve object number
@@ -171,13 +175,28 @@ func (e *emitter) build(ctx context.Context, node *Element, parentRef ast.PdfInd
 		if pi < 0 || pi >= len(e.pages) {
 			return ast.PdfIndirectRef{}, fmt.Errorf("tagging: element %q references page %d of %d", node.Role, pi, len(e.pages))
 		}
-		mcid := len(e.perPage[pi])
 		dict["Pg"] = e.pages[pi].Ref
-		dict["K"] = ast.PdfInt(mcid)
-		e.perPage[pi] = append(e.perPage[pi], leafEntry{
-			span: markSpan{start: node.Span.Start, end: node.Span.End, mcid: mcid, tag: node.Role},
-			ref:  selfRef,
-		})
+		// The MCIDs follow the spans in reading order, so /K lists the
+		// element's sequences in the order they are read (ISO 32000-1,
+		// 14.7.4.1). An integer MCID names a sequence on the /Pg page
+		// (14.7.4.2), which is why every span of the leaf is on it.
+		kids := make(ast.PdfArray, 0, 1+len(node.Continued))
+		for _, span := range append([]ContentSpan{*node.Span}, node.Continued...) {
+			if span.PageIndex != pi {
+				return ast.PdfIndirectRef{}, fmt.Errorf("tagging: element %q continues from page %d onto page %d", node.Role, pi, span.PageIndex)
+			}
+			mcid := len(e.perPage[pi])
+			kids = append(kids, ast.PdfInt(mcid))
+			e.perPage[pi] = append(e.perPage[pi], leafEntry{
+				span: markSpan{start: span.Start, end: span.End, mcid: mcid, tag: node.Role, inText: span.InText},
+				ref:  selfRef,
+			})
+		}
+		if len(kids) == 1 {
+			dict["K"] = kids[0]
+		} else {
+			dict["K"] = kids
+		}
 	default:
 		kids := make(ast.PdfArray, 0, len(node.Kids))
 		for _, child := range node.Kids {
@@ -233,7 +252,12 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		// The spans stop where the last token that terminates ends, so the EMC
 		// closing the trailing artifact is never written inside a string the
 		// stream leaves open; the bytes past it are copied after the EMC.
-		spans, elemRefs := pageSpans(data[:content.TerminatedEnd(ctx, data)], leaves, textBearingXObjects(ctx, e.alloc, e.doc, e.pages[pi]))
+		terminated := data[:content.TerminatedEnd(ctx, data)]
+		var textTokens []textToken
+		if slices.ContainsFunc(leaves, func(l leafEntry) bool { return l.span.inText }) {
+			textTokens = textObjectTokens(ctx, terminated)
+		}
+		spans, elemRefs := pageSpans(terminated, leaves, textBearingXObjects(ctx, e.alloc, e.doc, e.pages[pi]), textTokens)
 		if len(spans) == 0 {
 			continue // no paintable content to mark
 		}
@@ -279,12 +303,20 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 // planned as it stands and owns no structure element. elemRefs maps MCID to
 // its structure element for the page's ParentTree entry.
 //
+// textTokens are the page's BT and ET operators, in content order, given when
+// a leaf lies inside a text object (see [ContentSpan.InText]), and nil
+// otherwise. ISO 32000-1, 14.6 asks each pair of BDC (or BMC) and EMC and each
+// pair of BT and ET to nest, so a gap that holds an unmatched BT or ET, as the
+// gaps beside such a leaf do, is not one artifact: it is artifacted piece by
+// piece between them, and the BT and ET, which paint nothing, stay outside
+// marked content. A gap whose text objects it holds whole stays one artifact.
+//
 // # Corpus evidence
 //
 //   - pdfjs TAMReview.pdf: keeps most of its words inside text-painting Form
 //     XObjects, and sweeping them into an /Artifact dropped the document from
 //     11914 extractable characters to 2266.
-func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([]markSpan, ast.PdfArray) {
+func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool, textTokens []textToken) ([]markSpan, ast.PdfArray) {
 	structLeaves := 0
 	for _, leaf := range leaves {
 		if !leaf.span.artifact {
@@ -294,7 +326,7 @@ func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([
 	elemRefs := make(ast.PdfArray, structLeaves)
 	var spans []markSpan
 	cursor := 0
-	addArtifact := func(start, end int) {
+	addPiece := func(start, end int) {
 		if start >= end || isBlank(data[start:end]) {
 			return
 		}
@@ -309,6 +341,19 @@ func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([
 		}
 		spans = append(spans, markSpan{start: start, end: end, artifact: true})
 	}
+	addArtifact := func(start, end int) {
+		inside := tokensWithin(textTokens, start, end)
+		if nestsWhole(inside) {
+			addPiece(start, end)
+			return
+		}
+		from := start
+		for _, tok := range inside {
+			addPiece(from, tok.start)
+			from = tok.end
+		}
+		addPiece(from, end)
+	}
 	for _, leaf := range leaves {
 		s := leaf.span
 		addArtifact(cursor, s.start)
@@ -322,6 +367,57 @@ func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([
 	}
 	addArtifact(cursor, len(data))
 	return spans, elemRefs
+}
+
+// textToken is one BT or ET operator of a page's content, by its byte range.
+type textToken struct {
+	start, end int
+	// begin is true for a BT, false for an ET.
+	begin bool
+}
+
+// textObjectTokens returns the BT and ET operators of content data, in content
+// order, as [pageTextBlocks] reads the content, or nil when it does not parse.
+func textObjectTokens(ctx context.Context, data []byte) []textToken {
+	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.WholeStream())
+	if err != nil {
+		return nil
+	}
+	var out []textToken
+	for i, op := range ops {
+		if op.Operator == "BT" || op.Operator == "ET" {
+			out = append(out, textToken{start: ranges[i].Start, end: ranges[i].End, begin: op.Operator == "BT"})
+		}
+	}
+	return out
+}
+
+// tokensWithin returns the tokens that lie in [start, end).
+func tokensWithin(tokens []textToken, start, end int) []textToken {
+	lo, _ := slices.BinarySearchFunc(tokens, start, func(t textToken, at int) int { return cmp.Compare(t.start, at) })
+	hi := lo
+	for hi < len(tokens) && tokens[hi].end <= end {
+		hi++
+	}
+	return tokens[lo:hi]
+}
+
+// nestsWhole reports whether tokens, the BT and ET operators of one region,
+// open and close whole text objects, so a sequence around the region nests
+// with them (ISO 32000-1, 14.6).
+func nestsWhole(tokens []textToken) bool {
+	depth := 0
+	for _, t := range tokens {
+		if t.begin {
+			depth++
+			continue
+		}
+		depth--
+		if depth < 0 {
+			return false
+		}
+	}
+	return depth == 0
 }
 
 // textBearingXObjects returns the page's Form XObject resource names whose

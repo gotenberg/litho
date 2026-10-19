@@ -388,10 +388,11 @@ func boxCorners(box ast.PdfArray) (x0, y0, x1, y1 float64) {
 // to bottom in default user space, which is not the way such a page reads.
 //
 // The blocks are classified in reading order, so heading levels follow the
-// order a reader meets the headings in (see [headingLevels]). Two blocks only
-// ever join one paragraph when they are also adjacent in the content, since a
-// marked-content sequence is one contiguous run of it (ISO 32000-1, 14.6), so
-// a paragraph whose lines the stream sets apart stays a run of paragraphs.
+// order a reader meets the headings in (see [headingLevels]). A marked-content
+// sequence is one contiguous run of the content (ISO 32000-1, 14.6), so two
+// blocks share a sequence only when they are adjacent in it; a paragraph whose
+// lines the stream sets apart, around the lines of another column, is one
+// element whose lines are sequences of their own (see [classifyBlocks]).
 //
 // # Corpus evidence
 //
@@ -454,7 +455,7 @@ func classifyInReadingOrder(ctx context.Context, alloc *writer.ObjAllocator, doc
 			ordered = append(ordered, rest[i])
 		}
 	}
-	elems := classifyBlocks(ordered, pageIndex, data)
+	elems := classifyBlocks(ordered, pageIndex, data, boxAt)
 	elems = append(elems, figureElements(images, pageIndex)...)
 	elems = append(elems, tables...)
 	byStart := make(map[int]*Element, len(elems))

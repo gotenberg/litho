@@ -200,7 +200,8 @@ func alreadyTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 //
 // Scope: text in one column or several. Text objects are segmented per
 // BT…ET. Running headers, footers and page numbers are set apart first (see
-// [detectFurniture]). Strongly grid-like runs of blocks become tables
+// [detectFurniture]), cut off the text object that also sets the body when
+// a producer sets both in one. Strongly grid-like runs of blocks become tables
 // ([carveTables]). The rest are classified as headings, by font size relative
 // to body text and numbered into a no-skip H1..Hn hierarchy, or paragraphs;
 // adjacent paragraph lines merge into one element by baseline proximity, so a
@@ -208,8 +209,10 @@ func alreadyTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // become lists ([listify]). Each image paint outside a text object is a Figure
 // ([figureElements]). The elements follow the page's reading order
 // ([classifyInReadingOrder]): columns read one after the other and the page
-// top to bottom, wherever the content stream draws them; a page whose layout
-// the segmentation cannot read keeps content order.
+// top to bottom, wherever the content stream draws them, and a paragraph whose
+// lines the stream sets apart, around another column's, is one element of
+// several sequences ([Element.Continued]); a page whose layout the
+// segmentation cannot read keeps content order.
 //
 // Font size is transform-aware: it is the Tf size scaled by the text matrix and
 // the CTM (ISO 32000-1, 9.4.4), so text enlarged by a cm or by Tm's own scale
@@ -217,10 +220,12 @@ func alreadyTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // stay in text space; the reason is on [textBlock].
 //
 // Known limitations: text inside Form XObjects (Do) is not descended into for
-// classification; a text object mixing sizes is classified by its dominant
-// size; tables carry no TH and lists no Lbl; and a paragraph whose lines the
-// content stream sets apart, around another column's, stays one paragraph per
-// text object. Content not placed in a structure element
+// classification, and since [Emit] leaves such a form unmarked rather than
+// artifact it, the form takes no place in the tree for the reading order to
+// set (ISO 32000-1, 14.7.4.3 would make the whole form one content item); a
+// text object mixing sizes is classified by its dominant size, and one setting
+// several paragraphs is one block, cut only to set its furniture apart; tables
+// carry no TH and lists no Lbl. Content not placed in a structure element
 // (graphics, and text the heuristic misses) is marked as an artifact by [Emit]
 // so the output stays fully marked.
 func Classify(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*Element, error) {
@@ -239,17 +244,17 @@ func Classify(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		blocks, images, data, err := pageTextBlocks(ctx, alloc, doc, pages[pi])
+		blocks, images, data, err := pageTextBlocks(ctx, alloc, doc, pages[pi], furniture[pi].splits)
 		if err != nil || (len(blocks) == 0 && len(images) == 0) {
 			continue // skip unparseable or content-free pages
 		}
-		blocks, artifacts := splitFurniture(blocks, pi, furniture[pi])
+		blocks, artifacts := splitFurniture(blocks, pi, furniture[pi].kinds)
 		tables, rest := carveTables(blocks, pi)
 		if kids, ok := classifyInReadingOrder(ctx, alloc, doc, pages[pi], pi, data, blocks, rest, images, tables); ok {
 			root.Kids = append(append(root.Kids, kids...), artifacts...)
 			continue
 		}
-		elems := mergeByOffset(classifyBlocks(rest, pi, data), figureElements(images, pi))
+		elems := mergeByOffset(classifyBlocks(rest, pi, data, nil), figureElements(images, pi))
 		elems = mergeByOffset(elems, tables)
 		root.Kids = append(root.Kids, mergeByOffset(elems, artifacts)...)
 	}
@@ -264,20 +269,23 @@ func Classify(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 const furniturePositionTol = 4.0
 
 // detectFurniture finds the running headers and footers of the document and
-// returns them per page index, keyed by the start byte of their text block.
-// It reads the pages as [Classify] does, a pass ahead of it, since a running
-// head is only known as one once every page is read.
+// returns them per page index ([pageFurniture]), keyed by the start byte of
+// their text block. It reads the pages as [Classify] does, a pass ahead of it,
+// since a running head is only known as one once every page is read.
 //
 // A block is furniture when it lies wholly in the top or bottom margin band of
 // its page (see [heuristics.MarginEdge]), either repeats, with digits compared
 // as equal and at the same distance from the edge, on a strict majority of the
-// pages that show text or reads as the page's own number, and stands apart
-// from the page's content (see [separatedFurniture]). A running head that
-// changes with the chapter, a page number in a font whose codes are not ASCII,
-// a table's header row repeated atop each page and any page turned by /Rotate
-// stay content: missing furniture leaves a paragraph a reader can skip, while
-// taking content for furniture hides it from assistive technology (ISO
-// 32000-1, 14.8.2.2).
+// pages that show text, or of those of its hand, the left-hand or the
+// right-hand pages, or reads as the page's own number, and stands apart from
+// the page's content (see [separatedFurniture]). The lines a text block that
+// reaches out of the bands sets in one of them are weighed the same way, as a
+// part of the block that is cut off it when it is furniture ([marginParts]).
+// A running head that changes with the chapter, a page number in a font whose
+// codes are not ASCII, a table's header row repeated atop each page and any
+// page turned by /Rotate stay content: missing furniture leaves a paragraph a
+// reader can skip, while taking content for furniture hides it from assistive
+// technology (ISO 32000-1, 14.8.2.2).
 //
 // # Corpus evidence
 //
@@ -288,22 +296,31 @@ const furniturePositionTol = 4.0
 //   - govdocs, pdfjs, litho: the PDF/UA-1 and PDF/UA-2 remediations of those
 //     138 files draw no rule from veraPDF they did not draw before, and the
 //     text they extract with artifacts is the same.
-func detectFurniture(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page) (map[int]map[int]Pagination, error) {
+//   - govdocs, pdfjs, pdfcpu: weighing each hand apart takes 1277 more
+//     blocks and parts for furniture, in 55 files. govdocs
+//     thread_400_400760.pdf: "Soil Survey of" and "Rock County, Minnesota",
+//     194 pages each. govdocs thread_000_000347.pdf: the journal's name and
+//     the authors' names, 8 pages each.
+func detectFurniture(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page) (map[int]pageFurniture, error) {
 	var lines []heuristics.Line
 	var lineBlocks []furnitureBlock
 	// geometry keeps every block of a page that holds a margin line, for the
 	// separation test; other pages need none.
 	geometry := make(map[int][]furnitureBlock)
 	textPages := 0
+	// textPagesOf counts the pages that show text by hand: even page
+	// indices, then odd ones.
+	var textPagesOf [2]int
 	for pi, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		blocks, _, _, err := pageTextBlocks(ctx, alloc, doc, page)
+		blocks, _, _, err := pageTextBlocks(ctx, alloc, doc, page, nil)
 		if err != nil || len(blocks) == 0 {
 			continue
 		}
 		textPages++
+		textPagesOf[pi%2]++
 		bottom, top, ok := visibleYRange(page)
 		if !ok || page.Rotate != 0 {
 			continue
@@ -312,12 +329,26 @@ func detectFurniture(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		inBand := false
 		for _, b := range blocks {
 			fb := furnitureBlock{start: b.startByte, minY: b.minUY, maxY: b.maxUY, size: b.fontSize}
-			pageGeometry = append(pageGeometry, fb)
-			if !b.upright || b.shownOverflow || b.shown == "" {
-				continue
+			edge, offset := heuristics.EdgeNone, 0.0
+			if b.upright {
+				edge, offset = heuristics.MarginEdge(b.minUY, b.maxUY, bottom, top)
 			}
-			edge, offset := heuristics.MarginEdge(b.minUY, b.maxUY, bottom, top)
-			if edge == heuristics.EdgeNone {
+			if edge == heuristics.EdgeNone && b.upright {
+				if parts := marginParts(b, bottom, top); parts != nil {
+					for _, part := range parts {
+						pageGeometry = append(pageGeometry, part.block)
+						if part.block.edge == heuristics.EdgeNone {
+							continue
+						}
+						inBand = true
+						lines = append(lines, heuristics.Line{Page: pi, Text: part.text, Edge: part.block.edge, Offset: part.offset})
+						lineBlocks = append(lineBlocks, part.block)
+					}
+					continue
+				}
+			}
+			pageGeometry = append(pageGeometry, fb)
+			if edge == heuristics.EdgeNone || b.shownOverflow || b.shown == "" {
 				continue
 			}
 			inBand = true
@@ -337,6 +368,30 @@ func detectFurniture(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			PositionTolerance: furniturePositionTol,
 			FoldDigits:        true,
 		})
+		// A book or a journal sets one running head on its left-hand
+		// pages and another on its right-hand ones, each on half of them,
+		// so the pages of each hand are weighed apart as well.
+		for hand := range 2 {
+			if textPagesOf[hand] < 2 {
+				continue
+			}
+			var idx []int
+			var sub []heuristics.Line
+			for i, l := range lines {
+				if l.Page%2 == hand {
+					idx = append(idx, i)
+					sub = append(sub, l)
+				}
+			}
+			handRunning := heuristics.RunningLines(sub, heuristics.RunningOptions{
+				MinPages:          textPagesOf[hand]/2 + 1,
+				PositionTolerance: furniturePositionTol,
+				FoldDigits:        true,
+			})
+			for k, i := range idx {
+				running[i] = running[i] || handRunning[k]
+			}
+		}
 	}
 	type pageBand struct {
 		page int
@@ -355,7 +410,7 @@ func detectFurniture(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		candidates[k] = append(candidates[k], lineBlocks[i])
 	}
 
-	out := make(map[int]map[int]Pagination)
+	out := make(map[int]pageFurniture)
 	for _, k := range order {
 		furniture := candidates[k]
 		if !separatedFurniture(furniture, geometry[k.page], k.edge) {
@@ -365,14 +420,163 @@ func detectFurniture(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		if k.edge == heuristics.EdgeTop {
 			kind = PaginationHeader
 		}
-		if out[k.page] == nil {
-			out[k.page] = make(map[int]Pagination)
+		pf := out[k.page]
+		if pf.kinds == nil {
+			pf.kinds = make(map[int]Pagination)
 		}
 		for _, f := range furniture {
-			out[k.page][f.start] = kind
+			pf.kinds[f.start] = kind
+			if f.cut > 0 {
+				if pf.splits == nil {
+					pf.splits = make(map[int]bool)
+				}
+				pf.splits[f.cut] = true
+			}
 		}
+		out[k.page] = pf
 	}
 	return out, nil
+}
+
+// pageFurniture is the furniture of one page: the pagination subtype of each
+// furniture block, keyed by the start byte of the block, and the line starts
+// at which [pageTextBlocks] cuts a text object to set its furniture apart.
+type pageFurniture struct {
+	kinds  map[int]Pagination
+	splits map[int]bool
+}
+
+// marginPart is one part of a text block [marginParts] cuts: its geometry,
+// with the margin band it sits in, and, for a part in a band, its shown
+// bytes and distance from the page edge.
+type marginPart struct {
+	block  furnitureBlock
+	text   string
+	offset float64
+}
+
+// marginParts cuts a text block that reaches out of the margin bands, yet
+// opens with lines in the top band or closes with lines in the bottom one,
+// into those lines and the rest, and returns the parts top to bottom in
+// content order, or nil when it holds no such lines.
+//
+// A producer may set a page's running head and the text under it in one text
+// object, so the block reaches out of the band and reads as body text, and
+// the head reads as content: a reader then meets the head on every page,
+// which ISO 14289-1, 7.8 asks to be an artifact instead. The head is the
+// lines the band holds before the first break of furnitureGapLines line
+// heights, as the separation test reads a head set off from the body, or all
+// of them when no break comes first; the foot likewise, from the end. A part
+// in a band is weighed as furniture like a whole block (see
+// [detectFurniture]), and a part that is taken is cut off the text object at
+// its first line, or at the line after its last.
+//
+// # Corpus evidence
+//
+//   - govdocs, facturx, pdfjs, pdfcpu: of the 3914 files auto-tagging reaches,
+//     174 set furniture in a text object that sets more, 4077 parts cut off
+//     in all (govdocs 145 files, facturx 26, pdfjs 2, pdfcpu 1).
+//   - govdocs thread_000_000347.pdf: each page sets its running head (the
+//     page number, the volume and the journal's name) and the body under it in
+//     one text object, so the head was tagged as a paragraph, and on the pages
+//     of tables it was folded with the caption into one paragraph, which the
+//     reading order then placed ahead of the other column's caption.
+//   - facturx xmlrechnung__FX_EN16931_Einfach.pdf: sets the sample's running
+//     head and its page count in one text object.
+//   - All corpora: every page auto-tagging marks keeps its sequences nested
+//     with its text objects, but on four pdfjs files whose own content leaves
+//     a text object or a sequence unbalanced, as it did before (pdfjs
+//     JBIG2Globals.pdf, bug1065245.pdf, issue9458.pdf and
+//     poppler-90-0-fuzzed.pdf).
+func marginParts(b textBlock, bottom, top float64) []marginPart {
+	n := len(b.lines)
+	if n < 2 {
+		return nil
+	}
+	inBand := func(i int, edge heuristics.Edge) bool {
+		e, _ := heuristics.MarginEdge(b.lines[i].uy, b.lines[i].uy, bottom, top)
+		return e == edge
+	}
+	breaksBefore := func(i int) bool {
+		gap := b.lines[i-1].uy - b.lines[i].uy
+		return gap >= furnitureGapLines*lineHeightFactor*math.Max(dominantSize(b.lines[i-1].sizes), dominantSize(b.lines[i].sizes))
+	}
+	head := 0
+	for head < n && inBand(head, heuristics.EdgeTop) {
+		head++
+	}
+	for i := 1; i < head; i++ {
+		if breaksBefore(i) {
+			head = i
+			break
+		}
+	}
+	if head == n {
+		head = 0
+	}
+	foot := n
+	for foot > head && inBand(foot-1, heuristics.EdgeBottom) {
+		foot--
+	}
+	for i := n - 1; i > foot; i-- {
+		if breaksBefore(i) {
+			foot = i
+			break
+		}
+	}
+	if foot == head {
+		foot = n
+	}
+	if head == 0 && foot == n {
+		return nil
+	}
+	part := func(from, to int, edge heuristics.Edge) (marginPart, bool) {
+		p := marginPart{block: furnitureBlock{minY: math.Inf(1), maxY: math.Inf(-1), edge: edge}}
+		overflow := false
+		sizes := make(map[float64]int)
+		for _, l := range b.lines[from:to] {
+			p.block.minY, p.block.maxY = math.Min(p.block.minY, l.uy), math.Max(p.block.maxY, l.uy)
+			for sz, c := range l.sizes {
+				sizes[sz] += c
+			}
+			p.text += l.shown
+			overflow = overflow || l.overflow
+		}
+		p.block.size = dominantSize(sizes)
+		if from == 0 {
+			p.block.start = b.innerStart
+		} else {
+			p.block.start = b.lines[from].start
+		}
+		switch edge {
+		case heuristics.EdgeTop:
+			p.block.cut = b.lines[to].start
+			_, p.offset = heuristics.MarginEdge(p.block.minY, p.block.maxY, bottom, top)
+		case heuristics.EdgeBottom:
+			p.block.cut = b.lines[from].start
+			_, p.offset = heuristics.MarginEdge(p.block.minY, p.block.maxY, bottom, top)
+		case heuristics.EdgeNone:
+		}
+		return p, edge == heuristics.EdgeNone || (!overflow && len(p.text) <= maxFurnitureTextBytes && p.text != "")
+	}
+	var parts []marginPart
+	add := func(from, to int, edge heuristics.Edge) {
+		p, ok := part(from, to, edge)
+		if !ok {
+			// A part whose text cannot be compared is no furniture, but
+			// it keeps its place in the page's geometry.
+			p.block.edge, p.block.cut = heuristics.EdgeNone, 0
+		}
+		parts = append(parts, p)
+	}
+	if head > 0 {
+		add(0, head, heuristics.EdgeTop)
+	}
+	add(head, foot, heuristics.EdgeNone)
+	if foot < n {
+		add(foot, n, heuristics.EdgeBottom)
+	}
+	return parts
 }
 
 // furnitureBlock is the geometry of one text block the furniture pass weighs:
@@ -383,6 +587,10 @@ type furnitureBlock struct {
 	minY, maxY float64
 	size       float64
 	edge       heuristics.Edge
+	// cut is, for a part of a text block (see [marginParts]), the line start
+	// at which the text object is cut to set the part apart, and 0 for a
+	// whole block.
+	cut int
 }
 
 // furnitureGapLines is the least distance, in line heights, between page
@@ -508,7 +716,7 @@ func splitFurniture(blocks []textBlock, pageIndex int, furniture map[int]Paginat
 		}
 		artifacts = append(artifacts, &Element{
 			Pagination: kind,
-			Span:       &ContentSpan{PageIndex: pageIndex, Start: b.startByte, End: b.endByte},
+			Span:       &ContentSpan{PageIndex: pageIndex, Start: b.startByte, End: b.endByte, InText: b.inText},
 		})
 	}
 	return rest, artifacts
@@ -563,7 +771,7 @@ func carveTables(blocks []textBlock, pageIndex int) ([]*Element, []textBlock) {
 				b := blocks[bi]
 				tr.Kids = append(tr.Kids, &Element{
 					Role: RoleTD,
-					Span: &ContentSpan{PageIndex: pageIndex, Start: b.startByte, End: b.endByte},
+					Span: &ContentSpan{PageIndex: pageIndex, Start: b.startByte, End: b.endByte, InText: b.inText},
 				})
 				consumed[bi] = true
 			}
@@ -763,13 +971,70 @@ type textBlock struct {
 	// never furniture.
 	shown         string
 	shownOverflow bool
+	// lines are the block's lines in content order, for the furniture pass
+	// to cut a running head or foot off a text object that sets more.
+	lines []blockLine
+	// innerStart is where the block's BT ends, the start of the first part of
+	// its text object when it is cut (see [pageTextBlocks]).
+	innerStart int
+	// inText reports that the block is a part of a cut text object, between
+	// its BT and its ET (see [ContentSpan.InText]).
+	inText bool
+}
+
+// blockLine is one line of a text block: a run of the strings it shows on
+// one baseline, rowBaselineTol apart at most, in default user space.
+type blockLine struct {
+	// start is where the line begins: the first operation after the string
+	// the line before ended with, so the operations that move to the line
+	// are part of it. The first line of a text object starts where its BT
+	// ends, and the first line of a part where the part starts.
+	start int
+	// uy is the baseline, as [lineOrigin] reads it.
+	uy float64
+	// sizes counts the characters the line shows at each rounded size, as
+	// the block's own size is weighed (see [dominantSize]).
+	sizes map[float64]int
+	// shown and overflow are the line's shown bytes as textBlock.shown holds
+	// the block's.
+	shown    string
+	overflow bool
+}
+
+// addLine records a string of n characters op shows on the baseline uy at
+// size: on the block's last line when it sits on that line's baseline, or on
+// a new line, which starts at lineStart, the first operation after the last
+// string shown, or at at, op's own start, when none came between.
+func (b *textBlock) addLine(op content.Operation, at, lineStart, n int, uy, size float64) {
+	k := len(b.lines)
+	if k == 0 || math.Abs(b.lines[k-1].uy-uy) > rowBaselineTol {
+		start := at
+		switch {
+		case k == 0:
+			start = max(b.startByte, b.innerStart)
+		case lineStart >= 0:
+			start = lineStart
+		}
+		b.lines = append(b.lines, blockLine{start: start, uy: uy, sizes: make(map[float64]int, 1)})
+		k++
+	}
+	line := &b.lines[k-1]
+	line.sizes[roundHalf(size)] += n
+	line.shown, line.overflow = appendShownText(line.shown, line.overflow, op)
 }
 
 // appendShown adds the bytes op shows to b.shown, whitespace dropped, until
 // they pass maxFurnitureTextBytes.
 func (b *textBlock) appendShown(op content.Operation) {
-	if b.shownOverflow {
-		return
+	b.shown, b.shownOverflow = appendShownText(b.shown, b.shownOverflow, op)
+}
+
+// appendShownText returns shown with the bytes op shows appended, whitespace
+// dropped, and whether they passed maxFurnitureTextBytes, in which case shown
+// is empty.
+func appendShownText(shown string, overflow bool, op content.Operation) (string, bool) {
+	if overflow {
+		return "", true
 	}
 	var strs []ast.PdfString
 	switch op.Operator {
@@ -796,20 +1061,19 @@ func (b *textBlock) appendShown(op content.Operation) {
 			}
 		}
 	}
-	buf := []byte(b.shown)
+	buf := []byte(shown)
 	for _, s := range strs {
 		for _, c := range []byte(s) {
 			if isSpaceByte(c) {
 				continue
 			}
 			if len(buf) >= maxFurnitureTextBytes {
-				b.shown, b.shownOverflow = "", true
-				return
+				return "", true
 			}
 			buf = append(buf, c)
 		}
 	}
-	b.shown = string(buf)
+	return string(buf), false
 }
 
 // isSpaceByte reports whether c is PDF white space (ISO 32000-1, 7.2.2,
@@ -868,7 +1132,15 @@ const firstTextPrefixLen = 16
 // The content is read whole ([content.WholeStream]): a viewer draws the text
 // after a stray "]" that validation reads no further than, and ISO 32000-1,
 // 14.8.2.2 asks that it be tagged too.
-func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]textBlock, []imageBlock, []byte, error) {
+//
+// splits names the starts of lines (see [blockLine]) at which a text object is
+// cut into parts, each a block of its own: the furniture pass cuts a running
+// head or foot off the text object that also sets the page's body (see
+// [detectFurniture]). The parts of a cut text object lie between its BT and
+// its ET, which belong to none of them, so the sequences marking them nest
+// with the text object (ISO 32000-1, 14.6), and they are marked
+// [ContentSpan.InText].
+func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, splits map[int]bool) ([]textBlock, []imageBlock, []byte, error) {
 	data, err := pageContentBytes(ctx, alloc, doc, page)
 	if err != nil || len(data) == 0 {
 		return nil, nil, data, err
@@ -912,6 +1184,10 @@ func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	tm := [6]float64{1, 0, 0, 1, 0, 0}
 	sizeChars := make(map[float64]int) // dominant-size accumulator for the current block
 
+	// lineStart is the start of the first operation after the last string the
+	// current block showed, where a line that moves off its baseline begins,
+	// or -1 when no operation followed it yet.
+	lineStart := -1
 	flush := func() {
 		if cur != nil && cur.textLen > 0 {
 			cur.fontSize = dominantSize(sizeChars)
@@ -933,6 +1209,19 @@ func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			}
 		}
 		r := ranges[i]
+		if cur != nil && splits[r.Start] && cur.textLen > 0 && op.Operator != "ET" {
+			if !cur.inText {
+				cur.startByte = cur.innerStart
+			}
+			cur.inText = true
+			innerStart := cur.innerStart
+			flush()
+			cur = &textBlock{startByte: r.Start, endByte: r.Start, innerStart: innerStart, inText: true}
+			lineStart = -1
+		}
+		if cur != nil && lineStart < 0 && showTextLen(op) == 0 {
+			lineStart = r.Start
+		}
 		switch op.Operator {
 		case "Do":
 			// Image paints become Figure leaves. Only outside text
@@ -983,11 +1272,15 @@ func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			}
 		case "BT":
 			flush()
-			cur = &textBlock{startByte: r.Start, endByte: r.End}
+			cur = &textBlock{startByte: r.Start, endByte: r.End, innerStart: r.End}
+			lineStart = -1
 			textY, textX, leading = 0, 0, 0 // BT resets the text and line matrices to identity
 			tm = [6]float64{1, 0, 0, 1, 0, 0}
 		case "ET":
-			extend(r.End)
+			// The last part of a cut text object ends before the ET.
+			if cur != nil && !cur.inText {
+				extend(r.End)
+			}
 			flush()
 		case "Tf":
 			if len(op.Operands) >= 2 {
@@ -1061,7 +1354,10 @@ func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 					cur.upright = cur.upright && upright
 					cur.textLen += n
 					cur.appendShown(op)
-					sizeChars[roundHalf(curFont*textVScale(tm, ctm))] += n
+					size := curFont * textVScale(tm, ctm)
+					cur.addLine(op, r.Start, lineStart, n, uy, size)
+					lineStart = -1
+					sizeChars[roundHalf(size)] += n
 					cur.lastY = textY
 					if !cur.hasY {
 						cur.y, cur.x, cur.hasY = textY, textX, true
@@ -1153,7 +1449,15 @@ const maxLineGapRatio = 1.3
 // heading from the hierarchy). Two blocks merge only when nothing but
 // whitespace lies between them, so intervening graphics (a rule, a background)
 // is never swallowed into a paragraph and stays an artifact.
-func classifyBlocks(blocks []textBlock, pageIndex int, data []byte) []*Element {
+//
+// boxes, given when blocks are in reading order rather than content order,
+// holds the ink box of each block by its start byte. A block that is the next
+// line of the paragraph before it on the page ([nextLineApart]), but that the
+// content stream sets apart from it, joins that paragraph as a further span
+// of its own ([Element.Continued]), so the lines of a column the stream
+// interleaves with another's form one paragraph, and what lies between them
+// stays out of it.
+func classifyBlocks(blocks []textBlock, pageIndex int, data []byte, boxes map[int][4]float64) []*Element {
 	if len(blocks) == 0 {
 		return nil
 	}
@@ -1169,15 +1473,21 @@ func classifyBlocks(blocks []textBlock, pageIndex int, data []byte) []*Element {
 	var metas []elemMeta
 	for i := 0; i < len(blocks); {
 		role := roles[i]
-		start, end := blocks[i].startByte, blocks[i].endByte
+		spans := []ContentSpan{{PageIndex: pageIndex, Start: blocks[i].startByte, End: blocks[i].endByte, InText: blocks[i].inText}}
 		j := i + 1
 		// A marker-starting line opens a new list item and never folds
 		// into the preceding paragraph or item.
-		for j < len(blocks) && role == RoleP && roles[j] == RoleP &&
-			!isListMarker(blocks[j].firstText) &&
-			blankGap(data, blocks[j-1].endByte, blocks[j].startByte) &&
-			lineAdjacent(blocks[j-1], blocks[j]) {
-			end = blocks[j].endByte
+	join:
+		for j < len(blocks) && role == RoleP && roles[j] == RoleP && !isListMarker(blocks[j].firstText) {
+			switch b := blocks[j]; {
+			case blankGap(data, blocks[j-1].endByte, b.startByte) && lineAdjacent(blocks[j-1], b):
+				last := &spans[len(spans)-1]
+				last.End, last.InText = b.endByte, last.InText || b.inText
+			case boxes != nil && nextLineApart(blocks[j-1], b, boxes):
+				spans = append(spans, ContentSpan{PageIndex: pageIndex, Start: b.startByte, End: b.endByte, InText: b.inText})
+			default:
+				break join
+			}
 			j++
 		}
 		meta := elemMeta{
@@ -1189,22 +1499,63 @@ func classifyBlocks(blocks []textBlock, pageIndex int, data []byte) []*Element {
 		}
 		i = j
 
-		if start < 0 {
-			start = 0
+		var kept []ContentSpan
+		for _, sp := range spans {
+			sp.Start, sp.End = max(sp.Start, 0), min(sp.End, len(data))
+			if sp.Start < sp.End {
+				kept = append(kept, sp)
+			}
 		}
-		if end > len(data) {
-			end = len(data)
-		}
-		if start >= end {
+		if len(kept) == 0 {
 			continue
 		}
-		elems = append(elems, &Element{
-			Role: role,
-			Span: &ContentSpan{PageIndex: pageIndex, Start: start, End: end},
-		})
+		e := &Element{Role: role, Span: &kept[0]}
+		if len(kept) > 1 {
+			e.Continued = kept[1:]
+		}
+		elems = append(elems, e)
 		metas = append(metas, meta)
 	}
 	return listify(elems, metas)
+}
+
+// nextLineApart reports whether block b, which the content stream sets apart
+// from block a, is the next line of the same paragraph on the page: set at
+// a's size, its first baseline lies below a's last by no more than
+// maxLineGapRatio line heights, and its ink overlaps a's across the page, so
+// both sit in one column. The baselines are read in default user space,
+// where two text objects set under different transforms still compare, and
+// not in text space as [lineAdjacent] reads them.
+//
+// # Corpus evidence
+//
+//   - govdocs, pdfjs, facturx, pdfcpu: of the 3914 files auto-tagging reaches,
+//     172 hold an element of several sequences, 6140 in all, each a run of
+//     one-line elements before.
+//   - govdocs thread_300_300236.pdf: sets every line of its numbered
+//     submissions as a text object of its own, a cm and an rg between each
+//     two, so each line was a paragraph; each submission is now a list item.
+//   - govdocs thread_100_100169.pdf: the wrapped heads of a table's columns
+//     and the wrapped lines of its notes join their first lines.
+//   - govdocs, pdfjs, facturx, pdfcpu: the PDF/UA-1 and PDF/UA-2
+//     remediations, default and aggressive, of the 340 files whose trees
+//     these elements and the cut furniture of [marginParts] change write 1360
+//     outputs that differ from before. On none does litho or veraPDF report
+//     a rule it did not report before, or miss one it did, and a second run
+//     writes the same bytes. govdocs thread_000_000839.pdf reports one font's
+//     missing Unicode mapping (ISO 14289-1, 7.21.7) twice more, once per
+//     sequence a split paragraph shows the glyph in.
+func nextLineApart(a, b textBlock, boxes map[int][4]float64) bool {
+	if roundHalf(a.fontSize) != roundHalf(b.fontSize) || a.fontSize <= 0 {
+		return false
+	}
+	gap := a.minUY - b.maxUY
+	if gap <= 0 || gap > a.fontSize*lineHeightFactor*maxLineGapRatio {
+		return false
+	}
+	ba, okA := boxes[a.startByte]
+	bb, okB := boxes[b.startByte]
+	return okA && okB && math.Max(ba[0], bb[0]) < math.Min(ba[2], bb[2])
 }
 
 // elemMeta carries the layout facts of one classified element that the
@@ -1269,7 +1620,7 @@ func listify(elems []*Element, metas []elemMeta) []*Element {
 		}
 		list := &Element{Role: RoleL}
 		for _, item := range elems[i:j] {
-			body := &Element{Role: RoleLBody, Span: item.Span}
+			body := &Element{Role: RoleLBody, Span: item.Span, Continued: item.Continued}
 			list.Kids = append(list.Kids, &Element{Role: RoleLI, Kids: []*Element{body}})
 		}
 		out = append(out, list)
