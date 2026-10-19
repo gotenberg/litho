@@ -232,6 +232,7 @@ one deliberately rather than diffing it against a fresh build.
 | `drivetitle_1b.pdf`    | PDF/A-1b     | Info text entries that begin like a PDF date, against XMP        |
 | `unclosedmc_ua1.pdf`   | PDF/UA-1     | An artifact sequence the content stream never closes             |
 | `danglingstr_ua1.pdf`  | PDF/UA-1     | Auto-tagging a page that ends inside an unterminated string      |
+| `readorder_ua1.pdf`    | PDF/UA-1     | Untagged two-column page whose stream interleaves the columns    |
 
 ### Must-not-fire controls
 
@@ -635,6 +636,7 @@ which are covered under [Known divergences](#known-divergences).
 | `patternshade_2b.pdf`  | 8    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 7    | 6    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `remapchain_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 4    | 0    |
+| `readorder_ua1.pdf`    | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `redactcopies_2b.pdf`  | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `redactrefs_ua1.pdf`   | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 4    | 5    |
 | `remreach_2b.pdf`      | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 6    | 6    | 10   | 8    |
@@ -7420,6 +7422,38 @@ veraPDF judges that glyph once because the cell starts in the procedure's mode
 UA-1 and UA-2, six rule-set cells. veraPDF and litho now report the same rule
 set and counts in all thirteen cells, and remediated at every level in both
 modes, on every output.
+
+### `readorder_ua1.pdf`
+
+ISO 14289-1, 7.2 asks the structure tree to follow the reading order (ISO
+32000-1, 14.8.2.3 lets it differ from content order), and auto-tagging builds
+that tree when remediation to PDF/UA finds a page untagged. The one page here
+is untagged, and its content stream does not follow the reading order:
+
+| Drawn | Content                                | Read |
+| ----- | -------------------------------------- | ---- |
+| 1     | page number `1` at the foot            | none |
+| 2     | 14-point heading over the right column | 4    |
+| 3     | left column, paragraph one             | 2    |
+| 4     | right column, paragraph one            | 5    |
+| 5     | left column, paragraph two             | 3    |
+| 6     | right column, paragraph two            | 6    |
+| 7     | 24-point title across both columns     | 1    |
+
+The page number is a pagination artifact and takes no place in the tree.
+Tagged in content order, the tree read the right column's heading first, as
+`H1`, and the title last, as `H1` again; and the right column's first paragraph
+and the left column's second, adjacent in the stream and a line apart in text
+space, folded into one `P` that crossed the gutter. Tagged in reading order it
+reads `H1`, `P`, `P`, `H2`, `P`, `P`, as the Read column says.
+
+Before remediation both tools report the untagged page (`6.2/1`, `7.1/3` and
+`7.1/11` at PDF/UA-1, `6.2/1`, `8.2.1/1` and `8.2.2/1` at PDF/UA-2) and the
+non-embedded font, plus `5/2` and `5/5` at PDF/UA-2, where the packet's PDF/UA-1
+claim is the wrong part. The two tools agree in all thirteen cells.
+The PDF/UA-1 and PDF/UA-2 outputs, default and aggressive, keep only the font
+(`7.21.4.1/1`, `8.4.5.5.1/1`) on both tools, in reading order as in content
+order: veraPDF does not judge the order of a tree.
 
 ## Scope
 
