@@ -97,43 +97,13 @@ func Subset(ctx context.Context, data []byte, keep []uint16) ([]byte, map[uint16
 	}
 	glyph := func(gid int) []byte { return glyf[offsets[gid]:offsets[gid+1]] }
 
-	kept := make([]bool, numGlyphs)
-	kept[0] = true
-	queue := []int{0}
-	for _, gid := range keep {
-		if int(gid) >= numGlyphs {
-			return nil, nil, fmt.Errorf("%w: glyph %d past the program's %d glyphs", ErrInvalidFont, gid, numGlyphs)
-		}
-		if !kept[gid] {
-			kept[gid] = true
-			queue = append(queue, int(gid))
-		}
-	}
-	// Each glyph enters the queue once, so the walk ends however the
-	// composite glyphs refer to one another, a cycle included.
-	for i := 0; i < len(queue); i++ {
-		if i%subsetCtxCheckEvery == 0 {
-			if err := ctx.Err(); err != nil {
-				return nil, nil, err
-			}
-		}
-		err := compositeComponents(glyph(queue[i]), func(_ int, component uint16) error {
-			if int(component) >= numGlyphs {
-				return fmt.Errorf("%w: glyph %d draws glyph %d, past the program's %d glyphs", ErrInvalidFont, queue[i], component, numGlyphs)
-			}
-			if !kept[component] {
-				kept[component] = true
-				queue = append(queue, int(component))
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, nil, err
-		}
+	kept, err := keptGlyphs(ctx, numGlyphs, keep, glyph)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	old := make([]uint16, 0, len(queue))
-	newGID := make(map[uint16]uint16, len(queue))
+	old := make([]uint16, 0, len(keep)+1)
+	newGID := make(map[uint16]uint16, len(keep)+1)
 	for gid, k := range kept {
 		if k {
 			newGID[uint16(gid)] = uint16(len(old)) //nolint:gosec // G115: both are below numGlyphs, a uint16.
