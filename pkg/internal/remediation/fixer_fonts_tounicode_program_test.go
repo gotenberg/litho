@@ -283,3 +283,67 @@ func TestFixType0Font_ToUnicodeThroughACIDToGIDMapStreamRefuses(t *testing.T) {
 		}
 	}
 }
+
+// symbolicType1PDF builds a page whose object 4 is a symbolic Type 1 font
+// stating no /Encoding, embedding a program whose built-in encoding is the
+// given "dup <code> /<name> put" lines.
+func symbolicType1PDF(vector string) []byte {
+	program := []byte("%!PS-AdobeFont-1.0: LithoMath 001.000\n/FontName /LithoMath def\n" +
+		"/Encoding 256 array\n0 1 255 {1 index exch /.notdef put} for\n" + vector + "readonly def\n" +
+		"currentdict end\ncurrentfile eexec\n")
+	return assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /LithoMath /FontDescriptor 5 0 R >>",
+		"<< /Type /FontDescriptor /FontName /LithoMath /Flags 4 /FontFile 6 0 R >>",
+		streamObject(program),
+	})
+}
+
+// TestFixSimpleFontToUnicode_SymbolicType1ReadsItsBuiltInEncoding pins that a
+// symbolic Type 1 font stating no /Encoding gets the /ToUnicode its program's
+// built-in encoding grounds.
+//
+// ISO 32000-1, 9.6.6.1 draws such a font's codes through the built-in
+// encoding of its program, which names the glyph each code selects, and a
+// name the Adobe Glyph List carries is the character (9.10.2). The TeX math
+// fonts of verapdf 6-3-8-t01-fail-a name codes this way: read through a
+// standard encoding instead, "−∞ ∞" came out "−1 1".
+func TestFixSimpleFontToUnicode_SymbolicType1ReadsItsBuiltInEncoding(t *testing.T) {
+	t.Parallel()
+
+	data := symbolicType1PDF("dup 0 /minus put\ndup 49 /infinity put\n")
+	cmap, fixes := generatedToUnicode(t, data, codes(0x00, 0x31))
+	if cmap == "" {
+		t.Fatalf("no /ToUnicode was generated, fixes=%v", fixes)
+	}
+	for _, want := range []string{"<00> <2212>", "<31> <221E>"} {
+		if !strings.Contains(cmap, want) {
+			t.Errorf("the CMap lacks %q, the character the program names the glyph:\n%s", want, cmap)
+		}
+	}
+}
+
+// TestFixSimpleFontToUnicode_SymbolicType1RefusesAnUngroundedCode is the
+// control for codes the built-in encoding does not ground: a name no glyph
+// list carries, a numeric name whose number is a guess at the producer's
+// convention, and a code the encoding leaves at .notdef. Each would leave a
+// shown code unmapped, so no map is written.
+func TestFixSimpleFontToUnicode_SymbolicType1RefusesAnUngroundedCode(t *testing.T) {
+	t.Parallel()
+
+	vector := "dup 49 /infinity put\ndup 50 /H11021 put\ndup 51 /C51 put\n"
+	for _, tc := range []struct {
+		name string
+		code byte
+	}{
+		{"a name no glyph list carries", 0x32},
+		{"a numeric name", 0x33},
+		{"a code the encoding leaves at .notdef", 0x34},
+	} {
+		if cmap, _ := generatedToUnicode(t, symbolicType1PDF(vector), codes(0x31, tc.code)); cmap != "" {
+			t.Errorf("%s: a /ToUnicode was attached:\n%s", tc.name, cmap)
+		}
+	}
+}

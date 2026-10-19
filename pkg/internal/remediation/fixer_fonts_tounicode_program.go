@@ -11,18 +11,20 @@ import (
 )
 
 // symbolicProgramToUnicode returns the code-to-Unicode mapping the embedded
-// program of a symbolic TrueType font that states no /Encoding gives the codes
-// it characterises, and nil for any other font.
+// program of a symbolic TrueType or Type 1 font that states no /Encoding gives
+// the codes it characterises, and nil for any other font.
 //
-// ISO 32000-1, 9.6.6.4 takes such a font's codes to glyphs through the
+// ISO 32000-1, 9.6.6.4 takes a TrueType font's codes to glyphs through the
 // program's (3,0) cmap subtable, or through a (1,0) subtable that copies the
 // (3,1) one, and the program names each glyph: its post table, read through
-// the Adobe Glyph List (9.10.2), or its Unicode subtable.
+// the Adobe Glyph List (9.10.2), or its Unicode subtable. A Type 1 font's codes
+// select glyphs through its program's built-in encoding (9.6.6.1), which names
+// the glyph each code selects, read through the same glyph lists.
 // [typography.Font.ProgramGlyphRunes] holds those readings, the ones text
-// extraction shows. A code the program leaves unnamed, or names with a Private
-// Use Area or control value, gets no entry: what the font's default encoding
-// reads there is a guess (9.6.6.1), and a guessed map turned "−∞ ∞" into
-// "−1 1" (see [fixSimpleFontToUnicode]).
+// extraction shows. A code the program leaves unnamed, names with a numeric
+// name, or names with a Private Use Area or control value, gets no entry: what
+// the font's default encoding reads there is a guess (9.6.6.1), and a guessed
+// map turned "−∞ ∞" into "−1 1" (see [fixSimpleFontToUnicode]).
 //
 // The map carries litho's reading, not PDF.js's, which reads such a font's
 // codes through MacRomanEncoding (see the typography package's
@@ -39,17 +41,35 @@ import (
 //   - govdocs thread_200_200393.pdf, thread_300_300082.pdf,
 //     thread_300_300237.pdf: post names code 0xB7 bullet. PDF.js reads "∑"
 //     from the original, its golden, and "•" from the remediated file.
+//   - All corpora: 41 files show a symbolic Type 1 font that states no
+//     /Encoding, and 48 of their font cells at PDF/A-2u, PDF/A-3u, PDF/UA-1
+//     and PDF/UA-2 get a map. On veraPDF 1.30.2 the remediated outputs of
+//     verapdf 6-2-11-7-2-t01-fail-a, pdfjs issue9552.pdf and
+//     reduced_planck_constant.pdf, govdocs thread_400_400008.pdf lose the
+//     rule at every level that states it, 1a, 2a and 3a included; govdocs
+//     thread_300_300849.pdf loses 8.4.3 t1 at PDF/UA-2 and 6.2.11.7.3 t1 at
+//     PDF/A-2a and PDF/A-3a. litho agrees with veraPDF on every cell, no rule
+//     is gained, and litho's extracted text is unchanged in both modes.
+//   - All corpora: the fonts left unmapped name a shown code with a name no
+//     glyph list carries (the "H11021" names of the Universal and
+//     MathematicalPi subsets), or a numeric one (AdvOpti's "C42").
 func symbolicProgramToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[uint16]rune {
-	// An unreadable /Subtype names no TrueType font, which is the answer.
-	if subtype, _ := document.ResolveName(ctx, doc, fontDict["Subtype"]); subtype != "TrueType" {
+	// An unreadable /Subtype names no font with a program to read, which is
+	// the answer.
+	switch subtype, _ := document.ResolveName(ctx, doc, fontDict["Subtype"]); subtype {
+	case "TrueType", "Type1", "MMType1":
+	default:
 		return nil
 	}
 	font, err := typography.ResolveFont(ctx, doc, fontDict)
 	if err != nil || font == nil {
-		doc.Logger.Debug("resolving a symbolic TrueType font for its /ToUnicode", slog.Any("err", err))
+		doc.Logger.Debug("resolving a symbolic simple font for its /ToUnicode", slog.Any("err", err))
 		return nil
 	}
-	if len(font.ProgramGlyphRunes) == 0 {
+	// A font text extraction reads through a map of its own, one litho
+	// synthesises from the font's name, is not read through its program, and a
+	// map written from the program would change what the output reads.
+	if len(font.ProgramGlyphRunes) == 0 || font.ToUnicode != nil {
 		return nil
 	}
 	mapping := make(map[uint16]rune, len(font.ProgramGlyphRunes))

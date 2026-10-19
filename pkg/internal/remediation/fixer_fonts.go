@@ -1246,8 +1246,9 @@ func fixSimpleFontToUnicode(ctx context.Context, doc *document.Document, alloc *
 	//
 	// The one source left is the program itself: a symbolic TrueType program
 	// takes the codes to glyphs through its own cmap subtable and names the
-	// glyphs (9.6.6.4), so the codes it names map to what it names them, and
-	// no others ([symbolicProgramToUnicode]).
+	// glyphs (9.6.6.4), a Type 1 program's built-in encoding names the glyph
+	// each code selects (9.6.6.1), so the codes it names map to what it names
+	// them, and no others ([symbolicProgramToUnicode]).
 	//
 	// Only where the font has no map: a map the producer wrote names what it
 	// meant, and replacing one for a forbidden value it holds elsewhere

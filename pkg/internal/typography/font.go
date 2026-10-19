@@ -106,11 +106,13 @@ type Font struct {
 	LigatureOverrides map[byte]string
 
 	// ProgramGlyphRunes holds the characters the embedded program of a
-	// symbolic TrueType font that states no /Encoding gives its codes
-	// ([applySymbolicTrueTypeGlyphs]), and only those; nil for any other
-	// font. [Font.Encoding] also carries the default encoding's reading of
-	// every code the program leaves unnamed, a guess a caller that persists
-	// a mapping must not write.
+	// simple font that states no /Encoding gives its codes, and only those:
+	// a symbolic TrueType program through its cmap and glyph names
+	// ([applySymbolicTrueTypeGlyphs]), a Type 1 program through the glyph
+	// names of its built-in encoding ([applyType1FontFileEncoding]). It is
+	// nil for any other font. [Font.Encoding] also carries the default
+	// encoding's reading of every code the program leaves unnamed, a guess
+	// a caller that persists a mapping must not write.
 	ProgramGlyphRunes map[byte]rune
 }
 
@@ -1776,14 +1778,38 @@ func applyType1FontFileEncoding(ctx context.Context, doc *document.Document, fon
 		swapType1NamedEncoding(font, enc[0])
 		return
 	}
+	// The built-in encoding alone says what a code shows only when the font
+	// states no /Encoding: a /Differences array laid over it renames codes
+	// after this fill (ISO 32000-1, 9.6.6.1).
+	_, stated := fontDict["Encoding"]
 	for i, name := range enc {
 		if name == "" || name == ".notdef" || builtinNumericNameMisreads(name, i) {
 			continue
 		}
 		if r, ok := resolveGlyphRune(name, isDingbats, isSymbol); ok {
-			font.Encoding[byte(i)] = r //nolint:gosec // i is bounded by 0..255 via the array size
+			code := byte(i) //nolint:gosec // i is bounded by 0..255 via the array size
+			font.Encoding[code] = r
+			if !stated {
+				recordProgramGlyphRune(font, code, name, r)
+			}
 		}
 	}
+}
+
+// recordProgramGlyphRune records in [Font.ProgramGlyphRunes] that the built-in
+// encoding of a Type 1 program names code's glyph name, read as r through the
+// glyph lists (ISO 32000-1, 9.10.2). A numeric name ("Gxx", "Cdd") is left
+// out: it is in no glyph list, and its number is a guess at the producer's
+// convention ([builtinNumericNameMisreads]) that text extraction may take but
+// a persisted mapping must not.
+func recordProgramGlyphRune(font *Font, code byte, name string, r rune) {
+	if _, numeric := encodings.NumericGlyphName(name); numeric {
+		return
+	}
+	if font.ProgramGlyphRunes == nil {
+		font.ProgramGlyphRunes = make(map[byte]rune)
+	}
+	font.ProgramGlyphRunes[code] = r
 }
 
 // builtinNumericNameMisreads reports whether name, found at code in a font
