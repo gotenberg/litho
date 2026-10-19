@@ -203,6 +203,10 @@ litho rotate --angle 90 -o rotated.pdf document.pdf
 litho merge -o merged.pdf a.pdf b.pdf
 litho stamp-text --text "DRAFT" -o stamped.pdf document.pdf
 
+# Shrink a command's rewrite: --compact packs objects and merges duplicate
+# streams, --recompress-images recompresses images losslessly and costs more time.
+litho merge --compact --recompress-images -o merged.pdf a.pdf b.pdf
+
 # Chain operations in one command. A remediate stage runs last.
 litho pipe document.pdf rotate --angle 90 stamp-text --text "DRAFT" -o out.pdf
 litho pipe document.pdf rotate --angle 90 remediate --profile PDF/UA-1 -o out.pdf
@@ -214,6 +218,8 @@ litho sign --cert cert.pem --key key.pem --reason Approved -o signed.pdf documen
 ```
 
 Run `litho` with no arguments to list every subcommand, or `litho <command> -h` to see its flags.
+
+`--compact` is `pdf.WithObjectStreams` and `pdf.WithDedup`, and `--recompress-images` is `pdf.WithImageRecompression`. Every command that rewrites the whole file takes both, `pipe` included, alone or together. `--recompress-images` re-encodes uncompressed, Flate, LZW and RunLength images as Flate with a PNG predictor where that is smaller, and every recompressed image decodes to the same samples as before. JPEG, JPEG 2000, JBIG2 and CCITT images are left as they are. It is a separate flag because it can take seconds on an image-heavy file that `--compact` alone writes in milliseconds. Neither applies to an encrypted output.
 
 `--font-dir` is `pdf.WithFontFiles` over a directory: `remediate` and the `pipe` remediate stage search it recursively and embed a subset of the program each unembedded font takes (see [Embedding fonts](#embedding-fonts)). `--system-fonts` is `pdf.WithSystemFonts`: the operating system's fonts serve the fonts `--font-dir` supplies no program for, or every font without `--font-dir`. `remediate` lists every font left unembedded, with the reason, under `Fonts left unembedded`, or `refused_fonts` with `-f json`. `pipe` prints no report: `pipe --strict` exits `2` when a font stays unembedded. `--document-id` is `pdf.WithDocumentID`: 32 hex digits pin the trailer `/ID` a remediation writes when the document has no valid one, so two runs over the same file write the same bytes. A directory that does not exist, or a value that is not 32 hex digits, exits `1` and writes nothing.
 

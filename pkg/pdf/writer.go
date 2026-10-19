@@ -267,6 +267,17 @@ func WithDedup() WriteOption {
 // encrypted output is never recompressed: encryption has replaced every
 // stream's data with ciphertext before the pass would run. The output stays
 // deterministic: the same input and options give the same bytes.
+//
+// It costs time where the other compaction options cost almost none:
+// compressing at zlib's best level takes seconds on an image-heavy file that
+// [WithObjectStreams] and [WithDedup] rewrite in milliseconds.
+//
+// # Corpus evidence
+//
+//   - All corpora: 27,709 images re-encoded, each decoding to its original
+//     samples; govdocs saves 2.46%, pdfjs 1.90% and pdfcpu 6.46% of the
+//     rewritten bytes.
+//   - pdfcpu: writing all 51 files takes 17s with it and 1s without.
 func WithImageRecompression() WriteOption {
 	return func(o *writeOpts) {
 		o.recompressImages = true

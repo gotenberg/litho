@@ -157,7 +157,9 @@
 // a source's encryption, so an edited document is written in the clear unless
 // this option asks otherwise. [WithObjectStreams], [WithDedup] and
 // [WithImageRecompression] shrink a full rewrite, losslessly, and all three
-// decline on an encrypted output.
+// decline on an encrypted output. [WithImageRecompression] costs far more time
+// than the other two, so the CLI keeps it behind its own --recompress-images
+// flag rather than in --compact.
 //
 // # Resource limits
 //
