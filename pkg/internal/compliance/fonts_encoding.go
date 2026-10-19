@@ -1978,18 +1978,10 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 	// Measured against veraPDF at PDF/A-1a over an Adobe-GB1 CIDFont with no
 	// /ToUnicode: GBK-EUC-H and UniGB-UCS2-H report nothing, UniGB-UTF16-H
 	// reports the glyph.
-	cidSysInfo, err := document.ResolveDict(ctx, doc, cidFontDict["CIDSystemInfo"])
-	if err == nil && cidSysInfo != nil {
-		ordering, _ := document.ResolveString(ctx, doc, cidSysInfo["Ordering"])
-		registry, _ := document.ResolveString(ctx, doc, cidSysInfo["Registry"])
-		encName, _ := document.ResolveName(ctx, doc, type0Dict["Encoding"])
-		undefinedHere := PDFAPart(profile) == 1 && cmapNameIsUnicodeTransformFormat(string(encName))
-		if string(registry) == "Adobe" && !undefinedHere {
-			switch string(ordering) {
-			case "GB1", "CNS1", "Japan1", "Korea1":
-				return nil
-			}
-		}
+	encName, _ := document.ResolveName(ctx, doc, type0Dict["Encoding"])
+	undefinedHere := PDFAPart(profile) == 1 && cmapNameIsUnicodeTransformFormat(string(encName))
+	if !undefinedHere && reachesCollectionUCS2(ctx, doc, type0Dict, cidFontDict, profile) {
+		return nil
 	}
 
 	// With no map at all, or one that maps nothing, every glyph the font shows
@@ -2011,6 +2003,63 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 	}
 
 	return nil
+}
+
+// reachesCollectionUCS2 reports whether a Type 0 font reaches Unicode through
+// the UCS2 CMap of its character collection, which exempts it from carrying a
+// /ToUnicode map (ISO 19005-2, 6.2.11.7.2; ISO 19005-1, 6.3.8; ISO 14289-1,
+// 7.21.7; ISO 14289-2, 8.4.5.8).
+//
+// The clauses exempt the Adobe-GB1, Adobe-CNS1, Adobe-Japan1 and
+// Adobe-Korea1 collections by name. This relaxes them to every collection
+// veraPDF 1.30.2 maps, whose PDType0Font.toUnicode reads a glyph's Unicode
+// value from the collection's Adobe-<Ordering>-UCS2 CMap: under Identity-H
+// and Identity-V the collection the CIDFont's /CIDSystemInfo names, among
+// those four and Adobe-KR; under any other encoding the collection the
+// encoding CMap's /CIDSystemInfo names, a predefined CMap's from Adobe's
+// table (PDCMap.getCIDSystemInfo), whenever veraPDF bundles that UCS2 CMap.
+// Both give the same five collections, so one test serves them. Adobe-KR is
+// Adobe's successor to Adobe-Korea1, published with its own UCS2 CMap, and
+// ISO 32000-2 moves UniKS-UTF16-H onto it; the clauses predate it.
+func reachesCollectionUCS2(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, profile string) bool {
+	encObj := type0Dict["Encoding"]
+	encName, _ := document.ResolveName(ctx, doc, encObj)
+	var registry, ordering string
+	switch {
+	case encName == "Identity-H" || encName == "Identity-V":
+		registry, ordering = cidSystemInfoCollection(ctx, doc, cidFontDict["CIDSystemInfo"])
+	case encName != "":
+		pdf20 := PDFAPart(profile) == 4 || (IsPDFUA(profile) && PDFUAPart(profile) == 2)
+		reg, ord, _, ok := cmap.PredefinedCMapCIDSystemInfo(string(encName), pdf20)
+		if !ok {
+			return false
+		}
+		registry, ordering = reg, ord
+	default:
+		stream, err := document.ResolveStream(ctx, doc, encObj)
+		if err != nil || stream.Dict == nil {
+			return false
+		}
+		registry, ordering = cidSystemInfoCollection(ctx, doc, stream.Dict["CIDSystemInfo"])
+	}
+	return cmap.CollectionUCS2Bundled(registry, ordering)
+}
+
+// cidSystemInfoCollection returns the Registry and Ordering of a
+// /CIDSystemInfo value: a dictionary, or an array whose first element is one,
+// as veraPDF reads the PDF 1.4 form of an embedded CMap's entry
+// (PDCMap.getCIDSystemInfo).
+func cidSystemInfoCollection(ctx context.Context, doc *document.Document, obj ast.PdfObject) (string, string) {
+	if arr, err := document.ResolveArray(ctx, doc, obj); err == nil && len(arr) > 0 {
+		obj = arr[0]
+	}
+	info, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || info == nil {
+		return "", ""
+	}
+	registry, _ := document.ResolveString(ctx, doc, info["Registry"])
+	ordering, _ := document.ResolveString(ctx, doc, info["Ordering"])
+	return string(registry), string(ordering)
 }
 
 // type0MissingUnicode states rule once for every CID a composite font's shown

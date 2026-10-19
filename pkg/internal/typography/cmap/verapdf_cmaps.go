@@ -119,6 +119,19 @@ func LoadConformanceCIDMap(name string) *CIDMap {
 	return ConformanceCIDBase(name)
 }
 
+// CollectionUCS2Bundled reports whether veraPDF 1.30.2 bundles the UCS2 CMap
+// of the character collection registry-ordering, "<Registry>-<Ordering>-UCS2"
+// (ISO 32000-1, 9.10.2), through which it maps a Type 0 font's CIDs to
+// Unicode when the font carries no /ToUnicode value for them
+// (PDType0Font.setUcsCMap). It holds for Adobe-CNS1, Adobe-GB1, Adobe-Japan1,
+// Adobe-Korea1 and Adobe-KR.
+func CollectionUCS2Bundled(registry, ordering string) bool {
+	if registry == "" || ordering == "" {
+		return false
+	}
+	return veraPDFBundledCMaps[registry+"-"+ordering+"-UCS2"]
+}
+
 // ConformanceCMap is a CMap program as veraPDF 1.30.2 bundles it, with the
 // CIDSystemInfo and writing mode the program declares, so a stream carrying it
 // can state them in its dictionary (ISO 32000-1, 9.7.5.3, Table 120).

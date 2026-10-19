@@ -1834,24 +1834,16 @@ page painting `0 0 0 rg` under one output intent whose profile header carries
 establishes a device colour space at all. Not planted in any fixture.
 
 **Counts on `cmapverabase_2b.pdf`.** The rule sets agree in all thirteen
-cells, and two counts do not. `6.2.11.3.3/3` (`6.2.10.3.3/3`, `7.21.3.3/3`,
+cells, and one count does not. `6.2.11.3.3/3` (`6.2.10.3.3/3`, `7.21.3.3/3`,
 `8.4.5.4/3`) reads 4 on litho and 1 on veraPDF at the eleven levels past part
 1: veraPDF builds its `PDReferencedCMap` from the `/UseCMap` entry alone
 (`GFPDCmap.getUseCMap`), so `K4` counts and the usecmap operators of `K1`, `K2`
 and `K3` do not, where litho reads the clause's "a CMap shall not reference any
-other CMap" as covering the operator too (ISO 32000-1, 9.7.5.4). The Unicode
-rules, `6.2.11.7.2/1` at A-2a, A-2u, A-3a, A-3u, `7.21.7/1`, `8.4.5.8/1` and
-`6.3.8/1` at A-1a, count `K1` and `K2` on litho only: ISO 19005-2, 6.2.11.7.2
-and ISO 19005-1, 6.3.8 exempt the Adobe-GB1, Adobe-CNS1, Adobe-Japan1 and
-Adobe-Korea1 collections by name, and veraPDF also maps Adobe-KR through its
-Adobe-KR-UCS2. litho is right on the letter of both clauses, so no code
-changed. Remediation inlines the operators' bases and embeds `K5`'s CMap, whose
-program declares Adobe-KR-9, so on the outputs at A-2a, A-2u, A-3a, A-3u, UA-1
-and UA-2 the Unicode rule stays on litho only, for `K1` and `K5`, for the same
-reason; every other rule agrees. Before the embedding, veraPDF still reported
-it for `K5`, whose name gave it no collection to map through. A `/UseCMap`
-chain that loops still makes veraPDF raise "Loop inside CMap" and abandon the
-run, where litho leaves the codes unknown; that is not planted in any fixture.
+other CMap" as covering the operator too (ISO 32000-1, 9.7.5.4). Remediation
+inlines the operators' bases, after which both tools agree on every output,
+default and aggressive, rule by rule and count by count. A `/UseCMap` chain
+that loops still makes veraPDF raise "Loop inside CMap" and abandon the run,
+where litho leaves the codes unknown; that is not planted in any fixture.
 
 **`6.2.4.3/2` when an uncoloured pattern is painted.** litho reports DeviceRGB
 used inside a coloured (`/PaintType 1`) tiling pattern; veraPDF does not, but
@@ -6311,8 +6303,8 @@ Every font is a CIDFontType2 over the three-glyph TrueType program, whose
 
 Before, litho read `K6`'s U+2002 as unmapped through PDF.js's UniGB-UTF16-H, a
 false positive, and missed the other five, so the rule sets agreed by chance.
-Now both tools report the same rule set in all thirteen cells; the two counts
-that differ are under [Known divergences](#known-divergences). `K4`'s and
+Now both tools report the same rule set in all thirteen cells; the one count
+that differs is under [Known divergences](#known-divergences). `K4`'s and
 `K5`'s names are no CMap of Table 118, which `6.2.11.3.3/3` and `/1` report, and
 veraPDF knows no CIDSystemInfo for UniAKR-UTF16-H, which `6.2.11.3.1/1`
 reports. Remediation used to drop `K4`'s `/UseCMap` as naming nothing, which
@@ -6324,9 +6316,19 @@ byte with the Adobe-KR-9 CIDSystemInfo the file declares, since PDF/A requires
 a CMap outside Table 118 embedded and PDF.js ships none. That settles `K5`'s
 embedding and CIDSystemInfo rules (`6.2.11.3.3/1` and `6.2.11.3.1/1` and their
 restatements) on both tools with no rule added, default and aggressive, at all
-thirteen levels. Both tools then report the same rules on every output but the
-Unicode rule under [Known divergences](#known-divergences). `K6` and `K7` keep
-`6.3.3.3/1` at part 1, which requires even a Table 118 CMap embedded.
+thirteen levels, and both tools then report the same rules and counts on every
+output. `K6` and `K7` keep `6.3.3.3/1` at part 1, which requires even a Table
+118 CMap embedded.
+
+The Unicode rules (`6.2.11.7.2/1` at A-2a, A-2u, A-3a, A-3u, `7.21.7/1`,
+`8.4.5.8/1`, `6.3.8/1` at A-1a) once counted `K1` and `K2` on litho only, and
+after the embedding `K5` too: the clauses exempt the Adobe-GB1, Adobe-CNS1,
+Adobe-Japan1 and Adobe-Korea1 collections by name, and veraPDF maps the
+glyphs of Adobe-KR, Adobe's successor Korean collection, through its
+Adobe-KR-UCS2 CMap as well. litho now takes the collection where veraPDF's
+PDType0Font does, from the CIDFont under Identity-H and from the encoding CMap
+otherwise, and exempts every collection whose Adobe-<Ordering>-UCS2 CMap
+veraPDF bundles, so the counts agree.
 
 ### `cmapcidtext_2b.pdf`
 
