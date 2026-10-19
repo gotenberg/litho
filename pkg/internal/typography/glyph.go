@@ -249,6 +249,31 @@ func currentMCIDFromStack(stack []graphics.MarkedContentState) (mcid int, lang, 
 // skip flag that tells the caller to continue past the consumed bytes
 // without emitting an element (used for unmapped CID fallbacks that
 // should not produce visible output).
+//
+// A single-byte code no table maps reads as nothing, unless the code is
+// itself a whitespace character ([isWhitespaceRune]): it then reads as a
+// space glyph. PDF.js shows an unmapped glyph as its code
+// (src/core/fonts.js, _charToGlyph, String.fromCharCode) and reads a
+// whitespace character as a word space (src/core/evaluator.js,
+// buildTextContentItem), and ISO 32000-1, 9.3.3 applies word spacing to
+// the single-byte code 32 whatever glyph it selects. The space invents no
+// visible character.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200612.pdf, thread_200_200408.pdf: TeX text fonts
+//     set "fi" at code 0x0C and "fl" at 0x0D with no glyph name litho or
+//     PDF.js maps, so "brie\x0Cy" read "briey" where PDF.js reads "brie y".
+//   - pdfjs bug810214.pdf, TAMReview.pdf, govdocs thread_400_400235.pdf,
+//     thread_400_400786.pdf: symbol fonts whose space is an unnamed code 32
+//     glued every word, "#$" for PDF.js's "# $".
+//   - All corpora: the space disagreements with PDF.js on files whose
+//     characters match fall from 12339 to 6444, on 22 files, with 49 new
+//     ones on 2 of them (govdocs thread_200_200176.pdf, thread_200_200409.pdf).
+//     Words match on 1 more page of a file that still differs (govdocs
+//     thread_400_400025.pdf page 21) and on no fewer; no file's words or
+//     characters match moves, since PDF.js writes the other unmapped codes
+//     of those files as raw control characters.
 func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	if font.SuppressExtraction {
 		// No route to Unicode exists for this font (see
@@ -321,6 +346,11 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	}
 	if n == 0 {
 		n = 1
+	}
+	if char == "" && n == 1 && isWhitespaceRune(rune(data[0])) {
+		// PDF.js shows the unmapped code, a whitespace character, so it
+		// reads a word space there (ISO 32000-1, 9.3.3 for code 32).
+		char = " "
 	}
 	return char, n, false
 }
