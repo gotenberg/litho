@@ -7009,6 +7009,12 @@ and neither reports the string. Remediated at all thirteen, default and
 aggressive, every output carries the same rule set on both tools and fully
 fixes, but PDF/A-4f, which keeps `6.9/5`.
 
+The same string swallowed what writers append after a page's content: the
+`mutate-stamp` cell's restoring `Q` and stamp were read inside it, and qpdf
+reported the stamped page as not carrying the stamp. Stamping and flattening
+now end the page's content at its last operator before appending, as
+auto-tagging does, and the cell matches.
+
 ### `fontnohead_2b.pdf`
 
 ISO 19005-2, 6.2.11.5 weighs a program's advances in units of its em, which an

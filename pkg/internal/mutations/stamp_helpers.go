@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // stampResource describes a single named resource to add to each stamped
@@ -211,7 +212,9 @@ func newContentBrackets(alloc *writer.ObjAllocator) func() (ast.PdfIndirectRef, 
 // the existing content in q/Q and appending a new content stream. A page's
 // /Contents is a single stream or a flat array of streams (ISO 32000-1 §7.8.2),
 // and the array's elements are concatenated into one stream, so the brackets
-// may be separate elements. When the page already holds an array, from multiple
+// may be separate elements; [endDanglingContent] keeps the page's content from
+// reading them into a string it never terminates. When the page already holds
+// an array, from multiple
 // original streams or a prior stamp, the new stream is appended to it; wrapping
 // the array as one element would nest it, and a conforming reader treats the
 // nested array as a non-stream entry and drops all the content it holds.
@@ -230,7 +233,7 @@ func appendPageContents(ctx context.Context, doc *document.Document, alloc *writ
 		saveRef, restoreRef := brackets()
 		out := make(ast.PdfArray, 0, len(elems)+3)
 		out = append(out, saveRef)
-		out = append(out, contentStreamElements(ctx, doc, alloc, elems)...)
+		out = append(out, endDanglingContent(ctx, doc, alloc, contentStreamElements(ctx, doc, alloc, elems))...)
 		out = append(out, restoreRef, stampRef)
 		return out
 	}
@@ -247,6 +250,71 @@ func appendPageContents(ctx context.Context, doc *document.Document, alloc *writ
 		}
 	}
 	return bracket(existing)
+}
+
+// endDanglingContent returns the /Contents elements of a page with their
+// content ended at [content.TerminatedEnd], so that what a writer appends
+// after them is read as operators. ISO 32000-1, 7.8.2 reads the elements as
+// one stream, and a literal or hex string the page never terminates (7.3.4.2,
+// 7.3.4.3) runs to the end of it, so a restoring Q and a stamp appended after
+// it were read as string bytes and the page showed nothing of them. The
+// element the dangling token starts in is replaced by an unfiltered copy that
+// stops at the last operator, and the elements after it, which lie inside the
+// token, are dropped. They paint nothing and viewers discard a token
+// unterminated at the end of the content, so the page renders as before. The
+// source streams are left as they are, since another page may share them.
+// Elements litho cannot decode are returned unchanged.
+//
+// # Corpus evidence
+//
+//   - litho danglingstr_ua1.pdf: the page ends inside "(dangling ( string",
+//     and the stamp the mutate-stamp cell appended was read inside it, so qpdf
+//     reported the stamped page as not carrying the stamp.
+func endDanglingContent(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, elems []ast.PdfObject) []ast.PdfObject {
+	datas := make([][]byte, len(elems))
+	starts := make([]int, len(elems))
+	var joined []byte
+	for i, elem := range elems {
+		resolved, err := resolveAllocFirst(ctx, alloc, doc, elem)
+		if err != nil {
+			doc.Logger.Debug("mutations: content element unresolved, appending after it unchecked", slog.Any("err", err))
+			return elems
+		}
+		stream, ok := resolved.(ast.PdfStream)
+		if !ok {
+			return elems
+		}
+		data, err := doc.DecodeStream(ctx, stream)
+		if err != nil {
+			doc.Logger.Debug("mutations: content element undecodable, appending after it unchecked", slog.Any("err", err))
+			return elems
+		}
+		// Joined as [collectContents] joins them, so the offsets address the
+		// content every other reader of the page assembles.
+		if i > 0 {
+			joined = append(joined, '\n')
+		}
+		starts[i] = len(joined)
+		joined = append(joined, data...)
+		datas[i] = data
+	}
+	end := content.TerminatedEnd(ctx, joined)
+	if end >= len(joined) {
+		return elems
+	}
+	k := 0
+	for i, start := range starts {
+		if start <= end {
+			k = i
+		}
+	}
+	out := make([]ast.PdfObject, 0, k+1)
+	out = append(out, elems[:k]...)
+	if cut := min(end-starts[k], len(datas[k])); cut > 0 {
+		kept := datas[k][:cut]
+		out = append(out, alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(kept))}, kept)))
+	}
+	return out
 }
 
 // latestPageDict returns the most recent version of a page's dict, preferring

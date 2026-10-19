@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -164,10 +165,16 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 		// MCID 0: the wrapper is the only marked content on the page, and
 		// the ParentTree entry array for the page is indexed by MCID.
-		var wrapped []byte
-		wrapped = append(wrapped, "/Document <</MCID 0>> BDC\n"...)
-		wrapped = append(wrapped, contentBytes...)
-		wrapped = append(wrapped, "\nEMC\n"...)
+		// The wrapper stops where the last token that terminates ends: an EMC
+		// written after a string the page never closes is read as string
+		// bytes and leaves the sequence open (ISO 32000-1, 7.3.4.2, 14.6).
+		// The unterminated tail paints nothing, so it is left out.
+		const open, closing = "/Document <</MCID 0>> BDC\n", "\nEMC\n"
+		body := contentBytes[:content.TerminatedEnd(ctx, contentBytes)]
+		wrapped := make([]byte, 0, len(open)+len(body)+len(closing))
+		wrapped = append(wrapped, open...)
+		wrapped = append(wrapped, body...)
+		wrapped = append(wrapped, closing...)
 
 		newStream := ast.NewStream(ast.PdfDict{
 			"Length": ast.PdfInt(len(wrapped)),

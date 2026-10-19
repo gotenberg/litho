@@ -11,8 +11,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/core/ioat"
-	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -235,7 +233,7 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		// The spans stop where the last token that terminates ends, so the EMC
 		// closing the trailing artifact is never written inside a string the
 		// stream leaves open; the bytes past it are copied after the EMC.
-		spans, elemRefs := pageSpans(data[:markableEnd(ctx, data)], leaves, textBearingXObjects(ctx, e.alloc, e.doc, e.pages[pi]))
+		spans, elemRefs := pageSpans(data[:content.TerminatedEnd(ctx, data)], leaves, textBearingXObjects(ctx, e.alloc, e.doc, e.pages[pi]))
 		if len(spans) == 0 {
 			continue // no paintable content to mark
 		}
@@ -567,51 +565,6 @@ func paintsTextXObject(region []byte, textXObjects map[string]bool) bool {
 
 // isBlank reports whether b is empty or only PDF whitespace (ISO 32000-1
 // Table 1), in which case it carries no painting content and needs no artifact.
-// markableEnd returns how much of a page's content stream marked-content
-// sequences may cover: all of it, unless the stream ends inside a literal or
-// hex string that never terminates, in which case it is the end of the last
-// operator. Such a string runs to the end of the stream (ISO 32000-1,
-// 7.3.4.2 and 7.3.4.3), so an EMC appended after the last byte is read as
-// string bytes, not as the operator, and leaves the sequence it was meant to
-// close open; ISO 32000-1, 14.6 makes no marked-content sequence of one that
-// never ends. The unterminated bytes paint nothing, since no operator follows
-// them, so leaving them outside every sequence marks all the stream paints.
-// A stream litho does not parse is left whole.
-//
-// # Corpus evidence
-//
-//   - pdfjs poppler-90-0-fuzzed.pdf: page 2 opens a literal string 2 KB into
-//     its 22 KB stream that nothing closes, and the /Artifact sequence
-//     remediation wrapped the page in stayed open, so veraPDF reported ISO
-//     14289-1, 7.1 t3 and ISO 14289-2, 8.2.2 t1 on the remediated output.
-func markableEnd(ctx context.Context, data []byte) int {
-	_, ranges, err := content.ParseStreamDataWithOffsets(ctx, data)
-	if err != nil || len(ranges) == 0 {
-		return len(data)
-	}
-	last := ranges[len(ranges)-1].End
-	if last < 0 || last > len(data) || tokensTerminate(data[last:]) {
-		return len(data)
-	}
-	return last
-}
-
-// tokensTerminate reports whether every token in b ends before b does, that
-// is, whether b holds no string the lexer reaches the end of b inside. Each
-// token consumes at least one byte, so the loop ends.
-func tokensTerminate(b []byte) bool {
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(b), int64(len(b)), 0)).WithVeraPDFTokens()
-	for {
-		tok, err := lex.NextToken()
-		if tok.Type == lexer.TokenError {
-			return false
-		}
-		if tok.Type == lexer.TokenEOF || err != nil {
-			return true
-		}
-	}
-}
-
 func isBlank(b []byte) bool {
 	for _, c := range b {
 		switch c {
