@@ -3,6 +3,7 @@ package typography
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -128,6 +129,11 @@ func resolveEncodingCIDs(ctx context.Context, doc *document.Document, fontDict a
 		if m := cmap.LoadPredefinedCIDMap(string(enc)); m != nil {
 			return &encodingCIDs{cids: m}
 		}
+		if isCollectionCMapName(string(enc)) {
+			if m := cmap.PredefinedCIDBase(string(enc)); m != nil {
+				return &encodingCIDs{cids: m}
+			}
+		}
 	case ast.PdfStream:
 		out := &encodingCIDs{cids: EmbeddedEncodingCIDMap(ctx, doc, encObj)}
 		if data, err := doc.DecodeStream(ctx, enc); err == nil {
@@ -140,6 +146,28 @@ func resolveEncodingCIDs(ctx context.Context, doc *document.Document, fontDict a
 		}
 	}
 	return nil
+}
+
+// isCollectionCMapName reports whether name is the CMap of an Adobe character
+// collection named in ISO 32000-1, 9.10.2 at one of its supplements, such as
+// Adobe-Korea1-2: an identity over the collection's CIDs, declaring that
+// CIDSystemInfo. The name lies outside 9.7.5.2, Table 118, but PDF.js bundles
+// the file and decodes a font's codes through it (CMapFactory, builtInCMap),
+// and so does veraPDF.
+func isCollectionCMapName(name string) bool {
+	rest, ok := strings.CutPrefix(name, "Adobe-")
+	if !ok {
+		return false
+	}
+	ordering, supplement, ok := strings.Cut(rest, "-")
+	if !ok || supplement == "" || strings.IndexFunc(supplement, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
+		return false
+	}
+	switch ordering {
+	case "GB1", "CNS1", "Japan1", "Korea1":
+		return true
+	}
+	return false
 }
 
 // metricCID returns the key a Type 0 font's glyph metrics are looked up by
@@ -172,8 +200,16 @@ func resolveEncodingCIDs(ctx context.Context, doc *document.Document, fontDict a
 //     page edge.
 //   - All corpora: words match PDF.js on 4 more files and on none fewer.
 func (f *Font) metricCID(code []byte, charCode int) int {
+	cid, _ := f.encodingCID(code, charCode)
+	return cid
+}
+
+// encodingCID is [Font.metricCID], also reporting whether a mapping of the
+// encoding CMap, cidchar, cidrange, bfchar or bfrange, gave the CID. When none
+// did, cid is charCode.
+func (f *Font) encodingCID(code []byte, charCode int) (cid int, mapped bool) {
 	if f.encodingCIDs == nil {
-		return charCode
+		return charCode, false
 	}
 	if f.encodingCIDs.cids != nil && len(code) <= maxEncodingCodeBytes {
 		// The code's own value, not charCode, which carries two bytes at
@@ -183,17 +219,17 @@ func (f *Font) metricCID(code []byte, charCode int) int {
 			value = value<<8 | int(b)
 		}
 		if cid, ok := f.encodingCIDs.cids.MappedCID(value); ok {
-			return cid
+			return cid, true
 		}
 	}
 	if f.encodingCIDs.bf != nil {
 		if dst, ok := f.encodingCIDs.bf.Mapping[string(code)]; ok {
 			if r := []rune(dst); len(r) == 1 && r[0] != utf8.RuneError {
-				return int(r[0])
+				return int(r[0]), true
 			}
 		}
 	}
-	return charCode
+	return charCode, false
 }
 
 // encodingCIDKeyed reports whether a Type 0 font's CID-keyed fallback tables
@@ -213,6 +249,9 @@ type encodingCode struct {
 	// cid is the CID the code selects, read as its metrics are
 	// ([Font.metricCID]).
 	cid int
+	// mapped reports whether a mapping of the encoding CMap gave cid
+	// ([Font.encodingCID]); when none did, cid is the code's value.
+	mapped bool
 	// undefined marks bytes no codespace range holds (ISO 32000-1, 9.7.6.3),
 	// read one byte at a time.
 	undefined bool
@@ -234,7 +273,7 @@ func (f *Font) nextEncodingCode(data []byte) (code encodingCode, ok bool) {
 	for _, b := range data[:code.n] {
 		code.value = code.value<<8 | int(b)
 	}
-	code.cid = f.metricCID(data[:code.n], code.value)
+	code.cid, code.mapped = f.encodingCID(data[:code.n], code.value)
 	return code, true
 }
 

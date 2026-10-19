@@ -372,9 +372,9 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 // identity reading PDF.js gives a composite font's code it has no character
 // for (evaluator.js, buildToUnicode, and fonts.js, _charToGlyph), and a value
 // in the C0 control range emits nothing, as an unmapped two-byte code does
-// under a /ToUnicode CMap. Bytes no codespace range holds select the .notdef
-// glyph (9.7.6.3), which names no character: they advance as a glyph and emit
-// none.
+// under a /ToUnicode CMap. A code that selects the .notdef glyph
+// ([codeSelectsNotdef], 9.7.6.3) names no character: it advances as a glyph
+// and emits none.
 //
 // # Corpus evidence
 //
@@ -387,8 +387,13 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 //   - All corpora: no other file's text changes, and no validation or
 //     remediation result moves on the 112 files whose Type 0 fonts name a
 //     non-Identity encoding.
+//   - litho cmapverabase_2b.pdf: read as no character, the codes the CMaps
+//     veraPDF bundles leave unmapped, which remediation inlines or embeds at
+//     PDF/A-1, read as less text than the input, and the integrity probe
+//     rolled the CMap repairs back. A code mapped to CID 0 reaches no file of
+//     the six text corpora.
 func encodingCIDTableChar(font *Font, code encodingCode) (char string, consumed int, skip bool) {
-	if code.undefined {
+	if codeSelectsNotdef(code) {
 		return "", code.n, false
 	}
 	if code.cid >= 0 && code.cid <= math.MaxUint16 {
@@ -400,6 +405,21 @@ func encodingCIDTableChar(font *Font, code encodingCode) (char string, consumed 
 		return string(rune(code.value)), code.n, false
 	}
 	return "", code.n, true
+}
+
+// codeSelectsNotdef reports whether code, split off a shown string by a Type 0
+// font's encoding CMap ([Font.nextEncodingCode]), selects the .notdef glyph,
+// CID 0, which names no character (ISO 32000-1, 9.7.6.3): bytes no codespace
+// range holds, and a code a mapping of the CMap sends to CID 0.
+//
+// A code no mapping covers also selects CID 0 under 9.7.6.3, but keeps the
+// reading PDF.js gives it, the code itself, as [Font.metricCID] reads its
+// width. Remediation inlines and embeds veraPDF's copies of CMaps PDF.js
+// bundles differently, and its integrity probe compares the text litho reads
+// before and after: read as .notdef, the codes those copies leave unmapped
+// would count as lost text and roll the repair back.
+func codeSelectsNotdef(code encodingCode) bool {
+	return code.undefined || code.mapped && code.cid == 0
 }
 
 // type0TableRune looks a two-byte Type 0 code up in [Font.GIDToUnicode].

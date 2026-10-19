@@ -459,6 +459,14 @@ func copyEncoding(src map[byte]rune) map[byte]rune {
 //   - All corpora: 29 files change text once unembedded composite fonts read
 //     through 9.10.2, 22 of them pdfjs files that then match PDF.js, and none
 //     moves away from it.
+//   - litho cmapcollect_1b.pdf, cmapusevert_1b.pdf: Adobe-Korea1 and
+//     Adobe-Japan1 fonts whose /CIDToGIDMap stream sends CIDs 1 and 2 to the
+//     program's glyph A. litho read "AA" and "A", the glyphs the program
+//     paints; read through the collection, both match PDF.js. No file of the
+//     five text corpora changes, CJK files included, and no validation or
+//     remediation result moves on the litho corpus.
+//   - litho type0nodesc_2b.pdf: four fonts with no descendant CIDFont read
+//     U+001E, the code plus the CID offset heuristic; no other file reaches it.
 func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (*Font, error) {
 	subtypeObj, ok := fontDict["Subtype"]
 	if !ok {
@@ -622,21 +630,47 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		if encName := encodingCMapName(ctx, doc, fontDict); encName != "" && encName != "Identity-H" && encName != "Identity-V" {
 			if cm := cmap.LoadPredefinedCMap(encName); cm != nil {
 				font.ToUnicode = cm
-			} else if !hasEmbeddedFontFile(ctx, doc, fontDict) {
+			} else if !hasEmbeddedFontFile(ctx, doc, fontDict) && (!font.encodingCIDKeyed() || !adobeKnownCollection(ctx, doc, fontDict)) {
 				// A name outside Table 118, or a collection without a UCS2
 				// table, leaves 9.10.2 no route to Unicode, and no font
 				// program offers one either: any character litho emitted
-				// would be invented.
+				// would be invented. A collection's own CMap, such as
+				// Adobe-Korea1-2, gives its CIDs, which the descendant's
+				// collection names below.
 				font.SuppressExtraction = true
 			}
 		}
+	}
+
+	// ISO 32000-1, 9.7.6.1 requires a Type 0 font's /DescendantFonts to hold
+	// one CIDFont dictionary. Without it and without a /ToUnicode CMap, no
+	// step of 9.10.2 applies: the codes select CIDs of no font, whose
+	// character collection is undeclared, so any character litho emitted
+	// would be invented.
+	if subtypeName == "Type0" && font.ToUnicode == nil && descendantCIDFont(ctx, doc, fontDict) == nil {
+		font.SuppressExtraction = true
+	}
+
+	// A descendant of a collection ISO 32000-1, 9.10.2 names reads through the
+	// collection's UCS2 CMap before the embedded program: steps a-e take the
+	// code to its CID through the font's CMap and the CID to Unicode through
+	// the <Registry>-<Ordering>-UCS2 CMap, and the font program takes no part.
+	// The CID must be known, as it is under an Identity CMap (9.7.5.2, Table
+	// 118) or one whose cidchar and cidrange mappings give it
+	// ([Font.encodingCIDKeyed]). PDF.js reads such a font the same way
+	// (evaluator.js, buildToUnicode), whatever its /CIDToGIDMap.
+	collectionRead := false
+	if subtypeName == "Type0" && font.ToUnicode == nil && !font.CIDIdentityFallback &&
+		(isIdentityEncoding(ctx, doc, fontDict) || font.encodingCIDKeyed()) && adobeKnownCollection(ctx, doc, fontDict) {
+		applyAdobeCIDFallback(ctx, doc, fontDict, font)
+		collectionRead = font.GIDToUnicode != nil
 	}
 
 	// CIDToGIDMap handling for Type0 fonts. When CIDToGIDMap is a stream,
 	// parse it to build CID→GID mapping and combine with the embedded font's
 	// GID→Unicode cmap to create a synthetic ToUnicode. When it's /Identity,
 	// CID=GID and the Identity fallback is used as a last resort below.
-	if subtypeName == "Type0" && font.ToUnicode == nil && !font.CIDIdentityFallback {
+	if subtypeName == "Type0" && font.ToUnicode == nil && !font.CIDIdentityFallback && !collectionRead {
 		applyCIDToGIDIdentityFallback(ctx, doc, fontDict, font)
 	}
 
@@ -2691,6 +2725,33 @@ func isCJKOrdering(ctx context.Context, doc *document.Document, fontDict ast.Pdf
 	}
 	switch string(ordering) {
 	case "Japan1", "GB1", "CNS1", "Korea1":
+		return true
+	}
+	return false
+}
+
+// adobeKnownCollection reports whether a Type0 font's descendant CIDFont
+// declares one of the four character collections ISO 32000-1, 9.10.2 names:
+// Registry Adobe and Ordering GB1, CNS1, Japan1 or Korea1.
+func adobeKnownCollection(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	cidDict := descendantCIDFont(ctx, doc, fontDict)
+	if cidDict == nil {
+		return false
+	}
+	csDict, err := document.ResolveDict(ctx, doc, cidDict["CIDSystemInfo"])
+	if err != nil || csDict == nil {
+		return false
+	}
+	registry, err := document.ResolveString(ctx, doc, csDict["Registry"])
+	if err != nil || string(registry) != "Adobe" {
+		return false
+	}
+	ordering, err := document.ResolveString(ctx, doc, csDict["Ordering"])
+	if err != nil {
+		return false
+	}
+	switch string(ordering) {
+	case "GB1", "CNS1", "Japan1", "Korea1":
 		return true
 	}
 	return false

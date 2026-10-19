@@ -7872,21 +7872,19 @@ and states the clause behind its verdict. It either gives the right reading,
 where ISO 32000-1, 9.10.2 or the page geometry decides it, or marks the page
 unscored, where the readers disagree only on codes 9.10.2 gives no Unicode
 value, since no reading of those is right. Where PDF.js and litho agree, the
-golden stands. Of the 191 fixtures, 177 match, 8 are unscored
+golden stands. Of the 191 fixtures, 179 match, 8 are unscored
 (`cmapcidtext_2b`, `cmapnotdef_2b`, `cmaps_2b`, `cmapusecmap_2b`,
 `cmapusestream_2b`, `cmapverabase_2b`, `type0nodesc_2b`, `usecmap_2u`; page 16
-of `fontcopies_2b` too, whose other pages score), and 6 mismatch, each on a
+of `fontcopies_2b` too, whose other pages score), and 4 mismatch, each on a
 reading litho gets wrong:
 
 | Fixture                         | Right reading                                                    | litho reads                                        |
 | ------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------- |
-| `cmapcollect_1b`                | `!`: CIDs 1 and 2 of Adobe-Korea1 are U+0020 and U+0021 (9.10.2) | `AA`, the glyphs the embedded program paints       |
-| `cmapusevert_1b`                | nothing but a space: CID 1 of Adobe-Japan1 is U+0020 (9.10.2)    | `A`, likewise                                      |
 | `complex_ua1`, `complex_ua2`    | words split at code 20, the WinAnsiEncoding space                | each letter a word, on the lines after the figures |
 | `fontemptycs_2b`, `fontkeys_1b` | `AB`: two glyphs that do not advance, with no space between them | `A B`                                              |
 
-The cell's `words_match` reads 177 and `chars_match` 181: the four fixtures of
-the third and fourth rows match once spaces are ignored. A new fixture needs
+The cell's `words_match` reads 179 and `chars_match` 183: the four fixtures of
+the two rows match once spaces are ignored. A new fixture needs
 its golden regenerated at provisioning, and an override when PDF.js reads it
 wrong.
 
