@@ -49,7 +49,7 @@ func registerCompactFlags(fs *flag.FlagSet) compactionFlags {
 				"recompression only when it is smaller, when the command rewrites the whole file. "+
 				"Slower than --compact, and independent of it"),
 		subsetFonts: fs.Bool("subset-fonts", false,
-			"Subset the embedded TrueType and CFF fonts to the glyphs the document shows, "+
+			"Subset the embedded TrueType, CFF and Type 1 fonts to the glyphs the document shows, "+
 				"keeping every glyph ID, when the command rewrites the whole file. Text added "+
 				"later in a subset font finds no glyph. Independent of --compact"),
 	}

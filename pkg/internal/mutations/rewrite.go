@@ -37,10 +37,10 @@ type CompactOptions struct {
 	// RecompressImages re-encodes image streams losslessly where that makes
 	// them smaller, leaving their samples unchanged.
 	RecompressImages bool
-	// SubsetFonts subsets the embedded TrueType and CFF font programs to the
-	// glyphs the document can show, keeping every glyph ID (see
-	// [fontsubset.Run]). Unlike the passes above it runs before encryption,
-	// so it applies to an encrypted output too.
+	// SubsetFonts subsets the embedded TrueType, CFF and Type 1 font
+	// programs to the glyphs the document can show, keeping every glyph ID
+	// (see [fontsubset.Run]). Unlike the passes above it runs before
+	// encryption, so it applies to an encrypted output too.
 	SubsetFonts bool
 }
 

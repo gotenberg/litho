@@ -314,25 +314,27 @@ func WithImageRecompression() WriteOption {
 	}
 }
 
-// WithFontSubsetting subsets the TrueType (/FontFile2) and CFF (/FontFile3
-// /Type1C and /CIDFontType0C) font programs the output embeds to the glyphs
-// the document can show, losslessly: every glyph a content stream, a form,
-// a pattern, a Type 3 glyph procedure or an annotation appearance can select
-// through each font drawing from the program is kept, with .notdef and the
-// glyphs those draw. The others keep their glyph IDs and lose their
-// outlines, so no reference into the program changes: /Widths, /W,
-// /ToUnicode, /CIDToGIDMap, /CIDSet and /CharSet stay right, every page
-// renders and extracts as before, and the compliance verdicts do not move.
-// The font's name gains no subset tag.
+// WithFontSubsetting subsets the TrueType (/FontFile2), CFF (/FontFile3
+// /Type1C and /CIDFontType0C) and Type 1 (/FontFile) font programs the
+// output embeds to the glyphs the document can show, losslessly: every glyph
+// a content stream, a form, a pattern, a Type 3 glyph procedure or an
+// annotation appearance can select through each font drawing from the
+// program is kept, with .notdef and the glyphs those draw. The others keep
+// their glyph IDs, or their Type 1 glyph names, and lose their outlines, so
+// no reference into the program changes: /Widths, /W, /ToUnicode,
+// /CIDToGIDMap, /CIDSet and /CharSet stay right, every page renders and
+// extracts as before, and the compliance verdicts do not move. The font's
+// name gains no subset tag.
 //
 // A program is left whole when litho cannot prove it saw every use of it:
 // when something other than the fonts and resources ISO 32000-1 defines
 // holds it, a stream drawing with it does not decode, a default appearance
 // string names its font (a reader filling a field types with it), or a
 // widget appearance drawing with it may be regenerated (/NeedAppearances).
-// Type 1 (/FontFile) and OpenType programs are left whole too, and nothing is
-// subset in a document holding a signature or an XFA form. A subset is kept
-// only when it is smaller.
+// OpenType programs are left whole too, and so are Type 1 programs litho
+// cannot rewrite exactly (an ASCII-hex encrypted portion, a seac in a
+// subroutine), and nothing is subset in a document holding a signature or an
+// XFA form. A subset is kept only when it is smaller.
 //
 // It applies to the full-rewrite path only, as [WithObjectStreams] does, and
 // is the one compaction option that also applies to an encrypted output: it
@@ -350,6 +352,8 @@ func WithImageRecompression() WriteOption {
 //     facturx saves 52.5%, pdfjs 7.3%, pdfcpu 2.7% and govdocs 1.4% of the
 //     rewritten bytes, and facturx 58.3% beside WithObjectStreams and
 //     WithDedup.
+//   - All corpora: 293 Type 1 programs subset in 93 files, with the same
+//     evidence, saving 1.0 MB on govdocs and 595 KB on pdfjs.
 func WithFontSubsetting() WriteOption {
 	return func(o *writeOpts) {
 		o.subsetFonts = true

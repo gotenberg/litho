@@ -1,9 +1,11 @@
 package fontsubset
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/internal/typography/type1"
 )
 
 // programKind is the format of an embedded font program, read from its bytes
@@ -22,6 +25,7 @@ type programKind int
 const (
 	kindTrueType programKind = iota + 1
 	kindCFF
+	kindType1
 )
 
 // String names the format.
@@ -31,19 +35,31 @@ func (k programKind) String() string {
 		return "TrueType"
 	case kindCFF:
 		return "CFF"
+	case kindType1:
+		return "Type 1"
 	}
 	return "unknown"
 }
 
+// type1Headers open the first line of a Type 1 program, its version
+// comment (Adobe Type 1 Font Format, 2.3: "%!PS-AdobeFont-1.0" or
+// "%!FontType1-1.0").
+var type1Headers = []string{"%!PS-AdobeFont", "%!FontType1"}
+
 // kindOf returns the format of a program the pass subsets: a TrueType program
-// with glyf outlines, or a bare CFF program (ISO 32000-1, 9.9, Table 126).
-// OpenType, TrueType collections and Type 1 programs are left whole.
+// with glyf outlines, a bare CFF program, or a Type 1 program (ISO 32000-1,
+// 9.9, Table 126). OpenType and TrueType collections are left whole.
 func kindOf(data []byte) (programKind, bool) {
 	switch {
 	case truetype.IsSfnt(data) && string(data[:4]) != "OTTO":
 		return kindTrueType, true
 	case len(data) >= 4 && data[0] == 1:
 		return kindCFF, true
+	}
+	for _, h := range type1Headers {
+		if bytes.HasPrefix(data, []byte(h)) {
+			return kindType1, true
+		}
 	}
 	return 0, false
 }
@@ -61,11 +77,18 @@ type program struct {
 	// the glyphs carrying it.
 	byName map[string][]uint16
 	byRune map[rune][]uint16
-	// builtin is a name-keyed CFF program's own encoding (Adobe Technical
-	// Note #5176, section 12).
-	builtin map[byte]string
+	// builtins are a name-keyed CFF program's own encoding (Adobe Technical
+	// Note #5176, section 12), or the encoding vector of a Type 1 program as
+	// a PostScript interpreter and as PDF.js read it (Adobe Type 1 Font
+	// Format, 2.3), which differ on radix codes.
+	builtins []map[byte]string
 	// byCID maps each CID of a CID-keyed CFF program's charset to its glyph.
 	byCID map[int][]uint16
+	// names are a Type 1 program's glyph names in /CharStrings order, each
+	// name's index its glyph ID in the pass.
+	names []string
+	// widths are a Type 1 program's charstring advance widths by glyph name.
+	widths map[string]float64
 }
 
 // readProgram reads the routes to the glyphs of data.
@@ -125,9 +148,63 @@ func readProgram(ctx context.Context, data []byte, kind programKind) (*program, 
 		for _, gid := range sortedGIDs(names) {
 			addName(gid, names[gid])
 		}
-		p.builtin = cff.ExtractEncoding(data)
+		if enc := cff.ExtractEncoding(data); enc != nil {
+			p.builtins = []map[byte]string{enc}
+		}
+	case kindType1:
+		p.names = type1.ParseCharStringNames(data)
+		if len(p.names) == 0 {
+			return nil, errNoCharStrings
+		}
+		p.numGlyphs = len(p.names)
+		if p.numGlyphs > maxType1Glyphs {
+			return nil, fmt.Errorf("%w: %d glyphs", errTooManyGlyphs, p.numGlyphs)
+		}
+		for gid, name := range p.names {
+			addName(uint16(gid), name) //nolint:gosec // G115: gid < numGlyphs <= maxType1Glyphs.
+		}
+		p.widths = type1.ParseCharStringWidths(data)
+		for _, vector := range [][256]string{type1.ParseEncoding(data), type1.ParseEncodingPS(data)} {
+			enc, err := type1Encoding(vector)
+			if err != nil {
+				return nil, err
+			}
+			p.builtins = append(p.builtins, enc)
+		}
 	}
 	return p, nil
+}
+
+// maxType1Glyphs is the most glyphs the pass gives a Type 1 program IDs for:
+// the glyph IDs of the pass are uint16. Not a format limit, since a Type 1
+// /CharStrings dictionary may hold any number of entries, but no real font
+// comes near it.
+const maxType1Glyphs = math.MaxUint16
+
+// type1Encoding returns the codes a Type 1 program's encoding vector names,
+// as [type1.ParseEncoding] reads it. A vector naming a predefined encoding
+// is that encoding: the Standard encoding, which most Type 1 programs name
+// (Adobe Type 1 Font Format, 2.3), is read through its table, and any other
+// is refused, since the codes it names are not all routes the pass follows.
+func type1Encoding(vector [256]string) (map[byte]string, error) {
+	enc := make(map[byte]string)
+	if name := vector[0]; name == vector[0xFF] && strings.HasSuffix(name, "Encoding") {
+		if name != "StandardEncoding" {
+			return nil, fmt.Errorf("%w: /%s", errPredefinedEncoding, name)
+		}
+		for c, glyph := range encodings.StandardEncodingNames {
+			if glyph != "" {
+				enc[byte(c)] = glyph //nolint:gosec // G115: c indexes a 256-entry table.
+			}
+		}
+		return enc, nil
+	}
+	for c, glyph := range vector {
+		if glyph != "" {
+			enc[byte(c)] = glyph //nolint:gosec // G115: c indexes a 256-entry array.
+		}
+	}
+	return enc, nil
 }
 
 // sortedGIDs returns the keys of m in order.
@@ -171,8 +248,10 @@ func (w *walk) simpleGlyphs(font node, p *program, use *fontUse, keep glyphSet) 
 		if name, ok := differences[c]; ok {
 			names = append(names, name)
 		}
-		if name, ok := p.builtin[c]; ok {
-			names = append(names, name)
+		for _, builtin := range p.builtins {
+			if name, ok := builtin[c]; ok {
+				names = append(names, name)
+			}
 		}
 		var runes []rune
 		for _, table := range []map[byte]rune{encodings.StandardEncoding, encodings.WinAnsiEncoding, encodings.MacRomanEncoding, encodings.MacExpertEncoding} {

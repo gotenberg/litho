@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/internal/typography/type1"
 )
 
 // Config configures [Run].
@@ -43,18 +44,21 @@ type Stats struct {
 	SavedBytes int64
 }
 
-// Run subsets, in place, the embedded TrueType and CFF font programs of the
-// object graph an allocator holds, keeping the glyphs the document can show:
-// every glyph a text-showing operator of a content stream the document draws
-// can select through each font drawing from the program, the .notdef glyph,
-// and the glyphs a kept glyph draws (TrueType composite components, CFF seac
-// accents). Every other glyph keeps its glyph ID and loses its outline
-// ([truetype.SubsetInPlace], [cff.SubsetInPlace]), so no reference into the
-// program changes: /Widths, /W, /FontBBox, /ToUnicode, /CIDToGIDMap, /CIDSet
-// and /CharSet describe the subset as they described the whole program. The
-// font's name gains no subset tag (ISO 32000-1, 9.6.4): the program still
-// holds every glyph ID, and the tag would make ISO 19005-1, 6.3.5 ask a
-// /CharSet or /CIDSet of a font that never needed one.
+// Run subsets, in place, the embedded TrueType, CFF and Type 1 font programs
+// of the object graph an allocator holds, keeping the glyphs the document can
+// show: every glyph a text-showing operator of a content stream the document
+// draws can select through each font drawing from the program, the .notdef
+// glyph, and the glyphs a kept glyph draws (TrueType composite components,
+// CFF and Type 1 seac accents). Every other glyph keeps its glyph ID, or its
+// name and place in a Type 1 /CharStrings dictionary, and loses its outline
+// ([truetype.SubsetInPlace], [cff.SubsetInPlace], [type1.SubsetInPlace]), so
+// no reference into the program changes: /Widths, /W, /FontBBox,
+// /ToUnicode, /CIDToGIDMap, /CIDSet and /CharSet describe the subset as they
+// described the whole program. A Type 1 /CharSet in particular still lists
+// exactly the glyph names the program holds, as ISO 19005-1, 6.3.5 requires,
+// since every name stays. The font's name gains no subset tag (ISO 32000-1,
+// 9.6.4): the program still holds every glyph ID, and the tag would make ISO
+// 19005-1, 6.3.5 ask a /CharSet or /CIDSet of a font that never needed one.
 //
 // The walk interprets every content stream the page tree reaches: each page's
 // content, its annotations' appearances and the icons of its widgets, and,
@@ -68,8 +72,8 @@ type Stats struct {
 // when a font is named by a default appearance string, which a reader filling
 // a field types with (12.7.3.3); when a widget's appearance draws with it
 // under /NeedAppearances; when a stream drawing with it does not decode or
-// parse; when the program is OpenType, Type 1, or a format litho cannot read
-// whole; and when its subset is not smaller as serialized. The whole pass
+// parse; when the program is OpenType, or a format litho cannot read whole;
+// and when its subset is not smaller as serialized. The whole pass
 // subsets nothing in a document holding a signature, whose signed bytes a
 // rewrite already changes but whose fonts a signer chose, in one with an XFA
 // form, whose text a reader draws outside every content stream (12.7.8), and
@@ -78,10 +82,12 @@ type Stats struct {
 //
 // A program is replaced by its subset compressed with FlateDecode, its
 // dictionary keeping every entry but /Filter, /DecodeParms and /DL, and
-// /Length1 giving the subset's length where the program carried one. Every
-// subset is decoded again and read back before it replaces the program: its
-// glyph count, cmap subtables, glyph names, charset and built-in encoding
-// must be the program's.
+// /Length1 giving the subset's length where the program carried one, or, for
+// a Type 1 program, /Length1, /Length2 and /Length3 giving the lengths of its
+// three portions (ISO 32000-1, 9.9, Table 127). Every subset is decoded
+// again and read back before it replaces the program: its glyph count, cmap
+// subtables, glyph names, charset, built-in encoding and Type 1 charstring
+// widths must be the program's.
 //
 // Subset bytes are kept in memory up to [limits.Limits.MaxFontProgCacheBytes]
 // in total. Past it, a program's subset is redone from its source when the
@@ -111,6 +117,23 @@ type Stats struct {
 //     list, come out under FlateDecode, so 6.1.7.2 fires three times fewer.
 //   - pdfjs issue14990.pdf: page 33 renders differently on every poppler run
 //     of the plain rewrite too, so its render difference is poppler's.
+//   - All corpora: 293 Type 1 programs subset in 93 files, which embed 38
+//     programs with seac glyphs. Each output extracts the same text as the
+//     plain rewrite, in litho and pdftotext, renders the same in poppler on
+//     its first 50 pages, passes qpdf --check as the plain rewrite does,
+//     comes out the same on a second run, and fails the same veraPDF 1.30.2
+//     rules as often at PDF/A-1b and at its own flavour or PDF/A-2b, but in
+//     the three files below.
+//   - All corpora: the Type 1 subsets save 1.0 MB on govdocs (4.5% of the
+//     31 files' rewrite), 595 KB on pdfjs (1.9%), 28 KB on verapdf (22.3%),
+//     24 KB on pdfcpu (5.0%) and 2.5 KB on litho (7.3%); facturx and pdf20
+//     embed no Type 1 program.
+//   - govdocs thread_400_400543.pdf and thread_400_400559.pdf: four Type 1
+//     programs stored under LZWDecode come out under FlateDecode, so ISO
+//     19005-1, 6.1.10 and ISO 19005-2, 6.1.7.2 fire four times fewer.
+//   - pdfjs issue3928.pdf: a Type 1 program's /Length2 and /Length3 exceed
+//     the integer range ISO 19005-1, 6.1.12 and ISO 19005-2, 6.1.13 allow,
+//     and the subset gives its real lengths.
 func Run(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, cfg Config) (Stats, error) {
 	var stats Stats
 	lim := cfg.Limits.WithDefaults()
@@ -236,9 +259,12 @@ type subsetPlan struct {
 	// cidKeyed reports a CID-keyed CFF program.
 	cidKeyed bool
 	gids     []uint16
-	dict     ast.PdfDict
-	encoded  []byte
-	saved    int64
+	// names are the glyph names of gids, for a Type 1 program, which keeps
+	// its glyphs by name.
+	names   []string
+	dict    ast.PdfDict
+	encoded []byte
+	saved   int64
 }
 
 // planProgram returns the subset the byte-identical program objects of group
@@ -267,9 +293,9 @@ func (w *walk) planProgram(ctx context.Context, group []int) (subsetPlan, string
 	}
 	kind, ok := kindOf(data)
 	if !ok {
-		return subsetPlan{}, "an OpenType, Type 1 or unknown program", nil
+		return subsetPlan{}, "an OpenType or unknown program", nil
 	}
-	wantKey := map[programKind]string{kindTrueType: "FontFile2", kindCFF: "FontFile3"}[kind]
+	wantKey := map[programKind]string{kindTrueType: "FontFile2", kindCFF: "FontFile3", kindType1: "FontFile"}[kind]
 	for _, num := range group {
 		for _, h := range w.g.holders(loc{obj: num}) {
 			if h.key != wantKey {
@@ -285,6 +311,11 @@ func (w *walk) planProgram(ctx context.Context, group []int) (subsetPlan, string
 		return subsetPlan{}, fmt.Sprintf("the program does not read: %v", err), nil
 	}
 	keep := glyphSet{0: true}
+	for _, gid := range p.byName[".notdef"] {
+		// A Type 1 program's .notdef sits wherever its /CharStrings
+		// dictionary puts it, not at glyph 0.
+		keep.add(int(gid), p)
+	}
 	for _, u := range users {
 		use := w.uses[u.top.at]
 		if use == nil {
@@ -308,6 +339,11 @@ func (w *walk) planProgram(ctx context.Context, group []int) (subsetPlan, string
 	slices.Sort(gids)
 
 	plan := subsetPlan{source: s, kind: kind, cidKeyed: p.byCID != nil, gids: gids}
+	if kind == kindType1 {
+		for _, gid := range gids {
+			plan.names = append(plan.names, p.names[gid])
+		}
+	}
 	sub, encoded, dict, reason, err := plan.build(ctx, data)
 	if err != nil || reason != "" {
 		return subsetPlan{}, reason, err
@@ -346,14 +382,17 @@ func (w *walk) planProgram(ctx context.Context, group []int) (subsetPlan, string
 // the program cannot be subset.
 func (p subsetPlan) build(ctx context.Context, data []byte) ([]byte, []byte, ast.PdfDict, string, error) {
 	var (
-		sub []byte
-		err error
+		sub     []byte
+		lengths type1.Lengths
+		err     error
 	)
 	switch p.kind {
 	case kindTrueType:
 		sub, err = truetype.SubsetInPlace(ctx, data, p.gids)
 	case kindCFF:
 		sub, err = cff.SubsetInPlace(ctx, data, p.gids)
+	case kindType1:
+		sub, lengths, err = type1.SubsetInPlace(ctx, data, p.names)
 	}
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -376,7 +415,14 @@ func (p subsetPlan) build(ctx context.Context, data []byte) ([]byte, []byte, ast
 	dict["Filter"] = ast.PdfName("FlateDecode")
 	delete(dict, "DecodeParms")
 	delete(dict, "DL")
-	if _, has := dict["Length1"]; has || p.kind == kindTrueType {
+	if p.kind == kindType1 {
+		// ISO 32000-1, 9.9, Table 127 gives a FontFile stream the lengths of
+		// the program's clear-text portion, its encrypted portion and its
+		// trailer, which the subset changes the middle one of.
+		dict["Length1"] = ast.PdfInt(lengths.Clear)
+		dict["Length2"] = ast.PdfInt(lengths.Encrypted)
+		dict["Length3"] = ast.PdfInt(lengths.Trailer)
+	} else if _, has := dict["Length1"]; has || p.kind == kindTrueType {
 		// ISO 32000-1, 9.9, Table 127 gives a FontFile2 stream the length of
 		// its decoded program.
 		dict["Length1"] = ast.PdfInt(len(sub))

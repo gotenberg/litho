@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/internal/typography/type1"
 )
 
 // testGlyphs are the glyphs of the test programs after .notdef: space at
@@ -149,7 +150,8 @@ func (d *testDoc) program(ref ast.PdfIndirectRef) []byte {
 			d.t.Fatalf("inflating the program: %v", err)
 		}
 		data = buf.Bytes()
-		if l1, ok := s.Dict["Length1"].(ast.PdfInt); ok && int(l1) != len(data) {
+		// A Type 1 program's /Length1 is its clear-text portion alone.
+		if l1, ok := s.Dict["Length1"].(ast.PdfInt); ok && s.Dict["Length2"] == nil && int(l1) != len(data) {
 			d.t.Errorf("/Length1 %d, program of %d bytes", l1, len(data))
 		}
 	}
@@ -222,6 +224,55 @@ func TestRun_Type1C(t *testing.T) {
 	want, err := cff.SubsetInPlace(context.Background(), cffProgram(), []uint16{2, 4})
 	if err != nil || !bytes.Equal(got, want) {
 		t.Errorf("program is not the subset keeping B and D: %v", err)
+	}
+}
+
+// type1Program returns a Type 1 program of .notdef, A to L, Aacute (a seac
+// of A and acute) and acute, with its three lengths.
+func type1Program() ([]byte, [3]int) {
+	var glyphs []fontbuild.Glyph
+	for c := 'A'; c <= 'L'; c++ {
+		glyphs = append(glyphs, fontbuild.Glyph{Name: string(c), Advance: 600})
+	}
+	glyphs = append(glyphs,
+		fontbuild.Glyph{Name: "Aacute", Advance: 600, Seac: &[2]byte{0x41, 0xC2}},
+		fontbuild.Glyph{Name: "acute", Advance: 333},
+	)
+	return fontbuild.Type1{FontName: "TestType1", Glyphs: glyphs, Subrs: true}.Build()
+}
+
+func TestRun_Type1(t *testing.T) {
+	t.Parallel()
+	d := newTestDoc(t)
+	src, lens := type1Program()
+	prog := d.add(ast.NewStream(ast.PdfDict{
+		"Length1": ast.PdfInt(lens[0]), "Length2": ast.PdfInt(lens[1]), "Length3": ast.PdfInt(lens[2]),
+	}, src))
+	fd := d.add(ast.PdfDict{"Type": ast.PdfName("FontDescriptor"), "FontName": ast.PdfName("TestType1"), "FontFile": prog})
+	font := d.add(ast.PdfDict{
+		"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type1"), "BaseFont": ast.PdfName("TestType1"),
+		"FontDescriptor": fd,
+		"Encoding":       ast.PdfDict{"Differences": ast.PdfArray{ast.PdfInt(200), ast.PdfName("Aacute")}},
+	})
+	res := ast.PdfDict{"Font": ast.PdfDict{"F1": font}}
+	trailer := d.finish(res, nil, "BT /F1 12 Tf (B\\310) Tj ET")
+	if stats := d.run(trailer); stats.Programs != 1 || stats.SavedBytes <= 0 {
+		t.Fatalf("stats %+v, want one program subset", stats)
+	}
+	// B through the Standard encoding, Aacute through /Differences, and the
+	// A and acute its seac draws.
+	want, wantLens, err := type1.SubsetInPlace(context.Background(), src, []string{".notdef", "B", "Aacute"})
+	if err != nil {
+		t.Fatalf("SubsetInPlace: %v", err)
+	}
+	if !bytes.Equal(d.program(prog), want) {
+		t.Error("program is not the subset keeping B and Aacute")
+	}
+	s, _ := d.alloc.Pending()[prog.ObjectNum].(ast.PdfStream)
+	for key, n := range map[ast.PdfName]int{"Length1": wantLens.Clear, "Length2": wantLens.Encrypted, "Length3": wantLens.Trailer} {
+		if s.Dict[key] != ast.PdfInt(n) {
+			t.Errorf("/%s %v, want %d", key, s.Dict[key], n)
+		}
 	}
 }
 
