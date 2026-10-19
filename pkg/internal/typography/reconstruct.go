@@ -34,6 +34,13 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //     gaps leaves those pages differing from PDF.js by the codes alone, and
 //     makes words match on 1 more file (govdocs thread_200_200676.pdf) and
 //     on none fewer.
+//   - govdocs thread_000_000839.pdf, thread_300_300880.pdf and 9 more: a
+//     word gap between two such glyphs, "(11b)" then "Ex", vanished
+//     ("11bEx") where PDF.js, which shows both codes, reads "11b Ex". Reading
+//     it makes the space disagreements with PDF.js on files whose
+//     characters match fall from 6444 to 2915, on 11 files, with no new
+//     one; no file's words or characters match moves, since PDF.js writes
+//     those codes as raw control characters.
 //   - pdfjs issue13915.pdf, govdocs thread_300_300849.pdf and 4 more: "≠" is
 //     a zero-width slash, read as "6", set over "=" after a word gap. Read
 //     from the slash, the gap vanished before "=" ("σ1(e) 6= 0"), where
@@ -247,10 +254,11 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 			el := ln.elems[idx]
 			if el.Text == "" {
 				// A glyph with no character still paints, so a word gap
-				// before it is a word gap in the text: hold a space for
+				// before it is a word gap in the text, after a glyph with a
+				// character or after another with none: hold a space for
 				// the next character rather than let the glyph swallow it.
 				if pendingSpace == "" && prevIdx >= 0 {
-					if prev := ln.elems[prevIdx]; prev.Text != "" && !isSpaceGlyph(prev.Text) &&
+					if prev := ln.elems[prevIdx]; !isSpaceGlyph(prev.Text) &&
 						shouldInsertSpace(prev, computeLineGap(prev, el), wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), prev.Chunk == el.Chunk && el.Chunk != 0) {
 						pendingSpace = " "
 					}
