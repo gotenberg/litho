@@ -48,6 +48,9 @@ type writeOpts struct {
 	// droppedSignatures receives the signatures the output drops (see
 	// [WithDroppedSignatures]).
 	droppedSignatures *[]DroppedSignature
+	// compactionSkipped receives whether the output left out the compaction
+	// asked for (see [WithCompactionSkipped]).
+	compactionSkipped *bool
 	// pageSize is the media box [WithDefaultPageSize] names, nil for US
 	// Letter, and pageSizeErr the refusal of the size it was given.
 	pageSize    ast.PdfArray
@@ -299,6 +302,24 @@ func WithDedup() WriteOption {
 func WithImageRecompression() WriteOption {
 	return func(o *writeOpts) {
 		o.recompressImages = true
+	}
+}
+
+// WithCompactionSkipped stores in *dst, once the output is written, whether
+// the write was given [WithObjectStreams], [WithDedup] or
+// [WithImageRecompression] and applied none of them because its output is an
+// incremental update of the document the Writer edits. An update appends to
+// that document's bytes and leaves them as they are (ISO 32000-1, 7.5.6), and
+// the three run on a full rewrite only, so the output is the one the write
+// produces without them. It applies to [Writer.WriteTo], [Pipeline.WriteTo],
+// [Split] and [Merge], the last two always rewriting. A write that fails
+// leaves *dst as it was.
+//
+// An encrypted output, never compacted either, is a full rewrite and is not
+// reported here: see [WithObjectStreams].
+func WithCompactionSkipped(dst *bool) WriteOption {
+	return func(o *writeOpts) {
+		o.compactionSkipped = dst
 	}
 }
 
@@ -860,6 +881,11 @@ type Writer struct {
 	// remediation writes its output before WriteTo, so the record outlives
 	// one write; a remediation or a WriteTo that fails puts it back as it was.
 	droppedSignatures []DroppedSignature
+
+	// compactionSkipped records that the write [Writer.WriteTo] is running
+	// was asked for compaction and appended an incremental update, which
+	// carries none (see [WithCompactionSkipped]).
+	compactionSkipped bool
 
 	// preSerializedPath is the path to a temp file holding the fully
 	// serialized PDF when remediation pre-serializes for accurate
@@ -3534,11 +3560,15 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	// A failed write leaves the record as the remediation left it, since a
 	// retry may write the output another way.
 	dropped := slices.Clone(w.droppedSignatures)
+	w.compactionSkipped = false
 	if err := w.writeSigned(ctx, dst, write, steps, opts...); err != nil {
 		w.droppedSignatures = dropped
 		return err
 	}
 	w.consumed = true
+	if cfg.compactionSkipped != nil {
+		*cfg.compactionSkipped = w.compactionSkipped
+	}
 	if cfg.droppedSignatures != nil {
 		*cfg.droppedSignatures = w.DroppedSignatures()
 	}
@@ -3922,6 +3952,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 	// file byte-identical to one written without the option, which a caller
 	// cannot tell apart from compaction that ran and found nothing to save.
 	if (cfg.packObjectStreams || cfg.dedupStreams || cfg.recompressImages) && !cfg.fullRewrite && !w.forceRewrite {
+		w.compactionSkipped = true
 		logger.Debug("compaction ignored: packing, dedup and image recompression apply only to a full rewrite; this write is incremental",
 			slog.Bool("pack_object_streams", cfg.packObjectStreams),
 			slog.Bool("dedup_streams", cfg.dedupStreams),
@@ -4195,6 +4226,9 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 	if cfg.droppedSignatures != nil {
 		*cfg.droppedSignatures = droppedSignaturesOf(ctx, src.doc)
 	}
+	if cfg.compactionSkipped != nil {
+		*cfg.compactionSkipped = false
+	}
 	return nil
 }
 
@@ -4300,6 +4334,9 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 			docs[i] = src.doc
 		}
 		*cfg.droppedSignatures = droppedSignaturesOf(ctx, docs...)
+	}
+	if cfg.compactionSkipped != nil {
+		*cfg.compactionSkipped = false
 	}
 	return nil
 }
