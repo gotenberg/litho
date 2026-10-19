@@ -18,7 +18,7 @@ import (
 // hand rather than owning a FlagSet, so this stands in for the usage a FlagSet
 // would print for any other command.
 func pipeUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... [--compact] [--recompress-images] [--strict] [--default-page-size SIZE] -o out.pdf")
+	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... [--compact] [--recompress-images] [--subset-fonts] [--strict] [--default-page-size SIZE] -o out.pdf")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  --compact   Shrink the output by packing objects into object streams")
 	fmt.Fprintln(w, "              and merging duplicate streams. Applies to the final write,")
@@ -27,6 +27,11 @@ func pipeUsage(w io.Writer) {
 	fmt.Fprintln(w, "              Recompress Flate, LZW, RunLength and uncompressed images")
 	fmt.Fprintln(w, "              losslessly, keeping each only when smaller. Slower than")
 	fmt.Fprintln(w, "              --compact and independent of it. Applies to the final write,")
+	fmt.Fprintln(w, "              and only when a stage rewrites the whole file.")
+	fmt.Fprintln(w, "  --subset-fonts")
+	fmt.Fprintln(w, "              Subset the embedded TrueType and CFF fonts to the glyphs the")
+	fmt.Fprintln(w, "              document shows, keeping every glyph ID. Text added later in")
+	fmt.Fprintln(w, "              a subset font finds no glyph. Applies to the final write,")
 	fmt.Fprintln(w, "              and only when a stage rewrites the whole file.")
 	fmt.Fprintln(w, "  --strict    Exit 2 when a remediate stage leaves violations it could")
 	fmt.Fprintln(w, "              not fix. The output is still written.")
@@ -65,7 +70,8 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	}
 
 	// Extract -o, -p, and input file before stage parsing.
-	inputFile, password, outputFile, compact, recompressImages, strict, pageSizeArg, stageArgs := parsePipeGlobals(args)
+	inputFile, password, outputFile, compacting, strict, pageSizeArg, stageArgs := parsePipeGlobals(args)
+	compact, recompressImages := compacting.compact, compacting.recompressImages
 	if inputFile == "" {
 		fmt.Fprintln(stderr, "pipe: missing input file")
 		return exitError
@@ -250,7 +256,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// The default page size reaches every stage, not only the final write:
 	// Pipeline.WriteTo hands it to each Writer and each intermediate split or
 	// merge, since a stage that gives a page a media box gives it for good.
-	finalOpts := append(profileCompactWriteOptions(compact, recompressImages, packingRefusedProfile), defaultPageSize.writeOptions()...)
+	finalOpts := append(profileCompactWriteOptions(compacting, packingRefusedProfile), defaultPageSize.writeOptions()...)
 	// Whether the flags reached an incremental update, which carries no
 	// compaction, can only be known once the library has chosen the write.
 	var compactionSkipped bool
@@ -281,7 +287,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		warnAutoTagSkipped(stderr, report)
 	}
 	warnSignaturesDropped(stderr, result.DroppedSignatures)
-	warnCompactIncremental(stderr, compact, recompressImages, compactionSkipped, packingRefusedProfile)
+	warnCompactIncremental(stderr, compacting, compactionSkipped, packingRefusedProfile)
 
 	// A remediate stage asserts the profile in the output whatever it could
 	// not repair, exactly as the standalone command does, so a pipeline that
@@ -311,7 +317,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 //
 // --default-page-size takes a value, as -o does, in either spelling, or joined
 // by "=".
-func parsePipeGlobals(args []string) (inputFile, password, outputFile string, compact, recompressImages, strict bool, pageSize *string, rest []string) {
+func parsePipeGlobals(args []string) (inputFile, password, outputFile string, compacting compaction, strict bool, pageSize *string, rest []string) {
 	consumed := false
 	for i := 0; i < len(args); i++ {
 		if consumed {
@@ -335,11 +341,15 @@ func parsePipeGlobals(args []string) (inputFile, password, outputFile string, co
 		// boolean STAGE flag from eating the next stage name, and listing a
 		// global there would mis-split the stage groups.
 		case args[i] == "-compact" || args[i] == "--compact":
-			compact = true
+			compacting.compact = true
 		// The same shape as -compact, for the same reasons. No stage defines
 		// -recompress-images, so it collides with no stage flag spelling.
 		case args[i] == "-recompress-images" || args[i] == "--recompress-images":
-			recompressImages = true
+			compacting.recompressImages = true
+		// The same shape as -compact, for the same reasons. No stage defines
+		// -subset-fonts, so it collides with no stage flag spelling.
+		case args[i] == "-subset-fonts" || args[i] == "--subset-fonts":
+			compacting.subsetFonts = true
 		// The same shape as -compact, for the same reasons: a global boolean
 		// that advances nothing, must not set consumed, and stays out of
 		// boolStageFlags. No stage defines -strict, so it collides with no

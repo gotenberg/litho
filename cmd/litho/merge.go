@@ -18,7 +18,7 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	userPwd := fs.String("user-password", "", "Encrypt the output with this user password")
 	ownerPwd := fs.String("owner-password", "", "Owner password for the encrypted output")
 	algorithm := fs.String("algorithm", "aes256", "Algorithm for the encrypted output: rc4-128, aes128, aes256")
-	compact, recompressImages := registerCompactFlags(fs)
+	compactFlags := registerCompactFlags(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -26,7 +26,7 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 
 	files := fs.Args()
 	if len(files) < 2 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho merge <file1> <file2> [file...] [--user-password X] [--compact] [--recompress-images] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho merge <file1> <file2> [file...] [--user-password X] [--compact] [--recompress-images] [--subset-fonts] -o out.pdf")
 		return exitError
 	}
 
@@ -42,7 +42,7 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	// alone would make it non-empty, which suppresses the encryption warning
 	// and fires the compaction one on a file that was compacted fine.
 	encrypting := len(writeOpts) > 0
-	writeOpts = append(writeOpts, compactWriteOptions(*compact, *recompressImages)...)
+	writeOpts = append(writeOpts, compactWriteOptions(compactFlags.get())...)
 	writeOpts = append(writeOpts, defaultPageSize.writeOptions()...)
 
 	var readers []*pdf.Reader
@@ -69,8 +69,8 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 
 	warnEncryptionDroppedOfferingPassword(stderr, encrypting, readers...)
 	warnXFADropped(ctx, stderr, readers...)
-	warnCompactSkipped(stderr, *compact, encrypting)
-	warnRecompressSkipped(stderr, *recompressImages, encrypting)
+	warnCompactSkipped(stderr, *compactFlags.compact, encrypting)
+	warnRecompressSkipped(stderr, *compactFlags.recompressImages, encrypting)
 
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {

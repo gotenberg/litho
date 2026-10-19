@@ -10,21 +10,49 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// registerCompactFlags adds -compact and -recompress-images to fs and returns
-// their bound values. The two are registered together so that every command
-// offering one offers the other, and are independent: either may be given
-// alone or both together.
+// compaction is what the compaction flags select: -compact, -recompress-images
+// and -subset-fonts.
+type compaction struct {
+	compact, recompressImages, subsetFonts bool
+}
+
+// compactionFlags holds the values [registerCompactFlags] binds.
+type compactionFlags struct {
+	compact, recompressImages, subsetFonts *bool
+}
+
+// get returns what the parsed flags select.
+func (f compactionFlags) get() compaction {
+	return compaction{compact: *f.compact, recompressImages: *f.recompressImages, subsetFonts: *f.subsetFonts}
+}
+
+// registerCompactFlags adds -compact, -recompress-images and -subset-fonts to
+// fs and returns their bound values. The three are registered together so that
+// every command offering one offers the others, and are independent: any may
+// be given alone or with the others.
 //
 // -recompress-images stays out of -compact by decision. Recompressing images
 // at zlib's best level costs seconds on an image-heavy file that otherwise
 // writes in milliseconds, too much for the flag a caller reaches for first.
-func registerCompactFlags(fs *flag.FlagSet) (compact, recompressImages *bool) {
-	compact = registerCompactFlag(fs)
-	recompressImages = fs.Bool("recompress-images", false,
-		"Recompress Flate, LZW, RunLength and uncompressed images losslessly, keeping each "+
-			"recompression only when it is smaller, when the command rewrites the whole file. "+
-			"Slower than --compact, and independent of it")
-	return compact, recompressImages
+//
+// -subset-fonts stays out of -compact for a different reason, following the
+// same decision to keep a pass with a trade of its own behind its own flag.
+// Subsetting is lossless for the document as it stands, but a subset font
+// holds only the glyphs the document shows, so text a later edit or a form
+// field adds in that font finds no glyph to draw. Packing and dedup change
+// how the document is stored and nothing a later edit can reach.
+func registerCompactFlags(fs *flag.FlagSet) compactionFlags {
+	return compactionFlags{
+		compact: registerCompactFlag(fs),
+		recompressImages: fs.Bool("recompress-images", false,
+			"Recompress Flate, LZW, RunLength and uncompressed images losslessly, keeping each "+
+				"recompression only when it is smaller, when the command rewrites the whole file. "+
+				"Slower than --compact, and independent of it"),
+		subsetFonts: fs.Bool("subset-fonts", false,
+			"Subset the embedded TrueType and CFF fonts to the glyphs the document shows, "+
+				"keeping every glyph ID, when the command rewrites the whole file. Text added "+
+				"later in a subset font finds no glyph. Independent of --compact"),
+	}
 }
 
 // registerCompactFlag adds -compact to fs and returns the bound value.
@@ -120,13 +148,15 @@ func warnPackingWithheld(stderr io.Writer, compact bool, profile string) {
 		"Duplicate streams are still merged.\n", profile)
 }
 
-// warnCompactIncremental reports that --compact or --recompress-images was
-// asked for and did not happen, because the write appended an incremental
-// update, as [pdf.WithCompactionSkipped] reports it after the write.
+// warnCompactIncremental reports that --compact, --recompress-images or
+// --subset-fonts was asked for and did not happen, because the write appended
+// an incremental update, as [pdf.WithCompactionSkipped] reports it after the
+// write.
 //
 // An update appends the edits to the input's bytes and keeps those bytes as
-// they are (ISO 32000-1, 7.5.6), and packing, dedup and image recompression
-// run on a full rewrite only, so the output is byte-identical to the one
+// they are (ISO 32000-1, 7.5.6), and packing, dedup, image recompression and
+// font subsetting run on a full rewrite only, so the output is byte-identical
+// to the one
 // written without the flag. pipe and remediate leave an update when nothing
 // they do needs a rewrite, a rotation or a remediation that repaired nothing
 // structural, and neither forces one for compaction: a rewrite drops every
@@ -139,27 +169,37 @@ func warnPackingWithheld(stderr io.Writer, compact bool, profile string) {
 //
 // A warning rather than an error, matching [warnCompactSkipped]: the command
 // still produced a correct document, only a larger one.
-func warnCompactIncremental(stderr io.Writer, compact, recompressImages, skipped bool, profile string) {
+func warnCompactIncremental(stderr io.Writer, c compaction, skipped bool, profile string) {
 	if !skipped {
 		return
 	}
+	var asked []string
+	for _, f := range []struct {
+		on   bool
+		name string
+	}{{c.compact, "--compact"}, {c.recompressImages, "--recompress-images"}, {c.subsetFonts, "--subset-fonts"}} {
+		if f.on {
+			asked = append(asked, f.name)
+		}
+	}
 	var flags string
-	switch {
-	case compact && recompressImages:
-		flags = "--compact and --recompress-images do"
-	case compact:
-		flags = "--compact does"
-	case recompressImages:
-		flags = "--recompress-images does"
-	default:
+	switch len(asked) {
+	case 0:
 		return
+	case 1:
+		flags = asked[0] + " does"
+	default:
+		flags = strings.Join(asked[:len(asked)-1], ", ") + " and " + asked[len(asked)-1] + " do"
 	}
 	var remedy []string
-	if compact && !packingForbiddenByProfile(profile) {
+	if c.compact && !packingForbiddenByProfile(profile) {
 		remedy = append(remedy, "--compact")
 	}
-	if recompressImages {
+	if c.recompressImages {
 		remedy = append(remedy, "--recompress-images")
+	}
+	if c.subsetFonts {
+		remedy = append(remedy, "--subset-fonts")
 	}
 	fmt.Fprintf(stderr, "warning: %s not apply to an incremental update, so the output is not compacted: "+
 		"the edits were appended to the input's bytes, which an update keeps as they are.", flags)
@@ -167,7 +207,7 @@ func warnCompactIncremental(stderr io.Writer, compact, recompressImages, skipped
 		fmt.Fprintf(stderr, " Run the output through `litho decrypt %s`, which rewrites the whole file, to compact it.",
 			strings.Join(remedy, " "))
 	}
-	if compact && packingForbiddenByProfile(profile) {
+	if c.compact && packingForbiddenByProfile(profile) {
 		fmt.Fprintf(stderr, " `litho decrypt --compact` would pack objects into object streams, which %s forbids: "+
 			"ISO 19005-1, 6.1.4 forbids the cross-reference stream they require.", profile)
 	}
@@ -186,12 +226,15 @@ func warnRecompressSkipped(stderr io.Writer, recompressImages, encrypting bool) 
 		"Recompress the document first, then encrypt the result.")
 }
 
-// compactWriteOptions returns the write options -compact and
-// -recompress-images select, or none when neither was passed.
+// compactWriteOptions returns the write options -compact, -recompress-images
+// and -subset-fonts select, or none when none was passed.
 //
 // No PDF/A profile forbids image recompression: it writes FlateDecode, which
-// ISO 19005 permits at every part, and needs no PDF 1.5 construct. A command
-// that targets a profile calls [profileCompactWriteOptions] instead.
+// ISO 19005 permits at every part, and needs no PDF 1.5 construct. Nor does
+// any forbid font subsetting, which keeps every glyph a document shows and
+// every glyph ID, so the /CIDSet and /CharSet ISO 19005 asks of a font stay
+// right. A command that targets a profile calls [profileCompactWriteOptions]
+// instead.
 //
 // -compact drives both packing and dedup because they are independently safe and their
 // savings add up rather than overlap. Callers wanting one without the other
@@ -205,27 +248,34 @@ func warnRecompressSkipped(stderr io.Writer, recompressImages, encrypting bool) 
 //
 //   - All corpora, 37 files: packing saves 6.25% and dedup 0.76% against the
 //     same rewrite without them, and 7.00% together.
-func compactWriteOptions(compact, recompressImages bool) []pdf.WriteOption {
+func compactWriteOptions(c compaction) []pdf.WriteOption {
 	var opts []pdf.WriteOption
-	if compact {
+	if c.compact {
 		opts = append(opts, pdf.WithObjectStreams(), pdf.WithDedup())
 	}
-	if recompressImages {
+	if c.recompressImages {
 		opts = append(opts, pdf.WithImageRecompression())
+	}
+	if c.subsetFonts {
+		opts = append(opts, pdf.WithFontSubsetting())
 	}
 	return opts
 }
 
-// profileCompactWriteOptions returns the write options -compact and
-// -recompress-images select for an output that must conform to profile.
+// profileCompactWriteOptions returns the write options -compact,
+// -recompress-images and -subset-fonts select for an output that must conform
+// to profile.
 //
 // A profile that forbids packing (see [packingForbiddenByProfile]) keeps
-// dedup and image recompression: neither writes a construct ISO 19005-1
-// forbids, and refusing all of -compact there threw away a saving the profile
-// permits. Callers report the withheld packing with [warnPackingWithheld].
-func profileCompactWriteOptions(compact, recompressImages bool, profile string) []pdf.WriteOption {
-	if !compact || !packingForbiddenByProfile(profile) {
-		return compactWriteOptions(compact, recompressImages)
+// dedup, image recompression and font subsetting: none writes a construct ISO
+// 19005-1 forbids, and refusing all of -compact there threw away a saving the
+// profile permits. Callers report the withheld packing with
+// [warnPackingWithheld].
+func profileCompactWriteOptions(c compaction, profile string) []pdf.WriteOption {
+	if !c.compact || !packingForbiddenByProfile(profile) {
+		return compactWriteOptions(c)
 	}
-	return append([]pdf.WriteOption{pdf.WithDedup()}, compactWriteOptions(false, recompressImages)...)
+	rest := c
+	rest.compact = false
+	return append([]pdf.WriteOption{pdf.WithDedup()}, compactWriteOptions(rest)...)
 }

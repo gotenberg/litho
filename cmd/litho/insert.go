@@ -18,14 +18,14 @@ func runInsert(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	source := fs.String("source", "", "Source PDF file (required)")
 	pos := fs.Int("pos", -1, "0-based insertion position (required)")
 	sourcePages := fs.String("source-pages", "", "Source page range (default: all)")
-	compact, recompressImages := registerCompactFlags(fs)
+	compactFlags := registerCompactFlags(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *source == "" || *pos < 0 {
-		fmt.Fprintln(stderr, "Usage: litho insert <target> --source <file> --pos N [--source-pages RANGE] [--compact] [--recompress-images] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho insert <target> --source <file> --pos N [--source-pages RANGE] [--compact] [--recompress-images] [--subset-fonts] -o out.pdf")
 		return exitError
 	}
 
@@ -75,7 +75,7 @@ func runInsert(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 		return exitError
 	}
 
-	if err := w.WriteTo(ctx, dst, compactWriteOptions(*compact, *recompressImages)...); err != nil {
+	if err := w.WriteTo(ctx, dst, compactWriteOptions(compactFlags.get())...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError

@@ -139,14 +139,14 @@ func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 	userPwd := fs.String("user-password", "", "User password")
 	ownerPwd := fs.String("owner-password", "", "Owner password")
 	algorithm := fs.String("algorithm", "aes256", "Encryption algorithm: rc4-128, aes128, aes256")
-	compact, recompressImages := registerCompactFlags(fs)
+	compactFlags := registerCompactFlags(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho encrypt <file> --user-password X [--owner-password Y] [--algorithm aes256] [--compact] [--recompress-images] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho encrypt <file> --user-password X [--owner-password Y] [--algorithm aes256] [--compact] [--recompress-images] [--subset-fonts] -o out.pdf")
 		return exitError
 	}
 
@@ -165,8 +165,8 @@ func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 
 	// This command always encrypts its output, so asking to compact it is
 	// always a request the write engine will refuse.
-	warnCompactSkipped(stderr, *compact, true)
-	warnRecompressSkipped(stderr, *recompressImages, true)
+	warnCompactSkipped(stderr, *compactFlags.compact, true)
+	warnRecompressSkipped(stderr, *compactFlags.recompressImages, true)
 
 	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
@@ -183,7 +183,7 @@ func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 		return exitError
 	}
 
-	if err := w.WriteTo(ctx, dst, compactWriteOptions(*compact, *recompressImages)...); err != nil {
+	if err := w.WriteTo(ctx, dst, compactWriteOptions(compactFlags.get())...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError

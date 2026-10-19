@@ -52,7 +52,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	format := fs.String("f", "text", "Output format: text or json")
 	invoice := fs.String("invoice", "", "Cross-Industry Invoice XML to embed (Factur-X / ZUGFeRD profiles)")
 	level := fs.String("level", "", "Factur-X conformance level: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG")
-	compact, recompressImages := registerCompactFlags(fs)
+	compactFlags := registerCompactFlags(fs)
 	fonts := registerFontFlags(fs)
 	documentID := registerDocumentIDFlag(fs)
 	strict := fs.Bool("strict", false,
@@ -63,7 +63,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--system-fonts] [--no-font-subset] [--document-id HEX] [--compact] [--recompress-images] [--strict] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--system-fonts] [--no-font-subset] [--document-id HEX] [--compact] [--recompress-images] [--subset-fonts] [--strict] -o out.pdf")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
 		return exitError
@@ -135,7 +135,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	// happens. PDF/A-1 keeps dedup and withholds packing, since packing would
 	// hand back a file that no longer conforms to the profile this command was
 	// asked to produce.
-	warnPackingWithheld(stderr, *compact, *profile)
+	warnPackingWithheld(stderr, *compactFlags.compact, *profile)
 
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {
@@ -144,7 +144,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	var compactionSkipped bool
-	writeOpts := append(profileCompactWriteOptions(*compact, *recompressImages, *profile), pdf.WithCompactionSkipped(&compactionSkipped))
+	writeOpts := append(profileCompactWriteOptions(compactFlags.get(), *profile), pdf.WithCompactionSkipped(&compactionSkipped))
 	if err := w.WriteTo(ctx, dst, writeOpts...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
@@ -155,7 +155,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintf(stderr, "closing output: %v\n", err)
 		return exitError
 	}
-	warnCompactIncremental(stderr, *compact, *recompressImages, compactionSkipped, *profile)
+	warnCompactIncremental(stderr, compactFlags.get(), compactionSkipped, *profile)
 
 	result := remediateResult{
 		Profile: *profile,
