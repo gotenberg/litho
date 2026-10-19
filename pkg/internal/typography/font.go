@@ -108,9 +108,10 @@ type Font struct {
 	// ProgramGlyphRunes holds the characters the embedded program of a
 	// simple font that states no /Encoding gives its codes, and only those:
 	// a symbolic TrueType program through its cmap and glyph names
-	// ([applySymbolicTrueTypeGlyphs]), a Type 1 program through the glyph
-	// names of its built-in encoding ([applyType1FontFileEncoding]). It is
-	// nil for any other font. [Font.Encoding] also carries the default
+	// ([applySymbolicTrueTypeGlyphs]), a Type 1 or Type1C program through the
+	// glyph names of its built-in encoding ([applyType1FontFileEncoding],
+	// [extractCFFEncoding]). It is nil for any other font. [Font.Encoding]
+	// also carries the default
 	// encoding's reading of every code the program leaves unnamed, a guess
 	// a caller that persists a mapping must not write.
 	ProgramGlyphRunes map[byte]rune
@@ -1794,11 +1795,11 @@ func applyType1FontFileEncoding(ctx context.Context, doc *document.Document, fon
 }
 
 // recordProgramGlyphRune records in [Font.ProgramGlyphRunes] that the built-in
-// encoding of a Type 1 program names code's glyph name, read as r through the
-// glyph lists (ISO 32000-1, 9.10.2). A numeric name ("Gxx", "Cdd") is left
-// out: it is in no glyph list, and its number is a guess at the producer's
-// convention ([builtinNumericNameMisreads]) that text extraction may take but
-// a persisted mapping must not.
+// encoding of a Type 1 or Type1C program names code's glyph name, read as r
+// through the glyph lists (ISO 32000-1, 9.10.2). A numeric name ("Gxx",
+// "Cdd") is left out: it is in no glyph list, and its number is a guess at the
+// producer's convention ([builtinNumericNameMisreads]) that text extraction
+// may take but a persisted mapping must not.
 func recordProgramGlyphRune(font *Font, code byte, name string, r rune) {
 	if _, numeric := encodings.NumericGlyphName(name); numeric {
 		return
@@ -3020,7 +3021,8 @@ func unreadableRune(r rune) bool {
 // that states no /Encoding and populates font.Encoding. This is needed for TeX
 // fonts (CMR, CMSY, etc.) that use OT1 encoding internally. The byte→glyph
 // mapping differs from StandardEncoding/WinAnsiEncoding. The glyph names read
-// as a Type 1 program's do ([builtinGlyphRune]).
+// as a Type 1 program's do ([builtinGlyphRune]), and a simple font records
+// them in [Font.ProgramGlyphRunes].
 func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats bool) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
@@ -3034,10 +3036,14 @@ func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict as
 	if len(encMap) == 0 {
 		return
 	}
+	simple := font.Subtype == "Type1" || font.Subtype == "MMType1"
 	// Convert glyph names to runes and overwrite the encoding table.
 	for code, name := range encMap {
 		if r, ok := builtinGlyphRune(name, int(code), isDingbats); ok {
 			font.Encoding[code] = r
+			if simple {
+				recordProgramGlyphRune(font, code, name, r)
+			}
 		}
 	}
 }

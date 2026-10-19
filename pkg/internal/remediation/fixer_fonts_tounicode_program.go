@@ -18,8 +18,9 @@ import (
 // program's (3,0) cmap subtable, or through a (1,0) subtable that copies the
 // (3,1) one, and the program names each glyph: its post table, read through
 // the Adobe Glyph List (9.10.2), or its Unicode subtable. A Type 1 font's codes
-// select glyphs through its program's built-in encoding (9.6.6.1), which names
-// the glyph each code selects, read through the same glyph lists.
+// select glyphs through its program's built-in encoding (9.6.6.1), a Type 1
+// (/FontFile) or a Type1C (/FontFile3) program alike, which names the glyph
+// each code selects, read through the same glyph lists.
 // [typography.Font.ProgramGlyphRunes] holds those readings, the ones text
 // extraction shows. A code the program leaves unnamed, names with a numeric
 // name, or names with a Private Use Area or control value, gets no entry: what
@@ -50,6 +51,17 @@ import (
 //     thread_300_300849.pdf loses 8.4.3 t1 at PDF/UA-2 and 6.2.11.7.3 t1 at
 //     PDF/A-2a and PDF/A-3a. litho agrees with veraPDF on every cell, no rule
 //     is gained, and litho's extracted text is unchanged in both modes.
+//   - All corpora: 16 files show a symbolic Type1C font that states no
+//     /Encoding and no /ToUnicode, and the remediated outputs of 9 change at
+//     some of the 13 levels, in both modes. On veraPDF 1.30.2 those of verapdf
+//     6-3-8-t01-fail-a lose the rule at every level that states it and pass
+//     at PDF/A-1a, PDF/A-2a, PDF/A-2u, PDF/A-3a, PDF/A-3u, PDF/UA-1 and
+//     PDF/UA-2; those of pdfjs issue3566.pdf lose 6.2.11.7.2 t2, 6.2.10.7 t1,
+//     7.21.7 t2 and 8.4.5.8 t2, which litho did not report, so 18 cells of
+//     disagreement close. No rule is gained, no disagreement opens, and
+//     litho's own verdicts are unchanged apart from fail-a's. veraPDF reads
+//     neither pdfjs link-annotation-border.pdf nor prefilled_f1040.pdf, the
+//     originals included.
 //   - All corpora: the fonts left unmapped name a shown code with a name no
 //     glyph list carries (the "H11021" names of the Universal and
 //     MathematicalPi subsets), or a numeric one (AdvOpti's "C42").

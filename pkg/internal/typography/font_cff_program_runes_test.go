@@ -2,6 +2,7 @@ package typography
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -85,6 +86,41 @@ func TestResolveFont_Type1CBuiltInEncodingReadsTheGlyphLists(t *testing.T) {
 			}
 			if got := font.Encoding[0x33]; got == '✄' {
 				t.Errorf("Encoding[0x33] = %q, the Dingbats reading of a font that is not ZapfDingbats", got)
+			}
+		})
+	}
+}
+
+// TestResolveFont_Type1CProgramGlyphRunes pins that a Type1C font that states
+// no /Encoding records in [Font.ProgramGlyphRunes] the codes its program's
+// built-in encoding names with a glyph-list name, as a Type 1 program's do
+// (ISO 32000-1, 9.6.6.1 and 9.10.2), and that a font whose /Differences
+// renames codes over the built-in encoding records nothing.
+func TestResolveFont_Type1CProgramGlyphRunes(t *testing.T) {
+	t.Parallel()
+
+	names := map[byte]string{0x00: "minus", 0x31: "infinity", 0x32: "H11021", 0x62: "C98"}
+	differences := ast.PdfDict{
+		"Type":        ast.PdfName("Encoding"),
+		"Differences": ast.PdfArray{ast.PdfInt(0x31), ast.PdfName("one")},
+	}
+	for _, c := range []struct {
+		name     string
+		encoding ast.PdfObject
+		want     map[byte]rune
+	}{
+		{"no Encoding", nil, map[byte]rune{0x00: '−', 0x31: '∞'}},
+		{"Differences without BaseEncoding", differences, nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			font, err := ResolveFont(context.Background(),
+				&document.Document{Logger: document.NopLogger()}, symbolicType1CFont(names, c.encoding))
+			if err != nil {
+				t.Fatalf("ResolveFont: %v", err)
+			}
+			if !maps.Equal(font.ProgramGlyphRunes, c.want) {
+				t.Errorf("ProgramGlyphRunes = %v, want %v", font.ProgramGlyphRunes, c.want)
 			}
 		})
 	}
