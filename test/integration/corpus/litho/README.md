@@ -6985,10 +6985,10 @@ veraPDF 1.30.2 and litho report the same rule set in all thirteen cells:
 and `8.2.5.2/2` a part-1 claim and a Document element outside the PDF 2.0
 namespace draw.
 Remediated at all thirteen, default and aggressive, every output carries the
-same rule set on both tools. No fixer closes the sequence: the content-tag
-fixer leaves a page that already holds marked content, so the PDF/UA-1 output
-keeps `7.1/3` and the PDF/UA-2 output `8.2.2/1`. The PDF/A levels fully fix,
-but PDF/A-4f, which keeps `6.9/5`.
+same rule set on both tools and fully fixes, but PDF/A-4f, which keeps `6.9/5`.
+The content-tag fixer leaves a page that already holds marked content, so until
+the marked-content-close fixer appended the missing EMC in a stream of its own,
+the PDF/UA-1 output kept `7.1/3` and the PDF/UA-2 output `8.2.2/1`.
 
 ### `danglingstr_ua1.pdf`
 
