@@ -234,6 +234,7 @@ one deliberately rather than diffing it against a fresh build.
 | `unclosedmc_ua1.pdf`   | PDF/UA-1     | An artifact sequence the content stream never closes             |
 | `danglingstr_ua1.pdf`  | PDF/UA-1     | Auto-tagging a page that ends inside an unterminated string      |
 | `readorder_ua1.pdf`    | PDF/UA-1     | Untagged two-column page whose stream interleaves the columns    |
+| `readcolumns_ua1.pdf`  | PDF/UA-1     | Columns set line by line; a running head in the title's object   |
 
 ### Must-not-fire controls
 
@@ -638,6 +639,7 @@ which are covered under [Known divergences](#known-divergences).
 | `patternshade_2b.pdf`  | 8    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 7    | 6    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `remapchain_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 4    | 0    |
+| `readcolumns_ua1.pdf`  | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `readorder_ua1.pdf`    | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `redactcopies_2b.pdf`  | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `redactrefs_ua1.pdf`   | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 4    | 5    |
@@ -7488,6 +7490,36 @@ claim is the wrong part. The two tools agree in all thirteen cells.
 The PDF/UA-1 and PDF/UA-2 outputs, default and aggressive, keep only the font
 (`7.21.4.1/1`, `8.4.5.5.1/1`) on both tools, in reading order as in content
 order: veraPDF does not judge the order of a tree.
+
+### `readcolumns_ua1.pdf`
+
+The same reading-order question, asked of two shapes `readorder_ua1.pdf` does
+not hold. Both pages are untagged, and each sets two columns of six lines line
+by line across both, every line a text object of its own, so no two lines of a
+column are adjacent in the content stream. The right column's baselines sit
+half a line below the left's, so no row of the two reads as a table row.
+
+A marked-content sequence is one contiguous run of the content (ISO 32000-1,
+14.6), so one sequence cannot hold a column's lines. ISO 32000-1, 14.7.4.1 lets
+a structure element hold several sequences, and auto-tagging now tags each
+column as one `P` whose `/K` lists its six lines' MCIDs in reading order. It
+tagged each line as a `P` of its own before.
+
+Each page's running head is set in the text object that also sets the page's
+title under it, so the object reaches out of the top margin and read as body
+text: the head was tagged with the title, as one `H1`. Auto-tagging now cuts
+the head off the text object at the line that leaves the margin and marks it
+as a pagination artifact (ISO 14289-1, 7.8), its sequence kept between the
+object's `BT` and `ET`, as ISO 32000-1, 14.6 asks. Each page reads `H1`, `P`,
+`P`, with the head and the page number as artifacts.
+
+Before remediation both tools report the untagged pages and the non-embedded
+font, as on `readorder_ua1.pdf`: `6.2/1`, `7.1/3`, `7.1/11` and `7.21.4.1/1`
+at PDF/UA-1, and `5/2`, `5/5`, `6.2/1`, `8.2.1/1`, `8.2.2/1` and
+`8.4.5.5.1/1` at PDF/UA-2. The two tools agree in all thirteen cells. The
+outputs remediated at every level, default and aggressive, keep only the font
+on both tools, and at PDF/A-4f the missing `EmbeddedFiles` (`6.9/5`) too, as
+they did when each line was a paragraph.
 
 ## Scope
 
