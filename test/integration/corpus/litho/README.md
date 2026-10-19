@@ -237,6 +237,7 @@ one deliberately rather than diffing it against a fresh build.
 | `readorder_ua1.pdf`    | PDF/UA-1     | Untagged two-column page whose stream interleaves the columns    |
 | `readcolumns_ua1.pdf`  | PDF/UA-1     | Columns set line by line; a running head in the title's object   |
 | `sharedicc_2b.pdf`     | PDF/A-2b     | One content stream four pages share, each over its own ICC space |
+| `texlig_2b.pdf`        | PDF/A-2b     | A TeX ligature code and a code 32 whose names map nothing        |
 
 ### Must-not-fire controls
 
@@ -674,6 +675,7 @@ are covered under [Known divergences](#known-divergences).
 | `tableregular_ua2.pdf` | 4    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 2    | 5    |
 | `tablespan_ua2.pdf`    | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 4    | 4    |
+| `texlig_2b.pdf`        | 6    | 2    | 5    | 1    | 3    | 6    | 2    | 4    | 5   | 5    | 6    | 9    | 8    |
 | `threed_4e.pdf`        | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 11   | 8    |
 | `threedcs_4.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 5    | 7    | 8    | 6    |
 | `trailer_2b.pdf`       | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
@@ -7604,6 +7606,52 @@ at PDF/UA-1, and `5/2`, `5/5`, `6.2/1`, `8.2.1/1`, `8.2.2/1` and
 outputs remediated at every level, default and aggressive, keep only the font
 on both tools, and at PDF/A-4f the missing `EmbeddedFiles` (`6.9/5`) too, as
 they did when each line was a paragraph.
+
+### `texlig_2b.pdf`
+
+ISO 32000-1, 9.10.2 derives a simple font's Unicode value from the glyph name a
+code selects. TeX text fonts set the "fi" ligature at code `0C` under a name no
+glyph list holds, so the code has no value. PDF.js shows the code as itself
+and reads a form feed as a word space, which cuts "verification" in two. litho
+reads it as no character and keeps the word whole: correct words over oracle
+agreement is a user decision (2026-10-19). ISO 32000-1, 9.3.3 applies word
+spacing to code `20` whatever glyph it selects, so code `20` reads as a space
+whatever its name. Font `F1` embeds a Type 1 program on `StandardEncoding`
+holding the letters it shows and `T0C`, carries no `/ToUnicode`, and states
+`/Differences [12 /T0C 32 /T20]`. The program holds no `T20`, and `/Widths`
+gives code `20` no advance, so no gap divides the words it separates:
+
+| Line                             | litho reads       | Read with `0C` as a space |
+| -------------------------------- | ----------------- | ------------------------- |
+| `veri` `0C` `cation` `20` `text` | `verication text` | `veri cation text`        |
+| `code` `20` `space`              | `code space`      | `code space`              |
+
+No gate cell sees the reading: the litho corpus scores no text against an
+oracle, the `mutate-*` cells compare litho's text on the output with litho's
+on the input, and compliance, auto-tagging and remediation do not move when
+`0C` reads as a space. `TestExtractTextKeepsAnUnmappedLigatureInsideItsWord`
+in `pkg/pdf` reads the fixture instead, and fails on the wave-54 reading.
+
+Code `20` reaches no fallback in litho: a `/Differences` name that maps
+nothing leaves the base encoding's `space` in place, and every base litho
+builds for a simple font fills code `20`. The second line still pins that the
+code alone, with no gap, divides the words.
+
+| Rule at PDF/A-2u                    | veraPDF | litho |
+| ----------------------------------- | ------- | ----- |
+| `6.2.11.4.1/2` glyph not in program | 1       | 1     |
+| `6.2.11.7.2/1` no Unicode value     | 2       | 2     |
+| `6.6.4/3` conformance claimed is B  | 1       | 1     |
+
+Both codes fail the value rule, `20` included: veraPDF and litho read a value
+from the name the encoding gives a code, and `T20` names nothing. The glyph
+and value rules answer the same way at PDF/A-2a, 3a and 3u, at PDF/UA-1
+(`7.21.4.1/2`, `7.21.7/1`) and at PDF/UA-2 (`8.4.5.5.1/2`, `8.4.5.8/1`). At
+PDF/A-4, 4e and 4f only the glyph rule fires (`6.2.10.4.1/2`). At PDF/A-1a
+`6.3.8/1` fires for both codes, and at PDF/A-1a and 1b `6.3.5/1` for the
+missing glyph. At PDF/A-2b only the missing glyph fires.
+veraPDF 1.30.2 and litho report the same rule set, with the same failed-check
+counts, in all thirteen cells.
 
 ## Scope
 

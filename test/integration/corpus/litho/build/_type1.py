@@ -21,6 +21,9 @@ CHARSTRING_KEY = 4330
 C1 = 52845
 C2 = 22719
 LEN_IV = 4
+# The nth glyph is 400 + 100 * (n % GLYPH_HEIGHTS) high, so a program of any
+# size keeps every height a charstring integer this module writes.
+GLYPH_HEIGHTS = 8
 
 
 def _encrypt(plain, key):
@@ -111,7 +114,7 @@ def build(name=b"LithoT1", glyphs=("A", "B"), encoding=None, charstrings=True):
         names = (".notdef",) + tuple(glyphs)
         private += b"2 index /CharStrings %d dict dup begin\n" % len(names)
         for i, glyph in enumerate(names):
-            cs = _encrypt(b"\x00" * LEN_IV + _charstring(0 if i == 0 else 400 + 100 * i), CHARSTRING_KEY)
+            cs = _encrypt(b"\x00" * LEN_IV + _charstring(0 if i == 0 else 400 + 100 * (i % GLYPH_HEIGHTS)), CHARSTRING_KEY)
             private += b"/%s %d RD " % (glyph.encode("ascii"), len(cs)) + cs + b" ND\n"
         private += b"end\n"
     private += b"end\nreadonly put\nnoaccess put\ndup /FontName get exch definefont pop\nmark currentfile closefile\n"
