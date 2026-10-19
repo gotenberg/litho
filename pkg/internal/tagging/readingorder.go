@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Reading-order segmentation bounds. Tuning constants, not spec-mandated: the
@@ -297,10 +298,16 @@ func hasGutter(covered []span, width float64) bool {
 // rendering matrix, rather than from a second reckoning of glyph widths here.
 // A block none of whose glyphs is placed, its font missing, leaves ok false,
 // and so does a glyph set in vertical writing or turned off the horizontal.
-func pageInkBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, data []byte, blocks []textBlock) (boxes [][4]float64, rtl bool, ok bool) {
+//
+// gaps holds, per block, the widest gap along a line between two runs of its
+// glyphs that follow one another in the content: extraction parts a run at a
+// gap wider than a word space, so a line of running text has none wider than
+// a word space, while a row of figures one text object sets apart has one per
+// figure.
+func pageInkBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, data []byte, blocks []textBlock) (boxes [][4]float64, gaps []float64, rtl bool, ok bool) {
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.WholeStream())
 	if err != nil {
-		return nil, false, false
+		return nil, nil, false, false
 	}
 	x0, y0, x1, y1 := boxCorners(page.ViewedBox())
 	machine := graphics.NewMachine([4]float64{x0, y0, x1, y1})
@@ -311,17 +318,19 @@ func pageInkBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	elements, origins, err := typography.ExtractElementsWithOrigins(ctx, doc, machine, page, ops)
 	if err != nil {
 		doc.Logger.Debug("tagging: page text cannot be placed; keeping content order", slog.Any("err", err))
-		return nil, false, false
+		return nil, nil, false, false
 	}
 	boxes = make([][4]float64, len(blocks))
 	placed := make([]bool, len(blocks))
+	gaps = make([]float64, len(blocks))
+	last := make([]models.TextElement, len(blocks))
 	var rtlRunes, letterRunes int
 	for k, el := range elements {
 		// Vertical writing reads its lines top to bottom and its columns
 		// right to left (ISO 32000-1, 9.7.4.3), and a turned glyph reads
 		// along its own baseline: the segmentation reads neither.
 		if el.Vertical || math.Abs(el.Angle) > maxLevelAngle {
-			return nil, false, false
+			return nil, nil, false, false
 		}
 		origin := origins[k]
 		if origin < 0 || origin >= len(ranges) || el.InkBox == [4]float64{} {
@@ -343,10 +352,14 @@ func pageInkBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		if !placed[bi] {
 			boxes[bi], placed[bi] = el.InkBox, true
 		} else {
+			if prev := last[bi]; math.Abs(el.Y-prev.Y) <= rowBaselineTol {
+				gaps[bi] = math.Max(gaps[bi], el.InkBox[0]-prev.InkBox[2])
+			}
 			b := &boxes[bi]
 			b[0], b[1] = math.Min(b[0], el.InkBox[0]), math.Min(b[1], el.InkBox[1])
 			b[2], b[3] = math.Max(b[2], el.InkBox[2]), math.Max(b[3], el.InkBox[3])
 		}
+		last[bi] = el
 		for _, r := range el.Text {
 			if !unicode.IsLetter(r) {
 				continue
@@ -358,9 +371,9 @@ func pageInkBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		}
 	}
 	if slices.Contains(placed, false) {
-		return nil, false, false
+		return nil, nil, false, false
 	}
-	return boxes, 2*rtlRunes > letterRunes, true
+	return boxes, gaps, 2*rtlRunes > letterRunes, true
 }
 
 // boxCorners returns the corners of a page box, lower left first, or zeros
@@ -380,7 +393,7 @@ func boxCorners(box ast.PdfArray) (x0, y0, x1, y1 float64) {
 // classifyInReadingOrder classifies one page's content in reading order
 // ([readingOrder]) and returns its elements, or false when the reading order
 // is content order or cannot be told, and the caller classifies in content
-// order as before. blocks is every content block of the page, rest those
+// order as before. geo reads every content block of the page, rest are those
 // [carveTables] left, and tables the tables it carved from the others.
 //
 // A page turned by /Rotate, or holding text that does not read upright, keeps
@@ -414,24 +427,20 @@ func boxCorners(box ast.PdfArray) (x0, y0, x1, y1 float64) {
 //     other files above write 1364 outputs that differ from before, and on
 //     none does litho or veraPDF report a rule it did not report before, or
 //     miss one it did.
-func classifyInReadingOrder(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, pageIndex int, data []byte, blocks, rest []textBlock, images []imageBlock, tables []*Element) ([]*Element, bool) {
-	if page.Rotate != 0 || len(rest)+len(images)+len(tables) < 2 || len(blocks) > maxOrderItems {
+func classifyInReadingOrder(ctx context.Context, geo *pageGeometry, pageIndex int, rest []textBlock, images []imageBlock, tables []*Element) ([]*Element, bool) {
+	if geo.page.Rotate != 0 || len(rest)+len(images)+len(tables) < 2 || len(geo.blocks) > maxOrderItems {
 		return nil, false
 	}
-	if slices.ContainsFunc(blocks, func(b textBlock) bool { return !b.upright }) {
+	if slices.ContainsFunc(geo.blocks, func(b textBlock) bool { return !b.upright }) {
 		return nil, false
 	}
 	body := bodyFontSize(rest)
 	if body <= 0 {
 		return nil, false
 	}
-	boxes, rtl, ok := pageInkBoxes(ctx, alloc, doc, page, data, blocks)
+	boxAt, rtl, ok := geo.inkBoxes(ctx)
 	if !ok {
 		return nil, false
-	}
-	boxAt := make(map[int][4]float64, len(blocks))
-	for i, b := range blocks {
-		boxAt[b.startByte] = boxes[i]
 	}
 
 	items := make([]orderItem, 0, len(rest)+len(images)+len(tables))
@@ -455,7 +464,7 @@ func classifyInReadingOrder(ctx context.Context, alloc *writer.ObjAllocator, doc
 			ordered = append(ordered, rest[i])
 		}
 	}
-	elems := classifyBlocks(ordered, pageIndex, data, boxAt)
+	elems := classifyBlocks(ordered, pageIndex, geo.data, boxAt)
 	elems = append(elems, figureElements(images, pageIndex)...)
 	elems = append(elems, tables...)
 	byStart := make(map[int]*Element, len(elems))

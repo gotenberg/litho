@@ -202,7 +202,8 @@ func alreadyTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // BT…ET. Running headers, footers and page numbers are set apart first (see
 // [detectFurniture]), cut off the text object that also sets the body when
 // a producer sets both in one. Strongly grid-like runs of blocks become tables
-// ([carveTables]). The rest are classified as headings, by font size relative
+// ([carveTables]), unless they are columns of running text set line by line.
+// The rest are classified as headings, by font size relative
 // to body text and numbered into a no-skip H1..Hn hierarchy, or paragraphs;
 // adjacent paragraph lines merge into one element by baseline proximity, so a
 // wrapped paragraph is a single element, and runs of marker-led paragraphs
@@ -249,8 +250,9 @@ func Classify(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 			continue // skip unparseable or content-free pages
 		}
 		blocks, artifacts := splitFurniture(blocks, pi, furniture[pi].kinds)
-		tables, rest := carveTables(blocks, pi)
-		if kids, ok := classifyInReadingOrder(ctx, alloc, doc, pages[pi], pi, data, blocks, rest, images, tables); ok {
+		geo := &pageGeometry{alloc: alloc, doc: doc, page: pages[pi], data: data, blocks: blocks}
+		tables, rest := carveTables(ctx, geo, pi)
+		if kids, ok := classifyInReadingOrder(ctx, geo, pi, rest, images, tables); ok {
 			root.Kids = append(append(root.Kids, kids...), artifacts...)
 			continue
 		}
@@ -738,15 +740,20 @@ const (
 	minTableCols = 2
 )
 
-// carveTables extracts strongly grid-like block runs as Table > TR > TD
-// elements and returns them with the remaining blocks. A table is at
-// least minTableRows consecutive rows of minTableCols or more blocks
-// each, where a row shares one baseline and consecutive rows have the
-// same column count with aligned start positions. Cells become TD
-// leaves; no TH is synthesized, which keeps the result inside ISO/TS
-// 32005's Table rows without guessing header semantics (a wrong TH
-// would trigger the PDF/UA header-determination rules).
-func carveTables(blocks []textBlock, pageIndex int) ([]*Element, []textBlock) {
+// carveTables extracts strongly grid-like block runs of the page's blocks as
+// Table > TR > TD elements and returns them with the remaining blocks. A table
+// is at least minTableRows consecutive rows of minTableCols or more blocks
+// each, where a row shares one baseline and consecutive rows have the same
+// column count with aligned start positions. Cells become TD leaves; no TH is
+// synthesized, which keeps the result inside ISO/TS 32005's Table rows without
+// guessing header semantics (a wrong TH would trigger the PDF/UA
+// header-determination rules).
+//
+// A grid that reads as columns of running text ([pageGeometry.proseColumns])
+// is no table: its blocks stay with the rest, for the reading order to read
+// column by column.
+func carveTables(ctx context.Context, geo *pageGeometry, pageIndex int) ([]*Element, []textBlock) {
+	blocks := geo.blocks
 	rows := blockRows(blocks)
 
 	var tables []*Element
@@ -760,7 +767,7 @@ func carveTables(blocks []textBlock, pageIndex int) ([]*Element, []textBlock) {
 		for j < len(rows) && rowsAlign(blocks, rows[j-1], rows[j]) {
 			j++
 		}
-		if j-i < minTableRows {
+		if j-i < minTableRows || geo.proseColumns(ctx, rows[i:j]) {
 			i = j
 			continue
 		}
