@@ -213,8 +213,9 @@ func checkOutputIntentProfileComponents(ctx context.Context, doc *document.Docum
 
 // checkICCOutputProfileHeader validates the ICC profile stream referenced by an
 // output intent's /DestOutputProfile: device class prtr or mntr, colour space
-// GRAY, RGB or CMYK, ICC major version below 5 (ISO 19005-1 §6.2.2 t1,
-// ISO 19005-2/3/4 §6.2.3 t1). label locates the intent in every message.
+// GRAY, RGB or CMYK, ICC major version 2 under PDF/A-1 (ISO 19005-1 §6.2.2
+// t1) and 2 or 4 under the later parts (ISO 19005-2/3/4 §6.2.3 t1). label
+// locates the intent in every message.
 // It returns the parsed header and whether the profile decoded and parsed.
 func checkICCOutputProfileHeader(ctx context.Context, doc *document.Document, destProfileObj ast.PdfObject, part int, label string, results *[]Violation) (iccProfileHeader, bool) {
 	stream, err := document.ResolveStream(ctx, doc, destProfileObj)
@@ -246,7 +247,15 @@ func checkICCOutputProfileHeader(ctx context.Context, doc *document.Document, de
 			"%s: invalid colour space %q (expected GRAY, RGB  or CMYK)", label, hdr.colorSpace)...)
 	}
 
-	if hdr.version != 2 && hdr.version != 4 {
+	// PDF/A-1 rests on PDF 1.4, which predates ICC v4, so ISO 19005-1, 6.2.2
+	// takes the profile of PDF Reference 1.4, 9.10.4 (an ICC.1:1998-09, v2
+	// profile) and a v4 one fails it, as veraPDF's "version < 3.0" reads. The
+	// later parts admit v4 ([iccVersionExceedsCeiling]).
+	switch {
+	case iccVersionExceedsCeiling(hdr.version, part):
+		*results = append(*results, failf(outputIntentICCRule(part),
+			"%s: ICC profile version %d exceeds the PDF/A-%d ceiling", label, hdr.version, part)...)
+	case hdr.version != 2 && hdr.version != 4:
 		*results = append(*results, failf(outputIntentICCRule(part),
 			"%s: invalid ICC profile version %d (expected 2 or 4)", label, hdr.version)...)
 	}

@@ -88,6 +88,40 @@ func TestPageLevelOutputIntents(t *testing.T) {
 	}
 }
 
+// TestOutputIntentICCVersionCeiling pins the ICC version an output intent's
+// /DestOutputProfile may carry in each part. PDF/A-1 is based on PDF 1.4,
+// which predates ICC v4, so ISO 19005-1, 6.2.2 fails a v4 profile there
+// (veraPDF's test reads "version < 3.0"); PDF/A-2 and later admit it.
+func TestOutputIntentICCVersionCeiling(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		part    int
+		version byte
+		fails   bool
+	}{
+		{part: 1, version: 2, fails: false},
+		{part: 1, version: 4, fails: true},
+		{part: 2, version: 4, fails: false},
+		{part: 3, version: 4, fails: false},
+		{part: 4, version: 4, fails: false},
+	} {
+		doc, cat := objsDocPDF(t,
+			"<< /Type /Catalog /Pages 2 0 R /OutputIntents [4 0 R] >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier (sRGB) /DestOutputProfile 5 0 R >>",
+			iccStreamObj("mntr", "RGB ", tc.version),
+		)
+		var results []Violation
+		checkOutputIntentICC(ctx, doc, cat, tc.part, &results)
+		if got := hasRule(results, outputIntentICCRule(tc.part)); got != tc.fails {
+			t.Errorf("part %d, ICC v%d: reported %v, want %v: %v", tc.part, tc.version, got, tc.fails, results)
+		}
+	}
+}
+
 // TestCatalogOutputIntentICCUnchanged pins the catalog-level §6.2.3 t1/t2
 // reporting that [checkICCOutputProfileHeader] serves, so extending the clause
 // to pages cannot silently drop it.
