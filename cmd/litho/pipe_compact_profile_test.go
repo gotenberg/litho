@@ -49,7 +49,7 @@ func runPipeCompactProfile(t *testing.T, args []string) ([]byte, string) {
 	return data, errOut
 }
 
-// TestPipe_CompactRefusedForAPDFA1RemediateStage pins a conformance defect, not
+// TestPipe_CompactWithholdsPackingForAPDFA1RemediateStage pins a conformance defect, not
 // a missing notice.
 //
 // `81e88565` made the standalone remediate refuse --compact for PDF/A-1,
@@ -63,7 +63,7 @@ func runPipeCompactProfile(t *testing.T, args []string) ([]byte, string) {
 // alone: without --compact the output validated clean at PDF/A-1b, with it the
 // output carried exactly one violation, "clause 6.1.4 test 3: Xref streams
 // shall not be used". The standalone command refused and stayed clean.
-func TestPipe_CompactRefusedForAPDFA1RemediateStage(t *testing.T) {
+func TestPipe_CompactWithholdsPackingForAPDFA1RemediateStage(t *testing.T) {
 	src := writeTempPDF(t, compactFixturePDF())
 
 	// The precondition carries half the test: if the uncompacted pipeline were
@@ -95,7 +95,7 @@ func TestPipe_CompactRefusedForAPDFA1RemediateStage(t *testing.T) {
 		t.Error("PDF/A-1 output carries a cross-reference stream, which 6.1.4 forbids")
 	}
 	if !strings.Contains(errOut, warnCompactProfile) {
-		t.Errorf("refused compaction without saying so; stderr: %q", errOut)
+		t.Errorf("withheld packing without saying so; stderr: %q", errOut)
 	}
 }
 
@@ -134,8 +134,33 @@ func TestPipe_CompactStillPacksForAPermittedProfile(t *testing.T) {
 	if !bytes.Contains(packed, []byte("/Type /ObjStm")) {
 		t.Error("refused compaction on a profile that permits it, so the flag is inert")
 	}
-	if strings.Contains(errOut, "--compact does not apply") {
+	if strings.Contains(errOut, "does not pack objects") {
 		t.Errorf("refused compaction on PDF/A-2b, which permits it; stderr: %q", errOut)
+	}
+}
+
+// TestPipe_CompactDedupsForAPDFA1RemediateStage is the pipe half of
+// [TestRemediateCompact_DedupsForPDFA1]: a PDF/A-1 remediate stage withholds
+// packing from the final write and keeps dedup.
+func TestPipe_CompactDedupsForAPDFA1RemediateStage(t *testing.T) {
+	src := writeTempPDF(t, twinStreamsPDF())
+
+	plain, _ := runPipeCompactProfile(t, []string{
+		"pipe", src, "remediate", "--profile", "PDF/A-1b", "-o", filepath.Join(t.TempDir(), "plain.pdf"),
+	})
+	dedupedOut := filepath.Join(t.TempDir(), "deduped.pdf")
+	deduped, errOut := runPipeCompactProfile(t, []string{
+		"pipe", src, "remediate", "--profile", "PDF/A-1b", "--compact", "-o", dedupedOut,
+	})
+
+	if got, want := streamCount(deduped), streamCount(plain)-1; got != want {
+		t.Errorf("the PDF/A-1b output carries %d streams with --compact and %d without, want %d", got, streamCount(plain), want)
+	}
+	if bytes.Contains(deduped, []byte("/Type /XRef")) {
+		t.Error("PDF/A-1 output carries a cross-reference stream, which 6.1.4 forbids")
+	}
+	if !strings.Contains(errOut, warnCompactProfile) {
+		t.Errorf("withheld packing without saying so; stderr: %q", errOut)
 	}
 }
 

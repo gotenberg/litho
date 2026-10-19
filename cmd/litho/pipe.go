@@ -109,7 +109,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// of a group is the stage name, so this reads the pipeline rather than
 	// guessing at the argument list.
 	encryptsOutput, dropsEncryption, dropsXFA := false, false, false
-	var compactRefusedProfile string
+	var packingRefusedProfile string
 	for _, g := range groups {
 		if len(g) == 0 {
 			continue
@@ -125,23 +125,22 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		}
 		// A remediate stage names the profile the caller asked for, and
 		// PDF/A-1 forbids the cross-reference stream that packing requires.
-		// The standalone command refuses --compact there; pipe honoured it and
+		// The standalone command withholds packing there; pipe honoured it and
 		// wrote a document that no longer conformed to the profile it had just
 		// remediated to, exit 0 and silent. Measured on one file: ISO 19005-1,
 		// 6.1.4 test 3, exactly one violation the uncompacted pipeline lacks.
 		if g[0] == "remediate" {
-			if p := stageProfileValue(g); compactForbiddenByProfile(p) {
-				compactRefusedProfile = p
+			if p := stageProfileValue(g); packingForbiddenByProfile(p) {
+				packingRefusedProfile = p
 			}
 		}
 	}
 	warnCompactSkipped(stderr, compact, encryptsOutput)
 	warnRecompressSkipped(stderr, recompressImages, encryptsOutput)
 
-	// Reported after the encryption case and applied after both warnings, so
-	// each one still judges the flag as the caller passed it.
-	warnCompactProfileRefused(stderr, compact, compactRefusedProfile)
-	compact = compact && !compactForbiddenByProfile(compactRefusedProfile)
+	// Reported after the encryption case. The final write keeps dedup and
+	// withholds packing alone, see profileCompactWriteOptions.
+	warnPackingWithheld(stderr, compact, packingRefusedProfile)
 
 	// Residual violations left by any remediate stage, judged after the write
 	// when --strict was passed. Stages run sequentially, pdf.Pipeline.WriteTo
@@ -251,7 +250,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// The default page size reaches every stage, not only the final write:
 	// Pipeline.WriteTo hands it to each Writer and each intermediate split or
 	// merge, since a stage that gives a page a media box gives it for good.
-	finalOpts := append(compactWriteOptions(compact, recompressImages), defaultPageSize.writeOptions()...)
+	finalOpts := append(profileCompactWriteOptions(compact, recompressImages, packingRefusedProfile), defaultPageSize.writeOptions()...)
 	result, err := pipeline.WriteTo(ctx, dst, finalOpts...)
 	if err != nil {
 		// Withdraw the file createOutput already made. Every other

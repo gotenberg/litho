@@ -132,11 +132,10 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 
 	// Remediation forces a full rewrite for most documents but not all, so the
 	// flag is accepted the way pipe accepts it: it applies when a rewrite
-	// happens. PDF/A-1 is the exception that must be refused outright, since
-	// packing would hand back a file that no longer conforms to the profile
-	// this command was asked to produce.
-	compactOK := *compact && !compactForbiddenByProfile(*profile)
-	warnCompactProfileRefused(stderr, *compact, *profile)
+	// happens. PDF/A-1 keeps dedup and withholds packing, since packing would
+	// hand back a file that no longer conforms to the profile this command was
+	// asked to produce.
+	warnPackingWithheld(stderr, *compact, *profile)
 
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {
@@ -144,7 +143,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return exitError
 	}
 
-	if err := w.WriteTo(ctx, dst, compactWriteOptions(compactOK, *recompressImages)...); err != nil {
+	if err := w.WriteTo(ctx, dst, profileCompactWriteOptions(*compact, *recompressImages, *profile)...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError

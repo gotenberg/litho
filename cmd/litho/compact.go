@@ -72,8 +72,8 @@ func warnCompactSkipped(stderr io.Writer, compact, encrypting bool) {
 		"Compact the document first, then encrypt the result.")
 }
 
-// compactForbiddenByProfile reports whether packing would cost the named
-// compliance profile its conformance.
+// packingForbiddenByProfile reports whether object-stream packing would cost
+// the named compliance profile its conformance.
 //
 // ISO 19005-1, 6.1.4 forbids cross-reference streams in PDF/A-1 outright, and
 // packing requires one: a traditional table has no type field and cannot name
@@ -83,11 +83,16 @@ func warnCompactSkipped(stderr io.Writer, compact, encrypting bool) {
 // exactly one violation, clause 6.1.4, while PDF/A-2b, PDF/A-3b and PDF/UA-1
 // gain none.
 //
+// Only packing is forbidden. Stream dedup rewrites references to point at one
+// of several byte-identical streams and needs neither construct, so a
+// traditional cross-reference table still describes the output and the PDF 1.4
+// header ISO 19005-1 is written against stays.
+//
 // Factur-X and the ZUGFeRD variants remediate to a PDF/A-3 base whatever
 // generation the variant names, so none of them is affected. An unknown
 // profile is not forbidden here: [runRemediate] rejects it before the write,
-// and answering "forbidden" would silence compaction for a typo.
-func compactForbiddenByProfile(profile string) bool {
+// and answering "forbidden" would silence packing for a typo.
+func packingForbiddenByProfile(profile string) bool {
 	p, ok := pdfaProfiles[profile]
 	if !ok {
 		return false
@@ -95,22 +100,24 @@ func compactForbiddenByProfile(profile string) bool {
 	return p == models.PDFA1a || p == models.PDFA1b
 }
 
-// warnCompactProfileRefused reports that --compact was asked for and will not
-// happen, because packing would cost the target profile its conformance.
+// warnPackingWithheld reports that --compact was asked for and will not pack
+// objects, because packing would cost the target profile its conformance.
+// Dedup still runs, so the output is compacted as far as the profile permits.
 //
-// Ignoring the flag silently would hand back a larger file with no reason
-// given. Honoring it silently would be worse: the caller would receive a
-// smaller file that no longer conforms to the profile they asked the command
-// to produce, which defeats remediation entirely.
+// Packing silently would hand the caller a smaller file that no longer
+// conforms to the profile they asked the command to produce, which defeats
+// remediation entirely. Withholding it silently would leave a caller who sees
+// no object stream in the output guessing why.
 //
 // A warning rather than an error, matching [warnCompactSkipped]: the command
 // still produced the conformant document it was asked for, only a larger one.
-func warnCompactProfileRefused(stderr io.Writer, compact bool, profile string) {
-	if !compact || !compactForbiddenByProfile(profile) {
+func warnPackingWithheld(stderr io.Writer, compact bool, profile string) {
+	if !compact || !packingForbiddenByProfile(profile) {
 		return
 	}
-	fmt.Fprintf(stderr, "warning: --compact does not apply to %s, so the output is not compacted. "+
-		"ISO 19005-1, 6.1.4 forbids the cross-reference stream that object streams require.\n", profile)
+	fmt.Fprintf(stderr, "warning: --compact does not pack objects into object streams for %s, "+
+		"since ISO 19005-1, 6.1.4 forbids the cross-reference stream they require. "+
+		"Duplicate streams are still merged.\n", profile)
 }
 
 // warnRecompressSkipped reports that --recompress-images was asked for and
@@ -129,9 +136,8 @@ func warnRecompressSkipped(stderr io.Writer, recompressImages, encrypting bool) 
 // -recompress-images select, or none when neither was passed.
 //
 // No PDF/A profile forbids image recompression: it writes FlateDecode, which
-// ISO 19005 permits at every part, and needs no PDF 1.5 construct. A caller
-// that must withhold -compact for a profile still passes recompressImages as
-// given.
+// ISO 19005 permits at every part, and needs no PDF 1.5 construct. A command
+// that targets a profile calls [profileCompactWriteOptions] instead.
 //
 // -compact drives both packing and dedup because they are independently safe and their
 // savings add up rather than overlap. Callers wanting one without the other
@@ -154,4 +160,18 @@ func compactWriteOptions(compact, recompressImages bool) []pdf.WriteOption {
 		opts = append(opts, pdf.WithImageRecompression())
 	}
 	return opts
+}
+
+// profileCompactWriteOptions returns the write options -compact and
+// -recompress-images select for an output that must conform to profile.
+//
+// A profile that forbids packing (see [packingForbiddenByProfile]) keeps
+// dedup and image recompression: neither writes a construct ISO 19005-1
+// forbids, and refusing all of -compact there threw away a saving the profile
+// permits. Callers report the withheld packing with [warnPackingWithheld].
+func profileCompactWriteOptions(compact, recompressImages bool, profile string) []pdf.WriteOption {
+	if !compact || !packingForbiddenByProfile(profile) {
+		return compactWriteOptions(compact, recompressImages)
+	}
+	return append([]pdf.WriteOption{pdf.WithDedup()}, compactWriteOptions(false, recompressImages)...)
 }

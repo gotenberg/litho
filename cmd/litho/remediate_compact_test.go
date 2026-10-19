@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,14 +14,14 @@ import (
 // takes --compact the way pipe does rather than the way rotate does: the flag
 // is accepted, and applies when a rewrite happens.
 //
-// PDF/A-1 is the one profile it must refuse. ISO 19005-1, 6.1.4 forbids
-// cross-reference streams, which packing requires. Measured on one file with
-// and without compaction, PDF/A-1b gains exactly one violation (clause 6.1.4)
-// while PDF/A-2b, PDF/A-3b and PDF/UA-1 gain none. Remediating a document into
-// conformance and then packing it back out of conformance would defeat the
-// command, so the flag is refused there rather than honored.
+// PDF/A-1 is the one profile where it must withhold packing. ISO 19005-1,
+// 6.1.4 forbids cross-reference streams, which packing requires. Measured on
+// one file with and without compaction, PDF/A-1b gains exactly one violation
+// (clause 6.1.4) while PDF/A-2b, PDF/A-3b and PDF/UA-1 gain none. Remediating a
+// document into conformance and then packing it back out of conformance would
+// defeat the command, so packing is withheld there and dedup still runs.
 
-const warnCompactProfile = "--compact does not apply to PDF/A-1b"
+const warnCompactProfile = "--compact does not pack objects into object streams for PDF/A-1b"
 
 // runRemediateTo runs the remediate command and returns the output bytes and
 // whatever it wrote to stderr.
@@ -57,7 +58,7 @@ func TestRemediateCompact_PacksForAProfileThatPermitsIt(t *testing.T) {
 	if !bytes.Contains(packed, []byte("/Type /ObjStm")) {
 		t.Error("--compact produced no object stream on a profile that permits one")
 	}
-	if strings.Contains(stderr, "--compact does not apply") {
+	if strings.Contains(stderr, "does not pack objects") {
 		t.Errorf("refused compaction on a profile that permits it; stderr: %q", stderr)
 	}
 	if len(packed) >= len(plain) {
@@ -65,21 +66,83 @@ func TestRemediateCompact_PacksForAProfileThatPermitsIt(t *testing.T) {
 	}
 }
 
-// TestRemediateCompact_RefusedForPDFA1 is the trap this refusal exists to
-// avoid: a smaller file that no longer conforms to the profile the caller
-// asked for is worse than the larger conformant one.
-func TestRemediateCompact_RefusedForPDFA1(t *testing.T) {
+// TestRemediateCompact_WithholdsPackingForPDFA1 is the trap the withholding
+// exists to avoid: a smaller file that no longer conforms to the profile the
+// caller asked for is worse than the larger conformant one.
+func TestRemediateCompact_WithholdsPackingForPDFA1(t *testing.T) {
 	src := compactFixtureFile(t)
 
 	out, stderr := runRemediateTo(t, src, "PDF/A-1b", "--compact")
 	if !strings.Contains(stderr, warnCompactProfile) {
-		t.Errorf("no warning that PDF/A-1 cannot be compacted; stderr: %q", stderr)
+		t.Errorf("no warning that PDF/A-1 cannot be packed; stderr: %q", stderr)
 	}
 	if bytes.Contains(out, []byte("/Type /ObjStm")) {
 		t.Error("packed a PDF/A-1 output; ISO 19005-1, 6.1.4 forbids the xref stream that needs")
 	}
 	if bytes.Contains(out, []byte("/Type /XRef")) {
 		t.Error("PDF/A-1 output carries a cross-reference stream, which 6.1.4 forbids")
+	}
+}
+
+// twinStreamsPDF builds two pages whose content streams are separate objects
+// holding the same bytes, which dedup merges into one.
+func twinStreamsPDF() []byte {
+	content := "0 0 m 300 300 l S\n"
+	stream := fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(content), content)
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 6 0 R >>",
+		stream,
+		stream,
+	}
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.4\n")
+	offs := make([]int, len(objs)+1)
+	for i, o := range objs {
+		offs[i+1] = buf.Len()
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offs[i])
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
+	return buf.Bytes()
+}
+
+// streamCount counts the stream objects data carries.
+func streamCount(data []byte) int {
+	return bytes.Count(data, []byte("endstream"))
+}
+
+// TestRemediateCompact_DedupsForPDFA1 pins that withholding packing at PDF/A-1
+// withholds nothing else. --compact was refused outright there, so the twin
+// content streams of a PDF/A-1b output stayed two although merging them writes
+// no construct ISO 19005-1 forbids: the output keeps a traditional
+// cross-reference table and the PDF 1.4 header.
+func TestRemediateCompact_DedupsForPDFA1(t *testing.T) {
+	src := writeTempPDF(t, twinStreamsPDF())
+
+	plain, _ := runRemediateTo(t, src, "PDF/A-1b")
+	deduped, stderr := runRemediateTo(t, src, "PDF/A-1b", "--compact")
+
+	if got, want := streamCount(deduped), streamCount(plain)-1; got != want {
+		t.Errorf("the PDF/A-1b output carries %d streams with --compact and %d without, want %d", got, streamCount(plain), want)
+	}
+	if bytes.Contains(deduped, []byte("/Type /XRef")) || bytes.Contains(deduped, []byte("/Type /ObjStm")) {
+		t.Error("the PDF/A-1b output carries a construct ISO 19005-1, 6.1.4 forbids")
+	}
+	if !bytes.HasPrefix(deduped, []byte("%PDF-1.4")) {
+		t.Errorf("the PDF/A-1b output declares %q, want PDF 1.4", deduped[:8])
+	}
+	if !strings.Contains(stderr, warnCompactProfile) {
+		t.Errorf("no notice that packing was withheld; stderr: %q", stderr)
+	}
+	if !strings.Contains(stderr, "Duplicate streams are still merged") {
+		t.Errorf("the notice does not say dedup still runs; stderr: %q", stderr)
 	}
 }
 
@@ -144,8 +207,8 @@ func TestCompactForbiddenByProfile(t *testing.T) {
 	} {
 		t.Run(tc.profile, func(t *testing.T) {
 			t.Parallel()
-			if got := compactForbiddenByProfile(tc.profile); got != tc.want {
-				t.Errorf("compactForbiddenByProfile(%q) = %v, want %v", tc.profile, got, tc.want)
+			if got := packingForbiddenByProfile(tc.profile); got != tc.want {
+				t.Errorf("packingForbiddenByProfile(%q) = %v, want %v", tc.profile, got, tc.want)
 			}
 		})
 	}
