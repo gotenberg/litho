@@ -238,6 +238,7 @@ one deliberately rather than diffing it against a fresh build.
 | `readorder_ua1.pdf`    | PDF/UA-1     | Untagged two-column page whose stream interleaves the columns    |
 | `readcolumns_ua1.pdf`  | PDF/UA-1     | Columns set line by line; a running head in the title's object   |
 | `prosecolumns_ua1.pdf` | PDF/UA-1     | Prose columns on shared baselines; a borderless table control    |
+| `filledrules_ua1.pdf`  | PDF/UA-1     | A table ruled by filled hairlines; prose under a barred title    |
 | `sharedicc_2b.pdf`     | PDF/A-2b     | One content stream four pages share, each over its own ICC space |
 | `texlig_2b.pdf`        | PDF/A-2b     | A TeX ligature code and a code 32 whose names map nothing        |
 | `qnestreach_2b.pdf`    | PDF/A-2b     | q/Q nesting past 28 in a form, a cell, a glyph and an appearance |
@@ -580,6 +581,7 @@ are covered under [Known divergences](#known-divergences).
 | `fenote_ua2.pdf`       | 4    | 3    | 5    | 4    | 4    | 5    | 4    | 4    | 3   | 3    | 4    | 5    | 6    |
 | `fieldkids_2b.pdf`     | 6    | 3    | 5    | 2    | 3    | 6    | 3    | 4    | 5   | 5    | 6    | 8    | 6    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
+| `filledrules_ua1.pdf`  | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `fnlimits_1b.pdf`      | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 5   | 5    | 6    | 6    | 6    |
 | `fontcff2_2b.pdf`      | 8    | 5    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
 | `fontclaims_2b.pdf`    | 9    | 6    | 9    | 6    | 7    | 9    | 6    | 7    | 7   | 7    | 8    | 11   | 11   |
@@ -7760,8 +7762,8 @@ of two `TD`, a grid of half-sentences that reads across the gutter at every
 line. ISO 14289-1, 7.5 reserves `Table` for tabular content and 7.2 asks the
 tree to follow the reading order: a grid whose cells are, in every column, for
 the most part single lines of running text, twelve sizes wide at least and
-with no gap inside them a gutter wide, and which no stroked rule crosses, now
-reads as columns. Each column is one `P` whose `/K` lists its eight lines'
+with no gap inside them a gutter wide, and which no rule crosses (stroked, or
+filled as on `filledrules_ua1.pdf`), now reads as columns. Each column is one `P` whose `/K` lists its eight lines'
 MCIDs, left then right, under the page title, now an `H1`.
 
 Page 2 is the control: a borderless table of five rows of three short cells,
@@ -7775,6 +7777,39 @@ outputs remediated at every level, default and aggressive, keep only the font
 on veraPDF, and at PDF/A-4f the missing `EmbeddedFiles` (`6.9/5`) too. The
 PDF/UA-1 and PDF/UA-2 outputs drew the same rules when the columns were tagged
 as a table: veraPDF does not judge whether a `Table` holds tabular content.
+
+### `filledrules_ua1.pdf`
+
+The ruling `prosecolumns_ua1.pdf` asks about, drawn as producers draw it. ISO
+32000-1, 8.5.3.3 paints a filled path as it does a stroked one, and Word
+through PDFMaker or Distiller, LibreOffice and TeX fill a rule as a rectangle a
+rule's width tall. Page 1 is a table of five rows of two wide cells, each a
+single line of text twelve sizes wide at least, ruled the way Word draws a
+table's borders: every border a row of filled rectangles 0.48 points tall, one
+per cell and a square at each corner, none of which crosses the gutter alone,
+and the column borders filled the same way. Only stroked rules were read, so
+auto-tagging read the grid as two columns of prose, each cell its own `P`,
+left column then right. A filled bar at most 2 points tall now rules a grid as
+a stroked line does, and a border drawn cell by cell is one rule where its
+pieces abut: the page reads as one `Table` of five `TR` of two `TD`. The title
+over it, an `H1` while the cells were paragraphs, now reads as a `P`, as the
+title over the table on page 2 of `prosecolumns_ua1.pdf` does: a residual of
+the heading pass, not of the ruling.
+
+Page 2 is the control: two columns of six lines of prose on shared baselines,
+under a title that a full-width filled bar a point tall underlines more than a
+line above the columns, on a light shaded panel that crosses the gutter. The
+bar rules no row, being clear of the grid, and the panel is no rule, being as
+tall as the text it sits behind. Each column still reads as one `P` whose `/K`
+lists its six lines' MCIDs, under the title, an `H1`.
+
+Before remediation both tools report the untagged pages and the non-embedded
+font, as on `prosecolumns_ua1.pdf`: `6.2/1`, `7.1/3`, `7.1/11` and
+`7.21.4.1/1` at PDF/UA-1, and `5/2`, `5/5`, `6.2/1`, `8.2.1/1`, `8.2.2/1` and
+`8.4.5.5.1/1` at PDF/UA-2. The two tools agree in all thirteen cells. The
+outputs remediated at every level, default and aggressive, keep only the font
+on both tools, and at PDF/A-4f the missing `EmbeddedFiles` (`6.9/5`) too, as
+they did when the cells were paragraphs.
 
 ### `texlig_2b.pdf`
 

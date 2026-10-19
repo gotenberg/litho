@@ -1,0 +1,120 @@
+%PDF-1.7
+%¿÷¢þ
+1 0 obj
+<< /Lang (en-US) /Metadata 2 0 R /Pages 3 0 R /Type /Catalog /ViewerPreferences << /DisplayDocTitle true >> >>
+endobj
+2 0 obj
+<< /Subtype /XML /Type /Metadata /Length 535 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/" xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">litho corpus fixture</rdf:li></rdf:Alt></dc:title>
+    <pdfuaid:part>1</pdfuaid:part>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+
+<?xpacket end="w"?>
+
+endstream
+endobj
+3 0 obj
+<< /Count 2 /Kids [ 4 0 R 5 0 R ] /Type /Pages >>
+endobj
+4 0 obj
+<< /Contents 6 0 R /MediaBox [ 0 0 612 792 ] /Parent 3 0 R /Resources << /Font << /F1 7 0 R >> >> /Type /Page >>
+endobj
+5 0 obj
+<< /Contents 8 0 R /MediaBox [ 0 0 612 792 ] /Parent 3 0 R /Resources << /Font << /F1 7 0 R >> >> /Type /Page >>
+endobj
+6 0 obj
+<< /Length 1652 >>
+stream
+BT /F1 16 Tf 72 720 Td (A table ruled with filled hairlines) Tj ET
+66 694 0.48 0.48 re f*
+66.48 694 247.52 0.48 re f*
+314 694 0.48 0.48 re f*
+314.48 694 231.52 0.48 re f*
+546 694 0.48 0.48 re f*
+BT /F1 10 Tf 72 680 Td (The structure tree follows the reading order) Tj ET
+BT /F1 10 Tf 320 680 Td (Clause 7.2, logical structure and order) Tj ET
+66 674 0.48 0.48 re f*
+66.48 674 247.52 0.48 re f*
+314 674 0.48 0.48 re f*
+314.48 674 231.52 0.48 re f*
+546 674 0.48 0.48 re f*
+BT /F1 10 Tf 72 660 Td (Tables are tagged with their rows and cells) Tj ET
+BT /F1 10 Tf 320 660 Td (Clause 7.5, table rows, headers and cells) Tj ET
+66 654 0.48 0.48 re f*
+66.48 654 247.52 0.48 re f*
+314 654 0.48 0.48 re f*
+314.48 654 231.52 0.48 re f*
+546 654 0.48 0.48 re f*
+BT /F1 10 Tf 72 640 Td (Every figure carries an alternative text) Tj ET
+BT /F1 10 Tf 320 640 Td (Clause 7.3, figures and their descriptions) Tj ET
+66 634 0.48 0.48 re f*
+66.48 634 247.52 0.48 re f*
+314 634 0.48 0.48 re f*
+314.48 634 231.52 0.48 re f*
+546 634 0.48 0.48 re f*
+BT /F1 10 Tf 72 620 Td (Running heads and folios are artifacts) Tj ET
+BT /F1 10 Tf 320 620 Td (Clause 7.8, page headers and page footers) Tj ET
+66 614 0.48 0.48 re f*
+66.48 614 247.52 0.48 re f*
+314 614 0.48 0.48 re f*
+314.48 614 231.52 0.48 re f*
+546 614 0.48 0.48 re f*
+BT /F1 10 Tf 72 600 Td (The document states its natural language) Tj ET
+BT /F1 10 Tf 320 600 Td (Clause 7.2, the Lang entry of the catalog) Tj ET
+66 594 0.48 0.48 re f*
+66.48 594 247.52 0.48 re f*
+314 594 0.48 0.48 re f*
+314.48 594 231.52 0.48 re f*
+546 594 0.48 0.48 re f*
+66 594.48 0.48 99.52 re f*
+314 594.48 0.48 99.52 re f*
+546 594.48 0.48 99.52 re f*
+
+endstream
+endobj
+7 0 obj
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
+endobj
+8 0 obj
+<< /Length 1024 >>
+stream
+q 0.92 g 66 600 480 92 re f Q
+BT /F1 16 Tf 72 720 Td (Two columns of prose under a barred title) Tj ET
+72 712 468 1 re f
+BT /F1 10 Tf 72 680 Td (Accessible documents carry a structure tree) Tj ET
+BT /F1 10 Tf 320 680 Td (Some producers set such a page line by line,) Tj ET
+BT /F1 10 Tf 72 668 Td (that names what each part of a page is: a) Tj ET
+BT /F1 10 Tf 320 668 Td (the first line of the left column and then) Tj ET
+BT /F1 10 Tf 72 656 Td (heading, a paragraph, a list, a table or a) Tj ET
+BT /F1 10 Tf 320 656 Td (the first line of the right one, on the same) Tj ET
+BT /F1 10 Tf 72 644 Td (figure. Assistive technology reads that tree) Tj ET
+BT /F1 10 Tf 320 644 Td (baseline. A bar under the title and a panel) Tj ET
+BT /F1 10 Tf 72 632 Td (rather than the order in which a producer) Tj ET
+BT /F1 10 Tf 320 632 Td (behind the text are no rules between rows,) Tj ET
+BT /F1 10 Tf 72 620 Td (happened to draw the text, so a page set in) Tj ET
+BT /F1 10 Tf 320 620 Td (so each column still reads as one paragraph.) Tj ET
+
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000141 00000 n 
+0000000757 00000 n 
+0000000822 00000 n 
+0000000950 00000 n 
+0000001078 00000 n 
+0000002782 00000 n 
+0000002879 00000 n 
+trailer << /Root 1 0 R /Size 9 /ID [<16e62e9834d5e857abfcb9cd11561a55><16e62e9834d5e857abfcb9cd11561a55>] >>
+startxref
+3955
+%%EOF
