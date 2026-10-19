@@ -3493,6 +3493,24 @@ func bezierBounds(p [4][2]float64, add func(x, y float64)) {
 // the standard AGL is checked, followed by the Symbol and Dingbats tables
 // as a last resort (some non-symbol fonts use glyph names like "asteriskmath"
 // from the Symbol encoding in their /Differences arrays).
+//
+// "Omega" reads U+03A9 GREEK CAPITAL LETTER OMEGA, through the Symbol table,
+// where ISO 32000-1, 9.10.2 and the Adobe Glyph List (glyphlist.txt
+// "Omega;2126", AGLFN 1.7 too, which reverted 1.5's U+03A9) give U+2126 OHM
+// SIGN. The leniency is deliberate: UnicodeData.txt decomposes U+2126
+// canonically to U+03A9, so every normalization form, NFC included, replaces
+// the sign by the letter and the two are one character to any reader of the
+// text. Extracted text already folds U+2126 to U+03A9, as PDF.js's text layer
+// does (src/shared/util.js, normalizeUnicode), so the reading reaches only
+// what the fold does not: text elements, and a /ToUnicode remediation
+// persists, where U+03A9 is what a search for the letter finds.
+//
+// # Corpus evidence
+//
+//   - All corpora: the five text corpora reach "Omega" through this function
+//     in one file, govdocs thread_300_300849.pdf, 50 times, as the grand
+//     potential "Ω(T, μi; mi)" of a physics talk, a Greek letter. Its
+//     extracted text is byte-identical whether "Omega" reads U+2126 or U+03A9.
 func resolveGlyphRune(name string, isDingbats, isSymbol bool) (rune, bool) {
 	if isDingbats {
 		if r, ok := encodings.DingbatsGlyphsUnicode[name]; ok {
