@@ -42,6 +42,7 @@ test/integration/
 │   └── litho/                  Self-authored fixtures, committed (not downloaded)
 │       ├── download.sh         Copies pdfs/ into the output dir
 │       ├── manifest.json
+│       ├── text-overrides.json Corrections to the PDF.js text goldens, with reasons
 │       ├── build/*.py          pikepdf builders that regenerate the fixtures
 │       ├── pdfs/*.pdf
 │       └── README.md           Per-fixture expected firing set
@@ -134,7 +135,7 @@ The live `remediation` cells shell out to the `verapdf` on your PATH, and live c
 
 ## Regression baseline
 
-`test/integration/baseline.json` captures one `(matched, mismatched, skipped)` count per `(corpus, feature)` cell, plus named metrics for the cells that emit them (21 of 28 cells, 24 distinct names, across `text`, `imagedecode`, `compliance`, `remediation`, `remediation-aggressive`, `facturx-*`, `split`, `merge` and `merge-catalog`). The file is committed; `make corpus-check` runs the matrix and fails when any cell's `matched` count drops below the captured value, or when a metric moves the wrong way, which is **not always downwards**. `costMetrics` (`baseline.go`) registers nineteen metrics as good-when-lower, so a **rise** in `false_positive`, `false_negative`, `ruleset_mismatch`, `disagreement`, `parse_failed`, `decode_failed`, `litho_regressed`, `verapdf_regressed`, `acroform_invented`, `portfolio_dropped`, `lexicons_dropped`, or one of the eight failure counts of the [mutation features](#mutation-features) is the regression. A further six (`litho_pre`/`post`/`fixed`, `verapdf_pre`/`post`/`fixed`) are raw inventory totals listed in `uncomparedMetrics`, and the check does not gate them at all. Improvements are non-fatal: they surface as `improvement:` lines so the operator can decide whether to refresh the baseline with `make corpus-baseline`.
+`test/integration/baseline.json` captures one `(matched, mismatched, skipped)` count per `(corpus, feature)` cell, plus named metrics for the cells that emit them (30 of 37 cells, 35 distinct names, across `text`, `imagedecode`, `compliance`, `remediation`, `remediation-aggressive`, `facturx-*`, `split`, `merge`, `merge-catalog`, `determinism` and the `mutate-*` cells). The file is committed; `make corpus-check` runs the matrix and fails when any cell's `matched` count drops below the captured value, or when a metric moves the wrong way, which is **not always downwards**. `costMetrics` (`baseline.go`) registers nineteen metrics as good-when-lower, so a **rise** in `false_positive`, `false_negative`, `ruleset_mismatch`, `disagreement`, `parse_failed`, `decode_failed`, `litho_regressed`, `verapdf_regressed`, `acroform_invented`, `portfolio_dropped`, `lexicons_dropped`, or one of the eight failure counts of the [mutation features](#mutation-features) is the regression. A further six (`litho_pre`/`post`/`fixed`, `verapdf_pre`/`post`/`fixed`) are raw inventory totals listed in `uncomparedMetrics`, and the check does not gate them at all. Improvements are non-fatal: they surface as `improvement:` lines so the operator can decide whether to refresh the baseline with `make corpus-baseline`.
 
 Cells with `[no golden]` (typically corpora not provisioned for a feature) are excluded so capturing the baseline on a partially provisioned tree does not pin missing-golden states. The check is silent about corpora that exist in the current run but not the baseline; new corpora become regression-gated only after the next `make corpus-baseline` commit.
 
@@ -150,7 +151,7 @@ Cells with `[no golden]` (typically corpora not provisioned for a feature) are e
 
 | Feature                  | Golden source              | What it compares                                                                                                                                                                                                                                                                                                              |
 | ------------------------ | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `text`                   | PDF.js (captured at init)  | Per-page text extraction against PDF.js's reference text                                                                                                                                                                                                                                                                      |
+| `text`                   | PDF.js (captured at init)  | Per-page text extraction against PDF.js's reference text. Runs once per PDF on an `expand` corpus, and scores against a corpus's committed overrides where PDF.js reads a page wrong                                                                                                                                          |
 | `metadata`               | PDF.js (captured at init)  | Info dict + linearization/form flags                                                                                                                                                                                                                                                                                          |
 | `imagedecode`            | PDF.js (captured at init)  | Decodes every image `ExtractImages` lists on a page through its `Decode` function and matches it against the images PDF.js paints on that page, by size and by the mean colour of a grid of at most 4x4 cells; a cell may differ by 3 levels, the rounding two decoders legitimately disagree on                              |
 | `compliance`             | veraPDF (captured at init) | litho's validation verdict against veraPDF's, per profile, which is what `matched` counts; `ruleset_mismatch` counts the cells whose set of failed rules (clause and test) differs from veraPDF's, whether or not the verdicts agree                                                                                          |
@@ -184,7 +185,7 @@ Not every corpus runs every feature. Each corpus is the oracle for the feature i
 | `pdf20`   | ✓    | ✓        |             | ✓          | ✓           |           |       |       |             |               |           |             | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)                                                                        |
 | `pdfcpu`  | ✓    | ✓        |             |            |             | ✓         | ✓     | ✓     | ✓           |               |           |             | bookmark/merge/split canary; sourced from pdfcpu's sample tree                                                                  |
 | `facturx` | ✓    | ✓        |             | ✓          | ✓           |           |       |       |             |               |           |             | Factur-X / ZUGFeRD hybrid-invoice oracle; the only corpus running `facturx-validity` (Mustang) and `facturx-schematron` (KoSIT) |
-| `litho`   |      |          |             | ✓          | ✓           |           |       |       |             |               | ✓         | ✓           | rule-masking oracle; hand-built multi-violation fixtures; the only corpus running the Writer mutations                          |
+| `litho`   | ✓    |          |             | ✓          | ✓           |           |       |       |             |               | ✓         | ✓           | rule-masking oracle; hand-built multi-violation fixtures; the only corpus running the Writer mutations                          |
 
 `merge-catalog` runs on `pdfjs` because that is where the annotation shapes it
 guards against actually occur: measured across all 5171 corpus fixtures, 49
@@ -276,7 +277,7 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
-- `expand` (verapdf): every PDF yields one fixture per declared profile, ID = `<profile>/<basename>`.
+- `expand` (verapdf, litho): every PDF yields one fixture per declared profile, ID = `<profile>/<basename>`. A profile-agnostic feature (`text`) keeps each PDF's first fixture, under ID = `<basename>`.
 - `none` (pdfjs): one fixture per PDF, ID = `<basename>`.
 - `auto` (govdocs, pdf20, facturx): one fixture per PDF, profile read from the document's XMP claim. Files claiming `PDF_A-Nx` or `PDF_UA-N` get ID = `<profile>/<basename>` and run compliance/remediation. Files with no claim get ID = `<basename>` and run only the profile-agnostic features (text, metadata).
 
@@ -297,7 +298,8 @@ When a change touches a construct no corpus file reaches, add a fixture to the l
 - Pack several independent constructs into one fixture. The corpus exists to catch a rule that masks another, which a one-construct file cannot show.
 - Confirm the counts with veraPDF at the fixture's home profile before committing, and compare litho's rule set with veraPDF's at every profile.
 - Provisioning captures the goldens with `corpus/lib/run-verapdf.sh`. On an already provisioned checkout, copy the PDF into `testdata/litho/pdfs/` and add its veraPDF jobs to each `testdata/litho/goldens/compliance/<profile>.json`, made with the pinned veraPDF (`make corpus-tools` shows whether the local one matches), then recapture `baseline.json`.
-- A fixture only protects what a feature runs on it. The litho corpus runs `compliance`, `remediation`, `remediation-aggressive` and the seven [mutation features](#mutation-features), so a fixture protects a stamp, a page insertion and deletion, auto-tagging, form flattening, a signature, encryption and a redaction too. A construct only another Writer mutation reaches needs a spec in `mutationSpecs` (`cmd/corpus/feature_mutation_specs.go`) that runs it, not only a fixture.
+- A fixture's text is scored too. Provisioning generates its PDF.js golden into `testdata/litho/goldens/text/`; where PDF.js reads the fixture wrong, add an entry to `corpus/litho/text-overrides.json` that records PDF.js's reading, gives the right one or marks the page unscored, and cites the clause (see the Scope section of `corpus/litho/README.md`).
+- A fixture only protects what a feature runs on it. The litho corpus runs `compliance`, `remediation`, `remediation-aggressive`, `determinism`, `text` and the seven [mutation features](#mutation-features), so a fixture protects a stamp, a page insertion and deletion, auto-tagging, form flattening, a signature, encryption and a redaction too. A construct only another Writer mutation reaches needs a spec in `mutationSpecs` (`cmd/corpus/feature_mutation_specs.go`) that runs it, not only a fixture.
 
 ## Manifest schema
 
@@ -329,6 +331,7 @@ Fields:
 - `profile_mode`: how PDFs become fixtures. `expand` (default) cartesian-products every PDF over `profiles`; `none` drops the cartesian and emits one fixture per PDF; `auto` reads each PDF's XMP claim and emits one fixture per PDF, keyed by the claimed profile when present.
 - `profiles`: veraPDF profile directory names. Drives the cartesian under `expand`, acts as the allow-set for accepted XMP claims under `auto`, and is ignored under `none`.
 - `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from. The provisioning Docker image only generates goldens for features listed here, so dropping `text` + `metadata` from the veraPDF corpus skips the (slow) PDF.js generator entirely.
+- `golden_overrides`: maps feature name to a committed file, relative to the corpus source directory, that corrects goldens the oracle reads wrong. Only `text` takes one. Each entry records the oracle's reading it replaces, so it fails its fixture when the oracle changes, and gives the right reading or marks the page unscored, with the clause behind it; the goldens stay the oracle's raw output.
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
 
 ## See also

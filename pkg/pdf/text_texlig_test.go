@@ -17,9 +17,8 @@ import (
 // base encoding's space at 0x20 (ISO 32000-1, 9.6.6.1), so code 32 reads as a
 // word space by 9.3.3 alone; 0x0C reads as no character, so the word
 // stays whole. Reading every unmapped whitespace code as a space, as PDF.js
-// does, gave "veri cation text". No gate cell sees this reading: the litho
-// corpus scores no text against an oracle, and the mutate-* cells compare
-// litho's text with litho's.
+// does, gave "veri cation text". The litho corpus text cell scores the reading
+// too, through an override of PDF.js's golden, which reads it that way.
 func TestExtractTextKeepsAnUnmappedLigatureInsideItsWord(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

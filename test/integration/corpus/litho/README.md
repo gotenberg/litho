@@ -22,6 +22,7 @@ byte for byte.
 corpus/litho/
 ├── download.sh     Provisioning step: copies pdfs/ into the output dir
 ├── manifest.json   Corpus manifest (profile_mode=expand over 13 profiles)
+├── text-overrides.json  Corrections to the PDF.js text goldens, with reasons
 ├── build/          pikepdf builders, one per fixture, plus _common.py
 ├── pdfs/           The committed fixtures
 └── README.md       This file
@@ -7789,11 +7790,12 @@ gives code `20` no advance, so no gap divides the words it separates:
 | `veri` `0C` `cation` `20` `text` | `verication text` | `veri cation text`        |
 | `code` `20` `space`              | `code space`      | `code space`              |
 
-No gate cell sees the reading: the litho corpus scores no text against an
-oracle, the `mutate-*` cells compare litho's text on the output with litho's
-on the input, and compliance, auto-tagging and remediation do not move when
-`0C` reads as a space. `TestExtractTextKeepsAnUnmappedLigatureInsideItsWord`
-in `pkg/pdf` reads the fixture instead, and fails on the wave-54 reading.
+The `text` cell scores the reading against `text-overrides.json`, which
+replaces PDF.js's `veri cation` with it (see [Scope](#scope)); the `mutate-*`
+cells compare litho's text on the output with litho's on the input, and
+compliance, auto-tagging and remediation do not move when `0C` reads as a
+space. `TestExtractTextKeepsAnUnmappedLigatureInsideItsWord` in `pkg/pdf` also
+reads the fixture, and fails on the wave-54 reading.
 
 Code `20` reaches no fallback in litho: a `/Differences` name that maps
 nothing leaves the base encoding's `space` in place, and every base litho
@@ -7852,6 +7854,37 @@ the cells, the difference between the numbers of rules each reports. It reads
 11 on this corpus in both modes, all on `sharedicc_2b` (see
 [Known divergences](#known-divergences)), so any other cell that moves it is a
 regression or a divergence to cover there.
+
+The `text` feature scores each fixture once, not once per profile: the text a
+page holds does not depend on the profile, so the runner keeps each PDF's
+first fixture under its basename. The goldens are PDF.js's reading, generated
+at provisioning with the PDF.js commit `versions.env` pins, as for the other
+text corpora. These fixtures exercise font and CMap constructs PDF.js reads
+wrong, so `text-overrides.json` corrects the goldens page by page, and the
+goldens stay PDF.js's raw output. Each entry records the PDF.js reading it
+replaces, so it fails its fixture when a new PDF.js reads the page otherwise,
+and states the clause behind its verdict. It either gives the right reading,
+where ISO 32000-1, 9.10.2 or the page geometry decides it, or marks the page
+unscored, where the readers disagree only on codes 9.10.2 gives no Unicode
+value, since no reading of those is right. Where PDF.js and litho agree, the
+golden stands. Of the 186 fixtures, 171 match, 8 are unscored
+(`cmapcidtext_2b`, `cmapnotdef_2b`, `cmaps_2b`, `cmapusecmap_2b`,
+`cmapusestream_2b`, `cmapverabase_2b`, `type0nodesc_2b`, `usecmap_2u`; page 16
+of `fontcopies_2b` too, whose other pages score), and 7 mismatch, each on a
+reading litho gets wrong:
+
+| Fixture                         | Right reading                                                      | litho reads                                        |
+| ------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------- |
+| `cmapcollect_1b`                | `!`: CIDs 1 and 2 of Adobe-Korea1 are U+0020 and U+0021 (9.10.2)   | `AA`, the glyphs the embedded program paints       |
+| `cmapusevert_1b`                | nothing but a space: CID 1 of Adobe-Japan1 is U+0020 (9.10.2)      | `A`, likewise                                      |
+| `complex_ua1`, `complex_ua2`    | words split at code 20, the WinAnsiEncoding space                  | each letter a word, on the lines after the figures |
+| `fontemptycs_2b`, `fontkeys_1b` | `AB`: two glyphs that do not advance, with no space between them   | `A B`                                              |
+| `type1notdef_2u`                | `A` under `N1` and `N2`, whose built-in encoding leaves 43 unnamed | `AC`, code 43 read through StandardEncoding        |
+
+The cell's `words_match` reads 171 and `chars_match` 175: the four fixtures of
+the third and fourth rows match once spaces are ignored. A new fixture needs
+its golden regenerated at provisioning, and an override when PDF.js reads it
+wrong.
 
 PDF/A-4e and PDF/A-4f are the manifest's ninth and tenth profiles, after the eight it
 listed first. Appended rather than sorted in, they leave the determinism
