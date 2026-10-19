@@ -318,7 +318,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// whatever it did not name takes the font selected out here.
 		if runs != nil {
 			cur := machine.Current()
-			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur) * currentFont.type3HeightScale(cur.Text.Tfs), stream: stream, segment: segment, marked: marked}
+			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur) * currentFont.type3HeightScale(cur.Text.Tfs), trm: renderingMatrixOnPage(cur), stream: stream, segment: segment, marked: marked}
 			for len(runs.fonts) < len(*elements) {
 				runs.fonts = append(runs.fonts, key)
 			}
@@ -1174,6 +1174,21 @@ func elementInsideAnyBead(el models.TextElement, beads []semantics.Bead) bool {
 func riseOnPage(state *graphics.State) float64 {
 	tm, ctm := state.Text.Tm, state.CTM
 	return state.Text.Ts * (tm[2]*ctm[1] + tm[3]*ctm[3])
+}
+
+// renderingMatrixOnPage returns the linear part [a b c d] of the text
+// rendering matrix of state, [Tfs×Th 0 0 Tfs] × Tm × CTM (ISO 32000-1,
+// 9.4.4): the image of the text space x axis, then of its y axis.
+func renderingMatrixOnPage(state *graphics.State) [4]float64 {
+	tm, ctm := state.Text.Tm, state.CTM
+	sx := state.Text.Tfs * state.Text.Tz / 100
+	sy := state.Text.Tfs
+	a, b := sx*tm[0], sx*tm[1]
+	c, d := sy*tm[2], sy*tm[3]
+	return [4]float64{
+		a*ctm[0] + b*ctm[2], a*ctm[1] + b*ctm[3],
+		c*ctm[0] + d*ctm[2], c*ctm[1] + d*ctm[3],
+	}
 }
 
 // heightOnPage returns the size of the font of state across the line on

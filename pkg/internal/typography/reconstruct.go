@@ -631,7 +631,10 @@ func textItemStarts(elements []models.TextElement, fonts []runFont) []int {
 // rise, how far up the page the text rise (ISO 32000-1, 9.3.7) lifted the
 // element, which its position already includes, and height, the size of
 // the font across the line on the page: the Tf size scaled by the text
-// space y axis, where the element's FontSize is scaled by the x axis.
+// space y axis, where the element's FontSize is scaled by the x axis. trm
+// is the linear part [a b c d] of the text rendering matrix the element was
+// shown with (ISO 32000-1, 9.4.4), which PDF.js reads positions through
+// when it sets the text along no page axis ([runTracker.skewedAcross]).
 //
 // stream and segment say where the element sat in the content streams
 // PDF.js reads as separate text runs. stream names the invocation of the
@@ -656,6 +659,7 @@ type runFont struct {
 	size    float64
 	rise    float64
 	height  float64
+	trm     [4]float64
 	stream  int
 	segment int
 	marked  int
@@ -766,7 +770,14 @@ func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 	size := r.gapSize(fromIdx, i, from, el)
 	gap := computeLineGap(from, el) - r.marks.drift(fromIdx, i)
 	if r.endsLine(fromIdx, i, from, el, gap, size) {
+		ref, refIdx := r.start, r.startIdx
 		r.start, r.startIdx = el, i
+		if _, skewed := r.skewedAcross(fromIdx, i, from, el); skewed {
+			// The reference generator breaks a line PDF.js flagged as ended
+			// only past a tenth of the size of the run before the flag,
+			// measured across the baseline of el (join-lines.mjs, joinLines).
+			return acrossBaseline(ref, el) > min(lineBreakTolerance, sameBaselineRatio*r.height(refIdx, ref))
+		}
 		return true
 	}
 	ref := r.start
@@ -889,10 +900,15 @@ const sameBaselineRatio = 0.1
 // the change of text rise between the two is taken out, so a superscript
 // that drops back to the baseline stays on its line. The bound follows the
 // font size, so the lines of a tiny font break where a fixed tolerance
-// glues them.
+// glues them. A glyph whose text rendering matrix is set along no page axis
+// is read across the line as PDF.js reads it ([runTracker.skewedAcross]).
 func (r *runTracker) endsLine(lastIdx, i int, last, el models.TextElement, gap, size float64) bool {
 	height := r.height(lastIdx, last)
+	skewed, isSkewed := r.skewedAcross(lastIdx, i, last, el)
 	if gap < negativeRunGapFactor*size {
+		if isSkewed {
+			return math.Abs(skewed) > backwardLineRatio*height
+		}
 		return acrossLine(last, el) > backwardLineRatio*height
 	}
 	if quarterTurnLine(last, el) {
@@ -904,10 +920,90 @@ func (r *runTracker) endsLine(lastIdx, i int, last, el models.TextElement, gap, 
 		return acrossLine(last, el) > height
 	}
 	dy := el.Y - last.Y
+	if isSkewed {
+		dy = skewed
+	}
 	if r.fonts != nil {
 		dy -= r.fonts[i].rise - r.fonts[lastIdx].rise
 	}
 	return math.Abs(dy) > height
+}
+
+// sameDirectionTolerance is how far apart, in radians, the baselines of two
+// glyphs may point and still run in one direction. It absorbs the rounding
+// of a rotation matrix, as the reference generator's tolerance of the same
+// name does (test/integration/corpus/lib/join-lines.mjs), not a real change
+// of direction.
+const sameDirectionTolerance = 1e-3
+
+// skewedAcross returns how far across the line PDF.js reads el, the element
+// i, from the end of last, the glyph lastIdx painted before it, and whether
+// it reads it so: when the text rendering matrix of el (ISO 32000-1, 9.4.4,
+// [runFont] trm) maps the text space axes onto no page axis, PDF.js takes
+// the matrix for a rotation, scales it to unit length along its x axis and
+// reads each position through its transpose, the position of el through the
+// matrix of el and the end of last through the matrix of last
+// (src/core/evaluator.js, compareWithLastPosition, applyInverseRotation).
+// For a skewed matrix, an oblique font set by its text matrix, or one that
+// scales one axis more than the other, that transpose is no inverse, and
+// the move across the line grows with the distance from the page origin.
+// Text on a horizontal line only is read so, el and last set in one
+// direction: litho reads rotated and vertical lines by their own rules.
+// ISO 32000-1, 14.8.2.5 leaves line breaks to the consumer, so the reading
+// is the reference's, not the specification's.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200087.pdf, thread_200_200089.pdf: the subscript δ
+//     of "Reδ" and "Uδ" set by an oblique text matrix 1.56 units below its
+//     line read glued, where PDF.js ends the line at it ("Re δ").
+//   - pdfjs issue20914.pdf: wire labels compressed to 0.18 of their height
+//     by a text matrix turned 0.01°, read glued across a jump back to the
+//     left margin 1.5 units lower ("COAWG1PIAWG20A" for "COAWG1 PIAWG20A").
+//   - pdfjs issue10004.pdf: an oblique "Ｐ" after a full-width bracket.
+//   - pdfjs JBIG2Globals.pdf: a margin note set on the baseline of a line
+//     turned 0.57°, 2.42 units lower on the page, continues that line in
+//     PDF.js, which the reference measures across the turned baseline.
+//   - All corpora: words match PDF.js on 6 more files (govdocs
+//     thread_200_200089.pdf, thread_300_300854.pdf, thread_300_300859.pdf,
+//     thread_300_300863.pdf, pdfcpu pkg_testdata__itu-t81.pdf, pdfjs
+//     issue20914.pdf) and on 36 more pages of files that still differ
+//     (govdocs thread_200_200087.pdf 34, thread_200_200402.pdf 1, pdfjs
+//     issue10004.pdf 1), and on none fewer; facturx and pdf20 do not move.
+func (r *runTracker) skewedAcross(lastIdx, i int, last, el models.TextElement) (float64, bool) {
+	if r.fonts == nil || el.Vertical || last.Vertical || isRotated(el.Angle) || isOrthogonalRotation(el.Angle) || isHalfTurn(el.Angle) ||
+		math.Abs(el.Angle-last.Angle) > sameDirectionTolerance {
+		return 0, false
+	}
+	m := r.fonts[i].trm
+	if alongPageAxes(m) {
+		return 0, false
+	}
+	p := r.fonts[lastIdx].trm
+	sm, sp := math.Hypot(m[0], m[1]), math.Hypot(p[0], p[1])
+	if sm == 0 || sp == 0 {
+		return 0, false
+	}
+	endX := last.X + last.Width*math.Cos(last.Angle)
+	endY := last.Y + last.Width*math.Sin(last.Angle)
+	return (m[2]*el.X+m[3]*el.Y)/sm - (p[2]*endX+p[3]*endY)/sp, true
+}
+
+// alongPageAxes reports whether the linear part m of a text rendering matrix
+// maps the text space x axis onto a page axis and the y axis onto the other,
+// the test PDF.js puts a glyph's matrix to before it compares positions
+// without any rotation (compareWithLastPosition, which requires exact
+// zeros).
+func alongPageAxes(m [4]float64) bool {
+	return (m[0] != 0 && m[1] == 0 && m[2] == 0) || (m[1] != 0 && m[0] == 0 && m[3] == 0)
+}
+
+// acrossBaseline returns how far b sits from a across the baseline of b: the
+// move along the normal of the direction b advances in, as the reference
+// generator measures it (join-lines.mjs, acrossLine).
+func acrossBaseline(a, b models.TextElement) float64 {
+	dx, dy := b.X-a.X, b.Y-a.Y
+	return math.Abs(-dx*math.Sin(b.Angle) + dy*math.Cos(b.Angle))
 }
 
 // height returns the size across its line of the font el, the element i,

@@ -234,3 +234,39 @@ func TestReconstructText_BeadReadsContentOrder(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// TestExtractText_SkewedMatrixEndsLine pins that a glyph whose text
+// rendering matrix is not set along the page axes is read across the line as
+// PDF.js reads it, each position taken through the inverse of its own
+// matrix as if the matrix were a rotation. A subscript "d" set by an oblique
+// text matrix 1.56 units below "Re" then ends the line of "Re", and breaks it,
+// sitting more than a tenth of the size of "Re" off its baseline. The same
+// glyph on the baseline of "Re" continues its line. A line turned 0.57°
+// round and scaled across reads a jump back to its margin along its own
+// baseline, 0.3 units off it, where the page Y axis reads 2.42.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200087.pdf: "Reδ" and "Uδ", each δ an oblique
+//     Symbol subscript, where PDF.js reads "Re δ" and "U δ".
+//   - pdfjs JBIG2Globals.pdf: "tyrannidemdinavit", a margin note set on the
+//     turned baseline of the line before it, as PDF.js reads it.
+func TestExtractText_SkewedMatrixEndsLine(t *testing.T) {
+	t.Parallel()
+	// Helvetica sets "Re" 722 + 556 units wide, 12.73 units at 9.96 points.
+	for _, tc := range []struct {
+		name, body, want string
+	}{
+		{"skewed subscript", "BT /F1 1 Tf 9.96 0 0 9.96 72 422.36 Tm (Re) Tj 6.48 0 2.2163 6.48 84.73 420.8 Tm (d) Tj 9.96 0 0 9.96 108 422.36 Tm (Reynolds) Tj ET", "Re\nd Reynolds"},
+		{"skewed on the baseline", "BT /F1 1 Tf 9.96 0 0 9.96 72 422.36 Tm (Re) Tj 9.96 0 2.2163 9.96 84.73 422.36 Tm (d) Tj ET", "Red"},
+		{"upright subscript", "BT /F1 1 Tf 9.96 0 0 9.96 72 422.36 Tm (Re) Tj 6.48 0 0 6.48 84.73 420.8 Tm (d) Tj ET", "Red"},
+		{"turned and scaled", "BT /F1 1 Tf 9.02 0.0902 -0.11 11 239.1 680.11 Tm (tyrannidem) Tj 6.17 0.0617 -0.07 7 26.71 677.69 Tm (dinavit) Tj ET", "tyrannidemdinavit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := subsupExtract(t, subsupPDF(tc.body, "")); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
