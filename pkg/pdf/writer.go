@@ -182,7 +182,12 @@ func (o writeOpts) internalEncrypt() *crypto.EncryptConfig {
 }
 
 // WithVersion sets the PDF version in the output header (e.g., "2.0").
-// Only applies to full rewrites.
+// Only applies to full rewrites: an incremental update keeps the header of the
+// bytes it appends to. As with [WithObjectStreams], the document a Writer
+// edits after a remediation that kept a later round, or after a [Pipeline]
+// Split or Merge, is a file litho wrote for it, and [Writer.WriteTo] rewrites
+// that file in full when this option is given, unless the file still carries
+// a signature a rewrite would drop.
 func WithVersion(version string) WriteOption {
 	return func(o *writeOpts) {
 		o.version = version
@@ -858,27 +863,29 @@ type Writer struct {
 
 	// intermediate is set when source is a file a [Pipeline] wrote between
 	// two of its stages, which no caller holds (see
-	// [Writer.rewritesForCompaction]).
+	// [Writer.rewritesForOptions]).
 	intermediate bool
 }
 
-// rewritesForCompaction reports whether the write cfg selects must be a full
-// rewrite for the compaction it asks for to apply.
+// rewritesForOptions reports whether the write cfg selects must be a full
+// rewrite for the options that shape a full rewrite alone to apply: the
+// compaction options and [WithVersion].
 //
-// Packing, dedup and image recompression run on a full rewrite only. An
-// incremental update keeps the bytes of the document the Writer edits, which
-// is right for the caller's own file: an update appends to it (ISO 32000-1,
+// Packing, dedup and image recompression run on a full rewrite only, and
+// WithVersion sets the header a full rewrite writes. An incremental update
+// keeps the bytes of the document the Writer edits, header included, which is
+// right for the caller's own file: an update appends to it (ISO 32000-1,
 // 7.5.6) and every signature it carries survives. It is wrong when that
 // document is a file litho wrote for the Writer, a remediation round's output
 // at basePath or a [Pipeline] intermediate: no caller holds those bytes, so
-// the output carried them uncompacted under an update, and the options were
-// dropped with only a Debug line, a signature's update included. Such a file
-// that still carries a signature keeps the update, since a rewrite would drop
-// the signature (ISO 32000-1, 12.8.1) for a saving the caller did not trade
-// it for.
-func (w *Writer) rewritesForCompaction(ctx context.Context, cfg writeOpts) bool {
-	compacts := cfg.packObjectStreams || cfg.dedupStreams || cfg.recompressImages
-	if !compacts || cfg.fullRewrite || (w.basePath == "" && !w.intermediate) {
+// the output carried them uncompacted, under the header litho wrote them with,
+// and the options were dropped with only a Debug line, a signature's update
+// included. Such a file that still carries a signature keeps the update, since
+// a rewrite would drop the signature (ISO 32000-1, 12.8.1) for a saving the
+// caller did not trade it for.
+func (w *Writer) rewritesForOptions(ctx context.Context, cfg writeOpts) bool {
+	shapes := cfg.packObjectStreams || cfg.dedupStreams || cfg.recompressImages || cfg.version != ""
+	if !shapes || cfg.fullRewrite || (w.basePath == "" && !w.intermediate) {
 		return false
 	}
 	return len(mutations.SignedSignatures(ctx, w.reader.doc)) == 0
@@ -3450,7 +3457,7 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 		w.encryptCfg = nil
 		defer func() { w.encryptCfg = encryptCfg }()
 	}
-	if w.rewritesForCompaction(ctx, cfg) {
+	if w.rewritesForOptions(ctx, cfg) {
 		opts = append(slices.Clone(opts), WithFullRewrite())
 		cfg.fullRewrite = true
 	}

@@ -204,8 +204,8 @@ func (p *Pipeline) buildValidationErrors() []error {
 // [ErrPDFUAForbidsBarringAccessibility]. A stage after a remediation fails
 // with [ErrEditAfterRemediation] (see [Pipeline]).
 //
-// [WithObjectStreams], [WithDedup] and [WithImageRecompression] reach the
-// output after a Split or a Merge too: when a later stage edits the file a
+// [WithObjectStreams], [WithDedup], [WithImageRecompression] and
+// [WithVersion] reach the output after a Split or a Merge too: when a later stage edits the file a
 // Split or a Merge wrote, the output is a full rewrite of it, and a signature
 // goes on top of that rewrite. On the source itself they apply only when the
 // write rewrites it in full, as on [Writer.WriteTo].
@@ -335,9 +335,9 @@ func (ex *executor) isLastStage() bool { return ex.stageIdx == ex.totalStages-1 
 // files where the pipeline places its own. The Writer is asked for the
 // encryption an earlier stage asked for, as if the stage that binds it had
 // called [Writer.Encrypt] first (see [executor.carryEncryption]). A Writer
-// over an intermediate file knows it, so the compaction the output asks for
-// rewrites that file rather than updating it (see
-// [Writer.rewritesForCompaction]).
+// over an intermediate file knows it, so the compaction and the version the
+// output asks for rewrite that file rather than update it (see
+// [Writer.rewritesForOptions]).
 func (ex *executor) ensureWriter() {
 	if ex.writer == nil {
 		ex.writer = NewWriter(ex.cur)
