@@ -85,21 +85,9 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	return results
 }
 
-// checkPageContent validates the content streams of a single page.
-//
-// The q/Q nesting limit, ISO 19005-1, 6.1.12 t8 and ISO 19005-2/3, 6.1.13 t8,
-// fails once for every q that opens a level past [maxQNesting]: veraPDF states
-// it over each q operator (Op_q_gsave, "nestingLevel <= 28"). Measured with
-// veraPDF 1.30 at PDF/A-1b and PDF/A-2b, 29 nested levels fail it once, 31
-// levels three times, and two runs of 29 levels twice.
-//
-// # Corpus evidence
-//
-//   - litho limits_2b.pdf: nests 30 levels, and veraPDF fails the test twice at
-//     PDF/A-1b and PDF/A-2b, where litho failed it once.
-//   - pdfjs bug1130815.pdf: runs 124 q past the limit on its first page, 145
-//     levels deep at most, which litho stated once. veraPDF cannot parse the
-//     file (it finds no cross-reference table), so it has no count to compare.
+// checkPageContent validates the content streams of a single page: its
+// operators, the q/Q nesting limit ([checkQNesting]) and its inline image
+// filters.
 func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx, part, pageNum int) []Violation {
 	if len(page.content) == 0 {
 		return nil
@@ -115,10 +103,6 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 
 	var results []Violation
 
-	// Check operators and q/Q nesting.
-	qDepth := 0
-	nestingRule := qNestingRule(part)
-
 	for idx, op := range ops {
 		// Check context every ~100 operators.
 		if idx%100 == 0 && ctx.Err() != nil {
@@ -130,13 +114,59 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 			results = append(results, failf(unknownOperatorRule(part),
 				"page %d: operator %q", pageNum, op.Operator)...)
 		}
+	}
 
-		// Track q/Q nesting depth.
+	results = append(results, checkQNesting(ctx, ops, part, pageNum)...)
+	results = append(results, checkInlineImageFilters(ops, part, pageNum)...)
+
+	return results
+}
+
+// checkQNesting states the q/Q nesting limit, ISO 19005-1, 6.1.12 t8 and ISO
+// 19005-2/3, 6.1.13 t8, over the operators of one content stream. It fails
+// once for every q that opens a level past [maxQNesting]: veraPDF states it
+// over each q operator (Op_q_gsave, "nestingLevel <= 28"). Measured with
+// veraPDF 1.30 at PDF/A-1b and PDF/A-2b, 29 nested levels fail it once, 31
+// levels three times, and two runs of 29 levels twice.
+//
+// Every content stream keeps its own count, starting at zero: ISO 19005-1,
+// 6.1.12 and ISO 19005-2, 6.1.13 bound the nesting a conforming file writes,
+// and veraPDF counts the levels of each stream it parses, the page's content,
+// a form XObject, a tiling pattern cell, a Type 3 glyph description and an
+// annotation appearance alike. Measured with veraPDF 1.30.2 at PDF/A-1b and
+// PDF/A-2b, 33 levels in any of those four fail the test five times, and a
+// page 20 levels deep painting a form 15 levels deep fails nothing.
+// [checkPageContent] states it for a page's content and [checkDrawnStream]
+// for every stream the page draws, each stream once.
+//
+// # Corpus evidence
+//
+//   - litho limits_2b.pdf: nests 30 levels, and veraPDF fails the test twice at
+//     PDF/A-1b and PDF/A-2b, where litho failed it once.
+//   - pdfjs bug1130815.pdf: runs 124 q past the limit on its first page, 145
+//     levels deep at most, which litho stated once. veraPDF cannot parse the
+//     file (it finds no cross-reference table), so it has no count to compare.
+//   - litho qnestreach_2b.pdf: nests past the limit in a form XObject, a tiling
+//     pattern cell, a Type 3 glyph and an annotation appearance, which
+//     veraPDF reports and litho did not judge.
+//   - All corpora: no file nests past the limit in a stream its pages draw,
+//     and no count moves at PDF/A-1b or PDF/A-2b.
+func checkQNesting(ctx context.Context, ops []content.Operation, part, pageNum int) []Violation {
+	rule := qNestingRule(part)
+	if rule.Clause == "" {
+		return nil
+	}
+	var results []Violation
+	qDepth := 0
+	for idx, op := range ops {
+		if idx%100 == 0 && ctx.Err() != nil {
+			return results
+		}
 		switch op.Operator {
 		case "q":
 			qDepth++
-			if qDepth > maxQNesting && nestingRule.Clause != "" {
-				results = append(results, failf(nestingRule,
+			if qDepth > maxQNesting {
+				results = append(results, failf(rule,
 					"page %d: q/Q nesting depth %d exceeds %d", pageNum, qDepth, maxQNesting)...)
 			}
 		case "Q":
@@ -145,9 +175,6 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 			}
 		}
 	}
-
-	results = append(results, checkInlineImageFilters(ops, part, pageNum)...)
-
 	return results
 }
 

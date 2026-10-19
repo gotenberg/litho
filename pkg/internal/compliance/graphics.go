@@ -216,11 +216,11 @@ func pageWithoutResources(ctx context.Context, doc *document.Document, p *pageCt
 // image intent test exactly as a form XObject the page paints does.
 //
 // The undefined-operator rule, ISO 19005-1, 6.2.10 t1 and ISO 19005-2/3/4,
-// 6.2.2 t1, and the inline image filter rule ([checkInlineImageFilters]) are
-// stated here for these streams, and by [checkPageContent] for a page's own
-// content alone, so each is stated exactly once per undefined operator and
-// per inline image. The operand limits are stated by
-// [checkContentStreamLimits].
+// 6.2.2 t1, the inline image filter rule ([checkInlineImageFilters]) and the
+// q/Q nesting limit ([checkQNesting]) are stated here for these streams, and
+// by [checkPageContent] for a page's own content alone, so each is stated
+// exactly once per undefined operator, per inline image and per q. The
+// operand limits are stated by [checkContentStreamLimits].
 //
 // # Corpus evidence
 //
@@ -242,6 +242,7 @@ func checkDrawnStream(ctx context.Context, doc *document.Document, s *drawnStrea
 	results = append(results, hexStrings.check(s.format, s.pageNum)...)
 	results = append(results, checkInlineImageIntent(s.ops, part, s.pageNum)...)
 	results = append(results, checkInlineImageFilters(s.ops, part, s.pageNum)...)
+	results = append(results, checkQNesting(ctx, s.ops, part, s.pageNum)...)
 	if s.kind == drawnAppearance {
 		for i := range results {
 			results[i].Context += " in annotation appearance"
