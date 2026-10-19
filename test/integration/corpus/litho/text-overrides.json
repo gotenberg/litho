@@ -166,7 +166,7 @@
       "page": 1,
       "pdfjs": "AC AC A A AC A AB",
       "expected": "A A A A AC A AB",
-      "reason": "N1 and N2 have no /Encoding, so their codes follow the embedded program's built-in encoding (ISO 32000-1, 9.6.6.1), which names only 41 and 42, and N3's /Differences builds on it; StandardEncoding, the encoding of N4 and N6, names nothing at 80 (Annex D.2). Those codes have no Unicode value and add no character (9.10.2), while N5's /StandardEncoding names 43 C. PDF.js reads 80 as U+0080 and 43 as C under every font; litho reads 43 as C under N1 and N2."
+      "reason": "N1 and N2 have no /Encoding, so their codes follow the embedded program's built-in encoding (ISO 32000-1, 9.6.6.1), which names only 41 and 42, and N3's /Differences builds on it; StandardEncoding, the encoding of N4 and N6, names nothing at 80 (Annex D.2). Those codes have no Unicode value and add no character (9.10.2), while N5's /StandardEncoding names 43 C. PDF.js reads 80 as U+0080 and 43 as C under every font."
     },
     {
       "fixture": "unembednames_2u",

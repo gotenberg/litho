@@ -6960,6 +6960,11 @@ holds the name, so `N2` alone fails it, where litho reported five fonts. veraPDF
 1.30.2 and litho report the same rule set in all thirteen cells. Remediation
 leaves the value rule on the output at every manifest profile in both modes, on
 both tools: no `/ToUnicode` entry gives `.notdef` a value other than its own.
+Nor does one give `N2`'s `43`, which no encoding names, a value, so the presence
+rule stays on the output too, `6.3.8/1` at PDF/A-1a, `6.2.11.7.2/1` at PDF/A-2a,
+2u, 3a and 3u, `7.21.7/1` at PDF/UA-1 and `8.4.5.8/1` at PDF/UA-2, on both tools.
+Remediation mapped it to `C` before, the StandardEncoding reading litho's text
+extraction took.
 
 ### `type3names_2u.pdf`
 
@@ -7867,21 +7872,20 @@ and states the clause behind its verdict. It either gives the right reading,
 where ISO 32000-1, 9.10.2 or the page geometry decides it, or marks the page
 unscored, where the readers disagree only on codes 9.10.2 gives no Unicode
 value, since no reading of those is right. Where PDF.js and litho agree, the
-golden stands. Of the 191 fixtures, 176 match, 8 are unscored
+golden stands. Of the 191 fixtures, 177 match, 8 are unscored
 (`cmapcidtext_2b`, `cmapnotdef_2b`, `cmaps_2b`, `cmapusecmap_2b`,
 `cmapusestream_2b`, `cmapverabase_2b`, `type0nodesc_2b`, `usecmap_2u`; page 16
-of `fontcopies_2b` too, whose other pages score), and 7 mismatch, each on a
+of `fontcopies_2b` too, whose other pages score), and 6 mismatch, each on a
 reading litho gets wrong:
 
-| Fixture                         | Right reading                                                      | litho reads                                        |
-| ------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------- |
-| `cmapcollect_1b`                | `!`: CIDs 1 and 2 of Adobe-Korea1 are U+0020 and U+0021 (9.10.2)   | `AA`, the glyphs the embedded program paints       |
-| `cmapusevert_1b`                | nothing but a space: CID 1 of Adobe-Japan1 is U+0020 (9.10.2)      | `A`, likewise                                      |
-| `complex_ua1`, `complex_ua2`    | words split at code 20, the WinAnsiEncoding space                  | each letter a word, on the lines after the figures |
-| `fontemptycs_2b`, `fontkeys_1b` | `AB`: two glyphs that do not advance, with no space between them   | `A B`                                              |
-| `type1notdef_2u`                | `A` under `N1` and `N2`, whose built-in encoding leaves 43 unnamed | `AC`, code 43 read through StandardEncoding        |
+| Fixture                         | Right reading                                                    | litho reads                                        |
+| ------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------- |
+| `cmapcollect_1b`                | `!`: CIDs 1 and 2 of Adobe-Korea1 are U+0020 and U+0021 (9.10.2) | `AA`, the glyphs the embedded program paints       |
+| `cmapusevert_1b`                | nothing but a space: CID 1 of Adobe-Japan1 is U+0020 (9.10.2)    | `A`, likewise                                      |
+| `complex_ua1`, `complex_ua2`    | words split at code 20, the WinAnsiEncoding space                | each letter a word, on the lines after the figures |
+| `fontemptycs_2b`, `fontkeys_1b` | `AB`: two glyphs that do not advance, with no space between them | `A B`                                              |
 
-The cell's `words_match` reads 176 and `chars_match` 180: the four fixtures of
+The cell's `words_match` reads 177 and `chars_match` 181: the four fixtures of
 the third and fourth rows match once spaces are ignored. A new fixture needs
 its golden regenerated at provisioning, and an override when PDF.js reads it
 wrong.

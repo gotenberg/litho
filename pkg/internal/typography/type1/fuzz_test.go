@@ -9,6 +9,8 @@ func FuzzType1(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte("/Encoding 256 array\n0 1 255 {1 index exch /.notdef put} for\ndup 65 /A put\n"))
 	f.Add([]byte("2 dict dup begin\n/A 5 RD ????? ND\n/B 5 RD ????? ND\nend\n"))
+	f.Add([]byte("/Encoding 256 array\ndup 32/space put\ndup 8#101 /A put\nreadonly def\n"))
+	f.Add([]byte("/Encoding 256 array\ndup 3"))
 	f.Add([]byte("/FontMatrix [0.001 0 0 0.001 0 0] readonly def\n"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -31,5 +33,7 @@ func FuzzType1(f *testing.F) {
 		// Same: EncodingFillsNotdef runs its own regexp over clearTextRegion and
 		// has no in-package caller, so it needs its own line to be exercised.
 		_ = EncodingFillsNotdef(data)
+		// NamedCodes scans with a third, looser regexp of its own.
+		_, _ = NamedCodes(data)
 	})
 }

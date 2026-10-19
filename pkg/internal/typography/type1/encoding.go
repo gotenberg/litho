@@ -118,3 +118,35 @@ func clearTextRegion(data []byte) []byte {
 	}
 	return data
 }
+
+// namingEntryRe matches any "dup <code> /<name> put" entry a PostScript
+// interpreter runs, in the spacing [dupPutRadixRe] requires and in the
+// tighter ones it misses ("dup 32/space put"), so [NamedCodes] never takes a
+// code a vector names for one it leaves unnamed.
+var namingEntryRe = regexp.MustCompile(`dup\s*(\d+(?:#[0-9A-Za-z]+)?)\s*/([^\s/\[\]{}()<>%]+)\s*put`)
+
+// NamedCodes reports which codes a Type 1 program's built-in encoding vector
+// names a glyph other than .notdef. ok is false when the program writes no
+// vector to judge a code by: a reference to a predefined or other named
+// encoding, or no entry at all.
+//
+// Every entry a PostScript interpreter runs counts, whatever its spacing, so a
+// code reads as unnamed only when the vector names it nothing or .notdef
+// (Adobe Type 1 Font Format, 2.3).
+func NamedCodes(data []byte) (named [256]bool, ok bool) {
+	region := clearTextRegion(data)
+	if namedEncodingRe.Match(region) {
+		return named, false
+	}
+	for _, m := range namingEntryRe.FindAllSubmatch(region, -1) {
+		idx, err := parseCode(string(m[1]))
+		if err != nil || idx < 0 || idx > 255 {
+			continue
+		}
+		ok = true
+		if string(m[2]) != ".notdef" {
+			named[idx] = true
+		}
+	}
+	return named, ok
+}

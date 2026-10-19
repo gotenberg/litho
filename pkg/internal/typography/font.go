@@ -111,9 +111,10 @@ type Font struct {
 	// ([applySymbolicTrueTypeGlyphs]), a Type 1 or Type1C program through the
 	// glyph names of its built-in encoding ([applyType1FontFileEncoding],
 	// [extractCFFEncoding]). It is nil for any other font. [Font.Encoding]
-	// also carries the default
-	// encoding's reading of every code the program leaves unnamed, a guess
-	// a caller that persists a mapping must not write.
+	// also carries the default encoding's reading of every code the program
+	// gives no glyph-list reading, a guess a caller that persists a mapping
+	// must not write, apart from a code a Type 1 or Type1C program names no
+	// glyph, which has no reading at all ([dropProgramUnnamedCodes]).
 	ProgramGlyphRunes map[byte]rune
 
 	// differenceCodes holds the codes a /Encoding dictionary's /Differences
@@ -584,6 +585,9 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// that use OT1 encoding internally.
 	if !hasExplicitEncoding {
 		extractCFFEncoding(ctx, doc, fontDict, font, isDingbatsFont)
+		if isType1Like {
+			dropProgramUnnamedCodes(ctx, doc, fontDict, font)
+		}
 	}
 
 	// TrueType cmap-derived implicit encoding (ISO 32000-1 §9.6.6.4).
@@ -876,9 +880,10 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 			// almost always store glyphs at Latin-1 byte positions.
 			// Seed from the FontFile / FontFile3 first so the program's
 			// own encoding wins, then overlay the appropriate built-in
-			// on any unfilled slot. A symbolic Type 1 font whose program
-			// leaves a slot without a usable name takes the WinAnsi
-			// default ResolveFont gives symbolic fonts: StandardEncoding
+			// on any unfilled slot the program names. A symbolic Type 1
+			// font whose program names a slot with a name no glyph list
+			// reads takes the WinAnsi default ResolveFont gives
+			// symbolic fonts: StandardEncoding
 			// is the nonsymbolic default (ISO 32000-1, 9.6.6.1), and it
 			// reads 0x27 and 0x60 as curly quotes where PDF.js, whose
 			// symbolic default is MacRoman, reads straight ones.
@@ -886,6 +891,14 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbats)
 			extractCFFEncodingAsBase(ctx, doc, fontDict, font, isDingbats)
 			isType1Like := font.Subtype == "Type1" || font.Subtype == "MMType1"
+			// Table 114 makes an embedded program's built-in encoding the
+			// base, so a code that encoding names no glyph takes no overlay
+			// character ([dropProgramUnnamedCodes]).
+			var named [256]bool
+			namedOK := false
+			if isType1Like {
+				named, namedOK = programNamedCodes(ctx, doc, fontDict)
+			}
 			var overlay map[byte]rune
 			switch {
 			case isSymbol:
@@ -898,6 +911,9 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 				overlay = encodings.WinAnsiEncoding
 			}
 			for code, r := range overlay {
+				if namedOK && !named[code] {
+					continue
+				}
 				if _, set := font.Encoding[code]; !set {
 					font.Encoding[code] = r
 				}
@@ -3181,6 +3197,83 @@ func extractCFFEncodingAsBase(ctx context.Context, doc *document.Document, fontD
 		}
 		if r, ok := builtinGlyphRune(name, int(code), isDingbats); ok {
 			font.Encoding[code] = r
+		}
+	}
+}
+
+// programNamedCodes reports which codes the built-in encoding of a simple
+// font's embedded Type 1 (/FontFile) or Type1C (/FontFile3) program names a
+// glyph other than .notdef. ok is false when no such program is embedded or
+// its encoding cannot be read, and when a Type 1 program refers to a
+// predefined encoding by name, which [applyType1FontFileEncoding] swaps in
+// whole.
+//
+// A Type1C program's predefined encoding is read in full, not against its
+// charset ([cff.PredefinedEncodingNames]): a code the table names selects that
+// glyph whether or not a subset embeds it.
+func programNamedCodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (named [256]bool, ok bool) {
+	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fdDict == nil {
+		return named, false
+	}
+	if data := decodeFontStream(ctx, doc, fdDict, "FontFile"); data != nil {
+		return type1.NamedCodes(data)
+	}
+	data := decodeFontStream(ctx, doc, fdDict, "FontFile3")
+	if data == nil {
+		return named, false
+	}
+	enc := cff.PredefinedEncodingNames(data)
+	if enc == nil {
+		enc = cff.ExtractEncoding(data)
+	}
+	if len(enc) == 0 {
+		return named, false
+	}
+	for code, name := range enc {
+		if name != "" && name != ".notdef" {
+			named[code] = true
+		}
+	}
+	return named, true
+}
+
+// dropProgramUnnamedCodes removes from font.Encoding every code the built-in
+// encoding of the font's embedded Type 1 or Type1C program leaves unnamed or
+// names .notdef, for a simple font that states no /Encoding.
+//
+// ISO 32000-1, 9.6.6.1 and Table 111 make the program's built-in encoding the
+// encoding of such a font, symbolic or not, and 9.10.2 takes a code to Unicode
+// through the glyph name that encoding gives it: a code it names no glyph has
+// no Unicode value and adds no character. litho read such a code through the
+// StandardEncoding or WinAnsiEncoding default ResolveFont starts from. A code
+// named with a name no glyph list reads keeps that default, as before.
+//
+// This departs from PDF.js, which overlays the program's named codes on the
+// default encoding and keeps the default's reading of the rest
+// (src/core/fonts.js, adjustType1ToUnicode).
+//
+// # Corpus evidence
+//
+//   - litho type1notdef_2u.pdf: N1 and N2 read code 43, which their programs
+//     name .notdef or nothing, as "C". They now read as nothing, the reading
+//     the fixture's text override gives.
+//   - All corpora: 282 files (189 govdocs, 71 pdfjs, 12 verapdf, 9 pdfcpu, 1
+//     litho) hold a Type 1 or Type1C font whose program leaves codes unnamed
+//     that the default encoding reads. Only type1notdef_2u.pdf shows such a
+//     code, so no other text cell moves. Remediating the 282 at PDF/A-1b,
+//     PDF/A-2u and PDF/UA-1 changes the output bytes of 68, through the
+//     /ToUnicode entries remediation writes for codes no page shows, and
+//     litho's verdict on none but type1notdef_2u.pdf, where veraPDF 1.30.2
+//     and litho agree in all 13 manifest profiles in both modes.
+func dropProgramUnnamedCodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+	named, ok := programNamedCodes(ctx, doc, fontDict)
+	if !ok {
+		return
+	}
+	for code := range font.Encoding {
+		if !named[code] {
+			delete(font.Encoding, code)
 		}
 	}
 }
