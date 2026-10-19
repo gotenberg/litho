@@ -198,6 +198,7 @@ one deliberately rather than diffing it against a fresh build.
 | `cmappredef_2b.pdf`    | PDF/A-2b     | Fonts naming predefined CMaps, through their bases and notdefs   |
 | `cmapusevert_1b.pdf`   | PDF/A-1b     | An encoding CMap whose `/UseCMap` names the vertical CMap V      |
 | `cmapverabase_2b.pdf`  | PDF/A-2b     | Encoding CMaps only veraPDF's bundle maps, as bases and by name  |
+| `cmapcollect_1b.pdf`   | PDF/A-1b     | A font whose `/Encoding` names a collection CMap, Adobe-Korea1-2 |
 | `cmapcidtext_2b.pdf`   | PDF/A-2b     | Text of codes an encoding CMap sends to other CIDs, no ToUnicode |
 | `stdremap_ua2.pdf`     | PDF/UA-2     | A standard type the root `/RoleMap` sends to a private dead end  |
 | `remapchain_ua2.pdf`   | PDF/UA-2     | Standard types mapped through a private type to a standard one   |
@@ -521,6 +522,7 @@ which are covered under [Known divergences](#known-divergences).
 | `boxorigin_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
 | `charset_1b.pdf`       | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 3   | 3    | 4    | 9    | 7    |
 | `cmapcidtext_2b.pdf`   | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
+| `cmapcollect_1b.pdf`   | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
 | `cmapnotdef_2b.pdf`    | 6    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
 | `cmappredef_2b.pdf`    | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 8    | 8    |
 | `cmaps_2b.pdf`         | 9    | 6    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
@@ -6353,6 +6355,44 @@ Adobe-KR-UCS2 CMap as well. litho now takes the collection where veraPDF's
 PDType0Font does, from the CIDFont under Identity-H and from the encoding CMap
 otherwise, and exempts every collection whose Adobe-<Ordering>-UCS2 CMap
 veraPDF bundles, so the counts agree.
+
+### `cmapcollect_1b.pdf`
+
+A character collection has a CMap of its own, named for it: Adobe-Korea1-2 is
+an identity over the Adobe-Korea1 CIDs of supplement 2, declaring that
+CIDSystemInfo. The name lies outside ISO 32000-1, 9.7.5.2, Table 118, but
+veraPDF 1.30.2 bundles the file, and so do PDF.js's bcmaps, so both decode a
+font's codes through it. veraPDF takes a named CMap's CIDSystemInfo from its
+CharacterCollections table, which lists only the Table 118 names, so the name
+fails the CIDSystemInfo rule as well as the embedding rule at every level. The
+verapdf corpus holds the shape in four files (`6-2-11-3-3-t01-fail-a`,
+`6-2-10-3-3-t01-fail-a`, `7.21.3.3-t01-fail-a`, `8.4.5.4-t01-fail-a`), at
+PDF/A-2b, PDF/A-4 and PDF/UA only, which the gate never remediates at PDF/A-1.
+
+The font is a CIDFontType2 over Adobe-Korea1-2 and the three-glyph TrueType
+program, whose `/CIDToGIDMap` sends CIDs 1 to 6 to a glyph.
+
+| Font | Encoding          | Shows     | CIDs |
+| ---- | ----------------- | --------- | ---- |
+| `C1` | `/Adobe-Korea1-2` | 0001 0002 | 1, 2 |
+
+| Level      | CMap embedded  | CIDSystemInfo compatible |
+| ---------- | -------------- | ------------------------ |
+| A-1a, A-1b | `6.3.3.3/1`    | `6.3.3.1/1`              |
+| A-2, A-3   | `6.2.11.3.3/1` | `6.2.11.3.1/1`           |
+| A-4        | `6.2.10.3.3/1` | `6.2.10.3.1/1`           |
+| UA-1       | `7.21.3.3/1`   | `7.21.3.1/1`             |
+| UA-2       | `8.4.5.4/1`    | `8.4.5.3.1/1`            |
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+Remediation used to leave the name as written, judging that it denoted no
+CMap, so both rules stayed on both tools at every level, default and
+aggressive, and no output was fully fixed. It now embeds the CMap rendered
+from the bundled data, with the CIDSystemInfo Adobe Korea1 2 the file
+declares, every code keeping its CID. Both rules clear on both tools, with the
+Unicode rule (`6.3.8/1`, `6.2.11.7.2/1`, `7.21.7/1`, `8.4.5.8/1`) where the
+level has one, and both tools find 24 of the 26 outputs conforming; at
+PDF/A-4f the two keep `6.9/5`, the embedded file that level requires.
 
 ### `cmapcidtext_2b.pdf`
 
