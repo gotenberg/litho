@@ -94,6 +94,55 @@ func TestContentMarking_UntaggedScope(t *testing.T) {
 	}
 }
 
+// TestContentMarking_UnclosedSequence covers content after a BMC or BDC that
+// no EMC in the stream closes. ISO 32000-1, 14.6 delimits a marked-content
+// sequence by BMC or BDC and the matching EMC, so an operator in a sequence
+// the stream never closes is in none, and veraPDF groups every operator from
+// the last point the stream left all sequences closed into one unmarked group
+// (GFPDSemanticContentStream.getContentItem). An EMC lexed inside a literal
+// or hex string that never terminates closes nothing.
+func TestContentMarking_UnclosedSequence(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	untagged := func(t *testing.T, content, profile string, rule Rule) int {
+		t.Helper()
+		doc, cat := contentMarkingDoc(t, content)
+		n := 0
+		for _, v := range checkContentMarking(ctx, doc, cat, profile) {
+			if v.Rule == rule {
+				n++
+			}
+		}
+		return n
+	}
+
+	tests := []struct {
+		name    string
+		content string
+		want    int
+	}{
+		{"closed artifact", "/Artifact BMC\n0 0 m 10 10 l S\nEMC", 0},
+		{"artifact never closed", "/Artifact BMC\n0 0 m 10 10 l S", 1},
+		{"EMC swallowed by an unterminated string", "/Artifact BMC\n0 0 m 10 10 l S\n(dangling ( string\nEMC", 1},
+		{"EMC swallowed by an unterminated hex string", "/Artifact BMC\n0 0 m 10 10 l S\n<0A1B\nEMC", 1},
+		{"second artifact never closed", "/Artifact BMC\n0 0 m 10 10 l S\nEMC\n/Artifact BMC\n0 0 m 5 5 l S\n0 0 m 6 6 l S", 2},
+		{"outer artifact never closed around a closed one", "/Artifact BMC\n/Artifact BMC\n0 0 m 10 10 l S\nEMC\n0 0 m 5 5 l S", 2},
+		{"surplus EMC closes nothing", "/Artifact BMC\n0 0 m 10 10 l S\nEMC\nEMC", 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := untagged(t, tc.content, "PDF/UA-1", Rule_14289_1_7_1_t03); got != tc.want {
+				t.Errorf("PDF/UA-1 7.1 t3 items = %d, want %d", got, tc.want)
+			}
+			if got := untagged(t, tc.content, "PDF/UA-2", Rule_14289_2_8_2_2_t01); got != tc.want {
+				t.Errorf("PDF/UA-2 8.2.2 t1 items = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestContentMarking_DoResourceScope covers ISO 14289-1 §7.1 t3 for a `Do`
 // whose XObject resolution depends on resource inheritance: a page with no
 // /Resources inherits the Pages-node resources (so the Do paints and fires),

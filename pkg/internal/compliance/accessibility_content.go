@@ -342,10 +342,17 @@ func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation
 	owners, complete := w.mcidOwners(ctx, holder)
 	levels := slices.Clone(outer)
 	floor := len(levels)
+	unclosed := unclosedMarkedTail(ops)
 	var found markingFindings
 	for i, op := range ops {
 		if i%contentOpCancelCheckInterval == 0 && ctx.Err() != nil {
 			return found
+		}
+		// Past unclosed, every operator lies in a sequence the stream never
+		// closes, which marks nothing: its BMC, BDC and EMC open and close no
+		// level, and what it paints stands in the state around the stream.
+		if i >= unclosed && (op.Operator == "BMC" || op.Operator == "BDC" || op.Operator == "EMC") {
+			continue
 		}
 		switch op.Operator {
 		case "BMC", "BDC":
@@ -390,6 +397,44 @@ func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation
 		}
 	}
 	return found
+}
+
+// unclosedMarkedTail returns the index of the first operator past the last
+// point where ops leave every marked-content sequence they open closed, or
+// len(ops) when the stream closes all of them. ISO 32000-1, 14.6 delimits a
+// sequence by its BMC or BDC and the matching EMC, so the operators from that
+// index on lie in a sequence that never ends and is no marked-content
+// sequence at all. veraPDF reads them the same way: its semantic content
+// stream (GFPDSemanticContentStream.getContentItem) makes everything after
+// the last balanced EMC one unmarked group when the stream ends with a
+// sequence open. An EMC with no sequence open closes nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-90-0-fuzzed.pdf: page 2 opens a literal string that never
+//     terminates, so the EMC remediation appends after its /Artifact BMC is
+//     lexed inside the string, and veraPDF reports the page's first three
+//     items under ISO 14289-1, 7.1 t3 and ISO 14289-2, 8.2.2 t1.
+func unclosedMarkedTail(ops []content.Operation) int {
+	depth, tail := 0, 0
+	for i, op := range ops {
+		switch op.Operator {
+		case "BMC", "BDC":
+			depth++
+		case "EMC":
+			if depth == 0 {
+				continue
+			}
+			depth--
+			if depth == 0 {
+				tail = i + 1
+			}
+		}
+	}
+	if depth == 0 {
+		return len(ops)
+	}
+	return tail
 }
 
 // mcidOwners maps each MCID the ParentTree entry of holder's /StructParents
