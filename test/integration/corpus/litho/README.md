@@ -3929,7 +3929,11 @@ which the program does not hold. ISO 19005-1, 6.3.5 has the set identify the
 CIDs present in the program, and veraPDF asks it at PDF/A-1 only for a rendered
 CID the program holds: one the `/CIDToGIDMap` covers whose glyph lies below
 `maxp.numGlyphs`, with or without an outline. Neither tool reports `6.3.5/3` on
-the output, and the two agree on its rule set.
+the output, and the two agree on its rule set. At PDF/A-1a and 1b the output
+also carries UniJIS-UCS2-H embedded for the Korean fonts, the two written
+directly moving to objects of their own, so `6.3.3.3/1` (4) clears on both
+tools. `6.3.3.1/1` (4) stays on both: the descendant declares Adobe-Korea1
+under a Japan1 CMap, which no faithful copy of the CMap changes.
 
 ### `usecmap_2u.pdf`
 
@@ -6088,8 +6092,10 @@ The two tools return the same rule set in all thirteen cells, and the same
 count for every rule at every level; at the PDF/UA levels both count the
 untagged-content rules once per text show. Remediated without a program at
 the first eight manifest profiles, default and aggressive, each output fails the
-embedding rule nine times on both tools, beside PDF/A-1b's `6.3.3.3/1`, PDF/UA-1's
-`7.1/3` and PDF/UA-2's `8.2.2/1`, the same on both. Remediated with the test's
+embedding rule nine times on both tools, beside PDF/UA-1's `7.1/3` and PDF/UA-2's
+`8.2.2/1`, the same on both. At PDF/A-1b remediation embeds JP's UniJIS-UCS2-H,
+which part 1 requires embedded (ISO 19005-1, 6.3.3.3), so `6.3.3.3/1` no
+longer stays beside them. Remediated with the test's
 programs at PDF/A-1b, PDF/A-2b (default and aggressive), PDF/A-4 and PDF/UA-1,
 the embedding rule falls to two, NO and WD, on both tools, and no rule appears.
 
@@ -6266,7 +6272,12 @@ conforming where veraPDF reports both rules on it. `P6` also extracts as `A`
 and U+3042 through EUC-H, where litho read the codes as UTF-16 and returned
 two unrelated characters. Remediation of `cmapusevert_1b` at PDF/A-1b now
 embeds V flattened over H, with `/WMode 1` in its dictionary and program, and
-both tools find the output conforming; before, 6.3.3.3 stayed.
+both tools find the output conforming; before, 6.3.3.3 stayed. At PDF/A-1a and
+1b, remediation of `cmappredef_2b` embeds each font's named CMap, rendered from
+the bundled data: the codespaces as declared, so 90ms-RKSJ-H keeps its one-
+and two-byte codes, the notdefrange, and the -V CMaps flattened over their -H
+base. `6.3.3.3/1` falls from 6 to 0 on both tools, default and aggressive, and
+no rule appears; `6.3.5/1` (5) stays on both.
 
 ### `cmapverabase_2b.pdf`
 
@@ -6319,8 +6330,11 @@ a CMap outside Table 118 embedded and PDF.js ships none. That settles `K5`'s
 embedding and CIDSystemInfo rules (`6.2.11.3.3/1` and `6.2.11.3.1/1` and their
 restatements) on both tools with no rule added, default and aggressive, at all
 thirteen levels, and both tools then report the same rules and counts on every
-output. `K6` and `K7` keep `6.3.3.3/1` at part 1, which requires even a Table
-118 CMap embedded.
+output. Part 1 requires even a Table 118 CMap embedded (ISO 19005-1,
+6.3.3.3), so at PDF/A-1a and 1b remediation also embeds veraPDF's files for
+`K6`'s and `K7`'s names, byte for byte. `6.3.3.3/1` and `6.3.3.1/1` (2 each)
+and, at PDF/A-1a, `6.3.8/1` (2) then clear on both tools, default and
+aggressive, and no rule appears.
 
 The Unicode rules (`6.2.11.7.2/1` at A-2a, A-2u, A-3a, A-3u, `7.21.7/1`,
 `8.4.5.8/1`, `6.3.8/1` at A-1a) once counted `K1` and `K2` on litho only, and
