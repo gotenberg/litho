@@ -241,6 +241,8 @@ one deliberately rather than diffing it against a fresh build.
 | `texlig_2b.pdf`        | PDF/A-2b     | A TeX ligature code and a code 32 whose names map nothing        |
 | `qnestreach_2b.pdf`    | PDF/A-2b     | q/Q nesting past 28 in a form, a cell, a glyph and an appearance |
 | `patternreach_2b.pdf`  | PDF/A-2b     | DeviceRGB a pattern reaches, one path, cycle or sharing per page |
+| `iccbadgray_1b.pdf`    | PDF/A-1b     | A grey output intent whose ICC profile states version 5.0        |
+| `iccbadgray_2b.pdf`    | PDF/A-2b     | A direct grey output intent over a scanner-class ICC profile     |
 
 ### Must-not-fire controls
 
@@ -603,6 +605,8 @@ are covered under [Known divergences](#known-divergences).
 | `gstate_2b.pdf`        | 9    | 7    | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
+| `iccbadgray_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
+| `iccbadgray_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
 | `iccv4gray_1b.pdf`     | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `iccv4intent_1b.pdf`   | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
@@ -7072,6 +7076,44 @@ place, so the page and the image still share one profile object, and lcms 2.17
 converts every 8-bit grey to the same sRGB colour through it as through the
 source; the other levels keep the v4 profile. Before the `icc-space-v2` fixer
 the PDF/A-1a and 1b outputs kept `6.2.3.2/1` on both tools.
+
+### `iccbadgray_1b.pdf` and `iccbadgray_2b.pdf`
+
+A grey destination profile that cannot be kept or re-encoded is replaced with
+litho's generated v2.4 grey profile, `sgray-v2.icc` (`4afa50fb`), whose `cprt`
+dedicates it to the public domain under CC0 1.0. A grey intent must keep a grey
+profile: sRGB under a grey output condition would license DeviceRGB content the
+source never had (ISO 19005-1, 6.2.3.3; ISO 19005-2, 6.2.4.3). No fixture
+reached that replacement before these two; `outputintent_2b.pdf` reaches the
+sRGB one, and no fixture reaches the CMYK one.
+
+`iccbadgray_1b.pdf` has one indirect intent whose grey display profile states
+version 5.0, which no part admits. `iccbadgray_2b.pdf` has one intent written
+directly in `/OutputIntents` over a version 2.1 grey profile of the input
+device class `scnr`. Both profiles carry v2 `desc`, `cprt`, `wtpt` and `kTRC`
+tags, and each page paints a DeviceGray square and text in an embedded
+TrueType.
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells:
+`6.2.2/1` at PDF/A-1a and 1b, `6.2.3/1` at the other PDF/A levels, beside the
+tagging and identification rules each claim draws, and no ICC rule at PDF/UA-1
+and UA-2. Remediated at all thirteen, default and aggressive, every output
+carries the same rule set on both tools and fully fixes, but PDF/A-4f, which
+keeps `6.9/5`. At every PDF/A level the output intent reads the CC0 grey
+profile with `/N 1` and keeps its `/OutputConditionIdentifier`; PDF/UA checks
+no output intent, so those outputs keep the source profile.
+
+The two files take the two branches of the replacement. A version no part
+admits fails an ICCBased space sharing the profile as well (ISO 19005-2,
+6.2.4.2 t1), so `iccbadgray_1b.pdf` has its profile replaced at its own object
+number. A scanner profile is admitted in an ICCBased space, so
+`iccbadgray_2b.pdf` keeps it and the intent names a new profile object; the
+intent has no object number of its own, so remediation rewrites the catalog's
+array. Before the fix in the same change, that branch overwrote the profile
+stream in place after allocating the replacement once more under a number
+nothing referenced, so every output carried an orphan 2.7 KB copy of the grey
+profile, and two intents sharing one profile came back with two copies, which
+a later fixer had to unify.
 
 ### `drivetitle_1b.pdf`
 
