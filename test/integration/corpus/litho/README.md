@@ -224,6 +224,7 @@ one deliberately rather than diffing it against a fresh build.
 | `patternglyph_2b.pdf`  | PDF/A-2b     | Type 3 glyphs a tiling cell shows, nested once                   |
 | `shadedefault_2b.pdf`  | PDF/A-2b     | Shading patterns over DeviceCMYK beside DeviceRGB, CMYK intent   |
 | `type3names_2u.pdf`    | PDF/A-2u     | Type 3 fonts with no `/ToUnicode`, glyph names their one meaning |
+| `sizetie_2b.pdf`       | PDF/A-2b     | Two font sizes of equal weight, under bookmark generation        |
 
 ### Must-not-fire controls
 
@@ -639,6 +640,7 @@ which are covered under [Known divergences](#known-divergences).
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
 | `siglock_2b.pdf`       | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
 | `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
+| `sizetie_2b.pdf`       | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `stdremap_ua2.pdf`     | 4    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `structcopy_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 0    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
@@ -6833,6 +6835,29 @@ rule set on both tools at every profile: `6.3.8/1` x2 at PDF/A-1a,
 `6.2.11.7.2/1` x1 at PDF/A-2a, 2u, 3a and 3u, `7.21.7/1` x1 at PDF/UA-1 and
 `8.4.5.8/1` x1 at PDF/UA-2. The other six profiles carry no Unicode rule and
 fully fix, but PDF/A-4f, which keeps `6.9/5`.
+
+### `sizetie_2b.pdf`
+
+Bookmark generation takes the body font size to be the size that sets the most
+characters, and calls a line set larger a heading. One page shows `AABB` at 48
+points over `ABAB` at 12, four characters each, so the two sizes tie. The tie
+broke in the iteration order of a Go map until `5688d5c6`, and the outline came
+out with `AABB` or without it from run to run. The tie now breaks to the smaller
+size, and both generations find the one heading `AABB`.
+
+The `determinism` feature runs `generate-bookmarks` (a Writer generation with
+the CLI's options, replacing the outline) at PDF/UA-2 and `split-reconstruct` (a
+split of every page that reconstructs the outline) at PDF/A-4e, eight times
+each. With the tie broken in map order again, the feature counted one or both
+cells nondeterministic in 10 of 10 runs.
+
+The file conforms to PDF/A-2b: the text is in the conforming embedded TrueType
+of `ttcmap_2b.pdf`, in DeviceGray under a CMYK OutputIntent, as in
+`pagelabels_2b.pdf`. veraPDF 1.30.2 and litho report the same rule set in all
+thirteen cells: nothing at PDF/A-2b, and at the other levels the
+identification and tagging rules a part-2 claim draws. Remediated at all
+thirteen, default and aggressive, every output carries the same rule set on both
+tools and fully fixes, but PDF/A-4f, which keeps `6.9/5` on both.
 
 ### `fontnohead_2b.pdf`
 
