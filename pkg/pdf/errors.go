@@ -471,8 +471,9 @@ var (
 	// PDF/A-1a or PDF/A-1b returns it when [NewWriter] was given
 	// [WithObjectStreams] or [WithXRefStream], and [Writer.WriteTo] and
 	// [Pipeline.WriteTo] return it when either asks to write what such a
-	// remediation produced. Nothing is written. [WithDedup] and
-	// [WithImageRecompression] write neither construct and stay allowed.
+	// remediation produced. Nothing is written. [WithDedup],
+	// [WithImageRecompression] and [WithFontSubsetting] write neither
+	// construct and stay allowed.
 	ErrPDFA1ForbidsObjectStreams = errors.New("PDF/A-1 forbids cross-reference streams, which object streams require")
 
 	// ErrPDFUAForbidsBarringAccessibility is returned, naming the clause, when

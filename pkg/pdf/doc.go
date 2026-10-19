@@ -131,7 +131,7 @@
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
 //     [WithBookmarks], [WithPipelineTempDir], [WithTempDir],
 //     [WithEncryption], [WithObjectStreams], [WithDedup],
-//     [WithImageRecompression], [WithCompactionSkipped],
+//     [WithImageRecompression], [WithFontSubsetting], [WithCompactionSkipped],
 //     [WithDroppedSignatures], [WithDefaultPageSize]. [NewWriter] takes them
 //     too, as defaults for the Writer's WriteTo, which overrides them with
 //     its own, and a [WithDefaultPageSize] given to it also reaches its
@@ -157,13 +157,15 @@
 //
 // [WithEncryption] is how an output becomes encrypted. No operation preserves
 // a source's encryption, so an edited document is written in the clear unless
-// this option asks otherwise. [WithObjectStreams], [WithDedup] and
-// [WithImageRecompression] shrink a full rewrite, losslessly, and all three
-// decline on an encrypted output. [WithCompactionSkipped] reports a write
-// that applied none of them because it appended an incremental update.
-// [WithImageRecompression] costs far more time
-// than the other two, so the CLI keeps it behind its own --recompress-images
-// flag rather than in --compact.
+// this option asks otherwise. [WithObjectStreams], [WithDedup],
+// [WithImageRecompression] and [WithFontSubsetting] shrink a full rewrite,
+// losslessly, and the first three decline on an encrypted output.
+// [WithCompactionSkipped] reports a write that applied none of them because
+// it appended an incremental update. [WithImageRecompression] costs far more
+// time than the other two, so the CLI keeps it behind its own
+// --recompress-images flag rather than in --compact, and
+// [WithFontSubsetting] leaves later edits no glyph the document does not
+// show, so the CLI keeps it behind --subset-fonts.
 //
 // # Resource limits
 //

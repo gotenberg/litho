@@ -206,8 +206,9 @@ func (p *Pipeline) buildValidationErrors() []error {
 // [ErrPDFA1ForbidsObjectStreams]. A stage after a remediation fails with
 // [ErrEditAfterRemediation] (see [Pipeline]).
 //
-// [WithObjectStreams], [WithDedup], [WithImageRecompression] and
-// [WithVersion] reach the output after a Split or a Merge too: when a later
+// [WithObjectStreams], [WithDedup], [WithImageRecompression],
+// [WithFontSubsetting] and [WithVersion] reach the output after a Split or a
+// Merge too: when a later
 // stage edits the file a Split or a Merge wrote, the output is a full rewrite
 // of it, and a signature goes on top of that rewrite. On the source itself
 // they apply only when the write rewrites it in full, as on [Writer.WriteTo].
