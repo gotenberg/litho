@@ -1,0 +1,94 @@
+%PDF-1.7
+%¿÷¢þ
+1 0 obj
+<< /Lang (en-US) /Metadata 2 0 R /Pages 3 0 R /Type /Catalog /ViewerPreferences << /DisplayDocTitle true >> >>
+endobj
+2 0 obj
+<< /Subtype /XML /Type /Metadata /Length 535 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/" xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">litho corpus fixture</rdf:li></rdf:Alt></dc:title>
+    <pdfuaid:part>1</pdfuaid:part>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+
+<?xpacket end="w"?>
+
+endstream
+endobj
+3 0 obj
+<< /Count 2 /Kids [ 4 0 R 5 0 R ] /Type /Pages >>
+endobj
+4 0 obj
+<< /Contents 6 0 R /MediaBox [ 0 0 612 792 ] /Parent 3 0 R /Resources << /Font << /F1 7 0 R >> >> /Type /Page >>
+endobj
+5 0 obj
+<< /Contents 8 0 R /MediaBox [ 0 0 612 792 ] /Parent 3 0 R /Resources << /Font << /F1 7 0 R >> >> /Type /Page >>
+endobj
+6 0 obj
+<< /Length 1274 >>
+stream
+BT /F1 16 Tf 72 720 Td (Two columns of prose on shared baselines) Tj ET
+BT /F1 10 Tf 72 680 Td (Accessible documents carry a structure tree) Tj ET
+BT /F1 10 Tf 320 680 Td (Some producers set such a page line by line,) Tj ET
+BT /F1 10 Tf 72 668 Td (that names what each part of a page is: a) Tj ET
+BT /F1 10 Tf 320 668 Td (the first line of the left column and then) Tj ET
+BT /F1 10 Tf 72 656 Td (heading, a paragraph, a list, a table or a) Tj ET
+BT /F1 10 Tf 320 656 Td (the first line of the right one, on the same) Tj ET
+BT /F1 10 Tf 72 644 Td (figure. Assistive technology reads that tree) Tj ET
+BT /F1 10 Tf 320 644 Td (baseline. Rows of the two columns then line) Tj ET
+BT /F1 10 Tf 72 632 Td (rather than the order in which a producer) Tj ET
+BT /F1 10 Tf 320 632 Td (up as the rows of a table do, yet nothing on) Tj ET
+BT /F1 10 Tf 72 620 Td (happened to draw the text, so a page set in) Tj ET
+BT /F1 10 Tf 320 620 Td (the page is tabular: no rule parts the rows,) Tj ET
+BT /F1 10 Tf 72 608 Td (two columns reads one column after the other) Tj ET
+BT /F1 10 Tf 320 608 Td (and every line runs on into the next one of) Tj ET
+BT /F1 10 Tf 72 596 Td (when its tree follows the reading order.) Tj ET
+BT /F1 10 Tf 320 596 Td (its own column, never across the gutter.) Tj ET
+
+endstream
+endobj
+7 0 obj
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
+endobj
+8 0 obj
+<< /Length 619 >>
+stream
+BT /F1 16 Tf 72 720 Td (A borderless table of short cells) Tj ET
+BT /F1 10 Tf 72 680 Td (Item) Tj ET
+BT /F1 10 Tf 220 680 Td (Quantity) Tj ET
+BT /F1 10 Tf 340 680 Td (Price) Tj ET
+BT /F1 10 Tf 72 664 Td (Paper) Tj ET
+BT /F1 10 Tf 220 664 Td (12) Tj ET
+BT /F1 10 Tf 340 664 Td (4.50) Tj ET
+BT /F1 10 Tf 72 648 Td (Toner) Tj ET
+BT /F1 10 Tf 220 648 Td (2) Tj ET
+BT /F1 10 Tf 340 648 Td (38.00) Tj ET
+BT /F1 10 Tf 72 632 Td (Staples) Tj ET
+BT /F1 10 Tf 220 632 Td (5) Tj ET
+BT /F1 10 Tf 340 632 Td (1.20) Tj ET
+BT /F1 10 Tf 72 616 Td (Folders) Tj ET
+BT /F1 10 Tf 220 616 Td (30) Tj ET
+BT /F1 10 Tf 340 616 Td (9.90) Tj ET
+
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000141 00000 n 
+0000000757 00000 n 
+0000000822 00000 n 
+0000000950 00000 n 
+0000001078 00000 n 
+0000002404 00000 n 
+0000002501 00000 n 
+trailer << /Root 1 0 R /Size 9 /ID [<6ac008caa75d90d8781782c8a7134273><6ac008caa75d90d8781782c8a7134273>] >>
+startxref
+3171
+%%EOF

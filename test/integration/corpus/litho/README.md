@@ -236,6 +236,7 @@ one deliberately rather than diffing it against a fresh build.
 | `danglingstr_ua1.pdf`  | PDF/UA-1     | Auto-tagging a page that ends inside an unterminated string      |
 | `readorder_ua1.pdf`    | PDF/UA-1     | Untagged two-column page whose stream interleaves the columns    |
 | `readcolumns_ua1.pdf`  | PDF/UA-1     | Columns set line by line; a running head in the title's object   |
+| `prosecolumns_ua1.pdf` | PDF/UA-1     | Prose columns on shared baselines; a borderless table control    |
 | `sharedicc_2b.pdf`     | PDF/A-2b     | One content stream four pages share, each over its own ICC space |
 | `texlig_2b.pdf`        | PDF/A-2b     | A TeX ligature code and a code 32 whose names map nothing        |
 | `qnestreach_2b.pdf`    | PDF/A-2b     | q/Q nesting past 28 in a form, a cell, a glyph and an appearance |
@@ -648,6 +649,7 @@ are covered under [Known divergences](#known-divergences).
 | `patternglyph_2b.pdf`  | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 7    | 7    |
 | `patternreach_2b.pdf`  | 6    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 10   | 7    |
 | `patternshade_2b.pdf`  | 8    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 7    | 6    |
+| `prosecolumns_ua1.pdf` | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `qnestreach_2b.pdf`    | 6    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 4   | 4    | 5    | 10   | 7    |
 | `remapchain_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 4    | 0    |
@@ -7697,6 +7699,34 @@ at PDF/UA-1, and `5/2`, `5/5`, `6.2/1`, `8.2.1/1`, `8.2.2/1` and
 outputs remediated at every level, default and aggressive, keep only the font
 on both tools, and at PDF/A-4f the missing `EmbeddedFiles` (`6.9/5`) too, as
 they did when each line was a paragraph.
+
+### `prosecolumns_ua1.pdf`
+
+The question `readcolumns_ua1.pdf` steps around: its right column's baselines
+sit half a line below the left's so that no row of the two reads as a table
+row. Page 1 sets two columns of eight lines of running text line by line across
+both, every line a text object of its own and every right-hand line on the
+baseline of its left-hand neighbour, with no rule anywhere. Every row of the
+two aligned, so auto-tagging tagged the columns as one `Table` of eight `TR`
+of two `TD`, a grid of half-sentences that reads across the gutter at every
+line. ISO 14289-1, 7.5 reserves `Table` for tabular content and 7.2 asks the
+tree to follow the reading order: a grid whose cells are, in every column, for
+the most part single lines of running text, twelve sizes wide at least and
+with no gap inside them a gutter wide, and which no stroked rule crosses, now
+reads as columns. Each column is one `P` whose `/K` lists its eight lines'
+MCIDs, left then right, under the page title, now an `H1`.
+
+Page 2 is the control: a borderless table of five rows of three short cells,
+an item, a quantity and a price, still tagged `Table > TR > TD`.
+
+Before remediation both tools report the untagged pages and the non-embedded
+font, as on `readcolumns_ua1.pdf`: `6.2/1`, `7.1/3`, `7.1/11` and
+`7.21.4.1/1` at PDF/UA-1, and `5/2`, `5/5`, `6.2/1`, `8.2.1/1`, `8.2.2/1` and
+`8.4.5.5.1/1` at PDF/UA-2. The two tools agree in all thirteen cells. The
+outputs remediated at every level, default and aggressive, keep only the font
+on veraPDF, and at PDF/A-4f the missing `EmbeddedFiles` (`6.9/5`) too. The
+PDF/UA-1 and PDF/UA-2 outputs drew the same rules when the columns were tagged
+as a table: veraPDF does not judge whether a `Table` holds tabular content.
 
 ### `texlig_2b.pdf`
 
