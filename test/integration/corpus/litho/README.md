@@ -230,6 +230,7 @@ one deliberately rather than diffing it against a fresh build.
 | `sizetie_2b.pdf`       | PDF/A-2b     | Two font sizes of equal weight, under bookmark generation        |
 | `iccv4intent_1b.pdf`   | PDF/A-1b     | An output intent's ICC v4 destination profile at PDF/A-1         |
 | `iccv4gray_1b.pdf`     | PDF/A-1b     | A grey ICC v4 destination profile whose tags need v2 re-encoding |
+| `iccv4space_1b.pdf`    | PDF/A-1b     | ICCBased spaces of a page and an image sharing an ICC v4 profile |
 | `drivetitle_1b.pdf`    | PDF/A-1b     | Info text entries that begin like a PDF date, against XMP        |
 | `unclosedmc_ua1.pdf`   | PDF/UA-1     | An artifact sequence the content stream never closes             |
 | `danglingstr_ua1.pdf`  | PDF/UA-1     | Auto-tagging a page that ends inside an unterminated string      |
@@ -596,6 +597,7 @@ which are covered under [Known divergences](#known-divergences).
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
 | `iccv4gray_1b.pdf`     | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `iccv4intent_1b.pdf`   | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
+| `iccv4space_1b.pdf`    | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `idfields_ua2.pdf`     | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 4    | 6    |
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
 | `imagecolour_2b.pdf`   | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
@@ -6974,6 +6976,30 @@ profile is re-encoded as version 2.4 (`5e8bf48c`): `mluc` becomes
 maps from; the output converts every 8-bit grey to the same sRGB colour on
 litho and lcms 2.14. Before that commit the PDF/A-1a and 1b outputs kept `6.2.2/1` on both
 tools.
+
+### `iccv4space_1b.pdf`
+
+The colour-space twin of `iccv4gray_1b.pdf`. Its v4.2 grey display profile, of
+the same shape, sits where the content paints rather than in an output intent:
+`CS0` fills a square and colours the text, and the image `Im0` names the same
+profile stream in its own `/ColorSpace`. `CS1`, the control, fills a second
+square over a v2.4 profile of the same transfer function. The file declares no
+output intent. ISO 19005-1, 6.2.3.2 asks of an ICCBased space the profile of
+PDF Reference 1.4, 4.5.4, and veraPDF's `ICCInputProfile` test reads "version
+< 3.0"; ISO 19005-2, -3 and -4, 6.2.4.2 admit v4.
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells:
+`6.2.3.2/1` alone at PDF/A-1b, five failed checks on both tools (the two
+selections of `CS0`, the fill and the text it colours, and the image, none for
+`CS1`), and at the
+other levels the tagging and identification rules a part-1 claim draws, with no
+ICC rule. Remediated at all thirteen, default and aggressive, every output
+carries the same rule set on both tools and fully fixes, but PDF/A-4f, which
+keeps `6.9/5`. At PDF/A-1a and 1b the profile is re-encoded as version 2.4 in
+place, so the page and the image still share one profile object, and lcms 2.17
+converts every 8-bit grey to the same sRGB colour through it as through the
+source; the other levels keep the v4 profile. Before the `icc-space-v2` fixer
+the PDF/A-1a and 1b outputs kept `6.2.3.2/1` on both tools.
 
 ### `drivetitle_1b.pdf`
 
