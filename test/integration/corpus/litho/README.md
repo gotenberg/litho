@@ -7240,9 +7240,11 @@ A shading reaches a page through a shading pattern an `scn` selects (ISO
 pattern's cell (8.7.3.1) or in a Type 3 glyph description (9.6.5). veraPDF
 1.30.2 judges the colour space of every such shading, a Separation or DeviceN
 tint transform included, and judges neither the shading's `/Function` nor a
-shading pattern's own `/ExtGState`. No corpus file reaches a shading through a
-cell or a glyph, so this fixture plants one path per page, each answering a
-rule nothing else in the file fires. A CMYK OutputIntent covers DeviceCMYK and
+shading pattern's own `/ExtGState`. Three pdfjs files reach a shading through a cell (`issue6737` paints one with
+`sh`, `issue16127` and `issue8565` select shading patterns), and litho matches
+veraPDF on all three. No corpus file reaches a shading through a glyph, and
+none isolates each path, so this fixture plants one path per page, each
+answering a rule nothing else in the file fires. A CMYK OutputIntent covers DeviceCMYK and
 the DeviceGray a glyph shows in:
 
 | Page | Path                                 | Shading colour space               | Answers at PDF/A-2b     |
@@ -7459,12 +7461,12 @@ order: veraPDF does not judge the order of a tree.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-173 x 13 = 2249 cells, the whole hand-measured matrix. litho and veraPDF return
+181 x 13 = 2353 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2247 of the 2249 cells. The two
+fixtures exist to protect, and it holds in 2351 of the 2353 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -7472,12 +7474,12 @@ non-empty set in each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-eleven is non-compliant on both sides (`baretree_2b`, `boxorigin_2b`,
-`pagelabels_2b`, `siglock_2b`, `sizetie_2b` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
+thirteen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `boxorigin_2b`,
+`pagelabels_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2249 and moves only `ruleset_mismatch`, and on
-those eleven cells it moves both. Both exceptions sit in the manifest's profiles,
+rule class leaves `matched` at 2353 and moves only `ruleset_mismatch`, and on
+those thirteen cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
 the runner is a regression, or a divergence to cover under Known divergences and
