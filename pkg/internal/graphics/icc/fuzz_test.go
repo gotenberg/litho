@@ -41,3 +41,29 @@ func FuzzProfile(f *testing.F) {
 		}
 	})
 }
+
+// FuzzToV2 feeds arbitrary data to the version 2 re-encoder. The contract is
+// crash-freedom and a well-formed result: every input either converts to a
+// profile [Parse] reads as version 2, or returns an error carrying a sentinel.
+func FuzzToV2(f *testing.F) {
+	for _, p := range [][]byte{sGrayV4(), rgbProfile(), extendedProfile()} {
+		f.Add(p)
+		f.Add(p[:len(p)/2])
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		out, err := ToV2(data)
+		if err != nil {
+			if !errors.Is(err, ErrMalformed) && !errors.Is(err, ErrUnsupported) && !errors.Is(err, ErrLimit) {
+				t.Fatalf("error without a sentinel: %v", err)
+			}
+			return
+		}
+		p, err := Parse(out)
+		if err != nil {
+			t.Fatalf("converted profile does not parse: %v", err)
+		}
+		if p.Version != 2 {
+			t.Fatalf("converted profile is version %d", p.Version)
+		}
+	})
+}
