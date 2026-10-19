@@ -30,16 +30,44 @@ var charStringReaders = [][]byte{
 // The returned slice preserves discovery order. Duplicate names are
 // filtered so callers can use it directly for set-membership checks.
 func ParseCharStringNames(data []byte) []string {
-	if len(data) == 0 {
-		return nil
-	}
 	plain := decryptEexec(eexecRegion(data))
 	if plain == nil {
 		return nil
 	}
+	entries, _ := charStringEntries(plain)
+	var names []string
+	seen := make(map[string]struct{})
+	for _, e := range entries {
+		if _, ok := seen[e.name]; !ok {
+			seen[e.name] = struct{}{}
+			names = append(names, e.name)
+		}
+	}
+	return names
+}
+
+// charStringEntry is one "/name LEN RD <LEN bytes> ND" entry of a
+// decrypted /CharStrings dictionary, as offsets into the plaintext it
+// was read from.
+type charStringEntry struct {
+	name string
+	// lenStart and lenEnd bound the LEN token.
+	lenStart, lenEnd int
+	// bodyStart and bodyEnd bound the encrypted charstring bytes.
+	bodyStart, bodyEnd int
+}
+
+// charStringEntries walks the /CharStrings dictionary of plain, the
+// decrypted private section, and returns its entries in the order they
+// appear, duplicates included, and whether plain holds a /CharStrings
+// dictionary at all. Entries the walk cannot validate (missing length,
+// missing operator) are skipped rather than aborting the walk, and the
+// walk stops at the dictionary's "end" or at an entry whose length runs
+// past the plaintext.
+func charStringEntries(plain []byte) ([]charStringEntry, bool) {
 	cs := bytes.Index(plain, charStringsMarker)
 	if cs < 0 {
-		return nil
+		return nil, false
 	}
 	// Skip past "/CharStrings N dict dup begin" preamble to the first
 	// entry. The parser anchors on the first '/' after the preamble.
@@ -48,8 +76,7 @@ func ParseCharStringNames(data []byte) []string {
 		pos += beginIdx + len("begin")
 	}
 
-	var names []string
-	seen := make(map[string]struct{})
+	var entries []charStringEntry
 	for pos < len(plain) {
 		pos = skipWhitespace(plain, pos)
 		if pos >= len(plain) {
@@ -70,8 +97,8 @@ func ParseCharStringNames(data []byte) []string {
 			pos++
 			continue
 		}
-		pos = next
-		pos = skipWhitespace(plain, pos)
+		pos = skipWhitespace(plain, next)
+		lenStart := pos
 		length, after := readInt(plain, pos)
 		if after == pos {
 			// No length follows the name; skip this token and keep
@@ -91,17 +118,16 @@ func ParseCharStringNames(data []byte) []string {
 		if pos < len(plain) && isPostScriptWhitespace(plain[pos]) {
 			pos++
 		}
-		// Skip the encrypted charstring bytes.
-		if pos+length > len(plain) {
+		if length > len(plain)-pos {
 			break
 		}
+		entries = append(entries, charStringEntry{
+			name: name, lenStart: lenStart, lenEnd: after,
+			bodyStart: pos, bodyEnd: pos + length,
+		})
 		pos += length
-		if _, ok := seen[name]; !ok {
-			seen[name] = struct{}{}
-			names = append(names, name)
-		}
 	}
-	return names
+	return entries, true
 }
 
 // eexecRegion returns the byte slice that starts at the first byte

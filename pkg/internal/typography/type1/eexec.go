@@ -28,13 +28,7 @@ func decryptEexec(data []byte) []byte {
 	if len(binary) <= eexecSalt {
 		return nil
 	}
-	plain := make([]byte, len(binary))
-	r := eexecKey
-	for i, c := range binary {
-		plain[i] = c ^ byte(r>>8)
-		r = (uint32(c)+r)*eexecC1 + eexecC2
-	}
-	return plain[eexecSalt:]
+	return crypt(binary, eexecKey, false)[eexecSalt:]
 }
 
 // normaliseEexec inspects the leading bytes and returns a binary
@@ -129,4 +123,21 @@ func hexNibble(c byte) (byte, bool) {
 		return c - 'A' + 10, true
 	}
 	return 0, false
+}
+
+// crypt runs the Type 1 cipher (Adobe Type 1 Font Format, 7.1) over data
+// under key r, encrypting when encrypt is set and decrypting otherwise. The
+// salt is neither added nor removed.
+func crypt(data []byte, r uint32, encrypt bool) []byte {
+	out := make([]byte, len(data))
+	for i, b := range data {
+		o := b ^ byte(r>>8) //nolint:gosec // G115: keeps bits 8 to 15 of the key, the high byte of the 16-bit r Adobe Type 1 Font Format, 7.1 runs the cipher on.
+		out[i] = o
+		c := b
+		if encrypt {
+			c = o
+		}
+		r = (uint32(c)+r)*eexecC1 + eexecC2
+	}
+	return out
 }

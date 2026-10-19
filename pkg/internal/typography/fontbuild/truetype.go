@@ -29,10 +29,10 @@ type Glyph struct {
 	// drawing each listed GID at the origin (OpenType specification, glyf
 	// table, composite glyph description). CFF programs ignore it.
 	Components []uint16
-	// Seac, when set, makes a CFF glyph an accented character built from
-	// the two glyphs the Standard encoding codes name, base then accent
-	// (Type 2 charstring endchar with four arguments). TrueType programs
-	// ignore it.
+	// Seac, when set, makes a CFF or Type 1 glyph an accented character
+	// built from the two glyphs the Standard encoding codes name, base then
+	// accent (Type 2 charstring endchar with four arguments, Type 1 seac).
+	// TrueType programs ignore it.
 	Seac *[2]byte
 }
 

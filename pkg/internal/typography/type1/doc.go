@@ -9,4 +9,8 @@
 // interpreted: the width scan stops at the metrics operator. Callers
 // resolve glyph names to Unicode through the main Adobe Glyph List and
 // the Symbol/Dingbats auxiliary tables.
+//
+// [SubsetInPlace] empties the charstrings of the glyphs a document does
+// not show, keeping every glyph name and width, and encrypts the program
+// again.
 package type1

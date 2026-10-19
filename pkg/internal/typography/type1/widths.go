@@ -1,7 +1,6 @@
 package type1
 
 import (
-	"bytes"
 	"regexp"
 	"strconv"
 )
@@ -58,13 +57,7 @@ func decryptCharString(data []byte, lenIV int) []byte {
 	if len(data) <= lenIV {
 		return nil
 	}
-	plain := make([]byte, len(data))
-	r := charStringKey
-	for i, c := range data {
-		plain[i] = c ^ byte(r>>8)
-		r = (uint32(c)+r)*eexecC1 + eexecC2
-	}
-	return plain[lenIV:]
+	return crypt(data, charStringKey, false)[lenIV:]
 }
 
 // parseLenIV returns the /lenIV value declared in the decrypted
@@ -88,61 +81,20 @@ func parseLenIV(plain []byte) int {
 // Type 1) are skipped silently so a partial map still gets back to
 // the caller.
 func ParseCharStringWidths(data []byte) map[string]float64 {
-	if len(data) == 0 {
-		return nil
-	}
 	plain := decryptEexec(eexecRegion(data))
 	if plain == nil {
 		return nil
 	}
-	cs := bytes.Index(plain, charStringsMarker)
-	if cs < 0 {
+	entries, ok := charStringEntries(plain)
+	if !ok {
 		return nil
 	}
 	lenIV := parseLenIV(plain)
-
-	pos := cs + len(charStringsMarker)
-	if beginIdx := bytes.Index(plain[pos:], []byte("begin")); beginIdx >= 0 {
-		pos += beginIdx + len("begin")
-	}
-
 	widths := make(map[string]float64)
-	for pos < len(plain) {
-		pos = skipWhitespace(plain, pos)
-		if pos >= len(plain) || bytes.HasPrefix(plain[pos:], []byte("end")) {
-			break
-		}
-		if plain[pos] != '/' {
-			pos++
-			continue
-		}
-		name, next := readName(plain, pos+1)
-		if name == "" {
-			pos++
-			continue
-		}
-		pos = skipWhitespace(plain, next)
-		length, after := readInt(plain, pos)
-		if after == pos {
-			continue
-		}
-		pos = skipWhitespace(plain, after)
-		op, afterOp := readReaderOp(plain, pos)
-		if op == nil {
-			continue
-		}
-		pos = afterOp
-		if pos < len(plain) && isPostScriptWhitespace(plain[pos]) {
-			pos++
-		}
-		if pos+length > len(plain) {
-			break
-		}
-		body := plain[pos : pos+length]
-		pos += length
-		if w, ok := extractAdvanceWidth(decryptCharString(body, lenIV)); ok {
-			if _, exists := widths[name]; !exists {
-				widths[name] = w
+	for _, e := range entries {
+		if w, ok := extractAdvanceWidth(decryptCharString(plain[e.bodyStart:e.bodyEnd], lenIV)); ok {
+			if _, exists := widths[e.name]; !exists {
+				widths[e.name] = w
 			}
 		}
 	}
@@ -154,19 +106,19 @@ func ParseCharStringWidths(data []byte) map[string]float64 {
 // two that carry the advance width, so the interpreter in
 // [extractAdvanceWidth] intentionally stops once it sees one.
 const (
-	csOpHstem          = 1  //nolint:unused // listed for context
-	csOpVstem          = 3  //nolint:unused // listed for context
-	csOpVmoveTo        = 4  //nolint:unused // listed for context
-	csOpRlineTo        = 5  //nolint:unused // listed for context
-	csOpHlineTo        = 6  //nolint:unused // listed for context
-	csOpVlineTo        = 7  //nolint:unused // listed for context
-	csOpRrcurveTo      = 8  //nolint:unused // listed for context
-	csOpClosePath      = 9  //nolint:unused // listed for context
-	csOpCallSubr       = 10 //nolint:unused // listed for context
+	csOpHstem          = 1 //nolint:unused // listed for context
+	csOpVstem          = 3 //nolint:unused // listed for context
+	csOpVmoveTo        = 4 //nolint:unused // listed for context
+	csOpRlineTo        = 5 //nolint:unused // listed for context
+	csOpHlineTo        = 6 //nolint:unused // listed for context
+	csOpVlineTo        = 7 //nolint:unused // listed for context
+	csOpRrcurveTo      = 8 //nolint:unused // listed for context
+	csOpClosePath      = 9 //nolint:unused // listed for context
+	csOpCallSubr       = 10
 	csOpReturn         = 11 //nolint:unused // listed for context
 	csOpEscape         = 12
 	csOpHsbw           = 13
-	csOpEndChar        = 14 //nolint:unused // listed for context
+	csOpEndChar        = 14
 	csOpRmoveTo        = 21 //nolint:unused // listed for context
 	csOpHmoveTo        = 22 //nolint:unused // listed for context
 	csOpVhcurveTo      = 30 //nolint:unused // listed for context
@@ -175,24 +127,35 @@ const (
 	csOpEscapeDiv byte = 12 // follows csOpEscape to form the two-byte div operator
 )
 
-// extractAdvanceWidth walks the decrypted charstring bytes, decoding
-// the Type 1 integer encoding until it hits either hsbw (operator
-// 13) or sbw (12 7). Returns the advance width pushed immediately
-// before that operator. A div (12 12) on the way is evaluated, since a
-// fractional advance can only be written as a quotient (Adobe Type 1 Font
-// Format, 6.5): TeX's Computer Modern subsets set "78 113889 100 div hsbw".
-// Any other operator or malformed byte stream returns (0, false) so the
-// caller can skip the glyph.
+// maxCharStringStack is the depth of the Type 1 BuildChar operand stack
+// (Adobe Type 1 Font Format, 6.1: "the BuildChar operand stack has a
+// limit of 24 entries").
+const maxCharStringStack = 24
+
+// extractAdvanceWidth returns the advance width a decrypted charstring
+// gives in its hsbw or sbw operator. See [scanMetrics].
 func extractAdvanceWidth(plain []byte) (float64, bool) {
+	w, _, ok := scanMetrics(plain)
+	return w, ok
+}
+
+// scanMetrics walks the decrypted charstring bytes, decoding the Type 1
+// integer encoding until it hits either hsbw (operator 13) or sbw (12 7).
+// Returns the advance width pushed immediately before that operator and
+// the offset just past it, where the charstring's metrics end. A div
+// (12 12) on the way is evaluated, since a fractional advance can only be
+// written as a quotient (Adobe Type 1 Font Format, 6.5): TeX's Computer
+// Modern subsets set "78 113889 100 div hsbw". Any other operator or
+// malformed byte stream returns false so the caller can skip the glyph.
+func scanMetrics(plain []byte) (float64, int, bool) {
 	if len(plain) == 0 {
-		return 0, false
+		return 0, 0, false
 	}
-	const stackLimit = 24
-	var stack [stackLimit]float64
+	var stack [maxCharStringStack]float64
 	top := 0
 
 	push := func(v float64) bool {
-		if top >= stackLimit {
+		if top >= maxCharStringStack {
 			return false
 		}
 		stack[top] = v
@@ -205,53 +168,53 @@ func extractAdvanceWidth(plain []byte) (float64, bool) {
 		switch {
 		case b >= 32 && b <= 246:
 			if !push(float64(int(b) - 139)) {
-				return 0, false
+				return 0, 0, false
 			}
 			i++
 		case b >= 247 && b <= 250:
 			if i+1 >= len(plain) {
-				return 0, false
+				return 0, 0, false
 			}
 			if !push(float64((int(b)-247)*256 + int(plain[i+1]) + 108)) {
-				return 0, false
+				return 0, 0, false
 			}
 			i += 2
 		case b >= 251 && b <= 254:
 			if i+1 >= len(plain) {
-				return 0, false
+				return 0, 0, false
 			}
 			if !push(float64(-(int(b)-251)*256 - int(plain[i+1]) - 108)) {
-				return 0, false
+				return 0, 0, false
 			}
 			i += 2
 		case b == 255:
 			if i+4 >= len(plain) {
-				return 0, false
+				return 0, 0, false
 			}
 			v := int32(plain[i+1])<<24 | int32(plain[i+2])<<16 | int32(plain[i+3])<<8 | int32(plain[i+4])
 			if !push(float64(v)) {
-				return 0, false
+				return 0, 0, false
 			}
 			i += 5
 		case b == csOpHsbw:
 			if top < 2 {
-				return 0, false
+				return 0, 0, false
 			}
-			return stack[top-1], true
+			return stack[top-1], i + 1, true
 		case b == csOpEscape:
 			if i+1 >= len(plain) {
-				return 0, false
+				return 0, 0, false
 			}
 			next := plain[i+1]
 			if next == csOpEscapeSbw {
 				if top < 4 {
-					return 0, false
+					return 0, 0, false
 				}
-				return stack[top-2], true
+				return stack[top-2], i + 2, true
 			}
 			if next == csOpEscapeDiv {
 				if top < 2 || stack[top-1] == 0 {
-					return 0, false
+					return 0, 0, false
 				}
 				stack[top-2] /= stack[top-1]
 				top--
@@ -261,13 +224,13 @@ func extractAdvanceWidth(plain []byte) (float64, bool) {
 			// Any other escaped operator before hsbw/sbw is a spec
 			// violation for Type 1 charstrings; abandon rather than
 			// fabricate a width.
-			return 0, false
+			return 0, 0, false
 		default:
 			// Any other single-byte operator means the scan passed the
 			// metrics prologue without finding a width: the charstring
 			// is malformed for width extraction.
-			return 0, false
+			return 0, 0, false
 		}
 	}
-	return 0, false
+	return 0, 0, false
 }
