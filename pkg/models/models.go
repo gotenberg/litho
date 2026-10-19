@@ -124,13 +124,27 @@ type TextElement struct {
 	// below its text-space baseline (9.6.5). A negative font size turns the
 	// glyphs a half turn without moving them across the advance, which Angle
 	// already carries.
-	InkRight      bool   `json:"inkRight,omitempty"`
-	Redacted      bool   `json:"redacted,omitempty"`
-	IsClipped     bool   `json:"isClipped,omitempty"`
-	PatternType   string `json:"patternType,omitempty"`
-	Language      string `json:"language,omitempty"`
-	ExpansionText string `json:"expansionText,omitempty"`
-	MathML        string `json:"mathML,omitempty"`
+	InkRight bool `json:"inkRight,omitempty"`
+	// InkBox is the axis-aligned box [minX minY maxX maxY], in default user
+	// space, holding the ink the element paints and its origin: each glyph's
+	// bounds carried through the text rendering matrix of ISO 32000-1,
+	// 9.4.4, [Tfs×Th 0 0 Tfs 0 Trise] × Tm × CTM, so a skewed, turned or
+	// mirrored matrix gives the box of the parallelogram it draws. A Type 3
+	// glyph is bounded by what its description paints and the box its d1
+	// states (9.6.5), mapped by /FontMatrix, so a glyph drawn in pixels and
+	// shown at Tf 1 is bounded where it inks, however small its font size.
+	// Any other glyph is bounded by its advance along the baseline and by
+	// the font's /FontBBox across it, never less than an ascender of one em
+	// and a descender of a fifth of one. A run's box is the union of its
+	// glyphs'. Redaction tests it against a region. It is all zeros on an
+	// element that does not come from extraction.
+	InkBox        [4]float64 `json:"inkBox,omitzero"`
+	Redacted      bool       `json:"redacted,omitempty"`
+	IsClipped     bool       `json:"isClipped,omitempty"`
+	PatternType   string     `json:"patternType,omitempty"`
+	Language      string     `json:"language,omitempty"`
+	ExpansionText string     `json:"expansionText,omitempty"`
+	MathML        string     `json:"mathML,omitempty"`
 }
 
 // Bookmark represents an item in the document outline.

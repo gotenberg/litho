@@ -188,8 +188,19 @@ func rectArray(r [4]float64) ast.PdfArray {
 // textElementBox returns a rectangle holding the glyphs of e: its advance
 // along the baseline, widened by the font size above and below it, and a
 // square around its origin wide enough for any turn when the text is turned
-// or written vertically.
+// or written vertically, grown to the ink box extraction records
+// ([models.TextElement.InkBox]), which reaches the ink of a Type 3 glyph
+// sized through its /FontMatrix and of a skewed matrix.
 func textElementBox(e models.TextElement) [4]float64 {
+	box := sizedTextElementBox(e)
+	if ink := e.InkBox; ink != ([4]float64{}) {
+		box = [4]float64{min(box[0], ink[0]), min(box[1], ink[1]), max(box[2], ink[2]), max(box[3], ink[3])}
+	}
+	return box
+}
+
+// sizedTextElementBox is the part of [textElementBox] the font size gives.
+func sizedTextElementBox(e models.TextElement) [4]float64 {
 	size := math.Abs(e.FontSize)
 	if e.Angle != 0 || e.Vertical {
 		r := math.Abs(e.Width) + (extentAscentFactor+extentDescentFactor)*size

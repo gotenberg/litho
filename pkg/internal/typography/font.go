@@ -85,6 +85,12 @@ type Font struct {
 	// than assumed above the baseline as the ascender of every other font
 	// puts it. See [glyphsInkRight].
 	type3InkBelow bool
+	// type3GlyphInk maps the name of each Type 3 glyph whose ink is bounded
+	// to those bounds in glyph space, and type3FontInk is their union with
+	// /FontBBox, nil when neither bounds anything. A glyph that paints
+	// nothing maps to a box at its origin. See [Font.type3Ink].
+	type3GlyphInk map[string][4]float64
+	type3FontInk  *[4]float64
 
 	// SuppressExtraction marks a reference-only Type0 font that ISO
 	// 32000-1, 9.10.2 gives no route to Unicode: a CMap name outside
@@ -1003,6 +1009,10 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 		}
 	}
 
+	// The box a Type 3 glyph widens to when its own marks are not all
+	// bounded ([type3GlyphInkBounds]), its corners ordered.
+	fontBox := [4]float64{min(bbox[0], bbox[2]), min(bbox[1], bbox[3]), max(bbox[0], bbox[2]), max(bbox[1], bbox[3])}
+
 	// /CharProcs maps glyph names → streams containing d0/d1 width operators.
 	var guessed, ink *[4]float64
 	if cpObj, ok := fontDict["CharProcs"]; ok {
@@ -1012,6 +1022,7 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 		}
 		if cpDict != nil {
 			font.Type3Widths = make(map[string]float64, len(cpDict))
+			font.type3GlyphInk = make(map[string][4]float64, len(cpDict))
 			for name, streamObj := range cpDict {
 				if err := ctx.Err(); err != nil {
 					return
@@ -1023,15 +1034,22 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 				if stream.Dict == nil {
 					continue
 				}
-				w, glyphBox, inkBox, err := extractType3Glyph(ctx, doc, stream)
+				g, err := extractType3Glyph(ctx, doc, stream)
 				if err != nil {
 					continue
 				}
-				font.Type3Widths[string(name)] = w
-				guessed = unionBox(guessed, glyphBox)
-				ink = unionBox(ink, inkBox)
+				font.Type3Widths[string(name)] = g.width
+				guessed = unionBox(guessed, g.pathBox)
+				ink = unionBox(ink, g.inkBox)
+				if box, ok := type3GlyphInkBounds(g, &fontBox); ok {
+					font.type3GlyphInk[string(name)] = box
+					font.type3FontInk = unionBox(font.type3FontInk, &box)
+				}
 			}
 		}
+	}
+	if nonDegenerate(&fontBox) {
+		font.type3FontInk = unionBox(font.type3FontInk, &fontBox)
 	}
 	if ink == nil && math.Hypot(bbox[2]-bbox[0], bbox[3]-bbox[1]) != 0 {
 		ink = &bbox
@@ -3173,58 +3191,102 @@ func builtinGlyphNames(name string) (*[256]string, map[string]rune, map[rune]str
 	return nil, nil, nil
 }
 
+// type3Glyph is what [extractType3Glyph] reads off a Type 3 CharProc stream.
+type type3Glyph struct {
+	// width is the horizontal advance, wx, in glyph space units.
+	width float64
+	// pathBox is the bounds of the paths a glyph description that begins
+	// with d0 constructs, in glyph space, or nil for one that begins
+	// otherwise or constructs none. PDF.js reads those bounds as the font's
+	// bounding box when the font states an empty /FontBBox
+	// (src/core/evaluator.js, TranslatedFont, #guessType3FontBBox): see
+	// [Font.type3HeightScale].
+	pathBox *[4]float64
+	// inkBox is where the glyph's ink lies in glyph space, nil when unknown:
+	// the bounding box d1 states (ISO 32000-1, 9.6.5, Table 113), or the
+	// bounds of the paths drawn after d0. See [Font.type3InkBelow].
+	inkBox *[4]float64
+	// d1Box is the bounding box d1 states, its corners ordered, nil after d0.
+	d1Box *[4]float64
+	// paintBox is the bounds of what the description paints after d0 or
+	// d1, and paintComplete whether they account for every operator that
+	// can paint ([type3PaintBounds]).
+	paintBox      *[4]float64
+	paintComplete bool
+}
+
 // extractType3Glyph parses a Type 3 CharProc stream and returns the glyph
-// width from the d0 or d1 operator.
+// width from the d0 or d1 operator, with the bounds [type3Glyph] records.
 //
 // d0 (setcharwidth): wx wy d0 sets the glyph width.
 // d1 (setcachedevice): wx wy llx lly urx ury d1 sets width and cache bbox.
 //
 // The first operand (wx) is the horizontal advance width in glyph space units.
-//
-// It also returns the bounds of the paths a glyph description that begins
-// with d0 constructs, in glyph space, or nil for one that begins otherwise
-// or constructs none. PDF.js reads those bounds as the font's bounding box
-// when the font states an empty /FontBBox (src/core/evaluator.js,
-// TranslatedFont, #guessType3FontBBox): see [Font.type3HeightScale].
-//
-// Last, it returns where the glyph's ink lies in glyph space, nil when
-// unknown: the bounding box d1 states (ISO 32000-1, 9.6.5, Table 113), or the
-// bounds of the paths drawn after d0. See [Font.type3InkBelow].
-func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.PdfStream) (width float64, pathBox, inkBox *[4]float64, err error) {
+func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.PdfStream) (type3Glyph, error) {
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return 0, nil, nil, err
+		return type3Glyph{}, err
 	}
 
 	ops, err := content.ParseStreamData(ctx, data, content.SplitGluedOperators())
 	if err != nil {
-		return 0, nil, nil, err
+		return type3Glyph{}, err
 	}
 
 	for i, op := range ops {
 		switch op.Operator {
 		case "d0":
 			if len(op.Operands) >= 1 {
-				drawn := type3PathBounds(ops[i+1:])
+				g := type3Glyph{width: document.Float(op.Operands[0])}
+				g.inkBox = type3PathBounds(ops[i+1:])
 				if i == 0 {
-					pathBox = drawn
+					g.pathBox = g.inkBox
 				}
-				return document.Float(op.Operands[0]), pathBox, drawn, nil
+				g.paintBox, g.paintComplete = type3PaintBounds(ops[i+1:])
+				return g, nil
 			}
 		case "d1":
-			if len(op.Operands) >= 6 {
-				inkBox = &[4]float64{
-					document.Float(op.Operands[2]), document.Float(op.Operands[3]),
-					document.Float(op.Operands[4]), document.Float(op.Operands[5]),
-				}
-			}
 			if len(op.Operands) >= 1 {
-				return document.Float(op.Operands[0]), nil, inkBox, nil
+				g := type3Glyph{width: document.Float(op.Operands[0])}
+				if len(op.Operands) >= 6 {
+					llx, lly := document.Float(op.Operands[2]), document.Float(op.Operands[3])
+					urx, ury := document.Float(op.Operands[4]), document.Float(op.Operands[5])
+					g.inkBox = &[4]float64{llx, lly, urx, ury}
+					g.d1Box = &[4]float64{min(llx, urx), min(lly, ury), max(llx, urx), max(lly, ury)}
+				}
+				g.paintBox, g.paintComplete = type3PaintBounds(ops[i+1:])
+				return g, nil
 			}
 		}
 	}
 
-	return 0, nil, nil, fmt.Errorf("no d0/d1 operator found in CharProc stream")
+	return type3Glyph{}, fmt.Errorf("no d0/d1 operator found in CharProc stream")
+}
+
+// type3GlyphInkBounds returns the bounds, in glyph space, of the ink of the
+// Type 3 glyph g of a font stating fontBBox: what its description paints,
+// grown to the box its d1 states, since ISO 32000-1, 9.6.5, Table 113 leaves
+// painting outside that box undefined rather than clipped. A description
+// whose marks are not all bounded grows to /FontBBox too, and is unbounded,
+// false, when neither box has area. A description that paints nothing has no
+// ink: its box is its origin.
+func type3GlyphInkBounds(g type3Glyph, fontBBox *[4]float64) ([4]float64, bool) {
+	ink := unionBox(nil, g.paintBox)
+	if nonDegenerate(g.d1Box) {
+		ink = unionBox(ink, g.d1Box)
+	}
+	if !g.paintComplete {
+		if nonDegenerate(fontBBox) {
+			ink = unionBox(ink, fontBBox)
+		}
+		if !nonDegenerate(ink) {
+			return [4]float64{}, false
+		}
+	}
+	if ink == nil {
+		return [4]float64{}, true
+	}
+	return *ink, true
 }
 
 // unionBox returns the smallest box holding acc and box, either of which may

@@ -955,6 +955,10 @@ func coalesceTextElements(ctx context.Context, in []models.TextElement) []models
 			continue
 		}
 		last.Text += next.Text
+		last.InkBox = [4]float64{
+			min(last.InkBox[0], next.InkBox[0]), min(last.InkBox[1], next.InkBox[1]),
+			max(last.InkBox[2], next.InkBox[2]), max(last.InkBox[3], next.InkBox[3]),
+		}
 		// Width is the total advance from the run's starting position
 		// to the end of the final glyph, measured along the text
 		// baseline direction (cos, sin of the rotation angle).

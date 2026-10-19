@@ -106,10 +106,20 @@ func quadToRect(qp [8]float64) Zone {
 }
 
 // ElementZone returns the axis-aligned bounds of the ink a text element
-// paints. The element origin sits on the baseline at the start of the run,
-// [models.TextElement.Width] measures the advance along that baseline, and the
-// ink rises a font size above it. The returned box always contains the origin.
+// paints: the [models.TextElement.InkBox] extraction records, which holds each
+// glyph's bounds through the text rendering matrix of ISO 32000-1, 9.4.4.
+//
+// An element that records no box, one not built by extraction, is bounded by
+// its size instead: the origin sits on the baseline at the start of the run,
+// [models.TextElement.Width] measures the advance along that baseline, and
+// the ink rises a font size above it. That reach misses the ink of a Type 3
+// glyph sized through its /FontMatrix rather than its font size (9.6.5), and
+// of a skewed matrix, which is why extraction records the box. The returned
+// box always contains the origin.
 func ElementZone(el models.TextElement) Zone {
+	if el.InkBox != ([4]float64{}) {
+		return ZoneFromRect(el.InkBox)
+	}
 	dirX, dirY := baselineDirection(el)
 	// The ink rises on the left of the advance, unless the rendering matrix
 	// reflects the glyph (ISO 32000-1, 9.4.4) or a Type 3 font draws it below

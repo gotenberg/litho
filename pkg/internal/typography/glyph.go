@@ -109,6 +109,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Vertical:      font.WMode == 1,
 			Angle:         angle,
 			InkRight:      glyphsInkRight(state, font),
+			InkBox:        glyphInkBox(state, font, fontSize, cid, x, y),
 			PatternType:   state.FillPatternType,
 			Language:      mcLang,
 			ExpansionText: mcExpansion,
@@ -132,6 +133,10 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 // getCurrentTextTransform and compareWithLastPosition). A vertical font's
 // advance takes no Th and keeps the direction its metrics give it.
 //
+// A Type 3 glyph's width is in glyph space, which /FontMatrix maps to text
+// space (9.6.5, Table 112), so a matrix with a negative X scale gives w0 the
+// other sign and runs the glyphs the other way too ([type3XSign]).
+//
 // # Corpus evidence
 //
 //   - pdfjs issue14415.pdf: words set at -9 to -15 Tf on a page turned by
@@ -139,11 +144,24 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 //   - pdfcpu pkg_testdata__Paclitaxel.pdf: -12 Tf with -100 Tz under a CTM
 //     that flips Y advances rightward, so the font size alone does not give
 //     the direction.
+//   - All corpora: no Type 3 font a page shows sets a negative X scale in its
+//     /FontMatrix, so reading its sign moves no file's text.
 func advancesBackward(state *graphics.State, font *Font, fontSize float64) bool {
 	if font.WMode == 1 {
 		return false
 	}
-	return fontSize*state.Text.Tz < 0
+	return fontSize*state.Text.Tz*type3XSign(font) < 0
+}
+
+// type3XSign returns -1 for a Type 3 font whose /FontMatrix maps the glyph
+// space X axis onto the negative text space X axis (ISO 32000-1, 9.6.5), and
+// 1 for any other font: the sign that matrix gives a glyph's advance and the
+// reflection it gives the glyph along the baseline.
+func type3XSign(font *Font) float64 {
+	if font.Subtype == "Type3" && font.FontMatrix[0] < 0 {
+		return -1
+	}
+	return 1
 }
 
 // glyphsInkRight reports whether the glyphs font paints in state ink the
@@ -157,7 +175,9 @@ func advancesBackward(state *graphics.State, font *Font, fontSize float64) bool 
 // reflects text space. Every font but Type 3 inks above the text-space
 // baseline, which a reflection carries to the right of the advance. A Type 3
 // font may draw below that baseline instead ([Font.type3InkBelow]), which
-// crosses the ink to the other side once more.
+// crosses the ink to the other side once more, and its /FontMatrix may
+// reverse the X axis, which reflects the glyph as a negative Th does
+// ([type3XSign]).
 //
 // # Corpus evidence
 //
@@ -173,7 +193,7 @@ func advancesBackward(state *graphics.State, font *Font, fontSize float64) bool 
 //     reflection off the matrices alone put their ink on the wrong side.
 func glyphsInkRight(state *graphics.State, font *Font) bool {
 	tm, ctm := state.Text.Tm, state.CTM
-	reflected := state.Text.Tz*(tm[0]*tm[3]-tm[1]*tm[2])*(ctm[0]*ctm[3]-ctm[1]*ctm[2]) < 0
+	reflected := state.Text.Tz*type3XSign(font)*(tm[0]*tm[3]-tm[1]*tm[2])*(ctm[0]*ctm[3]-ctm[1]*ctm[2]) < 0
 	below := font.Subtype == "Type3" && font.type3InkBelow
 	return reflected != below
 }
