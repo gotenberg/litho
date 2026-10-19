@@ -9,12 +9,11 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// TestDecodeNextChar_UnmappedWhitespaceCodeReadsAsSpace pins that a
-// single-byte code no table maps reads as a word space when the code is
-// itself a whitespace character, as PDF.js shows an unmapped glyph by its
-// code and reads a whitespace code as a space glyph. Any other unmapped code
-// still reads as nothing.
-func TestDecodeNextChar_UnmappedWhitespaceCodeReadsAsSpace(t *testing.T) {
+// TestDecodeNextChar_UnmappedCode32ReadsAsSpace pins that the single-byte
+// code 32 no table maps reads as a word space, the code ISO 32000-1, 9.3.3
+// applies word spacing to, and that no other unmapped code does, whitespace
+// valued or not: nothing in the font says the glyph there is blank.
+func TestDecodeNextChar_UnmappedCode32ReadsAsSpace(t *testing.T) {
 	t.Parallel()
 
 	font := &Font{
@@ -27,12 +26,12 @@ func TestDecodeNextChar_UnmappedWhitespaceCodeReadsAsSpace(t *testing.T) {
 		want string
 	}{
 		{0x20, " "},
-		{0x09, " "},
-		{0x0C, " "},
-		{0x0D, " "},
-		{0xA0, " "},
+		{0x09, ""},
+		{0x0B, ""},
+		{0x0C, ""},
+		{0x0D, ""},
+		{0xA0, ""},
 		{0x01, ""},
-		{0x0E, ""},
 		{'A', "A"},
 	} {
 		got, n, skip := decodeNextChar(font, []byte{tc.code})
@@ -42,15 +41,12 @@ func TestDecodeNextChar_UnmappedWhitespaceCodeReadsAsSpace(t *testing.T) {
 	}
 }
 
-// TestProcessText_UnmappedWhitespaceCodeSpacesWords pins the word space an
-// unmapped whitespace code shows: TeX's text fonts set the "fi" ligature at
-// code 0x0C, and a font that names no glyph there shows "brie" 0x0C "y",
-// which reads "brie y", where it read "briey" while the code read as nothing.
-func TestProcessText_UnmappedWhitespaceCodeSpacesWords(t *testing.T) {
-	t.Parallel()
-
+// unmappedLigatureFont returns a simple font whose encoding maps the letters
+// of word and nothing else, every code 500 units wide, as a TeX text font
+// whose ligatures carry no glyph name litho maps.
+func unmappedLigatureFont(word string) *Font {
 	enc := map[byte]rune{}
-	for _, r := range "briey" {
+	for _, r := range word {
 		enc[byte(r)] = r
 	}
 	font := &Font{
@@ -65,12 +61,46 @@ func TestProcessText_UnmappedWhitespaceCodeSpacesWords(t *testing.T) {
 	for i := range font.Widths {
 		font.Widths[i] = 500
 	}
+	return font
+}
+
+// showText runs shown through [processText] in font at 10 points.
+func showText(t *testing.T, font *Font, shown string) []models.TextElement {
+	t.Helper()
 	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
 	machine.Current().Text.Tfs = 10
 	var elements []models.TextElement
-	if err := processText(context.Background(), ast.PdfString("brie\x0Cy"), font, machine, &elements); err != nil {
+	if err := processText(context.Background(), ast.PdfString(shown), font, machine, &elements); err != nil {
 		t.Fatalf("processText: %v", err)
 	}
+	return elements
+}
+
+// TestProcessText_UnmappedLigatureCodeKeepsWordWhole pins that a TeX "fi"
+// ligature at code 0x0C with no glyph name litho maps puts no space inside
+// the word: "Veri" 0x0C "cation" reads "Verication", where PDF.js, which
+// shows the code and reads a form feed as whitespace, reads "Veri cation".
+// The glyph also reaches no element as a space.
+func TestProcessText_UnmappedLigatureCodeKeepsWordWhole(t *testing.T) {
+	t.Parallel()
+
+	elements := showText(t, unmappedLigatureFont("Vericaton"), "Veri\x0Ccation")
+	for _, el := range elements {
+		if isSpaceGlyph(el.Text) {
+			t.Errorf("the ligature reached an element as %q", el.Text)
+		}
+	}
+	if got, want := ReconstructText(context.Background(), elements, nil), "Verication"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestProcessText_UnmappedCode32SpacesWords pins the word space an unmapped
+// code 32 shows: "brie" 32 "y" reads "brie y".
+func TestProcessText_UnmappedCode32SpacesWords(t *testing.T) {
+	t.Parallel()
+
+	elements := showText(t, unmappedLigatureFont("briey"), "brie y")
 	if got, want := ReconstructText(context.Background(), elements, nil), "brie y"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

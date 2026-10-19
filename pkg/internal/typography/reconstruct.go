@@ -38,7 +38,7 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //     word gap between two such glyphs, "(11b)" then "Ex", vanished
 //     ("11bEx") where PDF.js, which shows both codes, reads "11b Ex". Reading
 //     it makes the space disagreements with PDF.js on files whose
-//     characters match fall from 6444 to 2915, on 11 files, with no new
+//     characters match fall from 12339 to 7160, on 12 files, with no new
 //     one; no file's words or characters match moves, since PDF.js writes
 //     those codes as raw control characters.
 //   - pdfjs issue13915.pdf, govdocs thread_300_300849.pdf and 4 more: "≠" is
