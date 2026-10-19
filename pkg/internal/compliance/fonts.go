@@ -158,7 +158,7 @@ func collectFontUsageAt(ops []content.Operation, site showSite) map[string]*font
 			u.charCodes[b] = true
 		}
 		u.rawStrings = append(u.rawStrings, s)
-		at := glyphContext{mode: text.mode, owner: site.owner}
+		at := glyphContext{mode: text.mode, owner: site.owner, real: site.real}
 		if n := len(mcStack); n > 0 {
 			at.mc = mcStack[n-1]
 		}
@@ -279,11 +279,11 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			// stream and applies the same font rules there; litho matches by
 			// walking invoked forms.
 			xobjVisited := make(map[int]bool)
-			results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), showSite{}, p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
+			results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), site, p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
 
 			// A tiling pattern's cell is another content stream the page walk
 			// above never enters. See checkPatternFonts.
-			results = append(results, checkPatternFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
+			results = append(results, checkPatternFonts(ctx, doc, p.parsedOps(ctx), site, p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
 
 			// A Type3 glyph procedure is another content stream that may select
 			// fonts of its own, and the page walk above stops at the Type3 font
@@ -308,7 +308,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 // pageSite returns the [showSite] of a page's own content stream.
 func pageSite(ctx context.Context, doc *document.Document, p *pageCtx, pageNum int) showSite {
-	site := showSite{key: "page " + strconv.Itoa(pageNum), owner: structureKey(ctx, doc, p.dict), fonts: pageFontsKey(p, pageNum)}
+	site := showSite{key: "page " + strconv.Itoa(pageNum), owner: structureKey(ctx, doc, p.dict), fonts: pageFontsKey(p, pageNum), real: true}
 	site.props, _ = document.ResolveDict(ctx, doc, p.resources["Properties"])
 	return site
 }
@@ -351,9 +351,6 @@ type fontJudgements struct {
 	// [fontJudgements.readsProgram].
 	programMode  map[string]bool
 	programScope map[string]bool
-	// type3Open holds the object numbers of the Type 3 fonts whose glyph
-	// procedures the walk is inside; see [checkType3CharProcFonts].
-	type3Open map[int]bool
 	// type3Mode holds the rendering mode each Type 3 font object is first
 	// shown in, and type3Proc the object numbers of the glyph procedures
 	// already judged; see [checkType3CharProcFonts].
@@ -374,7 +371,6 @@ func newFontJudgements() *fontJudgements {
 		glyph:        make(map[glyphKey]bool),
 		programMode:  make(map[string]bool),
 		programScope: make(map[string]bool),
-		type3Open:    make(map[int]bool),
 		type3Mode:    make(map[string]int),
 		type3Proc:    make(map[int]bool),
 	}
@@ -637,6 +633,7 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 		}
 		site := streamSite(ctx, doc, form.ref, form.dict["Resources"], form.res)
 		site.mode = text.mode
+		site.real = parent.real
 		site.cellsOff = parent.cellsOff
 		results = append(results, checkResourceFonts(ctx, doc, form.res, form.ops, site, pageNum, profile, judged)...)
 		results = append(results, checkFormPUA(ctx, doc, form.res, judged.pageRes, form.ops, form.data, form.dict, treeRoot, pageNum, profile)...)
@@ -665,16 +662,17 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 //
 //   - pdfjs ContentStreamCycleType3insideType3.pdf: a Type 3 procedure paints
 //     text with a pattern whose cell shows the same Type 3 font again.
-//     Judging the cell's glyphs of that font raised ISO 19005-2, 6.2.11.7.2
-//     t1 at PDF/A-2u from 3 to 5 against veraPDF's 3, which judging none of
-//     them there keeps at 3 ([checkType3CharProcFonts]).
+//     Judging the cell's glyphs in rendering mode 0 raised ISO 19005-2,
+//     6.2.11.7.2 t1 at PDF/A-2u from 3 to 5 against veraPDF's 3. The cell
+//     starts in the procedure's mode 2, the page's, which keeps it at 3, and
+//     at PDF/UA-1 and PDF/UA-2 gives veraPDF's 5 ([glyphContext]).
 //   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
 //     profile for the verapdf files: reaching the fonts of these streams moves
 //     no other count. litho fontclaims_2b.pdf shows a Type 3 glyph in a form.
 func checkDrawnStreamFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, site showSite, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	results := checkFormXObjectFonts(ctx, doc, ops, site, res, treeRoot, pageNum, profile, judged, visited, depth)
 	if !site.cellsOff {
-		results = append(results, checkPatternFonts(ctx, doc, ops, res, treeRoot, pageNum, profile, judged, visited, depth)...)
+		results = append(results, checkPatternFonts(ctx, doc, ops, site, res, treeRoot, pageNum, profile, judged, visited, depth)...)
 	}
 	return append(results, checkType3CharProcFonts(ctx, doc, ops, res, site, treeRoot, pageNum, profile, judged, visited, depth)...)
 }
@@ -763,6 +761,18 @@ func resolveFontForm(ctx context.Context, doc *document.Document, xobjDict ast.P
 // unembedded font, selected inside an uncoloured cell or a form one draws,
 // fires nothing.
 //
+// A cell starts in the graphics state the selecting stream started in, not
+// the one in force at the scn: veraPDF builds the pattern over the stream's
+// initial state (GFPDTilingPattern, GraphicState.getInitialGraphicState,
+// veraPDF-validation 1.30.2), much as ISO 32000-1, 8.7.2 ties a pattern to
+// the state its parent content stream begins with rather than to the one at
+// the operator painting with it. Its glyphs therefore carry the text rendering
+// mode the stream parent names starts in. Measured with veraPDF 1.30.2 at PDF/A-2u on a Type 3 glyph with
+// no Unicode value: shown by the page in mode 2 and by a cell the page selects
+// after that, ISO 19005-2, 6.2.11.7.2 t1 fails twice; shown by a page in mode
+// 2 and by a cell a procedure of the font selects, the procedure starting in
+// mode 2, once.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue15716.pdf: fills a rectangle with a pattern whose cell shows a
@@ -771,7 +781,7 @@ func resolveFontForm(ctx context.Context, doc *document.Document, xobjDict ast.P
 //   - litho offlimits_1b.pdf: page 12 shows a Type 3 glyph in an uncoloured
 //     cell, which veraPDF reports under ISO 19005-1, 6.3.8 t1 and litho never
 //     reached.
-func checkPatternFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
+func checkPatternFonts(ctx context.Context, doc *document.Document, ops []content.Operation, parent showSite, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
@@ -798,6 +808,7 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 			continue
 		}
 		site := streamSite(ctx, doc, pattern.ref, pattern.dict["Resources"], pattern.res)
+		site.mode = parent.mode
 		site.cellsOff = cellsOff
 		results = append(results, checkResourceFonts(ctx, doc, pattern.res, pattern.ops, site, pageNum, profile, judged)...)
 		results = append(results, checkDrawnStreamFonts(ctx, doc, pattern.ops, pattern.res, site, treeRoot, pageNum, profile, judged, visited, depth+1)...)
@@ -926,14 +937,17 @@ func resolveFontPattern(ctx context.Context, doc *document.Document, patternRef 
 // of the Type3 font's /Resources, which [fontIdentity] keys on that font.
 //
 // A stream the walk reaches from a font's glyph procedures that shows the
-// same font again has none of that font's glyphs judged there, as veraPDF,
-// reading the font's procedures, judges none: judged.type3Open holds the
-// fonts whose procedures the walk is inside. Measured with veraPDF 1.30 at
-// PDF/A-2b and PDF/A-2u on a Type 3 font whose glyph rect, shown by the page
-// in rendering mode 2, paints text with a tiling pattern whose cell shows the
-// glyph again in mode 0: ISO 19005-2, 6.2.11.7.2 t1 fails for the page's rect
+// same font again has that font's glyphs judged there as any other stream's:
+// the procedures are not walked again (judged.type3Proc), and the glyphs are
+// told apart by [glyphContext]. A cell such a procedure selects starts in the
+// rendering mode the procedure starts in ([checkPatternFonts]), so a glyph the
+// cell shows in that mode is the page's glyph again. Measured with veraPDF
+// 1.30.2 at PDF/A-2b and PDF/A-2u on a Type 3 font whose glyph rect, shown by
+// the page in rendering mode 2, paints text with a tiling pattern whose cell
+// shows the glyph again: ISO 19005-2, 6.2.11.7.2 t1 fails for the page's rect
 // and not for the cell's, and a CID the cell also shows through another font
-// fails it and 6.2.11.8 t1; another Type 3 font's glyph in the cell fails it.
+// fails it and 6.2.11.8 t1; shown by the page in mode 0, a glyph the cell
+// shows that the page does not fails it.
 //
 // # Corpus evidence
 //
@@ -984,11 +998,6 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 		if !recorded {
 			mode = fontUsage.shows[0].at.mode
 		}
-		fontNum := 0
-		if ref, ok := fontRef.(ast.PdfIndirectRef); ok && !judged.type3Open[ref.ObjectNum] {
-			fontNum = ref.ObjectNum
-			judged.type3Open[fontNum] = true
-		}
 		for _, glyphName := range sortedNames(charProcs) {
 			procRef := charProcs[glyphName]
 			if ref, ok := procRef.(ast.PdfIndirectRef); ok {
@@ -1006,9 +1015,6 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 			procSite.cellsOff = site.cellsOff
 			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, procSite, pageNum, profile, judged)...)
 			results = append(results, checkDrawnStreamFonts(ctx, doc, procOps, t3Res, procSite, treeRoot, pageNum, profile, judged, visited, depth+1)...)
-		}
-		if fontNum != 0 {
-			delete(judged.type3Open, fontNum)
 		}
 	}
 	return results
@@ -1070,11 +1076,6 @@ func checkResourceFonts(ctx context.Context, doc *document.Document, res ast.Pdf
 			continue // declared in the form resources but never selected
 		}
 		fontRef := fontDict[fontName]
-		// A Type 3 font shown inside its own glyph procedures has no glyph
-		// judged there; see [checkType3CharProcFonts].
-		if ref, ok := fontRef.(ast.PdfIndirectRef); ok && judged.type3Open[ref.ObjectNum] {
-			continue
-		}
 		results = append(results, judged.streamFont(ctx, doc, fontRef, fontName, site, pageNum, profile, fontUsage)...)
 	}
 	return results

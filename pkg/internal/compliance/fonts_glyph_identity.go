@@ -85,12 +85,32 @@ func (g *glyphFaults) first() []Violation {
 
 // glyphContext is what veraPDF tells two glyphs of one font and one code apart
 // by: the text rendering mode in force, the marked-content sequence around the
-// show, and the structure key of the stream it is shown in ([structureKey]).
-// mc is empty outside marked content.
+// show, the structure key of the stream it is shown in ([structureKey]), and
+// whether that stream is real content. mc is empty outside marked content.
+//
+// real holds for a page's content and the forms it draws, and for the forms
+// those draw, and not for a tiling cell, a Type 3 glyph procedure, an
+// annotation appearance or a form one of those draws. veraPDF keys a Glyph by
+// isRealContent (GFIDGenerator), which a PDF/UA or WTPDF validation sets for
+// the streams it parses as semantic content (GFPDSemanticContentStream: a
+// page's content and a form drawn from real content outside an annotation,
+// GFPDPage and GFPDXForm) and clears for every other (GFPDContentStream, the
+// only parse of a pattern cell, GFPDTilingPattern, and of a glyph procedure,
+// GFPDType3Font), veraPDF-validation 1.30.2. A PDF/A validation parses no
+// stream as semantic, so real tells nothing apart there, and
+// [fontJudgements.glyphs] ignores it outside PDF/UA and WTPDF
+// ([realContentSplitsGlyphs]). Measured with veraPDF 1.30.2 at PDF/UA-1,
+// PDF/UA-2 and WTPDF 1.0 Accessibility on a Type 3 glyph with no Unicode
+// value: shown by the page and by a cell, a glyph procedure, an annotation
+// appearance or a form a cell draws, ISO 14289-1, 7.21.7 t1 and ISO 14289-2,
+// 8.4.5.8 t1 fail twice, and by the page and a form it draws, or a form that
+// form draws, once; at PDF/A-2u, ISO 19005-2, 6.2.11.7.2 t1 fails once for
+// each.
 type glyphContext struct {
 	mode  int
 	mc    string
 	owner int32
+	real  bool
 }
 
 // describe renders where a glyph was shown, for a violation stated for more
@@ -136,7 +156,8 @@ const mcUnnamed = "none"
 // from; owner is the stream's [structureKey]; fonts names the /Font dictionary
 // of those resources ([fontDictKey]); mode is the text rendering mode the
 // stream starts in, which a Form XObject inherits from the Do that draws it
-// ([textStateWalk]); cellsOff records that the stream is, or is drawn by, a
+// ([textStateWalk]); real records that the stream is real content
+// ([glyphContext]); cellsOff records that the stream is, or is drawn by, a
 // tiling cell whose colour operators are off, where the font walks follow no
 // pattern ([checkPatternFonts]).
 type showSite struct {
@@ -145,6 +166,7 @@ type showSite struct {
 	owner    int32
 	fonts    string
 	mode     int
+	real     bool
 	cellsOff bool
 }
 
@@ -309,6 +331,14 @@ type shownGlyph struct {
 	at    glyphContext
 }
 
+// realContentSplitsGlyphs reports whether profile tells a glyph shown in real
+// content apart from the same glyph shown elsewhere ([glyphContext]): a PDF/UA
+// profile, the WTPDF levels included, whose validation veraPDF runs as a
+// PDF/UA-related flavour (PDFFlavours.isPDFUARelatedFlavour).
+func realContentSplitsGlyphs(profile string) bool {
+	return IsPDFUA(profile)
+}
+
 // noContext stands for a glyph a check named but the stream's shows do not
 // decode to, so it is stated once per font and code.
 var noContext = glyphContext{mode: -1}
@@ -423,6 +453,7 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 	var out []Violation
 	var where map[uint32][]shownGlyph
 	programRead := j.readsProgram(ctx, doc, fontID, font, usage)
+	splitsReal := realContentSplitsGlyphs(profile)
 	for _, v := range vs {
 		renderedOnly := v.Rule == glyphPresenceRule(profile) || v.Rule == glyphWidthRule(profile)
 		unread := renderedOnly && !programRead
@@ -446,7 +477,11 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 			if renderedOnly && g.at.mode == invisibleRenderingMode {
 				continue
 			}
-			key := glyphKey{rule: v.Rule, font: fontID, code: g.code, at: g.at}
+			at := g.at
+			if !splitsReal {
+				at.real = false
+			}
+			key := glyphKey{rule: v.Rule, font: fontID, code: g.code, at: at}
 			if j.glyph[key] {
 				continue
 			}
@@ -660,11 +695,11 @@ func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Doc
 				j.claimType3Reads(ctx, doc, walk, ref, ast.PdfName(text.font), site, shown, text.mode, colour.paintState, depth, unread)
 			}
 			fill, stroke := textPaints(text.mode)
-			j.claimPaintReads(ctx, doc, walk, colour.paintState, fill, stroke, depth)
+			j.claimPaintReads(ctx, doc, walk, colour.paintState, fill, stroke, site.mode, depth)
 			continue
 		}
 		if fill, stroke := pathPaints(op.Operator); fill || stroke {
-			j.claimPaintReads(ctx, doc, walk, colour.paintState, fill, stroke, depth)
+			j.claimPaintReads(ctx, doc, walk, colour.paintState, fill, stroke, site.mode, depth)
 			continue
 		}
 		if len(xobjs) == 0 {
@@ -682,18 +717,21 @@ func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Doc
 
 // claimPaintReads makes the claims of the tiling patterns an operator paints
 // with, the fill colour's where it fills and the stroke colour's where it
-// strokes; see [fontJudgements.claimPatternReads].
-func (j *fontJudgements) claimPaintReads(ctx context.Context, doc *document.Document, walk claimWalk, paint paintState, fill, stroke bool, depth int) {
+// strokes, in a stream that starts in the text rendering mode mode; see
+// [fontJudgements.claimPatternReads].
+func (j *fontJudgements) claimPaintReads(ctx context.Context, doc *document.Document, walk claimWalk, paint paintState, fill, stroke bool, mode, depth int) {
 	if fill {
-		j.claimPatternReads(ctx, doc, walk, paint.fill, depth)
+		j.claimPatternReads(ctx, doc, walk, paint.fill, mode, depth)
 	}
 	if stroke {
-		j.claimPatternReads(ctx, doc, walk, paint.stroke, depth)
+		j.claimPatternReads(ctx, doc, walk, paint.stroke, mode, depth)
 	}
 }
 
 // claimPatternReads makes the claims of the tiling pattern patternRef names,
-// where an operator paints with it, without judging its glyphs by them.
+// where an operator paints with it, without judging its glyphs by them. The
+// cell starts in mode, the text rendering mode the painting stream starts in
+// ([checkPatternFonts]).
 //
 // veraPDF parses a coloured tiling pattern's cell where an operator paints
 // with the pattern, and never judges the glyphs the cell shows by the program
@@ -724,7 +762,7 @@ func (j *fontJudgements) claimPaintReads(ctx context.Context, doc *document.Docu
 //     profile for the verapdf files: claiming where a pattern is painted, and
 //     where a Type 3 glyph is shown ([fontJudgements.claimType3Reads]), moves
 //     no count. litho fontclaims_2b.pdf plants both.
-func (j *fontJudgements) claimPatternReads(ctx context.Context, doc *document.Document, walk claimWalk, patternRef ast.PdfObject, depth int) {
+func (j *fontJudgements) claimPatternReads(ctx context.Context, doc *document.Document, walk claimWalk, patternRef ast.PdfObject, mode, depth int) {
 	if patternRef == nil {
 		return
 	}
@@ -733,6 +771,7 @@ func (j *fontJudgements) claimPatternReads(ctx context.Context, doc *document.Do
 		return
 	}
 	site := streamSite(ctx, doc, pattern.ref, pattern.dict["Resources"], pattern.res)
+	site.mode = mode
 	j.claimStreamReads(ctx, doc, walk, pattern.ops, pattern.res, site, paintState{}, depth+1, true)
 }
 

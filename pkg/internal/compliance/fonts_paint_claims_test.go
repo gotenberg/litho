@@ -161,12 +161,13 @@ func TestFontsReachedThroughEveryDrawnStream(t *testing.T) {
 	}
 }
 
-// TestType3FontShownInsideItsOwnProcedure pins that a stream reached from a
-// Type 3 font's glyph procedure has none of that font's glyphs judged, while
-// the other fonts it shows are; see [checkType3CharProcFonts]. The page shows
-// the Type 3 glyph rect in rendering mode 2, whose procedure shows CID 257
-// through a text show painted with a tiling pattern, whose cell shows rect
-// again, in mode 0, and with it CID 256 or nothing.
+// TestType3FontShownInsideItsOwnProcedure pins that a cell a Type 3 font's
+// glyph procedure selects starts in the rendering mode the procedure starts
+// in, so the font's glyph the cell shows again is the page's glyph, while the
+// other fonts it shows are judged; see [checkType3CharProcFonts]. The page
+// shows the Type 3 glyph rect in rendering mode 2, whose procedure shows CID
+// 257 through a text show painted with a tiling pattern, whose cell shows
+// rect again and with it CID 256 or nothing.
 //
 // Every count was measured with veraPDF 1.30 at PDF/A-2b and PDF/A-2u.
 func TestType3FontShownInsideItsOwnProcedure(t *testing.T) {
