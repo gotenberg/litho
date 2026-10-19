@@ -198,6 +198,10 @@ func WithVersion(version string) WriteOption {
 // of a traditional xref table. The output declares at least PDF 1.5
 // accordingly, since a reader honoring an earlier declaration cannot parse a
 // cross-reference stream at all.
+//
+// ISO 19005-1, 6.1.4 forbids cross-reference streams, so after
+// [Writer.RemediatePDFA] at PDF/A-1a or PDF/A-1b, [Writer.WriteTo] refuses
+// this option with [ErrPDFA1ForbidsObjectStreams] and writes nothing.
 func WithXRefStream() WriteOption {
 	return func(o *writeOpts) {
 		o.xrefStream = true
@@ -226,7 +230,10 @@ func WithXRefStream() WriteOption {
 // carried one. A document that must keep an earlier version must not be
 // packed: ISO 19005-1 is written against PDF 1.4 and its 6.1.4 forbids
 // cross-reference streams outright, so packing a PDF/A-1 file costs it
-// conformance.
+// conformance. After [Writer.RemediatePDFA] at PDF/A-1a or PDF/A-1b,
+// [Writer.WriteTo] refuses this option with [ErrPDFA1ForbidsObjectStreams]
+// and writes nothing; [WithDedup] needs no cross-reference stream and is the
+// compaction such an output takes.
 //
 // An encrypted output is never packed. Encryption runs over every object
 // before serialization, so packing afterwards would place ciphertext strings
@@ -830,11 +837,14 @@ type Writer struct {
 	// 19005 clause that forbids encrypting what that remediation produced, ""
 	// when its profile is not a PDF/A one, and accessibilityClause the ISO
 	// 14289 clause that requires an encryption of it to permit extraction for
-	// accessibility, "" when its profile states none. refused is the first call
-	// refused after it, which WriteTo returns.
+	// accessibility, "" when its profile states none. xrefStreamClause is the
+	// ISO 19005 clause that forbids a cross-reference stream in it, "" when its
+	// profile permits one. refused is the first call refused after it, which
+	// WriteTo returns.
 	remediation         string
 	pdfaClause          string
 	accessibilityClause string
+	xrefStreamClause    string
 	refused             error
 
 	// redactions records the regions of every successful [Writer.Redact]
@@ -2121,6 +2131,12 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 // when [Writer.Encrypt] was called before it or [NewWriter] was given
 // [WithEncryption], and [Writer.WriteTo] returns it for WithEncryption.
 //
+// At PDF/A-1a and PDF/A-1b its output carries no cross-reference stream,
+// which ISO 19005-1, 6.1.4 forbids, and so no object stream, which requires
+// one. It returns [ErrPDFA1ForbidsObjectStreams] when [NewWriter] was given
+// [WithObjectStreams] or [WithXRefStream], and [Writer.WriteTo] returns it for
+// either. [WithDedup] stays allowed.
+//
 // ISO 19005-1, 6.5.3 and ISO 19005-2 to ISO 19005-4, 6.3.2 require annotation
 // flags that print an annotation and show it on screen. An annotation that
 // shows neither on screen nor in print, one whose Hidden flag is set or whose
@@ -2141,7 +2157,7 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFA(ctx, profile)
 	}
-	target := remediationTarget{method: "RemediatePDFA", pdfaClause: pdfaEncryptionClause(profile)}
+	target := remediationTarget{method: "RemediatePDFA", pdfaClause: pdfaEncryptionClause(profile), xrefStreamClause: pdfaXRefStreamClause(profile)}
 	return w.remediate(ctx, target, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
 	})
@@ -2426,11 +2442,41 @@ func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 // clause that forbids encrypting the output, "" when the profile is not a
 // PDF/A one, and accessibilityClause, the ISO 14289 clause that requires an
 // encrypted output to permit extraction for accessibility, "" when the profile
-// states none.
+// states none, and xrefStreamClause, the ISO 19005 clause that forbids a
+// cross-reference stream in the output, "" when the profile permits one.
 type remediationTarget struct {
 	method              string
 	pdfaClause          string
 	accessibilityClause string
+	xrefStreamClause    string
+}
+
+// pdfaXRefStreamClause returns the clause of profile that forbids
+// cross-reference streams, "" when the profile permits them. ISO 19005-1,
+// 6.1.4 forbids them at PDF/A-1a and PDF/A-1b. ISO 19005-2, ISO 19005-3 and
+// ISO 19005-4 are written against PDF 1.7 and PDF 2.0, which define them, and
+// forbid neither them nor object streams.
+func pdfaXRefStreamClause(profile models.PDFAProfile) string {
+	if profile == models.PDFA1a || profile == models.PDFA1b {
+		return "ISO 19005-1, 6.1.4"
+	}
+	return ""
+}
+
+// writesXRefStream reports whether the write cfg selects can carry a
+// cross-reference stream: [WithXRefStream] asks for one, and packing
+// ([WithObjectStreams]) requires one.
+func (o writeOpts) writesXRefStream() bool {
+	return o.xrefStream || o.packObjectStreams
+}
+
+// xrefStreamOption names the option of cfg that asks for a cross-reference
+// stream, for a refusal to cite.
+func (o writeOpts) xrefStreamOption() string {
+	if o.packObjectStreams {
+		return "WithObjectStreams"
+	}
+	return "WithXRefStream"
 }
 
 // pdfuaAccessibilityClause returns the clause of profile that requires an
@@ -2660,6 +2706,12 @@ func (w *Writer) remediate(
 	// that bars accessibility adds to the output.
 	if target.accessibilityClause != "" && w.encryptCfg != nil && !permitsAccessibility(w.encryptCfg.Permissions) {
 		return nil, fmt.Errorf("%w (%s): %s before Writer.%s", ErrPDFUAForbidsBarringAccessibility, target.accessibilityClause, w.encryptBy, target.method)
+	}
+	// The probes are written without the options NewWriter was given, so the
+	// remediation would judge an output the write then fills with a construct
+	// the profile forbids.
+	if target.xrefStreamClause != "" && w.defaults.writesXRefStream() {
+		return nil, fmt.Errorf("%w (%s): %s given to NewWriter before Writer.%s", ErrPDFA1ForbidsObjectStreams, target.xrefStreamClause, w.defaults.xrefStreamOption(), target.method)
 	}
 	unmaterialize, err := w.materialize(ctx)
 	if err != nil {
@@ -2972,6 +3024,7 @@ func (w *Writer) remediate(
 	temps.forget(tmpPath)
 	w.markPreSerialized(tmpPath)
 	w.remediation, w.pdfaClause, w.accessibilityClause = target.method, target.pdfaClause, target.accessibilityClause
+	w.xrefStreamClause = target.xrefStreamClause
 	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack), FontRefusals: fontRefusals(fonts)}, nil
 }
 
@@ -3350,9 +3403,11 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // WriteTo writes nothing, and returns the refusal, when a call was refused
 // after a remediation ([ErrEditAfterRemediation]), when [WithEncryption] asks
 // to encrypt the output of a PDF/A remediation ([ErrPDFAForbidsEncryption]),
-// and when it asks to encrypt the output of a PDF/UA-1 remediation with
+// when it asks to encrypt the output of a PDF/UA-1 remediation with
 // permissions that bar extraction for accessibility
-// ([ErrPDFUAForbidsBarringAccessibility]).
+// ([ErrPDFUAForbidsBarringAccessibility]), and when [WithObjectStreams] or
+// [WithXRefStream] asks to write the output of a PDF/A-1 remediation with a
+// cross-reference stream ([ErrPDFA1ForbidsObjectStreams]).
 //
 // Signing ([Writer.Sign]) is incompatible with encryption and decryption
 // ([Writer.Encrypt], [Writer.RemoveEncryption], [WithEncryption]); combining
@@ -3406,6 +3461,12 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	}
 	if cfg.pageSizeErr != nil {
 		return cfg.pageSizeErr
+	}
+	// Refused whether or not the write would end up a full rewrite: an option
+	// that packs only when the write happens to rewrite would leave the
+	// conformance of the output to how much the remediation repaired.
+	if w.xrefStreamClause != "" && cfg.writesXRefStream() {
+		return fmt.Errorf("%w (%s): %s after Writer.%s", ErrPDFA1ForbidsObjectStreams, w.xrefStreamClause, cfg.xrefStreamOption(), w.remediation)
 	}
 	// The guard below reads the encryption WithEncryption asks for as well as
 	// w.encryptCfg, the one Encrypt or NewWriter asked for: reading only the

@@ -463,6 +463,18 @@ var (
 	// asks to encrypt what such a remediation produced. Nothing is written.
 	ErrPDFAForbidsEncryption = errors.New("PDF/A forbids encryption: the trailer shall not contain the Encrypt key")
 
+	// ErrPDFA1ForbidsObjectStreams is returned, naming the clause, when the
+	// output of a PDF/A-1 remediation would carry a cross-reference stream.
+	// ISO 19005-1, 6.1.4 forbids cross-reference streams, and packing objects
+	// into object streams requires one, since a cross-reference table cannot
+	// name a compressed object (ISO 32000-1, 7.5.8). [Writer.RemediatePDFA] at
+	// PDF/A-1a or PDF/A-1b returns it when [NewWriter] was given
+	// [WithObjectStreams] or [WithXRefStream], and [Writer.WriteTo] and
+	// [Pipeline.WriteTo] return it when either asks to write what such a
+	// remediation produced. Nothing is written. [WithDedup] and
+	// [WithImageRecompression] write neither construct and stay allowed.
+	ErrPDFA1ForbidsObjectStreams = errors.New("PDF/A-1 forbids cross-reference streams, which object streams require")
+
 	// ErrPDFUAForbidsBarringAccessibility is returned, naming the clause, when
 	// the output of a PDF/UA-1 remediation would be encrypted with permissions
 	// that clear bit 10 of the P key, the permission to extract content for

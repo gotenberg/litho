@@ -201,14 +201,16 @@ func (p *Pipeline) buildValidationErrors() []error {
 // refuses [WithEncryption] after a PDF/A remediation with
 // [ErrPDFAForbidsEncryption], and after a PDF/UA-1 remediation, when its
 // permissions bar extraction for accessibility, with
-// [ErrPDFUAForbidsBarringAccessibility]. A stage after a remediation fails
-// with [ErrEditAfterRemediation] (see [Pipeline]).
+// [ErrPDFUAForbidsBarringAccessibility]. It refuses [WithObjectStreams] and
+// [WithXRefStream] after a PDF/A-1 remediation with
+// [ErrPDFA1ForbidsObjectStreams]. A stage after a remediation fails with
+// [ErrEditAfterRemediation] (see [Pipeline]).
 //
 // [WithObjectStreams], [WithDedup], [WithImageRecompression] and
-// [WithVersion] reach the output after a Split or a Merge too: when a later stage edits the file a
-// Split or a Merge wrote, the output is a full rewrite of it, and a signature
-// goes on top of that rewrite. On the source itself they apply only when the
-// write rewrites it in full, as on [Writer.WriteTo].
+// [WithVersion] reach the output after a Split or a Merge too: when a later
+// stage edits the file a Split or a Merge wrote, the output is a full rewrite
+// of it, and a signature goes on top of that rewrite. On the source itself
+// they apply only when the write rewrites it in full, as on [Writer.WriteTo].
 func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (_ *PipelineResult, err error) {
 	if err := p.Validate(); err != nil {
 		return nil, err

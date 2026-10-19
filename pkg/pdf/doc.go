@@ -84,7 +84,9 @@
 // output of a PDF/A remediation is never encrypted, since ISO 19005 forbids
 // it: [ErrPDFAForbidsEncryption]. That of a PDF/UA-1 remediation is encrypted
 // only with permissions that allow extraction for accessibility, which ISO
-// 14289-1, 7.16 requires: [ErrPDFUAForbidsBarringAccessibility].
+// 14289-1, 7.16 requires: [ErrPDFUAForbidsBarringAccessibility]. That of a
+// PDF/A-1 remediation carries no cross-reference stream, which ISO 19005-1,
+// 6.1.4 forbids, and so no object stream: [ErrPDFA1ForbidsObjectStreams].
 //
 // # Digital signatures
 //
