@@ -229,6 +229,7 @@ one deliberately rather than diffing it against a fresh build.
 | `type3cycle_2u.pdf`    | PDF/A-2u     | A Type 3 font shown again in a cell its own glyph selects        |
 | `sizetie_2b.pdf`       | PDF/A-2b     | Two font sizes of equal weight, under bookmark generation        |
 | `iccv4intent_1b.pdf`   | PDF/A-1b     | An output intent's ICC v4 destination profile at PDF/A-1         |
+| `iccv4gray_1b.pdf`     | PDF/A-1b     | A grey ICC v4 destination profile whose tags need v2 re-encoding |
 | `drivetitle_1b.pdf`    | PDF/A-1b     | Info text entries that begin like a PDF date, against XMP        |
 | `unclosedmc_ua1.pdf`   | PDF/UA-1     | An artifact sequence the content stream never closes             |
 | `danglingstr_ua1.pdf`  | PDF/UA-1     | Auto-tagging a page that ends inside an unterminated string      |
@@ -592,6 +593,7 @@ which are covered under [Known divergences](#known-divergences).
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
+| `iccv4gray_1b.pdf`     | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `iccv4intent_1b.pdf`   | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `idfields_ua2.pdf`     | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 4    | 6    |
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
@@ -6943,9 +6945,33 @@ veraPDF 1.30.2 and litho report the same rule set in all thirteen cells:
 `6.2.2/1` alone at PDF/A-1b, and at the other levels the tagging and
 identification rules a part-1 claim draws, with no ICC rule. Remediated at all
 thirteen, default and aggressive, every output carries the same rule set on both
-tools. litho writes no replacement destination profile, so the PDF/A-1a and 1b
-outputs keep `6.2.2/1`; the other levels fully fix, but PDF/A-4f, which keeps
-`6.9/5`.
+tools. Remediation at PDF/A-1a and 1b re-encodes the profile as version 2 in
+place (`5e8bf48c`): a profile with no tags loses nothing, so every level fully
+fixes, but PDF/A-4f, which keeps `6.9/5`. Before that commit litho wrote no
+replacement destination profile, and the PDF/A-1a and 1b outputs kept
+`6.2.2/1` on both tools.
+
+### `iccv4gray_1b.pdf`
+
+The tagged twin of `iccv4intent_1b.pdf`. Its one output intent carries a v4.2
+grey display profile of the shape pdfjs `issue19532.pdf` has: `desc` and `cprt`
+as `mluc`, the sRGB tone curve as a type 3 `para` curve, and a D50 white point
+with the Bradford adaptation from D65 in `chad`, every value computed from IEC
+61966-2-1 and ICC.1:2010, Annex E.3. None of those tags has its version 4 type
+in version 2 (ICC.1:2001-04, 6.5), so a v2 form must re-encode each one, where
+`iccv4intent_1b.pdf` only changes a header field.
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells:
+`6.2.2/1` alone at PDF/A-1b, and at the other levels the tagging and
+identification rules a part-1 claim draws, with no ICC rule. Remediated at all
+thirteen, default and aggressive, every output carries the same rule set on both
+tools and fully fixes, but PDF/A-4f, which keeps `6.9/5`. At PDF/A-1a and 1b the
+profile is re-encoded as version 2.4 (`5e8bf48c`): `mluc` becomes
+`textDescriptionType` and `textType`, the curve a 1024-entry `curv` within one
+16-bit step of the function, and the white point the D65 white the adaptation
+maps from; the output converts every 8-bit grey to the same sRGB colour on
+litho and lcms 2.14. Before that commit the PDF/A-1a and 1b outputs kept `6.2.2/1` on both
+tools.
 
 ### `drivetitle_1b.pdf`
 
