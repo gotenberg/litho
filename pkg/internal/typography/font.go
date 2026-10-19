@@ -948,7 +948,8 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 //   - Any name in a Type 3 font. Its glyph names are only the keys of its
 //     /CharProcs (9.6.5, Table 112), which producers draw at the code of the
 //     character they show (dvips and pdfTeX bitmap fonts name code c "a<c>"),
-//     and PDF.js reads such a code as itself.
+//     and PDF.js reads such a code as itself. A name only TeX's glyph list
+//     defines ([encodings.InTeXGlyphList]) does the same there.
 //   - A numeric name ([differencesNameIsItsCode]) whose number is the code,
 //     which names the code rather than a character: PDF.js then reads the
 //     base encoding's glyph (issue5070.pdf, "c128" for the Euro sign).
@@ -969,7 +970,10 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 //     reads it; it now reads as nothing. The words differ from PDF.js on 1
 //     more file, by decision: correct words over agreement (2026-10-19).
 //   - govdocs thread_300_300511.pdf: CMMI "lscript" (U+2113) at 0x60, read as
-//     "`" as PDF.js reads it, now reads as nothing.
+//     "`" as PDF.js reads it, then as nothing, and as ℓ since TeX's glyph
+//     list is read ([encodings.InTeXGlyphList]).
+//   - pdfjs simpletype3font.pdf, Type3WordSpacing.pdf: a Type 3 font names
+//     its glyph at "b" "triangle", which keeps reading "b" under that list.
 //   - pdfjs issue918.pdf, issue14999_reduced.pdf, french_diacritics.pdf and 6
 //     more Type 3 files, issue18208.pdf, issue4304.pdf (.notdef) and
 //     issue5070.pdf (c128): the three leniencies keep their text, which
@@ -989,6 +993,9 @@ func applyDifferencesName(font *Font, code byte, name string, isDingbats, isSymb
 	}
 	font.differenceCodes[code] = true
 	delete(font.LigatureOverrides, code)
+	if font.Subtype == "Type3" && encodings.InTeXGlyphList(name) {
+		return
+	}
 	if r, ok := resolveGlyphRune(name, isDingbats, isSymbol); ok {
 		font.Encoding[code] = r
 		return

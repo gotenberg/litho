@@ -110,3 +110,43 @@ func TestResolveFontType3DifferencesNameKeepsTheCode(t *testing.T) {
 		t.Errorf("decodeNextChar(0x42) = %q, want %q from the name eacute", got, "é")
 	}
 }
+
+// TestResolveFontTeXGlyphListNames pins the names only TeX Live's
+// texglyphlist.txt defines: a CMMI subset's /Differences "lscript" and
+// "epsilon1" read as ℓ and ϵ, while a Type 3 font's "triangle", a /CharProcs
+// key that names a drawn shape (ISO 32000-1, 9.6.5), keeps reading its code.
+func TestResolveFontTeXGlyphListNames(t *testing.T) {
+	t.Parallel()
+	differences := ast.PdfDict{
+		"Type":        ast.PdfName("Encoding"),
+		"Differences": ast.PdfArray{ast.PdfInt(96), ast.PdfName("lscript"), ast.PdfInt(15), ast.PdfName("epsilon1"), ast.PdfInt(98), ast.PdfName("triangle")},
+	}
+	doc := &document.Document{Logger: document.NopLogger()}
+	type1, err := ResolveFont(context.Background(), doc, ast.PdfDict{
+		"Type":     ast.PdfName("Font"),
+		"Subtype":  ast.PdfName("Type1"),
+		"BaseFont": ast.PdfName("CMMI10"),
+		"Encoding": differences,
+	})
+	if err != nil {
+		t.Fatalf("ResolveFont Type1: %v", err)
+	}
+	for code, want := range map[byte]string{96: "ℓ", 15: "ϵ", 98: "△"} {
+		if got, _, _ := decodeNextChar(type1, []byte{code}); got != want {
+			t.Errorf("Type1 decodeNextChar(0x%02X) = %q, want %q", code, got, want)
+		}
+	}
+	type3, err := ResolveFont(context.Background(), doc, ast.PdfDict{
+		"Type":       ast.PdfName("Font"),
+		"Subtype":    ast.PdfName("Type3"),
+		"FontMatrix": ast.PdfArray{ast.PdfReal(0.001), ast.PdfInt(0), ast.PdfInt(0), ast.PdfReal(0.001), ast.PdfInt(0), ast.PdfInt(0)},
+		"CharProcs":  ast.PdfDict{},
+		"Encoding":   differences,
+	})
+	if err != nil {
+		t.Fatalf("ResolveFont Type3: %v", err)
+	}
+	if got, _, _ := decodeNextChar(type3, []byte{98}); got != "b" {
+		t.Errorf("Type3 decodeNextChar(0x62) = %q, want %q", got, "b")
+	}
+}

@@ -121,3 +121,34 @@ func TestGlyphToRuneFull_SpacingAccents(t *testing.T) {
 		}
 	}
 }
+
+// TestGlyphToRuneFull_TeXMathNames locks the cmmi and cmsy glyph names that
+// only TeX Live's texglyphlist.txt defines, at the values it gives them, and
+// keeps them out of the Adobe Glyph List the compliance rules read.
+func TestGlyphToRuneFull_TeXMathNames(t *testing.T) {
+	want := map[string]rune{
+		"lscript":     0x2113,
+		"epsilon1":    0x03F5,
+		"pi1":         0x03D6,
+		"rho1":        0x03F1,
+		"star":        0x22C6,
+		"Rfractur":    0x211C,
+		"floorleft":   0x230A,
+		"ceilingleft": 0x2308,
+		"coproduct":   0x2A3F,
+	}
+	for name, r := range want {
+		got, ok := GlyphToRuneFull(name)
+		if !ok || got != r {
+			t.Errorf("GlyphToRuneFull(%q) = %U, %v; want %U, true", name, got, ok, r)
+		}
+		if InAdobeGlyphList(name) {
+			t.Errorf("InAdobeGlyphList(%q) = true, want false", name)
+		}
+	}
+	for _, name := range []string{"vector", "negationslash", "tie", "mapsto"} {
+		if r, ok := GlyphToRuneFull(name); ok {
+			t.Errorf("GlyphToRuneFull(%q) = %U, true; want no value", name, r)
+		}
+	}
+}

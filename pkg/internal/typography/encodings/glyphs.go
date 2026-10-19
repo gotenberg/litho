@@ -378,6 +378,95 @@ var texMathGlyphs = map[string]rune{
 	"Delta": 0x2206, // ∆
 }
 
+// texGlyphList maps the glyph names of the TeX math italic (OML, cmmi) and
+// math symbol (OMS, cmsy) encodings that neither the Adobe Glyph List nor
+// [texMathGlyphs] carries, at the value TeX Live's extension of the list
+// gives each (lcdf-typetools texglyphlist.txt, installed as
+// texmf-dist/fonts/map/glyphlist/texglyphlist.txt). The AMS Type 1 Computer
+// Modern fonts name their glyphs so, and pdfTeX writes those names into
+// /Differences, which replace the base encoding's names (ISO 32000-1,
+// 9.6.6.1), so a name litho does not read extracts as nothing.
+//
+// ISO 32000-1, 9.10.2 derives a character only from the Adobe Glyph List, so
+// the values are a leniency toward TeX producers, read by text extraction and
+// the /ToUnicode remediation writes. The compliance rules on Unicode values
+// ask [InAdobeGlyphList] instead, as veraPDF asks its own copy of the list,
+// which carries none of these names (veraPDF-parser font/AdobeGlyphList.txt).
+// A Type 3 font does not read them ([InTeXGlyphList]): its names are only
+// /CharProcs keys (9.6.5), and generic ones like "triangle" and "star" name
+// drawn shapes.
+//
+// "vector", U+20D7, stays out with "negationslash" (see [texMathGlyphs]): a
+// combining mark TeX draws before its base letter would attach to the
+// character before it. "tie" and "mapsto" have no entry in the list.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300511.pdf, pdfjs issue13915.pdf: CMMI "lscript"
+//     read as nothing where the page shows ℓ, and PDF.js reads the code, "`".
+//   - govdocs thread_300_300504.pdf, thread_300_300849.pdf,
+//     thread_400_400302.pdf, thread_400_400393.pdf, pdfjs issue13915.pdf:
+//     CMMI "epsilon1" read as nothing where the page shows ϵ.
+//   - pdfcpu pkg_testdata__ECSTR11-01.pdf, pkg_testdata__schmager_plateau10.pdf:
+//     CMMI "sharp" in "C♯" read as "]", the code, as PDF.js reads it.
+//   - pdfjs link-annotation-border.pdf: CMSY "floorleft" and "floorright"
+//     read as "b" and "c", the codes, as PDF.js reads them.
+//   - pdfjs simpletype3font.pdf, Type3WordSpacing.pdf: Type 3 fonts name the
+//     glyph at "b" "triangle", which PDF.js reads as "b".
+//   - All corpora: 17 files reach a name, all through TeX math fonts. Words
+//     match PDF.js on 1 file fewer (pdfcpu ECSTR11-01, by decision: correct
+//     words over agreement), and compliance verdicts at PDF/A-1b, 2b, 2u and
+//     PDF/UA-1 do not move. Remediation at PDF/A-2u and PDF/UA-1 maps the
+//     glyphs in /ToUnicode, leaving fewer 6.2.11.7.2 and 7.21.7 failures on
+//     8 files. veraPDF counts the same on the 6 it checked, and
+//     schmager_plateau10 at both levels and ECSTR11-01 at PDF/A-2u now pass.
+var texGlyphList = map[string]rune{
+	"epsilon1":        0x03F5, // ϵ texglyphlist.txt: epsilon1;03F5
+	"pi1":             0x03D6, // ϖ texglyphlist.txt: pi1;03D6
+	"rho1":            0x03F1, // ϱ texglyphlist.txt: rho1;03F1
+	"triangleright":   0x25B7, // ▷ texglyphlist.txt: triangleright;25B7
+	"triangleleft":    0x25C1, // ◁ texglyphlist.txt: triangleleft;25C1
+	"star":            0x22C6, // ⋆ texglyphlist.txt: star;22C6
+	"flat":            0x266D, // ♭ texglyphlist.txt: flat;266D
+	"natural":         0x266E, // ♮ texglyphlist.txt: natural;266E
+	"sharp":           0x266F, // ♯ texglyphlist.txt: sharp;266F
+	"slurbelow":       0x2323, // ⌣ texglyphlist.txt: slurbelow;2323
+	"slurabove":       0x2322, // ⌢ texglyphlist.txt: slurabove;2322
+	"lscript":         0x2113, // ℓ texglyphlist.txt: lscript;2113
+	"diamondmath":     0x22C4, // ⋄ texglyphlist.txt: diamondmath;22C4
+	"circleminus":     0x2296, // ⊖ texglyphlist.txt: circleminus;2296
+	"circledivide":    0x2298, // ⊘ texglyphlist.txt: circledivide;2298
+	"circledot":       0x2299, // ⊙ texglyphlist.txt: circledot;2299
+	"equivasymptotic": 0x224D, // ≍ texglyphlist.txt: equivasymptotic;224D
+	"precedesequal":   0x2AAF, // ⪯ texglyphlist.txt: precedesequal;2AAF
+	"followsequal":    0x2AB0, // ⪰ texglyphlist.txt: followsequal;2AB0
+	"lessmuch":        0x226A, // ≪ texglyphlist.txt: lessmuch;226A
+	"greatermuch":     0x226B, // ≫ texglyphlist.txt: greatermuch;226B
+	"follows":         0x227B, // ≻ texglyphlist.txt: follows;227B
+	"similarequal":    0x2243, // ≃ texglyphlist.txt: similarequal;2243
+	"owner":           0x220B, // ∋ texglyphlist.txt: owner;220B
+	"triangle":        0x25B3, // △ texglyphlist.txt: triangle;25B3
+	"triangleinv":     0x25BD, // ▽ texglyphlist.txt: triangleinv;25BD
+	"Rfractur":        0x211C, // ℜ texglyphlist.txt: Rfractur;211C
+	"Ifractur":        0x2111, // ℑ texglyphlist.txt: Ifractur;2111
+	"latticetop":      0x22A4, // ⊤ texglyphlist.txt: latticetop;22A4
+	"unionmulti":      0x228E, // ⊎ texglyphlist.txt: unionmulti;228E
+	"turnstileleft":   0x22A2, // ⊢ texglyphlist.txt: turnstileleft;22A2
+	"turnstileright":  0x22A3, // ⊣ texglyphlist.txt: turnstileright;22A3
+	"floorleft":       0x230A, // ⌊ texglyphlist.txt: floorleft;230A
+	"floorright":      0x230B, // ⌋ texglyphlist.txt: floorright;230B
+	"ceilingleft":     0x2308, // ⌈ texglyphlist.txt: ceilingleft;2308
+	"ceilingright":    0x2309, // ⌉ texglyphlist.txt: ceilingright;2309
+	"arrowbothv":      0x2195, // ↕ texglyphlist.txt: arrowbothv;2195
+	"arrowdblbothv":   0x21D5, // ⇕ texglyphlist.txt: arrowdblbothv;21D5
+	"wreathproduct":   0x2240, // ≀ texglyphlist.txt: wreathproduct;2240
+	"coproduct":       0x2A3F, // ⨿ texglyphlist.txt: coproduct;2A3F
+	"unionsq":         0x2294, // ⊔ texglyphlist.txt: unionsq;2294
+	"intersectionsq":  0x2293, // ⊓ texglyphlist.txt: intersectionsq;2293
+	"subsetsqequal":   0x2291, // ⊑ texglyphlist.txt: subsetsqequal;2291
+	"supersetsqequal": 0x2292, // ⊒ texglyphlist.txt: supersetsqequal;2292
+}
+
 // aglAliases holds the Adobe Glyph List (glyphlist.txt, AGL 2.0) names that
 // share their code point with another listed name and that [extendedAGL] left
 // out, while keeping the other name: "nonbreakingspace", "softhyphen" and
@@ -415,6 +504,9 @@ func GlyphToRuneFull(name string) (rune, bool) {
 		return r, true
 	}
 	if r, ok := texMathGlyphs[name]; ok {
+		return r, true
+	}
+	if r, ok := texGlyphList[name]; ok {
 		return r, true
 	}
 	// "uniXXXX": 4 hex digits after "uni".
@@ -505,7 +597,18 @@ func NumericGlyphName(name string) (rune, bool) {
 	if _, ok := texMathGlyphs[name]; ok {
 		return 0, false
 	}
+	if InTeXGlyphList(name) {
+		return 0, false
+	}
 	return numericGlyphNameRune(name)
+}
+
+// InTeXGlyphList reports whether name is one of the TeX math font glyph names
+// [GlyphToRuneFull] reads through TeX Live's texglyphlist.txt alone, which a
+// Type 3 font's names do not follow (ISO 32000-1, 9.6.5).
+func InTeXGlyphList(name string) bool {
+	_, ok := texGlyphList[name]
+	return ok
 }
 
 // diacriticalModifiers maps modifier suffixes to their Unicode combining
