@@ -70,17 +70,31 @@ type pdfjsRefItem struct {
 // Run memoises by PDFPath so corpora that expand each PDF into multiple
 // (pdf, profile) fixtures (e.g. govdocs) only pay the extraction cost
 // once per PDF.
+//
+// A corpus may correct the goldens with a committed override file (see
+// [textFeature.LoadOverrides]): Compare then scores an overridden page
+// against the override's reading, or skips it when the override marks it
+// unscored.
 type textFeature struct {
-	mu      sync.RWMutex
-	goldens map[string]*pdfjsReference
-	cache   sync.Map // pdfPath -> *cachedRun
+	mu        sync.RWMutex
+	goldens   map[string]*pdfjsReference
+	overrides map[textOverrideKey]textOverride
+	cache     sync.Map // pdfPath -> *cachedRun
 }
 
 func newTextFeature() *textFeature {
-	return &textFeature{goldens: make(map[string]*pdfjsReference)}
+	return &textFeature{
+		goldens:   make(map[string]*pdfjsReference),
+		overrides: make(map[textOverrideKey]textOverride),
+	}
 }
 
-func (f *textFeature) Name() string         { return "text" }
+func (f *textFeature) Name() string { return "text" }
+
+// OncePerPDF marks text extraction as profile-agnostic (see [PerPDFFeature]):
+// the litho corpus fans each fixture out to 13 profiles, and its text
+// is the same under every one.
+func (f *textFeature) OncePerPDF()          {}
 func (f *textFeature) GoldenSource() string { return "pdfjs" }
 
 func (f *textFeature) LoadGoldens(dir string) error {
@@ -134,6 +148,7 @@ func (f *textFeature) Compare(fixtureID string, output []byte) Verdict {
 	if golden == nil {
 		return Verdict{FixtureID: fixtureID, Skipped: true, Reason: "no golden"}
 	}
+	base := baseFixtureID(fixtureID)
 
 	var got textOutput
 	if err := json.Unmarshal(output, &got); err != nil {
@@ -149,10 +164,30 @@ func (f *textFeature) Compare(fixtureID string, output []byte) Verdict {
 		gotByPage[p.PageNumber] = p
 	}
 
+	scored := 0
+	var unscored []string
 	for _, gp := range golden.Pages {
 		if gp.Error != "" {
 			continue
 		}
+		f.mu.RLock()
+		o, overridden := f.overrides[textOverrideKey{base, gp.PageNumber}]
+		f.mu.RUnlock()
+		if overridden {
+			if read := normalizeWhitespace(foldVerticalForms(gp.Text)); read != normalizeWhitespace(o.PDFJS) {
+				charsMatch = false
+				wordsMatch = false
+				mismatches = append(mismatches, textMismatchRaw(golden.File, gp.PageNumber, 0, o.PDFJS,
+					fmt.Sprintf("(stale override: PDF.js now reads %q)", truncate(read, 80))))
+				continue
+			}
+			if o.Unscored {
+				unscored = append(unscored, fmt.Sprintf("page %d: %s", gp.PageNumber, o.Reason))
+				continue
+			}
+			gp.Text = o.Expected
+		}
+		scored++
 		lp, ok := gotByPage[gp.PageNumber]
 		if !ok {
 			charsMatch = false
@@ -176,6 +211,10 @@ func (f *textFeature) Compare(fixtureID string, output []byte) Verdict {
 			raw, _ := json.Marshal(mm)
 			mismatches = append(mismatches, raw)
 		}
+	}
+
+	if scored == 0 && len(unscored) > 0 && len(mismatches) == 0 {
+		return Verdict{FixtureID: fixtureID, Skipped: true, Reason: "unscored: " + strings.Join(unscored, "; ")}
 	}
 
 	score := 0.0

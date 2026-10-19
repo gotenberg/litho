@@ -1,0 +1,172 @@
+{
+  "overrides": [
+    {
+      "fixture": "cmapcidtext_2b",
+      "page": 1,
+      "pdfjs": "ab BA",
+      "unscored": true,
+      "reason": "Font G1's CIDFont is Adobe-Identity and the font has no /ToUnicode, so ISO 32000-1, 9.10.2 gives its codes no Unicode value. litho reads the glyphs the embedded program's cmap names (BA), PDF.js the codes as Latin-1 (ab). Both read G2's Adobe-Japan1 line as BA."
+    },
+    {
+      "fixture": "cmapnotdef_2b",
+      "page": 1,
+      "pdfjs": "AC \u0002Ő",
+      "unscored": true,
+      "reason": "Both fonts are Adobe-Identity with no /ToUnicode, so ISO 32000-1, 9.10.2 gives their codes no Unicode value, and the two readers put different stand-ins there."
+    },
+    {
+      "fixture": "cmappredef_2b",
+      "page": 1,
+      "pdfjs": "!A!\" \u0001  \u0001 Aあ",
+      "expected": "!A!\"  Aあ",
+      "reason": "P3 and P5 show code 01, which the notdef range of 90ms-RKSJ-H sends to CID 231 (ISO 32000-1, 9.7.6.3), and Adobe-Japan1-UCS2 maps CID 231 to U+0020 (9.10.2): a space. PDF.js reports the code itself, U+0001."
+    },
+    {
+      "fixture": "cmaps_2b",
+      "page": 1,
+      "pdfjs": "A A A A",
+      "unscored": true,
+      "reason": "The five fonts are Adobe-Identity with no /ToUnicode and no embedded program, and T1 names a CMap that is neither predefined nor embedded (ISO 32000-1, 9.7.5.2), so no code has a Unicode value (9.10.2). PDF.js reads the code as U+0041 under four fonts, litho as U+0041 under three and as ^ under one."
+    },
+    {
+      "fixture": "cmapusecmap_2b",
+      "page": 1,
+      "pdfjs": "\u0005 \u0001\u0006",
+      "unscored": true,
+      "reason": "Both fonts are Adobe-Identity with no /ToUnicode, so ISO 32000-1, 9.10.2 gives their codes no Unicode value, and the two readers put different stand-ins there."
+    },
+    {
+      "fixture": "cmapusestream_2b",
+      "page": 1,
+      "pdfjs": "AB",
+      "unscored": true,
+      "reason": "The font is Adobe-Identity with no /ToUnicode, so ISO 32000-1, 9.10.2 gives its codes no Unicode value, and the two readers put different stand-ins there."
+    },
+    {
+      "fixture": "cmapverabase_2b",
+      "page": 1,
+      "pdfjs": "\u0007 郞",
+      "unscored": true,
+      "reason": "K1, K2 and K5 read through Adobe-KR, which ISO 32000-1, 9.10.2 does not list, and K3 and K4 send their codes to CID 0, .notdef (9.7.6.3). The readers differ only on those codes, where no reading is right."
+    },
+    {
+      "fixture": "complex_ua1",
+      "page": 1,
+      "pdfjs": "Heading One Skipped To Three Body text Customtype Untaggedrealcontent",
+      "expected": "Heading One Skipped To Three Body text Custom type Untagged real content",
+      "reason": "Every show is a literal string under /WinAnsiEncoding, whose code 20 is space (ISO 32000-1, Annex D.2), the character 9.3.3 treats as the word separator, so the last two lines are two and three words. PDF.js joins their words, litho splits them into letters."
+    },
+    {
+      "fixture": "complex_ua2",
+      "page": 1,
+      "pdfjs": "Heading One Body text with a bad language tag Body text with a good language tag  Namespacedcustomtype Legacycustomtype Unmappednamespacedtype Orphanelement,noparententry Jumptoapagedestination Untaggedrealcontent",
+      "expected": "Heading One Body text with a bad language tag Body text with a good language tag  Namespaced custom type Legacy custom type Unmapped namespaced type Orphan element, no parent entry Jump to a page destination Untagged real content",
+      "reason": "Every show is a literal string under /WinAnsiEncoding, whose code 20 is space (ISO 32000-1, Annex D.2), the character 9.3.3 treats as the word separator, and F2's /ToUnicode maps code 41 to U+E000 (9.10.2). PDF.js joins the words of the lines after the figures, litho splits them into letters."
+    },
+    {
+      "fixture": "fontclaims_2b",
+      "page": 1,
+      "pdfjs": "\u0001\u0003 \u0003 \u0006 a \u0006\u0007 a",
+      "expected": "\u0001\u0003 \u0003 \u0006 a \u0006\u0007 a A",
+      "reason": "Font HV shows code 01, which its /ToUnicode CMap maps to U+0041, and ISO 32000-1, 9.10.2 reads /ToUnicode first. PDF.js reports no text for that show."
+    },
+    {
+      "fixture": "fontcopies_2b",
+      "page": 16,
+      "pdfjs": "\u0005 \u0005 \u0005 \u0005 \u0003 \u0001 \u0005",
+      "unscored": true,
+      "reason": "Every font is Adobe-Identity with no /ToUnicode, so ISO 32000-1, 9.10.2 gives the codes no Unicode value, and M7's CID 5 lies past its /CIDToGIDMap and paints .notdef. The readers differ only on that code."
+    },
+    {
+      "fixture": "fontdict_2b",
+      "page": 1,
+      "pdfjs": "AB AB AB AB",
+      "expected": "AB AB AB AB AB",
+      "reason": "Five TrueType fonts show (AB) under /WinAnsiEncoding, which names codes 41 and 42 A and B (ISO 32000-1, Annex D.2), so each line reads AB (9.10.2). PDF.js reports no text for one of the five shows."
+    },
+    {
+      "fixture": "glyphs_2b",
+      "page": 1,
+      "pdfjs": "\u0001 \u0005 \u0000 \u0001 \u0005 AB",
+      "expected": "\u0001 \u0005 \u0001 \u0005 AB",
+      "reason": "Font CD shows CID 0 under Identity-H, the .notdef glyph (ISO 32000-1, 9.7.6.3), which has no Unicode value (9.10.2) and adds no character. PDF.js reports U+0000. The readers agree on every other show."
+    },
+    {
+      "fixture": "inlineimage_2b",
+      "page": 1,
+      "pdfjs": "A\u0001B AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expected": "AB AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "reason": "Code 01 has no glyph name under /WinAnsiEncoding (ISO 32000-1, Annex D.2), so it has no Unicode value (9.10.2) and adds no character. PDF.js reports U+0001."
+    },
+    {
+      "fixture": "laterreads_2u",
+      "page": 5,
+      "pdfjs": "!\" #$",
+      "expected": "✁✂ ✃✄",
+      "reason": "ZapfDingbats with no /Encoding reads codes 21 to 24 through its built-in encoding (ISO 32000-1, 9.6.6.1, Annex D.6) as a1, a2, a202 and a3, U+2701 to U+2704 in the ZapfDingbats glyph list (9.10.2). PDF.js reads the codes as ASCII."
+    },
+    {
+      "fixture": "repairleft_4",
+      "page": 1,
+      "pdfjs": "AB \u0001AB \u0001BA",
+      "expected": "AB AB BA",
+      "reason": "Code 01 has no glyph name under /WinAnsiEncoding (ISO 32000-1, Annex D.2), so it has no Unicode value (9.10.2) and adds no character: the three lines read AB, AB and BA. PDF.js reports U+0001 twice."
+    },
+    {
+      "fixture": "repairroom_2b",
+      "page": 1,
+      "pdfjs": "AB\u0001 BA A\u0001BAB",
+      "expected": "AB BA ABAB",
+      "reason": "Code 01 has no glyph name under /WinAnsiEncoding (ISO 32000-1, Annex D.2) and adds no character (9.10.2). The -3000 TJ adjustment after it moves BA 36 points right, a word gap (9.4.3), while the second line's shows abut. PDF.js reports U+0001 twice."
+    },
+    {
+      "fixture": "tables_ua1",
+      "page": 1,
+      "pdfjs": "HeaderCell Header2Cell2 First item Second item Trailing paragraph",
+      "expected": "Header Cell Header2 Cell2 First item Second item Trailing paragraph",
+      "reason": "Each cell is its own text object, every TD 100 points right of its TH on the same baseline, and /Widths gives the header's glyphs no advance, so a gap separates header and cell. PDF.js joins them into one word."
+    },
+    {
+      "fixture": "texlig_2b",
+      "page": 1,
+      "pdfjs": "veri cation text code space",
+      "expected": "verication text code space",
+      "reason": "Font F1 embeds a Type 1 program, has no /ToUnicode, and names code 0C T0C, a TeX fi ligature no glyph list holds, so ISO 32000-1, 9.10.2 gives the code no Unicode value and it adds no character. PDF.js reads the form feed as a word space and cuts the word in two. Correct words over oracle agreement is a user decision (2026-10-19)."
+    },
+    {
+      "fixture": "ttmaccopy_2b",
+      "page": 1,
+      "pdfjs": "Ää €Š",
+      "expected": "Ää Ää",
+      "reason": "Font M2 is a symbolic TrueType font with no /Encoding, so codes 80 and 8A select glyphs through the program's (1,0) cmap (ISO 32000-1, 9.6.6.4): Adieresis and adieresis, U+00C4 and U+00E4 (9.10.2). PDF.js reads the codes through WinAnsiEncoding as U+20AC and U+0160."
+    },
+    {
+      "fixture": "type0nodesc_2b",
+      "page": 1,
+      "pdfjs": "\u0001 \u0000\u0001",
+      "unscored": true,
+      "reason": "C1 is Adobe-Identity with no /ToUnicode, and N1 to N4 lack the one descendant CIDFont ISO 32000-1, 9.7.6.1 requires, so no code on the page has a Unicode value (9.10.2)."
+    },
+    {
+      "fixture": "type1notdef_2u",
+      "page": 1,
+      "pdfjs": "AC AC A A AC A AB",
+      "expected": "A A A A AC A AB",
+      "reason": "N1 and N2 have no /Encoding, so their codes follow the embedded program's built-in encoding (ISO 32000-1, 9.6.6.1), which names only 41 and 42, and N3's /Differences builds on it; StandardEncoding, the encoding of N4 and N6, names nothing at 80 (Annex D.2). Those codes have no Unicode value and add no character (9.10.2), while N5's /StandardEncoding names 43 C. PDF.js reads 80 as U+0080 and 43 as C under every font; litho reads 43 as C under N1 and N2."
+    },
+    {
+      "fixture": "unembednames_2u",
+      "page": 1,
+      "pdfjs": "A A \u0000\u0001A A aa",
+      "expected": "A A A ● aa",
+      "reason": "Font ZD's /Differences names code 41 a71, U+25CF in the ZapfDingbats glyph list, and codes 00, 01 and 80 have no glyph name under their fonts' encodings (ISO 32000-1, Annex D.2), so they add no character (9.10.2). PDF.js reads ZD's code as A and reports U+0000 and U+0001."
+    },
+    {
+      "fixture": "usecmap_2u",
+      "page": 1,
+      "pdfjs": "A`ae A`ae A`ae A`ae `\u0000\u0000 ︷︸︳﹏嗀﨟�Ⅶ 䪐䪑䪒�¢ |}猶猷狠カケカ�9 \u0000dejkĄ 䪐䪑䪒䪓䪔䪕\u0000䫫 娒娓\u0000娔",
+      "unscored": true,
+      "reason": "C4's /ToUnicode builds on Adobe-KR-UCS2, which neither reader bundles, and C5 and C6 carry empty /ToUnicode CMaps over Adobe-Identity CIDFonts, which leaves their codes no Unicode value (ISO 32000-1, 9.10.2). The readers differ only on those lines."
+    }
+  ]
+}

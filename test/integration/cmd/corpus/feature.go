@@ -67,6 +67,23 @@ type Verdict struct {
 // empty. The runner treats this as "[no golden]" rather than a fatal error.
 var ErrNoGoldens = errors.New("no goldens available")
 
+// PerPDFFeature is an optional interface a [Feature] implements when its
+// result depends on the PDF alone, never on the profile a fixture ID
+// carries. The runner then scores each PDF once, under its basename,
+// instead of once per profile an "expand" manifest fans it out to.
+// Corpora that already list one fixture per PDF are unaffected.
+type PerPDFFeature interface {
+	OncePerPDF()
+}
+
+// GoldenOverrider is an optional interface a [Feature] implements when a
+// corpus may correct its goldens with a committed override file (see
+// [Manifest.GoldenOverrides]). The runner calls LoadOverrides after
+// [Feature.LoadGoldens] succeeds.
+type GoldenOverrider interface {
+	LoadOverrides(path string) error
+}
+
 // BatchPreparer is an optional interface a [Feature] can implement when
 // per-fixture Run calls would be too expensive. The runner invokes
 // Prepare once after [Feature.LoadGoldens] and before any Run call,

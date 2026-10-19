@@ -263,6 +263,15 @@
             "verapdf_pre": 15532,
             "verapdf_regressed": 0
           }
+        },
+        "text": {
+          "matched": 171,
+          "mismatched": 7,
+          "skipped": 8,
+          "metrics": {
+            "chars_match": 175,
+            "words_match": 171
+          }
         }
       }
     },

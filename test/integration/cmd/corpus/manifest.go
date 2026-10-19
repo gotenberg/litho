@@ -52,6 +52,14 @@ type Manifest struct {
 	// this map render as "[no golden]" in the scoreboard.
 	Goldens map[string]string `json:"goldens,omitempty"`
 
+	// GoldenOverrides maps feature name to a committed file, relative to
+	// the corpus source directory, that corrects goldens the oracle reads
+	// wrong. Each entry names the reading it replaces and why, so a
+	// divergence from the oracle stays auditable in git while the goldens
+	// themselves stay the oracle's raw output. Only a feature that
+	// implements [GoldenOverrider] accepts one.
+	GoldenOverrides map[string]string `json:"golden_overrides,omitempty"`
+
 	// Skips maps a fixture ID to a reason explaining why the runner must
 	// skip it (infinite loop, decompression bomb). Skipped fixtures do
 	// not reach any feature.
@@ -155,6 +163,16 @@ func (m *Manifest) GoldenDir(feature string) string {
 		return ""
 	}
 	return filepath.Join(m.TestdataRoot(), rel)
+}
+
+// GoldenOverridesPath returns the path to the committed golden override
+// file for a feature, or "" when the manifest declares none.
+func (m *Manifest) GoldenOverridesPath(feature string) string {
+	rel, ok := m.GoldenOverrides[feature]
+	if !ok {
+		return ""
+	}
+	return filepath.Join(corpusRoot(), m.Source, rel)
 }
 
 // ListCorpora returns the Name of every corpus whose source directory

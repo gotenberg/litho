@@ -220,14 +220,31 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 			report.Features = append(report.Features, fr)
 			continue
 		}
+		if path := manifest.GoldenOverridesPath(feat.Name()); path != "" {
+			o, ok := feat.(GoldenOverrider)
+			if !ok {
+				fr.LoadError = fmt.Sprintf("manifest declares golden overrides, but feature %s takes none", feat.Name())
+				report.Features = append(report.Features, fr)
+				continue
+			}
+			if err := o.LoadOverrides(path); err != nil {
+				fr.LoadError = fmt.Sprintf("load overrides: %v", err)
+				report.Features = append(report.Features, fr)
+				continue
+			}
+		}
+		featFixtures := fixtures
+		if _, ok := feat.(PerPDFFeature); ok {
+			featFixtures = oncePerPDF(fixtures)
+		}
 		if p, ok := feat.(BatchPreparer); ok {
-			if err := p.Prepare(ctx, fixtures); err != nil {
+			if err := p.Prepare(ctx, featFixtures); err != nil {
 				fr.LoadError = fmt.Sprintf("prepare: %v", err)
 				report.Features = append(report.Features, fr)
 				continue
 			}
 		}
-		runFeatureAcrossFixtures(ctx, feat, fixtures, opts.workers, fr)
+		runFeatureAcrossFixtures(ctx, feat, featFixtures, opts.workers, fr)
 		report.Features = append(report.Features, fr)
 	}
 	return report, nil
@@ -320,6 +337,23 @@ func processFixture(ctx context.Context, feat Feature, fx Fixture) (v Verdict) {
 		return v
 	}
 	return feat.Compare(fx.ID, output)
+}
+
+// oncePerPDF keeps the first fixture of each PDF, in the order the
+// manifest lists them, and keys it on its basename (see [PerPDFFeature]).
+// A skip the manifest records against that first fixture carries over.
+func oncePerPDF(fixtures []Fixture) []Fixture {
+	seen := make(map[string]bool, len(fixtures))
+	out := make([]Fixture, 0, len(fixtures))
+	for _, fx := range fixtures {
+		if seen[fx.PDFPath] {
+			continue
+		}
+		seen[fx.PDFPath] = true
+		fx.ID = baseFixtureID(fx.ID)
+		out = append(out, fx)
+	}
+	return out
 }
 
 func filterByProfile(fixtures []Fixture, profile string) []Fixture {

@@ -104,7 +104,7 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 		fmt.Fprintf(w, "    %d fixtures skipped (no per-fixture golden)\n", fr.NoGoldenFixtures)
 	}
 	if fr.Skipped > 0 {
-		fmt.Fprintf(w, "    %d fixtures skipped (corpus skip list)\n", fr.Skipped)
+		fmt.Fprintf(w, "    %d fixtures skipped (corpus skip list or not scored)\n", fr.Skipped)
 	}
 }
 

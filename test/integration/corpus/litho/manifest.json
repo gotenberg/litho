@@ -29,6 +29,10 @@
     "mutate-sign": "goldens/compliance",
     "mutate-encrypt": "goldens/compliance",
     "mutate-redact": "goldens/compliance",
-    "determinism": "goldens/compliance"
+    "determinism": "goldens/compliance",
+    "text": "goldens/text"
+  },
+  "golden_overrides": {
+    "text": "text-overrides.json"
   }
 }
