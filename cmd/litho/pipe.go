@@ -20,9 +20,10 @@ import (
 func pipeUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... [--compact] [--strict] [--default-page-size SIZE] -o out.pdf")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "  --compact   Shrink the output by packing objects into object streams")
-	fmt.Fprintln(w, "              and merging duplicate streams. Applies to the final write,")
-	fmt.Fprintln(w, "              and only when a stage rewrites the whole file.")
+	fmt.Fprintln(w, "  --compact   Shrink the output losslessly by packing objects into object")
+	fmt.Fprintln(w, "              streams, merging duplicate streams and recompressing Flate,")
+	fmt.Fprintln(w, "              LZW, RunLength and uncompressed images. Applies to the final")
+	fmt.Fprintln(w, "              write, and only when a stage rewrites the whole file.")
 	fmt.Fprintln(w, "  --strict    Exit 2 when a remediate stage leaves violations it could")
 	fmt.Fprintln(w, "              not fix. The output is still written.")
 	fmt.Fprintln(w, "  --default-page-size SIZE")

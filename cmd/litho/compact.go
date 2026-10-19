@@ -11,7 +11,8 @@ import (
 
 // registerCompactFlag adds -compact to fs and returns the bound value.
 //
-// Object-stream packing and stream dedup both run on the full-rewrite path.
+// Object-stream packing, stream dedup and image recompression all run on the
+// full-rewrite path.
 // [pdf.WithObjectStreams] states the rule: an incremental update appends to
 // the original bytes and leaves their packing untouched, and the incremental
 // write config carries no compaction field to honor in the first place. A
@@ -29,8 +30,9 @@ import (
 // happens.
 func registerCompactFlag(fs *flag.FlagSet) *bool {
 	return fs.Bool("compact", false,
-		"Shrink the output by packing objects into object streams and merging "+
-			"duplicate streams, when the command rewrites the whole file")
+		"Shrink the output losslessly by packing objects into object streams, merging "+
+			"duplicate streams and recompressing Flate, LZW, RunLength and uncompressed images, "+
+			"when the command rewrites the whole file")
 }
 
 // warnCompactSkipped reports that --compact was asked for and will not happen,
@@ -98,13 +100,15 @@ func warnCompactProfileRefused(stderr io.Writer, compact bool, profile string) {
 // compactWriteOptions returns the write options -compact selects, or none when
 // it was not passed.
 //
-// One flag drives both passes because they are independently safe and their
-// savings add up rather than overlap. Callers wanting one without the other
-// use [pdf.WithObjectStreams] and [pdf.WithDedup] directly.
+// One flag drives the three passes because they are independently safe and
+// their savings add up rather than overlap. Callers wanting one without the
+// others use [pdf.WithObjectStreams], [pdf.WithDedup] and
+// [pdf.WithImageRecompression] directly.
 //
-// Neither pass can enlarge a file or damage one: packing declines any batch it
-// cannot shrink, and both refuse outright on an encrypted output, where
-// per-object encryption keys make merging and packing unsafe.
+// No pass can enlarge a file or damage one: packing declines any batch it
+// cannot shrink, recompression keeps a re-encoding only when it is smaller
+// and decodes to the same samples, and all three refuse outright on an
+// encrypted output, where per-object encryption keys make them unsafe.
 //
 // # Corpus evidence
 //
@@ -114,5 +118,5 @@ func compactWriteOptions(compact bool) []pdf.WriteOption {
 	if !compact {
 		return nil
 	}
-	return []pdf.WriteOption{pdf.WithObjectStreams(), pdf.WithDedup()}
+	return []pdf.WriteOption{pdf.WithObjectStreams(), pdf.WithDedup(), pdf.WithImageRecompression()}
 }
