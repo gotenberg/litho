@@ -238,6 +238,8 @@ one deliberately rather than diffing it against a fresh build.
 | `readcolumns_ua1.pdf`  | PDF/UA-1     | Columns set line by line; a running head in the title's object   |
 | `sharedicc_2b.pdf`     | PDF/A-2b     | One content stream four pages share, each over its own ICC space |
 | `texlig_2b.pdf`        | PDF/A-2b     | A TeX ligature code and a code 32 whose names map nothing        |
+| `qnestreach_2b.pdf`    | PDF/A-2b     | q/Q nesting past 28 in a form, a cell, a glyph and an appearance |
+| `patternreach_2b.pdf`  | PDF/A-2b     | DeviceRGB a pattern reaches, one path, cycle or sharing per page |
 
 ### Must-not-fire controls
 
@@ -501,6 +503,8 @@ violation but is exempt, so a firing is a false positive.
 | `patternshade_2b`                         | every shading's `/Function`: a type 4 program past both number limits  | ISO 19005-2, 6.1.13 t1       |
 | `patternshade_2b`                         | `SH1`'s own `/ExtGState`, setting `/TR /Identity` and `/BM /Foo`       | ISO 19005-2, 6.2.5, 6.2.10   |
 | `patternglyph_2b`                         | page 4: a Type 3 font a cell selects with `Tf` and shows nothing in    | ISO 19005-2, 6.2.6 t1        |
+| `qnestreach_2b`                           | page 5: page 1's 29-level form painted again                           | one judgement per stream     |
+| `qnestreach_2b`                           | page 6: a page 20 levels deep painting a form 15 levels deep           | ISO 19005-2, 6.1.13 t8       |
 | `sharedicc_2b`                            | page 3: an ICC version 4 display profile, at PDF/A-2b                  | ISO 19005-2, 6.2.4.2         |
 | `sharedicc_2b`                            | page 4: the shared stream under page 1's resources, a second time      | one reading per resource set |
 
@@ -642,8 +646,10 @@ are covered under [Known divergences](#known-divergences).
 | `parentreach_2b.pdf`   | 7    | 3    | 7    | 3    | 4    | 8    | 4    | 5    | 7   | 7    | 8    | 7    | 7    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `patternglyph_2b.pdf`  | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 7    | 7    |
+| `patternreach_2b.pdf`  | 6    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 10   | 7    |
 | `patternshade_2b.pdf`  | 8    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 7    | 6    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
+| `qnestreach_2b.pdf`    | 6    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 4   | 4    | 5    | 10   | 7    |
 | `remapchain_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 4    | 0    |
 | `readcolumns_ua1.pdf`  | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `readorder_ua1.pdf`    | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
@@ -7446,6 +7452,87 @@ on every output. What stays is the unembedded TrueType font, which litho ships
 no program for (`6.2.11.4.1/1`, `6.3.4/1` at PDF/A-1, `6.2.10.4.1/1` at part 4,
 `7.21.4.1/1` and `8.4.5.5.1/1` at PDF/UA), with `6.3.8/1` at PDF/A-1a and
 `6.9/5` at PDF/A-4f beside it.
+
+### `patternreach_2b.pdf`
+
+A pattern reaches a page through an `scn` or `SCN` that selects it (ISO
+32000-1, 8.7.3.1 and 8.7.4.1), from the page's content, a form XObject, an
+annotation appearance, a Type 3 glyph or another pattern's cell, and a shading
+reaches it through a shading pattern or through `sh` (8.7.4.2). veraPDF 1.30.2
+judges the colour space of each such shading and of each colour operator in a
+cell, and judges a stream once however many paths reach it. The veraPDF corpus
+reaches a cell only from a page's content and reaches no shading pattern, and
+the litho fixtures before this one reach a shading pattern only from a page, a
+cell or a glyph, so this fixture plants one path per page, each painting
+DeviceRGB, which `6.2.4.3/2` answers under the CMYK OutputIntent:
+
+| Page | Path                                                     | `6.2.4.3/2` |
+| ---- | -------------------------------------------------------- | ----------- |
+| 1    | `SCN` strokes with a shading pattern                     | 1           |
+| 2    | a form XObject selects a shading pattern                 | 1           |
+| 3    | an annotation appearance selects a shading pattern       | 1           |
+| 4    | text in a `d1` Type 3 font filled with a shading pattern | 1           |
+| 5    | a tiling cell paints a form XObject that runs `sh`       | 1           |
+| 6    | a shading pattern over a type 4 mesh shading             | 1           |
+| 7    | a shading pattern over an `/Indexed` space on DeviceRGB  | 1           |
+| 8    | a direct shading pattern holding a direct shading        | 2           |
+| 9    | a tiling cell that selects itself                        | 2           |
+| 10   | two tiling cells that select each other                  | 4           |
+| 11   | a Type 3 glyph whose pattern cell shows the same font    | 2           |
+| 12   | one shading pattern on the page and in a cell it paints  | 1           |
+| 13   | one /Pattern dictionary two cells share                  | 1           |
+
+A cycle ends where it reaches a stream already judged (pages 9 to 11), and a
+shading pattern or a /Pattern dictionary reached twice counts once (pages 12
+and 13). Page 8's pattern and shading are direct objects, so the `scn` and the
+fill after it each link to the shading's colour space.
+
+litho already reached every path, so the fixture pins the reading rather than
+a fix. veraPDF 1.30.2 and litho report the same rule set and the same counts in
+all thirteen cells, 19 for `6.2.4.3/2` (`6.2.3.3/1` at PDF/A-1); at PDF/UA both
+count `7.1/3` and `8.2.2/1` fifteen times. A chain of twelve tiling cells, each
+selecting the next, is left out: litho counts a cell as a level of the form
+budget (`pdf.Limits.MaxFormDepth`, 10 by default) and stops there, where
+veraPDF has no budget. Raised to 40, litho reports the innermost cell's
+DeviceRGB as veraPDF does.
+
+Remediated at every level in both modes, both tools report the same rule set
+on every output: the PDF/A-1 to PDF/A-3, PDF/A-4, PDF/A-4e and PDF/UA-2
+outputs are conforming, and `6.9/5` stays at PDF/A-4f and `7.18.1/2` at
+PDF/UA-1.
+
+### `qnestreach_2b.pdf`
+
+ISO 19005-1, 6.1.12 and ISO 19005-2, 6.1.13 cap q/Q nesting at 28 levels (ISO
+32000-1, Annex C, Table C.1). veraPDF 1.30.2 counts the levels of every content
+stream it parses on its own, from zero, and fails the test once for each `q`
+past the 28th: in the page's content and in each form XObject, tiling pattern
+cell, Type 3 glyph description and annotation appearance the page draws. litho
+judged the page's content alone. No corpus file nests that deep outside a
+page's content, so this fixture plants one stream per page, each at its own
+depth so the count names the stream:
+
+| Page | Stream                                 | Levels | `6.1.13/8` |
+| ---- | -------------------------------------- | ------ | ---------- |
+| 1    | a form XObject                         | 29     | 1          |
+| 2    | a tiling pattern cell                  | 30     | 2          |
+| 3    | a Type 3 glyph description             | 31     | 3          |
+| 4    | an annotation's normal appearance      | 32     | 4          |
+| 5    | page 1's form, painted again           | 29     | 0          |
+| 6    | a page 20 deep painting a form 15 deep | 20, 15 | 0          |
+
+| Rule at PDF/A-2b               | veraPDF | litho before | litho |
+| ------------------------------ | ------- | ------------ | ----- |
+| `6.1.13/8` q/Q nesting past 28 | 10      | 0            | 10    |
+
+veraPDF 1.30.2 and litho report the same rule set and the same counts in all
+thirteen cells: `6.1.12/8` counts 10 at PDF/A-1, and PDF/A-4 states no nesting
+limit. A CMYK OutputIntent covers the DeviceGray every stream paints in.
+
+No fixer reduces nesting, so remediation keeps `6.1.13/8` (`6.1.12/8` at
+PDF/A-1) at every PDF/A-1 to PDF/A-3 level in both modes, on both tools; the
+PDF/A-4, PDF/A-4e and PDF/UA-2 outputs are conforming, and `6.9/5` stays at
+PDF/A-4f and `7.18.1/2` at PDF/UA-1.
 
 ### `shadedefault_2b.pdf`
 
