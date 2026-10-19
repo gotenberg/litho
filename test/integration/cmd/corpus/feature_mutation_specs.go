@@ -350,6 +350,11 @@ const mutationRedactReach = 1e6
 //     content counted promise_broken until AutoTag reported its skips.
 //   - litho undecodable_2b: the page it cannot read is page 7, and litho
 //     reads no text from it either.
+//   - litho patternreach_2b: 1 promise_broken PDF. Its only text is one Type
+//     3 A at (10, 10) on pages 4 and 11, which AutoTag reads as a running
+//     footer, and a document whose text is all furniture has nothing to tag.
+//     AutoTag writes no tree, so nothing is hidden; the check reads the
+//     input's text and cannot tell furniture from content.
 //   - litho: [scanMarkedContent] finds marked content in 26 inputs, the 23
 //     already tagged that carry it and the 3 above, and in none of the 59
 //     AutoTag tags.

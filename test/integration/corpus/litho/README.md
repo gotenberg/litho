@@ -7822,12 +7822,12 @@ counts, in all thirteen cells.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-186 x 13 = 2418 cells, the whole hand-measured matrix. litho and veraPDF return
+191 x 13 = 2483 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2394 of the 2418 cells. The 24
+fixtures exist to protect, and it holds in 2459 of the 2483 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
@@ -7840,7 +7840,7 @@ thirteen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_
 `pagelabels_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2418 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 2483 and moves only `ruleset_mismatch`, and on
 those thirteen cells it moves both. Every exception sits in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
 fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
@@ -7867,7 +7867,7 @@ and states the clause behind its verdict. It either gives the right reading,
 where ISO 32000-1, 9.10.2 or the page geometry decides it, or marks the page
 unscored, where the readers disagree only on codes 9.10.2 gives no Unicode
 value, since no reading of those is right. Where PDF.js and litho agree, the
-golden stands. Of the 186 fixtures, 171 match, 8 are unscored
+golden stands. Of the 191 fixtures, 176 match, 8 are unscored
 (`cmapcidtext_2b`, `cmapnotdef_2b`, `cmaps_2b`, `cmapusecmap_2b`,
 `cmapusestream_2b`, `cmapverabase_2b`, `type0nodesc_2b`, `usecmap_2u`; page 16
 of `fontcopies_2b` too, whose other pages score), and 7 mismatch, each on a
@@ -7881,7 +7881,7 @@ reading litho gets wrong:
 | `fontemptycs_2b`, `fontkeys_1b` | `AB`: two glyphs that do not advance, with no space between them   | `A B`                                              |
 | `type1notdef_2u`                | `A` under `N1` and `N2`, whose built-in encoding leaves 43 unnamed | `AC`, code 43 read through StandardEncoding        |
 
-The cell's `words_match` reads 171 and `chars_match` 175: the four fixtures of
+The cell's `words_match` reads 176 and `chars_match` 180: the four fixtures of
 the third and fourth rows match once spaces are ignored. A new fixture needs
 its golden regenerated at provisioning, and an override when PDF.js reads it
 wrong.
