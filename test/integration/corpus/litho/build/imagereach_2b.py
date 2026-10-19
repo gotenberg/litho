@@ -5,7 +5,7 @@ veraPDF judges an image where a Do operator draws it, once for the whole
 document, and a page content stream another page shares once, through the
 resources of the first page that draws it. Every image in this file breaks two
 image rules, an /Intent outside the four ISO 32000-1 names (ISO 19005-2, 6.2.6)
-and an /Interpolate of true (6.2.8 t3), and no image is drawn:
+and an /Interpolate of true (6.2.8 t3):
 
   I1  listed by the resources of the form FmList the first page draws, whose
       content draws nothing. A form's resource entry is not a draw.
@@ -15,9 +15,11 @@ and an /Interpolate of true (6.2.8 t3), and no image is drawn:
       the content stream it shares with the first page, which draws /FmList
       as the first page names it.
 
-So neither rule fails, where judging the resource entries fails both. The file
-fails only the rules no image decides: its initial DeviceGray fill and its
-missing metadata.
+Neither rule fails for I1 or I2, where judging the resource entries fails
+both. I3 is drawn, since the second page's /FmList resolves in the second
+page's resources (ISO 32000-1, 7.8.3): litho fails both rules once, and
+veraPDF, which reads the shared stream through the first page alone, fails
+neither.
 
 See ../README.md for the authoritative expected firing set.
 """

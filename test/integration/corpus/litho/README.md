@@ -236,6 +236,7 @@ one deliberately rather than diffing it against a fresh build.
 | `danglingstr_ua1.pdf`  | PDF/UA-1     | Auto-tagging a page that ends inside an unterminated string      |
 | `readorder_ua1.pdf`    | PDF/UA-1     | Untagged two-column page whose stream interleaves the columns    |
 | `readcolumns_ua1.pdf`  | PDF/UA-1     | Columns set line by line; a running head in the title's object   |
+| `sharedicc_2b.pdf`     | PDF/A-2b     | One content stream four pages share, each over its own ICC space |
 
 ### Must-not-fire controls
 
@@ -499,6 +500,8 @@ violation but is exempt, so a firing is a false positive.
 | `patternshade_2b`                         | every shading's `/Function`: a type 4 program past both number limits  | ISO 19005-2, 6.1.13 t1       |
 | `patternshade_2b`                         | `SH1`'s own `/ExtGState`, setting `/TR /Identity` and `/BM /Foo`       | ISO 19005-2, 6.2.5, 6.2.10   |
 | `patternglyph_2b`                         | page 4: a Type 3 font a cell selects with `Tf` and shows nothing in    | ISO 19005-2, 6.2.6 t1        |
+| `sharedicc_2b`                            | page 3: an ICC version 4 display profile, at PDF/A-2b                  | ISO 19005-2, 6.2.4.2         |
+| `sharedicc_2b`                            | page 4: the shared stream under page 1's resources, a second time      | one reading per resource set |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -508,8 +511,8 @@ zero-area annotation.
 ## Expected firing sets
 
 Counts are distinct rule classes (`clause/test`) reported by litho. litho and
-veraPDF agree exactly on the set in every cell except the two marked `*`,
-which are covered under [Known divergences](#known-divergences).
+veraPDF agree exactly on the set in every cell except those marked `*`, which
+are covered under [Known divergences](#known-divergences).
 
 | Fixture                | A-1a | A-1b | A-2a | A-2b | A-2u | A-3a | A-3b | A-3u | A-4 | A-4e | A-4f | UA-1 | UA-2 |
 | ---------------------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- | ---- | ---- |
@@ -602,7 +605,7 @@ which are covered under [Known divergences](#known-divergences).
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
 | `imagecolour_2b.pdf`   | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
 | `imagedraws_2b.pdf`    | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 10   | 7    |
-| `imagereach_2b.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
+| `imagereach_2b.pdf`    | 6\*  | 4\*  | 6\*  | 4\*  | 4\*  | 6\*  | 4\*  | 4\*  | 4\* | 4\*  | 5\*  | 5    | 6    |
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
 | `inlinefs_4.pdf`       | 7    | 5    | 9    | 7    | 7    | 11   | 9    | 9    | 4   | 4    | 5    | 10   | 6    |
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
@@ -656,6 +659,7 @@ which are covered under [Known divergences](#known-divergences).
 | `rolecycle_ua2.pdf`    | 5    | 4    | 8    | 5    | 5    | 8    | 5    | 5    | 2   | 2    | 3    | 5    | 4    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `shadedefault_2b.pdf`  | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
+| `sharedicc_2b.pdf`     | 4\*  | 2\*  | 4\*  | 2\*  | 2\*  | 4\*  | 2\*  | 2\*  | 3\* | 3\*  | 4\*  | 5    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
 | `siglock_2b.pdf`       | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
@@ -1848,6 +1852,20 @@ precondition of the rule, as under `docinfo_1b.pdf` above, so neither tool
 reports it here.
 
 ## Known divergences
+
+**A content stream pages share under resources of their own.** ISO 32000-1,
+7.7.3.3 lets pages share a content stream, and the names it uses resolve in
+each page's `/Resources` (7.8.3). veraPDF judges the stream once for the
+document, through the first page that draws it, so what a later page's names
+select goes unjudged; litho judges each page whose resources differ, and keeps
+veraPDF's single reading for pages whose resources are equal. The marked cells
+of `sharedicc_2b.pdf` (ICCBased spaces, ISO 19005-2, 6.2.4.2 and ISO 19005-1,
+6.2.3.2) and `imagereach_2b.pdf` (an image the second page draws, 6.2.6 and
+6.2.8) are this divergence, eleven each, at every PDF/A level. Given a copy of
+the stream for each page, veraPDF fails what litho fails. Outside the litho
+corpus it reaches pdfjs `pypdf2332.pdf` alone, whose rule sets agree and whose
+DeviceGray count is litho's 13 to veraPDF's 10: three pages share a stream
+under scanned images of their own.
 
 **`6.2.4.3/4` on a `Lab ` destination profile.** litho reports the device
 colour-space rule against a page whose output intent declares an ICC profile
@@ -3670,10 +3688,9 @@ the presence rule there, which counts 3.
 ### `imagereach_2b.pdf`
 
 `imagereach_2b.pdf` holds three images, each with an `/Intent` outside the four
-ISO 32000-1 names and an `/Interpolate` of true, and no operator draws any of
-them. veraPDF reaches an image through the `Do` that draws it, once for the
-whole document, and a content stream two pages share through the resources of
-the first page:
+ISO 32000-1 names and an `/Interpolate` of true. veraPDF reaches an image
+through the `Do` that draws it, once for the whole document, and a content
+stream two pages share through the resources of the first page:
 
 | Image | Where it sits                                                        |
 | ----- | -------------------------------------------------------------------- |
@@ -3681,19 +3698,60 @@ the first page:
 | `I2`  | in the resources of a form nested in a form the first page draws     |
 | `I3`  | drawn by the form the second page names for the shared stream's `Do` |
 
-So neither image rule fails. litho judged every entry of a drawn form's
-resources and every page's resources for a shared stream, which failed both
-three times.
+No operator draws `I1` or `I2`, so neither image rule fails for them. `I3` is
+drawn: the second page's `/FmList` resolves in the second page's resources
+(ISO 32000-1, 7.8.3) and paints it, so both rules fail once. veraPDF fails
+neither, since it reads the shared stream through the first page alone (see
+[Known divergences](#known-divergences)). litho once judged every entry of a
+drawn form's resources too, which failed both three times.
 
 | Rule at PDF/A-2b              | veraPDF | litho | litho before |
 | ----------------------------- | ------- | ----- | ------------ |
-| `6.2.6/1` rendering intent    | 0       | 0     | 3            |
-| `6.2.8/3` `/Interpolate` true | 0       | 0     | 3            |
-| `6.2.4.3/4` DeviceGray        | 2       | 2     | 2            |
+| `6.2.6/1` rendering intent    | 0       | 1     | 0            |
+| `6.2.8/3` `/Interpolate` true | 0       | 1     | 0            |
+| `6.2.4.3/4` DeviceGray        | 2       | 3     | 2            |
 | `6.6.2.1/1` no metadata       | 1       | 1     | 1            |
 
-The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
-counts.
+The rule sets equal veraPDF 1.30.2's in the two PDF/UA cells, and litho adds
+the two image rules in the eleven PDF/A cells (`6.2.4/3` and `6.2.9/1` at
+PDF/A-1, and the interpolation test `6.2.7.1/3` alone at PDF/A-4).
+`6.2.4.3/4` counts the second page's initial DeviceGray fill once more.
+
+### `sharedicc_2b.pdf`
+
+Four pages share one content stream, `/CS0 cs 0.5 0.5 0.5 scn 0 0 10 10 re f`,
+and each page's `/Resources` maps `/CS0` to an ICCBased space of its own. The
+name resolves in each page's resources (ISO 32000-1, 7.8.3), so the one stream
+paints four spaces. Merging duplicate streams on a write makes such files:
+`csnames_2b.pdf`, rewritten with `--compact`, shares one content stream
+between pages 1, 2, 9, 10 and 13 and another between pages 14 to 19, and
+veraPDF stops failing the abstract profiles of pages 9, 10, 18 and 19, which
+the rewrite leaves in place; litho stopped too, until it judged each page's
+resources. No corpus file shares a content stream under ICCBased spaces of its
+own: `pypdf2332.pdf` (pdfjs) shares three under images of their own, and
+`imagereach_2b.pdf` one under a form.
+
+| Page | `/CS0`                                         | Answers                     |
+| ---- | ---------------------------------------------- | --------------------------- |
+| 1    | ICCBased over a version 2 display profile      | nothing                     |
+| 2    | ICCBased over a version 2 abstract profile     | `6.2.4.2/1`, `6.2.3.2/1`    |
+| 3    | ICCBased over a version 4 display profile      | `6.2.3.2/1` at PDF/A-1 only |
+| 4    | page 1's space, in resources equal to page 1's | nothing                     |
+
+ISO 19005-2, 6.2.4.2 takes a profile of the input, output, display or colour
+space class, so page 2 fails at every PDF/A level; ISO 19005-1, 6.2.3.2 reads
+the PDF 1.4 profile, version 2, so page 3 fails at PDF/A-1 alone. Page 4 reads
+the stream under the same resources as page 1, and is judged once with it.
+
+| Rule                    | veraPDF | litho | each page its own stream, veraPDF |
+| ----------------------- | ------- | ----- | --------------------------------- |
+| `6.2.4.2/1` at PDF/A-2b | 0       | 1     | 1                                 |
+| `6.2.3.2/1` at PDF/A-1b | 0       | 2     | 2                                 |
+| `6.6.2.1/1` at PDF/A-2b | 1       | 1     | 1                                 |
+
+veraPDF judges the shared stream through page 1 alone and fails no ICC test;
+given a copy of the stream for each page, it fails what litho fails on the
+shared one. The two PDF/UA cells agree, rule by rule and count by count.
 
 ### `csnames_2b.pdf`
 
