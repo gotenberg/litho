@@ -198,15 +198,18 @@ func alreadyTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // reading the document alone, and [Emit] must be given the same alloc, so the
 // spans index the content Emit marks.
 //
-// Scope: single-column text. Text objects are segmented per BT…ET. Running
-// headers, footers and page numbers are set apart first (see
+// Scope: text in one column or several. Text objects are segmented per
+// BT…ET. Running headers, footers and page numbers are set apart first (see
 // [detectFurniture]). Strongly grid-like runs of blocks become tables
 // ([carveTables]). The rest are classified as headings, by font size relative
 // to body text and numbered into a no-skip H1..Hn hierarchy, or paragraphs;
 // adjacent paragraph lines merge into one element by baseline proximity, so a
 // wrapped paragraph is a single element, and runs of marker-led paragraphs
 // become lists ([listify]). Each image paint outside a text object is a Figure
-// ([figureElements]). Content order is taken as reading order.
+// ([figureElements]). The elements follow the page's reading order
+// ([classifyInReadingOrder]): columns read one after the other and the page
+// top to bottom, wherever the content stream draws them; a page whose layout
+// the segmentation cannot read keeps content order.
 //
 // Font size is transform-aware: it is the Tf size scaled by the text matrix and
 // the CTM (ISO 32000-1, 9.4.4), so text enlarged by a cm or by Tm's own scale
@@ -215,8 +218,9 @@ func alreadyTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 //
 // Known limitations: text inside Form XObjects (Do) is not descended into for
 // classification; a text object mixing sizes is classified by its dominant
-// size; tables carry no TH and lists no Lbl; and multi-column reading-order
-// segmentation is not done. Content not placed in a structure element
+// size; tables carry no TH and lists no Lbl; and a paragraph whose lines the
+// content stream sets apart, around another column's, stays one paragraph per
+// text object. Content not placed in a structure element
 // (graphics, and text the heuristic misses) is marked as an artifact by [Emit]
 // so the output stays fully marked.
 func Classify(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*Element, error) {
@@ -241,6 +245,10 @@ func Classify(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 		}
 		blocks, artifacts := splitFurniture(blocks, pi, furniture[pi])
 		tables, rest := carveTables(blocks, pi)
+		if kids, ok := classifyInReadingOrder(ctx, alloc, doc, pages[pi], pi, data, blocks, rest, images, tables); ok {
+			root.Kids = append(append(root.Kids, kids...), artifacts...)
+			continue
+		}
 		elems := mergeByOffset(classifyBlocks(rest, pi, data), figureElements(images, pi))
 		elems = mergeByOffset(elems, tables)
 		root.Kids = append(root.Kids, mergeByOffset(elems, artifacts)...)
@@ -643,6 +651,22 @@ func elemStart(e *Element) int {
 type imageBlock struct {
 	startByte, endByte int
 	name               string
+	// box is where the image paints in default user space, the unit square
+	// carried through the CTM (ISO 32000-1, 8.9.4 and 8.9.7).
+	box [4]float64
+}
+
+// unitSquareBox returns the axis-aligned box of the unit square under ctm,
+// [minX minY maxX maxY].
+func unitSquareBox(ctm [6]float64) [4]float64 {
+	box := [4]float64{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
+	for _, p := range [4][2]float64{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
+		x := p[0]*ctm[0] + p[1]*ctm[2] + ctm[4]
+		y := p[0]*ctm[1] + p[1]*ctm[3] + ctm[5]
+		box[0], box[1] = math.Min(box[0], x), math.Min(box[1], y)
+		box[2], box[3] = math.Max(box[2], x), math.Max(box[3], y)
+	}
+	return box
 }
 
 // figureElements builds one Figure leaf per image paint. The /Alt value
@@ -916,13 +940,13 @@ func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			// nesting of the injected marked-content operators.
 			if cur == nil && len(op.Operands) == 1 {
 				if n, ok := op.Operands[0].(ast.PdfName); ok && imageNames[string(n)] {
-					images = append(images, imageBlock{startByte: r.Start, endByte: r.End, name: string(n)})
+					images = append(images, imageBlock{startByte: r.Start, endByte: r.End, name: string(n), box: unitSquareBox(ctm)})
 				}
 			}
 		case "BI":
 			// The parser surfaces a whole inline image (BI..EI) as one op.
 			if cur == nil {
-				images = append(images, imageBlock{startByte: r.Start, endByte: r.End, name: "inline"})
+				images = append(images, imageBlock{startByte: r.Start, endByte: r.End, name: "inline", box: unitSquareBox(ctm)})
 			}
 		case "q":
 			stateStack = append(stateStack, textStateFrame{font: curFont, leading: leading, ctm: ctm})
