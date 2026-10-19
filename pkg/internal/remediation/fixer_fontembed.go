@@ -771,6 +771,25 @@ func symbolicToUnicode(ctx context.Context, doc *document.Document, font ast.Pdf
 // Unicode ([cmap.AdobeCIDToUnicode]).
 var adobeOrderings = map[string]bool{"Japan1": true, "GB1": true, "CNS1": true, "Korea1": true}
 
+// liveEncodingFont returns font with its /Encoding written in place when that
+// is a reference to a stream an earlier fixer queued, so a reading of the
+// document decodes the font's codes through it: cmap-flatten embeds the CMap
+// a font named ([embedNamedEncoding]) at a new object, which the document
+// does not hold. Any other font comes back unchanged.
+func liveEncodingFont(alloc *writer.ObjAllocator, font ast.PdfDict) ast.PdfDict {
+	ref, isRef := font["Encoding"].(ast.PdfIndirectRef)
+	if !isRef {
+		return font
+	}
+	stream, pending := alloc.Pending()[ref.ObjectNum].(ast.PdfStream)
+	if !pending {
+		return font
+	}
+	out := maps.Clone(font)
+	out["Encoding"] = stream
+	return out
+}
+
 // prepareComposite reads what planning a composite font takes, and the
 // request the provider answers. Its CIDs belong to a
 // character collection, and a program another producer made numbers its
@@ -794,7 +813,7 @@ func (e *fontEmbedder) prepareComposite(ctx context.Context, font ast.PdfDict, s
 		return nil, FontRequest{}, fmt.Errorf("%w: the %s-%s character collection maps no CID to a character", ErrFontKind, registry, ordering)
 	}
 	toUnicode := cmap.AdobeCIDToUnicode(ordering)
-	cids := compliance.Type0ShownCIDs(ctx, e.doc, font, shown)
+	cids := compliance.Type0ShownCIDs(ctx, e.doc, liveEncodingFont(e.alloc, font), shown)
 	if len(cids) == 0 {
 		return nil, FontRequest{}, fmt.Errorf("%w: the codes the document shows decode to no CID", ErrFontKind)
 	}
