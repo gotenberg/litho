@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
 // DICT operators the subsetter rewrites or drops (Adobe Technical Note #5176,
@@ -323,7 +325,7 @@ func (s *subsetSource) standardGlyph(code int) (int, bool) {
 	if code < 0 || code > math.MaxUint8 {
 		return 0, false
 	}
-	name := standardEncodingNames[code]
+	name := encodings.StandardEncodingNames[code]
 	if name == "" {
 		return 0, false
 	}

@@ -77,7 +77,7 @@ func ExtractEncoding(data []byte) map[byte]string {
 		if info.encodingOffset == 1 {
 			predefined = expertEncodingNames[:]
 		} else {
-			predefined = standardEncodingNames[:]
+			predefined = encodings.StandardEncodingNames[:]
 		}
 		result := make(map[byte]string)
 		for gid, sid := range sids {
@@ -212,7 +212,7 @@ func PredefinedEncodingNames(data []byte) map[byte]string {
 	var predefined []string
 	switch parseTopDict(topDictEntries[0]).encodingOffset {
 	case 0:
-		predefined = standardEncodingNames[:]
+		predefined = encodings.StandardEncodingNames[:]
 	case 1:
 		predefined = expertEncodingNames[:]
 	default:
