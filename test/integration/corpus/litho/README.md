@@ -1867,7 +1867,11 @@ of `sharedicc_2b.pdf` (ICCBased spaces, ISO 19005-2, 6.2.4.2 and ISO 19005-1,
 the stream for each page, veraPDF fails what litho fails. Outside the litho
 corpus it reaches pdfjs `pypdf2332.pdf` alone, whose rule sets agree and whose
 DeviceGray count is litho's 13 to veraPDF's 10: three pages share a stream
-under scanned images of their own.
+under scanned images of their own. Remediation cannot clear the abstract
+profile of `sharedicc_2b.pdf`'s second page, since replacing it changes its
+colours, so the remediated outputs keep `6.2.4.2/1` (`6.2.3.2/1` at PDF/A-1) on
+litho and report nothing on veraPDF: the remediation features' `disagreement`
+reads 11 in each mode, one per PDF/A level.
 
 **`6.2.4.3/4` on a `Lab ` destination profile.** litho reports the device
 colour-space rule against a page whose output intent declares an ICC profile
@@ -7657,15 +7661,16 @@ counts, in all thirteen cells.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-183 x 13 = 2379 cells, the whole hand-measured matrix. litho and veraPDF return
+186 x 13 = 2418 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2377 of the 2379 cells. The two
-exceptions, both on `complex_ua2`, are marked `*` in the counts table and
-covered under [Known divergences](#known-divergences); veraPDF reports a
-non-empty set in each, which is why the verdict still matches.
+fixtures exist to protect, and it holds in 2394 of the 2418 cells. The 24
+exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
+`imagereach_2b`, are marked `*` in the counts table and covered under
+[Known divergences](#known-divergences); veraPDF reports a non-empty set in
+each, which is why the verdict still matches.
 
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
@@ -7674,18 +7679,20 @@ thirteen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_
 `pagelabels_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2379 and moves only `ruleset_mismatch`, and on
-those thirteen cells it moves both. Both exceptions sit in the manifest's profiles,
-`complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
-and the text scoreboard names the rules only one side reports. A third cell in
-the runner is a regression, or a divergence to cover under Known divergences and
+rule class leaves `matched` at 2418 and moves only `ruleset_mismatch`, and on
+those thirteen cells it moves both. Every exception sits in the manifest's
+profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
+fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
+the text scoreboard names the rules only one side reports. A 25th cell in the
+runner is a regression, or a divergence to cover under Known divergences and
 mark `*`.
 
 The `remediation` and `remediation-aggressive` features validate each
 remediated output with both tools, and their `disagreement` metric sums, over
-the cells, the difference between the numbers of rules each reports. It reads 0
-on this corpus in both modes, so any cell that moves it is a regression or a
-divergence to cover under Known divergences.
+the cells, the difference between the numbers of rules each reports. It reads
+11 on this corpus in both modes, all on `sharedicc_2b` (see
+[Known divergences](#known-divergences)), so any other cell that moves it is a
+regression or a divergence to cover there.
 
 PDF/A-4e and PDF/A-4f are the manifest's ninth and tenth profiles, after the eight it
 listed first. Appended rather than sorted in, they leave the determinism
