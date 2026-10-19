@@ -129,7 +129,8 @@
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
 //     [WithBookmarks], [WithPipelineTempDir], [WithTempDir],
 //     [WithEncryption], [WithObjectStreams], [WithDedup],
-//     [WithDroppedSignatures], [WithDefaultPageSize]. [NewWriter] takes them
+//     [WithImageRecompression], [WithDroppedSignatures],
+//     [WithDefaultPageSize]. [NewWriter] takes them
 //     too, as defaults for the Writer's WriteTo, which overrides them with
 //     its own, and a [WithDefaultPageSize] given to it also reaches its
 //     remediation. [WithTempDir] places the temp files of [NewWriter],
@@ -154,8 +155,9 @@
 //
 // [WithEncryption] is how an output becomes encrypted. No operation preserves
 // a source's encryption, so an edited document is written in the clear unless
-// this option asks otherwise. [WithObjectStreams] and [WithDedup] shrink a
-// full rewrite, and both decline on an encrypted output.
+// this option asks otherwise. [WithObjectStreams], [WithDedup] and
+// [WithImageRecompression] shrink a full rewrite, losslessly, and all three
+// decline on an encrypted output.
 //
 // # Resource limits
 //

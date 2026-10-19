@@ -17,3 +17,8 @@ var ErrNameHoldsNull = errors.New("name holds a NUL byte, which ISO 32000-1, 7.3
 // such an object conforms; [HoistDirectStreams] moves each into an object of
 // its own before a write.
 var ErrDirectStream = errors.New("stream inside a dictionary or an array, which ISO 32000-1, 7.3.8.1 forbids: every stream is an indirect object")
+
+// ErrRecompressionDiverged is returned, wrapped, when an image
+// [RecompressImages] re-encodes lazily no longer re-encodes to the bytes it
+// measured, which means its source changed between the pass and the write.
+var ErrRecompressionDiverged = errors.New("a recompressed image no longer re-encodes as measured")

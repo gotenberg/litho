@@ -268,6 +268,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		UseXRefStream:     xrefStream,
 		PackObjectStreams: compact.PackObjectStreams,
 		DedupStreams:      compact.DedupStreams,
+		RecompressImages:  compact.imageRecompression(sources[0].Doc),
 	})
 }
 

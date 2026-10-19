@@ -17,13 +17,14 @@ import (
 //
 // Grouped rather than passed as separate booleans: [Split] and [Merge] take
 // these positionally, and three or more adjacent bools at a call site are
-// transposable without the compiler noticing. Later passes (image
-// recompression, font subsetting, linearization) extend this struct instead of
-// lengthening those signatures again.
+// transposable without the compiler noticing. Later passes (font subsetting,
+// linearization) extend this struct instead of lengthening those signatures
+// again.
 //
 // Every pass here is refused for an encrypted document, because encryption
 // runs over the object set before serialization; see [writer.PackObjectStreams]
-// and [writer.DedupStreams] for what each would otherwise corrupt.
+// [writer.DedupStreams] and [writer.RecompressImages] for what each would
+// otherwise corrupt.
 type CompactOptions struct {
 	// PackObjectStreams packs eligible objects into /Type /ObjStm streams.
 	// The write engine forces a cross-reference stream when it packs, since
@@ -32,6 +33,18 @@ type CompactOptions struct {
 	// DedupStreams merges byte-identical stream objects, repointing every
 	// reference at one survivor.
 	DedupStreams bool
+	// RecompressImages re-encodes image streams losslessly where that makes
+	// them smaller, leaving their samples unchanged.
+	RecompressImages bool
+}
+
+// imageRecompression returns the recompression pass c selects, decoding under
+// doc's filter plugins and budgets, or nil when c selects none.
+func (c CompactOptions) imageRecompression(doc *document.Document) *writer.ImageRecompression {
+	if !c.RecompressImages {
+		return nil
+	}
+	return &writer.ImageRecompression{Decoder: doc.Filters, Limits: doc.Limits()}
 }
 
 // FullRewriteConfig holds the parameters for a full document rewrite.
@@ -223,6 +236,7 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		UseXRefStream:     cfg.XRefStream,
 		PackObjectStreams: cfg.Compact.PackObjectStreams,
 		DedupStreams:      cfg.Compact.DedupStreams,
+		RecompressImages:  cfg.Compact.imageRecompression(doc),
 	})
 }
 

@@ -262,6 +262,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		UseXRefStream:     xrefStream,
 		PackObjectStreams: compact.PackObjectStreams,
 		DedupStreams:      compact.DedupStreams,
+		RecompressImages:  compact.imageRecompression(doc),
 	})
 }
 

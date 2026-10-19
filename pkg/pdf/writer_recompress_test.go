@@ -1,0 +1,140 @@
+package pdf
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"slices"
+	"testing"
+)
+
+// gradientImagePDF builds a one-page document showing /Im0, a 64x48 RGB
+// gradient stored without compression, which a PNG-predicted Flate encoding
+// shrinks many times over.
+func gradientImagePDF() ([]byte, []byte) {
+	const w, h = 64, 48
+	samples := make([]byte, 0, w*h*3)
+	for y := range h {
+		for x := range w {
+			samples = append(samples, byte(x*3+y), byte(x*5), byte(y*7))
+		}
+	}
+	const content = "q 64 0 0 48 0 0 cm /Im0 Do Q"
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length %d >>\nstream\n%s\nendstream",
+			w, h, len(samples), samples),
+	}
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.7\n")
+	offs := make([]int, len(objs)+1)
+	for i, o := range objs {
+		offs[i+1] = buf.Len()
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offs[i])
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
+	return buf.Bytes(), samples
+}
+
+func openRecompressSource(t *testing.T, data []byte, opts ...OpenOption) *Reader {
+	t.Helper()
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)), opts...)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Logf("closing reader: %v", err)
+		}
+	})
+	return r
+}
+
+// TestWriter_WithImageRecompression_KeepsPixels is the end-to-end contract:
+// the option shrinks the output, the image decodes to the same pixels, and two
+// runs give the same bytes.
+func TestWriter_WithImageRecompression_KeepsPixels(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data, samples := gradientImagePDF()
+
+	write := func(opts ...WriteOption) []byte {
+		t.Helper()
+		var out bytes.Buffer
+		if err := NewWriter(openRecompressSource(t, data)).WriteTo(ctx, &out, append([]WriteOption{WithFullRewrite()}, opts...)...); err != nil {
+			t.Fatalf("WriteTo: %v", err)
+		}
+		return out.Bytes()
+	}
+	plain := write()
+	packed := write(WithImageRecompression())
+	again := write(WithImageRecompression())
+
+	if len(packed) >= len(plain)-len(samples)/2 {
+		t.Fatalf("recompressed output is %d bytes against %d without the option", len(packed), len(plain))
+	}
+	if !bytes.Equal(packed, again) {
+		t.Fatal("two runs of the same write differ")
+	}
+
+	before, err := openRecompressSource(t, data).DecodeImage(ctx, 1, "Im0")
+	if err != nil {
+		t.Fatalf("DecodeImage on the source: %v", err)
+	}
+	after, err := openRecompressSource(t, packed).DecodeImage(ctx, 1, "Im0")
+	if err != nil {
+		t.Fatalf("DecodeImage on the output: %v", err)
+	}
+	if !slices.Equal(levels(before), levels(after)) {
+		t.Fatal("recompression changed the image's pixels")
+	}
+}
+
+// TestWriter_WithImageRecompression_HonoursImageBudget lowers the image budget
+// through WithLimits below the image's pixel count, which must leave the
+// image's stored samples as they were.
+func TestWriter_WithImageRecompression_HonoursImageBudget(t *testing.T) {
+	t.Parallel()
+	data, samples := gradientImagePDF()
+	r := openRecompressSource(t, data, WithLimits(Limits{MaxImagePixels: 64*48 - 1}))
+	var out bytes.Buffer
+	if err := NewWriter(r).WriteTo(context.Background(), &out, WithFullRewrite(), WithImageRecompression()); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if !bytes.Contains(out.Bytes(), samples) {
+		t.Fatal("an image past the image budget was recompressed")
+	}
+}
+
+// TestWriter_WithImageRecompression_DeclinesEncryptedOutput checks that an
+// encrypted output keeps its images as they were. Encryption's keys and salts
+// are random but its lengths are not, so the option must not change the size.
+func TestWriter_WithImageRecompression_DeclinesEncryptedOutput(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data, _ := gradientImagePDF()
+	write := func(opts ...WriteOption) []byte {
+		t.Helper()
+		var out bytes.Buffer
+		opts = append(opts, WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o"}))
+		if err := NewWriter(openRecompressSource(t, data)).WriteTo(ctx, &out, opts...); err != nil {
+			t.Fatalf("WriteTo: %v", err)
+		}
+		return out.Bytes()
+	}
+	plain, asked := write(), write(WithImageRecompression())
+	if len(plain) != len(asked) {
+		t.Fatalf("encrypted output is %d bytes with the option and %d without", len(asked), len(plain))
+	}
+	if _, err := openRecompressSource(t, asked, WithPassword("u")).DecodeImage(ctx, 1, "Im0"); err != nil {
+		t.Fatalf("DecodeImage on the encrypted output: %v", err)
+	}
+}

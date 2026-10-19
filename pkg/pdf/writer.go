@@ -37,6 +37,7 @@ type writeOpts struct {
 	xrefStream        bool
 	packObjectStreams bool
 	dedupStreams      bool
+	recompressImages  bool
 	logger            *slog.Logger
 	bookmarks         *BookmarkOptions
 	tempDir           string
@@ -162,6 +163,7 @@ func (o writeOpts) compactOptions() mutations.CompactOptions {
 	return mutations.CompactOptions{
 		PackObjectStreams: o.packObjectStreams,
 		DedupStreams:      o.dedupStreams,
+		RecompressImages:  o.recompressImages,
 	}
 }
 
@@ -244,6 +246,30 @@ func WithObjectStreams() WriteOption {
 func WithDedup() WriteOption {
 	return func(o *writeOpts) {
 		o.dedupStreams = true
+	}
+}
+
+// WithImageRecompression re-encodes image XObjects losslessly in the output,
+// with FlateDecode at its best compression and a PNG predictor where that
+// helps (ISO 32000-1, 7.4.4.4), keeping each re-encoding only when it is
+// smaller. Every image's samples decode exactly as before: only /Filter,
+// /DecodeParms and the data change, and each re-encoding is decoded again and
+// compared with the original samples before it is written.
+//
+// Only images stored without compression or under FlateDecode, LZWDecode,
+// RunLengthDecode, ASCIIHexDecode or ASCII85Decode qualify. JPEG, JPEG 2000,
+// JBIG2 and CCITT images are left alone, and nothing is downsampled or
+// recompressed lossily. An image is also left alone when its samples exceed
+// the image budget of [WithLimits], its data decodes only by salvage, or a
+// filter plugin ([WithFilterPlugin]) claims one of its filters.
+//
+// Like [WithObjectStreams] this applies to the full-rewrite path only, and an
+// encrypted output is never recompressed: encryption has replaced every
+// stream's data with ciphertext before the pass would run. The output stays
+// deterministic: the same input and options give the same bytes.
+func WithImageRecompression() WriteOption {
+	return func(o *writeOpts) {
+		o.recompressImages = true
 	}
 }
 
@@ -3698,7 +3724,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 		stale := w.encryptCfg != nil ||
 			step != nil ||
 			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream ||
-			cfg.packObjectStreams || cfg.dedupStreams ||
+			cfg.packObjectStreams || cfg.dedupStreams || cfg.recompressImages ||
 			(cfg.pageSize != nil && !slices.Equal(cfg.pageSize, w.defaults.pageSize))
 		if !stale {
 			return w.copyFromPreSerialized(ctx, dst)
@@ -3774,15 +3800,16 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 	}
 
 	// The compaction options need the same notice for a stronger reason.
-	// Packing and dedup run inside the full-rewrite engine, and
-	// writer.IncrementalConfig carries no field for either, so the incremental
+	// Packing, dedup and image recompression run inside the full-rewrite
+	// engine, and writer.IncrementalConfig carries no field for any, so the incremental
 	// path has nothing to honor them with. An ignored compaction produces a
 	// file byte-identical to one written without the option, which a caller
 	// cannot tell apart from compaction that ran and found nothing to save.
-	if (cfg.packObjectStreams || cfg.dedupStreams) && !cfg.fullRewrite && !w.forceRewrite {
-		logger.Debug("compaction ignored: packing and dedup apply only to a full rewrite; this write is incremental",
+	if (cfg.packObjectStreams || cfg.dedupStreams || cfg.recompressImages) && !cfg.fullRewrite && !w.forceRewrite {
+		logger.Debug("compaction ignored: packing, dedup and image recompression apply only to a full rewrite; this write is incremental",
 			slog.Bool("pack_object_streams", cfg.packObjectStreams),
-			slog.Bool("dedup_streams", cfg.dedupStreams))
+			slog.Bool("dedup_streams", cfg.dedupStreams),
+			slog.Bool("recompress_images", cfg.recompressImages))
 	}
 
 	// Signing requires its own two-pass incremental flow. It carries the

@@ -37,6 +37,10 @@ type RewriteConfig struct {
 	// document for the reason [DedupStreams] gives. Note that it rewrites
 	// references inside Trailer in place.
 	DedupStreams bool
+	// RecompressImages, when not nil, re-encodes image streams losslessly
+	// where that makes them smaller (see [RecompressImages]). Declined for an
+	// encrypted document, whose streams are ciphertext by then.
+	RecompressImages *ImageRecompression
 }
 
 // WriteRewrite emits a complete PDF file to dst from the objects in the
@@ -54,18 +58,19 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	// Packing also removes objects from the allocator's pending set and
 	// allocates the streams that now hold them, and Pending returns that live
 	// map, so an enumeration taken earlier would name objects this file no
-	// longer writes directly. Neither compaction pass writes to dst.
+	// longer writes directly. No compaction pass writes to dst.
 	//
 	// Encryption has already run over every pending object by the time a
-	// rewrite reaches this point, so both compaction passes are refused for
+	// rewrite reaches this point, so every compaction pass is refused for
 	// an encrypted document: packing would encrypt an object stream's
-	// strings a second time, which ISO 32000-1, 7.5.7 forbids, and dedup
-	// would compare ciphertext keyed per object number and find nothing.
+	// strings a second time, which ISO 32000-1, 7.5.7 forbids, dedup would
+	// compare ciphertext keyed per object number and find nothing, and
+	// recompression would decode ciphertext as image data.
 	// The file is written uncompacted rather than incorrectly.
 	_, encrypted := cfg.Trailer["Encrypt"]
 
 	// Every stream goes out as an indirect object (ISO 32000-1, 7.3.8.1), and
-	// both compaction passes must see the objects a direct stream becomes:
+	// the compaction passes must see the objects a direct stream becomes:
 	// dedup compares whole stream objects, and packing would otherwise seal
 	// one inside an object stream, which 7.5.7 forbids. An encrypted
 	// document's streams were moved before encryption keyed each to its
@@ -86,7 +91,15 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		restoreCatalogVersion = raiseCatalogVersion(cfg.Allocator, cfg.Trailer, minXRefStreamVersion)
 	}
 
-	// Dedup first. Packing removes objects from the pending set and
+	// Recompression runs before dedup, so two copies of one image, which
+	// re-encode to identical bytes, still merge.
+	if cfg.RecompressImages != nil && !encrypted {
+		if _, err := RecompressImages(ctx, cfg.Allocator, *cfg.RecompressImages); err != nil {
+			return fmt.Errorf("recompressing images: %w", err)
+		}
+	}
+
+	// Dedup before packing. Packing removes objects from the pending set and
 	// serializes their bodies, so a later dedup would neither see the full
 	// population nor be able to repoint what it merged.
 	if cfg.DedupStreams && !encrypted {
