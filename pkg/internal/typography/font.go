@@ -576,7 +576,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// Also try CFF/Type1C encoding from /FontFile3 for fonts like TeX CMR
 	// that use OT1 encoding internally.
 	if !hasExplicitEncoding {
-		extractCFFEncoding(ctx, doc, fontDict, font)
+		extractCFFEncoding(ctx, doc, fontDict, font, isDingbatsFont)
 	}
 
 	// TrueType cmap-derived implicit encoding (ISO 32000-1 §9.6.6.4).
@@ -645,7 +645,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// whose custom encodings have no standard counterpart.
 	if font.ToUnicode == nil && (subtypeName == "Type1" || subtypeName == "MMType1") {
 		if _, hasEnc := fontDict["Encoding"]; !hasEnc {
-			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbatsFont, isSymbolFont)
+			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbatsFont)
 		}
 	}
 
@@ -876,8 +876,8 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 			// reads 0x27 and 0x60 as curly quotes where PDF.js, whose
 			// symbolic default is MacRoman, reads straight ones.
 			font.Encoding = make(map[byte]rune)
-			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbats, isSymbol)
-			extractCFFEncodingAsBase(ctx, doc, fontDict, font)
+			applyType1FontFileEncoding(ctx, doc, fontDict, font, isDingbats)
+			extractCFFEncodingAsBase(ctx, doc, fontDict, font, isDingbats)
 			isType1Like := font.Subtype == "Type1" || font.Subtype == "MMType1"
 			var overlay map[byte]rune
 			switch {
@@ -1760,7 +1760,7 @@ func ExtractType1EncodingNames(fontData []byte) map[byte]string {
 // encoding references (StandardEncoding, WinAnsiEncoding, and so on)
 // swap in the matching map from [encodings]; explicit "dup N /name
 // put" vectors are applied one byte at a time.
-func applyType1FontFileEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats, isSymbol bool) {
+func applyType1FontFileEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats bool) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
@@ -1783,10 +1783,7 @@ func applyType1FontFileEncoding(ctx context.Context, doc *document.Document, fon
 	// after this fill (ISO 32000-1, 9.6.6.1).
 	_, stated := fontDict["Encoding"]
 	for i, name := range enc {
-		if name == "" || name == ".notdef" || builtinNumericNameMisreads(name, i) {
-			continue
-		}
-		if r, ok := resolveGlyphRune(name, isDingbats, isSymbol); ok {
+		if r, ok := builtinGlyphRune(name, i, isDingbats); ok {
 			code := byte(i) //nolint:gosec // i is bounded by 0..255 via the array size
 			font.Encoding[code] = r
 			if !stated {
@@ -1810,6 +1807,51 @@ func recordProgramGlyphRune(font *Font, code byte, name string, r rune) {
 		font.ProgramGlyphRunes = make(map[byte]rune)
 	}
 	font.ProgramGlyphRunes[code] = r
+}
+
+// builtinGlyphRune reads name, the glyph name a font program's built-in
+// encoding gives code, as the character it names, through the glyph lists
+// [resolveGlyphRune] reads a /Differences name through. It is the one reading
+// of a Type 1 (/FontFile) and of a Type1C (/FontFile3) built-in encoding: ISO
+// 32000-1, 9.10.2 takes either to Unicode through the glyph name, whichever
+// program format holds it, and PDF.js reads both through one table
+// (src/core/fonts.js, adjustType1ToUnicode, through getUnicodeForGlyph and
+// getGlyphsUnicode). An empty or .notdef name, and a numeric name that misreads
+// code ([builtinNumericNameMisreads]), name no character.
+//
+// The Type1C reading used [encodings.GlyphToRuneFull], the table compliance
+// checks consult, which leaves out the Adobe Glyph List's Greek and math names
+// and reads ZapfDingbats "aNN" names in any font. [resolveGlyphRune] adds them
+// back through the Symbol glyph table and drops the Dingbats names, as PDF.js's
+// table does.
+//
+// The Adobe Glyph List answers before the Symbol glyph table, even in the
+// standard Symbol font: a built-in encoding names glyphs, and 9.10.2 reads a
+// name through the list, which reads "Delta" as U+2206 and "mu" as U+00B5, the
+// two names on which the tables disagree. The Symbol table's U+0394 and U+03BC
+// stay the reading of the Symbol encoding's codes and /Differences names.
+//
+// # Corpus evidence
+//
+//   - All corpora: 242 Type1C fonts in 46 files name codes the two readings
+//     take differently, 31 of them in 8 files with no /ToUnicode, the only
+//     fonts whose text the reading reaches. Every differing name now reads as
+//     PDF.js reads it but "Omega", U+03A9 to PDF.js's U+2126, which Unicode
+//     decomposes to it.
+//   - verapdf 6-3-8-t01-fail-a: the CMSY8 subset's "infinity" read as the
+//     default encoding's "1", so "−∞ ∞" came out "−1 1".
+//   - govdocs thread_300_300492.pdf, thread_300_300848.pdf, pdfjs
+//     link-annotation-border.pdf: their TeX and Greek subsets' "pi",
+//     "sigma", "lambda", "element" and "reflexsubset" read as "ð", "ó", "ì",
+//     "2" and nothing. With the glyph lists, thread_300_300492.pdf extracts
+//     the words PDF.js does and link-annotation-border.pdf its characters.
+//   - govdocs thread_300_300228.pdf: a Symbol subset's "Delta" read through the
+//     Symbol table first came out U+0394, where PDF.js reads U+2206.
+func builtinGlyphRune(name string, code int, isDingbats bool) (rune, bool) {
+	if name == "" || name == ".notdef" || builtinNumericNameMisreads(name, code) {
+		return 0, false
+	}
+	return resolveGlyphRune(name, isDingbats, false)
 }
 
 // builtinNumericNameMisreads reports whether name, found at code in a font
@@ -2975,10 +3017,11 @@ func unreadableRune(r rune) bool {
 }
 
 // extractCFFEncoding reads the CFF encoding from a /FontFile3 (Type1C) font
-// and populates font.Encoding. This is needed for TeX fonts (CMR, CMSY, etc.)
-// that use OT1 encoding internally. The byte→glyph mapping differs from
-// StandardEncoding/WinAnsiEncoding.
-func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+// that states no /Encoding and populates font.Encoding. This is needed for TeX
+// fonts (CMR, CMSY, etc.) that use OT1 encoding internally. The byte→glyph
+// mapping differs from StandardEncoding/WinAnsiEncoding. The glyph names read
+// as a Type 1 program's do ([builtinGlyphRune]).
+func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats bool) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
@@ -2993,10 +3036,7 @@ func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict as
 	}
 	// Convert glyph names to runes and overwrite the encoding table.
 	for code, name := range encMap {
-		if builtinNumericNameMisreads(name, int(code)) {
-			continue
-		}
-		if r, ok := encodings.GlyphToRuneFull(name); ok {
+		if r, ok := builtinGlyphRune(name, int(code), isDingbats); ok {
 			font.Encoding[code] = r
 		}
 	}
@@ -3005,8 +3045,9 @@ func extractCFFEncoding(ctx context.Context, doc *document.Document, fontDict as
 // extractCFFEncodingAsBase fills holes in font.Encoding from a /FontFile3
 // (Type1C/CFF) built-in encoding without overwriting entries that
 // /Differences will set. Used when a dict /Encoding has no /BaseEncoding:
-// the font program's own mapping is a better base than WinAnsi.
-func extractCFFEncodingAsBase(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
+// the font program's own mapping is a better base than WinAnsi. The glyph
+// names read as [extractCFFEncoding] reads them.
+func extractCFFEncodingAsBase(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, isDingbats bool) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {
 		return
@@ -3023,10 +3064,10 @@ func extractCFFEncodingAsBase(ctx context.Context, doc *document.Document, fontD
 		font.Encoding = make(map[byte]rune)
 	}
 	for code, name := range encMap {
-		if _, set := font.Encoding[code]; set || builtinNumericNameMisreads(name, int(code)) {
+		if _, set := font.Encoding[code]; set {
 			continue
 		}
-		if r, ok := encodings.GlyphToRuneFull(name); ok {
+		if r, ok := builtinGlyphRune(name, int(code), isDingbats); ok {
 			font.Encoding[code] = r
 		}
 	}
