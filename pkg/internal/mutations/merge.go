@@ -253,6 +253,10 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		version = "1.4"
 	}
 
+	if err := compact.subsetFonts(ctx, sources[0].Doc, alloc, trailer); err != nil {
+		return err
+	}
+
 	// Last, after every alloc.Alloc above: see [applyEncryption] on why an
 	// object allocated after the sweep is written in the clear.
 	if encryptCfg != nil {

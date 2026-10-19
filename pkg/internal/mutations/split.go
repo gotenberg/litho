@@ -247,6 +247,10 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		version = sourceVersion(doc)
 	}
 
+	if err := compact.subsetFonts(ctx, doc, alloc, trailer); err != nil {
+		return err
+	}
+
 	// Last, after every alloc.Alloc above: see applyEncryption on why an
 	// object allocated after the sweep is written in the clear.
 	if encryptCfg != nil {

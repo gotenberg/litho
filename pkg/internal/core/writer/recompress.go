@@ -179,7 +179,7 @@ func planRecompression(
 	if _, external := s.Dict["F"]; external {
 		return recompressionPlan{}, false, nil
 	}
-	source, ok := directFilterKeys(pending, s.Dict)
+	source, ok := DirectFilterKeys(pending, s.Dict)
 	if !ok || !chainRecompressible(source["Filter"], dec) {
 		return recompressionPlan{}, false, nil
 	}
@@ -190,7 +190,7 @@ func planRecompression(
 		return recompressionPlan{}, false, nil
 	}
 
-	decoded, ok, err := decodeWhole(ctx, dec, ast.NewLazyStream(source, s.Bytes))
+	decoded, ok, err := DecodeWhole(ctx, dec, ast.NewLazyStream(source, s.Bytes))
 	if err != nil || !ok {
 		return recompressionPlan{}, false, err
 	}
@@ -242,7 +242,7 @@ func planRecompression(
 	best := recompressionPlan{source: source, dict: dict, encoded: encoded, saved: before - after, layout: layout}
 
 	// The re-encoding replaces the samples only if it decodes to them.
-	again, ok, err := decodeWhole(ctx, dec, ast.NewStream(best.dict, best.encoded))
+	again, ok, err := DecodeWhole(ctx, dec, ast.NewStream(best.dict, best.encoded))
 	if err != nil || !ok || !bytes.Equal(again, decoded) {
 		return recompressionPlan{}, false, err
 	}
@@ -260,7 +260,7 @@ func (p recompressionPlan) reencoder(
 ) func(context.Context) ([]byte, error) {
 	source, dict, layout, want := p.source, p.dict, p.layout, len(p.encoded)
 	return func(ctx context.Context) ([]byte, error) {
-		decoded, ok, err := decodeWhole(ctx, dec, ast.NewLazyStream(source, raw))
+		decoded, ok, err := DecodeWhole(ctx, dec, ast.NewLazyStream(source, raw))
 		if err != nil {
 			return nil, fmt.Errorf("decoding a recompressed image's source: %w", err)
 		}
@@ -275,12 +275,12 @@ func (p recompressionPlan) reencoder(
 	}
 }
 
-// decodeWhole decodes s through its filter chain, reporting false when a
+// DecodeWhole decodes s through its filter chain, reporting false when a
 // filter was skipped or met damaged data, or when decoding failed for any
 // reason but the context's. The decoder refuses salvaged data
 // ([filter.Decoder.RefuseSalvaged]) so a stream litho reads leniently is
 // never rewritten as though that reading were the file's.
-func decodeWhole(ctx context.Context, dec *filter.Decoder, s ast.PdfStream) ([]byte, bool, error) {
+func DecodeWhole(ctx context.Context, dec *filter.Decoder, s ast.PdfStream) ([]byte, bool, error) {
 	data, report, err := dec.RefuseSalvaged().DecodeStreamReport(ctx, s)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, false, ctxErr
@@ -320,13 +320,13 @@ func chainRecompressible(f ast.PdfObject, dec *filter.Decoder) bool {
 	return true
 }
 
-// directFilterKeys returns dict with /Filter and /DecodeParms, and the
+// DirectFilterKeys returns dict with /Filter and /DecodeParms, and the
 // elements of either when it is an array, resolved to direct values through
 // pending, or false when one of them is neither direct nor a reference to a
 // direct value. The decoder reads only direct filter keys; the source's own
 // resolution of indirect ones went through object numbers this rewrite
 // renumbered, so the pending objects are what they now name.
-func directFilterKeys(pending map[int]ast.PdfObject, dict ast.PdfDict) (ast.PdfDict, bool) {
+func DirectFilterKeys(pending map[int]ast.PdfObject, dict ast.PdfDict) (ast.PdfDict, bool) {
 	out, cloned := dict, false
 	for _, key := range []ast.PdfName{"Filter", "DecodeParms"} {
 		v, present := dict[key]

@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/internal/fontsubset"
 )
 
 // CompactOptions selects which output-compaction passes a full rewrite runs.
@@ -36,6 +37,27 @@ type CompactOptions struct {
 	// RecompressImages re-encodes image streams losslessly where that makes
 	// them smaller, leaving their samples unchanged.
 	RecompressImages bool
+	// SubsetFonts subsets the embedded TrueType and CFF font programs to the
+	// glyphs the document can show, keeping every glyph ID (see
+	// [fontsubset.Run]). Unlike the passes above it runs before encryption,
+	// so it applies to an encrypted output too.
+	SubsetFonts bool
+}
+
+// subsetFonts runs the font subsetting pass c selects over the objects alloc
+// holds and the trailer, reading under doc's filter plugins, budgets and
+// logger. Every write path calls it after its last allocation and before
+// encryption, which replaces the stream data the pass reads.
+func (c CompactOptions) subsetFonts(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, trailer ast.PdfDict) error {
+	if !c.SubsetFonts {
+		return nil
+	}
+	stats, err := fontsubset.Run(ctx, alloc, trailer, fontsubset.Config{Decoder: doc.Filters, Limits: doc.Limits(), Logger: doc.Logger})
+	if err != nil {
+		return fmt.Errorf("subsetting fonts: %w", err)
+	}
+	doc.Logger.Debug("font subsetting", slog.Int("programs", stats.Programs), slog.Int64("saved_bytes", stats.SavedBytes))
+	return nil
 }
 
 // imageRecompression returns the recompression pass c selects, decoding under
@@ -215,6 +237,10 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	}
 	for _, src := range cfg.PageSources {
 		version = writer.AtLeastVersion(version, sourceVersion(src))
+	}
+
+	if err := cfg.Compact.subsetFonts(ctx, doc, alloc, trailer); err != nil {
+		return err
 	}
 
 	// Shared with Split and Merge so the three write paths cannot drift: see
