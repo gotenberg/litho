@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
+	"strings"
 )
 
 // maxCMapCodeBytes is the widest character code a CMap program may declare:
@@ -23,7 +25,8 @@ const maxEntriesPerGroup = 100
 // stream dictionary, for a repair to embed. ISO 19005-1, 6.3.3.3 requires
 // every CMap but Identity-H and Identity-V embedded, the predefined CMaps of
 // ISO 32000-1, 9.7.5.2, Table 118 included, so under PDF/A-1 the name alone
-// fails whatever it denotes.
+// fails whatever it denotes; every later part and PDF/UA require a name
+// outside the table embedded.
 //
 // The program is the copy the conformance checks read under the name
 // ([LoadConformanceCIDMap]), so every code keeps the CID it had while the
@@ -38,7 +41,9 @@ const maxEntriesPerGroup = 100
 //     resolve, and its notdef mappings in the order a reader consults them.
 //     The CIDSystemInfo is the one Table 118's generation of the name
 //     carries ([PredefinedCMapCIDSystemInfo], PDF 1.x column, since part 1 is
-//     written against PDF 1.4).
+//     written against PDF 1.4), or, for a character collection's own CMap
+//     outside the table (Adobe-Korea1-2), the one its name spells
+//     ([collectionCMapCIDSystemInfo]).
 //
 // A -V CMap of veraPDF's set, which runs usecmap on its -H base, takes the
 // rendered path, flattened over veraPDF's base.
@@ -60,6 +65,9 @@ func EncodingProgram(ctx context.Context, name string) (ConformanceCMap, bool, e
 	}
 	reg, ord, sup, ok := PredefinedCMapCIDSystemInfo(name, false)
 	if !ok {
+		reg, ord, sup, ok = collectionCMapCIDSystemInfo(name)
+	}
+	if !ok {
 		return ConformanceCMap{}, false, nil
 	}
 	m := LoadConformanceCIDMap(name)
@@ -77,6 +85,36 @@ func EncodingProgram(ctx context.Context, name string) (ConformanceCMap, bool, e
 		Supplement: sup,
 		WMode:      m.wmode,
 	}, true, nil
+}
+
+// collectionCMapCIDSystemInfo returns the CIDSystemInfo of a character
+// collection's own CMap, named Adobe-<Ordering>-<Supplement> (Adobe-Korea1-2,
+// Adobe-Japan1-6), which maps codes to the CIDs of that collection and lies
+// outside ISO 32000-1, 9.7.5.2, Table 118. ok is false unless veraPDF 1.30.2
+// bundles the name: a supplement no reader holds names no CMap, and the
+// Adobe-<Ordering>-UCS2 CMaps map CIDs to Unicode rather than codes to CIDs.
+//
+// The name spells the CIDSystemInfo, which [PredefinedCMapCIDSystemInfo]
+// does not tabulate since the name is not a Table 118 one: every such file
+// veraPDF bundles declares Registry Adobe and the Ordering and Supplement of
+// its name in its /CIDSystemInfo, and none runs usecmap.
+func collectionCMapCIDSystemInfo(name string) (string, string, int, bool) {
+	if !veraPDFBundledCMaps[name] {
+		return "", "", 0, false
+	}
+	registry, rest, ok := strings.Cut(name, "-")
+	if !ok || registry != "Adobe" {
+		return "", "", 0, false
+	}
+	ordering, supplementText, ok := strings.Cut(rest, "-")
+	if !ok || ordering == "" {
+		return "", "", 0, false
+	}
+	supplement, err := strconv.Atoi(supplementText)
+	if err != nil || supplement < 0 {
+		return "", "", 0, false
+	}
+	return registry, ordering, supplement, true
 }
 
 // widthSpan is a run of codes of one byte width: a cidrange entry when cid

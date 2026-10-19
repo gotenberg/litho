@@ -112,8 +112,9 @@ func TestEmbedPredefined_Declines(t *testing.T) {
 		{"90ms-RKSJ-H", "mixed-width codespace"},
 		// Exempt from the embedding rule, and not in the bundled set.
 		{"Identity-H", "identity encodings are exempt"},
-		// A character collection, never a CMap.
-		{"Adobe-Korea1-2", "names no CMap at all"},
+		// A character collection's own CMap, outside Table 118, which
+		// tabulates no CIDSystemInfo for it; inlineNamedBases folds it in.
+		{"Adobe-Korea1-2", "no tabulated CIDSystemInfo"},
 		{"NotACMapName", "unknown name"},
 		{"", "empty name"},
 	} {

@@ -97,12 +97,85 @@ func TestEncodingProgram_CopiesVeraPDFsFileByteForByte(t *testing.T) {
 	}
 }
 
+// TestEncodingProgram_CopiesEveryCollectionCMap pins the character-collection
+// CMaps, Adobe-Korea1-2 and the like: names outside ISO 32000-1, 9.7.5.2,
+// Table 118 that veraPDF 1.30.2 bundles and decodes a font's codes through.
+// Each yields a program that decodes every code as the named CMap does and
+// declares the CIDSystemInfo its name spells.
+func TestEncodingProgram_CopiesEveryCollectionCMap(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	copied := 0
+	for _, name := range slices.Sorted(maps.Keys(veraPDFBundledCMaps)) {
+		reg, ord, sup, isCollection := collectionCMapCIDSystemInfo(name)
+		if !isCollection {
+			continue
+		}
+		want := LoadConformanceCIDMap(name)
+		if want == nil {
+			continue
+		}
+		prog, ok, err := EncodingProgram(ctx, name)
+		if err != nil || !ok {
+			t.Errorf("%s: ok=%v err=%v, want a program", name, ok, err)
+			continue
+		}
+		copied++
+		got := ParseConformanceCIDMapOver(ctx, prog.Program, Base{})
+		if got == nil {
+			t.Errorf("%s: the program does not parse", name)
+			continue
+		}
+		wantMap, _ := want.cidMappings()
+		gotMap, _ := got.cidMappings()
+		if !maps.Equal(gotMap, wantMap) {
+			t.Errorf("%s: the program maps %d codes, the named CMap %d", name, len(gotMap), len(wantMap))
+		}
+		if prog.Registry != reg || prog.Ordering != ord || prog.Supplement != sup {
+			t.Errorf("%s: CIDSystemInfo %s-%s-%d, want %s-%s-%d", name,
+				prog.Registry, prog.Ordering, prog.Supplement, reg, ord, sup)
+		}
+		if prog.WMode != 0 {
+			t.Errorf("%s: WMode %d, want 0", name, prog.WMode)
+		}
+	}
+	// A refactor that stops reaching the collection CMaps must not pass by
+	// copying none of them.
+	if copied < minCollectionCMapsCopied {
+		t.Errorf("copied %d collection CMaps, want at least %d", copied, minCollectionCMapsCopied)
+	}
+}
+
+// minCollectionCMapsCopied is the lower bound on the character-collection
+// CMaps [EncodingProgram] copies: veraPDF 1.30.2 bundles 37
+// (Adobe-CNS1-0..7, Adobe-GB1-0..6, Adobe-Japan1-0..7, Adobe-Japan2-0,
+// Adobe-KR-0..9, Adobe-Korea1-0..2).
+const minCollectionCMapsCopied = 30
+
+// TestCollectionCMapCIDSystemInfo pins which names count as a collection
+// CMap: an Adobe-<Ordering>-<Supplement> name veraPDF bundles. The UCS2 CMaps
+// map CIDs to Unicode, not codes to CIDs, and a supplement nobody bundles
+// names no file.
+func TestCollectionCMapCIDSystemInfo(t *testing.T) {
+	t.Parallel()
+
+	if reg, ord, sup, ok := collectionCMapCIDSystemInfo("Adobe-Korea1-2"); !ok || reg != "Adobe" || ord != "Korea1" || sup != 2 {
+		t.Errorf("Adobe-Korea1-2: %s-%s-%d ok=%v, want Adobe-Korea1-2", reg, ord, sup, ok)
+	}
+	for _, name := range []string{"Adobe-Korea1-UCS2", "Adobe-Korea1-9", "Adobe-Korea1", "UniKS-UCS2-H", "Identity-H", ""} {
+		if _, _, _, ok := collectionCMapCIDSystemInfo(name); ok {
+			t.Errorf("%q counts as a collection CMap", name)
+		}
+	}
+}
+
 // TestEncodingProgram_Declines pins the refusals: the Identity CMaps, which
 // ISO 19005-1, 6.3.3.3 exempts, and names litho holds no data for.
 func TestEncodingProgram_Declines(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"Identity-H", "Identity-V", "Adobe-Korea1-2", "NotACMapName", ""} {
+	for _, name := range []string{"Identity-H", "Identity-V", "Adobe-Korea1-9", "Adobe-Korea1-UCS2", "NotACMapName", ""} {
 		prog, ok, err := EncodingProgram(context.Background(), name)
 		if err != nil || ok || prog.Program != nil {
 			t.Errorf("%q: ok=%v err=%v, %d bytes, want a refusal", name, ok, err, len(prog.Program))

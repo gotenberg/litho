@@ -391,7 +391,11 @@ func embedNamedUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //     one: PDF.js ships no UniAKR-UTF16-H. The stream carries that file byte
 //     for byte ([cmap.ConformanceProgram]), and its dictionary states the
 //     CIDSystemInfo the program declares, which the name alone cannot supply
-//     (6.2.11.3.1).
+//     (6.2.11.3.1). A character collection's own CMap, Adobe-Korea1-2 or
+//     Adobe-Japan1-2, is such a name too, and a real CMap: veraPDF and
+//     PDF.js both bundle it and decode the font's codes through it. Its
+//     stream carries it rendered from that data ([cmap.EncodingProgram]),
+//     with the CIDSystemInfo the file declares.
 //   - ISO 19005-1, 6.3.3.3 requires every CMap but Identity-H and Identity-V
 //     embedded, so under part 1 a Table 118 name fails too. Parts 2 and later,
 //     and PDF/UA, PERMIT it by name, so it stays a name there, as
@@ -412,11 +416,20 @@ func embedNamedUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //     /Encoding, 2 of them (litho fontcopies_2b.pdf, pdfjs issue11555.pdf) in
 //     a font written inline. Remediated at PDF/A-1a and 1b, default and
 //     aggressive, veraPDF 1.30.2 reported 6.3.3.3 t1 on 116 of the 136
-//     outputs before and on 20 after, the 20 of the 5 verapdf files naming
-//     Adobe-Korea1-2 or Adobe-Japan1-2, which denote no CMap. 6.3.3.1 t1 and,
-//     at 1a, 6.3.8 t1 cleared with it on 9 files, no rule appeared, and
-//     litho and veraPDF reported the same rule set on every output.
-//   - All corpora: the same files remediated at the other eleven levels give
+//     outputs before and on 20 after. 6.3.3.1 t1 and, at 1a, 6.3.8 t1
+//     cleared with it on 9 files, no rule appeared, and litho and veraPDF
+//     reported the same rule set on every output.
+//   - verapdf 6-2-11-3-3-t01-fail-a, 6-2-10-3-3-t01-fail-a,
+//     7.21.3.3-t01-fail-a, 8.4.5.4-t01-fail-a: 16 of the 20 named
+//     Adobe-Korea1-2 or Adobe-Japan1-2, which litho once took to denote no
+//     CMap. Embedding them cleared 6.3.3.3 t1 and 6.3.3.1 t1 on all 16, and
+//     the embedding and CIDSystemInfo rules at PDF/A-2b, PDF/A-4, PDF/UA-1
+//     and PDF/UA-2 on the 32 outputs there, default and aggressive: veraPDF
+//     finds all 48 conforming.
+//   - litho cmaps_2b.pdf: the other 4 name LithoCustomCMap, which no reader
+//     holds, so nothing faithful can be embedded.
+//   - All corpora: the other 40 files 6.3.3.3 fires on, remediated at
+//     PDF/A-1a, 1b, 2b, 4, PDF/UA-1 and UA-2, default and aggressive, give
 //     byte-identical outputs.
 func embedNamedEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef, embedded map[ast.PdfName]ast.PdfIndirectRef, profile string) (ast.PdfName, bool) {
 	font := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
@@ -498,7 +511,10 @@ func namedEncodingStream(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		return name, encRef, true
 	}
 	program := cmap.ConformanceProgram
-	if predefined {
+	// A character collection's own CMap (Adobe-Korea1-2) lies outside Table
+	// 118, but [cmap.EncodingProgram] knows its CIDSystemInfo, so it is
+	// rendered from the bundled data as a Table 118 CMap is.
+	if predefined || compliance.IsCIDSystemInfoShapedCMapName(string(name)) {
 		program = func(n string) (cmap.ConformanceCMap, bool, error) { return cmap.EncodingProgram(ctx, n) }
 	}
 	prog, ok, err := program(string(name))

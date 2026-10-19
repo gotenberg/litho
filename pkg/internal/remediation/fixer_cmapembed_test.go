@@ -282,6 +282,78 @@ func TestFixCMapFlatten_EmbedsAnEncodingNamedOutsideTable118(t *testing.T) {
 	}
 }
 
+// collectionEncodingPDF builds a Type 0 font whose /Encoding names
+// Adobe-Korea1-2, the identity CMap of the Adobe-Korea1 collection at
+// supplement 2, the shape of veraPDF's 6-2-11-3-3-t01-fail-a fixture.
+func collectionEncodingPDF() []byte {
+	return buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "+
+			"/Resources << /Font << /F1 4 0 R >> >> >>",
+		"<< /Type /Font /Subtype /Type0 /BaseFont /Probe /Encoding /Adobe-Korea1-2 "+
+			"/DescendantFonts [5 0 R] >>",
+		"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /Probe "+
+			"/CIDSystemInfo << /Registry (Adobe) /Ordering (Korea1) /Supplement 2 >> >>",
+	)
+}
+
+// TestFixCMapFlatten_EmbedsACollectionEncoding pins that a font naming a
+// character collection's CMap, which lies outside Table 118 but which veraPDF
+// and PDF.js both bundle, gets that CMap embedded under every profile, with
+// the CIDSystemInfo the CMap declares and every code keeping its CID.
+func TestFixCMapFlatten_EmbedsACollectionEncoding(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for _, profile := range []string{"PDF/A-1b", "PDF/A-2b", "PDF/A-4", "PDF/UA-1"} {
+		doc, alloc := newTestDoc(t, collectionEncodingPDF())
+		fixes, err := fixCMapFlatten(ctx, alloc, doc, Options{}, nil, profile)
+		if err != nil {
+			t.Fatalf("%s: fixCMapFlatten: %v", profile, err)
+		}
+		if len(fixes) != 1 {
+			t.Errorf("%s: reported %d fixes, want 1: %v", profile, len(fixes), fixes)
+			continue
+		}
+		font, ok := alloc.Pending()[4].(ast.PdfDict)
+		if !ok {
+			t.Errorf("%s: the font was not rewritten", profile)
+			continue
+		}
+		ref, isRef := font["Encoding"].(ast.PdfIndirectRef)
+		if !isRef {
+			t.Errorf("%s: /Encoding is %v, want a stream reference", profile, font["Encoding"])
+			continue
+		}
+		stream, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfStream)
+		if !ok {
+			t.Errorf("%s: /Encoding points at no pending stream", profile)
+			continue
+		}
+		info, _ := stream.Dict["CIDSystemInfo"].(ast.PdfDict)
+		if info["Registry"] != ast.PdfString("Adobe") || info["Ordering"] != ast.PdfString("Korea1") ||
+			info["Supplement"] != ast.PdfInt(2) {
+			t.Errorf("%s: the stream declares CIDSystemInfo %v, want Adobe Korea1 2", profile, info)
+		}
+		data, err := doc.DecodeStream(ctx, stream)
+		if err != nil {
+			t.Errorf("%s: decoding the embedded CMap: %v", profile, err)
+			continue
+		}
+		got := cmap.ParseConformanceCIDMapOver(ctx, data, cmap.Base{})
+		named := cmap.LoadConformanceCIDMap("Adobe-Korea1-2")
+		if got == nil || named == nil {
+			t.Fatalf("%s: cannot read the program or the bundled CMap", profile)
+		}
+		for _, text := range [][]byte{{0x00, 0x29}, {0x00, 0x01}, {0x47, 0xAF}} {
+			if g, w := got.Decode(text), named.Decode(text); !slices.Equal(g, w) {
+				t.Errorf("%s: % X decodes as %v, the name as %v", profile, text, g, w)
+			}
+		}
+	}
+}
+
 // table118EncodingPDF builds Type 0 fonts whose /Encoding names Table 118
 // CMaps: UniJIS-UCS2-H, past the range cap [cmap.EmbedPredefined] keeps,
 // 90ms-RKSJ-H, which mixes code widths, UniGB-UTF16-H, of which veraPDF
