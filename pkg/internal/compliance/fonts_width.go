@@ -586,12 +586,38 @@ func widthValue(ctx context.Context, doc *document.Document, obj ast.PdfObject) 
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
 // charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
 //
+// A CFF program's advances are read as Adobe Technical Note #5176 defines
+// them, and two veraPDF 1.30.2 readings litho deliberately does not copy make
+// it report widths the program does not have, under ISO 19005-1, 6.3.6,
+// ISO 19005-2/3, 6.2.11.5, ISO 19005-4, 6.2.10.5, ISO 14289-1, 7.21.5 and
+// ISO 14289-2, 8.4.5.6 alike:
+//
+//   - The Private DICT's nominalWidthX and defaultWidthX are numbers (Table
+//     23), reals included, and a charstring's width is its operand plus
+//     nominalWidthX. veraPDF stores both as int (CFFFontBaseParser, "(int)
+//     getInteger()"), so a fractional nominalWidthX shifts every advance by
+//     its fraction, enough to cross the one-unit tolerance.
+//   - An encoding supplement maps a code to a glyph by SID (section 12,
+//     "Supplements"), resolved through the charset. veraPDF stores the SID as
+//     if it were an encoding index (CFFType1FontProgram.readSupplements) and
+//     takes the glyph at that index plus one, so a supplemented code reads
+//     another glyph's advance.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue11150_reduced.pdf: embeds a Symbol program whose code 113
 //     advances 521 units and declares neither /Widths nor /MissingWidth, so
 //     its declared width is 0 and veraPDF reports the glyph under ISO 19005-2
 //     §6.2.11.5 t1.
+//   - govdocs thread_300_300504.pdf: CMTI10 states nominalWidthX 873.66669.
+//     Codes 73, 108 and 114 advance 385.55, 255.55 and 421.66 (fontTools
+//     agrees), within one unit of /Widths 386, 256 and 422, and veraPDF,
+//     adding 873, reports 384.88, 254.89 and 421.00 at every PDF/A and PDF/UA
+//     level, on the original and on every remediated output.
+//   - govdocs thread_300_300228.pdf: Helvetica-Bold reaches code 32 only
+//     through a supplement naming SID 1, space, whose advance 569 equals
+//     /Widths. veraPDF takes GID 2, y, and reports 1139 at every level, on
+//     the original and on every remediated output.
 func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
 	// Width consistency is a property of a glyph the document actually
 	// paints: the rule compares the program advance against the declared
