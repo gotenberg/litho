@@ -14,6 +14,11 @@ var (
 	// pdf.ErrStreamTooLarge.
 	ErrDecompressionBomb = errors.New("decoded stream exceeds the stream size limit")
 
+	// ErrPredictorLayout reports that [EncodePNGPredictor] cannot predict
+	// data under the layout it was given: the layout is not one ISO 32000-1,
+	// Table 8 defines, or the data is not a whole number of its rows.
+	ErrPredictorLayout = errors.New("data does not match the predictor layout")
+
 	// ErrUnsupportedPredictor indicates a predictor configuration the
 	// un-filter cannot reverse, such as a BitsPerComponent the TIFF
 	// predictor code does not handle. Returning an error prevents
