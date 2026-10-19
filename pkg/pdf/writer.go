@@ -205,8 +205,14 @@ func WithXRefStream() WriteOption {
 //
 // It applies to the full-rewrite path only. An incremental update appends to
 // the original bytes and leaves their packing untouched, so the option has no
-// effect there. Packing implies a cross-reference stream, since a traditional
-// table cannot name a compressed object, and litho writes one whether or not
+// effect there. The document a Writer edits after a remediation that kept a
+// later round, or after a [Pipeline] Split or Merge, is a file litho wrote for
+// it, not the caller's: [Writer.WriteTo] rewrites that file in full when this
+// option, [WithDedup] or [WithImageRecompression] is given, signed or not,
+// unless the file still carries a signature a rewrite would drop.
+//
+// Packing implies a cross-reference stream, since a traditional table cannot
+// name a compressed object, and litho writes one whether or not
 // [WithXRefStream] was passed.
 //
 // Object streams and cross-reference streams are both PDF 1.5 constructs, so
@@ -849,6 +855,33 @@ type Writer struct {
 	// in the file (see [Writer.writeTempFile]), and WriteTo re-serializes so
 	// it is not silently dropped.
 	preSerializedPath string
+
+	// intermediate is set when source is a file a [Pipeline] wrote between
+	// two of its stages, which no caller holds (see
+	// [Writer.rewritesForCompaction]).
+	intermediate bool
+}
+
+// rewritesForCompaction reports whether the write cfg selects must be a full
+// rewrite for the compaction it asks for to apply.
+//
+// Packing, dedup and image recompression run on a full rewrite only. An
+// incremental update keeps the bytes of the document the Writer edits, which
+// is right for the caller's own file: an update appends to it (ISO 32000-1,
+// 7.5.6) and every signature it carries survives. It is wrong when that
+// document is a file litho wrote for the Writer, a remediation round's output
+// at basePath or a [Pipeline] intermediate: no caller holds those bytes, so
+// the output carried them uncompacted under an update, and the options were
+// dropped with only a Debug line, a signature's update included. Such a file
+// that still carries a signature keeps the update, since a rewrite would drop
+// the signature (ISO 32000-1, 12.8.1) for a saving the caller did not trade
+// it for.
+func (w *Writer) rewritesForCompaction(ctx context.Context, cfg writeOpts) bool {
+	compacts := cfg.packObjectStreams || cfg.dedupStreams || cfg.recompressImages
+	if !compacts || cfg.fullRewrite || (w.basePath == "" && !w.intermediate) {
+		return false
+	}
+	return len(mutations.SignedSignatures(ctx, w.reader.doc)) == 0
 }
 
 // mutation is a deferred modification applied during WriteTo.
@@ -3416,6 +3449,10 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 		encryptCfg := w.encryptCfg
 		w.encryptCfg = nil
 		defer func() { w.encryptCfg = encryptCfg }()
+	}
+	if w.rewritesForCompaction(ctx, cfg) {
+		opts = append(slices.Clone(opts), WithFullRewrite())
+		cfg.fullRewrite = true
 	}
 	steps := w.signingSteps()
 	var first *signingStep

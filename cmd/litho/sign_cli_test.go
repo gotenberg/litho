@@ -196,6 +196,39 @@ func TestSign_Refuses(t *testing.T) {
 	}
 }
 
+// TestPipe_SignStageKeepsCompaction pins that --compact reaches a pipeline
+// whose split or merge is followed by the sign stage. The split wrote an
+// uncompacted intermediate, the sign stage appended its update to it, and the
+// output came back uncompacted with nothing said. It is now the compacted
+// rewrite of the intermediate with the signature on top, and the signature
+// verifies.
+func TestPipe_SignStageKeepsCompaction(t *testing.T) {
+	certPath, keyPath := writeSigningPEM(t, "ec")
+	src := compactFixtureFile(t)
+	sign := []string{"sign", "--cert", certPath, "--key", keyPath}
+
+	for _, stage := range [][]string{{"split", "--pages", "2"}, {"merge", src}} {
+		t.Run(stage[0], func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "signed.pdf")
+			args := append(append(append([]string{"pipe", src}, stage...), sign...), "--compact", "-o", out)
+			var stdout, stderr bytes.Buffer
+			if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
+				t.Fatalf("pipe: exit %d, stderr: %s", rc, stderr.String())
+			}
+			data, err := os.ReadFile(out) //nolint:gosec // the test's own temp path
+			if err != nil {
+				t.Fatalf("reading output: %v", err)
+			}
+			if !bytes.Contains(data, []byte("/Type /ObjStm")) {
+				t.Error("--compact did not reach the signed output")
+			}
+			if got := verifiedSignatures(t, out, certPath); len(got) != 1 {
+				t.Errorf("verified signatures %q, want one", got)
+			}
+		})
+	}
+}
+
 // TestPipe_SignStage signs after a remediation in one pipe, and refuses a
 // stage after sign and an encrypt stage beside it.
 func TestPipe_SignStage(t *testing.T) {

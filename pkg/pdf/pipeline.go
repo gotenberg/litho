@@ -203,6 +203,12 @@ func (p *Pipeline) buildValidationErrors() []error {
 // permissions bar extraction for accessibility, with
 // [ErrPDFUAForbidsBarringAccessibility]. A stage after a remediation fails
 // with [ErrEditAfterRemediation] (see [Pipeline]).
+//
+// [WithObjectStreams], [WithDedup] and [WithImageRecompression] reach the
+// output after a Split or a Merge too: when a later stage edits the file a
+// Split or a Merge wrote, the output is a full rewrite of it, and a signature
+// goes on top of that rewrite. On the source itself they apply only when the
+// write rewrites it in full, as on [Writer.WriteTo].
 func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (_ *PipelineResult, err error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
@@ -328,11 +334,15 @@ func (ex *executor) isLastStage() bool { return ex.stageIdx == ex.totalStages-1 
 // ensureWriter binds a Writer to the current document, placing its temp
 // files where the pipeline places its own. The Writer is asked for the
 // encryption an earlier stage asked for, as if the stage that binds it had
-// called [Writer.Encrypt] first (see [executor.carryEncryption]).
+// called [Writer.Encrypt] first (see [executor.carryEncryption]). A Writer
+// over an intermediate file knows it, so the compaction the output asks for
+// rewrites that file rather than updating it (see
+// [Writer.rewritesForCompaction]).
 func (ex *executor) ensureWriter() {
 	if ex.writer == nil {
 		ex.writer = NewWriter(ex.cur)
 		ex.writer.tempDir = ex.tempDir
+		ex.writer.intermediate = ex.curFile != nil
 		ex.writer.defaults.pageSize = ex.pageSize
 		if ex.encrypt != nil {
 			ex.writer.Encrypt(*ex.encrypt)
