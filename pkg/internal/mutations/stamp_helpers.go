@@ -120,16 +120,23 @@ func applyStampToPages(
 	// and the extractor's artifact stripping does the same.
 	contentOps = "/Artifact BMC " + contentOps + " EMC"
 
-	stampStream := ast.NewStream(ast.PdfDict{}, []byte(contentOps))
-	stampRef := alloc.Alloc(stampStream)
+	plan := planStampSharing(ctx, alloc, pages, pageNums, contentOps)
+
+	// A page drawing its stamp through a dispatch form holds the stamp in the
+	// form, so a call stamping only such pages allocates no stamp stream that
+	// nothing would draw.
+	var stampRef ast.PdfIndirectRef
+	if plan.drawsStream {
+		stampRef = alloc.Alloc(ast.NewStream(ast.PdfDict{}, []byte(contentOps)))
+	}
 
 	// Pages whose box starts at the origin share one stamp stream. A page whose
 	// box starts elsewhere needs its own, translated copy: see stampOriginShift.
 	shifted := make(map[string]ast.PdfIndirectRef)
 
 	brackets := newContentBrackets(alloc)
-	namers := stampedContentsNamers(alloc, pages, pageNums)
 	stamped := make(map[[2]int]ast.PdfIndirectRef)
+	dispatcher := newStampDispatcher(doc, alloc, pages, pageNums, plan, brackets, resources)
 
 	for _, pageNum := range pageNums {
 		// The builders refuse an out-of-range page before allocating anything
@@ -145,6 +152,18 @@ func applyStampToPages(
 		// to the allocator.
 		baseDict := latestPageDict(alloc, page)
 
+		// Pages sharing one /Contents object keep sharing one: see
+		// [stampSharing].
+		contentsRef, isRef := baseDict["Contents"].(ast.PdfIndirectRef)
+		if isRef {
+			if dispatch, ok := dispatcher.forContents(ctx, baseDict, contentsRef); ok {
+				if err := dispatcher.stamp(ctx, pageNum, page, baseDict, dispatch, pageStampOps(page, contentOps)); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+
 		// Merge the requested resources into the current resource tree.
 		newResources := mergeStampResources(ctx, doc, alloc, baseDict, page, resources)
 
@@ -157,20 +176,18 @@ func applyStampToPages(
 			key := FormatFloat(dx) + " " + FormatFloat(dy)
 			ref, built := shifted[key]
 			if !built {
-				ref = alloc.Alloc(ast.NewStream(ast.PdfDict{},
-					[]byte("q 1 0 0 1 "+key+" cm "+contentOps+" Q")))
+				ref = alloc.Alloc(ast.NewStream(ast.PdfDict{}, []byte(stampShiftedOps(key, contentOps))))
 				shifted[key] = ref
 			}
 			pageStampRef = ref
 		}
 
-		// Pages sharing one /Contents object share its stamped content too, as
-		// remediation shares its wrapped content, so a form the shared content
-		// draws keeps the single reference ISO 14289-1, 7.20 t2 counts there.
-		// A direct array cannot be shared, so the array the other pages name
-		// is an object of its own.
-		contentsRef, isRef := baseDict["Contents"].(ast.PdfIndirectRef)
-		if isRef && namers[contentsRef.ObjectNum] > 1 {
+		// Pages sharing one /Contents object that all take this stamp share
+		// its stamped content too, as remediation shares its wrapped content,
+		// so a form the shared content draws keeps the single reference ISO
+		// 14289-1, 7.20 t2 counts there. A direct array cannot be shared, so
+		// the array the other pages name is an object of its own.
+		if isRef && plan.shared[contentsRef.ObjectNum] {
 			key := [2]int{contentsRef.ObjectNum, pageStampRef.ObjectNum}
 			ref, built := stamped[key]
 			if !built {
@@ -193,30 +210,6 @@ func applyStampToPages(
 		}
 	}
 	return nil
-}
-
-// stampedContentsNamers counts, for each object number an indirect /Contents
-// names, the stamped pages naming it, each page read alloc-first as the stamp
-// reads it.
-//
-// # Corpus evidence
-//
-//   - litho formshare_ua1.pdf, sharedtag_ua1.pdf, sharedclose_ua1.pdf: a
-//     stamped array for each page of two sharing one /Contents stream made
-//     veraPDF parse the stream once per array, so the marked form it draws
-//     gained a second reference and the stamp added ISO 14289-1, 7.20 t2 at
-//     PDF/UA-1.
-func stampedContentsNamers(alloc *writer.ObjAllocator, pages []*document.Page, pageNums []int) map[int]int {
-	namers := make(map[int]int)
-	for _, pageNum := range pageNums {
-		if pageNum < 1 || pageNum > len(pages) {
-			continue
-		}
-		if ref, ok := latestPageDict(alloc, pages[pageNum-1])["Contents"].(ast.PdfIndirectRef); ok {
-			namers[ref.ObjectNum]++
-		}
-	}
-	return namers
 }
 
 // newContentBrackets returns a function yielding the pair of streams that wrap

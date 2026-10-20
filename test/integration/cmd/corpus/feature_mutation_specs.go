@@ -309,14 +309,14 @@ const mutationRedactReach = 1e6
 //     ErrRedactionRefused (content a form XObject draws, an inline image, a
 //     stroked path) and 9 with ErrRedactionIncomplete; the 2 encrypted
 //     fixtures refuse the signature.
-//   - litho formshare_ua1, sharedtag_ua1, sharedclose_ua1: 1 ruleset_changed
-//     cell each under mutate-stamp, 7.20 test 2 added at PDF/UA-1, and
-//     veraPDF 1.30.2 adds it too. Their pages share one /Contents stream
-//     drawing a marked form, which veraPDF parses once per /Contents object.
-//     One StampText call over every page keeps the pages sharing one stamped
-//     array, and veraPDF then adds nothing; applyStamp stamps one page per
-//     call, so each page gets an array of its own and veraPDF reads the
-//     shared stream once per page, counting the form again.
+//   - litho formshare_ua1, sharedtag_ua1, sharedclose_ua1: no ruleset_changed
+//     cell under mutate-stamp. Their pages share one /Contents stream drawing
+//     a marked form, which veraPDF parses once per /Contents object. While
+//     each StampText call of applyStamp gave the page it stamped a /Contents
+//     array of its own, veraPDF 1.30.2 read the shared stream once per page
+//     and counted the form again, so the stamp added 7.20 test 2 at PDF/UA-1
+//     on both tools. The pages now keep naming one array, which draws each
+//     page's stamps through a form its own resources name.
 //   - litho sharedtag_ua1: 1 ruleset_changed cell under mutate-autotag, 7.1
 //     test 2 added at PDF/UA-1, and veraPDF 1.30.2 adds it too: the marked
 //     form is drawn inside the artifact the auto-tagger makes of the graphics
@@ -326,8 +326,13 @@ const mutationRedactReach = 1e6
 //     content stream, and litho judges it under each page's resources (ISO
 //     32000-1, 7.8.3), so the stamp's /Contents arrays and the page move no
 //     longer change which page's image is judged. Before that, both features
-//     counted 11 cells, one per PDF/A profile, as veraPDF still would: it
-//     judges a shared stream once, through the first page's resources.
+//     counted 11 cells, one per PDF/A profile, as veraPDF still would under
+//     mutate-pages: it judges a shared stream once, through the first page's
+//     resources. Under mutate-stamp the pages keep naming one /Contents
+//     array, so veraPDF 1.30.2 judges the image as it does on the source and
+//     adds at PDF/A-2b only the stamp's own 6.2.11.4.1 test 1 and 6.2.4.3
+//     test 2, where a /Contents array for each page added 6.2.6 test 1 and
+//     6.2.8 test 3 as well.
 //   - litho namedmcid_ua1, structcopy_ua2: while the copy of a tagged first
 //     page carried its content and not its structure, its MCIDs mapped to no
 //     element, and mutate-pages added 7.1 test 3 at PDF/UA-1 and 8.2.2 test 1

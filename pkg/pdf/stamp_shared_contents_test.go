@@ -54,6 +54,53 @@ func TestStampText_KeepsSharedContentsShared(t *testing.T) {
 	}
 }
 
+// TestStampText_PerPageCallsKeepSharedContentsShared pins that stamping the
+// pages of a document whose pages share one /Contents stream one call at a
+// time, as the corpus gate's mutate-stamp cell does, adds no ISO 14289-1,
+// 7.20 rule either, and that each page draws its own stamp and no other's. A
+// later call used to give the page it stamped a /Contents array of its own,
+// so veraPDF read the shared stream once per page and counted the marked form
+// it draws again.
+func TestStampText_PerPageCallsKeepSharedContentsShared(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range []string{"formshare_ua1", "sharedtag_ua1", "sharedclose_ua1"} {
+		t.Run(fixture, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/" + fixture + ".pdf")
+			if err != nil {
+				t.Fatalf("reading the fixture: %v", err)
+			}
+			before := uaRules(t, data)
+			plain := plainTexts(t, data)
+
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+			w := NewWriter(r)
+			defer w.Close()
+			for i := range plain {
+				if err := w.StampText(TextStamp{Text: fmt.Sprintf("MARKQ%dZ", i+1), X: 20, Y: 20, FontSize: 12}, i+1); err != nil {
+					t.Fatalf("StampText page %d: %v", i+1, err)
+				}
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+
+			for rule := range uaRules(t, out.Bytes()) {
+				if !before[rule] && strings.HasPrefix(rule, "7.20/") {
+					t.Errorf("stamping page by page added PDF/UA-1 rule %s", rule)
+				}
+			}
+			assertStamps(t, out.Bytes(), plain, func(page int) []string { return []string{fmt.Sprintf("MARKQ%dZ", page)} })
+		})
+	}
+}
+
 // TestStampText_SecondCallKeepsSharedContent pins that a second stamp over
 // pages that share one /Contents stream keeps the page's own content and the
 // first stamp. The first call gives those pages one stamped array, which only
@@ -84,6 +131,68 @@ func TestStampText_SecondCallKeepsSharedContent(t *testing.T) {
 		t.Fatalf("WriteTo: %v", err)
 	}
 	assertStamps(t, out.Bytes(), plain, func(int) []string { return []string{"FIRSTQZ", "SECONDQZ"} })
+}
+
+// TestStampImage_PerPageCallsKeepSharedContentsShared pins that an image
+// stamped page by page on pages sharing one /Contents stream reaches each page
+// once, through the form its own resources name, and adds no ISO 14289-1,
+// 7.20 rule.
+func TestStampImage_PerPageCallsKeepSharedContentsShared(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/sharedtag_ua1.pdf")
+	if err != nil {
+		t.Fatalf("reading the fixture: %v", err)
+	}
+	before := uaRules(t, data)
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	pageCount, err := r.PageCount(ctx)
+	if err != nil {
+		t.Fatalf("PageCount: %v", err)
+	}
+	images := make([]int, pageCount)
+	for i := range images {
+		metas, err := r.ExtractImages(ctx, i+1)
+		if err != nil {
+			t.Fatalf("ExtractImages page %d: %v", i+1, err)
+		}
+		images[i] = len(metas)
+	}
+	w := NewWriter(r)
+	defer w.Close()
+	png := buildPNG(t, false)
+	for i := range pageCount {
+		if err := w.StampImage(ImageStamp{Data: png, MimeType: "image/png", X: 20, Y: 20}, i+1); err != nil {
+			t.Fatalf("StampImage page %d: %v", i+1, err)
+		}
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	for rule := range uaRules(t, out.Bytes()) {
+		if !before[rule] && strings.HasPrefix(rule, "7.20/") {
+			t.Errorf("stamping page by page added PDF/UA-1 rule %s", rule)
+		}
+	}
+	stamped, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open stamped: %v", err)
+	}
+	defer stamped.Close()
+	for i := range images {
+		metas, err := stamped.ExtractImages(ctx, i+1)
+		if err != nil {
+			t.Fatalf("ExtractImages stamped page %d: %v", i+1, err)
+		}
+		if len(metas) != images[i]+1 {
+			t.Errorf("stamped page %d holds %d images, want %d", i+1, len(metas), images[i]+1)
+		}
+	}
 }
 
 // plainTexts returns the text of every page of data, artifacts left out.
