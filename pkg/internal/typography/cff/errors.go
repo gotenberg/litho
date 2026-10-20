@@ -12,4 +12,7 @@ var (
 	// ErrSubsetUnsupported indicates a program [Subset] does not cut down:
 	// a CID-keyed one, or one whose charstrings are not Type 2.
 	ErrSubsetUnsupported = errors.New("cff: program cannot be subset")
+	// ErrInvalidCharstring indicates a Type 2 charstring that cannot be
+	// interpreted to an outline.
+	ErrInvalidCharstring = errors.New("cff: invalid charstring")
 )
