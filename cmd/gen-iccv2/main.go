@@ -9,16 +9,17 @@ import (
 	"path/filepath"
 )
 
-const outName = "sgray-v2.icc"
-
-// The ICC.1:2001-04 header fields the profile states. version is 2.4.0, the
-// version of that edition, the last of version 2.
+// The profiles the command writes, and the CC0 CMYK profile it reads the
+// CMYK characterisation from.
 const (
-	version     = 0x02400000
-	deviceClass = "mntr"
-	colourSpace = "GRAY"
-	pcs         = "XYZ "
+	outName    = "sgray-v2.icc"
+	cmykName   = "cgats001-cmyk-v2.icc"
+	sourceName = "CGATS001Compat-v2-micro.icc"
 )
+
+// version is the ICC.1:2001-04 header version both profiles state: 2.4.0, the
+// version of that edition, the last of version 2.
+const version = 0x02400000
 
 // creationDate is the header's date and time (ICC.1:2001-04, 6.1.4 and
 // 5.3.1): a constant, so every run writes the same bytes.
@@ -57,11 +58,27 @@ func main() {
 	if dir == "" {
 		dir = findProfileDir()
 	}
-	if err := os.WriteFile(filepath.Join(dir, outName), generate(), 0o600); err != nil {
-		fmt.Fprintf(os.Stderr, "gen-iccv2: writing %s: %v\n", outName, err)
+	write(dir, outName, generate())
+	source, err := os.ReadFile(filepath.Join(dir, sourceName))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gen-iccv2: reading %s: %v\n", sourceName, err)
 		os.Exit(1)
 	}
-	fmt.Printf("Generated %s\n", outName)
+	cmyk, err := generateCMYK(source)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gen-iccv2: generating %s: %v\n", cmykName, err)
+		os.Exit(1)
+	}
+	write(dir, cmykName, cmyk)
+}
+
+// write writes one profile into dir, exiting on failure.
+func write(dir, name string, profile []byte) {
+	if err := os.WriteFile(filepath.Join(dir, name), profile, 0o600); err != nil { //nolint:gosec // dir is the operator's own --out flag, name one of the constant profile names.
+		fmt.Fprintf(os.Stderr, "gen-iccv2: writing %s: %v\n", name, err)
+		os.Exit(1)
+	}
+	fmt.Printf("Generated %s\n", name)
 }
 
 // findProfileDir returns the profile directory of the icc package, from the
@@ -86,7 +103,7 @@ func srgbToLinear(v float64) float64 {
 	return math.Pow((v+0.055)/1.055, 2.4)
 }
 
-// generate builds the profile: the header, then the tag table and tags of a
+// generate builds the grey profile: the header, then the tag table and tags of a
 // monochrome display profile (ICC.1:2001-04, 6.3.1.2): profileDescription,
 // grayTRC, mediaWhitePoint and copyright.
 func generate() []byte {
@@ -95,42 +112,60 @@ func generate() []byte {
 		y := srgbToLinear(float64(i) / (curveEntries - 1))
 		trc = binary.BigEndian.AppendUint16(trc, uint16(math.Round(y*65535)))
 	}
-	tags := []struct {
-		sig  string
-		data []byte
-	}{
-		{"desc", textDescription(description)},
-		{"kTRC", trc},
-		{"wtpt", xyzType(sRGBWhite)},
-		{"cprt", textType(copyright)},
-	}
+	return assemble("mntr", "GRAY", "XYZ ", []tag{
+		{sig: "desc", data: textDescription(description)},
+		{sig: "kTRC", data: trc},
+		{sig: "wtpt", data: xyzType(sRGBWhite)},
+		{sig: "cprt", data: textType(copyright)},
+	})
+}
 
+// tag is one entry of a profile's tag table: its data, or the signature of an
+// earlier tag whose data it shares (ICC.1:2001-04, 6.4 lets tag table entries
+// point at the same data).
+type tag struct {
+	sig  string
+	data []byte
+	same string
+}
+
+// assemble builds a profile of the device class, data colour space and
+// connection space: the header, then the tag table and the tags in order,
+// each padded to four bytes.
+func assemble(class, space, connection string, tags []tag) []byte {
 	const headerSize = 128
-	table := binary.BigEndian.AppendUint32(nil, uint32(len(tags))) //nolint:gosec // four tags.
+	table := binary.BigEndian.AppendUint32(nil, uint32(len(tags))) //nolint:gosec // a handful of tags.
 	offset := headerSize + 4 + 12*len(tags)
+	type placed struct{ off, size int }
+	at := make(map[string]placed, len(tags))
 	var body []byte
-	for _, tag := range tags {
-		table = append(table, tag.sig...)
-		table = binary.BigEndian.AppendUint32(table, uint32(offset+len(body))) //nolint:gosec // a few kilobytes.
-		table = binary.BigEndian.AppendUint32(table, uint32(len(tag.data)))    //nolint:gosec // a few kilobytes.
-		body = append(body, tag.data...)
-		for len(body)%4 != 0 {
-			body = append(body, 0)
+	for _, t := range tags {
+		p, shared := at[t.same]
+		if !shared {
+			p = placed{offset + len(body), len(t.data)}
+			body = append(body, t.data...)
+			for len(body)%4 != 0 {
+				body = append(body, 0)
+			}
 		}
+		at[t.sig] = p
+		table = append(table, t.sig...)
+		table = binary.BigEndian.AppendUint32(table, uint32(p.off))  //nolint:gosec // under a megabyte.
+		table = binary.BigEndian.AppendUint32(table, uint32(p.size)) //nolint:gosec // under a megabyte.
 	}
 
 	profile := make([]byte, headerSize, headerSize+len(table)+len(body))
 	binary.BigEndian.PutUint32(profile[8:], version)
-	copy(profile[12:], deviceClass)
-	copy(profile[16:], colourSpace)
-	copy(profile[20:], pcs)
+	copy(profile[12:], class)
+	copy(profile[16:], space)
+	copy(profile[20:], connection)
 	for i, v := range creationDate {
 		binary.BigEndian.PutUint16(profile[24+2*i:], v)
 	}
 	copy(profile[36:], "acsp")
 	copy(profile[68:], s15(pcsIlluminant[:]...))
 	profile = append(append(profile, table...), body...)
-	binary.BigEndian.PutUint32(profile, uint32(len(profile))) //nolint:gosec // a few kilobytes.
+	binary.BigEndian.PutUint32(profile, uint32(len(profile))) //nolint:gosec // under a megabyte.
 	return profile
 }
 
