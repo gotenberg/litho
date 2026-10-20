@@ -102,29 +102,139 @@ func TestOptimizeHuffmanKeepsSamplesAndShrinks(t *testing.T) {
 	}
 }
 
-// TestOptimizeHuffmanKeepsRestartMarkers checks that each restart marker of
-// the source is written again, in sequence.
-func TestOptimizeHuffmanKeepsRestartMarkers(t *testing.T) {
+// restartMarkers returns the restart markers of b, and whether it holds a
+// DRI marker. Neither byte pair occurs inside entropy-coded data, where 0xFF
+// is followed by a stuffed zero (ITU-T T.81, F.1.2.3).
+func restartMarkers(b []byte) ([]byte, bool) {
+	var (
+		ms  []byte
+		dri bool
+	)
+	for i := 0; i+1 < len(b); i++ {
+		if b[i] == 0xFF && b[i+1] >= 0xD0 && b[i+1] <= 0xD7 {
+			ms = append(ms, b[i+1])
+		}
+		if b[i] == 0xFF && b[i+1] == 0xDD {
+			dri = true
+		}
+	}
+	return ms, dri
+}
+
+// sameCoefficients fails unless a and b code the same quantized
+// coefficients, by the digest of their walks.
+func sameCoefficients(t *testing.T, a, b []byte) {
+	t.Helper()
+	sumA, err := walkSequential(context.Background(), a, nopVisitor{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sumB, err := walkSequential(context.Background(), b, nopVisitor{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sumA != sumB {
+		t.Fatal("the re-coding codes other coefficients")
+	}
+}
+
+// TestOptimizeHuffmanDropsRestartIntervals checks that the DRI segment and
+// every restart marker go, and the coefficients stay.
+func TestOptimizeHuffmanDropsRestartIntervals(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile("testdata/restart.jpg")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if ms, dri := restartMarkers(data); len(ms) == 0 || !dri {
+		t.Fatal("the source has no restart intervals")
+	}
 	out, ok, err := OptimizeHuffman(context.Background(), data)
 	if err != nil || !ok {
 		t.Fatalf("OptimizeHuffman = %v, %v", ok, err)
 	}
-	markers := func(b []byte) []byte {
-		var ms []byte
-		for i := 0; i+1 < len(b); i++ {
-			if b[i] == 0xFF && b[i+1] >= 0xD0 && b[i+1] <= 0xD7 {
-				ms = append(ms, b[i+1])
-			}
-		}
-		return ms
+	if ms, dri := restartMarkers(out); len(ms) > 0 || dri {
+		t.Fatalf("restart markers %x and DRI %v kept", ms, dri)
 	}
-	if want, got := markers(data), markers(out); len(want) == 0 || !bytes.Equal(want, got) {
-		t.Fatalf("restart markers %x, want %x", got, want)
+	sameCoefficients(t, data, out)
+	samePixels(t, data, out)
+}
+
+// overflowJPEG returns a 16x8 grayscale JPEG of two blocks, one per restart
+// interval, whose DC coefficients are -2047 and 2047. Each is coded from a
+// zero prediction, in category 11; their difference, 4094, has no category
+// for 8-bit samples (ITU-T T.81, Table F.1). Its DC table gives every
+// category a 4-bit code, so optimized tables code it smaller.
+func overflowJPEG() []byte {
+	out := []byte{0xFF, 0xD8}
+	dqt := []byte{0xFF, 0xDB, 0x00, 0x43, 0x00}
+	for range 64 {
+		dqt = append(dqt, 1)
+	}
+	out = append(out, dqt...)
+	out = append(out, 0xFF, 0xC0, 0x00, 0x0B, 8, 0x00, 0x08, 0x00, 0x10, 1, 1, 0x11, 0)
+	// DC table 0: categories 0 to 11, 4 bits each; AC table 0: EOB alone,
+	// in 2 bits.
+	dht := []byte{0xFF, 0xC4, 0x00, 0x00, 0x00, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	for v := range 12 {
+		dht = append(dht, byte(v))
+	}
+	dht = append(dht, 0x10, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x00)
+	dht[2], dht[3] = 0, byte(len(dht)-2)
+	out = append(out, dht...)
+	out = append(out, 0xFF, 0xDD, 0x00, 0x04, 0x00, 0x01)
+	out = append(out, 0xFF, 0xDA, 0x00, 0x08, 1, 1, 0x00, 0, 63, 0)
+	block := func(extra uint32) []byte {
+		e := &encodeVisitor{}
+		e.put(0b1011, 4) // Category 11.
+		e.put(extra, 11)
+		e.put(0b00, 2) // EOB.
+		e.flush()
+		return e.out
+	}
+	out = append(out, block(0)...) // -2047.
+	out = append(out, 0xFF, 0xD0)
+	out = append(out, block(2047)...)
+	return append(out, 0xFF, 0xD9)
+}
+
+// TestOptimizeHuffmanKeepsRestartsWhenDCOverflows checks that restart
+// intervals whose drop would need a DC difference past Table F.1 are kept,
+// and the data still re-coded.
+func TestOptimizeHuffmanKeepsRestartsWhenDCOverflows(t *testing.T) {
+	t.Parallel()
+	data := overflowJPEG()
+	out, ok, err := OptimizeHuffman(context.Background(), data)
+	if err != nil || !ok {
+		t.Fatalf("OptimizeHuffman = %v, %v; want a re-coding", ok, err)
+	}
+	wantMs, _ := restartMarkers(data)
+	if ms, dri := restartMarkers(out); !bytes.Equal(ms, wantMs) || !dri {
+		t.Fatalf("restart markers %x and DRI %v, want %x and DRI", ms, dri, wantMs)
+	}
+	sameCoefficients(t, data, out)
+	samePixels(t, data, out)
+}
+
+// TestDCCoderRoundTrips checks that every difference of 8-bit samples is
+// coded in its category and extended back to itself (ITU-T T.81, F.1.2.1.1
+// and F.2.2.1).
+func TestDCCoderRoundTrips(t *testing.T) {
+	t.Parallel()
+	for diff := -2047; diff <= 2047; diff++ {
+		var c dcCoder
+		sym, extra := c.code(0, diff)
+		if c.overflow {
+			t.Fatalf("difference %d overflows", diff)
+		}
+		if got := extendDC(int(sym), extra); got != diff {
+			t.Fatalf("difference %d coded as %d, %d extends to %d", diff, sym, extra, got)
+		}
+	}
+	var c dcCoder
+	c.code(0, 2048)
+	if !c.overflow {
+		t.Fatal("a difference of 2048 does not overflow")
 	}
 }
 

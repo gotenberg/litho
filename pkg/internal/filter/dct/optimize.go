@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"math/bits"
 )
 
 // errNotOptimizable is what the walk of [OptimizeHuffman] fails with on data
@@ -33,12 +34,20 @@ const (
 // OptimizeHuffman re-codes a sequential Huffman-coded JPEG (ITU-T T.81,
 // SOF0 or SOF1 with 8-bit samples) with Huffman tables built from the
 // statistics of its own scans, as T.81, Annex K.2 describes, and returns the
-// result when it is smaller than data. It is lossless: every scan codes the
-// same symbols and the same additional bits, so the quantized coefficients,
-// and with them the samples any decoder reconstructs, are unchanged. Only the
-// DHT segments and the entropy-coded data change; every other marker segment
-// is kept, in its order and byte for byte, and each scan is preceded by one
-// DHT segment holding the tables it uses.
+// result when it is smaller than data. It is lossless: every block codes the
+// same quantized coefficients, and with them every decoder reconstructs the
+// same samples. Only the DHT and DRI segments and the entropy-coded data
+// change; every other marker segment is kept, in its order and byte for byte,
+// and each scan is preceded by one DHT segment holding the tables it uses.
+//
+// Restart intervals are dropped: the DRI segments and the restart markers go,
+// and each DC coefficient is coded again as its difference from the previous
+// block of its component across what were interval boundaries (T.81,
+// F.1.1.5.1 resets the prediction at the start of each interval). An interval of
+// zero, or none, is the scan without restarts (B.2.4.4), so the coefficients
+// are unchanged. When a difference so derived falls outside the categories of
+// 8-bit samples (Table F.1), which only data no encoder writes reaches, the
+// restart intervals are kept and the DC differences coded as data codes them.
 //
 // ok is false, with a nil error, when data is not re-coded: it is
 // progressive, arithmetic-coded, lossless or hierarchical, its samples are
@@ -48,49 +57,75 @@ const (
 // smaller. The error is only ever the context's.
 //
 // The result is verified before it is returned: its own walk must yield the
-// same marker segments, symbols and additional bits as data's, compared by
-// digest.
+// same marker segments, but for DRI, and the same quantized coefficients,
+// block by block, as data's, compared by digest.
 //
-// Restart intervals are kept, though dropping them would save a little more,
-// since that changes the DC differences the scans code and with them the
-// symbols the digest compares.
+// Progressive data is left as it is, though T.81, Annex G, codes it with
+// Huffman tables an encoder may optimize too: measured against jpegtran,
+// neither re-coding it with optimized tables and its own scan script nor
+// converting it to sequential coding saves a noticeable amount.
 //
 // # Corpus evidence
 //
 //   - All corpora: 5,713 of the 5,892 images whose only filter is DCTDecode
 //     are re-coded, saving 19.3 MB, and libjpeg-turbo's djpeg and [Decode]
 //     read every one to the samples they read from its source.
-//   - govdocs: the re-coding saves 95% of what jpegtran -optimize saves.
-//     jpegtran also drops restart intervals, as in thread_200_200644.pdf,
-//     which this keeps.
+//   - govdocs: the re-coding saves 100.2% of what jpegtran -optimize saves,
+//     and 95.2% while it kept restart intervals.
+//   - All corpora: 865 of 6,349 DCTDecode images have restart intervals,
+//     56.4 MB. Dropping them saves 0.73 MB more than keeping them, re-codes
+//     8 images keeping them did not shrink, and no derived DC difference
+//     leaves Table F.1. djpeg reads every changed re-coding to the samples it
+//     reads from its source.
+//   - All corpora: 133 images are progressive, 6.04 MB. jpegtran -optimize
+//     re-codes them with their own scan scripts 632 bytes smaller in all (5
+//     images smaller), and sequentially 4.0% larger (8 images smaller, by
+//     762 bytes): libjpeg optimizes the tables of every progressive JPEG it
+//     writes.
 func OptimizeHuffman(ctx context.Context, data []byte) ([]byte, bool, error) {
-	var stats statsVisitor
+	out, ok, restarts, err := recode(ctx, data, false)
+	if err != nil || ok || !restarts {
+		return out, ok, err
+	}
+	out, ok, _, err = recode(ctx, data, true)
+	return out, ok, err
+}
+
+// recode is [OptimizeHuffman], dropping data's restart intervals or keeping
+// them. restarts reports whether data's walk met a restart marker, so that a
+// re-coding that dropped them and was not kept can be tried again keeping
+// them.
+func recode(ctx context.Context, data []byte, keepRestarts bool) ([]byte, bool, bool, error) {
+	stats := statsVisitor{coder: dcCoder{keepRestarts: keepRestarts}}
 	origSum, err := walkSequential(ctx, data, &stats)
 	if err != nil {
-		return nil, false, notOptimizable(err)
+		return nil, false, false, notOptimizable(err)
+	}
+	if stats.coder.overflow {
+		return nil, false, stats.restarts, nil
 	}
 	tables := make([]scanTables, len(stats.scans))
 	for i, freq := range stats.scans {
 		if tables[i], err = buildScanTables(freq); err != nil {
-			return nil, false, nil //nolint:nilerr // A table that cannot be built leaves the image as it is.
+			return nil, false, stats.restarts, nil //nolint:nilerr // A table that cannot be built leaves the image as it is.
 		}
 	}
-	enc := &encodeVisitor{tables: tables, out: make([]byte, 0, len(data))}
+	enc := &encodeVisitor{tables: tables, coder: dcCoder{keepRestarts: keepRestarts}, out: make([]byte, 0, len(data))}
 	if _, err := walkSequential(ctx, data, enc); err != nil {
-		return nil, false, notOptimizable(err)
+		return nil, false, false, notOptimizable(err)
 	}
 	out := enc.out
 	if len(out) >= len(data) {
-		return nil, false, nil
+		return nil, false, stats.restarts, nil
 	}
 	newSum, err := walkSequential(ctx, out, nopVisitor{})
 	if err != nil {
-		return nil, false, notOptimizable(err)
+		return nil, false, stats.restarts, notOptimizable(err)
 	}
 	if newSum != origSum {
-		return nil, false, nil
+		return nil, false, stats.restarts, nil
 	}
-	return out, true, nil
+	return out, true, stats.restarts, nil
 }
 
 // notOptimizable returns err when it is the context's, and nil for every
@@ -105,17 +140,77 @@ func notOptimizable(err error) error {
 // visitor receives what [walkSequential] reads. segment is every marker
 // segment but DHT, marker and length included, and the SOI and EOI markers;
 // dht is called with each DHT segment instead. scan is called with each
-// scan's ordinal before its first symbol, symbol with each coded symbol and
-// its additional bits, restart with each restart marker, and endScan after a
-// scan's last symbol.
+// scan's ordinal before its first block, dc with each block's quantized DC
+// coefficient, the block's component given by its position in the scan
+// header, ac with each coded AC symbol and its additional bits, restart with
+// each restart marker, and endScan after a scan's last block.
 type visitor interface {
 	segment(seg []byte)
 	dht()
 	scan(index int, header []byte)
-	symbol(ac bool, slot int, sym byte, extra uint16, n int)
+	dc(comp, slot, value int)
+	ac(slot int, sym byte, extra uint16, n int)
 	restart(marker byte)
 	endScan()
 	trailer(rest []byte)
+}
+
+// dcCoder codes the DC coefficients of a scan as the differences T.81,
+// F.1.1.5.1 codes: from the previous block of the same component, from zero
+// at the start of the scan and, when keepRestarts is set, of each restart
+// interval. overflow is set when a difference falls outside the categories
+// of 8-bit samples (Table F.1).
+type dcCoder struct {
+	keepRestarts bool
+	pred         [maxComponents]int
+	overflow     bool
+}
+
+// startScan resets the predictions at the start of a scan.
+func (c *dcCoder) startScan() {
+	c.pred = [maxComponents]int{}
+}
+
+// restart resets the predictions at a restart marker the coding keeps.
+func (c *dcCoder) restart() {
+	if c.keepRestarts {
+		c.startScan()
+	}
+}
+
+// code returns the category and additional bits of the difference that
+// codes value for the scan's component comp (T.81, F.1.2.1.1 and Table
+// F.1).
+func (c *dcCoder) code(comp, value int) (byte, uint16) {
+	diff := value - c.pred[comp]
+	c.pred[comp] = value
+	mag := diff
+	if mag < 0 {
+		mag = -mag
+	}
+	t := bits.Len(uint(mag))
+	if t > maxDCCategory {
+		c.overflow = true
+		return 0, 0
+	}
+	// A negative difference is coded as its ones' complement in t bits.
+	if diff < 0 {
+		diff += 1<<t - 1
+	}
+	return byte(t), uint16(diff) //nolint:gosec // t is at most maxDCCategory and 0 <= diff < 1<<t.
+}
+
+// extendDC returns the DC difference a category t and its additional bits
+// code (T.81, F.2.2.1, EXTEND).
+func extendDC(t int, extra uint16) int {
+	if t == 0 {
+		return 0
+	}
+	v := int(extra)
+	if v < 1<<(t-1) {
+		v -= 1<<t - 1
+	}
+	return v
 }
 
 // seqFrame is the frame a sequential walk lays its scans out on.
@@ -136,9 +231,10 @@ type seqComp struct {
 
 // walkSequential walks data as a sequential Huffman-coded JPEG, strictly,
 // telling v what it reads, and returns a digest of everything but its
-// Huffman tables: the marker segments, and for each scan its symbols, their
-// additional bits and its restart markers. Two JPEGs with the same digest
-// decode to the same coefficients.
+// Huffman tables and restart intervals: the other marker segments, and for
+// each scan the quantized DC coefficient and the AC symbols and additional
+// bits of each block. Two JPEGs with the same digest decode to the same
+// coefficients.
 func walkSequential(ctx context.Context, data []byte, v visitor) ([32]byte, error) {
 	var sum [32]byte
 	h := sha256.New()
@@ -204,6 +300,11 @@ func walkSequential(ctx context.Context, data []byte, v visitor) ([32]byte, erro
 				return sum, fmt.Errorf("%w: DRI segment of %d bytes", errNotOptimizable, len(body))
 			}
 			interval = int(binary.BigEndian.Uint16(body))
+			// Restart intervals change how the coefficients are coded,
+			// not what they are, so the digest leaves them out.
+			v.segment(seg)
+			p += 2 + length
+			continue
 		case m == 0xDB, m >= 0xE0 && m <= 0xEF, m == 0xFE:
 			// Quantization tables, application data and comments are kept.
 		case m == 0xDA:
@@ -402,7 +503,6 @@ func walkScan(
 				return 0, err
 			}
 			v.restart(marker)
-			hashBytes(h, 'R', []byte{marker})
 			for i := range preds {
 				preds[i] = 0
 			}
@@ -413,13 +513,13 @@ func walkScan(
 				return 0, err
 			}
 		}
-		for _, s := range sc {
+		for i, s := range sc {
 			n := s.c.h * s.c.v
 			if ns == 1 {
 				n = 1
 			}
 			for range n {
-				if err := walkBlock(r, dc[s.dc], ac[s.ac], s.dc, s.ac, v, h); err != nil {
+				if err := walkBlock(r, dc[s.dc], ac[s.ac], s, i, &preds[i], v, h); err != nil {
 					return 0, err
 				}
 			}
@@ -429,8 +529,9 @@ func walkScan(
 }
 
 // walkBlock walks the symbols of one block of a sequential scan (T.81,
-// F.2.2.1 and F.2.2.2).
-func walkBlock(r *strictBits, dcT, acT *huffman, dcSlot, acSlot int, v visitor, h hash.Hash) error {
+// F.2.2.1 and F.2.2.2), the block of the scan's component comp, whose DC
+// prediction is pred (F.2.1.3.1).
+func walkBlock(r *strictBits, dcT, acT *huffman, s seqScanComp, comp int, pred *int, v visitor, h hash.Hash) error {
 	t, err := dcT.decodeStrict(r)
 	if err != nil {
 		return err
@@ -442,8 +543,13 @@ func walkBlock(r *strictBits, dcT, acT *huffman, dcSlot, acSlot int, v visitor, 
 	if err != nil {
 		return err
 	}
-	v.symbol(false, dcSlot, t, extra, int(t))
-	hashSymbol(h, 'D', t, extra)
+	*pred += extendDC(int(t), extra)
+	v.dc(comp, s.dc, *pred)
+	var dcHash [9]byte
+	dcHash[0] = 'D'
+	binary.BigEndian.PutUint64(dcHash[1:], uint64(*pred)) //nolint:gosec // Two's complement bits, hashed rather than read as a size.
+	h.Write(dcHash[:])
+	acSlot := s.ac
 	for k := 1; k < 64; {
 		rs, err := acT.decodeStrict(r)
 		if err != nil {
@@ -452,7 +558,7 @@ func walkBlock(r *strictBits, dcT, acT *huffman, dcSlot, acSlot int, v visitor, 
 		run, size := int(rs>>4), int(rs&15)
 		switch {
 		case size == 0 && run == 0:
-			v.symbol(true, acSlot, rs, 0, 0)
+			v.ac(acSlot, rs, 0, 0)
 			hashSymbol(h, 'A', rs, 0)
 			return nil
 		case size == 0 && run == 15:
@@ -460,7 +566,7 @@ func walkBlock(r *strictBits, dcT, acT *huffman, dcSlot, acSlot int, v visitor, 
 			if k > 64 {
 				return fmt.Errorf("%w: run past the block", errNotOptimizable)
 			}
-			v.symbol(true, acSlot, rs, 0, 0)
+			v.ac(acSlot, rs, 0, 0)
 			hashSymbol(h, 'A', rs, 0)
 			continue
 		case size == 0 || size > maxACSize:
@@ -474,7 +580,7 @@ func walkBlock(r *strictBits, dcT, acT *huffman, dcSlot, acSlot int, v visitor, 
 		if err != nil {
 			return err
 		}
-		v.symbol(true, acSlot, rs, extra, size)
+		v.ac(acSlot, rs, extra, size)
 		hashSymbol(h, 'A', rs, extra)
 		k++
 	}
@@ -593,29 +699,38 @@ type scanFreqs struct {
 	usedDC, usedAC [4]bool
 }
 
-// statsVisitor counts the symbols of every scan.
+// statsVisitor counts the symbols every scan codes, its DC differences
+// derived by coder, and records whether a restart marker was met.
 type statsVisitor struct {
-	scans []*scanFreqs
+	scans    []*scanFreqs
+	coder    dcCoder
+	restarts bool
 }
 
 func (*statsVisitor) segment([]byte) {}
 func (*statsVisitor) dht()           {}
 func (s *statsVisitor) scan(int, []byte) {
 	s.scans = append(s.scans, &scanFreqs{})
+	s.coder.startScan()
 }
 
-func (s *statsVisitor) symbol(ac bool, slot int, sym byte, _ uint16, _ int) {
+func (s *statsVisitor) dc(comp, slot, value int) {
+	sym, _ := s.coder.code(comp, value)
 	f := s.scans[len(s.scans)-1]
-	if ac {
-		f.ac[slot][sym]++
-		f.usedAC[slot] = true
-	} else {
-		f.dc[slot][sym]++
-		f.usedDC[slot] = true
-	}
+	f.dc[slot][sym]++
+	f.usedDC[slot] = true
 }
 
-func (*statsVisitor) restart(byte) {}
+func (s *statsVisitor) ac(slot int, sym byte, _ uint16, _ int) {
+	f := s.scans[len(s.scans)-1]
+	f.ac[slot][sym]++
+	f.usedAC[slot] = true
+}
+
+func (s *statsVisitor) restart(byte) {
+	s.restarts = true
+	s.coder.restart()
+}
 
 func (*statsVisitor) endScan() {}
 
@@ -630,7 +745,9 @@ func (nopVisitor) dht() {}
 
 func (nopVisitor) scan(int, []byte) {}
 
-func (nopVisitor) symbol(bool, int, byte, uint16, int) {}
+func (nopVisitor) dc(int, int, int) {}
+
+func (nopVisitor) ac(int, byte, uint16, int) {}
 
 func (nopVisitor) restart(byte) {}
 
@@ -837,10 +954,12 @@ func (t scanTables) dhtSegment() []byte {
 }
 
 // encodeVisitor writes the walked JPEG back with the scans' optimized
-// tables.
+// tables, its DC differences derived by coder, and without its restart
+// intervals unless coder keeps them.
 type encodeVisitor struct {
 	tables []scanTables
 	cur    scanTables
+	coder  dcCoder
 	out    []byte
 	acc    uint32
 	n      int
@@ -852,6 +971,9 @@ func (e *encodeVisitor) segment(seg []byte) {
 		// receives next; the header itself is written there.
 		return
 	}
+	if len(seg) >= 2 && seg[1] == 0xDD && !e.coder.keepRestarts {
+		return
+	}
 	e.out = append(e.out, seg...)
 }
 
@@ -859,15 +981,22 @@ func (*encodeVisitor) dht() {}
 
 func (e *encodeVisitor) scan(index int, header []byte) {
 	e.cur = e.tables[index]
+	e.coder.startScan()
 	e.out = append(e.out, e.cur.dhtSegment()...)
 	e.out = append(e.out, header...)
 }
 
-func (e *encodeVisitor) symbol(ac bool, slot int, sym byte, extra uint16, n int) {
+func (e *encodeVisitor) dc(comp, slot, value int) {
+	sym, extra := e.coder.code(comp, value)
 	t := e.cur.dc[slot]
-	if ac {
-		t = e.cur.ac[slot]
+	e.put(uint32(t.code[sym]), t.size[sym])
+	if sym > 0 {
+		e.put(uint32(extra), int(sym))
 	}
+}
+
+func (e *encodeVisitor) ac(slot int, sym byte, extra uint16, n int) {
+	t := e.cur.ac[slot]
 	e.put(uint32(t.code[sym]), t.size[sym])
 	if n > 0 {
 		e.put(uint32(extra), n)
@@ -875,6 +1004,10 @@ func (e *encodeVisitor) symbol(ac bool, slot int, sym byte, extra uint16, n int)
 }
 
 func (e *encodeVisitor) restart(marker byte) {
+	if !e.coder.keepRestarts {
+		return
+	}
+	e.coder.restart()
 	e.flush()
 	e.out = append(e.out, 0xFF, marker)
 }

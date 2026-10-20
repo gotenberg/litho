@@ -50,8 +50,9 @@ type RecompressStats struct {
 // result is smaller than the stream it replaces.
 //
 // An image whose only filter is DCTDecode keeps it: its JPEG data is re-coded
-// with Huffman tables built from its own statistics (ITU-T T.81, Annex K.2),
-// which codes the same quantized coefficients in fewer bytes, so every
+// with Huffman tables built from its own statistics (ITU-T T.81, Annex K.2)
+// and without restart intervals, which codes the same quantized coefficients
+// in fewer bytes, so every
 // decoder reconstructs the same samples ([dct.OptimizeHuffman]). Only
 // sequential Huffman-coded JPEG qualifies; progressive data, and data that
 // does not decode exactly to its markers, is left as it is. JPXDecode,

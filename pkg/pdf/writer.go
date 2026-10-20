@@ -291,7 +291,8 @@ func WithDedup() WriteOption {
 // (ISO 32000-1, 7.4.4.4): only /Filter, /DecodeParms and the data change. A
 // JPEG image (DCTDecode alone) keeps its filter and its dictionary: its data
 // is re-coded with Huffman tables fitted to its own statistics (ITU-T T.81,
-// Annex K.2), which codes the same quantized coefficients in fewer bytes.
+// Annex K.2) and without restart intervals, which codes the same quantized
+// coefficients in fewer bytes.
 // Only sequential JPEG qualifies; progressive JPEG, JPEG 2000, JBIG2 and
 // CCITT images are left alone, and nothing is downsampled or recompressed
 // lossily. An image is also left alone when its samples exceed the image

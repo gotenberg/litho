@@ -19,6 +19,9 @@ func FuzzOptimizeHuffman(f *testing.F) {
 		f.Add(data)
 		f.Add(data[:len(data)/2])
 	}
+	overflow := overflowJPEG()
+	f.Add(overflow)
+	f.Add(overflow[:len(overflow)/2])
 	f.Fuzz(func(t *testing.T, data []byte) {
 		ctx := context.Background()
 		out, ok, err := OptimizeHuffman(ctx, data)
