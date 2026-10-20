@@ -2,6 +2,7 @@ package typography
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
@@ -36,5 +37,37 @@ func TestDecodeNextCode_IdentityCodeOutsideToUnicodeCodespace(t *testing.T) {
 	}
 	if got != "Hello" {
 		t.Fatalf("decoded %q, want %q", got, "Hello")
+	}
+}
+
+// TestDecodeNextCode_IdentityControlCodeStaysTwoBytes pins that an
+// Identity-H code in the C0 control range that the /ToUnicode CMap neither
+// maps nor holds in its codespace reads as no character and consumes its
+// two bytes, so the code after it stays aligned: govdocs
+// thread_300_300034.pdf shows <0004> four times under a CMap whose only
+// codespace range is <0006>, and read a byte at a time "<0004><0004>" came
+// out "Ѐ".
+func TestDecodeNextCode_IdentityControlCodeStaysTwoBytes(t *testing.T) {
+	t.Parallel()
+
+	tu, err := cmap.Parse(context.Background(), []byte("begincmap\n"+
+		"1 begincodespacerange\n<0006> <0006>\nendcodespacerange\n"+
+		"1 beginbfrange\n<0006> <0006> <0023>\nendbfrange\nendcmap\n"))
+	if err != nil {
+		t.Fatalf("cmap.Parse: %v", err)
+	}
+	font := &Font{Subtype: "Type0", ToUnicode: tu, identityEncoding: true}
+	data := []byte{0x00, 0x04, 0x00, 0x04, 0x00, 0x06}
+	var got []string
+	for len(data) > 0 {
+		char, n, _, _ := decodeNextCode(font, data)
+		if n != 2 {
+			t.Fatalf("decodeNextCode consumed %d bytes of % X, want 2", n, data)
+		}
+		got = append(got, char)
+		data = data[n:]
+	}
+	if want := []string{"", "", "#"}; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("decoded %q, want %q", got, want)
 	}
 }

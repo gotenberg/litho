@@ -313,6 +313,9 @@ const spaceCharCode = 0x20
 //     <00> to <FF> one byte long and <0100> to <FFFF> two, then maps <0029>
 //     and the other two-byte codes below <0100>. Split by that codespace,
 //     "Hello" read "⤀䘀䴀䴀P". No other file of the six text corpora moves.
+//   - govdocs thread_300_300034.pdf pages 29 and 30: <0004> codes under a
+//     /ToUnicode whose only codespace range is <0006>, read a byte at a
+//     time, put "ЀЀЀ" around "Population Viability".
 func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn bool) {
 	if font.SuppressExtraction {
 		// No route to Unicode exists for this font (see
@@ -377,6 +380,13 @@ func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn 
 		cp := rune(uint16(data[0])<<8 | uint16(data[1]))
 		if cp > 0x1F {
 			return string(cp), 2, false, true
+		}
+		// A value in the C0 control range names no character, as an
+		// unmapped two-byte code does under a /ToUnicode CMap above. The
+		// two bytes stay one code: read one byte at a time, they shift
+		// every code after them.
+		if font.identityEncoding {
+			return "", 2, true, false
 		}
 	}
 
