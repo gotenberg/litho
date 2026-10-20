@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 	"github.com/gotenberg/litho/pkg/models"
@@ -335,7 +336,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					if visIdx < 0 || hasMarks {
 						break
 					}
-					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el), literalSpaceSize(ln.elems, lineFonts, visIdx, idx), spaceGlyphsBetween(ln.elems, visIdx, idx)) {
+					if vis := ln.elems[visIdx]; vis.Text != "" && suppressesLiteralSpace(vis, el, computeLineGap(vis, el), literalSpaceSize(ln.elems, lineFonts, visIdx, idx), spaceGlyphsBetween(ln.elems, visIdx, idx), spaceSetBack(ln.elems, visIdx, idx)) {
 						pendingSpace = ""
 					}
 				case !advances(prev) && advAt >= 0 && advAt != base+prevIdx:
@@ -1280,7 +1281,15 @@ func isWhitespaceRune(r rune) bool {
 // the size's magnitude. Vertical, otherwise rotated and right-to-left runs
 // measure their gaps along other axes or in visual order, and keep their
 // literal spaces. So does an exact abutment after one space glyph
-// ([exactAbutment]).
+// ([exactAbutment]), unless that space is set back over the ligature before
+// it (setBack, [spaceSetBack]): it then paints inside that glyph's advance,
+// the next glyph starts where that glyph ends, and the page shows no gap.
+// PDF.js compares the two positions for exact equality, and a position
+// reached through a move back and the advance of a space equals the end of
+// the glyph it was set over only by chance of rounding, so PDF.js reads the
+// same construct with and without a space on one page. Correct words over
+// agreement with the reference is a user decision (2026-10-20); the govdocs
+// text overrides record the readings PDF.js gets wrong.
 //
 // # Corpus evidence
 //
@@ -1326,7 +1335,7 @@ func isWhitespaceRune(r rune) bool {
 //   - All corpora: the tracking bound after two spaces or more makes words
 //     match PDF.js on 5 more files (govdocs 4, pdfjs 1) and on none fewer;
 //     facturx, pdf20 and pdfcpu do not move.
-func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64, spaces int) bool {
+func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64, spaces int, setBack bool) bool {
 	if prev.Vertical || el.Vertical || !gapReadable(el.Angle) || math.Abs(prev.Angle-el.Angle) >= math.Pi/180 {
 		return false
 	}
@@ -1344,10 +1353,37 @@ func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64, spac
 	if spaces >= 2 {
 		return !exceedsBound(gap, trackingSpaceFactor*size)
 	}
-	if math.Abs(gap) < exactAbutment {
+	if math.Abs(gap) < exactAbutment && !setBack {
 		return false
 	}
 	return gap <= notASpaceFactor*size
+}
+
+// spaceSetBack reports whether the element at p is a ligature, one glyph
+// that reads as several characters ("fi", "fl", "Th"), and the first space
+// glyph among the elements strictly between p and i starts before it ends,
+// measured along the advance ([computeLineGap]): the space is set back over
+// the ligature. Producers that set a ligature over two characters keep a
+// space glyph inside its advance; a space set back over one letter is
+// tracking, the negative character spacing of the whole run (ISO 32000-1,
+// 9.3.2), and still marks the break.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200744.pdf page 84: every space of a -1.2-unit Tc
+//     run starts 1.2 units inside the letter before it, and the next word at
+//     that letter's end. Read without the ligature test, "genetically
+//     susceptible" came out "geneticallysusceptible".
+func spaceSetBack(elems []models.TextElement, p, i int) bool {
+	if utf8.RuneCountInString(elems[p].Text) < 2 {
+		return false
+	}
+	for k := p + 1; k < i; k++ {
+		if isSpaceGlyph(elems[k].Text) {
+			return computeLineGap(elems[p], elems[k]) <= -exactAbutment
+		}
+	}
+	return false
 }
 
 // spaceGlyphsBetween counts the space glyphs among the elements strictly
