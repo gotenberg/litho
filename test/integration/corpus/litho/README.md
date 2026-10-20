@@ -255,6 +255,8 @@ one deliberately rather than diffing it against a fresh build.
 | `formshare_ua1.pdf`    | PDF/UA-1     | Marked forms a content stream two pages share draws once         |
 | `inlinejpx_2b.pdf`     | PDF/A-2b     | Inline images applying JPXDecode or JBIG2Decode                  |
 | `headingart_ua2.pdf`   | PDF/UA-2     | Generic `H` headings nested in `Art` and `Sect` elements         |
+| `sharedtag_ua1.pdf`    | PDF/UA-1     | Untagged text and a marked form two pages' shared content draws  |
+| `sharedclose_ua1.pdf`  | PDF/UA-1     | A marked form and an open artifact two pages' shared content has |
 
 ### Must-not-fire controls
 
@@ -525,6 +527,8 @@ violation but is exempt, so a firing is a false positive.
 | `refreach_ua1`                            | page 6: a reference XObject a page, a cell and a Type 3 font list      | ISO 14289-1, 7.20 t1         |
 | `formreuse_ua1`                           | page 7: a form, a cell and a glyph drawn twice, each drawing one form  | ISO 14289-1, 7.20 t2         |
 | `formshare_ua1`                           | every page: a marked form the content two pages share draws once       | ISO 14289-1, 7.20 t2         |
+| `sharedtag_ua1`                           | pages 1, 2: a marked form shared content draws once, before and after  | ISO 14289-1, 7.20 t2         |
+| `sharedclose_ua1`                         | pages 1, 2: a marked form shared content draws once, before and after  | ISO 14289-1, 7.20 t2         |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -697,8 +701,10 @@ are covered under [Known divergences](#known-divergences).
 | `rolecycle_ua2.pdf`    | 5    | 4    | 8    | 5    | 5    | 8    | 5    | 5    | 2   | 2    | 3    | 5    | 4    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `shadedefault_2b.pdf`  | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
+| `sharedclose_ua1.pdf`  | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 2   | 2    | 3    | 1    | 4    |
 | `sharedicc_2b.pdf`     | 4\*  | 2\*  | 4\*  | 2\*  | 2\*  | 4\*  | 2\*  | 2\*  | 3\* | 3\*  | 4\*  | 5    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
+| `sharedtag_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 6    | 7    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
 | `siglock_2b.pdf`       | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
 | `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
@@ -8202,9 +8208,41 @@ must-not-fire control: veraPDF states `7.20/2` nowhere, litho stated it twice.
 veraPDF 1.30.2 and litho report the same rule set, with the same failed-check
 counts, in all thirteen cells.
 
-Remediated at PDF/UA-1 in both modes, both tools state `7.20/2` twice: the
-fixer wrapping untagged page content in a marked-content sequence writes one
-stream per page, so each marked form gains a second reference.
+Remediated at PDF/UA-1 in both modes, both tools report nothing. The fixer
+wrapping untagged page content in a marked-content sequence wrote one stream
+per page, so each marked form gained a second reference and both tools stated
+`7.20/2` twice. Pages naming one `/Contents` object now name one wrapped
+stream, its MCID resolving through each page's own `/StructParents`.
+
+### `sharedtag_ua1.pdf`
+
+The auto-tagger's twin of `formshare_ua1.pdf`. Pages 1 and 2 share a stream
+showing Type 3 text and drawing a marked form under one resource dictionary;
+page 3 shows the same text from a stream of its own. Every page is a
+must-not-fire control for `7.20/2`. veraPDF 1.30.2 and litho report the same
+rule set in all thirteen cells, before remediation and after it, default and
+aggressive.
+
+Remediated at PDF/UA-1, both tools state `7.1/2` once, the marked form drawn
+inside the artifact the auto-tagger makes of the graphics around it. The
+auto-tagger marked each page in a stream of its own, and both tools stated
+`7.20/2` beside it; pages naming one `/Contents` object that they mark alike
+now name one marked stream.
+
+### `sharedclose_ua1.pdf`
+
+The open-sequence twin of `formshare_ua1.pdf`. Pages 1 and 2 share a stream
+drawing a marked form, then opening an `/Artifact` sequence it never closes;
+page 3 opens the same sequence in a stream of its own. Every page is a
+must-not-fire control for `7.20/2`, and the unclosed sequences are the one
+UA-1 content finding, `7.1/3` on both tools. veraPDF 1.30.2 and litho report
+the same rule set in all thirteen cells, before remediation and after it,
+default and aggressive.
+
+Remediated at PDF/UA-1 in both modes, both tools report nothing. The fixer
+closing the sequence appended its EMC in an array of its own for each page, so
+veraPDF parsed the shared stream once per array and both tools stated `7.20/2`;
+pages naming one `/Contents` object now name one closed array.
 
 ## Scope
 
