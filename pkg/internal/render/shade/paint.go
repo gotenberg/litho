@@ -39,6 +39,25 @@ const (
 // sets through ctx is what bounds it.
 const checkCtxPixels = 1 << 16
 
+// Bounds on the pixels a mesh may visit while it is rasterised. A triangle
+// costs the pixels of its bounding box inside the paint area, so a file can
+// make one paint cost the area many times over with overlapping or sliver
+// triangles, and a deadline is the only other bound. The budget is
+// meshOverdraw times the pixels of the area the mesh reaches, and never less
+// than minMeshWork; past it painting fails with [ErrTooLarge]. Anti-DoS, not
+// spec-mandated: ISO 32000-1, 8.7.4.5.5 to 8.7.4.5.8 put no bound on the
+// overlap of a mesh's primitives.
+//
+// A mesh that tiles its area visits each pixel about twice, the bounding box
+// of a triangle being twice its area, and a patch mesh's cells, four pixels
+// a side, about the same. 256 leaves room for meshes that overlap themselves
+// a hundred times; minMeshWork, 4 million pixels, lets a mesh over a small
+// area draw slivers freely.
+const (
+	meshOverdraw = 256
+	minMeshWork  = 1 << 22
+)
+
 // insideTolerance widens the barycentric inside test so that a pixel centre
 // on an edge two triangles share is never missed by both through rounding.
 const insideTolerance = 1e-9
@@ -361,6 +380,8 @@ type meshBuffer struct {
 	prim    []int32
 	a, b    []float32
 	visited int
+	// work is what is left of the pixels the mesh may visit (meshOverdraw).
+	work int64
 }
 
 // paintMesh rasterises a type 4 to 7 shading. Triangles are drawn in stream
@@ -382,7 +403,10 @@ func (p *painter) paintMesh(ctx context.Context) error {
 		}
 	}
 	w, h := area.x1-area.x0, area.y1-area.y0
-	buf := &meshBuffer{area: area, w: w, prim: make([]int32, w*h), a: make([]float32, w*h), b: make([]float32, w*h)}
+	buf := &meshBuffer{
+		area: area, w: w, prim: make([]int32, w*h), a: make([]float32, w*h), b: make([]float32, w*h),
+		work: max(meshOverdraw*int64(w)*int64(h), minMeshWork),
+	}
 	for i := range buf.prim {
 		buf.prim[i] = -1
 	}
@@ -457,6 +481,10 @@ func (mb *meshBuffer) triangle(ctx context.Context, d [3]geom.Point, attr [3][2]
 	box, _ := path.Bounds()
 	span := pixelSpan(box, mb.area)
 	for y := span.y0; y < span.y1; y++ {
+		mb.work -= int64(span.x1 - span.x0)
+		if mb.work < 0 {
+			return fmt.Errorf("%w: the mesh visits more than %d times the pixels it paints", ErrTooLarge, meshOverdraw)
+		}
 		mb.visited += span.x1 - span.x0
 		if mb.visited >= checkCtxPixels {
 			mb.visited = 0
