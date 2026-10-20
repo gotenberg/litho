@@ -7813,7 +7813,8 @@ filled as on `filledrules_ua1.pdf`), now reads as columns. Each column is one `P
 MCIDs, left then right, under the page title, now an `H1`.
 
 Page 2 is the control: a borderless table of five rows of three short cells,
-an item, a quantity and a price, still tagged `Table > TR > TD`.
+an item, a quantity and a price, still tagged `Table > TR > TD`, under its
+title, an `H1`.
 
 Before remediation both tools report the untagged pages and the non-embedded
 font, as on `readcolumns_ua1.pdf`: `6.2/1`, `7.1/3`, `7.1/11` and
@@ -7838,9 +7839,8 @@ auto-tagging read the grid as two columns of prose, each cell its own `P`,
 left column then right. A filled bar at most 2 points tall now rules a grid as
 a stroked line does, and a border drawn cell by cell is one rule where its
 pieces abut: the page reads as one `Table` of five `TR` of two `TD`. The title
-over it, an `H1` while the cells were paragraphs, now reads as a `P`, as the
-title over the table on page 2 of `prosecolumns_ua1.pdf` does: a residual of
-the heading pass, not of the ruling.
+over it stays an `H1`: the heading pass judges a title left alone beside a
+table against the size of the cells, not against its own.
 
 Page 2 is the control: two columns of six lines of prose on shared baselines,
 under a title that a full-width filled bar a point tall underlines more than a
