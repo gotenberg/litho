@@ -309,6 +309,10 @@ const spaceCharCode = 0x20
 //     by index ("g55", "G40") give code 32 a name no table maps. The rule
 //     reads those codes as the word spaces they separate; it reaches no
 //     other file of the five text corpora.
+//   - pdfjs outlines_se.pdf: Identity-H fonts whose /ToUnicode declares
+//     <00> to <FF> one byte long and <0100> to <FFFF> two, then maps <0029>
+//     and the other two-byte codes below <0100>. Split by that codespace,
+//     "Hello" read "⤀䘀䴀䴀P". No other file of the six text corpora moves.
 func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn bool) {
 	if font.SuppressExtraction {
 		// No route to Unicode exists for this font (see
@@ -318,6 +322,19 @@ func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn 
 		return "", consume, true, false
 	}
 	var ok bool
+	if font.ToUnicode != nil && font.identityEncoding && len(data) >= 2 {
+		// The font's encoding CMap splits the string into codes (ISO
+		// 32000-1, 9.7.6.2), two bytes each under Identity-H and
+		// Identity-V (9.7.5.2, Table 118), and /ToUnicode maps those
+		// codes (9.10.3). An entry for the two-byte code reads even when
+		// the CMap's own codespace ranges leave the code out, as PDF.js
+		// reads it (src/core/evaluator.js, readToUnicode, keys its map by
+		// the code's value): split by that codespace, the code would
+		// break into bytes that shift every code after it.
+		if s, found := font.ToUnicode.Mapping[string(data[:2])]; found {
+			return s, 2, false, false
+		}
+	}
 	if font.ToUnicode != nil {
 		n, char, ok = font.ToUnicode.Map(data)
 	}

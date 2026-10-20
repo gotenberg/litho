@@ -66,7 +66,7 @@ type Font struct {
 	encodingCIDs *encodingCIDs
 	// identityEncoding reports a Type 0 font whose /Encoding is Identity-H or
 	// Identity-V, whose codes are two bytes each (ISO 32000-1, 9.7.5.2,
-	// Table 118). See [Font.codeAligned].
+	// Table 118). See [Font.codeAligned] and [decodeNextCode].
 	identityEncoding bool
 
 	// widthStated marks the [Font.Widths] entries a simple font's /Widths
