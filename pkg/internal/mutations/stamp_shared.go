@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -238,7 +239,7 @@ func (d *stampDispatcher) forContents(ctx context.Context, base ast.PdfDict, ref
 		d.built[ref.ObjectNum] = got
 		return got, true
 	}
-	name := ast.PdfName(fmt.Sprintf("%s%d", stampDispatchPrefix, ref.ObjectNum))
+	name := d.freeDispatchName(ctx, ref.ObjectNum)
 	draw := d.alloc.Alloc(ast.NewStream(ast.PdfDict{}, []byte("/"+string(name)+" Do\n")))
 	got := stampDispatch{
 		contents: d.alloc.Alloc(appendPageContents(ctx, d.doc, d.alloc, base, d.brackets, draw)),
@@ -254,6 +255,29 @@ func (d *stampDispatcher) forContents(ctx context.Context, base ast.PdfDict, ref
 		d.rewrite(ctx, i+1, page, latestPageDict(d.alloc, page), got, d.emptyForm())
 	}
 	return got, true
+}
+
+// freeDispatchName returns the XObject name the dispatch array built from the
+// /Contents object contentsNum draws: [stampDispatchPrefix] and the object
+// number, with a counter after it when a page naming the object already maps
+// that name in its /XObject resources. The page's own content draws its
+// XObjects by name through those resources, so mapping a name it already uses
+// to the stamp form would replace what the page drew.
+func (d *stampDispatcher) freeDispatchName(ctx context.Context, contentsNum int) ast.PdfName {
+	var taken []ast.PdfDict
+	for _, i := range d.plan.members[contentsNum] {
+		page := d.pages[i]
+		xobjects, err := resolveDictAllocFirst(ctx, d.alloc, d.doc, d.pageResources(ctx, page, latestPageDict(d.alloc, page))["XObject"])
+		if err == nil && xobjects != nil {
+			taken = append(taken, xobjects)
+		}
+	}
+	base := fmt.Sprintf("%s%d", stampDispatchPrefix, contentsNum)
+	name := ast.PdfName(base)
+	for n := 2; slices.ContainsFunc(taken, func(x ast.PdfDict) bool { _, used := x[name]; return used }); n++ {
+		name = ast.PdfName(fmt.Sprintf("%s_%d", base, n))
+	}
+	return name
 }
 
 // stamp gives page the dispatch array and a form drawing the stamps it took

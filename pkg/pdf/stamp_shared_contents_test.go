@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -193,6 +194,52 @@ func TestStampImage_PerPageCallsKeepSharedContentsShared(t *testing.T) {
 			t.Errorf("stamped page %d holds %d images, want %d", i+1, len(metas), images[i]+1)
 		}
 	}
+}
+
+// TestStampText_DispatchNameAvoidsThePageXObjects pins that the XObject name
+// a shared /Contents array draws each page's stamps under is one no page naming
+// the array already maps. Both pages here share object 6, which draws their own
+// form as /StampShared6, the name the dispatch takes first: mapping it to the
+// stamp form would replace the form the shared content draws.
+func TestStampText_DispatchNameAvoidsThePageXObjects(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	content := "/StampShared6 Do"
+	form := "BT /F1 12 Tf 72 700 Td (ORIGINALFORM) Tj ET"
+	data := []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 5 0 R /Contents 6 0 R >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 5 0 R /Contents 6 0 R >>\nendobj\n" +
+		"5 0 obj\n<< /XObject << /StampShared6 7 0 R >> >>\nendobj\n" +
+		"6 0 obj\n<< /Length " + strconv.Itoa(len(content)) + " >>\nstream\n" + content + "\nendstream\nendobj\n" +
+		"7 0 obj\n<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 8 0 R >> >> /Length " + strconv.Itoa(len(form)) + " >>\nstream\n" + form + "\nendstream\nendobj\n" +
+		"8 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+		"trailer\n<< /Size 9 /Root 1 0 R >>\n%%EOF\n")
+	plain := plainTexts(t, data)
+	for i, text := range plain {
+		if !strings.Contains(text, "ORIGINALFORM") {
+			t.Fatalf("precondition: page %d reads %q, want the form's text", i+1, text)
+		}
+	}
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	w := NewWriter(r)
+	defer w.Close()
+	for i := range plain {
+		if err := w.StampText(TextStamp{Text: fmt.Sprintf("MARKQ%dZ", i+1), X: 20, Y: 20, FontSize: 12}, i+1); err != nil {
+			t.Fatalf("StampText page %d: %v", i+1, err)
+		}
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	assertStamps(t, out.Bytes(), plain, func(page int) []string { return []string{fmt.Sprintf("MARKQ%dZ", page)} })
 }
 
 // plainTexts returns the text of every page of data, artifacts left out.
