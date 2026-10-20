@@ -9,13 +9,13 @@
 // headers, footers and page numbers are marked as pagination artifacts
 // instead (see [Element.Pagination]).
 //
-// Scope. This package is the emitter: it takes an in-memory logical tree
-// ([Element]) whose leaves carry byte-range [ContentSpan] values into a page's
-// decoded content, and writes the structure objects, marked content, and
-// catalog wiring into a [writer.ObjAllocator]. Deriving the tree from layout
-// analysis (heading detection, reading order, tables) is a separate concern;
-// so is mapping content-stream operations to byte ranges. Callers supply spans
-// that fall on content-stream operation boundaries.
+// Scope. [Classify] derives the logical tree ([Element]) from the page
+// layout: headings, paragraphs, lists, tables and figures in reading order,
+// with running headers, footers and page numbers set apart. Its leaves carry
+// byte-range [ContentSpan] values into a page's decoded content, on
+// content-stream operation boundaries. [Emit] takes such a tree and writes the
+// structure objects, marked content, and catalog wiring into a
+// [writer.ObjAllocator]. [AutoTag] runs both.
 //
 // Concurrency. [Emit] mutates the allocator it is given and is not safe for
 // concurrent use. Remediation runs are serialized by the caller.

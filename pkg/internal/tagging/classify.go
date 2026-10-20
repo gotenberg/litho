@@ -202,8 +202,9 @@ func alreadyTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // BT…ET. Running headers, footers and page numbers are set apart first (see
 // [detectFurniture]), cut off the text object that also sets the body when
 // a producer sets both in one. Strongly grid-like runs of blocks become tables
-// ([carveTables]), unless they are columns of running text set line by line.
-// The rest are classified as headings, by font size relative
+// ([carveTables]), unless they are columns of running text set line by line
+// that no stroked or filled rule divides ([pageGeometry.proseColumns]). The
+// rest are classified as headings, by font size relative
 // to body text and numbered into a no-skip H1..Hn hierarchy, or paragraphs;
 // adjacent paragraph lines merge into one element by baseline proximity, so a
 // wrapped paragraph is a single element, and runs of marker-led paragraphs

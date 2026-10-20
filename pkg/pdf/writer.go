@@ -1602,10 +1602,11 @@ type AutoTagReport struct {
 }
 
 // AutoTag synthesizes a logical structure tree (a tagged PDF) for an untagged
-// document: it classifies each page's text into headings and paragraphs, marks
-// the content (tagging text, artifacting the rest), and wires the catalog
-// /StructTreeRoot and /MarkInfo. The change is applied when [Writer.WriteTo] is
-// called.
+// document: it classifies each page's content into headings, paragraphs,
+// lists, tables and figures in reading order, marks the content (tagging it,
+// and artifacting running headers, footers, page numbers and the rest), and
+// wires the catalog /StructTreeRoot and /MarkInfo. The change is applied when
+// [Writer.WriteTo] is called.
 //
 // AutoTag produces the structure and marked content only; it does not set the
 // document language, title, or the PDF/UA identifier, which other operations
