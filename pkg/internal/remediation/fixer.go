@@ -184,6 +184,9 @@ var registry = []fixer{
 	{name: "font-embed", safety: safetyContent, matches: matchFontEmbed, apply: fixFontEmbed},
 	{name: "images", safety: safetyContent, matches: matchImageIssues, apply: fixImageIssues},
 	{name: "lzw", safety: safetyContent, matches: matchLZW, apply: fixLZW},
+	// inline-filter reads each content stream through the allocator, so it
+	// rewrites the images whose /Interpolate the images fixer respelled.
+	{name: "inline-filter", safety: safetyContent, matches: matchInlineImageFilter, apply: fixInlineImageFilters},
 	{name: "signature-strip", safety: safetyContent, matches: matchSignatureStrip, apply: fixSignatureStrip},
 	{name: "embedded-compliance", safety: safetyContent, matches: matchEmbeddedCompliance, apply: fixEmbeddedCompliance},
 	{name: "stream-file-keys", safety: safetyContent, matches: matchStreamFileKeys, apply: fixStreamFileKeys},

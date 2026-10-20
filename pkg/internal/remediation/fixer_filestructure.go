@@ -29,7 +29,8 @@ func matchFileStructure(v compliance.Violation) bool {
 		// which re-serialisation does repair. ISO 19005-4 gives that number to
 		// the Inline Image /F key instead, and a content stream's body is
 		// carried across as bytes, so a BI...ID...EI sequence is beyond the
-		// rewrite. fixHexString documents that limit from measurement.
+		// rewrite. fixHexString documents that limit from measurement, and
+		// fixInlineImageFilters repairs the rule.
 		return false
 	case compliance.Rule_19005_4_6_1_6_1_t03:
 		// A 3D stream /Subtype shall be U3D or PRC. The rewrite copies

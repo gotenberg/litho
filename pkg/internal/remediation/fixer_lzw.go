@@ -35,16 +35,17 @@ import (
 // than being silenced.
 //
 // The inline-image spellings stay outside this matcher's reach on purpose:
-// they name the Inline Image /F key, and rewriting a BI...ID...EI sequence is
-// beyond what re-encoding stream objects can do. Every part has one, and they
+// they name the Inline Image /F key, and a BI...ID...EI sequence is rewritten
+// inside its content stream, which [matchInlineImageFilter] and
+// [fixInlineImageFilters] do. Every part has one, and they
 // collide with the stream-filter spellings rather than sitting clear of them:
 // ISO 19005-1 splits 6.1.10 by TEST NUMBER (t01 the stream filter, t02 the
 // inline image, carrying the SAME description word for word), parts 2 and 3
 // give 6.1.10 entirely to the inline image while their stream filter is
 // 6.1.7.2, and part 4 calls it 6.1.9.
 //
-// So matching the clause alone claimed three rules this fixer documents itself
-// as unable to repair, and matching Specification and Clause together would
+// So matching the clause alone claimed three rules this fixer does not
+// repair, and matching Specification and Clause together would
 // still claim ISO 19005-1 t02. A clause number is not a rule id: the identity
 // is Specification, Clause and TestNumber together, which is why this is an
 // explicit allow-list rather than a set of literals. Comparing descriptions
