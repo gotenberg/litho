@@ -103,3 +103,21 @@ func TestReconstructText_ZeroAdvanceGlyphThenNewLine(t *testing.T) {
 		t.Fatalf("ReconstructText = %q, want %q", got, want)
 	}
 }
+
+// TestReconstructText_ZeroAdvanceGlyphPastLineBreakTolerance pins that a
+// glyph after one with no advance that sits past [lineBreakTolerance] across
+// its baseline starts a line, even within a tenth of a large font's size: the
+// reference generator breaks a line at any item that far across it.
+func TestReconstructText_ZeroAdvanceGlyphPastLineBreakTolerance(t *testing.T) {
+	t.Parallel()
+
+	elements := []models.TextElement{
+		{Text: "A", X: 10, Y: 750, Width: 28, FontSize: 40},
+		{Text: "B", X: 10, Y: 700, Width: 0, FontSize: 40},
+		{Text: "C", X: 10, Y: 697, Width: 0, FontSize: 40},
+	}
+	got := ReconstructText(context.Background(), elements, nil)
+	if want := "A\nB\nC"; got != want {
+		t.Fatalf("ReconstructText = %q, want %q", got, want)
+	}
+}

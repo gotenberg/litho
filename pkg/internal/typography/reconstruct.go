@@ -811,8 +811,9 @@ func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 			// compares it with the last glyph that advanced
 			// (src/core/evaluator.js, buildTextContentItem, prevTransform).
 			// The reference generator measures the flag from the run, and
-			// joins el to it on its baseline (join-lines.mjs, joinLines).
-			return acrossBaseline(ref, el) > sameBaselineRatio*r.height(refIdx, ref)
+			// joins el to it on its baseline (join-lines.mjs, joinLines),
+			// unless el sits past lineBreakTolerance, where it breaks any line.
+			return acrossBaseline(ref, el) > min(lineBreakTolerance, sameBaselineRatio*r.height(refIdx, ref))
 		}
 		return true
 	}
