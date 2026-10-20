@@ -582,8 +582,9 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) error {
 // page numbered pageNum whose /Contents is contentsObj: a stream stays at its
 // number, and an array, direct or through a reference, comes to hold the
 // content in one stream (ISO 32000-1, 7.7.3.3). sharing tells which pages
-// name each stream, so a direct array sharing one with another page leaves it
-// alone; nil, or a page sharing does not list, rewrites the array in place.
+// name each stream, so a stream or array this page shares with another page,
+// alone or as an element, is left alone and the page gets a stream of its own;
+// nil, or a page sharing does not list, rewrites in place.
 //
 // # Corpus evidence
 //
@@ -604,6 +605,12 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) error {
 //     shared stream off one page and painted the repaired page on another.
 //     No other litho or verapdf corpus output changes, at any of the 13
 //     levels, default or aggressive.
+//   - litho formshare_ua1, imagereach_2b, noresources_4, sharedclose_ua1,
+//     sharedicc_2b, sharedtag_ua1: a page names through a reference a stream
+//     another page names too, and verapdf has none. No repair rewrites such a
+//     stream, so a stream of its own for the page changes no litho output at
+//     any of the 13 levels, default or aggressive, and no verapdf output at
+//     PDF/A-2b and PDF/UA-1.
 func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, sharing *contentSharing, contentsObj ast.PdfObject, newData []byte, pageNum int) error {
 	ref, isRef := contentsObj.(ast.PdfIndirectRef)
 	if !isRef {
@@ -624,6 +631,13 @@ func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *
 			return replaceContentArrayStreams(alloc, arr, newData, pageNum)
 		}
 		return fmt.Errorf("page %d /Contents is not an indirect reference or array", pageNum)
+	}
+
+	// A stream or array another page names too would carry this page's
+	// repair onto that page, which reads it under its own resources (ISO
+	// 32000-1, 7.8.3): the page gets a stream of its own instead.
+	if _, known := sharing.page(pageNum); known && sharing.sharedObject(ctx, alloc, doc, ref, pageNum) {
+		return sharing.writeOwnContentStream(ctx, alloc, doc, newData, pageNum)
 	}
 
 	// Decide stream-vs-array alloc-first: an earlier fixer (auto-tag,

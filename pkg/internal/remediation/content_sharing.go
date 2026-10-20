@@ -11,8 +11,8 @@ import (
 )
 
 // contentSharing tells [replaceContentStream] which pages name a content
-// stream in their /Contents, so the rewrite of one page's direct /Contents
-// array leaves a stream another page draws as that page reads it.
+// stream in their /Contents, so the rewrite of one page's /Contents leaves a
+// stream or array another page draws as that page reads it.
 //
 // ISO 32000-1, 7.7.3.3 lets /Contents be an array of streams, and nothing
 // keeps two pages from naming the same stream, or one array from naming a
@@ -22,14 +22,15 @@ import (
 // a shared first stream.
 //
 // entries holds the page tree entries in page order, which the page number a
-// rewrite is handed indexes. users is built on the first array rewrite from
+// rewrite is handed indexes. users is built on the first rewrite from
 // the pages' /Contents as they then stand, and is not rebuilt: a rewrite never
 // makes two pages share a stream, so what it reads stale is a stream no longer
 // shared, which only sends a page to the write that shares nothing. A
 // contentSharing serves one fixer's pass over the pages, on one goroutine.
 type contentSharing struct {
 	entries []annotPageEntry
-	// users maps the object number of each stream a page's /Contents names to
+	// users maps the object number of each stream or array a page's
+	// /Contents names to
 	// the indexes of the first two distinct pages naming it, or to the one
 	// index twice when the page names it twice: two entries tell it shared.
 	users map[int][]int
@@ -81,9 +82,26 @@ func (s *contentSharing) shared(ctx context.Context, alloc *writer.ObjAllocator,
 	return false
 }
 
+// sharedObject reports whether the object ref names, the /Contents of the page
+// numbered pageNum given through a reference, is named by another page's
+// /Contents: a stream another page names alone or in an array, or an array
+// another page names too. The rewrite at that number writes the content one
+// page repaired, under its own resources, onto every page that names it.
+func (s *contentSharing) sharedObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef, pageNum int) bool {
+	if s.users == nil {
+		s.build(ctx, alloc, doc)
+	}
+	for _, user := range s.users[ref.ObjectNum] {
+		if user != pageNum-1 {
+			return true
+		}
+	}
+	return false
+}
+
 // build records the users of every stream the pages' /Contents name, read
 // through the allocator: the elements of an array, direct or at an object
-// number, or the stream /Contents names alone.
+// number, the number of such an array, or the stream /Contents names alone.
 func (s *contentSharing) build(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) {
 	s.users = make(map[int][]int)
 	for i, pe := range s.entries {
@@ -101,6 +119,10 @@ func (s *contentSharing) build(ctx context.Context, alloc *writer.ObjAllocator, 
 		case ast.PdfIndirectRef:
 			if refs = liveArray(ctx, alloc, doc, v); refs == nil {
 				refs = ast.PdfArray{v}
+			} else {
+				// The array's own number, for [contentSharing.sharedObject]:
+				// its rewrite replaces the array every page naming it reads.
+				refs = append(ast.PdfArray{v}, refs...)
 			}
 		}
 		for _, elem := range refs {
