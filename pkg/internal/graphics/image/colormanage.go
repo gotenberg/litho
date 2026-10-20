@@ -161,15 +161,7 @@ func renderingIntent(ctx context.Context, doc *document.Document, dict ast.PdfDi
 		doc.Logger.Debug("resolving image /Intent", slog.Any("err", err))
 		return icc.RelativeColorimetric
 	}
-	switch name {
-	case "Perceptual":
-		return icc.Perceptual
-	case "Saturation":
-		return icc.Saturation
-	case "AbsoluteColorimetric":
-		return icc.AbsoluteColorimetric
-	}
-	return icc.RelativeColorimetric
+	return icc.ParseIntent(string(name))
 }
 
 // colorTransform returns the transform that takes samples of a colour space

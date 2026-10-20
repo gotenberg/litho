@@ -18,6 +18,26 @@ const (
 	AbsoluteColorimetric
 )
 
+// ParseIntent returns the rendering intent a PDF name selects (ISO 32000-1,
+// 8.6.5.8, Table 70). Per 8.6.5.8 an unrecognised name selects relative
+// colorimetric, which is also the graphics state's initial intent.
+func ParseIntent(name string) Intent {
+	switch name {
+	case "Perceptual":
+		return Perceptual
+	case "Saturation":
+		return Saturation
+	case "AbsoluteColorimetric":
+		return AbsoluteColorimetric
+	}
+	return RelativeColorimetric
+}
+
+// String returns the PDF name of the rendering intent (ISO 32000-1, Table 70).
+func (i Intent) String() string {
+	return [4]string{"Perceptual", "RelativeColorimetric", "Saturation", "AbsoluteColorimetric"}[i&3]
+}
+
 // d50 is the PCS illuminant (ICC.1:2010, 7.2.16).
 var d50 = [3]float64{0.9642, 1.0, 0.8249}
 
