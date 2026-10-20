@@ -323,6 +323,9 @@ func checkAppearanceForms(ctx context.Context, doc *document.Document, page ast.
 type appearance struct {
 	stream ast.PdfStream
 	key    ast.PdfName
+	// objNum is the object number of the stream, or 0 for a stream written
+	// directly rather than referenced.
+	objNum int
 }
 
 // annotationAppearances returns the appearance streams of the annotations of
@@ -362,7 +365,11 @@ func annotationAppearances(ctx context.Context, doc *document.Document, page ast
 				if err != nil {
 					continue
 				}
-				out = append(out, appearance{stream: stream, key: key})
+				objNum := 0
+				if ref, ok := streamObj.(ast.PdfIndirectRef); ok {
+					objNum = ref.ObjectNum
+				}
+				out = append(out, appearance{stream: stream, key: key, objNum: objNum})
 			}
 		}
 	}
