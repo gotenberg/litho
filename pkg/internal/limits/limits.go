@@ -2,8 +2,8 @@ package limits
 
 import "fmt"
 
-// Limits holds the five resource budgets of one document. A zero field stands
-// for its default, which [Limits.WithDefaults] fills in. Only these five are
+// Limits holds the six resource budgets of one document. A zero field stands
+// for its default, which [Limits.WithDefaults] fills in. Only these six are
 // configurable: the recursion guards that protect litho's own stack stay fixed
 // consts in the packages that recurse, since a Go stack overflow is fatal and
 // no recover can catch it.
@@ -33,6 +33,11 @@ type Limits struct {
 	// MaxCachedObjects bounds the entries of the object cache. See
 	// [DefaultMaxCachedObjects].
 	MaxCachedObjects int
+
+	// MaxRenderPixels bounds Width x Height of one rendered page and of every
+	// raster the renderer allocates at its size. See
+	// [DefaultMaxRenderPixels].
+	MaxRenderPixels int64
 }
 
 // DefaultMaxStreamBytes caps the decoded output of one stream at 256 MiB. It is
@@ -150,6 +155,19 @@ const DefaultMaxFormDepth = 10
 //   - pdfjs bug1978317.pdf: the one file past the cap, 65,563 objects.
 const DefaultMaxCachedObjects = 50_000
 
+// DefaultMaxRenderPixels caps the pixels of one rendered page at 50 million.
+// It is an anti-DoS guard, not spec-mandated: the page size comes from the
+// file (ISO 32000-1, 7.7.3.3, Table 30 lets a box span 14,400 units and
+// /UserUnit scale it further) and the resolution from the caller, and the
+// renderer holds 16 bytes a pixel for the page and 4 for each clip it keeps,
+// so an unchecked product is gigabytes.
+//
+// It bounds the page and every raster the renderer allocates at its size:
+// clip masks and the coverage of a pattern fill. 50 million pixels holds a US
+// Letter or A4 page at 600 dpi, 33.7 and 34.8 million, for 800 MB of page
+// raster.
+const DefaultMaxRenderPixels = 50_000_000
+
 // Ceilings bound what a caller may configure. Past its ceiling a budget stops
 // being a guard: one operation would hold more memory than a host has, or the
 // arithmetic built on the budget would leave the int64 range.
@@ -177,6 +195,11 @@ const (
 	// file holds under ISO 32000-1, Annex C, Table C.1, so a larger cache
 	// never fills.
 	MaxCachedObjectsCeiling = 8_388_607
+
+	// MaxRenderPixelsCeiling is 2^30 pixels, the image ceiling. The page
+	// raster then holds 16 GiB, past what one render can reasonably ask of a
+	// host.
+	MaxRenderPixelsCeiling = 1 << 30
 )
 
 // Default returns every budget at its default.
@@ -187,6 +210,7 @@ func Default() Limits {
 		MaxEmbeddedFileBytes: DefaultMaxEmbeddedFileBytes,
 		MaxFormDepth:         DefaultMaxFormDepth,
 		MaxCachedObjects:     DefaultMaxCachedObjects,
+		MaxRenderPixels:      DefaultMaxRenderPixels,
 	}
 }
 
@@ -208,6 +232,9 @@ func (l Limits) WithDefaults() Limits {
 	if l.MaxCachedObjects == 0 {
 		l.MaxCachedObjects = d.MaxCachedObjects
 	}
+	if l.MaxRenderPixels == 0 {
+		l.MaxRenderPixels = d.MaxRenderPixels
+	}
 	return l
 }
 
@@ -224,6 +251,7 @@ func (l Limits) Validate() error {
 		{"MaxEmbeddedFileBytes", l.MaxEmbeddedFileBytes, MaxEmbeddedFileBytesCeiling},
 		{"MaxFormDepth", int64(l.MaxFormDepth), MaxFormDepthCeiling},
 		{"MaxCachedObjects", int64(l.MaxCachedObjects), MaxCachedObjectsCeiling},
+		{"MaxRenderPixels", l.MaxRenderPixels, MaxRenderPixelsCeiling},
 	} {
 		if b.value < 0 {
 			return fmt.Errorf("%w: %s is %d, below zero", ErrInvalid, b.name, b.value)
