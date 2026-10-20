@@ -261,6 +261,7 @@ one deliberately rather than diffing it against a fresh build.
 | `pdfxnoprofile_2b.pdf` | PDF/A-2b     | A PDF/A intent naming no profile beside a PDF/X CMYK intent      |
 | `qshyphen_2b.pdf`      | PDF/A-2b     | Soft hyphens shown inside `q`...`Q` within a text object         |
 | `sharedarray_2b.pdf`   | PDF/A-2b     | Direct /Contents arrays sharing a stream, beside an invalid `ri` |
+| `sharedstream_2b.pdf`  | PDF/A-2b     | One stream two pages read through a simple and a Type0 font      |
 
 ### Must-not-fire controls
 
@@ -710,6 +711,7 @@ are covered under [Known divergences](#known-divergences).
 | `shadedefault_2b.pdf`  | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `sharedclose_ua1.pdf`  | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 2   | 2    | 3    | 1    | 4    |
 | `sharedarray_2b.pdf`   | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 3   | 3    | 4    | 5    | 6    |
+| `sharedstream_2b.pdf`  | 5    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 6   | 6    | 7    | 9    | 9    |
 | `sharedicc_2b.pdf`     | 4\*  | 2\*  | 4\*  | 2\*  | 2\*  | 4\*  | 2\*  | 2\*  | 3\* | 3\*  | 4\*  | 5    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sharedtag_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 6    | 7    |
@@ -3871,6 +3873,33 @@ as before. veraPDF passes the aggressive output either way at PDF/A-1b and
 PDF/A-2b, since the lost or doubled square breaks no rule: only the page
 content tells the two writes apart. Both tools agree on every cell, rule by
 rule.
+
+### `sharedstream_2b.pdf`
+
+ISO 32000-1, 7.7.3.3 lets two pages name the same content stream, and each page
+reads it through its own `/Resources` (7.8.3). Both pages name one stream as
+their whole `/Contents`, `BT /F1 24 Tf 50 700 Td (A\x01) Tj ET`:
+
+| Page | `/F1`                                                   | Reads `(A\x01)` as                   | Answers at PDF/A-2b          |
+| ---- | ------------------------------------------------------- | ------------------------------------ | ---------------------------- |
+| 1    | a simple TrueType under `WinAnsiEncoding`               | `A`, then 0x01, which names no glyph | `6.2.11.4.1/2`, `6.2.11.8/1` |
+| 2    | a Type0 font under `Identity-H`, a `CIDToGIDMap` stream | one code, CID 0x4101, the glyph `A`  | nothing                      |
+
+Aggressive remediation strips the control byte page 1 shows (ISO 19005-2,
+6.2.11.8). Written in place, the rewrite took the byte off page 2 too, which
+then showed a lone `A`, half a two-byte code: litho reported `.notdef` there,
+and veraPDF, which judges a shared stream once through page 1's resources, did
+not. No corpus file has a page naming through a reference a stream another page
+names, and a repair rewriting it. Both fonts embed the TrueType program of
+`ttcmap_2b.pdf`; the Type0 font carries a ToUnicode CMap mapping its code to
+U+0041. Both pages also draw `6.2.4.3/4`, litho once per page and veraPDF once.
+
+Measured on veraPDF 1.30.2, litho and veraPDF agree on the rule set at all
+thirteen levels on the input and on every output, default and aggressive. Before
+the fix the aggressive outputs of the eleven levels where the strip runs, every
+level but PDF/A-1a and 1b, failed `.notdef` and glyph rules on page 2 in litho
+alone, and the second page's stream read `[(A) -600] TJ`; now page 1 gets a
+stream of its own and page 2 keeps `(A\x01)`.
 
 ### `csnames_2b.pdf`
 
