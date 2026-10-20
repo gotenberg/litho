@@ -230,33 +230,29 @@ func TestWriter_Redact_ClearsTheMetadataCopy(t *testing.T) {
 	}
 }
 
-// redactableWithCatalogPieceInfoPDF puts a second copy of the redacted word in
-// the CATALOG's /PieceInfo, where nothing the redaction composes will reach it.
+// redactableWithCollectionPDF puts a second copy of the redacted word in the
+// catalog's portfolio /Collection, where nothing the redaction composes will
+// reach it.
 //
-// That is a real leak vector, not a contrived one: token_scan.go names
-// /PieceInfo among the structures that "survive a page edit, and several
-// survive a full rewrite as well", and producers really do leave original text
-// in private application data.
-//
-// It survives on purpose. ClearMetadata only empties /Info and deletes the
-// catalog's /Metadata; strip_page_copies drops /Thumb and /PieceInfo from the
-// PAGE, and deliberately leaves the CATALOG's alone because ISO 19005-4, 6.1.3
-// forbids a trailer /Info unless the catalog carries /PieceInfo. Meanwhile
-// ScanOutputForTokens walks outward from the catalog, so it finds the copy.
+// It survives on purpose. A collection's schema and initial document name are
+// user-visible portfolio structure (ISO 32000-1, 12.3.5), not a copy the
+// redaction may delete, so the redaction keeps it and the scan, which walks
+// outward from the catalog, finds the copy. The catalog's /PieceInfo used to
+// serve here, until redaction began clearing its private data.
 //
 // The word appears TWICE: once drawn on the page, once here.
-func redactableWithCatalogPieceInfoPDF() []byte {
+func redactableWithCollectionPDF() []byte {
 	body := "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET"
 
 	return []byte("%PDF-1.7\n" +
-		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /PieceInfo 9 0 R >>\nendobj\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /Collection 9 0 R >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
 		"5 0 obj\n<< /Font << /F1 4 0 R >> >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
 		"/Resources 5 0 R /Contents 6 0 R >>\nendobj\n" +
 		"6 0 obj\n<< /Length " + strconv.Itoa(len(body)) + " >>\nstream\n" + body + "\nendstream\nendobj\n" +
-		"9 0 obj\n<< /SomeApp << /LastModified (D:20240101000000Z) /Private (SECRET) >> >>\nendobj\n" +
+		"9 0 obj\n<< /Type /Collection /D (SECRET) >>\nendobj\n" +
 		"trailer\n<< /Size 10 /Root 1 0 R >>\n%%EOF\n")
 }
 
@@ -272,14 +268,14 @@ func redactableWithCatalogPieceInfoPDF() []byte {
 //
 // The occurrence COUNT is what makes this precise. Asserting only that "SECRET"
 // is still present would pass if the page had been cleared and just the
-// /PieceInfo copy remained. Two copies going in and two coming out is what
+// /Collection copy remained. Two copies going in and two coming out is what
 // shows the page edit was rolled back rather than partially applied.
 func TestWriter_Redact_FailsClosedWhenACopySurvives(t *testing.T) {
 	ctx := context.Background()
-	data := redactableWithCatalogPieceInfoPDF()
+	data := redactableWithCollectionPDF()
 
 	if n := bytes.Count(data, []byte("SECRET")); n != 2 {
-		t.Fatalf("fixture holds %d copies of the word, want 2 (page + /PieceInfo)", n)
+		t.Fatalf("fixture holds %d copies of the word, want 2 (page + /Collection)", n)
 	}
 
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))

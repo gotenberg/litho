@@ -9,7 +9,7 @@ import (
 
 // TestWriter_Redact_IgnoresACopyTooShortToIdentify pins that a removed run
 // too short to name anything is not looked for. The page loses a lone "A",
-// and the catalog's private data spells an "A" of its own: that is not a copy
+// and the catalog's portfolio spells an "A" of its own: that is not a copy
 // of what was removed, and refusing over it refuses every real document, since
 // a single character survives in nearly all of them.
 func TestWriter_Redact_IgnoresACopyTooShortToIdentify(t *testing.T) {
@@ -17,8 +17,8 @@ func TestWriter_Redact_IgnoresACopyTooShortToIdentify(t *testing.T) {
 	ctx := context.Background()
 
 	src := plantedPDF("BT /F1 12 Tf 100 700 Td (A) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET", plant{
-		catalog: "/PieceInfo 12 0 R",
-		objects: "12 0 obj\n<< /SomeApp << /Private (A note) >> >>\nendobj\n",
+		catalog: "/Collection 12 0 R",
+		objects: "12 0 obj\n<< /Type /Collection /D (A note) >>\nendobj\n",
 	})
 	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
 	if err != nil {

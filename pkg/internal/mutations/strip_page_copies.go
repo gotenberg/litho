@@ -18,6 +18,12 @@ import (
 //     is safe.
 //   - /PieceInfo is private application data (ISO 32000-1, 14.5): InDesign and
 //     Illustrator blobs that can hold the original text. It is not rendered.
+//   - /Metadata is the page's own XMP stream (ISO 32000-1, 14.3.2, Table 30).
+//     It describes the page as it was, and XMP carries a page thumbnail as
+//     base64 JPEG (xmpGImg:image in the xmp:Thumbnails property, ISO 16684-1
+//     schema), a copy of the removed content no text comparison recognises.
+//     Nothing renders it, and the document-level metadata goes as well (see
+//     [ClearMetadata]).
 //
 // The CATALOG's /PieceInfo is deliberately not in this list. ISO 19005-4,
 // 6.1.3 forbids /Info in the trailer unless the catalog carries /PieceInfo, a
@@ -25,7 +31,7 @@ import (
 // PDF/A-4 file non-conforming whenever /Info stayed. Clearing that one means
 // clearing /Info with it, which is a document-wide decision and not this
 // page-scoped edit's to make.
-var pageCopyKeys = []ast.PdfName{"Thumb", "PieceInfo"}
+var pageCopyKeys = []ast.PdfName{"Thumb", "PieceInfo", "Metadata"}
 
 // stripPageCopies drops the page entries that keep a copy of the content a
 // redaction removed, and reports which it dropped.

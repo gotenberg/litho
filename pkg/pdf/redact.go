@@ -100,6 +100,13 @@ type RedactReport struct {
 	ScrubbedAnnotations  []int
 	ScrubbedFormFields   []int
 	ScrubbedOutlineItems []int
+	// RemovedScripts counts the JavaScript the redaction removed: each script
+	// action cut out of an action entry, and the document-level
+	// /Names/JavaScript tree as one.
+	RemovedScripts int
+	// ScrubbedPrivateData names the applications whose private data the
+	// redaction removed from the catalog's /PieceInfo, sorted.
+	ScrubbedPrivateData []string
 	// SurvivingCopies names every place a removed string was still found by
 	// the verification scan. Non-empty only alongside
 	// [ErrRedactionIncomplete].
@@ -161,6 +168,37 @@ type RedactReport struct {
 // metadata or any other object, still refuses. [WithStrictRedaction] refuses
 // copies on other pages too.
 //
+// The document holds copies outside its pages too. Each home is cleared,
+// kept for the scan to judge, or left to the rewrite, as follows:
+//
+//   - Annotation values, form field values, outline titles and the structure
+//     tree's text are scrubbed of the removed strings. Document metadata goes:
+//     /Info is emptied and the catalog's XMP removed.
+//   - The redacted page's /Thumb, /PieceInfo and /Metadata go: a thumbnail, an
+//     application's copy of the page, and an XMP packet that can carry a page
+//     thumbnail as base64 (ISO 32000-1, 12.3.4, 14.5 and 14.3.2). An image
+//     blanked in place is rewritten without its /Alternates, /Metadata and
+//     other entries, which picture or describe the samples it had.
+//   - JavaScript goes, wherever an action entry or the /Names/JavaScript tree
+//     holds it (ISO 32000-1, 12.6.4.16): a script builds a word at run time
+//     from pieces no comparison of bytes finds. Form calculations and custom
+//     navigation go with it; see [RedactReport.RemovedScripts].
+//   - The private data of the catalog's /PieceInfo goes, its dictionaries and
+//     their /LastModified staying (ISO 32000-1, 14.5): an application's own
+//     format, an embedded search index among them, that the scan cannot read.
+//     See [RedactReport.ScrubbedPrivateData].
+//   - Signatures leave the form, /Perms and the /DSS, their appearances drawn
+//     into the pages, as every full rewrite does (see
+//     [Writer.DroppedSignatures]), so a copy in a signature dictionary or a
+//     certificate never reaches the output.
+//   - Embedded files and their /Collection, named destinations, and every
+//     other object stay, and the scan compares them: a copy there refuses.
+//     Removing an attachment or renaming a destination would delete structure
+//     the caller can see, and an attachment holding no copy is kept. The scan
+//     reads text spelled in UTF-16 either way round, and into an attached PDF,
+//     zip or gzip; a container it cannot open, encrypted or nested past its
+//     bound, refuses as an unreadable object does.
+//
 // Regions on several pages are applied together. Passing none is a no-op.
 //
 // Everything outside the regions stays where it was. Text after a removed run
@@ -184,7 +222,9 @@ type RedactReport struct {
 // What this does NOT do: re-subset embedded fonts whose glyphs now describe
 // only removed text (see [RedactReport.FontsFullyRemovedOnPage]), and it cannot
 // remove content a form XObject draws or an inline image's samples, which it
-// refuses instead.
+// refuses instead. Nor does it find a copy no comparison of text recognises:
+// text an image or a thumbnail inside an attachment draws, or an attachment in
+// a format whose compression the scan does not know.
 func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...RedactOption) (_ *RedactReport, err error) {
 	defer recoverToError(w.logger(), "Writer.Redact", &err)
 
@@ -302,6 +342,10 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...Red
 	if metaErr := mutations.ClearMetadata(ctx, alloc, doc); metaErr != nil {
 		restoreTrailer()
 		return nil, fmt.Errorf("%w: clearing metadata: %w", ErrRedactionRefused, metaErr)
+	}
+	if vecErr := clearOpaqueCopies(ctx, alloc, doc, report); vecErr != nil {
+		restoreTrailer()
+		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, vecErr)
 	}
 
 	// The scrubs and the scan look for the removed runs that can identify

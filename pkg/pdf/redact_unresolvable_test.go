@@ -194,8 +194,8 @@ func TestWriter_Redact_RefusesCopiesNoDecodedValueSpells(t *testing.T) {
 		t.Fatal(err)
 	}
 	piece := func(stream string) []byte {
-		return unresolvableDoc(map[int]string{7: "<< /App << /Private 8 0 R >> >>", 8: stream},
-			"/PieceInfo 7 0 R", "", "", nil, "")
+		return unresolvableDoc(map[int]string{7: "<< /Type /Filespec /F (a) /EF << /F 8 0 R >> >>", 8: stream},
+			"/Names << /EmbeddedFiles << /Names [(a) 7 0 R] >> >>", "", "", nil, "")
 	}
 	cases := map[string][]byte{
 		"flate tail":    piece(rawStream("/Filter /FlateDecode", append(flate.Bytes(), []byte("SECRET")...))),

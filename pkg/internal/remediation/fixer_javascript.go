@@ -45,6 +45,19 @@ func matchJavaScript(v compliance.Violation) bool {
 }
 
 func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
+	// The /Names/JavaScript tree's presence is the violation only where the
+	// profile forbids JavaScript actions, which
+	// compliance.checkJavaScriptNameTree mirrors: every PDF/A-4 conformance
+	// permits them.
+	return stripActions(ctx, alloc, doc, newActionSplice(alloc, doc, profile), stripsActionType("JavaScript", profile))
+}
+
+// stripActions cuts the actions s forbids out of every action entry of the
+// document: the catalog's /AA and /OpenAction, each form field's /AA, each
+// page's /AA, each annotation's /A and /AA, and each outline item's /A. With
+// dropNamesJS it also removes the catalog's /Names/JavaScript tree. It returns
+// the fix descriptions.
+func stripActions(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, s *actionSplice, dropNamesJS bool) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
@@ -56,7 +69,6 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	var fixes []string
 	catalogChanged := false
-	s := newActionSplice(alloc, doc, profile)
 
 	// Remove forbidden entries from catalog /AA.
 	if aaObj, ok := catalogDict["AA"]; ok {
@@ -87,17 +99,13 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		}
 	}
 
-	// Remove /Names/JavaScript from catalog. The tree's presence is the
-	// violation only where the profile forbids JavaScript actions, which
-	// compliance.checkJavaScriptNameTree mirrors: every PDF/A-4 conformance
-	// permits them.
-	if namesObj, ok := catalogDict["Names"]; ok && stripsActionType("JavaScript", profile) {
+	if namesObj, ok := catalogDict["Names"]; ok && dropNamesJS {
 		if newCatalog, removed := removeNamesJavaScript(ctx, alloc, doc, catalogDict, namesObj); removed {
 			if newCatalog != nil {
 				catalogDict = newCatalog
 				catalogChanged = true
 			}
-			fixes = append(fixes, "removed /Names/JavaScript from catalog")
+			fixes = append(fixes, namesJavaScriptRemoved)
 		}
 	}
 
@@ -179,9 +187,11 @@ const maxActionChainDepth = 200
 //     but no /Next chain remediate to the same residual rules and fix
 //     descriptions as before the splice.
 type actionSplice struct {
-	alloc   *writer.ObjAllocator
-	doc     *document.Document
-	profile string
+	alloc *writer.ObjAllocator
+	doc   *document.Document
+	// forbids reports whether an action, read through the allocator, is cut.
+	// Only the action itself is judged: the splice walks its /Next.
+	forbids func(ctx context.Context, action ast.PdfDict) bool
 
 	// done holds, per indirect action spliced, the actions that replace it
 	// in a parent's sequence: itself, or its successors when it is cut.
@@ -207,12 +217,21 @@ type splicedAction struct {
 	cut     bool
 }
 
-// newActionSplice returns an [actionSplice] for one run of the fixer.
+// newActionSplice returns an [actionSplice] for one run of the fixer, cutting
+// the actions profile forbids (see [isForbiddenActionDict]).
 func newActionSplice(alloc *writer.ObjAllocator, doc *document.Document, profile string) *actionSplice {
+	return newActionSpliceFunc(alloc, doc, func(ctx context.Context, action ast.PdfDict) bool {
+		return isForbiddenActionDict(ctx, doc, action, profile)
+	})
+}
+
+// newActionSpliceFunc returns an [actionSplice] cutting the actions forbids
+// reports.
+func newActionSpliceFunc(alloc *writer.ObjAllocator, doc *document.Document, forbids func(context.Context, ast.PdfDict) bool) *actionSplice {
 	return &actionSplice{
 		alloc:   alloc,
 		doc:     doc,
-		profile: profile,
+		forbids: forbids,
 		done:    make(map[int]splicedAction),
 		active:  make(map[int]bool),
 		arrays:  make(map[int][]ast.PdfObject),
@@ -297,7 +316,7 @@ func (s *actionSplice) splice(ctx context.Context, obj ast.PdfObject, depth int)
 		return unchanged
 	}
 
-	forbidden := isForbiddenActionDict(ctx, s.doc, action, s.profile)
+	forbidden := s.forbids(ctx, action)
 	if isRef {
 		s.active[ref.ObjectNum] = forbidden
 	}
