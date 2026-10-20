@@ -723,6 +723,13 @@ type ExtractionConfig struct {
 //
 //   - pdfjs ShowText-ShadingPattern.pdf: repeats "Helvetica" many points past
 //     the right margin, and that runaway tail must stay clipped.
+//   - pdfjs issue14824.pdf: "Photoshop" set across the right edge of an A4
+//     page read "Photos", its "s" 0.4 points past the edge let back in as
+//     a hairline overshoot that continued the word. govdocs
+//     thread_200_200620.pdf read a stray "e" the same way. Dropping the
+//     overshoot rule makes words match PDF.js on these 2 files and on none
+//     fewer; pdfjs bug920426.pdf, whose "Checkliste Service" the rule was
+//     written for, keeps its words, its "e" 24 points inside the edge.
 func extractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, record extractionRecord) (extraction, error) {
 	// Collect annotation appearance object numbers to skip them during text
 	// extraction. Annotation appearances are visual overlays, not page content.
@@ -764,7 +771,11 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 	// Flag elements that fall outside the CropBox (the visible region).
 	// The check uses the glyph's start point, matching PDF viewers
 	// that reject a glyph when its text-matrix position sits past the
-	// right or bottom edge of the page.
+	// right or bottom edge of the page. A glyph past the right edge stays
+	// out even when it continues a word inside: upright text advances
+	// rightward from its origin, so the whole glyph paints outside the
+	// visible region (ISO 32000-1, 14.11.2), and PDF.js drops it on the
+	// same test (src/core/evaluator.js, compareWithLastPosition).
 	//
 	// When a page declares a /CropBox that lies entirely outside the
 	// /MediaBox, the stated clip is nonsensical and viewers fall back to
@@ -786,40 +797,6 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 				elements[i].Y < minY || elements[i].Y > maxY {
 				elements[i].IsClipped = true
 			}
-		}
-		// Un-clip a single glyph that continues a non-clipped word past
-		// the right edge by a hairline margin. Viewers render a trailing
-		// letter whose origin has drifted a few points past maxX when
-		// the glyph itself sits on the baseline of its in-bounds
-		// neighbour; without this relaxation "Checkliste Service"
-		// becomes "Checkliste Servic". The chain is capped at one glyph
-		// per non-clipped run and at a small absolute overshoot (a few
-		// points), so a long runaway tail past the margin cannot
-		// propagate back in and stays clipped.
-		const edgeOvershoot = 3.0
-		originallyClipped := make([]bool, len(elements))
-		for i := range elements {
-			originallyClipped[i] = elements[i].IsClipped
-		}
-		for i := 1; i < len(elements); i++ {
-			if !originallyClipped[i] {
-				continue
-			}
-			if originallyClipped[i-1] {
-				continue
-			}
-			prev := &elements[i-1]
-			if math.Abs(elements[i].Y-prev.Y) > 0.5 {
-				continue
-			}
-			expectedX := prev.X + prev.Width
-			if math.Abs(elements[i].X-expectedX) > 0.5 {
-				continue
-			}
-			if elements[i].X > maxX+edgeOvershoot {
-				continue
-			}
-			elements[i].IsClipped = false
 		}
 	}
 
