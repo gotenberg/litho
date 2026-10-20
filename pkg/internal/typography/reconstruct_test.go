@@ -374,3 +374,18 @@ func TestReconstructText_IdeographicSpace(t *testing.T) {
 		t.Errorf("got %q, want %q", got, "目 录")
 	}
 }
+
+// TestReconstructText_GapAtTrackingBoundIsTracking pins that a gap the
+// content stream sets exactly at 0.102 em reads as tracking whichever way
+// float rounding lands it: govdocs thread_300_300344.pdf sets "ment" by a Td
+// that far past the "e" of "involve", and read "involve ment".
+func TestReconstructText_GapAtTrackingBoundIsTracking(t *testing.T) {
+	t.Parallel()
+	in := []models.TextElement{
+		{Text: "e", X: 276.68400000000008, Y: 609.48, Width: 6.6720000000000006, FontSize: 12},
+		{Text: "m", X: 284.5800000000001, Y: 609.48, Width: 9.996, FontSize: 12},
+	}
+	if got := ReconstructText(context.Background(), in, nil); got != "em" {
+		t.Errorf("got %q, want %q", got, "em")
+	}
+}

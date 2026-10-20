@@ -881,7 +881,7 @@ func (r *runTracker) breaksItem(i int, el models.TextElement) bool {
 	if r.endsLine(before, i, prev, el, gap, size) {
 		return acrossLine(start, el) > min(lineBreakTolerance, sameBaselineRatio*r.height(fromIdx, from))
 	}
-	if gap > trackingSpaceFactor*size {
+	if exceedsBound(gap, trackingSpaceFactor*size) {
 		return acrossLine(start, prev) > lineBreakTolerance || acrossLine(prev, el) > lineBreakTolerance
 	}
 	return acrossLine(start, el) > lineBreakTolerance
@@ -924,7 +924,7 @@ func spacesItem(r *runTracker, before, i int, el models.TextElement) bool {
 	}
 	size := math.Abs(prev.FontSize)
 	gap := computeLineGap(prev, el)
-	return !r.endsLine(before, i, prev, el, gap, size) && gap > trackingSpaceFactor*size
+	return !r.endsLine(before, i, prev, el, gap, size) && exceedsBound(gap, trackingSpaceFactor*size)
 }
 
 // sameBaselineRatio is how far across the baseline, as a fraction of the
@@ -1320,7 +1320,7 @@ func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64, spac
 	// carries; the gap that counts as none is a fraction of its magnitude.
 	size = math.Abs(size)
 	if spaces >= 2 {
-		return gap <= trackingSpaceFactor*size
+		return !exceedsBound(gap, trackingSpaceFactor*size)
 	}
 	if math.Abs(gap) < exactAbutment {
 		return false
@@ -1698,9 +1698,47 @@ func wordSpaceThreshold(elems []models.TextElement, fonts []runFont, p, i int, l
 	return trackingSpaceFactor * prevSize * math.Abs(el.FontSize) / size
 }
 
+// gapTieTolerance is the margin, in user-space units, by which a gap must
+// pass the [trackingSpaceFactor] bound to count as past it. It absorbs float
+// rounding only: litho and PDF.js reach the same gap by different sums of the
+// same operands, so a gap the content stream sets exactly at the bound comes
+// out a few ulps either side of it, and read as a space or not by chance.
+// PDF.js's rule holds a gap at the bound to be tracking (src/core/evaluator.js,
+// compareWithLastPosition: advanceX <= trackingSpaceMin), so a tie reads as
+// no word space. ISO 32000-1, 14.8.2.5 leaves word breaks to the consumer, so
+// the bound is the reference's heuristic, not a spec value. The
+// [notASpaceFactor] bound keeps its plain comparison: a tie there only decides
+// whether a literal space glyph survives before leader dots, and settling it
+// the same way drops spaces PDF.js keeps without changing a word.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300344.pdf page 11: "involve" then "ment" set by a
+//     Td 0.102 em past the end of the "e" read "involve ment".
+//   - govdocs thread_200_200293.pdf page 13: "Ixtoc /Burmah" read
+//     "Ixtoc / Burmah" across a gap of exactly 0.102 em.
+//   - govdocs thread_400_400745.pdf page 1, pdfjs issue9552.pdf page 5: PDF.js
+//     reads a space at an exact 0.102 em tie ("JURISDICTIO N", "ex ami ned")
+//     where litho reads the word the page shows.
+//   - All corpora: words match PDF.js on 2 more files (govdocs
+//     thread_200_200293.pdf, thread_300_300344.pdf) and on 2 fewer, both
+//     PDF.js splitting a word at a tie (govdocs thread_400_400745.pdf, pdfjs
+//     issue9552.pdf); pages that differ fall on 3 more files and rise on
+//     none; facturx, litho, pdf20 and pdfcpu do not move.
+//   - govdocs thread_400_400905.pdf pages 11, 13 and 15: leader dots set 0.03
+//     em after a word and its space glyph keep the space in PDF.js; the tie
+//     margin on that bound dropped it on 2 more pages.
+const gapTieTolerance = 1e-9
+
+// exceedsBound reports whether gap passes bound by more than
+// [gapTieTolerance].
+func exceedsBound(gap, bound float64) bool {
+	return gap > bound+gapTieTolerance
+}
+
 // needsSpace decides whether to insert a space between two consecutive glyphs.
 func needsSpace(gap, threshold float64) bool {
-	return gap > threshold
+	return exceedsBound(gap, threshold)
 }
 
 // chunkKerningLimit returns the maximum gap that still counts as
@@ -1720,7 +1758,7 @@ func chunkKerningLimit(prev models.TextElement) float64 {
 // kerning floor can produce a space; across chunks the threshold
 // alone decides, matching the behaviour before chunk tracking landed.
 func shouldInsertSpace(prev models.TextElement, gap, spaceThreshold float64, sameChunk bool) bool {
-	if sameChunk && gap <= chunkKerningLimit(prev) {
+	if sameChunk && !exceedsBound(gap, chunkKerningLimit(prev)) {
 		return false
 	}
 	return needsSpace(gap, spaceThreshold)
