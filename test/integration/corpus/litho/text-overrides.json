@@ -127,6 +127,13 @@
       "reason": "Code 01 has no glyph name under /WinAnsiEncoding (ISO 32000-1, Annex D.2) and adds no character (9.10.2). The -3000 TJ adjustment after it moves BA 36 points right, a word gap (9.4.3), while the second line's shows abut. PDF.js reports U+0001 twice."
     },
     {
+      "fixture": "sharedstream_2b",
+      "page": 1,
+      "pdfjs": "A\u0001",
+      "expected": "A",
+      "reason": "F1 on page 1 is a simple TrueType font under WinAnsiEncoding, which gives code 01 no character (ISO 32000-1, Annex D.2), and the font has no /ToUnicode, so the code has no Unicode value (9.10.2). PDF.js reports the code itself, U+0001."
+    },
+    {
       "fixture": "symbolname_2u",
       "page": 1,
       "pdfjs": "AB",
