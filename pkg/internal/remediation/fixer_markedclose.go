@@ -56,6 +56,11 @@ import (
 //     10 MB of content inside a /Layer sequence, but every sequence closes
 //     in the whole reading, so the fixer leaves it, and a /Layer sequence
 //     would tag nothing anyway.
+//   - litho sharedclose_ua1.pdf: a closed array for each page of two sharing
+//     one /Contents stream made veraPDF parse the stream once per array, so
+//     the marked form it draws gained a second reference and remediation at
+//     PDF/UA-1 left ISO 14289-1, 7.20 t2 on both tools; one shared closed
+//     array fully fixes it.
 func fixMarkedContentClose(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -66,6 +71,8 @@ func fixMarkedContentClose(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		return nil, nil //nolint:nilerr // No page tree holds no content to close; validation reports the broken document.
 	}
 
+	namers := contentsNamers(ctx, alloc, doc, pages)
+	closedContents := make(map[int]ast.PdfObject)
 	var count int
 	for _, page := range pages {
 		if ctx.Err() != nil {
@@ -79,6 +86,17 @@ func fixMarkedContentClose(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		pageDict := livePageDict(ctx, alloc, doc, page)
 		contentsObj, ok := pageDict["Contents"]
 		if !ok {
+			continue
+		}
+		// Pages sharing one /Contents object share its closed content too, as
+		// the content-tag fixer shares its wrapper, so a form the shared
+		// content draws keeps the single reference ISO 14289-1, 7.20 t2
+		// counts there; see [fixContentTag].
+		contentsRef, isRef := contentsObj.(ast.PdfIndirectRef)
+		shared := isRef && namers[contentsRef.ObjectNum] > 1
+		if closed, done := closedContents[contentsRef.ObjectNum]; shared && done {
+			setPageContents(alloc, page, pageDict, closed)
+			count++
 			continue
 		}
 		data, err := liveContentBytes(ctx, alloc, doc, contentsObj)
@@ -113,18 +131,46 @@ func fixMarkedContentClose(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		} else {
 			closingRef := alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(closing))}, closing))
 			contents = append(contentElements(ctx, alloc, doc, contentsObj), closingRef)
+			if shared {
+				// A direct array cannot be shared, so the array the other
+				// pages will name is an object of its own.
+				contents = alloc.Alloc(contents)
+			}
 		}
-
-		newPage := make(ast.PdfDict, len(pageDict))
-		maps.Copy(newPage, pageDict)
-		newPage["Contents"] = contents
-		alloc.AllocAt(page.Ref.ObjectNum, newPage)
+		if shared {
+			closedContents[contentsRef.ObjectNum] = contents
+		}
+		setPageContents(alloc, page, pageDict, contents)
 		count++
 	}
 	if count == 0 {
 		return nil, nil
 	}
 	return []string{fmt.Sprintf("closed the marked content left open on %d page(s)", count)}, nil
+}
+
+// contentsNamers counts, for each object number an indirect /Contents names,
+// the pages naming it, each page read alloc-first as its fixer reads it.
+func contentsNamers(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page) map[int]int {
+	namers := make(map[int]int)
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return namers
+		}
+		if ref, ok := livePageDict(ctx, alloc, doc, page)["Contents"].(ast.PdfIndirectRef); ok {
+			namers[ref.ObjectNum]++
+		}
+	}
+	return namers
+}
+
+// setPageContents queues page with contents as its /Contents, the rest of
+// pageDict, its live dictionary, kept.
+func setPageContents(alloc *writer.ObjAllocator, page *document.Page, pageDict ast.PdfDict, contents ast.PdfObject) {
+	newPage := make(ast.PdfDict, len(pageDict))
+	maps.Copy(newPage, pageDict)
+	newPage["Contents"] = contents
+	alloc.AllocAt(page.Ref.ObjectNum, newPage)
 }
 
 // contentElements returns the elements of a page's /Contents as a new array, as

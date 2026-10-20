@@ -41,6 +41,10 @@ func matchContentTag(v compliance.Violation) bool {
 //
 //   - All corpora: attaching the MCR straight to the Document accounted for
 //     158 of the 173 files where PDF/UA-2 remediation introduced a violation.
+//   - litho formshare_ua1.pdf: a wrapped stream for each page of two sharing
+//     one /Contents stream gave the marked form it draws a second reference,
+//     and remediation at PDF/UA-1 left ISO 14289-1, 7.20 t2 twice on both
+//     litho and veraPDF; one shared wrapped stream fully fixes it.
 func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -128,6 +132,7 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		return nil, nil
 	}
 
+	wrappedContents := make(map[int]ast.PdfIndirectRef)
 	var count int
 	for _, page := range pages {
 		if ctx.Err() != nil {
@@ -158,28 +163,27 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			continue
 		}
 
-		contentBytes, err := liveContentBytes(ctx, alloc, doc, contentsObj)
-		if err != nil || len(contentBytes) == 0 {
-			continue
+		// Pages sharing one /Contents object share its wrapped stream too. The
+		// stream's MCID 0 resolves through each page's own /StructParents
+		// (ISO 32000-1, 14.7.4.4), so one stream serves every page, and a
+		// form the shared content draws keeps the single reference the shared
+		// stream made: veraPDF parses a content stream once for the document,
+		// which ISO 14289-1, 7.20 t2 counts, so a stream of its own for each
+		// page gave every marked form such content draws a second reference.
+		contentsRef, sharable := contentsObj.(ast.PdfIndirectRef)
+		newStreamRef, done := wrappedContents[contentsRef.ObjectNum]
+		if !sharable || !done {
+			wrapped, ok := wrapPageContent(ctx, alloc, doc, contentsObj)
+			if !ok {
+				continue
+			}
+			newStreamRef = alloc.Alloc(ast.NewStream(ast.PdfDict{
+				"Length": ast.PdfInt(len(wrapped)),
+			}, wrapped))
+			if sharable {
+				wrappedContents[contentsRef.ObjectNum] = newStreamRef
+			}
 		}
-
-		// MCID 0: the wrapper is the only marked content on the page, and
-		// the ParentTree entry array for the page is indexed by MCID.
-		// The wrapper stops where the last token that terminates ends: an EMC
-		// written after a string the page never closes is read as string
-		// bytes and leaves the sequence open (ISO 32000-1, 7.3.4.2, 14.6).
-		// The unterminated tail paints nothing, so it is left out.
-		const open, closing = "/Document <</MCID 0>> BDC\n", "\nEMC\n"
-		body := contentBytes[:content.TerminatedEnd(ctx, contentBytes)]
-		wrapped := make([]byte, 0, len(open)+len(body)+len(closing))
-		wrapped = append(wrapped, open...)
-		wrapped = append(wrapped, body...)
-		wrapped = append(wrapped, closing...)
-
-		newStream := ast.NewStream(ast.PdfDict{
-			"Length": ast.PdfInt(len(wrapped)),
-		}, wrapped)
-		newStreamRef := alloc.Alloc(newStream)
 
 		newPage := make(ast.PdfDict, len(pageDict)+2)
 		maps.Copy(newPage, pageDict)
@@ -239,6 +243,28 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	alloc.AllocAt(stRef.ObjectNum, newST)
 
 	return []string{fmt.Sprintf("tagged %d page(s) with /Document marked-content wrapper", count)}, nil
+}
+
+// wrapPageContent returns the content /Contents names wrapped in the
+// marked-content sequence of MCID 0, or false when it holds nothing to wrap.
+// MCID 0: the wrapper is the only marked content on the page, and the
+// ParentTree entry array for the page is indexed by MCID. The wrapper stops
+// where the last token that terminates ends: an EMC written after a string the
+// page never closes is read as string bytes and leaves the sequence open (ISO
+// 32000-1, 7.3.4.2, 14.6). The unterminated tail paints nothing, so it is left
+// out.
+func wrapPageContent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject) ([]byte, bool) {
+	contentBytes, err := liveContentBytes(ctx, alloc, doc, contentsObj)
+	if err != nil || len(contentBytes) == 0 {
+		return nil, false
+	}
+	const open, closing = "/Document <</MCID 0>> BDC\n", "\nEMC\n"
+	body := contentBytes[:content.TerminatedEnd(ctx, contentBytes)]
+	wrapped := make([]byte, 0, len(open)+len(body)+len(closing))
+	wrapped = append(wrapped, open...)
+	wrapped = append(wrapped, body...)
+	wrapped = append(wrapped, closing...)
+	return wrapped, true
 }
 
 // existingParentTreeNums returns a copy of the structure tree root's

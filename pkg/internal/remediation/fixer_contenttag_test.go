@@ -165,6 +165,58 @@ func TestFixContentTag_TagsUntaggedPages(t *testing.T) {
 	}
 }
 
+// TestFixContentTag_SharedContents pins that pages naming one /Contents object
+// name one wrapped stream after the repair, each page owning its MCID 0
+// through a /StructParents of its own. A wrapped copy for each page gave a
+// marked form the shared content draws a second reference, which ISO 14289-1,
+// 7.20 t2 forbids and veraPDF, parsing a content stream once for the
+// document, did not report before the repair (litho formshare_ua1.pdf).
+func TestFixContentTag_SharedContents(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name   string
+		page2  string
+		shared bool
+	}{
+		{name: "one stream two pages name", page2: "7 0 R", shared: true},
+		{name: "streams of their own", page2: "8 0 R"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, alloc := newTestDoc(t, buildStructPDF(
+				"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 5 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 7 0 R >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents "+tc.page2+" >>",
+				"<< /Type /StructTreeRoot /K 6 0 R >>",
+				"<< /Type /StructElem /S /Document /P 5 0 R >>",
+				"<< /Length 3 >>\nstream\nq Q\nendstream",
+				"<< /Length 3 >>\nstream\nq Q\nendstream",
+			))
+			if _, err := fixContentTag(ctx, alloc, doc, Options{}, nil, "PDF/UA-1"); err != nil {
+				t.Fatalf("fixContentTag: %v", err)
+			}
+			p1, p2 := pendingDict(t, alloc, 3), pendingDict(t, alloc, 4)
+			if p1["StructParents"] == p2["StructParents"] {
+				t.Errorf("pages share /StructParents %v, want a key each", p1["StructParents"])
+			}
+			for _, p := range []ast.PdfDict{p1, p2} {
+				ref, ok := p["Contents"].(ast.PdfIndirectRef)
+				if !ok {
+					t.Fatalf("/Contents: got %T, want a wrapped stream", p["Contents"])
+				}
+				if data := pendingStreamBytes(t, alloc, ref.ObjectNum); !bytes.HasPrefix(data, []byte("/Document <</MCID 0>> BDC")) {
+					t.Errorf("/Contents %v reads %q, want the wrapper", ref, data)
+				}
+			}
+			if same := p1["Contents"] == p2["Contents"]; same != tc.shared {
+				t.Errorf("pages name /Contents %v and %v, shared = %v, want %v", p1["Contents"], p2["Contents"], same, tc.shared)
+			}
+		})
+	}
+}
+
 func TestFixContentTag_MergesExistingParentTree(t *testing.T) {
 	// An existing ParentTree entry (key 5, e.g. an annotation
 	// /StructParent) must survive, and new keys must start above it. The

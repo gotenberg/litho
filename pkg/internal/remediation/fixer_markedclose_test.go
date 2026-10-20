@@ -86,6 +86,20 @@ func TestFixMarkedContentClose(t *testing.T) {
 			fixed: 2,
 		},
 		{
+			name:      "a stream two pages share",
+			contents1: "5 0 R", contents2: "5 0 R",
+			bodies: []string{open},
+			want1:  "BMC m l S EMC", want2: "BMC m l S EMC",
+			fixed: 2,
+		},
+		{
+			name:      "a stream two pages share ending inside a string",
+			contents1: "5 0 R", contents2: "5 0 R",
+			bodies: []string{open + "\n(dangling ( string"},
+			want1:  "BMC m l S EMC", want2: "BMC m l S EMC",
+			fixed: 2, rewritesFromSource: true,
+		},
+		{
 			name:      "a stream ending inside a string it never terminates",
 			contents1: "5 0 R", contents2: "6 0 R",
 			bodies: []string{open + "\n(dangling ( string", closed},
@@ -129,6 +143,13 @@ func TestFixMarkedContentClose(t *testing.T) {
 				}
 				if strings.Join(got, " ") != want {
 					t.Errorf("page %d reads %q, want %q", objNum, strings.Join(got, " "), want)
+				}
+				if tc.contents1 == tc.contents2 {
+					other := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 7 - objNum})
+					mine, isRef := dict["Contents"].(ast.PdfIndirectRef)
+					if theirs, ok := other["Contents"].(ast.PdfIndirectRef); !isRef || !ok || mine != theirs {
+						t.Errorf("page %d names /Contents %v, the page it shares content with %v", objNum, dict["Contents"], other["Contents"])
+					}
 				}
 				if _, open := content.UnclosedMarkedContent(ops); open != 0 {
 					t.Errorf("page %d leaves %d sequence(s) open", objNum, open)
