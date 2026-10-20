@@ -17,7 +17,9 @@ import "strings"
 //   - xs:string(x) / xs:date(x) / xs:dateTime(x) / xs:anyURI(x) →
 //     string(x). Date comparisons fall back to lexicographic string
 //     comparison; CCYY-MM-DD ordering happens to coincide with that.
-//   - upper-case(x) / lower-case(x) → translate(x, lo, up) / mirror.
+//   - upper-case(x) → translate() over ASCII plus one replace() per
+//     non-ASCII character whose upper case is ASCII (see
+//     [rewriteUpperCase]). lower-case() is native to antchfx.
 //   - The lossy transformations above are documented at the call
 //     site so callers know what to expect when comparing verdicts
 //     against Saxon.
@@ -39,8 +41,10 @@ func rewriteXPath2(expr string) string {
 	}
 	out = elideCastInStep(out, "number")
 	out = elideCastInStep(out, "string")
-	out = rewriteCaseFunction(out, "upper-case", upperCaseLo, upperCaseUp)
-	out = rewriteCaseFunction(out, "lower-case", lowerCaseUp, lowerCaseLo)
+	// lower-case() is native to antchfx/xpath (strings.ToLower, the
+	// Unicode simple mapping); upper-case() is not, see
+	// rewriteUpperCase.
+	out = rewriteUpperCase(out)
 	out = rewriteFnRename(out, "exists", "boolean")
 	out = rewriteDistinctValuesEqOne(out)
 	out = rewriteRoundAsFloor(out)
@@ -1539,16 +1543,61 @@ func rewriteFnRename(expr, fn, replacement string) string {
 const (
 	upperCaseLo = "abcdefghijklmnopqrstuvwxyz"
 	upperCaseUp = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	lowerCaseLo = "abcdefghijklmnopqrstuvwxyz"
-	lowerCaseUp = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
 
+// upperCaseToASCII lists every non-ASCII character whose upper case,
+// under the Unicode full case mapping (UnicodeData.txt plus the
+// unconditional entries of SpecialCasing.txt) that XPath F&O 3.1,
+// 5.4.7 fn:upper-case applies, is made of ASCII letters only.
+// TestUpperCaseToASCIIMatchesUnicode regenerates it from
+// golang.org/x/text/cases over every code point.
+//
+//nolint:gochecknoglobals // immutable case-mapping table shared across calls.
+var upperCaseToASCII = []struct{ from, to string }{
+	{"ß", "SS"},  // LATIN SMALL LETTER SHARP S
+	{"ı", "I"},   // LATIN SMALL LETTER DOTLESS I
+	{"ſ", "S"},   // LATIN SMALL LETTER LONG S
+	{"ﬀ", "FF"},  // LATIN SMALL LIGATURE FF
+	{"ﬁ", "FI"},  // LATIN SMALL LIGATURE FI
+	{"ﬂ", "FL"},  // LATIN SMALL LIGATURE FL
+	{"ﬃ", "FFI"}, // LATIN SMALL LIGATURE FFI
+	{"ﬄ", "FFL"}, // LATIN SMALL LIGATURE FFL
+	{"ﬅ", "ST"},  // LATIN SMALL LIGATURE LONG S T
+	{"ﬆ", "ST"},  // LATIN SMALL LIGATURE ST
+}
+
+// rewriteUpperCase rewrites every upper-case(EXPR) call, which
+// antchfx/xpath v1.3.6 does not implement, into
+// translate(replace(...replace(EXPR, c, C)...), a-z, A-Z).
+//
+// The result is exact whenever it is compared with an ASCII string,
+// which is how every bundled rule uses upper-case() (code lists,
+// country and VAT prefixes, IBANs). translate() maps ASCII letters,
+// and one replace() per [upperCaseToASCII] entry maps each non-ASCII
+// character whose upper case is ASCII, the sharp s and its multi-letter
+// expansion included. Every other non-ASCII character keeps its case:
+// antchfx's translate() reads its replacement string by byte offset
+// (func.go translateFunc), so it cannot map one non-ASCII character to
+// another, and such a character can never equal an ASCII string in
+// either case.
+func rewriteUpperCase(expr string) string {
+	if !strings.Contains(expr, "upper-case(") {
+		return expr
+	}
+	var open, closeArgs strings.Builder
+	for _, m := range upperCaseToASCII {
+		open.WriteString("replace(")
+		closeArgs.WriteString(",'" + m.from + "','" + m.to + "')")
+	}
+	return rewriteCaseFunction(expr, "upper-case", open.String(), closeArgs.String(), upperCaseLo, upperCaseUp)
+}
+
 // rewriteCaseFunction rewrites every fn(EXPR) call into
-// translate(EXPR, from, to). Walking byte-by-byte to handle nested
-// parens correctly: regex with a single capture group misses cases
-// where the argument itself contains parens, which EN 16931 uses
-// often (e.g. upper-case(normalize-space(x))).
-func rewriteCaseFunction(expr, fn, from, to string) string {
+// translate(wrapOpen EXPR wrapClose, from, to). Walking byte-by-byte to
+// handle nested parens correctly: regex with a single capture group
+// misses cases where the argument itself contains parens, which EN
+// 16931 uses often (e.g. upper-case(normalize-space(x))).
+func rewriteCaseFunction(expr, fn, wrapOpen, wrapClose, from, to string) string {
 	prefix := fn + "("
 	if !strings.Contains(expr, prefix) {
 		return expr
@@ -1566,7 +1615,9 @@ func rewriteCaseFunction(expr, fn, from, to string) string {
 			}
 			arg := expr[start:end]
 			b.WriteString("translate(")
+			b.WriteString(wrapOpen)
 			b.WriteString(arg)
+			b.WriteString(wrapClose)
 			b.WriteString(",'")
 			b.WriteString(from)
 			b.WriteString("','")

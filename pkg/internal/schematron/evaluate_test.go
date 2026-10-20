@@ -5,6 +5,11 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"unicode"
+	"unicode/utf8"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 const invoiceRulesSch = `<?xml version="1.0" encoding="UTF-8"?>
@@ -316,6 +321,67 @@ func TestExprCache_UpstreamPanicsBecomeErrors(t *testing.T) {
 </sch:schema>`, `<a/>`)
 	if len(fired) != 0 || len(skipped) != 1 {
 		t.Errorf("fired %v skipped %v, want NOVAR skipped", fired, skipped)
+	}
+}
+
+func TestValidate_CaseFunctionsBeyondASCII(t *testing.T) {
+	// XPath F&O 3.1, 5.4.7 and 5.4.8: upper-case and lower-case map
+	// characters through the Unicode case mappings, not ASCII only.
+	// The bundled rules compare upper-case() against ASCII code lists,
+	// so a non-ASCII letter whose upper case is ASCII (dotless i, long
+	// s, sharp s) decides a verdict.
+	sch := `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="inv" uri="urn:example:invoice"/>
+  <sch:pattern id="P">
+    <sch:rule context="//inv:Invoice">
+      <sch:assert id="LOW" test="lower-case(inv:Name) = 'élan'">lower-case maps É</sch:assert>
+      <sch:assert id="UPI" test="upper-case(inv:Code) = 'IT'">dotless i uppercases to I</sch:assert>
+      <sch:assert id="UPS" test="upper-case(inv:Unit) = 'S'">long s uppercases to S</sch:assert>
+      <sch:assert id="UPSS" test="upper-case(inv:Street) = 'STRASSE'">sharp s uppercases to SS</sch:assert>
+      <sch:assert id="UPASCII" test="upper-case(normalize-space(inv:Country)) = 'DE'">ASCII still maps</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	payload := `<inv:Invoice xmlns:inv="urn:example:invoice">` +
+		`<inv:Name>ÉLAN</inv:Name><inv:Code>ıt</inv:Code><inv:Unit>ſ</inv:Unit>` +
+		`<inv:Street>straße</inv:Street><inv:Country> de </inv:Country></inv:Invoice>`
+	fired, skipped := runOne(t, sch, payload)
+	if len(fired) != 0 || len(skipped) != 0 {
+		t.Errorf("fired %v skipped %v, want neither", fired, skipped)
+	}
+}
+
+func TestUpperCaseToASCIIMatchesUnicode(t *testing.T) {
+	// Regenerates upperCaseToASCII: every non-ASCII code point whose
+	// full upper-case mapping is non-empty ASCII and differs from it.
+	upper := cases.Upper(language.Und)
+	var want []string
+	for r := rune(0x80); r <= unicode.MaxRune; r++ {
+		if !utf8.ValidRune(r) {
+			continue
+		}
+		u := upper.String(string(r))
+		if u == string(r) || u == "" {
+			continue
+		}
+		ascii := true
+		for i := 0; i < len(u); i++ {
+			if u[i] >= utf8.RuneSelf {
+				ascii = false
+				break
+			}
+		}
+		if ascii {
+			want = append(want, string(r)+"="+u)
+		}
+	}
+	got := make([]string, 0, len(upperCaseToASCII))
+	for _, m := range upperCaseToASCII {
+		got = append(got, m.from+"="+m.to)
+	}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("upperCaseToASCII = %v, Unicode gives %v", got, want)
 	}
 }
 

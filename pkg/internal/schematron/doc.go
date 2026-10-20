@@ -17,8 +17,9 @@
 //   - XPath 1.0 in full: path expressions, predicates, axes,
 //     arithmetic, comparison, boolean and node-set operators.
 //   - XPath 2.0 builtins provided by antchfx/xpath: matches, replace,
-//     string-join, upper-case, lower-case, reverse, ends-with.
-//   - XPath 2.0 builtins emulated by the rewriter: xs:decimal /
+//     string-join, lower-case, reverse, ends-with.
+//   - XPath 2.0 builtins emulated by the rewriter: upper-case (exact
+//     whenever the result is compared with ASCII text), xs:decimal /
 //     xs:integer / xs:double / xs:string / xs:date / xs:dateTime
 //     (cast → number or string), exists (→ boolean), abs (algebraic
 //     identity), count(distinct-values(X)) = 1 (uniqueness idiom),
