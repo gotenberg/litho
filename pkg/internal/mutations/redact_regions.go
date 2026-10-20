@@ -203,7 +203,15 @@ func redactPageRegions(
 		return RedactReport{}, fmt.Errorf("assembling page content: %w", err)
 	}
 	if len(data) == 0 {
-		return RedactReport{}, nil
+		// A page that draws nothing still carries its annotations: ISO
+		// 32000-1, Table 30 lets /Contents be absent, and no content stream
+		// draws an annotation (12.5.1). Returning before this pass kept every
+		// annotation inside the region and reported a success.
+		removedAnnots, err := removeRegionAnnotations(ctx, alloc, doc, page, regionZones(regions))
+		if err != nil {
+			return RedactReport{}, err
+		}
+		return RedactReport{RemovedAnnotations: removedAnnots}, nil
 	}
 
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.SplitGluedOperators())
@@ -239,10 +247,7 @@ func redactPageRegions(
 	fontGlyphs := make(map[int]int)
 	fontRemoved := make(map[int]int)
 
-	zones := make([]heuristics.Zone, 0, len(regions))
-	for _, r := range regions {
-		zones = append(zones, heuristics.ZoneFromRect(r))
-	}
+	zones := regionZones(regions)
 
 	var report RedactReport
 
@@ -464,6 +469,16 @@ func redactPageRegions(
 	// alloc-first read picks up the /Contents the excision just queued.
 	report.DroppedPageEntries = stripPageCopies(alloc, page)
 	return report, nil
+}
+
+// regionZones turns the regions, each [llx, lly, urx, ury], into the zones the
+// geometric tests compare against.
+func regionZones(regions [][4]float64) []heuristics.Zone {
+	zones := make([]heuristics.Zone, 0, len(regions))
+	for _, r := range regions {
+		zones = append(zones, heuristics.ZoneFromRect(r))
+	}
+	return zones
 }
 
 // pathSpans returns the byte ranges of the painted paths the zones cover, and

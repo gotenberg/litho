@@ -392,3 +392,81 @@ func TestRemoveRegionAnnotations_RefusalRollsBack(t *testing.T) {
 		t.Errorf("allocator holds %d objects after a refusal, want none", len(alloc.Pending()))
 	}
 }
+
+// emptyPageFixture builds a one-page document whose page draws nothing and
+// carries one annotation, object 8. contents is spliced into the page
+// dictionary: empty to omit /Contents, or " /Contents 6 0 R" for an empty stream.
+func emptyPageFixture(t *testing.T, contents, annot string) (*document.Document, *document.Page) {
+	t.Helper()
+	ctx := context.Background()
+	raw := "%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >>" +
+		contents + " /Annots [8 0 R] >>\nendobj\n" +
+		"6 0 obj\n<< /Length 0 >>\nstream\n\nendstream\nendobj\n" +
+		"8 0 obj\n" + annot + "\nendobj\n" +
+		"trailer\n<< /Size 20 /Root 1 0 R >>\n%%EOF\n"
+	doc, err := document.NewDocument(ctx, bytes.NewReader([]byte(raw)), int64(len(raw)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
+	}
+	return doc, pages[0]
+}
+
+// TestRemoveRegionAnnotations_PageWithoutContent pins the pass on a page that
+// draws nothing. A page may omit /Contents (ISO 32000-1, Table 30: absent, the
+// page is empty) and still carry annotations, which no content stream draws.
+// Such a page once returned before the annotation pass ran, so a FreeText
+// quoting its text inside the region survived and the redaction reported
+// success having removed nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs: freetexts.pdf page 1 has no /Contents and seven FreeText
+//     annotations. A whole-page redaction kept all seven, and pdftotext still
+//     read "Hello World from Acrobat" from the output.
+func TestRemoveRegionAnnotations_PageWithoutContent(t *testing.T) {
+	const inside = "<< /Type /Annot /Subtype /FreeText /Rect [100 695 200 720] /Contents (SECRET) >>"
+	const straddling = "<< /Type /Annot /Subtype /FreeText /Rect [50 695 400 720] /Contents (SECRET) >>"
+
+	for name, contents := range map[string]string{
+		"no /Contents":    "",
+		"empty /Contents": " /Contents 6 0 R",
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc, page := emptyPageFixture(t, contents, inside)
+			alloc := writer.NewObjAllocator(20)
+			report, err := RedactPageRegions(context.Background(), alloc, doc, page, theTextRegion)
+			if err != nil {
+				t.Fatalf("RedactPageRegions: %v", err)
+			}
+			if !slices.Contains(report.RemovedAnnotations, 8) {
+				t.Errorf("RemovedAnnotations = %v, want object 8", report.RemovedAnnotations)
+			}
+			pageDict, ok := alloc.Pending()[3].(ast.PdfDict)
+			if !ok {
+				t.Fatalf("the page was not rewritten: %T", alloc.Pending()[3])
+			}
+			if arr, _ := pageDict["Annots"].(ast.PdfArray); len(arr) != 0 {
+				t.Errorf("/Annots = %v, want empty", arr)
+			}
+
+			// The refusals hold on such a page too: an annotation reaching
+			// outside the region is not removed approximately.
+			doc, page = emptyPageFixture(t, contents, straddling)
+			_, err = RedactPageRegions(context.Background(), writer.NewObjAllocator(20), doc, page, theTextRegion)
+			if !errors.Is(err, ErrAnnotationStraddlesRegion) {
+				t.Errorf("err = %v, want ErrAnnotationStraddlesRegion", err)
+			}
+		})
+	}
+}
