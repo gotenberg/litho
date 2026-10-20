@@ -149,6 +149,14 @@ func Validate(ctx context.Context, schema *Schema, payload []byte, opts ...EvalO
 	// pattern lets fold into the shared map up front, in source
 	// order so a later pattern can reference an earlier one.
 	schemaVars := resolveLevelLets(schema.Lets, nil)
+	// ISO/IEC 19757-3:2016, 5.4.6: a let declared in a phase binds for
+	// the patterns that phase activates. It folds in after the schema
+	// lets it may reference and before the pattern lets that may
+	// reference it. selectPatterns has already rejected an unknown
+	// phase, so the lookup only misses when no phase is selected.
+	if ph := schema.Phases[cfg.phase]; cfg.phase != "" && ph != nil {
+		schemaVars = resolveLevelLets(ph.Lets, schemaVars)
+	}
 	for _, pid := range schema.PatternOrder {
 		pat := schema.Patterns[pid]
 		if pat == nil {

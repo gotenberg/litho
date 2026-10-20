@@ -219,3 +219,50 @@ func TestValidate_ContextCancel(t *testing.T) {
 		t.Error("expected ctx error")
 	}
 }
+
+// runOne loads sch, validates payload, and fails the test on a load or
+// parse error. It returns the fired rule ids and the skipped rules.
+func runOne(t *testing.T, sch, payload string, opts ...EvalOption) (fired, skipped []string) {
+	t.Helper()
+	s := loadInline(t, sch)
+	v, sk, err := Validate(context.Background(), s, []byte(payload), opts...)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	for _, x := range v {
+		fired = append(fired, x.RuleID)
+	}
+	for _, x := range sk {
+		skipped = append(skipped, x.RuleID+": "+x.Reason)
+	}
+	return fired, skipped
+}
+
+func TestValidate_PhaseLetsApply(t *testing.T) {
+	// ISO/IEC 19757-3:2016, 5.4.6: a let in a phase binds for the
+	// patterns that phase activates. The name must resolve, not leave an
+	// undeclared variable that skips the rule.
+	sch := `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="inv" uri="urn:example:invoice"/>
+  <sch:phase id="strict">
+    <sch:active pattern="P"/>
+    <sch:let name="wanted" value="'EUR'"/>
+  </sch:phase>
+  <sch:pattern id="P">
+    <sch:rule context="//inv:Invoice">
+      <sch:assert id="CUR" test="inv:Currency = $wanted">currency</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	ok := `<inv:Invoice xmlns:inv="urn:example:invoice"><inv:Currency>EUR</inv:Currency></inv:Invoice>`
+	bad := `<inv:Invoice xmlns:inv="urn:example:invoice"><inv:Currency>USD</inv:Currency></inv:Invoice>`
+	fired, skipped := runOne(t, sch, ok, WithPhase("strict"))
+	if len(fired) != 0 || len(skipped) != 0 {
+		t.Errorf("EUR: fired %v skipped %v, want neither", fired, skipped)
+	}
+	fired, skipped = runOne(t, sch, bad, WithPhase("strict"))
+	if len(fired) != 1 || len(skipped) != 0 {
+		t.Errorf("USD: fired %v skipped %v, want CUR to fire", fired, skipped)
+	}
+}
