@@ -33,7 +33,7 @@ func TestMeshWorkCap(t *testing.T) {
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
-		return sh.Paint(ctx, Target{Canvas: canvas, Alpha: 1, Convert: deviceRGB{}}, pageToDevice)
+		return sh.Paint(ctx, Target{Canvas: canvas, Convert: deviceRGB{}}, pageToDevice)
 	}
 	if err := paint(shading(1)); err != nil {
 		t.Fatalf("one triangle: %v", err)

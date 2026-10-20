@@ -25,9 +25,9 @@ type Params struct {
 	// Interpolate is the image's /Interpolate (ISO 32000-1, 8.9.5.3, Table
 	// 89). For [DrawStencil] it is the mask's own.
 	Interpolate bool
-	// Alpha is the constant alpha (ISO 32000-1, 11.6.4.4, /ca). 1 paints
-	// opaque; the zero value paints nothing.
-	Alpha float32
+	// Opacity is the constant alpha (ISO 32000-1, 11.6.4.4, /ca). The zero
+	// value paints opaque.
+	Opacity surface.Opacity
 	// Clip is the current clip as coverage, the size of the canvas; nil
 	// clips nothing.
 	Clip *surface.Mask
@@ -162,7 +162,7 @@ func (j *job) run(ctx context.Context, dst *surface.Canvas, p Params) error {
 	if p.Clip != nil && (p.Clip.Width != dst.Width || p.Clip.Height != dst.Height) {
 		return fmt.Errorf("%w: %dx%d clip on a %dx%d canvas", ErrBadClip, p.Clip.Width, p.Clip.Height, dst.Width, dst.Height)
 	}
-	constAlpha := min(p.Alpha, 1)
+	constAlpha := p.Opacity.Alpha()
 	if !(constAlpha > 0) {
 		return nil
 	}

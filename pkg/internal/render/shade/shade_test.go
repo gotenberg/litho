@@ -264,7 +264,7 @@ func TestPaintTarget(t *testing.T) {
 
 	t.Run("alpha", func(t *testing.T) {
 		c := newCanvas()
-		if err := sh.Paint(ctx, Target{Canvas: c, Alpha: 0.5, Convert: deviceRGB{}}, pageToDevice); err != nil {
+		if err := sh.Paint(ctx, Target{Canvas: c, Opacity: surface.NewOpacity(0.5), Convert: deviceRGB{}}, pageToDevice); err != nil {
 			t.Fatal(err)
 		}
 		// Red at half alpha over white.
@@ -275,7 +275,7 @@ func TestPaintTarget(t *testing.T) {
 		c := newCanvas()
 		clip := squareMask(t, 0, 0, 50, 100)
 		clip.Set(60, 50, 0.25)
-		if err := sh.Paint(ctx, Target{Canvas: c, Clip: clip, Alpha: 1, Convert: deviceRGB{}}, pageToDevice); err != nil {
+		if err := sh.Paint(ctx, Target{Canvas: c, Clip: clip, Convert: deviceRGB{}}, pageToDevice); err != nil {
 			t.Fatal(err)
 		}
 		s := (60.5 - 10) / 80
@@ -296,7 +296,7 @@ func TestPaintTarget(t *testing.T) {
 
 	t.Run("singular matrix", func(t *testing.T) {
 		c := newCanvas()
-		if err := sh.Paint(ctx, Target{Canvas: c, Alpha: 1, Convert: deviceRGB{}}, geom.Matrix{}); err != nil {
+		if err := sh.Paint(ctx, Target{Canvas: c, Convert: deviceRGB{}}, geom.Matrix{}); err != nil {
 			t.Fatal(err)
 		}
 		checkSamples(t, c, 0, []sample{{5, 50, white}})
@@ -308,9 +308,9 @@ func TestPaintTarget(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, target := range []Target{
-			{Alpha: 1, Convert: deviceRGB{}},
-			{Canvas: newCanvas(), Alpha: 1},
-			{Canvas: newCanvas(), Clip: small, Alpha: 1, Convert: deviceRGB{}},
+			{Convert: deviceRGB{}},
+			{Canvas: newCanvas()},
+			{Canvas: newCanvas(), Clip: small, Convert: deviceRGB{}},
 		} {
 			if err := sh.Paint(ctx, target, pageToDevice); !errors.Is(err, ErrTarget) {
 				t.Errorf("Paint(%+v) = %v, want ErrTarget", target, err)
@@ -321,7 +321,7 @@ func TestPaintTarget(t *testing.T) {
 	t.Run("cancelled", func(t *testing.T) {
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
-		err := sh.Paint(cctx, Target{Canvas: newCanvas(), Alpha: 1, Convert: deviceRGB{}}, pageToDevice)
+		err := sh.Paint(cctx, Target{Canvas: newCanvas(), Convert: deviceRGB{}}, pageToDevice)
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("Paint with a cancelled context = %v, want context.Canceled", err)
 		}
@@ -347,7 +347,7 @@ func TestConcurrentPaint(t *testing.T) {
 					errs[i] = err
 					return
 				}
-				errs[i] = sh.Paint(ctx, Target{Canvas: c, Alpha: 1, Convert: deviceRGB{}}, pageToDevice)
+				errs[i] = sh.Paint(ctx, Target{Canvas: c, Convert: deviceRGB{}}, pageToDevice)
 			})
 		}
 		wg.Wait()

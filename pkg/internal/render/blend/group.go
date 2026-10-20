@@ -258,9 +258,8 @@ func (g *Group) Into(ctx context.Context, parent *Group, params Params) error {
 // 11.6.4).
 type Params struct {
 	Mode Mode
-	// Opacity is the constant alpha, CA or ca. Zero paints nothing: set it
-	// to 1 for an opaque element.
-	Opacity float32
+	// Opacity is the constant alpha, CA or ca. The zero value is opaque.
+	Opacity surface.Opacity
 	// SoftMask holds the soft mask's values over the device, nil for /None.
 	SoftMask *surface.Mask
 	// AlphaIsShape makes the soft mask and the constant alpha shape rather
@@ -276,7 +275,7 @@ func (p Params) Source(x, y int, shape, alpha float32) (fs, as float32) {
 	if p.SoftMask != nil {
 		m = p.SoftMask.At(x, y)
 	}
-	k := m * clamp01(p.Opacity)
+	k := m * p.Opacity.Alpha()
 	if p.AlphaIsShape {
 		return shape * k, alpha * k
 	}

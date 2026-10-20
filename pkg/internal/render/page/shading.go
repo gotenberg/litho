@@ -68,7 +68,7 @@ func (r *renderer) shading(s *scope, op content.Operation) error {
 	if err != nil {
 		return err
 	}
-	t := shade.Target{Canvas: r.canvas, Clip: mask, Alpha: alpha32(st.FillAlpha), Convert: r.shadingConverter(s, sh)}
+	t := shade.Target{Canvas: r.canvas, Clip: mask, Opacity: surface.NewOpacity(st.FillAlpha), Convert: r.shadingConverter(s, sh)}
 	if err := sh.Paint(r.ctx, t, r.toDevice()); err != nil {
 		if fatal(err) {
 			return err
@@ -131,7 +131,7 @@ func (r *renderer) patternFill(s *scope, cov *raster.Coverage, c graphics.Color,
 		row := (cov.Y + y) * mask.Width
 		copy(mask.A[row+cov.X:row+cov.X+cov.Width], cov.A[y*cov.Width:(y+1)*cov.Width])
 	}
-	t := shade.Target{Canvas: r.canvas, Clip: mask, Alpha: alpha32(a), Convert: r.shadingConverter(s, pat.Shading())}
+	t := shade.Target{Canvas: r.canvas, Clip: mask, Opacity: surface.NewOpacity(a), Convert: r.shadingConverter(s, pat.Shading())}
 	if err := pat.Fill(r.ctx, t, s.base); err != nil {
 		if fatal(err) {
 			return err

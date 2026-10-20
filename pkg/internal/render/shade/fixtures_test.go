@@ -121,7 +121,7 @@ func renderFixture(t testing.TB, f fixture, clip *surface.Mask) *surface.Canvas 
 		t.Fatal(err)
 	}
 	canvas.Fill(1, 1, 1, 1)
-	target := Target{Canvas: canvas, Clip: clip, Alpha: 1, Convert: deviceRGB{}}
+	target := Target{Canvas: canvas, Clip: clip, Convert: deviceRGB{}}
 	if f.pattern != "" {
 		pat, err := NewPattern(ctx, doc, ast.PdfIndirectRef{ObjectNum: 6}, deviceComponents)
 		if err != nil {

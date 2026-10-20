@@ -65,7 +65,7 @@ func wantPixel(t *testing.T, c *surface.Canvas, x, y int, want [4]int) {
 	}
 }
 
-var opaque = Params{Alpha: 1}
+var opaque = Params{}
 
 func with(p Params, m geom.Matrix) Params {
 	p.Matrix = m
@@ -232,7 +232,7 @@ func TestDrawSoftMaskAndConstantAlpha(t *testing.T) {
 	c := newCanvas(t, 1, 1)
 	c.Fill(1, 1, 1, 1)
 	p := with(opaque, upright(0, 0, 1, 1))
-	p.Alpha = 0.5
+	p.Opacity = surface.NewOpacity(0.5)
 	if err := Draw(context.Background(), c, img, Masks{SMask: smask}, p); err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func TestDrawPaintsNothing(t *testing.T) {
 	img := rgbImage(1, 1, 0x000000)
 	for name, p := range map[string]Params{
 		"singular matrix": with(opaque, geom.Matrix{1, 1, 1, 1, 0, 0}),
-		"zero alpha":      {Matrix: upright(0, 0, 2, 2)},
+		"zero alpha":      {Matrix: upright(0, 0, 2, 2), Opacity: surface.NewOpacity(0)},
 		"off canvas":      with(opaque, upright(-10, -10, 2, 2)),
 		"not finite":      with(opaque, geom.Matrix{math.Inf(1), 0, 0, 1, 0, 0}),
 	} {

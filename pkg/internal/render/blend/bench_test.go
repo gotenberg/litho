@@ -3,6 +3,8 @@ package blend
 import (
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/render/surface"
 )
 
 // benchSide is the device side of the benchmarks: a full A4 page at about
@@ -63,7 +65,7 @@ func BenchmarkInto(b *testing.B) {
 	}
 	b.ReportAllocs()
 	for b.Loop() {
-		if err := g.Into(ctx, page, Params{Mode: Screen, Opacity: 0.8}); err != nil {
+		if err := g.Into(ctx, page, Params{Mode: Screen, Opacity: surface.NewOpacity(0.8)}); err != nil {
 			b.Fatal(err)
 		}
 	}

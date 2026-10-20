@@ -70,7 +70,7 @@ func TestIsolatedGroupOfOneObject(t *testing.T) {
 			t.Fatal(err)
 		}
 		element{Normal, obj.color, obj.rect, obj.coverage, 1}.paint(g)
-		if err := g.Into(ctx, grouped, Params{Mode: mode, Opacity: obj.opacity}); err != nil {
+		if err := g.Into(ctx, grouped, Params{Mode: mode, Opacity: surface.NewOpacity(float64(obj.opacity))}); err != nil {
 			t.Fatal(err)
 		}
 		sameCanvas(t, grouped.Canvas(), direct.Canvas())
@@ -103,7 +103,7 @@ func TestNonIsolatedGroupIsTransparent(t *testing.T) {
 	for _, e := range elements {
 		e.paint(g)
 	}
-	if err := g.Into(ctx, grouped, Params{Opacity: 1}); err != nil {
+	if err := g.Into(ctx, grouped, Params{}); err != nil {
 		t.Fatal(err)
 	}
 	sameCanvas(t, grouped.Canvas(), direct.Canvas())
@@ -205,7 +205,7 @@ func TestNonIsolatedKnockoutBlendsWithInitialBackdrop(t *testing.T) {
 		t.Errorf("nested group starts at %v, want the knockout's initial backdrop %v", got, want)
 	}
 	inner.Paint(0, 0, Multiply, [3]float32{0, 1, 1}, 1, 1)
-	if err := inner.Into(ctx, knock, Params{Opacity: 1}); err != nil {
+	if err := inner.Into(ctx, knock, Params{}); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := pixel(knock, 0, 0), [4]float32{0, 0.5, 0.5, 1}; !near4(got, want) {
@@ -221,7 +221,7 @@ func TestSoftMaskParams(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.Set(1, 0, 0.5)
-	p := Params{Opacity: 0.8, SoftMask: m}
+	p := Params{Opacity: surface.NewOpacity(0.8), SoftMask: m}
 	if fs, as := p.Source(1, 0, 0.9, 0.9); !near32(fs, 0.9) || !near32(as, 0.36) {
 		t.Errorf("opacity mask: fs, as = %g, %g, want 0.9, 0.36", fs, as)
 	}
@@ -251,7 +251,14 @@ func TestIntoHonoursCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := g.Into(ctx, page, Params{Opacity: 1}); !errors.Is(err, context.Canceled) {
+	if err := g.Into(ctx, page, Params{}); !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled", err)
+	}
+}
+
+func TestDefaultParamsAreOpaque(t *testing.T) {
+	fs, as := Params{}.Source(0, 0, 0.5, 0.75)
+	if fs != 0.5 || as != 0.75 {
+		t.Errorf("Params{}.Source = %v, %v; want the object's own 0.5, 0.75", fs, as)
 	}
 }

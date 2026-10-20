@@ -78,9 +78,9 @@ type Target struct {
 	// by pixel: the clip for the sh operator, the shape's coverage times
 	// the clip for a pattern fill.
 	Clip *surface.Mask
-	// Alpha is the constant alpha (ISO 32000-1, 11.6.4.4): 1 paints opaque,
-	// 0 or less paints nothing.
-	Alpha float32
+	// Opacity is the constant alpha (ISO 32000-1, 11.6.4.4). The zero value
+	// paints opaque.
+	Opacity surface.Opacity
 	// Convert maps the shading's colour components to sRGB.
 	Convert Converter
 }
@@ -122,7 +122,7 @@ func (s *Shading) paint(ctx context.Context, t Target, toDevice geom.Matrix, wit
 		return fmt.Errorf("%w: clip is %dx%d, canvas %dx%d", ErrTarget,
 			t.Clip.Width, t.Clip.Height, t.Canvas.Width, t.Canvas.Height)
 	}
-	if !(t.Alpha > 0) {
+	if t.Opacity.Transparent() {
 		return nil
 	}
 	inv, invertible := toDevice.Invert()
@@ -178,7 +178,7 @@ func clipBounds(t Target) region {
 
 // coverage returns the paint's alpha at pixel (x, y).
 func (p *painter) coverage(x, y int) float32 {
-	a := p.t.Alpha
+	a := p.t.Opacity.Alpha()
 	if p.t.Clip != nil {
 		a *= p.t.Clip.A[y*p.t.Clip.Width+x]
 	}

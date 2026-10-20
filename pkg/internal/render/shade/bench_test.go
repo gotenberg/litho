@@ -26,7 +26,7 @@ func benchmarkPaint(b *testing.B, f fixture) {
 		b.Fatal(err)
 	}
 	toDevice := geom.Matrix{benchSide / pageSide, 0, 0, -benchSide / pageSide, 0, benchSide}
-	target := Target{Canvas: canvas, Alpha: 1, Convert: deviceRGB{}}
+	target := Target{Canvas: canvas, Convert: deviceRGB{}}
 	b.ReportAllocs()
 	for b.Loop() {
 		if err := sh.Paint(ctx, target, toDevice); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/imgpaint"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
+	"github.com/gotenberg/litho/pkg/internal/render/surface"
 )
 
 // inlineImageName labels an inline image, which has no resource name.
@@ -172,7 +173,7 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 	if err != nil {
 		return err
 	}
-	p := imgpaint.Params{Matrix: r.toDevice(), Interpolate: bool(interpolate), Alpha: alpha32(st.FillAlpha), Clip: clipMask}
+	p := imgpaint.Params{Matrix: r.toDevice(), Interpolate: bool(interpolate), Opacity: surface.NewOpacity(st.FillAlpha), Clip: clipMask}
 
 	if isMask, _ := document.ResolveBool(r.ctx, r.doc, dict["ImageMask"]); isMask {
 		if st.Fill.Space.Family == graphics.FamilyPattern {
