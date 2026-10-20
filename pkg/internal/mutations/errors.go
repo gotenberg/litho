@@ -158,12 +158,16 @@ var ErrRegionCoversAClippedPath = errors.New("region covers a path that also cli
 // region was cleared.
 var ErrImageNotAddressable = errors.New("image has no indirect reference")
 
-// ErrInlineImageInRegion reports an inline image the region covers.
+// ErrInlineImageInRegion reports an inline image the region covers that the
+// mutation cannot rewrite in place.
 //
 // An inline image carries its samples in the content stream between BI and EI
-// (ISO 32000-1, 8.9.7), so there is no object to replace: blanking one means
-// splicing new sample bytes into the stream itself. That path does not exist
-// yet, so the mutation reports it rather than leaving the pixels in place.
+// (ISO 32000-1, 8.9.7), so blanking one splices a new inline image over those
+// bytes, which has to name the same colour space through the same resources.
+// An image whose data the readers end at different bytes, whose dictionary
+// writes a key both abbreviated and in full or holds one Table 93 does not
+// list, or whose colour space only an image XObject could name once rewritten
+// is reported rather than left with its pixels in place.
 var ErrInlineImageInRegion = errors.New("region covers an inline image")
 
 // ErrImageNotDecodable reports an image whose samples the mutation could not

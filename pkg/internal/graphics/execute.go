@@ -232,6 +232,12 @@ type ImageBox struct {
 	// from it, so carrying a page-space point back into the image needs the
 	// matrix itself. See [ImageBox.ImageSpace].
 	CTM [6]float64
+	// Op is the [Machine.OpIndex] of the operator that painted the image,
+	// and FormDepth the [Machine.FormDepth] it ran at. An inline image has
+	// no resource to name it, so these are what lead a caller back to the
+	// BI whose bytes hold its samples; a non-zero FormDepth means a form
+	// XObject's stream holds them, which Op does not index.
+	Op, FormDepth int
 }
 
 // ImageSpace maps a page-space point into the image's unit square, where (0,0)
@@ -296,6 +302,7 @@ func handleDoXObject(ctx context.Context, m *Machine, state *State, op content.O
 	}
 	box := imageBoxFromCTM(string(name), state.CTM)
 	box.ObjNum = objNum
+	box.Op, box.FormDepth = m.OpIndex, m.FormDepth
 	m.imageBoxes = append(m.imageBoxes, box)
 }
 
@@ -320,7 +327,9 @@ func handleInlineImage(_ context.Context, m *Machine, state *State, _ content.Op
 	if !m.RecordImageBoxes {
 		return
 	}
-	m.imageBoxes = append(m.imageBoxes, imageBoxFromCTM(InlineImageName, state.CTM))
+	box := imageBoxFromCTM(InlineImageName, state.CTM)
+	box.Op, box.FormDepth = m.OpIndex, m.FormDepth
+	m.imageBoxes = append(m.imageBoxes, box)
 }
 
 // resolveXObject looks a name up in the current /XObject resources, reporting

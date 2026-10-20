@@ -58,8 +58,9 @@ import (
 //   - A region selecting content a form XObject draws reports
 //     [ErrRegionInFormXObject], whose bytes are in the form's stream.
 //   - An image whose samples cannot be rewritten reports one of
-//     [ErrInlineImageInRegion] (its pixels live in the content stream, so there
-//     is no object to replace), [ErrImageNotAddressable],
+//     [ErrInlineImageInRegion] (an inline image whose bytes or colour space
+//     no replacement spliced into the stream can keep, see
+//     [blankInlineImage]), [ErrImageNotAddressable],
 //     [ErrImageNotDecodable], [ErrImagePlacementDegenerate],
 //     [ErrImageCarriesSampleEntries] or [ErrImageIsStencilMask], which is the
 //     mask carrying /SMask, the one stencil blanking cannot keep a mask.
@@ -140,8 +141,9 @@ type RedactReport struct {
 	// file. Runs that decode to nothing are dropped for the same reason an
 	// empty token is refused outright.
 	RemovedText []string
-	// BlankedImages names the image XObjects whose covered samples were
-	// overwritten.
+	// BlankedImages names the images whose covered samples were overwritten:
+	// an image XObject by its resource name, an inline image as
+	// [graphics.InlineImageName].
 	BlankedImages []string
 	// BlankedImageObjects holds the object number of each image XObject
 	// blanked, once each. An image is rewritten in place, so every other place
@@ -270,7 +272,13 @@ func redactPageRegions(
 	// An image cannot be cleared by removing operators: a single Do carries the
 	// whole picture, so dropping it would take the parts the region never
 	// selected. Blanking the covered samples clears exactly what was asked, and
-	// refuses when it cannot. See blankImage.
+	// refuses when it cannot. See blankImage, and blankInlineImage for an image
+	// whose samples sit in this content, which is rewritten with the text
+	// edits below.
+	var (
+		inlineEdits []SpanEdit
+		inlineEnds  *content.InlineImageEnds
+	)
 	for _, box := range machine.ImageBoxes() {
 		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
 		covered := false
@@ -281,6 +289,18 @@ func redactPageRegions(
 			}
 		}
 		if !covered {
+			continue
+		}
+		if box.Name == graphics.InlineImageName {
+			if inlineEnds == nil {
+				inlineEnds = content.NewInlineImageEnds(data)
+			}
+			edit, err := blankInlineImage(ctx, alloc, doc, page, data, ops, ranges, inlineEnds, box, zones)
+			if err != nil {
+				return RedactReport{}, err
+			}
+			inlineEdits = append(inlineEdits, edit)
+			report.BlankedImages = append(report.BlankedImages, box.Name)
 			continue
 		}
 		objNum, err := blankImage(ctx, alloc, doc, page, box, zones)
@@ -483,7 +503,7 @@ func redactPageRegions(
 	}
 
 	spans = append(spans, vectorSpans...)
-	if len(spans) == 0 {
+	if len(spans) == 0 && len(inlineEdits) == 0 {
 		// An image may still have been blanked, so the report stands even when
 		// no operator was removed, and the page's own copies still have to go.
 		if len(report.BlankedImages) > 0 {
@@ -492,7 +512,8 @@ func redactPageRegions(
 		return report, nil
 	}
 
-	edits := make([]SpanEdit, 0, len(spans))
+	edits := make([]SpanEdit, 0, len(spans)+len(inlineEdits))
+	edits = append(edits, inlineEdits...)
 	for _, origin := range selected {
 		if replacement, ok := splits[origin]; ok {
 			edits = append(edits, SpanEdit{Span: ranges[origin], Replacement: replacement})

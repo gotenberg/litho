@@ -76,8 +76,8 @@ type RedactReport struct {
 	// string per operator, in the order the pages drew them. An operator split
 	// at its glyphs gives one string per run of removed glyphs.
 	RemovedText []string
-	// BlankedImages names the image XObjects whose covered samples were
-	// overwritten.
+	// BlankedImages names the images whose covered samples were overwritten:
+	// an image XObject by its resource name, an inline image as "(inline)".
 	BlankedImages []string
 	// RemovedPaths counts the painted paths removed.
 	RemovedPaths int
