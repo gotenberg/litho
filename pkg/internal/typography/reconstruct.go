@@ -755,6 +755,24 @@ func (r *runTracker) restart(i int, el models.TextElement) {
 // breaksLine reports whether el, the element i, starts a new line, and
 // advances the run state past it. A run is compared with the last glyph that
 // was not a space, and a space glyph never starts a line ([runTracker]).
+//
+// A glyph compared with a glyph before its run, because every glyph of the
+// run gave no advance, continues the run on its baseline, as the reference
+// generator joins it.
+//
+// # Corpus evidence
+//
+//   - litho fontemptycs_2b.pdf, fontkeys_1b.pdf: two glyphs whose /Widths
+//     entry is 0 or missing, shown at one origin on a line of their own,
+//     read "A" and "B" on two lines where PDF.js reads "AB".
+//   - litho complex_ua1.pdf, complex_ua2.pdf: an unembedded font whose
+//     /Widths covers only "A" and "B" gave every other letter no advance, so
+//     each letter read as a line of its own.
+//   - All corpora: words match PDF.js on these 4 more files and on none
+//     fewer; govdocs, pdfcpu, facturx and pdf20 do not move, and 4 pdfjs
+//     files whose words still differ (issue18208.pdf, issue20722.pdf,
+//     issue5874.pdf, bug1142033.pdf) now read a mark or a zero-width glyph
+//     that begins a line with the glyphs after it on its baseline.
 func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 	if carriesNoPosition(el.Text) {
 		return false
@@ -785,6 +803,16 @@ func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 			// only past a tenth of the size of the run before the flag,
 			// measured across the baseline of el (join-lines.mjs, joinLines).
 			return acrossBaseline(ref, el) > min(lineBreakTolerance, sameBaselineRatio*r.height(refIdx, ref))
+		}
+		if fromIdx < refIdx {
+			// Every glyph of the run before el gave no advance (ISO 32000-1,
+			// 9.2.4: the displacement is the /Widths entry, which may be 0),
+			// so el was compared with a glyph before the run, as PDF.js
+			// compares it with the last glyph that advanced
+			// (src/core/evaluator.js, buildTextContentItem, prevTransform).
+			// The reference generator measures the flag from the run, and
+			// joins el to it on its baseline (join-lines.mjs, joinLines).
+			return acrossBaseline(ref, el) > sameBaselineRatio*r.height(refIdx, ref)
 		}
 		return true
 	}

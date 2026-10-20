@@ -7959,10 +7959,9 @@ golden stands. Of the 194 fixtures, 182 match, 8 are unscored
 of `fontcopies_2b` too, whose other pages score), and 4 mismatch, each on a
 reading litho gets wrong:
 
-| Fixture                         | Right reading                                                    | litho reads                                        |
-| ------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------- |
-| `complex_ua1`, `complex_ua2`    | words split at code 20, the WinAnsiEncoding space                | each letter a word, on the lines after the figures |
-| `fontemptycs_2b`, `fontkeys_1b` | `AB`: two glyphs that do not advance, with no space between them | `A B`                                              |
+| Fixture                      | Right reading                                     | litho reads                                        |
+| ---------------------------- | ------------------------------------------------- | -------------------------------------------------- |
+| `complex_ua1`, `complex_ua2` | words split at code 20, the WinAnsiEncoding space | each letter a word, on the lines after the figures |
 
 The cell's `words_match` reads 182 and `chars_match` 186: the four fixtures of
 the two rows match once spaces are ignored. A new fixture needs

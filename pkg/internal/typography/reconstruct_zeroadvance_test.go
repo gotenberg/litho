@@ -63,3 +63,43 @@ func TestReconstructText_ZeroAdvanceGlyphAtWordEnd(t *testing.T) {
 		t.Fatalf("ReconstructText = %q, want %q", got, want)
 	}
 }
+
+// TestReconstructText_ZeroAdvanceGlyphsOnNewLine pins that glyphs a font gives
+// no advance, shown at one origin on a line of their own, read as one word.
+// None of them moves the position PDF.js measures from, so each is compared
+// with the last glyph of the line above and flagged as a line end, and the
+// reference generator joins the glyphs of one baseline across such a flag.
+// The displacement is the /Widths entry (ISO 32000-1, 9.2.4), here 0, so the
+// two glyphs touch: no space either.
+func TestReconstructText_ZeroAdvanceGlyphsOnNewLine(t *testing.T) {
+	t.Parallel()
+
+	elements := []models.TextElement{
+		{Text: "A", X: 10, Y: 750, Width: 8.4, FontSize: 12},
+		{Text: "B", X: 18.4, Y: 750, Width: 8.4, FontSize: 12},
+		{Text: "A", X: 10, Y: 730, Width: 0, FontSize: 12},
+		{Text: "B", X: 10, Y: 730, Width: 0, FontSize: 12},
+		{Text: "A", X: 10, Y: 710, Width: 8.4, FontSize: 12},
+		{Text: "B", X: 18.4, Y: 710, Width: 8.4, FontSize: 12},
+	}
+	got := ReconstructText(context.Background(), elements, nil)
+	if want := "AB\nAB\nAB"; got != want {
+		t.Fatalf("ReconstructText = %q, want %q", got, want)
+	}
+}
+
+// TestReconstructText_ZeroAdvanceGlyphThenNewLine is the control: a glyph
+// below a zero-width glyph that began a line still starts a line of its own.
+func TestReconstructText_ZeroAdvanceGlyphThenNewLine(t *testing.T) {
+	t.Parallel()
+
+	elements := []models.TextElement{
+		{Text: "A", X: 10, Y: 750, Width: 8.4, FontSize: 12},
+		{Text: "B", X: 10, Y: 730, Width: 0, FontSize: 12},
+		{Text: "C", X: 10, Y: 710, Width: 0, FontSize: 12},
+	}
+	got := ReconstructText(context.Background(), elements, nil)
+	if want := "A\nB\nC"; got != want {
+		t.Fatalf("ReconstructText = %q, want %q", got, want)
+	}
+}
