@@ -101,28 +101,28 @@ func ParseCharStringWidths(data []byte) map[string]float64 {
 	return widths
 }
 
-// Type 1 charstring operator numbers used for width extraction. The
-// full operator set is much larger; text extraction only needs the
-// two that carry the advance width, so the interpreter in
-// [extractAdvanceWidth] intentionally stops once it sees one.
+// Type 1 charstring operator numbers (Adobe Type 1 Font Format, Appendix
+// 1). Width extraction only needs the two that carry the advance width, so
+// [extractAdvanceWidth] stops once it sees one; [Font.GlyphOutline] runs
+// them all.
 const (
-	csOpHstem          = 1 //nolint:unused // listed for context
-	csOpVstem          = 3 //nolint:unused // listed for context
-	csOpVmoveTo        = 4 //nolint:unused // listed for context
-	csOpRlineTo        = 5 //nolint:unused // listed for context
-	csOpHlineTo        = 6 //nolint:unused // listed for context
-	csOpVlineTo        = 7 //nolint:unused // listed for context
-	csOpRrcurveTo      = 8 //nolint:unused // listed for context
-	csOpClosePath      = 9 //nolint:unused // listed for context
+	csOpHstem          = 1
+	csOpVstem          = 3
+	csOpVmoveTo        = 4
+	csOpRlineTo        = 5
+	csOpHlineTo        = 6
+	csOpVlineTo        = 7
+	csOpRrcurveTo      = 8
+	csOpClosePath      = 9
 	csOpCallSubr       = 10
-	csOpReturn         = 11 //nolint:unused // listed for context
+	csOpReturn         = 11
 	csOpEscape         = 12
 	csOpHsbw           = 13
 	csOpEndChar        = 14
-	csOpRmoveTo        = 21 //nolint:unused // listed for context
-	csOpHmoveTo        = 22 //nolint:unused // listed for context
-	csOpVhcurveTo      = 30 //nolint:unused // listed for context
-	csOpHvcurveTo      = 31 //nolint:unused // listed for context
+	csOpRmoveTo        = 21
+	csOpHmoveTo        = 22
+	csOpVhcurveTo      = 30
+	csOpHvcurveTo      = 31
 	csOpEscapeSbw byte = 7  // follows csOpEscape to form the two-byte sbw operator
 	csOpEscapeDiv byte = 12 // follows csOpEscape to form the two-byte div operator
 )

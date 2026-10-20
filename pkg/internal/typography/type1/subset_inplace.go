@@ -420,7 +420,7 @@ func checkSubrs(ctx context.Context, body []byte, lenIV int) error {
 				return fmt.Errorf("subsetting a Type 1 program: %w", err)
 			}
 		}
-		start, end, status := nextSubr(body, pos)
+		_, start, end, status := nextSubr(body, pos)
 		switch status {
 		case subrEntry:
 			// Read on.
@@ -457,10 +457,10 @@ var subrSeparators = map[string]bool{"NP": true, "|": true, "noaccess": true, "p
 // procedure, its "|-" spelling, or what it stands for.
 var subrsClosers = map[string]bool{"ND": true, "|-": true, "def": true, "readonly": true}
 
-// nextSubr reads the /Subrs entry at or after pos and returns the bounds of
-// its encrypted bytes, or reports that the definition closes there or does
-// not read.
-func nextSubr(body []byte, pos int) (int, int, subrStatus) {
+// nextSubr reads the /Subrs entry at or after pos and returns its index and
+// the bounds of its encrypted bytes, or reports that the definition closes
+// there or does not read.
+func nextSubr(body []byte, pos int) (int, int, int, subrStatus) {
 	for {
 		pos = skipWhitespace(body, pos)
 		tokEnd := pos
@@ -473,36 +473,36 @@ func nextSubr(body []byte, pos int) (int, int, subrStatus) {
 			break
 		}
 		if subrsClosers[tok] {
-			return 0, 0, subrsClosed
+			return 0, 0, 0, subrsClosed
 		}
 		if !subrSeparators[tok] {
-			return 0, 0, subrsUnread
+			return 0, 0, 0, subrsUnread
 		}
 		pos = tokEnd
 	}
 	pos = skipWhitespace(body, pos)
-	_, after := readInt(body, pos)
+	index, after := readInt(body, pos)
 	if after == pos {
-		return 0, 0, subrsUnread
+		return 0, 0, 0, subrsUnread
 	}
 	pos = skipWhitespace(body, after)
 	length, after := readInt(body, pos)
 	if after == pos {
-		return 0, 0, subrsUnread
+		return 0, 0, 0, subrsUnread
 	}
 	pos = skipWhitespace(body, after)
 	op, afterOp := readReaderOp(body, pos)
 	if op == nil {
-		return 0, 0, subrsUnread
+		return 0, 0, 0, subrsUnread
 	}
 	pos = afterOp
 	if pos < len(body) && isPostScriptWhitespace(body[pos]) {
 		pos++
 	}
 	if length > len(body)-pos {
-		return 0, 0, subrsUnread
+		return 0, 0, 0, subrsUnread
 	}
-	return pos, pos + length, subrEntry
+	return index, pos, pos + length, subrEntry
 }
 
 // hasSeac reports whether a decrypted charstring holds a seac operator.
