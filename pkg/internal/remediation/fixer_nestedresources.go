@@ -68,9 +68,9 @@ func matchNestedResources(v compliance.Violation) bool {
 // page, with its /Resources empty or absent alike.
 //
 // A Form XObject or a pattern shared by several pages may see a different
-// binding for the same name on each, so only a singly-referenced one is
-// repaired. Deep-copying per page would also be correct and reaches more
-// documents.
+// binding for the same name on each, so a singly-referenced one is repaired
+// here and a shared one by [fixSharedNestedResources], which copies it per
+// group of pages that bind its names alike.
 //
 // # Corpus evidence
 //
@@ -99,8 +99,9 @@ func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	var pages []annotPageEntry
 	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
 
-	// An XObject or a pattern reachable from more than one page is left alone:
-	// the pages may bind the same name to different objects.
+	// An XObject or a pattern reachable from more than one page goes to
+	// [fixSharedNestedResources]: the pages may bind the same name to
+	// different objects.
 	refCount := make(map[int]int)
 	for _, pe := range pages {
 		pageRes := pageResourcesFor(ctx, alloc, doc, pe)
@@ -133,6 +134,12 @@ func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		patterns += fixTilingPatternResources(ctx, alloc, doc, pageRes, refCount)
 		type3 += fixType3FontResources(ctx, alloc, doc, pageRes)
 	}
+	sharedForms, sharedPatterns, err := fixSharedNestedResources(ctx, alloc, doc, pages, refCount)
+	if err != nil {
+		return nil, err
+	}
+	forms += sharedForms
+	patterns += sharedPatterns
 
 	var fixes []string
 	if forms > 0 {

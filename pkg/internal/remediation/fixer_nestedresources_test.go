@@ -72,17 +72,13 @@ func TestFixNestedResources_GivesAFormXObjectItsOwnResources(t *testing.T) {
 	}
 }
 
-// TestFixNestedResources_LeavesASharedXObjectAlone guards a hazard no real
-// file exercises.
+// TestFixNestedResources_LeavesASharedXObjectAlone pins that a form XObject two
+// pages bind differently keeps its own dictionary: each page draws a copy
+// carrying its own binding instead.
 //
-// Two pages may bind the same name to different objects, so copying one page's
-// binding into an XObject both share would be wrong. Only this test can catch a
+// Copying one page's binding into the object both share would repaint the
+// other page with it. Only this test and litho sharednested_2b.pdf can catch a
 // regression here.
-//
-// # Corpus evidence
-//
-//   - All corpora: every fixture carrying this violation is single-page, so the
-//     corpus cannot falsify this hazard.
 func TestFixNestedResources_LeavesASharedXObjectAlone(t *testing.T) {
 	t.Parallel()
 
@@ -103,6 +99,11 @@ func TestFixNestedResources_LeavesASharedXObjectAlone(t *testing.T) {
 	}
 	if _, rewritten := alloc.Pending()[4]; rewritten {
 		t.Error("a form XObject referenced by two pages was rewritten; the pages bind /CS0 differently")
+	}
+	gray := sharedCopyColourSpace(t, alloc, 3, "X0")
+	rgb := sharedCopyColourSpace(t, alloc, 6, "X0")
+	if gray != "CalGray" || rgb != "CalRGB" {
+		t.Errorf("copies bind /CS0 to %q and %q, want CalGray and CalRGB", gray, rgb)
 	}
 }
 
