@@ -248,6 +248,7 @@ one deliberately rather than diffing it against a fresh build.
 | `iccbadcmyk_1b.pdf`    | PDF/A-1b     | A CMYK output intent whose ICC profile states version 5.0        |
 | `iccbadcmyk_2b.pdf`    | PDF/A-2b     | Two output intents sharing one scanner-class CMYK ICC profile    |
 | `refreach_ua1.pdf`     | PDF/UA-1     | Reference XObjects a cell, glyph, page or appearance draws       |
+| `inlinelzw_2b.pdf`     | PDF/A-2b     | Inline images with a forbidden filter in every stream parsed     |
 
 ### Must-not-fire controls
 
@@ -630,6 +631,7 @@ are covered under [Known divergences](#known-divergences).
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `inlineinterp_2b.pdf`  | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 10   | 8    |
 | `inlinekids_ua2.pdf`   | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
+| `inlinelzw_2b.pdf`     | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 9    | 7    |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
 | `kidsarray_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 12   | 8    |
 | `kidsrepair_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 5    | 5    |
@@ -4796,6 +4798,45 @@ tools. With the repair but not the write of the page's array, the rewrite wrote
 the reference to its new stream as the value of the array's object, which
 qpdf reads as an integer and litho's text extraction as no text: the writer
 rolled the content repairs back and the four findings came back.
+
+### `inlinelzw_2b.pdf`
+
+ISO 19005-1, 6.1.10 forbids LZWDecode in an inline image's filters, and ISO
+19005-2/3, 6.1.10 and ISO 19005-4, 6.1.9 forbid LZWDecode, Crypt and every value
+outside ISO 32000-1, Table 6. veraPDF judges each inline image as an image of
+its own. The LZW repair re-encodes stream objects, whose dictionary and data
+are apart, so every inline image kept its finding through a remediation. The
+corpus holds such images in page content alone; this fixture puts one in each
+stream veraPDF parses, and spells the filters every way the repair reads them:
+
+| Stream                                       | Filters written                              | A-1b       | A-2b       |
+| -------------------------------------------- | -------------------------------------------- | ---------- | ---------- |
+| the page's content                           | `/F /LZW /DP << /EarlyChange 0 >>`, and `/L` | `6.1.10/2` | `6.1.10/1` |
+| the page's content                           | `/F [/AHx /LZW /RL]`                         | `6.1.10/2` | `6.1.10/1` |
+| the page's content                           | `/F /AHx`, the control                       | none       | none       |
+| a form XObject the page draws                | `/Filter /LZWDecode`                         | `6.1.10/2` | `6.1.10/1` |
+| glyph `a` of a Type 3 font the page shows    | `/F [/LZW]`                                  | `6.1.10/2` | `6.1.10/1` |
+| the cell of a tiling pattern the page fills  | `/F /LZW`                                    | `6.1.10/2` | `6.1.10/1` |
+| the normal appearance of a Square annotation | `/F /Lzw`, a name outside Table 6            | none       | `6.1.10/1` |
+
+Every image draws the same eight grey samples from real LZW data. The repair
+decodes each image through its last forbidden filter, writes it again with
+FlateDecode, keeps the RunLength after the LZW of the second, and states the
+new length in the first's `/L`; the control keeps its bytes. At PDF/A-1 the
+`/Lzw` image keeps its bytes too, since ISO 19005-1 names LZWDecode alone.
+
+| Rule at PDF/A-2b                   | veraPDF | litho | litho remediated |
+| ---------------------------------- | ------- | ----- | ---------------- |
+| `6.1.10/1` forbidden inline filter | 6       | 6     | 0                |
+| `6.2.4.3/4` DeviceGray             | 8       | 8     | 0                |
+| `6.6.2.1/1` no metadata            | 1       | 1     | 0                |
+
+The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
+counts. Remediated at the eleven PDF/A levels, default and aggressive, every
+output passes on both tools but PDF/A-4f's, which keeps `6.9/5`, the embedded
+file that level requires, and each draws the samples the source draws. Before
+the repair, every output kept the five or six inline filter findings on both
+tools.
 
 ### `formhidden_ua1.pdf`
 
