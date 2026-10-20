@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-19T21:42:06Z",
+  "captured_at": "2026-10-20T06:01:50Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -185,9 +185,9 @@
           }
         },
         "mutate-redact": {
-          "matched": 1560,
+          "matched": 1547,
           "mismatched": 0,
-          "skipped": 962,
+          "skipped": 975,
           "metrics": {
             "pages_wrong": 0,
             "qpdf_failed": 0,
@@ -229,48 +229,48 @@
           }
         },
         "remediation": {
-          "matched": 884,
-          "mismatched": 1638,
+          "matched": 885,
+          "mismatched": 1637,
           "skipped": 0,
           "metrics": {
             "disagreement": 11,
-            "fully_fixed": 884,
-            "litho_fixed": 12730,
-            "litho_post": 3302,
+            "fully_fixed": 885,
+            "litho_fixed": 12744,
+            "litho_post": 3288,
             "litho_pre": 16032,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 12709,
-            "verapdf_post": 3291,
+            "verapdf_fixed": 12723,
+            "verapdf_post": 3277,
             "verapdf_pre": 16000,
             "verapdf_regressed": 0
           }
         },
         "remediation-aggressive": {
-          "matched": 953,
-          "mismatched": 1569,
+          "matched": 954,
+          "mismatched": 1568,
           "skipped": 0,
           "metrics": {
             "disagreement": 11,
-            "fully_fixed": 953,
-            "litho_fixed": 13139,
-            "litho_post": 2893,
+            "fully_fixed": 954,
+            "litho_fixed": 13153,
+            "litho_post": 2879,
             "litho_pre": 16032,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 13118,
-            "verapdf_post": 2882,
+            "verapdf_fixed": 13132,
+            "verapdf_post": 2868,
             "verapdf_pre": 16000,
             "verapdf_regressed": 0
           }
         },
         "text": {
-          "matched": 182,
-          "mismatched": 4,
+          "matched": 186,
+          "mismatched": 0,
           "skipped": 8,
           "metrics": {
             "chars_match": 186,
-            "words_match": 182
+            "words_match": 186
           }
         }
       }
