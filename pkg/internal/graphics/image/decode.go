@@ -962,6 +962,16 @@ type labParams struct {
 	// aMin, aMax, bMin, bMax are /Range. Its default is [-100 100 -100 100],
 	// but real files carry other spans, so the declared one is read.
 	aMin, aMax, bMin, bMax float64
+	// toLinear takes XYZ relative to the white point to linear sRGB: the
+	// Bradford adaptation of the white to D65, then the sRGB matrix. Set by
+	// [labParams.withMatrix].
+	toLinear [9]float64
+}
+
+// withMatrix returns p with toLinear computed from its white point.
+func (p labParams) withMatrix() labParams {
+	p.toLinear = mul3(xyzToLinearS, adaptToD65([3]float64{p.whiteX, p.whiteY, p.whiteZ}))
+	return p
 }
 
 // palette holds a resolved indexed colour space: the device space its entries
@@ -1141,22 +1151,34 @@ func resolveLabParams(ctx context.Context, doc *document.Document, obj ast.PdfOb
 		p.aMin, p.aMax = document.Float(rng[0]), document.Float(rng[1])
 		p.bMin, p.bMax = document.Float(rng[2]), document.Float(rng[3])
 	}
-	return p, true
+	return p.withMatrix(), true
 }
 
 // labEntryToRGB converts one palette entry written in a Lab space to sRGB.
 //
 // The entry bytes are scaled onto the component ranges per ISO 32000-1, 8.6.6.3
 // (L* over [0, 100], a* and b* over /Range), turned into XYZ by the g() of
-// 8.6.5.4, and then matrixed to sRGB. The matrix is chosen by the declared
-// white rather than adapted to one: no chromatic adaptation is applied, which
-// is what PDF.js does for the same construct.
+// 8.6.5.4 relative to the space's /WhitePoint, adapted to the D65 white of
+// sRGB by the Bradford transform, matrixed to linear sRGB, and encoded by the
+// sRGB transfer function of IEC 61966-2-1, rounding to the nearest level.
+// That is the path CalRGB takes ([calSpace]), so Lab white is sRGB white.
+//
+// PDF.js picks a fixed matrix by the white instead, applies no adaptation
+// and approximates the transfer function by a square root, which puts its
+// mid-tones up to ten levels off and its white a level short; litho does not
+// follow it there.
 //
 // Clamping before the transfer function is load-bearing rather than tidy. The
 // matrix yields negative channels for colours outside the sRGB gamut, which
-// real palettes hold, math.Sqrt of a negative is NaN, and a float-to-uint8
-// conversion outside [0, 255] is not defined to saturate: uint8(-1.0) is 255,
-// so an out-of-gamut entry would come out as its opposite.
+// real palettes hold, and a float-to-uint8 conversion outside [0, 255] is not
+// defined to saturate: uint8(-1.0) is 255, so an out-of-gamut entry would
+// come out as its opposite. [encodeSRGB] clamps.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10339_reduced.pdf, issue2761.pdf, govdocs
+//     thread_300_300253.pdf: the 5 Lab images of the corpora, direct or
+//     indexed, now lie 7 to 10 levels from PDF.js's approximation.
 func labEntryToRGB(e [4]byte, p labParams) (uint8, uint8, uint8) {
 	decode := func(v byte, lo, hi float64) float64 {
 		return lo + float64(v)*(hi-lo)/255
@@ -1176,22 +1198,8 @@ func labEntryToRGB(e [4]byte, p labParams) (uint8, uint8, uint8) {
 	y := p.whiteY * g(m)
 	z := p.whiteZ * g(m-bStar/200)
 
-	var r, gr, b float64
-	if p.whiteZ < 1 {
-		r = x*3.1339 + y*-1.617 + z*-0.4906
-		gr = x*-0.9785 + y*1.916 + z*0.0333
-		b = x*0.072 + y*-0.229 + z*1.4057
-	} else {
-		r = x*3.2406 + y*-1.5372 + z*-0.4986
-		gr = x*-0.9689 + y*1.8758 + z*0.0415
-		b = x*0.0557 + y*-0.204 + z*1.057
-	}
-
-	channel := func(v float64) uint8 {
-		v = min(max(v, 0), 1)
-		return uint8(math.Sqrt(v) * 255)
-	}
-	return channel(r), channel(gr), channel(b)
+	rgb := apply3(p.toLinear, [3]float64{x, y, z})
+	return encodeSRGB(rgb[0]), encodeSRGB(rgb[1]), encodeSRGB(rgb[2])
 }
 
 // decodeIndexed builds the image of an indexed colour space, mapping each

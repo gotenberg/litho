@@ -91,17 +91,13 @@ type colorCase struct {
 // was read off the centre of the square pdftoppm 26.09.0, built with lcms2,
 // painted at 72 dpi.
 //
-// Two families diverge by design, and their tolerance is the measured
-// divergence, so a further drift still fails:
-//
-//   - DeviceCMYK with no output intent, alone or as a tint transform's
-//     alternate: litho reads it through its built-in CMYK profile, as it
-//     decodes CMYK images, where poppler applies its own formula. The two
-//     agree on pure cyan, and the same colours through an ICCBased space of
-//     litho's CMYK printer profile match poppler to the level.
-//   - Lab: litho converts it as its image decoder does, mirroring PDF.js
-//     (no chromatic adaptation, a square-root transfer curve), where poppler
-//     goes through lcms2.
+// One family diverges by design, and its tolerance is the measured
+// divergence, so a further drift still fails: DeviceCMYK with no output
+// intent, alone or as a tint transform's alternate. litho reads it through
+// its built-in CMYK profile, as it decodes CMYK images, where poppler applies
+// its own formula. The two agree on pure cyan, and the same colours through
+// an ICCBased space of litho's CMYK printer profile match poppler to the
+// level.
 var oracleCases = []colorCase{
 	{name: "DeviceGray", def: "/DeviceGray", comps: []float64{0.5}, poppler: []uint8{128, 128, 128}, tol: 1},
 	{name: "DeviceRGB", def: "/DeviceRGB", comps: []float64{0.2, 0.4, 0.6}, poppler: []uint8{51, 102, 153}, tol: 1},
@@ -109,16 +105,16 @@ var oracleCases = []colorCase{
 	{name: "DeviceCMYK mix", def: "/DeviceCMYK", comps: []float64{0, 0.5, 0.5, 0.2}, poppler: []uint8{203, 108, 88}, tol: 17},
 	{name: "CalGray", def: "[/CalGray << " + d65Cal + " /Gamma 2.2 >>]", comps: []float64{0.5}, poppler: []uint8{128, 128, 128}, tol: 1},
 	{name: "CalRGB", def: "[/CalRGB << " + d65Cal + " /Gamma [2.2 2.2 2.2] " + srgbM + " >>]", comps: []float64{0.2, 0.4, 0.6}, poppler: []uint8{48, 102, 154}, tol: 1},
-	{name: "Lab", def: labDef, comps: []float64{50, 20, -30}, poppler: []uint8{133, 108, 170}, tol: 10},
+	{name: "Lab", def: labDef, comps: []float64{50, 20, -30}, poppler: []uint8{133, 108, 170}, tol: 1},
 	{name: "ICCBased RGB", def: "[/ICCBased 5 0 R]", comps: []float64{0.2, 0.4, 0.6}, poppler: []uint8{51, 102, 153}, tol: 1},
 	{name: "ICCBased CMYK", def: "[/ICCBased 6 0 R]", comps: []float64{1, 0, 0, 0}, poppler: []uint8{0, 174, 239}, tol: 1},
 	{name: "Indexed RGB", def: "[/Indexed /DeviceRGB 2 <FF0000 00FF00 0000FF>]", comps: []float64{1}, poppler: []uint8{0, 255, 0}, tol: 1},
 	{name: "Separation", def: sepDef, comps: []float64{0.5}, poppler: []uint8{246, 129, 153}, tol: 23},
 	{name: "DeviceN", def: "[/DeviceN [/A /B] /DeviceRGB 8 0 R]", comps: []float64{0.3, 0.7}, poppler: []uint8{76, 178, 128}, tol: 1},
-	{name: "Indexed Lab", def: "[/Indexed " + labDef + " 1 <FF8080 80FF80>]", comps: []float64{1}, poppler: []uint8{255, 0, 127}, tol: 10},
+	{name: "Indexed Lab", def: "[/Indexed " + labDef + " 1 <FF8080 80FF80>]", comps: []float64{1}, poppler: []uint8{255, 0, 127}, tol: 1},
 	{name: "Indexed Separation", def: "[/Indexed " + sepDef + " 2 <0080FF>]", comps: []float64{1}, poppler: []uint8{246, 129, 152}, tol: 23},
 	{name: "ICCBased CMYK mix", def: "[/ICCBased 6 0 R]", comps: []float64{0, 0.5, 0.5, 0.2}, poppler: []uint8{204, 125, 101}, tol: 1},
-	{name: "Lab saturated", def: labDef, comps: []float64{90, -50, 60}, poppler: []uint8{149, 250, 101}, tol: 9},
+	{name: "Lab saturated", def: labDef, comps: []float64{90, -50, 60}, poppler: []uint8{149, 250, 101}, tol: 1},
 }
 
 // oraclePage returns the content stream and colour space resources of the
@@ -296,6 +292,8 @@ func TestHandComputed(t *testing.T) {
 		{"DeviceN over RGB", "[/DeviceN [/A /B] /DeviceRGB 8 0 R]", []float64{0.2, 1}, [3]int{51, 255, 128}},
 		{"Lab white", labDef, []float64{100, 0, 0}, [3]int{255, 255, 255}},
 		{"Lab black", labDef, []float64{0, 0, 0}, [3]int{0, 0, 0}},
+		// L* 50 quantises to 50.196, Y = ((50.196+16)/116)^3 = 0.1859, sRGB 119.
+		{"Lab grey", labDef, []float64{50, 0, 0}, [3]int{119, 119, 119}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -306,9 +304,9 @@ func TestHandComputed(t *testing.T) {
 				t.Fatalf("ForObject: %v", err)
 			}
 			r, g, b := conv.RGB(tt.comps)
-			// The decoder truncates its Lab channels, so the white of a Lab
-			// space comes out a level short of 255 on two channels; one level
-			// is the tolerance throughout.
+			// The expected values round the exact formulas; a level is the
+			// quantisation of a vector colour to an 8-bit sample, as images
+			// hold them.
 			got := [3]int{level(r), level(g), level(b)}
 			for ch := range 3 {
 				if d := got[ch] - tt.want[ch]; d < -1 || d > 1 {

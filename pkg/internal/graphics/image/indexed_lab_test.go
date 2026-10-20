@@ -10,7 +10,7 @@ import (
 
 // labBase is a /Lab base colour space as the documents that exposed the
 // refusal write it: /Range and /WhitePoint are theirs verbatim. The white point
-// is D50 (Z < 1), which selects the D50 matrix in [labEntryToRGB].
+// is D50, which [labEntryToRGB] adapts to the D65 white of sRGB.
 //
 // # Corpus evidence
 //
@@ -28,10 +28,11 @@ const labBase = "[/Lab << /Range [-128.0 127.0 -128.0 127.0]" +
 //
 // The expected values are computed from ISO 32000-1, 8.6.6.3 and 8.6.5.4 with
 // the white point above, not eyeballed. Byte 128 maps a* and b* to exactly 0
-// under /Range [-128 127], so the grey entries are exact anchors. Note white
-// comes back 255,254,254 rather than 255,255,255: the D50 matrix and the
-// square-root transfer leave green and blue one short, and asserting pure white
-// would be asserting an intuition over the arithmetic.
+// under /Range [-128 127], so the grey entries are exact anchors: Bradford
+// takes the D50 white to D65, so L* = 100 is sRGB white and L* = 50.196 the
+// sRGB grey of luminance 0.1859. The values agree with a Python
+// implementation of the same formulas and, within a level, with pdftoppm
+// 26.09.0 through lcms2.
 //
 // # Corpus evidence
 //
@@ -57,10 +58,10 @@ func TestDecodeIndexedLabImage(t *testing.T) {
 		want color.RGBA
 		note string
 	}{
-		{0, 0, color.RGBA{R: 255, G: 254, B: 254, A: 255}, "L*=100 a*=0 b*=0"},
+		{0, 0, color.RGBA{R: 255, G: 255, B: 255, A: 255}, "L*=100 a*=0 b*=0"},
 		{1, 0, color.RGBA{R: 0, G: 0, B: 0, A: 255}, "L*=0 a*=0 b*=0"},
-		{0, 1, color.RGBA{R: 109, G: 109, B: 109, A: 255}, "L*=50.196 a*=0 b*=0"},
-		{1, 1, color.RGBA{R: 255, G: 0, B: 117, A: 255}, "L*=50.196 a*=127 b*=0"},
+		{0, 1, color.RGBA{R: 119, G: 119, B: 119, A: 255}, "L*=50.196 a*=0 b*=0"},
+		{1, 1, color.RGBA{R: 255, G: 0, B: 127, A: 255}, "L*=50.196 a*=127 b*=0"},
 	} {
 		r, g, b, a := img.At(tc.x, tc.y).RGBA()
 		got := color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: uint8(a >> 8)}
@@ -76,16 +77,14 @@ func TestDecodeIndexedLabImage(t *testing.T) {
 // the sRGB gamut, and real palettes hold them. The two entries here are the two
 // halves, and only one of them is observable:
 //
-//   - a* = +127 puts red at 1.3189. Without the upper clamp math.Sqrt gives
-//     1.1484, times 255 is 292.8, and the conversion wraps to 36: the brightest
-//     channel in the image comes out nearly black. This is what the assertion
-//     below actually catches.
-//   - a* = -128 with b* = +127 drives red and blue negative. math.Sqrt of a
-//     negative is NaN, and converting NaN to uint8 currently yields 0 here,
-//     which is the same answer the clamp gives. That agreement is incidental:
-//     Go leaves an out-of-range float to integer conversion
-//     implementation-defined, so the clamp is what makes the result 0 by
-//     contract rather than by luck.
+//   - a* = +127 puts linear red above 1. Without the upper clamp the
+//     transfer function gives more than 255, and the conversion wraps: the
+//     brightest channel in the image comes out nearly black. This is what the
+//     assertion below actually catches.
+//   - a* = -128 with b* = +127 drives red and blue negative. The transfer
+//     function of a negative is negative, and Go leaves an out-of-range float
+//     to integer conversion implementation-defined, so the clamp is what makes
+//     the result 0 by contract rather than by luck.
 //
 // An earlier version of this test asserted only the negative entry and passed
 // with the clamp removed, which is why both are pinned now.
@@ -106,8 +105,8 @@ func TestDecodeIndexedLabClampsOutOfGamut(t *testing.T) {
 		want color.RGBA
 		note string
 	}{
-		{0, 0, color.RGBA{R: 255, G: 0, B: 117, A: 255}, "red 1.3189 clamped down to 1"},
-		{1, 0, color.RGBA{R: 0, G: 145, B: 0, A: 255}, "red and blue negative, clamped up to 0"},
+		{0, 0, color.RGBA{R: 255, G: 0, B: 127, A: 255}, "red above 1 clamped down to 1"},
+		{1, 0, color.RGBA{R: 0, G: 155, B: 0, A: 255}, "red and blue negative, clamped up to 0"},
 	} {
 		r, g, b, a := img.At(tc.x, tc.y).RGBA()
 		got := color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: uint8(a >> 8)}

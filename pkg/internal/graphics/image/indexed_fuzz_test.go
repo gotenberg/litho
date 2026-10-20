@@ -77,7 +77,7 @@ func FuzzDecodeIndexed(f *testing.F) {
 			labPal.lab = labParams{
 				whiteX: 0.964203, whiteY: 1.0, whiteZ: 0.824905,
 				aMin: -128, aMax: 127, bMin: -128, bMax: 127,
-			}
+			}.withMatrix()
 			labImg, labErr := decodeIndexed(data, w, h, labPal)
 			if labErr == nil {
 				b := labImg.Bounds()
