@@ -1909,6 +1909,41 @@ colours, so the remediated outputs keep `6.2.4.2/1` (`6.2.3.2/1` at PDF/A-1) on
 litho and report nothing on veraPDF: the remediation features' `disagreement`
 reads 11 in each mode, one per PDF/A level.
 
+The mechanism is veraPDF's object identity, not a rule. `BaseValidator` (core
+1.30.2, `checkRequired`, line 328) pushes a model object onto its work stack
+only when its `getID()` is not yet in `idSet`, and `GFPDObject` (validation
+1.30.2, lines 57 to 68) builds a content stream's ID from the object key of
+the stream it wraps, `"<num> <gen> obj PDContentStream"`. `GFPDPage` (lines 239
+to 254) wraps each page's `/Contents`, as `PDPage` (parser 1.30.2, line 85)
+holds it, together with that page's resources handler, so the second page's
+`GFPDContentStream` carries the first page's ID and is never pushed: its
+operators are never parsed, and nothing its resources name is reached. The
+contexts veraPDF prints on `imagereach_2b.pdf` show the key:
+`contentStream[0](5 0 obj PDContentStream)`. A form XObject's stream takes its
+ID the same way, so a form two pages draw is also read once; that changes
+nothing while the form names only its own `/Resources`.
+
+Re-measured with live veraPDF 1.30.2 at all thirteen levels, the 22 cells and
+what each side counts (litho / veraPDF):
+
+| Levels              | `sharedicc_2b`    | `imagereach_2b`                                     |
+| ------------------- | ----------------- | --------------------------------------------------- |
+| PDF/A-1a, 1b        | `6.2.3.2/1` 2 / 0 | `6.2.4/3` 1 / 0, `6.2.9/1` 1 / 0, `6.2.3.3/3` 3 / 2 |
+| PDF/A-2a to 3u, six | `6.2.4.2/1` 1 / 0 | `6.2.6/1` 1 / 0, `6.2.8/3` 1 / 0, `6.2.4.3/4` 3 / 2 |
+| PDF/A-4, 4e, 4f     | `6.2.4.2/1` 1 / 0 | `6.2.7.1/3` 1 / 0, `6.2.4.3/4` 3 / 2                |
+
+Each extra report is an object veraPDF never reaches, not a second count of
+one it does. The ICC tests (ISO 19005-1, 6.2.3.2; ISO 19005-2, 6.2.4.2 t1)
+judge the profile of each ICCBased space, and the abstract and version 4
+spaces are page 2's and page 3's own. The intent and interpolation tests (ISO
+19005-1, 6.2.4 and 6.2.9; ISO 19005-2, 6.2.6 and 6.2.8 t3; ISO 19005-4,
+6.2.7.1 t3) judge each image dictionary, and `I3` is drawn by page 2 alone.
+The device colour tests (ISO 19005-1, 6.2.3.3; ISO 19005-2, 6.2.4.3) judge a
+use, and the third DeviceGray is `I3`'s. No clause here counts a shared object
+once, so litho keeps its per-reading judgement. Rewriting each fixture with a
+copy of the stream per page makes veraPDF's rule sets and counts equal litho's
+in all 26 cells.
+
 **`6.2.4.3/4` on a `Lab ` destination profile.** litho reports the device
 colour-space rule against a page whose output intent declares an ICC profile
 with a `Lab ` data colour space; veraPDF does not. The reduction is a single
