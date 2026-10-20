@@ -148,6 +148,12 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		default:
 			newLine = runs.breaksLine(i, el)
 		}
+		if !newLine && !carriesNoPosition(el.Text) && turnsAway(prev, el) {
+			// A glyph set in another direction away from the end of the
+			// glyph before it starts a label of its own ([turnsAway]).
+			newLine = true
+			runs.restart(i, el)
+		}
 		if newLine {
 			lines = append(lines, cur)
 			cur = line{elems: []models.TextElement{el}}
@@ -972,6 +978,52 @@ func (r *runTracker) endsLine(lastIdx, i int, last, el models.TextElement, gap, 
 // name does (test/integration/corpus/lib/join-lines.mjs), not a real change
 // of direction.
 const sameDirectionTolerance = 1e-3
+
+// turnsAway reports whether el starts a line of its own because it is set
+// in another direction than prev, the last glyph that painted before it,
+// and away from where prev ends. Two labels of a map or a chart, set by
+// text matrices of their own in two directions (ISO 32000-1, 9.4.4), are
+// two lines, however close their baselines run: the reference generator
+// breaks the line wherever the baseline turns by more than
+// [sameDirectionTolerance] and the text moved past [lineBreakTolerance]
+// (test/integration/corpus/lib/join-lines.mjs, joinLines). litho breaks it
+// only when el also starts more than the font size of prev from the end of
+// prev: the letters of a label set along a curve, each turned a little and
+// each starting where the one before it ends, stay one line and keep their
+// words, where the reference reads one letter per line. Words that read
+// right over agreement with the reference is a user decision (2026-10-19).
+// ISO 32000-1, 14.8.2.5 leaves line breaks to the consumer.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000024.pdf: "OCEAN" then "PACIFIC", set 0.004
+//     radian apart, PACIFIC 150 units back along the line, read
+//     "OCEANPACIFIC".
+//   - govdocs thread_100_100945.pdf page 14: two "River" labels turned
+//     0.6 radian apart read "RiverRiver", and "MONTANA" then "IDAHO", set
+//     upside down, "MONTANAIDAHO".
+//   - govdocs thread_000_000146.pdf: "Big Hog Bayou", one letter per text
+//     matrix along a curve, still reads as one line.
+//   - All corpora: words match PDF.js on 3 more files (govdocs
+//     thread_000_000024.pdf, thread_300_300121.pdf, pdfjs bug1753983.pdf)
+//     and on 17 more pages of a file that still differs (pdfjs
+//     Brotli-Prototype-FileA.pdf), and on none fewer; facturx, pdf20,
+//     pdfcpu and litho do not move.
+func turnsAway(prev, el models.TextElement) bool {
+	if prev.Vertical || el.Vertical {
+		return false
+	}
+	turn := math.Mod(math.Abs(prev.Angle-el.Angle), 2*math.Pi)
+	if turn > math.Pi {
+		turn = 2*math.Pi - turn
+	}
+	if turn <= sameDirectionTolerance {
+		return false
+	}
+	endX := prev.X + prev.Width*math.Cos(prev.Angle)
+	endY := prev.Y + prev.Width*math.Sin(prev.Angle)
+	return math.Hypot(el.X-endX, el.Y-endY) > math.Abs(prev.FontSize)
+}
 
 // skewedAcross returns how far across the line PDF.js reads el, the element
 // i, from the end of last, the glyph lastIdx painted before it, and whether
