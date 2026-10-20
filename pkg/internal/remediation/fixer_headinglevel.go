@@ -38,34 +38,59 @@ func matchHeadingLevel(v compliance.Violation) bool {
 // An H nested in no division, whose ancestors are only Document elements or
 // the structure tree root, sits at the outermost level: it becomes H1.
 //
-// An H inside a Sect is numbered when the whole document is strongly
+// An H inside a division is numbered when the whole document is strongly
 // structured in the plain sense the clause describes: every H nested below
-// the Document level sits in a chain of Sect elements (Document elements
-// between them are transparent), is the first structure element of its
-// parent and the only H there, and the document numbers no heading itself,
-// neither with an Hn element nor through a role map. Its level is then the
-// number of Sect elements around it, less that of the outermost H, plus one:
-// the outermost headings become H1, and each Sect nested inside another adds
-// a level. Only Sect counts. ISO 32000-2:2020, 14.8.4.4 defines Part, Div and
-// NonStruct as grouping wrappers whose descendants carry the meaning, and
-// ISO/TS 32005, Table 5 looks through them, so whether one adds a level is a
-// reading of the author's outline; a list, a table cell or an Art says
-// nothing of the outline either. An H under any of them gives no level. The
-// nested repair is all or nothing: when one H gives no level, every H below
-// the Document level stays H, so the outline is not half numbered.
+// the Document level sits in a chain of divisions (Document elements between
+// them are transparent), is the first structure element of its parent and the
+// only H there, and the document numbers no heading itself, neither with an
+// Hn element nor through a role map. Its level is then the number of
+// divisions around it, less that of the outermost H, plus one: the outermost
+// headings become H1, and each division nested inside another adds a level.
 //
-// The other refusals are where the nesting does not give a level. A Sect
-// holding two H (ISO/TS 32005, Table 5, Sect-H) has no level to give the
-// second, and ISO 14289-1, 7.4.4 calls a document that uses both H and Hn
+// The divisions are Sect and Art, the two grouping types the strongly
+// structured paradigm names as the levels of an outline: ISO 32000-1:2008,
+// 14.8.4.3.5 has the grouping elements nest "to reflect the organization of
+// the material into articles, sections, subsections", each level a heading
+// and its content. ISO/TS 32005, Table 5 marks them as headed divisions:
+// Sect-H and Art-H allow at most one H, the heading that states the level.
+// Art counts only in the PDF 1.7 namespace, since ISO 32000-2:2020, 14.8.4.4
+// defines no Art in the PDF 2.0 one, and an element without /NS is in the
+// default, PDF 1.7, namespace (14.7.4).
+//
+// Part and Div add no level. 14.8.4.3.5 lists them among the grouping
+// elements that may nest, but ISO/TS 32005, Table 5 looks through Part, Div
+// and NonStruct and judges what they hold as held by the enclosing element,
+// so it bounds no Part-H or Div-H, and ISO 32000-1:2008, Table 333 calls a
+// Div a generic element and a Part a division grouping articles or sections,
+// whose sections carry the outline. The two readings, a wrapper or a level,
+// number the same tree differently, and choosing one is a reading of the
+// author's outline the repair does not make: an H whose parent is a Part or a
+// Div gives no level, and an H in a division inside one is refused with it.
+// ISO 32000-2:2020, 14.8.4.4 defines NonStruct as a grouping wrapper whose
+// descendants carry the meaning, and an Aside, a DocumentFragment, a list, a
+// table cell or a BlockQuote states no level of the document's own outline
+// either. An H under any of them gives no level. The nested repair is all or
+// nothing: when one H gives no level, every H below the Document level stays
+// H, so the outline is not half numbered.
+//
+// veraPDF checks no derived level at PDF/UA-2 or WTPDF: its profiles test H
+// only for 8.2.5.12 t1 and the Table 5 containment rows, and the PDF/UA-1
+// sequence rule, ISO 14289-1, 7.4.2, applies to Hn in documents that are not
+// strongly structured. The choice of divisions is the outline's reading, not
+// a validator's verdict.
+//
+// The other refusals are where the nesting does not give a level. A
+// division holding two H (ISO/TS 32005, Table 5, Sect-H and Art-H) has no
+// level to give the second, and ISO 14289-1, 7.4.4 calls a document that uses both H and Hn
 // neither strongly nor weakly structured, so its H relate to no outline the
 // file states. A level past [maxDerivedHeadingLevel] is refused too.
 //
 // The repair is also refused where a role map governs a name it writes: the
 // legacy /RoleMap mapping H or the target Hn, or the /RoleMapNS of the
 // heading's namespace mapping either, since the renamed element would then
-// stand for a type the file chose (ISO 32000-2:2020, 14.8.6). An H, Sect or
-// Document in a namespace other than the two PDF standard ones is not the
-// standard type and gives no level. Only the /S changes: content, attributes
+// stand for a type the file chose (ISO 32000-2:2020, 14.8.6). An H, Sect,
+// Art or Document in a namespace other than the two PDF standard ones is not
+// the standard type and gives no level. Only the /S changes: content, attributes
 // and children stay as the file wrote them.
 //
 // The WTPDF levels state 8.2.5.12 with the rest of ISO 14289-2, so the
@@ -89,6 +114,13 @@ func matchHeadingLevel(v compliance.Violation) bool {
 //     to 3, and at each WTPDF level from 0 to 3, since the WTPDF runs did not
 //     reach the repair before. No rule appears on either tool, and litho and
 //     veraPDF report the same rule set on every output.
+//   - All corpora: no H has a standard Art ancestor. pdfjs bug1722036 nests
+//     its H in an Article its /RoleMap maps to Art, and the H1 it also uses
+//     refuses it.
+//   - litho headingart_ua2: the three H of two Art elements of the PDF 1.7
+//     namespace and a Sect inside one become H1, H2 and H1, and veraPDF
+//     1.30.2 reports nothing on the PDF/UA-2 and WTPDF outputs, default and
+//     aggressive.
 func fixHeadingLevel(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	if compliance.PDFUAPart(profile) != 2 {
 		return nil, nil
@@ -149,10 +181,10 @@ func fixHeadingLevel(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 type headingPlace struct {
 	// topLevel holds while every ancestor is a standard Document element.
 	topLevel bool
-	// divisions holds while every ancestor is a standard Document or Sect
-	// element, the chain an H takes its level from.
+	// divisions holds while every ancestor is a standard Document, Sect or
+	// Art element, the chain an H takes its level from.
 	divisions bool
-	// depth counts the Sect ancestors.
+	// depth counts the Sect and Art ancestors.
 	depth int
 }
 
@@ -160,7 +192,7 @@ type headingPlace struct {
 type headingCandidate struct {
 	node     structNode
 	topLevel bool
-	// placed holds when the H sits in a Sect chain, is the first
+	// placed holds when the H sits in a chain of divisions, is the first
 	// structure element of its parent and the only H there.
 	placed bool
 	depth  int
@@ -250,6 +282,14 @@ func (w *headingWalk) walk(ctx context.Context, kObj ast.PdfObject, place headin
 		case k.s == "Sect":
 			inner.divisions = place.divisions && w.standardUngoverned(ctx, k.dict, "Sect")
 			inner.depth++
+		case k.s == "Art":
+			// Per ISO 32000-2:2020, 14.8.4.4 the PDF 2.0 namespace defines no
+			// Art, so only the PDF 1.7 one, declared or by default, makes the
+			// element the standard article.
+			uri := declaredNamespace(ctx, w.alloc, w.doc, k.dict)
+			inner.divisions = place.divisions && (uri == "" || uri == pdf1NamespaceURI) &&
+				w.standardUngoverned(ctx, k.dict, "Art")
+			inner.depth++
 		}
 		w.walk(ctx, k.dict["K"], inner, depth+1)
 	}
@@ -302,7 +342,7 @@ func (w *headingWalk) levels(ctx context.Context) map[int]int {
 		target := ast.PdfName("H" + strconv.Itoa(level))
 		switch {
 		case !h.placed:
-			reason = "an H sits outside a Sect chain, after other content or beside another H"
+			reason = "an H sits outside a chain of divisions, after other content or beside another H"
 		case level > maxDerivedHeadingLevel:
 			reason = "the nesting is deeper than H6"
 		case !w.standardUngoverned(ctx, h.node.dict, "H") || roleMapGoverns(w.legacy, target) ||

@@ -188,10 +188,11 @@ func structTypesInOrder(t *testing.T, doc *document.Document) string {
 // TestRemediatePDFUA2NumbersNestedGenericHeadings pins the repair of ISO
 // 14289-2, 8.2.5.12 t1 for an H inside a section: in a tree of Sect elements,
 // each H the first and only H of its Sect, every H takes the level its section
-// nesting gives it, the outermost H1. The controls are the trees whose nesting
-// gives no level: a Sect holding two H, an H inside a Part or a Div or after
-// other content, a document that also numbers its headings, and a nesting
-// deeper than H6.
+// nesting gives it, the outermost H1. An Art of the PDF 1.7 namespace adds a
+// level as a Sect does. The controls are the trees whose nesting gives no
+// level: a Sect holding two H, an H inside a Part or a Div or after other
+// content, an Art in the PDF 2.0 namespace, which defines no Art, a document
+// that also numbers its headings, and a nesting deeper than H6.
 func TestRemediatePDFUA2NumbersNestedGenericHeadings(t *testing.T) {
 	t.Parallel()
 
@@ -229,6 +230,44 @@ func TestRemediatePDFUA2NumbersNestedGenericHeadings(t *testing.T) {
 			},
 			wantBefore: 2, wantAfter: 2,
 			wantTypes: "Document Part H Sect H",
+		},
+		{
+			name: "an article holding a section",
+			elems: []string{
+				"<< /Type /StructElem /S /Document /P 4 0 R /K [6 0 R] >>",
+				"<< /Type /StructElem /S /Art /P 5 0 R /K [7 0 R 8 0 R] >>",
+				"<< /Type /StructElem /S /H /P 6 0 R >>",
+				"<< /Type /StructElem /S /Sect /P 6 0 R /K [9 0 R] >>",
+				"<< /Type /StructElem /S /H /P 8 0 R >>",
+			},
+			wantBefore: 2,
+			wantTypes:  "Document Art H1 Sect H2",
+		},
+		{
+			name: "a section holding an article",
+			elems: []string{
+				"<< /Type /StructElem /S /Document /P 4 0 R /K [6 0 R] >>",
+				"<< /Type /StructElem /S /Sect /P 5 0 R /K [7 0 R 8 0 R] >>",
+				"<< /Type /StructElem /S /H /P 6 0 R >>",
+				"<< /Type /StructElem /S /Art /P 6 0 R /K [9 0 R] >>",
+				"<< /Type /StructElem /S /H /P 8 0 R >>",
+			},
+			wantBefore: 2,
+			wantTypes:  "Document Sect H1 Art H2",
+		},
+		{
+			name: "an article in the pdf 2.0 namespace",
+			root: "/Namespaces [9 0 R]",
+			elems: []string{
+				"<< /Type /StructElem /S /Document /P 4 0 R /K [6 0 R] >>",
+				"<< /Type /StructElem /S /Art /NS 9 0 R /P 5 0 R /K [7 0 R 8 0 R] >>",
+				"<< /Type /StructElem /S /H /P 6 0 R >>",
+				"<< /Type /StructElem /S /Sect /P 6 0 R /K [10 0 R] >>",
+				"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+				"<< /Type /StructElem /S /H /P 8 0 R >>",
+			},
+			wantBefore: 2, wantAfter: 2,
+			wantTypes: "Document Art H Sect H",
 		},
 		{
 			name: "a document heading over a section heading",
