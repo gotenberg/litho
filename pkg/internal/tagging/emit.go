@@ -226,9 +226,17 @@ func (e *emitter) build(ctx context.Context, node *Element, parentRef ast.PdfInd
 // or artifact" rule (ISO 14289-1, 7.1). It returns the StructTreeRoot
 // /ParentTree /Nums array mapping each tagged page's StructParents key to its
 // structure elements in MCID order.
+//
+// # Corpus evidence
+//
+//   - litho sharedtag_ua1.pdf: a marked stream for each page of two sharing one
+//     /Contents stream gave the marked form it draws a second reference, and
+//     remediation at PDF/UA-1 added ISO 14289-1, 7.20 t2 on both litho and
+//     veraPDF.
 func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 	var nums ast.PdfArray
 	e.maxParentKey = -1
+	marks := make(map[int]markedContents)
 
 	for pi := 0; pi < len(e.pages); pi++ {
 		if err := ctx.Err(); err != nil {
@@ -267,12 +275,28 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 			return nil, fmt.Errorf("tagging: page %d: %w", pi, err)
 		}
 
-		streamRef := e.alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(marked))}, marked))
 		page := e.pages[pi]
 		// Read the page dict alloc-first so an edit an earlier pipeline stage
 		// queued at this object number (a remediation fixer injecting a
 		// /DefaultRGB colour space, say) is preserved rather than overwritten.
 		baseDict := stagedPageDict(e.alloc, page)
+		// Pages sharing one /Contents object share its marked stream when they
+		// mark it alike. Each page's MCIDs resolve through its own
+		// /StructParents (ISO 32000-1, 14.7.4.4), so one stream serves both,
+		// and a form the shared content draws keeps the single reference the
+		// shared stream made: veraPDF parses a content stream once for the
+		// document, which ISO 14289-1, 7.20 t2 counts, so a stream of its own
+		// for each page gave every marked form it draws a second reference.
+		contentsRef, sharable := baseDict["Contents"].(ast.PdfIndirectRef)
+		var streamRef ast.PdfIndirectRef
+		if prior, done := marks[contentsRef.ObjectNum]; sharable && done && bytes.Equal(prior.data, marked) {
+			streamRef = prior.ref
+		} else {
+			streamRef = e.alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(marked))}, marked))
+			if sharable && !done {
+				marks[contentsRef.ObjectNum] = markedContents{data: marked, ref: streamRef}
+			}
+		}
 		newPage := make(ast.PdfDict, len(baseDict)+2)
 		maps.Copy(newPage, baseDict)
 		newPage["Contents"] = streamRef
@@ -294,6 +318,14 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		}
 	}
 	return nums, nil
+}
+
+// markedContents is the marked stream [emitter.applyMarks] wrote for the
+// content of a /Contents object, kept so another page naming that object
+// shares it when it marks the content alike.
+type markedContents struct {
+	data []byte
+	ref  ast.PdfIndirectRef
 }
 
 // pageSpans builds the marked-content spans for one page: the structure leaves,
