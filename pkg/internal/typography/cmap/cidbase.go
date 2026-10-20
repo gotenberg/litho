@@ -159,7 +159,8 @@ type baseSet uint8
 
 const (
 	// pdfjsBases reads PDF.js's binary CMaps, which text extraction keeps to
-	// so that it stays equal to PDF.js.
+	// so that it stays equal to PDF.js. A usecmap naming a base PDF.js ships
+	// none of reads veraPDF's copy ([NamedBase]).
 	pdfjsBases baseSet = iota
 	// conformanceBases reads the copies veraPDF 1.30.2 bundles where their
 	// code-to-CID content differs from PDF.js's or PDF.js ships none, and
@@ -198,7 +199,9 @@ func PredefinedCIDBase(name string) *CIDMap {
 // CMaps of the newest supplements (Adobe-Japan1-7, Adobe-KR-9 and the like)
 // and UniAKR-UTF16-H, which PDF.js ships none of, and eight Unicode CMaps
 // Adobe has revised since PDF.js copied them. A usecmap chain resolves
-// through the same set. Text extraction keeps to [PredefinedCIDBase].
+// through the same set. Text extraction keeps to [PredefinedCIDBase], and
+// reads this set only for a usecmap naming a CMap PDF.js ships none of
+// ([NamedBase]).
 //
 // It returns nil when neither litho nor veraPDF bundles the CMap or litho
 // cannot follow its chain. The map is read-only and safe for concurrent use.
@@ -213,10 +216,21 @@ func ConformanceCIDBase(name string) *CIDMap {
 // using CMap's unmapped codes still select CID 0: ISO 32000-1, 9.7.5.2 makes
 // Table 118 the predefined set, and litho bundles every name in it.
 //
-// The exception is a name veraPDF 1.30 bundles and PDF.js does not: Adobe's
-// character-collection CMaps (Adobe-Japan1-7, Adobe-KR-9 and the like) and
-// UniAKR-UTF16-H. The base comes back unresolved and the codes it could map
-// stay unknown; [ConformanceNamedBase] resolves them.
+// A name PDF.js ships no copy of but veraPDF 1.30 does, Adobe's
+// character-collection CMaps of the newest supplements (Adobe-Japan1-7,
+// Adobe-KR-9 and the like) and UniAKR-UTF16-H, resolves through veraPDF's
+// copy ([ConformanceCIDBase]): it is the CMap Adobe publishes under the name
+// the usecmap gives (9.7.5.4), and PDF.js holds no reading of it to stay
+// equal to. Any other Adobe name litho cannot resolve comes back unresolved,
+// and the codes it could map stay unknown.
+//
+// # Corpus evidence
+//
+//   - litho cmapverabase_2b.pdf: K4's code 0007, which its Adobe-GB1-6 base
+//     sends to CID 7, read as nothing and now reads "&" through
+//     Adobe-GB1-UCS2 (ISO 32000-1, 9.10.2). No file of the five text corpora
+//     changes, and no validation or remediation result moves on the litho
+//     corpus.
 func NamedBase(name string) Base {
 	return namedBase(pdfjsBases, name, 0)
 }
@@ -238,6 +252,9 @@ func namedBase(set baseSet, name string, depth int) Base {
 		return Base{Map: m}
 	}
 	if set == pdfjsBases && (strings.HasPrefix(name, "Adobe-") || strings.HasPrefix(name, "UniAKR-")) {
+		if m := predefinedCIDBase(conformanceBases, name, depth); m != nil {
+			return Base{Map: m}
+		}
 		return Base{Unresolved: true}
 	}
 	return Base{}

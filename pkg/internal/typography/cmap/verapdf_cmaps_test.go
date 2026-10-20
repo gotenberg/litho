@@ -32,14 +32,17 @@ func TestVeraPDFCMapsMatchDigests(t *testing.T) {
 }
 
 // TestConformanceCIDBaseVeraPDFOnly pins that a base only veraPDF 1.30.2
-// bundles resolves for the conformance checks and stays unresolved for text
-// extraction. Adobe-KR-9 maps the codes 0000 to 5970 to themselves inside
+// bundles resolves through veraPDF's copy, for the conformance checks and for
+// text extraction alike, since PDF.js ships none. Adobe-KR-9 maps the codes 0000 to 5970 to themselves inside
 // the code space <0000> <59FF>, so a code past CID 22896 selects CID 0 (ISO
 // 32000-1, 9.7.6.3).
 func TestConformanceCIDBaseVeraPDFOnly(t *testing.T) {
 	t.Parallel()
-	if b := NamedBase("Adobe-KR-9"); b.Map != nil || !b.Unresolved {
-		t.Errorf("NamedBase(Adobe-KR-9) = %+v, want unresolved for text extraction", b)
+	if b := NamedBase("Adobe-KR-9"); b.Map != ConformanceCIDBase("Adobe-KR-9") || b.Unresolved {
+		t.Errorf("NamedBase(Adobe-KR-9) = %+v, want veraPDF's copy for text extraction", b)
+	}
+	if b := NamedBase("Adobe-Japan1-99"); b.Map != nil || !b.Unresolved {
+		t.Errorf("NamedBase(Adobe-Japan1-99) = %+v, want unresolved: no reader bundles it", b)
 	}
 	b := ConformanceNamedBase("Adobe-KR-9")
 	if b.Map == nil {

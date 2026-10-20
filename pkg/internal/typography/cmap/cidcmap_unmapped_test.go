@@ -16,9 +16,10 @@ const (
 // it to CID 0, and a bfchar section maps to Unicode rather than to CIDs
 // (9.10.3), so a CMap written with bfchar alone still decodes, every code to
 // CID 0. A base named by usecmap supplies the codes the CMap leaves unmapped,
-// then a notdef section does, as veraPDF's CMap.toCID reads them. A base litho
-// cannot resolve but veraPDF bundles leaves the code unknown; a name no reader
-// bundles names no base at all. Every case was measured against veraPDF 1.30.2.
+// then a notdef section does, as veraPDF's CMap.toCID reads them. A base only
+// veraPDF bundles reads through veraPDF's copy, an Adobe name neither bundles
+// leaves the code unknown, and any other name no reader bundles names no base
+// at all. Every case was measured against veraPDF 1.30.2.
 func TestParseEmbeddedCIDMapUnmappedCodes(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -42,8 +43,10 @@ func TestParseEmbeddedCIDMapUnmappedCodes(t *testing.T) {
 		{"a cid mapping wins over a notdef range", "1 beginnotdefrange <0000> <00FF> 1 endnotdefrange\n1 begincidchar <0041> 7 endcidchar\n", false, true, true, 7},
 		{"the first notdef range covering the code wins", "2 beginnotdefrange <0000> <00FF> 1 <0040> <0041> 2 endnotdefrange\n", false, true, true, 1},
 		{"a base no reader bundles names no base", "/No-Such-H usecmap\n1 beginbfchar <0041> <0041> endbfchar\n", false, true, false, 0},
-		{"a base only veraPDF bundles leaves the code unknown", "/Adobe-KR-9 usecmap\n1 beginbfchar <0041> <0041> endbfchar\n", true, false, false, 0},
-		{"an own mapping over a base only veraPDF bundles", "/Adobe-KR-9 usecmap\n1 begincidchar <0042> 7 endcidchar\n", false, false, false, 0},
+		{"a base only veraPDF bundles reads its copy", "/Adobe-KR-9 usecmap\n1 beginbfchar <0041> <0041> endbfchar\n", false, true, true, 0x41},
+		{"an own mapping over a base only veraPDF bundles", "/Adobe-KR-9 usecmap\n1 begincidchar <0042> 7 endcidchar\n", false, true, true, 0x41},
+		{"an Adobe base no reader bundles leaves the code unknown", "/Adobe-Japan1-99 usecmap\n1 beginbfchar <0041> <0041> endbfchar\n", true, false, false, 0},
+		{"an own mapping over an Adobe base no reader bundles", "/Adobe-Japan1-99 usecmap\n1 begincidchar <0042> 7 endcidchar\n", false, false, false, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

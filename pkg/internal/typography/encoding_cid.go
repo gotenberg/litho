@@ -37,9 +37,10 @@ func EmbeddedEncodingCIDMap(ctx context.Context, doc *document.Document, encObj 
 // ConformanceEncodingCIDMap is [EmbeddedEncodingCIDMap] for the conformance
 // checks: a predefined base, named by usecmap or /UseCMap, resolves through
 // the CMaps veraPDF 1.30.2 bundles ([cmap.ConformanceNamedBase]), as
-// veraPDF's PDCMap and CMapParser load them, so that a base only veraPDF
-// bundles (Adobe-KR-9, Adobe-Japan1-7) maps the codes it maps there. Text
-// extraction keeps to [EmbeddedEncodingCIDMap].
+// veraPDF's PDCMap and CMapParser load them, so that a Unicode base veraPDF
+// bundles a revised copy of (UniGB-UTF16-H, UniKS-UTF16-H) maps the codes it
+// maps there. Text extraction keeps to [EmbeddedEncodingCIDMap], which reads
+// veraPDF's copy only of a base PDF.js ships none of ([cmap.NamedBase]).
 func ConformanceEncodingCIDMap(ctx context.Context, doc *document.Document, encObj ast.PdfObject) *cmap.CIDMap {
 	return embeddedEncodingCIDMapAt(ctx, doc, encObj, true, make(map[int]bool), 0)
 }

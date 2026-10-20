@@ -15,8 +15,8 @@ import (
 // veraPDFCMapFS holds the encoding CMaps veraPDF 1.30.2 bundles whose
 // code-to-CID content PDF.js's binary copies under bcmaps/ do not hold. See
 // verapdf_cmaps_sources.go for their provenance, and [ConformanceCIDBase]
-// for their use: the conformance checks only, text extraction keeping to
-// PDF.js.
+// for their use: the conformance checks, and text extraction only where a
+// usecmap names a CMap PDF.js ships none of ([NamedBase]).
 //
 //go:embed verapdfcmaps/*.gz
 var veraPDFCMapFS embed.FS
