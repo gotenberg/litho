@@ -52,15 +52,19 @@ var ErrPageTreeNotReproduced = errors.New("source page tree could not be reprodu
 var ErrSpanOutOfRange = errors.New("byte span lies outside the content")
 
 // ErrPartialOperatorCoverage reports a region that covers some but not all of
-// what one content-stream operator draws.
+// what one content-stream operator draws, and an operator that cannot be split
+// at its glyphs exactly.
 //
-// An operator is removed whole or not at all, because excision deletes byte
-// ranges and cannot rewrite one: dropping a show-text operator whose run only
-// partly meets the region would take the rest of its text with it. Splitting
-// the run at glyph boundaries is the alternative, and it has to answer the
-// glyph-advance leak first (arXiv 2206.02285), where the advances of the
-// surviving glyphs still spell the removed ones. Refusing states the problem
-// instead of removing more than the caller asked for.
+// A show-text operator whose run only partly meets the region is split: the
+// covered glyphs go, and each removed run becomes one TJ number standing for
+// its whole width, kerning included, which answers the glyph-advance leak
+// (arXiv 2206.02285) since the next kept glyph shows that width anyway. A split
+// is refused when litho cannot place the kept glyphs where they were: a code
+// the extractor read at a length the font's encoding does not give it, text
+// in a rendering mode that adds it to the clipping path, or a TJ number under
+// a horizontal scaling other than 100. Dropping the whole operator would take
+// the rest of its text with it, so refusing states the problem instead of
+// removing more than the caller asked for.
 var ErrPartialOperatorCoverage = errors.New("region covers an operator only partly")
 
 // ErrImageShared is returned by [CheckBlankedImageUses] when a blanked image

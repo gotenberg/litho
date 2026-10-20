@@ -439,6 +439,49 @@ func (m *Machine) ShowAdvances() map[int]ShowAdvance {
 	return m.showAdvances
 }
 
+// GlyphAdvance records one character code a show-text operator drew: how many
+// bytes of the shown string it took, and how it moved the text matrix.
+type GlyphAdvance struct {
+	// Bytes is the length of the code in the shown string.
+	Bytes int
+	// Aligned reports that the extractor split the code where the font's
+	// encoding splits it (ISO 32000-1, 9.7.6.2): one byte for a simple font,
+	// the codespace length of a Type 0 font's encoding CMap. A code the
+	// extractor read at another length is not a code a viewer reads, so its
+	// boundaries cannot be cut at.
+	Aligned bool
+	// Emitted reports that the code produced a text element. A code the
+	// extractor consumed without emitting one did not move the text matrix
+	// either, so it advances differently from what a viewer draws.
+	Emitted bool
+	// Before and After are Tm as the code started and as it ended.
+	Before, After [6]float64
+	// RenderingMode is Tr, the text rendering mode (ISO 32000-1, 9.3.6).
+	RenderingMode int
+}
+
+// RecordGlyphAdvance appends the record of one code drawn by the operation
+// [Machine.OpIndex] names. It does nothing unless
+// [Machine.RecordGlyphAdvances] is set, or when the code sits in a form
+// XObject, whose bytes are not in the page's operations.
+func (m *Machine) RecordGlyphAdvance(glyph GlyphAdvance) {
+	if !m.RecordGlyphAdvances || m.FormDepth > 0 {
+		return
+	}
+	if m.glyphAdvances == nil {
+		m.glyphAdvances = make(map[int][]GlyphAdvance)
+	}
+	m.glyphAdvances[m.OpIndex] = append(m.glyphAdvances[m.OpIndex], glyph)
+}
+
+// GlyphAdvances returns the codes each show-text operator of the page's own
+// content stream drew, in drawing order, keyed by its index in the operation
+// slice. It is empty unless [Machine.RecordGlyphAdvances] was set before
+// extraction.
+func (m *Machine) GlyphAdvances() map[int][]GlyphAdvance {
+	return m.glyphAdvances
+}
+
 // ImageBoxes returns where images painted, in the order the content stream drew
 // them. It is empty unless [Machine.RecordImageBoxes] was set before execution.
 func (m *Machine) ImageBoxes() []ImageBox {

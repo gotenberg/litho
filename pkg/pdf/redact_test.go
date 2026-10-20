@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -14,7 +15,7 @@ import (
 // The geometry is what the tests turn on, so it is fixed here rather than
 // derived: a region of {90, 690, 300, 730} covers the whole "SECRET" run and
 // meets nothing at y=600, while {90, 690, 110, 730} clips the run's left edge
-// and must be refused rather than removed. Both are the shapes
+// and splits the run at its glyphs. Both are the shapes
 // pkg/internal/mutations/redact_regions_test.go already pins at the layer
 // below, reused here so a failure separates the public wiring from the
 // excision engine.
@@ -23,7 +24,12 @@ import (
 // composition test puts a copy of the redacted word somewhere no token-driven
 // scrub reaches.
 func redactableTextPDF(info string) []byte {
-	body := "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET"
+	return redactableBodyPDF("BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET", info)
+}
+
+// redactableBodyPDF builds the document [redactableTextPDF] does, with body as
+// its content stream.
+func redactableBodyPDF(body, info string) []byte {
 
 	objs := "%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
@@ -319,9 +325,11 @@ func TestWriter_Redact_FailsClosedWhenACopySurvives(t *testing.T) {
 // second half matters as much as the first: an eager operation
 // that queued edits before erroring would leave a Writer whose next WriteTo
 // emits a partially redacted file, so the error must restore the Writer state.
+// The run is drawn in text rendering mode 7, which adds its glyphs to the
+// clipping path, so the run cannot be split at its glyphs.
 func TestWriter_Redact_RefusesPartialCoverage(t *testing.T) {
 	ctx := context.Background()
-	data := redactableTextPDF("")
+	data := redactableBodyPDF("BT 7 Tr /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET", "")
 
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -330,8 +338,8 @@ func TestWriter_Redact_RefusesPartialCoverage(t *testing.T) {
 	w := NewWriter(r)
 
 	// Clips the left edge of "SECRET": some glyphs inside the region, some
-	// outside. Removing the operator would take the rest of the word.
-	clipsSecret := RedactRegion{Page: 1, Rect: [4]float64{90, 690, 110, 730}}
+	// outside. Removing the operator would take the rest of the word, and
+	// splitting it would change the clip.
 	if _, err := w.Redact(ctx, []RedactRegion{clipsSecret}); err == nil {
 		t.Fatal("a region covering an operator only partly was accepted")
 	} else if !errors.Is(err, ErrRedactionRefused) {
@@ -345,6 +353,42 @@ func TestWriter_Redact_RefusesPartialCoverage(t *testing.T) {
 	}
 	if !bytes.Contains(out.Bytes(), []byte("SECRET")) {
 		t.Error("a refused redaction still removed content")
+	}
+}
+
+// clipsSecret covers the left edge of "SECRET", its first two glyphs.
+var clipsSecret = RedactRegion{Page: 1, Rect: [4]float64{90, 690, 110, 730}}
+
+// TestWriter_Redact_SplitsPartialCoverage pins that a region over part of a
+// run removes the glyphs it covers and keeps the rest, through the public
+// boundary and its verification scan.
+func TestWriter_Redact_SplitsPartialCoverage(t *testing.T) {
+	ctx := context.Background()
+	data := redactableTextPDF("")
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.Redact(ctx, []RedactRegion{clipsSecret}); err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	got, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open output: %v", err)
+	}
+	text, err := got.ExtractText(ctx, 1)
+	if err != nil {
+		t.Fatalf("ExtractText: %v", err)
+	}
+	if strings.Contains(text, "SECRET") || !strings.Contains(text, "CRET") || !strings.Contains(text, "KEEP") {
+		t.Errorf("page text = %q, want CRET and KEEP without SECRET", text)
 	}
 }
 

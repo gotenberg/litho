@@ -51,6 +51,10 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			// and the caller opted out of emitting anything. Advance
 			// the byte stream but leave the text matrix and elements
 			// untouched.
+			machine.RecordGlyphAdvance(graphics.GlyphAdvance{
+				Bytes: n, Aligned: font.codeAligned(data, n),
+				Before: state.Text.Tm, After: state.Text.Tm, RenderingMode: state.Text.Tmode,
+			})
 			data = data[n:]
 			continue
 		}
@@ -126,7 +130,12 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			}
 		}
 
+		before := state.Text.Tm
 		advanceTextMatrix(state, font, fontSize, n, charCode, cid)
+		machine.RecordGlyphAdvance(graphics.GlyphAdvance{
+			Bytes: n, Aligned: font.codeAligned(data, n), Emitted: true,
+			Before: before, After: state.Text.Tm, RenderingMode: state.Text.Tmode,
+		})
 
 		data = data[n:]
 	}

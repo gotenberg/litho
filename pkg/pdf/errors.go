@@ -269,8 +269,8 @@ var (
 	ErrPasswordRejected = crypto.ErrPasswordRejected
 
 	// ErrRedactionRefused is returned by [Writer.Redact] when a region
-	// selects content that cannot be removed exactly: an operator the region
-	// covers only partly, a painted path that straddles the region or was
+	// selects content that cannot be removed exactly: a text run the region
+	// covers only partly that cannot be split at its glyphs, a painted path that straddles the region or was
 	// stroked or took part in a clip, content drawn by a form XObject, an
 	// image whose samples cannot be rewritten, an image also painted where
 	// the regions do not cover the same samples (blanking rewrites the image,

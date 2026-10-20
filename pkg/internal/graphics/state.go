@@ -140,6 +140,15 @@ type Machine struct {
 	// See [Machine.ShowAdvances].
 	RecordShowAdvances bool
 	showAdvances       map[int]ShowAdvance
+	// RecordGlyphAdvances makes the text extractor remember, code by code,
+	// how each show-text operator of the page's own content stream split its
+	// strings and moved the text matrix. Off by default for the same reason as
+	// [Machine.RecordImageBoxes]. A caller that removes some of an operator's
+	// glyphs and keeps the rest needs it: the kept codes stay where they were
+	// only if each removed code's advance is put back. See
+	// [Machine.GlyphAdvances].
+	RecordGlyphAdvances bool
+	glyphAdvances       map[int][]GlyphAdvance
 	// MarkUnvaluedText makes the text extractor read as U+FFFD every code of
 	// a Type 0 font that no mapping gives a character, which ISO 32000-1,
 	// 9.10.2 gives no Unicode value. The default extraction reads such a code

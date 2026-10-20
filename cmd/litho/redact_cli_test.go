@@ -18,7 +18,12 @@ import (
 // nothing at y=600. Narrowing the width to 20 clips the run instead, which must
 // be refused rather than half-removed.
 func redactableCLIPDF() []byte {
-	body := "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET"
+	return redactableCLIBodyPDF("BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET")
+}
+
+// redactableCLIBodyPDF builds the document [redactableCLIPDF] does, with body
+// as its content stream.
+func redactableCLIBodyPDF(body string) []byte {
 	return []byte("%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
@@ -61,7 +66,9 @@ func TestRedact_RemovesTheRegionText(t *testing.T) {
 // failure this command exists to prevent. The output is therefore created only
 // after the redaction succeeds.
 func TestRedact_RefusesPartialCoverageAndWritesNoFile(t *testing.T) {
-	path := writeTempPDF(t, redactableCLIPDF())
+	// Text rendering mode 7 adds the run to the clipping path, so a region
+	// over part of it can neither take it whole nor split it.
+	path := writeTempPDF(t, redactableCLIBodyPDF("BT 7 Tr /F1 12 Tf 100 700 Td (SECRET) Tj ET"))
 	out := filepath.Join(t.TempDir(), "redacted.pdf")
 
 	var stdout, stderr bytes.Buffer

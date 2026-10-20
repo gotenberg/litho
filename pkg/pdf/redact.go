@@ -73,7 +73,8 @@ func WithStrictRedaction() RedactOption {
 // Values must not be shared across goroutines without synchronization.
 type RedactReport struct {
 	// RemovedText holds the text of each show-text operator removed, one
-	// string per operator, in the order the pages drew them.
+	// string per operator, in the order the pages drew them. An operator split
+	// at its glyphs gives one string per run of removed glyphs.
 	RemovedText []string
 	// BlankedImages names the image XObjects whose covered samples were
 	// overwritten.
@@ -142,9 +143,11 @@ type RedactReport struct {
 // Two ways it refuses, both leaving the [Writer] exactly as it was:
 //
 //   - [ErrRedactionRefused] when something cannot be removed exactly: a region
-//     covering an operator only partly, a straddling, stroked or clipping path,
-//     content drawn by a form XObject, or an image whose samples cannot be
-//     rewritten. Removing more than was asked, or reporting success over
+//     covering only some of a text run that cannot be split at its glyphs
+//     (a run a region covers only partly is otherwise split, the covered
+//     glyphs removed and the rest kept where they were), a straddling,
+//     stroked or clipping path, content drawn by a form XObject, or an image
+//     whose samples cannot be rewritten. Removing more than was asked, or reporting success over
 //     content still in the file, are both worse than refusing.
 //   - [ErrRedactionIncomplete] when the passes succeed but the verification
 //     scan still finds a copy outside the content of other pages (see below),

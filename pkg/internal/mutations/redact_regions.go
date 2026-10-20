@@ -40,9 +40,13 @@ import (
 //
 // It removes operators, so it refuses whatever it cannot remove exactly:
 //
-//   - A region covering only part of what one operator draws reports
-//     [ErrPartialOperatorCoverage]. Excision takes whole operators and cannot
-//     split one, so removing that one would take the rest of its text.
+//   - A region covering only some of the glyphs one show-text operator draws
+//     splits the operator at its glyphs: the covered ones go and the others
+//     stay where they were, positioned by a TJ number standing for the removed
+//     run (see splitShowReplacement). An operator that cannot be split exactly
+//     reports [ErrPartialOperatorCoverage]: a code read at a length the font's
+//     encoding does not give it, text added to the clipping path, or a TJ
+//     number under a horizontal scaling other than 100.
 //   - A removed show-text operator whose advance later text on its line
 //     depends on, and which no TJ number can reproduce, reports
 //     [ErrTextAdvanceUnknown]. The removal puts that advance back otherwise,
@@ -127,7 +131,8 @@ func RedactPageRegions(
 // cleared document.
 type RedactReport struct {
 	// RemovedText holds the text of each show-text operator that was removed,
-	// one string per operator, in the order the page drew them.
+	// one string per operator, in the order the page drew them. An operator
+	// split at its glyphs gives one string per run of removed glyphs.
 	//
 	// One string per operator rather than per glyph: an extracted text element
 	// is a single glyph on this path, and a list of single characters would be
@@ -232,6 +237,9 @@ func redactPageRegions(
 	// A removed show operator takes its advance with it, and later text on the
 	// same line is positioned by that advance. See removedShowReplacement.
 	machine.RecordShowAdvances = true
+	// An operator a region covers only partly is split at its glyphs, which
+	// needs each code's bytes and advance. See splitShowReplacement.
+	machine.RecordGlyphAdvances = true
 	// An XObject an earlier stage drew, a stamp's, is queued at a number only
 	// alloc holds: resolved against the document alone it was unresolved, and
 	// the page was refused below.
@@ -312,6 +320,12 @@ func redactPageRegions(
 		inside, outside int
 		glyphs          []string
 		mcids           []int
+		// picked and glyphMCIDs run parallel to glyphs: whether each glyph
+		// met a region, and its marked-content identifier (-1 for none). A
+		// split operator removes some glyphs and keeps others, so its
+		// marked content can go on both sides.
+		picked     []bool
+		glyphMCIDs []int
 		// fontRef is the font every glyph of this operator was drawn with: one
 		// show-text operator paints with whatever Tf last selected. It holds
 		// typography.FontUnattributable until a glyph names a font, so an
@@ -346,6 +360,8 @@ func redactPageRegions(
 			tally[origin] = c
 		}
 		c.glyphs = append(c.glyphs, el.Text)
+		c.picked = append(c.picked, selected)
+		c.glyphMCIDs = append(c.glyphMCIDs, el.MCID)
 		if el.MCID >= 0 {
 			c.mcids = append(c.mcids, el.MCID)
 		}
@@ -371,11 +387,34 @@ func redactPageRegions(
 	}
 	sort.Ints(selected)
 
+	// An operator with glyphs on both sides is split rather than removed:
+	// its covered glyphs go and the rest stay where they were. See
+	// splitShowReplacement, which refuses whatever it cannot split exactly.
+	// Only whole removals count as removed for the pen, since a split
+	// operator keeps its full advance.
+	removedOps := make(map[int]bool, len(selected))
+	for _, origin := range selected {
+		if tally[origin].outside == 0 {
+			removedOps[origin] = true
+		}
+	}
+	splits := make(map[int][]byte)
+
 	spans := make([]content.ByteRange, 0, len(selected)+len(vectorSpans))
 	for _, origin := range selected {
 		if c := tally[origin]; c.outside > 0 {
-			return RedactReport{}, fmt.Errorf("%w: operation %d draws %d glyphs inside and %d outside",
-				ErrPartialOperatorCoverage, origin, c.inside, c.outside)
+			split, err := splitShowReplacement(ctx, ops, origin, c.picked, c.glyphs, removedOps,
+				machine.GlyphAdvances()[origin], machine.ShowAdvances()[origin])
+			if err != nil {
+				return RedactReport{}, err
+			}
+			splits[origin] = split.replacement
+			spans = append(spans, ranges[origin])
+			if c.fontRef != typography.FontUnattributable {
+				fontRemoved[c.fontRef] += c.inside
+			}
+			report.RemovedText = append(report.RemovedText, split.removedText...)
+			continue
 		}
 		spans = append(spans, ranges[origin])
 		// Counted here rather than from the selected set, so it is reached only
@@ -413,8 +452,15 @@ func redactPageRegions(
 	selectedOrigins := make(map[int]bool, len(selected))
 	for _, origin := range selected {
 		selectedOrigins[origin] = true
-		for _, mcid := range tally[origin].mcids {
-			removedMCIDs[mcid] = true
+		c := tally[origin]
+		for k, mcid := range c.glyphMCIDs {
+			switch {
+			case mcid < 0:
+			case c.picked[k] || c.outside == 0:
+				removedMCIDs[mcid] = true
+			default:
+				survivingMCIDs[mcid] = true
+			}
 		}
 	}
 	for origin, c := range tally {
@@ -446,12 +492,12 @@ func redactPageRegions(
 		return report, nil
 	}
 
-	removedOps := make(map[int]bool, len(selected))
-	for _, origin := range selected {
-		removedOps[origin] = true
-	}
 	edits := make([]SpanEdit, 0, len(spans))
 	for _, origin := range selected {
+		if replacement, ok := splits[origin]; ok {
+			edits = append(edits, SpanEdit{Span: ranges[origin], Replacement: replacement})
+			continue
+		}
 		replacement, err := removedShowReplacement(ctx, ops, origin, removedOps, machine.ShowAdvances())
 		if err != nil {
 			return RedactReport{}, err

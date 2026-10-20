@@ -93,12 +93,13 @@ func TestRedactPageRegions_RegionCoveringNothingLeavesThePageAlone(t *testing.T)
 }
 
 func TestRedactPageRegions_RefusesPartialOperatorCoverage(t *testing.T) {
-	doc, page := redactFixture(t)
+	doc, page := redactPathFixture(t, "BT 7 Tr /F1 12 Tf 100 700 Td (SECRET) Tj ET")
 	alloc := writer.NewObjAllocator(20)
 
 	// Clips the left edge of "SECRET": some of its glyphs are inside the
 	// region and some are not. Removing the operator would take the rest of
-	// the word with it, so the mutation refuses.
+	// the word with it, and mode 7 adds the glyphs to the clipping path, so
+	// splitting it would change the clip: the mutation refuses.
 	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 690, 110, 730}})
 	if !errors.Is(err, ErrPartialOperatorCoverage) {

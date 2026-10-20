@@ -242,6 +242,28 @@ func (f *Font) encodingCIDKeyed() bool {
 	return f.encodingCIDs != nil && f.encodingCIDs.cids != nil
 }
 
+// codeAligned reports whether n, the length text extraction read the code
+// at the start of data at, is the length the font's encoding gives it, so
+// that a cut after it falls between two codes as a viewer reads them. A
+// simple font's codes are one byte each (ISO 32000-1, 9.6.6). A Type 0 font's
+// are as its encoding CMap's codespace ranges split them (9.7.6.2): Identity-H
+// and Identity-V take two bytes (9.7.5.2, Table 118), and any other CMap is
+// read through the CID mappings litho holds. A Type 0 encoding litho holds no
+// codespace for answers false: the boundaries are then unknown.
+func (f *Font) codeAligned(data []byte, n int) bool {
+	if n <= 0 || n > len(data) {
+		return false
+	}
+	if f.Subtype != "Type0" {
+		return n == 1
+	}
+	if f.encodingCIDKeyed() {
+		code, ok := f.nextEncodingCode(data)
+		return ok && code.n == n
+	}
+	return f.identityEncoding && n == 2
+}
+
 // encodingCode is one character code a Type 0 font's encoding CMap splits
 // off a shown string ([Font.nextEncodingCode]).
 type encodingCode struct {

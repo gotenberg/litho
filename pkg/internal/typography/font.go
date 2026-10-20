@@ -64,6 +64,10 @@ type Font struct {
 	// and /W2 arrays are indexed by, when its /Encoding is an embedded or a
 	// predefined non-Identity CMap; nil otherwise. See [Font.metricCID].
 	encodingCIDs *encodingCIDs
+	// identityEncoding reports a Type 0 font whose /Encoding is Identity-H or
+	// Identity-V, whose codes are two bytes each (ISO 32000-1, 9.7.5.2,
+	// Table 118). See [Font.codeAligned].
+	identityEncoding bool
 
 	// widthStated marks the [Font.Widths] entries a simple font's /Widths
 	// array states as numbers, index for index; nil when [Font.Widths] came
@@ -1274,6 +1278,7 @@ func resolveType0Metrics(ctx context.Context, doc *document.Document, fontDict a
 	// Default vertical metrics per PDF spec Table 117.
 	font.DW2 = [2]float64{880, -1000}
 	font.encodingCIDs = resolveEncodingCIDs(ctx, doc, fontDict)
+	font.identityEncoding = isIdentityEncoding(ctx, doc, fontDict)
 
 	// CIDFont metrics live in the first element of /DescendantFonts.
 	if dfObj, ok := fontDict["DescendantFonts"]; ok {
