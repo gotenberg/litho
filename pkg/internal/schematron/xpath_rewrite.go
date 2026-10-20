@@ -140,13 +140,11 @@ func elideCastInStep(expr, fnName string) string {
 // int rather than float64; that int propagates as NaN through every
 // downstream arithmetic operation because the engine's asNumber
 // coercion has no case for int. floor() goes through math.Floor and
-// returns float64 cleanly, and floor(x + 0.5) matches XPath 1.0's
-// rounding semantics for non-negative numbers (round-half-up). EN
-// 16931's BR-CO-* arithmetic rules use round() on always-positive
-// monetary sums, so the half-up vs banker's-rounding distinction
-// does not bite. For negative halves the result differs from
-// XPath 1.0's "round half toward +Inf" by one ULP, which is below
-// the tolerance every Schematron arithmetic rule already accepts.
+// returns float64 cleanly. floor(x + 0.5) is XPath 1.0's round (4.4:
+// the closest integer, ties toward positive infinity) on every half,
+// negative ones included. It differs only where XPath returns negative
+// zero and for x = 0.49999999999999994, whose sum with 0.5 rounds up
+// to 1 in IEEE 754 arithmetic; neither reaches a monetary verdict.
 func rewriteRoundAsFloor(expr string) string {
 	if !strings.Contains(expr, "round") {
 		return expr

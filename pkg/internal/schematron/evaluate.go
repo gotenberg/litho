@@ -1013,20 +1013,31 @@ func evalBoolean(expr string, n *xmlquery.Node, cache *exprCache) (result bool, 
 	return xpathBoolean(compiled.Evaluate(nav)), nil
 }
 
-// xpathBoolean coerces an XPath evaluation result to the boolean
-// semantics Schematron expects:
+// xpathBoolean coerces an XPath evaluation result to its effective
+// boolean value, XPath 2.0 2.4.3 (XPath 1.0 4.3 boolean() for the
+// kinds the two share):
 //
 //   - bool: returned as-is.
 //   - float64: true for non-zero non-NaN.
+//   - int: true for non-zero. antchfx/xpath v1.3.6 returns round() as
+//     a Go int (func_go110.go), and a round() the rewriter misses
+//     reaches here as one.
 //   - string: true when non-empty.
-//   - *xpath.NodeIterator: true when the node set is non-empty.
+//   - *xpath.NodeIterator: true when the node set is non-empty, which
+//     is XPath 2.0's "first item is a node" rule.
 //
 // Any other type returns false; antchfx/xpath does not emit anything
-// outside those kinds today.
+// outside those kinds. XPath 2.0 raises FORG0006 on a sequence of two
+// or more atomic values; the rewriter turns the sequence literals the
+// bundled rules use into disjunctions of node tests before evaluation
+// (see rewriteBareSequenceAsDisjunction), so no such sequence reaches
+// here.
 func xpathBoolean(v any) bool {
 	switch t := v.(type) {
 	case bool:
 		return t
+	case int:
+		return t != 0
 	case float64:
 		return t != 0 && t == t // NaN check
 	case string:

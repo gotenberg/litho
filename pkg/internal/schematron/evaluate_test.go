@@ -292,6 +292,30 @@ func TestValidate_CarriageReturnIsWhitespace(t *testing.T) {
 	}
 }
 
+func TestXPathBoolean_EffectiveBooleanValue(t *testing.T) {
+	// antchfx/xpath v1.3.6 returns round() as a Go int. XPath 2.0,
+	// 2.4.3 (and XPath 1.0, 4.3 boolean()): a number is true unless it
+	// is zero or NaN, whatever Go type carries it.
+	cases := []struct {
+		in   any
+		want bool
+	}{
+		{int(3), true},
+		{int(0), false},
+		{float64(2), true},
+		{float64(0), false},
+		{"x", true},
+		{"", false},
+		{true, true},
+		{false, false},
+	}
+	for _, c := range cases {
+		if got := xpathBoolean(c.in); got != c.want {
+			t.Errorf("xpathBoolean(%#v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
 func TestValidate_RoundAcrossCarriageReturn(t *testing.T) {
 	// XPath 1.0, 3.7: CR is whitespace between "round" and "(". The
 	// bundled Factur-X profiles carry CRLF inside test attributes.
