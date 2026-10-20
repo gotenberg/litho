@@ -309,10 +309,6 @@ const mutationRedactReach = 1e6
 //     ErrRedactionRefused (content a form XObject draws, an inline image, a
 //     stroked path) and 9 with ErrRedactionIncomplete; the 2 encrypted
 //     fixtures refuse the signature.
-//   - litho cmapnotdef_2b: refuses with ErrRedactionIncomplete at all 13
-//     profiles. Its codes with no Unicode value read as no character, so
-//     page 1 reads "A" on each line, and the sanitization scan finds 7
-//     other copies of a one-letter string in the file; it redacted before.
 //   - litho imagereach_2b: no ruleset_changed cell. Its two pages share one
 //     content stream, and litho judges it under each page's resources (ISO
 //     32000-1, 7.8.3), so the stamp's /Contents arrays and the page move no

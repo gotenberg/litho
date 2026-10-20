@@ -114,7 +114,11 @@ type RedactReport struct {
 //   - [ErrRedactionIncomplete] when the passes succeed but the verification
 //     scan still finds a copy, or could not read an object. The report names
 //     every survivor in [RedactReport.SurvivingCopies] so the caller can act on
-//     it.
+//     it. The scan looks for each removed run holding at least three letters
+//     or digits, and for each such word drawn across shorter runs, as a
+//     producer that positions every glyph draws one. A run too short to
+//     identify anything, a lone space, letter or digit, is not looked for: it
+//     survives in nearly every document whatever was removed.
 //
 // Regions on several pages are applied together. Passing none is a no-op.
 //
@@ -248,7 +252,12 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 		return nil, fmt.Errorf("%w: clearing metadata: %w", ErrRedactionRefused, metaErr)
 	}
 
-	sanitized, sanErr := mutations.SanitizeDocument(ctx, alloc, doc, report.RemovedText)
+	// The scrubs and the scan look for the removed runs that can identify
+	// what was removed, not for every run: a lone space or digit survives in
+	// nearly every document, and refusing over it refuses over nothing (see
+	// mutations.RedactionNeedles).
+	needles := mutations.RedactionNeedles(report.RemovedText)
+	sanitized, sanErr := mutations.SanitizeDocument(ctx, alloc, doc, needles)
 	report.ScrubbedAnnotations = sanitized.Annotations
 	report.ScrubbedFormFields = sanitized.FormFields
 	report.ScrubbedOutlineItems = sanitized.OutlineItems
@@ -274,7 +283,7 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	w.rewriteOverrides = alloc.Pending()
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
-	w.recordRedaction(regions, report.RemovedText)
+	w.recordRedaction(regions, needles)
 	return report, nil
 }
 
@@ -289,10 +298,11 @@ func seedAllocator(alloc *writer.ObjAllocator, overrides map[int]ast.PdfObject) 
 }
 
 // recordRedaction remembers a successful redaction so [Writer.WriteTo] can
-// check the composed output against it.
-func (w *Writer) recordRedaction(regions []RedactRegion, removed []string) {
+// check the composed output against it. needles are the removed runs the
+// output is verified against (see mutations.RedactionNeedles).
+func (w *Writer) recordRedaction(regions []RedactRegion, needles []string) {
 	w.redactions = append(w.redactions, slices.Clone(regions))
-	w.redactedTokens = appendNewTokens(w.redactedTokens, removed)
+	w.redactedTokens = appendNewTokens(w.redactedTokens, needles)
 }
 
 // appendNewObjects appends each object number of add that objs does not hold
@@ -367,7 +377,7 @@ func (w *Writer) enforceRedactions(ctx context.Context, overrides map[int]ast.Pd
 			if redactErr != nil {
 				return nil, fmt.Errorf("%w: re-applying page %d at write time: %w", ErrRedactionRefused, pageNum, redactErr)
 			}
-			tokens = appendNewTokens(tokens, pageReport.RemovedText)
+			tokens = appendNewTokens(tokens, mutations.RedactionNeedles(pageReport.RemovedText))
 		}
 	}
 	if _, sanErr := mutations.SanitizeDocument(ctx, alloc, doc, tokens); sanErr != nil {

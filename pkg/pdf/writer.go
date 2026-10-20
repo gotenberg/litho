@@ -934,10 +934,11 @@ type Writer struct {
 	refused             error
 
 	// redactions records the regions of every successful [Writer.Redact]
-	// call, in call order, and redactedTokens the text they removed. WriteTo
-	// re-checks the fully composed output against them, because a stage
-	// queued before or after Redact can rebuild content from the source
-	// document and restore what Redact removed.
+	// call, in call order, and redactedTokens the needles of the text they
+	// removed (see mutations.RedactionNeedles). WriteTo re-checks the fully
+	// composed output against them, because a stage queued before or after
+	// Redact can rebuild content from the source document and restore what
+	// Redact removed.
 	redactions     [][]RedactRegion
 	redactedTokens []string
 
