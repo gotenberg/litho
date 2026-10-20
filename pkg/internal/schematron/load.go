@@ -77,7 +77,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, err
 		s.Namespaces = append(s.Namespaces, NamespaceDecl(ns))
 	}
 	for _, lt := range raw.Lets {
-		s.Lets = append(s.Lets, Let(lt))
+		s.Lets = append(s.Lets, xpathLet(lt))
 	}
 
 	// Resolve includes first so the importer can pull patterns and
@@ -99,7 +99,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, err
 			ph.Active = append(ph.Active, a.Pattern)
 		}
 		for _, lt := range rp.Lets {
-			ph.Lets = append(ph.Lets, Let(lt))
+			ph.Lets = append(ph.Lets, xpathLet(lt))
 		}
 		s.Phases[rp.ID] = ph
 	}
@@ -109,17 +109,17 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, err
 		}
 		pat := &Pattern{ID: rp.ID, Title: strings.TrimSpace(rp.Title)}
 		for _, lt := range rp.Lets {
-			pat.Lets = append(pat.Lets, Let(lt))
+			pat.Lets = append(pat.Lets, xpathLet(lt))
 		}
 		for _, rr := range rp.Rules {
-			rule := &Rule{Context: rr.Context}
+			rule := &Rule{Context: xpathText(rr.Context)}
 			for _, lt := range rr.Lets {
-				rule.Lets = append(rule.Lets, Let(lt))
+				rule.Lets = append(rule.Lets, xpathLet(lt))
 			}
 			for _, ra := range rr.Asserts {
 				rule.Asserts = append(rule.Asserts, &Assertion{
 					ID:      ra.ID,
-					Test:    ra.Test,
+					Test:    xpathText(ra.Test),
 					Flag:    ra.Flag,
 					Role:    ra.Role,
 					Message: collapseWhitespace(ra.InnerXML),
@@ -129,7 +129,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, err
 			for _, rr2 := range rr.Reports {
 				rule.Reports = append(rule.Reports, &Assertion{
 					ID:      rr2.ID,
-					Test:    rr2.Test,
+					Test:    xpathText(rr2.Test),
 					Flag:    rr2.Flag,
 					Role:    rr2.Role,
 					Message: collapseWhitespace(rr2.InnerXML),
@@ -211,6 +211,42 @@ type rawNS struct {
 type rawLet struct {
 	Name  string `xml:"name,attr"`
 	Value string `xml:"value,attr"`
+}
+
+// xpathLet converts one parsed sch:let, normalising its XPath value
+// through [xpathText].
+func xpathLet(lt rawLet) Let {
+	return Let{Name: lt.Name, Value: xpathText(lt.Value)}
+}
+
+// xpathText turns every carriage return outside a string literal into
+// a space. XPath 1.0, 3.7 (ExprWhitespace, production S of XML 1.0)
+// and XPath 2.0, A.2.4 count CR as whitespace between tokens, the same
+// as space, tab and LF. The bundled Factur-X profile schematrons write
+// CRLF into their test and context attributes as "&#13;&#10;", which
+// XML keeps as a literal CR, and the evaluator's path rewriting
+// recognises space, tab and LF only: a CR after "(" or "or" stopped a
+// relative path from being anchored at the rule context. A CR inside
+// a literal is data and stays.
+func xpathText(s string) string {
+	if !strings.ContainsRune(s, '\r') {
+		return s
+	}
+	b := []byte(s)
+	var quote byte
+	for i, c := range b {
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case c == '\r':
+			b[i] = ' '
+		}
+	}
+	return string(b)
 }
 
 type rawPhase struct {

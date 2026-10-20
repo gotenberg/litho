@@ -266,3 +266,47 @@ func TestValidate_PhaseLetsApply(t *testing.T) {
 		t.Errorf("USD: fired %v skipped %v, want CUR to fire", fired, skipped)
 	}
 }
+
+func TestValidate_CarriageReturnIsWhitespace(t *testing.T) {
+	// XPath 1.0, 3.7 ExprWhitespace and XPath 2.0, A.2.4: CR (#xD)
+	// separates tokens like space. The bundled Factur-X profiles write
+	// CRLF into test attributes as "&#13;&#10;", which XML keeps as a
+	// literal CR. A relative path after one must still resolve against
+	// the rule context, and a literal keeps its CR.
+	sch := `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="inv" uri="urn:example:invoice"/>
+  <sch:let name="sep" value="'a&#13;b'"/>
+  <sch:pattern id="P">
+    <sch:rule context="&#13;&#10;inv:Line">
+      <sch:assert id="OR" test="(&#13;&#10;inv:Missing&#13;&#10;or&#13;&#10;inv:Amount)">or</sch:assert>
+      <sch:assert id="LIT" test="string-length($sep) = 3">literal keeps its CR</sch:assert>
+      <sch:report id="CTX" test="true()">the context matched the line</sch:report>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	payload := `<inv:Invoice xmlns:inv="urn:example:invoice"><inv:Line><inv:Amount>1</inv:Amount></inv:Line></inv:Invoice>`
+	fired, skipped := runOne(t, sch, payload)
+	if strings.Join(fired, ",") != "CTX" || len(skipped) != 0 {
+		t.Errorf("fired %v skipped %v, want only CTX", fired, skipped)
+	}
+}
+
+func TestValidate_RoundAcrossCarriageReturn(t *testing.T) {
+	// XPath 1.0, 3.7: CR is whitespace between "round" and "(". The
+	// bundled Factur-X profiles carry CRLF inside test attributes.
+	sch := `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="inv" uri="urn:example:invoice"/>
+  <sch:pattern id="P">
+    <sch:rule context="//inv:Invoice">
+      <sch:assert id="EBV" test="round&#13;&#10;(2.6)">round is 3, so true</sch:assert>
+      <sch:assert id="SUM" test="round&#13;&#10;(2.6) + 1 = 4">round feeds arithmetic</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	fired, skipped := runOne(t, sch, `<inv:Invoice xmlns:inv="urn:example:invoice"/>`)
+	if len(fired) != 0 || len(skipped) != 0 {
+		t.Errorf("fired %v skipped %v, want neither", fired, skipped)
+	}
+}
