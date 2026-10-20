@@ -76,13 +76,14 @@ const metricRenderFailed = "render_failed"
 // that is not opaque is composed over white, the background pdftoppm draws.
 type pageRenderer func(ctx context.Context, r *pdf.Reader, page int, dpi float64) (image.Image, error)
 
-// lithoRenderPage is the render feature's hook into litho. It stays nil until
-// litho renders pages: every fixture then scores as skipped, so the gate
-// carries the render cells with nothing in them. Wiring the renderer in is
-// assigning this variable.
+// lithoRenderPage is the render feature's hook into litho: [pdf.Reader.RenderPage]
+// over white, the background pdftoppm draws. Set to nil, every fixture
+// scores as skipped.
 //
 //nolint:gochecknoglobals // the one switch the renderer integration flips
-var lithoRenderPage pageRenderer
+var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page int, dpi float64) (image.Image, error) {
+	return r.RenderPage(ctx, page, pdf.WithRenderDPI(dpi))
+}
 
 // renderFeature renders the first pages of each PDF with litho and compares
 // them, pixel by pixel within the tolerances above, with the pages poppler's
