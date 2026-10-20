@@ -237,6 +237,7 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	}
 
 	var total opSpliceTally
+	sharing := pageContentSharing(ctx, alloc, doc, pages)
 
 	for pageNum, page := range pages {
 		if err := ctx.Err(); err != nil {
@@ -259,7 +260,7 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 			if t == (opSpliceTally{}) {
 				continue
 			}
-			if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
+			if err := replaceContentStream(ctx, alloc, doc, sharing, contentsObj, newData, pageNum+1); err != nil {
 				return nil, err
 			}
 			total.add(t)
@@ -301,7 +302,7 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 				"page", pageNum+1, "error", err)
 			continue
 		}
-		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
+		if err := replaceContentStream(ctx, alloc, doc, sharing, contentsObj, newData, pageNum+1); err != nil {
 			return nil, err
 		}
 		total.add(tally)
@@ -580,7 +581,9 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) error {
 // replaceContentStream writes newData, decoded content, as the content of the
 // page numbered pageNum whose /Contents is contentsObj: a stream stays at its
 // number, and an array, direct or through a reference, comes to hold the
-// content in one stream (ISO 32000-1, 7.7.3.3).
+// content in one stream (ISO 32000-1, 7.7.3.3). sharing tells which pages
+// name each stream, so a direct array sharing one with another page leaves it
+// alone; nil, or a page sharing does not list, rewrites the array in place.
 //
 // # Corpus evidence
 //
@@ -596,7 +599,12 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) error {
 //     and with it and this write only thread_100_100877.pdf changes.
 //   - litho inlineinterp_2b.pdf: its page names such an array, and the inline
 //     image repair of the page rolled back until this write.
-func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject, newData []byte, pageNum int) error {
+//   - litho sharedarray_2b.pdf: two pairs of pages share a stream of their
+//     direct arrays, and the aggressive rendering intent repair took the
+//     shared stream off one page and painted the repaired page on another.
+//     No other litho or verapdf corpus output changes, at any of the 13
+//     levels, default or aggressive.
+func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, sharing *contentSharing, contentsObj ast.PdfObject, newData []byte, pageNum int) error {
 	ref, isRef := contentsObj.(ast.PdfIndirectRef)
 	if !isRef {
 		// A direct /Contents array [s1 s2 ...] holds the content across several
@@ -605,7 +613,14 @@ func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		// array keeps addressing the same objects, so no page-dict rewrite is
 		// needed. Without this a direct-array /Contents aborts the whole
 		// document's remediation.
+		//
+		// A stream the array shares with another page, or names twice, cannot
+		// be rewritten so: the page gets a stream of its own instead
+		// ([contentSharing]).
 		if arr, ok := contentsObj.(ast.PdfArray); ok {
+			if _, known := sharing.page(pageNum); known && sharing.shared(ctx, alloc, doc, arr, pageNum) {
+				return sharing.writeOwnContentStream(ctx, alloc, doc, newData, pageNum)
+			}
 			return replaceContentArrayStreams(alloc, arr, newData, pageNum)
 		}
 		return fmt.Errorf("page %d /Contents is not an indirect reference or array", pageNum)

@@ -66,7 +66,9 @@ func (w *contentStreamWalk) run(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("resolving pages: %w", err)
 	}
 
-	for i, pe := range pageTreeEntries(ctx, alloc, doc, pages) {
+	entries := pageTreeEntries(ctx, alloc, doc, pages)
+	w.sharing = newContentSharing(entries)
+	for i, pe := range entries {
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
@@ -110,6 +112,9 @@ type contentStreamWalk struct {
 	visited   map[int]bool
 	// streams counts the content streams rewritten.
 	streams int
+	// sharing tells which pages name each content stream, so a page's own
+	// content is rewritten without touching a stream another page draws.
+	sharing *contentSharing
 }
 
 // firstVisit reports whether obj is an inline value or an indirect object the
@@ -204,7 +209,7 @@ func (w *contentStreamWalk) pageContent(ctx context.Context, pageDict ast.PdfDic
 			"fixer", w.fixer, "page", pageNum)
 		return
 	}
-	if err := replaceContentStream(ctx, w.alloc, w.doc, contentsObj, newData, pageNum); err != nil {
+	if err := replaceContentStream(ctx, w.alloc, w.doc, w.sharing, contentsObj, newData, pageNum); err != nil {
 		edit.abandon()
 		w.doc.Logger.Debug("remediation: cannot rewrite a page's content stream",
 			"fixer", w.fixer, "page", pageNum, "error", err)

@@ -113,7 +113,7 @@ func TestLiveContentBytes_SeesAQueuedRewrite(t *testing.T) {
 		doc, alloc := newTestDoc(t, tc.pdf)
 		contentsObj := firstPage(t, ctx, doc).Dict["Contents"]
 
-		if err := replaceContentStream(ctx, alloc, doc, contentsObj,
+		if err := replaceContentStream(ctx, alloc, doc, nil, contentsObj,
 			[]byte("BT (REPAIRED) Tj ET"), 1); err != nil {
 			t.Errorf("%s: queueing a repair: %v", tc.name, err)
 			continue
@@ -191,7 +191,7 @@ func TestReplaceContentStream_WritesAnIndirectArrayAsAnArray(t *testing.T) {
 			// An earlier fixer queued the array at its own number.
 			alloc.AllocAt(4, ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 5}, ast.PdfIndirectRef{ObjectNum: 6}})
 		}
-		if err := replaceContentStream(ctx, alloc, doc, contentsObj, []byte("BT (REPAIRED) Tj ET"), 1); err != nil {
+		if err := replaceContentStream(ctx, alloc, doc, nil, contentsObj, []byte("BT (REPAIRED) Tj ET"), 1); err != nil {
 			t.Fatalf("queued=%v: replaceContentStream: %v", queued, err)
 		}
 		if got, ok := alloc.Pending()[4].(ast.PdfArray); !ok || len(got) != 1 {

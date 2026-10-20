@@ -53,6 +53,7 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 
 	total := 0
 	entries := pageTreeEntries(ctx, alloc, doc, pages)
+	sharing := newContentSharing(entries)
 	for pageNum, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -73,7 +74,7 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		if removed == 0 {
 			continue
 		}
-		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
+		if err := replaceContentStream(ctx, alloc, doc, sharing, contentsObj, newData, pageNum+1); err != nil {
 			return nil, fmt.Errorf("replacing content stream on page %d: %w", pageNum+1, err)
 		}
 		total += removed

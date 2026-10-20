@@ -63,6 +63,7 @@ func fixStringLimit(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		// Best-effort: a page-tree resolve failure yields an empty slice;
 		// the loop then no-ops.
 		pages, _ := document.ResolvePages(ctx, doc, catalog)
+		sharing := pageContentSharing(ctx, alloc, doc, pages)
 		for pageNum, page := range pages {
 			if ctx.Err() != nil {
 				break
@@ -80,7 +81,7 @@ func fixStringLimit(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			if n == 0 {
 				continue
 			}
-			if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
+			if err := replaceContentStream(ctx, alloc, doc, sharing, contentsObj, newData, pageNum+1); err != nil {
 				return nil, fmt.Errorf("replacing content stream on page %d: %w", pageNum+1, err)
 			}
 			count++

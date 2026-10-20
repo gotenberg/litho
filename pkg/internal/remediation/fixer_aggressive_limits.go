@@ -162,6 +162,7 @@ func flattenGraphicsStack(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	}
 
 	count := 0
+	sharing := pageContentSharing(ctx, alloc, doc, pages)
 	for pageNum, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return count, err
@@ -183,7 +184,7 @@ func flattenGraphicsStack(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if dropped == 0 {
 			continue
 		}
-		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
+		if err := replaceContentStream(ctx, alloc, doc, sharing, contentsObj, newData, pageNum+1); err != nil {
 			return count, fmt.Errorf("replacing content stream on page %d: %w", pageNum+1, err)
 		}
 		count++
