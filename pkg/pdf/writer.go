@@ -950,6 +950,10 @@ type Writer struct {
 	// Redact removed.
 	redactions     [][]RedactRegion
 	redactedTokens []string
+	// redactionTolerances records, per successful non-strict Redact call, the
+	// copies on other pages it reported rather than refused, so WriteTo
+	// tolerates them too (see [redactionTolerance]).
+	redactionTolerances []redactionTolerance
 
 	// droppedSignatures lists the signatures the writes that produce the
 	// output left out, each a full rewrite (see [Writer.DroppedSignatures]). A

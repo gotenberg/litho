@@ -42,6 +42,16 @@ type redactResult struct {
 	ScrubbedAnnotations     []int         `json:"scrubbedAnnotations,omitempty"`
 	ScrubbedFormFields      []int         `json:"scrubbedFormFields,omitempty"`
 	ScrubbedOutlineItems    []int         `json:"scrubbedOutlineItems,omitempty"`
+	CopiesOnOtherPages      []otherCopy   `json:"copiesOnOtherPages,omitempty"`
+}
+
+// otherCopy is a removed string a page outside the regions still draws. It is
+// a warning: the redaction succeeded, and the output keeps the copy.
+type otherCopy struct {
+	Token     string `json:"token"`
+	ObjectNum int    `json:"object"`
+	Where     string `json:"where"`
+	Pages     []int  `json:"pages"`
 }
 
 // parseRedactRegion reads one "page:x,y,width,height" argument.
@@ -96,6 +106,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	// such as an indexed image over DeviceCMYK, as RGB, and this profile is
 	// what its CMYK colours are read in when the document names none.
 	cmykProfile := fs.String("cmyk-profile", "", "ICC profile DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
+	strict := fs.Bool("strict", false, "Refuse when a page outside the regions still draws removed text, instead of warning")
 
 	var regionSpecs regionFlags
 	fs.Var(&regionSpecs, "region", "Region to clear, page:x,y,width,height (repeatable, required)")
@@ -105,7 +116,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] -o out.pdf")
 		return exitError
 	}
 
@@ -147,7 +158,11 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	// Before the output file exists: a refused redaction must leave nothing
 	// behind, and a half-redacted file on disk is the failure this command
 	// exists to prevent.
-	report, err := w.Redact(ctx, regions)
+	var redactOpts []pdf.RedactOption
+	if *strict {
+		redactOpts = append(redactOpts, pdf.WithStrictRedaction())
+	}
+	report, err := w.Redact(ctx, regions, redactOpts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "redacting: %v\n", err)
 		if errors.Is(err, pdf.ErrRedactionIncomplete) && report != nil {
@@ -197,6 +212,16 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		ScrubbedAnnotations:     report.ScrubbedAnnotations,
 		ScrubbedFormFields:      report.ScrubbedFormFields,
 		ScrubbedOutlineItems:    report.ScrubbedOutlineItems,
+	}
+	for _, hit := range report.CopiesOnOtherPages {
+		result.CopiesOnOtherPages = append(result.CopiesOnOtherPages,
+			otherCopy{Token: hit.Token, ObjectNum: hit.ObjectNum, Where: hit.Where, Pages: hit.Pages})
+	}
+	// A copy left on another page is a warning, so it reaches stderr whatever
+	// the format: a caller reading only the JSON still sees it in its fields.
+	for _, c := range result.CopiesOnOtherPages {
+		fmt.Fprintf(stderr, "warning: a copy of %q remains on page(s) %v, object %d (%s); --strict refuses it\n",
+			c.Token, c.Pages, c.ObjectNum, c.Where)
 	}
 
 	switch format {

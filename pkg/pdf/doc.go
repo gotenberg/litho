@@ -150,6 +150,7 @@
 //     [WithSigningTime], [WithSignatureField], [WithPAdES],
 //     [WithTimestampAuthority], [WithLTV], [WithValidationData].
 //   - [Writer.Timestamp] takes [TimestampOption]: [WithTimestampField].
+//   - [Writer.Redact] takes [RedactOption]: [WithStrictRedaction].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:
