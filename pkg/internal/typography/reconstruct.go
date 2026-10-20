@@ -570,7 +570,7 @@ type runTracker struct {
 // the font of each element, or nil when unknown, and items their
 // [textItemStarts].
 func newRunTracker(elements []models.TextElement, fonts []runFont, items []int) runTracker {
-	r := runTracker{start: elements[0], last: elements[0], fonts: fonts, elements: elements, items: items, advIdx: -1, marks: newMarkAdvances(elements)}
+	r := runTracker{start: elements[0], last: elements[0], fonts: fonts, elements: elements, items: items, advIdx: -1, marks: newMarkAdvances(elements, fonts)}
 	if advances(elements[0]) {
 		r.adv, r.advIdx = elements[0], 0
 	}
@@ -677,6 +677,10 @@ type runFont struct {
 	stream  int
 	segment int
 	marked  int
+	// placement is the machine's [graphics.Machine] Placement when the
+	// glyph was shown: it changes wherever a text-positioning operator set
+	// the position, and not at a Tf.
+	placement int
 }
 
 // runRecorder collects the [runFont] of each element extraction appends,
@@ -1878,28 +1882,49 @@ func hasNonspacingMark(s string) bool {
 // advances past no such glyph (src/core/evaluator.js, buildTextContentItem,
 // which zeroes the advance of a zero-width diacritic and skips an invisible
 // format mark), so it reads every glyph after one, until a text-positioning
-// operator sets the position again, that far before where litho reads it.
-// ISO 32000-1, 9.4.4 advances the text position past every glyph shown, so
-// the difference is the reference's. It is built once per sequence so each answer costs no walk
-// of the elements between.
+// operator sets the position again, that far before where litho reads it. A
+// Tf between them does not end the shift: it selects a font and leaves the
+// text matrix alone, in PDF.js (getTextContent, OPS.setFont) as in ISO
+// 32000-1, 9.3.1. ISO 32000-1, 9.4.4 advances the text position past every
+// glyph shown, so the difference is the reference's. It is built once per
+// sequence so each answer costs no walk of the elements between.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300224.pdf page 105: a soft hyphen before a Tf
+//     read "76432 , E." where PDF.js reads "76432, E .".
+//   - All corpora: carrying the shift across a Tf makes words match PDF.js on
+//     1 more file (govdocs thread_300_300224.pdf) and moves 16 more pages of
+//     3 files that still differ closer to it (govdocs thread_400_400243.pdf
+//     13, thread_400_400228.pdf 2, thread_400_400245.pdf 1), and none
+//     farther; facturx, litho, pdf20, pdfcpu and pdfjs do not move.
 type markAdvances struct {
 	// sum holds, at k, the widths of the marks among the first k elements.
 	sum []float64
 	// chunkStart holds, for each element, the index of the first element of
-	// the run of consecutive elements that share its chunk, the glyphs shown
-	// since a text-positioning operator last set the position.
+	// the run of consecutive elements shown since a text-positioning
+	// operator last set the position: those that share its [runFont]
+	// placement, or its chunk when the fonts are unknown.
 	chunkStart []int
 }
 
-// newMarkAdvances indexes the nonspacing marks of elements.
-func newMarkAdvances(elements []models.TextElement) markAdvances {
+// newMarkAdvances indexes the nonspacing marks of elements. fonts is the
+// font of each element, or nil when unknown.
+func newMarkAdvances(elements []models.TextElement, fonts []runFont) markAdvances {
+	if len(fonts) != len(elements) {
+		fonts = nil
+	}
 	m := markAdvances{sum: make([]float64, len(elements)+1), chunkStart: make([]int, len(elements))}
 	for k, e := range elements {
 		m.sum[k+1] = m.sum[k]
 		if hasNonspacingMark(e.Text) || isFormatOnly(e.Text) {
 			m.sum[k+1] += e.Width
 		}
-		if k > 0 && elements[k-1].Chunk == e.Chunk {
+		placed := k > 0 && elements[k-1].Chunk == e.Chunk
+		if fonts != nil {
+			placed = k > 0 && fonts[k-1].placement == fonts[k].placement
+		}
+		if placed {
 			m.chunkStart[k] = m.chunkStart[k-1]
 		} else {
 			m.chunkStart[k] = k

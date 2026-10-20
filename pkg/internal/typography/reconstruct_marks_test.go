@@ -93,7 +93,7 @@ func TestMarkAdvances_Drift(t *testing.T) {
 		{Text: combiningSolidus, Width: 4, Chunk: 2},
 		{Text: combiningSolidus, Width: 2, Chunk: 2},
 		{Text: "d", Width: 5, Chunk: 2},
-	})
+	}, nil)
 	for _, tc := range []struct {
 		a, b int
 		want float64

@@ -501,12 +501,14 @@ func handleBeginText(_ context.Context, m *Machine, state *State, _ content.Oper
 	state.Text.Tm = identityTextMatrix
 	state.Text.Tlm = identityTextMatrix
 	m.Chunk++
+	m.Placement++
 }
 
 func handleEndText(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	state.Text.Tm = identityTextMatrix
 	state.Text.Tlm = identityTextMatrix
 	m.Chunk++
+	m.Placement++
 }
 
 func handleTextCharSpacing(_ context.Context, _ *Machine, state *State, op content.Operation) {
@@ -563,6 +565,7 @@ func handleTextMatrix(_ context.Context, m *Machine, state *State, op content.Op
 	}
 	state.Text.Tlm = state.Text.Tm
 	m.Chunk++
+	m.Placement++
 }
 
 // applyTextMove advances the text line matrix by (tx, ty) per the ISO
@@ -582,6 +585,7 @@ func handleTextMove(_ context.Context, m *Machine, state *State, op content.Oper
 	ty := document.Float(op.Operands[1])
 	applyTextMove(state, tx, ty)
 	m.Chunk++
+	m.Placement++
 }
 
 func handleTextMoveSetLeading(_ context.Context, m *Machine, state *State, op content.Operation) {
@@ -593,11 +597,13 @@ func handleTextMoveSetLeading(_ context.Context, m *Machine, state *State, op co
 	state.Text.Tl = -ty
 	applyTextMove(state, tx, ty)
 	m.Chunk++
+	m.Placement++
 }
 
 func handleTextNextLine(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	applyTextMove(state, 0, -state.Text.Tl)
 	m.Chunk++
+	m.Placement++
 }
 
 func handleTextNextLineShow(_ context.Context, m *Machine, state *State, _ content.Operation) {
@@ -605,6 +611,7 @@ func handleTextNextLineShow(_ context.Context, m *Machine, state *State, _ conte
 	// is handled by the extractor layer. This handler only advances the matrix.
 	applyTextMove(state, 0, -state.Text.Tl)
 	m.Chunk++
+	m.Placement++
 }
 
 func handleTextSpacingNextLineShow(_ context.Context, m *Machine, state *State, op content.Operation) {
@@ -615,6 +622,7 @@ func handleTextSpacingNextLineShow(_ context.Context, m *Machine, state *State, 
 	state.Text.Tc = document.Float(op.Operands[1])
 	applyTextMove(state, 0, -state.Text.Tl)
 	m.Chunk++
+	m.Placement++
 }
 
 func handleTextRenderingMode(_ context.Context, _ *Machine, state *State, op content.Operation) {

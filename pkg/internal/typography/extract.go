@@ -318,7 +318,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// whatever it did not name takes the font selected out here.
 		if runs != nil {
 			cur := machine.Current()
-			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur) * currentFont.type3HeightScale(cur.Text.Tfs), trm: renderingMatrixOnPage(cur), stream: stream, segment: segment, marked: marked}
+			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur) * currentFont.type3HeightScale(cur.Text.Tfs), trm: renderingMatrixOnPage(cur), stream: stream, segment: segment, marked: marked, placement: machine.Placement}
 			for len(runs.fonts) < len(*elements) {
 				runs.fonts = append(runs.fonts, key)
 			}

@@ -93,6 +93,12 @@ type Machine struct {
 	// reconstruction can treat them as one logical text run and
 	// suppress gap-based space insertion inside that run.
 	Chunk int
+	// Placement is a monotonically increasing counter bumped by the text
+	// operators that set the text position (BT, ET, Td, TD, Tm, T*, ' and
+	// "): every [Chunk] boundary but Tf, which selects a font and leaves
+	// the text matrix alone (ISO 32000-1, 9.3.1 and 9.4.2). Glyphs shown
+	// while it is unchanged were placed by advancing from one position.
+	Placement int
 	// RecordUnknownOperators makes the machine remember every operator it
 	// has no handler for. Off by default, because ignoring one is right for
 	// extraction: a page still yields its text when the machine skips a
