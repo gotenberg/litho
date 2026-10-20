@@ -35,7 +35,7 @@ type Fixture struct {
 // "<profile>/<basename>"; "none" yields "<basename>"; "auto" yields
 // "<profile>/<basename>" when the PDF claims a profile via XMP and
 // "<basename>" otherwise.
-func LoadFixtures(m *Manifest) ([]Fixture, error) {
+func LoadFixtures(ctx context.Context, m *Manifest) ([]Fixture, error) {
 	pdfs, err := walkPDFs(m)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func LoadFixtures(m *Manifest) ([]Fixture, error) {
 	case ProfileModeNone:
 		return loadFixturesNone(m, pdfs), nil
 	case ProfileModeAuto:
-		return loadFixturesAuto(m, pdfs)
+		return loadFixturesAuto(ctx, m, pdfs)
 	default:
 		return nil, fmt.Errorf("unknown profile_mode %q", m.ProfileMode)
 	}
@@ -118,7 +118,7 @@ func loadFixturesNone(m *Manifest, pdfs []string) []Fixture {
 //
 //   - govdocs: 1091 PDFs, and the live XMP scan adds ~30s to every run,
 //     which is why a provisioned claims.csv replaces it.
-func loadFixturesAuto(m *Manifest, pdfs []string) ([]Fixture, error) {
+func loadFixturesAuto(ctx context.Context, m *Manifest, pdfs []string) ([]Fixture, error) {
 	allow := make(map[string]bool, len(m.Profiles))
 	for _, p := range m.Profiles {
 		allow[p] = true
@@ -134,8 +134,10 @@ func loadFixturesAuto(m *Manifest, pdfs []string) ([]Fixture, error) {
 	sem := make(chan struct{}, runtime.NumCPU())
 	var wg sync.WaitGroup
 	for i, path := range pdfs {
+		if !acquire(ctx, sem) {
+			break
+		}
 		wg.Add(1)
-		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
@@ -144,7 +146,7 @@ func loadFixturesAuto(m *Manifest, pdfs []string) ([]Fixture, error) {
 			if claims != nil {
 				profile = claims[base]
 			} else {
-				profile = detectClaimedProfile(context.Background(), path)
+				profile = detectClaimedProfile(ctx, path)
 			}
 			if profile != "" && len(allow) > 0 && !allow[profile] {
 				profile = ""
@@ -161,6 +163,11 @@ func loadFixturesAuto(m *Manifest, pdfs []string) ([]Fixture, error) {
 		}()
 	}
 	wg.Wait()
+	// A scan cut short read the files it never reached, and the ones it was
+	// opening, as claiming no profile: those fixtures would carry the wrong ID.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("scanning XMP claims: %w", err)
+	}
 	return fixtures, nil
 }
 

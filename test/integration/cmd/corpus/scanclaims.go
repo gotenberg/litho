@@ -24,7 +24,7 @@ import (
 // Files with no recognised XMP claim do not appear in the CSV. The
 // entrypoint treats absent rows as "no compliance/remediation
 // fixture", which lines up with the runner's auto-mode behavior.
-func runScanClaims(args []string) int {
+func runScanClaims(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("scan-claims", flag.ExitOnError)
 	pdfsDir := fs.String("pdfs", "", "Directory holding the flat pdfs/ tree (required)")
 	out := fs.String("out", "", "Output CSV path; empty writes to stdout")
@@ -54,7 +54,11 @@ func runScanClaims(args []string) int {
 		return 1
 	}
 
-	rows := scanClaimsParallel(pdfs, allowSet, *workers)
+	rows, err := scanClaimsParallel(ctx, pdfs, allowSet, *workers)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scan-claims: %v\n", err)
+		return 1
+	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].base < rows[j].base })
 
 	w := os.Stdout
@@ -108,17 +112,23 @@ func collectPDFs(dir string) ([]string, error) {
 	return out, nil
 }
 
-func scanClaimsParallel(pdfs []string, allow map[string]bool, workers int) []claimRow {
+// scanClaimsParallel reads the claim of every PDF in pdfs on at most workers
+// goroutines. It returns ctx's error when ctx is done before the scan
+// completes: a cut-short scan reads every file it never reached as claiming no
+// profile, and a claims.csv written from it drops their rows.
+func scanClaimsParallel(ctx context.Context, pdfs []string, allow map[string]bool, workers int) ([]claimRow, error) {
 	results := make([]claimRow, len(pdfs))
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 	for i, path := range pdfs {
+		if !acquire(ctx, sem) {
+			break
+		}
 		wg.Add(1)
-		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			profile := detectClaimedProfile(context.Background(), path)
+			profile := detectClaimedProfile(ctx, path)
 			if profile == "" {
 				return
 			}
@@ -130,6 +140,9 @@ func scanClaimsParallel(pdfs []string, allow map[string]bool, workers int) []cla
 		}()
 	}
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("scanning claims: %w", err)
+	}
 
 	rows := results[:0]
 	for _, r := range results {
@@ -137,7 +150,21 @@ func scanClaimsParallel(pdfs []string, allow map[string]bool, workers int) []cla
 			rows = append(rows, r)
 		}
 	}
-	return rows
+	return rows, nil
+}
+
+// acquire takes a slot of sem, or reports false without one once ctx is done,
+// so a worker pool stops starting goroutines when the command is interrupted.
+func acquire(ctx context.Context, sem chan struct{}) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	select {
+	case sem <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // maxClaimsLineBytes bounds one line of claims.csv. It is an anti-DoS guard

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -36,8 +37,8 @@ func TestScanClaimsParallelDropsNoClaim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collectPDFs: %v", err)
 	}
-	if got := scanClaimsParallel(pdfs, nil, 4); len(got) != 0 {
-		t.Errorf("expected 0 rows for unclaimed PDFs, got %#v", got)
+	if got, err := scanClaimsParallel(context.Background(), pdfs, nil, 4); err != nil || len(got) != 0 {
+		t.Errorf("expected 0 rows and no error for unclaimed PDFs, got %#v, %v", got, err)
 	}
 }
 
@@ -48,7 +49,7 @@ func TestRunScanClaimsWritesEmptyCSVWhenNoClaims(t *testing.T) {
 	}
 	out := filepath.Join(t.TempDir(), "claims.csv")
 
-	rc := runScanClaims([]string{"--pdfs", pdfsDir, "--out", out, "--workers", "2"})
+	rc := runScanClaims(context.Background(), []string{"--pdfs", pdfsDir, "--out", out, "--workers", "2"})
 	if rc != 0 {
 		t.Fatalf("runScanClaims rc=%d", rc)
 	}

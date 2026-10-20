@@ -126,7 +126,7 @@ func defaultBaselinePath() string {
 	return "test/integration/baseline.json"
 }
 
-func runBaseline(args []string) int {
+func runBaseline(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("baseline", flag.ExitOnError)
 	corpus := fs.String("corpus", "", "Comma-separated corpus names (empty = all)")
 	feature := fs.String("feature", "", "Comma-separated feature names (empty = all)")
@@ -149,7 +149,7 @@ func runBaseline(args []string) int {
 		opts.workers = 1
 	}
 
-	board, ok := buildScoreboard(context.Background(), opts)
+	board, ok := buildScoreboard(ctx, opts)
 	if !ok {
 		return 1
 	}
@@ -182,7 +182,7 @@ func runBaseline(args []string) int {
 	return 0
 }
 
-func runCheck(args []string) int {
+func runCheck(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("check", flag.ExitOnError)
 	corpus := fs.String("corpus", "", "Comma-separated corpus names (empty = all)")
 	feature := fs.String("feature", "", "Comma-separated feature names (empty = all)")
@@ -210,7 +210,7 @@ func runCheck(args []string) int {
 		opts.workers = 1
 	}
 
-	board, ok := buildScoreboard(context.Background(), opts)
+	board, ok := buildScoreboard(ctx, opts)
 	if !ok {
 		return 1
 	}

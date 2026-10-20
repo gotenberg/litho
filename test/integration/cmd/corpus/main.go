@@ -1,13 +1,29 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 )
 
 func main() {
+	os.Exit(runMain())
+}
+
+// runMain dispatches the command under a context an interrupt cancels, so
+// Ctrl-C reaches the workers through their contexts and a cut-short run or
+// scan writes no result. It returns rather than exiting so the deferred stop runs. The first signal
+// also restores the default handling: a second Ctrl-C kills a run whose
+// shutdown hangs.
+func runMain() int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	context.AfterFunc(ctx, stop)
+
 	// Multi-call dispatch: when argv[0]'s basename matches a
 	// subcommand, treat the program as that subcommand directly. The
 	// provisioning Docker entrypoint cross-compiles this binary and
@@ -15,14 +31,14 @@ func main() {
 	// `scan-claims --pdfs ...`. Without this dispatch the flag parser
 	// would treat `--pdfs` as an unknown subcommand.
 	if cmd := subcommandFromArgv0(); cmd != "" {
-		os.Exit(dispatch(cmd, os.Args[1:]))
+		return dispatch(ctx, cmd, os.Args[1:])
 	}
 
 	if len(os.Args) < 2 {
 		printUsage(os.Stderr)
-		os.Exit(2)
+		return 2
 	}
-	os.Exit(dispatch(os.Args[1], os.Args[2:]))
+	return dispatch(ctx, os.Args[1], os.Args[2:])
 }
 
 func subcommandFromArgv0() string {
@@ -32,22 +48,22 @@ func subcommandFromArgv0() string {
 	return ""
 }
 
-func dispatch(cmd string, args []string) int {
+func dispatch(ctx context.Context, cmd string, args []string) int {
 	switch cmd {
 	case "init":
 		return runInit(args)
 	case "run":
-		return runRun(args)
+		return runRun(ctx, args)
 	case "baseline":
-		return runBaseline(args)
+		return runBaseline(ctx, args)
 	case "check":
-		return runCheck(args)
+		return runCheck(ctx, args)
 	case "scan-claims":
-		return runScanClaims(args)
+		return runScanClaims(ctx, args)
 	case "versions":
 		return runVersions(args)
 	case "tools":
-		return runTools(args)
+		return runTools(ctx, args)
 	case "-h", "--help", "help":
 		printUsage(os.Stderr)
 		return 0

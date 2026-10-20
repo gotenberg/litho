@@ -50,7 +50,7 @@ type runOptions struct {
 	allowVersionDrift bool
 }
 
-func runRun(args []string) int {
+func runRun(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	corpus := fs.String("corpus", "", "Comma-separated corpus names (empty = all)")
 	feature := fs.String("feature", "", "Comma-separated feature names (empty = all)")
@@ -75,7 +75,7 @@ func runRun(args []string) int {
 		opts.workers = 1
 	}
 
-	board, ok := buildScoreboard(context.Background(), opts)
+	board, ok := buildScoreboard(ctx, opts)
 	if !ok {
 		return 1
 	}
@@ -124,12 +124,22 @@ func buildScoreboard(ctx context.Context, opts runOptions) (*Scoreboard, bool) {
 	start := time.Now()
 	board := &Scoreboard{Corpora: make([]*CorpusReport, 0, len(corpora))}
 	for _, name := range corpora {
+		if ctx.Err() != nil {
+			break
+		}
 		report, err := runCorpus(ctx, name, opts)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
 			continue
 		}
 		board.Corpora = append(board.Corpora, report)
+	}
+	// An interrupted run scored only part of the matrix, and the fixtures it
+	// abandoned read as mismatches. baseline would write that as the new
+	// floor and check would report it as regressions, so it is no result.
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "interrupted: %v\n", err)
+		return nil, false
 	}
 	board.Elapsed = time.Since(start).Round(time.Millisecond).String()
 	return board, true
@@ -181,7 +191,7 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 	if err != nil {
 		return nil, fmt.Errorf("load manifest: %w", err)
 	}
-	fixtures, err := LoadFixtures(manifest)
+	fixtures, err := LoadFixtures(ctx, manifest)
 	if err != nil {
 		return nil, fmt.Errorf("load fixtures: %w", err)
 	}
@@ -201,6 +211,9 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 	}
 
 	for _, feat := range features {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		fr := &FeatureReport{
 			Name:         feat.Name(),
 			GoldenSource: feat.GoldenSource(),
@@ -260,6 +273,11 @@ func runFeatureAcrossFixtures(ctx context.Context, feat Feature, fixtures []Fixt
 	for range workers {
 		wg.Go(func() {
 			for fx := range work {
+				// Drains the queue without running once the run is
+				// cancelled: buildScoreboard discards a cancelled run.
+				if ctx.Err() != nil {
+					continue
+				}
 				results <- processFixture(ctx, feat, fx)
 			}
 		})

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -156,7 +157,7 @@ func TestLoadFixturesAutoNoClaimFallsBackToBasename(t *testing.T) {
 	}
 	pdfs := []string{filepath.Join(dir, "alpha.pdf"), filepath.Join(dir, "beta.pdf")}
 	m := &Manifest{ProfileMode: "auto", Profiles: []string{"PDF_A-2b"}}
-	got, err := loadFixturesAuto(m, pdfs)
+	got, err := loadFixturesAuto(context.Background(), m, pdfs)
 	if err != nil {
 		t.Fatalf("loadFixturesAuto: %v", err)
 	}
@@ -167,7 +168,7 @@ func TestLoadFixturesAutoNoClaimFallsBackToBasename(t *testing.T) {
 
 func TestLoadFixturesUnknownMode(t *testing.T) {
 	m := &Manifest{ProfileMode: "bogus"}
-	if _, err := LoadFixtures(m); err == nil {
+	if _, err := LoadFixtures(context.Background(), m); err == nil {
 		t.Fatal("expected error for unknown profile_mode")
 	}
 }

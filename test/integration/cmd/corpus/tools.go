@@ -87,7 +87,7 @@ func localTools(veraPDFProbe string) []localTool {
 
 // runTools prints the local tools' versions against the pins. It reports and
 // never fails: a differing local tool is the operator's call.
-func runTools(args []string) int {
+func runTools(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("tools", flag.ExitOnError)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
@@ -116,7 +116,13 @@ func runTools(args []string) int {
 
 	rows := make([]toolStatus, 0, len(localTools(probe)))
 	for _, tool := range localTools(probe) {
-		rows = append(rows, probeTool(context.Background(), tool, pins.Values[tool.PinKey]))
+		rows = append(rows, probeTool(ctx, tool, pins.Values[tool.PinKey]))
+	}
+	// An interrupted probe reports a failure that is not the tool's, so the
+	// table is not printed.
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "tools: interrupted: %v\n", err)
+		return 1
 	}
 	if err := printToolStatus(os.Stdout, rows); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
