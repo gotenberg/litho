@@ -102,8 +102,39 @@ func normalizeExtractionUnicode(s string) string {
 			}
 			j += sz2
 		}
-		b.WriteString(norm.NFKC.String(s[i:j]))
+		writeNFKC(&b, s[i:j])
 		i = j
 	}
 	return b.String()
+}
+
+// longSTLigature is U+FB05 LATIN SMALL LIGATURE LONG S T, and
+// longSTDecomposition its decomposition mapping in the Unicode Character
+// Database, U+017F LATIN SMALL LETTER LONG S and "t".
+const (
+	longSTLigature      = 'ﬅ'
+	longSTDecomposition = "ſt"
+)
+
+// writeNFKC writes s, a run of [isNormalizable] characters, to b in NFKC,
+// except U+FB05, which it writes as its decomposition mapping: NFKC carries
+// on into the long s and writes "st", where litho keeps a long s a font
+// shows alone. PDF.js maps it the same way (src/shared/util.js,
+// normalizeUnicode, NormalizationMap).
+//
+// # Corpus evidence
+//
+//   - pdfjs copy_paste_ligatures.pdf: its "ﬅ" glyph read "st", where PDF.js
+//     reads "ſt". No other file of the six text corpora shows U+FB05.
+func writeNFKC(b *strings.Builder, s string) {
+	for {
+		k := strings.IndexRune(s, longSTLigature)
+		if k < 0 {
+			b.WriteString(norm.NFKC.String(s))
+			return
+		}
+		b.WriteString(norm.NFKC.String(s[:k]))
+		b.WriteString(longSTDecomposition)
+		s = s[k+utf8.RuneLen(longSTLigature):]
+	}
 }
