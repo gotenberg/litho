@@ -25,25 +25,37 @@ const maxFreeGeneration = 65535
 //
 // An edit that replaces an object can drop the last reference to another: a
 // remediation that points every output intent at one profile leaves the other
-// profile's stream behind, one that writes new XMP at a new number leaves the
-// old metadata stream behind, and one that repairs a profile and then replaces
-// the colour space naming it leaves its own repair behind. A full rewrite
-// copies only what the trailer reaches, so it never writes them. An
-// incremental update keeps every byte of its source, and without a free entry
-// the older cross-reference section keeps listing each such object as in use,
-// a stream nothing shows that readers still enumerate. ISO 32000-1, 7.5.6
-// deletes an object in an update by giving it a free entry in the section the
-// update appends.
+// profile's stream behind, and one that writes new XMP at a new number leaves
+// the old metadata stream behind. A full rewrite copies only what the trailer
+// reaches, so it never writes them. An incremental update keeps every byte of
+// its source, and without a free entry the older cross-reference section keeps
+// listing each such object as in use, a stream nothing shows that readers
+// still enumerate. ISO 32000-1, 7.5.6 deletes an object in an update by giving
+// it a free entry in the section the update appends.
 //
-// Only what the edit orphaned is freed: an object the update writes, or one a
+// Only what the edit orphaned is freed: an object the update adds, or one a
 // replaced object referenced in the source, or one only such objects lead to,
-// that nothing the update leaves reaches from the trailer. An object the
-// source already left unreferenced stays as the source lists it, since the
-// update did not delete it, unless the update writes it or an object it frees
-// leads to it. When an object the update leaves cannot be read,
+// that nothing the update leaves reaches from the trailer. A source object the
+// update writes again is never freed, nor anything it leads to, even when
+// nothing references it any more: its new version is what the edit made of
+// it, a profile repaired or a file specification stripped of its embedded
+// file. A free entry carries the next generation (ISO 32000-1, 7.5.4), so a
+// reader that keeps the older section's entry at the old generation would
+// read the version the edit removed; only an in-use entry replaces it for
+// every reader. An object the source already left unreferenced stays as the
+// source lists it, since the update did not delete it, unless an object it
+// frees leads to it. When an object the update leaves cannot be read,
 // whatever it references is unknown, so nothing is freed: freeing an object
 // something still references would lose it. A cancelled ctx is the only
 // error.
+//
+// # Corpus evidence
+//
+//   - verapdf: PDF_UA-2__8.9.2.4.10-t01-fail-a remediated aggressively at
+//     PDF/A-4 and PDF/A-4e: remediation strips /EF from the file
+//     specification (object 29) whose annotation it removes. Freeing the
+//     stripped version made veraPDF 1.30.2 report ISO 19005-4 6.9 tests 3
+//     and 4 on the source's object 29 0, which qpdf reads as freed.
 func OrphanedObjects(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, trailer ast.PdfDict) (map[int]int, error) {
 	pending := alloc.Pending()
 	src := sourceGraph{doc: doc, promoted: doc.PromotedObjects()}
@@ -52,7 +64,13 @@ func OrphanedObjects(ctx context.Context, doc *document.Document, alloc *writer.
 		return nil, err
 	}
 
-	reached, complete, err := reachedObjects(ctx, src, pending, trailer)
+	roots := appendRefs(nil, trailer)
+	for num := range pending {
+		if src.defines(num) {
+			roots = append(roots, num)
+		}
+	}
+	reached, complete, err := reachedObjects(ctx, src, pending, roots)
 	if err != nil || !complete {
 		return nil, err
 	}
@@ -174,8 +192,9 @@ func unreachedClosure(ctx context.Context, src sourceGraph, pending map[int]ast.
 	return out, nil
 }
 
-// reachedObjects returns the object numbers the update's trailer reaches, an
-// object read from pending when the update writes it and from doc otherwise.
+// reachedObjects returns the object numbers roots name and everything they
+// lead to, an object read from pending when the update writes it and from doc
+// otherwise.
 // complete is false when an object doc defines cannot be read, so what it
 // references is unknown.
 //
@@ -184,9 +203,9 @@ func unreachedClosure(ctx context.Context, src sourceGraph, pending map[int]ast.
 // (see [document.VisitedBefore]), so neither a cycle nor a fan-out of
 // references walks anything twice and no depth cap is needed: the number of
 // objects the file and the update define bounds it.
-func reachedObjects(ctx context.Context, src sourceGraph, pending map[int]ast.PdfObject, trailer ast.PdfDict) (map[int]bool, bool, error) {
+func reachedObjects(ctx context.Context, src sourceGraph, pending map[int]ast.PdfObject, roots []int) (map[int]bool, bool, error) {
 	reached := make(map[int]bool)
-	stack := appendRefs(nil, trailer)
+	stack := roots
 	for len(stack) > 0 {
 		if err := ctx.Err(); err != nil {
 			return nil, false, fmt.Errorf("walking the updated object graph: %w", err)

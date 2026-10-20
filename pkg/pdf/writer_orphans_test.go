@@ -70,6 +70,7 @@ func unreferencedInUse(t *testing.T, data []byte) []int {
 		}
 		orphans = append(orphans, num)
 	}
+	slices.Sort(orphans)
 	return orphans
 }
 
@@ -78,21 +79,25 @@ func unreferencedInUse(t *testing.T, data []byte) []int {
 // twoprofile_1b names two destination profiles, and unifying the intents on
 // the PDF/A one (ISO 19005-1, 6.2.2) drops the last reference to the other. At
 // PDF/A-2b the new XMP at a new number does the same to the old metadata
-// stream. threedcs_4 repairs the ICC profile its 3D stream's colour space
-// names, then replaces that colour space, and wrote the repaired profile
-// although nothing named it. The update kept listing each as in use; it now
-// writes none of them and gives each a free entry (ISO 32000-1, 7.5.6), and
-// keeps the source bytes it appends to.
+// stream. The update kept listing each as in use; it now writes neither and
+// gives each a free entry (ISO 32000-1, 7.5.6), and keeps the source bytes it
+// appends to. threedcs_4 repairs the ICC profile its 3D stream's colour space
+// names, then replaces that colour space, and rewrites its nine 3D
+// annotations before removing them: each is a source object the update writes
+// again, so it stays written and in use, since a free entry at the next
+// generation would leave a reader that keeps the older entry reading the
+// version before the edit.
 func TestRemediatePDFAFreesTheProfileItUnreferences(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	cases := []struct {
 		fixture  string
 		profiles []models.PDFAProfile
-		dropped  string
+		kept     []int
+		written  string
 	}{
-		{"twoprofile_1b", []models.PDFAProfile{models.PDFA1b, models.PDFA2b}, ""},
-		{"threedcs_4", []models.PDFAProfile{models.PDFA1b}, "\n34 0 obj"},
+		{"twoprofile_1b", []models.PDFAProfile{models.PDFA1b, models.PDFA2b}, nil, ""},
+		{"threedcs_4", []models.PDFAProfile{models.PDFA1b}, []int{4, 5, 6, 7, 8, 9, 10, 11, 12, 34}, "\n34 0 obj"},
 	}
 	for _, tc := range cases {
 		data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/" + tc.fixture + ".pdf")
@@ -122,11 +127,11 @@ func TestRemediatePDFAFreesTheProfileItUnreferences(t *testing.T) {
 				if !bytes.HasPrefix(out.Bytes(), data) {
 					t.Fatal("the remediation rewrote the file, so the incremental path never ran")
 				}
-				if got := unreferencedInUse(t, out.Bytes()); len(got) != 0 {
-					t.Errorf("the output lists unreferenced objects %v as in use", got)
+				if got := unreferencedInUse(t, out.Bytes()); !slices.Equal(got, tc.kept) {
+					t.Errorf("the output lists unreferenced objects %v as in use, want %v", got, tc.kept)
 				}
-				if tc.dropped != "" && bytes.Contains(out.Bytes()[len(data):], []byte(tc.dropped)) {
-					t.Errorf("the update writes %q, which nothing references", tc.dropped[1:])
+				if tc.written != "" && !bytes.Contains(out.Bytes()[len(data):], []byte(tc.written)) {
+					t.Errorf("the update does not write %q, the version its repair made", tc.written[1:])
 				}
 			})
 		}
