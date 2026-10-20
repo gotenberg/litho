@@ -184,6 +184,20 @@ func TestStitchingFunctionShapes(t *testing.T) {
 				want []float64
 			}{{0, []float64{0, 1, 0}}, {0.5, []float64{0, 0.5, 0.5}}},
 		},
+		{
+			// The last subdomain is [Bounds1, Domain1] = [1 1], so x = 1
+			// selects the third slot, read at the first value of its /Encode
+			// pair: green. The second slot would give blue.
+			"last bound = Domain1",
+			[]string{
+				"<< /FunctionType 3 /Domain [0 1] /Functions [4 0 R 5 0 R 4 0 R] /Bounds [0.5 1] /Encode [0 1 0 1 1 0] >>",
+				redGreen, greenBlue,
+			},
+			[]struct {
+				x    float64
+				want []float64
+			}{{0.75, []float64{0, 0.5, 0.5}}, {1, []float64{0, 1, 0}}},
+		},
 	} {
 		ctx, doc := funcPDF(t, append(append([]string(nil), stitchHead...), tc.parts...))
 		f, err := New(ctx, doc, ast.PdfIndirectRef{ObjectNum: 3})
