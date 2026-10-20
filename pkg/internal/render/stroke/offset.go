@@ -92,10 +92,11 @@ func (s *stroker) piece(pc piece) {
 // round caps, a square of side the line width with square caps, and nothing
 // with butt caps. A degenerate subpath reaches it with round caps only (see
 // piece). For a zero-length dash, ISO 32000-1, 8.4.3.6 treats the ends of
-// each dash with the current line cap style; a zero-length dash has both
-// ends at one point, so its two caps make the circle or the square. The
-// clause does not orient the square: it is aligned on the path's tangent at
-// the dash, the direction both caps project along.
+// each dash with the current line cap style, and 8.5.3.2 paints those caps
+// always, "since their orientation is determined by the direction of the
+// underlying path": a zero-length dash has both ends at one point, so its two
+// caps make the circle or the square, aligned on the path's tangent at the
+// dash.
 func (s *stroker) dot(p, tangent geom.Point) {
 	d := unit(tangent)
 	n := left(d)
