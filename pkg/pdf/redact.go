@@ -149,10 +149,11 @@ type RedactReport struct {
 //   - [ErrRedactionRefused] when something cannot be removed exactly: a region
 //     covering only some of a text run that cannot be split at its glyphs
 //     (a run a region covers only partly is otherwise split, the covered
-//     glyphs removed and the rest kept where they were), a clipping path, a
-//     straddling path it cannot cut and clip at the region, a stroke whose
-//     width cannot be read, content drawn by a form XObject, or an image
-//     whose samples cannot be rewritten. Removing more than was asked, or reporting success over
+//     glyphs removed and the rest kept where they were), a shading paint (sh)
+//     whose clip the region meets, a clipping path, a straddling path it
+//     cannot cut and clip at the region, a stroke whose width cannot be read,
+//     content drawn by a form XObject, or an image whose samples cannot be
+//     rewritten. Removing more than was asked, or reporting success over
 //     content still in the file, are both worse than refusing.
 //   - [ErrRedactionIncomplete] when the passes succeed but the verification
 //     scan still finds a copy outside the content of other pages (see below),

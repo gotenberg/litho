@@ -272,8 +272,8 @@ var (
 	// selects content that cannot be removed exactly: a text run the region
 	// covers only partly that cannot be split at its glyphs, a painted path
 	// that straddles the region and cannot be cut and clipped at it, a stroke
-	// whose width cannot be read, a path that took part in a clip, content
-	// drawn by a form XObject, an
+	// whose width cannot be read, a path that took part in a clip, a shading
+	// paint (sh) the region may reach, content drawn by a form XObject, an
 	// image whose samples cannot be rewritten, an image also painted where
 	// the regions do not cover the same samples (blanking rewrites the image,
 	// so that other place would lose them too), or a removed run whose advance

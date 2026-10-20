@@ -131,6 +131,11 @@ type Machine struct {
 	// reads. See [Machine.PathBoxes].
 	RecordPathBoxes bool
 	pathBoxes       []PathBox
+	// RecordShadingBoxes makes the machine remember the bounds of the clipping
+	// region in force at each sh operator. Off by default for the same reason
+	// as [Machine.RecordImageBoxes]. See [Machine.ShadingBoxes].
+	RecordShadingBoxes bool
+	shadingBoxes       []BoundingBox
 	// RecordShowAdvances makes the text extractor remember how far each
 	// show-text operator of the page's own content stream moved the text
 	// matrix. Off by default for the same reason as [Machine.RecordImageBoxes].

@@ -143,6 +143,16 @@ var ErrPathStraddlesRegion = errors.New("painted path lies only partly inside th
 // part moves every dash after it (8.4.3.6).
 var ErrRegionCoversAStrokedPath = errors.New("region covers a stroked path")
 
+// ErrRegionCoversAShading reports a region that a shading paint (sh) may reach.
+//
+// sh fills the whole current clipping region with the shading (ISO 32000-1,
+// 8.7.4.2): it has no geometry of its own to cut, and removing the operator
+// would clear the shading outside the region too. The region is checked
+// against the bounds of the clip in force, which contain all the shading can
+// paint; one that meets them is refused rather than reported clear while
+// shading ink stays inside it.
+var ErrRegionCoversAShading = errors.New("region covers a shading paint")
+
 // ErrRegionCoversAClippedPath reports a region meeting a path that a W or W*
 // took part in.
 //

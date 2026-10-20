@@ -150,6 +150,9 @@ func (m *Machine) Execute(ctx context.Context, ops []content.Operation) error {
 func (m *Machine) executeOp(ctx context.Context, op content.Operation) error {
 	h, ok := opHandlers[op.Operator]
 	if !ok {
+		if op.Operator == "sh" && m.RecordShadingBoxes {
+			m.shadingBoxes = append(m.shadingBoxes, m.Current().ClippingPath)
+		}
 		m.recordUnknownOperator(op.Operator)
 		return nil
 	}
@@ -980,6 +983,18 @@ func handlePathPaint(_ context.Context, m *Machine, state *State, _ content.Oper
 	m.CurrentPath = emptyBoundingBox
 	m.pathStartOp = 0
 	m.pathClipped = false
+}
+
+// ShadingBoxes returns, for each sh operator in the order the content stream
+// drew them, the bounds of the clipping region in force. sh paints its
+// shading over the whole current clipping region (ISO 32000-1, 8.7.4.2), so
+// these bounds contain everything it can paint. They are a bounding box, and
+// so may reach further than the paint. The list is empty unless
+// [Machine.RecordShadingBoxes] was set before execution. sh stays among
+// [Machine.UnknownOperators], since the machine models where it paints and
+// not what.
+func (m *Machine) ShadingBoxes() []BoundingBox {
+	return m.shadingBoxes
 }
 
 // PathBoxes returns where painted paths covered, in the order the content

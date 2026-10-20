@@ -58,6 +58,8 @@ import (
 //     width cannot be read or whose dashes a cut would move reports
 //     [ErrRegionCoversAStrokedPath], and one a W or W* took part in reports
 //     [ErrRegionCoversAClippedPath].
+//   - A shading paint (sh) whose clip in force the region meets reports
+//     [ErrRegionCoversAShading]: it fills that clip and has no geometry to cut.
 //   - A region selecting content a form XObject draws reports
 //     [ErrRegionInFormXObject], whose bytes are in the form's stream.
 //   - An image whose samples cannot be rewritten reports one of
@@ -245,6 +247,9 @@ func redactPageRegions(
 	// A filled path inside the region is content to remove, and a stroked or
 	// clipping one is content to refuse over. Both need its geometry.
 	machine.RecordPathBoxes = true
+	// A shading paint fills the clip in force and has no geometry to cut, so
+	// one that may reach the region is refused. See ErrRegionCoversAShading.
+	machine.RecordShadingBoxes = true
 	// A removed show operator takes its advance with it, and later text on the
 	// same line is positioned by that advance. See removedShowReplacement.
 	machine.RecordShowAdvances = true
@@ -288,6 +293,14 @@ func redactPageRegions(
 		inlineEdits []SpanEdit
 		inlineEnds  *content.InlineImageEnds
 	)
+	for _, box := range machine.ShadingBoxes() {
+		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
+		for _, z := range zones {
+			if heuristics.ZonesOverlap(painted, z) {
+				return RedactReport{}, ErrRegionCoversAShading
+			}
+		}
+	}
 	for _, box := range machine.ImageBoxes() {
 		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
 		covered := false
