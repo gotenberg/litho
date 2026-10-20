@@ -15,7 +15,8 @@ const (
 // "currentfile eexec" keyword in a Type 1 font program. Both encoded
 // forms the spec permits are handled: ASCII-hex (the portion before
 // the encrypted bytes is a sequence of 0-9a-fA-F) and raw binary
-// (anything else is treated as binary). The 4-byte random salt that
+// (anything else is treated as binary). Only the white space
+// [isEexecLeadSpace] admits is skipped before the payload. The 4-byte random salt that
 // prefixes every eexec stream is stripped from the returned plaintext.
 //
 // An all-zero salt or a stream shorter than the salt returns nil so
@@ -37,10 +38,8 @@ func decryptEexec(data []byte) []byte {
 // first non-hex byte so stray whitespace and section terminators do
 // not corrupt the stream.
 func normaliseEexec(data []byte) []byte {
-	// Skip leading newlines/spaces that PDF producers often include
-	// between "currentfile eexec" and the payload.
 	i := 0
-	for i < len(data) && isEexecWhitespace(data[i]) {
+	for i < len(data) && isEexecLeadSpace(data[i]) {
 		i++
 	}
 	if i >= len(data) {
@@ -91,7 +90,7 @@ func isHexEncoded(data []byte) bool {
 	const probe = 4
 	seen := 0
 	for _, c := range data {
-		if isEexecWhitespace(c) {
+		if isEexecLeadSpace(c) {
 			continue
 		}
 		if !isHexDigit(c) {
@@ -104,6 +103,33 @@ func isHexEncoded(data []byte) bool {
 	return false
 }
 
+// isEexecLeadSpace reports whether c is one of the four white-space characters
+// that may separate the eexec keyword from the encrypted portion: space, tab,
+// carriage return and line feed. Adobe Type 1 Font Format, 7.2, forbids the
+// first cipher text byte to be one of them, so they are clear text, and leaves
+// every other byte to the cipher text: a form feed after the keyword is the
+// first byte of the salt, not white space.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300851.pdf: CMDCGH+AdvMT_RM opens its binary cipher
+//     text with 0x0C; skipping it as white space decrypted the section into
+//     noise, and the program read no glyph name and no width. Its /Length1 of
+//     523 ends the clear text right before the form feed, and decrypting from
+//     there yields "dup /Private 23 dict". veraPDF 1.30.2 still reports the
+//     font unembedded (ISO 19005-1 6.3.4 test 1 and 6.3.5 test 2, ISO 19005-2
+//     6.2.11.4.1 test 1, ISO 14289-1 7.21.4.1 test 1), which litho no longer
+//     does: a veraPDF-side reading of the same byte.
+//   - All corpora: of 887 Type 1 programs, this is the only one whose names,
+//     widths or outlines change.
+func isEexecLeadSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\r' || c == '\n'
+}
+
+// isEexecWhitespace reports whether c is PostScript white space between the
+// digits of an ASCII-hex eexec section or after the decrypted text, where a
+// form feed is white space like the other four (PostScript Language
+// Reference, 3.2.2).
 func isEexecWhitespace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f'
 }

@@ -136,8 +136,7 @@ func charStringEntries(plain []byte) ([]charStringEntry, bool) {
 // unparseable input by returning nil, which short-circuits the
 // caller.
 func eexecRegion(data []byte) []byte {
-	const keyword = "currentfile eexec"
-	_, after, ok := bytes.Cut(data, []byte(keyword))
+	_, after, ok := bytes.Cut(data, eexecMarker)
 	if !ok {
 		return data
 	}

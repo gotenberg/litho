@@ -110,7 +110,7 @@ const maxGlyphOperations = 1 << 16
 func ParseFont(ctx context.Context, data []byte) (*Font, error) {
 	data = joinPFBSegments(data)
 	clearText, _, _ := bytes.Cut(data, eexecMarker)
-	plain := outlinePlaintext(data)
+	plain := decryptEexec(eexecRegion(data))
 	if plain == nil {
 		return nil, fmt.Errorf("%w: no eexec section", ErrNoCharStrings)
 	}
@@ -686,36 +686,6 @@ func (in *interpreter) dropDanglingMove() {
 
 func (in *interpreter) point(x, y float64) geom.Point {
 	return geom.Point{X: x + in.offset.X, Y: y + in.offset.Y}
-}
-
-// outlinePlaintext returns the decrypted eexec section of data, salt
-// removed, or nil when there is none. The white space after the eexec
-// keyword is clear text, but a form feed there is the first cipher byte:
-// Adobe Type 1 Font Format, 7.2, makes the first cipher byte something other
-// than space, tab, carriage return or line feed, and a binary salt may begin
-// with 0x0C. [decryptEexec] skips it as white space, a reading the width scan
-// keeps.
-//
-// # Corpus evidence
-//
-//   - govdocs thread_300_300851.pdf: CMDCGH+AdvMT_RM opens its cipher text
-//     with 0x0C; skipping it decrypts the section into noise.
-func outlinePlaintext(data []byte) []byte {
-	_, after, ok := bytes.Cut(data, eexecMarker)
-	if !ok {
-		return decryptEexec(data)
-	}
-	i := 0
-	for i < len(after) && isEexecWhitespace(after[i]) && after[i] != '\f' {
-		i++
-	}
-	if isHexEncoded(after[i:]) {
-		return decryptEexec(after[i:])
-	}
-	if len(after)-i <= eexecSalt {
-		return nil
-	}
-	return crypt(after[i:], eexecKey, false)[eexecSalt:]
 }
 
 // outlineLenIV returns the /lenIV of the private section, -1 when it is

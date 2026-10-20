@@ -79,6 +79,55 @@ func TestIsHexEncoded(t *testing.T) {
 	}
 }
 
+// TestDecryptEexec_FormFeedOpensCipherText pins that a form feed after the
+// eexec keyword is cipher text. Adobe Type 1 Font Format, 7.2, keeps only
+// space, tab, carriage return and line feed out of the first cipher byte, so
+// a salt may encrypt to 0x0C, and skipping it as white space decrypts the
+// whole section one byte out of step.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300851.pdf: CMDCGH+AdvMT_RM opens its cipher text
+//     with 0x0C, and litho read no glyph name and no width from it.
+func TestDecryptEexec_FormFeedOpensCipherText(t *testing.T) {
+	t.Parallel()
+
+	// The key's high byte is 0xD9, so a salt opening with 0xD5 encrypts to
+	// 0x0C.
+	salt := []byte{0xD5, 0x02, 0x41, 0x42}
+	width := encryptCharString([]byte{189, 248, 136, csOpHsbw}, defaultLenIV)
+	plain := append(salt, "/CharStrings 1 dict dup begin\n/A 8 RD "...)
+	plain = append(plain, width...)
+	plain = append(plain, " ND\nend"...)
+	body := encryptEexec(plain)
+	if body[0] != '\f' {
+		t.Fatalf("cipher text opens with %#x, want a form feed", body[0])
+	}
+
+	for _, sep := range []string{"\n", "\r\n", " ", "\t"} {
+		program := append([]byte("currentfile eexec"+sep), body...)
+		if got := ParseCharStringNames(program); len(got) != 1 || got[0] != "A" {
+			t.Errorf("separator %q: names %v, want [A]", sep, got)
+		}
+		if got := ParseCharStringWidths(program); got["A"] != 500 {
+			t.Errorf("separator %q: widths %v, want A=500", sep, got)
+		}
+	}
+}
+
+// TestIsEexecLeadSpace pins the four characters Adobe Type 1 Font Format,
+// 7.2, keeps out of the first cipher byte.
+func TestIsEexecLeadSpace(t *testing.T) {
+	t.Parallel()
+
+	for c := range 256 {
+		want := c == ' ' || c == '\t' || c == '\r' || c == '\n'
+		if got := isEexecLeadSpace(byte(c)); got != want {
+			t.Errorf("isEexecLeadSpace(%#x) = %v, want %v", c, got, want)
+		}
+	}
+}
+
 // hexEncode writes bytes in the ASCII-hex form the eexec section may take.
 func hexEncode(data []byte) []byte {
 	const digits = "0123456789abcdef"

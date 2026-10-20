@@ -169,7 +169,7 @@ func splitForSubset(data []byte) (subsetSource, error) {
 	encStart := len(before) + len(eexecMarker)
 	// The first cipher text byte is never white space (Adobe Type 1 Font
 	// Format, 7.2), so the white space after the keyword is clear text.
-	for encStart < len(data) && isEexecWhitespace(data[encStart]) && data[encStart] != '\f' {
+	for encStart < len(data) && isEexecLeadSpace(data[encStart]) {
 		encStart++
 	}
 	if isHexEncoded(data[encStart:]) {
