@@ -206,6 +206,7 @@ one deliberately rather than diffing it against a fresh build.
 | `imagecolour_2b.pdf`   | PDF/A-2b     | Images over the colorant None; JPX CIELab, ROMM-RGB, e-sRGB      |
 | `redactrefs_ua1.pdf`   | PDF/UA-1     | Copies of page text behind objects a redaction cannot read       |
 | `redactcopies_2b.pdf`  | PDF/A-2b     | Copies of page text no decoded value spells                      |
+| `redactvectors_4.pdf`  | PDF/A-4      | Copies of page text no comparison of bytes finds                 |
 | `rolecycle_ua1.pdf`    | PDF/UA-1     | A standard type in a `/RoleMap` cycle, and a type mapped into it |
 | `rolecycle_ua2.pdf`    | PDF/UA-2     | Role-map cycles through the root `/RoleMap` and namespaces       |
 | `type0nodesc_2b.pdf`   | PDF/A-2b     | Type 0 fonts whose `/DescendantFonts` holds no dictionary        |
@@ -700,6 +701,7 @@ are covered under [Known divergences](#known-divergences).
 | `readorder_ua1.pdf`    | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `redactcopies_2b.pdf`  | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `redactrefs_ua1.pdf`   | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 4    | 5    |
+| `redactvectors_4.pdf`  | 8    | 6    | 11   | 9    | 9    | 10   | 8    | 8    | 5   | 4    | 4    | 8    | 8    |
 | `refreach_ua1.pdf`     | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 10   | 8    |
 | `remreach_2b.pdf`      | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 6    | 6    | 10   | 8    |
 | `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
@@ -6845,10 +6847,38 @@ words, with the paragraph stored after its zlib checksum (RFC 1950, 2.2), and
 the catalog's `/Dests` names a destination after the paragraph (12.3.2.3).
 Before, the redaction succeeded and wrote both out, which pikepdf reads back as
 the stored stream data and a name key. Now it refuses with
-`ErrRedactionIncomplete` and names both survivors.
+`ErrRedactionIncomplete` and names the `/Dests` survivor. The `/PieceInfo` copy
+goes before the scan: redaction clears the private data of the catalog's
+`/PieceInfo`, keeping its `/LastModified` (see `redactvectors_4`).
 
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells of
 each file.
+
+### `redactvectors_4.pdf`
+
+Redaction proves its output clean by comparing what a rewrite writes with every
+removed string. Four copies of page 1's paragraph, `the secret plan`, sit where
+that comparison cannot see them, and before, redacting page 1 wrote every one
+out and reported success:
+
+| Copy                                                                                  | Clause                       | Now                |
+| ------------------------------------------------------------------------------------- | ---------------------------- | ------------------ |
+| `/OpenAction` and page 1's `/AA /O` build the paragraph from `'the sec' + 'ret plan'` | ISO 32000-1, 12.6.4.16       | script cut         |
+| `/Names /JavaScript` runs a script held in a UTF-16BE text stream                     | ISO 32000-1, 7.9.3           | tree removed       |
+| Page 1's `/Metadata` carries a page thumbnail as base64 (`xmpGImg:image`)             | ISO 32000-1, 14.3.2          | entry removed      |
+| The catalog's `/PieceInfo` holds a stream with no filter whose bytes are zlib data    | ISO 32000-1, 14.5, Table 368 | `/Private` removed |
+
+Two attachments hold no copy and stay: a zip archive and a PDF whose content
+stream is Flate-compressed, both about page two. The scan reads into each, a
+zip's members and an attached PDF's objects, and finds nothing. pikepdf reads
+none of the four copies back from the output, and both attachments. No other
+fixture puts a copy of page 1's text in any of these homes. Page 2 draws
+`page two`.
+
+PDF/A-4 permits JavaScript actions (ISO 19005-4, 6.6.1), so at PDF/A-4 only the
+page's `/AA /O` trigger fires (6.6.3 test 1), and 6.9 test 3 fires for the
+attachments, neither a PDF/A file. veraPDF 1.30.2 and litho report the same
+rule set in all thirteen cells.
 
 ### `rolecycle_ua1.pdf` and `rolecycle_ua2.pdf`
 
