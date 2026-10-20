@@ -2,7 +2,7 @@
 # Shared corpus provisioning image.
 #
 # Installs Node (for PDF.js), a Java runtime, veraPDF, pdfcpu, Mustang,
-# KoSIT, and baseline utilities. Bakes a built pdf.js checkout into the
+# KoSIT, poppler's pdftoppm, and baseline utilities. Bakes a built pdf.js checkout into the
 # image so per-run provisioning only downloads fixtures and generates
 # goldens.
 #
@@ -22,6 +22,8 @@ ARG VERAPDF_IMAGE_DIGEST
 ARG NODE_VERSION
 ARG NODE_DEBIAN_RELEASE
 ARG NODE_IMAGE_DIGEST
+ARG POPPLER_DEBIAN_RELEASE
+ARG POPPLER_DEBIAN_IMAGE_DIGEST
 
 # verapdf/cli is published as linux/amd64 only. Pin the platform so the
 # build does not emit the InvalidBaseImagePlatform warning on arm64
@@ -29,6 +31,45 @@ ARG NODE_IMAGE_DIGEST
 # plus shell launchers). The tag names the release; the digest, when
 # set, pins the one build of it the goldens were made with.
 FROM --platform=linux/amd64 verapdf/cli:v${VERAPDF_VERSION}${VERAPDF_IMAGE_DIGEST:+@}${VERAPDF_IMAGE_DIGEST} AS verapdf-dist
+
+# poppler: pdftoppm renders the render goldens. The pinned release needs
+# CMake 3.28, a C++23 compiler and FreeType 2.13, newer than the Node
+# image's Debian release ships, so it builds on its own Debian release from
+# the release tarball, checked against the SHA-256 versions.env pins.
+# bundle-poppler packs the binaries with their libraries, loader and fonts,
+# so the final stage runs them unchanged. Only the libraries pdftoppm reads
+# PDFs with are enabled: no Qt, GLib, C++ wrapper, network, TIFF or
+# signature backends. fonts-urw-base35 provides the metric-compatible
+# substitutes for the standard 14 fonts (ISO 32000-1, 9.6.2.2), and
+# fonts-dejavu-core the fallback for any other unembedded font.
+FROM debian:${POPPLER_DEBIAN_RELEASE}-slim${POPPLER_DEBIAN_IMAGE_DIGEST:+@}${POPPLER_DEBIAN_IMAGE_DIGEST} AS poppler-build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  ca-certificates curl xz-utils cmake g++ make pkg-config \
+  libfreetype-dev libfontconfig-dev libjpeg62-turbo-dev libpng-dev \
+  libopenjp2-7-dev liblcms2-dev zlib1g-dev \
+  fontconfig fonts-urw-base35 fonts-dejavu-core \
+  && rm -rf /var/lib/apt/lists/*
+ARG POPPLER_VERSION
+ARG POPPLER_SHA256
+RUN : "${POPPLER_VERSION:?build through corpus init, which passes versions.env}" \
+  && : "${POPPLER_SHA256:?build through corpus init, which passes versions.env}" \
+  && cd /tmp \
+  && curl -fSLO "https://poppler.freedesktop.org/poppler-${POPPLER_VERSION}.tar.xz" \
+  && if ! echo "${POPPLER_SHA256}  poppler-${POPPLER_VERSION}.tar.xz" | sha256sum -c -; then \
+    echo "poppler-${POPPLER_VERSION}.tar.xz does not match POPPLER_SHA256=${POPPLER_SHA256}" >&2 && exit 1; \
+  fi \
+  && tar -xJf "poppler-${POPPLER_VERSION}.tar.xz" \
+  && cmake -S "poppler-${POPPLER_VERSION}" -B build \
+    -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DENABLE_UTILS=ON \
+    -DENABLE_CPP=OFF -DENABLE_GLIB=OFF -DENABLE_GOBJECT_INTROSPECTION=OFF \
+    -DENABLE_QT5=OFF -DENABLE_QT6=OFF -DENABLE_BOOST=OFF -DENABLE_LIBCURL=OFF \
+    -DENABLE_LIBTIFF=OFF -DENABLE_NSS3=OFF -DENABLE_GPGME=OFF -DENABLE_HARFBUZZ=OFF \
+    -DBUILD_GTK_TESTS=OFF -DBUILD_QT5_TESTS=OFF -DBUILD_QT6_TESTS=OFF \
+    -DBUILD_CPP_TESTS=OFF -DBUILD_MANUAL_TESTS=OFF \
+  && cmake --build build -j "$(nproc)" --target pdftoppm pdfinfo
+COPY lib/bundle-poppler.sh /usr/local/bin/bundle-poppler
+RUN bash /usr/local/bin/bundle-poppler /tmp/build/utils /opt/poppler pdftoppm pdfinfo \
+  && rm -rf /tmp/build "/tmp/poppler-${POPPLER_VERSION}" "/tmp/poppler-${POPPLER_VERSION}.tar.xz"
 
 FROM node:${NODE_VERSION}-${NODE_DEBIAN_RELEASE}${NODE_IMAGE_DIGEST:+@}${NODE_IMAGE_DIGEST}
 
@@ -149,6 +190,15 @@ RUN found="$(verapdf --version | head -n 1)" \
     echo "the veraPDF image carries ${found}, versions.env pins veraPDF ${VERAPDF_VERSION}: fix VERAPDF_IMAGE_DIGEST" >&2 && exit 1; \
   fi
 
+# poppler's pdftoppm and pdfinfo, from the poppler-build stage.
+COPY --from=poppler-build /opt/poppler /opt/poppler
+ENV PATH="/opt/poppler/bin:${PATH}"
+ARG POPPLER_VERSION
+RUN found="$(pdftoppm -v 2>&1 | head -n 1)" \
+  && if [ "${found}" != "pdftoppm version ${POPPLER_VERSION}" ]; then \
+    echo "the image carries ${found}, versions.env pins poppler ${POPPLER_VERSION}" >&2 && exit 1; \
+  fi
+
 WORKDIR /work
 COPY entrypoint.sh ./
 COPY lib/ ./lib/
@@ -168,6 +218,7 @@ RUN chmod +x entrypoint.sh \
   lib/gen-bookmarks.sh \
   lib/gen-merges.sh \
   lib/gen-merge-empty.sh \
+  lib/gen-render.sh \
   pdfjs/download.sh \
   verapdf/download.sh \
   govdocs/download.sh \
@@ -189,6 +240,9 @@ ARG PDF20_REVISION
 ARG PDFCPU_CORPUS_REVISION
 ARG FACTURX_CORPUS_REVISION
 ARG GOVDOCS_THREADS
+ARG POPPLER_SHA256
+ARG POPPLER_DEBIAN_RELEASE
+ARG POPPLER_DEBIAN_IMAGE_DIGEST
 COPY versions.env /opt/litho/versions.pinned.env
 RUN sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' /opt/litho/versions.pinned.env \
   | while read -r key; do \

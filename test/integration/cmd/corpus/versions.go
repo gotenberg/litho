@@ -59,16 +59,19 @@ var veraPDFCorePattern = regexp.MustCompile(`"id"\s*:\s*"core"\s*,\s*"version"\s
 var digestPins = map[string][]string{
 	"VERAPDF_IMAGE_DIGEST": {"VERAPDF_VERSION"},
 	"NODE_IMAGE_DIGEST":    {"NODE_VERSION", "NODE_DEBIAN_RELEASE"},
+
+	"POPPLER_DEBIAN_IMAGE_DIGEST": {"POPPLER_DEBIAN_RELEASE"},
 }
 
 // localToolPins are the pins of tools the host runs rather than the image:
 // the live checks and the litho fixture builders use them, and `corpus tools`
-// compares them. They are not build arguments.
+// compares them. They are not build arguments. POPPLER_VERSION is not one of
+// them although `corpus tools` compares the host's pdfsig against it: the
+// image builds the same release for the render goldens.
 //
 //nolint:gochecknoglobals // static key set
 var localToolPins = map[string]bool{
 	"QPDF_VERSION":    true,
-	"POPPLER_VERSION": true,
 	"PIKEPDF_VERSION": true,
 }
 
@@ -77,9 +80,12 @@ var localToolPins = map[string]bool{
 // with another value of any of them is stale. The keys mirror the
 // record_stage calls in corpus/entrypoint.sh.
 //
-// The pdfcpu archive hashes are not listed. Each checks the download of the
+// The pdfcpu archive hashes and the poppler tarball hash are not listed. Each checks the download of the
 // release PDFCPU_VERSION names for one architecture, and a golden made on
-// either architecture is the same golden, so a hash says nothing about it.
+// either architecture is the same golden, so a hash says nothing about it. The
+// poppler hash checks the tarball of the release POPPLER_VERSION names. The
+// render goldens depend on the Debian release poppler builds on, which
+// supplies its FreeType and the fonts it substitutes for unembedded ones.
 //
 // # Corpus evidence
 //
@@ -97,6 +103,7 @@ var stagePins = map[string][]string{
 	"goldens/merges":             {"PDFCPU_VERSION"},
 	"goldens/merge-empty":        {"PDFCPU_VERSION"},
 	"goldens/facturx-validity":   {"MUSTANG_VERSION", "JRE_VERSION"},
+	"goldens/render":             {"POPPLER_VERSION", "POPPLER_DEBIAN_RELEASE", "POPPLER_DEBIAN_IMAGE_DIGEST"},
 	"goldens/facturx-schematron": {"KOSIT_VERSION", "XRECHNUNG_CONFIG_TAG", "XRECHNUNG_CONFIG_ASSET", "EN16931_VERSION", "MUSTANG_VERSION", "JRE_VERSION"},
 }
 

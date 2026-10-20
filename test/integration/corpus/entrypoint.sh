@@ -8,7 +8,7 @@
 #   docker run <image> <corpus_name> <profiles_csv> <features_csv> <profile_mode>
 #
 # features_csv lists the feature names whose goldens this corpus needs
-# (text, metadata, imagedecode, compliance, remediation,
+# (text, metadata, imagedecode, render, compliance, remediation,
 # remediation-aggressive).
 # profile_mode mirrors the manifest's profile_mode field; "auto"
 # triggers the per-claim VeraPDF flow which validates each PDF only
@@ -69,7 +69,8 @@ tool_versions() {
     --arg node "$(node --version)" \
     --arg pdfjs "$(jq -c . /opt/pdfjs/build/version.json 2> /dev/null || true)" \
     --arg pdfcpu "$(pdfcpu version 2> /dev/null | grep -m 1 '^pdfcpu:' || true)" \
-    '{verapdf: $verapdf, java: $java, node: $node, pdfjs: $pdfjs, pdfcpu: $pdfcpu}'
+    --arg poppler "$(pdftoppm -v 2>&1 | head -n 1)" \
+    '{verapdf: $verapdf, java: $java, node: $node, pdfjs: $pdfjs, pdfcpu: $pdfcpu, poppler: $poppler}'
 }
 TOOLS_JSON=$(tool_versions)
 
@@ -174,6 +175,28 @@ if wants imagedecode; then
   fi
 else
   echo "==> skipping image goldens (not requested by ${CORPUS})."
+fi
+
+if wants render; then
+  RENDER="$OUTPUT/goldens/render"
+  if nonempty "$RENDER"; then
+    echo "==> render goldens already present, skipping pdftoppm."
+  else
+    # The litho corpus is rendered whole: its fixtures are small and each
+    # exercises a construct of its own. The downloaded corpora are rendered
+    # one PDF in sixteen, chosen by a hash of the file name (see
+    # gen-render.sh), which keeps their goldens to a few megabytes.
+    case "$CORPUS" in
+      litho) SAMPLE=256 ;;
+      *) SAMPLE=16 ;;
+    esac
+    mkdir -p "$RENDER"
+    echo "==> generating render goldens (pdftoppm, ${SAMPLE}/256 of the PDFs)..."
+    SHELL=/bin/bash /work/lib/gen-render.sh "$PDFS" "$RENDER" "$SAMPLE"
+    record_stage goldens/render "$(jq -nc --argjson s "$SAMPLE" '{render_sample_per_256: $s}')"
+  fi
+else
+  echo "==> skipping render goldens (not requested by ${CORPUS})."
 fi
 
 if wants bookmarks; then
