@@ -262,6 +262,8 @@ one deliberately rather than diffing it against a fresh build.
 | `qshyphen_2b.pdf`      | PDF/A-2b     | Soft hyphens shown inside `q`...`Q` within a text object         |
 | `sharedarray_2b.pdf`   | PDF/A-2b     | Direct /Contents arrays sharing a stream, beside an invalid `ri` |
 | `sharedstream_2b.pdf`  | PDF/A-2b     | One stream two pages read through a simple and a Type0 font      |
+| `ttnoenc_2b.pdf`       | PDF/A-2b     | Embedded TrueType fonts carrying no `/Encoding`, by `cmap` set   |
+| `sharednested_2b.pdf`  | PDF/A-2b     | Forms and a pattern two pages share and bind alike or apart      |
 
 ### Must-not-fire controls
 
@@ -534,6 +536,7 @@ violation but is exempt, so a firing is a false positive.
 | `formshare_ua1`                           | every page: a marked form the content two pages share draws once       | ISO 14289-1, 7.20 t2         |
 | `sharedtag_ua1`                           | pages 1, 2: a marked form shared content draws once, before and after  | ISO 14289-1, 7.20 t2         |
 | `sharedclose_ua1`                         | pages 1, 2: a marked form shared content draws once, before and after  | ISO 14289-1, 7.20 t2         |
+| `ttnoenc_2b`                              | `N3110`, `N10`, `N30`: no `/Encoding`, a (1,0) or (3,0) subtable       | ISO 19005-2, 6.2.11.4.1 t2   |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -712,6 +715,7 @@ are covered under [Known divergences](#known-divergences).
 | `sharedclose_ua1.pdf`  | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 2   | 2    | 3    | 1    | 4    |
 | `sharedarray_2b.pdf`   | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 3   | 3    | 4    | 5    | 6    |
 | `sharedstream_2b.pdf`  | 5    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 6   | 6    | 7    | 9    | 9    |
+| `sharednested_2b.pdf`  | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `sharedicc_2b.pdf`     | 4\*  | 2\*  | 4\*  | 2\*  | 2\*  | 4\*  | 2\*  | 2\*  | 3\* | 3\*  | 4\*  | 5    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sharedtag_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 6    | 7    |
@@ -735,6 +739,7 @@ are covered under [Known divergences](#known-divergences).
 | `treekids_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
+| `ttnoenc_2b.pdf`       | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 7   | 7    | 8    | 10   | 11   |
 | `ttmaccopy_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `twoprofile_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `type0nodesc_2b.pdf`   | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 7    | 7    |
@@ -7043,6 +7048,65 @@ PDF/A remediation copies each borrowed name into the stream that uses it and
 leaves `P2` and `X1` as they are. veraPDF 1.30.2 finds the output fully
 conforming at PDF/A-2a, PDF/A-2b, PDF/A-2u, PDF/A-3b and PDF/A-4 in both
 modes, where it reported test 2 three times before.
+
+### `ttnoenc_2b.pdf`
+
+ISO 32000-1, 9.6.6.4 reads a TrueType font "when the font has no Encoding
+entry, or the font descriptor's Symbolic flag is set" through its (3,0)
+subtable, else its (1,0) one, and leaves any other mapping to the processor.
+veraPDF 1.30.2 takes no other mapping for glyph presence
+(`TrueTypeFontProgram.containsCode`), so a program offering neither subtable
+holds no glyph for any code, even when its (3,1) subtable maps the code. Its
+widths still fall back to any subtable, and the glyph has no name, so its
+Unicode value comes from `/ToUnicode` alone. litho read a font with no
+`/Encoding` through its (3,1) subtable and a symbolic one without a symbol
+subtable through whatever its `cmap` offered, so it found every glyph:
+
+| Font    | Construct                                     | Answers at PDF/A-2b          |
+| ------- | --------------------------------------------- | ---------------------------- |
+| `N31`   | non-symbolic, no `/Encoding`, (3,1) only      | `6.2.11.4.1/2`, `6.2.11.6/2` |
+| `N3110` | non-symbolic, no `/Encoding`, (3,1) and (1,0) | `6.2.11.6/2`                 |
+| `N10`   | non-symbolic, no `/Encoding`, (1,0) only      | `6.2.11.6/2`                 |
+| `N30`   | non-symbolic, no `/Encoding`, (3,0) only      | `6.2.11.6/1`, `6.2.11.6/2`   |
+| `S31`   | symbolic, no `/Encoding`, (3,1) only          | `6.2.11.4.1/2`               |
+
+Each font draws codes 65 and 66 and carries matching `/Widths`, so the width
+rule stays silent. No font carries `/ToUnicode`, so at the Unicode levels every
+code of all five fails `6.2.11.7.2/1` and its restatements on both tools: the
+name the program gives none of them holds a Unicode value. veraPDF 1.30.2 and
+litho report the same rule set in all thirteen cells, with the same counts.
+
+`builtinProgramEncoding` reads no encoding out of a `/FontFile2` on purpose:
+the program's built-in encoding is a `cmap` to glyphs, not to names.
+
+### `sharednested_2b.pdf`
+
+ISO 19005-2, 6.2.2 test 2 fails a form XObject or a tiling pattern cell that
+resolves a name only through the page's resources. When two pages draw the
+same stream, each may bind that name to a different object, so a repair that
+copies one page's binding into the shared stream repaints the other page with
+it. litho's remediation left every shared form and pattern alone, and no corpus
+file draws one from two pages:
+
+| Object | Construct                                     | The two pages bind its name |
+| ------ | --------------------------------------------- | --------------------------- |
+| `X0`   | form XObject, `/Resources << >>`, `/GS0 gs`   | apart                       |
+| `X1`   | form XObject, `/Resources << >>`, `/GS1 gs`   | alike                       |
+| `P0`   | tiling pattern, `/Resources << >>`, `/GS0 gs` | apart                       |
+
+Page 1 binds `/GS0` to a line width of 2, page 2 to 4, and both bind `/GS1` to
+one object. The pages share one indirect `/XObject` dictionary. Test 2 fails
+three times, once for each stream, judged under page 1's resources. A CMYK
+OutputIntent covers the DeviceGray every stream paints in and the file draws
+no text, so at PDF/A-2b test 2 is the whole firing set. veraPDF 1.30.2 and
+litho report the same rule set in all thirteen cells, with the same counts.
+
+PDF/A remediation gives `X1` the name in place, since both pages bind it
+alike. `X0` and `P0` keep their own dictionaries: each page draws a copy
+carrying its own `/GS0`, and each page gets its own copy of the shared
+`/XObject` dictionary. veraPDF 1.30.2 finds the output fully conforming at
+PDF/A-2b, PDF/A-3b and PDF/A-4 in the default mode and at PDF/A-2b and PDF/A-4
+in the aggressive one, where it reported test 2 three times before.
 
 ### `symbolname_2u.pdf`
 
