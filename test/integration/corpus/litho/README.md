@@ -251,6 +251,8 @@ one deliberately rather than diffing it against a fresh build.
 | `inlinelzw_2b.pdf`     | PDF/A-2b     | Inline images with a forbidden filter in every stream parsed     |
 | `headingnest_ua2.pdf`  | PDF/UA-2     | Generic `H` headings nested three `Sect` elements deep           |
 | `twoprofile_1b.pdf`    | PDF/A-1b     | A PDF/X intent before the PDF/A one, each over its own profile   |
+| `formreuse_ua1.pdf`    | PDF/UA-1     | Marked forms a cell, glyph, form or appearance references again  |
+| `formshare_ua1.pdf`    | PDF/UA-1     | Marked forms a content stream two pages share draws once         |
 
 ### Must-not-fire controls
 
@@ -519,6 +521,8 @@ violation but is exempt, so a firing is a false positive.
 | `sharedicc_2b`                            | page 3: an ICC version 4 display profile, at PDF/A-2b                  | ISO 19005-2, 6.2.4.2         |
 | `sharedicc_2b`                            | page 4: the shared stream under page 1's resources, a second time      | one reading per resource set |
 | `refreach_ua1`                            | page 6: a reference XObject a page, a cell and a Type 3 font list      | ISO 14289-1, 7.20 t1         |
+| `formreuse_ua1`                           | page 7: a form, a cell and a glyph drawn twice, each drawing one form  | ISO 14289-1, 7.20 t2         |
+| `formshare_ua1`                           | every page: a marked form the content two pages share draws once       | ISO 14289-1, 7.20 t2         |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -608,6 +612,8 @@ are covered under [Known divergences](#known-divergences).
 | `formhidden_ua1.pdf`   | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 5    |
 | `formmark_ua1.pdf`     | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 2    | 3    |
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
+| `formreuse_ua1.pdf`    | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 10   | 8    |
+| `formshare_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 5    | 7    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `gotochain_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 1    |
@@ -8046,6 +8052,56 @@ reports no heading rule: the document uses `H` alone, which ISO 14289-1, 7.4.4
 accepts. Remediated at PDF/UA-2 and both WTPDF levels, default and aggressive,
 every output is clean in both tools; before the repair every one kept
 `8.2.5.12/1`.
+
+### `formreuse_ua1.pdf`
+
+ISO 14289-1, 7.20 has a form XObject whose content holds MCIDs referenced once
+(ISO 32000-1, 14.7.2). veraPDF 1.30.2 states test 2 on the form object a `Do`
+or an appearance entry builds: a form carrying `/StructParents` passes at its
+first reference and fails at every later one. It parses a content stream once
+for the document, so a `Do` counts once however many pages or streams draw the
+stream holding it, and an appearance entry counts once per annotation. litho
+counted the `Do` operators of the pages' own content alone, so it missed every
+second reference a pattern cell, a Type 3 glyph, a form or an appearance makes.
+No corpus file references a marked form twice at PDF/UA-1, so this fixture
+plants one path per page, each with a marked form of its own:
+
+| Page | Path                                                 | `7.20/2`, veraPDF | litho before |
+| ---- | ---------------------------------------------------- | ----------------- | ------------ |
+| 1    | the page and a tiling cell it selects, `/F Do` each  | 1                 | 0            |
+| 2    | the page and a Type 3 glyph it shows, `/F Do` each   | 1                 | 0            |
+| 3    | the page and a form it draws, `/F Do` each           | 1                 | 0            |
+| 4    | the normal appearance of two annotations             | 1                 | 0            |
+| 5    | one annotation's normal and down appearance          | 1                 | 0            |
+| 6    | the page's `/F Do` and an annotation's appearance    | 1                 | 0            |
+| 7    | a form, a cell and a glyph drawn twice, each `/F Do` | 0                 | 0            |
+
+Page 7 is the must-not-fire control: it draws twice a form that draws a marked
+form once, selects twice a cell that draws another, shows twice a glyph that
+draws a third, and draws twice a form without `/StructParents` and a form
+carrying `/StructParent`, the key of a form that is one marked item itself.
+veraPDF 1.30.2 and litho report the same rule set, with the same failed-check
+counts, in all thirteen cells.
+
+Remediated at PDF/UA-1 in both modes, both tools keep `7.20/2` six times and
+`7.1/3` once: no fixer gives a reference a form of its own.
+
+### `formshare_ua1.pdf`
+
+A `Do` in a `/Contents` two pages share is one reference to the form it draws:
+veraPDF 1.30.2 parses the stream once, whether the second page reads it under
+the same resources or under resources of its own. litho read the content of
+every page again and stated `7.20/2` once for each marked form such a stream
+draws. Pages 1 and 2 share a stream drawing one marked form, page 2 under
+resources of its own that name the same form and add an ExtGState; pages 3
+and 4 share another under one resource dictionary. Every page is a
+must-not-fire control: veraPDF states `7.20/2` nowhere, litho stated it twice.
+veraPDF 1.30.2 and litho report the same rule set, with the same failed-check
+counts, in all thirteen cells.
+
+Remediated at PDF/UA-1 in both modes, both tools state `7.20/2` twice: the
+fixer wrapping untagged page content in a marked-content sequence writes one
+stream per page, so each marked form gains a second reference.
 
 ## Scope
 
