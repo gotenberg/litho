@@ -1061,6 +1061,14 @@ func builtinEncodingNames(fontData []byte) map[byte]string {
 // Type 1 (/FontFile) or CFF (/FontFile3) program carries in its own encoding.
 // Returns nil when the descriptor holds no such program or it cannot be read.
 //
+// A TrueType (/FontFile2) program has no branch on purpose. Its built-in
+// encoding is a cmap from codes to glyphs, not to names (ISO 32000-1,
+// 9.6.6.4), so it names no code. veraPDF 1.30.2 agrees: for a TrueType font
+// read through its symbol subtables, symbolic or without /Encoding,
+// TrueTypeFontProgram.getGlyphName answers " ", which no glyph list holds, so
+// such a code gets no Unicode value from a name and is never .notdef. Glyph
+// presence on that route is [trueTypeSymbolPresence].
+//
 // # Corpus evidence
 //
 //   - pdfjs bug860632.pdf: embeds Helvetica as a PFB container with no

@@ -117,6 +117,11 @@ type simpleFontGlyphs struct {
 	// map to GID 0 in codeToGID for their width, but the charset holds that
 	// glyph, so it is present.
 	notdefNamed map[byte]bool
+	// symbolPresence, when non-nil, decides glyph presence alone: the codes of
+	// an embedded TrueType program that ISO 32000-1, 9.6.6.4 reads through its
+	// (3,0) or (1,0) subtable, mapped through that subtable. A code it lacks
+	// selects no glyph. See [trueTypeSymbolPresence].
+	symbolPresence map[uint16]uint16
 }
 
 // The OpenType head table bounds unitsPerEm to 16..16384 ("Valid range is from
@@ -227,9 +232,10 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 	//
 	// With no symbol subtable, a font that has neither an /Encoding nor a
 	// Unicode cmap leaves its codes unresolvable, so an empty (non-nil) map makes
-	// the width and presence checks skip them rather than misreport against an
-	// empty encoding or an identity GID. One that has either keeps the glyph-name
-	// route below.
+	// the width check skip them rather than misreport against an empty encoding
+	// or an identity GID. Presence is still answered: no code reaches a glyph
+	// ([trueTypeSymbolPresence]). One that has either keeps the glyph-name route
+	// below.
 	//
 	// The cmap route is an sfnt one. A symbolic Type 1 or CFF font has no cmap
 	// to be missing: its codes resolve through the program's own encoding
@@ -241,7 +247,12 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 			return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: sym, symbolCmap: true}, true
 		}
 		if charCodeToGID == nil && fontDict["Encoding"] == nil {
-			return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: map[uint16]uint16{}}, true
+			return simpleFontGlyphs{
+				widths:         binaryWidths,
+				unitsPerEm:     unitsPerEm,
+				codeToGID:      map[uint16]uint16{},
+				symbolPresence: trueTypeSymbolPresence(ctx, doc, fontDict, fd, fontData),
+			}, true
 		}
 	}
 
@@ -340,7 +351,59 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 		}
 	}
 
-	return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: charCodeToGID, encodingNames: encNames, notdefNamed: notdefNamed}, true
+	return simpleFontGlyphs{
+		widths:         binaryWidths,
+		unitsPerEm:     unitsPerEm,
+		codeToGID:      charCodeToGID,
+		encodingNames:  encNames,
+		notdefNamed:    notdefNamed,
+		symbolPresence: trueTypeSymbolPresence(ctx, doc, fontDict, fd, fontData),
+	}, true
+}
+
+// trueTypeSymbolPresence returns the code to GID map that decides glyph
+// presence for an embedded TrueType (/FontFile2) program read through its
+// symbol subtables, or nil when that route does not govern the font.
+//
+// ISO 32000-1, 9.6.6.4 reads a TrueType font "when the font has no Encoding
+// entry, or the font descriptor's Symbolic flag is set" through the (3,0)
+// subtable, else the (1,0) one, and leaves any other mapping to the
+// processor's choice. veraPDF 1.30.2 makes no other choice for presence
+// (TrueTypeFontProgram.containsCode tests `isSymbolic ||
+// encoding.getDirectBase() == null` and consults those two subtables alone),
+// so a program carrying neither selects no glyph for any code, even through a
+// (3,1) subtable that holds one. Its width reading still falls back to any
+// subtable (getWidthSymbolic, TrueTypeCmapTable.getGID), which is why this
+// governs presence only and leaves codeToGID alone. A program whose cmap
+// will not read leaves presence to the other routes.
+//
+// # Corpus evidence
+//
+//   - litho ttnoenc_2b.pdf: veraPDF reports ISO 19005-2, 6.2.11.4.1 t2 for
+//     both codes of a non-symbolic font with no /Encoding and of a symbolic
+//     font, each carrying only a (3,1) subtable, and nothing for the
+//     siblings carrying a (1,0) or a (3,0).
+//   - pdfjs issue5501.pdf: a symbolic DejaVuSans subset whose only subtable
+//     is (0,0); veraPDF reports all 14 glyphs it shows absent at 2b, 2u, 4,
+//     UA-1 and UA-2, and litho reported none.
+//   - pdfjs issue5701.pdf: a symbolic font carrying /Encoding and a (3,1)
+//     subtable alone; veraPDF reports its 7 glyphs absent at the same five
+//     levels, and litho reported none.
+func trueTypeSymbolPresence(ctx context.Context, doc *document.Document, fontDict, fd ast.PdfDict, fontData []byte) map[uint16]uint16 {
+	if fd["FontFile2"] == nil || !isSfntFontProgram(fontData) {
+		return nil
+	}
+	if fontDict["Encoding"] != nil && !isSymbolicFont(ctx, doc, fd) {
+		return nil
+	}
+	sym, err := truetype.SymbolCharCodeToGID(ctx, fontData)
+	if err != nil {
+		return nil
+	}
+	if sym == nil {
+		return map[uint16]uint16{}
+	}
+	return sym
 }
 
 // emptyCFFGlyphs resolves the glyphs of a simple font whose name-keyed bare
@@ -912,6 +975,11 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 			continue
 		}
 		gid, mapped := glyphs.codeToGID[uint16(code)]
+		if glyphs.symbolPresence != nil {
+			if gid, mapped = glyphs.symbolPresence[uint16(code)]; !mapped {
+				gid, mapped = 0, true
+			}
+		}
 		// A symbolic TrueType font draws a code through its symbol cmap
 		// subtable (ISO 32000-1, 9.6.6.4), so a code that subtable does not hold
 		// selects no glyph: it is resolved, not unknown. veraPDF
