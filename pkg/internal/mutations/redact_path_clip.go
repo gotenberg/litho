@@ -31,20 +31,21 @@ import (
 //   - The geometry inside each region is removed from the operands. A clip
 //     hides what it covers but keeps it in the file, and path coordinates are
 //     content in their own right: a vector signature, handwriting or a chart is
-//     legible from the numbers alone. Each run of the path inside a region is
-//     replaced by one straight chord between where it entered and where it
-//     left. The region is convex and every point that still paints is outside
-//     it, so the closed loop the old run and the chord form winds zero times
-//     around any such point: the fill under either rule (8.5.3.3) is unchanged
-//     outside the region.
+//     legible from the numbers alone. A stroke alone is broken where it enters
+//     a region and resumes where it leaves. A filled path has each run inside
+//     a region replaced by one straight chord between where it entered and
+//     where it left: the region is convex and every point that still paints is
+//     outside it, so the closed loop the old run and the chord form winds zero
+//     times around any such point, and the fill under either rule (8.5.3.3) is
+//     unchanged outside the region.
 //
 // A stroke is cut at the region shrunk by the stroke's reach rather than at the
-// region itself, so the removed geometry and the new chord paint only inside
-// the region, where the clip discards them, and the ink outside is the ink the
-// original drew. The reach counts the miter of every join the path makes, the
-// chords' included. The geometry left between the shrunk region and the region
-// is what draws the ink visible just outside it, so it shows no more than the
-// page already shows.
+// region itself, so the removed geometry, and the caps and chords the cut adds,
+// paint only inside the region, where the clip discards them, and the ink
+// outside is the ink the original drew. The reach counts the miter of every
+// join the path makes, a chord's included. The geometry left between the
+// shrunk region and the region is what draws the ink visible just outside it,
+// so it shows no more than the page already shows.
 
 // strokeReachSlack widens a stroke's reach by one page unit. Not spec-mandated:
 // it absorbs what the line width does not state, the thinnest-line rule (ISO
@@ -407,6 +408,8 @@ type subpath struct {
 	// operator after h starts at the closed subpath's start (ISO 32000-1,
 	// 8.5.2.1), which a copy placed after rewritten geometry has to state.
 	explicitStart bool
+	// rect holds the x, y, width and height of a subpath an re built.
+	rect *[4]float64
 }
 
 // parsePathRun reads the construction operators ops[first:paint] into
@@ -493,6 +496,7 @@ func parsePathRun(ops []content.Operation, first, paint int) ([]subpath, []int, 
 			x, y, w, h := v[0], v[1], v[2], v[3]
 			corners := [4]bezPt{{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}}
 			begin(corners[0], i, true)
+			subs[cur].rect = &[4]float64{x, y, w, h}
 			for k := 1; k < 4; k++ {
 				subs[cur].segs = append(subs[cur].segs, pathSeg{p: [4]bezPt{corners[k-1], {}, {}, corners[k]}})
 			}
@@ -810,7 +814,7 @@ func clipPathRun(
 			reach = strokeReach(*stroke, ctm, factor)
 			inset = reach
 		}
-		frame := cutFrame{ctm: ctm, det: det, cuts: insetCuts(zones, inset)}
+		frame := cutFrame{ctm: ctm, det: det, cuts: insetCuts(zones, inset), paint: paint, lone: len(subs) == 1}
 		body, cut, err := cutSubpaths(data, ranges, subs, paint, frame)
 		if err != nil {
 			return "", false, err
@@ -943,6 +947,10 @@ type cutFrame struct {
 	ctm  [6]float64
 	det  float64
 	cuts []cutRect
+	// paint is the run's paint operator, and lone reports a run of one
+	// subpath, whose pieces can each take their own paint operator.
+	paint string
+	lone  bool
 }
 
 // toUser maps a page-space point into user space.
@@ -978,14 +986,17 @@ func (f cutFrame) transitionPoint(from, to int) (bezPt, error) {
 // rewriteSubpath returns sp with the geometry inside the cuts removed, and
 // whether anything changed. An unchanged subpath is copied by the caller.
 //
-// A closed subpath, and any subpath a fill alone paints (which the fill
-// closes, ISO 32000-1, 8.5.3.1), is a loop: a run inside a cut is replaced by a
-// chord wherever it falls, the start included. An open stroked one loses the
-// parts before its first and after its last surviving piece, whose ink lies
-// inside the region. An open subpath both filled and stroked is closed for the
-// fill and open for the stroke, so moving its start would move the fill's
-// closing edge: it is rewritten only where its ends and that edge stay outside
-// every cut.
+// A stroke alone is broken where it enters a cut and starts again where it
+// leaves: every piece that survives keeps its own segments and joins, and the
+// caps the breaks add lie within the stroke's reach of the cut, inside the
+// region. A fill needs its loops closed, so a closed subpath, and any subpath
+// a fill alone paints (which the fill closes, ISO 32000-1, 8.5.3.1), has each
+// run inside a cut replaced by a chord wherever it falls, the start included;
+// a rectangle a fill alone paints is split into the rectangles around the cut
+// instead (see [splitRectangle]). An open subpath both filled and stroked is
+// closed for the fill and open for the stroke, so moving its start would move
+// the fill's closing edge: it is rewritten only where its ends and that edge
+// stay outside every cut.
 func rewriteSubpath(sp subpath, closed, fills, strokes bool, f cutFrame) (string, bool, error) {
 	if len(f.cuts) == 0 {
 		return "", false, nil
@@ -1005,16 +1016,24 @@ func rewriteSubpath(sp subpath, closed, fills, strokes bool, f cutFrame) (string
 		segs = append(slices.Clip(segs), pathSeg{p: [4]bezPt{last, {}, {}, sp.start}})
 	}
 
+	// A subpath none of whose geometry enters a cut has nothing there to
+	// remove: a rectangle around the whole region stays as it was, and the
+	// clip alone keeps its fill out of the region.
 	pieces := cutPieces(segs, f.ctm, f.cuts)
 	if !slices.ContainsFunc(pieces, func(pc piece) bool { return pc.zone >= 0 }) {
 		return "", false, nil
 	}
-
-	if loop {
-		return emitLoop(segs, pieces, closingSeg, fills, f)
+	if sp.rect != nil && fills && !strokes {
+		if out, changed, ok := splitRectangle(*sp.rect, f); ok {
+			return out, changed, nil
+		}
 	}
+
 	if !fills {
-		return emitOpen(segs, pieces, f)
+		return emitBroken(segs, pieces, loop), true, nil
+	}
+	if loop {
+		return emitLoop(segs, pieces, closingSeg, f)
 	}
 	// The closing edge is the fill's alone, and the ends anchor it.
 	errAnchor := errors.New("a filled and stroked open subpath starts, ends or closes inside the region")
@@ -1026,6 +1045,117 @@ func rewriteSubpath(sp subpath, closed, fills, strokes bool, f cutFrame) (string
 		return "", false, errAnchor
 	}
 	return emitOpen(segs, open, f)
+}
+
+// emitBroken writes the surviving pieces of a stroked subpath as open
+// subpaths, one per run of pieces outside every cut. A loop starts at the
+// first piece that follows a removed one, so a run wrapping past the original
+// start stays one subpath and keeps the join there.
+func emitBroken(segs []pathSeg, pieces []piece, loop bool) string {
+	n := len(pieces)
+	start := 0
+	if loop {
+		start = -1
+		for i := range pieces {
+			if pieces[i].zone < 0 && pieces[(i+n-1)%n].zone >= 0 {
+				start = i
+				break
+			}
+		}
+		if start < 0 {
+			// Every piece is inside a cut.
+			return ""
+		}
+	}
+	var e pathEmitter
+	drawing := false
+	for k := range n {
+		pc := pieces[(start+k)%n]
+		if pc.zone >= 0 {
+			drawing = false
+			continue
+		}
+		if !drawing {
+			e.nums("m", evalSeg(segs[pc.seg], pc.t0))
+			drawing = true
+		}
+		e.seg(subSeg(segs[pc.seg], pc.t0, pc.t1))
+	}
+	return e.b.String()
+}
+
+// splitRectangle rewrites a rectangle a fill alone paints as the rectangles
+// that cover it outside the one cut it meets, each drawn with re in the
+// original's direction, so the winding it adds around any point outside the
+// cut is the original's (ISO 32000-1, 8.5.3.3). It reports false when it does
+// not apply: a CTM that rotates or skews the rectangle off the page axes, or
+// more than one cut meeting it, which the chord rewrite handles.
+//
+// A rectangle stays a rectangle because renderers draw one differently from
+// the same outline as a polygon: poppler snaps a hairline rule drawn with re
+// to whole pixels and anti-aliases the polygon, so the rule left outside the
+// region would come back fainter than it was.
+func splitRectangle(r [4]float64, f cutFrame) (string, bool, bool) {
+	ctm := f.ctm
+	if !(ctm[1] == 0 && ctm[2] == 0) && !(ctm[0] == 0 && ctm[3] == 0) {
+		return "", false, false
+	}
+	x, y, w, h := r[0], r[1], r[2], r[3]
+	ax0, ax1 := math.Min(x, x+w), math.Max(x, x+w)
+	ay0, ay1 := math.Min(y, y+h), math.Max(y, y+h)
+
+	meeting := -1
+	var cx0, cy0, cx1, cy1 float64
+	for i, c := range f.cuts {
+		p, q := f.toUser(bezPt{c.x0, c.y0}), f.toUser(bezPt{c.x1, c.y1})
+		ux0, ux1 := math.Min(p.x, q.x), math.Max(p.x, q.x)
+		uy0, uy1 := math.Min(p.y, q.y), math.Max(p.y, q.y)
+		if ux0 >= ax1 || ux1 <= ax0 || uy0 >= ay1 || uy1 <= ay0 {
+			continue
+		}
+		if meeting >= 0 {
+			return "", false, false
+		}
+		meeting, cx0, cy0, cx1, cy1 = i, ux0, uy0, ux1, uy1
+	}
+	if meeting < 0 {
+		return "", false, true
+	}
+
+	var parts []string
+	part := func(px0, py0, px1, py1 float64) bool {
+		if px1 <= px0 || py1 <= py0 {
+			return false
+		}
+		ox, ow := px0, px1-px0
+		if w < 0 {
+			ox, ow = px1, px0-px1
+		}
+		oy, oh := py0, py1-py0
+		if h < 0 {
+			oy, oh = py1, py0-py1
+		}
+		var e pathEmitter
+		e.nums("re", bezPt{ox, oy}, bezPt{ow, oh})
+		parts = append(parts, e.b.String())
+		return true
+	}
+	beside := part(ax0, ay0, math.Min(ax1, cx0), ay1)
+	beside = part(math.Max(ax0, cx1), ay0, ax1, ay1) || beside
+	mx0, mx1 := math.Max(ax0, cx0), math.Min(ax1, cx1)
+	across := part(mx0, ay0, mx1, math.Min(ay1, cy0))
+	across = part(mx0, math.Max(ay0, cy1), mx1, ay1) || across
+
+	// Pieces on one axis only, a rule the cut crosses, never touch, so each
+	// can be painted on its own: one path holding two rectangles is no
+	// rectangle to poppler either. Pieces on both axes share edges outside the
+	// cut, where painting them apart would leave an anti-aliased seam, so they
+	// stay one path.
+	sep := ""
+	if f.lone && (!beside || !across) {
+		sep = f.paint + " "
+	}
+	return strings.Join(parts, sep), true, true
 }
 
 // emitOpen writes an open subpath from its first surviving piece to its last,
@@ -1052,10 +1182,10 @@ func emitOpen(segs []pathSeg, pieces []piece, f cutFrame) (string, bool, error) 
 	return e.b.String(), true, nil
 }
 
-// emitLoop writes a closed subpath from a point outside every cut, so a run
-// that wraps past the original start is written like any other, and closes
-// it with h.
-func emitLoop(segs []pathSeg, pieces []piece, closingSeg int, fills bool, f cutFrame) (string, bool, error) {
+// emitLoop writes a filled closed subpath from a point outside every cut, so a
+// run that wraps past the original start is written like any other, and
+// closes it with h.
+func emitLoop(segs []pathSeg, pieces []piece, closingSeg int, f cutFrame) (string, bool, error) {
 	n := len(pieces)
 	start := 0
 	if pieces[0].zone >= 0 {
@@ -1068,7 +1198,7 @@ func emitLoop(segs []pathSeg, pieces []piece, closingSeg int, fills bool, f cutF
 		// covers: the loop becomes the polygon through the points where it
 		// passes from one region to the next.
 		multi := slices.ContainsFunc(pieces, func(pc piece) bool { return pc.zone != pieces[0].zone })
-		if !fills || !multi {
+		if !multi {
 			return "", true, nil
 		}
 		for i := range pieces {

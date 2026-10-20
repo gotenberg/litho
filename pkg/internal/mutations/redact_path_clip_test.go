@@ -330,6 +330,32 @@ func assertNoGeometryInside(t *testing.T, after []byte, cuts []cutRect) {
 	}
 }
 
+// assertNoStrokeInside is [assertNoGeometryInside] for a stroke, whose
+// segments must not cross the cuts either: a stroke is broken at a cut rather
+// than bridged by a chord.
+func assertNoStrokeInside(t *testing.T, after []byte, cuts []cutRect) {
+	t.Helper()
+	assertNoGeometryInside(t, after, cuts)
+	for _, o := range renderModel(t, after) {
+		for si, s := range o.subpaths {
+			n := len(s) - 1
+			if o.closed[si] {
+				n = len(s)
+			}
+			for i := 0; i < n; i++ {
+				a, b := s[i], s[(i+1)%len(s)]
+				mid := bezPt{(a.x + b.x) / 2, (a.y + b.y) / 2}
+				for _, c := range cuts {
+					const eps = 1e-6
+					if mid.x > c.x0+eps && mid.x < c.x1-eps && mid.y > c.y0+eps && mid.y < c.y1-eps {
+						t.Fatalf("a stroked segment crosses %v at (%g, %g):\n%s", c, mid.x, mid.y, after)
+					}
+				}
+			}
+		}
+	}
+}
+
 func redactAndRead(t *testing.T, resources, body string, regions [][4]float64) (RedactReport, []byte) {
 	t.Helper()
 	doc, page := clipFixture(t, resources, body)
@@ -355,6 +381,51 @@ func TestRedactPageRegions_ClipsAFilledPathStraddlingTheRegion(t *testing.T) {
 	assertNoGeometryInside(t, got, []cutRect{{90 + fillCutInset, 90 + fillCutInset, 160 - fillCutInset, 160 - fillCutInset}})
 }
 
+func TestRedactPageRegions_SplitsAFilledRuleIntoRectangles(t *testing.T) {
+	// A hairline rule drawn as a thin filled rectangle, as producers draw
+	// table borders. What survives stays two rectangles: a renderer snaps an
+	// re rule to whole pixels and anti-aliases a polygon, so the rule outside
+	// the region would come back fainter as anything else.
+	body := "92.039 335 0.12 153 re f"
+	regions := [][4]float64{{61.2, 356.4, 550.8, 435.6}}
+	_, got := redactAndRead(t, "<< >>", body, regions)
+
+	assertClearedExactly(t, []byte(body), got, regions)
+	_, painted, ok := bytes.Cut(got, []byte("W* n"))
+	if n := bytes.Count(painted, []byte(" re")); !ok || n != 2 || bytes.Contains(painted, []byte(" l ")) {
+		t.Errorf("want the rule painted as two rectangles, got %d re:\n%s", n, got)
+	}
+	// One path holding two rectangles is no rectangle to poppler either, so
+	// each piece takes its own paint operator.
+	if n := bytes.Count(painted, []byte(" f")); n != 2 {
+		t.Errorf("want each piece filled on its own, got %d f:\n%s", n, got)
+	}
+}
+
+func TestRedactPageRegions_StrokesARectangleWithoutBridgingTheRegion(t *testing.T) {
+	// The outline's corner sits in the region. The stroke is broken at the
+	// region rather than bridged, so no segment of it crosses the region and
+	// no diagonal makes a renderer treat the outline as anything but lines.
+	body := "1 w 20 400 150 150 re S"
+	regions := [][4]float64{{60, 360, 540, 440}}
+	_, got := redactAndRead(t, "<< >>", body, regions)
+
+	assertClearedExactly(t, []byte(body), got, regions)
+	reach := 0.5*math.Sqrt2 + strokeReachSlack
+	assertNoStrokeInside(t, got, []cutRect{{60 + reach, 360 + reach, 540 - reach, 440 - reach}})
+}
+
+func TestRedactPageRegions_KeepsARectangleWindingWithItsDirection(t *testing.T) {
+	// The narrow rectangle runs against the outer one, so under the nonzero
+	// rule it punches a hole in it. Its parts outside the region must keep
+	// punching it.
+	body := "100 100 300 300 re 150 150 m 150 350 l 350 350 l 350 150 l h 110 340 30 -150 re f"
+	regions := [][4]float64{{105, 120, 330, 230}}
+	_, got := redactAndRead(t, "<< >>", body, regions)
+
+	assertClearedExactly(t, []byte(body), got, regions)
+}
+
 func TestRedactPageRegions_ClipsAStrokedLineCrossingTheRegion(t *testing.T) {
 	body := "2 w 50 400 m 500 400 l S"
 	regions := [][4]float64{{200, 300, 300, 500}}
@@ -365,7 +436,7 @@ func TestRedactPageRegions_ClipsAStrokedLineCrossingTheRegion(t *testing.T) {
 	}
 	assertClearedExactly(t, []byte(body), got, regions)
 	reach := 1*math.Sqrt2 + strokeReachSlack
-	assertNoGeometryInside(t, got, []cutRect{{200 + reach, 300 + reach, 300 - reach, 500 - reach}})
+	assertNoStrokeInside(t, got, []cutRect{{200 + reach, 300 + reach, 300 - reach, 500 - reach}})
 }
 
 func TestRedactPageRegions_ClipsACurveLikeASignature(t *testing.T) {
@@ -376,7 +447,7 @@ func TestRedactPageRegions_ClipsACurveLikeASignature(t *testing.T) {
 
 	assertClearedExactly(t, []byte(body), got, regions)
 	reach := 0.75*math.Sqrt2 + strokeReachSlack
-	assertNoGeometryInside(t, got, []cutRect{{220 + reach, 330 + reach, 360 - reach, 470 - reach}})
+	assertNoStrokeInside(t, got, []cutRect{{220 + reach, 330 + reach, 360 - reach, 470 - reach}})
 }
 
 func TestRedactPageRegions_ClipsAClosedStrokeWhoseStartIsInside(t *testing.T) {
