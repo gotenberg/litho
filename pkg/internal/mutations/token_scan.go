@@ -23,14 +23,24 @@ import (
 // reason.
 const maxScanDepth = 100
 
-// maxScanRefDepth bounds how long a chain of indirect references an output scan
-// follows. Anti-DoS guard, not spec-mandated: the visited set already stops a
-// cycle, so what this bounds is Go stack depth on a crafted file that chains
-// references linearly rather than circularly. It is counted separately from
-// maxScanDepth on purpose. Sharing one budget would let an ordinary page tree
-// spend what a deeply tagged document's structure tree needs, and a structure
-// the walk gave up on is reported unreadable, which fails a caller closed over
-// a document that was never malformed.
+// maxScanRefDepth bounds how many indirect references an output scan descends
+// through before it sets a reference aside to walk later from the top (see
+// [scanWalk.walkSetAside]). Anti-DoS guard, not spec-mandated: the visited set
+// already stops a cycle, so what this bounds is Go stack depth on a crafted
+// file that chains references linearly rather than circularly. It is counted
+// separately from maxScanDepth on purpose. Sharing one budget would let an
+// ordinary page tree spend what a deeply tagged document's structure tree
+// needs.
+//
+// A reference past the bound is set aside, not reported unreadable. The walk
+// ranges dictionaries, which Go orders at random, so the depth at which it
+// first meets an object changes from run to run: reporting what lay past the
+// bound unreadable made the same file fail closed on some runs and not others.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400594.pdf: reported 0 to 44 objects unreadable from
+//     run to run, every one past this bound, while each object resolved.
 const maxScanRefDepth = 100
 
 // TokenHit records one token still present in the document, and where.
@@ -167,6 +177,7 @@ func ScanOutputForTokens(
 	if info, ok := doc.Index.Trailer["Info"]; ok {
 		w.walk(ctx, 0, info, 0)
 	}
+	w.walkSetAside(ctx)
 
 	// The rewrite copies the trailer's /ID array too (see FullRewrite), so
 	// its strings are bytes of the output like any other.
@@ -201,6 +212,10 @@ type scanWalk struct {
 	// cannot loop the walk and an object reached twice is scanned once.
 	visited  map[int]bool
 	refDepth int
+
+	// setAside holds the references met past maxScanRefDepth, walked from the
+	// top once the roots are done (see [scanWalk.walkSetAside]).
+	setAside []ast.PdfIndirectRef
 
 	// contents holds the object numbers a page's /Contents names, so the scan
 	// knows which streams to read as content streams (see scanContentStrings).
@@ -357,13 +372,25 @@ func (w *scanWalk) followBinary(ctx context.Context, ref ast.PdfIndirectRef) {
 	w.visit(ctx, ref)
 }
 
+// walkSetAside walks each reference the walk set aside past maxScanRefDepth,
+// from the top, until none is left. Each object is entered once, so it ends,
+// and every object the roots reach is scanned whatever order the walk met
+// them in.
+func (w *scanWalk) walkSetAside(ctx context.Context) {
+	for len(w.setAside) > 0 && w.err == nil {
+		ref := w.setAside[len(w.setAside)-1]
+		w.setAside = w.setAside[:len(w.setAside)-1]
+		w.visit(ctx, ref)
+	}
+}
+
 // visit enters the object a reference names, once.
 func (w *scanWalk) visit(ctx context.Context, ref ast.PdfIndirectRef) {
 	if w.visited[ref.ObjectNum] {
 		return
 	}
 	if w.refDepth >= maxScanRefDepth {
-		w.unreadable[ref.ObjectNum] = true
+		w.setAside = append(w.setAside, ref)
 		return
 	}
 	if len(w.visited)%100 == 0 { //nolint:mnd // amortized cancellation check, one per 100 objects as the compliance sweep does
