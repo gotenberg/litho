@@ -470,3 +470,60 @@ func TestRemoveRegionAnnotations_PageWithoutContent(t *testing.T) {
 		})
 	}
 }
+
+// TestRemoveRegionAnnotations_LeavesTheStructureTree pins that a removed link
+// leaves the structure tree too. The /OBJR of a /Link element still named it
+// after /Annots dropped it, so the annotation and the URI it quotes stayed
+// reachable, and the redaction was refused over the link it had removed. An
+// element left holding nothing leaves its parent, the two /StructParent keys
+// leave the /ParentTree, and the page's own key stays.
+func TestRemoveRegionAnnotations_LeavesTheStructureTree(t *testing.T) {
+	doc, page := annotPageFixtureWithCatalog(t, "[8 0 R 9 0 R]",
+		"8 0 obj\n<< /Type /Annot /Subtype /Link /Rect [100 695 200 720] /StructParent 1"+
+			" /A << /S /URI /URI (http://example.test/SECRET) >> >>\nendobj\n"+
+			"9 0 obj\n<< /Type /Annot /Subtype /Link /Rect [210 695 290 720] /StructParent 2"+
+			" /A << /S /URI /URI (http://example.test/other) >> >>\nendobj\n"+
+			"10 0 obj\n<< /Type /StructTreeRoot /K 11 0 R"+
+			" /ParentTree << /Nums [0 [12 0 R] 1 12 0 R 2 13 0 R] >> /ParentTreeNextKey 3 >>\nendobj\n"+
+			"11 0 obj\n<< /Type /StructElem /S /Document /P 10 0 R /K [12 0 R 13 0 R] >>\nendobj\n"+
+			"12 0 obj\n<< /Type /StructElem /S /Link /P 11 0 R /Pg 3 0 R"+
+			" /K [0 << /Type /OBJR /Obj 8 0 R >>] >>\nendobj\n"+
+			"13 0 obj\n<< /Type /StructElem /S /Link /P 11 0 R /Pg 3 0 R"+
+			" /K << /Type /OBJR /Obj 9 0 R >> >>\nendobj\n",
+		"/StructTreeRoot 10 0 R")
+	alloc := writer.NewObjAllocator(20)
+
+	report, err := RedactPageRegions(context.Background(), alloc, doc, page, theTextRegion)
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+	if !slices.Equal(report.RemovedAnnotations, []int{8, 9}) {
+		t.Fatalf("RemovedAnnotations = %v, want [8 9]", report.RemovedAnnotations)
+	}
+
+	link, ok := alloc.Pending()[12].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the /Link element was not rewritten: %T", alloc.Pending()[12])
+	}
+	if kids, _ := link["K"].(ast.PdfArray); !slices.Equal(kids, ast.PdfArray{ast.PdfInt(0)}) {
+		t.Errorf("/Link /K = %v, want [0], the marked content without the /OBJR", link["K"])
+	}
+
+	docElem, ok := alloc.Pending()[11].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the emptied element's parent was not rewritten: %T", alloc.Pending()[11])
+	}
+	if kids, _ := docElem["K"].(ast.PdfArray); !slices.Equal(kids, ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 12}}) {
+		t.Errorf("/Document /K = %v, want [12 0 R]: the emptied element leaves", docElem["K"])
+	}
+
+	root, ok := alloc.Pending()[10].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the structure tree root was not rewritten: %T", alloc.Pending()[10])
+	}
+	tree, _ := root["ParentTree"].(ast.PdfDict)
+	nums, _ := tree["Nums"].(ast.PdfArray)
+	if len(nums) != 2 || nums[0] != ast.PdfInt(0) {
+		t.Errorf("/ParentTree /Nums = %v, want the page's key 0 alone", nums)
+	}
+}

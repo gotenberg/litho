@@ -53,6 +53,7 @@ func removeRegionAnnotations(
 	kept := make(ast.PdfArray, 0, len(annots))
 	var removed, rootWidgets []int
 	var kidWidgets []kidWidget
+	var untag []RemovedAnnotation
 
 	for _, entry := range annots {
 		annot, err := document.ResolveDict(ctx, doc, entry)
@@ -118,6 +119,7 @@ func removeRegionAnnotations(
 		if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
 			removed = append(removed, ref.ObjectNum)
 		}
+		untag = append(untag, RemovedAnnotation{Obj: entry, Dict: annot})
 	}
 
 	if len(kept) == len(annots) {
@@ -139,6 +141,9 @@ func removeRegionAnnotations(
 		return nil, err
 	}
 	if err := pruneRootFields(ctx, alloc, doc, rootWidgets); err != nil {
+		return nil, err
+	}
+	if err := untagRegionAnnotations(ctx, alloc, doc, untag); err != nil {
 		return nil, err
 	}
 
@@ -330,6 +335,39 @@ func pruneRootFields(
 	newCatalog["AcroForm"] = newForm
 	if !alloc.AllocAt(catalogRef.ObjectNum, newCatalog) {
 		return ErrFormNotAddressable
+	}
+	return nil
+}
+
+// untagRegionAnnotations takes the removed annotations out of the structure
+// tree. An object reference names its annotation from the element that holds
+// it (ISO 32000-1, 14.7.4.3), so an annotation dropped from /Annots alone stays
+// reachable through the tree, and with it the /Contents and /A /URI it quotes:
+// a redaction that left the /OBJR in place was refused over the very link it
+// had removed. Its /StructParent key leaves the /ParentTree (14.7.4.4), and an
+// element left holding nothing leaves its parent, the cleanup
+// [UntagRemovedAnnotations] makes for every annotation litho removes.
+//
+// A document whose catalog cannot be found has no structure tree to prune.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100196, thread_300_300346, thread_400_400371,
+//     thread_400_400916, pdfjs annotation-link-text-popup: redacting page 1
+//     was refused over a removed link's URI that an /OBJR still reached, and
+//     now succeeds.
+//   - litho: 14 tagged fixtures change output under a page-1 redaction, and
+//     veraPDF reports no rule the untouched tree did not.
+func untagRegionAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annots []RemovedAnnotation) error {
+	if len(annots) == 0 {
+		return nil
+	}
+	catalogRef, ok := CatalogRef(ctx, doc)
+	if !ok {
+		return nil
+	}
+	if err := UntagRemovedAnnotations(ctx, alloc, doc, catalogRef, annots); err != nil {
+		return fmt.Errorf("removing annotations from the structure tree: %w", err)
 	}
 	return nil
 }
