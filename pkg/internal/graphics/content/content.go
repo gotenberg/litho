@@ -97,7 +97,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 				if images == nil {
 					images = newStreamImages(data, o)
 				}
-				dict, reads, err := readInlineImage(ctx, p, o, images)
+				dict, idEnd, reads, err := readInlineImage(ctx, p, o, images)
 				if err != nil {
 					return nil, fmt.Errorf("inline image: %w", err)
 				}
@@ -109,10 +109,11 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 					break
 				}
 				placer.take(0)
-				ops = append(ops, Operation{
-					Operator: "BI",
-					Operands: []ast.PdfObject{dict},
-				})
+				biOperands := []ast.PdfObject{dict}
+				if o.inlineData {
+					biOperands = append(biOperands, ast.PdfString(inlineImageData(data, idEnd, int(p.Position()))))
+				}
+				ops = append(ops, Operation{Operator: "BI", Operands: biOperands})
 				placer.place("BI", ops[len(ops)-1].Operands)
 				operands = nil
 				// The image data is consumed off-token, and the token buffer is
@@ -207,31 +208,72 @@ func newStreamImages(data []byte, o readOptions) *inlineImages {
 // such a key. The readings of a repair, [ForRepair] and [WholeStream], end the
 // data at the later of the ends the two readers give it
 // ([inlineImages.repairEnd]).
-func readInlineImage(ctx context.Context, p *parser.Parser, o readOptions, images *inlineImages) (ast.PdfDict, bool, error) {
+//
+// It also returns the offset just past the image's ID keyword, where its data
+// begins.
+func readInlineImage(ctx context.Context, p *parser.Parser, o readOptions, images *inlineImages) (ast.PdfDict, int, bool, error) {
 	switch {
 	case o.commands != nil:
 		dict, err := p.ParseInlineImageHeader(ctx)
 		if err != nil || p.SkippedInlineImageKey() {
-			return nil, false, ctx.Err()
+			return nil, 0, false, ctx.Err()
 		}
-		end, stops := images.pdfjsEnd(ctx, int(p.Position()), dict)
+		idEnd := int(p.Position())
+		end, stops := images.pdfjsEnd(ctx, idEnd, dict)
 		if stops {
-			return nil, false, nil
+			return nil, 0, false, nil
 		}
-		return dict, true, p.ResumeAt(int64(end))
+		return dict, idEnd, true, p.ResumeAt(int64(end))
 	case o.readsAsVeraPDF():
 		dict, err := p.ParseInlineImageHeader(ctx)
 		if err != nil {
-			return nil, false, err
+			return nil, 0, false, err
 		}
-		return dict, true, p.ResumeAt(int64(images.resume(ctx, int(p.Position()), dict)))
+		idEnd := int(p.Position())
+		return dict, idEnd, true, p.ResumeAt(int64(images.resume(ctx, idEnd, dict)))
 	default:
 		dict, err := p.ParseInlineImageHeader(ctx)
 		if err != nil {
-			return nil, false, err
+			return nil, 0, false, err
 		}
-		return dict, true, p.ResumeAt(int64(images.repairEnd(ctx, int(p.Position()), dict)))
+		idEnd := int(p.Position())
+		return dict, idEnd, true, p.ResumeAt(int64(images.repairEnd(ctx, idEnd, dict)))
 	}
+}
+
+// inlineImageData returns the data of the inline image whose ID keyword ends
+// at idEnd and whose reading resumes at end: the bytes between the white space
+// that follows ID and the white space before EI (ISO 32000-1, 8.9.7). A
+// reading that ends before an EI keeps every byte it read.
+func inlineImageData(data []byte, idEnd, end int) []byte {
+	if idEnd < 0 || end > len(data) || idEnd > end {
+		return nil
+	}
+	start := idEnd
+	if start < end && isContentWhiteSpace(data[start]) {
+		start++
+	}
+	stop := end
+	for stop > start && isContentWhiteSpace(data[stop-1]) {
+		stop--
+	}
+	if stop-start >= len("EI") && string(data[stop-len("EI"):stop]) == "EI" {
+		stop -= len("EI")
+		if stop > start && isContentWhiteSpace(data[stop-1]) {
+			stop--
+		}
+	}
+	return data[start:stop]
+}
+
+// isContentWhiteSpace reports whether c is white space (ISO 32000-1, 7.2.2,
+// Table 1).
+func isContentWhiteSpace(c byte) bool {
+	switch c {
+	case 0, '\t', '\n', '\f', '\r', ' ':
+		return true
+	}
+	return false
 }
 
 // endsReading reports whether tok, read where an operand or an operator
@@ -275,6 +317,8 @@ type readOptions struct {
 	repair bool
 	// whole reads every operator of the stream. See [WholeStream].
 	whole bool
+	// inlineData keeps the data of each inline image. See [InlineImageData].
+	inlineData bool
 }
 
 // readsAsVeraPDF reports whether a parse under o reads the stream as veraPDF
@@ -411,6 +455,19 @@ func ForRepair() Option {
 func WholeStream() Option {
 	return func(o *readOptions) {
 		o.whole = true
+	}
+}
+
+// InlineImageData keeps the data of each inline image a parse reads: the BI
+// operation carries it as a second operand, an [ast.PdfString] of the bytes
+// between ID and EI (ISO 32000-1, 8.9.7), after the image dictionary. Without
+// it the operation carries the dictionary alone.
+//
+// It is for a reader that paints the image, the renderer. It changes where no
+// reading ends the data.
+func InlineImageData() Option {
+	return func(o *readOptions) {
+		o.inlineData = true
 	}
 }
 
