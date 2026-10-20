@@ -19,6 +19,7 @@ import (
 var nonStageOutputCmds = map[string]string{
 	"redact": "redact's value is its report, and pipe prints nothing but the document",
 	"pipe":   "pipe is the pipeline itself, so it cannot be one of its own stages",
+	"render": "render writes PNG images, not a document a later stage could read",
 }
 
 // TestEveryOutputProducingCommandIsAStageOrDeliberatelyExcluded closes the last

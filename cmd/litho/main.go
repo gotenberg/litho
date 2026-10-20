@@ -311,6 +311,8 @@ func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, st
 		return runAutotag(ctx, globalArgs, stdout, stderr)
 	case "remediate":
 		return runRemediate(ctx, globalArgs, stdout, stderr)
+	case "render":
+		return runRender(ctx, globalArgs, stdout, stderr)
 	case "pipe":
 		return runPipe(ctx, globalArgs, stdout, stderr)
 	default:
@@ -335,6 +337,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  images        List images per page")
 	fmt.Fprintln(w, "  signatures    List or verify digital signatures")
 	fmt.Fprintln(w, "  attachments   List embedded file attachments")
+	fmt.Fprintln(w, "  render        Draw pages to PNG images")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Extraction:")
 	fmt.Fprintln(w, "  tables        Extract detected tables per page")

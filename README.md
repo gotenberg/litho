@@ -183,6 +183,9 @@ litho info -f json document.pdf
 litho text document.pdf
 litho images -f json document.pdf
 
+# Draw pages 1 to 3 at 150 dpi to page-1.png, page-2.png and page-3.png.
+litho render --pages 1-3 --dpi 150 -o page document.pdf
+
 # Validate compliance.
 litho validate --profile PDF/A-2b document.pdf
 litho validate --profile WTPDF-1.0-Accessibility document.pdf
@@ -239,9 +242,13 @@ The signature is a detached CMS SignedData (`adbe.pkcs7.detached`) over SHA-256,
 
 In Go, `pdf.NewSigner` builds the same signer from a certificate and any `crypto.Signer`, `pdf.ParseSignerPEM` from PEM data, and `pdf.ParseSignerPKCS12` from a PKCS #12 key store and its password. `pdf.WithPAdES`, `pdf.WithTimestampAuthority`, `pdf.WithLTV` and `Writer.Timestamp` do what the flags above do, and `pdf.WithValidationData` supplies the validation data so signing reaches no network. Implement `pdf.Signer` for anything else, such as a signature a remote service computes whole.
 
+### Rendering
+
+`litho render` draws pages with litho's own renderer, `Reader.RenderPage` in Go, which returns an `*image.NRGBA` at the resolution `pdf.WithRenderDPI` sets, over the colour `pdf.WithRenderBackground` sets, white by default. It draws paths, strokes, clipping, images with their masks, shadings and shading patterns, and form XObjects. It does not yet draw text, tiling patterns or annotations, nor apply soft masks, blend modes, transparency groups or colour management: colours convert with the device formulas, and spaces other than the device and ICC-based ones paint mid-grey. `--max-render-pixels` bounds the pixels of one page.
+
 ### Resource limits
 
-Every document is read under five budgets that keep a crafted file from asking for unbounded memory or work. Global flags, placed before the command, change them for every document the command reads, each input of a multi-input command and each `pipe` stage included:
+Every document is read under six budgets that keep a crafted file from asking for unbounded memory or work. Global flags, placed before the command, change them for every document the command reads, each input of a multi-input command and each `pipe` stage included:
 
 | Flag                        | Bounds                                              | Default     |
 | --------------------------- | --------------------------------------------------- | ----------- |
@@ -250,6 +257,7 @@ Every document is read under five budgets that keep a crafted file from asking f
 | `--max-embedded-file-bytes` | Size of an embedded PDF that PDF/A validation opens | `50MiB`     |
 | `--max-form-depth`          | Form XObjects nested below a page                   | `10`        |
 | `--max-cached-objects`      | Parsed objects kept in memory                       | `50000`     |
+| `--max-render-pixels`       | Pixels of one page `litho render` draws             | `50000000`  |
 
 A byte count takes a plain integer or a `KiB`, `MiB` or `GiB` suffix, the others a plain integer, and `0` keeps the default. A value that does not parse, or one past its ceiling, exits `1` before any document opens.
 

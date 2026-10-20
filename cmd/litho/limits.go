@@ -74,6 +74,15 @@ var limitFlags = []limitFlag{
 		},
 		get: func(l pdf.Limits) int64 { return int64(l.MaxCachedObjects) },
 	},
+	{
+		name: "max-render-pixels", usage: "Pixels of one rendered page",
+		set: func(l *pdf.Limits, v string) error {
+			n, err := parseCount64(v)
+			l.MaxRenderPixels = n
+			return err
+		},
+		get: func(l pdf.Limits) int64 { return l.MaxRenderPixels },
+	},
 }
 
 // limitFlagFor returns the resource-limit flag arg names, in its space form

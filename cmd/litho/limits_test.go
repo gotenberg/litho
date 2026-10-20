@@ -143,7 +143,7 @@ func TestLimitFlags_AreAdvertised(t *testing.T) {
 			t.Errorf("printUsage does not mention --%s", f.name)
 		}
 	}
-	for _, want := range []string{"(default 256MiB)", "(default 100000000)", "(default 50MiB)", "(default 10)", "(default 50000)"} {
+	for _, want := range []string{"(default 256MiB)", "(default 100000000)", "(default 50MiB)", "(default 10)", "(default 50000)", "(default 50000000)"} {
 		if !strings.Contains(usage.String(), want) {
 			t.Errorf("printUsage does not show %s", want)
 		}
@@ -168,6 +168,7 @@ func TestRun_LimitFlagsPastTheirCeiling(t *testing.T) {
 		{"max-embedded-file-bytes", "5GiB", pdf.Limits{MaxEmbeddedFileBytes: 5 << 30}},
 		{"max-form-depth", "257", pdf.Limits{MaxFormDepth: 257}},
 		{"max-cached-objects", "8388608", pdf.Limits{MaxCachedObjects: 8_388_608}},
+		{"max-render-pixels", "1073741825", pdf.Limits{MaxRenderPixels: 1<<30 + 1}},
 	} {
 		t.Run(tt.flag+"="+tt.value, func(t *testing.T) {
 			verr := tt.limits.Validate()
@@ -203,6 +204,7 @@ func TestRun_LimitFlagsPastTheirCeiling(t *testing.T) {
 		{"--max-embedded-file-bytes", "4GiB", "images", path},
 		{"--max-form-depth", "256", "images", path},
 		{"--max-cached-objects", "8388607", "images", path},
+		{"--max-render-pixels", "1073741824", "images", path},
 	} {
 		var stdout, stderr bytes.Buffer
 		if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
