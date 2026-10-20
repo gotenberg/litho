@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"bytes"
 	"compress/zlib"
 	"context"
 	"slices"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
 // pdfxIntentDoc builds a one-page document whose catalog lists the given
@@ -154,5 +157,97 @@ func TestAddOutputIntent_ReplacesAProfilelessPDFAIntent(t *testing.T) {
 	}
 	if arr[1] != (ast.PdfIndirectRef{ObjectNum: pdfxIntent}) {
 		t.Errorf("OutputIntent[1] = %v, want the PDF/X intent %d 0 R", arr[1], pdfxIntent)
+	}
+}
+
+// defaultCMYKProfile returns the profile reference the page's /DefaultCMYK
+// names, or the zero reference when the page carries none.
+func defaultCMYKProfile(t *testing.T, ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator) ast.PdfIndirectRef {
+	t.Helper()
+	page := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 3})
+	res := liveDictValue(ctx, alloc, doc, page["Resources"])
+	cs := liveDictValue(ctx, alloc, doc, res["ColorSpace"])
+	arr := liveArray(ctx, alloc, doc, cs["DefaultCMYK"])
+	if len(arr) != 2 || arr[0] != ast.PdfName("ICCBased") {
+		t.Fatalf("page /DefaultCMYK = %v, want an ICCBased space", arr)
+	}
+	ref, _ := arr[1].(ast.PdfIndirectRef)
+	return ref
+}
+
+// TestDefaultCMYK_ReusesTheDocumentsCMYKProfile pins that the /DefaultCMYK
+// staged beside an RGB PDF/A intent names the CMYK profile a PDF/X intent
+// carries, when PDF/A admits it, rather than litho's stock one: the producer's
+// characterisation of its CMYK stays, and the output carries no second CMYK
+// profile.
+func TestDefaultCMYK_ReusesTheDocumentsCMYKProfile(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cmyk := deflateAt(t, cmykICCProfile, zlib.BestCompression)
+	doc, alloc := newTestDoc(t, pdfxIntentDoc(t, "[4 0 R]",
+		"<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) /DestOutputProfile 5 0 R >>",
+		iccObj(cmyk, 4),
+	))
+	const pdfxProfile = 5
+
+	violations := []compliance.Violation{{Context: "DeviceRGB used without OutputIntent"}}
+	if _, err := fixDeviceColorIntent(ctx, alloc, doc, violations, 2); err != nil {
+		t.Fatalf("fixDeviceColorIntent: %v", err)
+	}
+	if got, want := defaultCMYKProfile(t, ctx, doc, alloc), (ast.PdfIndirectRef{ObjectNum: pdfxProfile}); got != want {
+		t.Errorf("page /DefaultCMYK profile = %v, want %v, the PDF/X intent's", got, want)
+	}
+}
+
+// TestDefaultCMYK_KeepsTheStockProfileWhenPDFARejectsTheDocuments pins the
+// cases where the document's CMYK profile cannot serve as the /DefaultCMYK
+// profile, so the stock one is staged: a version 4 profile under PDF/A-1 (ISO
+// 19005-1, 6.2.3.2 admits version 2 only), and under PDF/A-4 a profile a
+// transparency group blends in (ISO 19005-4, 6.2.4.2 t3).
+func TestDefaultCMYK_KeepsTheStockProfileWhenPDFARejectsTheDocuments(t *testing.T) {
+	t.Parallel()
+
+	v4 := slices.Clone(cmykICCProfile)
+	v4[8] = 4
+	cases := []struct {
+		name    string
+		profile []byte
+		page    string
+		part    int
+	}{
+		{name: "version 4 under PDF/A-1", profile: v4, part: 1},
+		{name: "blending profile under PDF/A-4", profile: cmykICCProfile, part: 4,
+			page: "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Group << /S /Transparency /CS [/ICCBased 5 0 R] >> >>"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			objs := []string{
+				"<< /Type /Catalog /Pages 2 0 R /OutputIntents [4 0 R] >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+				"<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) /DestOutputProfile 5 0 R >>",
+				iccObj(deflateAt(t, tc.profile, zlib.BestCompression), 4),
+			}
+			if tc.page != "" {
+				objs[2] = tc.page
+			}
+			doc, alloc := newTestDoc(t, assemblePDF(objs))
+
+			violations := []compliance.Violation{{Context: "DeviceRGB used without OutputIntent"}}
+			if _, err := fixDeviceColorIntent(ctx, alloc, doc, violations, tc.part); err != nil {
+				t.Fatalf("fixDeviceColorIntent: %v", err)
+			}
+			ref := defaultCMYKProfile(t, ctx, doc, alloc)
+			if ref.ObjectNum == 5 {
+				t.Fatalf("page /DefaultCMYK names the document's profile 5 0 R, want the stock one")
+			}
+			if data := decodedProfile(ctx, alloc, doc, ref); !bytes.Equal(data, cmykICCProfile) {
+				t.Errorf("page /DefaultCMYK profile is not the stock CMYK profile")
+			}
+		})
 	}
 }

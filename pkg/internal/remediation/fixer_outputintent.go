@@ -496,6 +496,12 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		needsRGB = true
 	}
 
+	// The destination profiles of the intents as the source lists them, read
+	// before an added intent replaces a GTS_PDFA1 one or unification re-points
+	// the others: a CMYK one among them is the profile a staged DefaultCMYK
+	// reuses (see [reusableDefaultCMYK]).
+	sourceProfiles := intentProfiles(ctx, alloc, doc, catalogDict)
+
 	// Inspect existing OutputIntents to avoid duplicating coverage.
 	hasCMYKOI, hasRGBOI := false, false
 	if oiObj, ok := catalogDict["OutputIntents"]; ok {
@@ -559,6 +565,10 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	// already-remediated file grew it by that much on every pass while
 	// reporting no fixes at all.
 	var iccRef ast.PdfIndirectRef
+	reused := false
+	if defaultColor == "DefaultCMYK" {
+		iccRef, reused = reusableDefaultCMYK(ctx, alloc, doc, catalogDict, sourceProfiles, part)
+	}
 	csArr := func() ast.PdfArray {
 		if iccRef.ObjectNum == 0 {
 			iccRef = alloc.Alloc(profile())
@@ -566,7 +576,11 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		return ast.PdfArray{ast.PdfName("ICCBased"), iccRef}
 	}
 	if n, err := injectDefaultColorSpace(ctx, alloc, doc, catalogDict, defaultColor, csArr); err == nil && n > 0 {
-		fixes = append(fixes, fmt.Sprintf("injected /%s into %d page(s)", string(defaultColor), n))
+		fix := fmt.Sprintf("injected /%s into %d page(s)", string(defaultColor), n)
+		if reused {
+			fix += fmt.Sprintf(", over the document's CMYK profile %d 0 R", iccRef.ObjectNum)
+		}
+		fixes = append(fixes, fix)
 	}
 
 	return fixes, nil
@@ -758,35 +772,202 @@ const iccProfileHeaderLen = 128
 // no object number for the other intents to share (6.2.3 t2), so only an
 // indirect one qualifies.
 func reusableIntentProfile(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, kept []keptIntent, cmyk bool, part int) (ast.PdfIndirectRef, ast.PdfDict, bool) {
-	colorSpace, components := "RGB ", 3
-	if cmyk {
-		colorSpace, components = "CMYK", 4
-	}
 	for _, it := range kept {
 		ref, ok := it.dict["DestOutputProfile"].(ast.PdfIndirectRef)
 		if !ok || ref.ObjectNum == 0 {
 			continue
 		}
-		stream, err := document.ResolveStream(ctx, doc, ref)
-		if err != nil {
-			continue
+		if admittedDestinationProfile(ctx, alloc, doc, ref, cmyk, part) {
+			return ref, it.dict, true
 		}
-		if n, err := document.ResolveInt(ctx, doc, stream.Dict["N"]); err != nil || int(n) != components {
-			continue
-		}
-		data := decodedProfile(ctx, alloc, doc, ref)
-		if len(data) < iccProfileHeaderLen || string(data[16:20]) != colorSpace {
-			continue
-		}
-		if class := string(data[12:16]); class != "prtr" && class != "mntr" {
-			continue
-		}
-		if version := data[8]; version != 2 && (version != 4 || part == 1) {
-			continue
-		}
-		return ref, it.dict, true
 	}
 	return ast.PdfIndirectRef{}, nil, false
+}
+
+// admittedDestinationProfile reports whether the indirect ICC profile stream
+// ref names is one PDF/A admits as the destination profile of a GTS_PDFA1
+// intent covering CMYK (cmyk) or RGB: the tests [reusableIntentProfile] lists.
+// The stream is read as this run left it, so a profile an earlier fixer
+// rewrote is judged by its replacement.
+func admittedDestinationProfile(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef, cmyk bool, part int) bool {
+	colorSpace, components := "RGB ", 3
+	if cmyk {
+		colorSpace, components = "CMYK", 4
+	}
+	stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, ref)
+	if !ok {
+		return false
+	}
+	if n, err := document.ResolveInt(ctx, doc, stream.Dict["N"]); err != nil || int(n) != components {
+		return false
+	}
+	data := decodedProfile(ctx, alloc, doc, ref)
+	if len(data) < iccProfileHeaderLen || string(data[16:20]) != colorSpace {
+		return false
+	}
+	if class := string(data[12:16]); class != "prtr" && class != "mntr" {
+		return false
+	}
+	version := data[8]
+	return version == 2 || (version == 4 && part != 1)
+}
+
+// reusableDefaultCMYK returns the CMYK destination profile of an output intent
+// the source lists, as the profile of the DefaultCMYK [fixDeviceColorIntent]
+// stages beside an RGB intent, and false when none can serve, in which case
+// the stock profile does. profiles are the destination profiles of the
+// intents the source lists ([intentProfiles]), read before the run replaced or
+// re-pointed any entry, so a PDF/X CMYK profile unification leaves
+// unreferenced is still found.
+//
+// Reusing it keeps the producer's characterisation of its CMYK, which the
+// stock profile replaces with a generic one, and spares the output a second
+// CMYK profile. The profile must be one PDF/A admits as a CMYK destination
+// profile ([admittedDestinationProfile]): those tests are a subset of the ones
+// ISO 19005-1, 6.2.3.2 and ISO 19005-2/3/4, 6.2.4.2 t1 apply to an ICCBased
+// profile, so it is admitted there too. Under PDF/A-4 a profile a transparency
+// group blends in is skipped, since ISO 19005-4, 6.2.4.2 t3 forbids an
+// ICCBased space identical to it (see [blendsInProfile]).
+//
+// The profiles are tried in array order, so the choice is deterministic.
+//
+// # Corpus evidence
+//
+//   - All corpora: 107 files list an intent over a CMYK profile (verapdf 73,
+//     litho 31, pdfjs 2, govdocs 1). Remediated at the eleven PDF/A levels,
+//     default and aggressive, only litho pdfxnoprofile_2b stages a DefaultCMYK
+//     over it, in all 22 cells, each output about 28 KB smaller, and no cell
+//     of the 2354 changes the rule set litho reports. veraPDF reports the same
+//     rule set as before in all 22.
+func reusableDefaultCMYK(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, profiles []ast.PdfIndirectRef, part int) (ast.PdfIndirectRef, bool) {
+	for _, ref := range profiles {
+		if !admittedDestinationProfile(ctx, alloc, doc, ref, true, part) {
+			continue
+		}
+		if part == 4 && blendsInProfile(ctx, alloc, doc, catalog, decodedProfile(ctx, alloc, doc, ref)) {
+			continue
+		}
+		return ref, true
+	}
+	return ast.PdfIndirectRef{}, false
+}
+
+// intentProfiles returns the indirect /DestOutputProfile of every output
+// intent the catalog lists, in array order. A profile written directly in its
+// intent has no object number a colour space could name, and is left out.
+func intentProfiles(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict) []ast.PdfIndirectRef {
+	var refs []ast.PdfIndirectRef
+	for _, entry := range liveArray(ctx, alloc, doc, catalog["OutputIntents"]) {
+		intent := liveDictValue(ctx, alloc, doc, entry)
+		if ref, ok := intent["DestOutputProfile"].(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
+}
+
+// blendsInProfile reports whether a transparency group of the document blends
+// in an ICC profile identical to profile, as [compliance.ICCProfilesEqual]
+// compares them: the group of a page, of a Form XObject or tiling pattern its
+// resources reach, nested to [maxTransparencyResourceDepth], or of an
+// annotation's normal appearance. An unreadable object counts as no group.
+func blendsInProfile(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, profile []byte) bool {
+	if len(profile) == 0 {
+		return false
+	}
+	var pages []annotPageEntry
+	collectPageRefs(ctx, alloc, doc, catalog["Pages"], &pages, make(map[int]bool), 0)
+	seen := make(map[int]bool)
+	for _, pe := range pages {
+		if ctx.Err() != nil {
+			return false
+		}
+		if groupBlendsIn(ctx, alloc, doc, pe.dict, profile) {
+			return true
+		}
+		if holder, ok := resourcesHolder(ctx, alloc, doc, pe); ok &&
+			resourcesBlendIn(ctx, alloc, doc, holder.dict["Resources"], profile, seen, 0) {
+			return true
+		}
+		for _, annot := range liveArray(ctx, alloc, doc, pe.dict["Annots"]) {
+			if document.VisitedBefore(annot, seen) {
+				continue
+			}
+			ap := liveDictValue(ctx, alloc, doc, liveDictValue(ctx, alloc, doc, annot)["AP"])
+			if appearanceBlendsIn(ctx, alloc, doc, ap["N"], profile, seen) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// appearanceBlendsIn reports whether a normal appearance, one form or a
+// subdictionary of appearance states each naming one (ISO 32000-1, 12.5.5),
+// blends in profile ([formBlendsIn]).
+func appearanceBlendsIn(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, normal ast.PdfObject, profile []byte, seen map[int]bool) bool {
+	if normal == nil {
+		return false
+	}
+	ref, _ := normal.(ast.PdfIndirectRef)
+	if _, isStream := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, normal); isStream {
+		return formBlendsIn(ctx, alloc, doc, normal, profile, seen, 0)
+	}
+	if document.VisitedBefore(normal, seen) {
+		return false
+	}
+	states := liveDictValue(ctx, alloc, doc, normal)
+	for _, name := range slices.Sorted(maps.Keys(states)) {
+		if formBlendsIn(ctx, alloc, doc, states[name], profile, seen, 0) {
+			return true
+		}
+	}
+	return false
+}
+
+// groupBlendsIn reports whether the /Group of dict blends in profile
+// ([blendingProfile]).
+func groupBlendsIn(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, dict ast.PdfDict, profile []byte) bool {
+	blending := blendingProfile(ctx, alloc, doc, dict)
+	return len(blending) > 0 && compliance.ICCProfilesEqual(blending, profile)
+}
+
+// resourcesBlendIn reports whether a Form XObject or tiling pattern the
+// resource dictionary res names, or one nested in theirs, declares a group
+// blending in profile. The depth cap is [maxTransparencyResourceDepth], the
+// cap of the transparency fixer's walk over the same nesting.
+func resourcesBlendIn(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, res ast.PdfObject, profile []byte, seen map[int]bool, depth int) bool {
+	if res == nil || ctx.Err() != nil || depth > maxTransparencyResourceDepth || document.VisitedBefore(res, seen) {
+		return false
+	}
+	resDict := liveDictValue(ctx, alloc, doc, res)
+	for _, category := range []ast.PdfName{"XObject", "Pattern"} {
+		sub := liveDictValue(ctx, alloc, doc, resDict[category])
+		for _, name := range slices.Sorted(maps.Keys(sub)) {
+			if formBlendsIn(ctx, alloc, doc, sub[name], profile, seen, depth+1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// formBlendsIn reports whether the stream obj names, a Form XObject or a
+// tiling pattern, declares a group blending in profile, or reaches one through
+// its own /Resources.
+func formBlendsIn(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, profile []byte, seen map[int]bool, depth int) bool {
+	if obj == nil || document.VisitedBefore(obj, seen) {
+		return false
+	}
+	ref, _ := obj.(ast.PdfIndirectRef)
+	stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, obj)
+	if !ok {
+		return false
+	}
+	if groupBlendsIn(ctx, alloc, doc, stream.Dict, profile) {
+		return true
+	}
+	return resourcesBlendIn(ctx, alloc, doc, stream.Dict["Resources"], profile, seen, depth)
 }
 
 // injectDefaultColorSpace walks the page tree plus every reachable Form
