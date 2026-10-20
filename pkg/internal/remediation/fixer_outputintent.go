@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -120,7 +121,12 @@ func matchOutputIntent(v compliance.Violation) bool {
 // matchOutputIntentCleanup covers structural OutputIntent violations:
 // invalid ICC profile, duplicate DestOutputProfile mismatch, and the
 // forbidden DestOutputProfileRef key (PDF/A-2 §6.2.3 / PDF/A-4 §6.2.3).
+// ISO 19005-1 numbers the same-profile rule 6.2.2 t2, so it is claimed by
+// rule rather than by the clause prefix the later parts share.
 func matchOutputIntentCleanup(v compliance.Violation) bool {
+	if v.Rule == compliance.Rule_19005_1_6_2_2_t02 {
+		return true
+	}
 	if !clausePrefix(v, "6.2.3") {
 		return false
 	}
@@ -132,10 +138,30 @@ func matchOutputIntentCleanup(v compliance.Violation) bool {
 // fixOutputIntentCleanup normalises the OutputIntents array:
 //
 //  1. Strips forbidden /DestOutputProfileRef entries.
-//  2. Re-points a later entry's /DestOutputProfile to the first entry's
-//     value when they diverge, satisfying §6.2.3 test 2.
-//  3. Replaces /DestOutputProfile ICC streams that the validator
-//     rejects as too short with the embedded sRGB profile.
+//  2. Replaces the anchor intent's /DestOutputProfile with the embedded sRGB
+//     profile when it is too short to carry an ICC header.
+//  3. Re-points every other intent's /DestOutputProfile at the anchor's when
+//     they diverge, satisfying ISO 19005-1, 6.2.2 t2 and ISO 19005-2/3/4,
+//     6.2.3 t2: every intent carrying the key names the same indirect object.
+//
+// The anchor is the first GTS_PDFA1 intent carrying a destination profile
+// (see [outputIntentAnchor]), so the PDF/A reading of the document keeps its
+// colour and the other intents, GTS_PDFX or ISO_PDFE1, take its profile. Their
+// /OutputConditionIdentifier stays, so a PDF/X intent whose profile differed
+// now names its printing condition over the PDF/A intent's profile. Each fix
+// says whether the replaced profile differed from the anchor's.
+//
+// # Corpus evidence
+//
+//   - All corpora: three files name more than one destination profile object
+//     in their catalog's /OutputIntents, verapdf PDF_A-2b and PDF_A-4
+//     6-2-3-t02-fail-a and litho outputintent_2b, each with the GTS_PDFA1
+//     intent first. Before the fixer claimed ISO 19005-1, 6.2.2 t2, the three
+//     kept it through a PDF/A-1a and 1b remediation on litho and veraPDF.
+//   - litho twoprofile_1b, a GTS_PDFX CMYK intent before a GTS_PDFA1 RGB one
+//     over DeviceRGB content: unifying on the first entry left the content
+//     uncovered, and the next round replaced the whole array with a stock sRGB
+//     intent, dropping the PDF/X intent and the source's RGB profile.
 func fixOutputIntentCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -155,9 +181,9 @@ func fixOutputIntentCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc
 	}
 
 	var fixes []string
-	var firstProfile ast.PdfIndirectRef
 	changedArr := false
 	newArr := make(ast.PdfArray, len(arr))
+	intents := make([]cleanupIntent, len(arr))
 
 	for i, entry := range arr {
 		newArr[i] = entry
@@ -174,50 +200,56 @@ func fixOutputIntentCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc
 		if entryDict == nil {
 			continue
 		}
-		entryChanged := false
-		updated := make(ast.PdfDict, len(entryDict))
-		maps.Copy(updated, entryDict)
-
-		if _, has := updated["DestOutputProfileRef"]; has {
-			delete(updated, "DestOutputProfileRef")
-			entryChanged = true
+		it := cleanupIntent{dict: make(ast.PdfDict, len(entryDict))}
+		if isRef && ref.ObjectNum > 0 {
+			it.ref = ref
+		}
+		maps.Copy(it.dict, entryDict)
+		if _, has := it.dict["DestOutputProfileRef"]; has {
+			delete(it.dict, "DestOutputProfileRef")
+			it.changed = true
 			fixes = append(fixes, fmt.Sprintf("removed /DestOutputProfileRef from OutputIntent[%d]", i))
 		}
+		intents[i] = it
+	}
 
-		dpObj, hasDP := updated["DestOutputProfile"]
-		if hasDP {
-			if dpRef, isDPRef := dpObj.(ast.PdfIndirectRef); isDPRef {
-				if i == 0 {
-					firstProfile = dpRef
-				} else if firstProfile.ObjectNum > 0 && dpRef != firstProfile {
-					updated["DestOutputProfile"] = firstProfile
-					entryChanged = true
-					fixes = append(fixes, fmt.Sprintf("unified /DestOutputProfile on OutputIntent[%d]", i))
-				}
-			}
-			if stream, err := document.ResolveStream(ctx, doc, updated["DestOutputProfile"]); err == nil {
-				// Measure the decoded profile: the 128-byte ICC header is a
-				// property of the profile, not of its compressed body.
-				if data, err := doc.DecodeStream(ctx, stream); err == nil && len(data) < 128 {
-					// Replace with a stock sRGB profile when the existing
-					// stream is too short to be a valid ICC header.
-					iccStream := ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile)
-					iccRef := alloc.Alloc(iccStream)
-					updated["DestOutputProfile"] = iccRef
-					firstProfile = iccRef
-					entryChanged = true
-					fixes = append(fixes, fmt.Sprintf("replaced too-short ICC profile on OutputIntent[%d]", i))
-				}
-			}
+	if a := outputIntentAnchor(ctx, doc, intents); a >= 0 {
+		anchor := &intents[a]
+		anchorProfile, _ := anchor.dict["DestOutputProfile"].(ast.PdfIndirectRef)
+		anchorData := decodedProfile(ctx, alloc, doc, anchorProfile)
+		// Measure the decoded profile: the 128-byte ICC header is a property
+		// of the profile, not of its compressed body.
+		if anchorData != nil && len(anchorData) < 128 {
+			// Replace with a stock sRGB profile when the existing stream is
+			// too short to be a valid ICC header.
+			anchorProfile = alloc.Alloc(ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile))
+			anchorData = sRGBICCProfile
+			anchor.dict["DestOutputProfile"] = anchorProfile
+			anchor.changed = true
+			fixes = append(fixes, fmt.Sprintf("replaced too-short ICC profile on OutputIntent[%d]", a))
 		}
+		for i := range intents {
+			it := &intents[i]
+			dp, has := it.dict["DestOutputProfile"]
+			if dpRef, isRef := dp.(ast.PdfIndirectRef); i == a || it.dict == nil || !has || (isRef && dpRef == anchorProfile) {
+				continue
+			}
+			fixes = append(fixes, fmt.Sprintf("unified /DestOutputProfile on OutputIntent[%d] (/S /%s) with OutputIntent[%d] (/S /%s): %s",
+				i, intentSubtype(ctx, doc, it.dict), a, intentSubtype(ctx, doc, anchor.dict),
+				profileDifference(anchorData, decodedProfile(ctx, alloc, doc, dp))))
+			it.dict["DestOutputProfile"] = anchorProfile
+			it.changed = true
+		}
+	}
 
-		if !entryChanged {
+	for i, it := range intents {
+		if !it.changed {
 			continue
 		}
-		if isRef && ref.ObjectNum > 0 {
-			alloc.AllocAt(ref.ObjectNum, updated)
+		if it.ref.ObjectNum > 0 {
+			alloc.AllocAt(it.ref.ObjectNum, it.dict)
 		} else {
-			newArr[i] = updated
+			newArr[i] = it.dict
 			changedArr = true
 		}
 	}
@@ -233,6 +265,93 @@ func fixOutputIntentCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc
 		return nil, nil
 	}
 	return fixes, nil
+}
+
+// cleanupIntent is one /OutputIntents entry as [fixOutputIntentCleanup]
+// rewrites it: a copy of its dictionary, the object it lives at (zero for an
+// intent written directly in the array), and whether the copy changed. dict is
+// nil for an entry that does not resolve to a dictionary.
+type cleanupIntent struct {
+	dict    ast.PdfDict
+	ref     ast.PdfIndirectRef
+	changed bool
+}
+
+// outputIntentAnchor returns the index of the intent whose destination profile
+// every other intent is unified on, or -1 when no intent names one by
+// reference.
+//
+// It is the first GTS_PDFA1 intent: that is the intent PDF/A reads the
+// document's device colour through (ISO 19005-1, 6.2.3.3; ISO 19005-2/3/4,
+// 6.2.4.3), and ISO 32000-2, Table 401 keeps GTS_PDFA1 as the PDF/A subtype
+// for every part. Keeping its profile leaves the colour of the PDF/A reading
+// unchanged, where unifying on the first entry gave a PDF/A intent listed after
+// a GTS_PDFX one the PDF/X profile, possibly of another colour space. A file
+// whose intents are all of other subtypes falls back to the first intent
+// naming a profile, the choice the fixer made before.
+func outputIntentAnchor(ctx context.Context, doc *document.Document, intents []cleanupIntent) int {
+	first := -1
+	for i, it := range intents {
+		if _, ok := it.dict["DestOutputProfile"].(ast.PdfIndirectRef); !ok {
+			continue
+		}
+		if intentSubtype(ctx, doc, it.dict) == "GTS_PDFA1" {
+			return i
+		}
+		if first < 0 {
+			first = i
+		}
+	}
+	return first
+}
+
+// intentSubtype returns an output intent's /S, or "" when it names none.
+func intentSubtype(ctx context.Context, doc *document.Document, intent ast.PdfDict) string {
+	s, err := document.ResolveName(ctx, doc, intent["S"])
+	if err != nil {
+		return ""
+	}
+	return string(s)
+}
+
+// decodedProfile returns the decoded bytes of the ICC profile stream obj
+// names, or nil when it does not resolve or decode. A profile an earlier fixer
+// of this run replaced is read from the allocator, where it is still pending.
+func decodedProfile(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) []byte {
+	var stream ast.PdfStream
+	ref, isRef := obj.(ast.PdfIndirectRef)
+	pending, isPending := alloc.Pending()[ref.ObjectNum].(ast.PdfStream)
+	switch {
+	case isRef && isPending:
+		stream = pending
+	default:
+		s, err := document.ResolveStream(ctx, doc, obj)
+		if err != nil {
+			return nil
+		}
+		stream = s
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+// profileDifference describes, for a unification fix, how the profile an
+// intent loses relates to the anchor's: the colour of content that intent
+// characterises changes only when the bytes differ.
+func profileDifference(anchor, replaced []byte) string {
+	switch {
+	case anchor == nil || replaced == nil:
+		return "a profile litho cannot compare"
+	case bytes.Equal(anchor, replaced):
+		return "an identical profile"
+	case len(anchor) >= 20 && len(replaced) >= 20:
+		return fmt.Sprintf("a different %q profile replaced by a %q one", replaced[16:20], anchor[16:20])
+	default:
+		return "a different profile"
+	}
 }
 
 // maxPlausibleObjNum caps the object numbers fixOutputIntent will tolerate

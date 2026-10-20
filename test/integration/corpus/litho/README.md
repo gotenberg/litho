@@ -7238,15 +7238,21 @@ veraPDF 1.30.2 and litho report the same rule set in all thirteen cells. At
 PDF/A-1b the file fails `6.2.2/2` alone; at the other PDF/A levels `6.2.3/2`,
 beside the identification and tagging rules each claim draws.
 
-Remediated at the eleven PDF/A levels, default and aggressive, the outputs
-report the same rule set on both tools. At PDF/A-1a and 1b every output keeps
-`6.2.2/2`: the cleanup fixer that unifies the profiles claims only clause
-6.2.3, which is 6.2.2 in part 1. At the other levels the outputs pass but
-PDF/A-4f's, which keeps `6.9/5`, through two rounds that replace the document's
-colour: the first points the PDF/A intent at the PDF/X intent's CMYK profile,
-which leaves the DeviceRGB square uncovered, and the second replaces the whole
-`/OutputIntents` array with one stock sRGB `GTS_PDFA1` intent. The output loses
-the PDF/X intent and both source profiles, which stay in the file unreferenced.
+Remediated at the eleven PDF/A levels, default and aggressive, every output
+reports the same rule set on both tools and passes but PDF/A-4f's, which keeps
+`6.9/5`. The cleanup fixer keeps the `GTS_PDFA1` intent's profile and points
+the `GTS_PDFX` intent at it, so the PDF/A reading keeps its colour and the
+PDF/X intent keeps its `/OutputConditionIdentifier` over an RGB profile; the
+fix it reports names the CMYK profile it replaced. The CMYK profile stays in
+the file unreferenced.
+
+Before that change the outputs at PDF/A-1a and 1b kept `6.2.2/2`, since the
+fixer claimed only clause 6.2.3, which is 6.2.2 in part 1. At the other levels
+it kept the first entry's profile, and two rounds replaced the document's
+colour: the first pointed the PDF/A intent at the CMYK profile, which left the
+DeviceRGB square uncovered, and the second replaced the whole `/OutputIntents`
+array with one stock sRGB `GTS_PDFA1` intent, dropping the PDF/X intent and
+both source profiles.
 
 ### `drivetitle_1b.pdf`
 
