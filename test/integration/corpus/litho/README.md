@@ -253,6 +253,7 @@ one deliberately rather than diffing it against a fresh build.
 | `twoprofile_1b.pdf`    | PDF/A-1b     | A PDF/X intent before the PDF/A one, each over its own profile   |
 | `formreuse_ua1.pdf`    | PDF/UA-1     | Marked forms a cell, glyph, form or appearance references again  |
 | `formshare_ua1.pdf`    | PDF/UA-1     | Marked forms a content stream two pages share draws once         |
+| `inlinejpx_2b.pdf`     | PDF/A-2b     | Inline images applying JPXDecode or JBIG2Decode                  |
 
 ### Must-not-fire controls
 
@@ -639,6 +640,7 @@ are covered under [Known divergences](#known-divergences).
 | `inlinefs_4.pdf`       | 7    | 5    | 9    | 7    | 7    | 11   | 9    | 9    | 4   | 4    | 5    | 10   | 6    |
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `inlineinterp_2b.pdf`  | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 10   | 8    |
+| `inlinejpx_2b.pdf`     | 5    | 3    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 5    | 6    |
 | `inlinekids_ua2.pdf`   | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `inlinelzw_2b.pdf`     | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 9    | 7    |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
@@ -4847,6 +4849,44 @@ output passes on both tools but PDF/A-4f's, which keeps `6.9/5`, the embedded
 file that level requires, and each draws the samples the source draws. Before
 the repair, every output kept the five or six inline filter findings on both
 tools.
+
+### `inlinejpx_2b.pdf`
+
+JPXDecode and JBIG2Decode are standard filters (ISO 32000-1, 7.4, Table 6), but
+no inline image's: ISO 32000-2, 8.9.7, Table 92 gives neither an abbreviation,
+and ISO 32000-1, 7.4.9 applies JPXDecode to image XObjects alone. veraPDF
+1.30.2's PDF/A-2, 3 and 4 profiles state ISO 19005-2/3, 6.1.10 t1 and ISO
+19005-4, 6.1.9 t1 as that abbreviation list, while litho let both filters
+through. No other corpus file holds such an image. ISO 19005-1, 6.1.10 names
+LZWDecode alone, so part 1 judges none of them by the rule:
+
+| Stream                        | Filters written                         | A-1b | A-2b       |
+| ----------------------------- | --------------------------------------- | ---- | ---------- |
+| the page's content            | `/F /JPXDecode`, `/CS /RGB /BPC 8`      | none | `6.1.10/1` |
+| the page's content            | `/F /JPXDecode`, colour from the data   | none | `6.1.10/1` |
+| the page's content            | `/F /JBIG2Decode`, 1-bit DeviceGray     | none | `6.1.10/1` |
+| the page's content            | `/F [/AHx /JBIG2Decode]`, an image mask | none | `6.1.10/1` |
+| the page's content            | `/F /CCF`, a control                    | none | none       |
+| the page's content            | `/F /Fl`, a control                     | none | none       |
+| a form XObject the page draws | `/Filter /JPXDecode`, the full key      | none | `6.1.10/1` |
+
+The JPEG 2000 data is the codestream `_jp2.py` holds in a JP2 container with
+one sRGB colour specification; the JBIG2 data is an embedded stream of one
+generic region coded with MMR, the band the CCF control codes with Group 4.
+
+| Rule at PDF/A-2b                   | veraPDF | litho | litho remediated |
+| ---------------------------------- | ------- | ----- | ---------------- |
+| `6.1.10/1` forbidden inline filter | 5       | 5     | 0                |
+
+The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
+counts. The repair moves each image to an image XObject the stream's resources
+name, its data byte for byte under its filters spelled in full, so every viewer
+decodes the samples it decoded. Decoding the images and writing them inline
+with Flate passed veraPDF too, at PDF/A-2b and PDF/A-4, default and aggressive,
+but writes one decoder's reading of the JPEG 2000 data into the file.
+Remediated at the eleven PDF/A levels, default and aggressive, every output
+passes on both tools but PDF/A-4f's, which keeps `6.9/5`, the embedded file
+that level requires.
 
 ### `formhidden_ua1.pdf`
 
