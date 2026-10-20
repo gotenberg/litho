@@ -5,6 +5,10 @@ import (
 	"compress/zlib"
 	"context"
 	"encoding/hex"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"os"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -316,3 +320,142 @@ type flateClaim struct{}
 func (flateClaim) FilterName() string { return "FlateDecode" }
 
 func (flateClaim) Decode(data []byte, _ map[string]any) ([]byte, error) { return data, nil }
+
+// gradientJPEG returns a w x h RGB gradient encoded by image/jpeg, whose
+// encoder writes the example Huffman tables of ITU-T T.81, Annex K.3 rather
+// than tables fitted to the data.
+func gradientJPEG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			img.SetRGBA(x, y, color.RGBA{R: byte(x * 3), G: byte(y * 5), B: byte(x ^ y), A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85}); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestRecompressImagesRecodesJPEG checks that a DCTDecode image keeps its
+// filter and every dictionary entry, shrinks, and decodes to the same samples.
+func TestRecompressImagesRecodesJPEG(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := gradientJPEG(t, 96, 72)
+	dict := imageDict(96, 72, ast.PdfDict{
+		"Filter":      ast.PdfName("DCTDecode"),
+		"DecodeParms": ast.PdfDict{"ColorTransform": ast.PdfInt(1)},
+		"SMask":       ast.PdfIndirectRef{ObjectNum: 99},
+	})
+	alloc := NewObjAllocator(0)
+	ref := alloc.Alloc(ast.NewStream(dict, data))
+	want := decodedSamples(t, alloc, ref.ObjectNum)
+
+	stats, err := RecompressImages(ctx, alloc, ImageRecompression{})
+	if err != nil {
+		t.Fatalf("RecompressImages: %v", err)
+	}
+	if stats.Images != 1 || stats.SavedBytes <= 0 {
+		t.Fatalf("stats = %+v, want the JPEG re-coded with a saving", stats)
+	}
+	got := streamAt(t, alloc, ref.ObjectNum)
+	if got.Dict.String() != dict.String() {
+		t.Fatalf("the dictionary changed: %v", got.Dict)
+	}
+	recoded, err := got.Bytes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int64(len(data)-len(recoded)) != stats.SavedBytes {
+		t.Fatalf("saved %d bytes, stats say %d", len(data)-len(recoded), stats.SavedBytes)
+	}
+	if !bytes.Equal(decodedSamples(t, alloc, ref.ObjectNum), want) {
+		t.Fatal("re-coding changed the decoded samples")
+	}
+}
+
+// TestRecompressImagesLeavesOtherJPEGsAlone covers the JPEG data the pass
+// does not re-code.
+func TestRecompressImagesLeavesOtherJPEGsAlone(t *testing.T) {
+	t.Parallel()
+	data := gradientJPEG(t, 32, 32)
+	progressive, err := os.ReadFile("../../filter/dct/testdata/progressive.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim := filter.NewDecoder([]plugins.FilterDecoder{dctClaim{}}, limits.Default())
+	jpegDict := func() ast.PdfDict { return imageDict(32, 32, ast.PdfDict{"Filter": ast.PdfName("DCTDecode")}) }
+	cases := []struct {
+		name string
+		dict ast.PdfDict
+		data []byte
+		cfg  ImageRecompression
+	}{
+		{"progressive", jpegDict(), progressive, ImageRecompression{}},
+		{"plugin claims DCTDecode", jpegDict(), data, ImageRecompression{Decoder: claim}},
+		{"under another filter", imageDict(32, 32, ast.PdfDict{"Filter": ast.PdfArray{ast.PdfName("ASCIIHexDecode"), ast.PdfName("DCTDecode")}}),
+			[]byte(hex.EncodeToString(data) + ">"), ImageRecompression{}},
+		{"past the image budget", jpegDict(), data, ImageRecompression{Limits: limits.Limits{MaxImagePixels: 32*32 - 1}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			alloc := NewObjAllocator(0)
+			ref := alloc.Alloc(ast.NewStream(tc.dict, tc.data))
+			stats, err := RecompressImages(context.Background(), alloc, tc.cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stats.Images != 0 {
+				t.Fatalf("recompressed %d images, want none", stats.Images)
+			}
+			got, err := streamAt(t, alloc, ref.ObjectNum).Bytes(context.Background())
+			if err != nil || !bytes.Equal(got, tc.data) {
+				t.Fatal("the stream's data changed")
+			}
+		})
+	}
+}
+
+// TestRecompressImagesLazyJPEGMatchesRetained checks that a JPEG whose
+// re-coding is redone at write time, past the retention budget, serializes to
+// the bytes it would have had in memory.
+func TestRecompressImagesLazyJPEGMatchesRetained(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := gradientJPEG(t, 48, 40)
+	build := func() (*ObjAllocator, int) {
+		alloc := NewObjAllocator(0)
+		ref := alloc.Alloc(ast.NewStream(imageDict(48, 40, ast.PdfDict{"Filter": ast.PdfName("DCTDecode")}), data))
+		return alloc, ref.ObjectNum
+	}
+	retained, num := build()
+	if _, err := RecompressImages(ctx, retained, ImageRecompression{}); err != nil {
+		t.Fatal(err)
+	}
+	lazy, _ := build()
+	stats, err := RecompressImages(ctx, lazy, ImageRecompression{Limits: limits.Limits{MaxStreamBytes: 1}})
+	if err != nil || stats.Images != 1 {
+		t.Fatalf("stats = %+v, err = %v", stats, err)
+	}
+	var a, b bytes.Buffer
+	if _, err := Serialize(ctx, &a, streamAt(t, retained, num)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Serialize(ctx, &b, streamAt(t, lazy, num)); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(a.Bytes(), b.Bytes()) || bytes.Contains(a.Bytes(), data) {
+		t.Fatal("the lazy re-coding differs from the retained one")
+	}
+}
+
+// dctClaim is a filter plugin that claims DCTDecode.
+type dctClaim struct{}
+
+func (dctClaim) FilterName() string { return "DCTDecode" }
+
+func (dctClaim) Decode(data []byte, _ map[string]any) ([]byte, error) { return data, nil }

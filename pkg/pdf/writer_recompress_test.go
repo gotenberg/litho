@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"slices"
 	"testing"
 )
@@ -19,14 +22,39 @@ func gradientImagePDF() ([]byte, []byte) {
 			samples = append(samples, byte(x*3+y), byte(x*5), byte(y*7))
 		}
 	}
-	const content = "q 64 0 0 48 0 0 cm /Im0 Do Q"
+	return oneImagePDF(w, h, "", samples), samples
+}
+
+// jpegImagePDF builds a one-page document showing /Im0, a 64x48 RGB gradient
+// stored as DCTDecode data image/jpeg encoded with the example Huffman tables
+// of ITU-T T.81, Annex K.3, and returns it with that data.
+func jpegImagePDF(t *testing.T) ([]byte, []byte) {
+	t.Helper()
+	const w, h = 64, 48
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			img.SetRGBA(x, y, color.RGBA{R: byte(x*3 + y), G: byte(x * 5), B: byte(y * 7), A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90}); err != nil {
+		t.Fatal(err)
+	}
+	return oneImagePDF(w, h, "/Filter /DCTDecode ", buf.Bytes()), buf.Bytes()
+}
+
+// oneImagePDF builds a one-page document showing /Im0, a w x h DeviceRGB image
+// whose stream holds data under the filter entries given.
+func oneImagePDF(w, h int, filter string, data []byte) []byte {
+	content := fmt.Sprintf("q %d 0 0 %d 0 0 cm /Im0 Do Q", w, h)
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
-		fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length %d >>\nstream\n%s\nendstream",
-			w, h, len(samples), samples),
+		fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8 %s/Length %d >>\nstream\n%s\nendstream",
+			w, h, filter, len(data), data),
 	}
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.7\n")
@@ -41,7 +69,7 @@ func gradientImagePDF() ([]byte, []byte) {
 		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offs[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
-	return buf.Bytes(), samples
+	return buf.Bytes()
 }
 
 func openRecompressSource(t *testing.T, data []byte, opts ...OpenOption) *Reader {
@@ -136,5 +164,48 @@ func TestWriter_WithImageRecompression_DeclinesEncryptedOutput(t *testing.T) {
 	}
 	if _, err := openRecompressSource(t, asked, WithPassword("u")).DecodeImage(ctx, 1, "Im0"); err != nil {
 		t.Fatalf("DecodeImage on the encrypted output: %v", err)
+	}
+}
+
+// TestWriter_WithImageRecompression_RecodesJPEG checks that a JPEG image keeps
+// DCTDecode, shrinks, decodes to the same pixels, and is written the same way
+// twice.
+func TestWriter_WithImageRecompression_RecodesJPEG(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data, jpegData := jpegImagePDF(t)
+
+	write := func(opts ...WriteOption) []byte {
+		t.Helper()
+		var out bytes.Buffer
+		if err := NewWriter(openRecompressSource(t, data)).WriteTo(ctx, &out, append([]WriteOption{WithFullRewrite()}, opts...)...); err != nil {
+			t.Fatalf("WriteTo: %v", err)
+		}
+		return out.Bytes()
+	}
+	plain := write()
+	recoded := write(WithImageRecompression())
+	again := write(WithImageRecompression())
+
+	if !bytes.Contains(plain, jpegData) || bytes.Contains(recoded, jpegData) {
+		t.Fatal("the JPEG data was not re-coded")
+	}
+	if len(recoded) >= len(plain) || !bytes.Contains(recoded, []byte("/DCTDecode")) {
+		t.Fatalf("re-coded output is %d bytes against %d, or lost DCTDecode", len(recoded), len(plain))
+	}
+	if !bytes.Equal(recoded, again) {
+		t.Fatal("two runs of the same write differ")
+	}
+
+	before, err := openRecompressSource(t, data).DecodeImage(ctx, 1, "Im0")
+	if err != nil {
+		t.Fatalf("DecodeImage on the source: %v", err)
+	}
+	after, err := openRecompressSource(t, recoded).DecodeImage(ctx, 1, "Im0")
+	if err != nil {
+		t.Fatalf("DecodeImage on the output: %v", err)
+	}
+	if !slices.Equal(levels(before), levels(after)) {
+		t.Fatal("re-coding changed the image's pixels")
 	}
 }

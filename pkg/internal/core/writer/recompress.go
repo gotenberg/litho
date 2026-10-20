@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -46,12 +47,21 @@ type RecompressStats struct {
 // how they were compressed. The candidates are FlateDecode without a
 // predictor and with a PNG predictor (ISO 32000-1, 7.4.4.4): the smaller at
 // zlib's default level is compressed again at its best level, and kept if the
-// result is smaller than the stream it replaces. DCTDecode, JPXDecode, JBIG2Decode and
-// CCITTFaxDecode images are left alone: each is a format of its own, and a
-// Flate re-encoding would replace it with the decoded samples, a different
-// trade rather than a lossless improvement of the same one.
+// result is smaller than the stream it replaces.
 //
-// Only /Filter, /DecodeParms and the data change. /Decode, /SMask, /Mask,
+// An image whose only filter is DCTDecode keeps it: its JPEG data is re-coded
+// with Huffman tables built from its own statistics (ITU-T T.81, Annex K.2),
+// which codes the same quantized coefficients in fewer bytes, so every
+// decoder reconstructs the same samples ([dct.OptimizeHuffman]). Only
+// sequential Huffman-coded JPEG qualifies; progressive data, and data that
+// does not decode exactly to its markers, is left as it is. JPXDecode,
+// JBIG2Decode and CCITTFaxDecode images, and JPEG data under another filter,
+// are left alone: each is a format of its own, and a Flate re-encoding would
+// replace it with the decoded samples, a different trade rather than a
+// lossless improvement of the same one.
+//
+// For the general-purpose filters only /Filter, /DecodeParms and the data
+// change, and for a JPEG only the data. /Decode, /SMask, /Mask,
 // /ColorSpace, /BitsPerComponent, /Width, /Height and /DL keep their values,
 // and every re-encoding is decoded again and compared with the original
 // samples before it replaces them, so a stream whose samples would differ is
@@ -70,8 +80,8 @@ type RecompressStats struct {
 // [limits.Limits.MaxObjStmCacheBytes] does. Past it, an image's re-encoding is
 // redone from its source when the stream is serialized, so beyond that budget
 // the pass holds one image's samples at a time, as the resource-streaming rule
-// asks. Images are visited in object-number order and zlib output depends on
-// its input alone, so the result does too.
+// asks. Images are visited in object-number order, and zlib output and a
+// JPEG's re-coding depend on their input alone, so the result does too.
 //
 // The caller must not run this on an encrypted document: encryption has
 // already replaced every stream's data with ciphertext by the time a rewrite
@@ -159,6 +169,10 @@ type recompressionPlan struct {
 	encoded []byte
 	saved   int64
 	layout  *predictorLayout
+	// jpeg marks a DCTDecode image whose JPEG data was re-coded with
+	// optimized Huffman tables (see [planJPEG]) rather than compressed with
+	// FlateDecode.
+	jpeg bool
 }
 
 // predictorLayout is the sample layout a PNG predictor is applied under.
@@ -180,7 +194,11 @@ func planRecompression(
 		return recompressionPlan{}, false, nil
 	}
 	source, ok := DirectFilterKeys(pending, s.Dict)
-	if !ok || !chainRecompressible(source["Filter"], dec) {
+	if !ok {
+		return recompressionPlan{}, false, nil
+	}
+	jpeg := chainIsDCT(source["Filter"], dec)
+	if !jpeg && !chainRecompressible(source["Filter"], dec) {
 		return recompressionPlan{}, false, nil
 	}
 
@@ -188,6 +206,9 @@ func planRecompression(
 	height, okH := pendingInt(pending, s.Dict["Height"])
 	if !okW || !okH || width < 1 || height < 1 || width > lim.MaxImagePixels/height {
 		return recompressionPlan{}, false, nil
+	}
+	if jpeg {
+		return planJPEG(ctx, s, source, dec)
 	}
 
 	decoded, ok, err := DecodeWhole(ctx, dec, ast.NewLazyStream(source, s.Bytes))
@@ -249,6 +270,59 @@ func planRecompression(
 	return best, true, nil
 }
 
+// planJPEG re-codes the JPEG data of a DCTDecode image with Huffman tables
+// optimized for it ([dct.OptimizeHuffman]), and returns the plan when the
+// stream serializes smaller. source is the image's dictionary with its filter
+// keys made direct. The dictionary keeps every entry, /DecodeParms and its
+// /ColorTransform included: only the entropy coding changes, and the
+// quantized coefficients it codes do not (ISO 32000-1, 7.4.8; ITU-T T.81,
+// Annex K.2). The
+// re-coding is decoded again and compared with the source's samples before it
+// replaces them, as every other re-encoding is.
+func planJPEG(ctx context.Context, s ast.PdfStream, source ast.PdfDict, dec *filter.Decoder) (recompressionPlan, bool, error) {
+	raw, err := s.Bytes(ctx)
+	if err != nil {
+		return recompressionPlan{}, false, ctx.Err()
+	}
+	encoded, ok, err := dct.OptimizeHuffman(ctx, raw)
+	if err != nil || !ok {
+		return recompressionPlan{}, false, err
+	}
+	before, err := serializedSize(ctx, s)
+	if err != nil {
+		return recompressionPlan{}, false, ctx.Err()
+	}
+	after, err := serializedSize(ctx, ast.NewStream(s.Dict, encoded))
+	if err != nil {
+		return recompressionPlan{}, false, ctx.Err()
+	}
+	if after >= before {
+		return recompressionPlan{}, false, nil
+	}
+
+	decoded, ok, err := DecodeWhole(ctx, dec, ast.NewStream(source, raw))
+	if err != nil || !ok {
+		return recompressionPlan{}, false, err
+	}
+	again, ok, err := DecodeWhole(ctx, dec, ast.NewStream(source, encoded))
+	if err != nil || !ok || !bytes.Equal(again, decoded) {
+		return recompressionPlan{}, false, err
+	}
+	return recompressionPlan{source: source, dict: s.Dict, encoded: encoded, saved: before - after, jpeg: true}, true, nil
+}
+
+// chainIsDCT reports whether a /Filter value, already direct, is DCTDecode
+// alone, as a name or a one-element array, and no plugin of dec claims it.
+// A chain that wraps the JPEG data in another filter is left to
+// [chainRecompressible], which declines it.
+func chainIsDCT(f ast.PdfObject, dec *filter.Decoder) bool {
+	name, ok := f.(ast.PdfName)
+	if arr, isArr := f.(ast.PdfArray); isArr && len(arr) == 1 {
+		name, ok = arr[0].(ast.PdfName)
+	}
+	return ok && (name == "DCTDecode" || name == "DCT") && !dec.Handles(name)
+}
+
 // reencoder returns a loader that redoes the plan's re-encoding from the
 // image's source bytes, for an image whose re-encoding [RecompressImages] did
 // not keep in memory. The result must have the length the plan measured,
@@ -259,6 +333,22 @@ func (p recompressionPlan) reencoder(
 	dec *filter.Decoder,
 ) func(context.Context) ([]byte, error) {
 	source, dict, layout, want := p.source, p.dict, p.layout, len(p.encoded)
+	if p.jpeg {
+		return func(ctx context.Context) ([]byte, error) {
+			data, err := raw(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("reading a recompressed image's source: %w", err)
+			}
+			encoded, ok, err := dct.OptimizeHuffman(ctx, data)
+			if err != nil {
+				return nil, fmt.Errorf("re-coding a recompressed image's source: %w", err)
+			}
+			if !ok || len(encoded) != want {
+				return nil, fmt.Errorf("%w: %d bytes where %d were measured", ErrRecompressionDiverged, len(encoded), want)
+			}
+			return encoded, nil
+		}
+	}
 	return func(ctx context.Context) ([]byte, error) {
 		decoded, ok, err := DecodeWhole(ctx, dec, ast.NewLazyStream(source, raw))
 		if err != nil {

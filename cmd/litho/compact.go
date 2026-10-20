@@ -45,8 +45,9 @@ func registerCompactFlags(fs *flag.FlagSet) compactionFlags {
 	return compactionFlags{
 		compact: registerCompactFlag(fs),
 		recompressImages: fs.Bool("recompress-images", false,
-			"Recompress Flate, LZW, RunLength and uncompressed images losslessly, keeping each "+
-				"recompression only when it is smaller, when the command rewrites the whole file. "+
+			"Recompress Flate, LZW, RunLength and uncompressed images losslessly, and re-code "+
+				"sequential JPEG images with fitted Huffman tables, keeping each recompression only "+
+				"when it is smaller, when the command rewrites the whole file. "+
 				"Slower than --compact, and independent of it"),
 		subsetFonts: fs.Bool("subset-fonts", false,
 			"Subset the embedded TrueType, CFF and Type 1 fonts to the glyphs the document shows, "+
@@ -229,8 +230,9 @@ func warnRecompressSkipped(stderr io.Writer, recompressImages, encrypting bool) 
 // compactWriteOptions returns the write options -compact, -recompress-images
 // and -subset-fonts select, or none when none was passed.
 //
-// No PDF/A profile forbids image recompression: it writes FlateDecode, which
-// ISO 19005 permits at every part, and needs no PDF 1.5 construct. Nor does
+// No PDF/A profile forbids image recompression: it writes FlateDecode, or
+// keeps a JPEG's DCTDecode, both of which ISO 19005 permits at every part,
+// and needs no PDF 1.5 construct. Nor does
 // any forbid font subsetting, which keeps every glyph a document shows and
 // every glyph ID, so the /CIDSet and /CharSet ISO 19005 asks of a font stay
 // right. A command that targets a profile calls [profileCompactWriteOptions]

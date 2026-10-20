@@ -281,18 +281,22 @@ func WithDedup() WriteOption {
 }
 
 // WithImageRecompression re-encodes image XObjects losslessly in the output,
-// with FlateDecode at its best compression and a PNG predictor where that
-// helps (ISO 32000-1, 7.4.4.4), keeping each re-encoding only when it is
-// smaller. Every image's samples decode exactly as before: only /Filter,
-// /DecodeParms and the data change, and each re-encoding is decoded again and
+// keeping each re-encoding only when it is smaller. Every image's samples
+// decode exactly as before, and each re-encoding is decoded again and
 // compared with the original samples before it is written.
 //
-// Only images stored without compression or under FlateDecode, LZWDecode,
-// RunLengthDecode, ASCIIHexDecode or ASCII85Decode qualify. JPEG, JPEG 2000,
-// JBIG2 and CCITT images are left alone, and nothing is downsampled or
-// recompressed lossily. An image is also left alone when its samples exceed
-// the image budget of [WithLimits], its data decodes only by salvage, or a
-// filter plugin ([WithFilterPlugin]) claims one of its filters.
+// An image stored without compression or under FlateDecode, LZWDecode,
+// RunLengthDecode, ASCIIHexDecode or ASCII85Decode is re-encoded with
+// FlateDecode at its best compression and a PNG predictor where that helps
+// (ISO 32000-1, 7.4.4.4): only /Filter, /DecodeParms and the data change. A
+// JPEG image (DCTDecode alone) keeps its filter and its dictionary: its data
+// is re-coded with Huffman tables fitted to its own statistics (ITU-T T.81,
+// Annex K.2), which codes the same quantized coefficients in fewer bytes.
+// Only sequential JPEG qualifies; progressive JPEG, JPEG 2000, JBIG2 and
+// CCITT images are left alone, and nothing is downsampled or recompressed
+// lossily. An image is also left alone when its samples exceed the image
+// budget of [WithLimits], its data decodes only by salvage, or a filter
+// plugin ([WithFilterPlugin]) claims one of its filters.
 //
 // Like [WithObjectStreams] this applies to the full-rewrite path only, and an
 // encrypted output is never recompressed: encryption has replaced every
@@ -309,6 +313,10 @@ func WithDedup() WriteOption {
 //     samples; govdocs saves 2.46%, pdfjs 1.90% and pdfcpu 6.46% of the
 //     rewritten bytes.
 //   - pdfcpu: writing all 51 files takes 17s with it and 1s without.
+//   - All corpora: re-coding JPEG data raises the saving to 4.33% on govdocs,
+//     3.05% on pdfjs and 7.31% on pdfcpu (19.3 MB more over 5,713 JPEGs), no
+//     output grows and none fails to write, and writing govdocs takes 178s
+//     against 123s without it.
 func WithImageRecompression() WriteOption {
 	return func(o *writeOpts) {
 		o.recompressImages = true
