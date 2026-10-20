@@ -29,6 +29,10 @@ type piece struct {
 	// tangent orients the cap of a piece that is a single point; the zero
 	// vector stands for the x axis.
 	tangent geom.Point
+	// degenerate marks a whole subpath that is a single point, as opposed to
+	// a zero-length dash: ISO 32000-1, 8.5.3.2 paints the former with round
+	// caps only.
+	degenerate bool
 }
 
 func (pc *piece) add(p geom.Point, smooth bool) {
@@ -41,7 +45,7 @@ func (pc *piece) add(p geom.Point, smooth bool) {
 // both points were, since a corner that falls on a curve point stays a
 // corner.
 func (pc piece) dedupe() piece {
-	out := piece{closed: pc.closed, tangent: pc.tangent}
+	out := piece{closed: pc.closed, tangent: pc.tangent, degenerate: pc.degenerate}
 	for i, p := range pc.pts {
 		if n := len(out.pts); n > 0 && out.pts[n-1] == p {
 			out.smooth[n-1] = out.smooth[n-1] && pc.smooth[i]
@@ -64,10 +68,11 @@ func (pc piece) transform(m geom.Matrix) piece {
 		t = geom.Point{X: 1}
 	}
 	out := piece{
-		pts:     make([]geom.Point, len(pc.pts)),
-		smooth:  append([]bool(nil), pc.smooth...),
-		closed:  pc.closed,
-		tangent: m.ApplyVector(t),
+		pts:        make([]geom.Point, len(pc.pts)),
+		smooth:     append([]bool(nil), pc.smooth...),
+		closed:     pc.closed,
+		tangent:    m.ApplyVector(t),
+		degenerate: pc.degenerate,
 	}
 	for i, p := range pc.pts {
 		out.pts[i] = m.Apply(p)
@@ -91,7 +96,9 @@ func flatten(p geom.Path, tol float64) ([]piece, error) {
 	)
 	flush := func() {
 		if started && drawn {
-			pieces = append(pieces, cur.dedupe())
+			pc := cur.dedupe()
+			pc.degenerate = len(pc.pts) == 1
+			pieces = append(pieces, pc)
 		}
 		cur, drawn, started = piece{}, false, false
 	}
@@ -125,9 +132,10 @@ func flatten(p geom.Path, tol float64) ([]piece, error) {
 			hasCurrent = true
 		case geom.LineTo:
 			if !hasCurrent {
-				// A segment with no current point is an error in the content
-				// stream (8.5.2.1: a path begins with m or re); poppler
-				// ignores the operator, and so does this.
+				// An l or c with no current point is an error in the content
+				// stream: ISO 32000-1, 8.5.2.1 begins every path with m or re.
+				// As a lenient reader, litho ignores the segment rather than
+				// rejecting the whole path.
 				break
 			}
 			if !started {

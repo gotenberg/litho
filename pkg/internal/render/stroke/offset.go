@@ -70,6 +70,14 @@ type stroker struct {
 func (s *stroker) piece(pc piece) {
 	switch {
 	case len(pc.pts) == 0:
+	case len(pc.pts) == 1 && pc.degenerate:
+		// Per ISO 32000-1, 8.5.3.2, S paints a degenerate subpath (a
+		// single-point closed path, or two or more points at the same
+		// coordinates) only when round caps are in force, as a filled
+		// circle. Square and butt caps paint nothing.
+		if s.cap == RoundCap {
+			s.dot(pc.pts[0], pc.tangent)
+		}
 	case len(pc.pts) == 1:
 		s.dot(pc.pts[0], pc.tangent)
 	case pc.closed:
@@ -80,16 +88,14 @@ func (s *stroker) piece(pc piece) {
 	}
 }
 
-// dot paints a single point: a circle of the line width with round caps, a
-// square of side the line width with square caps, aligned on the tangent,
-// and nothing with butt caps. ISO 32000-1, 8.5.3.2 paints a degenerate
-// subpath with round caps only. The square is a deliberate extension of that
-// clause: it reads the point as a zero-length segment whose projecting caps
-// extend half the width each way, the reading a zero-length dash needs
-// anyway (8.4.3.6 places a cap at each end of every dash).
-//
-// TODO: confirm the square against the pinned poppler once an image that
-// ships pdftoppm is provisioned.
+// dot paints the caps of a single point: a circle of the line width with
+// round caps, a square of side the line width with square caps, and nothing
+// with butt caps. A degenerate subpath reaches it with round caps only (see
+// piece). For a zero-length dash, ISO 32000-1, 8.4.3.6 treats the ends of
+// each dash with the current line cap style; a zero-length dash has both
+// ends at one point, so its two caps make the circle or the square. The
+// clause does not orient the square: it is aligned on the path's tangent at
+// the dash, the direction both caps project along.
 func (s *stroker) dot(p, tangent geom.Point) {
 	d := unit(tangent)
 	n := left(d)

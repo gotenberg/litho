@@ -79,9 +79,11 @@ type Style struct {
 // not positive and finite selects [DefaultTolerance].
 //
 // A subpath of a single point, closed or made of coincident points, paints a
-// dot with round or square caps and nothing with butt caps (8.5.3.2); a lone
-// MoveTo paints nothing. Open subpaths get caps at both ends, closed ones a
-// join at their start. Each subpath restarts the dash pattern (8.4.3.6).
+// filled circle with round caps and nothing otherwise (8.5.3.2); a lone
+// MoveTo paints nothing. A zero-length dash paints its caps: a circle with
+// round caps, a square along the path with square caps (8.4.3.6). Open
+// subpaths get caps at both ends, closed ones a join at their start. Each
+// subpath restarts the dash pattern (8.4.3.6).
 //
 // Outline returns [ErrInvalidStyle] for a negative or non-finite width,
 // [ErrNonFinite] for a non-finite point or matrix entry, and [ErrTooComplex]

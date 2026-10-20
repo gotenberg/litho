@@ -322,7 +322,9 @@ func TestZeroDashOrientation(t *testing.T) {
 	}
 }
 
-// TestDegenerateSubpaths checks the dots of 8.5.3.2.
+// TestDegenerateSubpaths checks 8.5.3.2: a degenerate subpath paints a
+// filled circle with round caps and nothing with square or butt caps, unlike
+// a zero-length dash (see TestDashes).
 func TestDegenerateSubpaths(t *testing.T) {
 	t.Parallel()
 	var closedPoint geom.Path
@@ -338,10 +340,11 @@ func TestDegenerateSubpaths(t *testing.T) {
 		want float64
 	}{
 		{"closed round", closedPoint, RoundCap, math.Pi},
-		{"closed square", closedPoint, SquareCap, 4},
+		{"closed square", closedPoint, SquareCap, 0},
 		{"closed butt", closedPoint, ButtCap, 0},
 		{"coincident round", coincident, RoundCap, math.Pi},
-		{"coincident square", coincident, SquareCap, 4},
+		{"coincident square", coincident, SquareCap, 0},
+		{"coincident butt", coincident, ButtCap, 0},
 		{"lone moveto", lone, RoundCap, 0},
 	} {
 		got := nonzeroArea(t, outline(t, tc.path, Style{Width: 2, Cap: tc.cap}, geom.Identity))
@@ -473,7 +476,7 @@ func TestDegenerateInputs(t *testing.T) {
 	if out, err := Outline(geom.Path{}, Style{Width: 1}, geom.Identity, 0); err != nil || !out.Empty() {
 		t.Errorf("empty path: %v, %v", out, err)
 	}
-	// A segment with no current point is ignored, like poppler does.
+	// A segment with no current point is a content-stream error, ignored.
 	var p geom.Path
 	p.LineTo(pt(5, 5))
 	p.MoveTo(pt(0, 0))

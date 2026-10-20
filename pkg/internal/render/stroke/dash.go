@@ -87,7 +87,8 @@ func (dp dashPattern) apply(in []piece) ([]piece, error) {
 	for _, pc := range in {
 		if len(pc.pts) == 1 {
 			// A degenerate subpath has no length to lay the pattern along:
-			// it paints its dot when the pattern starts on.
+			// it paints (with round caps, 8.5.3.2) when the pattern starts
+			// on.
 			if idx, _ := dp.start(); idx%2 == 0 {
 				out = append(out, pc)
 			}
