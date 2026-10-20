@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/antchfx/xmlquery"
 	"github.com/antchfx/xpath"
@@ -388,7 +390,7 @@ func evalBooleanWithQuantifier(expr string, n *xmlquery.Node, cache *exprCache) 
 		return evalBoolean(expr, n, cache)
 	}
 	root := documentRoot(n)
-	bindings, err := selectNodes(root, path, cache)
+	bindings, err := selectBindings(root, path, cache)
 	if err != nil {
 		return false, fmt.Errorf("quantifier path: %w", err)
 	}
@@ -399,14 +401,14 @@ func evalBooleanWithQuantifier(expr string, n *xmlquery.Node, cache *exprCache) 
 		return isEvery, nil
 	}
 	for _, b := range bindings {
-		literal := xpathStringLiteral(b.InnerText())
-		substituted := substituteVar(body, varName, literal)
+		substituted := substituteBinding(body, varName, b)
 		// Evaluate against the document root, not the rule context:
 		// quantifier bodies overwhelmingly use absolute paths, and
 		// antchfx/xpath silently resolves "/foo" to an empty node-set
 		// when the context is not the document node. The bound
-		// variable has already been substituted to a string literal,
-		// so the body no longer references the rule context.
+		// variable has already been substituted to an absolute path or
+		// a string literal, so the body no longer references the rule
+		// context.
 		fired, err := evalBooleanWithQuantifier(substituted, root, cache)
 		if err != nil {
 			return false, err
@@ -419,6 +421,144 @@ func evalBooleanWithQuantifier(expr string, n *xmlquery.Node, cache *exprCache) 
 		}
 	}
 	return isEvery, nil
+}
+
+// quantifierBinding is one item a quantifier's range variable takes:
+// the absolute path that selects it, empty when the item is not an
+// element, and its string value as an XPath literal.
+type quantifierBinding struct {
+	path    string
+	literal string
+}
+
+// bindingOf reads one item of a quantifier's binding sequence. It
+// reads the navigator rather than its node: on an attribute,
+// xmlquery's Current() returns the owner element, whose string value
+// is not the attribute's.
+func bindingOf(nav *xmlquery.NodeNavigator) quantifierBinding {
+	b := quantifierBinding{literal: opaqueStringLiteral(nav.Value())}
+	if nav.NodeType() == xpath.ElementNode {
+		if p := positionalXPath(nav.Current()); p != "" {
+			b.path = "(" + p + ")"
+		}
+	}
+	return b
+}
+
+// substituteBinding replaces every "$name" reference in body with the
+// item b. XPath 2.0, 3.9 binds the range variable to each item of the
+// sequence, so an element keeps its identity: where the reference
+// starts a path ("$line/ram:X") outside any predicate, it becomes the
+// absolute path that selects the item, and the step reaches its
+// children. Everywhere else the item's string value stands in, which
+// is what a comparison, an arithmetic operand or a string function
+// atomizes a node to (XPath 2.0, 2.4.2). A predicate keeps the literal
+// because antchfx/xpath v1.3.6 resolves an absolute path inside a
+// predicate wrongly once a function or an operator takes it:
+// "count(//a[b - number(/r[1]) < 1])" counts as if /r[1] were empty.
+// A "$v/step" left inside a predicate fails to compile and skips the
+// rule, as it did before.
+func substituteBinding(body, name string, b quantifierBinding) string {
+	target := "$" + name
+	if !strings.Contains(body, target) {
+		return body
+	}
+	var out strings.Builder
+	out.Grow(len(body))
+	depth := 0
+	var quote byte
+	for i := 0; i < len(body); {
+		c := body[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case c == '[':
+			depth++
+		case c == ']':
+			depth--
+		case strings.HasPrefix(body[i:], target):
+			tail := i + len(target)
+			if tail < len(body) && isXPathNameChar(body[tail]) {
+				break
+			}
+			rest := strings.TrimLeft(body[tail:], " \t\n\r")
+			if b.path != "" && depth == 0 && strings.HasPrefix(rest, "/") {
+				out.WriteString(b.path)
+			} else {
+				out.WriteString(b.literal)
+			}
+			i = tail
+			continue
+		}
+		out.WriteByte(c)
+		i++
+	}
+	return out.String()
+}
+
+// opaqueStringLiteral renders s as an XPath expression whose value is
+// s and that no rewrite in rewriteXPath2 can match. The rewriter is
+// textual and does not skip string literals, so payload text spliced in
+// as one literal is open to it: "inv:*" turns into a namespace-wildcard
+// predicate that closes the literal early, and " eq " into "=". Every
+// rewrite pattern joins a name to punctuation or space, so splitting
+// the text into runs of letters and digits, with each other character a
+// literal of its own, under concat(), leaves nothing to match.
+func opaqueStringLiteral(s string) string {
+	var parts []string
+	start := 0
+	flush := func(end int) {
+		if end > start {
+			parts = append(parts, xpathStringLiteral(s[start:end]))
+		}
+	}
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			i += size
+			continue
+		}
+		flush(i)
+		parts = append(parts, xpathStringLiteral(s[i:i+size]))
+		i += size
+		start = i
+	}
+	flush(len(s))
+	switch len(parts) {
+	case 0:
+		return "''"
+	case 1:
+		return parts[0]
+	}
+	return "concat(" + strings.Join(parts, ",") + ")"
+}
+
+// selectBindings evaluates a quantifier's binding sequence against doc
+// and returns its items. Panic recovery mirrors [selectNodes].
+func selectBindings(doc *xmlquery.Node, expr string, cache *exprCache) (out []quantifierBinding, err error) {
+	compiled, err := cache.compile(expr)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("xpath evaluator panic on quantifier path: %v", r)
+			out = nil
+		}
+	}()
+	iter := compiled.Select(xmlquery.CreateXPathNavigator(doc))
+	for iter.MoveNext() {
+		nav, ok := iter.Current().(*xmlquery.NodeNavigator)
+		if !ok {
+			continue
+		}
+		out = append(out, bindingOf(nav))
+	}
+	return out, nil
 }
 
 // hasLeadingForBinding reports whether expr begins with an XPath 2.0
@@ -677,6 +817,12 @@ func prefixRelativePaths(expr, prefix string) string {
 			pathStart = true
 			continue
 		}
+		if kwLen := matchClauseKeyword(expr, i); kwLen > 0 {
+			b.WriteString(expr[i : i+kwLen])
+			i += kwLen
+			pathStart = true
+			continue
+		}
 		if !pathStart {
 			b.WriteByte(c)
 			i++
@@ -825,6 +971,36 @@ func matchInfixOperator(expr string, i int) (string, int) {
 		return kw, len(kw)
 	}
 	return "", 0
+}
+
+// matchClauseKeyword returns the length of an XPath 2.0 clause keyword
+// starting at i, or 0. "in" (3.9 quantified and 3.7 for expressions),
+// "satisfies", "return", "then" and "else" (3.8 conditionals) each
+// open an ExprSingle, whose relative paths resolve against the
+// context item, the rule context here. The keyword must stand alone:
+// whitespace, a closing bracket or a literal before it, and no name
+// character after it, so a step named "in" ("ram:in", "/in") or a
+// variable "$in" is not read as one.
+func matchClauseKeyword(expr string, i int) int {
+	if i == 0 {
+		return 0
+	}
+	switch expr[i-1] {
+	case ' ', '\t', '\n', '\r', ')', ']', '\'', '"':
+	default:
+		return 0
+	}
+	for _, kw := range []string{"in", "satisfies", "return", "then", "else"} {
+		if !strings.HasPrefix(expr[i:], kw) {
+			continue
+		}
+		end := i + len(kw)
+		if end < len(expr) && (isXPathNameChar(expr[end]) || expr[end] == ':' || expr[end] == '(') {
+			continue
+		}
+		return len(kw)
+	}
+	return 0
 }
 
 // scanQName walks one qualified XPath name (optional prefix + local

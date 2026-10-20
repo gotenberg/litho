@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/antchfx/xmlquery"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -407,6 +408,64 @@ func TestValidate_BooleanConstructorWithoutSpaces(t *testing.T) {
 	fired, skipped := runOne(t, sch, payload)
 	if len(fired) != 0 || len(skipped) != 0 {
 		t.Errorf("fired %v skipped %v, want neither", fired, skipped)
+	}
+}
+
+const quantifierSch = `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="inv" uri="urn:example:invoice"/>
+  <sch:pattern id="P">
+    <sch:rule context="//inv:Invoice">
+      <sch:assert id="EVERY" test="every $line in inv:Line satisfies $line/inv:Amount &gt; 0">every line has a positive amount</sch:assert>
+      <sch:assert id="SOME" test="some $c in inv:Code satisfies $c = 'X'">a code is X</sch:assert>
+      <sch:assert id="ATTR" test="every $a in inv:Line/@kind satisfies $a = 'goods'">every line is goods</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+
+func TestValidate_QuantifierBindsNode(t *testing.T) {
+	// XPath 2.0, 3.9: the binding sequence is evaluated in the rule's
+	// context, so "inv:Line" names the context's children, and the
+	// range variable binds each item, so a node keeps its identity and
+	// "$line/inv:Amount" steps into it. The relative sequence used to
+	// resolve from the document root to nothing, which made "every"
+	// vacuously true and "some" false; and the bound string value made
+	// "$line/inv:Amount" a path off a literal. An attribute binds its
+	// own value, not its owner element's text.
+	good := `<inv:Invoice xmlns:inv="urn:example:invoice">` +
+		`<inv:Line kind="goods"><inv:Amount>5</inv:Amount></inv:Line>` +
+		`<inv:Line kind="goods"><inv:Amount>7</inv:Amount></inv:Line>` +
+		`<inv:Code>inv:*</inv:Code><inv:Code>X</inv:Code></inv:Invoice>`
+	fired, skipped := runOne(t, quantifierSch, good)
+	if len(fired) != 0 || len(skipped) != 0 {
+		t.Errorf("good: fired %v skipped %v, want neither", fired, skipped)
+	}
+	bad := `<inv:Invoice xmlns:inv="urn:example:invoice">` +
+		`<inv:Line kind="goods"><inv:Amount>5</inv:Amount></inv:Line>` +
+		`<inv:Line kind="services"><inv:Amount>0</inv:Amount></inv:Line>` +
+		`<inv:Code>inv:*</inv:Code></inv:Invoice>`
+	fired, skipped = runOne(t, quantifierSch, bad)
+	if strings.Join(fired, ",") != "EVERY,SOME,ATTR" || len(skipped) != 0 {
+		t.Errorf("bad: fired %v skipped %v, want EVERY,SOME,ATTR", fired, skipped)
+	}
+}
+
+func TestOpaqueStringLiteral(t *testing.T) {
+	// A bound value is payload text. Spliced in as one literal, the
+	// textual rewriter turned "inv:*" into a namespace-wildcard
+	// predicate that closed the literal early, and " eq " into "=".
+	c := newExprCache(map[string]string{"inv": "urn:example:invoice"})
+	for _, s := range []string{"inv:*", "a eq b", "round(1)", `it's "q"`, "upper-case(x)", "", "plain"} {
+		expr := "string(" + opaqueStringLiteral(s) + ")"
+		compiled, err := c.compile(expr)
+		if err != nil {
+			t.Errorf("%q: compile %q: %v", s, expr, err)
+			continue
+		}
+		root := &xmlquery.Node{Type: xmlquery.DocumentNode}
+		if got := compiled.Evaluate(xmlquery.CreateXPathNavigator(root)); got != s {
+			t.Errorf("%q: %q evaluates to %#v", s, expr, got)
+		}
 	}
 }
 

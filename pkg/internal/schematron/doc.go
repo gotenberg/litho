@@ -23,8 +23,11 @@
 //     xs:integer / xs:double / xs:string / xs:date / xs:dateTime
 //     (cast → number or string), exists (→ boolean), abs (algebraic
 //     identity), count(distinct-values(X)) = 1 (uniqueness idiom),
-//     "every $V in PATH satisfies EXPR" (→ not(PATH[not(EXPR')])),
-//     "some $V in PATH satisfies EXPR" (→ boolean(PATH[EXPR'])),
+//     a top-level "every|some $V in PATH satisfies EXPR" (PATH is
+//     evaluated in the rule context and EXPR once per item in Go,
+//     with $V an element's path where it starts a step outside a
+//     predicate and its string value elsewhere), the same over a
+//     literal sequence anywhere (→ disjunction / conjunction),
 //     "EXPR = (a, b, c)" and "EXPR != (a, b, c)" (→ disjunction /
 //     conjunction of per-item comparisons), bare sequence
 //     "(X, Y, Z)" in boolean context (→ disjunction of boolean
