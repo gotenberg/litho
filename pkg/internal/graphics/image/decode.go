@@ -797,6 +797,35 @@ func decodeDeviceN(
 //   - govdocs thread_300_300659, thread_400_400932: reading the tints as RGB
 //     misread every entry of their five-colorant tables.
 func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, colorants int, table []byte, intent icc.Intent, cc colorContext) ([]byte, error) {
+	tc, err := newTintConverter(ctx, doc, cs, colorants, intent, cc)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]byte, 0, len(table)/colorants*3)
+	for i := 0; i+colorants <= len(table); i += colorants {
+		rgb, err := tc.rgb(table[i : i+colorants])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rgb.R, rgb.G, rgb.B)
+	}
+	return out, nil
+}
+
+// tintConverter converts tints of a Separation or DeviceN space to sRGB
+// through its tint transform and alternate space (ISO 32000-1, 8.6.6.4 and
+// 8.6.6.5). It is not safe for concurrent use: conv remembers colours.
+type tintConverter struct {
+	tint      *function.Function
+	alternate string
+	conv      *converter
+	cal       *calSpace
+	in        []float64
+}
+
+// newTintConverter reads the tint transform and alternate space of the
+// Separation or DeviceN array cs, of colorants components.
+func newTintConverter(ctx context.Context, doc *document.Document, cs ast.PdfArray, colorants int, intent icc.Intent, cc colorContext) (*tintConverter, error) {
 	if len(cs) < 4 {
 		return nil, fmt.Errorf("tinted colour space has %d entries, want [family names alternate tint]", len(cs))
 	}
@@ -813,22 +842,26 @@ func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, col
 		return nil, fmt.Errorf("tint transform maps %d inputs to %d values for %d colorants over %q",
 			tint.Inputs(), tint.Outputs(), colorants, alternate)
 	}
-	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, intent, cc))
-	cal := alternateCal(ctx, doc, cs[2], altComps)
-	out := make([]byte, 0, len(table)/colorants*3)
-	in := make([]float64, colorants)
-	for i := 0; i+colorants <= len(table); i += colorants {
-		for c := range colorants {
-			in[c] = float64(table[i+c]) / 255
-		}
-		v, err := tint.Eval(in)
-		if err != nil {
-			return nil, fmt.Errorf("evaluating tint transform: %w", err)
-		}
-		rgb := alternateToRGB(alternate, conv, cal, v)
-		out = append(out, rgb.R, rgb.G, rgb.B)
+	return &tintConverter{
+		tint:      tint,
+		alternate: alternate,
+		conv:      newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, intent, cc)),
+		cal:       alternateCal(ctx, doc, cs[2], altComps),
+		in:        make([]float64, colorants),
+	}, nil
+}
+
+// rgb converts one tuple of tints, a byte per colorant as an 8-bit sample
+// holds it, to sRGB.
+func (tc *tintConverter) rgb(tints []byte) (color.RGBA, error) {
+	for c := range tc.in {
+		tc.in[c] = float64(tints[c]) / 255
 	}
-	return out, nil
+	v, err := tc.tint.Eval(tc.in)
+	if err != nil {
+		return color.RGBA{}, fmt.Errorf("evaluating tint transform: %w", err)
+	}
+	return alternateToRGB(tc.alternate, tc.conv, tc.cal, v), nil
 }
 
 // alternateCal returns the CalGray or CalRGB space the alternate obj of a
@@ -940,6 +973,9 @@ type palette struct {
 	// lab is set only when base is "Lab". Its entries are not device values,
 	// so they cannot be written out as RGB the way every other base can.
 	lab labParams
+	// entries is hival + 1, the number of indices the space defines
+	// (ISO 32000-1, 8.6.6.3), whether or not the table holds them all.
+	entries int
 }
 
 // resolveIndexedPalette reports the palette of an [/Indexed base hival lookup]
@@ -1017,7 +1053,7 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 			doc.Logger.Debug("converting an indexed colour table of tints", slog.Any("err", err))
 			return palette{}, false
 		}
-		return palette{base: "DeviceRGB", comps: 3, lookup: rgb}, true
+		return palette{base: "DeviceRGB", comps: 3, lookup: rgb, entries: int(hival) + 1}, true
 	}
 	// An ICCBased or DeviceCMYK base holds entries in a profiled space, which
 	// are converted once here. A short table is padded in the base space
@@ -1029,7 +1065,7 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 			copy(padded, lookup)
 			lookup = padded
 		}
-		return palette{base: "DeviceRGB", comps: 3, lookup: conv.convertTable(lookup)}, true
+		return palette{base: "DeviceRGB", comps: 3, lookup: conv.convertTable(lookup), entries: int(hival) + 1}, true
 	}
 	// A CalRGB or CalGray base, which resolveColorSpace names DeviceRGB or
 	// DeviceGray, holds CIE-based entries: convert them once here, into a copy,
@@ -1037,7 +1073,7 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	if cal, ok := resolveCalSpace(ctx, doc, arr[1]); ok && comps == calComponents(cal) {
 		lookup = cal.convertTable(lookup)
 	}
-	return palette{base: base, comps: comps, lookup: lookup, lab: lab}, true
+	return palette{base: base, comps: comps, lookup: lookup, lab: lab, entries: int(hival) + 1}, true
 }
 
 // mustResolve resolves obj, returning it unchanged when resolution fails. The
@@ -1168,28 +1204,32 @@ func decodeIndexed(data []byte, width, height int, pal palette) (image.Image, er
 	idx := 0
 	for y := range height {
 		for x := range width {
-			e := pal.entry(data[idx])
+			img.SetRGBA(x, y, pal.rgb(data[idx]))
 			idx++
-			switch pal.base {
-			case "DeviceGray":
-				img.SetRGBA(x, y, color.RGBA{R: e[0], G: e[0], B: e[0], A: 255})
-			case "DeviceCMYK":
-				c, m, yy, k := float64(e[0])/255, float64(e[1])/255, float64(e[2])/255, float64(e[3])/255
-				img.SetRGBA(x, y, color.RGBA{
-					R: uint8((1 - c) * (1 - k) * 255),
-					G: uint8((1 - m) * (1 - k) * 255),
-					B: uint8((1 - yy) * (1 - k) * 255),
-					A: 255,
-				})
-			case "Lab":
-				r, g, b := labEntryToRGB(e, pal.lab)
-				img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
-			default:
-				img.SetRGBA(x, y, color.RGBA{R: e[0], G: e[1], B: e[2], A: 255})
-			}
 		}
 	}
 	return img, nil
+}
+
+// rgb returns the sRGB colour of palette index i.
+func (p palette) rgb(i byte) color.RGBA {
+	e := p.entry(i)
+	switch p.base {
+	case "DeviceGray":
+		return color.RGBA{R: e[0], G: e[0], B: e[0], A: 255}
+	case "DeviceCMYK":
+		c, m, yy, k := float64(e[0])/255, float64(e[1])/255, float64(e[2])/255, float64(e[3])/255
+		return color.RGBA{
+			R: uint8((1 - c) * (1 - k) * 255),
+			G: uint8((1 - m) * (1 - k) * 255),
+			B: uint8((1 - yy) * (1 - k) * 255),
+			A: 255,
+		}
+	case "Lab":
+		r, g, b := labEntryToRGB(e, p.lab)
+		return color.RGBA{R: r, G: g, B: b, A: 255}
+	}
+	return color.RGBA{R: e[0], G: e[1], B: e[2], A: 255}
 }
 
 // DecodeImage decodes a named Image XObject a page shows into a Go
