@@ -309,6 +309,12 @@ const mutationRedactReach = 1e6
 //     ErrRedactionRefused (content a form XObject draws, an inline image, a
 //     stroked path) and 9 with ErrRedactionIncomplete; the 2 encrypted
 //     fixtures refuse the signature.
+//   - litho formshare_ua1: 1 ruleset_changed cell under mutate-stamp, 7.20
+//     test 2 added twice at PDF/UA-1, and veraPDF 1.30.2 adds it too. Its
+//     pages share one /Contents stream drawing a marked form, which veraPDF
+//     parses once; the stamp gives each page a /Contents array of its own,
+//     so veraPDF reads the shared stream once per page and counts the form
+//     again. The stamp keeps the stream and the form shared.
 //   - litho imagereach_2b: no ruleset_changed cell. Its two pages share one
 //     content stream, and litho judges it under each page's resources (ISO
 //     32000-1, 7.8.3), so the stamp's /Contents arrays and the page move no
@@ -358,6 +364,8 @@ const mutationRedactReach = 1e6
 //   - litho refreach_ua1: 1 promise_broken PDF, the same shape: its only
 //     text is one Type 3 A at (1, 1), shown on two pages, which AutoTag
 //     reads as a running footer.
+//   - litho formreuse_ua1: 1 promise_broken PDF, the same shape: its only
+//     text is Type 3 A glyphs drawn at one spot on each page.
 //   - litho: [scanMarkedContent] finds marked content in 26 inputs, the 23
 //     already tagged that carry it and the 3 above, and in none of the 59
 //     AutoTag tags.
