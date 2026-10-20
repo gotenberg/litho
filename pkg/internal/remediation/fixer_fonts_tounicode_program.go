@@ -17,7 +17,10 @@ import (
 // ISO 32000-1, 9.6.6.4 takes a TrueType font's codes to glyphs through the
 // program's (3,0) cmap subtable, or through a (1,0) subtable that copies the
 // (3,1) one, and the program names each glyph: its post table, read through
-// the Adobe Glyph List (9.10.2), or its Unicode subtable. A Type 1 font's codes
+// the Adobe Glyph List (9.10.2), or its Unicode subtable. A genuine (1,0)
+// subtable declares its codes Mac OS Roman characters, and a code is mapped
+// where the program's post name or Unicode subtable names its glyph that
+// character. A Type 1 font's codes
 // select glyphs through its program's built-in encoding (9.6.6.1), a Type 1
 // (/FontFile) or a Type1C (/FontFile3) program alike, which names the glyph
 // each code selects, read through the same glyph lists.
@@ -65,6 +68,20 @@ import (
 //   - All corpora: the fonts left unmapped name a shown code with a name no
 //     glyph list carries (the "H11021" names of the Universal and
 //     MathematicalPi subsets), or a numeric one (AdvOpti's "C42").
+//   - govdocs thread_000_000763.pdf, litho ttcmap_2b.pdf and
+//     ttmaccopy_2b.pdf: symbolic TrueType fonts behind a genuine (1,0)
+//     subtable get a map. On veraPDF 1.30.2 their remediated outputs lose
+//     6.3.8 t1, 6.2.11.7.2 t1, 7.21.7 t1 or 8.4.5.8 t1 at the seven levels
+//     that state the rule, in both modes, and those of thread_000_000763 and
+//     ttmaccopy_2b pass at PDF/UA-2. litho agrees with veraPDF on every cell,
+//     no rule is gained, and litho's extracted text is unchanged.
+//   - All corpora: of the 232 symbolic TrueType font cells stating no
+//     /Encoding that remediation leaves unmapped at PDF/UA-1, 195 carry (1,0)
+//     and (3,0) subtables with neither post names nor a Unicode subtable, 30
+//     show a code their program names no character or a Private Use Area
+//     one, 6 have no (3,0) subtable and no named glyph or no (1,0) subtable
+//     at all, and pdfjs bug894572.pdf's TSCInaimathi contradicts its (1,0)
+//     subtable.
 func symbolicProgramToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[uint16]rune {
 	// An unreadable /Subtype names no font with a program to read, which is
 	// the answer.

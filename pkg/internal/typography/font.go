@@ -14,7 +14,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -108,7 +111,7 @@ type Font struct {
 	// ProgramGlyphRunes holds the characters the embedded program of a
 	// simple font that states no /Encoding gives its codes, and only those:
 	// a symbolic TrueType program through its cmap and glyph names
-	// ([applySymbolicTrueTypeGlyphs]), a Type 1 or Type1C program through the
+	// ([applySymbolicTrueTypeGlyphs], [recordMacRomanGlyphNames]), a Type 1 or Type1C program through the
 	// glyph names of its built-in encoding ([applyType1FontFileEncoding],
 	// [extractCFFEncoding]). It is nil for any other font. [Font.Encoding]
 	// also carries the default encoding's reading of every code the program
@@ -2988,7 +2991,9 @@ func trueTypeTakesStandardEncoding(ctx context.Context, doc *document.Document, 
 //
 // A symbolic font whose (1,0) subtable copies its (3,1) subtable keeps the
 // encoding it has: [macSubtableCopiesUnicode] says why that subtable is no
-// Mac OS Roman mapping, and [applySymbolicTrueTypeGlyphs] reads its codes.
+// Mac OS Roman mapping, and [applySymbolicTrueTypeGlyphs] reads its codes. A
+// symbolic font whose genuine (1,0) subtable is its route to its glyphs also
+// records the readings its glyph names confirm ([recordMacRomanGlyphNames]).
 //
 // # Corpus evidence
 //
@@ -3014,9 +3019,113 @@ func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, f
 			break
 		}
 	}
-	if hasMacRoman && (!symbolic || !macSubtableCopiesUnicode(ctx, doc, fontData)) {
-		font.Encoding = copyEncoding(encodings.MacRomanEncoding)
+	if !hasMacRoman || (symbolic && macSubtableCopiesUnicode(ctx, doc, fontData)) {
+		return
 	}
+	font.Encoding = copyEncoding(encodings.MacRomanEncoding)
+	if symbolic && !hasSymbolCmapSubtable(fontData) {
+		recordMacRomanGlyphNames(ctx, doc, fontData, font)
+	}
+}
+
+// recordMacRomanGlyphNames records in [Font.ProgramGlyphRunes] the Mac OS
+// Roman reading of each code a symbolic TrueType program's genuine (1,0)
+// subtable takes to a glyph the program itself names that character.
+//
+// ISO 32000-1, 9.6.6.4 takes a symbolic font's codes to glyphs through the
+// (1,0) subtable when the program has no (3,0) one, and that subtable
+// declares its codes Mac OS Roman characters (OpenType, 'cmap', platform 1
+// encoding 0). The program states a glyph's character twice more: its post
+// name, read through the Adobe Glyph List (9.10.2), and the code points its
+// Microsoft Unicode subtables map to it. A code is recorded when one of those
+// statements names the character Mac OS Roman reads, compared under Unicode
+// canonical equivalence (Unicode 16.0, 3.7): the program then confirms the
+// reading text extraction shows. A code whose glyph neither statement
+// characterises stays out, since only the subtable's declaration speaks for
+// it, and so does a code only one of them contradicts.
+//
+// When the post name and a Unicode subtable agree with each other on a
+// character Mac OS Roman does not read, the program describes its glyphs in
+// another encoding than the one it declares, and no code of the font is
+// recorded: text extraction keeps the Mac OS Roman reading as a guess, which
+// a persisted mapping must not write.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000763.pdf: four TimesNewRoman subsets flagged
+//     symbolic carry (1,0) and (3,1) subtables. Their glyph at code 0xB9 is
+//     named pi1, U+03D6, where Mac OS Roman reads U+03C0, and no Unicode
+//     subtable maps it; every other named code agrees, Ohm U+2126 under
+//     canonical equivalence with U+03A9.
+//   - pdfjs bug894572.pdf: TSCInaimathi names its glyphs as Windows Latin
+//     characters and maps them so in (3,1): code 0xE8 selects a glyph named
+//     egrave and mapped to U+00E8, where Mac OS Roman reads U+00CB, so no code
+//     is recorded.
+func recordMacRomanGlyphNames(ctx context.Context, doc *document.Document, fontData []byte, font *Font) {
+	mac, err := truetype.SubtableCodeToGID(ctx, fontData, truetype.CmapSubtable{PlatformID: 1, EncodingID: 0})
+	if err != nil {
+		doc.Logger.Debug("reading the (1,0) cmap subtable for its glyph names", slog.Any("err", err))
+		return
+	}
+	names := ExtractGlyphNames(ctx, fontData)
+	unicodeOf := gidUnicodeStatements(ctx, doc, fontData)
+	agreed := make(map[byte]rune)
+	for code, gid := range mac {
+		if code > 0xFF || gid == 0 {
+			continue
+		}
+		macRune, defined := encodings.MacRomanEncoding[byte(code)]
+		if !defined {
+			continue
+		}
+		named, hasName := resolveGlyphRune(names[gid], false, false)
+		if _, numeric := encodings.NumericGlyphName(names[gid]); numeric {
+			hasName = false
+		}
+		mapped := unicodeOf[gid]
+		confirms := func(r rune) bool { return canonicallyEqual(r, macRune) }
+		switch {
+		case hasName && confirms(named), slices.ContainsFunc(mapped, confirms):
+			agreed[byte(code)] = macRune
+		case hasName && slices.Contains(mapped, named):
+			return
+		}
+	}
+	if len(agreed) == 0 {
+		return
+	}
+	if font.ProgramGlyphRunes == nil {
+		font.ProgramGlyphRunes = make(map[byte]rune, len(agreed))
+	}
+	maps.Copy(font.ProgramGlyphRunes, agreed)
+}
+
+// gidUnicodeStatements returns, by glyph, every code point a TrueType
+// program's Microsoft Unicode subtables, (3,1) and (3,10), map to it.
+func gidUnicodeStatements(ctx context.Context, doc *document.Document, fontData []byte) map[uint16][]rune {
+	out := make(map[uint16][]rune)
+	for _, st := range []truetype.CmapSubtable{{PlatformID: 3, EncodingID: 1}, {PlatformID: 3, EncodingID: 10}} {
+		codeToGID, err := truetype.SubtableCodeToGID(ctx, fontData, st)
+		if err != nil {
+			if !errors.Is(err, truetype.ErrTableNotFound) {
+				doc.Logger.Debug("reading a Unicode cmap subtable", slog.Any("err", err))
+			}
+			continue
+		}
+		for u, gid := range codeToGID {
+			if u <= unicode.MaxRune {
+				out[gid] = append(out[gid], rune(u)) //nolint:gosec // u <= unicode.MaxRune above.
+			}
+		}
+	}
+	return out
+}
+
+// canonicallyEqual reports whether a and b are canonically equivalent
+// (Unicode 16.0, 3.7), the same character to any reader: U+2126 OHM SIGN and
+// U+03A9 GREEK CAPITAL LETTER OMEGA, for one.
+func canonicallyEqual(a, b rune) bool {
+	return a == b || norm.NFC.String(string(a)) == norm.NFC.String(string(b))
 }
 
 // applySymbolicTrueTypeGlyphs reads each code of an embedded symbolic
