@@ -28,6 +28,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrFieldValueNotAddressable":      "ScrubFormFieldValues",
 	"ErrOutlineItemNotAddressable":     "ScrubOutlineTitles",
 	"ErrScanTokenEmpty":                "ScanOutputForTokens",
+	"ErrNestedContainerUnread":         "ScanOutputForTokens, which reports the carrying stream unreadable",
 	"ErrSanitizationIncomplete":        "SanitizeDocument",
 	"ErrPagePruneIncomplete":           "DeletePages",
 	"ErrInvalidPageNumber":             "RotatePages, Split, DeletePages, InsertPages and the three stamps; pdf.Writer.Redact checks its pages itself",

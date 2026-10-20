@@ -362,6 +362,13 @@ var ErrScanTokenEmpty = errors.New("scan token is empty")
 // starting over.
 var ErrSanitizationIncomplete = errors.New("document still holds removed text after sanitization")
 
+// ErrNestedContainerUnread reports a container inside a stream, an attached
+// PDF or archive, that the output scan could not read through: encrypted,
+// past the scan's budget or nesting bound, or with an object the scan of the
+// nested PDF could not read. The scan reports the carrying stream unreadable,
+// which fails a redaction closed.
+var ErrNestedContainerUnread = errors.New("nested container could not be read through")
+
 // ErrSpansOverlap reports two byte spans that cover some of the same bytes.
 //
 // Overlapping spans stop having a single meaning once one of them is removed,

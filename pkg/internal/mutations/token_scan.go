@@ -1,7 +1,6 @@
 package mutations
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -229,6 +228,10 @@ type scanWalk struct {
 	plain    map[int]bool
 	deferred map[int]ast.PdfStream
 
+	// wide holds each token spelled in UTF-16, big-endian then little-endian,
+	// built on first use (see [scanWalk.matchBytes]).
+	wide [][2][]byte
+
 	// err holds a cancellation seen mid-walk. The walk cannot return one, and
 	// abandoning it silently would hand back a short result that reads as a
 	// cleaner document than was examined.
@@ -273,6 +276,10 @@ func (w *scanWalk) walk(ctx context.Context, objNum int, obj ast.PdfObject, dept
 				w.hits[TokenHit{ObjectNum: objNum, Token: tok, Where: "string"}] = true
 			}
 		}
+		// A byte string, such as a signature's /Contents, holds UTF-16 with
+		// no byte order mark, or little-endian, which the decode above does
+		// not read as text.
+		w.matchBytes(objNum, []byte(v), "string")
 	case ast.PdfArray:
 		for i, item := range v {
 			if ref, isRef := item.(ast.PdfIndirectRef); isRef && i == 1 && isICCBasedArray(v) {
@@ -607,12 +614,7 @@ func (w *scanWalk) scanStreamData(ctx context.Context, objNum int, stream ast.Pd
 		return
 	}
 
-	text := string(data)
-	for _, tok := range w.tokens {
-		if strings.Contains(text, tok) {
-			w.hits[TokenHit{ObjectNum: objNum, Token: tok, Where: "stream"}] = true
-		}
-	}
+	w.scanBlob(ctx, objNum, stream.Dict, data)
 	if w.contents[objNum] || isContentStreamDict(stream.Dict) {
 		w.scanContentStrings(ctx, objNum, data)
 	}
@@ -665,11 +667,7 @@ func (w *scanWalk) scanStoredTail(ctx context.Context, objNum int, stream ast.Pd
 			slog.Int("object", objNum), slog.Any("err", err))
 		return
 	}
-	for _, tok := range w.tokens {
-		if bytes.Contains(tail, []byte(tok)) {
-			w.hits[TokenHit{ObjectNum: objNum, Token: tok, Where: "stream"}] = true
-		}
-	}
+	w.matchBytes(objNum, tail, "stream")
 }
 
 // buildScanResult turns the collected sets into the ordered result. The walk
