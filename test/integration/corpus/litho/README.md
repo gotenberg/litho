@@ -249,6 +249,7 @@ one deliberately rather than diffing it against a fresh build.
 | `iccbadcmyk_2b.pdf`    | PDF/A-2b     | Two output intents sharing one scanner-class CMYK ICC profile    |
 | `refreach_ua1.pdf`     | PDF/UA-1     | Reference XObjects a cell, glyph, page or appearance draws       |
 | `inlinelzw_2b.pdf`     | PDF/A-2b     | Inline images with a forbidden filter in every stream parsed     |
+| `headingnest_ua2.pdf`  | PDF/UA-2     | Generic `H` headings nested three `Sect` elements deep           |
 
 ### Must-not-fire controls
 
@@ -612,6 +613,7 @@ are covered under [Known divergences](#known-divergences).
 | `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
 | `gstate_2b.pdf`        | 9    | 7    | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
+| `headingnest_ua2.pdf`  | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
 | `iccbadcmyk_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `iccbadcmyk_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 6   | 6    | 7    | 7    | 6    |
@@ -7985,6 +7987,31 @@ counts, in all thirteen cells.
 Remediated at every level in both modes, every output is clean in both tools
 except PDF/A-4f, where `6.9/5` stays (no embedded file): litho deletes `/Ref`
 from every form the rules name.
+
+### `headingnest_ua2.pdf`
+
+ISO 14289-2, 8.2.5.12 forbids the generic `H` heading. ISO 32000-1, Table 335
+makes `H` the label of the division it is the first child of, whose level a
+reader takes from the nesting of the sections, so in a strongly structured
+document the nesting states the level `H1` to `H6` write out. Remediation
+renamed only an `H` nested in no division. No corpus file nests an `H` more
+than one `Sect` deep, so this fixture does:
+
+| Element                       | Construct                    | Remediated |
+| ----------------------------- | ---------------------------- | ---------- |
+| `Document` > `Sect`           | `H`, then a `P` and a `Sect` | `H1`       |
+| `Sect` > `Sect`               | `H`, then a `P` and a `Sect` | `H2`       |
+| `Sect` > `Sect` > `Sect`      | `H`, then a `P`              | `H3`       |
+| `Document` > `Sect`, the last | `H`, then a `P`              | `H1`       |
+
+The four `H` are the file's one defect at PDF/UA-2: the font is embedded, the
+XMP packet claims PDF/UA-2 and every element is a standard PDF 2.0 type. litho
+and veraPDF 1.30.2 report the same rule set in all thirteen cells, and at both
+WTPDF levels (`8.2.5.12/1` with the PDF Declaration WTPDF requires). PDF/UA-1
+reports no heading rule: the document uses `H` alone, which ISO 14289-1, 7.4.4
+accepts. Remediated at PDF/UA-2 and both WTPDF levels, default and aggressive,
+every output is clean in both tools; before the repair every one kept
+`8.2.5.12/1`.
 
 ## Scope
 
