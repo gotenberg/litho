@@ -355,6 +355,9 @@ const mutationRedactReach = 1e6
 //     footer, and a document whose text is all furniture has nothing to tag.
 //     AutoTag writes no tree, so nothing is hidden; the check reads the
 //     input's text and cannot tell furniture from content.
+//   - litho refreach_ua1: 1 promise_broken PDF, the same shape: its only
+//     text is one Type 3 A at (1, 1), shown on two pages, which AutoTag
+//     reads as a running footer.
 //   - litho: [scanMarkedContent] finds marked content in 26 inputs, the 23
 //     already tagged that carry it and the 3 above, and in none of the 59
 //     AutoTag tags.
