@@ -8355,12 +8355,12 @@ counts, in all thirteen cells; at PDF/A-2b both report nothing.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-206 x 13 = 2678 cells, the whole hand-measured matrix. litho and veraPDF return
+208 x 13 = 2704 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2654 of the 2678 cells. The 24
+fixtures exist to protect, and it holds in 2680 of the 2704 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
@@ -8369,12 +8369,12 @@ each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-thirteen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `boxorigin_2b`,
-`pagelabels_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
+fourteen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `boxorigin_2b`,
+`pagelabels_2b`, `qshyphen_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2678 and moves only `ruleset_mismatch`, and on
-those thirteen cells it moves both. Every exception sits in the manifest's
+rule class leaves `matched` at 2704 and moves only `ruleset_mismatch`, and on
+those fourteen cells it moves both. Every exception sits in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
 fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
 the text scoreboard names the rules only one side reports. A 25th cell in the
@@ -8400,11 +8400,11 @@ and states the clause behind its verdict. It either gives the right reading,
 where ISO 32000-1, 9.10.2 or the page geometry decides it, or marks the page
 unscored, where the readers disagree only on codes 9.10.2 gives no Unicode
 value, since no reading of those is right. Where PDF.js and litho agree, the
-golden stands. Of the 206 fixtures, 198 match and 8 are unscored
+golden stands. Of the 208 fixtures, 200 match and 8 are unscored
 (`cmapcidtext_2b`, `cmapnotdef_2b`, `cmaps_2b`, `cmapusecmap_2b`,
 `cmapusestream_2b`, `cmapverabase_2b`, `type0nodesc_2b`, `usecmap_2u`; page 16
 of `fontcopies_2b` too, whose other pages score), so the cell's `matched`,
-`words_match` and `chars_match` all read 198 and a mismatch is a regression.
+`words_match` and `chars_match` all read 200 and a mismatch is a regression.
 A new fixture needs
 its golden regenerated at provisioning, and an override when PDF.js reads it
 wrong.
