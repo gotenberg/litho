@@ -128,6 +128,8 @@ func applyStampToPages(
 	shifted := make(map[string]ast.PdfIndirectRef)
 
 	brackets := newContentBrackets(alloc)
+	namers := stampedContentsNamers(alloc, pages, pageNums)
+	stamped := make(map[[2]int]ast.PdfIndirectRef)
 
 	for _, pageNum := range pageNums {
 		// The builders refuse an out-of-range page before allocating anything
@@ -162,7 +164,23 @@ func applyStampToPages(
 			pageStampRef = ref
 		}
 
-		newDict["Contents"] = appendPageContents(ctx, doc, alloc, baseDict, brackets, pageStampRef)
+		// Pages sharing one /Contents object share its stamped content too, as
+		// remediation shares its wrapped content, so a form the shared content
+		// draws keeps the single reference ISO 14289-1, 7.20 t2 counts there.
+		// A direct array cannot be shared, so the array the other pages name
+		// is an object of its own.
+		contentsRef, isRef := baseDict["Contents"].(ast.PdfIndirectRef)
+		if isRef && namers[contentsRef.ObjectNum] > 1 {
+			key := [2]int{contentsRef.ObjectNum, pageStampRef.ObjectNum}
+			ref, built := stamped[key]
+			if !built {
+				ref = alloc.Alloc(appendPageContents(ctx, doc, alloc, baseDict, brackets, pageStampRef))
+				stamped[key] = ref
+			}
+			newDict["Contents"] = ref
+		} else {
+			newDict["Contents"] = appendPageContents(ctx, doc, alloc, baseDict, brackets, pageStampRef)
+		}
 
 		// A page inlined in a /Kids array has no object number to replace. Skip
 		// it rather than abort the whole stamp over one unaddressable page, but
@@ -175,6 +193,30 @@ func applyStampToPages(
 		}
 	}
 	return nil
+}
+
+// stampedContentsNamers counts, for each object number an indirect /Contents
+// names, the stamped pages naming it, each page read alloc-first as the stamp
+// reads it.
+//
+// # Corpus evidence
+//
+//   - litho formshare_ua1.pdf, sharedtag_ua1.pdf, sharedclose_ua1.pdf: a
+//     stamped array for each page of two sharing one /Contents stream made
+//     veraPDF parse the stream once per array, so the marked form it draws
+//     gained a second reference and the stamp added ISO 14289-1, 7.20 t2 at
+//     PDF/UA-1.
+func stampedContentsNamers(alloc *writer.ObjAllocator, pages []*document.Page, pageNums []int) map[int]int {
+	namers := make(map[int]int)
+	for _, pageNum := range pageNums {
+		if pageNum < 1 || pageNum > len(pages) {
+			continue
+		}
+		if ref, ok := latestPageDict(alloc, pages[pageNum-1])["Contents"].(ast.PdfIndirectRef); ok {
+			namers[ref.ObjectNum]++
+		}
+	}
+	return namers
 }
 
 // newContentBrackets returns a function yielding the pair of streams that wrap
