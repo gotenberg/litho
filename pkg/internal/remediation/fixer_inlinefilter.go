@@ -81,9 +81,11 @@ var inlineCodecFilters = []ast.PdfName{
 var inlinePart1Forbidden = []ast.PdfName{"LZW", "LZWDecode", "Crypt"}
 
 // inlineAllowed lists the inline image filters ISO 19005-2/3, 6.1.10 and ISO
-// 19005-4, 6.1.9 leave a conforming file: every value of ISO 32000-1, Table 6
-// but LZWDecode and Crypt. It mirrors compliance's allowedInlineImageFilters,
-// the authority for the verdict, so the two must stay in sync.
+// 19005-4, 6.1.9 leave a conforming file: the filters ISO 32000-2, 8.9.7,
+// Table 92 abbreviates for an inline image, under either name, but LZWDecode.
+// JPXDecode and JBIG2Decode are no inline image's ([inlineXObjectCodecs]). It
+// mirrors compliance's allowedInlineImageFilters, the authority for the
+// verdict, so the two must stay in sync.
 //
 //nolint:gochecknoglobals // static spec table, mirrors compliance.allowedInlineImageFilters
 var inlineAllowed = []ast.PdfName{
@@ -93,13 +95,12 @@ var inlineAllowed = []ast.PdfName{
 	"RL", "RunLengthDecode",
 	"CCF", "CCITTFaxDecode",
 	"DCT", "DCTDecode",
-	"JPXDecode", "JBIG2Decode",
 }
 
 // inlineFilterForbidden reports whether part of ISO 19005 forbids the filter
 // name in an inline image: ISO 19005-1, 6.1.10 names LZWDecode alone, while
 // ISO 19005-2/3, 6.1.10 and ISO 19005-4, 6.1.9 forbid every value outside
-// ISO 32000-1, Table 6, a name misspelled by case among them (PDF names are
+// [inlineAllowed], a name misspelled by case among them (PDF names are
 // case-sensitive, 7.3.5).
 func inlineFilterForbidden(name ast.PdfName, part int) bool {
 	if part == 1 {
@@ -123,14 +124,21 @@ func canonicalInlineFilter(name ast.PdfName) (ast.PdfName, bool) {
 // draw, each inline image whose filters include one the part of ISO 19005 the
 // violations name forbids ([inlineFilterForbidden]): ISO 19005-1, 6.1.10
 // forbids LZWDecode, and ISO 19005-2/3, 6.1.10 and ISO 19005-4, 6.1.9 forbid
-// LZWDecode, Crypt and every value outside ISO 32000-1, Table 6. veraPDF judges
-// each inline image as an image of its own, so a stream repair reaches what an
-// object repair ([fixLZW]) does not: the image's dictionary and its data change
-// together ([reencodeInlineImages]).
+// LZWDecode, Crypt and every value outside the abbreviations of ISO 32000-2,
+// 8.9.7, Table 92. veraPDF judges each inline image as an image of its own, so
+// a stream repair reaches what an object repair ([fixLZW]) does not: the
+// image's dictionary and its data change together ([reencodeInlineImages]).
 //
 // No clause bounds the size of an inline image: ISO 32000-1, 8.9.7 recommends
 // at most 4 KB, and veraPDF checks no size, so the image stays inline. The
 // FlateDecode data that replaces LZWDecode data is never much larger.
+//
+// An image applying JPXDecode or JBIG2Decode moves to an image XObject instead
+// ([moveInlineImage]): those filters are an image XObject's (ISO 32000-1,
+// 7.4.9), and the move keeps the coded data byte for byte, so every viewer
+// decodes the samples it decoded before. Decoding the image and re-encoding it
+// with Flate would instead write one decoder's reading of a lossy JPEG 2000
+// codestream into the file, and trade the codec's compression for Flate's.
 //
 // # Corpus evidence
 //
@@ -150,27 +158,41 @@ func canonicalInlineFilter(name ast.PdfName) (ast.PdfName, bool) {
 //   - litho inlinelzw_2b.pdf: holds such images in a form XObject, a Type 3
 //     glyph, a tiling pattern cell and an annotation appearance, which no
 //     other file does.
+//   - litho inlinejpx_2b.pdf: the only file whose inline images apply
+//     JPXDecode or JBIG2Decode, on its page and in a form XObject. Its five
+//     findings go at every PDF/A level of parts 2 to 4, default and
+//     aggressive, on litho and veraPDF 1.30.2 alike. Decoding the images and
+//     re-encoding them inline with Flate, crafted by hand, passed veraPDF at
+//     PDF/A-2b and PDF/A-4 too, so the tools do not choose between the
+//     repairs.
 func fixInlineImageFilters(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
 	part := inlineFilterPart(violations)
 	if part == 0 {
 		return nil, nil
 	}
 	dec := filter.NewDecoder(nil, doc.Limits())
-	images := 0
-	streams, err := walkContentStreams(ctx, alloc, doc, "inline-filter", func(ctx context.Context, data []byte) ([]byte, func()) {
-		out, n := reencodeInlineImages(ctx, data, part, dec)
-		if n == 0 {
+	var reencoded, moved int
+	streams, err := walkContentStreamsWithResources(ctx, alloc, doc, "inline-filter", func(ctx context.Context, data []byte, res *resourceEdit) ([]byte, func()) {
+		out, n, m := reencodeInlineImages(ctx, data, part, dec, res)
+		if n+m == 0 {
 			return nil, nil
 		}
-		return out, func() { images += n }
+		return out, func() { reencoded += n; moved += m }
 	})
 	if err != nil {
 		return nil, fmt.Errorf("re-encoding inline images: %w", err)
 	}
-	if images == 0 {
+	var fixes []string
+	if reencoded > 0 {
+		fixes = append(fixes, fmt.Sprintf("re-encoded %d inline image(s) with a forbidden filter as FlateDecode", reencoded))
+	}
+	if moved > 0 {
+		fixes = append(fixes, fmt.Sprintf("moved %d inline image(s) with a forbidden filter to image XObjects", moved))
+	}
+	if len(fixes) == 0 {
 		return nil, nil
 	}
-	return []string{fmt.Sprintf("re-encoded %d inline image(s) with a forbidden filter as FlateDecode in %d content stream(s)", images, streams)}, nil
+	return []string{fmt.Sprintf("%s in %d content stream(s)", strings.Join(fixes, ", and "), streams)}, nil
 }
 
 // inlineFilterPart returns the part of ISO 19005 the violations
@@ -193,17 +215,33 @@ func inlineFilterPart(violations []compliance.Violation) int {
 
 // inlineImageRewrite is one inline image [reencodeInlineImages] writes again:
 // the bytes [start, end) of the stream, from its BI through its EI, the text
-// written in their place, and the dictionary the text gives the image.
+// written in their place, and the dictionary the text gives the image, or the
+// name of the image XObject a Do in the text paints in its place.
 type inlineImageRewrite struct {
 	start, end int
 	text       []byte
 	dict       ast.PdfDict
+	name       ast.PdfName
+}
+
+// replaces reports whether op, read where the image's BI was, is what the
+// rewrite wrote: a BI with the dictionary it gave the image, or Do of the
+// image XObject it moved the image to.
+func (rw inlineImageRewrite) replaces(op content.Operation) bool {
+	if len(op.Operands) != 1 {
+		return false
+	}
+	if rw.name != "" {
+		return op.Operator == "Do" && op.Operands[0] == ast.PdfObject(rw.name)
+	}
+	return beginsInlineImage(op) && reflect.DeepEqual(op.Operands[0], ast.PdfObject(rw.dict))
 }
 
 // reencodeInlineImages returns data with every inline image whose filters
-// include one part forbids written again ([reencodeInlineImage]), and how many
-// images it wrote. An image it cannot rewrite keeps its bytes, its finding a
-// residual for validation to report.
+// include one part forbids written again, and how many images it re-encoded
+// ([reencodeInlineImage]) and moved to an image XObject res names
+// ([moveInlineImage]). An image it cannot rewrite keeps its bytes, its finding
+// a residual for validation to report.
 //
 // Each image is written whole, from its BI through its EI, and every other byte
 // of the stream is carried across as it was. The result is read back both as a
@@ -212,19 +250,20 @@ type inlineImageRewrite struct {
 // rewrote, each as written; the repair's reading must also end each rewritten
 // image at the EI written for it, so no reader takes a byte of what follows as
 // data or a byte of the data as operators. Otherwise data comes back unchanged
-// with a count of 0.
-func reencodeInlineImages(ctx context.Context, data []byte, part int, dec *filter.Decoder) ([]byte, int) {
+// with counts of 0.
+func reencodeInlineImages(ctx context.Context, data []byte, part int, dec *filter.Decoder, res *resourceEdit) ([]byte, int, int) {
 	if !bytes.Contains(data, []byte("ID")) {
-		return data, 0
+		return data, 0, 0
 	}
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.ForRepair())
 	if err != nil || len(ops) != len(ranges) {
-		return data, 0
+		return data, 0, 0
 	}
 	var rewrites []inlineImageRewrite
+	moved := 0
 	for i, op := range ops {
 		if i%spliceCheckInterval == 0 && ctx.Err() != nil {
-			return data, 0
+			return data, 0, 0
 		}
 		if !beginsInlineImage(op) || len(op.Operands) != 1 {
 			continue
@@ -233,12 +272,22 @@ func reencodeInlineImages(ctx context.Context, data []byte, part int, dec *filte
 		if !ok || !slices.ContainsFunc(inlineImageFilterNames(dict), func(n ast.PdfName) bool { return inlineFilterForbidden(n, part) }) {
 			continue
 		}
+		if movesToXObject(dict, part) {
+			if res == nil {
+				continue
+			}
+			if rw, ok := moveInlineImage(ctx, data, ranges[i], dict, part, dec, res); ok {
+				rewrites = append(rewrites, rw)
+				moved++
+			}
+			continue
+		}
 		if rw, ok := reencodeInlineImage(ctx, data, ranges[i], dict, part, dec); ok {
 			rewrites = append(rewrites, rw)
 		}
 	}
 	if len(rewrites) == 0 {
-		return data, 0
+		return data, 0, 0
 	}
 
 	var out bytes.Buffer
@@ -255,16 +304,16 @@ func reencodeInlineImages(ctx context.Context, data []byte, part int, dec *filte
 	result := out.Bytes()
 
 	if !rereadsRewritten(ctx, data, result, rewrites, starts) {
-		return data, 0
+		return data, 0, 0
 	}
-	return result, len(rewrites)
+	return result, len(rewrites) - moved, moved
 }
 
 // rereadsRewritten reports whether out, data with rewrites written at starts,
-// reads as data does, save the dictionaries of the rewritten images, both as a
-// repair reads it and as validation reads it, and whether the repair's reading
-// spans each rewritten image exactly from its BI through the EI written for
-// it.
+// reads as data does, save the rewritten images, each read as written
+// ([inlineImageRewrite.replaces]), both as a repair reads it and as validation
+// reads it, and whether the repair's reading spans each image written again
+// inline exactly from its BI through the EI written for it.
 func rereadsRewritten(ctx context.Context, data, out []byte, rewrites []inlineImageRewrite, starts []int) bool {
 	want := make(map[int]ast.PdfDict, len(rewrites))
 	for _, rw := range rewrites {
@@ -284,8 +333,8 @@ func rereadsRewritten(ctx context.Context, data, out []byte, rewrites []inlineIm
 			if sameOperation(after[i], op) {
 				continue
 			}
-			if !beginsInlineImage(op) || len(after[i].Operands) != 1 || !slices.ContainsFunc(rewrites, func(rw inlineImageRewrite) bool {
-				return reflect.DeepEqual(after[i].Operands[0], ast.PdfObject(rw.dict))
+			if !beginsInlineImage(op) || !slices.ContainsFunc(rewrites, func(rw inlineImageRewrite) bool {
+				return rw.replaces(after[i])
 			}) {
 				return false
 			}
@@ -296,6 +345,15 @@ func rereadsRewritten(ctx context.Context, data, out []byte, rewrites []inlineIm
 		}
 	}
 
+	var inline []inlineImageRewrite
+	var inlineStarts []int
+	for i, rw := range rewrites {
+		if rw.name == "" {
+			inline = append(inline, rw)
+			inlineStarts = append(inlineStarts, starts[i])
+		}
+	}
+	rewrites, starts = inline, inlineStarts
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, out, content.ForRepair())
 	if err != nil || len(ops) != len(ranges) {
 		return false
@@ -340,20 +398,10 @@ func rereadsRewritten(ctx context.Context, data, out []byte, rewrites []inlineIm
 // no I (7.4.2). A dictionary that states the data length, /L or /Length (ISO
 // 32000-2, 8.9.7, Table 91), states the new one.
 func reencodeInlineImage(ctx context.Context, data []byte, r content.ByteRange, dict ast.PdfDict, part int, dec *filter.Decoder) (inlineImageRewrite, bool) {
-	biStart, ok := inlineImageStart(data[r.Start:r.End])
+	start, end, raw, ok := inlineImageBody(ctx, data, r, dict)
 	if !ok {
 		return inlineImageRewrite{}, false
 	}
-	start := r.Start + biStart
-	end, ok := inlineImageEnd(data, r)
-	if !ok || end-start < len("BIEI") {
-		return inlineImageRewrite{}, false
-	}
-	dataStart, ok := inlineImageDataStart(ctx, data[start:end], dict)
-	if !ok {
-		return inlineImageRewrite{}, false
-	}
-	raw := data[start+dataStart : end-len("EI")]
 
 	filterKey, parmsKey, ok := inlineFilterKeys(dict)
 	if !ok {

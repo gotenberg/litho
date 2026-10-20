@@ -31,11 +31,32 @@ func walkContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	})
 }
 
+// resourceRepair is a [contentRepair] that may also name new image XObjects
+// in the resources the stream's names resolve in, through res. The walk writes
+// what res gathered before the stream, and drops it when the stream's write
+// does not land.
+type resourceRepair func(ctx context.Context, data []byte, res *resourceEdit) ([]byte, func())
+
+// walkContentStreamsWithResources is [walkContentStreams] with a repair that
+// may add image XObjects to the resources of the stream it repairs.
+func walkContentStreamsWithResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixer string, repair resourceRepair) (int, error) {
+	w := &contentStreamWalk{alloc: alloc, doc: doc, fixer: fixer, resRepair: repair, visited: make(map[int]bool)}
+	return w.run(ctx)
+}
+
 // walkStreams is [walkContentStreams] with a repair told which streams start
 // with their colour operators off: the ones colourOff holds by object number,
 // and the cell of every uncoloured tiling pattern (ISO 32000-1, 8.7.3.3),
 // drawn or not.
 func walkStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixer string, colourOff map[int]bool, repair streamRepair) (int, error) {
+	w := &contentStreamWalk{alloc: alloc, doc: doc, fixer: fixer, repair: repair, colourOff: colourOff, visited: make(map[int]bool)}
+	return w.run(ctx)
+}
+
+// run walks every page of the document and returns how many streams it
+// rewrote.
+func (w *contentStreamWalk) run(ctx context.Context) (int, error) {
+	alloc, doc := w.alloc, w.doc
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return 0, fmt.Errorf("resolving catalog: %w", err)
@@ -45,7 +66,6 @@ func walkStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		return 0, fmt.Errorf("resolving pages: %w", err)
 	}
 
-	w := &contentStreamWalk{alloc: alloc, doc: doc, fixer: fixer, repair: repair, colourOff: colourOff, visited: make(map[int]bool)}
 	for i, pe := range pageTreeEntries(ctx, alloc, doc, pages) {
 		if err := ctx.Err(); err != nil {
 			return 0, err
@@ -81,6 +101,9 @@ type contentStreamWalk struct {
 	doc    *document.Document
 	fixer  string
 	repair streamRepair
+	// resRepair, when set, repairs in place of repair, and may add image
+	// XObjects to the stream's resources ([walkContentStreamsWithResources]).
+	resRepair resourceRepair
 	// colourOff holds the object numbers of the streams that start with their
 	// colour operators off (see [walkStreams]).
 	colourOff map[int]bool
@@ -111,11 +134,48 @@ func (w *contentStreamWalk) firstVisit(obj ast.PdfObject) bool {
 // can name is walked and one only another node's dictionary names is not.
 func (w *contentStreamWalk) page(ctx context.Context, pe annotPageEntry, pageNum int) {
 	pe = pageTreeEntry(ctx, w.alloc, w.doc, pe)
-	w.pageContent(ctx, pe.dict, pageNum)
+	var owner resourceOwner
+	if holder, ok := resourcesHolder(ctx, w.alloc, w.doc, pe); ok {
+		owner = w.nodeOwner(ctx, holder)
+	}
+	w.pageContent(ctx, pe.dict, pageNum, owner)
 	if holder, ok := resourcesHolder(ctx, w.alloc, w.doc, pe); ok {
 		w.resources(ctx, holder.dict["Resources"], 0)
 	}
 	w.annotations(ctx, pe.dict)
+}
+
+// nodeOwner returns the owner of the /Resources a page tree node states, read
+// and written through the allocator, so a page's content names its images in
+// the dictionary the page resolves its names in, its own or the one it
+// inherits whole (ISO 32000-1, 7.7.3.4).
+func (w *contentStreamWalk) nodeOwner(ctx context.Context, node annotPageEntry) resourceOwner {
+	return resourceOwner{
+		load: func() ast.PdfObject {
+			return liveTreeNode(ctx, w.alloc, w.doc, node)["Resources"]
+		},
+		store: func(res ast.PdfDict) bool {
+			dict := maps.Clone(liveTreeNode(ctx, w.alloc, w.doc, node))
+			dict["Resources"] = res
+			return writeTreeNode(ctx, w.alloc, w.doc, node, dict)
+		},
+	}
+}
+
+// repairWith runs the walk's repair over one stream's data: resRepair with an
+// edit of the resources owner describes, or repair. The edit is nil when the
+// walk runs repair.
+func (w *contentStreamWalk) repairWith(ctx context.Context, data []byte, colourOff bool, owner resourceOwner) ([]byte, func(), *resourceEdit) {
+	if w.resRepair == nil {
+		newData, landed := w.repair(ctx, data, colourOff)
+		return newData, landed, nil
+	}
+	edit := newResourceEdit(w.alloc, w.doc, owner)
+	newData, landed := w.resRepair(ctx, data, edit)
+	if landed == nil {
+		edit.abandon()
+	}
+	return newData, landed, edit
 }
 
 // pageContent repairs a page's own content, which ISO 32000-1, 7.7.3.3 makes
@@ -125,7 +185,7 @@ func (w *contentStreamWalk) page(ctx context.Context, pe annotPageEntry, pageNum
 // A page the repair cannot write back is left as it was and logged, its
 // findings left as residuals, rather than failing the fixer: a fixer's error
 // aborts the whole remediation.
-func (w *contentStreamWalk) pageContent(ctx context.Context, pageDict ast.PdfDict, pageNum int) {
+func (w *contentStreamWalk) pageContent(ctx context.Context, pageDict ast.PdfDict, pageNum int, owner resourceOwner) {
 	contentsObj, ok := pageDict["Contents"]
 	if !ok {
 		return
@@ -134,11 +194,18 @@ func (w *contentStreamWalk) pageContent(ctx context.Context, pageDict ast.PdfDic
 	if err != nil || len(data) == 0 {
 		return
 	}
-	newData, landed := w.repair(ctx, data, false)
+	newData, landed, edit := w.repairWith(ctx, data, false, owner)
 	if landed == nil {
 		return
 	}
+	if !edit.commit(ctx) {
+		edit.abandon()
+		w.doc.Logger.Debug("remediation: cannot name a page's new images in its resources",
+			"fixer", w.fixer, "page", pageNum)
+		return
+	}
 	if err := replaceContentStream(ctx, w.alloc, w.doc, contentsObj, newData, pageNum); err != nil {
+		edit.abandon()
 		w.doc.Logger.Debug("remediation: cannot rewrite a page's content stream",
 			"fixer", w.fixer, "page", pageNum, "error", err)
 		return
@@ -158,12 +225,12 @@ func (w *contentStreamWalk) resources(ctx context.Context, obj ast.PdfObject, de
 		return
 	}
 	for _, entry := range w.entries(ctx, res["XObject"]) {
-		if dict, ok := w.stream(ctx, entry, isFormXObject); ok {
+		if dict, ok := w.stream(ctx, entry, isFormXObject, resourceOwner{}); ok {
 			w.resources(ctx, dict["Resources"], depth+1)
 		}
 	}
 	for _, entry := range w.entries(ctx, res["Pattern"]) {
-		if dict, ok := w.stream(ctx, entry, isTilingPattern); ok {
+		if dict, ok := w.stream(ctx, entry, isTilingPattern, resourceOwner{}); ok {
 			w.resources(ctx, dict["Resources"], depth+1)
 		}
 	}
@@ -198,10 +265,32 @@ func (w *contentStreamWalk) type3Font(ctx context.Context, entry ast.PdfObject, 
 	if subtype, _ := document.ResolveName(ctx, w.doc, font["Subtype"]); subtype != "Type3" {
 		return
 	}
+	owner := w.fontOwner(ctx, entry)
 	for _, glyph := range w.entries(ctx, font["CharProcs"]) {
-		w.stream(ctx, glyph, nil)
+		w.stream(ctx, glyph, nil, owner)
 	}
 	w.resources(ctx, font["Resources"], depth)
+}
+
+// fontOwner returns the owner of a Type 3 font's /Resources, in which its
+// glyph descriptions resolve their names (ISO 32000-1, 9.6.5), read and
+// written through the allocator. A font with no /Resources of its own leaves
+// its glyphs the page's, so it has none to load; one written directly in a
+// font dictionary, with no object number, has none to store.
+func (w *contentStreamWalk) fontOwner(ctx context.Context, entry ast.PdfObject) resourceOwner {
+	owner := resourceOwner{
+		load: func() ast.PdfObject {
+			return liveDictValue(ctx, w.alloc, w.doc, entry)["Resources"]
+		},
+	}
+	if ref, ok := entry.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+		owner.store = func(res ast.PdfDict) bool {
+			font := maps.Clone(liveDictValue(ctx, w.alloc, w.doc, entry))
+			font["Resources"] = res
+			return w.alloc.AllocAt(ref.ObjectNum, font)
+		}
+	}
+	return owner
 }
 
 // annotations repairs the appearance streams of a page's annotations, under
@@ -235,7 +324,7 @@ func (w *contentStreamWalk) annotations(ctx context.Context, pageDict ast.PdfDic
 // appearance repairs one appearance stream, a form XObject (ISO 32000-1,
 // 12.5.5), and walks its resources one level below the page.
 func (w *contentStreamWalk) appearance(ctx context.Context, entry ast.PdfObject) {
-	if dict, ok := w.stream(ctx, entry, nil); ok {
+	if dict, ok := w.stream(ctx, entry, nil, resourceOwner{}); ok {
 		w.resources(ctx, dict["Resources"], 1)
 	}
 }
@@ -243,7 +332,9 @@ func (w *contentStreamWalk) appearance(ctx context.Context, entry ast.PdfObject)
 // stream repairs the content stream entry names, when it is one the walk has
 // not reached yet and keep, when set, accepts its dictionary. It returns the
 // stream's live dictionary, for the walk to descend into its /Resources, and
-// whether it was reached.
+// whether it was reached. owner says where the stream's names resolve when
+// the stream does not resolve them in its own /Resources, as a Type 3 glyph
+// does not; its zero value names the stream's own.
 //
 // The stream is read alloc-first, so the write builds on what an earlier fixer
 // queued at that object number: transparency, for one, writes these same forms,
@@ -251,7 +342,7 @@ func (w *contentStreamWalk) appearance(ctx context.Context, entry ast.PdfObject)
 // replaces the body with decoded bytes ([replaceDecodedStream]), so the stream
 // stays a stream with every other key of its dictionary. A stream whose body
 // cannot be decoded is walked below but not rewritten.
-func (w *contentStreamWalk) stream(ctx context.Context, entry ast.PdfObject, keep func(context.Context, *document.Document, ast.PdfDict) bool) (ast.PdfDict, bool) {
+func (w *contentStreamWalk) stream(ctx context.Context, entry ast.PdfObject, keep func(context.Context, *document.Document, ast.PdfDict) bool, owner resourceOwner) (ast.PdfDict, bool) {
 	// A stream is always an indirect object (ISO 32000-1, 7.3.8.1), so a
 	// direct value names none.
 	ref, isRef := entry.(ast.PdfIndirectRef)
@@ -271,10 +362,27 @@ func (w *contentStreamWalk) stream(ctx context.Context, entry ast.PdfObject, kee
 		return stream.Dict, true
 	}
 	off := w.colourOff[ref.ObjectNum] || isUncolouredPattern(ctx, w.doc, stream.Dict)
-	if newData, landed := w.repair(ctx, data, off); landed != nil && replaceDecodedStream(w.alloc, ref, stream.Dict, newData) {
+	dict := stream.Dict
+	if owner.load == nil {
+		owner = resourceOwner{
+			load: func() ast.PdfObject { return dict["Resources"] },
+			store: func(res ast.PdfDict) bool {
+				dict = maps.Clone(dict)
+				dict["Resources"] = res
+				return true
+			},
+		}
+	}
+	newData, landed, edit := w.repairWith(ctx, data, off, owner)
+	if landed == nil {
+		return stream.Dict, true
+	}
+	if edit.commit(ctx) && replaceDecodedStream(w.alloc, ref, dict, newData) {
 		landed()
 		w.streams++
+		return stream.Dict, true
 	}
+	edit.abandon()
 	return stream.Dict, true
 }
 

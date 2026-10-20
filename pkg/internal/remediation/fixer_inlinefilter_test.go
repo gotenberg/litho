@@ -198,7 +198,7 @@ func TestReencodeInlineImages_KeepsTheFiltersAfterLZW(t *testing.T) {
 		t.Fatalf("control: the source draws %q", want)
 	}
 
-	out, n := reencodeInlineImages(ctx, []byte(src), 2, filter.NewDecoder(nil, limits.Default()))
+	out, n, _ := reencodeInlineImages(ctx, []byte(src), 2, filter.NewDecoder(nil, limits.Default()), nil)
 	if n != 1 {
 		t.Fatalf("rewrote %d images, want 1: %q", n, out)
 	}
@@ -228,10 +228,10 @@ func TestReencodeInlineImages_PartDecidesTheForbiddenNames(t *testing.T) {
 	dec := filter.NewDecoder(nil, limits.Default())
 
 	src := []byte("q " + lzwInline(t, "/F /Lzw") + " Q")
-	if out, n := reencodeInlineImages(ctx, src, 1, dec); n != 0 || !bytes.Equal(out, src) {
+	if out, n, _ := reencodeInlineImages(ctx, src, 1, dec, nil); n != 0 || !bytes.Equal(out, src) {
 		t.Errorf("part 1 rewrote %d images: %q", n, out)
 	}
-	out, n := reencodeInlineImages(ctx, src, 2, dec)
+	out, n, _ := reencodeInlineImages(ctx, src, 2, dec, nil)
 	if n != 1 {
 		t.Fatalf("part 2 rewrote %d images, want 1", n)
 	}
@@ -241,7 +241,7 @@ func TestReencodeInlineImages_PartDecidesTheForbiddenNames(t *testing.T) {
 
 	// A name only misspelled by case is renamed, its data kept.
 	ahx := []byte("q BI /W 4 /H 2 /BPC 8 /CS /G /F /ahx ID " + hex.EncodeToString([]byte(inlineFilterSamples)) + "> EI Q")
-	out, n = reencodeInlineImages(ctx, ahx, 4, dec)
+	out, n, _ = reencodeInlineImages(ctx, ahx, 4, dec, nil)
 	if n != 1 || !bytes.Contains(out, []byte("/F /AHx /H 2 /W 4 ID "+hex.EncodeToString([]byte(inlineFilterSamples))+">")) {
 		t.Errorf("rewrote %d images as %q, want /ahx renamed /AHx", n, out)
 	}
@@ -266,7 +266,7 @@ func TestReencodeInlineImages_LeavesWhatItCannotProve(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			in := []byte("q " + src + " Q")
-			if out, n := reencodeInlineImages(ctx, in, 2, dec); n != 0 || !bytes.Equal(out, in) {
+			if out, n, _ := reencodeInlineImages(ctx, in, 2, dec, nil); n != 0 || !bytes.Equal(out, in) {
 				t.Errorf("rewrote %d images: %q", n, out)
 			}
 		})
@@ -282,7 +282,7 @@ func TestReencodeInlineImages_StatesTheNewLength(t *testing.T) {
 	lzwData := lzwBody(t, inlineFilterSamples)
 	src := []byte(fmt.Sprintf("q BI /W 4 /H 2 /BPC 8 /CS /G /F /LZW /L %d ID %s EI Q", len(lzwData), lzwData))
 
-	out, n := reencodeInlineImages(ctx, src, 2, filter.NewDecoder(nil, limits.Default()))
+	out, n, _ := reencodeInlineImages(ctx, src, 2, filter.NewDecoder(nil, limits.Default()), nil)
 	if n != 1 {
 		t.Fatalf("rewrote %d images, want 1", n)
 	}
