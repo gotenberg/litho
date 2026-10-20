@@ -259,6 +259,7 @@ one deliberately rather than diffing it against a fresh build.
 | `sharedclose_ua1.pdf`  | PDF/UA-1     | A marked form and an open artifact two pages' shared content has |
 | `pdfxonly_2b.pdf`      | PDF/A-2b     | A PDF/X output intent and no PDF/A one, over CMYK and RGB paint  |
 | `pdfxnoprofile_2b.pdf` | PDF/A-2b     | A PDF/A intent naming no profile beside a PDF/X CMYK intent      |
+| `qshyphen_2b.pdf`      | PDF/A-2b     | Soft hyphens shown inside `q`...`Q` within a text object         |
 
 ### Must-not-fire controls
 
@@ -688,6 +689,7 @@ are covered under [Known divergences](#known-divergences).
 | `prosecolumns_ua1.pdf` | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `qnestreach_2b.pdf`    | 6    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 4   | 4    | 5    | 10   | 7    |
+| `qshyphen_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `remapchain_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 4    | 0    |
 | `readcolumns_ua1.pdf`  | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `readorder_ua1.pdf`    | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
@@ -8287,6 +8289,35 @@ Remediated at PDF/UA-1 in both modes, both tools report nothing. The fixer
 closing the sequence appended its EMC in an array of its own for each page, so
 veraPDF parsed the shared stream once per array and both tools stated `7.20/2`;
 pages naming one `/Contents` object now name one closed array.
+
+### `qshyphen_2b.pdf`
+
+PDF.js advances its text position past no soft hyphen (U+00AD), so it reads
+every glyph after one, until a text-positioning operator sets the position,
+the hyphen's advance before where ISO 32000-1, 9.4.4 puts it. It saves its
+whole text state at `q`, text matrix included, and restores it at `Q`, as
+litho's machine does. ISO 32000-1, 8.2, Figure 9 allows no `q` or `Q` inside a
+text object, and veraPDF logs each one there as a warning, so no clause says
+what `Q` does to the text matrix. No corpus file shows a soft hyphen inside
+`q`...`Q` within a text object. Font `F1` embeds a Type 1 program whose glyphs
+are 600 units wide and maps code `AD` to U+00AD through its `/ToUnicode` CMap;
+at 12 points the TJ number -300 leaves a 3.6-unit gap, which PDF.js reads as a
+word space:
+
+| Line                                         | PDF.js and litho read | Before       |
+| -------------------------------------------- | --------------------- | ------------ |
+| `(left)` `q` `(AD)` `Q` `[-300 (right)]`     | `left right`          | `leftright`  |
+| `(outerAD)` `q` `(AD)` `Q` `[-300 (inner)]`  | `outer inner`         | `outerinner` |
+| `(deep)` `q q (AD) Q (AD) Q` `[-300 (nest)]` | `deep nest`           | `deepnest`   |
+| `(softAD)` `q 0 -30 Td Q` `(ware)`           | `software`            | `soft ware`  |
+| `(plain)` `(AD)` `[-300 (text)]`, control    | `plain text`          | `plain text` |
+
+Before, litho kept the shift of a soft hyphen shown inside `q`...`Q` after
+`Q`, which closed the gap on the first three lines, and dropped the shift of
+the one before `q` at the `Td` inside, which opened one on the fourth. The
+shift now rides the graphics state with the text matrix it measures.
+veraPDF 1.30.2 and litho report the same rule set, with the same failed-check
+counts, in all thirteen cells; at PDF/A-2b both report nothing.
 
 ## Scope
 
