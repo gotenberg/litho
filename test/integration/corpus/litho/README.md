@@ -254,6 +254,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formreuse_ua1.pdf`    | PDF/UA-1     | Marked forms a cell, glyph, form or appearance references again  |
 | `formshare_ua1.pdf`    | PDF/UA-1     | Marked forms a content stream two pages share draws once         |
 | `inlinejpx_2b.pdf`     | PDF/A-2b     | Inline images applying JPXDecode or JBIG2Decode                  |
+| `headingart_ua2.pdf`   | PDF/UA-2     | Generic `H` headings nested in `Art` and `Sect` elements         |
 
 ### Must-not-fire controls
 
@@ -621,6 +622,7 @@ are covered under [Known divergences](#known-divergences).
 | `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
 | `gstate_2b.pdf`        | 9    | 7    | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
+| `headingart_ua2.pdf`   | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
 | `headingnest_ua2.pdf`  | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
 | `iccbadcmyk_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
@@ -8127,6 +8129,32 @@ reports no heading rule: the document uses `H` alone, which ISO 14289-1, 7.4.4
 accepts. Remediated at PDF/UA-2 and both WTPDF levels, default and aggressive,
 every output is clean in both tools; before the repair every one kept
 `8.2.5.12/1`.
+
+### `headingart_ua2.pdf`
+
+`headingnest_ua2.pdf` numbers an `H` by the `Sect` elements around it. ISO
+32000-1, 14.8.4.3.5 has a strongly structured document's grouping elements nest
+to reflect its organization "into articles, sections, subsections", and ISO/TS
+32005, Table 5 bounds an `Art`, like a `Sect`, to one `H`, so an `Art` adds a
+level as a `Sect` does. A `Part` or a `Div` adds none: Table 5 looks through
+both, and the repair leaves an `H` under one alone. The PDF 2.0 namespace
+defines no `Art`, so each `Art` here is in the PDF 1.7 namespace and every
+other element in the PDF 2.0 one. No corpus file nests an `H` in a standard
+`Art`, so this fixture does:
+
+| Element                      | Construct                    | Remediated |
+| ---------------------------- | ---------------------------- | ---------- |
+| `Document` > `Art`           | `H`, then a `P` and a `Sect` | `H1`       |
+| `Art` > `Sect`               | `H`, then a `P`              | `H2`       |
+| `Document` > `Art`, the last | `H`, then a `P`              | `H1`       |
+
+The three `H` are the file's one defect at PDF/UA-2: the font is embedded, the
+XMP packet claims PDF/UA-2 and every element is a standard type. litho and
+veraPDF 1.30.2 report the same rule set in all thirteen cells, and at both
+WTPDF levels (`8.2.5.12/1` with the PDF Declaration WTPDF requires). PDF/UA-1
+reports no heading rule. Remediated at PDF/UA-2 and both WTPDF levels, default
+and aggressive, every output is clean in both tools; before the repair counted
+`Art`, every one kept `8.2.5.12/1`.
 
 ### `formreuse_ua1.pdf`
 
