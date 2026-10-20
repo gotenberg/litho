@@ -14,7 +14,10 @@ import (
 // [models.TextElement] values. It is a thin orchestrator: each per-glyph
 // concern (decoding, MCID inheritance, visibility checks, glyph metrics,
 // matrix advance) lives in its own helper so the main loop reads
-// top-down without deeply nested branches.
+// top-down without deeply nested branches. When runs is not nil it records
+// there, for each glyph the font gives no advance, the advance the embedded
+// program gives it on the page ([recordProgramGapWidths]), for gap
+// measurement.
 //
 // # Corpus evidence
 //
@@ -22,7 +25,7 @@ import (
 //     glued to the word before them while the rise was ignored.
 //   - All corpora: honouring the rise alone makes words match PDF.js on 7
 //     more files and on none fewer.
-func processText(ctx context.Context, str ast.PdfString, font *Font, machine *graphics.Machine, elements *[]models.TextElement) error {
+func processText(ctx context.Context, str ast.PdfString, font *Font, machine *graphics.Machine, elements *[]models.TextElement, runs *runRecorder) error {
 	data := []byte(str)
 	state := machine.Current()
 	fontSize := state.Text.Tfs
@@ -117,6 +120,11 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Language:      mcLang,
 			ExpansionText: mcExpansion,
 		})
+		if runs != nil && pageWidth == 0 && font.WMode != 1 {
+			if w, ok := font.programGapWidth(cid); ok {
+				runs.recordGapWidth(len(*elements)-1, glyphPageAdvance(state, w, fontSize))
+			}
+		}
 
 		advanceTextMatrix(state, font, fontSize, n, charCode, cid)
 
@@ -509,7 +517,16 @@ func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, 
 		awy := advance * (tm[2]*ctm[1] + tm[3]*ctm[3])
 		return math.Sqrt(awx*awx + awy*awy)
 	}
-	glyphWidth := font.GlyphWidth(cid)
+	return glyphPageAdvance(state, font.GlyphWidth(cid), fontSize)
+}
+
+// glyphPageAdvance returns, in page-space units, the horizontal advance of a
+// glyph glyphWidth 1/1000 text space units wide shown at fontSize, scaled by
+// Th and carried through Tm and the CTM, as [computeGlyphPageWidth] measures
+// it.
+func glyphPageAdvance(state *graphics.State, glyphWidth, fontSize float64) float64 {
+	tm := state.Text.Tm
+	ctm := state.CTM
 	advance := (glyphWidth / 1000.0) * fontSize * (state.Text.Tz / 100.0)
 	awx := advance * (tm[0]*ctm[0] + tm[1]*ctm[2])
 	awy := advance * (tm[0]*ctm[1] + tm[1]*ctm[3])

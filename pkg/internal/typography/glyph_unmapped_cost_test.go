@@ -43,7 +43,7 @@ func TestProcessText_ManyUnmappedCodesStayFast(t *testing.T) {
 	go func() {
 		machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
 		var elements []models.TextElement
-		done <- processText(context.Background(), ast.PdfString(shown), font, machine, &elements)
+		done <- processText(context.Background(), ast.PdfString(shown), font, machine, &elements, nil)
 	}()
 
 	select {

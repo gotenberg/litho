@@ -34,7 +34,7 @@ func TestProcessText_TextRiseShiftsOrigin(t *testing.T) {
 			t.Fatalf("Ts: %v", err)
 		}
 		var elements []models.TextElement
-		if err := processText(ctx, ast.PdfString(s), font, machine, &elements); err != nil {
+		if err := processText(ctx, ast.PdfString(s), font, machine, &elements, nil); err != nil {
 			t.Fatalf("processText: %v", err)
 		}
 		return elements

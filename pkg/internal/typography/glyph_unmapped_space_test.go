@@ -70,7 +70,7 @@ func showText(t *testing.T, font *Font, shown string) []models.TextElement {
 	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
 	machine.Current().Text.Tfs = 10
 	var elements []models.TextElement
-	if err := processText(context.Background(), ast.PdfString(shown), font, machine, &elements); err != nil {
+	if err := processText(context.Background(), ast.PdfString(shown), font, machine, &elements, nil); err != nil {
 		t.Fatalf("processText: %v", err)
 	}
 	return elements

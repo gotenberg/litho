@@ -248,19 +248,19 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 				}
 			}
 		case "Tj":
-			if err := handleShowTextOp(ctx, machine, currentFont, op, 0, elements); err != nil {
+			if err := handleShowTextOp(ctx, machine, currentFont, op, 0, elements, runs); err != nil {
 				return err
 			}
 		case "'":
-			if err := handleShowTextOp(ctx, machine, currentFont, op, 0, elements); err != nil {
+			if err := handleShowTextOp(ctx, machine, currentFont, op, 0, elements, runs); err != nil {
 				return err
 			}
 		case "\"":
-			if err := handleShowTextOp(ctx, machine, currentFont, op, 2, elements); err != nil {
+			if err := handleShowTextOp(ctx, machine, currentFont, op, 2, elements, runs); err != nil {
 				return err
 			}
 		case "TJ":
-			if err := handleTJOp(ctx, machine, currentFont, op, elements); err != nil {
+			if err := handleTJOp(ctx, machine, currentFont, op, elements, runs); err != nil {
 				return err
 			}
 		case "Do":
@@ -320,6 +320,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			cur := machine.Current()
 			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur) * currentFont.type3HeightScale(cur.Text.Tfs), trm: renderingMatrixOnPage(cur), stream: stream, segment: segment, marked: marked, placement: machine.Placement}
 			for len(runs.fonts) < len(*elements) {
+				key.gapWidth = runs.gapWidths[len(runs.fonts)]
 				runs.fonts = append(runs.fonts, key)
 			}
 			// PDF.js ends the text item before it paints any XObject, an
@@ -495,7 +496,7 @@ func resolveFontFromResources(ctx context.Context, doc *document.Document, resou
 // handleShowTextOp processes the Tj, ' and " operators. strIndex selects the
 // operand that holds the PdfString: 0 for Tj and ', 2 for the
 // word/char-spacing form ".
-func handleShowTextOp(ctx context.Context, machine *graphics.Machine, currentFont *Font, op content.Operation, strIndex int, elements *[]models.TextElement) error {
+func handleShowTextOp(ctx context.Context, machine *graphics.Machine, currentFont *Font, op content.Operation, strIndex int, elements *[]models.TextElement, runs *runRecorder) error {
 	if machine.IgnoreTextOps || currentFont == nil {
 		return nil
 	}
@@ -506,13 +507,13 @@ func handleShowTextOp(ctx context.Context, machine *graphics.Machine, currentFon
 	if !ok {
 		return nil
 	}
-	return processText(ctx, str, currentFont, machine, elements)
+	return processText(ctx, str, currentFont, machine, elements, runs)
 }
 
 // handleTJOp processes the TJ (show text with kerning) operator. Numeric
 // array elements advance the text matrix instead of drawing a glyph, so
 // they must be dispatched separately from string elements.
-func handleTJOp(ctx context.Context, machine *graphics.Machine, currentFont *Font, op content.Operation, elements *[]models.TextElement) error {
+func handleTJOp(ctx context.Context, machine *graphics.Machine, currentFont *Font, op content.Operation, elements *[]models.TextElement, runs *runRecorder) error {
 	if machine.IgnoreTextOps || currentFont == nil {
 		return nil
 	}
@@ -525,7 +526,7 @@ func handleTJOp(ctx context.Context, machine *graphics.Machine, currentFont *Fon
 	}
 	for _, item := range arr {
 		if str, ok := item.(ast.PdfString); ok {
-			if err := processText(ctx, str, currentFont, machine, elements); err != nil {
+			if err := processText(ctx, str, currentFont, machine, elements, runs); err != nil {
 				return err
 			}
 			continue

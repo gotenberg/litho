@@ -78,7 +78,7 @@ func showAt10(t *testing.T, font *Font, s string) ([]models.TextElement, float64
 	state.Text.Tm = [6]float64{1, 0, 0, 1, 0, 0}
 	state.Text.Tfs = 10
 	var elements []models.TextElement
-	if err := processText(context.Background(), ast.PdfString(s), font, machine, &elements); err != nil {
+	if err := processText(context.Background(), ast.PdfString(s), font, machine, &elements, nil); err != nil {
 		t.Fatalf("processText: %v", err)
 	}
 	return elements, state.Text.Tm[4], state.Text.Tm[5]

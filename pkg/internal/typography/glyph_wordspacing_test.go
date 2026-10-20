@@ -22,7 +22,7 @@ func wordSpacingRun(t *testing.T, font *Font, s string) []float64 {
 	state.Text.Tw = 5
 
 	var elements []models.TextElement
-	if err := processText(context.Background(), ast.PdfString(s), font, machine, &elements); err != nil {
+	if err := processText(context.Background(), ast.PdfString(s), font, machine, &elements, nil); err != nil {
 		t.Fatalf("processText: %v", err)
 	}
 	xs := make([]float64, len(elements))

@@ -50,7 +50,7 @@ func TestProcessText_AngleFollowsTheAdvance(t *testing.T) {
 			state.Text.Tz = tc.tz
 
 			var elements []models.TextElement
-			if err := processText(ctx, ast.PdfString("ab"), font, machine, &elements); err != nil {
+			if err := processText(ctx, ast.PdfString("ab"), font, machine, &elements, nil); err != nil {
 				t.Fatalf("processText: %v", err)
 			}
 			if len(elements) != 2 {

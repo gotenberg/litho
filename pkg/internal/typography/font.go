@@ -125,6 +125,18 @@ type Font struct {
 	// (ISO 32000-1, 9.6.6.1), so a later fill from the font program's
 	// built-in encoding leaves these codes alone, mapped or not.
 	differenceCodes map[byte]bool
+
+	// differenceNames holds the glyph name a /Differences array gives each
+	// code it names other than .notdef, which [Font.programGapWidths] looks
+	// the code's glyph up by in the embedded program.
+	differenceNames map[byte]string
+
+	// programGapWidths holds, for each code a simple font gives no advance
+	// because /Widths does not cover it and the descriptor states no
+	// /MissingWidth ([Font.widthOutsideWidths]), the advance its embedded
+	// program gives the glyph the code selects, in 1/1000 text space units.
+	// Gap measurement reads it ([runFont] gapWidth); the advance stays 0.
+	programGapWidths map[byte]float64
 }
 
 // GlyphWidth returns the advance width (in 1/1000 text-space units) for the
@@ -707,6 +719,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	if subtypeName == "Type1" || subtypeName == "MMType1" {
 		applyType1CharStringWidths(ctx, doc, fontDict, font)
 	}
+	recordProgramGapWidths(ctx, doc, fontDict, font)
 
 	// Adobe predefined CID→Unicode fallback for Type0 fonts. ISO 32000-1,
 	// 9.10.2 extends steps a-e to a descendant CIDFont of the Adobe-GB1,
@@ -1045,6 +1058,10 @@ func applyDifferencesName(font *Font, code byte, name string, isDingbats, isSymb
 		font.differenceCodes = make(map[byte]bool)
 	}
 	font.differenceCodes[code] = true
+	if font.differenceNames == nil {
+		font.differenceNames = make(map[byte]string)
+	}
+	font.differenceNames[code] = name
 	delete(font.LigatureOverrides, code)
 	if font.Subtype == "Type3" && encodings.InTeXGlyphList(name) {
 		return

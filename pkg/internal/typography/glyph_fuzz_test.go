@@ -162,7 +162,7 @@ func FuzzProcessText(f *testing.F) {
 		defer cancel()
 
 		var elements []models.TextElement
-		if err := processText(ctx, ast.PdfString(data), font, machine, &elements); err != nil {
+		if err := processText(ctx, ast.PdfString(data), font, machine, &elements, nil); err != nil {
 			t.Fatalf("processText did not finish %d bytes before the deadline (%v): the loop consumed no bytes", len(data), err)
 		}
 	})
@@ -200,7 +200,7 @@ func TestGlyphFuzzSeedsReachTheLoop(t *testing.T) {
 
 	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
 	var elements []models.TextElement
-	if err := processText(context.Background(), ast.PdfString("AB"), font, machine, &elements); err != nil {
+	if err := processText(context.Background(), ast.PdfString("AB"), font, machine, &elements, nil); err != nil {
 		t.Fatalf("processText: %v", err)
 	}
 	if len(elements) != 2 {

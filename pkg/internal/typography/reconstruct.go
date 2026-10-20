@@ -3,6 +3,7 @@ package typography
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -87,6 +88,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 	if len(elements) == 0 {
 		return ""
 	}
+	elements = gapMeasured(elements, fonts)
 
 	// Beads order the text across them, not within one.
 	if len(beads) > 0 {
@@ -681,13 +683,28 @@ type runFont struct {
 	// glyph was shown: it changes wherever a text-positioning operator set
 	// the position, and not at a Tf.
 	placement int
+	// gapWidth is the advance on the page the embedded program gives a
+	// glyph the font gives none, because /Widths does not cover its code
+	// ([recordProgramGapWidths]), and 0 for any other glyph. Gaps are
+	// measured from it ([gapMeasured]).
+	gapWidth float64
 }
 
 // runRecorder collects the [runFont] of each element extraction appends,
-// and numbers the streams and segments it names.
+// and numbers the streams and segments it names. gapWidths holds the
+// [runFont] gapWidth of the elements that have one, by element index.
 type runRecorder struct {
-	fonts []runFont
-	ids   int
+	fonts     []runFont
+	ids       int
+	gapWidths map[int]float64
+}
+
+// recordGapWidth records w as the [runFont] gapWidth of the element i.
+func (r *runRecorder) recordGapWidth(i int, w float64) {
+	if r.gapWidths == nil {
+		r.gapWidths = make(map[int]float64)
+	}
+	r.gapWidths[i] = w
 }
 
 // next returns a stream or segment number no element has been given yet.
@@ -1966,4 +1983,30 @@ func itemEndingSpace(elems []models.TextElement, fonts []runFont, p, i int) int 
 		}
 	}
 	return -1
+}
+
+// gapMeasured returns elements with the width of each glyph whose [runFont]
+// gapWidth is set read as that width, so the gaps around it are measured
+// from the advance the embedded program gives it rather than from the 0 the
+// font dictionary gives its code ([recordProgramGapWidths]). Every other
+// element, and elements itself, are left as they are; without fonts paired
+// one to one it returns elements.
+func gapMeasured(elements []models.TextElement, fonts []runFont) []models.TextElement {
+	if len(fonts) != len(elements) {
+		return elements
+	}
+	var out []models.TextElement
+	for i, f := range fonts {
+		if f.gapWidth <= 0 || elements[i].Width != 0 {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(elements)
+		}
+		out[i].Width = f.gapWidth
+	}
+	if out == nil {
+		return elements
+	}
+	return out
 }

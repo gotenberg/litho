@@ -47,8 +47,9 @@ func missingWidthPitchPDF(pitch float64) []byte {
 // other code the descriptor's /MissingWidth, 0 when it states none. Such a
 // glyph advances nothing, so each sits where its own TD sets it, and the
 // gap two space glyphs leave between "net:" and "host" still reads as a
-// word break. Whether the glyphs inside each word join is the open
-// w62-missingwidth decision, which this test leaves to the code.
+// word break. The font here embeds no program, so no gap is measured from a
+// program's advance; [TestExtractText_CodesOutsideWidthsMeasuredByProgram]
+// pins the glyphs joining when one is embedded.
 //
 // # Corpus evidence
 //

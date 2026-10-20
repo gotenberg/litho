@@ -58,7 +58,7 @@ func TestProcessText_ZeroWidthToUnicodeTerminates(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		var elements []models.TextElement
-		done <- processText(context.Background(), ast.PdfString("AB"), font, machine, &elements)
+		done <- processText(context.Background(), ast.PdfString("AB"), font, machine, &elements, nil)
 	}()
 
 	select {
@@ -95,7 +95,7 @@ func TestProcessText_WellFormedToUnicodeStillExtracts(t *testing.T) {
 	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
 
 	var elements []models.TextElement
-	if err := processText(context.Background(), ast.PdfString("A"), font, machine, &elements); err != nil {
+	if err := processText(context.Background(), ast.PdfString("A"), font, machine, &elements, nil); err != nil {
 		t.Fatalf("processText: %v", err)
 	}
 	if len(elements) != 1 {
