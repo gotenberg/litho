@@ -399,7 +399,7 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 
 	var fixes []string
 	if len(device) > 0 || !annotColor {
-		deviceFixes, err := fixDeviceColorIntent(ctx, alloc, doc, device)
+		deviceFixes, err := fixDeviceColorIntent(ctx, alloc, doc, device, compliance.PDFAPart(profile))
 		if err != nil {
 			return nil, err
 		}
@@ -458,15 +458,16 @@ func addAnnotColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	if !annotColorPresent(ctx, alloc, doc, catalogDict, opts, profile) {
 		return ""
 	}
-	addOutputIntent(ctx, alloc, doc, catalogRef, catalogDict, false)
+	// The catalog carries no output intent, so none is kept to report.
+	addOutputIntent(ctx, alloc, doc, catalogRef, catalogDict, false, 1)
 	return "added sRGB OutputIntent to catalog for annotation colour arrays"
 }
 
 // fixDeviceColorIntent is the device colour decision of [fixOutputIntent]:
 // it adds the output intent covering the device colour space the violations
 // flag, and injects a Default colour space for the one that intent leaves
-// uncovered.
-func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, violations []compliance.Violation) ([]string, error) {
+// uncovered. part is the PDF/A part the run targets (see [addOutputIntent]).
+func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, violations []compliance.Violation, part int) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
@@ -526,7 +527,8 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	}
 
 	if addOI {
-		catalogDict = addOutputIntent(ctx, alloc, doc, catalogRef, catalogDict, addCMYK)
+		var kept []string
+		catalogDict, kept = addOutputIntent(ctx, alloc, doc, catalogRef, catalogDict, addCMYK, part)
 		if addCMYK {
 			fixes = append(fixes, "added CMYK OutputIntent to catalog")
 			oiIsCMYK = true
@@ -534,6 +536,7 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 			fixes = append(fixes, "added sRGB OutputIntent to catalog")
 			oiIsRGB = true
 		}
+		fixes = append(fixes, kept...)
 	}
 
 	// Inject a Default{RGB,CMYK} for the colorspace the OutputIntent
@@ -569,43 +572,122 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	return fixes, nil
 }
 
-// addOutputIntent makes a GTS_PDFA1 output intent carrying the embedded CMYK
-// profile, or the sRGB one when cmyk is false, the catalog's only output
-// intent, and returns the rewritten catalog.
+// addOutputIntent makes a GTS_PDFA1 output intent carrying a CMYK profile,
+// or an RGB one when cmyk is false, the catalog's PDF/A output intent, and
+// returns the rewritten catalog with a fix description for each intent it
+// keeps. part is the PDF/A part the run targets.
+//
+// ISO 32000-1, 14.11.5 admits several output intents, one per output
+// condition, so the intents of other subtypes the catalog lists, GTS_PDFX or
+// ISO_PDFE1, stay after the new one. A GTS_PDFA1 intent already there is
+// replaced: the caller adds an intent only when none covers the device colour
+// the content paints, and a second GTS_PDFA1 intent would name a second PDF/A
+// output condition. The new intent goes first, where the readers of the
+// first entry's profile ([firstOutputIntentProfile]) find it.
+//
+// ISO 19005-1, 6.2.2 and ISO 19005-2/3/4, 6.2.3 t2 then require every intent
+// carrying a /DestOutputProfile to name the same indirect object. When a kept
+// intent's profile is one PDF/A admits as the destination profile for the
+// colour space the new intent covers (see [reusableIntentProfile]), the new
+// intent names that object, with the kept intent's output condition, so
+// neither intent's reading changes. Otherwise the new intent carries litho's
+// stock profile and every kept intent naming a profile is pointed at it, the
+// unification [fixOutputIntentCleanup] applies: the PDF/A profile stays and
+// the kept intents keep their /OutputConditionIdentifier.
 //
 // An ICCBased colour space whose profile the new intent now repeats violates
 // ISO 19005-4, 6.2.4.2, so the same pass replaces every page's copy with the
 // device space the intent covers.
-func addOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogRef ast.PdfIndirectRef, catalogDict ast.PdfDict, cmyk bool) ast.PdfDict {
-	iccStream, conditionID := cmykICCStream(), cmykCondition
-	if !cmyk {
-		iccStream, conditionID = sRGBICCStream(), "sRGB IEC61966-2.1"
-	}
-	iccRef := alloc.Alloc(iccStream)
+//
+// # Corpus evidence
+//
+//   - All corpora: 12 files list a GTS_PDFX intent and no GTS_PDFA1 one
+//     (govdocs 1, pdfjs 5, pdfcpu 1, pdf20 1, verapdf 4). Replacing the array
+//     dropped the PDF/X intent from all 264 of their outputs at the eleven
+//     PDF/A levels, default and aggressive; every output now keeps it, and
+//     each reports the rule set it reported before on litho.
+//   - litho pdfxonly_2b and pdfxnoprofile_2b: remediated at the eleven PDF/A
+//     levels, every output keeps the PDF/X intent and reports the same rule
+//     set on litho and veraPDF.
+func addOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogRef ast.PdfIndirectRef, catalogDict ast.PdfDict, cmyk bool, part int) (ast.PdfDict, []string) {
+	kept := keptOutputIntents(ctx, alloc, doc, liveArray(ctx, alloc, doc, catalogDict["OutputIntents"]))
 
-	// ISO 32000-2 Table 401 and ISO 19005-4 §6.2.3 keep GTS_PDFA1 as
-	// the PDF/A output-intent subtype for every part; a "GTS_PDFA"
-	// subtype does not exist, so an intent carrying it does not satisfy
-	// the device-colour requirement of §6.2.4.3.
-	outputIntent := ast.PdfDict{
-		"Type":                      ast.PdfName("OutputIntent"),
-		"S":                         ast.PdfName("GTS_PDFA1"),
-		"OutputConditionIdentifier": ast.PdfString(conditionID),
-		"DestOutputProfile":         iccRef,
-	}
-	if cmyk {
-		outputIntent["RegistryName"] = ast.PdfString(cmykRegistry)
+	var outputIntent ast.PdfDict
+	iccRef, source, reused := reusableIntentProfile(ctx, alloc, doc, kept, cmyk, part)
+	if reused {
+		outputIntent = ast.PdfDict{
+			"Type":              ast.PdfName("OutputIntent"),
+			"S":                 ast.PdfName("GTS_PDFA1"),
+			"DestOutputProfile": iccRef,
+		}
+		for _, key := range []ast.PdfName{"OutputConditionIdentifier", "OutputCondition", "RegistryName", "Info"} {
+			if v, ok := source[key]; ok {
+				outputIntent[key] = v
+			}
+		}
+		if _, ok := outputIntent["OutputConditionIdentifier"]; !ok {
+			// ISO 32000-1, 14.11.5, Table 365 makes the identifier required;
+			// "Custom" names a condition the profile alone characterizes.
+			outputIntent["OutputConditionIdentifier"] = ast.PdfString("Custom")
+		}
+	} else {
+		iccStream, conditionID := cmykICCStream(), cmykCondition
+		if !cmyk {
+			iccStream, conditionID = sRGBICCStream(), "sRGB IEC61966-2.1"
+		}
+		iccRef = alloc.Alloc(iccStream)
+
+		// ISO 32000-2 Table 401 and ISO 19005-4 §6.2.3 keep GTS_PDFA1 as
+		// the PDF/A output-intent subtype for every part; a "GTS_PDFA"
+		// subtype does not exist, so an intent carrying it does not satisfy
+		// the device-colour requirement of §6.2.4.3.
+		outputIntent = ast.PdfDict{
+			"Type":                      ast.PdfName("OutputIntent"),
+			"S":                         ast.PdfName("GTS_PDFA1"),
+			"OutputConditionIdentifier": ast.PdfString(conditionID),
+			"DestOutputProfile":         iccRef,
+		}
+		if cmyk {
+			outputIntent["RegistryName"] = ast.PdfString(cmykRegistry)
+		}
 	}
 	oiRef := alloc.Alloc(outputIntent)
 
+	intents := ast.PdfArray{oiRef}
+	var notes []string
+	for _, it := range kept {
+		subtype := intentSubtype(ctx, doc, it.dict)
+		dp, has := it.dict["DestOutputProfile"]
+		if dpRef, isRef := dp.(ast.PdfIndirectRef); !has || (isRef && dpRef == iccRef) || entryResolvesToNull(ctx, doc, dp) {
+			note := fmt.Sprintf("kept OutputIntent[%d] (/S /%s) beside the GTS_PDFA1 intent", len(intents), subtype)
+			if has && !entryResolvesToNull(ctx, doc, dp) {
+				note += ", which shares its destination profile"
+			}
+			notes = append(notes, note)
+			intents = append(intents, it.entry)
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("kept OutputIntent[%d] (/S /%s) beside the GTS_PDFA1 intent, its /DestOutputProfile unified with the GTS_PDFA1 one: %s",
+			len(intents), subtype, profileDifference(decodedProfile(ctx, alloc, doc, iccRef), decodedProfile(ctx, alloc, doc, dp))))
+		repointed := make(ast.PdfDict, len(it.dict))
+		maps.Copy(repointed, it.dict)
+		repointed["DestOutputProfile"] = iccRef
+		if it.ref.ObjectNum > 0 {
+			alloc.AllocAt(it.ref.ObjectNum, repointed)
+			intents = append(intents, it.ref)
+		} else {
+			intents = append(intents, repointed)
+		}
+	}
+
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
 	maps.Copy(newCatalog, catalogDict)
-	newCatalog["OutputIntents"] = ast.PdfArray{oiRef}
+	newCatalog["OutputIntents"] = intents
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
 	newCat := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
 	if newCat == nil {
-		return newCatalog
+		return newCatalog, notes
 	}
 	if profile := firstOutputIntentProfile(ctx, alloc, doc, newCat); profile != nil {
 		visited := make(map[int]bool)
@@ -622,7 +704,89 @@ func addOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			dedupICCInXObjects(ctx, alloc, doc, pe, profiles, visited)
 		}
 	}
-	return newCatalog
+	return newCatalog, notes
+}
+
+// keptIntent is one /OutputIntents entry [addOutputIntent] keeps: the entry
+// as the array lists it, the object it lives at (zero for an intent written
+// directly in the array) and its dictionary as this run sees it.
+type keptIntent struct {
+	entry ast.PdfObject
+	ref   ast.PdfIndirectRef
+	dict  ast.PdfDict
+}
+
+// keptOutputIntents returns the entries of an /OutputIntents array that
+// [addOutputIntent] keeps: every output intent dictionary whose /S is not
+// GTS_PDFA1. An entry that names no dictionary is no output intent (ISO
+// 32000-1, 14.11.5) and is dropped, as replacing the whole array dropped it.
+func keptOutputIntents(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, arr ast.PdfArray) []keptIntent {
+	var kept []keptIntent
+	for _, entry := range arr {
+		it := keptIntent{entry: entry}
+		if ref, ok := entry.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+			it.ref = ref
+			it.dict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+		}
+		if it.dict == nil {
+			d, err := document.ResolveDict(ctx, doc, entry)
+			if err != nil || d == nil {
+				continue
+			}
+			it.dict = d
+		}
+		if intentSubtype(ctx, doc, it.dict) == "GTS_PDFA1" {
+			continue
+		}
+		kept = append(kept, it)
+	}
+	return kept
+}
+
+// iccProfileHeaderLen is the size of an ICC profile header (ISO 15076-1, 7.2).
+const iccProfileHeaderLen = 128
+
+// reusableIntentProfile returns the destination profile of the first kept
+// intent that PDF/A admits as the profile of a GTS_PDFA1 intent covering CMYK
+// (cmyk) or RGB, with that intent's dictionary, and false when none does.
+//
+// The profile must carry a full header, a printer or monitor device class, the
+// colour space the intent covers, the /N that colour space takes, and an ICC
+// major version of 2 under PDF/A-1 or of 2 or 4 under the later parts: the
+// tests ISO 19005-1, 6.2.2 t1 and 6.2.3.2 t2 and ISO 19005-2/3/4, 6.2.3 t1
+// apply to a destination profile. A profile written directly in the intent has
+// no object number for the other intents to share (6.2.3 t2), so only an
+// indirect one qualifies.
+func reusableIntentProfile(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, kept []keptIntent, cmyk bool, part int) (ast.PdfIndirectRef, ast.PdfDict, bool) {
+	colorSpace, components := "RGB ", 3
+	if cmyk {
+		colorSpace, components = "CMYK", 4
+	}
+	for _, it := range kept {
+		ref, ok := it.dict["DestOutputProfile"].(ast.PdfIndirectRef)
+		if !ok || ref.ObjectNum == 0 {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, ref)
+		if err != nil {
+			continue
+		}
+		if n, err := document.ResolveInt(ctx, doc, stream.Dict["N"]); err != nil || int(n) != components {
+			continue
+		}
+		data := decodedProfile(ctx, alloc, doc, ref)
+		if len(data) < iccProfileHeaderLen || string(data[16:20]) != colorSpace {
+			continue
+		}
+		if class := string(data[12:16]); class != "prtr" && class != "mntr" {
+			continue
+		}
+		if version := data[8]; version != 2 && (version != 4 || part == 1) {
+			continue
+		}
+		return ref, it.dict, true
+	}
+	return ast.PdfIndirectRef{}, nil, false
 }
 
 // injectDefaultColorSpace walks the page tree plus every reachable Form
