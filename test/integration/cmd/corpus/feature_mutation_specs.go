@@ -309,13 +309,14 @@ const mutationRedactReach = 1e6
 //     ErrRedactionRefused (content a form XObject draws, an inline image, a
 //     stroked path) and 9 with ErrRedactionIncomplete; the 2 encrypted
 //     fixtures refuse the signature.
-//   - litho formshare_ua1, sharedtag_ua1, sharedclose_ua1: no ruleset_changed
-//     cell under mutate-stamp. Their pages share one /Contents stream drawing
-//     a marked form, which veraPDF parses once per /Contents object. While the
-//     stamp gave each page a /Contents array of its own, veraPDF 1.30.2 read
-//     the shared stream once per page and counted the form again, so the stamp
-//     added 7.20 test 2 at PDF/UA-1 on both tools; pages sharing /Contents now
-//     share one stamped array.
+//   - litho formshare_ua1, sharedtag_ua1, sharedclose_ua1: 1 ruleset_changed
+//     cell each under mutate-stamp, 7.20 test 2 added at PDF/UA-1, and
+//     veraPDF 1.30.2 adds it too. Their pages share one /Contents stream
+//     drawing a marked form, which veraPDF parses once per /Contents object.
+//     One StampText call over every page keeps the pages sharing one stamped
+//     array, and veraPDF then adds nothing; applyStamp stamps one page per
+//     call, so each page gets an array of its own and veraPDF reads the
+//     shared stream once per page, counting the form again.
 //   - litho sharedtag_ua1: 1 ruleset_changed cell under mutate-autotag, 7.1
 //     test 2 added at PDF/UA-1, and veraPDF 1.30.2 adds it too: the marked
 //     form is drawn inside the artifact the auto-tagger makes of the graphics
