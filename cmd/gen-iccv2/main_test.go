@@ -84,6 +84,24 @@ func cmykSource(t *testing.T) []byte {
 	return b
 }
 
+// TestGeneratedCMYKProfileIsCommitted fails when the committed CMYK profile
+// is not the generator's output, so neither drifts from the other.
+func TestGeneratedCMYKProfileIsCommitted(t *testing.T) {
+	t.Parallel()
+
+	committed, err := os.ReadFile("../../pkg/internal/graphics/icc/profiles/" + cmykName)
+	if err != nil {
+		t.Fatalf("reading the committed profile: %v", err)
+	}
+	generated, err := generateCMYK(cmykSource(t))
+	if err != nil {
+		t.Fatalf("generateCMYK: %v", err)
+	}
+	if !bytes.Equal(generated, committed) {
+		t.Errorf("profiles/%s differs from the generator's output: run go generate ./pkg/internal/graphics/icc/...", cmykName)
+	}
+}
+
 // TestGenerateCMYKIsVersion2PrinterProfile pins the header and the tags an
 // ICC.1:2001-04 output profile requires (6.3.1.3), the AToB table carried
 // over from the source, the CC0 dedication, and a second run's bytes.
