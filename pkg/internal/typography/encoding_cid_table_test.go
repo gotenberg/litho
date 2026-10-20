@@ -1,9 +1,11 @@
 package typography
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
 // TestNextEncodingCode_SplitsByCodespaceAndReadsTheCID pins the code->CID
@@ -61,5 +63,33 @@ func TestDecodeNextChar_ReadsTheTableAtTheCID(t *testing.T) {
 	// <FF> lies in no codespace range: it selects .notdef and names nothing.
 	if char, n, skip := decodeNextChar(font, []byte("\xFF")); char != "" || n != 1 || skip {
 		t.Errorf("decodeNextChar(<FF>) = (%q, %d, %v), want (\"\", 1, false)", char, n, skip)
+	}
+}
+
+// TestDecodeNextCode_ReadsAnUnmappedCodeAsNotdef pins that a code no mapping
+// covers, in an encoding CMap litho holds whole, selects CID 0 (ISO 32000-1,
+// 9.7.6.3) and names no character, where it once read as its own value. It is
+// still reported as a stand-in, so the integrity probe weighs it as it
+// weighed the value.
+func TestDecodeNextCode_ReadsAnUnmappedCodeAsNotdef(t *testing.T) {
+	t.Parallel()
+
+	program := "/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n" +
+		"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n" +
+		"1 begincidrange\n<0041> <0042> 1\nendcidrange\nendcmap end end\n"
+	cids := cmap.ParseEmbeddedCIDMap(context.Background(), []byte(program))
+	if cids == nil || !cids.UnmappedNotdef() {
+		t.Fatal("the encoding CMap did not parse whole")
+	}
+	font := &Font{
+		Subtype:      "Type0",
+		GIDToUnicode: map[uint16]rune{1: 'A', 0x5A20: 'x'},
+		encodingCIDs: &encodingCIDs{cids: cids},
+	}
+	if char, n, skip, standIn := decodeNextCode(font, []byte("\x5A\x20")); char != "" || n != 2 || skip || !standIn {
+		t.Errorf("decodeNextCode(<5A20>) = (%q, %d, %v, %v), want (\"\", 2, false, true)", char, n, skip, standIn)
+	}
+	if char, _, _, standIn := decodeNextCode(font, []byte("\x00\x41")); char != "A" || standIn {
+		t.Errorf("decodeNextCode(<0041>) = (%q, standIn %v), want (A, false)", char, standIn)
 	}
 }

@@ -124,6 +124,16 @@ type Machine struct {
 	// See [Machine.ShowAdvances].
 	RecordShowAdvances bool
 	showAdvances       map[int]ShowAdvance
+	// MarkUnvaluedText makes the text extractor read as U+FFFD every code of
+	// a Type 0 font that no mapping gives a character, which ISO 32000-1,
+	// 9.10.2 gives no Unicode value. The default extraction reads such a code
+	// as its own value, the stand-in PDF.js reads, while the code's CID is
+	// unknown, and as nothing once litho holds the font's whole encoding CMap
+	// and the code selects .notdef (9.7.6.3). Off by default. A caller
+	// comparing how much text two versions of a document show needs it: a
+	// repair that moves such a code from one reading to the other shows the
+	// same glyph and loses no character a reader is given.
+	MarkUnvaluedText bool
 	// FormDepth is the nesting level of the content stream being executed: 0 for
 	// the page's own, one deeper per form XObject a caller recurses into. The
 	// machine cannot know this by itself, because a form's operators arrive

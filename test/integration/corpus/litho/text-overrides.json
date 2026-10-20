@@ -47,7 +47,7 @@
       "page": 1,
       "pdfjs": "\u0007 郞",
       "unscored": true,
-      "reason": "K1, K2 and K5 read through Adobe-KR, which ISO 32000-1, 9.10.2 does not list, and K3 and K4 send their codes to CID 0, .notdef (9.7.6.3). The readers differ only on those codes, where no reading is right."
+      "reason": "K1, K2 and K5 read through Adobe-KR, which ISO 32000-1, 9.10.2 does not list, and K3's code lies past every mapping of its Adobe-Japan1-7 base, so it selects CID 0, .notdef (9.7.6.3). K4's Adobe-GB1-6 base sends code 0007 to CID 7, which litho reads through Adobe-GB1-UCS2 as &, where PDF.js, which ships no copy of the base, reads the code itself. The readers differ only on the codes of K1 to K5, where no reading is right but K4's."
     },
     {
       "fixture": "complex_2u",

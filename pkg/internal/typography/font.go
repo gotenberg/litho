@@ -98,7 +98,7 @@ type Font struct {
 	// SuppressExtraction marks a reference-only Type0 font that ISO
 	// 32000-1, 9.10.2 gives no route to Unicode: a CMap name outside
 	// Table 118, or an Adobe CJK collection litho holds no UCS2 table for.
-	// [decodeNextChar] consumes the CID width and emits no element.
+	// [decodeNextCode] consumes the CID width and emits no element.
 	SuppressExtraction bool
 
 	// LigatureOverrides maps a byte code to a pre-decoded multi-rune
@@ -987,7 +987,7 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 // font's encoding. Per ISO 32000-1, 9.6.6.1 the entry replaces the base
 // encoding's name at the code, so the base's character goes whether or not
 // the new name maps to one: a name no glyph list maps leaves the code with no
-// character (9.10.2), and [decodeNextChar] reads it as nothing, or as a word
+// character (9.10.2), and [decodeNextCode] reads it as nothing, or as a word
 // space at code 32 (9.3.3). Composite ligature names ("f_t", "T_h") read as
 // their components through [Font.LigatureOverrides].
 //

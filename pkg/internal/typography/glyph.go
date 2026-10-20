@@ -42,7 +42,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			}
 		}
 
-		char, n, skip := decodeNextChar(font, data)
+		char, n, skip, standIn := decodeNextCode(font, data)
 		if skip {
 			// Multi-byte codespace consumed bytes without a mapping
 			// and the caller opted out of emitting anything. Advance
@@ -55,6 +55,9 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		// Decompose standard ligatures to their component characters so
 		// that text search and comparison works with plain ASCII.
 		char = decomposeLigature(char)
+		if standIn && machine.MarkUnvaluedText {
+			char = string(unicode.ReplacementChar)
+		}
 
 		tm := state.Text.Tm
 		ctm := state.CTM
@@ -248,11 +251,17 @@ func currentMCIDFromStack(stack []graphics.MarkedContentState) (mcid int, lang, 
 // word spacing to: the word space of a simple font, whatever glyph it selects.
 const spaceCharCode = 0x20
 
-// decodeNextChar maps the next glyph code in data to a UTF-8 character.
+// decodeNextCode maps the next glyph code in data to a UTF-8 character.
 // Returns the decoded character, the number of bytes consumed, and a
 // skip flag that tells the caller to continue past the consumed bytes
 // without emitting an element (used for unmapped CID fallbacks that
 // should not produce visible output).
+//
+// standIn reports a code of a Type 0 font that no mapping gives a character,
+// so ISO 32000-1, 9.10.2 gives it no Unicode value: char is then the code's
+// own value, the stand-in PDF.js reads for it, or nothing when the font's
+// encoding CMap is one litho holds whole and the code selects .notdef
+// ([codeSelectsNotdef]).
 //
 // A single-byte code no table maps reads as nothing, unless it is code 32:
 // ISO 32000-1, 9.3.3 applies word spacing to the single-byte code 32
@@ -283,13 +292,13 @@ const spaceCharCode = 0x20
 //     by index ("g55", "G40") give code 32 a name no table maps. The rule
 //     reads those codes as the word spaces they separate; it reaches no
 //     other file of the five text corpora.
-func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
+func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn bool) {
 	if font.SuppressExtraction {
 		// No route to Unicode exists for this font (see
 		// [Font.SuppressExtraction]), so any character would be invented.
 		// Consume the codespace width without emitting.
 		consume := min(len(data), 2)
-		return "", consume, true
+		return "", consume, true, false
 	}
 	var ok bool
 	if font.ToUnicode != nil {
@@ -303,7 +312,7 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 			// by n and would not terminate on a zero.
 			n = 1
 		}
-		return char, n, false
+		return char, n, false, false
 	}
 
 	if font.Subtype == "Type0" && font.GIDToUnicode != nil {
@@ -319,10 +328,10 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 		if font.Subtype == "Type0" && n == 2 && len(data) >= 2 {
 			cp := rune(uint16(data[0])<<8|uint16(data[1])) + rune(font.CIDOffset) //nolint:gosec // CIDOffset is 0 or 29, no overflow
 			if cp > 0x1F {
-				return string(cp), n, false
+				return string(cp), n, false, true
 			}
 		}
-		return "", n, true
+		return "", n, true, false
 	}
 	// Type0 fonts whose /ToUnicode CMap declares a limited codespace
 	// (for example <0086> <0374> covering only subset glyphs) return
@@ -333,7 +342,7 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	if font.Subtype == "Type0" && font.ToUnicode != nil && n == 0 && len(data) >= 2 {
 		cp := rune(uint16(data[0])<<8 | uint16(data[1]))
 		if cp > 0x1F {
-			return string(cp), 2, false
+			return string(cp), 2, false, true
 		}
 	}
 
@@ -342,16 +351,16 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	// glyph names decompose to multi-rune strings that the byte→rune
 	// encoding cannot represent.
 	if s, ok := font.LigatureOverrides[data[0]]; ok {
-		return s, 1, false
+		return s, 1, false, false
 	}
 	if font.Subtype == "Type0" && font.CIDIdentityFallback {
-		char = resolveGlyphFallback(font, data, &n)
+		char, standIn = resolveGlyphFallback(font, data, &n)
 	} else if r, ok := type0TableRune(font, data); ok {
 		char, n = string(r), 2
 	} else if r, ok := font.Encoding[data[0]]; ok {
 		char = string(r)
 	} else {
-		char = resolveGlyphFallback(font, data, &n)
+		char, standIn = resolveGlyphFallback(font, data, &n)
 	}
 	if n == 0 {
 		n = 1
@@ -359,9 +368,9 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	if char == "" && n == 1 && data[0] == spaceCharCode {
 		// ISO 32000-1, 9.3.3 makes the single-byte code 32 the word space
 		// of a simple font, whatever glyph it selects.
-		char = " "
+		char, standIn = " ", false
 	}
-	return char, n, false
+	return char, n, false, standIn
 }
 
 // encodingCIDTableChar reads code, which a Type 0 font's encoding CMap splits
@@ -374,7 +383,7 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 // in the C0 control range emits nothing, as an unmapped two-byte code does
 // under a /ToUnicode CMap. A code that selects the .notdef glyph
 // ([codeSelectsNotdef], 9.7.6.3) names no character: it advances as a glyph
-// and emits none.
+// and emits none. standIn is as [decodeNextCode] reports it.
 //
 // # Corpus evidence
 //
@@ -387,39 +396,40 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 //   - All corpora: no other file's text changes, and no validation or
 //     remediation result moves on the 112 files whose Type 0 fonts name a
 //     non-Identity encoding.
-//   - litho cmapverabase_2b.pdf: read as no character, the codes the CMaps
-//     veraPDF bundles leave unmapped, which remediation inlines or embeds at
-//     PDF/A-1, read as less text than the input, and the integrity probe
-//     rolled the CMap repairs back. A code mapped to CID 0 reaches no file of
-//     the six text corpora.
-func encodingCIDTableChar(font *Font, code encodingCode) (char string, consumed int, skip bool) {
+//   - All corpora: a code a mapping sends to CID 0 reaches no file of the
+//     six text corpora.
+func encodingCIDTableChar(font *Font, code encodingCode) (char string, consumed int, skip, standIn bool) {
 	if codeSelectsNotdef(code) {
-		return "", code.n, false
+		return "", code.n, false, !code.mapped && !code.undefined
 	}
 	if code.cid >= 0 && code.cid <= math.MaxUint16 {
 		if r, ok := font.GIDToUnicode[uint16(code.cid)]; ok { //nolint:gosec // code.cid is bounded to a uint16 above.
-			return string(r), code.n, false
+			return string(r), code.n, false, false
 		}
 	}
 	if code.value > 0x1F && code.value <= unicode.MaxRune {
-		return string(rune(code.value)), code.n, false
+		return string(rune(code.value)), code.n, false, true
 	}
-	return "", code.n, true
+	return "", code.n, true, false
 }
 
 // codeSelectsNotdef reports whether code, split off a shown string by a Type 0
 // font's encoding CMap ([Font.nextEncodingCode]), selects the .notdef glyph,
 // CID 0, which names no character (ISO 32000-1, 9.7.6.3): bytes no codespace
-// range holds, and a code a mapping of the CMap sends to CID 0.
+// range holds, a code a mapping of the CMap sends to CID 0, and a code no
+// cidchar or cidrange covers in a CMap litho holds whole, its bases
+// included, which 9.7.6.3 sends to the .notdef character: CID 0, or the CID
+// a notdef mapping gives it. A code a base litho cannot read might map keeps
+// the reading PDF.js gives it, the code itself.
 //
-// A code no mapping covers also selects CID 0 under 9.7.6.3, but keeps the
-// reading PDF.js gives it, the code itself, as [Font.metricCID] reads its
-// width. Remediation inlines and embeds veraPDF's copies of CMaps PDF.js
-// bundles differently, and its integrity probe compares the text litho reads
-// before and after: read as .notdef, the codes those copies leave unmapped
-// would count as lost text and roll the repair back.
+// # Corpus evidence
+//
+//   - litho cmapnotdef_2b.pdf, cmapverabase_2b.pdf: codes a notdef range or
+//     no mapping covers read "C", "Ő" and "娠", their own values; they now
+//     read as nothing. No file of the five text corpora changes, and both
+//     pages stay unscored.
 func codeSelectsNotdef(code encodingCode) bool {
-	return code.undefined || code.mapped && code.cid == 0
+	return code.undefined || code.mapped && code.cid == 0 || !code.mapped && code.closed
 }
 
 // type0TableRune looks a two-byte Type 0 code up in [Font.GIDToUnicode].
@@ -430,7 +440,7 @@ func codeSelectsNotdef(code encodingCode) bool {
 // and read each byte as Latin-1. A code the table does not name keeps the
 // single-byte reading: under an embedded CMap stream a code can be one byte.
 // A font whose encoding CMap gives its codes CIDs ([Font.encodingCIDKeyed])
-// never reaches it: [decodeNextChar] reads its table at those CIDs first.
+// never reaches it: [decodeNextCode] reads its table at those CIDs first.
 func type0TableRune(font *Font, data []byte) (rune, bool) {
 	if font.Subtype != "Type0" || font.GIDToUnicode == nil || len(data) < 2 {
 		return 0, false
@@ -569,8 +579,9 @@ func decomposeLigature(s string) string {
 // multi-byte code is consumed. An empty string signals "no mapping
 // available"; callers treat that as an unresolved glyph and drop it
 // from emitted text rather than printing a "?" placeholder that would
-// surface in extracted content.
-func resolveGlyphFallback(font *Font, data []byte, n *int) string {
+// surface in extracted content. standIn reports a character that is the
+// code's own value read as a code point ([decodeNextCode]).
+func resolveGlyphFallback(font *Font, data []byte, n *int) (char string, standIn bool) {
 	if font.GIDToUnicode != nil && (font.Subtype == "Type0" || font.CIDWidths != nil) && len(data) >= 2 {
 		// CIDFonts (Type0) feed 2-byte CIDs to the embedded font's
 		// GID→Unicode cmap, or to the glyph table of a non-embedded
@@ -587,7 +598,7 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 		gid := uint16(data[0])<<8 | uint16(data[1])
 		if r, ok := font.GIDToUnicode[gid]; ok {
 			*n = 2
-			return string(r)
+			return string(r), false
 		}
 		// Fall through to CIDIdentityFallback when a non-embedded font
 		// overlays a partial GID table via stdfonts: the table lists
@@ -602,9 +613,9 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 		cp := rune(uint16(data[0])<<8|uint16(data[1])) + rune(font.CIDOffset) //nolint:gosec // CIDOffset is 0 or 29, no overflow
 		*n = 2
 		if cp > 0 {
-			return string(cp)
+			return string(cp), true
 		}
-		return ""
+		return "", false
 	}
-	return ""
+	return "", false
 }

@@ -796,6 +796,22 @@ type extractTextOpts struct {
 	includeClipPath  bool
 	includeClipped   bool
 	includeArtifacts bool
+	// markUnvalued reads every glyph whose code has no Unicode value as
+	// U+FFFD ([withUnvaluedMarked]).
+	markUnvalued bool
+}
+
+// withUnvaluedMarked reads as U+FFFD every code of a Type 0 font that no
+// mapping gives a character, which ISO 32000-1, 9.10.2 gives no Unicode
+// value, where the default extraction reads the code's own value while its
+// CID is unknown and nothing once the code is known to select .notdef
+// (9.7.6.3). Remediation's integrity probe uses it, see [probeIntegrity]. It
+// is unexported: what a caller reads for such a code stays the default
+// reading.
+func withUnvaluedMarked() ExtractTextOption {
+	return func(o *extractTextOpts) {
+		o.markUnvalued = true
+	}
 }
 
 // WithHiddenText includes every category of normally-stripped text: invisible
@@ -882,6 +898,7 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 	// viewport; callers asking for textual content should get it without
 	// having to pre-configure OCs.
 	machine.IgnoreOCVisibility = true
+	machine.MarkUnvaluedText = o.markUnvalued
 
 	// Build the extraction config. WithHiddenText disables all stripping;
 	// the granular options override individual flags.

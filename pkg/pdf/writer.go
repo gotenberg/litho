@@ -13,6 +13,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -2472,14 +2473,16 @@ func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ 
 // integritySnap captures the signals the post-remediation probe compares
 // against the baseline measured on the source [Reader].
 type integritySnap struct {
-	pageCount  int
+	pageCount int
+	// textLen counts the characters of extractable text, see
+	// [probeIntegrity].
 	textLen    int
 	imageCount int
 }
 
 // probeIntegrity samples the observable surface area of a document: its
-// page count, the total length of extractable text across every page, and
-// the total number of image references. Per-page extraction failures
+// page count, the number of characters of extractable text across every page,
+// and the total number of image references. Per-page extraction failures
 // (missing fonts, OCR-only pages, decode errors) count as zero rather than
 // aborting the probe. The baseline may suffer the same failures, and the
 // comparison only needs relative movement between baseline and post.
@@ -2490,6 +2493,18 @@ type integritySnap struct {
 // shows, and pdf.js extracts it. Counting it as lost failed the whole
 // remediation of a document whose page furniture was most of its text.
 //
+// A code of a Type 0 font that no mapping gives a character, which ISO
+// 32000-1, 9.10.2 gives no Unicode value, counts as one character, U+FFFD
+// ([withUnvaluedMarked]), whatever the default extraction reads for it: its
+// own value while litho cannot tell its CID, nothing once litho holds the
+// font's whole encoding CMap and the code selects .notdef (9.7.6.3). A repair
+// that inlines or embeds a CMap moves such a code from one reading to the
+// other, shows the same glyph, and loses no character a reader is given. The
+// code still counts, so a repair that removes its glyph loses text all the
+// same. Characters are counted rather than bytes, so that a repair giving
+// such a code its value, as a /ToUnicode CMap does, weighs one character
+// against one.
+//
 // # Corpus evidence
 //
 //   - pdfjs basicapi.pdf, bug1749563.pdf, file_pdfjs_form.pdf, issue3214.pdf,
@@ -2497,6 +2512,11 @@ type integritySnap struct {
 //     the PDF/UA-1 and PDF/UA-2 remediations failed once auto-tagging marked
 //     their page numbers and running heads as pagination artifacts, which took
 //     13% to 100% of the text the default extraction keeps.
+//   - litho cmapverabase_2b.pdf: K7 shows U+FA2E, which PDF.js's
+//     UniKS-UTF16-H maps and veraPDF's leaves unmapped. Remediation embeds
+//     veraPDF's copy at PDF/A-1a and 1b, after which the code selects
+//     .notdef. Weighed as lost text in bytes, it rolled back all eight CMap
+//     repairs at both levels.
 func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 	snap := integritySnap{}
 	pages, err := r.PageCount(ctx)
@@ -2508,9 +2528,9 @@ func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 		if err := ctx.Err(); err != nil {
 			return snap, err
 		}
-		text, extractErr := r.ExtractText(ctx, p, WithArtifacts())
+		text, extractErr := r.ExtractText(ctx, p, WithArtifacts(), withUnvaluedMarked())
 		if extractErr == nil {
-			snap.textLen += len(text)
+			snap.textLen += utf8.RuneCountInString(text)
 		}
 		images, imagesErr := r.ExtractImages(ctx, p)
 		if imagesErr == nil {
@@ -2698,7 +2718,7 @@ func evaluateRegression(baseline, post integritySnap, tol RegressionTolerance) s
 	if baseline.textLen > 0 {
 		minText := int(float64(baseline.textLen) * (1.0 - tol.MaxTextDropRatio))
 		if post.textLen < minText {
-			return fmt.Sprintf("extracted text dropped from %d to %d bytes (min %d)", baseline.textLen, post.textLen, minText)
+			return fmt.Sprintf("extracted text dropped from %d to %d characters (min %d)", baseline.textLen, post.textLen, minText)
 		}
 	}
 	if baseline.imageCount > 0 {

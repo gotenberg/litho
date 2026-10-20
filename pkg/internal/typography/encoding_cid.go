@@ -253,6 +253,11 @@ type encodingCode struct {
 	// mapped reports whether a mapping of the encoding CMap gave cid
 	// ([Font.encodingCID]); when none did, cid is the code's value.
 	mapped bool
+	// closed reports whether litho holds every mapping of the encoding CMap,
+	// its bases' included ([cmap.CIDMap.UnmappedNotdef]), so a code none
+	// covers is known to select the .notdef character (ISO 32000-1, 9.7.6.3)
+	// rather than a CID a base litho could not read would give.
+	closed bool
 	// undefined marks bytes no codespace range holds (ISO 32000-1, 9.7.6.3),
 	// read one byte at a time.
 	undefined bool
@@ -275,6 +280,7 @@ func (f *Font) nextEncodingCode(data []byte) (code encodingCode, ok bool) {
 		code.value = code.value<<8 | int(b)
 	}
 	code.cid, code.mapped = f.encodingCID(data[:code.n], code.value)
+	code.closed = f.encodingCIDs.cids.UnmappedNotdef()
 	return code, true
 }
 
