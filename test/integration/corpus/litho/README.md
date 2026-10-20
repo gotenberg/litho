@@ -250,6 +250,7 @@ one deliberately rather than diffing it against a fresh build.
 | `refreach_ua1.pdf`     | PDF/UA-1     | Reference XObjects a cell, glyph, page or appearance draws       |
 | `inlinelzw_2b.pdf`     | PDF/A-2b     | Inline images with a forbidden filter in every stream parsed     |
 | `headingnest_ua2.pdf`  | PDF/UA-2     | Generic `H` headings nested three `Sect` elements deep           |
+| `twoprofile_1b.pdf`    | PDF/A-1b     | A PDF/X intent before the PDF/A one, each over its own profile   |
 
 ### Must-not-fire controls
 
@@ -709,6 +710,7 @@ are covered under [Known divergences](#known-divergences).
 | `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
 | `ttmaccopy_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 3   | 3    | 4    | 8    | 7    |
+| `twoprofile_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `type0nodesc_2b.pdf`   | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 7    | 7    |
 | `type1notdef_2u.pdf`   | 7    | 4    | 8    | 4    | 6    | 8    | 4    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `type3names_2u.pdf`    | 5    | 2    | 5    | 2    | 3    | 5    | 2    | 3    | 3   | 3    | 4    | 7    | 7    |
@@ -7219,6 +7221,32 @@ reads a document with no CMYK intent. The profile it replaced, `cmyk.icc`, was
 an 8-bit table into XYZ whose every entry was 128: LittleCMS read every CMYK
 colour as one pale grey, poppler refused it, and litho's engine could not
 build a transform from it.
+
+### `twoprofile_1b.pdf`
+
+ISO 19005-1, 6.2.2 asks every output intent carrying `/DestOutputProfile` to
+name the same indirect object, and ISO 19005-2/3/4, 6.2.3 t2 ask the same. The
+corpus fails the rule in three files, `outputintent_2b.pdf` and the veraPDF
+`6-2-3-t02-fail-a` pair, each with the `GTS_PDFA1` intent first. This fixture
+lists a `GTS_PDFX` intent over a version 2.1 CMYK printer profile before a
+`GTS_PDFA1` intent over a version 2.1 RGB display profile, and its page paints
+DeviceRGB, which only the RGB intent covers (ISO 19005-1, 6.2.3.3). The order
+is the probe: a repair that keeps the first entry's profile takes the PDF/A
+intent's colour away.
+
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells. At
+PDF/A-1b the file fails `6.2.2/2` alone; at the other PDF/A levels `6.2.3/2`,
+beside the identification and tagging rules each claim draws.
+
+Remediated at the eleven PDF/A levels, default and aggressive, the outputs
+report the same rule set on both tools. At PDF/A-1a and 1b every output keeps
+`6.2.2/2`: the cleanup fixer that unifies the profiles claims only clause
+6.2.3, which is 6.2.2 in part 1. At the other levels the outputs pass but
+PDF/A-4f's, which keeps `6.9/5`, through two rounds that replace the document's
+colour: the first points the PDF/A intent at the PDF/X intent's CMYK profile,
+which leaves the DeviceRGB square uncovered, and the second replaces the whole
+`/OutputIntents` array with one stock sRGB `GTS_PDFA1` intent. The output loses
+the PDF/X intent and both source profiles, which stay in the file unreferenced.
 
 ### `drivetitle_1b.pdf`
 
