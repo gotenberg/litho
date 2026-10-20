@@ -949,9 +949,16 @@ type PathBox struct {
 	// and narrows the clipping region for everything after it. Removing such a
 	// path would widen the clip and change how later content renders.
 	Clipped bool
+	// CTM is the matrix in force at the paint operator, which maps the path's
+	// user-space coordinates onto the page (ISO 32000-1, 8.3.2.3). No
+	// construction operator may change it while the path is built (8.2,
+	// Figure 9), so it is the matrix of every point of the path. A caller
+	// rewriting the path's operands works in user space and needs it to
+	// carry page-space geometry back.
+	CTM [6]float64
 }
 
-func handlePathPaint(_ context.Context, m *Machine, _ *State, _ content.Operation) {
+func handlePathPaint(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	// Record before the reset: this is the one moment the finished path's bounds
 	// are known, and the next line is what discards them. A paint operator with
 	// no path constructed marks nothing, so it is not a box.
@@ -965,6 +972,7 @@ func handlePathPaint(_ context.Context, m *Machine, _ *State, _ content.Operatio
 			StartOp:   m.pathStartOp,
 			EndOp:     m.OpIndex,
 			Clipped:   m.pathClipped,
+			CTM:       state.CTM,
 		})
 	}
 

@@ -39,7 +39,7 @@ func TestPathBoxes_SpanCoversTheWholeRun(t *testing.T) {
 		t.Fatalf("PathBoxes() = %v, want exactly one box", boxes)
 	}
 	got := boxes[0]
-	want := PathBox{MinX: 10, MinY: 20, MaxX: 110, MaxY: 70, StartOp: 0, EndOp: 1}
+	want := PathBox{MinX: 10, MinY: 20, MaxX: 110, MaxY: 70, StartOp: 0, EndOp: 1, CTM: [6]float64{1, 0, 0, 1, 0, 0}}
 	if got != want {
 		t.Errorf("box = %+v, want %+v", got, want)
 	}
@@ -59,7 +59,7 @@ func TestPathBoxes_SpanStartsAtTheFirstConstructionOperator(t *testing.T) {
 		t.Fatalf("PathBoxes() = %v, want exactly one box", boxes)
 	}
 	got := boxes[0]
-	want := PathBox{MinX: 10, MinY: 10, MaxX: 30, MaxY: 30, StartOp: 2, EndOp: 6}
+	want := PathBox{MinX: 10, MinY: 10, MaxX: 30, MaxY: 30, StartOp: 2, EndOp: 6, CTM: [6]float64{1, 0, 0, 1, 0, 0}}
 	if got != want {
 		t.Errorf("box = %+v, want %+v", got, want)
 	}
@@ -102,7 +102,7 @@ func TestPathBoxes_ClipViaNDoesNotLeakIntoTheNextPath(t *testing.T) {
 		t.Fatalf("PathBoxes() = %v, want exactly one box: the W n paints nothing", boxes)
 	}
 	got := boxes[0]
-	want := PathBox{MinX: 10, MinY: 10, MaxX: 30, MaxY: 30, StartOp: 3, EndOp: 4}
+	want := PathBox{MinX: 10, MinY: 10, MaxX: 30, MaxY: 30, StartOp: 3, EndOp: 4, CTM: [6]float64{1, 0, 0, 1, 0, 0}}
 	if got != want {
 		t.Errorf("box = %+v, want %+v", got, want)
 	}
@@ -137,6 +137,24 @@ func TestPathBoxes_OffByDefault(t *testing.T) {
 
 	if boxes := m.PathBoxes(); len(boxes) != 0 {
 		t.Errorf("PathBoxes() = %v, want none without RecordPathBoxes", boxes)
+	}
+}
+
+func TestPathBoxes_CarryTheCTMInForceAtThePaint(t *testing.T) {
+	t.Parallel()
+
+	// A caller rewriting the path's operands works in user space, so the box
+	// has to say how user space maps onto the page.
+	m := NewMachine([4]float64{0, 0, 612, 792})
+	m.RecordPathBoxes = true
+	runPathOps(t, m, "q 2 0 0 3 5 7 cm 0 0 10 10 re f Q")
+
+	boxes := m.PathBoxes()
+	if len(boxes) != 1 {
+		t.Fatalf("PathBoxes() = %v, want exactly one box", boxes)
+	}
+	if want := [6]float64{2, 0, 0, 3, 5, 7}; boxes[0].CTM != want {
+		t.Errorf("CTM = %v, want %v", boxes[0].CTM, want)
 	}
 }
 
