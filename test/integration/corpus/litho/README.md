@@ -6539,8 +6539,10 @@ Mac OS Roman gives "€Š". Both programs declare two subtables and no (3,0), so
 silent. veraPDF 1.30.2 and litho report the same rule set in all thirteen
 cells, with the same counts at every level; at the PDF/UA levels both count the
 untagged-content rules once per text show. The text change moves no
-validation or remediation result: litho reports and remediates the file alike
-before and after, and remediation writes no `/ToUnicode` for either font.
+validation result. Remediation writes a `/ToUnicode` for both fonts: `M1`'s
+from the glyphs its codes select, `M2`'s from the Mac OS Roman reading its post
+names confirm. At the seven levels that require a Unicode mapping, veraPDF
+1.30.2 and litho then both drop the rule for `M2` as they do for `M1`.
 
 ### `stdremap_ua2.pdf` and `remapchain_ua2.pdf`
 
