@@ -93,7 +93,7 @@ func TestFixCorruptICC_ReplacesCMYKProfileWithCMYK(t *testing.T) {
 			"colour space; the fixture never reached replaceICCProfile")
 	}
 	stream := replacedIntentProfile(ctx, t, alloc, doc, 4)
-	data, err := stream.Bytes(ctx)
+	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		t.Fatalf("reading replacement profile bytes: %v", err)
 	}

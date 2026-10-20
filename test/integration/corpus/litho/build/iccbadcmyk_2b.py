@@ -8,10 +8,10 @@ be an output (prtr) or display (mntr) profile, and ISO 19005-1, 6.2.2 and
 header declares the input device class scnr.
 
 Remediation replaces the profile with a stock profile of the same data colour
-space. The header names CMYK, so the replacement is litho's bundled CMYK
-profile (remediation/cmyk.icc), not sRGB: an RGB destination under a CMYK
-output condition would stop covering the DeviceCMYK content the page paints
-(ISO 19005-2, 6.2.4.3).
+space. The header names CMYK, so the replacement is litho's stock CMYK
+printer profile (graphics/icc/profiles/cgats001-cmyk-v2.icc), not sRGB: an
+RGB destination under a CMYK output condition would stop covering the
+DeviceCMYK content the page paints (ISO 19005-2, 6.2.4.3).
 
 An ICCBased space admits a scanner profile (ISO 19005-2, 6.2.4.2), and the
 page paints one over the same profile stream, so remediation keeps the source

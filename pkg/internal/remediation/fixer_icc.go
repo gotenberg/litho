@@ -250,19 +250,13 @@ func replaceICCProfile(alloc *writer.ObjAllocator, oiDict ast.PdfDict, dpObj ast
 	indirect = indirect && dpRef.ObjectNum > 0
 	newStreamRef, done := replacements[dpRef.ObjectNum]
 	if !indirect || !done {
-		iccData := sRGBICCProfile
-		nComponents := 3
+		newStream := sRGBICCStream()
 		switch colorSpace {
 		case "CMYK":
-			iccData = cmykICCProfile
-			nComponents = 4
+			newStream = cmykICCStream()
 		case "GRAY":
-			iccData = sGrayICCProfile
-			nComponents = 1
+			newStream = ast.NewStream(ast.PdfDict{"N": ast.PdfInt(1)}, sGrayICCProfile)
 		}
-		newStream := ast.NewStream(ast.PdfDict{
-			"N": ast.PdfInt(nComponents),
-		}, iccData)
 		if inPlace && indirect {
 			alloc.AllocAt(dpRef.ObjectNum, newStream)
 			newStreamRef = dpRef

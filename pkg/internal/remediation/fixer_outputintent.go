@@ -2,7 +2,6 @@ package remediation
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -24,8 +23,34 @@ var sRGBICCProfile = icc.SRGBProfile()
 // replacement for a grey destination profile (see [replaceICCProfile]).
 var sGrayICCProfile = icc.SGrayProfile()
 
-//go:embed cmyk.icc
-var cmykICCProfile []byte
+// cmykICCProfile is litho's generated version 2 CMYK printer profile, the
+// stock profile of the CMYK output intents remediation adds and of the CMYK
+// destination profiles it replaces (see [replaceICCProfile]). A CMYK colour
+// reads through it as DeviceCMYK reads by default.
+var cmykICCProfile = icc.CMYKPrinterProfile()
+
+// cmykCondition and cmykRegistry name the printing condition the stock CMYK
+// profile characterises: the CGATS TR 001 entry of the ICC characterization
+// data registry. ISO 32000-1, 14.11.5, Table 365 reads the
+// /OutputConditionIdentifier as a name from the registry /RegistryName names.
+const (
+	cmykCondition = "CGATS TR 001"
+	cmykRegistry  = "http://www.color.org"
+)
+
+// cmykICCStream returns the stock CMYK profile as an ICC profile stream of
+// four components, FlateDecode-compressed: its BToA table makes it 58 KB,
+// which deflates to 27 KB, and most PDF/A outputs carry a copy, the
+// DefaultCMYK [fixDeviceColorIntent] stages beside an RGB intent.
+func cmykICCStream() ast.PdfStream {
+	return flateStream(ast.PdfDict{"N": ast.PdfInt(4)}, cmykICCProfile)
+}
+
+// sRGBICCStream returns the stock sRGB profile as an ICC profile stream of
+// three components.
+func sRGBICCStream() ast.PdfStream {
+	return ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile)
+}
 
 // hasMatchingOutputIntent reports whether an existing PDF/A output intent
 // already covers the needed colour space (CMYK if needsCMYK, RGB otherwise).
@@ -397,13 +422,12 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	// violation even when a page mixes DeviceCMYK and DeviceRGB, so
 	// pre-stage the paired default whenever an OI was added.
 	var defaultColor ast.PdfName
-	var iccData []byte
-	var nComponents int
+	var profile func() ast.PdfStream
 	switch {
 	case oiIsCMYK && !oiIsRGB:
-		defaultColor, iccData, nComponents = "DefaultRGB", sRGBICCProfile, 3
+		defaultColor, profile = "DefaultRGB", sRGBICCStream
 	case oiIsRGB && !oiIsCMYK:
-		defaultColor, iccData, nComponents = "DefaultCMYK", cmykICCProfile, 4
+		defaultColor, profile = "DefaultCMYK", cmykICCStream
 	default:
 		return fixes, nil
 	}
@@ -415,7 +439,7 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	var iccRef ast.PdfIndirectRef
 	csArr := func() ast.PdfArray {
 		if iccRef.ObjectNum == 0 {
-			iccRef = alloc.Alloc(ast.NewStream(ast.PdfDict{"N": ast.PdfInt(nComponents)}, iccData))
+			iccRef = alloc.Alloc(profile())
 		}
 		return ast.PdfArray{ast.PdfName("ICCBased"), iccRef}
 	}
@@ -434,11 +458,10 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 // ISO 19005-4, 6.2.4.2, so the same pass replaces every page's copy with the
 // device space the intent covers.
 func addOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogRef ast.PdfIndirectRef, catalogDict ast.PdfDict, cmyk bool) ast.PdfDict {
-	iccData, nComponents, conditionID := cmykICCProfile, 4, "US Web Coated (SWOP) v2"
+	iccStream, conditionID := cmykICCStream(), cmykCondition
 	if !cmyk {
-		iccData, nComponents, conditionID = sRGBICCProfile, 3, "sRGB IEC61966-2.1"
+		iccStream, conditionID = sRGBICCStream(), "sRGB IEC61966-2.1"
 	}
-	iccStream := ast.NewStream(ast.PdfDict{"N": ast.PdfInt(nComponents)}, iccData)
 	iccRef := alloc.Alloc(iccStream)
 
 	// ISO 32000-2 Table 401 and ISO 19005-4 §6.2.3 keep GTS_PDFA1 as
@@ -450,6 +473,9 @@ func addOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		"S":                         ast.PdfName("GTS_PDFA1"),
 		"OutputConditionIdentifier": ast.PdfString(conditionID),
 		"DestOutputProfile":         iccRef,
+	}
+	if cmyk {
+		outputIntent["RegistryName"] = ast.PdfString(cmykRegistry)
 	}
 	oiRef := alloc.Alloc(outputIntent)
 

@@ -9,9 +9,10 @@ so every level fails the intent.
 
 Remediation cannot re-encode a version 5 profile, so it replaces it with a
 stock profile of the same data colour space. The header names CMYK, so the
-replacement is litho's bundled CMYK profile (remediation/cmyk.icc), not sRGB:
-an RGB destination under a CMYK output condition would stop covering the
-DeviceCMYK content the page paints (ISO 19005-1, 6.2.3.3).
+replacement is litho's stock CMYK printer profile
+(graphics/icc/profiles/cgats001-cmyk-v2.icc), not sRGB: an RGB destination
+under a CMYK output condition would stop covering the DeviceCMYK content the
+page paints (ISO 19005-1, 6.2.3.3).
 iccbadgray_1b.pdf reaches the grey replacement the same way; no fixture
 reached the CMYK one before this one and iccbadcmyk_2b.pdf.
 
