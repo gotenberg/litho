@@ -247,6 +247,7 @@ one deliberately rather than diffing it against a fresh build.
 | `iccbadgray_2b.pdf`    | PDF/A-2b     | A direct grey output intent over a scanner-class ICC profile     |
 | `iccbadcmyk_1b.pdf`    | PDF/A-1b     | A CMYK output intent whose ICC profile states version 5.0        |
 | `iccbadcmyk_2b.pdf`    | PDF/A-2b     | Two output intents sharing one scanner-class CMYK ICC profile    |
+| `refreach_ua1.pdf`     | PDF/UA-1     | Reference XObjects a cell, glyph, page or appearance draws       |
 
 ### Must-not-fire controls
 
@@ -514,6 +515,7 @@ violation but is exempt, so a firing is a false positive.
 | `qnestreach_2b`                           | page 6: a page 20 levels deep painting a form 15 levels deep           | ISO 19005-2, 6.1.13 t8       |
 | `sharedicc_2b`                            | page 3: an ICC version 4 display profile, at PDF/A-2b                  | ISO 19005-2, 6.2.4.2         |
 | `sharedicc_2b`                            | page 4: the shared stream under page 1's resources, a second time      | one reading per resource set |
+| `refreach_ua1`                            | page 6: a reference XObject a page, a cell and a Type 3 font list      | ISO 14289-1, 7.20 t1         |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -668,6 +670,7 @@ are covered under [Known divergences](#known-divergences).
 | `readorder_ua1.pdf`    | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `redactcopies_2b.pdf`  | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `redactrefs_ua1.pdf`   | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 4    | 5    |
+| `refreach_ua1.pdf`     | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 10   | 8    |
 | `remreach_2b.pdf`      | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 6    | 6    | 10   | 8    |
 | `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
 | `repairroom_2b.pdf`    | 5    | 2    | 7    | 3    | 5    | 8    | 4    | 6    | 8   | 8    | 9    | 10   | 9    |
@@ -7908,6 +7911,39 @@ PDF/A-4, 4e and 4f only the glyph rule fires (`6.2.10.4.1/2`). At PDF/A-1a
 missing glyph. At PDF/A-2b only the missing glyph fires.
 veraPDF 1.30.2 and litho report the same rule set, with the same failed-check
 counts, in all thirteen cells.
+
+### `refreach_ua1.pdf`
+
+ISO 14289-1, 7.20 forbids reference XObjects, form XObjects whose dictionary
+carries `/Ref` (ISO 32000-1, 8.10.4, Table 95). veraPDF 1.30.2 states test 1 on
+the form object a `Do` builds, as it states the PDF/A reference rules (ISO
+19005-1, 6.2.6 t1, ISO 19005-2, 6.2.9 t2, ISO 19005-4, 6.2.8.2 t1), so it judges
+a form at every `Do` that draws it, in every content stream it parses. litho
+judged the forms the page's resources listed, and those their resources listed
+in turn, once each: it missed every form a pattern cell or a Type 3 glyph draws,
+counted a form drawn twice once, and failed a form nothing draws. No corpus file
+draws a reference XObject at PDF/UA-1, so this fixture plants one path per page,
+each with a reference form of its own:
+
+| Page | Path                                             | `7.20/1`, veraPDF | litho before |
+| ---- | ------------------------------------------------ | ----------------- | ------------ |
+| 1    | tiling cell, `/R Do`                             | 1                 | 0            |
+| 2    | Type 3 glyph the page shows, `/R Do`             | 1                 | 0            |
+| 3    | tiling cell, Type 3 glyph, `/R Do`               | 1                 | 0            |
+| 4    | the page's content, `/R Do /R Do`                | 2                 | 1            |
+| 5    | annotation appearance, `/R Do`                   | 1                 | 0            |
+| 6    | the page, a cell and a Type 3 font list R, no Do | 0                 | 1            |
+
+Page 6 is the must-not-fire control: its page resources, the cell of the
+pattern it selects and the Type 3 font it shows text in each list one reference
+form that nothing draws. The PDF/A cells state their reference rule 6 times,
+on the same forms, in veraPDF and in litho alike, and did before the fix.
+veraPDF 1.30.2 and litho report the same rule set, with the same failed-check
+counts, in all thirteen cells.
+
+Remediated at every level in both modes, every output is clean in both tools
+except PDF/A-4f, where `6.9/5` stays (no embedded file): litho deletes `/Ref`
+from every form the rules name.
 
 ## Scope
 
