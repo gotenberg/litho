@@ -260,6 +260,7 @@ one deliberately rather than diffing it against a fresh build.
 | `pdfxonly_2b.pdf`      | PDF/A-2b     | A PDF/X output intent and no PDF/A one, over CMYK and RGB paint  |
 | `pdfxnoprofile_2b.pdf` | PDF/A-2b     | A PDF/A intent naming no profile beside a PDF/X CMYK intent      |
 | `qshyphen_2b.pdf`      | PDF/A-2b     | Soft hyphens shown inside `q`...`Q` within a text object         |
+| `sharedarray_2b.pdf`   | PDF/A-2b     | Direct /Contents arrays sharing a stream, beside an invalid `ri` |
 
 ### Must-not-fire controls
 
@@ -708,6 +709,7 @@ are covered under [Known divergences](#known-divergences).
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `shadedefault_2b.pdf`  | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `sharedclose_ua1.pdf`  | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 2   | 2    | 3    | 1    | 4    |
+| `sharedarray_2b.pdf`   | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 3   | 3    | 4    | 5    | 6    |
 | `sharedicc_2b.pdf`     | 4\*  | 2\*  | 4\*  | 2\*  | 2\*  | 4\*  | 2\*  | 2\*  | 3\* | 3\*  | 4\*  | 5    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sharedtag_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 6    | 7    |
@@ -3843,6 +3845,32 @@ the stream under the same resources as page 1, and is judged once with it.
 veraPDF judges the shared stream through page 1 alone and fails no ICC test;
 given a copy of the stream for each page, it fails what litho fails on the
 shared one. The two PDF/UA cells agree, rule by rule and count by count.
+
+### `sharedarray_2b.pdf`
+
+ISO 32000-1, 7.7.3.3 lets a page's `/Contents` be an array of streams, and
+nothing keeps two pages from naming the same stream in theirs. Aggressive
+remediation replaces an invalid rendering intent (ISO 19005-1, 6.2.9 and ISO
+19005-2, 6.2.6) by rewriting the page's content. Written in place, into the
+array's first stream with the others emptied, the rewrite took a later shared
+stream off the other page and, through a shared first stream, painted this
+page's content on it. No corpus file reaches it. Each page paints a square of
+its own and the shared square:
+
+| Page | `/Contents` | Streams                                           | Answers at PDF/A-2b |
+| ---- | ----------- | ------------------------------------------------- | ------------------- |
+| 1    | `[A S]`     | A: `/Bogus ri` and a square; S: the shared square | `6.2.6/1`           |
+| 2    | `[B S]`     | B: a square of its own                            | nothing             |
+| 3    | `[T C]`     | T: the shared square; C: `/Bogus ri` and a square | `6.2.6/1`           |
+| 4    | `[T D]`     | D: a square of its own                            | nothing             |
+| 5    | `[E]`       | E: `/Bogus ri` and a square, shared by no page    | `6.2.6/1`           |
+
+A page whose array shares a stream gets a stream of its own, and the page
+dictionary points at it; page 5, which shares nothing, is rewritten in place
+as before. veraPDF passes the aggressive output either way at PDF/A-1b and
+PDF/A-2b, since the lost or doubled square breaks no rule: only the page
+content tells the two writes apart. Both tools agree on every cell, rule by
+rule.
 
 ### `csnames_2b.pdf`
 
