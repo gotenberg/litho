@@ -29,7 +29,8 @@ test/integration/
 │   │   └── manifest.json
 │   ├── govdocs/
 │   │   ├── download.sh
-│   │   └── manifest.json
+│   │   ├── manifest.json
+│   │   └── text-overrides.json Corrections to the PDF.js text goldens, with reasons
 │   ├── pdf20/
 │   │   ├── download.sh
 │   │   └── manifest.json
@@ -331,7 +332,7 @@ Fields:
 - `profile_mode`: how PDFs become fixtures. `expand` (default) cartesian-products every PDF over `profiles`; `none` drops the cartesian and emits one fixture per PDF; `auto` reads each PDF's XMP claim and emits one fixture per PDF, keyed by the claimed profile when present.
 - `profiles`: veraPDF profile directory names. Drives the cartesian under `expand`, acts as the allow-set for accepted XMP claims under `auto`, and is ignored under `none`.
 - `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from. The provisioning Docker image only generates goldens for features listed here, so dropping `text` + `metadata` from the veraPDF corpus skips the (slow) PDF.js generator entirely.
-- `golden_overrides`: maps feature name to a committed file, relative to the corpus source directory, that corrects goldens the oracle reads wrong. Only `text` takes one. Each entry records the oracle's reading it replaces, so it fails its fixture when the oracle changes, and gives the right reading or marks the page unscored, with the clause behind it; the goldens stay the oracle's raw output.
+- `golden_overrides`: maps feature name to a committed file, relative to the corpus source directory, that corrects goldens the oracle reads wrong. Only `text` takes one, and any corpus may carry one (litho and govdocs do). Each entry records the oracle's reading it replaces, so it fails its fixture when the oracle changes, and gives the right reading or marks the page unscored, with the clause behind it; the goldens stay the oracle's raw output.
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
 
 ## See also

@@ -11,7 +11,7 @@ import (
 
 // TestGoldenOverrideFilesAreWellFormed pins every override file a corpus
 // manifest declares: it parses, its feature takes overrides, and each entry
-// names a committed fixture. The runner reports a broken file only as a load
+// names a fixture of its corpus. The runner reports a broken file only as a load
 // error, which the gate reads as a missing cell rather than a regression.
 func TestGoldenOverrideFilesAreWellFormed(t *testing.T) {
 	t.Parallel()
@@ -44,9 +44,13 @@ func TestGoldenOverrideFilesAreWellFormed(t *testing.T) {
 				t.Errorf("%s: %v", path, err)
 				continue
 			}
+			pdfDir, ok := overridePDFDir(path, m)
 			for _, o := range overrides {
 				checked++
-				pdf := filepath.Join(filepath.Dir(path), m.PDFRoot, o.Fixture+".pdf")
+				if !ok {
+					continue
+				}
+				pdf := filepath.Join(pdfDir, o.Fixture+".pdf")
 				if _, err := os.Stat(pdf); err != nil {
 					t.Errorf("%s: %s page %d names no committed fixture: %v", rel, o.Fixture, o.Page, err)
 				}
@@ -56,6 +60,27 @@ func TestGoldenOverrideFilesAreWellFormed(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("found no golden override to check")
 	}
+}
+
+// overridePDFDir returns the directory holding the PDFs the overrides of
+// the corpus whose manifest is at path name: the committed tree of a corpus
+// that commits its PDFs (litho), else the provisioned testdata of a
+// downloaded one (govdocs). ok is false for a downloaded corpus this
+// checkout has not provisioned, whose fixtures the test cannot see.
+func overridePDFDir(path string, m Manifest) (dir string, ok bool) {
+	committed := filepath.Join(filepath.Dir(path), m.PDFRoot)
+	if info, err := os.Stat(committed); err == nil && info.IsDir() {
+		return committed, true
+	}
+	leaf := m.Source
+	if leaf == "" {
+		leaf = m.Name
+	}
+	provisioned := filepath.Join("..", "..", "testdata", leaf, m.PDFRoot)
+	if info, err := os.Stat(provisioned); err == nil && info.IsDir() {
+		return provisioned, true
+	}
+	return "", false
 }
 
 func takesOverrides(feature string) bool {

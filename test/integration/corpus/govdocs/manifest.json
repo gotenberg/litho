@@ -25,5 +25,8 @@
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
     "remediation-aggressive": "goldens/compliance"
+  },
+  "golden_overrides": {
+    "text": "text-overrides.json"
   }
 }
