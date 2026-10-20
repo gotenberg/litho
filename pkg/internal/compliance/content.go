@@ -26,11 +26,25 @@ var forbiddenInlineImageFilters = map[string]bool{
 }
 
 // allowedInlineImageFilters lists the inline-image filter abbreviations and
-// full names permitted by PDF/A (ISO 32000-1 Table 6 / ISO 32000-2 Table 92).
-// A value mapped to false (LZW) is a valid abbreviation that PDF/A forbids; a
-// value absent from the map (e.g. "Crypt" or a mis-cased "Lzw") is "not listed
-// in Table 6" and is likewise forbidden. Used for parts 2/3/4, whose §6.1.10 /
-// §6.2.10.x rules require the value to be a valid, non-LZW Table-6 entry.
+// full names permitted by PDF/A: the filters ISO 32000-2, 8.9.7, Table 92
+// abbreviates for an inline image (ISO 32000-1, 8.9.7, Table 94), each under
+// either name. A value mapped to false is one PDF/A forbids; a value absent
+// from the map (e.g. a mis-cased "Lzw") is "not listed in Table 6" and is
+// likewise forbidden. Used for parts 2/3/4, whose ISO 19005-2/3, 6.1.10 and ISO
+// 19005-4, 6.1.9 rules require the value to be a valid, non-LZW entry.
+//
+// JPXDecode and JBIG2Decode are standard filters (ISO 32000-1, 7.4, Table 6)
+// but no inline image's: neither has an abbreviation in Table 92, and ISO
+// 32000-1, 7.4.9 applies JPXDecode to image XObjects alone. veraPDF 1.30.2's
+// PDF/A-2, 3 and 4 profiles state the rule as that abbreviation list, so an
+// inline image that applies either fails it, as Crypt does.
+//
+// # Corpus evidence
+//
+//   - litho inlinejpx_2b.pdf: its two JPXDecode, two JBIG2Decode and one
+//     form XObject JPXDecode inline images fail ISO 19005-2/3, 6.1.10 t1 and
+//     ISO 19005-4, 6.1.9 t1 five times on veraPDF 1.30.2, at every PDF/A level
+//     of those parts, and ISO 19005-1, 6.1.10 t2 never.
 //
 //nolint:gochecknoglobals // package-level lookup table.
 var allowedInlineImageFilters = map[string]bool{
@@ -41,8 +55,8 @@ var allowedInlineImageFilters = map[string]bool{
 	"RL": true, "RunLengthDecode": true,
 	"CCF": true, "CCITTFaxDecode": true,
 	"DCT": true, "DCTDecode": true,
-	"JPXDecode":   true,
-	"JBIG2Decode": true,
+	"JPXDecode":   false, // no inline image filter, see above
+	"JBIG2Decode": false, // no inline image filter, see above
 	"Crypt":       false, // explicitly forbidden
 }
 

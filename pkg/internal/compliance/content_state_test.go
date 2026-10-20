@@ -57,6 +57,37 @@ func TestInlineImageLZWStatedOnce(t *testing.T) {
 	}
 }
 
+// TestInlineImageCodecFiltersForbidden pins that parts 2 to 4 forbid
+// JPXDecode and JBIG2Decode in an inline image, and part 1 does not. Every case
+// was measured with veraPDF 1.30.2 on the litho fixture inlinejpx_2b.pdf, whose
+// five such images fail ISO 19005-2/3, 6.1.10 t1 and ISO 19005-4, 6.1.9 t1 five
+// times and ISO 19005-1, 6.1.10 t2 never, while its CCF and Fl images pass.
+func TestInlineImageCodecFiltersForbidden(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		content string
+		want    map[int]int
+	}{
+		{"JPXDecode", "BI /W 8 /H 8 /CS /RGB /BPC 8 /F /JPXDecode ID xx EI", map[int]int{1: 0, 2: 1, 3: 1, 4: 1}},
+		{"JBIG2Decode", "BI /W 8 /H 8 /CS /G /BPC 1 /F /JBIG2Decode ID xx EI", map[int]int{1: 0, 2: 1, 3: 1, 4: 1}},
+		{"JBIG2Decode in a chain", "BI /W 8 /H 8 /IM true /F [/AHx /JBIG2Decode] ID xx EI", map[int]int{1: 0, 2: 1, 3: 1, 4: 1}},
+		{"full key", "BI /W 8 /H 8 /Filter /JPXDecode ID xx EI", map[int]int{1: 0, 2: 1, 3: 1, 4: 1}},
+		{"CCF is permitted", "BI /W 8 /H 8 /CS /G /BPC 1 /F /CCF ID xx EI", map[int]int{1: 0, 2: 0, 3: 0, 4: 0}},
+		{"DCT is permitted", "BI /W 8 /H 8 /CS /G /BPC 8 /F /DCTDecode ID xx EI", map[int]int{1: 0, 2: 0, 3: 0, 4: 0}},
+	} {
+		for part, want := range tc.want {
+			t.Run(fmt.Sprintf("%s, part %d", tc.name, part), func(t *testing.T) {
+				t.Parallel()
+				if got := inlineFilterViolations(t, tc.content, part); len(got) != want {
+					t.Fatalf("got %d violations, want %d: %v", len(got), want, got)
+				}
+			})
+		}
+	}
+}
+
 // TestInlineImagesInARowJudgedOnce pins that an inline image whose BI follows
 // the EI before it, with only white space and comments between, is not judged:
 // the parse reads it as part of the check of that EI (see
