@@ -228,6 +228,13 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 		restoreTrailer()
 		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
 	}
+	// An annotation is one object however many pages list it, so removing it
+	// from one page is exact only when no other page still shows it. That
+	// also needs every page's regions applied first.
+	if useErr := mutations.CheckRemovedAnnotationUses(ctx, alloc, doc, pages, report.RemovedAnnotations); useErr != nil {
+		restoreTrailer()
+		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
+	}
 
 	// Nothing was selected, so there is nothing to sanitize and nothing to
 	// write. Leaving the Writer untouched keeps a redaction that removed
