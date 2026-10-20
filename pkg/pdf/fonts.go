@@ -14,8 +14,8 @@ import (
 )
 
 // FontProvider supplies the programs of the fonts a document shows without
-// embedding them, which every PDF/A and PDF/UA profile requires embedded (ISO
-// 19005-2, 6.2.11.4.1 and ISO 14289-1, 7.21.4.1 among them). litho ships no
+// embedding them, which every PDF/A, PDF/UA and WTPDF profile requires
+// embedded (ISO 19005-2, 6.2.11.4.1 and ISO 14289-1, 7.21.4.1 among them). litho ships no
 // font program, so a remediation embeds only what a provider supplies, and
 // the licence to embed it is the caller's. [WithFontProvider] registers one.
 //

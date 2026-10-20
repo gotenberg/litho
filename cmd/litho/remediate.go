@@ -219,8 +219,8 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 //
 // Severity is worth filtering on for one profile family only. The warning
 // grade covers four Factur-X and CII rules, a collapsed Schematron bucket and
-// three lenient-profile tolerances, while every PDF/A and PDF/UA rule is fatal
-// under the binary conformance model. So this narrows the set only on the
+// three lenient-profile tolerances, while every PDF/A, PDF/UA and WTPDF rule is
+// fatal under the binary conformance model. So this narrows the set only on the
 // invoice profiles, which is exactly where a soft tolerance must not fail a
 // build, and is an identity everywhere else.
 func fatalResiduals(report *pdf.RemediationReport) []pdf.Violation {

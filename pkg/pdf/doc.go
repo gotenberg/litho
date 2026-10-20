@@ -204,8 +204,8 @@
 //
 // litho's text extraction pipeline, CMap parser, and font resolution logic
 // were heavily inspired by Mozilla's PDF.js
-// (https://github.com/mozilla/pdf.js). The PDF/A and PDF/UA validation
-// rule set and clause numbering draw extensively from veraPDF
+// (https://github.com/mozilla/pdf.js). The PDF/A, PDF/UA and WTPDF
+// validation rule set and clause numbering draw extensively from veraPDF
 // (https://github.com/veraPDF). Grateful acknowledgment to both
 // communities for their pioneering open-source work on PDF parsing
 // and conformance.

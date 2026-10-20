@@ -14,8 +14,8 @@ import (
 //
 // Only the Factur-X / CII Schematron path produces non-fatal severities
 // today, and it distinguishes only Fatal from Warning (Info folds into
-// Warning). PDF/A and PDF/UA are binary conformance: every violation is
-// Fatal.
+// Warning). PDF/A, PDF/UA and WTPDF are binary conformance: every
+// violation is Fatal.
 // Severity values are immutable and safe for concurrent use.
 type Severity int
 
