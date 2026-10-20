@@ -588,19 +588,24 @@ func isAllWhitespace(s string) bool {
 // literal text "false" / "true" anyway.
 //
 // The transform looks for the exact "= false()" / "= true()" /
-// "!= false()" / "!= true()" tail (case-sensitive, no nested args)
-// and replaces it with the quoted literal. The leading whitespace
+// "!= false()" / "!= true()" tail, with or without the space before
+// the call (case-sensitive, no nested args), and replaces it with the
+// quoted literal. The leading whitespace
 // before the operator is preserved so source-level formatting stays
 // readable in compile-error messages.
 func rewriteBooleanLiteralComparison(expr string) string {
 	if !strings.Contains(expr, "true()") && !strings.Contains(expr, "false()") {
 		return expr
 	}
+	// The Factur-X profiles also write the operator flush against the
+	// call, "udt:Indicator=true()" in BR-S-08 (FX-SCH-A-000198).
 	replacements := []struct{ from, to string }{
 		{"= true()", "= 'true'"},
 		{"!= true()", "!= 'true'"},
 		{"= false()", "= 'false'"},
 		{"!= false()", "!= 'false'"},
+		{"=true()", "='true'"},
+		{"=false()", "='false'"},
 	}
 	for _, r := range replacements {
 		expr = strings.ReplaceAll(expr, r.from, r.to)

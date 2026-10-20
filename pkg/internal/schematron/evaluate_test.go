@@ -385,6 +385,31 @@ func TestUpperCaseToASCIIMatchesUnicode(t *testing.T) {
 	}
 }
 
+func TestValidate_BooleanConstructorWithoutSpaces(t *testing.T) {
+	// The Factur-X profiles write "udt:Indicator=true()" with no space
+	// around "=" (BR-S-08, FX-SCH-A-000198). antchfx/xpath v1.3.6
+	// dereferences nil comparing a node-set with true() inside a
+	// predicate, which skipped the rule.
+	sch := `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="inv" uri="urn:example:invoice"/>
+  <sch:pattern id="P">
+    <sch:rule context="//inv:Invoice">
+      <sch:assert id="CHARGES" test="count(inv:Charge[inv:Indicator=true()]) = 1">one charge</sch:assert>
+      <sch:assert id="ALLOWANCES" test="count(inv:Charge[inv:Indicator=false()]) = 2">two allowances</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	payload := `<inv:Invoice xmlns:inv="urn:example:invoice">` +
+		`<inv:Charge><inv:Indicator>true</inv:Indicator></inv:Charge>` +
+		`<inv:Charge><inv:Indicator>false</inv:Indicator></inv:Charge>` +
+		`<inv:Charge><inv:Indicator>false</inv:Indicator></inv:Charge></inv:Invoice>`
+	fired, skipped := runOne(t, sch, payload)
+	if len(fired) != 0 || len(skipped) != 0 {
+		t.Errorf("fired %v skipped %v, want neither", fired, skipped)
+	}
+}
+
 func TestXPathBoolean_EffectiveBooleanValue(t *testing.T) {
 	// antchfx/xpath v1.3.6 returns round() as a Go int. XPath 2.0,
 	// 2.4.3 (and XPath 1.0, 4.3 boolean()): a number is true unless it
