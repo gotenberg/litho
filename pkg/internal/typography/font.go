@@ -829,7 +829,9 @@ func parseAndCacheToUnicode(ctx context.Context, doc *document.Document, tuObj a
 //
 // A CMap that runs usecmap takes the named predefined CMap's mappings for the
 // codes it leaves unmapped, as PDF.js reads it. A /UseCMap entry in the stream
-// dictionary is not followed: PDF.js reads a /ToUnicode CMap without it.
+// dictionary is not followed: PDF.js reads a /ToUnicode CMap without it. A
+// cidchar or cidrange entry reads as the Unicode value it gives the code
+// ([cmap.WithCIDValuesAsUnicode]).
 //
 // # Corpus evidence
 //
@@ -858,6 +860,11 @@ func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfOb
 		if base := cmap.BuiltInUnicode(c.UseCMap()); len(base) > 0 {
 			c = c.WithBase(nil, base, false)
 		}
+	}
+	if withCIDs, err := cmap.WithCIDValuesAsUnicode(ctx, c, decoded); err != nil {
+		doc.Logger.Debug("reading the CID entries of a /ToUnicode CMap", slog.Any("err", err))
+	} else {
+		c = withCIDs
 	}
 	if c == nil || len(c.Mapping) == 0 {
 		return nil
