@@ -257,7 +257,7 @@ func Classify(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 			root.Kids = append(append(root.Kids, kids...), artifacts...)
 			continue
 		}
-		elems := mergeByOffset(classifyBlocks(rest, pi, data, nil), figureElements(images, pi))
+		elems := mergeByOffset(classifyBlocks(rest, headingBody(geo.blocks, rest), pi, data, nil), figureElements(images, pi))
 		elems = mergeByOffset(elems, tables)
 		root.Kids = append(root.Kids, mergeByOffset(elems, artifacts)...)
 	}
@@ -1449,7 +1449,8 @@ const maxLineGapRatio = 1.3
 
 // classifyBlocks assigns a role to each block, merges adjacent paragraph lines
 // into multi-line paragraphs, and builds the leaf elements for one page in
-// content (reading) order.
+// content (reading) order. body is the size a heading must stand above (see
+// [headingBody]).
 //
 // Only paragraphs are merged: a wrapped heading authored as separate text
 // objects stays as separate heading elements, which over-segments (safe) rather
@@ -1465,11 +1466,10 @@ const maxLineGapRatio = 1.3
 // of its own ([Element.Continued]), so the lines of a column the stream
 // interleaves with another's form one paragraph, and what lies between them
 // stays out of it.
-func classifyBlocks(blocks []textBlock, pageIndex int, data []byte, boxes map[int][4]float64) []*Element {
+func classifyBlocks(blocks []textBlock, body float64, pageIndex int, data []byte, boxes map[int][4]float64) []*Element {
 	if len(blocks) == 0 {
 		return nil
 	}
-	body := bodyFontSize(blocks)
 	levels := headingLevels(blocks, body)
 
 	roles := make([]Role, len(blocks))
@@ -1719,6 +1719,61 @@ func bodyFontSize(blocks []textBlock) float64 {
 		}
 	}
 	return best
+}
+
+// maxTitleLines is the most lines the text left beside a carved table may set
+// at its dominant size and still read as a title rather than as body text. A
+// tuning constant, not spec-mandated: a title over a table wraps to two lines
+// at most, and running text sets more.
+const maxTitleLines = 2
+
+// headingBody returns the body size the heading pass judges the blocks rest
+// against, all being every block of the page and rest those [carveTables]
+// left.
+//
+// The body is the dominant size of rest, so a table set smaller than the
+// prose around it does not make that prose a heading. A page that is a title
+// over a table leaves the title alone in rest, though, and a block cannot be
+// larger than its own size: the title read as a P, while the same title over
+// paragraphs read as an H1. ISO 14289-1, 7.4 tags a heading as a heading,
+// whatever follows it. So when the dominant size of rest sets no more than
+// maxTitleLines lines, that text is no body text, and the dominant size of
+// the whole page, the cells of its tables included, gives the body instead.
+// The smaller of the two is kept, so the body never rises above what rest
+// gives and no heading rest shows is lost.
+//
+// # Corpus evidence
+//
+//   - govdocs, pdfjs, pdfcpu, pdf20, facturx, litho: 14 elements on 7 of 2695
+//     files turn from P to H1 and no other element changes.
+//   - govdocs thread_300_300242.pdf: "Contents" over a table of contents.
+//     pdfjs radial_gradients.pdf: the title of four pages over a grid of
+//     labels. pdfcpu pkg_testdata__go-lecture.pdf: slide titles over bullets
+//     carved as a table. litho filledrules_ua1.pdf, prosecolumns_ua1.pdf: the
+//     title over a table.
+//   - govdocs, pdfjs, litho: the PDF/UA-1 and PDF/UA-2 remediations of the
+//     changed files, default and aggressive, draw the same rules as before
+//     on litho and on veraPDF.
+//   - govdocs thread_100_100859.pdf, thread_200_200623.pdf: prose over a
+//     table set smaller, which the cells as body would turn into headings.
+func headingBody(all, rest []textBlock) float64 {
+	body := bodyFontSize(rest)
+	if len(rest) == len(all) || body <= 0 {
+		return body
+	}
+	lines := 0
+	for _, b := range rest {
+		if roundHalf(b.fontSize) == body {
+			lines += max(len(b.lines), 1)
+		}
+	}
+	if lines > maxTitleLines {
+		return body
+	}
+	if page := bodyFontSize(all); page > 0 {
+		return min(body, page)
+	}
+	return body
 }
 
 // headingLevels assigns a heading level to every block, in reading order, and

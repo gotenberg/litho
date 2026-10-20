@@ -464,7 +464,7 @@ func classifyInReadingOrder(ctx context.Context, geo *pageGeometry, pageIndex in
 			ordered = append(ordered, rest[i])
 		}
 	}
-	elems := classifyBlocks(ordered, pageIndex, geo.data, boxAt)
+	elems := classifyBlocks(ordered, headingBody(geo.blocks, rest), pageIndex, geo.data, boxAt)
 	elems = append(elems, figureElements(images, pageIndex)...)
 	elems = append(elems, tables...)
 	byStart := make(map[int]*Element, len(elems))
