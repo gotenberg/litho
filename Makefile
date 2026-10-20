@@ -38,6 +38,18 @@ test-unit: ## Run unit tests
 bench: ## Run all benchmarks
 	go test -run=^$$ -bench=. -benchmem ./...
 
+OUTLINE_GOLDENS := pkg/internal/typography/truetype/testdata pkg/internal/typography/cff/testdata
+
+.PHONY: outline-goldens
+outline-goldens: ## Regenerate the TrueType and CFF outline goldens with the fontTools release test/integration/corpus/versions.env pins (an env var of the same name overrides it)
+	@set -e; \
+	version="$${FONTTOOLS_VERSION:-$$(sed -n 's/^FONTTOOLS_VERSION=//p' test/integration/corpus/versions.env)}"; \
+	venv="$$(mktemp -d)"; trap 'rm -rf "$$venv"' EXIT; \
+	python3 -m venv "$$venv"; \
+	"$$venv/bin/pip" install --quiet --disable-pip-version-check "fonttools==$$version"; \
+	for dir in $(OUTLINE_GOLDENS); do "$$venv/bin/python" -I "$$dir/gen_outlines_golden.py"; done; \
+	npx prettier --write $(addsuffix /outlines_golden.json,$(OUTLINE_GOLDENS))
+
 CORPUS_RUN_FLAGS :=
 ifdef CORPUS_JSON_OUTPUT
 CORPUS_RUN_FLAGS += --format=json
@@ -73,7 +85,7 @@ corpus-init: ## Provision missing corpora via Docker at the versions test/integr
 	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
 
 .PHONY: corpus-tools
-corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig and pikepdf with the pinned versions
+corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig, pikepdf and fontTools with the pinned versions
 	go run ./test/integration/cmd/corpus tools
 
 .PHONY: corpus-baseline
