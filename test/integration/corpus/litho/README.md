@@ -7958,18 +7958,12 @@ and states the clause behind its verdict. It either gives the right reading,
 where ISO 32000-1, 9.10.2 or the page geometry decides it, or marks the page
 unscored, where the readers disagree only on codes 9.10.2 gives no Unicode
 value, since no reading of those is right. Where PDF.js and litho agree, the
-golden stands. Of the 194 fixtures, 182 match, 8 are unscored
+golden stands. Of the 194 fixtures, 186 match and 8 are unscored
 (`cmapcidtext_2b`, `cmapnotdef_2b`, `cmaps_2b`, `cmapusecmap_2b`,
 `cmapusestream_2b`, `cmapverabase_2b`, `type0nodesc_2b`, `usecmap_2u`; page 16
-of `fontcopies_2b` too, whose other pages score), and 4 mismatch, each on a
-reading litho gets wrong:
-
-| Fixture                      | Right reading                                     | litho reads                                        |
-| ---------------------------- | ------------------------------------------------- | -------------------------------------------------- |
-| `complex_ua1`, `complex_ua2` | words split at code 20, the WinAnsiEncoding space | each letter a word, on the lines after the figures |
-
-The cell's `words_match` reads 182 and `chars_match` 186: the four fixtures of
-the two rows match once spaces are ignored. A new fixture needs
+of `fontcopies_2b` too, whose other pages score), so the cell's `matched`,
+`words_match` and `chars_match` all read 186 and a mismatch is a regression.
+A new fixture needs
 its golden regenerated at provisioning, and an override when PDF.js reads it
 wrong.
 

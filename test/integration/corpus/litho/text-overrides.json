@@ -61,14 +61,14 @@
       "page": 1,
       "pdfjs": "Heading One Skipped To Three Body text Customtype Untaggedrealcontent",
       "expected": "Heading One Skipped To Three Body text Custom type Untagged real content",
-      "reason": "Every show is a literal string under /WinAnsiEncoding, whose code 20 is space (ISO 32000-1, Annex D.2), the character 9.3.3 treats as the word separator, so the last two lines are two and three words. PDF.js joins their words, litho splits them into letters."
+      "reason": "Every show is a literal string under /WinAnsiEncoding, whose code 20 is space (ISO 32000-1, Annex D.2), the character 9.3.3 treats as the word separator, so the last two lines are two and three words. PDF.js joins their words."
     },
     {
       "fixture": "complex_ua2",
       "page": 1,
       "pdfjs": "Heading One Body text with a bad language tag Body text with a good language tag  Namespacedcustomtype Legacycustomtype Unmappednamespacedtype Orphanelement,noparententry Jumptoapagedestination Untaggedrealcontent",
       "expected": "Heading One Body text with a bad language tag Body text with a good language tag  Namespaced custom type Legacy custom type Unmapped namespaced type Orphan element, no parent entry Jump to a page destination Untagged real content",
-      "reason": "Every show is a literal string under /WinAnsiEncoding, whose code 20 is space (ISO 32000-1, Annex D.2), the character 9.3.3 treats as the word separator, and F2's /ToUnicode maps code 41 to U+E000 (9.10.2). PDF.js joins the words of the lines after the figures, litho splits them into letters."
+      "reason": "Every show is a literal string under /WinAnsiEncoding, whose code 20 is space (ISO 32000-1, Annex D.2), the character 9.3.3 treats as the word separator, and F2's /ToUnicode maps code 41 to U+E000 (9.10.2). PDF.js joins the words of the lines after the figures."
     },
     {
       "fixture": "fontclaims_2b",
