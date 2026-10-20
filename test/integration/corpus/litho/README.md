@@ -257,6 +257,8 @@ one deliberately rather than diffing it against a fresh build.
 | `headingart_ua2.pdf`   | PDF/UA-2     | Generic `H` headings nested in `Art` and `Sect` elements         |
 | `sharedtag_ua1.pdf`    | PDF/UA-1     | Untagged text and a marked form two pages' shared content draws  |
 | `sharedclose_ua1.pdf`  | PDF/UA-1     | A marked form and an open artifact two pages' shared content has |
+| `pdfxonly_2b.pdf`      | PDF/A-2b     | A PDF/X output intent and no PDF/A one, over CMYK and RGB paint  |
+| `pdfxnoprofile_2b.pdf` | PDF/A-2b     | A PDF/A intent naming no profile beside a PDF/X CMYK intent      |
 
 ### Must-not-fire controls
 
@@ -681,6 +683,8 @@ are covered under [Known divergences](#known-divergences).
 | `patternglyph_2b.pdf`  | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 7    | 7    |
 | `patternreach_2b.pdf`  | 6    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 10   | 7    |
 | `patternshade_2b.pdf`  | 8    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 7    | 6    |
+| `pdfxnoprofile_2b.pdf` | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
+| `pdfxonly_2b.pdf`      | 6    | 3    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 6    | 6    |
 | `prosecolumns_ua1.pdf` | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `qnestreach_2b.pdf`    | 6    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 4   | 4    | 5    | 10   | 7    |
@@ -7342,6 +7346,46 @@ colour: the first pointed the PDF/A intent at the CMYK profile, which left the
 DeviceRGB square uncovered, and the second replaced the whole `/OutputIntents`
 array with one stock sRGB `GTS_PDFA1` intent, dropping the PDF/X intent and
 both source profiles.
+
+### `pdfxonly_2b.pdf`
+
+ISO 32000-1, 14.11.5 admits several output intents, one per output condition.
+The catalog's sole intent is a `GTS_PDFX` one over a version 2.1 CMYK printer
+profile, and the page paints a DeviceCMYK square and a DeviceRGB one. Only a
+`GTS_PDFA1` intent covers device colour (ISO 19005-1, 6.2.3.3; ISO 19005-2,
+6.2.4.3), so every PDF/A level fails the device colour rules, `6.2.3.3/1` and
+`/2` at part 1 and `6.2.4.3/2` and `/3` after it, beside the identification
+and tagging rules each claim draws. veraPDF 1.30.2 and litho report the same
+rule set in all thirteen cells.
+
+Remediated at the eleven PDF/A levels, default and aggressive, every output
+reports the same rule set on both tools and passes but PDF/A-4f's, which keeps
+`6.9/5`. The new `GTS_PDFA1` intent goes first and names the PDF/X intent's
+profile object, with its `/OutputConditionIdentifier` and `/RegistryName`, and
+the PDF/X intent stays as it was: the profile is one PDF/A admits as a CMYK
+destination profile (ISO 19005-2, 6.2.3 t1), and both intents naming it meets
+6.2.3 t2. A DefaultRGB covers the DeviceRGB square. Before, remediation
+replaced the whole `/OutputIntents` array with a stock `CGATS TR 001` intent,
+which dropped the PDF/X intent and its profile.
+
+### `pdfxnoprofile_2b.pdf`
+
+The catalog lists a `GTS_PDFA1` intent carrying an `/OutputConditionIdentifier`
+and no `/DestOutputProfile`, then a `GTS_PDFX` intent over a version 2.1 CMYK
+printer profile. The page paints DeviceRGB. The PDF/A intent covers nothing
+without a profile, so every PDF/A level fails `6.2.3.3/1` or `6.2.4.3/2`.
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+
+Remediated at the eleven PDF/A levels, default and aggressive, every output
+reports the same rule set on both tools and passes but PDF/A-4f's, which keeps
+`6.9/5`. The profile-less `GTS_PDFA1` intent is replaced by a stock sRGB one,
+since a second `GTS_PDFA1` intent would name a second PDF/A output condition.
+The CMYK profile does not cover DeviceRGB, so the PDF/X intent cannot lend it,
+and ISO 19005-2, 6.2.3 t2 points the PDF/X intent at the sRGB profile: it
+keeps its `/OutputConditionIdentifier` over an RGB profile, as the cleanup
+fixer leaves `twoprofile_1b.pdf`'s, and the fix it reports names the CMYK
+profile it replaced. The CMYK profile stays in the file unreferenced. Before,
+remediation dropped the PDF/X intent.
 
 ### `drivetitle_1b.pdf`
 
