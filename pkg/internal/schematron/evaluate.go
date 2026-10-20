@@ -996,9 +996,15 @@ func selectNodes(doc *xmlquery.Node, expr string, cache *exprCache) (out []*xmlq
 // Panic recovery guards against upstream evaluator bugs in
 // antchfx/xpath: a malformed query graph has been observed to deref
 // a nil node deep inside the evaluator on real EN 16931 / XRechnung
-// payloads, and the host process should not crash for that. A
-// recovered panic surfaces as an error so the caller logs the rule
-// as skipped rather than ignoring the gap.
+// payloads, an undeclared variable does the same, and replace(),
+// sum(), contains() and starts-with() report a bad argument by
+// panicking (func.go). The
+// library signals these errors only by panic, so this recover, and
+// the one in selectNodes, is the deliberate exception to litho's
+// rule that internal code does not recover: it converts a
+// third-party error channel, not a panic of litho's own. A recovered
+// panic surfaces as an error so the caller logs the rule as skipped
+// rather than ignoring the gap.
 func evalBoolean(expr string, n *xmlquery.Node, cache *exprCache) (result bool, err error) {
 	compiled, err := cache.compile(expr)
 	if err != nil {
@@ -1086,6 +1092,10 @@ func (c *exprCache) compile(expr string) (*xpath.Expr, error) {
 	// namespace-uri predicate evaluates correctly and matches the
 	// same element set the XPath 1.0 spec defines for "ns:*".
 	rewritten = rewriteNamespaceWildcard(rewritten, c.ns)
+	// No recover here: antchfx's parser panics on a malformed
+	// expression but build() recovers it and returns an error, so the
+	// call cannot panic out. TestExprCache_UpstreamPanicsBecomeErrors
+	// pins that contract.
 	compiled, err := xpath.CompileWithNS(rewritten, c.ns)
 	if err != nil {
 		return nil, fmt.Errorf("compiling xpath %q: %w", expr, err)

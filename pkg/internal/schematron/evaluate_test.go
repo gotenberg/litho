@@ -292,6 +292,33 @@ func TestValidate_CarriageReturnIsWhitespace(t *testing.T) {
 	}
 }
 
+func TestExprCache_UpstreamPanicsBecomeErrors(t *testing.T) {
+	// antchfx/xpath v1.3.6 signals a malformed expression by panicking
+	// in its parser and recovers that panic inside build() (build.go),
+	// so a compile failure reaches litho as an error with no guard of
+	// litho's own. Evaluation has no such recover: an undeclared
+	// variable compiles and then dereferences nil, which evalBoolean
+	// converts. This pins both upstream behaviours so an upgrade that
+	// changes either fails here rather than crashing a validation run.
+	c := newExprCache(map[string]string{"inv": "urn:example:invoice"})
+	for _, expr := range []string{"'unclosed", "inv:a[", "undeclared:x", "1 +"} {
+		if _, err := c.compile(expr); err == nil {
+			t.Errorf("compile(%q): want an error", expr)
+		}
+	}
+	fired, skipped := runOne(t, `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:pattern id="P">
+    <sch:rule context="/a">
+      <sch:assert id="NOVAR" test="$undeclared = 1">undeclared</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`, `<a/>`)
+	if len(fired) != 0 || len(skipped) != 1 {
+		t.Errorf("fired %v skipped %v, want NOVAR skipped", fired, skipped)
+	}
+}
+
 func TestXPathBoolean_EffectiveBooleanValue(t *testing.T) {
 	// antchfx/xpath v1.3.6 returns round() as a Go int. XPath 2.0,
 	// 2.4.3 (and XPath 1.0, 4.3 boolean()): a number is true unless it
