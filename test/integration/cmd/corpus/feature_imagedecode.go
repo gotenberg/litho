@@ -23,6 +23,15 @@ import (
 // It is the gate's reach into image decoding: no other feature decodes image
 // samples, so a decoder could change its output while every other cell stayed
 // identical.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10339_reduced, issue2761, govdocs thread_300_300253: their Lab
+//     images (two indexed over Lab in each pdfjs file, one direct in govdocs)
+//     mismatch on PDF.js's side. litho converts Lab with Bradford adaptation to
+//     D65 and the sRGB curve (ISO 32000-1, 8.6.5.4) and matches the pinned
+//     poppler within one level; PDF.js skips the adaptation and approximates the
+//     curve with a square root, 7 to 10 levels away.
 type imageDecodeFeature struct {
 	mu      sync.RWMutex
 	goldens map[string]*imageGolden
