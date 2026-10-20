@@ -7414,8 +7414,12 @@ The CMYK profile does not cover DeviceRGB, so the PDF/X intent cannot lend it,
 and ISO 19005-2, 6.2.3 t2 points the PDF/X intent at the sRGB profile: it
 keeps its `/OutputConditionIdentifier` over an RGB profile, as the cleanup
 fixer leaves `twoprofile_1b.pdf`'s, and the fix it reports names the CMYK
-profile it replaced. The CMYK profile stays in the file unreferenced. Before,
-remediation dropped the PDF/X intent.
+profile it replaced. The `/DefaultCMYK` remediation stages beside the sRGB
+intent names that CMYK profile rather than litho's stock one: PDF/A admits it
+as a CMYK profile (ISO 19005-2, 6.2.4.2 t1), so the producer's
+characterisation stays and every output is about 28 KB smaller, with the same
+rule set on both tools. Before, remediation dropped the PDF/X intent, and then
+left its CMYK profile in the file unreferenced.
 
 ### `drivetitle_1b.pdf`
 
