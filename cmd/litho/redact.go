@@ -36,6 +36,7 @@ type redactResult struct {
 	RemovedText             []string      `json:"removedText"`
 	BlankedImages           []string      `json:"blankedImages,omitempty"`
 	RemovedPaths            int           `json:"removedPaths"`
+	ClippedPaths            int           `json:"clippedPaths,omitempty"`
 	RemovedAnnotations      []int         `json:"removedAnnotations,omitempty"`
 	DroppedPageEntries      []string      `json:"droppedPageEntries,omitempty"`
 	FontsFullyRemovedOnPage map[int][]int `json:"fontsFullyRemovedOnPage,omitempty"`
@@ -206,6 +207,7 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		RemovedText:             report.RemovedText,
 		BlankedImages:           report.BlankedImages,
 		RemovedPaths:            report.RemovedPaths,
+		ClippedPaths:            report.ClippedPaths,
 		RemovedAnnotations:      report.RemovedAnnotations,
 		DroppedPageEntries:      report.DroppedPageEntries,
 		FontsFullyRemovedOnPage: report.FontsFullyRemovedOnPage,
@@ -235,6 +237,9 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 	case "text":
 		fmt.Fprintf(stdout, "Removed %d text run(s), %d path(s), %d image(s)\n",
 			len(result.RemovedText), result.RemovedPaths, len(result.BlankedImages))
+		if n := result.ClippedPaths; n > 0 {
+			fmt.Fprintf(stdout, "Clipped %d path(s) at the region edges\n", n)
+		}
 		if n := len(result.RemovedAnnotations); n > 0 {
 			fmt.Fprintf(stdout, "Removed %d annotation(s) inside the regions\n", n)
 		}

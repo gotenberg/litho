@@ -182,11 +182,13 @@ func TestRedactPageRegions_RemovesAFilledPathInsideTheRegion(t *testing.T) {
 }
 
 func TestRedactPageRegions_RefusesAPathStraddlingTheRegion(t *testing.T) {
-	doc, page := redactPathFixture(t, "100 100 100 100 re f")
+	doc, page := redactPathFixture(t, "1 w 95 95 m 200 100 l 200 200 l B")
 	alloc := writer.NewObjAllocator(20)
 
-	// The rectangle runs to (200,200) and the region stops at 160, so removing
-	// the path would take ink the caller never selected.
+	// The path runs to (200,200) and the region stops at 160, so removing it
+	// would take ink the caller never selected. It starts inside the region,
+	// and B fills it closed back to that start while stroking it open, so no
+	// rewrite moves the start without moving the fill's edge.
 	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 90, 160, 160}})
 	if !errors.Is(err, ErrPathStraddlesRegion) {
@@ -198,11 +200,12 @@ func TestRedactPageRegions_RefusesAPathStraddlingTheRegion(t *testing.T) {
 }
 
 func TestRedactPageRegions_RefusesAStrokedPath(t *testing.T) {
-	doc, page := redactPathFixture(t, "100 100 50 50 re S")
+	doc, page := redactPathFixture(t, "/GS1 gs 100 100 50 50 re S")
 	alloc := writer.NewObjAllocator(20)
 
 	// A stroke spreads half a line width past the geometry the machine
-	// records, so the bounds cannot prove the ink stays inside the region.
+	// records, and the page names a graphics state its resources do not hold,
+	// so nothing says how wide the line is or where its ink stops.
 	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 90, 160, 160}})
 	if !errors.Is(err, ErrRegionCoversAStrokedPath) {
@@ -373,7 +376,7 @@ func TestRedactPageRegions_RefusalAfterBlankingRegistersNothing(t *testing.T) {
 	// allocator has to come back empty: a caller that handled the error would
 	// otherwise still write a document carrying a half-cleared image.
 	doc, page := redactImageFixture(t,
-		"q 200 0 0 100 50 600 cm /Im1 Do Q 100 100 100 100 re f")
+		"q 200 0 0 100 50 600 cm /Im1 Do Q 1 w 95 95 m 200 100 l 200 200 l B")
 	alloc := writer.NewObjAllocator(20)
 
 	_, err := RedactPageRegions(context.Background(), alloc, doc, page,

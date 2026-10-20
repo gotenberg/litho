@@ -2,6 +2,7 @@ package mutations
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -51,8 +52,10 @@ import (
 //     depends on, and which no TJ number can reproduce, reports
 //     [ErrTextAdvanceUnknown]. The removal puts that advance back otherwise,
 //     so the rest of the line stays where it was.
-//   - A painted path reaching outside the region reports
-//     [ErrPathStraddlesRegion], one painted by a stroking operator reports
+//   - A painted path reaching outside the region is rewritten (see
+//     [RedactReport.ClippedPaths]) unless it cannot be exactly: one it cannot
+//     parse, cut or clip reports [ErrPathStraddlesRegion], a stroke whose
+//     width cannot be read or whose dashes a cut would move reports
 //     [ErrRegionCoversAStrokedPath], and one a W or W* took part in reports
 //     [ErrRegionCoversAClippedPath].
 //   - A region selecting content a form XObject draws reports
@@ -91,12 +94,14 @@ import (
 // Refusing beats removing more than was asked, and beats reporting success over
 // content that is still in the file.
 //
-// This removes text and the filled paths a region covers. A stroked or
-// clipping path is refused rather than removed, because a stroke's ink spreads
-// past the geometry the machine records and a clipping path also constrains
-// content outside the region. The document-wide copies of page text (the
-// structure tree, annotation values, outlines, metadata) are still untouched,
-// so the result is not a redacted document on its own. An image the regions
+// This removes text and the painted paths a region covers. A path whose ink,
+// a stroke's width included, reaches outside the regions loses its geometry
+// inside them and paints the rest under a clip that excludes them, so the page
+// outside keeps every mark it had. A clipping path is refused rather than
+// removed, because it also constrains content outside the region. The
+// document-wide copies of page text (the structure tree, annotation values,
+// outlines, metadata) are still untouched, so the result is not a redacted
+// document on its own. An image the regions
 // cover is blanked rather than removed: one Do carries the whole picture, so
 // dropping it would take the parts the caller never selected, while overwriting
 // the covered samples clears exactly what was asked. A blanked image comes back
@@ -155,6 +160,10 @@ type RedactReport struct {
 	// there is nothing for a scan to look for; the count is for the caller's
 	// report of what it did.
 	RemovedPaths int
+	// ClippedPaths counts the painted paths that reached outside the regions
+	// and were rewritten: their geometry inside the regions removed, the rest
+	// painted under a clip excluding the regions.
+	ClippedPaths int
 	// RemovedMCIDs lists the marked-content identifiers whose content was
 	// removed, ascending. They are what reaches the structure tree: a tagged
 	// page keeps a parallel copy of its text there, keyed by these.
@@ -323,11 +332,12 @@ func redactPageRegions(
 	}
 	report.RemovedAnnotations = removedAnnots
 
-	vectorSpans, err := pathSpans(machine.PathBoxes(), ops, ranges, zones)
+	paths, err := pathEdits(ctx, alloc, doc, page, data, machine.PathBoxes(), ops, ranges, zones)
 	if err != nil {
 		return RedactReport{}, err
 	}
-	report.RemovedPaths = len(vectorSpans)
+	report.RemovedPaths = paths.removed
+	report.ClippedPaths = paths.clipped
 
 	// Tally each operator's glyphs, because an operator leaves whole or stays
 	// whole: every glyph it drew has to agree about the regions.
@@ -420,7 +430,7 @@ func redactPageRegions(
 	}
 	splits := make(map[int][]byte)
 
-	spans := make([]content.ByteRange, 0, len(selected)+len(vectorSpans))
+	spans := make([]content.ByteRange, 0, len(selected))
 	for _, origin := range selected {
 		if c := tally[origin]; c.outside > 0 {
 			split, err := splitShowReplacement(ctx, ops, origin, c.picked, c.glyphs, removedOps,
@@ -502,8 +512,7 @@ func redactPageRegions(
 		return RedactReport{}, err
 	}
 
-	spans = append(spans, vectorSpans...)
-	if len(spans) == 0 && len(inlineEdits) == 0 {
+	if len(spans) == 0 && len(inlineEdits) == 0 && len(paths.edits) == 0 {
 		// An image may still have been blanked, so the report stands even when
 		// no operator was removed, and the page's own copies still have to go.
 		if len(report.BlankedImages) > 0 {
@@ -512,7 +521,7 @@ func redactPageRegions(
 		return report, nil
 	}
 
-	edits := make([]SpanEdit, 0, len(spans)+len(inlineEdits))
+	edits := make([]SpanEdit, 0, len(spans)+len(inlineEdits)+len(paths.edits))
 	edits = append(edits, inlineEdits...)
 	for _, origin := range selected {
 		if replacement, ok := splits[origin]; ok {
@@ -525,9 +534,7 @@ func redactPageRegions(
 		}
 		edits = append(edits, SpanEdit{Span: ranges[origin], Replacement: replacement})
 	}
-	for _, span := range vectorSpans {
-		edits = append(edits, SpanEdit{Span: span})
-	}
+	edits = append(edits, paths.edits...)
 	if err := EditPageSpans(ctx, alloc, doc, page, edits); err != nil {
 		return RedactReport{}, err
 	}
@@ -548,65 +555,147 @@ func regionZones(regions [][4]float64) []heuristics.Zone {
 	return zones
 }
 
-// pathSpans returns the byte ranges of the painted paths the zones cover, and
-// refuses any path it cannot remove exactly.
+// pathEditSet is what [pathEdits] decided for the painted paths of a page.
+type pathEditSet struct {
+	edits            []SpanEdit
+	removed, clipped int
+}
+
+// pathEdits returns the edits clearing the painted paths the zones cover, and
+// refuses any path it cannot clear exactly.
 //
-// A path is removed as a whole run, from its first construction operator
-// through the paint operator that ended it, so it qualifies only when it sits
-// wholly inside one region. Overlapping is what selects it; containment is what
-// permits removing it.
-func pathSpans(boxes []graphics.PathBox, ops []content.Operation, ranges []content.ByteRange, zones []heuristics.Zone) ([]content.ByteRange, error) {
-	spans := make([]content.ByteRange, 0, len(boxes))
+// A path is selected when its ink meets a region: its geometry for a fill, and
+// for a stroke its geometry widened by the stroke's reach (see [strokeReach]),
+// since a stroke paints past the path it follows. One whose ink sits wholly
+// inside one region loses every construction operator of its run, from the
+// first through the paint operator that ended it: one left behind would merge
+// into the next path and be painted by its operator. One reaching outside is
+// rewritten in place by [clipPathRun]: its geometry inside the regions is
+// removed and the rest painted under a clip excluding them, so the page outside
+// keeps every mark it had.
+//
+// data is the buffer ops and ranges were parsed from.
+func pathEdits(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	page *document.Page,
+	data []byte,
+	boxes []graphics.PathBox,
+	ops []content.Operation,
+	ranges []content.ByteRange,
+	zones []heuristics.Zone,
+) (pathEditSet, error) {
+	var out pathEditSet
+	var states map[int]pathPaintState
+
+	meets := func(z heuristics.Zone) []heuristics.Zone {
+		var hit []heuristics.Zone
+		for _, r := range zones {
+			if heuristics.ZonesOverlap(z, r) {
+				hit = append(hit, r)
+			}
+		}
+		return hit
+	}
 
 	for _, box := range boxes {
 		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
 
-		selected := false
-		for _, z := range zones {
-			if heuristics.ZonesOverlap(painted, z) {
-				selected = true
-				break
+		// The operators that drew it are in the form's own stream, where no
+		// offset into this one reaches them, and neither does its state.
+		if box.FormDepth > 0 {
+			if len(meets(painted)) > 0 {
+				return pathEditSet{}, fmt.Errorf("%w: a painted path", ErrRegionInFormXObject)
 			}
+			continue
 		}
-		if !selected {
+		validRun := box.StartOp >= 0 && box.StartOp <= box.EndOp && box.EndOp < len(ops)
+
+		inked := painted
+		var reach, factor float64
+		var state pathPaintState
+		if validRun {
+			if states == nil {
+				var err error
+				if states, err = pagePaintStates(ctx, alloc, doc, page, ops); err != nil {
+					return pathEditSet{}, err
+				}
+			}
+			state = states[box.EndOp]
+		}
+		strokes := validRun && pathPaintStrokes(ops[box.EndOp].Operator)
+		if strokes {
+			if !state.stroke.known {
+				// Without the line width the ink cannot be placed, so a stroke
+				// whose geometry meets the region cannot be cleared exactly.
+				if len(meets(painted)) > 0 {
+					return pathEditSet{}, fmt.Errorf("%w: operation %d strokes with a line width or join that cannot be read",
+						ErrRegionCoversAStrokedPath, box.EndOp)
+				}
+				continue
+			}
+			// The joins the path actually makes decide how far it reaches; one
+			// that cannot be read is bounded by the miter limit.
+			factor = miterCeiling(state.stroke)
+			if subs, _, err := parsePathRun(ops, box.StartOp, box.EndOp); err == nil {
+				factor = joinFactor(subs, pathPaintCloses(ops[box.EndOp].Operator), state.stroke)
+			}
+			reach = strokeReach(state.stroke, box.CTM, factor)
+			inked = heuristics.ZoneFromRect([4]float64{box.MinX - reach, box.MinY - reach, box.MaxX + reach, box.MaxY + reach})
+		}
+
+		hit := meets(inked)
+		if len(hit) == 0 {
+			continue
+		}
+		if box.Clipped {
+			return pathEditSet{}, fmt.Errorf("%w: operations %d to %d", ErrRegionCoversAClippedPath, box.StartOp, box.EndOp)
+		}
+		if !validRun {
+			return pathEditSet{}, fmt.Errorf("painted path reports operations %d to %d, which is not a run of the %d parsed",
+				box.StartOp, box.EndOp, len(ops))
+		}
+		span := content.ByteRange{Start: ranges[box.StartOp].Start, End: ranges[box.EndOp].End}
+
+		if slices.ContainsFunc(hit, func(z heuristics.Zone) bool { return heuristics.ZoneContains(z, inked) }) {
+			// Operator by operator rather than the whole run: an operator a
+			// producer wrote inside the path, a colour or even a text object,
+			// still does what it did, and text the region selects is removed
+			// by its own edit.
+			for i := box.StartOp; i <= box.EndOp; i++ {
+				if i == box.EndOp || pathConstruction(ops[i].Operator) {
+					out.edits = append(out.edits, SpanEdit{Span: ranges[i]})
+				}
+			}
+			out.removed++
 			continue
 		}
 
-		// The operators that drew it are in the form's own stream, where no
-		// offset into this one reaches them.
-		if box.FormDepth > 0 {
-			return nil, fmt.Errorf("%w: a painted path", ErrRegionInFormXObject)
+		if state.inText {
+			return pathEditSet{}, fmt.Errorf("%w: operations %d to %d paint inside a text object, where no clip can be set",
+				ErrPathStraddlesRegion, box.StartOp, box.EndOp)
 		}
-		if box.Clipped {
-			return nil, fmt.Errorf("%w: operations %d to %d", ErrRegionCoversAClippedPath, box.StartOp, box.EndOp)
+		var stroke *strokeParams
+		if strokes {
+			stroke = &state.stroke
 		}
-		if box.StartOp < 0 || box.StartOp > box.EndOp || box.EndOp >= len(ops) {
-			return nil, fmt.Errorf("painted path reports operations %d to %d, which is not a run of the %d parsed",
-				box.StartOp, box.EndOp, len(ops))
+		replacement, paints, err := clipPathRun(ctx, data, ops, ranges, box, hit, inked, stroke, factor, !strokes || !state.stroke.dashed)
+		switch {
+		case errors.Is(err, errPathCutNeedsUndashedStroke):
+			return pathEditSet{}, fmt.Errorf("%w: operations %d to %d: %w", ErrRegionCoversAStrokedPath, box.StartOp, box.EndOp, err)
+		case err != nil:
+			return pathEditSet{}, fmt.Errorf("%w: operations %d to %d: %w", ErrPathStraddlesRegion, box.StartOp, box.EndOp, err)
 		}
-		if pathPaintStrokes(ops[box.EndOp].Operator) {
-			return nil, fmt.Errorf("%w: operation %d paints with %q",
-				ErrRegionCoversAStrokedPath, box.EndOp, ops[box.EndOp].Operator)
+		out.edits = append(out.edits, SpanEdit{Span: span, Replacement: []byte(replacement)})
+		if paints {
+			out.clipped++
+		} else {
+			out.removed++
 		}
-
-		contained := false
-		for _, z := range zones {
-			if heuristics.ZoneContains(z, painted) {
-				contained = true
-				break
-			}
-		}
-		if !contained {
-			return nil, fmt.Errorf("%w: operations %d to %d", ErrPathStraddlesRegion, box.StartOp, box.EndOp)
-		}
-
-		spans = append(spans, content.ByteRange{
-			Start: ranges[box.StartOp].Start,
-			End:   ranges[box.EndOp].End,
-		})
 	}
 
-	return spans, nil
+	return out, nil
 }
 
 // pathPaintStrokes reports whether a path-painting operator strokes.

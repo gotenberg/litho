@@ -118,25 +118,29 @@ var ErrXObjectUnresolved = errors.New("page invokes an XObject that could not be
 var ErrRegionInFormXObject = errors.New("region selects content drawn by a form XObject")
 
 // ErrPathStraddlesRegion reports a painted path that lies only partly inside
-// the region being cleared.
+// the region being cleared and cannot be rewritten exactly.
 //
-// Removing a path takes its whole run, from the first construction operator
-// through the paint operator that ended it, because the construction operators
-// left behind would merge into the next path and be painted by its operator
-// instead. A path reaching outside the region would therefore lose ink the
-// caller never selected. Refusing states the problem rather than clearing more
-// of the page than was asked.
+// Such a path is ordinarily rewritten: its geometry inside the region removed
+// and the rest painted under a clip excluding the region. That needs operands
+// it can read, a place for the clip (ISO 32000-1, 8.2 allows no q inside a
+// text object), and, for a subpath both filled and stroked but left open, ends
+// and a closing edge outside the region, since the fill closes it and the
+// stroke does not. Without them, removing the whole path would take ink the
+// caller never selected and keeping it would leave ink inside the region, so
+// the redaction is refused.
 var ErrPathStraddlesRegion = errors.New("painted path lies only partly inside the region")
 
 // ErrRegionCoversAStrokedPath reports a region meeting a path painted by a
-// stroking operator.
+// stroking operator whose ink cannot be cleared exactly.
 //
 // A stroke is centred on the path and spreads half the line width to either
-// side (ISO 32000-1, 8.4.3.2), so its ink covers more than the path geometry
-// the machine records. A stroked path whose recorded bounds sit inside the
-// region can still mark the page outside it, which makes containment
-// unprovable from the bounds alone. Refusing beats removing ink outside the
-// region; inflating the bounds by the line width in force would lift this.
+// side (ISO 32000-1, 8.4.3.2), more at a miter join, so its ink covers more than
+// the path geometry the machine records. A stroke is cleared by the reach the
+// line width, the joins and the CTM give it, and refused when that reach is
+// unknown: the width or join comes from a graphics state that does not
+// resolve, or an operand that is no number. A dashed stroke whose geometry
+// would have to be cut is refused too, since the chord replacing the removed
+// part moves every dash after it (8.4.3.6).
 var ErrRegionCoversAStrokedPath = errors.New("region covers a stroked path")
 
 // ErrRegionCoversAClippedPath reports a region meeting a path that a W or W*

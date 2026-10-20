@@ -81,6 +81,10 @@ type RedactReport struct {
 	BlankedImages []string
 	// RemovedPaths counts the painted paths removed.
 	RemovedPaths int
+	// ClippedPaths counts the painted paths that reached outside the regions:
+	// their geometry inside the regions was removed and the rest is painted
+	// under a clip that excludes the regions.
+	ClippedPaths int
 	// RemovedAnnotations lists the object numbers of annotations dropped
 	// because their rectangle sat inside a region, ascending.
 	RemovedAnnotations []int
@@ -145,8 +149,9 @@ type RedactReport struct {
 //   - [ErrRedactionRefused] when something cannot be removed exactly: a region
 //     covering only some of a text run that cannot be split at its glyphs
 //     (a run a region covers only partly is otherwise split, the covered
-//     glyphs removed and the rest kept where they were), a straddling,
-//     stroked or clipping path, content drawn by a form XObject, or an image
+//     glyphs removed and the rest kept where they were), a clipping path, a
+//     straddling path it cannot cut and clip at the region, a stroke whose
+//     width cannot be read, content drawn by a form XObject, or an image
 //     whose samples cannot be rewritten. Removing more than was asked, or reporting success over
 //     content still in the file, are both worse than refusing.
 //   - [ErrRedactionIncomplete] when the passes succeed but the verification
@@ -206,10 +211,12 @@ type RedactReport struct {
 //
 // Everything outside the regions stays where it was. Text after a removed run
 // on the same line keeps its position, because the run's advance is put back
-// in its place. An image is blanked by rewriting it, so an image also painted
-// somewhere the regions do not cover the same samples, on another page, twice
-// on one page, or by an annotation or a form, is refused rather than blanked
-// there too.
+// in its place. A painted path reaching outside the regions loses its geometry
+// inside them, and the rest is painted under a clip that excludes them (see
+// [RedactReport.ClippedPaths]). An image is blanked by rewriting it, so an
+// image also painted somewhere the regions do not cover the same samples, on
+// another page, twice on one page, or by an annotation or a form, is refused
+// rather than blanked there too.
 //
 // The redaction holds whatever else the Writer does before or after it:
 // another Redact, auto-tagging, and a remediation, which comes after it since a
@@ -624,6 +631,7 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 	out.RemovedText = append(out.RemovedText, in.RemovedText...)
 	out.BlankedImages = append(out.BlankedImages, in.BlankedImages...)
 	out.RemovedPaths += in.RemovedPaths
+	out.ClippedPaths += in.ClippedPaths
 	out.RemovedAnnotations = append(out.RemovedAnnotations, in.RemovedAnnotations...)
 	out.DroppedPageEntries = append(out.DroppedPageEntries, in.DroppedPageEntries...)
 	if len(in.FontsFullyRemovedOnPage) > 0 {
