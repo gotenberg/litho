@@ -78,6 +78,8 @@ var racedOptionReaders = []string{
 	"GenerateBookmarks",
 	// TestConcurrentVerifySignatures, over a document litho signed.
 	"VerifySignatures",
+	// TestRenderPageConcurrent, over a page that paints.
+	"RenderPage",
 }
 
 // readerMethodsByShape parses the package and groups exported *Reader methods

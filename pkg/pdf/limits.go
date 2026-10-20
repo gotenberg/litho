@@ -4,8 +4,8 @@ import "github.com/gotenberg/litho/pkg/internal/limits"
 
 // Limits bounds the resources litho spends on one document: how many bytes a
 // stream may decode to, how many pixels an image may hold, how large an
-// embedded PDF validation opens, how deeply form XObjects nest, and how many
-// parsed objects stay cached. Each budget is an anti-DoS guard, not a
+// embedded PDF validation opens, how deeply form XObjects nest, how many
+// parsed objects stay cached, and how many pixels a rendered page may hold. Each budget is an anti-DoS guard, not a
 // requirement of ISO 32000: a few kilobytes of crafted input can otherwise ask
 // for gigabytes of memory or unbounded work. The defaults ([DefaultLimits])
 // sit far above what real documents need.
@@ -87,6 +87,14 @@ type Limits struct {
 	// re-parsing, never a wrong answer. Default 50,000, at most 8,388,607, the
 	// most indirect objects ISO 32000-1, Annex C allows a file.
 	MaxCachedObjects int
+
+	// MaxRenderPixels bounds Width x Height of one page [Reader.RenderPage]
+	// draws, and of every raster it allocates at the page's size, such as a
+	// clip. A page whose size at the requested resolution exceeds it fails
+	// with [ErrRenderTooLarge] before anything is drawn. The renderer holds
+	// 16 bytes a pixel for the page. Default 50,000,000, a US Letter or A4
+	// page at 600 dpi, at most 2^30.
+	MaxRenderPixels int64
 }
 
 // DefaultLimits returns the budgets a [Reader] applies when [WithLimits] is
@@ -123,6 +131,7 @@ func (l Limits) internal() limits.Limits {
 		MaxEmbeddedFileBytes: l.MaxEmbeddedFileBytes,
 		MaxFormDepth:         l.MaxFormDepth,
 		MaxCachedObjects:     l.MaxCachedObjects,
+		MaxRenderPixels:      l.MaxRenderPixels,
 	}
 }
 
@@ -134,5 +143,6 @@ func limitsFromInternal(l limits.Limits) Limits {
 		MaxEmbeddedFileBytes: l.MaxEmbeddedFileBytes,
 		MaxFormDepth:         l.MaxFormDepth,
 		MaxCachedObjects:     l.MaxCachedObjects,
+		MaxRenderPixels:      l.MaxRenderPixels,
 	}
 }

@@ -126,6 +126,8 @@
 //   - [Reader.ExtractText] and [Reader.ExtractAllText] take
 //     [ExtractTextOption]: [WithHiddenText], [WithInvisibleText],
 //     [WithClipPathText], [WithClippedText], [WithArtifacts].
+//   - [Reader.RenderPage] takes [RenderOption]: [WithRenderDPI],
+//     [WithRenderBackground].
 //   - [Writer.WriteTo], [Split], [Merge], [Pipeline.WriteTo],
 //     [Pipeline.Split] and [Pipeline.Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
@@ -171,9 +173,10 @@
 // # Resource limits
 //
 // A crafted document can ask for far more memory or work than its size
-// suggests, so every [Reader] runs under five budgets: the decoded bytes of
+// suggests, so every [Reader] runs under six budgets: the decoded bytes of
 // one stream, the pixels of one image, the size of an embedded PDF validation
-// opens, the nesting of form XObjects, and the entries of the object cache.
+// opens, the nesting of form XObjects, the entries of the object cache, and
+// the pixels of one rendered page.
 // [DefaultLimits] suits ordinary documents. A service that reads untrusted
 // input can lower them, and one that handles unusually large images can raise
 // them, through [WithLimits]:

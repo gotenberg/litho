@@ -71,6 +71,18 @@ var (
 	// carries the reason.
 	ErrImageNotDecodable = errors.New("image cannot be decoded")
 
+	// ErrRenderTooLarge is returned, wrapped, by [Reader.RenderPage] when the
+	// page at the requested resolution holds more than
+	// [Limits.MaxRenderPixels] pixels, when the clips it keeps at once hold
+	// more than eight times that, or when its content runs more operators
+	// than one render allows. Raising MaxRenderPixels or lowering the
+	// resolution reads the first two.
+	ErrRenderTooLarge = errors.New("page render exceeds its budget")
+
+	// ErrInvalidRenderOptions is returned, wrapped, by [Reader.RenderPage]
+	// when [WithRenderDPI] is not positive and finite.
+	ErrInvalidRenderOptions = errors.New("invalid render options")
+
 	// ErrInvalidPageNumber is returned when a page number is outside the
 	// valid range [1, pageCount]: by the [Reader] methods that take one, by
 	// [Writer.Redact] and [Split], and by [Writer.WriteTo] for a page
