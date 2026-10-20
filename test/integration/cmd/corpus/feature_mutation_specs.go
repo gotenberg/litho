@@ -627,8 +627,17 @@ func verifyStamp(ctx context.Context, _ *mutationFeature, in *mutationInput, out
 // position tells it apart. A page litho reads no positions from is left to
 // the text check.
 //
+// A page narrower than the stamp clips its tail: a glyph whose origin lies
+// past the right edge of the crop box paints outside the visible region (ISO
+// 32000-1, 14.11.2), and litho reads it apart from the visible run, as PDF.js
+// drops it. The stamp then reads as a prefix of its text, which still says
+// where it starts.
+//
 // # Corpus evidence
 //
+//   - litho sharedarray_2b: its pages are 100 points wide, so the stamp's
+//     last letter starts at x = 102 and the visible run reads "LITHO
+//     MUTATION STAM" at (10, 10).
 //   - litho: every stamp on the 310 pages of the other 133 fixtures reads at
 //     exactly (10, 10), since none has a crop box off the origin.
 //   - litho boxorigin_2b: planted in turn, the cell adding the box origin to X
@@ -651,7 +660,8 @@ func stampPlacement(ctx context.Context, in *mutationInput, out *mutationOutputD
 		var seen []string
 		placed := false
 		for _, e := range elements {
-			if !strings.HasPrefix(normalizeContent(e.Text), stamp) {
+			text := normalizeContent(e.Text)
+			if !strings.HasPrefix(text, stamp) && (text == "" || !strings.HasPrefix(stamp, text)) {
 				continue
 			}
 			if math.Abs(e.X-wantX) <= mutationStampTolerance && math.Abs(e.Y-wantY) <= mutationStampTolerance {
