@@ -288,8 +288,12 @@ func WithDedup() WriteOption {
 // An image stored without compression or under FlateDecode, LZWDecode,
 // RunLengthDecode, ASCIIHexDecode or ASCII85Decode is re-encoded with
 // FlateDecode at its best compression and a PNG predictor where that helps
-// (ISO 32000-1, 7.4.4.4): only /Filter, /DecodeParms and the data change. A
-// JPEG image (DCTDecode alone) keeps its filter and its dictionary: its data
+// (ISO 32000-1, 7.4.4.4): only /Filter, /DecodeParms and the data change. Such
+// an image that is 8-bit DeviceRGB or ICCBased RGB and uses at most 256
+// colours may instead become an Indexed image over its own colour space (ISO
+// 32000-1, 8.6.6.3), with 1, 2, 4 or 8 bits per pixel, when that is smaller:
+// every pixel keeps its colour, and a colour-key /Mask is renumbered to the
+// indices of the colours it masked. A JPEG image (DCTDecode alone) keeps its filter and its dictionary: its data
 // is re-coded with Huffman tables fitted to its own statistics (ITU-T T.81,
 // Annex K.2) and without restart intervals, which codes the same quantized
 // coefficients in fewer bytes.
@@ -318,6 +322,10 @@ func WithDedup() WriteOption {
 //     3.05% on pdfjs and 7.31% on pdfcpu (19.3 MB more over 5,713 JPEGs), no
 //     output grows and none fails to write, and writing govdocs takes 178s
 //     against 123s without it.
+//   - All corpora: the Indexed form converts 205 images in 52 files and saves
+//     a further 0.08% on govdocs, 0.07% on pdfjs, 0.48% on pdfcpu and 5.4%
+//     on pdf20; every image decodes to the pixels it had, no output grows,
+//     and veraPDF reports the same rules at 2b and 4 on a sample of 8.
 func WithImageRecompression() WriteOption {
 	return func(o *writeOpts) {
 		o.recompressImages = true

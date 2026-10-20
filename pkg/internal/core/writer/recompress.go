@@ -61,12 +61,19 @@ type RecompressStats struct {
 // replace it with the decoded samples, a different trade rather than a
 // lossless improvement of the same one.
 //
+// An 8-bit RGB image of at most 256 colours is also weighed as indices into
+// an Indexed colour space over its own base, which stores a pixel in 1, 2, 4
+// or 8 bits rather than 24 ([indexedForm]), and that form is kept when it
+// serializes smaller than both the stream it replaces and the image's own
+// samples re-encoded.
+//
 // For the general-purpose filters only /Filter, /DecodeParms and the data
-// change, and for a JPEG only the data. /Decode, /SMask, /Mask,
-// /ColorSpace, /BitsPerComponent, /Width, /Height and /DL keep their values,
-// and every re-encoding is decoded again and compared with the original
-// samples before it replaces them, so a stream whose samples would differ is
-// never written.
+// change, and for a JPEG only the data. An Indexed form also changes
+// /ColorSpace and /BitsPerComponent, drops a default /Decode, and renumbers a
+// colour-key /Mask; every pixel keeps its colour. /SMask, /Width, /Height and
+// /DL keep their values, and every re-encoding is decoded again and compared
+// with the samples it encodes before it replaces them, so a stream whose
+// pixels would differ is never written.
 //
 // An image is left as it is, without failing the write, when its dictionary
 // names external data (/F), its filter keys are neither direct nor one
@@ -174,6 +181,10 @@ type recompressionPlan struct {
 	// optimized Huffman tables (see [planJPEG]) rather than compressed with
 	// FlateDecode.
 	jpeg bool
+	// indexed is the palette of an image rewritten as indices into an
+	// Indexed colour space (see [indexedForm]), nil when its samples are
+	// written as they decode.
+	indexed *indexedPalette
 }
 
 // predictorLayout is the sample layout a PNG predictor is applied under.
@@ -222,53 +233,91 @@ func planRecompression(
 		return recompressionPlan{}, false, ctx.Err()
 	}
 
-	// The layout is chosen at zlib's default level, which ranks the two
-	// candidates as the best level does at a fraction of its cost, and only
-	// the winner is compressed at the best level.
-	candidates := []*predictorLayout{nil}
-	if l := samplePredictorLayout(pending, s.Dict, width, height, len(decoded)); l != nil {
-		candidates = append(candidates, l)
+	forms := []sampleForm{{
+		samples: decoded,
+		dict:    s.Dict,
+		layout:  samplePredictorLayout(pending, s.Dict, width, height, len(decoded)),
+	}}
+	if f, ok := indexedForm(pending, s.Dict, decoded, width, height); ok {
+		forms = append(forms, f)
 	}
+	// Within a form the layout is chosen at zlib's default level, which ranks
+	// a form's layouts as the best level does at a fraction of its cost. Each
+	// form's winner is then compressed at the best level and the smallest
+	// kept: across forms the default level ranks less reliably, since indices
+	// and the samples they stand for compress differently.
 	var (
-		layout   *predictorLayout
-		screened = -1
+		form    sampleForm
+		encoded []byte
+		dict    ast.PdfDict
+		after   int64 = -1
 	)
-	for _, l := range candidates {
+	for _, f := range forms {
+		layout, screened, err := screenLayouts(ctx, f)
+		if err != nil {
+			return recompressionPlan{}, false, err
+		}
+		if screened < 0 || int64(screened) > before+before/screenSlack {
+			continue
+		}
 		if err := ctx.Err(); err != nil {
 			return recompressionPlan{}, false, err
 		}
-		encoded, _, ok := encodeCandidate(decoded, s.Dict, l, zlib.DefaultCompression)
-		if ok && (screened < 0 || len(encoded) < screened) {
-			layout, screened = l, len(encoded)
+		enc, d, ok := encodeCandidate(f.samples, f.dict, layout, zlib.BestCompression)
+		if !ok {
+			continue
+		}
+		size, err := serializedSize(ctx, ast.NewStream(d, enc))
+		if err != nil {
+			// The source serialized, and the replacement differs from it only
+			// in entries litho wrote, so only the context can fail it.
+			return recompressionPlan{}, false, ctx.Err()
+		}
+		if size < before && (after < 0 || size < after) {
+			form, encoded, dict, after = f, enc, d, size
+			form.layout = layout
 		}
 	}
-	if screened < 0 || int64(screened) > before+before/screenSlack {
+	if after < 0 {
 		return recompressionPlan{}, false, nil
 	}
-	if err := ctx.Err(); err != nil {
-		return recompressionPlan{}, false, err
+	best := recompressionPlan{
+		source: source, dict: dict, encoded: encoded, saved: before - after,
+		layout: form.layout, indexed: form.indexed,
 	}
-	encoded, dict, ok := encodeCandidate(decoded, s.Dict, layout, zlib.BestCompression)
-	if !ok {
-		return recompressionPlan{}, false, nil
-	}
-	after, err := serializedSize(ctx, ast.NewStream(dict, encoded))
-	if err != nil {
-		// The source serialized, and the replacement differs from it only in
-		// encoding entries litho wrote, so only the context can fail it.
-		return recompressionPlan{}, false, ctx.Err()
-	}
-	if after >= before {
-		return recompressionPlan{}, false, nil
-	}
-	best := recompressionPlan{source: source, dict: dict, encoded: encoded, saved: before - after, layout: layout}
 
-	// The re-encoding replaces the samples only if it decodes to them.
+	// The re-encoding replaces the samples only if it decodes to them: to the
+	// source's samples, or for an Indexed form to the indices [indexedForm]
+	// proved map back to them.
 	again, ok, err := DecodeWhole(ctx, dec, ast.NewStream(best.dict, best.encoded))
-	if err != nil || !ok || !bytes.Equal(again, decoded) {
+	if err != nil || !ok || !bytes.Equal(again, form.samples) {
 		return recompressionPlan{}, false, err
 	}
 	return best, true, nil
+}
+
+// screenLayouts returns the layout under which f's samples compress smallest
+// at zlib's default level, nil for no predictor, and that size, or -1 when no
+// layout encodes. The error is only ever the context's.
+func screenLayouts(ctx context.Context, f sampleForm) (*predictorLayout, int, error) {
+	layouts := []*predictorLayout{nil}
+	if f.layout != nil {
+		layouts = append(layouts, f.layout)
+	}
+	var (
+		best     *predictorLayout
+		screened = -1
+	)
+	for _, l := range layouts {
+		if err := ctx.Err(); err != nil {
+			return nil, -1, err
+		}
+		encoded, _, ok := encodeCandidate(f.samples, f.dict, l, zlib.DefaultCompression)
+		if ok && (screened < 0 || len(encoded) < screened) {
+			best, screened = l, len(encoded)
+		}
+	}
+	return best, screened, nil
 }
 
 // planJPEG re-codes the JPEG data of a DCTDecode image with Huffman tables
@@ -333,7 +382,7 @@ func (p recompressionPlan) reencoder(
 	raw func(context.Context) ([]byte, error),
 	dec *filter.Decoder,
 ) func(context.Context) ([]byte, error) {
-	source, dict, layout, want := p.source, p.dict, p.layout, len(p.encoded)
+	source, dict, layout, palette, want := p.source, p.dict, p.layout, p.indexed, len(p.encoded)
 	if p.jpeg {
 		return func(ctx context.Context) ([]byte, error) {
 			data, err := raw(ctx)
@@ -357,6 +406,11 @@ func (p recompressionPlan) reencoder(
 		}
 		if !ok {
 			return nil, fmt.Errorf("%w: its source no longer decodes whole", ErrRecompressionDiverged)
+		}
+		if palette != nil {
+			if decoded, ok = palette.indices(decoded); !ok {
+				return nil, fmt.Errorf("%w: a colour of its source is not in its palette", ErrRecompressionDiverged)
+			}
 		}
 		encoded, _, ok := encodeCandidate(decoded, dict, layout, zlib.BestCompression)
 		if !ok || len(encoded) != want {

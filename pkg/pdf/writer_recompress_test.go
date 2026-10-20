@@ -209,3 +209,60 @@ func TestWriter_WithImageRecompression_RecodesJPEG(t *testing.T) {
 		t.Fatal("re-coding changed the image's pixels")
 	}
 }
+
+// TestWriter_WithImageRecompression_IndexesFewColours checks that an RGB image
+// of few colours is written as an Indexed image that decodes to the same
+// pixels, with or without a colour-key mask, and that two runs give the same
+// bytes. DecodeImage does not apply a colour key, so the key's translation is
+// proved in the writer package's own tests.
+func TestWriter_WithImageRecompression_IndexesFewColours(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	const w, h = 120, 40
+	samples := make([]byte, 0, w*h*3)
+	for y := range h {
+		for x := range w {
+			c := (x/20 + y/10) % 5
+			samples = append(samples, byte(50*c), byte(200-40*c), byte(17*c))
+		}
+	}
+	for _, extra := range []string{"", "/Mask [100 160 0 255 0 255] "} {
+		data := oneImagePDF(w, h, extra, samples)
+		write := func() []byte {
+			t.Helper()
+			var out bytes.Buffer
+			if err := NewWriter(openRecompressSource(t, data)).WriteTo(ctx, &out, WithFullRewrite(), WithImageRecompression()); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			return out.Bytes()
+		}
+		packed, again := write(), write()
+		if !bytes.Contains(packed, []byte("/Indexed")) || len(packed) >= len(data) {
+			t.Fatalf("mask %q: output is %d bytes against %d, or holds no Indexed space", extra, len(packed), len(data))
+		}
+		if !bytes.Equal(packed, again) {
+			t.Fatal("two runs of the same write differ")
+		}
+		before, err := openRecompressSource(t, data).DecodeImage(ctx, 1, "Im0")
+		if err != nil {
+			t.Fatalf("DecodeImage on the source: %v", err)
+		}
+		after, err := openRecompressSource(t, packed).DecodeImage(ctx, 1, "Im0")
+		if err != nil {
+			t.Fatalf("DecodeImage on the output: %v", err)
+		}
+		b := before.Bounds()
+		if b != after.Bounds() {
+			t.Fatalf("bounds %v became %v", b, after.Bounds())
+		}
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				r0, g0, b0, a0 := before.At(x, y).RGBA()
+				r1, g1, b1, a1 := after.At(x, y).RGBA()
+				if r0 != r1 || g0 != g1 || b0 != b1 || a0 != a1 {
+					t.Fatalf("mask %q: pixel (%d,%d) changed", extra, x, y)
+				}
+			}
+		}
+	}
+}

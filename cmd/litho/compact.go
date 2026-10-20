@@ -45,7 +45,8 @@ func registerCompactFlags(fs *flag.FlagSet) compactionFlags {
 	return compactionFlags{
 		compact: registerCompactFlag(fs),
 		recompressImages: fs.Bool("recompress-images", false,
-			"Recompress Flate, LZW, RunLength and uncompressed images losslessly, and re-code "+
+			"Recompress Flate, LZW, RunLength and uncompressed images losslessly, as Indexed "+
+				"images when they use at most 256 colours, and re-code "+
 				"sequential JPEG images with fitted Huffman tables, keeping each recompression only "+
 				"when it is smaller, when the command rewrites the whole file. "+
 				"Slower than --compact, and independent of it"),
