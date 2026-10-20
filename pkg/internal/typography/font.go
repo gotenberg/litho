@@ -1002,6 +1002,7 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 						currentIndex++
 					}
 				}
+				readHexadecimalCNames(font)
 			}
 		}
 	}
@@ -1097,6 +1098,79 @@ func applyDifferencesName(font *Font, code byte, name string, isDingbats, isSymb
 		return
 	}
 	delete(font.Encoding, code)
+}
+
+// readHexadecimalCNames rereads in hexadecimal every "Cdd" and "cdd" name
+// of the font's /Differences once one of them is no decimal number.
+//
+// Such a name is in no glyph list, so ISO 32000-1, 9.10.2 gives it no
+// Unicode value, and reading its number is a guess at the producer's
+// convention ([encodings.NumericGlyphName]). Producers number glyphs in
+// decimal ("C65" for "A") or in hexadecimal ("C41"), and one font follows
+// one convention: a name such as "C2c", which only hexadecimal reads, shows
+// the font's, and "C50" in the same font is "P", not "2". PDF.js rereads the
+// whole encoding in hexadecimal on the same evidence (src/core/evaluator.js,
+// _simpleFontToUnicode, forceGlyphs). A name a glyph list maps keeps that
+// reading, and so does one whose hexadecimal value is no character.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9655_reduced.pdf: a Type 3 font names its glyphs "C20",
+//     "C2c", "C41" to "C79" by their hexadecimal codes. Read one name at a
+//     time, "Property Insurance" came out "2 Ho F A HJO 1nI KH= n?A".
+//   - All corpora: only pdfjs bug1513120_reduced.pdf also names glyphs so,
+//     and its text does not move; no litho or verapdf file does.
+func readHexadecimalCNames(font *Font) {
+	hex := false
+	for _, name := range font.differenceNames {
+		if isCName(name) && !isDecimal(name[1:]) && isHexadecimal(name[1:]) {
+			hex = true
+			break
+		}
+	}
+	if !hex {
+		return
+	}
+	for code, name := range font.differenceNames {
+		if !isCName(name) || !isHexadecimal(name[1:]) {
+			continue
+		}
+		if _, ok := encodings.GlyphToRuneSimple(name); ok {
+			continue
+		}
+		v, err := strconv.ParseUint(name[1:], 16, 16)
+		if err != nil || v < 0x20 || v == 0x7F || v >= 0x80 && v <= 0x9F {
+			continue
+		}
+		font.Encoding[code] = rune(v)
+		delete(font.LigatureOverrides, code)
+	}
+}
+
+// isCName reports whether name has the shape of a "Cdd" or "cdd" numeric
+// glyph name: a C and two or three characters.
+func isCName(name string) bool {
+	return len(name) >= 3 && len(name) <= 4 && (name[0] == 'C' || name[0] == 'c')
+}
+
+// isDecimal reports whether s is made of decimal digits only.
+func isDecimal(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return s != ""
+}
+
+// isHexadecimal reports whether s is made of hexadecimal digits only.
+func isHexadecimal(s string) bool {
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return s != ""
 }
 
 // differencesNameIsItsCode reports whether name spells code in one of the
