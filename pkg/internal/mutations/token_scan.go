@@ -112,9 +112,10 @@ func (r ScanResult) Clean() bool {
 // the trailer's /ID ([scanWalk.scanFileID]). A reference to an object the file
 // does not define is the null object, which is what the rewrite writes for it.
 //
-// The data of an embedded font program and of an ICC profile is neither
-// compared nor decoded (see [binarySlotKeys]): no reader extracts text from
-// it, so a match there refuses over a copy that is not one. A stream the walk
+// The data of an embedded font program, of an ICC profile and of a font's
+// CMap is neither compared nor decoded (see [isBinarySlot]): no reader
+// extracts page text from it, so a match there refuses over a copy that is not
+// one. A stream the walk
 // also reaches through any other reference is compared as usual.
 //
 // It is a check, not a proof. A token absent from every object may still be
@@ -222,7 +223,7 @@ type scanWalk struct {
 	contents map[int]bool
 
 	// plain holds every object some reference reaches outside a binary slot
-	// (see [binarySlotKeys]), and deferred the streams reached only through
+	// (see [isBinarySlot]), and deferred the streams reached only through
 	// one so far, whose data is not scanned unless a plain reference reaches
 	// them too (see [scanWalk.followBinary]).
 	plain    map[int]bool
@@ -285,7 +286,7 @@ func (w *scanWalk) walk(ctx context.Context, objNum int, obj ast.PdfObject, dept
 		// Keys are names, not text: a /Title key never carries a redacted word,
 		// its value does.
 		for key, item := range v {
-			if ref, isRef := item.(ast.PdfIndirectRef); isRef && binarySlotKeys[key] {
+			if ref, isRef := item.(ast.PdfIndirectRef); isRef && isBinarySlot(v, key) {
 				w.followBinary(ctx, ref)
 				continue
 			}
@@ -348,6 +349,78 @@ var binarySlotKeys = map[ast.PdfName]bool{
 	"DestOutputProfile": true,
 }
 
+// fontCMapSlotKeys are the font dictionary keys whose stream value is a CMap:
+// /ToUnicode (ISO 32000-1, 9.10.3, Tables 111 and 121) and a Type0 font's
+// /Encoding (9.7.5.2, Table 121). A simple font's /Encoding is a name or a
+// dictionary (9.6.6.1, Table 114), never a stream, and a dictionary's entries
+// are walked whatever slot reaches it.
+//
+// A CMap is the font's code table, not a record of what a page drew: a
+// /ToUnicode maps character codes to Unicode, an encoding CMap maps them to
+// CIDs (9.7.6), and both hold every code the font can show whether or not a
+// page shows it. What a page drew lives in its content stream, which the scan
+// reads. A match in a CMap is its PostScript ("begin", "Registry",
+// "Ordering"), the font name it repeats, or a chance alignment such as a
+// number that is also a hexadecimal destination (<2013> is the en dash). A
+// real word cannot sit there in the form the scan compares: 9.10.3 writes each
+// /ToUnicode destination as UTF-16BE, so an ASCII word spelled by a one-code
+// ligature destination is interleaved with zero bytes in the stream and never
+// matches the word as stored, and the codes of a run of glyphs are separate
+// entries, not one string. The same clauses hold in ISO 32000-2.
+//
+// # Corpus evidence
+//
+//   - govdocs, pdfjs, pdfcpu, facturx, pdf20, litho, redacting all of page 1:
+//     every copy a CMap held is a PostScript fragment ("Map", "uppl",
+//     "resource", "der"), a font name ("and" in SandRegular) or a hex
+//     destination ("2013"), 55 distinct tokens over 56 files. Skipping CMaps
+//     lets 3 govdocs and 7 pdfjs redactions through and changes no other
+//     outcome.
+var fontCMapSlotKeys = map[ast.PdfName]bool{
+	"ToUnicode": true,
+	"Encoding":  true,
+}
+
+// fontSubtypes are the /Subtype values of a font dictionary (ISO 32000-1,
+// 9.5, Table 110). A font dictionary is recognised by them as well as by
+// /Type /Font, which Tables 111 and 121 require.
+//
+// Deliberate leniency toward real-world producers, relaxing those tables: a
+// font a page draws with is read by every viewer when /Type is missing, so its
+// /ToUnicode is the same table whether the producer wrote /Type or not.
+var fontSubtypes = map[ast.PdfName]bool{
+	"Type0":        true,
+	"Type1":        true,
+	"MMType1":      true,
+	"Type3":        true,
+	"TrueType":     true,
+	"CIDFontType0": true,
+	"CIDFontType2": true,
+}
+
+// isBinarySlot reports whether key in dict names a stream no text extraction
+// reads as page text: a font program or an ICC profile (see [binarySlotKeys]),
+// a font's CMap (see [fontCMapSlotKeys]), or the parent CMap a CMap stream
+// names through /UseCMap (ISO 32000-1, 9.7.5.3, Table 120).
+//
+// The CMap keys are trusted only in the dictionary the format defines them
+// in. /Encoding and /ToUnicode are common words, and the same key in a
+// producer's private dictionary says nothing about the data it names.
+func isBinarySlot(dict ast.PdfDict, key ast.PdfName) bool {
+	if binarySlotKeys[key] {
+		return true
+	}
+	typ, _ := dict["Type"].(ast.PdfName)
+	switch {
+	case fontCMapSlotKeys[key]:
+		subtype, _ := dict["Subtype"].(ast.PdfName)
+		return typ == "Font" || fontSubtypes[subtype]
+	case key == "UseCMap":
+		return typ == "CMap"
+	}
+	return false
+}
+
 // isICCBasedArray reports whether arr is an ICCBased colour space, whose second
 // element is the profile stream (ISO 32000-1, 8.6.5.5).
 func isICCBasedArray(arr ast.PdfArray) bool {
@@ -358,7 +431,7 @@ func isICCBasedArray(arr ast.PdfArray) bool {
 	return name == "ICCBased"
 }
 
-// followBinary visits the stream a binary slot names (see [binarySlotKeys])
+// followBinary visits the stream a binary slot names (see [isBinarySlot])
 // without scanning its data: its dictionary is walked as any other, and its
 // data is scanned only if a plain reference reaches the same object, before or
 // after. That keeps the skip from being a hiding place. A content stream, a form

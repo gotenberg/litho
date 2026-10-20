@@ -1,6 +1,7 @@
 package mutations
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -86,6 +87,98 @@ func TestScanOutputForTokens_ReadsABinarySlotAlsoReachedAsText(t *testing.T) {
 				if !hasHit(res, tc.want, "stream") {
 					t.Fatalf("a stream also reached as text was skipped: %+v", res)
 				}
+			}
+		})
+	}
+}
+
+// cmapObjects returns a one-page document whose page uses a Type0 font
+// (object 10) with a /ToUnicode CMap (object 11) and an /Encoding CMap stream
+// (object 12) that names a parent through /UseCMap (object 13), and a
+// TrueType font (object 14) with a /ToUnicode CMap of its own (object 15).
+// Each CMap holds the PostScript a CMap file is written in and the word
+// SECRET. pageExtra is spliced into the page dictionary.
+func cmapObjects(pageExtra string) map[int]string {
+	cmap := []byte("/CIDInit /ProcSet findresource begin 12 dict begin begincmap " +
+		"/CIDSystemInfo << /Registry (Adobe) /Ordering (SECRET) /Supplement 0 >> def " +
+		"1 begincodespacerange <00> <FF> endcodespacerange endcmap end end")
+	systemInfo := "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>"
+	objs := copiesObjects("")
+	objs[3] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R " +
+		"/Resources << /Font << /F1 10 0 R /F2 14 0 R >> >> " + pageExtra + " >>"
+	objs[10] = "<< /Type /Font /Subtype /Type0 /BaseFont /Demo /Encoding 12 0 R " +
+		"/DescendantFonts [<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Demo " +
+		systemInfo + " >>] /ToUnicode 11 0 R >>"
+	objs[11] = streamObject("", cmap)
+	objs[12] = streamObject("/Type /CMap /CMapName /Demo-H /UseCMap 13 0 R "+systemInfo, cmap)
+	objs[13] = streamObject("/Type /CMap /CMapName /Demo-Parent "+systemInfo, cmap)
+	// No /Type: a font dictionary known by its /Subtype alone, as some
+	// producers write it.
+	objs[14] = "<< /Subtype /TrueType /BaseFont /Plain /ToUnicode 15 0 R >>"
+	objs[15] = streamObject("", cmap)
+	return objs
+}
+
+// TestScanOutputForTokens_SkipsCMaps pins that the data of a font's
+// /ToUnicode CMap, of a Type0 font's /Encoding CMap and of a CMap its
+// /UseCMap names is not compared. A CMap maps character codes to Unicode or
+// to CIDs (ISO 32000-1, 9.10.3 and 9.7.5): it is the font's table, not a
+// record of what a page drew, so a match there is a copy no reader finds.
+func TestScanOutputForTokens_SkipsCMaps(t *testing.T) {
+	t.Parallel()
+	res := scanFor(t, copiesDoc(t, cmapObjects(""), nil, ""), "SECRET")
+	if !res.Clean() {
+		t.Errorf("a CMap was compared: %+v", res)
+	}
+
+	// The control: the same document with the word drawn on the page is not
+	// clean, so the result above does not come from a scan that reads nothing.
+	objs := cmapObjects("")
+	objs[4] = streamObject("", []byte("BT /F2 12 Tf 100 600 Td (SECRET) Tj ET"))
+	if res := scanFor(t, copiesDoc(t, objs, nil, ""), "SECRET"); !hasHit(res, 4, "stream") {
+		t.Errorf("the page's own copy was not reported: %+v", res)
+	}
+}
+
+// TestScanOutputForTokens_ReadsACMapAlsoReachedAsText pins that the skip trusts
+// the slot, not the object: a CMap stream a crafted file also names somewhere
+// a reader reads is compared whichever reference the walk meets first. The
+// walk ranges dictionaries, so repeating the scan meets both orders.
+func TestScanOutputForTokens_ReadsACMapAlsoReachedAsText(t *testing.T) {
+	t.Parallel()
+	cases := map[string]int{
+		"tounicode": 11,
+		"encoding":  12,
+		"usecmap":   13,
+	}
+	for name, objNum := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			doc := copiesDoc(t, cmapObjects(fmt.Sprintf("/PieceInfo << /App << /Private %d 0 R >> >>", objNum)), nil, "")
+			for range 20 {
+				if res := scanFor(t, doc, "SECRET"); !hasHit(res, objNum, "stream") {
+					t.Fatalf("a CMap also reached as text was skipped: %+v", res)
+				}
+			}
+		})
+	}
+}
+
+// TestScanOutputForTokens_ReadsCMapKeysOutsideTheirDictionary pins that the
+// CMap slots are trusted only in the dictionary that defines them: /ToUnicode
+// and /Encoding in a font dictionary (ISO 32000-1, Tables 111 and 121) and
+// /UseCMap in a CMap stream dictionary (Table 120). The same key in a
+// producer's private dictionary names data the format says nothing about, so
+// it is compared.
+func TestScanOutputForTokens_ReadsCMapKeysOutsideTheirDictionary(t *testing.T) {
+	t.Parallel()
+	for _, key := range []string{"ToUnicode", "Encoding", "UseCMap"} {
+		t.Run(key, func(t *testing.T) {
+			t.Parallel()
+			objs := copiesObjects(fmt.Sprintf("/PieceInfo << /App << /%s 5 0 R >> >>", key))
+			objs[5] = streamObject("", []byte("SECRET"))
+			if res := scanFor(t, copiesDoc(t, objs, nil, ""), "SECRET"); !hasHit(res, 5, "stream") {
+				t.Errorf("a /%s outside its dictionary was skipped: %+v", key, res)
 			}
 		})
 	}
