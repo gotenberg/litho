@@ -110,7 +110,7 @@ func blankImage(
 	}
 	for _, key := range maskEntries {
 		if _, present := stream.Dict[key]; present {
-			return 0, fmt.Errorf("%w: %q carries /%s", ErrImageCarriesSampleEntries, box.Name, key)
+			return 0, fmt.Errorf("%w: %q carries %s", ErrImageCarriesSampleEntries, box.Name, key)
 		}
 	}
 	// /Decode is only a problem when the decode did not already fold it into

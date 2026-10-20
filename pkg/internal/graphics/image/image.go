@@ -14,11 +14,11 @@ import (
 func resolveInt(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) (int, error) {
 	obj, ok := dict[key]
 	if !ok {
-		return 0, fmt.Errorf("missing key /%s", key)
+		return 0, fmt.Errorf("missing key %s", key)
 	}
 	val, err := document.ResolveInt(ctx, doc, obj)
 	if err != nil {
-		return 0, fmt.Errorf("key /%s: %w", key, err)
+		return 0, fmt.Errorf("key %s: %w", key, err)
 	}
 	return int(val), nil
 }
@@ -28,11 +28,11 @@ func resolveInt(ctx context.Context, doc *document.Document, dict ast.PdfDict, k
 func resolveName(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) (string, error) {
 	obj, ok := dict[key]
 	if !ok {
-		return "", fmt.Errorf("missing key /%s", key)
+		return "", fmt.Errorf("missing key %s", key)
 	}
 	val, err := document.ResolveName(ctx, doc, obj)
 	if err != nil {
-		return "", fmt.Errorf("key /%s: %w", key, err)
+		return "", fmt.Errorf("key %s: %w", key, err)
 	}
 	return string(val), nil
 }
