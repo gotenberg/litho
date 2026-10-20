@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-20T16:40:13Z",
+  "captured_at": "2026-10-20T17:45:33Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -98,6 +98,11 @@
           "matched": 1091,
           "mismatched": 0,
           "skipped": 0
+        },
+        "render": {
+          "matched": 0,
+          "mismatched": 0,
+          "skipped": 79
         },
         "text": {
           "matched": 955,
@@ -264,6 +269,11 @@
             "verapdf_regressed": 0
           }
         },
+        "render": {
+          "matched": 0,
+          "mismatched": 0,
+          "skipped": 212
+        },
         "text": {
           "matched": 204,
           "mismatched": 0,
@@ -375,6 +385,11 @@
           "matched": 1190,
           "mismatched": 0,
           "skipped": 1
+        },
+        "render": {
+          "matched": 0,
+          "mismatched": 0,
+          "skipped": 80
         },
         "text": {
           "matched": 1128,
