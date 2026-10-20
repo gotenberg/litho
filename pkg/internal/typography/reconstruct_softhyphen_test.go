@@ -102,3 +102,59 @@ func TestExtractText_SoftHyphenAcrossFontChange(t *testing.T) {
 		})
 	}
 }
+
+// TestExtractText_SoftHyphenAcrossSaveRestore pins that Q puts the soft-hyphen
+// shift back where the matching q found it, as it does the text matrix. PDF.js
+// saves its whole text state, text matrix included, at q and restores it at
+// Q (src/core/evaluator.js, StateManager.save and TextState.clone), and so
+// does litho's machine, so a glyph after Q is read from the position q saw:
+// a soft hyphen shown inside q...Q leaves no shift behind it, and one shown
+// before q keeps its shift across a Td inside. Each case matches the text
+// PDF.js at the pinned revision reads from the same page.
+func TestExtractText_SoftHyphenAcrossSaveRestore(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			// The TJ moves "b" 3 units past "a": Q undid the soft hyphen's
+			// advance, so no shift is left to close the gap.
+			name: "soft hyphen inside q...Q",
+			body: "BT /F1 10 Tf 72 700 Td (a) Tj q (\255) Tj Q [-300 (b)] TJ ET",
+			want: "a b",
+		},
+		{
+			name: "nested q...Q",
+			body: "BT /F1 10 Tf 72 700 Td (a) Tj q q (\255) Tj Q (\255) Tj Q [-300 (b)] TJ ET",
+			want: "a b",
+		},
+		{
+			// The shift of the soft hyphen before q survives Q, while the
+			// one inside does not.
+			name: "soft hyphens before and inside q...Q",
+			body: "BT /F1 10 Tf 72 700 Td (a\255) Tj q (\255) Tj Q [-300 (b)] TJ ET",
+			want: "a b",
+		},
+		{
+			// Q undoes the Td, so "b" follows "a" with the shift still on.
+			name: "Td inside q...Q after a soft hyphen",
+			body: "BT /F1 10 Tf 72 700 Td (a\255) Tj q 0 -30 Td Q (b) Tj ET",
+			want: "ab",
+		},
+		{
+			name: "no q...Q, no change",
+			body: "BT /F1 10 Tf 72 700 Td (a) Tj (\255) Tj [-300 (b)] TJ ET",
+			want: "a b",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := softHyphenText(t, tc.body); got != tc.want {
+				t.Errorf("ExtractText = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

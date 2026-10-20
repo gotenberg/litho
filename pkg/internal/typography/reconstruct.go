@@ -679,15 +679,16 @@ type runFont struct {
 	stream  int
 	segment int
 	marked  int
-	// placement is the machine's [graphics.Machine] Placement when the
-	// glyph was shown: it changes wherever a text-positioning operator set
-	// the position, and not at a Tf.
-	placement int
 	// gapWidth is the advance on the page the embedded program gives a
 	// glyph the font gives none, because /Widths does not cover its code
 	// ([recordProgramGapWidths]), and 0 for any other glyph. Gaps are
 	// measured from it ([gapMeasured]).
 	gapWidth float64
+	// unadvanced is how far litho's position for the glyph lies past the
+	// one PDF.js reads: the state's [graphics.TextState] Unadvanced when the
+	// glyph was shown, plus the glyphs before it in the same show operator
+	// that PDF.js does not advance past ([skipsAdvance]).
+	unadvanced float64
 }
 
 // runRecorder collects the [runFont] of each element extraction appends,
@@ -1902,9 +1903,12 @@ func hasNonspacingMark(s string) bool {
 // operator sets the position again, that far before where litho reads it. A
 // Tf between them does not end the shift: it selects a font and leaves the
 // text matrix alone, in PDF.js (getTextContent, OPS.setFont) as in ISO
-// 32000-1, 9.3.1. ISO 32000-1, 9.4.4 advances the text position past every
-// glyph shown, so the difference is the reference's. It is built once per
-// sequence so each answer costs no walk of the elements between.
+// 32000-1, 9.3.1. Q puts the shift back where the matching q found it, as
+// it puts back the text matrix, in PDF.js as in litho's machine (see
+// [graphics.TextState] Unadvanced). ISO 32000-1, 9.4.4 advances the text
+// position past every glyph shown, so the difference is the reference's. It
+// is built once per sequence so each answer costs no walk of the elements
+// between.
 //
 // # Corpus evidence
 //
@@ -1916,32 +1920,35 @@ func hasNonspacingMark(s string) bool {
 //     13, thread_400_400228.pdf 2, thread_400_400245.pdf 1), and none
 //     farther; facturx, litho, pdf20, pdfcpu and pdfjs do not move.
 type markAdvances struct {
+	// recorded holds the [runFont] unadvanced of each element, when the
+	// fonts are known: the shift as the machine's state carried it.
+	recorded []float64
 	// sum holds, at k, the widths of the marks among the first k elements.
 	sum []float64
 	// chunkStart holds, for each element, the index of the first element of
-	// the run of consecutive elements shown since a text-positioning
-	// operator last set the position: those that share its [runFont]
-	// placement, or its chunk when the fonts are unknown.
+	// the run of consecutive elements that share its chunk, the glyphs shown
+	// since a text-positioning operator or a Tf last ran. It serves when the
+	// fonts are unknown.
 	chunkStart []int
 }
 
 // newMarkAdvances indexes the nonspacing marks of elements. fonts is the
 // font of each element, or nil when unknown.
 func newMarkAdvances(elements []models.TextElement, fonts []runFont) markAdvances {
-	if len(fonts) != len(elements) {
-		fonts = nil
+	if len(fonts) == len(elements) {
+		m := markAdvances{recorded: make([]float64, len(fonts))}
+		for k, f := range fonts {
+			m.recorded[k] = f.unadvanced
+		}
+		return m
 	}
 	m := markAdvances{sum: make([]float64, len(elements)+1), chunkStart: make([]int, len(elements))}
 	for k, e := range elements {
 		m.sum[k+1] = m.sum[k]
-		if hasNonspacingMark(e.Text) || isFormatOnly(e.Text) {
+		if skipsAdvance(e.Text) {
 			m.sum[k+1] += e.Width
 		}
-		placed := k > 0 && elements[k-1].Chunk == e.Chunk
-		if fonts != nil {
-			placed = k > 0 && fonts[k-1].placement == fonts[k].placement
-		}
-		if placed {
+		if k > 0 && elements[k-1].Chunk == e.Chunk {
 			m.chunkStart[k] = m.chunkStart[k-1]
 		} else {
 			m.chunkStart[k] = k
@@ -1950,10 +1957,22 @@ func newMarkAdvances(elements []models.TextElement, fonts []runFont) markAdvance
 	return m
 }
 
+// skipsAdvance reports whether PDF.js does not advance its text position past
+// a glyph showing s: a nonspacing mark or a format character.
+func skipsAdvance(s string) bool {
+	return hasNonspacingMark(s) || isFormatOnly(s)
+}
+
 // shift returns how far before litho's position PDF.js reads the element k:
-// the advance of the marks before it in its run. It returns 0 for an index
-// out of range.
+// the advance of the marks before it since the position was last set. It
+// returns 0 for an index out of range.
 func (m markAdvances) shift(k int) float64 {
+	if m.recorded != nil {
+		if k < 0 || k >= len(m.recorded) {
+			return 0
+		}
+		return m.recorded[k]
+	}
 	if k < 0 || k >= len(m.chunkStart) {
 		return 0
 	}

@@ -17,6 +17,22 @@ type TextState struct {
 	Tmode int        // Text rendering mode (0=Fill, 1=Stroke, 3=Invisible, etc)
 	Tm    [6]float64 // Text matrix
 	Tlm   [6]float64 // Text line matrix
+	// Unadvanced is how far Tm advanced past where PDF.js reads the
+	// position, since a text-positioning operator last set it: text
+	// extraction adds the advance of each glyph PDF.js does not advance
+	// past, and the operators that set the position (BT, ET, Td, TD, Tm,
+	// T*, ' and ") reset it. Tf leaves it alone, as it leaves Tm (ISO
+	// 32000-1, 9.3.1 and 9.4.2).
+	//
+	// It rides the state, so q saves it and Q restores it with Tm. ISO
+	// 32000-1, 8.2, Figure 9 allows no q or Q inside a text object, and
+	// neither the graphics state (8.4.1, Tables 52 and 53) nor the text
+	// state (9.3.1, Table 104) lists the text matrix, so no clause says
+	// what Q does to it there. The machine restores Tm with the rest of the
+	// state, as PDF.js restores its whole text state, text matrix included
+	// (src/core/evaluator.js, StateManager.save and TextState.clone), and
+	// the shift has to follow the matrix it measures.
+	Unadvanced float64
 }
 
 // Point represents a 2D coordinate.
@@ -93,12 +109,6 @@ type Machine struct {
 	// reconstruction can treat them as one logical text run and
 	// suppress gap-based space insertion inside that run.
 	Chunk int
-	// Placement is a monotonically increasing counter bumped by the text
-	// operators that set the text position (BT, ET, Td, TD, Tm, T*, ' and
-	// "): every [Chunk] boundary but Tf, which selects a font and leaves
-	// the text matrix alone (ISO 32000-1, 9.3.1 and 9.4.2). Glyphs shown
-	// while it is unchanged were placed by advancing from one position.
-	Placement int
 	// RecordUnknownOperators makes the machine remember every operator it
 	// has no handler for. Off by default, because ignoring one is right for
 	// extraction: a page still yields its text when the machine skips a

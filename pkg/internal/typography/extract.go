@@ -318,10 +318,19 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// whatever it did not name takes the font selected out here.
 		if runs != nil {
 			cur := machine.Current()
-			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur) * currentFont.type3HeightScale(cur.Text.Tfs), trm: renderingMatrixOnPage(cur), stream: stream, segment: segment, marked: marked, placement: machine.Placement}
+			key := runFont{name: currentFontName, font: currentFont, size: cur.Text.Tfs, rise: riseOnPage(cur), height: heightOnPage(cur) * currentFont.type3HeightScale(cur.Text.Tfs), trm: renderingMatrixOnPage(cur), stream: stream, segment: segment, marked: marked, unadvanced: cur.Text.Unadvanced}
+			// A show operator advances the state's shift past each glyph PDF.js
+			// does not advance past. A Do's glyphs moved the form's own state,
+			// which its synthetic Q has already put back.
 			for len(runs.fonts) < len(*elements) {
 				key.gapWidth = runs.gapWidths[len(runs.fonts)]
 				runs.fonts = append(runs.fonts, key)
+				if el := (*elements)[len(runs.fonts)-1]; isShow && skipsAdvance(el.Text) {
+					key.unadvanced += el.Width
+				}
+			}
+			if isShow {
+				cur.Text.Unadvanced = key.unadvanced
 			}
 			// PDF.js ends the text item before it paints any XObject, an
 			// image as well as a form (src/core/evaluator.js, getTextContent,
