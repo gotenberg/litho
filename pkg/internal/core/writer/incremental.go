@@ -34,6 +34,43 @@ type IncrementalConfig struct {
 	// in use, which is what a newly allocated one gets. A nil func writes every
 	// object at generation 0.
 	Generation func(objNum int) int
+	// Freed lists the objects the update deletes, each with the generation
+	// its free entry carries, the one a later reuse of the number takes (ISO
+	// 32000-1, 7.5.4). The update writes no object at a freed number, the
+	// Allocator's included. Nil deletes nothing.
+	Freed map[int]int
+}
+
+// freeListHeadGeneration is the generation of the object-0 entry heading the
+// free list (ISO 32000-1, 7.5.4), the highest a generation can be. The
+// cross-reference parser recognises the same head by the same value.
+const freeListHeadGeneration = 65535
+
+// freedRecords returns the free entries of the objects freed lists, headed by
+// object 0 and linked in ascending order, the last back to object 0 (ISO
+// 32000-1, 7.5.4), or nil when there are none. Object 0 heads the list and is
+// never freed.
+func freedRecords(freed map[int]int) []XRefRecord {
+	nums := make([]int, 0, len(freed))
+	for num := range freed {
+		if num > 0 {
+			nums = append(nums, num)
+		}
+	}
+	if len(nums) == 0 {
+		return nil
+	}
+	sort.Ints(nums)
+	records := make([]XRefRecord, 0, len(nums)+1)
+	records = append(records, XRefRecord{ObjNum: 0, Offset: int64(nums[0]), Generation: freeListHeadGeneration, Free: true})
+	for i, num := range nums {
+		next := 0
+		if i+1 < len(nums) {
+			next = nums[i+1]
+		}
+		records = append(records, XRefRecord{ObjNum: num, Offset: int64(next), Generation: freed[num], Free: true})
+	}
+	return records
 }
 
 // WriteIncremental appends an incremental update to dst. It copies the
@@ -72,7 +109,9 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 	pending := cfg.Allocator.Pending()
 	objNums := make([]int, 0, len(pending))
 	for num := range pending {
-		objNums = append(objNums, num)
+		if _, freed := cfg.Freed[num]; !freed {
+			objNums = append(objNums, num)
+		}
 	}
 	sort.Ints(objNums)
 
@@ -100,6 +139,11 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 		offset += written
 	}
 
+	// An object the update deletes gets a free entry, which supersedes the
+	// in-use entry an older section gives it (ISO 32000-1, 7.5.6). Its bytes
+	// stay where the source has them, as every byte of the source does.
+	records = append(records, freedRecords(cfg.Freed)...)
+
 	// A cross-reference section must begin with the object-0 free-list head
 	// (ISO 32000-1 §7.5.4). A trailer-only incremental update (e.g. adding /ID)
 	// changes no objects, leaving records empty; without the free head the
@@ -107,7 +151,7 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 	// invalid xref table. Emit the mandatory free entry so the appended section
 	// is well-formed.
 	if len(records) == 0 {
-		records = append(records, XRefRecord{ObjNum: 0, Generation: 65535, Free: true})
+		records = append(records, XRefRecord{ObjNum: 0, Generation: freeListHeadGeneration, Free: true})
 	}
 
 	// Complete the new trailer.

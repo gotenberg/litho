@@ -149,3 +149,24 @@ func TestWriteIncremental_HybridSourceUpdateWins(t *testing.T) {
 		t.Error("catalog is the pre-update revision: /LithoMarker missing")
 	}
 }
+
+// TestFreedRecordsLinksTheFreeList pins the free entries an update writes
+// for the objects it deletes: headed by object 0, linked in ascending order,
+// the last back to 0 (ISO 32000-1, 7.5.4), each at the generation given, and
+// none for object 0.
+func TestFreedRecordsLinksTheFreeList(t *testing.T) {
+	t.Parallel()
+	got := freedRecords(map[int]int{9: 1, 4: 2, 7: 1, 0: 1})
+	want := []XRefRecord{
+		{ObjNum: 0, Offset: 4, Generation: freeListHeadGeneration, Free: true},
+		{ObjNum: 4, Offset: 7, Generation: 2, Free: true},
+		{ObjNum: 7, Offset: 9, Generation: 1, Free: true},
+		{ObjNum: 9, Offset: 0, Generation: 1, Free: true},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("freedRecords = %v, want %v", got, want)
+	}
+	if got := freedRecords(map[int]int{0: 1}); got != nil {
+		t.Errorf("freedRecords freeing object 0 alone = %v, want nil", got)
+	}
+}

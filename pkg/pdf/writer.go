@@ -4215,6 +4215,19 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 		useXRefStream = true
 	}
 
+	// An object the edits left nothing referencing is not written, and is
+	// deleted with a free entry (ISO 32000-1, 7.5.6), so the update does not
+	// go on listing it as in use. A signed source is updated as before: deleting
+	// an object of a signed revision is a change a certification signature's
+	// permissions judge (12.8.2.2), and nothing here asks for it.
+	freed, err := mutations.OrphanedObjects(ctx, doc, alloc, trailer)
+	if err != nil {
+		return err
+	}
+	if len(freed) > 0 && len(mutations.SignedSignatures(ctx, doc)) > 0 {
+		freed = nil
+	}
+
 	return writer.WriteIncremental(ctx, dst, writer.IncrementalConfig{
 		Source:          doc.RawReader(),
 		SourceSize:      doc.FileSize(),
@@ -4223,6 +4236,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 		Trailer:         trailer,
 		UseXRefStream:   useXRefStream,
 		Generation:      doc.ObjectGeneration,
+		Freed:           freed,
 	})
 }
 
