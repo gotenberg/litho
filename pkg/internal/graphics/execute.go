@@ -3,6 +3,7 @@ package graphics
 import (
 	"context"
 	"math"
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -39,6 +40,21 @@ func init() {
 
 		// Coordinate transforms.
 		"cm": handleConcatMatrix,
+
+		// Graphics state parameters (ISO 32000-1, 8.4.4, Table 57). sh stays
+		// unhandled: callers find it through [Machine.UnknownOperators].
+		"w":  handleLineWidth,
+		"J":  handleLineCap,
+		"j":  handleLineJoin,
+		"M":  handleMiterLimit,
+		"d":  handleDash,
+		"ri": handleRenderingIntent,
+		"i":  handleFlatness,
+		"gs": handleExtGState,
+
+		// Type 3 glyph metrics (ISO 32000-1, 9.6.5, Table 113).
+		"d0": handleGlyphWidth,
+		"d1": handleGlyphWidthBBox,
 
 		// Text object state.
 		"BT": handleBeginText,
@@ -142,12 +158,15 @@ func (m *Machine) Execute(ctx context.Context, ops []content.Operation) error {
 // recognize, an error shall occur", and suspends that only inside a BX/EX
 // compatibility section (Table 32). The machine tracks state and does not
 // judge operators. Most keywords missing from [opHandlers] are standard
-// operators it does not model (sh, gs, Tj and others), and failing on
+// operators it does not model (sh, Tj and others), and failing on
 // those would abort every page. A keyword ISO 32000-1 does not define at
 // all is skipped the same way, inside BX/EX or not. The compliance checker
 // reports undefined operators under ISO 19005-1, 6.2.10 and ISO
 // 19005-2/3/4, 6.2.2, which forbid them even inside BX/EX.
 func (m *Machine) executeOp(ctx context.Context, op content.Operation) error {
+	if m.Glyph != nil && !m.Glyph.Colored && colorOperators[op.Operator] {
+		return nil
+	}
 	h, ok := opHandlers[op.Operator]
 	if !ok {
 		if op.Operator == "sh" && m.RecordShadingBoxes {
@@ -197,8 +216,11 @@ func (m *Machine) recordUnknownOperator(name string) {
 //
 // Use it to tell "this page holds only constructs I model" from "this page
 // holds something I skipped", a distinction the machine otherwise discards.
-// The operators absent from [opHandlers] include shading paints (sh) and
-// graphics-state parameters (gs).
+// The operators absent from [opHandlers] include shading paints (sh), which
+// stays unhandled on purpose: a caller sizing what a page paints reads it here
+// (sh paints the whole clip, ISO 32000-1, 8.7.4.2), and handling it would hide
+// it. The graphics-state parameter operators (w, J, j, M, d, ri, i, gs) are
+// handled and so never appear.
 //
 // It answers a question about the handler table, not about content: an operator
 // is reported when nothing handles it, whatever it would have drawn. XObject
@@ -608,6 +630,7 @@ func handleTextFont(_ context.Context, m *Machine, state *State, op content.Oper
 		state.Text.Tf = string(name)
 	}
 	state.Text.Tfs = document.Float(op.Operands[1])
+	state.Text.GStateFont = nil
 	m.Chunk++
 }
 
@@ -696,6 +719,7 @@ func handleFillRGB(_ context.Context, _ *Machine, state *State, op content.Opera
 		document.Float(op.Operands[2]),
 	}
 	state.FillColorSpace = "DeviceRGB"
+	state.Fill = deviceColor(FamilyDeviceRGB, slices.Clone(state.FillColor))
 }
 
 func handleStrokeRGB(_ context.Context, _ *Machine, state *State, op content.Operation) {
@@ -708,6 +732,7 @@ func handleStrokeRGB(_ context.Context, _ *Machine, state *State, op content.Ope
 		document.Float(op.Operands[2]),
 	}
 	state.StrokeColorSpace = "DeviceRGB"
+	state.Stroke = deviceColor(FamilyDeviceRGB, slices.Clone(state.StrokeColor))
 }
 
 func handleFillGray(_ context.Context, _ *Machine, state *State, op content.Operation) {
@@ -716,6 +741,7 @@ func handleFillGray(_ context.Context, _ *Machine, state *State, op content.Oper
 	}
 	state.FillColor = []float64{document.Float(op.Operands[0])}
 	state.FillColorSpace = "DeviceGray"
+	state.Fill = deviceColor(FamilyDeviceGray, slices.Clone(state.FillColor))
 }
 
 func handleStrokeGray(_ context.Context, _ *Machine, state *State, op content.Operation) {
@@ -724,6 +750,7 @@ func handleStrokeGray(_ context.Context, _ *Machine, state *State, op content.Op
 	}
 	state.StrokeColor = []float64{document.Float(op.Operands[0])}
 	state.StrokeColorSpace = "DeviceGray"
+	state.Stroke = deviceColor(FamilyDeviceGray, slices.Clone(state.StrokeColor))
 }
 
 func handleFillCMYK(_ context.Context, _ *Machine, state *State, op content.Operation) {
@@ -737,6 +764,7 @@ func handleFillCMYK(_ context.Context, _ *Machine, state *State, op content.Oper
 		document.Float(op.Operands[3]),
 	}
 	state.FillColorSpace = "DeviceCMYK"
+	state.Fill = deviceColor(FamilyDeviceCMYK, slices.Clone(state.FillColor))
 }
 
 func handleStrokeCMYK(_ context.Context, _ *Machine, state *State, op content.Operation) {
@@ -750,9 +778,10 @@ func handleStrokeCMYK(_ context.Context, _ *Machine, state *State, op content.Op
 		document.Float(op.Operands[3]),
 	}
 	state.StrokeColorSpace = "DeviceCMYK"
+	state.Stroke = deviceColor(FamilyDeviceCMYK, slices.Clone(state.StrokeColor))
 }
 
-func handleFillColorSpace(_ context.Context, _ *Machine, state *State, op content.Operation) {
+func handleFillColorSpace(ctx context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
@@ -760,6 +789,7 @@ func handleFillColorSpace(_ context.Context, _ *Machine, state *State, op conten
 	if !ok {
 		return
 	}
+	state.Fill = m.initialColor(ctx, m.resolveColorSpace(ctx, name))
 	state.FillColorSpace = string(name)
 	if name != "Pattern" {
 		state.FillPatternName = ""
@@ -767,16 +797,18 @@ func handleFillColorSpace(_ context.Context, _ *Machine, state *State, op conten
 	}
 }
 
-func handleStrokeColorSpace(_ context.Context, _ *Machine, state *State, op content.Operation) {
+func handleStrokeColorSpace(ctx context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
 	if name, ok := op.Operands[0].(ast.PdfName); ok {
+		state.Stroke = m.initialColor(ctx, m.resolveColorSpace(ctx, name))
 		state.StrokeColorSpace = string(name)
 	}
 }
 
 func handleFillColorInCurrentSpace(ctx context.Context, m *Machine, state *State, op content.Operation) {
+	state.Fill = colorFromOperands(state.Fill, op.Operands)
 	var vals []float64
 	var patName string
 	for _, operand := range op.Operands {
@@ -800,6 +832,7 @@ func handleFillColorInCurrentSpace(ctx context.Context, m *Machine, state *State
 }
 
 func handleStrokeColorInCurrentSpace(_ context.Context, _ *Machine, state *State, op content.Operation) {
+	state.Stroke = colorFromOperands(state.Stroke, op.Operands)
 	var vals []float64
 	for _, operand := range op.Operands {
 		switch operand.(type) {

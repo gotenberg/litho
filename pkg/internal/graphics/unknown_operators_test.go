@@ -39,7 +39,8 @@ func TestUnknownOperators_RecordedWhenAsked(t *testing.T) {
 		{Operator: "BX"},
 		{Operator: "q"}, // handled, must not be reported
 		{Operator: "BX"},
-		{Operator: "gs"},
+		{Operator: "gs"}, // handled since the machine models ExtGState
+		{Operator: "sh"},
 	}
 
 	if err := m.Execute(context.Background(), ops); err != nil {
@@ -49,8 +50,7 @@ func TestUnknownOperators_RecordedWhenAsked(t *testing.T) {
 	// Ordered by keyword, so the result does not depend on map iteration.
 	want := []UnknownOperator{
 		{Operator: "BX", Count: 2},
-		{Operator: "gs", Count: 1},
-		{Operator: "sh", Count: 1},
+		{Operator: "sh", Count: 2},
 	}
 	got := m.UnknownOperators()
 	if len(got) != len(want) {

@@ -33,6 +33,14 @@ type TextState struct {
 	// (src/core/evaluator.js, StateManager.save and TextState.clone), and
 	// the shift has to follow the matrix it measures.
 	Unadvanced float64
+	// GStateFont and GStateFontSize are the font and size a gs operator's
+	// ExtGState /Font entry set (ISO 32000-1, 8.4.5, Table 58): an indirect
+	// reference to a font dictionary, not a /Font resource name. A later Tf
+	// clears GStateFont, since both set the one text font parameter (9.3.1).
+	// Tf and Tfs keep the resource name and size text extraction reads; a
+	// caller drawing glyphs prefers GStateFont when it is set.
+	GStateFont     ast.PdfObject
+	GStateFontSize float64
 }
 
 // Point represents a 2D coordinate.
@@ -67,6 +75,50 @@ type State struct {
 	// "outside the CropBox", which is already reported separately. It rides the
 	// graphics state, so q/Q restore it with everything else.
 	ClipApplied bool
+
+	// The parameters below complete the device-independent graphics state of
+	// ISO 32000-1, 8.4.1, Tables 52 and 53. Text extraction reads none of
+	// them. Slices and pointers among them are never edited in place, so the
+	// shallow copy q makes keeps each frame's values apart.
+
+	// LineCap, LineJoin and MiterLimit are set by J, j and M or the LC, LJ
+	// and ML entries of an ExtGState (8.4.3.3 to 8.4.3.5). LineWidth above is
+	// set by w or /LW (8.4.3.2).
+	LineCap    int
+	LineJoin   int
+	MiterLimit float64
+	// Dash is set by d or an ExtGState /D (8.4.3.6).
+	Dash DashPattern
+	// RenderingIntent is set by ri or an ExtGState /RI (8.6.5.8).
+	RenderingIntent string
+	// Flatness is set by i or an ExtGState /FL (10.6.2). Smoothness is set by
+	// /SM (10.6.3) and stays 0 until an ExtGState sets it, since its initial
+	// value is device-dependent.
+	Flatness   float64
+	Smoothness float64
+	// StrokeAdjustment is set by an ExtGState /SA (10.6.5).
+	StrokeAdjustment bool
+	// StrokeOverprint, FillOverprint and OverprintMode are set by an
+	// ExtGState's OP, op and OPM (8.6.7).
+	StrokeOverprint bool
+	FillOverprint   bool
+	OverprintMode   int
+	// StrokeAlpha and FillAlpha are the constant alphas CA and ca, BlendMode
+	// the blend mode BM, SoftMask the soft mask SMask (nil for /None),
+	// AlphaIsShape AIS and TextKnockout TK, all set by an ExtGState (11.3.5,
+	// 11.6.4.3, 11.6.4.4, 9.3.8).
+	StrokeAlpha  float64
+	FillAlpha    float64
+	BlendMode    string
+	SoftMask     *SoftMask
+	AlphaIsShape bool
+	TextKnockout bool
+	// Fill and Stroke are the current colours with the colour space that
+	// holds them (8.6.8), Pattern spaces included. They track the operators
+	// [State.FillColor] and [State.StrokeColor] track, which keep their own
+	// reading for text extraction.
+	Fill   Color
+	Stroke Color
 }
 
 // MarkedContentState tracks the nested state of marked content blocks.
@@ -187,6 +239,11 @@ type Machine struct {
 	// Such a path both paints and narrows the clip for everything after it, so a
 	// caller removing it would change how later content renders.
 	pathClipped bool
+	// Glyph is what a d0 or d1 operator declared, nil until one runs. A caller
+	// executing a Type 3 glyph description reads the glyph's width from it.
+	// After d1 the machine ignores the description's colour operators, as ISO
+	// 32000-1, 9.6.5, Table 113 requires of an uncoloured glyph.
+	Glyph *Type3Glyph
 }
 
 // NewMachine initializes a new graphics state machine with the default state.
@@ -220,6 +277,7 @@ func NewMachine(cropBox [4]float64) *Machine {
 		StrokeColorSpace: "DeviceGray",
 		ClippingPath:     BoundingBox{MinX: cropBox[0], MinY: cropBox[1], MaxX: cropBox[2], MaxY: cropBox[3]},
 	}
+	defaultGraphicsParams(&defaultState)
 	return &Machine{
 		Stack:         []State{defaultState},
 		MarkedContent: make([]MarkedContentState, 0),
