@@ -285,9 +285,12 @@ func appendPageContents(ctx context.Context, doc *document.Document, alloc *writ
 	// The array may be reached through a reference, which a type assertion on
 	// the raw value misses: wrapping that reference produces
 	// [[streamA streamB] stamp], and a conforming reader drops the nested
-	// array along with every character it draws.
+	// array along with every character it draws. An earlier stamp may have
+	// queued that array, so it is read alloc-first: read from the document
+	// alone, the array two pages sharing /Contents were given was no object
+	// at all, and a second stamp left those pages only their new stamp.
 	if ref, isRef := existing.(ast.PdfIndirectRef); isRef {
-		if arr, err := document.ResolveArray(ctx, doc, ref); err == nil && arr != nil {
+		if arr, err := resolveArrayAllocFirst(ctx, alloc, doc, ref); err == nil && arr != nil {
 			return bracket(arr...)
 		}
 	}

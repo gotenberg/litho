@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -50,6 +51,100 @@ func TestStampText_KeepsSharedContentsShared(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestStampText_SecondCallKeepsSharedContent pins that a second stamp over
+// pages that share one /Contents stream keeps the page's own content and the
+// first stamp. The first call gives those pages one stamped array, which only
+// the writer holds, and the second read it from the source document, found
+// nothing there, and left the page its own stamp alone.
+func TestStampText_SecondCallKeepsSharedContent(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/sharedtag_ua1.pdf")
+	if err != nil {
+		t.Fatalf("reading the fixture: %v", err)
+	}
+	plain := plainTexts(t, data)
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	w := NewWriter(r)
+	defer w.Close()
+	for _, text := range []string{"FIRSTQZ", "SECONDQZ"} {
+		if err := w.StampText(TextStamp{Text: text, X: 20, Y: 20, FontSize: 12}); err != nil {
+			t.Fatalf("StampText %s: %v", text, err)
+		}
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	assertStamps(t, out.Bytes(), plain, func(int) []string { return []string{"FIRSTQZ", "SECONDQZ"} })
+}
+
+// plainTexts returns the text of every page of data, artifacts left out.
+func plainTexts(t *testing.T, data []byte) []string {
+	t.Helper()
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	pageCount, err := r.PageCount(ctx)
+	if err != nil {
+		t.Fatalf("PageCount: %v", err)
+	}
+	texts := make([]string, pageCount)
+	for i := range texts {
+		if texts[i], err = r.ExtractText(ctx, i+1); err != nil {
+			t.Fatalf("ExtractText page %d: %v", i+1, err)
+		}
+	}
+	return texts
+}
+
+// assertStamps checks that every page of data reads as plain without
+// artifacts, carries each stamp stamps names for it exactly once with them,
+// and carries no stamp stamps names for another page only.
+func assertStamps(t *testing.T, data []byte, plain []string, stamps func(page int) []string) {
+	t.Helper()
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open stamped: %v", err)
+	}
+	defer r.Close()
+	for i := range plain {
+		page := i + 1
+		got, err := r.ExtractText(ctx, page)
+		if err != nil {
+			t.Fatalf("ExtractText page %d: %v", page, err)
+		}
+		if got != plain[i] {
+			t.Errorf("page %d reads %q without artifacts, want %q", page, got, plain[i])
+		}
+		all, err := r.ExtractText(ctx, page, WithArtifacts())
+		if err != nil {
+			t.Fatalf("ExtractText page %d with artifacts: %v", page, err)
+		}
+		own := stamps(page)
+		for _, stamp := range own {
+			if n := strings.Count(all, stamp); n != 1 {
+				t.Errorf("page %d carries stamp %q %d times, want once: %q", page, stamp, n, all)
+			}
+		}
+		for other := range plain {
+			for _, stamp := range stamps(other + 1) {
+				if !slices.Contains(own, stamp) && strings.Contains(all, stamp) {
+					t.Errorf("page %d carries page %d's stamp %q: %q", page, other+1, stamp, all)
+				}
+			}
+		}
 	}
 }
 
