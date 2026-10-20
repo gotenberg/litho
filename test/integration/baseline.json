@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-20T17:45:33Z",
+  "captured_at": "2026-10-20T19:14:34Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -86,12 +86,12 @@
     "govdocs": {
       "features": {
         "imagedecode": {
-          "matched": 545,
-          "mismatched": 18,
+          "matched": 544,
+          "mismatched": 19,
           "skipped": 528,
           "metrics": {
             "decode_failed": 0,
-            "images_match": 71774
+            "images_match": 71773
           }
         },
         "metadata": {
@@ -100,9 +100,13 @@
           "skipped": 0
         },
         "render": {
-          "matched": 0,
-          "mismatched": 0,
-          "skipped": 79
+          "matched": 1,
+          "mismatched": 78,
+          "skipped": 0,
+          "metrics": {
+            "pages_match": 14,
+            "render_failed": 0
+          }
         },
         "text": {
           "matched": 955,
@@ -270,9 +274,13 @@
           }
         },
         "render": {
-          "matched": 0,
-          "mismatched": 0,
-          "skipped": 212
+          "matched": 174,
+          "mismatched": 37,
+          "skipped": 1,
+          "metrics": {
+            "pages_match": 269,
+            "render_failed": 6
+          }
         },
         "text": {
           "matched": 204,
@@ -360,12 +368,12 @@
     "pdfjs": {
       "features": {
         "imagedecode": {
-          "matched": 345,
-          "mismatched": 15,
+          "matched": 343,
+          "mismatched": 17,
           "skipped": 831,
           "metrics": {
             "decode_failed": 29,
-            "images_match": 4020
+            "images_match": 4016
           }
         },
         "merge-catalog": {
@@ -387,9 +395,13 @@
           "skipped": 1
         },
         "render": {
-          "matched": 0,
-          "mismatched": 0,
-          "skipped": 80
+          "matched": 33,
+          "mismatched": 44,
+          "skipped": 3,
+          "metrics": {
+            "pages_match": 46,
+            "render_failed": 2
+          }
         },
         "text": {
           "matched": 1128,
