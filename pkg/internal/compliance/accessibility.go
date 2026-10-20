@@ -126,7 +126,7 @@ func checkAccessibilityGroup(ctx context.Context, vctx *validationCtx) []Violati
 	results = append(results, checkPDFUA1FormRole(ctx, doc, catalog, profile)...)
 
 	// Form XObject restrictions (PDF/UA-1 §7.20).
-	results = append(results, checkFormXObjectRestrictions(ctx, doc, catalog, profile)...)
+	results = append(results, checkFormXObjectRestrictions(ctx, vctx)...)
 
 	// PDF/UA-2 form structure checks (§8.10.1, §8.10.2.3).
 	results = append(results, checkPDFUA2FormStructure(ctx, doc, catalog, profile)...)
