@@ -102,6 +102,11 @@ func (r ScanResult) Clean() bool {
 // the trailer's /ID ([scanWalk.scanFileID]). A reference to an object the file
 // does not define is the null object, which is what the rewrite writes for it.
 //
+// The data of an embedded font program and of an ICC profile is neither
+// compared nor decoded (see [binarySlotKeys]): no reader extracts text from
+// it, so a match there refuses over a copy that is not one. A stream the walk
+// also reaches through any other reference is compared as usual.
+//
 // It is a check, not a proof. A token absent from every object may still be
 // recoverable from glyph advances left behind by a split text run
 // (arXiv 2206.02285), and a token this finds may be an innocent coincidence in
@@ -201,6 +206,13 @@ type scanWalk struct {
 	// knows which streams to read as content streams (see scanContentStrings).
 	contents map[int]bool
 
+	// plain holds every object some reference reaches outside a binary slot
+	// (see [binarySlotKeys]), and deferred the streams reached only through
+	// one so far, whose data is not scanned unless a plain reference reaches
+	// them too (see [scanWalk.followBinary]).
+	plain    map[int]bool
+	deferred map[int]ast.PdfStream
+
 	// err holds a cancellation seen mid-walk. The walk cannot return one, and
 	// abandoning it silently would hand back a short result that reads as a
 	// cleaner document than was examined.
@@ -216,6 +228,8 @@ func newScanWalk(doc *document.Document, alloc *writer.ObjAllocator, tokens []st
 		unreadable: make(map[int]bool),
 		visited:    make(map[int]bool),
 		contents:   make(map[int]bool),
+		plain:      make(map[int]bool),
+		deferred:   make(map[int]ast.PdfStream),
 	}
 }
 
@@ -244,27 +258,108 @@ func (w *scanWalk) walk(ctx context.Context, objNum int, obj ast.PdfObject, dept
 			}
 		}
 	case ast.PdfArray:
-		for _, item := range v {
+		for i, item := range v {
+			if ref, isRef := item.(ast.PdfIndirectRef); isRef && i == 1 && isICCBasedArray(v) {
+				w.followBinary(ctx, ref)
+				continue
+			}
 			w.walk(ctx, objNum, item, depth+1)
 		}
 	case ast.PdfDict:
 		w.markPageContents(ctx, v)
 		// Keys are names, not text: a /Title key never carries a redacted word,
 		// its value does.
-		for _, item := range v {
+		for key, item := range v {
+			if ref, isRef := item.(ast.PdfIndirectRef); isRef && binarySlotKeys[key] {
+				w.followBinary(ctx, ref)
+				continue
+			}
 			w.walk(ctx, objNum, item, depth+1)
 		}
 	case ast.PdfStream:
 		w.walk(ctx, objNum, v.Dict, depth+1)
+		if depth == 0 && !w.plain[objNum] {
+			// Reached through a binary slot alone: the data waits until a
+			// plain reference proves it is read as something else too.
+			w.deferred[objNum] = v
+			return
+		}
 		w.scanStreamData(ctx, objNum, v)
 	case ast.PdfIndirectRef:
 		w.follow(ctx, v)
 	}
 }
 
-// follow visits the object a reference names, once.
+// follow visits the object a reference names, once, as a plain reference: its
+// stream data is scanned.
 func (w *scanWalk) follow(ctx context.Context, ref ast.PdfIndirectRef) {
-	if w.visited[ref.ObjectNum] || w.err != nil {
+	if w.err != nil {
+		return
+	}
+	w.plain[ref.ObjectNum] = true
+	if stream, ok := w.deferred[ref.ObjectNum]; ok {
+		// A stream first reached as a font program or a profile is also
+		// reached as something a reader does read as text, so its data is
+		// scanned after all.
+		delete(w.deferred, ref.ObjectNum)
+		w.scanStreamData(ctx, ref.ObjectNum, stream)
+	}
+	w.visit(ctx, ref)
+}
+
+// binarySlotKeys are the dictionary keys whose value is a stream of binary
+// data no text extraction reads: an embedded font program (ISO 32000-1, 9.9,
+// Table 126) and an output intent's ICC profile (14.11.5, Table 365).
+//
+// ISO 32000-1, 9.10.2 extracts text from a content stream's character codes
+// through the font's /ToUnicode CMap or its encoding, never through the font
+// program, and 8.6.5.5 makes an ICCBased stream colour data in the ICC.1
+// format. Neither stream holds the text a page draws: a redacted word found in
+// one is the font's own /Notice, a glyph name or a chance match in binary
+// tables, so scanning it refuses a redaction over a copy no reader finds. The
+// same clauses hold in ISO 32000-2.
+//
+// # Corpus evidence
+//
+//   - govdocs, pdfjs, pdfcpu, redacting all of page 1: font programs or
+//     profiles hold a surviving copy in 75 of 459 govdocs refusals and 55 of
+//     95 pdfjs refusals, none of 9 pdfcpu ones. Skipping them lets 8 govdocs
+//     and 37 pdfjs redactions through, exactly those whose every copy was in
+//     one, and changes no other outcome.
+var binarySlotKeys = map[ast.PdfName]bool{
+	"FontFile":          true,
+	"FontFile2":         true,
+	"FontFile3":         true,
+	"DestOutputProfile": true,
+}
+
+// isICCBasedArray reports whether arr is an ICCBased colour space, whose second
+// element is the profile stream (ISO 32000-1, 8.6.5.5).
+func isICCBasedArray(arr ast.PdfArray) bool {
+	if len(arr) != 2 { //nolint:mnd // ISO 32000-1, 8.6.5.5: [/ICCBased stream] has exactly two elements
+		return false
+	}
+	name, _ := arr[0].(ast.PdfName)
+	return name == "ICCBased"
+}
+
+// followBinary visits the stream a binary slot names (see [binarySlotKeys])
+// without scanning its data: its dictionary is walked as any other, and its
+// data is scanned only if a plain reference reaches the same object, before or
+// after. That keeps the skip from being a hiding place. A content stream, a form
+// XObject or an attachment that a crafted file also names as a /FontFile is
+// still read, whichever reference the walk meets first, because only the slot
+// is trusted to say what the data is, never the object.
+func (w *scanWalk) followBinary(ctx context.Context, ref ast.PdfIndirectRef) {
+	if w.err != nil {
+		return
+	}
+	w.visit(ctx, ref)
+}
+
+// visit enters the object a reference names, once.
+func (w *scanWalk) visit(ctx context.Context, ref ast.PdfIndirectRef) {
+	if w.visited[ref.ObjectNum] {
 		return
 	}
 	if w.refDepth >= maxScanRefDepth {
