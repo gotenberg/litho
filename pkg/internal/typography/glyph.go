@@ -120,7 +120,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Angle:         angle,
 			InkRight:      glyphsInkRight(state, font),
 			InkBox:        glyphInkBox(state, font, fontSize, cid, x, y),
-			PatternType:   state.FillPatternType,
+			PatternType:   state.Fill.PatternType,
 			Language:      mcLang,
 			ExpansionText: mcExpansion,
 		})
@@ -496,23 +496,27 @@ func type0TableRune(font *Font, data []byte) (rune, bool) {
 // textIsInvisible combines the two rendering-mode-3 and white-on-white
 // invisibility heuristics into a single predicate. Pattern color spaces
 // are exempt because they paint with a tiled or gradient fill.
+//
+// White is read only in a device space the content stream named directly
+// (ISO 32000-1, 8.6.8, Table 74): a /ColorSpace resource holding a device
+// family is left visible, as is any other space, whose white depends on a
+// conversion this predicate does not run.
 func textIsInvisible(state *graphics.State) bool {
 	if state.Text.Tmode == 3 {
 		return true
 	}
-	if state.FillPatternType != "" {
+	fill := state.Fill
+	if fill.Space.Resource != "" {
 		return false
 	}
-	switch state.FillColorSpace {
-	case "DeviceRGB":
-		return len(state.FillColor) == 3 &&
-			state.FillColor[0] == 1 && state.FillColor[1] == 1 && state.FillColor[2] == 1
-	case "DeviceCMYK":
-		return len(state.FillColor) == 4 &&
-			state.FillColor[0] == 0 && state.FillColor[1] == 0 &&
-			state.FillColor[2] == 0 && state.FillColor[3] == 0
-	case "DeviceGray":
-		return len(state.FillColor) == 1 && state.FillColor[0] == 1
+	c := fill.Components
+	switch fill.Space.Family {
+	case graphics.FamilyDeviceRGB:
+		return len(c) == 3 && c[0] == 1 && c[1] == 1 && c[2] == 1
+	case graphics.FamilyDeviceCMYK:
+		return len(c) == 4 && c[0] == 0 && c[1] == 0 && c[2] == 0 && c[3] == 0
+	case graphics.FamilyDeviceGray:
+		return len(c) == 1 && c[0] == 1
 	}
 	return false
 }

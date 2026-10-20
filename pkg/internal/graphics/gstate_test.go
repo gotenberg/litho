@@ -199,10 +199,6 @@ func TestColor_DeviceOperators(t *testing.T) {
 	if s.Stroke.Space.Family != FamilyDeviceCMYK || !slices.Equal(s.Stroke.Components, []float64{0, 0, 0, 1}) {
 		t.Errorf("stroke = %+v", s.Stroke)
 	}
-	// The legacy fields keep their reading.
-	if s.FillColorSpace != "DeviceRGB" || !slices.Equal(s.FillColor, []float64{1, 0.5, 0}) {
-		t.Errorf("legacy fill = %q %v", s.FillColorSpace, s.FillColor)
-	}
 }
 
 func TestColor_InitialColorPerSpace(t *testing.T) {
@@ -307,8 +303,8 @@ func TestType3Glyph(t *testing.T) {
 		t.Fatalf("d1 glyph = %+v", m.Glyph)
 	}
 	// Table 113: a d1 glyph's colour operators are ignored, others are not.
-	if s.Fill.Space.Family != FamilyDeviceGray || s.FillColorSpace != "DeviceGray" || s.LineWidth != 4 {
-		t.Errorf("d1 glyph: fill %+v legacy %q width %v", s.Fill, s.FillColorSpace, s.LineWidth)
+	if s.Fill.Space.Family != FamilyDeviceGray || s.LineWidth != 4 {
+		t.Errorf("d1 glyph: fill %+v width %v", s.Fill, s.LineWidth)
 	}
 }
 

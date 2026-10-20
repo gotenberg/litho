@@ -3,7 +3,6 @@ package graphics
 import (
 	"context"
 	"math"
-	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -532,14 +531,9 @@ func (m *Machine) UnresolvedXObjects() int {
 }
 
 func handleSaveState(_ context.Context, m *Machine, state *State, _ content.Operation) {
-	newState := *state
-	// Slice fields must be deep-copied so mutations by subsequent
-	// operators in the new frame don't leak back into the previous one.
-	newState.StrokeColor = make([]float64, len(state.StrokeColor))
-	copy(newState.StrokeColor, state.StrokeColor)
-	newState.FillColor = make([]float64, len(state.FillColor))
-	copy(newState.FillColor, state.FillColor)
-	m.Stack = append(m.Stack, newState)
+	// A shallow copy keeps the frames apart: every slice and pointer the
+	// state holds is replaced, never edited in place (see [State]).
+	m.Stack = append(m.Stack, *state)
 }
 
 func handleRestoreState(_ context.Context, m *Machine, _ *State, _ content.Operation) {
@@ -713,87 +707,60 @@ func handleFillRGB(_ context.Context, _ *Machine, state *State, op content.Opera
 	if len(op.Operands) != 3 {
 		return
 	}
-	state.FillColor = []float64{
-		document.Float(op.Operands[0]),
-		document.Float(op.Operands[1]),
-		document.Float(op.Operands[2]),
-	}
-	state.FillColorSpace = "DeviceRGB"
-	state.Fill = deviceColor(FamilyDeviceRGB, slices.Clone(state.FillColor))
+	state.Fill = deviceColor(FamilyDeviceRGB, operandFloats(op.Operands))
 }
 
 func handleStrokeRGB(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 3 {
 		return
 	}
-	state.StrokeColor = []float64{
-		document.Float(op.Operands[0]),
-		document.Float(op.Operands[1]),
-		document.Float(op.Operands[2]),
-	}
-	state.StrokeColorSpace = "DeviceRGB"
-	state.Stroke = deviceColor(FamilyDeviceRGB, slices.Clone(state.StrokeColor))
+	state.Stroke = deviceColor(FamilyDeviceRGB, operandFloats(op.Operands))
 }
 
 func handleFillGray(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
-	state.FillColor = []float64{document.Float(op.Operands[0])}
-	state.FillColorSpace = "DeviceGray"
-	state.Fill = deviceColor(FamilyDeviceGray, slices.Clone(state.FillColor))
+	state.Fill = deviceColor(FamilyDeviceGray, operandFloats(op.Operands))
 }
 
 func handleStrokeGray(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
-	state.StrokeColor = []float64{document.Float(op.Operands[0])}
-	state.StrokeColorSpace = "DeviceGray"
-	state.Stroke = deviceColor(FamilyDeviceGray, slices.Clone(state.StrokeColor))
+	state.Stroke = deviceColor(FamilyDeviceGray, operandFloats(op.Operands))
 }
 
 func handleFillCMYK(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 4 {
 		return
 	}
-	state.FillColor = []float64{
-		document.Float(op.Operands[0]),
-		document.Float(op.Operands[1]),
-		document.Float(op.Operands[2]),
-		document.Float(op.Operands[3]),
-	}
-	state.FillColorSpace = "DeviceCMYK"
-	state.Fill = deviceColor(FamilyDeviceCMYK, slices.Clone(state.FillColor))
+	state.Fill = deviceColor(FamilyDeviceCMYK, operandFloats(op.Operands))
 }
 
 func handleStrokeCMYK(_ context.Context, _ *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 4 {
 		return
 	}
-	state.StrokeColor = []float64{
-		document.Float(op.Operands[0]),
-		document.Float(op.Operands[1]),
-		document.Float(op.Operands[2]),
-		document.Float(op.Operands[3]),
+	state.Stroke = deviceColor(FamilyDeviceCMYK, operandFloats(op.Operands))
+}
+
+// operandFloats reads the operands of g, rg or k as numbers, a non-number
+// reading as 0 as [document.Float] reads it.
+func operandFloats(operands []ast.PdfObject) []float64 {
+	vals := make([]float64, len(operands))
+	for i, operand := range operands {
+		vals[i] = document.Float(operand)
 	}
-	state.StrokeColorSpace = "DeviceCMYK"
-	state.Stroke = deviceColor(FamilyDeviceCMYK, slices.Clone(state.StrokeColor))
+	return vals
 }
 
 func handleFillColorSpace(ctx context.Context, m *Machine, state *State, op content.Operation) {
 	if len(op.Operands) != 1 {
 		return
 	}
-	name, ok := op.Operands[0].(ast.PdfName)
-	if !ok {
-		return
-	}
-	state.Fill = m.initialColor(ctx, m.resolveColorSpace(ctx, name))
-	state.FillColorSpace = string(name)
-	if name != "Pattern" {
-		state.FillPatternName = ""
-		state.FillPatternType = ""
+	if name, ok := op.Operands[0].(ast.PdfName); ok {
+		state.Fill = m.initialColor(ctx, m.resolveColorSpace(ctx, name))
 	}
 }
 
@@ -803,46 +770,15 @@ func handleStrokeColorSpace(ctx context.Context, m *Machine, state *State, op co
 	}
 	if name, ok := op.Operands[0].(ast.PdfName); ok {
 		state.Stroke = m.initialColor(ctx, m.resolveColorSpace(ctx, name))
-		state.StrokeColorSpace = string(name)
 	}
 }
 
 func handleFillColorInCurrentSpace(ctx context.Context, m *Machine, state *State, op content.Operation) {
-	state.Fill = colorFromOperands(state.Fill, op.Operands)
-	var vals []float64
-	var patName string
-	for _, operand := range op.Operands {
-		switch v := operand.(type) {
-		case ast.PdfReal, ast.PdfInt:
-			vals = append(vals, document.Float(operand))
-		case ast.PdfName:
-			patName = string(v)
-		}
-	}
-	if patName != "" && state.FillColorSpace == "Pattern" {
-		state.FillPatternName = patName
-		state.FillPatternType = m.resolvePatternType(ctx, patName)
-		return
-	}
-	if len(vals) > 0 {
-		state.FillColor = vals
-		state.FillPatternName = ""
-		state.FillPatternType = ""
-	}
+	state.Fill = m.selectColor(ctx, state.Fill, op.Operands)
 }
 
-func handleStrokeColorInCurrentSpace(_ context.Context, _ *Machine, state *State, op content.Operation) {
-	state.Stroke = colorFromOperands(state.Stroke, op.Operands)
-	var vals []float64
-	for _, operand := range op.Operands {
-		switch operand.(type) {
-		case ast.PdfReal, ast.PdfInt:
-			vals = append(vals, document.Float(operand))
-		}
-	}
-	if len(vals) > 0 {
-		state.StrokeColor = vals
-	}
+func handleStrokeColorInCurrentSpace(ctx context.Context, m *Machine, state *State, op content.Operation) {
+	state.Stroke = m.selectColor(ctx, state.Stroke, op.Operands)
 }
 
 // updatePathBounds transforms (x, y) through the current CTM and widens

@@ -58,17 +58,11 @@ type BoundingBox struct {
 
 // State represents the current graphics state.
 type State struct {
-	CTM              [6]float64 // Current Transformation Matrix
-	LineWidth        float64
-	StrokeColor      []float64
-	StrokeColorSpace string // "DeviceGray", "DeviceRGB", "DeviceCMYK", or a named space
-	FillColor        []float64
-	FillColorSpace   string // "DeviceGray", "DeviceRGB", "DeviceCMYK", or a named space
-	FillPatternName  string // Pattern resource name when FillColorSpace is "Pattern"
-	FillPatternType  string // "Tiling" or "Shading" (resolved from /PatternType)
-	Text             TextState
-	SkipExtraction   bool        // Used for Optional Content Groups (Hidden Layers)
-	ClippingPath     BoundingBox // Simplified clipping to a bounding box for performance
+	CTM            [6]float64 // Current Transformation Matrix
+	LineWidth      float64
+	Text           TextState
+	SkipExtraction bool        // Used for Optional Content Groups (Hidden Layers)
+	ClippingPath   BoundingBox // Simplified clipping to a bounding box for performance
 	// ClipApplied reports whether a W or W* operator has taken part in the
 	// current clipping path. [NewMachine] seeds ClippingPath with the page box,
 	// so without this flag "outside the clipping path" cannot be told from
@@ -114,9 +108,9 @@ type State struct {
 	AlphaIsShape bool
 	TextKnockout bool
 	// Fill and Stroke are the current colours with the colour space that
-	// holds them (8.6.8), Pattern spaces included. They track the operators
-	// [State.FillColor] and [State.StrokeColor] track, which keep their own
-	// reading for text extraction.
+	// holds them (8.6.8), Pattern spaces included. They are the one record of
+	// colour: g, rg, k, cs, sc, scn and their stroking forms replace them, and
+	// text extraction reads them as every other caller does.
 	Fill   Color
 	Stroke Color
 }
@@ -270,12 +264,8 @@ func NewMachine(cropBox [4]float64) *Machine {
 			Tlm:   [6]float64{1, 0, 0, 1, 0, 0},
 			Tmode: 0, // Fill text by default
 		},
-		LineWidth:        1.0,
-		FillColor:        []float64{0}, // DeviceGray 0 = black (PDF spec default)
-		FillColorSpace:   "DeviceGray", // PDF spec default color space
-		StrokeColor:      []float64{0}, // DeviceGray 0 = black
-		StrokeColorSpace: "DeviceGray",
-		ClippingPath:     BoundingBox{MinX: cropBox[0], MinY: cropBox[1], MaxX: cropBox[2], MaxY: cropBox[3]},
+		LineWidth:    1.0,
+		ClippingPath: BoundingBox{MinX: cropBox[0], MinY: cropBox[1], MaxX: cropBox[2], MaxY: cropBox[3]},
 	}
 	defaultGraphicsParams(&defaultState)
 	return &Machine{

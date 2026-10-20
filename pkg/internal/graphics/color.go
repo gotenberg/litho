@@ -61,6 +61,12 @@ type Color struct {
 	// space, "" before one is selected, which paints nothing (ISO 32000-1,
 	// 8.6.8).
 	Pattern string
+	// PatternType classifies Pattern by its /PatternType (8.7.3.1, Table 75):
+	// "Tiling" for 1, "Shading" for 2, and "Pattern" when the resource is
+	// missing or carries another value. It is resolved when scn or SCN selects
+	// the pattern, against the resources in force there, and is "" whenever
+	// Pattern is.
+	PatternType string
 }
 
 // deviceGrayBlack is the initial colour of every graphics state (ISO 32000-1,
@@ -295,9 +301,11 @@ func clamp(v, lo, hi float64) float64 {
 // nothing leave current as it was.
 //
 // Deliberate leniency: Table 74 requires as many operands as the space has
-// components. The machine keeps the numbers it is given, as the legacy
-// [State.FillColor] does, and leaves the mismatch to the caller converting
-// the colour, which can see both counts.
+// components. The machine keeps the numbers it is given and leaves the
+// mismatch to the caller converting the colour, which can see both counts.
+//
+// The pattern's [Color.PatternType] is left for the caller to resolve, since
+// it needs the machine's resources.
 func colorFromOperands(current Color, operands []ast.PdfObject) Color {
 	var vals []float64
 	var pattern string
@@ -322,6 +330,19 @@ func colorFromOperands(current Color, operands []ast.PdfObject) Color {
 		return current
 	}
 	next.Components = vals
+	return next
+}
+
+// selectColor applies sc, scn, SC or SCN to current and, when the operands
+// select a pattern, classifies it against the resources in force now (ISO
+// 32000-1, 8.7.3.1): a pattern resource is looked up where it is selected.
+func (m *Machine) selectColor(ctx context.Context, current Color, operands []ast.PdfObject) Color {
+	next := colorFromOperands(current, operands)
+	if next.Pattern != "" && len(operands) > 0 {
+		if _, named := operands[len(operands)-1].(ast.PdfName); named {
+			next.PatternType = m.resolvePatternType(ctx, next.Pattern)
+		}
+	}
 	return next
 }
 
