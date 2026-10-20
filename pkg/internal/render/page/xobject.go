@@ -184,7 +184,11 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 		if err != nil {
 			return r.imageFailed(err)
 		}
-		cr, cg, cb := r.converter(s, st.Fill.Space).RGB(st.Fill.Components)
+		conv, paints := r.colorFor(s, st.Fill.Space)
+		if !paints {
+			return nil
+		}
+		cr, cg, cb := conv.RGB(st.Fill.Components)
 		return r.imageFailed(imgpaint.DrawStencil(r.ctx, r.canvas, imgpaint.StencilMask(img, bool(interpolate)), cr, cg, cb, p))
 	}
 

@@ -29,16 +29,6 @@ func (r *renderer) resource(s *scope, kind, name ast.PdfName) ast.PdfObject {
 	return dict[name]
 }
 
-// shadingConverter returns the converter for a shading's colour space.
-func (r *renderer) shadingConverter(s *scope, sh *shade.Shading) Converter {
-	space, err := graphics.DescribeColorSpace(r.ctx, r.doc, sh.ColorSpace())
-	if err != nil {
-		r.skip("shading colour space", err)
-		return greyConverter{}
-	}
-	return r.converter(s, space)
-}
-
 // shading runs sh (ISO 32000-1, 8.7.4.2): it paints the named shading over
 // the current clip, in the fill alpha (11.6.4.4).
 func (r *renderer) shading(s *scope, op content.Operation) error {
@@ -64,11 +54,15 @@ func (r *renderer) shading(s *scope, op content.Operation) error {
 		return nil
 	}
 	r.noteEffects(st)
+	conv, paints := r.colorForObject(s, sh.ColorSpace())
+	if !paints {
+		return nil
+	}
 	mask, err := r.clip().mask1(r.canvas.Width, r.canvas.Height, r.budget)
 	if err != nil {
 		return err
 	}
-	t := shade.Target{Canvas: r.canvas, Clip: mask, Opacity: surface.NewOpacity(st.FillAlpha), Convert: r.shadingConverter(s, sh)}
+	t := shade.Target{Canvas: r.canvas, Clip: mask, Opacity: surface.NewOpacity(st.FillAlpha), Convert: conv}
 	if err := sh.Paint(r.ctx, t, r.toDevice()); err != nil {
 		if fatal(err) {
 			return err
@@ -123,6 +117,10 @@ func (r *renderer) patternFill(s *scope, cov *raster.Coverage, c graphics.Color,
 		r.report.count(UnsupportedTilingPattern)
 		return nil
 	}
+	conv, paints := r.colorForObject(s, pat.Shading().ColorSpace())
+	if !paints {
+		return nil
+	}
 	mask, err := surface.NewMask(r.canvas.Width, r.canvas.Height, r.budget)
 	if err != nil {
 		return fmt.Errorf("%w: pattern coverage: %w", ErrTooLarge, err)
@@ -131,7 +129,7 @@ func (r *renderer) patternFill(s *scope, cov *raster.Coverage, c graphics.Color,
 		row := (cov.Y + y) * mask.Width
 		copy(mask.A[row+cov.X:row+cov.X+cov.Width], cov.A[y*cov.Width:(y+1)*cov.Width])
 	}
-	t := shade.Target{Canvas: r.canvas, Clip: mask, Opacity: surface.NewOpacity(a), Convert: r.shadingConverter(s, pat.Shading())}
+	t := shade.Target{Canvas: r.canvas, Clip: mask, Opacity: surface.NewOpacity(a), Convert: conv}
 	if err := pat.Fill(r.ctx, t, s.base); err != nil {
 		if fatal(err) {
 			return err

@@ -82,18 +82,25 @@ func TestClipping(t *testing.T) {
 func TestColoursAndAlpha(t *testing.T) {
 	t.Parallel()
 	img, report := draw(t, fixture{
-		page: "/Resources << /ExtGState << /Half << /ca 0.5 >> >> /ColorSpace << /Spot [/Separation /Spot /DeviceCMYK 5 0 R] >> >>",
+		page: "/Resources << /ExtGState << /Half << /ca 0.5 >> >> /ColorSpace << /Spot [/Separation /Spot /DeviceCMYK 5 0 R] /Nothing [/Separation /None /DeviceGray 6 0 R] >> >>",
 		content: "1 0 0 0 k 0 0 20 20 re f  0.5 g 20 0 20 20 re f  /Spot cs 1 sc 40 0 20 20 re f " +
-			"q /Half gs 0 g 60 0 20 20 re f Q",
-		objs: []string{"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 1 0] /N 1 >>"},
+			"q /Half gs 0 g 60 0 20 20 re f Q  /Nothing cs 1 sc 80 0 20 20 re f",
+		objs: []string{
+			"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 1 0] /N 1 >>",
+			"<< /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>",
+		},
 	})
 	expect(t, img, 1, map[[2]int]rgb{
-		{10, 90}: {0, 255, 255},
+		// Uncalibrated DeviceCMYK goes through litho's CMYK profile, so
+		// cyan is the printed cyan, not 0 255 255.
+		{10, 90}: {0, 174, 239},
 		{30, 90}: {128, 128, 128},
-		// The stand-in paints a Separation space mid-grey.
-		{50, 90}: {128, 128, 128},
+		// The tint transform maps the spot to CMYK magenta and yellow.
+		{50, 90}: {237, 28, 36},
 		// Black at alpha 0.5 over white.
 		{70, 90}: {128, 128, 128},
+		// The colorant None paints nothing (ISO 32000-1, 8.6.6.4).
+		{90, 90}: paper,
 	})
 	if len(report.Unsupported) != 0 {
 		t.Errorf("report %v, want nothing unsupported", report.Unsupported)

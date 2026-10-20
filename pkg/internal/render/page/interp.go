@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
@@ -24,7 +25,6 @@ type renderer struct {
 	device    geom.Matrix // the page's default user space to device pixels
 	budget    int64       // render pixel budget
 	clipLimit int64       // pixels the live clip masks may hold
-	colors    ColorProvider
 	report    *Report
 
 	m *graphics.Machine
@@ -38,6 +38,9 @@ type renderer struct {
 
 	shadings map[ast.PdfIndirectRef]*shade.Shading
 	patterns map[ast.PdfIndirectRef]*shade.Pattern
+
+	// colorCache keeps the colour converters of the render's page.
+	colorCache colorconv.Cache
 }
 
 // scope is one content stream being run: the page's or a form's.
@@ -376,21 +379,13 @@ func (r *renderer) paintCoverage(s *scope, cov *raster.Coverage, c graphics.Colo
 	if c.Space.Family == graphics.FamilyPattern {
 		return r.patternFill(s, cov, c, a)
 	}
-	conv := r.converter(s, c.Space)
+	conv, paints := r.colorFor(s, c.Space)
+	if !paints {
+		return nil
+	}
 	cr, cg, cb := conv.RGB(c.Components)
 	raster.PaintSolid(r.canvas, cov, cr, cg, cb, alpha32(a))
 	return nil
-}
-
-// converter returns the converter for space, the stand-in grey when the
-// provider fails.
-func (r *renderer) converter(s *scope, space graphics.ColorSpace) Converter {
-	conv, err := r.colors.For(r.ctx, r.doc, space, s.resources)
-	if err != nil {
-		r.skip("colour space", err)
-		return greyConverter{}
-	}
-	return conv
 }
 
 // components resolves the component count of a shading's colour space.

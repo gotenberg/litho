@@ -1,100 +1,57 @@
 package page
 
 import (
-	"context"
+	"errors"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
+	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 )
 
-// Converter converts colour components in one colour space to sRGB channels
-// in [0, 1]. It has the shape of [shade.Converter], so one value serves a
-// fill colour and a shading.
-type Converter interface {
-	RGB(components []float64) (r, g, b float32)
+// fallbackConverter paints black, the initial colour of the graphics state
+// (ISO 32000-1, 8.4.1, Table 52), a colour whose space cannot be converted:
+// a missing /ColorSpace resource, an unknown family, or a tint transform or
+// colour table that does not read.
+type fallbackConverter struct{}
+
+func (fallbackConverter) RGB([]float64) (r, g, b float32) {
+	return 0, 0, 0
 }
 
-// ColorProvider returns the [Converter] for a colour space, read against the
-// resources of the content stream that uses it (their default colour spaces
-// stand in for the device spaces, ISO 32000-1, 8.6.5.6).
-type ColorProvider interface {
-	For(ctx context.Context, doc *document.Document, space graphics.ColorSpace, resources ast.PdfDict) (Converter, error)
+// colorOptions returns what a conversion depends on beyond the space: the
+// rendering intent of the current graphics state (8.6.5.8), the page, whose
+// output intents replace the document's (ISO 32000-2, 14.11.5), and the
+// render's cache.
+func (r *renderer) colorOptions() colorconv.Options {
+	return colorconv.Options{Intent: r.m.Current().RenderingIntent, Page: r.page.Dict, Cache: &r.colorCache}
 }
 
-// midGrey is what the stand-in paints a colour space it does not convert in.
-const midGrey = 0.5
-
-// NaiveColors is a TEMPORARY [ColorProvider], the stand-in until the colour
-// conversion package joins the renderer. It converts with the device formulas
-// of ISO 32000-1, 10.4.2: DeviceGray and CalGray as grey, DeviceRGB and
-// CalRGB as RGB, DeviceCMYK as 1 - min(1, C + K) per channel, and an
-// ICCBased space by its component count as the device space of that count
-// (8.6.5.5 names it the alternate). Every other space paints mid-grey. It
-// ignores default colour spaces, rendering intents and ICC profiles.
-type NaiveColors struct{}
-
-// For returns the stand-in converter for space.
-func (NaiveColors) For(_ context.Context, _ *document.Document, space graphics.ColorSpace, _ ast.PdfDict) (Converter, error) {
-	switch space.Family {
-	case graphics.FamilyDeviceGray, graphics.FamilyCalGray:
-		return grayConverter{}, nil
-	case graphics.FamilyDeviceRGB, graphics.FamilyCalRGB:
-		return rgbConverter{}, nil
-	case graphics.FamilyDeviceCMYK:
-		return cmykConverter{}, nil
-	case graphics.FamilyICCBased:
-		switch space.Components {
-		case 1:
-			return grayConverter{}, nil
-		case 3:
-			return rgbConverter{}, nil
-		case 4:
-			return cmykConverter{}, nil
-		}
-	}
-	return greyConverter{}, nil
+// colorFor returns the converter of the colour space a fill or stroke colour
+// is in, against the resources of the stream being run, whose default spaces
+// stand in for the device spaces (8.6.5.6). A Pattern space converts through
+// its base (8.7.3.3). It reports false when the space paints nothing, a
+// Separation or DeviceN over the colorant None only (8.6.6.4, 8.6.6.5), and
+// the caller paints nothing. A space that cannot be converted is skipped and
+// paints [fallbackConverter]'s black.
+func (r *renderer) colorFor(s *scope, space graphics.ColorSpace) (colorconv.Converter, bool) {
+	conv, err := colorconv.For(r.ctx, r.doc, space, s.resources, r.colorOptions())
+	return r.converterOrFallback(conv, err)
 }
 
-// component returns c[i] clamped to [0, 1], 0 when c is too short.
-func component(c []float64, i int) float32 {
-	if i >= len(c) {
-		return 0
-	}
-	v := c[i]
+// colorForObject returns the converter of a /ColorSpace object as a shading
+// dictionary holds it, under the rules of [renderer.colorFor].
+func (r *renderer) colorForObject(s *scope, obj ast.PdfObject) (colorconv.Converter, bool) {
+	conv, err := colorconv.ForObject(r.ctx, r.doc, obj, s.resources, r.colorOptions())
+	return r.converterOrFallback(conv, err)
+}
+
+func (r *renderer) converterOrFallback(conv colorconv.Converter, err error) (colorconv.Converter, bool) {
 	switch {
-	case !(v > 0):
-		return 0
-	case v >= 1:
-		return 1
+	case err == nil:
+		return conv, true
+	case errors.Is(err, colorconv.ErrPaintsNothing):
+		return nil, false
 	}
-	return float32(v)
-}
-
-type grayConverter struct{}
-
-func (grayConverter) RGB(c []float64) (r, g, b float32) {
-	v := component(c, 0)
-	return v, v, v
-}
-
-type rgbConverter struct{}
-
-func (rgbConverter) RGB(c []float64) (r, g, b float32) {
-	return component(c, 0), component(c, 1), component(c, 2)
-}
-
-// cmykConverter applies ISO 32000-1, 10.4.2.4: red = 1 - min(1, C + K), and
-// so on.
-type cmykConverter struct{}
-
-func (cmykConverter) RGB(c []float64) (r, g, b float32) {
-	k := component(c, 3)
-	return 1 - min(1, component(c, 0)+k), 1 - min(1, component(c, 1)+k), 1 - min(1, component(c, 2)+k)
-}
-
-type greyConverter struct{}
-
-func (greyConverter) RGB([]float64) (r, g, b float32) {
-	return midGrey, midGrey, midGrey
+	r.skip("colour space", err)
+	return fallbackConverter{}, true
 }

@@ -68,8 +68,6 @@ type Options struct {
 	// Background is the unpremultiplied RGBA colour, each channel in [0, 1],
 	// the page is drawn over. The zero value leaves it transparent.
 	Background [4]float32
-	// Colors converts colour; nil selects [NaiveColors].
-	Colors ColorProvider
 }
 
 // Report says what a render left out.
@@ -110,10 +108,6 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 		bg := opts.Background
 		canvas.Fill(bg[0], bg[1], bg[2], bg[3])
 	}
-	colors := opts.Colors
-	if colors == nil {
-		colors = NaiveColors{}
-	}
 	ops, err := content.ParsePageContent(ctx, doc, pg.Dict, content.SplitGluedOperators(), content.InlineImageData())
 	if err != nil {
 		if fatal(err) {
@@ -135,7 +129,6 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 		device:    g.Matrix,
 		budget:    budget,
 		clipLimit: clipBudgetShare * budget,
-		colors:    colors,
 		report:    &report,
 		m:         m,
 		clips:     []*clip{newClip(g.Width, g.Height)},

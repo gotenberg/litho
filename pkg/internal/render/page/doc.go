@@ -6,9 +6,9 @@
 // page's content with a [graphics.Machine] holding the graphics state.
 // The driver itself handles what paints: path construction and painting
 // (8.5.2, 8.5.3) through [raster] and [stroke], clipping (8.5.4) with true
-// path masks, colour through a [ColorProvider], images and inline images
-// (8.9) through the image decoder and [imgpaint], shadings and shading
-// patterns (8.7.4) through [shade], and form XObjects (8.10) with their
+// path masks, colour converted to sRGB by [colorconv] (8.6), images and
+// inline images (8.9) through the image decoder and [imgpaint], shadings and
+// shading patterns (8.7.4) through [shade], and form XObjects (8.10) with their
 // matrix, bounding box and resources. Content hidden by optional content
 // (8.11) paints nothing, its clipping included as a viewer applies it.
 //

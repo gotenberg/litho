@@ -51,9 +51,11 @@ func WithRenderBackground(c color.Color) RenderOption {
 //
 // The renderer is litho's own. It draws paths, strokes, clipping, images and
 // inline images with their masks, shadings and shading patterns, and form
-// XObjects, in colours converted without colour management for now: the
-// device spaces and ICCBased spaces by their component count, any other space
-// mid-grey. It does not draw text, tiling patterns, annotations, or the
+// XObjects, in colours converted to sRGB as litho decodes images: every colour
+// space of ISO 32000-1, 8.6, the default colour spaces of the resources and
+// the output intents of the page and the document honoured, uncalibrated
+// DeviceCMYK through [WithDefaultCMYKProfile] or litho's built-in printer
+// profile. It does not draw text, tiling patterns, annotations, or the
 // effect of soft masks, blend modes and transparency groups yet; content
 // using them is drawn without them. Content a document's default optional
 // content configuration hides is not drawn.
