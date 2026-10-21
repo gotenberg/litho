@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
+	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/imgpaint"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
@@ -292,6 +293,15 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 		}))
 	}
 
+	// An image in a Separation or DeviceN space over the colorant None only
+	// produces no visible output (ISO 32000-1, 8.6.6.4 and 8.6.6.5), whatever
+	// its samples and masks. The decoder reads it as transparent pixels, and
+	// imgpaint takes transparency from the masks alone, so it is skipped here.
+	if cs, ok := dict["ColorSpace"]; ok {
+		if _, err := colorconv.ForObject(r.ctx, r.doc, cs, s.resources, r.colorOptions()); errors.Is(err, colorconv.ErrPaintsNothing) {
+			return nil
+		}
+	}
 	img, err := pdfimage.DecodePainted(r.ctx, r.doc, name, stream, s.resources, r.page.Dict)
 	if err != nil {
 		return r.imageFailed(err)

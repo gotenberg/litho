@@ -127,6 +127,28 @@ func TestImages(t *testing.T) {
 	expect(t, img, 1, map[[2]int]rgb{{65, 85}: {127, 127, 127}})
 }
 
+// TestNoneColorantImages paints images in a Separation and a DeviceN space
+// over the colorant None only. Neither produces visible output (ISO 32000-1,
+// 8.6.6.4 and 8.6.6.5); both used to paint black.
+func TestNoneColorantImages(t *testing.T) {
+	t.Parallel()
+	img, report := draw(t, fixture{
+		page: "/Resources << /XObject << /Sep 5 0 R /DevN 6 0 R >> /ColorSpace << /CS0 [/Separation /None /DeviceGray 7 0 R] >> >>",
+		content: "q 20 0 0 10 10 10 cm /Sep Do Q q 20 0 0 10 40 10 cm /DevN Do Q " +
+			"q 20 0 0 10 70 10 cm BI /W 2 /H 1 /CS /CS0 /BPC 8 ID \xff\x80 EI Q",
+		objs: []string{
+			stream("/Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace [/Separation /None /DeviceGray 7 0 R] /BitsPerComponent 8", "\xff\x80"),
+			stream("/Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace [/DeviceN [/None /None] /DeviceGray 8 0 R] /BitsPerComponent 8", "\xff\xff\x80\x80"),
+			"<< /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>",
+			"<< /FunctionType 2 /Domain [0 1 0 1] /C0 [1] /C1 [0] /N 1 >>",
+		},
+	})
+	expect(t, img, 0, map[[2]int]rgb{{15, 85}: paper, {25, 85}: paper, {45, 85}: paper, {55, 85}: paper, {75, 85}: paper, {85, 85}: paper})
+	if len(report.Unsupported) != 0 {
+		t.Errorf("report %v, want nothing unsupported", report.Unsupported)
+	}
+}
+
 func TestInlineImage(t *testing.T) {
 	t.Parallel()
 	img, _ := draw(t, fixture{content: "q 20 0 0 10 10 10 cm BI /W 2 /H 1 /CS /RGB /BPC 8 ID \xff\x00\x00\x00\x00\xff EI Q"})
