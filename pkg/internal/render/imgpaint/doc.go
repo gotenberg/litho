@@ -20,10 +20,13 @@
 // Each axis of a sample grid is filtered on its own, by the footprint one
 // device pixel covers on that axis:
 //
-//   - Downsampling (a pixel covers more than one sample): a box filter, the
-//     mean of up to maxBoxTaps evenly spaced samples across the footprint,
-//     whatever /Interpolate says. Picking one sample there aliases, and an
-//     exact 2:1 reduction averages exactly the two samples it covers.
+//   - Downsampling (a pixel covers more than one sample): a box filter,
+//     whatever /Interpolate says. Each sample the footprint overlaps weighs
+//     the share of the footprint it covers, so an exact 2:1 reduction
+//     averages exactly the two samples it covers and a 10:9 reduction takes
+//     a ninth of a neighbour, not half. Picking one sample there aliases.
+//     Past a footprint of maxBoxTaps samples the filter reads maxBoxTaps
+//     evenly spaced samples instead.
 //   - Upsampling with /Interpolate true: bilinear between sample centres
 //     (ISO 32000-1, 8.9.5.3 asks for interpolation and leaves the method to
 //     the reader).
@@ -50,6 +53,10 @@
 // litho keeps the centred reading: 8.9.4 maps the image onto the unit square,
 // each sample filling a cell of it, so the value a cell holds belongs at its
 // centre, and enlarging an image must not move it.
+// Reducing by a ratio that is not whole, it averages whole samples, one or two
+// per pixel on a 10:9 reduction, where litho weighs each by the share of the
+// pixel it covers: poppler's reduction is sharper and steps where litho's is
+// smooth.
 //
 // Functions in this package keep no state; they may run concurrently on
 // distinct canvases.
@@ -64,4 +71,11 @@
 //     by 2 interpolated image enlarged 100 by 50 pixels a sample; poppler
 //     shifts it the same way, and each page mismatches the render golden on
 //     about 14870 pixels for it.
+//   - pdfjs issue7200.pdf: a 501 by 583 scan drawn into 449 by 522 pixels.
+//     Two evenly spaced taps per axis weighed each neighbour as much as the
+//     sample and blurred the text, 7931 pixels off the render golden; area
+//     weights leave 6055, the rest poppler's whole-sample reduction.
+//   - pdfjs, govdocs and litho: of 634 golden pages none changes verdict
+//     with area weights; 51 move closer to the golden and 13 move away, by
+//     at most 0.05% of a page.
 package imgpaint

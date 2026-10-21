@@ -2,11 +2,13 @@ package imgpaint
 
 import "math"
 
-// maxBoxTaps caps the samples the box filter reads per axis for one device
-// pixel. Not spec-mandated: it bounds the work of drawing a huge image into a
-// few pixels, which a file controls, to maxBoxTaps² reads per pixel. Eight
-// taps reproduce an exact box average for every reduction up to 8:1 and keep
-// the residual aliasing of larger reductions below what one 8-bit level shows
+// maxBoxTaps caps the footprint, in samples per axis, the box filter
+// averages exactly. Not spec-mandated: it bounds the work of drawing a huge
+// image into a few pixels, which a file controls, to (maxBoxTaps+1)² reads per
+// pixel, since a footprint of up to maxBoxTaps samples overlaps at most
+// maxBoxTaps+1 of them. Up to 8:1 every sample is weighed by the share of the
+// footprint it covers; a larger reduction reads maxBoxTaps evenly spaced
+// samples, which keeps its residual aliasing below what one 8-bit level shows
 // on photographic content.
 const maxBoxTaps = 8
 
@@ -28,7 +30,7 @@ type tap struct {
 // axisTaps holds the taps of one axis for one device pixel.
 type axisTaps struct {
 	n int
-	t [maxBoxTaps]tap
+	t [maxBoxTaps + 1]tap
 }
 
 // grid is a sample grid laid over the unit square: size samples per axis and
@@ -58,8 +60,23 @@ func (g *grid) taps(u, v float64, xt, yt *axisTaps) {
 // for the choice of filter.
 func axis(s, extent float64, size int, interpolate bool, out *axisTaps) {
 	switch {
-	case extent > 1+footprintSlack:
-		n := min(int(math.Ceil(extent-footprintSlack)), maxBoxTaps)
+	case extent > 1+footprintSlack && extent <= maxBoxTaps:
+		// A box filter weighs each sample by the length of the footprint it
+		// covers: a footprint of 10/9 sample lies mostly over one sample and
+		// takes a ninth of the next, rather than half of each.
+		lo, hi := s-extent/2, s+extent/2
+		n := 0
+		for i := math.Floor(lo); i < hi && n < len(out.t); i++ {
+			cover := min(hi, i+1) - max(lo, i)
+			if cover <= 0 {
+				continue
+			}
+			out.t[n] = tap{i: clampIndex(i, size), w: float32(cover / extent)}
+			n++
+		}
+		out.n = n
+	case extent > maxBoxTaps:
+		n := maxBoxTaps
 		w := 1 / float32(n)
 		step := extent / float64(n)
 		start := s - extent/2 + step/2

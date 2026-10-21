@@ -12,7 +12,7 @@ import (
 )
 
 // rowsPerContextCheck is how many device rows run between two checks of the
-// context. A row costs at most the canvas width times maxBoxTaps² reads, so
+// context. A row costs at most the canvas width times (maxBoxTaps+1)² reads, so
 // 32 rows keeps cancellation prompt without a check per pixel.
 const rowsPerContextCheck = 32
 

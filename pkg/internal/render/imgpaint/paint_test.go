@@ -160,6 +160,26 @@ func TestDrawDownscaleThirds(t *testing.T) {
 	wantPixel(t, c, 1, 0, [4]int{180, 180, 180, 255})
 }
 
+func TestDrawDownscaleAreaWeights(t *testing.T) {
+	// Ten samples across nine pixels: each pixel's footprint is 10/9 of a
+	// sample, so it lies mostly over one sample and slightly over the next.
+	// A box filter weighs each sample by the share of the footprint it
+	// covers; two evenly spaced taps would weigh the sliver as much as the
+	// sample and blur the image as a 2:1 reduction does.
+	img := greyImage(10, 1, 255, 255, 255, 255, 0, 255, 255, 255, 255, 255)
+	c := newCanvas(t, 9, 1)
+	if err := Draw(context.Background(), c, img, Masks{}, with(opaque, upright(0, 0, 9, 1))); err != nil {
+		t.Fatal(err)
+	}
+	// Pixel 3 covers samples [3.33, 4.44): 0.67 of sample 3 (255) and 0.44
+	// of sample 4 (0), so 255 × 0.6. Pixel 4 covers [4.44, 5.56): half of
+	// each. Pixel 2 covers [2.22, 3.33): only 255s.
+	wantPixel(t, c, 2, 0, [4]int{255, 255, 255, 255})
+	wantPixel(t, c, 3, 0, [4]int{153, 153, 153, 255})
+	wantPixel(t, c, 4, 0, [4]int{128, 128, 128, 255})
+	wantPixel(t, c, 5, 0, [4]int{255, 255, 255, 255})
+}
+
 func TestDrawNearIdentityStaysSharp(t *testing.T) {
 	// Two samples across 1.99 pixels: a footprint of 1.005 samples is not a
 	// reduction, so no neighbour is averaged in.
