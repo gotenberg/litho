@@ -283,6 +283,8 @@ func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, st
 		return runRedact(ctx, globalArgs, stdout, stderr)
 	case "convert-colors":
 		return runConvertColors(ctx, globalArgs, stdout, stderr)
+	case "flatten-transparency":
+		return runFlattenTransparency(ctx, globalArgs, stdout, stderr)
 	case "encrypt":
 		return runEncrypt(ctx, globalArgs, stdout, stderr)
 	case "decrypt":
@@ -358,6 +360,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  insert        Insert pages from another PDF")
 	fmt.Fprintln(w, "  redact        Remove content under page regions")
 	fmt.Fprintln(w, "  convert-colors Convert every colour to one colour space")
+	fmt.Fprintln(w, "  flatten-transparency Composite transparency into opaque images, text kept")
 	fmt.Fprintln(w, "  encrypt       Encrypt a PDF with password")
 	fmt.Fprintln(w, "  decrypt       Remove encryption from a PDF")
 	fmt.Fprintln(w, "  set-metadata  Set document metadata fields")

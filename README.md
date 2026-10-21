@@ -220,6 +220,9 @@ litho pipe document.pdf rotate --angle 90 remediate --profile PDF/UA-1 -o out.pd
 # Convert every colour to CMYK, the built-in SWOP profile becoming the output intent.
 litho convert-colors --target cmyk -o cmyk.pdf document.pdf
 
+# Composite live transparency into opaque images at 300 dpi, text kept as text.
+litho flatten-transparency -o flat.pdf document.pdf
+
 # Redact, encrypt and sign.
 litho redact --region 1:72,700,200,24 -o redacted.pdf document.pdf
 litho encrypt --user-password secret -o encrypted.pdf document.pdf
@@ -239,6 +242,10 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 ### Colour conversion
 
 `litho convert-colors` converts every colour a document paints to one target, `Writer.ConvertColors` in Go: the colour operators of every page, form, pattern, Type 3 glyph and annotation appearance, their colour space resources, shadings, image XObjects and inline images. `--target` names it: `output-intent` (the default, the document's own output intent), `cmyk` (the built-in CGATS TR 001 profile, or `--cmyk-profile`), `rgb` (sRGB), `gray`, or `icc` with `--profile profile.icc`, which writes an ICCBased space. Colours convert through ICC profiles with litho's own colour engine, and a device colour reads as the renderer reads it: through the default colour space its resources give it, else the document's output intent of its component count, else the built-in profiles. The rendering intent is relative colorimetric unless `--intent` names another, and `--bpc` compensates black points. Spot colours, Separation and DeviceN, keep their colorants, which the report lists, and convert only their alternate space; `--convert-spots` converts them to process colour. A target whose profile is an output or display profile becomes the document's PDF/A output intent unless `--no-output-intent` is given, and an intent of another subtype, a PDF/X one among them, is kept as it was. A CMYK target refuses a document that keeps such an intent over another CMYK profile (`pdf.ErrOutputIntentConflict`, naming its printing condition), since viewers would read the converted colours through it; `--replace-output-intents` (`pdf.WithReplacedOutputIntents`) points those intents at the target profile instead, keeping their subtype and printing condition. Images are re-encoded losslessly under Flate by default, so a JPEG or JPEG 2000 image grows; `--jpeg-quality 1-100` (`pdf.WithJPEGQuality`) re-encodes a converted JPEG or JPEG 2000 image as a baseline JPEG at that quality instead, with litho's own encoder, and keeps an image lossless where Flate holds it in fewer bytes. A JPEG 2000 image deeper than 8 bits a component stays lossless. The conversion refuses, and writes nothing, when anything the document paints cannot be converted: an image whose samples do not decode, or a colour space litho cannot read.
+
+### Transparency flattening
+
+`litho flatten-transparency` removes a document's live transparency, `Writer.FlattenTransparency` in Go: constant alpha, blend modes, soft masks and transparency groups (ISO 32000-2, 11). Each region where a transparent object paints, with what it overlaps and must take along, is composited by litho's renderer into one opaque sRGB image at `--dpi` (300 by default, lowered to fit `--max-render-pixels`), drawn where the region's first object was. Everything outside those regions stays vector content. Text is never rasterised: the images are composited without it, and every text object stays in the content as it was, above the image, with its marked content, so the page stays searchable and its tags survive. The report counts the text whose look this approximates: text a transparent object covered now draws above it, and text that was transparent itself draws opaque in its own colour. Annotations are left as they are and counted; run `flatten-form` first to bake form fields into the page.
 
 ### Signing
 

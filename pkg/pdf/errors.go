@@ -570,6 +570,19 @@ var (
 	// disagrees. The [Writer] is left as it was.
 	ErrOutputIntentConflict = errors.New("an output intent the conversion keeps names another CMYK profile than the target's")
 
+	// ErrInvalidFlattenOptions is returned by [Writer.FlattenTransparency]
+	// when a [FlattenOption] is out of range: a [WithFlattenDPI] that is not
+	// a positive finite number. The [Writer] is left as it was.
+	ErrInvalidFlattenOptions = errors.New("invalid transparency flattening options")
+
+	// ErrTransparencyFlatteningRefused is returned by
+	// [Writer.FlattenTransparency] when a page cannot be flattened: its
+	// content does not parse, its regions do not settle within the passes
+	// litho allows them, its transparency does not fit the render pixel
+	// budget even at screen resolution, or it cannot be written back. The
+	// error names the page. The [Writer] is left as it was.
+	ErrTransparencyFlatteningRefused = errors.New("transparency flattening refused")
+
 	// ErrInvalidLimits is returned, wrapped in an error naming the field, by
 	// [Limits.Validate], and by [Open] and [OpenFile] when a budget given to
 	// [WithLimits] is negative or above its ceiling. See [Limits].

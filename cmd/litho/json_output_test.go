@@ -73,6 +73,9 @@ func TestEveryJSONCapableCommandEmitsJSON(t *testing.T) {
 		"convert-colors": func(s, o string) []string {
 			return []string{"convert-colors", "--target", "cmyk", "-f", "json", "-o", o, s}
 		},
+		"flatten-transparency": func(s, o string) []string {
+			return []string{"flatten-transparency", "--dpi", "72", "-f", "json", "-o", o, s}
+		},
 	}
 
 	for name := range derived {

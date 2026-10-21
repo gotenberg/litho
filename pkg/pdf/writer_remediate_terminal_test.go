@@ -109,6 +109,10 @@ func refusedCalls(t *testing.T) []refusedCall {
 			_, err := w.ConvertColors(ctx, CMYKColorTarget())
 			return err
 		}},
+		{"FlattenTransparency", func(ctx context.Context, _ *testing.T, w *Writer) error {
+			_, err := w.FlattenTransparency(ctx)
+			return err
+		}},
 		{"RemediatePDFA", func(ctx context.Context, _ *testing.T, w *Writer) error {
 			_, err := w.RemediatePDFA(ctx, models.PDFA1b)
 			return err

@@ -117,6 +117,9 @@ func TestMutationCommands_WarnWhenEncryptionIsDropped(t *testing.T) {
 		{"convert-colors", func(f encFixtures, out string) []string {
 			return []string{"convert-colors", "-p", "s3cret", "--target", "cmyk", "-o", out, f.doc}
 		}},
+		{"flatten-transparency", func(f encFixtures, out string) []string {
+			return []string{"flatten-transparency", "-p", "s3cret", "--dpi", "72", "-o", out, f.doc}
+		}},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			f := newEncFixtures(t)

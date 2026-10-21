@@ -104,6 +104,9 @@ func TestReportGoesToStdoutForAFileOutput(t *testing.T) {
 		{"convert-colors", func(src, out string) []string {
 			return []string{"convert-colors", "--target", "cmyk", "-o", out, src}
 		}, "Converted "},
+		{"flatten-transparency", func(src, out string) []string {
+			return []string{"flatten-transparency", "--dpi", "72", "-o", out, src}
+		}, "Flattened "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			src := writeTempPDF(t, redactableCLIPDF())
