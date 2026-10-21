@@ -2000,31 +2000,28 @@ those differences is adjudicated, and none is a litho defect left open:
   `/Kids` an array of references. poppler renders such a page as an empty 1 by
   1 image, and litho draws the page dictionary where the array holds it.
 
-The other 19 pages differ by at most 1% of the page and by more than half of
+The other 17 pages differ by at most 1% of the page and by more than half of
 the pixels either renderer inks: on each, one renderer draws a glyph, a fill or
 an annotation the other does not. PDFium (pypdfium2 4.30.0, at 72 dpi) is the
-third reading. The pages where litho differs from both, and `resinherit_2b`
-page 2, where litho differs from poppler and PDF.js, are litho divergences and
-stay open:
+third reading. The pages where litho differs from both are litho divergences
+and stay open:
 
-| File                    | Page | Differing / inked    | Who differs | Why                                                                                                           |
-| ----------------------- | ---- | -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
-| `filestruct_1b`         | 1    | 1200 / 1422          | litho       | draws a widget's `/AP` under `/NeedAppearances true`, which the others rebuild empty                          |
-| `sharednested_2b`       | 1, 2 | 705, 798 / 970, 1158 | litho       | resolves no name a form's empty `/Resources` lacks; the others fall back to the page's                        |
-| `undecodable_2b`        | 2    | 60 / 60              | litho       | decodes `[/Foo /FlateDecode]` past the unknown `/Foo`; the others draw nothing                                |
-| `resinherit_2b`         | 2    | 100 / 123            | litho       | fills in the undefined `CS4` with black; poppler keeps DeviceGray, where `1 scn` is white, as PDF.js reads it |
-| `afref_3b`              | 1    | 80 / 80              | poppler     | strokes a Link's `/Border` over an empty appearance stream (12.5.5)                                           |
-| `linkfont_ua2`          | 1    | 720 / 1345           | poppler     | the same `/Border` stroke over six links                                                                      |
-| `annotshare_ua1`        | 1, 2 | 202, 202 / 358, 202  | poppler     | draws its own icon for a Text annotation with no `/AP`                                                        |
-| `formmedia_ua1`         | 1    | 2400 / 4495          | poppler     | draws no Screen annotation; litho and PDFium paint their appearance                                           |
-| `sigcms_2b`             | 1    | 677 / 964            | poppler     | builds a text field's appearance from `/V` with no `/NeedAppearances`                                         |
-| `cmapusecmap_2b`        | 1    | 176 / 176            | poppler     | litho maps codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing                        |
-| `undecodable_2b`        | 3    | 60 / 60              | poppler     | draws nothing for `[/FlateDecode /Foo]`, which litho and PDFium read                                          |
-| `offlimits_1b`          | 3    | 100 / 100            | poppler     | paints no image while no colour space is selected; litho and PDFium paint it grey                             |
-| `fontclaims_2b`         | 1    | 50 / 80              | poppler     | draws no glyph for the last show, which litho and PDFium draw as A                                            |
-| `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156  | undefined   | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box                           |
-| `type0nodesc_2b`        | 1    | 176 / 237            | undefined   | Type 0 fonts with no descendant: litho boxes, poppler nothing, PDFium a substitute                            |
-| `parentreach_2b`        | 2    | 25 / 25              | undefined   | a one-input tint transform under nine colorants: litho black, poppler orange                                  |
+| File                    | Page | Differing / inked    | Who differs | Why                                                                                          |
+| ----------------------- | ---- | -------------------- | ----------- | -------------------------------------------------------------------------------------------- |
+| `filestruct_1b`         | 1    | 1200 / 1422          | litho       | draws a widget's `/AP` under `/NeedAppearances true`, which the others rebuild empty         |
+| `sharednested_2b`       | 1, 2 | 610, 610 / 970, 1158 | litho       | snaps a tiling cell's hairline on its `/BBox` edge outside the clip; the others draw it grey |
+| `afref_3b`              | 1    | 80 / 80              | poppler     | strokes a Link's `/Border` over an empty appearance stream (12.5.5)                          |
+| `linkfont_ua2`          | 1    | 720 / 1345           | poppler     | the same `/Border` stroke over six links                                                     |
+| `annotshare_ua1`        | 1, 2 | 202, 202 / 358, 202  | poppler     | draws its own icon for a Text annotation with no `/AP`                                       |
+| `formmedia_ua1`         | 1    | 2400 / 4495          | poppler     | draws no Screen annotation; litho and PDFium paint their appearance                          |
+| `sigcms_2b`             | 1    | 677 / 964            | poppler     | builds a text field's appearance from `/V` with no `/NeedAppearances`                        |
+| `cmapusecmap_2b`        | 1    | 176 / 176            | poppler     | litho maps codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing       |
+| `undecodable_2b`        | 3    | 60 / 60              | poppler     | draws nothing for `[/FlateDecode /Foo]`, which litho and PDFium read                         |
+| `offlimits_1b`          | 3    | 100 / 100            | poppler     | paints no image while no colour space is selected; litho and PDFium paint it grey            |
+| `fontclaims_2b`         | 1    | 50 / 80              | poppler     | draws no glyph for the last show, which litho and PDFium draw as A                           |
+| `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156  | undefined   | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box          |
+| `type0nodesc_2b`        | 1    | 176 / 237            | undefined   | Type 0 fonts with no descendant: litho boxes, poppler nothing, PDFium a substitute           |
+| `parentreach_2b`        | 2    | 25 / 25              | undefined   | a one-input tint transform under nine colorants: litho black, poppler orange                 |
 
 The cell's ink bar counts them; the 1% page bar alone passed every one.
 
@@ -2037,6 +2034,18 @@ pixels still differ, since litho advances an unnamed code of the unembedded
 Helvetica by 1000 and poppler by 0. `ttencoding_2b` draws A and B
 for its symbolic TrueType fonts with the stand-in the flags give, as poppler
 and PDFium do, where litho asked for no substitute and drew boxes.
+
+Three causes of these rows were litho's and are closed. A form whose `/Resources` does not define a
+name now resolves it in the page's resources, as poppler and PDFium do (ISO
+32000-1, 7.8.3 grants it only to a form with no `/Resources`), so the
+`sharednested_2b` forms stroke at the page's `/GS0` line width; a tiling cell
+keeps its own resources, which both renderers draw it with. And litho reads
+nothing from a content stream whose chain decodes past a filter it cannot
+decode, so `undecodable_2b` page 2 now matches. A `cs` or `CS` naming no
+colour space, and colour operands that do not fit the space in force, now leave
+the colour as it was, as poppler draws them; with `/Resources` read whole
+(7.7.3.4), the `/CS4` square of `resinherit_2b` page 2 now fills white, as
+poppler and PDF.js draw it.
 
 The mechanism is veraPDF's object identity, not a rule. `BaseValidator` (core
 1.30.2, `checkRequired`, line 328) pushes a model object onto its work stack

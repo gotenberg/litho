@@ -81,7 +81,7 @@ const renderMaxDiffPerMillion = 10_000
 //
 // # Corpus evidence
 //
-//   - All corpora: of the 607 golden pages the page bar passes, 19 share more
+//   - All corpora: of the 607 golden pages the page bar passes, 17 share more
 //     than 50% of their ink, all of them litho fixtures, and on each one
 //     renderer draws a glyph, a fill or an annotation the other does not (the
 //     litho corpus README lists and adjudicates them). The shares jump from
