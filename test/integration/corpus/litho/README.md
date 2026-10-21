@@ -2002,6 +2002,25 @@ those differences is adjudicated, and none is a litho defect left open:
   in the colours the image decoder reads (see the section on this file). Before
   the renderer skipped them, litho painted the None images black, from the
   decoder's transparent pixels.
+- **PDFium, the third reading.** pypdfium2 4.30.0 at 72 dpi, scored by the
+  cell's comparison, reads these five fixtures:
+  - `pdfxonly_2b`, `iccbadcmyk_1b`, `iccbadcmyk_2b`: PDFium matches poppler
+    pixel for pixel (3600, 3916 and 3916 from litho). Neither reads DeviceCMYK
+    through an output intent, which litho does by decision (14.11.5).
+  - `inlinejpx_2b`: PDFium paints none of the four JPXDecode or JBIG2Decode
+    inline images, the form's included, and paints the CCF and Flate
+    controls (5600 from litho, 3281 from poppler). It drops the codecs ISO
+    32000-1, 7.4.9 and 8.9.7, Table 94 leave to image XObjects; litho paints
+    every image whose data runs to its `EI`, as remediation keeps them by
+    moving each to an image XObject (`fixer_inlinemove.go`).
+  - `imagecolour_2b`: PDFium paints the None images as poppler does, black
+    and grey, and none of the four JPX images (19200 from litho, 15714 from
+    poppler). The three renderers differ, and litho's reading is the
+    specification's: the None images paint nothing (8.6.6.4, 8.6.6.5), the
+    EP-field CIELab image converts to sRGB 0 223 255 from the samples 200 80
+    40 under its stated ranges and D50 illuminant, as a by-hand ISO/IEC
+    15444-2, M.11.7.4 conversion gives, and the e-sRGB fallback matches
+    poppler.
 - **`pageboxes_2b`.** litho renders the crop box as pdf.js reads it, 612 by
   792, and poppler 500 by 700 (see the section on this file).
 - **Pages written directly in `/Kids`.** ISO 32000-1, 7.7.3.2, Table 29 makes
