@@ -129,6 +129,8 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 	}
 	fonts := &fontLedger{}
 	opts.fonts = fonts
+	flat := &flattenLedger{}
+	opts.flattened = flat
 
 	// Classify violations by fixer. A disabled fixer claims nothing, so the
 	// violations it would have answered stay in the residual.
@@ -256,6 +258,7 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		FontsEmbedded:    fonts.embedded,
 		FontsJudged:      fontsJudged,
 		Flattened:        flattened,
+		FlattenedImages:  flat.images,
 	}, nil
 }
 

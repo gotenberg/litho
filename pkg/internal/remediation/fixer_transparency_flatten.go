@@ -18,6 +18,24 @@ import (
 // forbids ([fixTransparencyFlatten]), for [Options.Disabled].
 const FlattenFixer = "transparency-flatten"
 
+// remediationJPEGQuality is the JPEG quality a remediation encodes a
+// photographic composite at ([flatten.Options.JPEGQuality]): 90, at which a
+// composite keeps its chroma whole (see recolor.subsampleBelowQuality). A
+// composite of images and shadings is a photograph a lossless encoding holds
+// in several times the bytes, and every other composite stays lossless.
+//
+// # Corpus evidence
+//
+//   - govdocs (34 files): the PDF/A-1b outputs weigh 177.2 MB with every
+//     composite lossless and 162.9 MB with photographic ones as JPEG, 8 files
+//     holding one (thread_300_300860 17556952 -> 4109245 bytes); the sources
+//     weigh 45.5 MB. Most of the rest is whole pages mixing photographs with
+//     vector art, which stay lossless (thread_000_000737 39.6 MB,
+//     thread_400_400019 30.0 MB). No output draws apart from its source.
+//   - verapdf: 23 of 522 files hold a JPEG composite, and no output draws
+//     apart from its source that did not before.
+const remediationJPEGQuality = 90
+
 // flattenedPrefix starts the report line of a run that flattened a page.
 const flattenedPrefix = "flattened transparency"
 
@@ -63,7 +81,7 @@ func flattenedAny(lines []string) bool {
 //     each output the rule set the opaque normalization alone left, file by
 //     file, and neither reports 6.4 on any.
 //   - Same files: the outputs drawing apart from their source at the render
-//     cell's bars go from 83 to 35 (verapdf), 7 to 4 (litho) and 11 to 2
+//     cell's bars go from 83 to 35 (verapdf), 7 to 3 (litho) and 11 to 0
 //     (govdocs) in each of the four runs. Six verapdf files newly draw apart,
 //     at 72 dpi only: in PDF_A-2b 6-2-10-t01-fail-c and t03-fail-c, and their
 //     PDF/A-4 copies, the 300 dpi composite draws a 1-point stroke the 72 dpi
@@ -72,11 +90,13 @@ func flattenedAny(lines []string) bool {
 //     pattern of overlapping tiles, litho draws the output as the source at
 //     300 dpi, and poppler draws the source apart from litho.
 //   - litho flattentext_2b and govdocs thread_000_000146, thread_000_000340,
-//     thread_200_200744 and thread_400_400019: the integrity probe refuses the
-//     flattened outputs, text at constant alpha 0 now invisible and the images
-//     of whole regions composited into one, and the writer remediates them
-//     again without flattening, which writes what it wrote before.
-func fixTransparencyFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
+//     thread_200_200744 and thread_400_400019: the integrity probe refused
+//     their flattened outputs, text at constant alpha 0 now invisible and up
+//     to 90 images of a page composited, and the writer fell back to the
+//     opaque normalization. Counted as the probe now counts them, all five
+//     keep their flattening, veraPDF and litho report the rule set the
+//     fallback left, and their pages draw like the source.
+func fixTransparencyFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	if compliance.PDFAPart(profile) != 1 {
 		return nil, nil
 	}
@@ -90,7 +110,7 @@ func fixTransparencyFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc
 	}
 
 	snap := alloc.Snapshot()
-	report, err := flatten.Document(ctx, alloc, doc, pages, flatten.Options{})
+	report, err := flatten.Document(ctx, alloc, doc, pages, flatten.Options{JPEGQuality: remediationJPEGQuality})
 	refused := 0
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -104,6 +124,11 @@ func fixTransparencyFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc
 		report, refused, err = flattenEachPage(ctx, alloc, doc, pages)
 		if err != nil {
 			return nil, err
+		}
+	}
+	if opts.flattened != nil && report != nil {
+		for _, p := range report.Pages {
+			opts.flattened.images += p.ReplacedImages
 		}
 	}
 	return describeFlattening(report, refused), nil
@@ -121,7 +146,7 @@ func flattenEachPage(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			return nil, 0, fmt.Errorf("flattening transparency: %w", err)
 		}
 		snap := alloc.Snapshot()
-		report, err := flatten.Document(ctx, alloc, doc, []*document.Page{pg}, flatten.Options{})
+		report, err := flatten.Document(ctx, alloc, doc, []*document.Page{pg}, flatten.Options{JPEGQuality: remediationJPEGQuality})
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return nil, 0, fmt.Errorf("flattening transparency: %w", ctxErr)
@@ -151,12 +176,13 @@ func describeFlattening(report *flatten.Report, refused int) []string {
 	if report == nil || len(report.Pages) == 0 {
 		return nil
 	}
-	var regions, kept, approximated int
+	var regions, kept, approximated, jpeg int
 	dpi := 0.0
 	for _, p := range report.Pages {
 		regions += p.Regions
 		kept += p.KeptText
 		approximated += p.TextUnderTransparency + p.TransparentText
+		jpeg += p.JPEG
 		if p.Regions > 0 && (dpi == 0 || p.DPI < dpi) {
 			dpi = p.DPI
 		}
@@ -164,6 +190,9 @@ func describeFlattening(report *flatten.Report, refused int) []string {
 	line := fmt.Sprintf(flattenedPrefix+" on %d page(s)", len(report.Pages))
 	if regions > 0 {
 		line += fmt.Sprintf(": %d region(s) composited into images at %.0f dpi, %d text object(s) kept as text", regions, dpi, kept)
+		if jpeg > 0 {
+			line += fmt.Sprintf(", %d photographic image(s) as JPEG", jpeg)
+		}
 	}
 	if refused > 0 {
 		line += fmt.Sprintf("; %d page(s) refused, their transparency set opaque", refused)

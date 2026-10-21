@@ -2268,9 +2268,13 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 // composited into opaque images and the text kept as text. What flattening
 // leaves, annotation appearances, Type 3 glyphs that paint with transparency
 // and a page it refuses, is set opaque, which changes how it draws.
-// [RemediationReport.Fixed] says which. An output the integrity probe refuses
-// with its pages flattened is remediated again with every page's
-// transparency set opaque, and [RemediationReport.RolledBack] lists the
+// [RemediationReport.Fixed] says which. A composite of images and shadings
+// only is encoded as JPEG at quality 90 when that is smaller (see
+// [WithFlattenJPEGQuality]), every other one losslessly. The integrity probe
+// takes text flattening draws invisible, the text a constant alpha of 0 hid,
+// as kept, and counts each composite as the images it replaced. An output it
+// still refuses with its pages flattened is remediated again with every
+// page's transparency set opaque, and [RemediationReport.RolledBack] lists the
 // flattening.
 //
 // It is the last edit on the Writer (see [Writer]): it judges the document the
@@ -2283,37 +2287,40 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 		return r.ValidatePDFA(ctx, profile)
 	}
 	target := remediationTarget{method: "RemediatePDFA", pdfaClause: pdfaEncryptionClause(profile), xrefStreamClause: pdfaXRefStreamClause(profile)}
+	return w.remediateFlattening(ctx, target, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
+	})
+}
+
+// remediateFlattening runs [Writer.remediate] for a remediation whose engine,
+// run, may flatten transparency ([remediation.FlattenFixer]), and remediates
+// again with the flattening disabled when the output it flattened regresses.
+// The flattening runs before every other fixer, outside the content tier a
+// rollback discards, so no rollback reaches it, and the transparency is then
+// set opaque instead. The probe accounts for what flattening changes by
+// design (see [Writer.remediate]), so a regression here is a loss it does not
+// account for. [RemediationReport.RolledBack] lists the abandoned flattening.
+func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarget, tol RegressionTolerance, revalidate func(context.Context, *Reader) ([]error, error), run remediationRun) (*RemediationReport, error) {
 	var flattened []string
-	run := func(noFlatten bool) remediationRun {
-		return func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
-			if noFlatten {
-				disabled = append(slices.Clone(disabled), remediation.FlattenFixer)
-			}
-			rep, err := remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
-			if rep != nil && len(rep.Flattened) > 0 {
-				flattened = append(flattened, rep.Flattened...)
-			}
-			return rep, err
+	recording := func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+		rep, err := run(ctx, alloc, doc, disabled)
+		if rep != nil && len(rep.Flattened) > 0 {
+			flattened = append(flattened, rep.Flattened...)
 		}
+		return rep, err
 	}
-	report, err := w.remediate(ctx, target, cfg.tolerance, revalidate, run(false))
+	report, err := w.remediate(ctx, target, tol, revalidate, recording)
 	if !errors.Is(err, ErrRemediationBrokePDF) || len(flattened) == 0 {
 		return report, err
 	}
-	// The flattening of a PDF/A-1 remediation runs before every other fixer,
-	// outside the content tier a rollback discards, so an output the
-	// integrity probe refuses with it is remediated again without it, its
-	// transparency set opaque instead. The probe counts the text a viewer
-	// extracts and the images a page draws, and flattening moves both by
-	// design: text drawn at constant alpha 0 becomes invisible text (ISO
-	// 32000-1, 9.3.6), and the images a region takes are composited into one.
 	w.logger().Debug("remediate: output regressed with flattened transparency, remediating without flattening", slog.Any("err", err))
-	abandoned := slices.Clone(flattened)
-	report, err = w.remediate(ctx, target, cfg.tolerance, revalidate, run(true))
+	report, err = w.remediate(ctx, target, tol, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+		return run(ctx, alloc, doc, append(slices.Clone(disabled), remediation.FlattenFixer))
+	})
 	if err != nil {
 		return nil, err
 	}
-	report.RolledBack = dedupeFixes(append(abandoned, report.RolledBack...))
+	report.RolledBack = dedupeFixes(append(flattened, report.RolledBack...))
 	return report, nil
 }
 
@@ -2548,6 +2555,10 @@ type integritySnap struct {
 	// [probeIntegrity].
 	textLen    int
 	imageCount int
+	// invisible reports that textLen counts invisible text too
+	// ([WithInvisibleText]), as a remediation that flattened transparency
+	// measures it: see [Writer.remediate].
+	invisible bool
 }
 
 // probeIntegrity samples the observable surface area of a document: its
@@ -2588,7 +2599,13 @@ type integritySnap struct {
 //     .notdef. Weighed as lost text in bytes, it rolled back all eight CMap
 //     repairs at both levels.
 func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
-	snap := integritySnap{}
+	return probeIntegrityText(ctx, r, false)
+}
+
+// probeIntegrityText is [probeIntegrity], counting invisible text too when
+// invisible is set.
+func probeIntegrityText(ctx context.Context, r *Reader, invisible bool) (integritySnap, error) {
+	snap := integritySnap{invisible: invisible}
 	pages, err := r.PageCount(ctx)
 	if err != nil {
 		return snap, fmt.Errorf("page count: %w", err)
@@ -2598,7 +2615,11 @@ func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 		if err := ctx.Err(); err != nil {
 			return snap, err
 		}
-		text, extractErr := r.ExtractText(ctx, p, WithArtifacts(), withUnvaluedMarked())
+		opts := []ExtractTextOption{WithArtifacts(), withUnvaluedMarked()}
+		if invisible {
+			opts = append(opts, WithInvisibleText())
+		}
+		text, extractErr := r.ExtractText(ctx, p, opts...)
 		if extractErr == nil {
 			snap.textLen += utf8.RuneCountInString(text)
 		}
@@ -3018,6 +3039,26 @@ func (w *Writer) remediate(
 		w.requiredVersion = report.RequiredVersion
 	}
 
+	// Flattening transparency moves the probe's measures by design, and
+	// keeps what they stand for. Text drawn at constant alpha 0, which
+	// paints nothing, is drawn in rendering mode 3, which paints nothing
+	// either (ISO 32000-1, 9.3.6), and which the default extraction leaves
+	// out: text is then counted with invisible text on both sides. The
+	// images whose pixels a composite now holds are no longer images of the
+	// page: the baseline counts each composite as the images it replaced.
+	// Any other loss still regresses.
+	if len(report.Flattened) > 0 && baseErr == nil {
+		rebased, err := probeIntegrityText(ctx, w.reader, true)
+		if err := ctx.Err(); err != nil {
+			restorePreState()
+			return nil, fmt.Errorf("remediation canceled: %w", err)
+		}
+		if err == nil {
+			rebased.imageCount = max(0, rebased.imageCount-report.FlattenedImages)
+			baseline = rebased
+		}
+	}
+
 	// attemptResult tells an output that reopens, probes and revalidates
 	// from one that fails any of those, a regression candidate eligible for
 	// rollback.
@@ -3056,7 +3097,7 @@ func (w *Writer) remediate(
 		}
 		defer r2.Close()
 
-		probe, probeErr := probeIntegrity(ctx, r2)
+		probe, probeErr := probeIntegrityText(ctx, r2, baseline.invisible)
 		if probeErr != nil {
 			doc.Logger.Debug("remediate: post probe failed", slog.Any("err", probeErr))
 			return tmpPath, nil, integritySnap{}, attemptBroken, nil
@@ -3429,7 +3470,7 @@ func (w *Writer) writeRound(
 	}
 	defer r3.Close()
 
-	post, err := probeIntegrity(ctx, r3)
+	post, err := probeIntegrityText(ctx, r3, baseline.invisible)
 	if err != nil {
 		temps.remove(tmpPath)
 		return "", nil, "output failed the integrity probe", nil

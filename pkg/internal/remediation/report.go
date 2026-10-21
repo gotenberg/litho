@@ -52,4 +52,8 @@ type Report struct {
 	// transparency then set opaque instead, since the flattening runs before
 	// the content tier and no rollback reaches it.
 	Flattened []string
+	// FlattenedImages counts the images the pages list fewer once
+	// [FlattenFixer] composited them, net of the composites: the drop in the
+	// images a page lists the flattening accounts for.
+	FlattenedImages int
 }

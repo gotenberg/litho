@@ -53,6 +53,16 @@ type Options struct {
 	// unembedded although Fonts was set, for [Report.FontRefusals] and
 	// [Report.FontsEmbedded]. [remediate] sets it for its run.
 	fonts *fontLedger
+	// flattened collects what [fixTransparencyFlatten] did for
+	// [Report.FlattenedImages]. [remediate] sets it for its run.
+	flattened *flattenLedger
+}
+
+// flattenLedger is what one run of [fixTransparencyFlatten] did.
+type flattenLedger struct {
+	// images counts the images the pages list fewer, their pixels in the
+	// composites ([flatten.PageReport.ReplacedImages]).
+	images int
 }
 
 // fontLedger is what one run of [fixFontEmbed] did with the fonts it met.
