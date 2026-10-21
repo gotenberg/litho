@@ -110,7 +110,7 @@ func recode(ctx context.Context, data []byte, keepRestarts bool) ([]byte, bool, 
 			return nil, false, stats.restarts, nil //nolint:nilerr // A table that cannot be built leaves the image as it is.
 		}
 	}
-	enc := &encodeVisitor{tables: tables, coder: dcCoder{keepRestarts: keepRestarts}, out: make([]byte, 0, len(data))}
+	enc := &encodeVisitor{tables: tables, coder: dcCoder{keepRestarts: keepRestarts}, bitWriter: bitWriter{out: make([]byte, 0, len(data))}}
 	if _, err := walkSequential(ctx, data, enc); err != nil {
 		return nil, false, false, notOptimizable(err)
 	}
@@ -917,6 +917,14 @@ func tableFromSizes(size [257]int) (*codeTable, error) {
 	if total != len(t.values) {
 		return nil, fmt.Errorf("%w: %d codes for %d values", errNotOptimizable, total, len(t.values))
 	}
+	t.assignCodes()
+	return t, nil
+}
+
+// assignCodes generates the code of each value from the counts per code
+// length (T.81, C.1 and C.2): the codes of one length are consecutive, and
+// those of the next length continue one bit longer.
+func (t *codeTable) assignCodes() {
 	code, k := 0, 0
 	for l := 1; l <= maxCodeLength; l++ {
 		for range int(t.counts[l-1]) {
@@ -927,7 +935,6 @@ func tableFromSizes(size [257]int) (*codeTable, error) {
 		}
 		code <<= 1
 	}
-	return t, nil
 }
 
 // dhtSegment returns the DHT segment carrying the tables of t.
@@ -960,9 +967,7 @@ type encodeVisitor struct {
 	tables []scanTables
 	cur    scanTables
 	coder  dcCoder
-	out    []byte
-	acc    uint32
-	n      int
+	bitWriter
 }
 
 func (e *encodeVisitor) segment(seg []byte) {
@@ -1016,9 +1021,17 @@ func (e *encodeVisitor) endScan() { e.flush() }
 
 func (e *encodeVisitor) trailer(rest []byte) { e.out = append(e.out, rest...) }
 
-// put writes the n low bits of v, most significant first, stuffing a zero
-// byte after each 0xFF (T.81, F.1.2.3).
-func (e *encodeVisitor) put(v uint32, n int) {
+// bitWriter writes entropy-coded data (T.81, F.1.2.3): bits most
+// significant first, a zero byte stuffed after each 0xFF.
+type bitWriter struct {
+	out []byte
+	acc uint32
+	n   int
+}
+
+// put writes the n low bits of v, n at most 16, most significant first,
+// stuffing a zero byte after each 0xFF (T.81, F.1.2.3).
+func (e *bitWriter) put(v uint32, n int) {
 	e.acc = e.acc<<n | v&(1<<n-1)
 	e.n += n
 	for e.n >= 8 {
@@ -1033,7 +1046,7 @@ func (e *encodeVisitor) put(v uint32, n int) {
 }
 
 // flush pads the last byte with one bits (T.81, F.1.2.3).
-func (e *encodeVisitor) flush() {
+func (e *bitWriter) flush() {
 	if e.n > 0 {
 		e.put(1<<(8-e.n)-1, 8-e.n)
 	}

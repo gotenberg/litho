@@ -6,4 +6,7 @@
 // It tolerates damage that other readers render through, where a strict
 // decoder refuses the whole image: scan data that ends early, a component
 // identifier repeated in the frame, a height given by a DNL marker.
+//
+// [OptimizeHuffman] re-codes a sequential JPEG losslessly with optimal
+// Huffman tables, and [Encode] writes samples as a new baseline JPEG.
 package dct
