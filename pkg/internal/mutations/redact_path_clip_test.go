@@ -402,6 +402,26 @@ func TestRedactPageRegions_SplitsAFilledRuleIntoRectangles(t *testing.T) {
 	}
 }
 
+func TestRedactPageRegions_PaintsAThinRuleAlongTheRegionEdgeAsSeparateRectangles(t *testing.T) {
+	// A table rule under one unit thick along the region's top edge, reaching past
+	// it on both sides: it splits into a piece either side and a sliver above
+	// the cut. Painted as one path, renderers stop snapping it to whole pixels
+	// and draw the whole rule fainter outside the region (govdocs
+	// thread_400_400756), so each piece takes its own paint operator.
+	body := "78.6 593.52 384.84 -0.96 re f"
+	regions := [][4]float64{{153, 198, 459, 594}}
+	_, got := redactAndRead(t, "<< >>", body, regions)
+
+	assertClearedExactly(t, []byte(body), got, regions)
+	_, painted, ok := bytes.Cut(got, []byte("W* n"))
+	if n := bytes.Count(painted, []byte(" re")); !ok || n != 3 {
+		t.Fatalf("want the rule painted as three rectangles, got %d re:\n%s", n, got)
+	}
+	if n := bytes.Count(painted, []byte(" f")); n != 3 {
+		t.Errorf("want each piece filled on its own, got %d f:\n%s", n, got)
+	}
+}
+
 func TestRedactPageRegions_StrokesARectangleWithoutBridgingTheRegion(t *testing.T) {
 	// The outline's corner sits in the region. The stroke is broken at the
 	// region rather than bridged, so no segment of it crosses the region and

@@ -62,6 +62,20 @@ const strokeReachSlack = 1.0
 // inside the region to a sliver no shape can be read from.
 const fillCutInset = 0.5
 
+// splitSeamReach is the thickest, in page units, a piece of a split rectangle
+// across the cut may be for the pieces to be painted apart (see
+// [splitRectangle]): the seam between two pieces is then at most this long,
+// and lies at a corner of the region, the cut's inset included. Not
+// spec-mandated: two units are two pixels at 72 dpi, the band along a region's
+// edge that the corpus redact-render cell leaves unread.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400756.pdf page 2: a table rule 1 unit thick along a
+//     region's top edge, split on both axes and painted as one path, lost
+//     its snapping and drew grey across the table outside the region.
+const splitSeamReach = 2.0
+
 // clipOuterMargin pads the rectangle each clip pairs with its region, in page
 // units, beyond what the path can paint. Not spec-mandated: it only has to
 // keep the clip's outer edge clear of every mark, which the path's reach
@@ -1143,16 +1157,30 @@ func splitRectangle(r [4]float64, f cutFrame) (string, bool, bool) {
 	beside := part(ax0, ay0, math.Min(ax1, cx0), ay1)
 	beside = part(math.Max(ax0, cx1), ay0, ax1, ay1) || beside
 	mx0, mx1 := math.Max(ax0, cx0), math.Min(ax1, cx1)
-	across := part(mx0, ay0, mx1, math.Min(ay1, cy0))
-	across = part(mx0, math.Max(ay0, cy1), mx1, ay1) || across
+	below := part(mx0, ay0, mx1, math.Min(ay1, cy0))
+	above := part(mx0, math.Max(ay0, cy1), mx1, ay1)
+	across := below || above
 
 	// Pieces on one axis only, a rule the cut crosses, never touch, so each
 	// can be painted on its own: one path holding two rectangles is no
 	// rectangle to poppler either. Pieces on both axes share edges outside the
 	// cut, where painting them apart would leave an anti-aliased seam, so they
-	// stay one path.
+	// stay one path, unless every piece across the cut is no thicker than
+	// splitSeamReach: then the seams are that short, at the region's corners,
+	// while one path would cost the whole rule its snapping to whole pixels
+	// and draw it fainter along its length outside the region.
+	thin := true
+	for _, piece := range [][4]float64{{mx0, ay0, mx1, math.Min(ay1, cy0)}, {mx0, math.Max(ay0, cy1), mx1, ay1}} {
+		if piece[2] <= piece[0] || piece[3] <= piece[1] {
+			continue
+		}
+		p, q := apply(ctm, bezPt{piece[0], piece[1]}), apply(ctm, bezPt{piece[2], piece[3]})
+		if math.Min(math.Abs(q.x-p.x), math.Abs(q.y-p.y)) > splitSeamReach {
+			thin = false
+		}
+	}
 	sep := ""
-	if f.lone && (!beside || !across) {
+	if f.lone && (!beside || !across || thin) {
 		sep = f.paint + " "
 	}
 	return strings.Join(parts, sep), true, true
