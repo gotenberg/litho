@@ -362,10 +362,11 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 			info.transparent = info.transparent || s.painting(ctx, st, p, resources, depth, chain)
 			if boxes := m.PathBoxes(); len(boxes) > before {
 				pb := boxes[len(boxes)-1]
-				r := rectOf(pb.MinX, pb.MinY, pb.MaxX, pb.MaxY)
+				reach := 0.0
 				if p.stroke {
-					r = r.Outset(strokeReach(st, ctm))
+					reach = strokeReach(st, ctm)
 				}
+				r := pathBox(pb.MinX, pb.MinY, pb.MaxX, pb.MaxY, reach)
 				info.bounds = info.bounds.Union(r)
 			}
 			continue

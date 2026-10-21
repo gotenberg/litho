@@ -226,3 +226,16 @@ func TestFlattenLeavesAnOpaquePageAlone(t *testing.T) {
 		t.Errorf("report %+v, want no page changed", report)
 	}
 }
+
+// TestFlattenStrokedLine pins that a transparent stroked straight line, whose
+// path box has no area, is composited rather than removed as painting
+// nothing.
+func TestFlattenStrokedLine(t *testing.T) {
+	t.Parallel()
+	_, report := checkFlattened(t, fixture{
+		content: "0 0 1 rg 0 0 100 100 re f q /GS1 gs 1 0 0 RG 4 w 10 50 m 90 50 l S Q",
+	})
+	if len(report.Pages) != 1 || report.Pages[0].Regions != 1 {
+		t.Errorf("report %+v, want the line composited in one region", report)
+	}
+}

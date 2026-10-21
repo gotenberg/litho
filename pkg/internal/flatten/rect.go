@@ -69,6 +69,29 @@ func rectOf(x0, y0, x1, y1 float64) Rect {
 	return Rect{min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)}
 }
 
+// pathBox returns the box of a path whose corners are x0, y0 and x1, y1,
+// grown by reach on every side, the reach of its stroke when it is stroked.
+// A stroked straight line has a path box with no area and paints the area
+// its stroke covers (ISO 32000-2, 8.5.3.2), so the reach is added whatever
+// the box's area, where [Rect.Outset] leaves a box with none as it is. The
+// box is empty when a corner is not finite.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12579.pdf: its Ink annotations stroke straight lines at a
+//     constant alpha of 0.7. Drawn into the page, each was read as painting
+//     nothing and removed with no composite in its place, and page 2 lost its
+//     20 lines.
+func pathBox(x0, y0, x1, y1, reach float64) Rect {
+	r := rectOf(x0, y0, x1, y1)
+	for _, v := range []float64{x0, y0, x1, y1} {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return r
+		}
+	}
+	return Rect{r.MinX - reach, r.MinY - reach, r.MaxX + reach, r.MaxY + reach}
+}
+
 // transformRect returns the box of r's four corners through m.
 func transformRect(m geom.Matrix, r Rect) Rect {
 	corners := [4]geom.Point{{X: r.MinX, Y: r.MinY}, {X: r.MaxX, Y: r.MinY}, {X: r.MinX, Y: r.MaxY}, {X: r.MaxX, Y: r.MaxY}}

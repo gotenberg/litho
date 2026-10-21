@@ -320,10 +320,11 @@ func (w *walker) step(i int, op content.Operation) {
 	if p, ok := pathPaints(op.Operator); ok {
 		if boxes := w.m.PathBoxes(); len(boxes) > before && !w.inText {
 			pb := boxes[len(boxes)-1]
-			r := rectOf(pb.MinX, pb.MinY, pb.MaxX, pb.MaxY)
+			reach := 0.0
 			if p.stroke {
-				r = r.Outset(strokeReach(st, ctm))
+				reach = strokeReach(st, ctm)
 			}
+			r := pathBox(pb.MinX, pb.MinY, pb.MaxX, pb.MaxY, reach)
 			w.units = append(w.units, Unit{
 				Kind:        KindPath,
 				First:       w.pathStart,
