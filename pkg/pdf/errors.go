@@ -577,10 +577,12 @@ var (
 
 	// ErrTransparencyFlatteningRefused is returned by
 	// [Writer.FlattenTransparency] when a page cannot be flattened: its
-	// content does not parse, its regions do not settle within the passes
-	// litho allows them, its transparency does not fit the render pixel
-	// budget even at screen resolution, or it cannot be written back. The
-	// error names the page. The [Writer] is left as it was.
+	// regions do not settle within the passes litho allows them, its
+	// transparency does not fit the render pixel budget even at screen
+	// resolution, or it cannot be written back. The error names the page.
+	// The [Writer] is left as it was. A page whose content does not read is
+	// no refusal: it is left as it is and listed in
+	// [FlattenReport.SkippedPages].
 	ErrTransparencyFlatteningRefused = errors.New("transparency flattening refused")
 
 	// ErrInvalidLimits is returned, wrapped in an error naming the field, by

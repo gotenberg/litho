@@ -17,6 +17,9 @@ type flattenTransparencyResult struct {
 	// TransparentAnnotations counts the annotations left painting with
 	// transparency, which the command does not flatten.
 	TransparentAnnotations int `json:"transparentAnnotations"`
+	// SkippedPages lists the pages whose content does not read, left as
+	// they are.
+	SkippedPages []int `json:"skippedPages,omitempty"`
 }
 
 // flattenTransparencyPage is one page of the JSON report.
@@ -98,7 +101,12 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 
 // printFlattenTransparencyReport writes the report in format, text or json.
 func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file string, report *pdf.FlattenReport) int {
-	result := flattenTransparencyResult{File: file, Pages: []flattenTransparencyPage{}, TransparentAnnotations: report.TransparentAnnotations}
+	result := flattenTransparencyResult{
+		File:                   file,
+		Pages:                  []flattenTransparencyPage{},
+		TransparentAnnotations: report.TransparentAnnotations,
+		SkippedPages:           report.SkippedPages,
+	}
 	regions, approximated := 0, 0
 	for _, p := range report.Pages {
 		result.Pages = append(result.Pages, flattenTransparencyPage{
@@ -133,6 +141,9 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 	}
 	if approximated > 0 {
 		fmt.Fprintf(stdout, "Approximated %d text object(s): transparent text drawn opaque, or text drawn above the transparency that covered it\n", approximated)
+	}
+	if len(result.SkippedPages) > 0 {
+		fmt.Fprintf(stdout, "Left %d page(s) whose content does not read as they are: %v\n", len(result.SkippedPages), result.SkippedPages)
 	}
 	if result.TransparentAnnotations > 0 {
 		fmt.Fprintf(stdout, "Left %d annotation(s) painting with transparency: annotations are not flattened\n", result.TransparentAnnotations)

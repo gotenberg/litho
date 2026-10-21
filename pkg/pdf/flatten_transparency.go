@@ -66,6 +66,11 @@ type FlattenReport struct {
 	// transparency. Annotations are not flattened: [Writer.FlattenForm]
 	// first bakes form fields into the page content.
 	TransparentAnnotations int
+	// SkippedPages lists the 1-based numbers of the pages whose content does
+	// not read, a stream that does not decode or a reference to an object
+	// the file lacks: they are left as they are, their transparency
+	// included, as a viewer draws them.
+	SkippedPages []int
 }
 
 // FlattenTransparency removes the live transparency of every page (ISO
@@ -96,7 +101,8 @@ type FlattenReport struct {
 // temporary file first and flattened with the rest. Like every edit, it comes
 // before a remediation, after which it returns [ErrEditAfterRemediation]. A
 // page it cannot flatten fails it with [ErrTransparencyFlatteningRefused],
-// leaving the Writer as it was.
+// leaving the Writer as it was. A page whose content does not read is left
+// as it is and listed in [FlattenReport.SkippedPages].
 func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption) (_ *FlattenReport, err error) {
 	defer recoverToError(w.logger(), "Writer.FlattenTransparency", &err)
 
@@ -158,6 +164,9 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 		return nil, false, fmt.Errorf("%w: %w", ErrTransparencyFlatteningRefused, err)
 	}
 	report := &FlattenReport{TransparentAnnotations: result.TransparentAnnotations}
+	for _, i := range result.Skipped {
+		report.SkippedPages = append(report.SkippedPages, i+1)
+	}
 	for _, p := range result.Pages {
 		report.Pages = append(report.Pages, FlattenedPage{
 			Page:                  p.Page + 1,
