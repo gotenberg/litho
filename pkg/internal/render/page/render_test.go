@@ -212,7 +212,7 @@ func TestReportsUnsupported(t *testing.T) {
 	})
 	// Helvetica is not embedded and no provider serves it: a and b draw
 	// placeholders.
-	want := map[string]int{PlaceholderGlyph: 2, UnsupportedTilingPattern: 1, UnsupportedBlendMode: 1}
+	want := map[string]int{PlaceholderGlyph: 2, UnsupportedBlendMode: 1}
 	for k, n := range want {
 		if report.Unsupported[k] != n {
 			t.Errorf("%s: %d, want %d (report %v)", k, report.Unsupported[k], n, report.Unsupported)

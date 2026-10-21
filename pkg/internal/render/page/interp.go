@@ -40,8 +40,10 @@ type renderer struct {
 	shadings map[ast.PdfIndirectRef]*shade.Shading
 	patterns map[ast.PdfIndirectRef]*shade.Pattern
 
-	// colorCache keeps the colour converters of the render's page.
-	colorCache colorconv.Cache
+	// colorCache keeps the colour converters of the render's page. It is a
+	// pointer so the renderers a tiling pattern's cells run in share it, and
+	// copying a renderer copies no lock.
+	colorCache *colorconv.Cache
 	// transfers keeps the transfer functions compiled so far, by the value
 	// /TR or /TR2 states (maxTransferCache).
 	transfers map[string]*transfer
@@ -52,6 +54,8 @@ type renderer struct {
 	glyphs     map[glyphKey]glyph.Glyph
 	type3      map[glyphKey][]content.Operation
 	type3Depth int
+	// tiling holds the render's tiling patterns and tiles, made on first use.
+	tiling *tilingState
 }
 
 // scope is one content stream being run: the page's or a form's.

@@ -176,13 +176,12 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 	p := imgpaint.Params{Matrix: r.toDevice(), Interpolate: bool(interpolate), Opacity: surface.NewOpacity(st.FillAlpha), Clip: clipMask}
 
 	if isMask, _ := document.ResolveBool(r.ctx, r.doc, dict["ImageMask"]); isMask {
-		if st.Fill.Space.Family == graphics.FamilyPattern {
-			r.report.count(UnsupportedPatternMask)
-			return nil
-		}
 		img, err := pdfimage.DecodeMask(r.ctx, r.doc, name, stream)
 		if err != nil {
 			return r.imageFailed(err)
+		}
+		if st.Fill.Space.Family == graphics.FamilyPattern {
+			return r.imageFailed(r.patternStencil(s, imgpaint.StencilMask(img, bool(interpolate)), p, st))
 		}
 		conv, paints := r.colorFor(s, st.Fill.Space)
 		if !paints {

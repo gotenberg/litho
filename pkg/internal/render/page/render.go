@@ -10,6 +10,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/render/annot"
+	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
@@ -43,9 +45,6 @@ const (
 	// neither the document nor [Options.Fonts] supplies a program for
 	// (ISO 32000-1, 9.6.2.2 leaves a substitute to the reader).
 	PlaceholderGlyph = "placeholder glyph"
-	// UnsupportedTilingPattern counts fills and strokes with a tiling
-	// pattern (8.7.3), which paint nothing.
-	UnsupportedTilingPattern = "tiling pattern"
 	// UnsupportedSoftMask counts paintings under a soft mask (11.6.5.2),
 	// painted unmasked.
 	UnsupportedSoftMask = "soft mask"
@@ -55,9 +54,15 @@ const (
 	// UnsupportedGroup counts form XObjects that are transparency groups
 	// (11.6.6), painted as plain content.
 	UnsupportedGroup = "transparency group"
-	// UnsupportedPatternMask counts image masks painted with a pattern
-	// (8.9.6.2), which paint nothing.
-	UnsupportedPatternMask = "image mask in a pattern"
+	// UnsupportedAnnotation counts annotations with no appearance stream
+	// (ISO 32000-1, 12.5.5), which draw nothing: a viewer may build one from
+	// the annotation's other entries, litho does not.
+	UnsupportedAnnotation = "annotation without appearance"
+	// StaleAppearance counts widget annotations drawn from the appearance
+	// stream the file holds although the form's /NeedAppearances asks the
+	// viewer to construct a new one (ISO 32000-1, 12.7.2, Table 218): litho
+	// builds none, so it draws what is stored, possibly out of date.
+	StaleAppearance = "stale widget appearance"
 	// Skipped counts constructs the file damages: an image that does not
 	// decode, a shading or pattern that does not compile, a form past the
 	// form-depth budget or in a cycle. A viewer skips them too.
@@ -75,6 +80,11 @@ type Options struct {
 	// ([glyph.Options.Substitutes]); nil supplies none, and their glyphs
 	// draw as placeholders.
 	Fonts glyph.Provider
+	// Annotations selects the annotation appearances drawn over the page:
+	// those a viewer shows on screen ([annot.View], the zero value, as
+	// pdftoppm draws them) or those it prints ([annot.Print]), by the flags
+	// of ISO 32000-1, 12.5.3.
+	Annotations annot.Mode
 }
 
 // Report says what a render left out.
@@ -120,32 +130,36 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 		if fatal(err) {
 			return nil, report, fmt.Errorf("parsing page content: %w", err)
 		}
-		// A viewer draws a page whose content it cannot read as blank paper
-		// rather than failing the document.
+		// A viewer draws a page whose content it cannot read as blank paper,
+		// its annotations still over it, rather than failing the document.
 		report.count(Skipped)
 		doc.Logger.Debug("render: skipping page content", slog.Any("err", err))
-		return canvas, report, nil
+		ops = nil
 	}
 	m := graphics.NewMachine([4]float64{})
 	m.Doc = doc
 	r := &renderer{
-		ctx:       ctx,
-		doc:       doc,
-		page:      pg,
-		canvas:    canvas,
-		device:    g.Matrix,
-		budget:    budget,
-		clipLimit: clipBudgetShare * budget,
-		report:    &report,
-		m:         m,
-		clips:     []*clip{newClip(g.Width, g.Height)},
-		shadings:  make(map[ast.PdfIndirectRef]*shade.Shading),
-		patterns:  make(map[ast.PdfIndirectRef]*shade.Pattern),
-		fonts:     glyph.NewCache(doc, glyph.Options{Substitutes: opts.Fonts}),
-		glyphs:    make(map[glyphKey]glyph.Glyph),
-		type3:     make(map[glyphKey][]content.Operation),
+		ctx:        ctx,
+		doc:        doc,
+		page:       pg,
+		canvas:     canvas,
+		device:     g.Matrix,
+		budget:     budget,
+		clipLimit:  clipBudgetShare * budget,
+		report:     &report,
+		m:          m,
+		clips:      []*clip{newClip(g.Width, g.Height)},
+		shadings:   make(map[ast.PdfIndirectRef]*shade.Shading),
+		patterns:   make(map[ast.PdfIndirectRef]*shade.Pattern),
+		fonts:      glyph.NewCache(doc, glyph.Options{Substitutes: opts.Fonts}),
+		colorCache: &colorconv.Cache{},
+		glyphs:     make(map[glyphKey]glyph.Glyph),
+		type3:      make(map[glyphKey][]content.Operation),
 	}
 	if err := r.run(ops, pg.Resources, g.Matrix, 0); err != nil {
+		return nil, report, err
+	}
+	if err := r.annotations(g, opts.Annotations); err != nil {
 		return nil, report, err
 	}
 	return canvas, report, nil

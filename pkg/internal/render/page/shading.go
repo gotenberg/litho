@@ -94,7 +94,7 @@ func (r *renderer) compileShading(obj ast.PdfObject) (*shade.Shading, error) {
 // patternFill paints cov with the pattern colour c (ISO 32000-1, 8.7.3.1). A
 // shading pattern paints its shading through the pattern matrix, which maps
 // into the default space of the stream the pattern resource belongs to; a
-// tiling pattern is counted and paints nothing yet.
+// tiling pattern paints its cells ([renderer.tilingFill]).
 func (r *renderer) patternFill(s *scope, cov *raster.Coverage, c graphics.Color, a float64) error {
 	if c.Pattern == "" {
 		// 8.6.8: a Pattern space with no pattern selected paints nothing.
@@ -114,8 +114,7 @@ func (r *renderer) patternFill(s *scope, cov *raster.Coverage, c graphics.Color,
 		return nil
 	}
 	if pat == nil {
-		r.report.count(UnsupportedTilingPattern)
-		return nil
+		return r.tilingFill(s, cov, c, a, obj)
 	}
 	conv, paints := r.colorForObject(s, pat.Shading().ColorSpace())
 	if !paints {
@@ -167,7 +166,7 @@ func (r *renderer) compilePattern(obj ast.PdfObject) (*shade.Pattern, error) {
 	}
 	switch kind {
 	case patternTypeTiling:
-		return nil, nil //nolint:nilnil // nil marks a tiling pattern, which the caller counts
+		return nil, nil //nolint:nilnil // nil marks a tiling pattern, which the caller paints
 	case patternTypeShading:
 	default:
 		return nil, fmt.Errorf("/PatternType %d is neither 1 nor 2", kind)

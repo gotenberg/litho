@@ -23,7 +23,7 @@ func (fallbackConverter) RGB([]float64) (r, g, b float32) {
 // output intents replace the document's (ISO 32000-2, 14.11.5), and the
 // render's cache.
 func (r *renderer) colorOptions() colorconv.Options {
-	return colorconv.Options{Intent: r.m.Current().RenderingIntent, Page: r.page.Dict, Cache: &r.colorCache}
+	return colorconv.Options{Intent: r.m.Current().RenderingIntent, Page: r.page.Dict, Cache: r.colorCache}
 }
 
 // colorFor returns the converter of the colour space a fill or stroke colour
