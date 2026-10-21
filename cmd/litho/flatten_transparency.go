@@ -34,6 +34,7 @@ type flattenTransparencyPage struct {
 	GroupRemoved          bool    `json:"groupRemoved,omitempty"`
 	Annotations           int     `json:"annotations,omitempty"`
 	EmptiedAnnotations    int     `json:"emptiedAnnotations,omitempty"`
+	JPEGImages            int     `json:"jpegImages,omitempty"`
 }
 
 func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -45,12 +46,13 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 	format := fs.String("f", "text", "Report format: text or json")
 	dpi := fs.Float64("dpi", 300, "Resolution transparent regions are composited at, in pixels per inch")
 	printed := fs.Bool("printed-annotations", false, "Draw every printed annotation into the page, not only those painting with transparency")
+	jpegQuality := fs.Int("jpeg-quality", 0, "Encode a composite of images and shadings only as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every composite lossless)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	if fs.NArg() < 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho flatten-transparency <file> [--dpi N] [--printed-annotations] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho flatten-transparency <file> [--dpi N] [--printed-annotations] [--jpeg-quality Q] -o out.pdf")
 		return exitError
 	}
 	if *format != "text" && *format != "json" {
@@ -73,7 +75,7 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 
 	// Before the output file exists: a refused flattening leaves nothing
 	// behind.
-	opts := []pdf.FlattenOption{pdf.WithFlattenDPI(*dpi)}
+	opts := []pdf.FlattenOption{pdf.WithFlattenDPI(*dpi), pdf.WithFlattenJPEGQuality(*jpegQuality)}
 	if *printed {
 		opts = append(opts, pdf.WithFlattenPrintedAnnotations())
 	}
@@ -127,6 +129,7 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 			GroupRemoved:          p.GroupRemoved,
 			Annotations:           p.Annotations,
 			EmptiedAnnotations:    p.EmptiedAnnotations,
+			JPEGImages:            p.JPEGImages,
 		})
 		regions += p.Regions
 		annotations += p.Annotations
@@ -149,6 +152,9 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 		}
 		fmt.Fprintf(stdout, "Page %d: %d region(s) at %g dpi, %d object(s) rasterized, %d text object(s) kept as text\n",
 			p.Page, p.Regions, p.DPI, p.Rasterized, p.KeptText)
+		if p.JPEGImages > 0 {
+			fmt.Fprintf(stdout, "Page %d: %d composite(s) encoded as JPEG\n", p.Page, p.JPEGImages)
+		}
 	}
 	if annotations > 0 {
 		fmt.Fprintf(stdout, "Drew %d annotation(s) into the page content\n", annotations)

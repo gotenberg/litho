@@ -18,8 +18,9 @@ type FlattenOption func(*flattenOpts)
 
 // flattenOpts holds what the [FlattenOption] values set.
 type flattenOpts struct {
-	dpi     float64
-	printed bool
+	dpi         float64
+	printed     bool
+	jpegQuality int
 }
 
 // WithFlattenDPI composites transparent regions at dpi pixels per inch.
@@ -39,6 +40,21 @@ func WithFlattenDPI(dpi float64) FlattenOption {
 // which annotations stay as they are.
 func WithFlattenPrintedAnnotations() FlattenOption {
 	return func(o *flattenOpts) { o.printed = true }
+}
+
+// WithFlattenJPEGQuality encodes a photographic composite as a baseline JPEG
+// (ITU-T T.81) at quality q, 1 to 100, on the scale of the Independent JPEG
+// Group's libjpeg, with chroma sampled at half resolution below 90, as
+// [WithJPEGQuality] encodes a converted image. A composite is photographic
+// when its region paints only images and shadings, no filled or stroked path
+// and no text, whose sharp edges JPEG would blur, and its pixels hold at least
+// 256 colours. A composite Flate holds in no more bytes stays lossless. A
+// region mixing a photograph with vector art, a whole page often, stays
+// lossless whole. By default every
+// composite is encoded losslessly under FlateDecode. A q outside 1 to 100
+// makes [Writer.FlattenTransparency] fail with [ErrInvalidFlattenOptions].
+func WithFlattenJPEGQuality(q int) FlattenOption {
+	return func(o *flattenOpts) { o.jpegQuality = q }
 }
 
 // FlattenedPage describes what [Writer.FlattenTransparency] did to one page.
@@ -76,6 +92,9 @@ type FlattenedPage struct {
 	// removed with nothing drawn in its place.
 	Annotations        int
 	EmptiedAnnotations int
+	// JPEGImages counts the composites encoded as JPEG
+	// ([WithFlattenJPEGQuality]).
+	JPEGImages int
 }
 
 // FlattenReport describes what [Writer.FlattenTransparency] did.
@@ -172,6 +191,9 @@ func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption)
 	}
 	if !(o.dpi > 0) || math.IsInf(o.dpi, 0) {
 		return nil, fmt.Errorf("%w: resolution %v dpi", ErrInvalidFlattenOptions, o.dpi)
+	}
+	if o.jpegQuality < 0 || o.jpegQuality > 100 {
+		return nil, fmt.Errorf("%w: JPEG quality %d, outside 1 to 100", ErrInvalidFlattenOptions, o.jpegQuality)
 	}
 
 	// The renderer reads the document, not the edits queued on it, so
@@ -348,7 +370,7 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 	}
 	seedAllocator(alloc, w.rewriteOverrides)
 	staged := alloc.Writes()
-	result, err := flatten.Document(ctx, alloc, doc, pages, flatten.Options{DPI: o.dpi})
+	result, err := flatten.Document(ctx, alloc, doc, pages, flatten.Options{DPI: o.dpi, JPEGQuality: o.jpegQuality})
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
 			return nil, false, err
@@ -369,6 +391,7 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 			TextUnderTransparency: p.TextUnderTransparency,
 			TransparentText:       p.TransparentText,
 			GroupRemoved:          p.GroupRemoved,
+			JPEGImages:            p.JPEG,
 		})
 	}
 	if alloc.Writes() == staged {

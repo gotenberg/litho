@@ -48,6 +48,13 @@ const pixelEpsilon = 1e-6
 type Options struct {
 	// DPI is the resolution regions are composited at; 0 is [DefaultDPI].
 	DPI float64
+	// JPEGQuality, 1 to 100, encodes a photographic composite as a baseline
+	// JPEG at that quality (ITU-T T.81): one whose region paints only
+	// images and shadings, no filled or stroked path and no text, and whose
+	// pixels hold many colours, unless Flate holds it in no more bytes (see
+	// [flattener.encodeComposite]). 0 keeps every composite lossless under
+	// Flate.
+	JPEGQuality int
 }
 
 // PageReport says what [Document] did to one page.
@@ -73,6 +80,13 @@ type PageReport struct {
 	TransparentText int
 	// GroupRemoved reports that the page's transparency group was removed.
 	GroupRemoved bool
+	// Composites counts the images drawn for the regions, and JPEG those
+	// of them encoded as JPEG ([Options.JPEGQuality]).
+	Composites, JPEG int
+	// ReplacedImages counts the images the page lists fewer, as
+	// [image.ExtractImagesRecursive] lists them: those whose pixels a
+	// composite now holds, net of the composites.
+	ReplacedImages int
 }
 
 // Report says what [Document] did.
@@ -106,6 +120,8 @@ type flattener struct {
 	doc   *document.Document
 	alloc *writer.ObjAllocator
 	dpi   float64
+	// quality is [Options.JPEGQuality].
+	quality int
 	// srgb is the ICC profile stream every image's colour space names.
 	srgb ast.PdfObject
 	// states maps a graphics state dictionary's object number to its copy
@@ -139,12 +155,16 @@ func Document(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 	if !(dpi > 0) || math.IsInf(dpi, 0) {
 		return nil, fmt.Errorf("%w: resolution %v dpi", ErrInvalidOptions, dpi)
 	}
+	if opts.JPEGQuality < 0 || opts.JPEGQuality > 100 {
+		return nil, fmt.Errorf("%w: JPEG quality %d, outside 1 to 100", ErrInvalidOptions, opts.JPEGQuality)
+	}
 	f := &flattener{
-		doc:    doc,
-		alloc:  alloc,
-		dpi:    dpi,
-		states: make(map[int]ast.PdfObject),
-		forms:  make(map[copyKey]ast.PdfIndirectRef),
+		doc:     doc,
+		alloc:   alloc,
+		dpi:     dpi,
+		quality: opts.JPEGQuality,
+		states:  make(map[int]ast.PdfObject),
+		forms:   make(map[copyKey]ast.PdfIndirectRef),
 
 		ungrouped: make(map[int]ast.PdfObject),
 		patterns:  make(map[patternKey]ast.PdfObject),
@@ -233,11 +253,16 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 		pr.Regions, pr.DPI = len(a.Regions), dpi
 		cover := &coverage{f: f, pg: pg, g: g, dpi: dpi, result: res}
 		for _, r := range a.Regions {
-			img, ok, err := f.regionImage(res, g, a.crop, r.Box, xobjects)
+			photo := f.quality > 0 && f.photoUnits(ctx, a, ops, r)
+			img, ok, err := f.regionImage(ctx, res, g, a.crop, r.Box, xobjects, photo)
 			if err != nil {
 				return pr, false, err
 			}
 			if ok {
+				pr.Composites++
+				if img.jpeg {
+					pr.JPEG++
+				}
 				e := edit(r.Insert)
 				e.before = append(e.before, f.drawImage(a.positions[r.Insert], r.Box, img.name, img.matrix)...)
 				n, err := cover.hideCovered(ctx, a, r, img, edit)
@@ -315,6 +340,7 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 	if len(xobjects) > 0 {
 		resources["XObject"] = xobjects
 	}
+	pr.ReplacedImages = f.droppedImages(ctx, pg.DrawResources, resources)
 	out["Resources"] = resources
 	if pr.GroupRemoved {
 		// ISO 32000-2, 11.6.6: the group only sets how the page's
@@ -387,6 +413,8 @@ type regionImg struct {
 	name   ast.PdfName
 	matrix geom.Matrix
 	px     image.Rectangle
+	// jpeg reports a composite encoded as JPEG.
+	jpeg bool
 }
 
 // regionImage crops box from canvas into a new image XObject named in
@@ -398,7 +426,7 @@ type regionImg struct {
 // are what the page's edge leaves of a pixel. Drawn at another resolution, a
 // composite holding them reaches past the edge the page's own content stops
 // at.
-func (f *flattener) regionImage(res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict) (regionImg, bool, error) {
+func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict, photo bool) (regionImg, bool, error) {
 	size := res.Group.Bounds().Size()
 	dev := transformRect(g.Matrix, box)
 	paper := transformRect(g.Matrix, crop)
@@ -411,13 +439,9 @@ func (f *flattener) regionImage(res *page.Result, g page.Geometry, crop, box Rec
 	}
 	w, h := x1-x0, y1-y0
 	samples, space := f.compositeSamples(res, image.Rect(x0, y0, x1, y1))
-	var buf bytes.Buffer
-	zw := zlib.NewWriter(&buf)
-	if _, err := zw.Write(samples); err != nil {
-		return regionImg{}, false, fmt.Errorf("compressing a composite: %w", err)
-	}
-	if err := zw.Close(); err != nil {
-		return regionImg{}, false, fmt.Errorf("compressing a composite: %w", err)
+	data, filterName, err := f.encodeComposite(ctx, samples, w, h, len(samples)/(w*h), photo)
+	if err != nil {
+		return regionImg{}, false, err
 	}
 	ref := f.alloc.Alloc(ast.NewStream(ast.PdfDict{
 		"Type":             ast.PdfName("XObject"),
@@ -426,9 +450,9 @@ func (f *flattener) regionImage(res *page.Result, g page.Geometry, crop, box Rec
 		"Height":           ast.PdfInt(h),
 		"ColorSpace":       space,
 		"BitsPerComponent": ast.PdfInt(8),
-		"Filter":           ast.PdfName("FlateDecode"),
-		"Length":           ast.PdfInt(buf.Len()),
-	}, buf.Bytes()))
+		"Filter":           ast.PdfName(filterName),
+		"Length":           ast.PdfInt(len(data)),
+	}, data))
 	name := f.newName(xobjects, "FlatIm")
 	xobjects[name] = ref
 	inv, ok := g.Matrix.Invert()
@@ -438,7 +462,7 @@ func (f *flattener) regionImage(res *page.Result, g page.Geometry, crop, box Rec
 	// The unit square's bottom edge is the image's last row (ISO 32000-2,
 	// 8.9.4), the bottom of the pixels in device space, whose y grows down.
 	unit := geom.Matrix{float64(w), 0, 0, -float64(h), float64(x0), float64(y1)}
-	return regionImg{name: name, matrix: unit.Mul(inv), px: image.Rect(x0, y0, x1, y1)}, true, nil
+	return regionImg{name: name, matrix: unit.Mul(inv), px: image.Rect(x0, y0, x1, y1), jpeg: filterName == "DCTDecode"}, true, nil
 }
 
 // compositeSamples returns the 8-bit samples of the composite res holds over

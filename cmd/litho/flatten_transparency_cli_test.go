@@ -64,6 +64,19 @@ func TestFlattenTransparency_CompositesAndKeepsText(t *testing.T) {
 	}
 }
 
+func TestFlattenTransparency_RefusesABadJPEGQuality(t *testing.T) {
+	t.Parallel()
+	src := writeTempPDF(t, transparentCLIPDF())
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(), []string{"flatten-transparency", "--jpeg-quality", "101", "-o", out, src}, &stdout, &stderr); rc != exitError {
+		t.Fatalf("exit %d, want %d", rc, exitError)
+	}
+	if !strings.Contains(stderr.String(), "JPEG quality 101") {
+		t.Errorf("stderr %q", stderr.String())
+	}
+}
+
 func TestFlattenTransparency_RefusesABadResolution(t *testing.T) {
 	t.Parallel()
 	src := writeTempPDF(t, transparentCLIPDF())

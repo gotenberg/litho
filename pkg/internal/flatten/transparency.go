@@ -172,6 +172,9 @@ type contentInfo struct {
 	// the text does not reproduce exactly: its colours composited over the
 	// paper, which the form's other content may not be, or dropped.
 	textTransparent bool
+	// vector reports painting a path or showing text somewhere: content
+	// whose edges a composite holds sharp, which JPEG blurs and rings.
+	vector bool
 }
 
 // scanner reads what form XObjects and tiling patterns paint, each object
@@ -367,6 +370,7 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 		}
 		st := m.Current()
 		if p, ok := pathPaints(op.Operator); ok {
+			info.vector = info.vector || p.fill || p.stroke
 			info.transparent = info.transparent || s.painting(ctx, st, p, resources, depth, chain)
 			if boxes := m.PathBoxes(); len(boxes) > before {
 				pb := boxes[len(boxes)-1]
@@ -381,7 +385,7 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 		}
 		switch {
 		case showText(op.Operator):
-			info.text, info.unbounded = true, true
+			info.text, info.unbounded, info.vector = true, true, true
 			if s.painting(ctx, st, textPaints(st.Text.Tmode), resources, depth, chain) {
 				info.transparent = true
 				outcome := s.textOutcome(ctx, st, resources)
@@ -410,6 +414,7 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 				info.textTransparent = info.textTransparent || inner.textTransparent
 				info.group = info.group || inner.group
 				info.states = info.states || inner.states
+				info.vector = info.vector || inner.vector
 				info.transparent = info.transparent || inner.transparent || stateTransparent(st, paintBoth)
 			}
 		}
