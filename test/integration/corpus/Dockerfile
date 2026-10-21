@@ -280,6 +280,7 @@ RUN chmod +x entrypoint.sh \
 # key names only: every value comes from the build arguments, and a key
 # with no value (a dropped digest, a local-tool pin) is left out.
 ARG VERAPDF_IMAGE_DIGEST
+ARG NODE_VERSION
 ARG NODE_DEBIAN_RELEASE
 ARG NODE_IMAGE_DIGEST
 ARG VERAPDF_CORPUS_REVISION
@@ -290,6 +291,13 @@ ARG GOVDOCS_THREADS
 ARG POPPLER_SHA256
 ARG POPPLER_DEBIAN_RELEASE
 ARG POPPLER_DEBIAN_IMAGE_DIGEST
+ARG POPPLER_DATA_VERSION
+ARG POPPLER_DATA_SHA256
+ARG NOTO_CJK_SANS_VERSION
+ARG NOTO_SANS_JP_SHA256
+ARG NOTO_SANS_KR_SHA256
+ARG NOTO_SANS_SC_SHA256
+ARG NOTO_SANS_TC_SHA256
 COPY versions.env /opt/litho/versions.pinned.env
 RUN sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' /opt/litho/versions.pinned.env \
   | while read -r key; do \

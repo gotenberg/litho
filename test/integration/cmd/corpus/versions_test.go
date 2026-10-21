@@ -341,6 +341,55 @@ func TestDockerfileDeclaresEveryImagePinWithoutDefault(t *testing.T) {
 	}
 }
 
+// TestDockerfileFinalStageRecordsEveryStagePin pins that the image's last
+// stage declares every pin a provisioning stage or a corpus source records.
+// /opt/litho/versions.env, which the entrypoint writes into each stage's
+// record, is built in that stage from the build arguments it declares, and a
+// build argument is scoped to the stage that declares it: a pin declared only
+// in an earlier stage records nothing, and every golden it covers reads stale
+// ("provisioned with POPPLER_DATA_VERSION=(none)") on the next run.
+func TestDockerfileFinalStageRecordsEveryStagePin(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile(filepath.Join(corpusSourceDir, "Dockerfile"))
+	if err != nil {
+		t.Fatalf("read Dockerfile: %v", err)
+	}
+	lines := strings.Split(string(data), "\n")
+	last := -1
+	for i, l := range lines {
+		if strings.HasPrefix(l, "FROM ") {
+			last = i
+		}
+	}
+	if last < 0 {
+		t.Fatal("the Dockerfile has no FROM line, so it was not read")
+	}
+	argLine := regexp.MustCompile(`^ARG\s+([A-Z][A-Z0-9_]*)`)
+	declared := make(map[string]bool)
+	for _, l := range lines[last:] {
+		if m := argLine.FindStringSubmatch(l); m != nil {
+			declared[m[1]] = true
+		}
+	}
+	recorded := make(map[string]bool)
+	for _, table := range []map[string][]string{stagePins, sourcePins} {
+		for _, pins := range table {
+			for _, p := range pins {
+				recorded[p] = true
+			}
+		}
+	}
+	if len(recorded) < 10 {
+		t.Fatalf("collected only %d recorded pins: %v", len(recorded), recorded)
+	}
+	for p := range recorded {
+		if !declared[p] {
+			t.Errorf("a stage records %s, but the Dockerfile's final stage declares no ARG for it", p)
+		}
+	}
+}
+
 // TestEntrypointRecordsEveryGoldenDir checks that the entrypoint writes a
 // version record for every golden directory a manifest declares, and that
 // stagePins knows which pins each depends on. A directory with no record
