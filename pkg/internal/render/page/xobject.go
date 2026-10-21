@@ -196,7 +196,7 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 	formToDevice := r.toDevice()
 
 	bp := boxPath(formToDevice, box)
-	c, err := r.clip().withPath(bp, raster.NonZero, r.width, r.height, r.budget)
+	c, err := r.clip().withPath(bp, raster.NonZero, true, r.width, r.height, r.budget)
 	if err != nil {
 		if fatal(err) {
 			return err

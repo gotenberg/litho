@@ -436,7 +436,7 @@ func (r *renderer) paintPath(s *scope, operator string) error {
 	if !s.clipSet {
 		return nil
 	}
-	c, err := r.clip().withPath(s.path, s.clipRule, r.width, r.height, r.budget)
+	c, err := r.clip().withPath(s.path, s.clipRule, true, r.width, r.height, r.budget)
 	if err != nil {
 		if fatal(err) {
 			return err

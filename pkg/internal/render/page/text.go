@@ -86,7 +86,7 @@ func (r *renderer) endText(s *scope) error {
 	if !t.clipped {
 		return nil
 	}
-	c, err := r.clip().withPath(t.clip, raster.NonZero, r.width, r.height, r.budget)
+	c, err := r.clip().withPath(t.clip, raster.NonZero, true, r.width, r.height, r.budget)
 	if err != nil {
 		if fatal(err) {
 			return err

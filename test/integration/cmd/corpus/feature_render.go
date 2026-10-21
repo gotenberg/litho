@@ -175,10 +175,10 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //   - pdfjs bug1978317: poppler refuses page 1, its /Annots past its 32768
 //     cap, and writes a 1 by 1 golden. The annotations are borderless links
 //     (/BS /W 0) that draw nothing. With them removed poppler draws the page,
-//     and litho differs by 6951 pixels (1.43%, 15.9% of the ink): 3-point
-//     glyphs FreeType hints onto other rows, and underlines a half-pixel
-//     clip cuts, which Splash moves into the clip and litho paints at half
-//     coverage.
+//     and litho matches it (0 pixels differ). Before litho rounded a
+//     clipping rectangle to whole rows as Splash does, 6951 pixels (1.43%,
+//     15.9% of the ink) differed: underlines a half-pixel clip cuts, which
+//     litho painted at half coverage.
 //   - pdfjs bitmap-halftone-skip-grid-template2, issue17871_top_right: JBIG2
 //     halftone regions poppler draws as nothing; bitmap-refine-tpgron: a
 //     JBIG2 refinement with TPGRON poppler garbles. litho draws the test

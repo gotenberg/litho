@@ -474,7 +474,7 @@ func (r *renderer) drawCell(s *scope, tp *tilingPattern, resources ast.PdfDict, 
 	bp.LineTo(cell.Apply(b.Max))
 	bp.LineTo(cell.Apply(geom.Point{X: b.Min.X, Y: b.Max.Y}))
 	bp.Close()
-	c, err := r.clip().withPath(bp, raster.NonZero, r.width, r.height, r.budget)
+	c, err := r.clip().withPath(bp, raster.NonZero, false, r.width, r.height, r.budget)
 	if err != nil {
 		if fatal(err) {
 			return err

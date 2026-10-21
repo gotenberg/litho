@@ -85,11 +85,54 @@ func (c *clip) intersectRect(r geom.Rect) *clip {
 	return out
 }
 
+// rowSnapTolerance is how far, in device pixels, a clipping rectangle's edge
+// may lie past a row boundary and still round to it, so a rectangle that
+// sits on whole rows but went through a matrix keeps them rather than
+// gaining a row from the rounding error.
+const rowSnapTolerance = 1e-6
+
+// snapRows returns r with its top and bottom moved outward to whole device
+// rows, as poppler clips a rectangle. ISO 32000-1, 8.5.4 makes the clipping
+// path an exact region and leaves its rasterisation to the renderer; this is
+// that convention, not a spec rule. Splash (SplashClip::clipToRect) keeps
+// the rows floor(top) to ceil(bottom) whole and cuts columns at sub-pixel
+// precision (SplashClip::clipAALine), and PDFium
+// (CFX_AggDeviceDriver::SetClip_PathFill, CFX_FloatRect::GetOuterRect)
+// rounds both outward to whole pixels. The two agree on the rows, so litho
+// rounds them and keeps the columns exact, poppler's reading. A rectangle
+// with no height keeps none: `0 0 0 0 re W n` clips everything away.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1978317, its /Annots removed so poppler draws it: 0.5-point
+//     underlines under a clip half a pixel tall, which poppler paints solid
+//     and exact coverage painted at half strength. 6951 pixels differed
+//     from poppler, 0 do.
+//   - govdocs, litho, pdfjs: 31 of 641 render-cell pages move. 20 come
+//     closer to poppler (govdocs thread_200_200148 pages 1 and 2: 3951 and
+//     3055 pixels differ, then 2037 and 1331), 7 keep their count, 4 move
+//     away by 1 to 6 pixels; no page, flatten or redact-render verdict
+//     changes.
+func snapRows(r geom.Rect) geom.Rect {
+	if !(r.Max.Y > r.Min.Y) {
+		return r
+	}
+	r.Min.Y = math.Floor(r.Min.Y + rowSnapTolerance)
+	r.Max.Y = math.Ceil(r.Max.Y - rowSnapTolerance)
+	return r
+}
+
 // withPath returns c narrowed to the device-space path p filled with rule
 // (ISO 32000-1, 8.5.4): a rectangle narrows the rectangle, any other shape
-// makes a mask of the intersection.
-func (c *clip) withPath(p geom.Path, rule raster.FillRule, width, height int, budget int64) (*clip, error) {
+// makes a mask of the intersection. With snap, a rectangle first takes
+// whole rows ([snapRows]), as a viewer clips to a clipping path or a form's
+// bounding box; a pattern cell keeps its exact box, so the cells of a tiling
+// meet without overlapping.
+func (c *clip) withPath(p geom.Path, rule raster.FillRule, snap bool, width, height int, budget int64) (*clip, error) {
 	if r, ok := axisRect(p); ok {
+		if snap {
+			r = snapRows(r)
+		}
 		return c.intersectRect(r), nil
 	}
 	cur, err := c.mask1(width, height, budget)
