@@ -50,6 +50,18 @@ outline-goldens: ## Regenerate the TrueType and CFF outline goldens with the fon
 	for dir in $(OUTLINE_GOLDENS); do "$$venv/bin/python" -I "$$dir/gen_outlines_golden.py"; done; \
 	npx prettier --write $(addsuffix /outlines_golden.json,$(OUTLINE_GOLDENS))
 
+ICC_GOLDENS := pkg/internal/graphics/icc/testdata
+
+.PHONY: icc-goldens
+icc-goldens: ## Regenerate the ICC transform goldens with the Pillow (littleCMS) release test/integration/corpus/versions.env pins (an env var of the same name overrides it)
+	@set -e; \
+	version="$${PILLOW_VERSION:-$$(sed -n 's/^PILLOW_VERSION=//p' test/integration/corpus/versions.env)}"; \
+	venv="$$(mktemp -d)"; trap 'rm -rf "$$venv"' EXIT; \
+	python3 -m venv "$$venv"; \
+	"$$venv/bin/pip" install --quiet --disable-pip-version-check "pillow==$$version"; \
+	"$$venv/bin/python" -I $(ICC_GOLDENS)/gen_transform_golden.py; \
+	npx prettier --write $(ICC_GOLDENS)/transform_golden.json
+
 CORPUS_RUN_FLAGS :=
 ifdef CORPUS_JSON_OUTPUT
 CORPUS_RUN_FLAGS += --format=json
@@ -85,7 +97,7 @@ corpus-init: ## Provision missing corpora via Docker at the versions test/integr
 	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
 
 .PHONY: corpus-tools
-corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig, pikepdf and fontTools with the pinned versions
+corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig, pikepdf, fontTools and Pillow with the pinned versions
 	go run ./test/integration/cmd/corpus tools
 
 .PHONY: corpus-baseline

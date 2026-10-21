@@ -64,17 +64,18 @@ var digestPins = map[string][]string{
 }
 
 // localToolPins are the pins of tools the host runs rather than the image:
-// the live checks, the litho fixture builders and the outline golden
+// the live checks, the litho fixture builders and the outline and ICC golden
 // generators use them, and `corpus tools` compares them. They are not build
-// arguments. POPPLER_VERSION is not one of
-// them although `corpus tools` compares the host's pdfsig against it: the
-// image builds the same release for the render goldens.
+// arguments. POPPLER_VERSION is not one of them although `corpus tools`
+// compares the host's pdfsig against it: the image builds the same release
+// for the render goldens.
 //
 //nolint:gochecknoglobals // static key set
 var localToolPins = map[string]bool{
 	"QPDF_VERSION":      true,
 	"PIKEPDF_VERSION":   true,
 	"FONTTOOLS_VERSION": true,
+	"PILLOW_VERSION":    true,
 }
 
 // stagePins maps each directory a provisioning stage fills to the pins its

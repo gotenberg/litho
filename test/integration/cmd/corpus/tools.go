@@ -87,6 +87,11 @@ func localTools(veraPDFProbe string) []localTool {
 			Args:  []string{"-c", "import fontTools; print(fontTools.version)"},
 			Parse: parseDottedVersion, Matches: exact,
 		},
+		{
+			Name: "python3", PinKey: "PILLOW_VERSION",
+			Args:  []string{"-c", "import PIL; print(PIL.__version__)"},
+			Parse: parseDottedVersion, Matches: exact,
+		},
 	}
 }
 
