@@ -153,6 +153,9 @@ type contentInfo struct {
 	// text reports showing text somewhere, outside tiling pattern cells,
 	// whose text paints as the fill or stroke that uses the pattern.
 	text bool
+	// group reports a form XObject holding a transparency group, this one
+	// or one it paints.
+	group bool
 }
 
 // scanner reads what form XObjects and tiling patterns paint, each object
@@ -226,6 +229,7 @@ func (s *scanner) form(ctx context.Context, obj ast.PdfObject, stream ast.PdfStr
 		return contentInfo{}
 	}
 	info := s.stream(ctx, ops, resources, depth, chain)
+	info.group = info.group || groupTransparency(ctx, s.doc, stream.Dict)
 	if isRef {
 		s.forms[ref.ObjectNum] = info
 	}
@@ -356,6 +360,7 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 			case "Form":
 				inner := s.form(ctx, obj, stream, resources, depth+1, chain)
 				info.text = info.text || inner.text
+				info.group = info.group || inner.group
 				info.transparent = info.transparent || inner.transparent || stateTransparent(st, paintBoth)
 			}
 		}

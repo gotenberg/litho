@@ -1,0 +1,192 @@
+package flatten
+
+import (
+	"context"
+	"maps"
+	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+)
+
+// keptForms readies the XObjects of a page whose operations ops are edited
+// by edits, against resources, and reports whether it changed xobjects, the
+// page's new /XObject subdictionary. A form the page keeps drawing that
+// holds a transparency group, or paints a form that does, is pointed at a
+// copy without one (see [flattener.ungroup]). A name only removed operations
+// drew is dropped, so the image or form whose painting a composite took over
+// leaves the page's resources, unless a form the page keeps has no resources
+// of its own and may draw it by that name (ISO 32000-2, 7.8.3).
+func (f *flattener) keptForms(ctx context.Context, ops []content.Operation, edits map[int]*opEdit, resources, xobjects ast.PdfDict) (bool, error) {
+	used := make(map[ast.PdfName]bool)
+	dropped := make(map[ast.PdfName]bool)
+	inheriting, changed := false, false
+	for i, op := range ops {
+		if op.Operator != "Do" || len(op.Operands) != 1 {
+			continue
+		}
+		name, ok := op.Operands[0].(ast.PdfName)
+		if !ok {
+			continue
+		}
+		if e := edits[i]; e != nil && e.remove {
+			dropped[name] = true
+			continue
+		}
+		used[name] = true
+		obj, stream, subtype, ok := f.scan.xobject(ctx, resources, op)
+		if !ok || subtype != "Form" {
+			continue
+		}
+		if _, own := stream.Dict["Resources"]; !own {
+			inheriting = true
+		}
+		if !f.scan.form(ctx, obj, stream, resources, 1, nil).group {
+			continue
+		}
+		copied, err := f.ungroup(ctx, obj, stream, resources, 1)
+		if err != nil {
+			return false, err
+		}
+		if _, defined := xobjects[name]; defined {
+			xobjects[name] = copied
+			changed = true
+		}
+	}
+	if inheriting {
+		return changed, nil
+	}
+	for _, name := range slices.Sorted(maps.Keys(dropped)) {
+		if _, defined := xobjects[name]; defined && !used[name] {
+			delete(xobjects, name)
+			changed = true
+		}
+	}
+	return changed, nil
+}
+
+// ungroup returns a copy of the form XObject obj, painted against parent,
+// without its transparency group, and whose resources name such copies of
+// the forms it paints that hold one. The form paints no transparency: the
+// group of opaque content paints exactly as the content painted without it
+// (ISO 32000-2, 11.4.5, 11.4.6, 11.6.6). The copy is a new object, its
+// content the original's bytes: an annotation appearance may still paint the
+// original under a constant alpha, where the group does change how it
+// composites. A form deeper than the form-depth budget, which the renderer
+// skips, is returned as it is.
+func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.PdfStream, parent ast.PdfDict, depth int) (ast.PdfObject, error) {
+	ref, isRef := obj.(ast.PdfIndirectRef)
+	if isRef {
+		if copied, ok := f.ungrouped[ref.ObjectNum]; ok {
+			return copied, nil
+		}
+		// A form that paints itself is left as it is where it recurses.
+		f.ungrouped[ref.ObjectNum] = obj
+	}
+	if depth > f.doc.Limits().WithDefaults().MaxFormDepth {
+		return obj, nil
+	}
+	dict := maps.Clone(stream.Dict)
+	delete(dict, "Group")
+	own, err := document.ResolveDict(ctx, f.doc, stream.Dict["Resources"])
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		own = nil
+	}
+	if own != nil {
+		resources := maps.Clone(own)
+		xobjects, err := f.subdict(ctx, resources, "XObject")
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range slices.Sorted(maps.Keys(xobjects)) {
+			inner, err := document.ResolveStream(ctx, f.doc, xobjects[name])
+			if err != nil || inner.Dict == nil {
+				continue
+			}
+			if subtype, err := document.ResolveName(ctx, f.doc, inner.Dict["Subtype"]); err != nil || subtype != "Form" {
+				continue
+			}
+			if !f.scan.form(ctx, xobjects[name], inner, own, depth+1, nil).group {
+				continue
+			}
+			copied, err := f.ungroup(ctx, xobjects[name], inner, own, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			xobjects[name] = copied
+		}
+		resources["XObject"] = xobjects
+		dict["Resources"] = resources
+	}
+	copied := f.alloc.Alloc(ast.NewLazyStream(dict, stream.Bytes))
+	if isRef {
+		f.ungrouped[ref.ObjectNum] = copied
+	}
+	return copied, nil
+}
+
+// transparentAnnotations counts the annotations of a page dictionary that
+// paint with transparency: a constant opacity /CA below 1 (ISO 32000-2,
+// 12.5.2), or a normal appearance that holds a transparency group or paints
+// with transparency (12.5.5). Flattening leaves annotations as they are: an
+// appearance composites over the page as a viewer draws it, and baking one
+// into the page is what flattening form fields or annotations does first.
+func (f *flattener) transparentAnnotations(ctx context.Context, dict ast.PdfDict) int {
+	annots, err := document.ResolveArray(ctx, f.doc, dict["Annots"])
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, entry := range annots {
+		annot, err := document.ResolveDict(ctx, f.doc, entry)
+		if err != nil || annot == nil {
+			continue
+		}
+		if ca, err := document.ResolveObject(ctx, f.doc, annot["CA"]); err == nil {
+			if v, ok := document.Number(ca); ok && v < 1 {
+				n++
+				continue
+			}
+		}
+		if f.appearanceTransparent(ctx, annot) {
+			n++
+		}
+	}
+	return n
+}
+
+// appearanceTransparent reports whether a normal appearance of annot, a
+// stream or a dictionary of streams by state, holds a transparency group or
+// paints with transparency.
+func (f *flattener) appearanceTransparent(ctx context.Context, annot ast.PdfDict) bool {
+	ap, err := document.ResolveDict(ctx, f.doc, annot["AP"])
+	if err != nil || ap == nil {
+		return false
+	}
+	normal, err := document.ResolveObject(ctx, f.doc, ap["N"])
+	if err != nil {
+		return false
+	}
+	candidates := []ast.PdfObject{ap["N"]}
+	if states, ok := normal.(ast.PdfDict); ok {
+		candidates = candidates[:0]
+		for _, k := range slices.Sorted(maps.Keys(states)) {
+			candidates = append(candidates, states[k])
+		}
+	}
+	for _, obj := range candidates {
+		stream, err := document.ResolveStream(ctx, f.doc, obj)
+		if err != nil || stream.Dict == nil {
+			continue
+		}
+		info := f.scan.form(ctx, obj, stream, nil, 1, nil)
+		if info.transparent || info.group {
+			return true
+		}
+	}
+	return false
+}

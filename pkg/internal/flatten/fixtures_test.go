@@ -21,15 +21,21 @@ type fixture struct {
 	page    string
 	content string
 	objs    []string
+	// bare leaves /GS1 out of the page's resources.
+	bare bool
 }
 
 // bytes serialises the fixture.
 func (f fixture) bytes() []byte {
+	states := "/ExtGState << /GS1 6 0 R >> "
+	if f.bare {
+		states = ""
+	}
 	objs := append([]string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /Contents 4 0 R /MediaBox [0 0 100 100] " +
-			"/Resources << /Font << /F1 5 0 R >> /ExtGState << /GS1 6 0 R >> " + f.resources + " >> " + f.page + " >>",
+			"/Resources << /Font << /F1 5 0 R >> " + states + f.resources + " >> " + f.page + " >>",
 		stream("", f.content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
 		"<< /Type /ExtGState /ca 0.5 /CA 0.5 >>",

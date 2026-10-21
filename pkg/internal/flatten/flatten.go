@@ -1,0 +1,531 @@
+package flatten
+
+import (
+	"bytes"
+	"compress/zlib"
+	"context"
+	"fmt"
+	"maps"
+	"math"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/internal/render/geom"
+	"github.com/gotenberg/litho/pkg/internal/render/page"
+	"github.com/gotenberg/litho/pkg/internal/render/surface"
+)
+
+// DefaultDPI is the resolution regions are composited at when the caller
+// names none: the print resolution of offset and laser output.
+const DefaultDPI = 300
+
+// minRetryDPI is the lowest resolution a page is composited at when its
+// transparency does not fit the render pixel budget at the resolution asked
+// for. Anti-DoS guard, not spec-mandated: each retry halves the resolution
+// and renders the page again, and below screen resolution a composite no
+// longer draws the page as a viewer shows it.
+const minRetryDPI = 72
+
+// pixelMargin is how many device pixels a region's image reaches past the
+// region's box on each side, so the antialiased edge of what the region
+// paints lands in the image rather than being cut at a pixel boundary.
+const pixelMargin = 1
+
+// pixelEpsilon is how close to a whole pixel a page edge in device space has
+// to be to count as on it, absorbing the rounding of the device matrix.
+const pixelEpsilon = 1e-6
+
+// Options configures [Document].
+type Options struct {
+	// DPI is the resolution regions are composited at; 0 is [DefaultDPI].
+	DPI float64
+}
+
+// PageReport says what [Document] did to one page.
+type PageReport struct {
+	// Page is the page's index, from 0.
+	Page int
+	// Regions counts the regions composited into images, and DPI the
+	// resolution they were composited at, 0 when there were none.
+	Regions int
+	DPI     float64
+	// Removed counts the painting elements whose painting the images took
+	// over.
+	Removed int
+	// KeptText counts the text objects and text-showing forms inside a
+	// region kept as text above its image.
+	KeptText int
+	// TextUnderTransparency counts the text objects a transparent element
+	// drawn after them overlapped: they draw above the image, without the
+	// transparency over them.
+	TextUnderTransparency int
+	// TransparentText counts the text objects that painted with
+	// transparency, now drawn opaque.
+	TransparentText int
+	// GroupRemoved reports that the page's transparency group was removed.
+	GroupRemoved bool
+}
+
+// Report says what [Document] did.
+type Report struct {
+	// Pages lists the pages it changed, in order.
+	Pages []PageReport
+	// TransparentAnnotations counts the annotations left painting with
+	// transparency: flattening leaves annotations as they are.
+	TransparentAnnotations int
+}
+
+// flattener holds what one run shares across pages.
+type flattener struct {
+	doc   *document.Document
+	alloc *writer.ObjAllocator
+	dpi   float64
+	// srgb is the ICC profile stream every image's colour space names.
+	srgb ast.PdfObject
+	// states maps a graphics state dictionary's object number to its copy
+	// without transparency, and forms a form's to its copy holding only its
+	// text.
+	states map[int]ast.PdfObject
+	forms  map[int]ast.PdfIndirectRef
+	// names counts the resource names this run added, so each is new.
+	names int
+	// scan reads the forms of the page being flattened.
+	scan *scanner
+	// ungrouped maps a form's object number to its copy without
+	// transparency groups.
+	ungrouped map[int]ast.PdfObject
+}
+
+// Document removes the transparency of every page in pages, queuing the
+// edits on alloc. It reads each page as doc holds it: alloc must hold no
+// edit of the pages yet.
+func Document(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page, opts Options) (*Report, error) {
+	dpi := opts.DPI
+	if dpi == 0 {
+		dpi = DefaultDPI
+	}
+	if !(dpi > 0) || math.IsInf(dpi, 0) {
+		return nil, fmt.Errorf("%w: resolution %v dpi", ErrInvalidOptions, dpi)
+	}
+	f := &flattener{
+		doc:    doc,
+		alloc:  alloc,
+		dpi:    dpi,
+		states: make(map[int]ast.PdfObject),
+		forms:  make(map[int]ast.PdfIndirectRef),
+
+		ungrouped: make(map[int]ast.PdfObject),
+	}
+	report := &Report{}
+	for i, pg := range pages {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		pr, changed, err := f.page(ctx, pg)
+		if err != nil {
+			return nil, fmt.Errorf("page %d: %w", i+1, err)
+		}
+		report.TransparentAnnotations += f.transparentAnnotations(ctx, pg.Dict)
+		if changed {
+			pr.Page = i
+			report.Pages = append(report.Pages, pr)
+		}
+	}
+	return report, nil
+}
+
+// opEdit is what happens to one operation of a content stream.
+type opEdit struct {
+	// before is drawn ahead of the operation.
+	before []byte
+	// remove drops the operation, and replace stands in its place.
+	remove  bool
+	replace []byte
+}
+
+// page flattens pg, reporting whether it changed it.
+func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bool, error) {
+	var pr PageReport
+	if pg.Ref.ObjectNum == 0 {
+		return pr, false, mutations.ErrPageNotAddressable
+	}
+	data, err := mutations.LatestPageContents(ctx, f.alloc, f.doc, pg)
+	if err != nil {
+		return pr, false, fmt.Errorf("assembling page content: %w", err)
+	}
+	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.SplitGluedOperators())
+	if err != nil {
+		return pr, false, fmt.Errorf("parsing page content: %w", err)
+	}
+	a, err := Analyze(ctx, f.doc, pg, ops)
+	if err != nil {
+		return pr, false, err
+	}
+	pr.TransparentText = len(a.TransparentText)
+	f.scan = newScanner(f.doc, pg.DrawResources)
+
+	resources := maps.Clone(pg.DrawResources)
+	if resources == nil {
+		resources = ast.PdfDict{}
+	}
+	xobjects, err := f.subdict(ctx, resources, "XObject")
+	if err != nil {
+		return pr, false, err
+	}
+	edits := make(map[int]*opEdit)
+	edit := func(i int) *opEdit {
+		e := edits[i]
+		if e == nil {
+			e = &opEdit{}
+			edits[i] = e
+		}
+		return e
+	}
+
+	if len(a.Regions) > 0 {
+		canvas, g, dpi, err := f.render(ctx, pg)
+		if err != nil {
+			return pr, false, err
+		}
+		pr.Regions, pr.DPI = len(a.Regions), dpi
+		for _, r := range a.Regions {
+			name, matrix, ok, err := f.regionImage(canvas, g, a.crop, r.Box, xobjects)
+			if err != nil {
+				return pr, false, err
+			}
+			if ok {
+				e := edit(r.Insert)
+				e.before = append(e.before, f.drawImage(a.positions[r.Insert], r.Box, name, matrix)...)
+			}
+			for _, u := range r.Removed {
+				if err := f.removeUnit(ctx, ops, a.Units[u], pg.DrawResources, xobjects, edit); err != nil {
+					return pr, false, err
+				}
+			}
+			pr.Removed += len(r.Removed)
+			pr.KeptText += len(r.Text)
+			pr.TextUnderTransparency += r.TextUnderTransparency
+		}
+	}
+
+	groupsChanged, err := f.keptForms(ctx, ops, edits, pg.DrawResources, xobjects)
+	if err != nil {
+		return pr, false, err
+	}
+	statesChanged, err := f.neutralStates(ctx, resources)
+	if err != nil {
+		return pr, false, err
+	}
+	dict := mutations.LatestPageDict(f.alloc, pg)
+	_, hasGroup := dict["Group"]
+	pr.GroupRemoved = hasGroup && groupTransparency(ctx, f.doc, dict)
+	if len(edits) == 0 && !statesChanged && !groupsChanged && !pr.GroupRemoved {
+		return pr, false, nil
+	}
+
+	if len(edits) > 0 {
+		if err := mutations.EditPageSpans(ctx, f.alloc, f.doc, pg, spanEdits(edits, ranges)); err != nil {
+			return pr, false, fmt.Errorf("splicing page content: %w", err)
+		}
+		dict = mutations.LatestPageDict(f.alloc, pg)
+	}
+	out := maps.Clone(dict)
+	if len(xobjects) > 0 {
+		resources["XObject"] = xobjects
+	}
+	out["Resources"] = resources
+	if pr.GroupRemoved {
+		// ISO 32000-2, 11.6.6: the group only sets how the page's
+		// transparency composites; with none left it changes nothing.
+		delete(out, "Group")
+	}
+	f.alloc.AllocAt(pg.Ref.ObjectNum, out)
+	return pr, true, nil
+}
+
+// subdict returns a copy of the resource subdictionary category of
+// resources, set in resources, so the run can add to it.
+func (f *flattener) subdict(ctx context.Context, resources ast.PdfDict, category ast.PdfName) (ast.PdfDict, error) {
+	d, err := document.ResolveDict(ctx, f.doc, resources[category])
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		// A subdictionary that does not resolve defines no name a viewer
+		// can draw (ISO 32000-2, 7.3.10 reads a dangling reference as
+		// null), so the run starts it afresh.
+		d = nil
+	}
+	out := maps.Clone(d)
+	if out == nil {
+		out = ast.PdfDict{}
+	}
+	return out, nil
+}
+
+// render draws pg without its text and annotations over white paper, at the
+// run's resolution or, when the page's transparency does not fit the render
+// pixel budget there, at the highest of the halved resolutions down to
+// [minRetryDPI] it fits.
+func (f *flattener) render(ctx context.Context, pg *document.Page) (*surface.Canvas, page.Geometry, float64, error) {
+	dpi := f.dpi
+	budget := f.doc.Limits().WithDefaults().MaxRenderPixels
+	for {
+		g, err := page.PageGeometry(pg, dpi)
+		if err != nil {
+			return nil, page.Geometry{}, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
+		}
+		if px := int64(g.Width) * int64(g.Height); px > budget {
+			// Scale to the budget at once rather than halving towards it.
+			dpi *= math.Sqrt(float64(budget)/float64(px)) * 0.999
+			continue
+		}
+		canvas, report, err := page.Render(ctx, f.doc, pg, page.Options{
+			DPI:        dpi,
+			Background: [4]float32{1, 1, 1, 1},
+			Omit:       page.Text | page.Annotations,
+		})
+		if err != nil {
+			return nil, page.Geometry{}, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
+		}
+		if report.Unsupported[page.TransparencyOverBudget] == 0 {
+			return canvas, g, dpi, nil
+		}
+		if dpi/2 < minRetryDPI {
+			return nil, page.Geometry{}, 0, fmt.Errorf("%w: the page's transparency does not fit the render pixel budget at %v dpi", ErrTooComplex, dpi)
+		}
+		dpi /= 2
+	}
+}
+
+// regionImage crops box from canvas into a new image XObject named in
+// xobjects, returning its name and the matrix that maps the unit square onto
+// its pixels in default user space. A box no pixel of the page holds gives
+// no image.
+//
+// The image holds whole pixels of the page only: the raster rounds the page
+// up to whole pixels (see [page.PageGeometry]), and its last column and row
+// are what the page's edge leaves of a pixel. Drawn at another resolution, a
+// composite holding them reaches past the edge the page's own content stops
+// at.
+func (f *flattener) regionImage(canvas *surface.Canvas, g page.Geometry, crop, box Rect, xobjects ast.PdfDict) (ast.PdfName, geom.Matrix, bool, error) {
+	dev := transformRect(g.Matrix, box)
+	paper := transformRect(g.Matrix, crop)
+	x0 := max(0, int(math.Floor(dev.MinX))-pixelMargin, int(math.Ceil(paper.MinX-pixelEpsilon)))
+	y0 := max(0, int(math.Floor(dev.MinY))-pixelMargin, int(math.Ceil(paper.MinY-pixelEpsilon)))
+	x1 := min(canvas.Width, int(math.Ceil(dev.MaxX))+pixelMargin, int(math.Floor(paper.MaxX+pixelEpsilon)))
+	y1 := min(canvas.Height, int(math.Ceil(dev.MaxY))+pixelMargin, int(math.Floor(paper.MaxY+pixelEpsilon)))
+	if x0 >= x1 || y0 >= y1 {
+		return "", geom.Matrix{}, false, nil
+	}
+	w, h := x1-x0, y1-y0
+	samples := make([]byte, 0, 3*w*h)
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			r, gr, b, a := canvas.At(x, y)
+			if a > 0 {
+				r, gr, b = r/a, gr/a, b/a
+			}
+			samples = append(samples, to8(r), to8(gr), to8(b))
+		}
+	}
+	var buf bytes.Buffer
+	zw := zlib.NewWriter(&buf)
+	if _, err := zw.Write(samples); err != nil {
+		return "", geom.Matrix{}, false, fmt.Errorf("compressing a composite: %w", err)
+	}
+	if err := zw.Close(); err != nil {
+		return "", geom.Matrix{}, false, fmt.Errorf("compressing a composite: %w", err)
+	}
+	ref := f.alloc.Alloc(ast.NewStream(ast.PdfDict{
+		"Type":             ast.PdfName("XObject"),
+		"Subtype":          ast.PdfName("Image"),
+		"Width":            ast.PdfInt(w),
+		"Height":           ast.PdfInt(h),
+		"ColorSpace":       ast.PdfArray{ast.PdfName("ICCBased"), f.srgbProfile()},
+		"BitsPerComponent": ast.PdfInt(8),
+		"Filter":           ast.PdfName("FlateDecode"),
+		"Length":           ast.PdfInt(buf.Len()),
+	}, buf.Bytes()))
+	name := f.newName(xobjects, "FlatIm")
+	xobjects[name] = ref
+	inv, ok := g.Matrix.Invert()
+	if !ok {
+		return "", geom.Matrix{}, false, fmt.Errorf("%w: the page maps to no device area", ErrTooComplex)
+	}
+	// The unit square's bottom edge is the image's last row (ISO 32000-2,
+	// 8.9.4), the bottom of the pixels in device space, whose y grows down.
+	unit := geom.Matrix{float64(w), 0, 0, -float64(h), float64(x0), float64(y1)}
+	return name, unit.Mul(inv), true, nil
+}
+
+// to8 returns v, in [0, 1], as an 8-bit sample.
+func to8(v float32) byte {
+	switch {
+	case v <= 0:
+		return 0
+	case v >= 1:
+		return 255
+	}
+	return byte(math.Round(float64(v) * 255))
+}
+
+// srgbProfile returns the sRGB ICC profile stream the images' colour space
+// names, allocating it once. The renderer composites in sRGB (IEC 61966-2-1),
+// so that is what the samples mean.
+func (f *flattener) srgbProfile() ast.PdfObject {
+	if f.srgb == nil {
+		profile := icc.SRGBProfile()
+		var buf bytes.Buffer
+		zw := zlib.NewWriter(&buf)
+		// Writing to a bytes.Buffer fails only when memory runs out, which
+		// panics before returning.
+		_, _ = zw.Write(profile) //nolint:errcheck // Deliberate: bytes.Buffer writes cannot fail.
+		_ = zw.Close()           //nolint:errcheck // Deliberate: bytes.Buffer writes cannot fail.
+		f.srgb = f.alloc.Alloc(ast.NewStream(ast.PdfDict{
+			"N":      ast.PdfInt(3),
+			"Filter": ast.PdfName("FlateDecode"),
+			"Length": ast.PdfInt(buf.Len()),
+		}, buf.Bytes()))
+	}
+	return f.srgb
+}
+
+// newName returns a name of prefix that dict does not define.
+func (f *flattener) newName(dict ast.PdfDict, prefix string) ast.PdfName {
+	for {
+		f.names++
+		name := ast.PdfName(prefix + strconv.Itoa(f.names))
+		if _, taken := dict[name]; !taken {
+			return name
+		}
+	}
+}
+
+// drawImage returns the operators that draw the image name with matrix in
+// default user space at pos, clipped to box: the CTM in force there is undone
+// first. The image reaches past box by its pixel margin, and past the page
+// edge by the part of a pixel the raster rounds the page up to; the clip
+// keeps it to the area it composites. Outside
+// marked content the image is an artifact (ISO 32000-2, 14.8.2.2): what it
+// shows is content the page already tags, or the page's own background, and
+// ISO 14289-1, 7.1 wants untagged content marked so.
+func (f *flattener) drawImage(pos position, box Rect, name ast.PdfName, matrix geom.Matrix) []byte {
+	var b strings.Builder
+	b.WriteString("\n")
+	if pos.marked == 0 {
+		b.WriteString("/Artifact BMC\n")
+	}
+	b.WriteString("q\n")
+	if pos.ctm != geom.Identity {
+		// insertion only picks positions whose CTM inverts.
+		inv, _ := pos.ctm.Invert()
+		b.WriteString(matrixOperands(inv) + " cm\n")
+	}
+	for _, v := range []float64{box.MinX, box.MinY, box.MaxX - box.MinX, box.MaxY - box.MinY} {
+		b.WriteString(number(v) + " ")
+	}
+	b.WriteString("re W n\n")
+	b.WriteString(matrixOperands(matrix) + " cm\n/" + string(name) + " Do\nQ\n")
+	if pos.marked == 0 {
+		b.WriteString("EMC\n")
+	}
+	return []byte(b.String())
+}
+
+// matrixOperands writes the six numbers of m as content stream operands.
+func matrixOperands(m geom.Matrix) string {
+	parts := make([]string, 6)
+	for i, v := range m {
+		parts[i] = number(v)
+	}
+	return strings.Join(parts, " ")
+}
+
+// number writes v as a content stream operand, to a millionth of a unit.
+func number(v float64) string {
+	return writer.FormatReal(math.Round(v*1e6) / 1e6)
+}
+
+// removeUnit edits the operations of u, a unit a region's image takes over:
+// a path's painting operator becomes n when the path also clips, so the clip
+// stays (ISO 32000-2, 8.5.4), and the path is dropped otherwise; a form
+// showing text is replaced by a copy holding its text; anything else is
+// dropped.
+func (f *flattener) removeUnit(ctx context.Context, ops []content.Operation, u Unit, resources, xobjects ast.PdfDict, edit func(int) *opEdit) error {
+	switch u.Kind {
+	case KindPath:
+		if u.Clips {
+			edit(u.Last).remove, edit(u.Last).replace = true, []byte("n")
+			return nil
+		}
+		for i := u.First; i <= u.Last; i++ {
+			if pathOperator(ops[i].Operator) {
+				edit(i).remove = true
+			}
+		}
+	case KindForm:
+		if !u.HasText {
+			edit(u.First).remove = true
+			return nil
+		}
+		ref, err := f.textForm(ctx, ops[u.First], resources, 1)
+		if err != nil {
+			return err
+		}
+		e := edit(u.First)
+		e.remove = true
+		if ref.ObjectNum != 0 {
+			name := f.newName(xobjects, "FlatTx")
+			xobjects[name] = ref
+			e.replace = []byte("/" + string(name) + " Do")
+		}
+	case KindImage, KindInlineImage, KindShading:
+		edit(u.First).remove = true
+	case KindText:
+		// Text is never removed: it stays above the image.
+	}
+	return nil
+}
+
+// pathOperator reports whether operator constructs, clips or paints a path
+// (ISO 32000-2, 8.5.2 to 8.5.4).
+func pathOperator(operator string) bool {
+	switch operator {
+	case "m", "l", "c", "v", "y", "h", "re", "W", "W*", "n":
+		return true
+	}
+	_, paints := pathPaints(operator)
+	return paints
+}
+
+// spanEdits turns the edits of operations into edits of the bytes ranges
+// address.
+func spanEdits(edits map[int]*opEdit, ranges []content.ByteRange) []mutations.SpanEdit {
+	out := make([]mutations.SpanEdit, 0, len(edits))
+	for _, i := range slices.Sorted(maps.Keys(edits)) {
+		e := edits[i]
+		r := ranges[i]
+		if !e.remove {
+			out = append(out, mutations.SpanEdit{Span: content.ByteRange{Start: r.Start, End: r.Start}, Replacement: e.before})
+			continue
+		}
+		replacement := slices.Clone(e.before)
+		if len(e.replace) > 0 {
+			replacement = append(append(append(replacement, '\n'), e.replace...), '\n')
+		} else if len(replacement) == 0 {
+			// The range may hold the white space that parts the operation
+			// from the one before; one space keeps them apart.
+			replacement = []byte(" ")
+		}
+		out = append(out, mutations.SpanEdit{Span: r, Replacement: replacement})
+	}
+	return out
+}

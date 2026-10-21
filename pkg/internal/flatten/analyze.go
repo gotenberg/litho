@@ -60,6 +60,9 @@ type Unit struct {
 	// Clips reports a path whose painting operator also sets the clipping
 	// path (8.5.4): removing it must keep the clip.
 	Clips bool
+	// Group reports a form holding a transparency group, its own or one of
+	// a form it paints.
+	Group bool
 }
 
 // Region is a part of the page composited into one image.
@@ -105,6 +108,8 @@ type Analysis struct {
 	// removed.
 	TransparentText []int
 	positions       []position
+	// crop is the page's crop box, as a viewer reads it.
+	crop Rect
 }
 
 // clipFrame is the part of the clipping state the graphics state stack
@@ -154,7 +159,7 @@ func Analyze(ctx context.Context, doc *document.Document, page *document.Page, o
 	w.m.Doc, w.m.Resources = doc, page.DrawResources
 	w.m.RecordPathBoxes = true
 
-	a := &Analysis{positions: make([]position, len(ops)+1)}
+	a := &Analysis{positions: make([]position, len(ops)+1), crop: crop}
 	for i, op := range ops {
 		if i%opsPerContextCheck == 0 {
 			if err := ctx.Err(); err != nil {
@@ -336,6 +341,7 @@ func (w *walker) do(i int, op content.Operation, st *graphics.State, ctm geom.Ma
 			Box:         w.visible(formBox(w.ctx, w.doc, stream.Dict, ctm)),
 			Transparent: info.transparent || stateTransparent(st, paintBoth),
 			HasText:     info.text,
+			Group:       info.group,
 		})
 	}
 }

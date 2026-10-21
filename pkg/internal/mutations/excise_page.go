@@ -86,3 +86,15 @@ func EditPageSpans(
 	}
 	return nil
 }
+
+// LatestPageContents returns the content of page as alloc stages it: the
+// buffer [EditPageSpans] edits, so the spans a caller hands it come from
+// parsing these bytes with [content.ParseStreamDataWithOffsets].
+func LatestPageContents(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]byte, error) {
+	return collectLatestPageContents(ctx, alloc, doc, page)
+}
+
+// LatestPageDict returns the dictionary of page as alloc stages it.
+func LatestPageDict(alloc *writer.ObjAllocator, page *document.Page) ast.PdfDict {
+	return latestPageDict(alloc, page)
+}
