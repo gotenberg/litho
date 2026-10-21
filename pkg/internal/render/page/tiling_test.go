@@ -162,6 +162,35 @@ func TestTilingFractionalStep(t *testing.T) {
 	expect(t, img, 8, want)
 }
 
+// TestTilingCellUnadjusted pins that a tiling cell paints without stroke
+// adjustment, from the initial /SA false, where the page's own hairline
+// snaps to one row: sharednested_2b strokes a 5 by 5 square in a 10 by 10
+// cell at the default width of one pixel, which poppler 26.09.0 and PDFium
+// draw at half strength across two rows, its bottom edge on the cell's /BBox
+// clipped to the half inside.
+func TestTilingCellUnadjusted(t *testing.T) {
+	t.Parallel()
+	img, _ := draw(t, fixture{
+		page:    "/Resources << /Pattern << /P 5 0 R >> >>",
+		content: "q /Pattern cs /P scn 0 0 100 100 re f Q 0 G 20 50 m 80 50 l S",
+		objs: []string{tilePattern("/PaintType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >>",
+			"0 G 0 0 5 5 re S 0 g 7.25 7.25 0.5 0.5 re f")},
+	})
+	grey, faint := rgb{128, 128, 128}, rgb{191, 191, 191}
+	// The cell at the origin spans device rows 90 to 99. Its square's top
+	// edge (user y 5, device 95) covers half of rows 94 and 95, its bottom
+	// edge (device 100) and left edge (device x 0) the half of row 99 and
+	// column 0 inside the /BBox, and the quarter-pixel square a quarter of
+	// pixel (7, 92).
+	expect(t, img, 8, map[[2]int]rgb{
+		{2, 94}: grey, {2, 95}: grey, {2, 99}: grey, {0, 97}: grey, {2, 97}: paper, {7, 92}: faint,
+	})
+	// The page's hairline at device y 50 snaps to one solid row.
+	if a, b := at(t, img, 50, 49), at(t, img, 50, 50); !close8(a, black, 8) && !close8(b, black, 8) {
+		t.Errorf("page hairline rows 49, 50 = %v, %v, want one black", a, b)
+	}
+}
+
 func TestTilingNested(t *testing.T) {
 	t.Parallel()
 	img, report := draw(t, patternPopplerFixtures["tiling_nested"])

@@ -424,7 +424,8 @@ func (r *renderer) tile(s *scope, tp *tilingPattern, resources ast.PdfDict, toTi
 // painted in its own space, independent of the state where the pattern is
 // used) with the CTM of the cell's place, into dst as the group the cells'
 // transparency composites in. Each cell is its own copy: a
-// pattern used inside the cell maps into the moved cell's space.
+// pattern used inside the cell maps into the moved cell's space. The cells
+// paint without stroke adjustment ([renderer.adjusts]).
 func (r *renderer) drawCells(s *scope, tp *tilingPattern, resources ast.PdfDict, dst *blend.Group, toDst geom.Matrix) error {
 	inv, ok := toDst.Invert()
 	if !ok {
@@ -437,6 +438,7 @@ func (r *renderer) drawCells(s *scope, tp *tilingPattern, resources ast.PdfDict,
 	}
 	sub := r.sub(w, h, geom.Identity, dst)
 	sub.chain = append(sub.chain, tp.ref.ObjectNum)
+	sub.unadjusted = true
 	defer func() { r.ops = sub.ops }()
 	for j := j0; j <= j1; j++ {
 		for i := i0; i <= i1; i++ {

@@ -16,6 +16,17 @@ import (
 // litho adjusts whatever /SA says, as poppler's Splash does: its
 // SplashOutputDev ignores the parameter because Acrobat hardwires it on.
 
+// adjusts reports whether the renderer adjusts strokes and thin rectangles.
+// The cells of a tiling pattern do not: a cell runs from the initial
+// graphics state ([renderer.drawCells]), whose /SA is false (Table 53,
+// 10.6.5), and the leniency above stops at the page's state. poppler
+// agrees: SplashOutputDev turns the adjustment on in startPage only, and
+// tilingPatternFill draws the cells on a Splash of its own whose state keeps
+// SplashState's default, off.
+func (r *renderer) adjusts() bool {
+	return !r.unadjusted
+}
+
 // alignEpsilon is how far, in device pixels, the two ends of a segment may
 // part on an axis and still count as one: such a segment runs along the
 // other axis. It absorbs the rounding of a user-space coordinate times the

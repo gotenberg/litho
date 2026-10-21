@@ -82,6 +82,9 @@ type renderer struct {
 	// kind's own content runs: a Type 3 glyph description, a pattern cell, a
 	// soft mask's group.
 	omit Content
+	// unadjusted turns stroke adjustment off ([renderer.adjusts]): set in
+	// the renderer a tiling pattern's cells run in.
+	unadjusted bool
 }
 
 // omits reports whether the render leaves out content of kind k.
@@ -448,7 +451,7 @@ func (r *renderer) paintPath(s *scope, operator string) error {
 // 8.5.3.3).
 func (r *renderer) fill(s *scope, rule raster.FillRule, st *graphics.State) error {
 	path := s.path
-	if adj, ok := adjustedRect(path); ok {
+	if adj, ok := adjustedRect(path); ok && r.adjusts() {
 		path = adj
 	}
 	cov, err := r.coverage(path, rule)
@@ -498,7 +501,10 @@ func (r *renderer) stroke(s *scope, st *graphics.State) error {
 		r.skip("stroke", err)
 		return nil
 	}
-	cov, err := r.coverage(adjustOutline(outline, s.path, style, m), raster.NonZero)
+	if r.adjusts() {
+		outline = adjustOutline(outline, s.path, style, m)
+	}
+	cov, err := r.coverage(outline, raster.NonZero)
 	if err != nil {
 		r.skip("stroke", err)
 		return nil
