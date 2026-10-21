@@ -2,8 +2,9 @@ package blend
 
 import "math"
 
-// Mode is a standard blend mode of ISO 32000-1, 11.3.5. The zero value is
-// Normal.
+// Mode is a standard blend mode of ISO 32000-1, 11.3.5, blending by the
+// formulas of ISO 32000-1 unless [Mode.In] selects another [Edition]. The
+// zero value is Normal.
 type Mode uint8
 
 // The standard blend modes: the separable ones of Table 136, then the
@@ -63,21 +64,21 @@ func ParseMode(name string) (Mode, bool) {
 
 // String returns the mode's PDF name.
 func (m Mode) String() string {
-	if int(m) < len(modeNames) {
-		return modeNames[m]
+	if b := m.base(); int(b) < len(modeNames) {
+		return modeNames[b]
 	}
 	return "Normal"
 }
 
 // Separable reports whether the mode applies to each colour component on its
 // own (Table 136) rather than to the colour as a whole (Table 137).
-func (m Mode) Separable() bool { return m < Hue }
+func (m Mode) Separable() bool { return m.base() < Hue }
 
 // Blend returns B(cb, cs), the blend function of the mode applied to the
 // unpremultiplied backdrop colour cb and source colour cs, RGB components in
 // [0, 1].
 func (m Mode) Blend(cb, cs [3]float32) [3]float32 {
-	switch m {
+	switch m.base() {
 	case Normal:
 		return cs
 	case Hue:
@@ -98,7 +99,7 @@ func (m Mode) Blend(cb, cs [3]float32) [3]float32 {
 
 // channel applies a separable blend function of Table 136 to one component.
 func (m Mode) channel(cb, cs float32) float32 {
-	switch m {
+	switch m.base() {
 	case Multiply:
 		return cb * cs
 	case Screen:
@@ -110,15 +111,21 @@ func (m Mode) channel(cb, cs float32) float32 {
 	case Lighten:
 		return max(cb, cs)
 	case ColorDodge:
-		// Per ISO 32000-1, Table 136. ISO 32000-2 later returns 0 where cb is
-		// 0 and cs is 1; this follows the PDF 1.7 text the package cites.
+		// Per ISO 32000-1, Table 136; ISO 32000-2, Table 136 returns 0 first
+		// where cb is 0, which parts from it only where cs is 1.
+		if m&edition2 != 0 && cb == 0 {
+			return 0
+		}
 		if cs < 1 {
 			return min(1, cb/(1-cs))
 		}
 		return 1
 	case ColorBurn:
-		// Per ISO 32000-1, Table 136. ISO 32000-2 later returns 1 where cb is
-		// 1 and cs is 0; this follows the PDF 1.7 text the package cites.
+		// Per ISO 32000-1, Table 136; ISO 32000-2, Table 136 returns 1 first
+		// where cb is 1, which parts from it only where cs is 0.
+		if m&edition2 != 0 && cb == 1 {
+			return 1
+		}
 		if cs > 0 {
 			return 1 - min(1, (1-cb)/cs)
 		}

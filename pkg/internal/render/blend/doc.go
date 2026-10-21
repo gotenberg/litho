@@ -3,8 +3,10 @@
 //
 // [Mode] holds a blend mode and [Mode.Blend] evaluates its blend function
 // B(Cb, Cs), the separable modes of Table 136 and the non-separable ones of
-// Table 137. A [Group] is one transparency group's stack (11.4): elements are
-// painted into it pixel by pixel with [Group.Paint], which applies the
+// Table 137, by the formulas of ISO 32000-1 or, through [Mode.In] and
+// [EditionFor], those ISO 32000-2 gives a PDF 2.0 document. A [Group] is one
+// transparency group's stack (11.4): elements are painted into it pixel by
+// pixel with [Group.Paint], which applies the
 // general compositing formulas of 11.4.8 with shape and alpha kept apart, so
 // isolated, non-isolated, knockout and non-knockout groups all follow the
 // same arithmetic. [Group.Into] then composites the finished group into its
