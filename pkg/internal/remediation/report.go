@@ -46,4 +46,10 @@ type Report struct {
 	// [Options.Fonts] was set and font-embed not disabled. FontRefusals is
 	// then the run's whole verdict, empty or not.
 	FontsJudged bool
+	// Flattened lists the descriptions of the pages [FlattenFixer] flattened,
+	// empty when it flattened none. A writer whose output regresses with
+	// them runs the remediation again with the fixer disabled, the
+	// transparency then set opaque instead, since the flattening runs before
+	// the content tier and no rollback reaches it.
+	Flattened []string
 }

@@ -24,6 +24,11 @@ func matchTransparency(v compliance.Violation) bool {
 // inherits through the page tree ([resourcesHolder]), in the streams they
 // name, in the page's own /Group, and in its annotations' appearances.
 //
+// It runs after [fixTransparencyFlatten], which composites the transparency
+// of each page it can flatten, and sets opaque what that leaves: annotation
+// appearances, Type 3 glyph descriptions, resources no content draws, and the
+// pages flattening refuses.
+//
 // # Corpus evidence
 //
 //   - litho kidsrepair_1b.pdf: three graphics states written directly in the
@@ -33,11 +38,9 @@ func matchTransparency(v compliance.Violation) bool {
 //     litho and veraPDF. Written into the node holding them, every output
 //     passes both tools.
 func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	// PDF/A-1 (ISO 19005-1 §6.4) forbids transparency outright. The
-	// only way a flagged file can become compliant is to flatten
-	// alpha, blend modes, and SMask, so this fix runs regardless of
-	// PreserveContent: there is no "preserve" alternative for files
-	// that must conform to part 1.
+	// PDF/A-1 (ISO 19005-1 §6.4) forbids transparency outright, so
+	// whatever flattening left must be set opaque for a flagged file to
+	// conform, and this fix runs regardless of PreserveContent.
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("getting catalog: %w", err)

@@ -155,7 +155,7 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 	// other one. Run interleaved, a structural or resource fixer registered
 	// after a content fixer lost its repair to the rollback while the report
 	// still listed it as fixed.
-	var fixed []string
+	var fixed, flattened []string
 	var needsRewrite bool
 	handled := make(map[int]bool) // indices of handled violations
 
@@ -171,6 +171,9 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		}
 		if entry.f.name == "file-structure" && len(descriptions) > 0 {
 			needsRewrite = true
+		}
+		if entry.f.name == FlattenFixer && flattenedAny(descriptions) {
+			flattened = descriptions
 		}
 	}
 
@@ -252,6 +255,7 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		FontRefusals:     fonts.refused,
 		FontsEmbedded:    fonts.embedded,
 		FontsJudged:      fontsJudged,
+		Flattened:        flattened,
 	}, nil
 }
 

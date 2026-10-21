@@ -64,6 +64,11 @@ type fixer struct {
 // the two. Keep the content tier last here all the same, so the list reads in
 // the order it runs.
 var registry = []fixer{
+	// transparency-flatten composites the document as it reads, so it runs
+	// before any fixer queues an edit (see [fixTransparencyFlatten]). It
+	// keeps what each page shows, and transparency below sets opaque what it
+	// leaves.
+	{name: FlattenFixer, safety: safetyResource, matches: matchTransparency, apply: fixTransparencyFlatten},
 	// Structural: catalog, trailer, metadata.
 	{name: "trailer-id", safety: safetyStructural, matches: matchTrailerID, apply: fixTrailerID},
 	{name: "info-date", safety: safetyStructural, matches: matchInfoDate, apply: fixInfoDate},

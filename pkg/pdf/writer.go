@@ -585,7 +585,10 @@ type RemediationReport struct {
 	// RolledBack lists human-readable descriptions of content-modifying
 	// fixes that were applied, failed the post-remediation integrity probe,
 	// and were subsequently discarded. When non-empty, the output preserves
-	// rendering at the cost of leaving the listed violations unfixed.
+	// rendering at the cost of leaving the listed violations unfixed. The
+	// flattening of a PDF/A-1 remediation is the exception: discarded, it
+	// gives way to setting the transparency opaque, which fixes the same
+	// violations and changes how the page draws (see [Writer.RemediatePDFA]).
 	RolledBack []string
 	// FontRefusals lists, in object-number order, the fonts the output
 	// shows unembedded although [WithFontProvider] or [WithFontFiles] was
@@ -2259,6 +2262,17 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 // annotation gets the flags those clauses require, so one that showed only in
 // print now shows on screen too.
 //
+// At PDF/A-1a and PDF/A-1b, which forbid transparency (ISO 19005-1, 6.4), it
+// flattens it first, in both modes, as [Writer.FlattenTransparency] does at
+// its default resolution: each page keeps its look, the transparent regions
+// composited into opaque images and the text kept as text. What flattening
+// leaves, annotation appearances, Type 3 glyphs that paint with transparency
+// and a page it refuses, is set opaque, which changes how it draws.
+// [RemediationReport.Fixed] says which. An output the integrity probe refuses
+// with its pages flattened is remediated again with every page's
+// transparency set opaque, and [RemediationReport.RolledBack] lists the
+// flattening.
+//
 // It is the last edit on the Writer (see [Writer]): it judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
@@ -2269,9 +2283,38 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 		return r.ValidatePDFA(ctx, profile)
 	}
 	target := remediationTarget{method: "RemediatePDFA", pdfaClause: pdfaEncryptionClause(profile), xrefStreamClause: pdfaXRefStreamClause(profile)}
-	return w.remediate(ctx, target, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
-		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
-	})
+	var flattened []string
+	run := func(noFlatten bool) remediationRun {
+		return func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+			if noFlatten {
+				disabled = append(slices.Clone(disabled), remediation.FlattenFixer)
+			}
+			rep, err := remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
+			if rep != nil && len(rep.Flattened) > 0 {
+				flattened = append(flattened, rep.Flattened...)
+			}
+			return rep, err
+		}
+	}
+	report, err := w.remediate(ctx, target, cfg.tolerance, revalidate, run(false))
+	if !errors.Is(err, ErrRemediationBrokePDF) || len(flattened) == 0 {
+		return report, err
+	}
+	// The flattening of a PDF/A-1 remediation runs before every other fixer,
+	// outside the content tier a rollback discards, so an output the
+	// integrity probe refuses with it is remediated again without it, its
+	// transparency set opaque instead. The probe counts the text a viewer
+	// extracts and the images a page draws, and flattening moves both by
+	// design: text drawn at constant alpha 0 becomes invisible text (ISO
+	// 32000-1, 9.3.6), and the images a region takes are composited into one.
+	w.logger().Debug("remediate: output regressed with flattened transparency, remediating without flattening", slog.Any("err", err))
+	abandoned := slices.Clone(flattened)
+	report, err = w.remediate(ctx, target, cfg.tolerance, revalidate, run(true))
+	if err != nil {
+		return nil, err
+	}
+	report.RolledBack = dedupeFixes(append(abandoned, report.RolledBack...))
+	return report, nil
 }
 
 // RemediatePDFUA validates the document against the given PDF/UA profile,
