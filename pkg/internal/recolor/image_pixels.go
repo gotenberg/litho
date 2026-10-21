@@ -102,19 +102,9 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
-	encoded, parms, err := encodeSamples(out, width, px.tc, outBPC)
+	encoded, parms, outFilter, err := im.encodeImage(ctx, out, width, height, px.tc, outBPC, outBPC == 8 && im.jpegSource(ctx, stream, filterName))
 	if err != nil {
-		return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
-	}
-	outFilter := ast.PdfName("FlateDecode")
-	if outBPC == 8 && im.jpegSource(ctx, stream, filterName) {
-		lossy, ok, err := im.encodeJPEG(ctx, out, width, height, px.tc, len(encoded))
-		if err != nil {
-			return stream, ImageUnchanged, err
-		}
-		if ok {
-			encoded, parms, outFilter = lossy, nil, "DCTDecode"
-		}
+		return stream, ImageUnchanged, err
 	}
 
 	newDict := maps.Clone(dict)
@@ -322,7 +312,7 @@ func (im *Images) rewriteMasks(ctx context.Context, label ast.PdfName, dict ast.
 		delete(dict, "Mask")
 		return nil
 	}
-	compressed, err := flateCompress(stencil)
+	compressed, _, err := flateCompress(stencil, -1)
 	if err != nil {
 		return fmt.Errorf("%w: compressing the stencil mask: %w", ErrImageNotConverted, err)
 	}
@@ -565,19 +555,9 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
-	encoded, parms, err := encodeSamples(out, width, px.tc, 8)
+	encoded, parms, outFilter, err := im.encodeImage(ctx, out, width, height, px.tc, 8, im.jpegSource(ctx, stream, "JPXDecode"))
 	if err != nil {
-		return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
-	}
-	outFilter := ast.PdfName("FlateDecode")
-	if im.jpegSource(ctx, stream, "JPXDecode") {
-		lossy, ok, err := im.encodeJPEG(ctx, out, width, height, px.tc, len(encoded))
-		if err != nil {
-			return stream, ImageUnchanged, err
-		}
-		if ok {
-			encoded, parms, outFilter = lossy, nil, "DCTDecode"
-		}
+		return stream, ImageUnchanged, err
 	}
 	newDict := maps.Clone(dict)
 	for _, key := range sampleEntries {

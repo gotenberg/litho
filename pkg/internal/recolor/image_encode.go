@@ -14,18 +14,80 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 )
 
+// errOverLimit stops a compression whose output has passed its limit.
+var errOverLimit = errors.New("recolor: compressed output past its limit")
+
+// limitedBuffer collects bytes until more than limit have been written, a
+// negative limit for none.
+type limitedBuffer struct {
+	buf   bytes.Buffer
+	limit int
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.limit >= 0 && b.buf.Len()+len(p) > b.limit {
+		return 0, errOverLimit
+	}
+	return b.buf.Write(p)
+}
+
 // flateCompress returns data compressed as /FlateDecode reads it (ISO
-// 32000-1, 7.4.4).
-func flateCompress(data []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	w := zlib.NewWriter(&buf)
-	if _, err := w.Write(data); err != nil {
-		return nil, err
+// 32000-1, 7.4.4), and false, with no data, as soon as the compressed bytes
+// pass limit, a negative limit for none.
+func flateCompress(data []byte, limit int) ([]byte, bool, error) {
+	out := &limitedBuffer{limit: limit}
+	w := zlib.NewWriter(out)
+	_, err := w.Write(data)
+	if err == nil {
+		err = w.Close()
 	}
-	if err := w.Close(); err != nil {
-		return nil, err
+	switch {
+	case errors.Is(err, errOverLimit):
+		return nil, false, nil
+	case err != nil:
+		return nil, false, err
 	}
-	return buf.Bytes(), nil
+	return out.buf.Bytes(), true, nil
+}
+
+// encodeImage encodes converted samples, rows of width x height pixels of
+// comps components at bpc bits, and returns the bytes, their /DecodeParms
+// and their filter. When lossy is set, the samples are 8 bits deep and a
+// JPEG quality is configured, it encodes them as JPEG first (see
+// [Images.encodeJPEG]) and keeps the JPEG when every lossless encoding is
+// larger; else it keeps the lossless encoding (see [encodeSamples]). The
+// lossless encodings stop as soon as they pass the JPEG's size, which then
+// wins whatever the rest would compress to, so the decision and the output
+// are those of encoding both in full.
+//
+// # Corpus evidence
+//
+//   - litho, pdfjs, govdocs render samples and every pdfjs, govdocs and
+//     litho file holding a JPEG 2000 image (417 files): converted to CMYK,
+//     lossless and at quality 85, the outputs are byte for byte those of
+//     encoding in full.
+//   - pdfjs issue17289.pdf: the conversion at quality 85 takes 13.6 s, 14.9
+//     s encoding in full.
+func (im *Images) encodeImage(ctx context.Context, samples []byte, width, height, comps, bpc int, lossy bool) ([]byte, ast.PdfDict, ast.PdfName, error) {
+	var jpeg []byte
+	limit := -1
+	if lossy && bpc == 8 {
+		data, ok, err := im.encodeJPEG(ctx, samples, width, height, comps)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		if ok {
+			jpeg, limit = data, len(data)
+		}
+	}
+	encoded, parms, fits, err := encodeSamples(samples, width, comps, bpc, limit)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("%w: %w", ErrImageNotConverted, err)
+	}
+	if !fits {
+		return jpeg, nil, "DCTDecode", nil
+	}
+	return encoded, parms, "FlateDecode", nil
 }
 
 // subsampleBelowQuality is the JPEG quality from which [Images.encodeJPEG]
@@ -88,10 +150,10 @@ func (im *Images) jpegSource(ctx context.Context, stream ast.PdfStream, filterNa
 // comps components at 8 bits, as a baseline JPEG at the configured quality,
 // with Huffman tables optimized for the image (ITU-T T.81, Annex K.2). It
 // reports false, to keep the lossless encoding, when no quality is
-// configured, when the lossless encoding of losslessSize bytes is no larger,
-// since it is then better on both counts, or when the image is past what a
-// JPEG frame holds (more than 65535 pixels a side). The output depends on
-// the samples and the quality alone.
+// configured or when the image is past what a JPEG frame holds (more than
+// 65535 pixels a side); [Images.encodeImage] keeps the lossless encoding too
+// when it is no larger, since it is then better on both counts. The output
+// depends on the samples and the quality alone.
 //
 // # Corpus evidence
 //
@@ -105,7 +167,7 @@ func (im *Images) jpegSource(ctx context.Context, stream ast.PdfStream, filterNa
 //     mode, no drift.
 //   - govdocs thread_100_100452, thread_100_100651, thread_300_300034: at
 //     95 the lossless encoding is no larger, so the file keeps its size.
-func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height, comps, losslessSize int) ([]byte, bool, error) {
+func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height, comps int) ([]byte, bool, error) {
 	q := im.cfg.JPEGQuality
 	if q == 0 {
 		return nil, false, nil
@@ -127,15 +189,13 @@ func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height,
 		}
 		return nil, false, fmt.Errorf("%w: encoding JPEG: %w", ErrImageNotConverted, err)
 	}
-	if len(data) >= losslessSize {
-		return nil, false, nil
-	}
 	return data, true, nil
 }
 
 // encodeSamples compresses image samples losslessly: rows of width pixels of
 // comps components at bpc bits. It returns the encoded bytes and the
-// /DecodeParms they need, nil when none.
+// /DecodeParms they need, nil when none, or false when every encoding passes
+// limit bytes, a negative limit for none.
 //
 // The samples are compressed both as they are and through the PNG predictors
 // (ISO 32000-1, 7.4.4.4, /Predictor 15, each row's filter chosen on its own),
@@ -143,21 +203,29 @@ func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height,
 // gradients, and adds a byte a row to flat art that compresses well anyway.
 // Equal sizes keep the unpredicted data, so the output depends on the
 // samples alone.
-func encodeSamples(samples []byte, width, comps, bpc int) ([]byte, ast.PdfDict, error) {
-	plain, err := flateCompress(samples)
+func encodeSamples(samples []byte, width, comps, bpc, limit int) ([]byte, ast.PdfDict, bool, error) {
+	plain, plainFits, err := flateCompress(samples, limit)
 	if err != nil {
-		return nil, nil, fmt.Errorf("compressing the samples: %w", err)
+		return nil, nil, false, fmt.Errorf("compressing the samples: %w", err)
 	}
 	predicted, err := filter.EncodePNGPredictor(samples, comps, bpc, width)
 	if err != nil {
-		return nil, nil, fmt.Errorf("predicting the samples: %w", err)
+		return nil, nil, false, fmt.Errorf("predicting the samples: %w", err)
 	}
-	packed, err := flateCompress(predicted)
+	// Past the plain data's size the predicted data loses the comparison
+	// below, so its compression stops there too.
+	if plainFits && (limit < 0 || len(plain) < limit) {
+		limit = len(plain)
+	}
+	packed, packedFits, err := flateCompress(predicted, limit)
 	if err != nil {
-		return nil, nil, fmt.Errorf("compressing the predicted samples: %w", err)
+		return nil, nil, false, fmt.Errorf("compressing the predicted samples: %w", err)
 	}
-	if len(packed) >= len(plain) {
-		return plain, nil, nil
+	switch {
+	case !plainFits && !packedFits:
+		return nil, nil, false, nil
+	case !packedFits, plainFits && len(packed) >= len(plain):
+		return plain, nil, true, nil
 	}
 	parms := ast.PdfDict{"Predictor": ast.PdfInt(15), "Columns": ast.PdfInt(width)}
 	// Table 8 defaults /Colors to 1 and /BitsPerComponent to 8.
@@ -167,5 +235,5 @@ func encodeSamples(samples []byte, width, comps, bpc int) ([]byte, ast.PdfDict, 
 	if bpc != 8 {
 		parms["BitsPerComponent"] = ast.PdfInt(bpc)
 	}
-	return packed, parms, nil
+	return packed, parms, true, nil
 }
