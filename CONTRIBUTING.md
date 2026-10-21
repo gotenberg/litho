@@ -25,7 +25,7 @@ make bench            # go test -bench=. -benchmem ./...
 
 - Never assign errors to `_` without a justification comment. If justified, log at Debug via `doc.Logger`.
 - Do not use `_ = variable` to suppress unused warnings. If a variable is unused, remove it. If a function parameter is unused, prefix it with `_` in the signature. If a multi-return value is unused, capture it as `_` directly in the assignment (e.g., `_, b, err := f()`).
-- Every named parameter must be used in the function body. Never leave a named-but-unused parameter: Go compiles it, but it misleads readers into thinking the value matters. The default fix is to remove the parameter and update callers. Prefix with `_` only when the signature is constrained by an interface, a function type, or a uniform calling convention (see `pkg/internal/compliance/doc.go`). Run `unparam` to catch these before submitting.
+- Every named parameter must be used in the function body. Never leave a named-but-unused parameter: Go compiles it, but it misleads readers into thinking the value matters. The default fix is to remove the parameter and update callers. Prefix with `_` only when the signature is constrained by an interface, a function type, or a uniform calling convention (see `pkg/internal/compliance/doc.go`). Run `make lint-unparam`, the pinned `unparam`, to catch these before submitting.
 - Wrap and propagate every error: `fmt.Errorf("resolving font on page %d: %w", pageNum, err)`.
 - Match errors with `errors.Is`, never `strings.Contains`.
 - Sentinel errors live in `errors.go` per package.
@@ -189,7 +189,7 @@ Plan non-trivial changes before coding. Present problem, approach, affected file
 - [ ] Resource streaming: no eager materialization of binary resources.
 - [ ] Safety: file-derived sizes bounded before allocation; defensive caps are named consts; new byte decoders have a fuzz target.
 - [ ] Spec-grounded: verdicts, accept/reject decisions, and hardcoded tables cite their clause; deliberate leniency names the clause it relaxes.
-- [ ] Linting: `make fmt && make lint` passes with zero warnings.
+- [ ] Linting: `make fmt && make lint && make lint-unparam` passes with zero warnings.
 - [ ] Documentation: Godoc on all exports; `doc.go` per package.
 - [ ] Tests: new behavior covered; no regressions; corpora unchanged.
 

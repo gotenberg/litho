@@ -20,6 +20,16 @@ lint: ## Lint Golang codebase
 lint-todo: ## Find TODOs in Golang codebase
 	golangci-lint run --no-config --enable godox
 
+# unparam publishes no releases, so the pin is a module pseudo-version. The
+# 2025-10-27 commit, built on golang.org/x/tools v0.38.0, aborts on Go 1.27 with
+# "package ... without types was imported"; the pinned one builds on v0.52.0.
+# An env var of the same name overrides it.
+UNPARAM_VERSION ?= v0.0.0-20261011093844-7a2c2c0b7aa6
+
+.PHONY: lint-unparam
+lint-unparam: ## Find unused parameters and results with the pinned unparam (UNPARAM_VERSION)
+	go run mvdan.cc/unparam@$(UNPARAM_VERSION) ./...
+
 .PHONY: lint-prettier
 lint-prettier: ## Lint non-Golang codebase
 	npx prettier --check .
