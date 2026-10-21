@@ -269,6 +269,7 @@ one deliberately rather than diffing it against a fresh build.
 | `annotsynth_2b.pdf`    | PDF/A-2b     | Polygon, Underline and Squiggly annotations with no `/AP`        |
 | `recolorimg_2b.pdf`    | PDF/A-2b     | 16-bit, Lab, colour-key, matted and /Decode images to recolour   |
 | `tounicodepair_2u.pdf` | PDF/A-2u     | A simple font's two-byte /ToUnicode mapping a shown byte pair    |
+| `flattentext_2b.pdf`   | PDF/A-2b     | Transparency over, under and on text, which flattening keeps     |
 
 ### Must-not-fire controls
 
@@ -615,6 +616,7 @@ are covered under [Known divergences](#known-divergences).
 | `fieldkids_2b.pdf`     | 6    | 3    | 5    | 2    | 3    | 6    | 3    | 4    | 5   | 5    | 6    | 8    | 6    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
 | `filledrules_ua1.pdf`  | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
+| `flattentext_2b.pdf`   | 11   | 8    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 7    | 6    |
 | `fnlimits_1b.pdf`      | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 5   | 5    | 6    | 6    | 6    |
 | `fontcff2_2b.pdf`      | 8    | 5    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
 | `fontclaims_2b.pdf`    | 9    | 6    | 9    | 6    | 7    | 9    | 6    | 7    | 7   | 7    | 8    | 11   | 11   |
@@ -8708,16 +8710,51 @@ and fails on the reading before wave C2. Redacting the first ten glyphs leaves
 PDF/A-2u; elsewhere only the claim and the profile's own structure rules fire.
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
 
+### `flattentext_2b.pdf`
+
+`Writer.FlattenTransparency` composites each region of transparent content into
+an opaque image and keeps every text object as text, drawn above the image. The
+corpora hold transparency, but no blend mode drawn over text, no transparent
+text over content, no transparency group showing text and no text under a
+constant alpha of 0, so the `flatten` cell never saw what flattening does with
+text. Every glyph is a Type 3 glyph painting in the text's colour, with a
+`/ToUnicode` map, so the text extracts and draws alike everywhere:
+
+| Page | Draws                                                                                |
+| ---- | ------------------------------------------------------------------------------------ |
+| 1    | text at ca 0.5 and Multiply text on the bare page, and a square at ca 0.5            |
+| 2    | a knockout group of two squares at ca 0.6 with text between them; a non-isolated     |
+|      | group holding an isolated one that shows text and a square under a luminosity mask   |
+| 3    | text under ca 0 over a grey page, text stroked under CA 0 and filled, a square at ca |
+|      | 0.5                                                                                  |
+| 4    | a line of text, then a Multiply rectangle and a Screen rectangle over parts of it    |
+| 5    | text at ca 0.5 over a blue band, and text under a luminosity soft mask               |
+
+Flattened, page 1's text draws exactly in its colour composited over white,
+page 2's groups are composited with their text above them, and page 3's
+invisible text is drawn in rendering mode 3 and its stroked text in mode 0.
+The `flatten` cell renders those three pages, and litho and poppler 26.09.0
+draw each like its source. Pages 4 and 5 hold what flattening approximates and
+reports: the text under the rectangles draws above them (`TextReordered` 2),
+the text over the band and the soft-masked text draw opaque (`TransparentText`
+2). The cell's text and transparency checks read all five pages; no
+transparency is left.
+
+The file declares no OutputIntent and its pages no `/Group`, so DeviceRGB
+fails `6.2.4.3/2`, DeviceGray `6.2.4.3/4`, and every page holding
+transparency `6.2.10/2` at PDF/A-2b. veraPDF 1.30.2 and litho report the same
+rule set in all thirteen cells.
+
 ## Scope
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-216 x 13 = 2808 cells, the whole hand-measured matrix. litho and veraPDF return
+217 x 13 = 2821 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2784 of the 2808 cells. The 24
+fixtures exist to protect, and it holds in 2797 of the 2821 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
@@ -8730,7 +8767,7 @@ seventeen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree
 `pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2808 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 2821 and moves only `ruleset_mismatch`, and on
 those seventeen cells it moves both. Every exception sits in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
 fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
