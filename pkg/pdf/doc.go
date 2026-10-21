@@ -14,8 +14,8 @@
 // Specialised PDF 2.0 extractors sit on [Reader] alongside the core
 // text, image, and annotation methods: [Reader.ExtractGeoData],
 // [Reader.ExtractMeasurements], [Reader.Extract3DModels],
-// [Reader.ExtractPronunciationLexicons], [Reader.ExtractFormulas], and
-// [Reader.ExtractRedactedText].
+// [Reader.ExtractPronunciationLexicons], [Reader.ExtractFormulas],
+// [Reader.ExtractRedactedText], and [Reader.ExtractColorSpaces].
 //
 // # Quick start
 //
@@ -155,6 +155,11 @@
 //     [WithTimestampAuthority], [WithLTV], [WithValidationData].
 //   - [Writer.Timestamp] takes [TimestampOption]: [WithTimestampField].
 //   - [Writer.Redact] takes [RedactOption]: [WithStrictRedaction].
+//   - [Writer.ConvertColors] takes [ColorOption]: [WithColorIntent],
+//     [WithBlackPointCompensation], [WithSpotConversion],
+//     [WithoutOutputIntent]. Its [ColorTarget] is one of
+//     [OutputIntentColorTarget], [CMYKColorTarget], [RGBColorTarget],
+//     [GrayColorTarget] and [ICCColorTarget].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:

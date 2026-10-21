@@ -533,6 +533,28 @@ var (
 	// litho can convert colours through.
 	ErrInvalidCMYKProfile = errors.New("invalid default CMYK profile")
 
+	// ErrInvalidColorTarget is returned by [Writer.ConvertColors] when the
+	// profile [ICCColorTarget] names, or the one the document's output intent
+	// carries, is not an ICC profile of a grey, RGB or CMYK data colour space
+	// litho can convert colours to. The [Writer] is left as it was.
+	ErrInvalidColorTarget = errors.New("invalid colour conversion target")
+
+	// ErrNoOutputIntent is returned by [Writer.ConvertColors] for the
+	// [OutputIntentColorTarget] of a document whose catalog states no output
+	// intent with a destination profile (ISO 32000-1, 14.11.5). Name the
+	// target instead, such as [CMYKColorTarget]. The [Writer] is left as it
+	// was.
+	ErrNoOutputIntent = errors.New("document states no output intent with a destination profile")
+
+	// ErrColorConversionRefused is returned by [Writer.ConvertColors] when a
+	// colour the document paints cannot be converted to the target: a colour
+	// space it cannot read, an image it cannot decode or re-encode, or a
+	// construct the conversion does not rewrite. Converting part of a document
+	// leaves colours in two spaces where the caller asked for one, so the
+	// conversion refuses and names the construct. The [Writer] is left as it
+	// was.
+	ErrColorConversionRefused = errors.New("colour conversion refused: the document paints a colour that cannot be converted")
+
 	// ErrInvalidLimits is returned, wrapped in an error naming the field, by
 	// [Limits.Validate], and by [Open] and [OpenFile] when a budget given to
 	// [WithLimits] is negative or above its ceiling. See [Limits].

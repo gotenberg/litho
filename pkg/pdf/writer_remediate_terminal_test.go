@@ -105,6 +105,10 @@ func refusedCalls(t *testing.T) []refusedCall {
 			_, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
 			return err
 		}},
+		{"ConvertColors", func(ctx context.Context, _ *testing.T, w *Writer) error {
+			_, err := w.ConvertColors(ctx, CMYKColorTarget())
+			return err
+		}},
 		{"RemediatePDFA", func(ctx context.Context, _ *testing.T, w *Writer) error {
 			_, err := w.RemediatePDFA(ctx, models.PDFA1b)
 			return err

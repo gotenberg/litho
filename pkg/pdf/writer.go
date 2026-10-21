@@ -980,6 +980,11 @@ type Writer struct {
 	// two of its stages, which no caller holds (see
 	// [Writer.rewritesForOptions]).
 	intermediate bool
+
+	// recolor is the colour conversion engine [Writer.ConvertColors] runs,
+	// nil for the built-in one. Tests set it to drive the API around an
+	// engine of their own.
+	recolor recolorEngine
 }
 
 // rewritesForOptions reports whether the write cfg selects must be a full
