@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
 // paints says which of the current colours a painting operator uses: the
@@ -156,6 +157,12 @@ type contentInfo struct {
 	// group reports a form XObject holding a transparency group, this one
 	// or one it paints.
 	group bool
+	// bounds holds what the content paints, in the space of its stream,
+	// unless unbounded: content whose extent the scan does not measure,
+	// text and shadings, which then reaches as far as a form's /BBox. A
+	// form's bounds are cut to its /BBox (ISO 32000-2, 8.10.1).
+	bounds    Rect
+	unbounded bool
 }
 
 // scanner reads what form XObjects and tiling patterns paint, each object
@@ -230,6 +237,11 @@ func (s *scanner) form(ctx context.Context, obj ast.PdfObject, stream ast.PdfStr
 	}
 	info := s.stream(ctx, ops, resources, depth, chain)
 	info.group = info.group || groupTransparency(ctx, s.doc, stream.Dict)
+	_, bbox := formGeometry(ctx, s.doc, stream.Dict)
+	if info.unbounded {
+		info.bounds, info.unbounded = bbox, false
+	}
+	info.bounds = info.bounds.Intersect(bbox)
 	if isRef {
 		s.forms[ref.ObjectNum] = info
 	}
@@ -302,6 +314,35 @@ func (s *scanner) painting(ctx context.Context, st *graphics.State, p paints, re
 		(p.stroke && s.colorTransparent(ctx, st.Stroke, resources, depth, chain))
 }
 
+// textMode returns the text rendering mode a show operator under st is
+// drawn in once transparency is gone, whether it differs from the mode in
+// force, and whether what it still paints is transparent, which opaque text
+// only approximates. A fill or stroke under a constant alpha of 0 paints
+// nothing (ISO 32000-2, 11.3.7.2), which the mode that leaves it out
+// reproduces exactly; the clipping modes keep clipping (9.3.6, Table 104).
+func (s *scanner) textMode(ctx context.Context, st *graphics.State, resources ast.PdfDict) (int, bool, bool) {
+	mode := st.Text.Tmode
+	p := textPaints(mode)
+	visible := paints{fill: p.fill && st.FillAlpha > 0, stroke: p.stroke && st.StrokeAlpha > 0}
+	approx := s.painting(ctx, st, visible, resources, 0, nil)
+	if visible == p || mode < 0 || mode > 7 {
+		return mode, false, approx
+	}
+	next := 3
+	switch {
+	case visible.fill && visible.stroke:
+		next = 2
+	case visible.fill:
+		next = 0
+	case visible.stroke:
+		next = 1
+	}
+	if mode >= 4 {
+		next += 4
+	}
+	return next, true, approx
+}
+
 // xobject resolves the XObject a Do names, with its subtype.
 func (s *scanner) xobject(ctx context.Context, resources ast.PdfDict, op content.Operation) (ast.PdfObject, ast.PdfStream, ast.PdfName, bool) {
 	if len(op.Operands) != 1 {
@@ -331,23 +372,38 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 	var info contentInfo
 	m := graphics.NewMachine([4]float64{})
 	m.Doc, m.Resources = s.doc, resources
+	m.RecordPathBoxes = true
 	for i, op := range ops {
 		if i%opsPerContextCheck == 0 && ctx.Err() != nil {
 			return info
 		}
+		before := len(m.PathBoxes())
+		ctm := geom.Matrix(m.Current().CTM)
 		if err := m.ExecuteOne(ctx, op); err != nil {
 			continue
 		}
 		st := m.Current()
 		if p, ok := pathPaints(op.Operator); ok {
 			info.transparent = info.transparent || s.painting(ctx, st, p, resources, depth, chain)
+			if boxes := m.PathBoxes(); len(boxes) > before {
+				pb := boxes[len(boxes)-1]
+				r := rectOf(pb.MinX, pb.MinY, pb.MaxX, pb.MaxY)
+				if p.stroke {
+					r = r.Outset(strokeReach(st, ctm))
+				}
+				info.bounds = info.bounds.Union(r)
+			}
 			continue
 		}
 		switch {
 		case showText(op.Operator):
-			info.text = true
+			info.text, info.unbounded = true, true
 			info.transparent = info.transparent || s.painting(ctx, st, textPaints(st.Text.Tmode), resources, depth, chain)
-		case op.Operator == "sh", op.Operator == "BI":
+		case op.Operator == "sh":
+			info.unbounded = true
+			info.transparent = info.transparent || stateTransparent(st, paintFill)
+		case op.Operator == "BI":
+			info.bounds = info.bounds.Union(transformRect(ctm, Rect{0, 0, 1, 1}))
 			info.transparent = info.transparent || stateTransparent(st, paintFill)
 		case op.Operator == "Do":
 			obj, stream, subtype, ok := s.xobject(ctx, resources, op)
@@ -356,9 +412,12 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 			}
 			switch subtype {
 			case "Image":
+				info.bounds = info.bounds.Union(transformRect(ctm, Rect{0, 0, 1, 1}))
 				info.transparent = info.transparent || stateTransparent(st, paintFill) || imageTransparent(ctx, s.doc, stream.Dict)
 			case "Form":
 				inner := s.form(ctx, obj, stream, resources, depth+1, chain)
+				matrix, _ := formGeometry(ctx, s.doc, stream.Dict)
+				info.bounds = info.bounds.Union(transformRect(matrix.Mul(ctm), inner.bounds))
 				info.text = info.text || inner.text
 				info.group = info.group || inner.group
 				info.transparent = info.transparent || inner.transparent || stateTransparent(st, paintBoth)

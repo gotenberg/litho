@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math"
 	"slices"
@@ -80,6 +82,22 @@ type Report struct {
 	// TransparentAnnotations counts the annotations left painting with
 	// transparency: flattening leaves annotations as they are.
 	TransparentAnnotations int
+	// Skipped lists, by index from 0, the pages whose content does not
+	// read: they are left as they are, as a viewer draws them, which is
+	// nothing past what fails (ISO 32000-2, 7.8.2 leaves a damaged stream
+	// to the reader).
+	Skipped []int
+}
+
+// errUnreadable marks a page whose content does not assemble or parse.
+var errUnreadable = errors.New("page content does not read")
+
+// unreadable marks err as [errUnreadable], unless ctx ended, which is why.
+func unreadable(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return err
+	}
+	return fmt.Errorf("%w: %w", errUnreadable, err)
 }
 
 // flattener holds what one run shares across pages.
@@ -93,7 +111,10 @@ type flattener struct {
 	// without transparency, and forms a form's to its copy holding only its
 	// text.
 	states map[int]ast.PdfObject
-	forms  map[int]ast.PdfIndirectRef
+	forms  map[copyKey]ast.PdfIndirectRef
+	// patterns maps a pattern's object number to its copy whose graphics
+	// states set no transparency, nil for one that needs none.
+	patterns map[int]ast.PdfObject
 	// names counts the resource names this run added, so each is new.
 	names int
 	// scan reads the forms of the page being flattened.
@@ -119,9 +140,10 @@ func Document(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 		alloc:  alloc,
 		dpi:    dpi,
 		states: make(map[int]ast.PdfObject),
-		forms:  make(map[int]ast.PdfIndirectRef),
+		forms:  make(map[copyKey]ast.PdfIndirectRef),
 
 		ungrouped: make(map[int]ast.PdfObject),
+		patterns:  make(map[int]ast.PdfObject),
 	}
 	report := &Report{}
 	for i, pg := range pages {
@@ -129,6 +151,11 @@ func Document(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 			return nil, err
 		}
 		pr, changed, err := f.page(ctx, pg)
+		if errors.Is(err, errUnreadable) {
+			f.doc.Logger.Debug("flatten: page content does not read", slog.Int("page", i+1), slog.Any("err", err))
+			report.Skipped = append(report.Skipped, i)
+			continue
+		}
 		if err != nil {
 			return nil, fmt.Errorf("page %d: %w", i+1, err)
 		}
@@ -148,6 +175,8 @@ type opEdit struct {
 	// remove drops the operation, and replace stands in its place.
 	remove  bool
 	replace []byte
+	// after is drawn behind it.
+	after []byte
 }
 
 // page flattens pg, reporting whether it changed it.
@@ -158,11 +187,11 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 	}
 	data, err := mutations.LatestPageContents(ctx, f.alloc, f.doc, pg)
 	if err != nil {
-		return pr, false, fmt.Errorf("assembling page content: %w", err)
+		return pr, false, unreadable(ctx, fmt.Errorf("assembling page content: %w", err))
 	}
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.SplitGluedOperators())
 	if err != nil {
-		return pr, false, fmt.Errorf("parsing page content: %w", err)
+		return pr, false, unreadable(ctx, fmt.Errorf("parsing page content: %w", err))
 	}
 	a, err := Analyze(ctx, f.doc, pg, ops)
 	if err != nil {
@@ -189,6 +218,8 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 		return e
 	}
 
+	removed := make(map[int]bool)
+	clippedBy := make(map[int][]Rect)
 	if len(a.Regions) > 0 {
 		canvas, g, dpi, err := f.render(ctx, pg)
 		if err != nil {
@@ -205,24 +236,53 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 				e.before = append(e.before, f.drawImage(a.positions[r.Insert], r.Box, name, matrix)...)
 			}
 			for _, u := range r.Removed {
-				if err := f.removeUnit(ctx, ops, a.Units[u], pg.DrawResources, xobjects, edit); err != nil {
-					return pr, false, err
-				}
+				removed[u] = true
 			}
-			pr.Removed += len(r.Removed)
+			for _, u := range r.Clipped {
+				clippedBy[u] = append(clippedBy[u], r.Box)
+			}
 			pr.KeptText += len(r.Text)
 			pr.TextUnderTransparency += r.TextUnderTransparency
 		}
 	}
-
+	for _, u := range a.Hidden {
+		removed[u] = true
+	}
+	for _, u := range slices.Sorted(maps.Keys(removed)) {
+		if err := f.removeUnit(ctx, ops, a.Units[u], pg.DrawResources, xobjects, edit); err != nil {
+			return pr, false, err
+		}
+	}
+	pr.Removed = len(removed)
+	for _, u := range slices.Sorted(maps.Keys(clippedBy)) {
+		if removed[u] {
+			continue
+		}
+		unit := a.Units[u]
+		before, after := clipOut(a.positions[unit.First].ctm, a.crop, clippedBy[u])
+		edit(unit.First).before = append(edit(unit.First).before, before...)
+		edit(unit.Last).after = append(edit(unit.Last).after, after...)
+	}
+	for _, i := range slices.Sorted(maps.Keys(a.TextModes)) {
+		e := edit(i)
+		r := ranges[i]
+		e.remove = true
+		e.replace = modeWrapped(a.TextModes[i], data[r.Start:r.End])
+	}
 	groupsChanged, err := f.keptForms(ctx, ops, edits, pg.DrawResources, xobjects)
 	if err != nil {
 		return pr, false, err
 	}
+
 	statesChanged, err := f.neutralStates(ctx, resources)
 	if err != nil {
 		return pr, false, err
 	}
+	patternsChanged, err := f.neutralPatterns(ctx, resources)
+	if err != nil {
+		return pr, false, err
+	}
+	statesChanged = statesChanged || patternsChanged
 	dict := mutations.LatestPageDict(f.alloc, pg)
 	_, hasGroup := dict["Group"]
 	pr.GroupRemoved = hasGroup && groupTransparency(ctx, f.doc, dict)
@@ -476,7 +536,7 @@ func (f *flattener) removeUnit(ctx context.Context, ops []content.Operation, u U
 			edit(u.First).remove = true
 			return nil
 		}
-		ref, err := f.textForm(ctx, ops[u.First], resources, 1)
+		ref, err := f.textForm(ctx, ops[u.First], resources, 1, u.hides)
 		if err != nil {
 			return err
 		}
@@ -495,6 +555,14 @@ func (f *flattener) removeUnit(ctx context.Context, ops []content.Operation, u U
 	return nil
 }
 
+// modeWrapped returns original, the bytes of a show operator, drawn in the
+// text rendering mode modes[0] and followed by modes[1], the mode in force
+// before, restored: the mode is graphics state (ISO 32000-2, 9.3.1), which
+// the operators after it read.
+func modeWrapped(modes [2]int, original []byte) []byte {
+	return []byte(strconv.Itoa(modes[0]) + " Tr " + string(original) + " " + strconv.Itoa(modes[1]) + " Tr")
+}
+
 // pathOperator reports whether operator constructs, clips or paints a path
 // (ISO 32000-2, 8.5.2 to 8.5.4).
 func pathOperator(operator string) bool {
@@ -507,25 +575,82 @@ func pathOperator(operator string) bool {
 }
 
 // spanEdits turns the edits of operations into edits of the bytes ranges
-// address.
+// address. Bytes drawn ahead of an operation go at its start, bytes drawn
+// behind it at its end, which is where the next operation starts: they are
+// joined there in drawing order, behind before ahead, into one edit, so the
+// result does not hang on the order of edits that share an offset.
 func spanEdits(edits map[int]*opEdit, ranges []content.ByteRange) []mutations.SpanEdit {
-	out := make([]mutations.SpanEdit, 0, len(edits))
+	var out []mutations.SpanEdit
+	var pending []byte
+	pendingAt := -1
+	flush := func() {
+		if pendingAt >= 0 && len(pending) > 0 {
+			out = append(out, mutations.SpanEdit{Span: content.ByteRange{Start: pendingAt, End: pendingAt}, Replacement: pending})
+		}
+		pending, pendingAt = nil, -1
+	}
+	insert := func(at int, b []byte) {
+		if pendingAt != at {
+			flush()
+			pendingAt = at
+		}
+		pending = append(pending, b...)
+	}
 	for _, i := range slices.Sorted(maps.Keys(edits)) {
 		e := edits[i]
 		r := ranges[i]
 		if !e.remove {
-			out = append(out, mutations.SpanEdit{Span: content.ByteRange{Start: r.Start, End: r.Start}, Replacement: e.before})
+			insert(r.Start, e.before)
+			if len(e.after) > 0 {
+				insert(r.End, e.after)
+			}
 			continue
 		}
-		replacement := slices.Clone(e.before)
+		var replacement []byte
+		if pendingAt == r.Start {
+			replacement, pending, pendingAt = pending, nil, -1
+		}
+		flush()
+		replacement = append(replacement, e.before...)
 		if len(e.replace) > 0 {
 			replacement = append(append(append(replacement, '\n'), e.replace...), '\n')
-		} else if len(replacement) == 0 {
+		}
+		replacement = append(replacement, e.after...)
+		if len(replacement) == 0 {
 			// The range may hold the white space that parts the operation
 			// from the one before; one space keeps them apart.
 			replacement = []byte(" ")
 		}
 		out = append(out, mutations.SpanEdit{Span: r, Replacement: replacement})
 	}
+	flush()
 	return out
+}
+
+// clipOut returns the operators that wrap a unit drawn under ctm so it paints
+// outside boxes only: a q and an even-odd clip of the crop box with the boxes
+// cut out (ISO 32000-2, 8.5.3.3.3), set in default user space with ctm undone
+// and restored around it, then the Q that ends it. The boxes are disjoint
+// regions, each inside the crop box. ctm inverts: [Analysis.removed] takes
+// the units whose CTM does not.
+func clipOut(ctm geom.Matrix, crop Rect, boxes []Rect) (before, after []byte) {
+	var b strings.Builder
+	b.WriteString("\nq\n")
+	identity := ctm == geom.Identity
+	if !identity {
+		inv, _ := ctm.Invert()
+		b.WriteString(matrixOperands(inv) + " cm\n")
+	}
+	outer := crop.Outset(1)
+	for _, r := range append([]Rect{outer}, boxes...) {
+		for _, v := range []float64{r.MinX, r.MinY, r.MaxX - r.MinX, r.MaxY - r.MinY} {
+			b.WriteString(number(v) + " ")
+		}
+		b.WriteString("re\n")
+	}
+	b.WriteString("W* n\n")
+	if !identity {
+		b.WriteString(matrixOperands(ctm) + " cm\n")
+	}
+	return []byte(b.String()), []byte("\nQ\n")
 }

@@ -53,11 +53,12 @@ func TestAnalyzeTextStaysAboveTheImage(t *testing.T) {
 	}
 }
 
-func TestAnalyzeRegionTakesWhatItsTransparencyCovers(t *testing.T) {
+func TestAnalyzeRegionClipsWhatItsTransparencyCovers(t *testing.T) {
 	t.Parallel()
-	// The opaque square drawn between two transparent ones that overlap is
-	// removed, and the region grows to its whole box.
-	a := analyze(t, fixture{content: "q /GS1 gs 10 10 20 20 re f Q 1 1 1 rg 20 20 40 40 re f q /GS1 gs 25 25 10 10 re f Q"})
+	// The opaque square drawn between two transparent ones that overlap
+	// stays, clipped out of the region, which keeps its size.
+	const content = "q /GS1 gs 10 10 20 20 re f Q 1 1 1 rg 20 20 40 40 re f q /GS1 gs 25 25 10 10 re f Q"
+	a := analyze(t, fixture{content: content})
 	if got := kinds(a); got != "path* path path*" {
 		t.Fatalf("units %q", got)
 	}
@@ -65,11 +66,21 @@ func TestAnalyzeRegionTakesWhatItsTransparencyCovers(t *testing.T) {
 		t.Fatalf("%d regions, want 1", len(a.Regions))
 	}
 	r := a.Regions[0]
-	if !slices.Equal(r.Removed, []int{0, 1, 2}) {
-		t.Errorf("removed %v, want [0 1 2]", r.Removed)
+	if !slices.Equal(r.Removed, []int{0, 2}) || !slices.Equal(r.Clipped, []int{1}) {
+		t.Errorf("removed %v clipped %v, want [0 2] [1]", r.Removed, r.Clipped)
 	}
-	if want := (Rect{10, 10, 60, 60}); r.Box != want {
+	if want := (Rect{10, 10, 35, 35}); r.Box != want {
 		t.Errorf("box %v, want %v", r.Box, want)
+	}
+	// A form showing text there is removed instead, its text kept above
+	// the image, and the region grows to hold it.
+	a = analyze(t, fixture{
+		resources: "/XObject << /T 7 0 R >>",
+		content:   "q /GS1 gs 10 10 20 20 re f Q /T Do q /GS1 gs 25 25 10 10 re f Q",
+		objs:      []string{stream("/Type /XObject /Subtype /Form /BBox [20 20 60 60] /Resources << /Font << /F 5 0 R >> >>", "BT /F 9 Tf 22 22 Td (t) Tj ET")},
+	})
+	if r := a.Regions[0]; !slices.Equal(r.Removed, []int{0, 1, 2}) || r.Box != (Rect{10, 10, 60, 60}) {
+		t.Errorf("removed %v box %v, want [0 1 2] {10 10 60 60}", r.Removed, r.Box)
 	}
 }
 

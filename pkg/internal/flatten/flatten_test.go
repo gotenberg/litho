@@ -196,6 +196,21 @@ func TestFlattenFormShowingText(t *testing.T) {
 	}
 }
 
+func TestFlattenClipsWhatTheCompositeHolds(t *testing.T) {
+	t.Parallel()
+	// The long rule crosses the region of the two transparent squares drawn
+	// around it: it stays vector outside them, clipped out of the region,
+	// under a CTM the clip has to undo.
+	out, report := checkFlattened(t, fixture{content: "q /GS1 gs 1 0 0 rg 30 30 30 30 re f Q " +
+		"q 0.5 0 0 0.5 0 0 cm 0 g 0 90 200 4 re f Q q /GS1 gs 0 0 1 rg 40 40 10 10 re f Q"})
+	if pr := report.Pages[0]; pr.Removed != 2 {
+		t.Errorf("report %+v, want the squares alone removed", pr)
+	}
+	if !bytes.Contains(out, []byte("W* n")) {
+		t.Error("the rule is not clipped out of the region")
+	}
+}
+
 func TestFlattenLeavesAnOpaquePageAlone(t *testing.T) {
 	t.Parallel()
 	in := fixture{bare: true, content: "0 0 1 rg 0 0 100 100 re f"}.bytes()

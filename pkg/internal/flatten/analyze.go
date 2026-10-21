@@ -63,6 +63,9 @@ type Unit struct {
 	// Group reports a form holding a transparency group, its own or one of
 	// a form it paints.
 	Group bool
+	// hides says which colours a form is painted under a constant alpha of
+	// 0 for: what its content paints in them shows nothing.
+	hides paints
 }
 
 // Region is a part of the page composited into one image.
@@ -74,6 +77,10 @@ type Region struct {
 	// Removed lists, in order, the units whose painting the image takes
 	// over; a form among them that shows text is replaced by its text.
 	Removed []int
+	// Clipped lists, in order, the units drawn after the image and before
+	// the region's last transparent unit that stay, clipped to paint
+	// outside the region only: inside it the image holds what they paint.
+	Clipped []int
 	// Text lists, in order, the units showing text inside Box that stay in
 	// the content, drawn above the image.
 	Text []int
@@ -103,11 +110,22 @@ type position struct {
 type Analysis struct {
 	Units   []Unit
 	Regions []Region
-	// TransparentText lists the text units that paint with transparency.
-	// Text is not rasterised, so these draw opaque once the transparency is
-	// removed.
+	// TransparentText lists the text units that paint with a transparency
+	// no opaque text reproduces: a constant alpha between 0 and 1, a blend
+	// mode, a soft mask. Text is not rasterised, so these draw opaque in
+	// their own colour once the transparency is removed.
 	TransparentText []int
-	positions       []position
+	// TextModes maps the show operators whose fill or stroke paints with a
+	// constant alpha of 0 to the text rendering mode that leaves it out, and
+	// the mode in force there
+	// (ISO 32000-2, 9.3.6, Table 104): such a paint changes nothing, and
+	// once the alpha is gone the mode is what keeps it so.
+	TextModes map[int][2]int
+	// Hidden lists the transparent units, other than text, that paint
+	// nothing on the page: no clip and crop box leave them area. Removing
+	// them changes nothing a viewer shows.
+	Hidden    []int
+	positions []position
 	// crop is the page's crop box, as a viewer reads it.
 	crop Rect
 }
@@ -132,6 +150,9 @@ type walker struct {
 	// those of the text object open.
 	textFor map[int]int
 	shows   []int
+	// textModes maps a show operator to the rendering mode it is drawn in
+	// once transparency is gone; see [scanner.textMode].
+	textModes map[int][2]int
 
 	pathStart, pathOps int
 	pathRect, clipping bool
@@ -155,6 +176,8 @@ func Analyze(ctx context.Context, doc *document.Document, page *document.Page, o
 		res:     page.DrawResources,
 		frames:  []clipFrame{{exact: true}},
 		textFor: make(map[int]int),
+
+		textModes: make(map[int][2]int),
 	}
 	w.m.Doc, w.m.Resources = doc, page.DrawResources
 	w.m.RecordPathBoxes = true
@@ -175,9 +198,13 @@ func Analyze(ctx context.Context, doc *document.Document, page *document.Page, o
 	if err := w.textBoxes(page, ops, a.Units); err != nil {
 		return nil, err
 	}
+	a.TextModes = w.textModes
 	for i, u := range a.Units {
-		if u.Kind == KindText && u.Transparent {
+		switch {
+		case u.Kind == KindText && u.Transparent:
 			a.TransparentText = append(a.TransparentText, i)
+		case u.Kind != KindText && u.Transparent && u.Box.Empty():
+			a.Hidden = append(a.Hidden, i)
 		}
 	}
 	if err := a.regions(); err != nil {
@@ -258,8 +285,11 @@ func (w *walker) step(i int, op content.Operation) {
 	if showText(op.Operator) && w.inText {
 		w.textShows = true
 		w.shows = append(w.shows, i)
-		p := textPaints(st.Text.Tmode)
-		w.textAlpha = w.textAlpha || w.scan.painting(w.ctx, st, p, w.res, 0, nil)
+		mode, rewrite, approx := w.scan.textMode(w.ctx, st, w.res)
+		if rewrite {
+			w.textModes[i] = [2]int{mode, st.Text.Tmode}
+		}
+		w.textAlpha = w.textAlpha || approx
 		if st.Text.Tmode >= 4 {
 			w.textClip = true
 		}
@@ -338,29 +368,36 @@ func (w *walker) do(i int, op content.Operation, st *graphics.State, ctm geom.Ma
 			Kind:        KindForm,
 			First:       i,
 			Last:        i,
-			Box:         w.visible(formBox(w.ctx, w.doc, stream.Dict, ctm)),
+			Box:         w.visible(formBox(w.ctx, w.doc, stream.Dict, info.bounds, ctm)),
 			Transparent: info.transparent || stateTransparent(st, paintBoth),
 			HasText:     info.text,
 			Group:       info.group,
+			hides:       paints{fill: st.FillAlpha <= 0, stroke: st.StrokeAlpha <= 0},
 		})
 	}
 }
 
-// formBox returns the box of a form's /BBox through its /Matrix and ctm
-// (ISO 32000-2, 8.10.1).
-func formBox(ctx context.Context, doc *document.Document, dict ast.PdfDict, ctm geom.Matrix) Rect {
-	bbox, err := document.ResolveArray(ctx, doc, dict["BBox"])
-	if err != nil || len(bbox) != 4 {
-		return Rect{}
-	}
+// formBox returns the box of bounds, what a form paints in its own space,
+// through its /Matrix and ctm (ISO 32000-2, 8.10.1).
+func formBox(ctx context.Context, doc *document.Document, dict ast.PdfDict, bounds Rect, ctm geom.Matrix) Rect {
+	matrix, _ := formGeometry(ctx, doc, dict)
+	return transformRect(matrix.Mul(ctm), bounds)
+}
+
+// formGeometry returns a form's /Matrix, the identity when it states none,
+// and its /BBox, empty when it states none (ISO 32000-2, 8.10.2, Table 93).
+func formGeometry(ctx context.Context, doc *document.Document, dict ast.PdfDict) (geom.Matrix, Rect) {
 	matrix := geom.Identity
 	if arr, err := document.ResolveArray(ctx, doc, dict["Matrix"]); err == nil && len(arr) == 6 {
 		for k := range 6 {
 			matrix[k] = document.Float(arr[k])
 		}
 	}
-	r := rectOf(document.Float(bbox[0]), document.Float(bbox[1]), document.Float(bbox[2]), document.Float(bbox[3]))
-	return transformRect(matrix.Mul(ctm), r)
+	bbox, err := document.ResolveArray(ctx, doc, dict["BBox"])
+	if err != nil || len(bbox) != 4 {
+		return matrix, Rect{}
+	}
+	return matrix, rectOf(document.Float(bbox[0]), document.Float(bbox[1]), document.Float(bbox[2]), document.Float(bbox[3]))
 }
 
 // strokeReach returns how far a stroke under st reaches past its path, in
@@ -423,13 +460,17 @@ func (w *walker) textBoxes(page *document.Page, ops []content.Operation, units [
 //     a text object, with no path under construction, under an invertible
 //     CTM and a clip that holds the region;
 //   - every unit other than a text object from there to its last
-//     transparent unit that overlaps it is removed, its painting taken over
-//     by the image, so the region grows to hold it.
+//     transparent unit that overlaps it either stays, clipped to paint
+//     outside the region only, or, when it cannot be clipped so, is removed
+//     whole, its painting taken over by the image, and the region grows to
+//     hold it.
 //
-// The units drawn before the image stay, under it. The units drawn after its
-// last transparent unit stay, above it, and are opaque: the image holds what
-// they paint too, and they paint it again. Text stays wherever it is, above
-// the image.
+// Inside the region the image shows what everything drawn up to its last
+// transparent unit composites to, text left out. The units drawn before the
+// image stay, under it. A unit clipped out of the region paints outside it
+// what it painted there. The units drawn after its last transparent unit
+// stay, above it, and are opaque: the image holds what they paint too, and
+// they paint it again. Text stays wherever it is, above the image.
 func (a *Analysis) regions() error {
 	var regs []*growing
 	for _, u := range a.Units {
@@ -473,7 +514,7 @@ func (a *Analysis) regions() error {
 			r.last = last
 			for i := range last + 1 {
 				u := a.Units[i]
-				if u.First < r.insert || u.Kind == KindText || !u.Box.Overlaps(r.box) {
+				if u.First < r.insert || u.Kind == KindText || !u.Box.Overlaps(r.box) || !a.removed(u) {
 					continue
 				}
 				grown := r.box.Union(u.Box)
@@ -498,8 +539,10 @@ func (a *Analysis) regions() error {
 				if i < r.last && a.overlappedLater(i, r.last) {
 					out.TextUnderTransparency++
 				}
-			case i <= r.last:
+			case i <= r.last && a.removed(u):
 				out.Removed = append(out.Removed, i)
+			case i <= r.last:
+				out.Clipped = append(out.Clipped, i)
 			case u.HasText:
 				out.Text = append(out.Text, i)
 			}
@@ -507,6 +550,20 @@ func (a *Analysis) regions() error {
 		a.Regions = append(a.Regions, out)
 	}
 	return nil
+}
+
+// removed reports whether a unit a region's image has to take over is
+// removed rather than clipped out of the region: a transparent unit, whose
+// painting the image composites; a form showing text, whose text has to go
+// above the image; a path that also clips, whose clip outlives it (ISO
+// 32000-2, 8.5.4) and so cannot be wrapped in a q and Q; and a unit under a
+// CTM that does not invert, which no clip in default user space reaches.
+func (a *Analysis) removed(u Unit) bool {
+	if u.Transparent || u.HasText || u.Clips {
+		return true
+	}
+	_, ok := a.positions[u.First].ctm.Invert()
+	return !ok
 }
 
 // overlappedLater reports whether a transparent unit after unit i, up to
