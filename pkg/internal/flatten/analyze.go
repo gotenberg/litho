@@ -66,6 +66,15 @@ type Unit struct {
 	// hides says which colours a form is painted under a constant alpha of
 	// 0 for: what its content paints in them shows nothing.
 	hides paints
+	// blended reports a text object whose colours were composited over
+	// the paper: exact unless something drawn before it lies under it.
+	blended bool
+	// textCovered reports a form that paints something after showing
+	// text, which its copy holding only its text no longer draws over it.
+	textCovered bool
+	// textTransparent reports a form showing text with a transparency its
+	// copy holding only its text approximates.
+	textTransparent bool
 }
 
 // Region is a part of the page composited into one image.
@@ -84,10 +93,12 @@ type Region struct {
 	// Text lists, in order, the units showing text inside Box that stay in
 	// the content, drawn above the image.
 	Text []int
-	// TextUnderTransparency counts the units among Text that a transparent
-	// unit drawn after them overlapped: they now draw above it, unchanged
-	// by it.
-	TextUnderTransparency int
+	// TextReordered counts the text the region's image now lies under
+	// though something it composites was drawn over it: a text unit among
+	// Text that a later unit drawn up to the region's last transparent unit
+	// overlapped, and a removed form that paints after showing text. The
+	// text stays above the image, without what covered it.
+	TextReordered int
 }
 
 // position is the graphics state in force before one operation.
@@ -110,17 +121,15 @@ type position struct {
 type Analysis struct {
 	Units   []Unit
 	Regions []Region
-	// TransparentText lists the text units that paint with a transparency
-	// no opaque text reproduces: a constant alpha between 0 and 1, a blend
-	// mode, a soft mask. Text is not rasterised, so these draw opaque in
-	// their own colour once the transparency is removed.
+	// TransparentText lists the text units whose transparency the output
+	// only approximates (see [scanner.textOutcome]): text is not
+	// rasterised, so a soft mask or a blend mode it painted with is dropped,
+	// and its colours composited over the paper differ where it lay over
+	// other content.
 	TransparentText []int
-	// TextModes maps the show operators whose fill or stroke paints with a
-	// constant alpha of 0 to the text rendering mode that leaves it out, and
-	// the mode in force there
-	// (ISO 32000-2, 9.3.6, Table 104): such a paint changes nothing, and
-	// once the alpha is gone the mode is what keeps it so.
-	TextModes map[int][2]int
+	// TextEdits maps the show operators that painted with transparency to
+	// what is drawn around them once it is gone (see [scanner.textOutcome]).
+	TextEdits map[int]TextEdit
 	// Hidden lists the transparent units, other than text, that paint
 	// nothing on the page: no clip and crop box leave them area. Removing
 	// them changes nothing a viewer shows.
@@ -150,9 +159,9 @@ type walker struct {
 	// those of the text object open.
 	textFor map[int]int
 	shows   []int
-	// textModes maps a show operator to the rendering mode it is drawn in
-	// once transparency is gone; see [scanner.textMode].
-	textModes map[int][2]int
+	// textEdits maps a show operator to what is drawn around it once
+	// transparency is gone; see [scanner.textOutcome].
+	textEdits map[int]TextEdit
 
 	pathStart, pathOps int
 	pathRect, clipping bool
@@ -160,7 +169,10 @@ type walker struct {
 	inText              bool
 	textStart           int
 	textAlpha, textClip bool
-	textShows           bool
+	// textBlended reports colours of the text object open composited over
+	// the paper, exact where the text lies on the paper.
+	textBlended bool
+	textShows   bool
 }
 
 // Analyze reads ops, the content of page, into units and regions.
@@ -177,7 +189,7 @@ func Analyze(ctx context.Context, doc *document.Document, page *document.Page, o
 		frames:  []clipFrame{{exact: true}},
 		textFor: make(map[int]int),
 
-		textModes: make(map[int][2]int),
+		textEdits: make(map[int]TextEdit),
 	}
 	w.m.Doc, w.m.Resources = doc, page.DrawResources
 	w.m.RecordPathBoxes = true
@@ -198,8 +210,12 @@ func Analyze(ctx context.Context, doc *document.Document, page *document.Page, o
 	if err := w.textBoxes(page, ops, a.Units); err != nil {
 		return nil, err
 	}
-	a.TextModes = w.textModes
+	a.TextEdits = w.textEdits
 	for i, u := range a.Units {
+		if u.blended && !u.Transparent && a.drawnUnder(i) {
+			a.Units[i].Transparent = true
+			u.Transparent = true
+		}
 		switch {
 		case u.Kind == KindText && u.Transparent:
 			a.TransparentText = append(a.TransparentText, i)
@@ -264,7 +280,7 @@ func (w *walker) step(i int, op content.Operation) {
 		w.endPath(ctm)
 	case "BT":
 		w.inText, w.textStart, w.shows = true, i, w.shows[:0]
-		w.textAlpha, w.textClip, w.textShows = false, false, false
+		w.textAlpha, w.textClip, w.textShows, w.textBlended = false, false, false, false
 	case "ET":
 		if w.inText {
 			w.endText(i)
@@ -285,11 +301,12 @@ func (w *walker) step(i int, op content.Operation) {
 	if showText(op.Operator) && w.inText {
 		w.textShows = true
 		w.shows = append(w.shows, i)
-		mode, rewrite, approx := w.scan.textMode(w.ctx, st, w.res)
-		if rewrite {
-			w.textModes[i] = [2]int{mode, st.Text.Tmode}
+		outcome := w.scan.textOutcome(w.ctx, st, w.res)
+		if outcome.edited {
+			w.textEdits[i] = outcome.edit
 		}
-		w.textAlpha = w.textAlpha || approx
+		w.textAlpha = w.textAlpha || outcome.approx
+		w.textBlended = w.textBlended || outcome.blended
 		if st.Text.Tmode >= 4 {
 			w.textClip = true
 		}
@@ -338,7 +355,7 @@ func (w *walker) endText(i int) {
 		w.textFor[op] = len(w.units)
 	}
 	w.shows = w.shows[:0]
-	w.units = append(w.units, Unit{Kind: KindText, First: w.textStart, Last: i, Transparent: w.textAlpha, HasText: w.textShows})
+	w.units = append(w.units, Unit{Kind: KindText, First: w.textStart, Last: i, Transparent: w.textAlpha, HasText: w.textShows, blended: w.textBlended})
 }
 
 // do records the Do at operation i.
@@ -372,7 +389,10 @@ func (w *walker) do(i int, op content.Operation, st *graphics.State, ctm geom.Ma
 			Transparent: info.transparent || stateTransparent(st, paintBoth),
 			HasText:     info.text,
 			Group:       info.group,
-			hides:       paints{fill: st.FillAlpha <= 0, stroke: st.StrokeAlpha <= 0},
+			textCovered: info.textCovered,
+
+			textTransparent: info.textTransparent,
+			hides:           paints{fill: st.FillAlpha <= 0, stroke: st.StrokeAlpha <= 0},
 		})
 	}
 }
@@ -397,8 +417,20 @@ func formGeometry(ctx context.Context, doc *document.Document, dict ast.PdfDict)
 	if err != nil || len(bbox) != 4 {
 		return matrix, Rect{}
 	}
-	return matrix, rectOf(document.Float(bbox[0]), document.Float(bbox[1]), document.Float(bbox[2]), document.Float(bbox[3]))
+	clamp := func(o ast.PdfObject) float64 {
+		return max(-maxBBoxCoordinate, min(document.Float(o), maxBBoxCoordinate))
+	}
+	return matrix, rectOf(clamp(bbox[0]), clamp(bbox[1]), clamp(bbox[2]), clamp(bbox[3]))
 }
+
+// maxBBoxCoordinate bounds each /BBox coordinate a form's box is read with,
+// as the renderer bounds the clip it draws the form under (see the constant
+// of the same name in package render/page). Anti-overflow guard, not
+// spec-mandated: a /BBox of ±9×10^307 through a scaling matrix overflows to
+// infinity, which reads as a box of no area, and a form that paints the
+// page would read as painting nothing. A billion units holds the largest
+// page (ISO 32000-1, Annex C.2).
+const maxBBoxCoordinate = 1e9
 
 // strokeReach returns how far a stroke under st reaches past its path, in
 // default user space: half the line width, times the miter limit where a
@@ -512,9 +544,15 @@ func (a *Analysis) regions() error {
 			}
 			r.insert = a.insertion(a.Units[start].First, r.box)
 			r.last = last
+			r.transparent = r.transparent[:0]
+			for i := range last + 1 {
+				if u := a.Units[i]; u.Transparent && u.Kind != KindText && u.Box.Overlaps(r.box) {
+					r.transparent = append(r.transparent, i)
+				}
+			}
 			for i := range last + 1 {
 				u := a.Units[i]
-				if u.First < r.insert || u.Kind == KindText || !u.Box.Overlaps(r.box) || !a.removed(u) {
+				if u.First < r.insert || u.Kind == KindText || !u.Box.Overlaps(r.box) || !a.removed(u) || (!u.Transparent && !r.coveredLater(a, i)) {
 					continue
 				}
 				grown := r.box.Union(u.Box)
@@ -536,11 +574,17 @@ func (a *Analysis) regions() error {
 			switch {
 			case u.Kind == KindText:
 				out.Text = append(out.Text, i)
-				if i < r.last && a.overlappedLater(i, r.last) {
-					out.TextUnderTransparency++
+				if i < r.last && r.overlappedLater(a, i) {
+					out.TextReordered++
 				}
+			case i <= r.last && !u.Transparent && !r.coveredLater(a, i):
+				// No transparency is drawn over it: it paints what the image
+				// holds where it stands, so it stays as it is.
 			case i <= r.last && a.removed(u):
 				out.Removed = append(out.Removed, i)
+				if u.textCovered {
+					out.TextReordered++
+				}
 			case i <= r.last:
 				out.Clipped = append(out.Clipped, i)
 			case u.HasText:
@@ -566,11 +610,37 @@ func (a *Analysis) removed(u Unit) bool {
 	return !ok
 }
 
-// overlappedLater reports whether a transparent unit after unit i, up to
-// unit last, overlaps it.
-func (a *Analysis) overlappedLater(i, last int) bool {
-	for j := i + 1; j <= last; j++ {
-		if a.Units[j].Transparent && a.Units[j].Kind != KindText && a.Units[j].Box.Overlaps(a.Units[i].Box) {
+// drawnUnder reports whether a unit drawn before unit i paints where it
+// does, so that i's colours composited over the paper only approximate what
+// it composited over.
+func (a *Analysis) drawnUnder(i int) bool {
+	for j := range i {
+		if a.Units[j].Box.Overlaps(a.Units[i].Box) {
+			return true
+		}
+	}
+	return false
+}
+
+// coveredLater reports whether a transparent unit of the region drawn after
+// unit i overlaps it: the image composites that unit over what i paints, so
+// i, drawn again where it stands, would paint over the composite.
+func (r *growing) coveredLater(a *Analysis, i int) bool {
+	for _, j := range r.transparent {
+		if j > i && a.Units[j].Box.Overlaps(a.Units[i].Box) {
+			return true
+		}
+	}
+	return false
+}
+
+// overlappedLater reports whether a unit other than text that the region's
+// image takes over, removed or clipped out of it, was drawn over text unit i
+// after it: i now draws above what covered it.
+func (r *growing) overlappedLater(a *Analysis, i int) bool {
+	for j := i + 1; j <= r.last; j++ {
+		u := a.Units[j]
+		if u.Kind != KindText && u.Box.Overlaps(a.Units[i].Box) && (u.Transparent || r.coveredLater(a, j)) {
 			return true
 		}
 	}
@@ -603,6 +673,8 @@ type growing struct {
 	// insert is the index of the operation the image is drawn before, and
 	// last the index of the region's last transparent unit.
 	insert, last int
+	// transparent lists, in order, the region's transparent units.
+	transparent []int
 }
 
 // mergeRegions joins regions whose boxes overlap, reporting whether any did.

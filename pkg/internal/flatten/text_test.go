@@ -24,6 +24,18 @@ func TestFlattenKeepsAlphaZeroTextInvisible(t *testing.T) {
 	}
 }
 
+func TestFlattenDrawsAWatermarkOnThePaperAsItWas(t *testing.T) {
+	t.Parallel()
+	// A half-transparent red watermark on the paper, beside a transparent
+	// square: its colour composited over white draws it exactly.
+	_, report := checkFlattened(t, fixture{
+		content: "q /GS1 gs 0 0 1 rg 0 0 30 30 re f Q q /GS1 gs 1 0 0 rg BT /F1 24 Tf 10 60 Td (DRAFT) Tj ET Q",
+	})
+	if pr := report.Pages[0]; pr.TransparentText != 0 {
+		t.Errorf("report %+v: the watermark on the paper is drawn exactly", pr)
+	}
+}
+
 func TestFlattenSkipsAPageWhoseContentDoesNotRead(t *testing.T) {
 	t.Parallel()
 	in := buildPDF([]string{

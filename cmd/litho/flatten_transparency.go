@@ -24,14 +24,14 @@ type flattenTransparencyResult struct {
 
 // flattenTransparencyPage is one page of the JSON report.
 type flattenTransparencyPage struct {
-	Page                  int     `json:"page"`
-	Regions               int     `json:"regions"`
-	DPI                   float64 `json:"dpi,omitempty"`
-	Rasterized            int     `json:"rasterized"`
-	KeptText              int     `json:"keptText"`
-	TextUnderTransparency int     `json:"textUnderTransparency"`
-	TransparentText       int     `json:"transparentText"`
-	GroupRemoved          bool    `json:"groupRemoved,omitempty"`
+	Page            int     `json:"page"`
+	Regions         int     `json:"regions"`
+	DPI             float64 `json:"dpi,omitempty"`
+	Rasterized      int     `json:"rasterized"`
+	KeptText        int     `json:"keptText"`
+	TextReordered   int     `json:"textReordered"`
+	TransparentText int     `json:"transparentText"`
+	GroupRemoved    bool    `json:"groupRemoved,omitempty"`
 }
 
 func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -110,17 +110,17 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 	regions, approximated := 0, 0
 	for _, p := range report.Pages {
 		result.Pages = append(result.Pages, flattenTransparencyPage{
-			Page:                  p.Page,
-			Regions:               p.Regions,
-			DPI:                   p.DPI,
-			Rasterized:            p.Rasterized,
-			KeptText:              p.KeptText,
-			TextUnderTransparency: p.TextUnderTransparency,
-			TransparentText:       p.TransparentText,
-			GroupRemoved:          p.GroupRemoved,
+			Page:            p.Page,
+			Regions:         p.Regions,
+			DPI:             p.DPI,
+			Rasterized:      p.Rasterized,
+			KeptText:        p.KeptText,
+			TextReordered:   p.TextReordered,
+			TransparentText: p.TransparentText,
+			GroupRemoved:    p.GroupRemoved,
 		})
 		regions += p.Regions
-		approximated += p.TextUnderTransparency + p.TransparentText
+		approximated += p.TextReordered + p.TransparentText
 	}
 	if format == "json" {
 		enc := json.NewEncoder(stdout)
@@ -140,7 +140,7 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 			p.Page, p.Regions, p.DPI, p.Rasterized, p.KeptText)
 	}
 	if approximated > 0 {
-		fmt.Fprintf(stdout, "Approximated %d text object(s): transparent text drawn opaque, or text drawn above the transparency that covered it\n", approximated)
+		fmt.Fprintf(stdout, "Approximated %d text object(s): transparency on text it could not reproduce, or text now drawn above what covered it\n", approximated)
 	}
 	if len(result.SkippedPages) > 0 {
 		fmt.Fprintf(stdout, "Left %d page(s) whose content does not read as they are: %v\n", len(result.SkippedPages), result.SkippedPages)

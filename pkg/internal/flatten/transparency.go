@@ -163,6 +163,12 @@ type contentInfo struct {
 	// form's bounds are cut to its /BBox (ISO 32000-2, 8.10.1).
 	bounds    Rect
 	unbounded bool
+	// textCovered reports something painted after text was shown.
+	textCovered bool
+	// textTransparent reports text whose transparency a copy holding only
+	// the text does not reproduce exactly: its colours composited over the
+	// paper, which the form's other content may not be, or dropped.
+	textTransparent bool
 }
 
 // scanner reads what form XObjects and tiling patterns paint, each object
@@ -314,35 +320,6 @@ func (s *scanner) painting(ctx context.Context, st *graphics.State, p paints, re
 		(p.stroke && s.colorTransparent(ctx, st.Stroke, resources, depth, chain))
 }
 
-// textMode returns the text rendering mode a show operator under st is
-// drawn in once transparency is gone, whether it differs from the mode in
-// force, and whether what it still paints is transparent, which opaque text
-// only approximates. A fill or stroke under a constant alpha of 0 paints
-// nothing (ISO 32000-2, 11.3.7.2), which the mode that leaves it out
-// reproduces exactly; the clipping modes keep clipping (9.3.6, Table 104).
-func (s *scanner) textMode(ctx context.Context, st *graphics.State, resources ast.PdfDict) (int, bool, bool) {
-	mode := st.Text.Tmode
-	p := textPaints(mode)
-	visible := paints{fill: p.fill && st.FillAlpha > 0, stroke: p.stroke && st.StrokeAlpha > 0}
-	approx := s.painting(ctx, st, visible, resources, 0, nil)
-	if visible == p || mode < 0 || mode > 7 {
-		return mode, false, approx
-	}
-	next := 3
-	switch {
-	case visible.fill && visible.stroke:
-		next = 2
-	case visible.fill:
-		next = 0
-	case visible.stroke:
-		next = 1
-	}
-	if mode >= 4 {
-		next += 4
-	}
-	return next, true, approx
-}
-
 // xobject resolves the XObject a Do names, with its subtype.
 func (s *scanner) xobject(ctx context.Context, resources ast.PdfDict, op content.Operation) (ast.PdfObject, ast.PdfStream, ast.PdfName, bool) {
 	if len(op.Operands) != 1 {
@@ -385,6 +362,7 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 		st := m.Current()
 		if p, ok := pathPaints(op.Operator); ok {
 			info.transparent = info.transparent || s.painting(ctx, st, p, resources, depth, chain)
+			info.textCovered = info.textCovered || info.text
 			if boxes := m.PathBoxes(); len(boxes) > before {
 				pb := boxes[len(boxes)-1]
 				r := rectOf(pb.MinX, pb.MinY, pb.MaxX, pb.MaxY)
@@ -398,11 +376,16 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 		switch {
 		case showText(op.Operator):
 			info.text, info.unbounded = true, true
-			info.transparent = info.transparent || s.painting(ctx, st, textPaints(st.Text.Tmode), resources, depth, chain)
+			if s.painting(ctx, st, textPaints(st.Text.Tmode), resources, depth, chain) {
+				info.transparent = true
+				outcome := s.textOutcome(ctx, st, resources)
+				info.textTransparent = info.textTransparent || outcome.approx || outcome.blended
+			}
 		case op.Operator == "sh":
-			info.unbounded = true
+			info.unbounded, info.textCovered = true, info.textCovered || info.text
 			info.transparent = info.transparent || stateTransparent(st, paintFill)
 		case op.Operator == "BI":
+			info.textCovered = info.textCovered || info.text
 			info.bounds = info.bounds.Union(transformRect(ctm, Rect{0, 0, 1, 1}))
 			info.transparent = info.transparent || stateTransparent(st, paintFill)
 		case op.Operator == "Do":
@@ -412,13 +395,18 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 			}
 			switch subtype {
 			case "Image":
+				info.textCovered = info.textCovered || info.text
 				info.bounds = info.bounds.Union(transformRect(ctm, Rect{0, 0, 1, 1}))
 				info.transparent = info.transparent || stateTransparent(st, paintFill) || imageTransparent(ctx, s.doc, stream.Dict)
 			case "Form":
 				inner := s.form(ctx, obj, stream, resources, depth+1, chain)
 				matrix, _ := formGeometry(ctx, s.doc, stream.Dict)
 				info.bounds = info.bounds.Union(transformRect(matrix.Mul(ctm), inner.bounds))
+				// What the inner form paints covers the text shown before it,
+				// and its own text covered within it.
+				info.textCovered = info.textCovered || inner.textCovered || (info.text && inner.bounds != (Rect{}))
 				info.text = info.text || inner.text
+				info.textTransparent = info.textTransparent || inner.textTransparent
 				info.group = info.group || inner.group
 				info.transparent = info.transparent || inner.transparent || stateTransparent(st, paintBoth)
 			}

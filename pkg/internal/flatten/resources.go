@@ -318,10 +318,10 @@ func (f *flattener) copyTextForm(ctx context.Context, stream ast.PdfStream, pare
 			if !showText(op.Operator) {
 				continue
 			}
-			if mode, rewrite, _ := f.scan.textMode(ctx, m.Current(), formRes); rewrite {
+			if outcome := f.scan.textOutcome(ctx, m.Current(), formRes); outcome.edited {
 				edits = append(edits, mutations.SpanEdit{
 					Span:        ranges[i],
-					Replacement: modeWrapped([2]int{mode, m.Current().Text.Tmode}, data[ranges[i].Start:ranges[i].End]),
+					Replacement: wrapped(outcome.edit, data[ranges[i].Start:ranges[i].End]),
 				})
 			}
 		case op.Operator == "W" || op.Operator == "W*":

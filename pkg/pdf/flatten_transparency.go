@@ -44,10 +44,10 @@ type FlattenedPage struct {
 	// KeptText counts the text objects, and forms showing text, inside a
 	// region that stay text, drawn above its image.
 	KeptText int
-	// TextUnderTransparency counts the text objects a transparent object
-	// was drawn over: they now draw above the image, without the
-	// transparency over them. Their look is approximated.
-	TextUnderTransparency int
+	// TextReordered counts the text objects something was drawn over,
+	// transparent or opaque, inside a region: text stays above the image,
+	// so they now draw above it. Their look is approximated.
+	TextReordered int
 	// TransparentText counts the text objects that painted with
 	// transparency themselves (a constant alpha below 1, a blend mode, a
 	// soft mask): they now draw opaque in their own colour. Their look is
@@ -169,14 +169,14 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 	}
 	for _, p := range result.Pages {
 		report.Pages = append(report.Pages, FlattenedPage{
-			Page:                  p.Page + 1,
-			Regions:               p.Regions,
-			DPI:                   p.DPI,
-			Rasterized:            p.Removed,
-			KeptText:              p.KeptText,
-			TextUnderTransparency: p.TextUnderTransparency,
-			TransparentText:       p.TransparentText,
-			GroupRemoved:          p.GroupRemoved,
+			Page:            p.Page + 1,
+			Regions:         p.Regions,
+			DPI:             p.DPI,
+			Rasterized:      p.Removed,
+			KeptText:        p.KeptText,
+			TextReordered:   p.TextReordered,
+			TransparentText: p.TransparentText,
+			GroupRemoved:    p.GroupRemoved,
 		})
 	}
 	if alloc.Writes() == staged {

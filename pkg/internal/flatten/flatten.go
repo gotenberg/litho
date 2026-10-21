@@ -64,10 +64,10 @@ type PageReport struct {
 	// KeptText counts the text objects and text-showing forms inside a
 	// region kept as text above its image.
 	KeptText int
-	// TextUnderTransparency counts the text objects a transparent element
-	// drawn after them overlapped: they draw above the image, without the
-	// transparency over them.
-	TextUnderTransparency int
+	// TextReordered counts the text objects something drawn after them
+	// overlapped, a region's image now holding it: they draw above the
+	// image, without what covered them.
+	TextReordered int
 	// TransparentText counts the text objects that painted with
 	// transparency, now drawn opaque.
 	TransparentText int
@@ -242,7 +242,7 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 				clippedBy[u] = append(clippedBy[u], r.Box)
 			}
 			pr.KeptText += len(r.Text)
-			pr.TextUnderTransparency += r.TextUnderTransparency
+			pr.TextReordered += r.TextReordered
 		}
 	}
 	for _, u := range a.Hidden {
@@ -254,6 +254,11 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 		}
 	}
 	pr.Removed = len(removed)
+	for u := range removed {
+		if a.Units[u].textTransparent {
+			pr.TransparentText++
+		}
+	}
 	for _, u := range slices.Sorted(maps.Keys(clippedBy)) {
 		if removed[u] {
 			continue
@@ -263,11 +268,11 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 		edit(unit.First).before = append(edit(unit.First).before, before...)
 		edit(unit.Last).after = append(edit(unit.Last).after, after...)
 	}
-	for _, i := range slices.Sorted(maps.Keys(a.TextModes)) {
+	for _, i := range slices.Sorted(maps.Keys(a.TextEdits)) {
 		e := edit(i)
 		r := ranges[i]
 		e.remove = true
-		e.replace = modeWrapped(a.TextModes[i], data[r.Start:r.End])
+		e.replace = wrapped(a.TextEdits[i], data[r.Start:r.End])
 	}
 	groupsChanged, err := f.keptForms(ctx, ops, edits, pg.DrawResources, xobjects)
 	if err != nil {
@@ -555,12 +560,12 @@ func (f *flattener) removeUnit(ctx context.Context, ops []content.Operation, u U
 	return nil
 }
 
-// modeWrapped returns original, the bytes of a show operator, drawn in the
-// text rendering mode modes[0] and followed by modes[1], the mode in force
-// before, restored: the mode is graphics state (ISO 32000-2, 9.3.1), which
-// the operators after it read.
-func modeWrapped(modes [2]int, original []byte) []byte {
-	return []byte(strconv.Itoa(modes[0]) + " Tr " + string(original) + " " + strconv.Itoa(modes[1]) + " Tr")
+// wrapped returns original, the bytes of a show operator, between the
+// operators of e: the rendering mode and colours they set are graphics state
+// (ISO 32000-2, 8.4.1, 9.3.1), which the operators after it read, so e puts
+// them back after it.
+func wrapped(e TextEdit, original []byte) []byte {
+	return []byte(e.Prefix + " " + string(original) + " " + e.Suffix)
 }
 
 // pathOperator reports whether operator constructs, clips or paints a path

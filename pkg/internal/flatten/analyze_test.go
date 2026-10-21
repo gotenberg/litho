@@ -48,8 +48,8 @@ func TestAnalyzeTextStaysAboveTheImage(t *testing.T) {
 	if r.Insert != 0 || !slices.Equal(r.Removed, []int{1}) || !slices.Equal(r.Text, []int{0}) {
 		t.Fatalf("insert %d removed %v text %v, want 0 [1] [0]", r.Insert, r.Removed, r.Text)
 	}
-	if r.TextUnderTransparency != 1 {
-		t.Errorf("text under transparency %d, want 1", r.TextUnderTransparency)
+	if r.TextReordered != 1 {
+		t.Errorf("text reordered %d, want 1", r.TextReordered)
 	}
 }
 
@@ -81,6 +81,25 @@ func TestAnalyzeRegionClipsWhatItsTransparencyCovers(t *testing.T) {
 	})
 	if r := a.Regions[0]; !slices.Equal(r.Removed, []int{0, 1, 2}) || r.Box != (Rect{10, 10, 60, 60}) {
 		t.Errorf("removed %v box %v, want [0 1 2] {10 10 60 60}", r.Removed, r.Box)
+	}
+}
+
+func TestAnalyzeOnlyWhatTransparencyCoversIsTakenOver(t *testing.T) {
+	t.Parallel()
+	// The black strip lies over the first square and under nothing
+	// transparent: it stays as it is, drawn over the image as before.
+	a := analyze(t, fixture{content: "q /GS1 gs 1 0 0 rg 5 5 20 20 re f Q 0 g 0 0 40 8 re f q /GS1 gs 0 0 1 rg 20 20 10 10 re f Q"})
+	r := a.Regions[0]
+	if !slices.Equal(r.Removed, []int{0, 2}) || len(r.Clipped) != 0 {
+		t.Errorf("removed %v clipped %v, want [0 2] and none", r.Removed, r.Clipped)
+	}
+	// The black square covers the text and the transparent square covers
+	// it: the square is clipped out of the region, and the text, now above
+	// the image, is counted.
+	a = analyze(t, fixture{content: "BT /F1 12 Tf 10 20 Td (Hi) Tj ET 0 g 0 0 40 40 re f q /GS1 gs 1 0 0 rg 5 5 40 40 re f Q"})
+	r = a.Regions[0]
+	if !slices.Equal(r.Clipped, []int{1}) || r.TextReordered != 1 {
+		t.Errorf("clipped %v reordered %d, want [1] and 1", r.Clipped, r.TextReordered)
 	}
 }
 
@@ -138,8 +157,27 @@ func TestAnalyzeForms(t *testing.T) {
 
 func TestAnalyzeTransparentText(t *testing.T) {
 	t.Parallel()
+	// On the paper, half-transparent black is drawn exactly as opaque grey;
+	// invisible text paints nothing.
 	a := analyze(t, fixture{content: "/GS1 gs BT /F1 12 Tf 10 20 Td (Hi) Tj ET BT 3 Tr (No) Tj ET"})
-	if !slices.Equal(a.TransparentText, []int{0}) || len(a.Regions) != 0 {
-		t.Errorf("transparent text %v, %d regions; want [0], none (invisible text paints nothing)", a.TransparentText, len(a.Regions))
+	if len(a.TransparentText) != 0 || len(a.Regions) != 0 {
+		t.Errorf("transparent text %v, %d regions; want none and none", a.TransparentText, len(a.Regions))
+	}
+	if e := a.TextEdits[a.Units[0].First+3]; e.Prefix != "0.5 sc" || e.Suffix != "0 sc" {
+		t.Errorf("edit %+v, want grey 0.5 drawn and black put back", e)
+	}
+	// Over a square drawn before it, the grey only approximates it.
+	a = analyze(t, fixture{content: "0 0 1 rg 0 0 50 50 re f /GS1 gs 0 g BT /F1 12 Tf 10 20 Td (Hi) Tj ET"})
+	if !slices.Equal(a.TransparentText, []int{1}) {
+		t.Errorf("transparent text %v, want [1]", a.TransparentText)
+	}
+	// A soft mask has no opaque reading at all.
+	a = analyze(t, fixture{
+		resources: "/ExtGState << /SM << /SMask << /S /Luminosity /G 7 0 R >> >> >>",
+		content:   "/SM gs BT /F1 12 Tf 10 20 Td (Hi) Tj ET",
+		objs:      []string{stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >>", "1 g 0 0 100 100 re f")},
+	})
+	if !slices.Equal(a.TransparentText, []int{0}) || len(a.TextEdits) != 0 {
+		t.Errorf("transparent text %v edits %v, want [0] and none", a.TransparentText, a.TextEdits)
 	}
 }
