@@ -303,13 +303,14 @@ const mutationRedactReach = 1e6
 //
 // # Corpus evidence
 //
-//   - litho: 148 of the 208 fixtures have one page, so mutate-pages deletes a
-//     page on 60.
-//   - litho: 51 fixtures refuse the whole-page redaction by design, 50 with
-//     ErrRedactionRefused (30 content a form XObject draws, 10 a stroked
-//     path, 7 an inline image, 2 image samples it cannot decode, 1 an
-//     annotation reaching outside the region) and 1, redactcopies_2b, with
-//     ErrRedactionIncomplete.
+//   - litho: 150 of the 214 fixtures have one page, so mutate-pages deletes a
+//     page on 64.
+//   - litho: 49 fixtures refuse the whole-page redaction by design, 48 with
+//     ErrRedactionRefused (36 content a form XObject draws, 4 image samples
+//     it cannot decode, 3 a shading paint the region reaches, 2 text whose
+//     glyphs cannot be placed, 1 text whose position viewers read two ways,
+//     1 an image carrying /Decode or /Mask entries, 1 an annotation another
+//     page still shows) and 1, redactcopies_2b, with ErrRedactionIncomplete.
 //   - litho encperm_ua1, trailer_2b: the 2 encrypted fixtures refuse the
 //     signature with ErrSignFullRewriteIncompatible.
 //   - litho formshare_ua1, sharedtag_ua1, sharedclose_ua1: no ruleset_changed
