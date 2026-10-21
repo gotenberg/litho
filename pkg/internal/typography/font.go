@@ -84,6 +84,12 @@ type Font struct {
 	// 0 from an entry litho could not read. See [Font.simpleWidth].
 	widthStated []bool
 
+	// standardWidths reports a simple font that embeds no program and states
+	// no /Widths, whose [Font.Widths] are the standard 14 metrics
+	// [injectStandard14Widths] read through its encoding. A code those
+	// metrics give no width takes the /MissingWidth. See [Font.GlyphWidth].
+	standardWidths bool
+
 	CIDIdentityFallback bool // True when CIDToGIDMap is /Identity and no ToUnicode/embedded font
 	CIDOffset           int  // Offset to add to CID values before treating as Unicode (detected from /W array)
 
@@ -169,6 +175,19 @@ type Font struct {
 // (src/core/evaluator.js, extractWidths, defaultWidth): such a code never
 // reaches the font program or the bounding box.
 //
+// A simple font that states no /Widths and embeds no program takes its
+// widths from the standard 14 metrics ([injectStandard14Widths]), and a
+// code they give no width, because its encoding names no glyph or a glyph
+// the metrics lack, takes the /MissingWidth, 0 by default (ISO 32000-1,
+// 9.6.2.1, Table 111; 9.8.1, Table 122). poppler reads it so (GfxFont.cc,
+// Gfx8BitFont: every width starts at missingWidth and the built-in font's
+// metrics fill the codes whose names it holds), and PDF.js gives such a
+// code the metrics' default width, 0 for every standard font but Courier
+// (evaluator.js, getBaseFontMetrics, buildCharCodeToWidth); PDFium alone
+// advances it by a width its substitute program gives. With no program, no
+// glyph backs the code, and neither the bounding box nor one em is a width
+// the font gives it.
+//
 // # Corpus evidence
 //
 //   - pdfjs complex_ttf_font.pdf: combining marks carry /W 0 under /DW 1000;
@@ -176,6 +195,17 @@ type Font struct {
 //   - pdfjs, govdocs, pdfcpu, facturx, pdf20: honouring /W 0 changes three
 //     files, all toward PDF.js (complex_ttf_font, bug1046314,
 //     ThuluthFeatures), and no file moves away from it.
+//   - litho unembednames_2u.pdf: the unembedded Helvetica shows codes 01 and
+//     80, which StandardEncoding leaves unnamed. Advanced by one em each,
+//     they pushed the glyph after them 24 points right of poppler's, and 78
+//     of the page's 219 inked pixels differed; read at 0, 8 of 184 do.
+//   - litho fontclaims_2b.pdf: its unembedded Helvetica shows code 01,
+//     which StandardEncoding leaves unnamed; the page's differing pixels
+//     fall from 50 to 35, and the rest is poppler's.
+//   - govdocs thread_200_200732.pdf page 31: unnamed codes of an unembedded
+//     font split "(3rain3)X" one word nearer PDF.js's "( 3rain 3) X".
+//   - All corpora: 19 files show such a code. The text of no other file
+//     changes, and no compliance verdict over them moves.
 //   - pdfjs issue7855.pdf: a Calibri subset states /Widths 0 for 154 codes,
 //     the space among them. Read at a fallback width, they pushed the tail
 //     of "28.11.2016" past the page clip, and litho read "28.11.2".
@@ -249,7 +279,7 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 	if f.MissingWidth > 0 {
 		return f.MissingWidth
 	}
-	if f.widthStated != nil {
+	if f.widthStated != nil || f.standardWidths {
 		return 0
 	}
 
@@ -263,7 +293,8 @@ func (f *Font) GlyphWidth(charCode int) float64 {
 // as 0 is a width, not an omission. PDF.js keeps it too (src/core/evaluator.js
 // extractWidths, src/core/fonts.js _charToGlyph): only an entry that is not a
 // number falls to the default width. An entry [injectStandard14Widths] left
-// at 0 states nothing, and falls through as before.
+// at 0 states nothing: [Font.GlyphWidth] gives it the /MissingWidth when the
+// font embeds no program, and the program's fallback otherwise.
 func (f *Font) simpleWidth(charCode int) (float64, bool) {
 	idx := charCode - f.FirstChar
 	if idx < 0 || idx >= len(f.Widths) {
@@ -1541,6 +1572,7 @@ func resolveSimpleFontMetrics(ctx context.Context, doc *document.Document, fontD
 			if bfName != "" {
 				_, described := fontDict["FontDescriptor"]
 				injectStandard14Widths(font, string(bfName), substituteIsSerif(string(bfName), described))
+				font.standardWidths = len(font.Widths) > 0 && !hasEmbeddedFontFile(ctx, doc, fontDict)
 			}
 		}
 	}
@@ -3642,6 +3674,27 @@ func decodeFontStream(ctx context.Context, doc *document.Document, fdDict ast.Pd
 	return data
 }
 
+// duplicateCodeGlyph names the glyph the standard Latin encodings show for
+// the two characters they encode twice. ISO 32000-1, Annex D.2, Table D.2,
+// notes 1 and 2: code 240 of WinAnsiEncoding and 312 of MacRomanEncoding
+// encode the space, whose meaning there is a nonbreaking space, and code 255
+// of WinAnsiEncoding the hyphen, as a soft hyphen; each is "typographically
+// the same" glyph. litho reads those codes as U+00A0 and U+00AD, whose
+// names the standard 14 metrics do not hold, so their width is looked up
+// under the glyph's own name, as poppler and PDF.js read the encoding's
+// glyph name "space" or "hyphen" for them.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug850854.pdf: an unembedded Helvetica under WinAnsiEncoding
+//     shows "Bug" and "850854" three codes 240 apart. Read at 0 wide, as
+//     the /MissingWidth gives a code the metrics lack, they ran the two
+//     words together where PDF.js reads a space.
+var duplicateCodeGlyph = map[rune]string{
+	0x00A0: "space",
+	0x00AD: "hyphen",
+}
+
 // injectStandard14Widths populates font.Widths from the Standard 14 Adobe
 // Font Metrics if the base font name matches. It iterates over char codes
 // 0-255, uses the font's encoding to map each code to a glyph name, and
@@ -3681,6 +3734,10 @@ func injectStandard14Widths(font *Font, baseFont string, serif bool) {
 				continue
 			}
 			if w, ok := glyphWidths[glyphName]; ok {
+				widths[code] = float64(w)
+				continue
+			}
+			if w, ok := glyphWidths[duplicateCodeGlyph[r]]; ok {
 				widths[code] = float64(w)
 				continue
 			}

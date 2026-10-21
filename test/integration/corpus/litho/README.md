@@ -2053,7 +2053,7 @@ and stay open:
 | `cmapusecmap_2b`        | 1    | 176 / 176           | poppler     | litho maps codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing |
 | `undecodable_2b`        | 3    | 60 / 60             | poppler     | draws nothing for `[/FlateDecode /Foo]`, which litho and PDFium read                   |
 | `offlimits_1b`          | 3    | 100 / 100           | poppler     | paints no image while no colour space is selected; litho and PDFium paint it grey      |
-| `fontclaims_2b`         | 1    | 50 / 80             | poppler     | draws no glyph for the last show, which litho and PDFium draw as A                     |
+| `fontclaims_2b`         | 1    | 35 / 65             | poppler     | draws no glyph for the last show, which litho and PDFium draw as A                     |
 | `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156 | undefined   | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box    |
 | `type0nodesc_2b`        | 1    | 176 / 237           | undefined   | Type 0 fonts with no descendant: litho boxes, poppler nothing, PDFium a substitute     |
 | `parentreach_2b`        | 2    | 25 / 25             | undefined   | a one-input tint transform under nine colorants: litho black, poppler orange           |
@@ -2064,11 +2064,12 @@ Three more were litho's alone and now match. `fontemptycs_2b` draws nothing
 for a CFF program with no glyph, where litho drew a substitute or a box: the
 program is embedded, and 9.6.6.3 and 9.7.6.3 send a code it lacks to its own
 `.notdef`, which it does not hold. `unembednames_2u` draws nothing for the
-codes its encodings leave unnamed, where litho drew boxes; 78 of its 219 inked
-pixels still differ, since litho advances an unnamed code of the unembedded
-Helvetica by 1000 and poppler by 0. `ttencoding_2b` draws A and B
-for its symbolic TrueType fonts with the stand-in the flags give, as poppler
-and PDFium do, where litho asked for no substitute and drew boxes.
+codes its encodings leave unnamed, where litho drew boxes, and advances them by
+the `/MissingWidth`, 0, as poppler and PDF.js do (ISO 32000-1, 9.6.2.1): 8 of
+its 184 inked pixels differ, where litho's advance of one em left 78 of 219.
+`ttencoding_2b` draws A and B for its symbolic TrueType fonts with the
+stand-in the flags give, as poppler and PDFium do, where litho asked for no
+substitute and drew boxes.
 
 Three causes of these rows were litho's and are closed. A form whose `/Resources` does not define a
 name now resolves it in the page's resources, as poppler and PDFium do (ISO

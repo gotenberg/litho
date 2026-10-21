@@ -31,7 +31,10 @@ func TestComputeLineGap_ZeroWidthGlyph(t *testing.T) {
 // TestGlyphWidth_NoMetricsIsNeverZero pins the premise [computeLineGap]
 // rests on: a font that gives a code no width at all, of any subtype, still
 // yields a non-zero advance, so a text element of width 0 always means a
-// width the font states.
+// width the font states. A code the standard 14 metrics give no width in a
+// font that embeds no program takes the /MissingWidth, a width ISO 32000-1,
+// 9.6.2.1, Table 111 states, 0 by default, so the Type 1 face here embeds
+// one.
 func TestGlyphWidth_NoMetricsIsNeverZero(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -41,14 +44,19 @@ func TestGlyphWidth_NoMetricsIsNeverZero(t *testing.T) {
 		"2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Font /Subtype /CIDFontType2 /BaseFont /NoMetrics " +
 		"/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> >>\nendobj\n" +
-		"trailer\n<< /Size 4 /Root 1 0 R >>\n%%EOF\n")
+		"4 0 obj\n<< /Type /FontDescriptor /FontName /NoMetrics /Flags 32 /FontFile 5 0 R >>\nendobj\n" +
+		"5 0 obj\n<< /Length 0 >>\nstream\n\nendstream\nendobj\n" +
+		"trailer\n<< /Size 6 /Root 1 0 R >>\n%%EOF\n")
 	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
 	dicts := map[string]ast.PdfDict{
-		"Type1 unknown face": {"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type1"), "BaseFont": ast.PdfName("NoMetrics")},
-		"TrueType no name":   {"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("TrueType")},
+		"Type1 unknown face": {
+			"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type1"), "BaseFont": ast.PdfName("NoMetrics"),
+			"FontDescriptor": ast.PdfIndirectRef{ObjectNum: 4},
+		},
+		"TrueType no name": {"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("TrueType")},
 		"Type3 no widths": {
 			"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type3"),
 			"FontMatrix": ast.PdfArray{ast.PdfReal(0.001), ast.PdfInt(0), ast.PdfInt(0), ast.PdfReal(0.001), ast.PdfInt(0), ast.PdfInt(0)},
