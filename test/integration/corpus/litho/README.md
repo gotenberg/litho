@@ -270,6 +270,7 @@ one deliberately rather than diffing it against a fresh build.
 | `recolorimg_2b.pdf`    | PDF/A-2b     | 16-bit, Lab, colour-key, matted and /Decode images to recolour   |
 | `tounicodepair_2u.pdf` | PDF/A-2u     | A simple font's two-byte /ToUnicode mapping a shown byte pair    |
 | `flattentext_2b.pdf`   | PDF/A-2b     | Transparency over, under and on text, which flattening keeps     |
+| `blendspace_2b.pdf`    | PDF/A-2b     | Blend modes, knockout and a soft mask in CMYK and grey groups    |
 
 ### Must-not-fire controls
 
@@ -572,6 +573,7 @@ are covered under [Known divergences](#known-divergences).
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
 | `baretree_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `blendcs_4.pdf`        | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 6    | 6    |
+| `blendspace_2b.pdf`    | 9    | 6    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `boxorigin_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
 | `charset_1b.pdf`       | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 3   | 3    | 4    | 9    | 7    |
 | `cmapcidtext_2b.pdf`   | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
@@ -8746,16 +8748,45 @@ fails `6.2.4.3/2`, DeviceGray `6.2.4.3/4`, and every page holding
 transparency `6.2.10/2` at PDF/A-2b. veraPDF 1.30.2 and litho report the same
 rule set in all thirteen cells.
 
+### `blendspace_2b.pdf`
+
+A transparency group composites its elements in the blending colour space its
+`/CS` names (ISO 32000-1, 11.3.4, Table 147): a blend mode in a CMYK group
+applies to the complements of the inks (11.3.5), a non-separable one takes K
+from one side, and a luminosity mask's group in DeviceGray blends greys. The
+corpora hold CMYK groups that blend, but none the render goldens sample, so no
+cell compared a group blending outside sRGB. Every colour is DeviceCMYK:
+
+| Page | Draws                                                                                 |
+| ---- | ------------------------------------------------------------------------------------- |
+| 1    | in a CMYK page group, an isolated CMYK group of a cyan square and a magenta one       |
+|      | Multiply over its right half, and an isolated knockout CMYK group of the same squares |
+|      | Multiply at ca 0.7 over yellow                                                         |
+| 2    | a luminosity mask whose group blends cyan and magenta Multiply in DeviceGray, over a  |
+|      | black fill                                                                            |
+| 3    | in a CMYK page group, black ink and cyan ink at ca 0.5, each over the other           |
+
+litho draws page 1's overlap as the ink of both, `1 1 0 0 k`; poppler 26.09.0
+and PDFium 4.30.0 (pypdfium2) blend every group in RGB and draw it as the RGB
+product of the two colours, 48 levels apart in blue, inside the render cell's
+tolerance, so all three pages match poppler. Flattened, page 3's composite is
+a DeviceCMYK image holding black and cyan ink alone, and the `flatten` cell
+draws all three pages like their source.
+
+The file declares no OutputIntent, so DeviceCMYK fails `6.2.4.3/3` at
+PDF/A-2b. veraPDF 1.30.2 and litho report the same rule set in all thirteen
+cells.
+
 ## Scope
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-217 x 13 = 2821 cells, the whole hand-measured matrix. litho and veraPDF return
+218 x 13 = 2834 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2797 of the 2821 cells. The 24
+fixtures exist to protect, and it holds in 2810 of the 2834 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
@@ -8768,7 +8799,7 @@ seventeen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree
 `pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2821 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 2834 and moves only `ruleset_mismatch`, and on
 those seventeen cells it moves both. Every exception sits in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
 fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
