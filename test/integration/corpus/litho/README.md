@@ -265,6 +265,7 @@ one deliberately rather than diffing it against a fresh build.
 | `sharedstream_2b.pdf`  | PDF/A-2b     | One stream two pages read through a simple and a Type0 font      |
 | `ttnoenc_2b.pdf`       | PDF/A-2b     | Embedded TrueType fonts carrying no `/Encoding`, by `cmap` set   |
 | `sharednested_2b.pdf`  | PDF/A-2b     | Forms and a pattern two pages share and bind alike or apart      |
+| `transparency_2b.pdf`  | PDF/A-2b     | Knockout groups, luminosity masks with /BC and /TR, blend modes  |
 
 ### Must-not-fire controls
 
@@ -738,6 +739,7 @@ are covered under [Known divergences](#known-divergences).
 | `threed_4e.pdf`        | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 11   | 8    |
 | `threedcs_4.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 5    | 7    | 8    | 6    |
 | `trailer_2b.pdf`       | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
+| `transparency_2b.pdf`  | 10   | 7    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 6    | 6    |
 | `treekids_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
@@ -8485,6 +8487,37 @@ the one before `q` at the `Td` inside, which opened one on the fourth. The
 shift now rides the graphics state with the text matrix it measures.
 veraPDF 1.30.2 and litho report the same rule set, with the same failed-check
 counts, in all thirteen cells; at PDF/A-2b both report nothing.
+
+### `transparency_2b.pdf`
+
+The renderer composites every painting into the transparency group being
+painted (ISO 32000-1, 11.4). The render goldens of the corpora held soft masks
+and blend modes, but no knockout group, no luminosity mask with a `/BC` or a
+`/TR`, and no blend mode over the bare page, so the `render` cell compared
+none of them. The file paints in DeviceRGB and DeviceGray:
+
+| Page | Draws                                                                                   |
+| ---- | --------------------------------------------------------------------------------------- |
+| 1    | four groups at ca 0.8 over a band: non-isolated, isolated, knockout, isolated knockout, |
+|      | each two squares in Multiply at ca 0.6; an isolated group holding a knockout group of   |
+|      | Difference squares, composited in Screen                                                |
+| 2    | a luminosity mask over a grey ramp, `/BC` 0.5 outside its box, and the same through an  |
+|      | inverting `/TR`; an alpha mask whose group holds an opaque square and one at ca 0.4     |
+| 3    | the sixteen blend modes, one per cell, over two backdrop colours and the bare page      |
+
+Rendered at 72 dpi, litho matches poppler 26.09.0 on all three pages, where
+litho before transparency mismatched all three (1880, 14750 and 8181 differing
+pixels). The page group's transparent backdrop (11.4.7) is what page 3's top
+row shows: poppler, like litho, paints Screen and Difference over the bare page
+in the source's own colour. poppler ignores the alpha source flag, text
+knockout and a graphics-state soft mask over an image with its own `/SMask`,
+so the file holds none of them; litho's unit tests check those against the
+specification.
+
+The file declares no OutputIntent and its pages no `/Group`, so DeviceRGB
+fails `6.2.4.3/2`, DeviceGray `6.2.4.3/4`, and every
+page holding transparency `6.2.10/2` at PDF/A-2b. veraPDF 1.30.2 and litho
+report the same rule set in all thirteen cells.
 
 ## Scope
 
