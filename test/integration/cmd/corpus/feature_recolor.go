@@ -172,7 +172,7 @@ const recolorJPEGQuality = 85
 //     reads the converted DeviceCMYK, 80.6 and 83.5 ΔE*ab from the source on
 //     the last two; with pdf.WithReplacedOutputIntents all four match.
 //   - pdfjs, govdocs: the JPEG run re-encodes 7 and 25 files, every one
-//     passing and none larger, 33880 and 22308 KiB saved; issue12752.pdf,
+//     passing and none larger, 33884 and 22313 KiB saved; issue12752.pdf,
 //     issue17289.pdf and thread_200_200163.pdf among them for their JPEG
 //     2000 images. 2 and 6 more name a codec filter and write the lossless
 //     bytes. Without the byte test the run also converted 15 and 8 files
@@ -183,8 +183,12 @@ const recolorJPEGQuality = 85
 //     refused).
 //   - pdfjs issue17289.pdf: each conversion takes 12 to 14 s, so the source
 //     renderings, the lossless run and the JPEG run in sequence took 33 s,
-//     past the 20 s fixture timeout; side by side they take 15.3 s, and
-//     17.2 s with 5 fixtures at once.
+//     past the 20 s fixture timeout; side by side they took 15.3 s, and
+//     17.2 s with 5 fixtures at once. A colour memo that catches a
+//     photograph's repeated colours, a lossless encoding that stops its
+//     prediction with its compression and a factorised DCT then cut the
+//     run's CPU time by 30% (41 to 44 s down to 29 to 31 s, measured in
+//     turn on one loaded machine), and its time by a quarter.
 type recolorFeature struct {
 	// convert runs the conversion with the options given; tests replace it
 	// to plant a defect.
@@ -354,17 +358,22 @@ func (f *recolorFeature) run(ctx context.Context, pdfPath string) recolorOutput 
 
 	sources := &recolorSourceRenders{done: make(chan struct{})}
 	wg.Go(func() { sources.render(ctx, src, opts) })
+	// Both runs compare their output's qpdf classes with the input's, which
+	// qpdf checks once.
+	inputKinds := sync.OnceValues(func() (map[string]bool, error) {
+		return qpdfCheck(ctx, f.qpdf, input, "")
+	})
 	var prep *recolorJPEGPrep
 	jpegDone := make(chan struct{})
 	jpegRun := f.jpegQuality > 0 && namesImageCodec(input)
 	if jpegRun {
 		wg.Go(func() {
 			defer close(jpegDone)
-			prep = f.prepareJPEG(ctx, src, input, opts)
+			prep = f.prepareJPEG(ctx, src, inputKinds, opts)
 		})
 	}
 
-	output, renders := f.runLossless(ctx, src, input, opts, sources, &out)
+	output, renders := f.runLossless(ctx, src, inputKinds, opts, sources, &out)
 	if output == nil || !jpegRun || out.Report.ConvertedImages == 0 {
 		return out
 	}
@@ -449,7 +458,7 @@ func namesImageCodec(input []byte) bool {
 // returns the output and the renderings of its first pages (nil for a page
 // that did not render), or a nil output when the conversion or the output
 // failed.
-func (f *recolorFeature) runLossless(ctx context.Context, src *pdf.Reader, input []byte, opts []pdf.RenderOption, sources *recolorSourceRenders, out *recolorOutput) ([]byte, []image.Image) {
+func (f *recolorFeature) runLossless(ctx context.Context, src *pdf.Reader, inputKinds qpdfClasses, opts []pdf.RenderOption, sources *recolorSourceRenders, out *recolorOutput) ([]byte, []image.Image) {
 	output, report, err := f.convertOnce(ctx, src)
 	if err != nil {
 		out.Error = err.Error()
@@ -468,7 +477,7 @@ func (f *recolorFeature) runLossless(ctx context.Context, src *pdf.Reader, input
 		return nil, nil
 	}
 	defer after.Close()
-	out.QPDF = f.newQPDFKinds(ctx, input, output)
+	out.QPDF = f.newQPDFKinds(ctx, inputKinds, output)
 
 	pages, err := after.PageCount(ctx)
 	if err != nil {
@@ -511,7 +520,7 @@ type recolorJPEGPrep struct {
 // prepareJPEG converts src under [pdf.WithJPEGQuality], and checks and
 // renders the first pages of the output. It recovers a panic into the
 // error, since it runs on a goroutine of its own, out of Run's guard.
-func (f *recolorFeature) prepareJPEG(ctx context.Context, src *pdf.Reader, input []byte, opts []pdf.RenderOption) (prep *recolorJPEGPrep) {
+func (f *recolorFeature) prepareJPEG(ctx context.Context, src *pdf.Reader, inputKinds qpdfClasses, opts []pdf.RenderOption) (prep *recolorJPEGPrep) {
 	prep = &recolorJPEGPrep{}
 	defer func() {
 		if r := recover(); r != nil {
@@ -530,7 +539,7 @@ func (f *recolorFeature) prepareJPEG(ctx context.Context, src *pdf.Reader, input
 		return prep
 	}
 	defer after.Close()
-	prep.qpdf = f.newQPDFKinds(ctx, input, output)
+	prep.qpdf = f.newQPDFKinds(ctx, inputKinds, output)
 	pages, err := after.PageCount(ctx)
 	if err != nil {
 		prep.err = fmt.Sprintf("output page count: %v", err)
@@ -599,13 +608,18 @@ func (f *recolorFeature) convertOnce(ctx context.Context, src *pdf.Reader, opts 
 	return buf.Bytes(), report, nil
 }
 
+// qpdfClasses returns the qpdf --check classes of a document, the input of a
+// run, checked on the first call.
+type qpdfClasses func() (map[string]bool, error)
+
 // newQPDFKinds returns, sorted, the qpdf --check classes the output has and
-// the input does not, nil when qpdf is absent or could not run.
-func (f *recolorFeature) newQPDFKinds(ctx context.Context, input, output []byte) []string {
+// the input, whose classes inputKinds returns, does not, nil when qpdf is
+// absent or could not run.
+func (f *recolorFeature) newQPDFKinds(ctx context.Context, inputKinds qpdfClasses, output []byte) []string {
 	if f.qpdf == "" {
 		return nil
 	}
-	inKinds, err := qpdfCheck(ctx, f.qpdf, input, "")
+	inKinds, err := inputKinds()
 	if err != nil {
 		return nil
 	}
