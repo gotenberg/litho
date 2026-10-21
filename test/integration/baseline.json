@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-21T07:58:22Z",
+  "captured_at": "2026-10-21T09:15:57Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -99,6 +99,27 @@
           "mismatched": 0,
           "skipped": 0
         },
+        "redact-render": {
+          "matched": 79,
+          "mismatched": 0,
+          "skipped": 0,
+          "metrics": {
+            "image_spill": 0,
+            "inside_leaked": 0,
+            "inside_leaked_litho": 0,
+            "inside_leaked_poppler": 0,
+            "outside_changed": 0,
+            "outside_changed_litho": 0,
+            "outside_changed_poppler": 0,
+            "poppler_no_oracle": 7,
+            "poppler_unavailable": 0,
+            "redaction_failed": 0,
+            "redaction_incomplete": 60,
+            "redaction_refused": 77,
+            "render_failed": 0,
+            "scenarios_run": 170
+          }
+        },
         "render": {
           "matched": 77,
           "mismatched": 2,
@@ -194,9 +215,9 @@
           }
         },
         "mutate-redact": {
-          "matched": 2197,
+          "matched": 2145,
           "mismatched": 0,
-          "skipped": 585,
+          "skipped": 637,
           "metrics": {
             "pages_wrong": 0,
             "qpdf_failed": 0,
@@ -235,6 +256,27 @@
             "ruleset_changed": 0,
             "text_wrong": 0,
             "write_failed": 0
+          }
+        },
+        "redact-render": {
+          "matched": 214,
+          "mismatched": 0,
+          "skipped": 0,
+          "metrics": {
+            "image_spill": 3,
+            "inside_leaked": 0,
+            "inside_leaked_litho": 0,
+            "inside_leaked_poppler": 0,
+            "outside_changed": 0,
+            "outside_changed_litho": 0,
+            "outside_changed_poppler": 0,
+            "poppler_no_oracle": 26,
+            "poppler_unavailable": 0,
+            "redaction_failed": 0,
+            "redaction_incomplete": 2,
+            "redaction_refused": 104,
+            "render_failed": 0,
+            "scenarios_run": 600
           }
         },
         "remediation": {
@@ -341,6 +383,27 @@
           "mismatched": 0,
           "skipped": 0
         },
+        "redact-render": {
+          "matched": 51,
+          "mismatched": 0,
+          "skipped": 0,
+          "metrics": {
+            "image_spill": 0,
+            "inside_leaked": 0,
+            "inside_leaked_litho": 0,
+            "inside_leaked_poppler": 0,
+            "outside_changed": 0,
+            "outside_changed_litho": 0,
+            "outside_changed_poppler": 0,
+            "poppler_no_oracle": 12,
+            "poppler_unavailable": 0,
+            "redaction_failed": 0,
+            "redaction_incomplete": 25,
+            "redaction_refused": 67,
+            "render_failed": 0,
+            "scenarios_run": 101
+          }
+        },
         "split": {
           "matched": 33,
           "mismatched": 0,
@@ -394,12 +457,33 @@
           "mismatched": 0,
           "skipped": 1
         },
+        "redact-render": {
+          "matched": 78,
+          "mismatched": 0,
+          "skipped": 2,
+          "metrics": {
+            "image_spill": 0,
+            "inside_leaked": 0,
+            "inside_leaked_litho": 0,
+            "inside_leaked_poppler": 0,
+            "outside_changed": 0,
+            "outside_changed_litho": 0,
+            "outside_changed_poppler": 0,
+            "poppler_no_oracle": 27,
+            "poppler_unavailable": 0,
+            "redaction_failed": 0,
+            "redaction_incomplete": 20,
+            "redaction_refused": 51,
+            "render_failed": 0,
+            "scenarios_run": 178
+          }
+        },
         "render": {
-          "matched": 66,
-          "mismatched": 11,
+          "matched": 67,
+          "mismatched": 10,
           "skipped": 3,
           "metrics": {
-            "pages_match": 91,
+            "pages_match": 92,
             "render_failed": 2
           }
         },
