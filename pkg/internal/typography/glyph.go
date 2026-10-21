@@ -362,6 +362,12 @@ const spaceCharCode = 0x20
 //   - govdocs thread_300_300034.pdf pages 29 and 30: <0004> codes under a
 //     /ToUnicode whose only codespace range is <0006>, read a byte at a
 //     time, put "ЀЀЀ" around "Population Viability".
+//   - pdfjs issue18208.pdf: simple fonts whose /ToUnicode CMaps declare a
+//     two-byte codespace read their codes two at a time, and the first 28
+//     lines of page 1 read "R", "a", "F" where PDF.js reads "Pág. 1/1",
+//     "Data de Vencimento". Read a byte at a time they read as PDF.js reads
+//     them, and redacting a quarter of page 1, or a band through it, no
+//     longer refuses. No other file of the six text corpora moves.
 func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn bool) {
 	if font.SuppressExtraction {
 		// No route to Unicode exists for this font (see
@@ -404,6 +410,14 @@ func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn 
 		}
 	}
 
+	if n > 1 && font.Subtype != "Type0" {
+		// A simple font's codes are one byte each (ISO 32000-1, 9.6.1), so a
+		// /ToUnicode CMap whose codespace ranges are wider does not make two
+		// bytes one code: taken together, the second code drew no glyph and
+		// moved nothing, and the line read one glyph in two. The code
+		// takes the single-byte paths below.
+		n = 0
+	}
 	if n > 1 {
 		// Multi-byte codespace consumed n>1 bytes but found no mapping.
 		// For Type0 Identity-H fonts, treat the unmapped 2-byte code as

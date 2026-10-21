@@ -10,6 +10,35 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
+// TestDecodeNextCode_SimpleFontReadsOneByteUnderWideToUnicode pins that a
+// simple font's codes stay one byte each (ISO 32000-1, 9.6.1) under a
+// /ToUnicode CMap whose codespace is two bytes wide, as pdfjs issue18208
+// writes: read two at a time, "Pa" lost every second glyph.
+func TestDecodeNextCode_SimpleFontReadsOneByteUnderWideToUnicode(t *testing.T) {
+	t.Parallel()
+
+	tu, err := cmap.Parse(context.Background(), []byte("begincmap\n"+
+		"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"+
+		"1 beginbfchar\n<0000> <0000>\nendbfchar\nendcmap\n"))
+	if err != nil {
+		t.Fatalf("cmap.Parse: %v", err)
+	}
+	font := &Font{Subtype: "TrueType", ToUnicode: tu, Encoding: map[byte]rune{'P': 'P', 'a': 'a'}}
+	data := []byte("Pa")
+	var got string
+	for len(data) > 0 {
+		char, n, skip, _ := decodeNextCode(font, data)
+		if n != 1 || skip {
+			t.Fatalf("code %q: consumed %d bytes, skip %v; want 1 byte, no skip", data[0], n, skip)
+		}
+		got += char
+		data = data[n:]
+	}
+	if got != "Pa" {
+		t.Errorf("decoded %q, want %q", got, "Pa")
+	}
+}
+
 // TestProcessText_UnmappedCodeAdvances pins that an Identity-H code the
 // /ToUnicode CMap maps to nothing still advances the text position by its
 // /DW width (ISO 32000-1, 9.4.4 and 9.7.4.3), as PDF.js advances every code
