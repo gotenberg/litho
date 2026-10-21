@@ -224,17 +224,28 @@ func collectContents(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		buf.Write(data)
 	case ast.PdfArray:
 		for _, elem := range v {
-			ref, ok := elem.(ast.PdfIndirectRef)
-			if !ok {
+			var stream ast.PdfStream
+			switch e := elem.(type) {
+			case ast.PdfIndirectRef:
+				item, err := resolveAllocFirst(ctx, alloc, doc, e)
+				if err != nil {
+					return nil, err
+				}
+				s, ok := item.(ast.PdfStream)
+				if !ok {
+					return nil, fmt.Errorf("/Contents element %d %d R is %T, not a stream", e.ObjectNum, e.GenNum, item)
+				}
+				stream = s
+			case ast.PdfStream:
+				// Deliberate leniency: ISO 32000-1, 7.3.8.1 makes every stream
+				// an indirect object, but the parser reads one written inline
+				// and viewers draw it. Skipping it left what it draws out of
+				// the page as a redaction reads it: a region over that content
+				// reported success and removed nothing.
+				stream = e
+			default:
+				// A null or any other non-stream draws nothing.
 				continue
-			}
-			item, err := resolveAllocFirst(ctx, alloc, doc, ref)
-			if err != nil {
-				return nil, err
-			}
-			stream, ok := item.(ast.PdfStream)
-			if !ok {
-				return nil, fmt.Errorf("/Contents element %d %d R is %T, not a stream", ref.ObjectNum, ref.GenNum, item)
 			}
 			data, err := doc.DecodeStream(ctx, stream)
 			if err != nil {
