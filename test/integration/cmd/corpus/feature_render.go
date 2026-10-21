@@ -71,30 +71,49 @@ const renderSizeSlack = 1
 // metricRenderFailed counts the golden pages litho failed to render.
 const metricRenderFailed = "render_failed"
 
-// pageRenderer renders one page (1-based) of an open document at dpi into an
-// image whose (0,0) is the top-left corner of the page's crop box. A pixel
-// that is not opaque is composed over white, the background pdftoppm draws.
-type pageRenderer func(ctx context.Context, r *pdf.Reader, page int, dpi float64) (image.Image, error)
+// renderFontsDir is the directory, under goldens/render, that holds the font
+// files poppler rendered the goldens with, mirroring the copy entrypoint.sh
+// makes of the image's poppler bundle.
+const renderFontsDir = "fonts"
+
+// pageRenderer renders one page (1-based) of an open document at dpi, with
+// opts, into an image whose (0,0) is the top-left corner of the page's crop
+// box. A pixel that is not opaque is composed over white, the background
+// pdftoppm draws.
+type pageRenderer func(ctx context.Context, r *pdf.Reader, page int, dpi float64, opts ...pdf.RenderOption) (image.Image, error)
 
 // lithoRenderPage is the render feature's hook into litho: [pdf.Reader.RenderPage]
 // over white, the background pdftoppm draws. Set to nil, every fixture
 // scores as skipped.
 //
 //nolint:gochecknoglobals // the one switch the renderer integration flips
-var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page int, dpi float64) (image.Image, error) {
-	return r.RenderPage(ctx, page, pdf.WithRenderDPI(dpi))
+var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page int, dpi float64, opts ...pdf.RenderOption) (image.Image, error) {
+	return r.RenderPage(ctx, page, append([]pdf.RenderOption{pdf.WithRenderDPI(dpi)}, opts...)...)
 }
 
 // renderFeature renders the first pages of each PDF with litho and compares
 // them, pixel by pixel within the tolerances above, with the pages poppler's
 // pdftoppm rendered at provisioning. It is the gate's reach into rendering:
 // no other feature looks at what a page draws.
+//
+// litho bundles no font program, and poppler draws the fonts a document does
+// not embed with the fonts of the image it runs in: URW base 35, the
+// metric-compatible stand-ins of the standard 14 fonts, and DejaVu. For a like
+// for like comparison, provisioning copies those fonts to
+// goldens/render/fonts, and the feature hands them to litho through
+// [pdf.WithRenderFontFiles]. Testdata provisioned before the copy existed
+// has none: litho then draws such fonts as placeholder boxes, and the feature
+// says so once.
 type renderFeature struct {
 	render pageRenderer
 
 	mu      sync.RWMutex
 	dir     string
 	goldens map[string]*renderIndex
+	// fonts draws the fonts a document does not embed with the fonts the
+	// goldens were drawn with, nil when the testdata holds none. One option
+	// value serves every render, so its index is built once.
+	fonts pdf.RenderOption
 }
 
 func newRenderFeature() *renderFeature {
@@ -180,9 +199,17 @@ func (f *renderFeature) LoadGoldens(dir string) error {
 	if len(loaded) == 0 {
 		return ErrNoGoldens
 	}
+	var fonts pdf.RenderOption
+	fontsDir := filepath.Join(dir, renderFontsDir)
+	if info, err := os.Stat(fontsDir); err == nil && info.IsDir() {
+		fonts = pdf.WithRenderFontFiles(os.DirFS(fontsDir))
+	} else {
+		fmt.Fprintf(os.Stderr, "render: %s holds no %s directory, so litho draws unembedded fonts as boxes: re-provision goldens/render\n", dir, renderFontsDir)
+	}
 	f.mu.Lock()
 	f.dir = dir
 	f.goldens = loaded
+	f.fonts = fonts
 	f.mu.Unlock()
 	return nil
 }
@@ -223,8 +250,12 @@ func (f *renderFeature) Run(ctx context.Context, pdfPath, fixtureID string) ([]b
 	}
 	defer r.Close()
 	f.mu.RLock()
-	dir := f.dir
+	dir, fonts := f.dir, f.fonts
 	f.mu.RUnlock()
+	var opts []pdf.RenderOption
+	if fonts != nil {
+		opts = append(opts, fonts)
+	}
 	for _, gp := range golden.Pages {
 		if gp.File == "" {
 			continue
@@ -236,7 +267,7 @@ func (f *renderFeature) Run(ctx context.Context, pdfPath, fixtureID string) ([]b
 			out.Pages = append(out.Pages, res)
 			continue
 		}
-		got, err := f.render(ctx, r, gp.Page, renderDPI)
+		got, err := f.render(ctx, r, gp.Page, renderDPI, opts...)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()

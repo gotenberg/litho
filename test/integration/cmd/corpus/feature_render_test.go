@@ -220,6 +220,37 @@ func TestRenderFeatureSkipsUntilLithoRenders(t *testing.T) {
 	}
 }
 
+// The fonts provisioning copies next to the goldens reach every render.
+func TestRenderFeatureHandsLithoTheGoldensFonts(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pdfPath := filepath.Join(dir, "doc.pdf")
+	if err := os.WriteFile(pdfPath, twoImagePDF(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, renderFontsDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeRenderGolden(t, dir, renderIndex{ID: "doc", DPI: renderDPI, PageCount: 1,
+		Pages: []renderIndexPage{{Page: 1, File: "doc.1.png"}}}, map[int]image.Image{1: whitePage(10, 10)})
+	f := newRenderFeature()
+	var got int
+	f.render = func(_ context.Context, _ *pdf.Reader, _ int, _ float64, opts ...pdf.RenderOption) (image.Image, error) {
+		got = len(opts)
+		return whitePage(10, 10), nil
+	}
+	if err := f.LoadGoldens(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Run(context.Background(), pdfPath, "doc"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got != 1 {
+		t.Errorf("rendered with %d options, want the fonts option", got)
+	}
+}
+
 func TestRenderFeatureScoresPages(t *testing.T) {
 	t.Parallel()
 
@@ -242,9 +273,12 @@ func TestRenderFeatureScoresPages(t *testing.T) {
 
 	var asked []int
 	f := newRenderFeature()
-	f.render = func(_ context.Context, _ *pdf.Reader, page int, dpi float64) (image.Image, error) {
+	f.render = func(_ context.Context, _ *pdf.Reader, page int, dpi float64, opts ...pdf.RenderOption) (image.Image, error) {
 		if dpi != renderDPI {
 			t.Errorf("rendered at %g dpi", dpi)
+		}
+		if len(opts) != 0 {
+			t.Errorf("rendered with %d options, want none: the goldens hold no fonts", len(opts))
 		}
 		asked = append(asked, page)
 		if page == 1 {

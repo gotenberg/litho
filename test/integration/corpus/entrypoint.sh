@@ -195,6 +195,21 @@ if wants render; then
     SHELL=/bin/bash /work/lib/gen-render.sh "$PDFS" "$RENDER" "$SAMPLE"
     record_stage goldens/render "$(jq -nc --argjson s "$SAMPLE" '{render_sample_per_256: $s}')"
   fi
+  # The fonts poppler draws unembedded fonts with (URW base 35, DejaVu), the
+  # TrueType and OpenType files of its bundle, which the render feature
+  # hands to litho so both draw them alike. They come from the Debian release
+  # the goldens/render pins name, so the stage's record covers them; testdata
+  # whose goldens predate the copy gets it on the next run.
+  if ! nonempty "$RENDER/fonts"; then
+    echo "==> copying poppler's fonts for the render feature..."
+    mkdir -p "$RENDER/fonts"
+    # A plain redirect, not cp, as record_stage writes: cp's fallocate probe
+    # breaks on macOS Docker Desktop's virtiofs bind mount.
+    find /opt/poppler/fonts -type f \( -name '*.otf' -o -name '*.ttf' \) -print0 \
+      | while IFS= read -r -d '' font; do
+        cat "$font" > "$RENDER/fonts/$(basename "$font")"
+      done
+  fi
 else
   echo "==> skipping render goldens (not requested by ${CORPUS})."
 fi
