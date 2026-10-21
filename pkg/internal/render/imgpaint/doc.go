@@ -60,4 +60,8 @@
 //     pixels a sample; poppler peaks each sample at the left edge of its cell
 //     (x 100, 350, 600 for samples 0, 1, 2), litho at its centre (225, 475,
 //     725). The page mismatches the render golden on 148309 pixels for it.
+//   - litho complex_2b.pdf, megafont_2b.pdf and multipage_2b.pdf page 2: a 2
+//     by 2 interpolated image enlarged 100 by 50 pixels a sample; poppler
+//     shifts it the same way, and each page mismatches the render golden on
+//     about 14870 pixels for it.
 package imgpaint

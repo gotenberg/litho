@@ -1948,6 +1948,52 @@ paints (144 and 184 grey) and poppler does not (244 114 22 and 97 155 205 for
 the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`). `iccbadcmyk_2b.pdf` paints
 the same grey and mismatched before the renderer converted colour too.
 
+**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 16 pages
+of 13 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
+tolerance. Each difference is adjudicated, and none is a litho defect left open:
+
+| File                                            | Page       | Differing pixels     | Why                                       |
+| ----------------------------------------------- | ---------- | -------------------- | ----------------------------------------- |
+| `pdfxonly_2b`, `iccbadcmyk_1b`, `iccbadcmyk_2b` | 1          | 3600, 3933, 3933     | DeviceCMYK through the output intent      |
+| `inlineinterp_2b`, `complex_2b`, `megafont_2b`  | 1          | 148178, 15169, 14874 | interpolation half a sample off (poppler) |
+| `multipage_2b`                                  | 2          | 14873                | interpolation half a sample off (poppler) |
+| `complex_2b`, `forbidden_mix`                   | 1          | 295 of 15169, 5000   | a Square annotation with no `/AP`         |
+| `inlinejpx_2b`                                  | 1          | 5600                 | poppler stops after an inline JPX image   |
+| `imagecolour_2b`                                | 1          | 15375                | colorant None and JPX colour (poppler)    |
+| `pageboxes_2b`                                  | 1, 2, 3    | page size            | page boxes read as pdf.js reads them      |
+| `kidsarray_2b`, `kidsrepair_1b`                 | 2 and 3, 3 | 1 by 1 golden        | poppler draws no page written in `/Kids`  |
+
+- **Interpolation.** Each fixture enlarges a 2 by 2 or 4 by 1 image with
+  `/Interpolate true` fifty times or more. poppler's bilinear filter places a
+  sample's value at the low corner of its cell, litho at its centre: ISO
+  32000-1, 8.9.4 maps the image onto the unit square with each sample filling a
+  cell, so enlarging must not move it. `pkg/internal/render/imgpaint` records
+  the measurement. The `complex_2b` pixels beyond the image are its Square
+  annotation.
+- **Square annotations without an appearance stream.** poppler builds a
+  rectangle from `/C`, `/IC` and `/CA`. litho draws appearance streams only
+  (`pkg/internal/render/annot`): building one from the dictionary is a
+  remediation matter, and ISO 19005-2, 6.3.3 is the rule both files break.
+- **`inlinejpx_2b`.** poppler paints the first inline JPXDecode image, warns
+  `Problem with skipping JPEG2000 box, stream error`, and paints nothing after
+  it: not the second JPX image, the JBIG2, CCITT and Flate images, nor the form.
+  ISO 32000-1, 7.4.9 applies JPXDecode to image XObjects alone, so the file is
+  wrong, but the data of each inline image runs to its `EI` (8.9.7), and the
+  CCITT and Flate controls after it are images every reader paints.
+- **`imagecolour_2b`.** poppler paints the two images over the colorant None,
+  which produce no visible output (8.6.6.4, 8.6.6.5), as grey ramps, and the
+  JPX CIELab and ROMM-RGB images in their raw samples (it rejects the EP fields
+  with `Bad COLR header box (bad size: 35)`), where 7.4.9 takes their colour from
+  the JPEG 2000 data. litho paints the None images as nothing, and the JPX ones
+  in the colours the image decoder reads (see the section on this file). Before
+  the renderer skipped them, litho painted the None images black, from the
+  decoder's transparent pixels.
+- **`pageboxes_2b`.** litho renders the crop box as pdf.js reads it, 612 by
+  792, and poppler 500 by 700 (see the section on this file).
+- **Pages written directly in `/Kids`.** ISO 32000-1, 7.7.3.2, Table 29 makes
+  `/Kids` an array of references. poppler renders such a page as an empty 1 by
+  1 image, and litho draws the page dictionary where the array holds it.
+
 The mechanism is veraPDF's object identity, not a rule. `BaseValidator` (core
 1.30.2, `checkRequired`, line 328) pushes a model object onto its work stack
 only when its `getID()` is not yet in `idSet`, and `GFPDObject` (validation
