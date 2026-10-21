@@ -174,16 +174,16 @@ func WithReplacedOutputIntents() ColorOption {
 }
 
 // WithJPEGQuality re-encodes each converted image whose source filter is
-// DCTDecode as a baseline JPEG (ITU-T T.81) at quality q, 1 to 100, on the
-// scale of the Independent JPEG Group's libjpeg, which most encoders share.
-// By default every converted image is re-encoded losslessly under
-// FlateDecode, which keeps the converted samples exactly but makes a JPEG
-// source several times larger: its samples were lossy already, and Flate
-// compresses them poorly. A JPEG 2000 source stays lossless, and an image's
-// soft mask and mask are kept as the lossless re-encoding keeps them. An
-// image the lossless encoding holds in fewer bytes stays lossless. A q
-// outside 1 to 100 makes [Writer.ConvertColors] fail with
-// [ErrInvalidColorTarget].
+// DCTDecode or JPXDecode as a baseline JPEG (ITU-T T.81) at quality q, 1 to
+// 100, on the scale of the Independent JPEG Group's libjpeg, which most
+// encoders share. By default every converted image is re-encoded losslessly
+// under FlateDecode, which keeps the converted samples exactly but makes a
+// JPEG or JPEG 2000 source several times larger: Flate compresses a codec's
+// samples poorly. A JPEG 2000 source with a component deeper than 8 bits
+// stays lossless, and an image's soft mask and mask are kept as the lossless
+// re-encoding keeps them. An image the lossless encoding holds in fewer bytes
+// stays lossless. A q outside 1 to 100 makes [Writer.ConvertColors] fail
+// with [ErrInvalidColorTarget].
 func WithJPEGQuality(q int) ColorOption {
 	return func(o *colorOpts) { o.jpegQuality, o.jpegQualitySet = q, true }
 }

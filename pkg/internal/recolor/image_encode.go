@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
+	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 )
 
 // flateCompress returns data compressed as /FlateDecode reads it (ISO
@@ -34,6 +35,54 @@ func flateCompress(data []byte) ([]byte, error) {
 // quality asked that high asks for the colour edges 4:2:0 softens, and below
 // it the luminance error dominates what subsampling saves.
 const subsampleBelowQuality = 90
+
+// jpegSource reports whether a converted image whose source's last filter is
+// filterName is re-encoded as JPEG under [ImageConfig.JPEGQuality]: a
+// DCTDecode source, or a JPXDecode source none of whose JPEG 2000 components
+// is deeper than 8 bits (T.800, A.5.1, SIZ Ssiz). The JPXDecode filter hands
+// every sample on at 8 bits (ISO 32000-1, 7.4.9), but a deeper source keeps
+// its lossless re-encoding by user decision: its producer chose precision
+// over size, which a baseline JPEG, 8 bits a sample (ITU-T T.81, B.2.2),
+// cannot honour. A JPEG 2000 header that does not read keeps the image
+// lossless too.
+//
+// # Corpus evidence
+//
+//   - pdfjs, govdocs, litho: the 41 files holding JPEG 2000 images that
+//     convert to CMYK grow from 58.8 MB to 275.9 MB lossless and 182.5 MB
+//     at quality 85, their JPEG 2000 images alone from 21.1 MB to 211.0 MB
+//     under Flate; pdfjs issue17289.pdf 59768197 -> 29291179 bytes.
+//   - pdfjs issue9650.pdf: its JPEG 2000 images stay under Flate, which
+//     holds them in fewer bytes than JPEG at 85, and issue11004.pdf barely
+//     shrinks (43312716 -> 43161977 bytes) for the same reason.
+func (im *Images) jpegSource(ctx context.Context, stream ast.PdfStream, filterName ast.PdfName) bool {
+	if im.cfg.JPEGQuality == 0 {
+		return false
+	}
+	switch filterName {
+	case "DCTDecode":
+		return true
+	case "JPXDecode":
+	default:
+		return false
+	}
+	data, _, err := im.doc.DecodeStreamUpTo(ctx, stream, "JPXDecode")
+	if err != nil {
+		im.doc.Logger.Debug("recolor: keeping a JPEG 2000 image lossless whose data does not read", slog.Any("err", err))
+		return false
+	}
+	img, err := jpx.Describe(data, im.doc.Limits().ScaleImageCap(jpx.DefaultMaxSamples))
+	if err != nil {
+		im.doc.Logger.Debug("recolor: keeping a JPEG 2000 image lossless whose header does not read", slog.Any("err", err))
+		return false
+	}
+	for _, c := range img.Components {
+		if c.Precision > 8 {
+			return false
+		}
+	}
+	return true
+}
 
 // encodeJPEG re-encodes converted samples, rows of width x height pixels of
 // comps components at 8 bits, as a baseline JPEG at the configured quality,

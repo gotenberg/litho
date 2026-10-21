@@ -29,8 +29,8 @@ var sampleEntries = []ast.PdfName{"Filter", "DecodeParms", "Decode", "Length", "
 
 // convertPixels converts an image's samples one pixel at a time and
 // re-encodes them losslessly under FlateDecode, or, under
-// [ImageConfig.JPEGQuality], a DCTDecode source as JPEG (see
-// [Images.encodeJPEG]). An image of one component at 8 bits or fewer is
+// [ImageConfig.JPEGQuality], a DCTDecode or JPXDecode source as JPEG (see
+// [Images.encodeJPEG] and [Images.jpegSource]). An image of one component at 8 bits or fewer is
 // converted by its colour table instead, see [Images.convertToIndexed].
 //
 // The samples are read as the filters leave them, not through the image
@@ -107,7 +107,7 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 		return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
 	}
 	outFilter := ast.PdfName("FlateDecode")
-	if filterName == "DCTDecode" && outBPC == 8 {
+	if outBPC == 8 && im.jpegSource(ctx, stream, filterName) {
 		lossy, ok, err := im.encodeJPEG(ctx, out, width, height, px.tc, len(encoded))
 		if err != nil {
 			return stream, ImageUnchanged, err
@@ -157,7 +157,9 @@ func (im *Images) dimensions(ctx context.Context, dict ast.PdfDict) (int, int, e
 
 // checkSMaskInData refuses a JPXDecode image whose JPEG 2000 data carries
 // its soft mask (ISO 32000-1, 8.9.5, Table 89 /SMaskInData): re-encoded
-// under FlateDecode, the mask would be lost.
+// under FlateDecode or DCTDecode, the mask would be lost, since only
+// JPXDecode data carries one (7.4.9) and the colour channels alone are
+// converted. The refusal holds under [ImageConfig.JPEGQuality] too.
 func (im *Images) checkSMaskInData(ctx context.Context, dict ast.PdfDict) error {
 	if v, err := document.ResolveInt(ctx, im.doc, dict["SMaskInData"]); err == nil && v != 0 {
 		return fmt.Errorf("%w: its JPEG 2000 data carries its soft mask (/SMaskInData %d)", ErrImageNotConverted, v)
@@ -567,6 +569,16 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 	if err != nil {
 		return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
 	}
+	outFilter := ast.PdfName("FlateDecode")
+	if im.jpegSource(ctx, stream, "JPXDecode") {
+		lossy, ok, err := im.encodeJPEG(ctx, out, width, height, px.tc, len(encoded))
+		if err != nil {
+			return stream, ImageUnchanged, err
+		}
+		if ok {
+			encoded, parms, outFilter = lossy, nil, "DCTDecode"
+		}
+	}
 	newDict := maps.Clone(dict)
 	for _, key := range sampleEntries {
 		delete(newDict, key)
@@ -576,7 +588,7 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 		newDict["ColorSpace"] = im.cfg.InlineSpace
 	}
 	newDict["BitsPerComponent"] = ast.PdfInt(8)
-	newDict["Filter"] = ast.PdfName("FlateDecode")
+	newDict["Filter"] = outFilter
 	if parms != nil {
 		newDict["DecodeParms"] = parms
 	}

@@ -137,13 +137,14 @@ const recolorJPEGQuality = 85
 // inventory, since the page paints no colour in it.
 //
 // A PDF whose conversion converted an image, and whose bytes name the
-// DCTDecode filter or its inline abbreviation DCT, is converted a second time
-// with [pdf.WithJPEGQuality] at [recolorJPEGQuality], which re-encodes the
-// converted DCTDecode images as JPEG. The byte test skips the PDFs the option
-// cannot change, at the cost of missing an inline JPEG inside a compressed
-// content stream. When that writes other bytes than the
-// lossless run (jpeg_files), the JPEG output must open and pass qpdf like the
-// lossless one (jpeg_failed), be no larger (jpeg_grew), paint in the target
+// DCTDecode filter, its inline abbreviation DCT, or the JPXDecode filter, is
+// converted a second time with [pdf.WithJPEGQuality] at
+// [recolorJPEGQuality], which re-encodes the converted DCTDecode and 8-bit
+// JPXDecode images as JPEG. The byte test skips the PDFs the option cannot
+// change, at the cost of missing an inline JPEG inside a compressed content
+// stream. When that writes other bytes than the lossless run (jpeg_files),
+// the JPEG output must open and pass qpdf like the lossless one
+// (jpeg_failed), be no larger (jpeg_grew), paint in the target
 // (jpeg_out_of_target), and render with the ink and colours of the lossless
 // output, by the same bars (jpeg_ink_moved, jpeg_colour_drift). The JPEG
 // output is checked against the lossless output, not the source, so the
@@ -170,12 +171,16 @@ const recolorJPEGQuality = 85
 //     a GTS_PDFX intent over another CMYK profile, through which the renderer
 //     reads the converted DeviceCMYK, 80.6 and 83.5 ΔE*ab from the source on
 //     the last two; with pdf.WithReplacedOutputIntents all four match.
-//   - pdfjs, govdocs: the JPEG run re-encodes 5 and 24 files, every one
-//     passing and none larger, 2264 and 22269 KiB saved; 1 and 6 more name
-//     DCTDecode and write the lossless bytes. Without the byte test the run
-//     also converts 15 and 8 files naming no JPEG filter, and changes none.
-//   - litho: no fixture converts a JPEG (undecodable_2b's is refused), so
-//     the run re-encodes nothing there.
+//   - pdfjs, govdocs: the JPEG run re-encodes 7 and 25 files, every one
+//     passing and none larger, 33880 and 22308 KiB saved; issue12752.pdf,
+//     issue17289.pdf and thread_200_200163.pdf among them for their JPEG
+//     2000 images. 2 and 6 more name a codec filter and write the lossless
+//     bytes. Without the byte test the run also converted 15 and 8 files
+//     naming no JPEG filter, and changed none.
+//   - litho imagecolour_2b.pdf, inlinejpx_2b.pdf: the run converts their
+//     JPEG 2000 images and keeps the lossless bytes, Flate holding images
+//     that small in fewer; no fixture converts a JPEG (undecodable_2b's is
+//     refused).
 type recolorFeature struct {
 	// convert runs the conversion with the options given; tests replace it
 	// to plant a defect.
@@ -365,7 +370,7 @@ func (f *recolorFeature) run(ctx context.Context, pdfPath string) recolorOutput 
 		out.Pages = append(out.Pages, eval)
 		renders = append(renders, rendered)
 	}
-	if f.jpegQuality > 0 && report.ConvertedImages > 0 && bytes.Contains(input, []byte("/DCT")) {
+	if f.jpegQuality > 0 && report.ConvertedImages > 0 && (bytes.Contains(input, []byte("/DCT")) || bytes.Contains(input, []byte("/JPXDecode"))) {
 		out.JPEG = f.runJPEG(ctx, src, input, output, renders, opts)
 	}
 	return out
