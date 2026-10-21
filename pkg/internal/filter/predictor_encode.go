@@ -1,6 +1,10 @@
 package filter
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+	"io"
+)
 
 // maxPredictorColors caps the Colors a predictor encode accepts. Not a DoS
 // guard: it is the largest component count a colour space has, the 32
@@ -26,78 +30,150 @@ const maxPredictorColors = 32
 // (ISO/IEC 15948, 12.8), with ties going to the lowest filter type so the output
 // depends on data alone.
 func EncodePNGPredictor(data []byte, colors, bpc, columns int) ([]byte, error) {
+	rowBytes, err := predictorRowBytes(len(data), colors, bpc, columns)
+	if err != nil {
+		return nil, err
+	}
+	out := bytes.NewBuffer(make([]byte, 0, len(data)+len(data)/rowBytes))
+	if err := writePNGPredicted(out, data, colors, bpc, rowBytes); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+// WritePNGPredictor writes to w what [EncodePNGPredictor] returns for the
+// same arguments, a row at a time, and stops at the first error w returns,
+// which it returns as it is: a writer that refuses more bytes stops the
+// prediction with it, so a caller that needs the output only while it stays
+// small pays for no more of it.
+func WritePNGPredictor(w io.Writer, data []byte, colors, bpc, columns int) error {
+	rowBytes, err := predictorRowBytes(len(data), colors, bpc, columns)
+	if err != nil {
+		return err
+	}
+	return writePNGPredicted(w, data, colors, bpc, rowBytes)
+}
+
+// predictorRowBytes checks the layout of n bytes of samples for PNG
+// prediction and returns the bytes a row takes.
+func predictorRowBytes(n, colors, bpc, columns int) (int, error) {
 	switch bpc {
 	case 1, 2, 4, 8, 16:
 	default:
-		return nil, fmt.Errorf("%w: BitsPerComponent %d", ErrPredictorLayout, bpc)
+		return 0, fmt.Errorf("%w: BitsPerComponent %d", ErrPredictorLayout, bpc)
 	}
 	if colors < 1 || colors > maxPredictorColors {
-		return nil, fmt.Errorf("%w: Colors %d", ErrPredictorLayout, colors)
+		return 0, fmt.Errorf("%w: Colors %d", ErrPredictorLayout, colors)
 	}
 	if columns < 1 {
-		return nil, fmt.Errorf("%w: Columns %d", ErrPredictorLayout, columns)
+		return 0, fmt.Errorf("%w: Columns %d", ErrPredictorLayout, columns)
 	}
 	// columns*colors*bpc cannot overflow once columns is checked against the
-	// data: a row is at most len(data) bytes, so columns is at most
-	// 8*len(data), and colors*bpc at most 512.
-	if columns > 8*len(data) {
-		return nil, fmt.Errorf("%w: %d columns over %d bytes", ErrPredictorLayout, columns, len(data))
+	// data: a row is at most n bytes, so columns is at most 8*n, and
+	// colors*bpc at most 512.
+	if columns > 8*n {
+		return 0, fmt.Errorf("%w: %d columns over %d bytes", ErrPredictorLayout, columns, n)
 	}
 	rowBytes := (columns*colors*bpc + 7) / 8
-	if len(data) == 0 || len(data)%rowBytes != 0 {
-		return nil, fmt.Errorf("%w: %d bytes are not whole rows of %d", ErrPredictorLayout, len(data), rowBytes)
+	if n == 0 || n%rowBytes != 0 {
+		return 0, fmt.Errorf("%w: %d bytes are not whole rows of %d", ErrPredictorLayout, n, rowBytes)
 	}
+	return rowBytes, nil
+}
+
+// writePNGPredicted writes the predicted rows of data, whose layout
+// predictorRowBytes checked, to w.
+func writePNGPredicted(w io.Writer, data []byte, colors, bpc, rowBytes int) error {
 	bpp := max((colors*bpc+7)/8, 1)
 	rows := len(data) / rowBytes
-
-	out := make([]byte, 0, rows*(rowBytes+1))
 	prev := make([]byte, rowBytes)
+	// Each candidate holds its filter-type byte before the filtered row, so
+	// the chosen one is written in one call.
 	var candidates [5][]byte
-	for i := range candidates {
-		candidates[i] = make([]byte, rowBytes)
+	for ft := range candidates {
+		candidates[ft] = make([]byte, rowBytes+1)
+		candidates[ft][0] = byte(ft) //nolint:gosec // ft ranges over the five PNG filter types.
 	}
 	for r := range rows {
 		cur := data[r*rowBytes : (r+1)*rowBytes]
 		best, bestScore := 0, -1
 		for ft := range candidates {
-			predictRow(candidates[ft], cur, prev, bpp, byte(ft)) //nolint:gosec // ft ranges over the five PNG filter types.
-			score := 0
-			for _, b := range candidates[ft] {
-				score += abs(int(int8(b))) //nolint:gosec // reinterpreting the byte as signed is the heuristic.
-			}
+			score := predictRow(candidates[ft][1:], cur, prev, bpp, byte(ft)) //nolint:gosec // ft ranges over the five PNG filter types.
 			if bestScore < 0 || score < bestScore {
 				best, bestScore = ft, score
 			}
 		}
-		out = append(out, byte(best)) //nolint:gosec // best is a filter type, 0 to 4.
-		out = append(out, candidates[best]...)
+		if _, err := w.Write(candidates[best]); err != nil {
+			return err
+		}
 		prev = cur
 	}
-	return out, nil
+	return nil
 }
 
 // predictRow writes into dst the PNG filter ft applied to cur, whose previous
-// row is prev and whose samples are bpp bytes apart. It is the inverse of the
-// cases of applyPNGPredictor.
-func predictRow(dst, cur, prev []byte, bpp int, ft byte) {
-	for i := range cur {
-		var left, upLeft byte
-		if i >= bpp {
-			left = cur[i-bpp]
-			upLeft = prev[i-bpp]
+// row is prev and whose samples are bpp bytes apart, and returns the sum of
+// the absolute values of dst as signed bytes. It is the inverse of the cases
+// of applyPNGPredictor. Each filter runs a loop of its own, split where the
+// left neighbour starts, since this loop is the cost of the prediction.
+func predictRow(dst, cur, prev []byte, bpp int, ft byte) int {
+	n := len(cur)
+	head := min(bpp, n)
+	dst, prev = dst[:n], prev[:n]
+	score := 0
+	switch ft {
+	case 0:
+		for i, c := range cur {
+			dst[i] = c
+			score += absInt8(c)
 		}
-		up := prev[i]
-		switch ft {
-		case 0:
+	case 1:
+		for i := range head {
 			dst[i] = cur[i]
-		case 1:
-			dst[i] = cur[i] - left
-		case 2:
-			dst[i] = cur[i] - up
-		case 3:
-			dst[i] = cur[i] - byte((int(left)+int(up))/2) //nolint:gosec // the average of two bytes is a byte.
-		default:
-			dst[i] = cur[i] - paethPredictor(left, up, upLeft)
+			score += absInt8(cur[i])
+		}
+		for i := head; i < n; i++ {
+			d := cur[i] - cur[i-bpp]
+			dst[i] = d
+			score += absInt8(d)
+		}
+	case 2:
+		for i, c := range cur {
+			d := c - prev[i]
+			dst[i] = d
+			score += absInt8(d)
+		}
+	case 3:
+		for i := range head {
+			d := cur[i] - prev[i]/2
+			dst[i] = d
+			score += absInt8(d)
+		}
+		for i := head; i < n; i++ {
+			d := cur[i] - byte((int(cur[i-bpp])+int(prev[i]))/2) //nolint:gosec // the average of two bytes is a byte.
+			dst[i] = d
+			score += absInt8(d)
+		}
+	default:
+		for i := range head {
+			d := cur[i] - paethPredictor(0, prev[i], 0)
+			dst[i] = d
+			score += absInt8(d)
+		}
+		for i := head; i < n; i++ {
+			d := cur[i] - paethPredictor(cur[i-bpp], prev[i], prev[i-bpp])
+			dst[i] = d
+			score += absInt8(d)
 		}
 	}
+	return score
+}
+
+// absInt8 returns the magnitude of b read as a signed byte.
+func absInt8(b byte) int {
+	v := int(int8(b)) //nolint:gosec // reinterpreting the byte as signed is the heuristic.
+	if v < 0 {
+		return -v
+	}
+	return v
 }

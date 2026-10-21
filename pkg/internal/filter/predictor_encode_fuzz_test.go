@@ -25,5 +25,9 @@ func FuzzEncodePNGPredictor(f *testing.F) {
 		if !bytes.Equal(dec, data) {
 			t.Fatal("round trip changed the samples")
 		}
+		rowBytes := (int(columns)*int(colors)*bpc + 7) / 8
+		if !bytes.Equal(enc, referencePNGPredict(data, max((int(colors)*bpc+7)/8, 1), rowBytes)) {
+			t.Fatal("the prediction differs from the reference")
+		}
 	})
 }

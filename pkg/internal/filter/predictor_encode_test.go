@@ -87,3 +87,111 @@ func TestEncodePNGPredictorRejectsLayouts(t *testing.T) {
 		})
 	}
 }
+
+// referencePNGPredict is the prediction [EncodePNGPredictor] promises,
+// written plainly: every filter of ISO/IEC 15948, 9.2 through one switch,
+// the least sum of absolute signed bytes winning, ties to the lowest type.
+func referencePNGPredict(data []byte, bpp, rowBytes int) []byte {
+	var out []byte
+	prev := make([]byte, rowBytes)
+	for r := range len(data) / rowBytes {
+		cur := data[r*rowBytes : (r+1)*rowBytes]
+		var best []byte
+		bestScore := -1
+		for ft := range 5 {
+			row := []byte{byte(ft)}
+			score := 0
+			for i := range cur {
+				var left, upLeft byte
+				if i >= bpp {
+					left, upLeft = cur[i-bpp], prev[i-bpp]
+				}
+				up := prev[i]
+				var d byte
+				switch ft {
+				case 0:
+					d = cur[i]
+				case 1:
+					d = cur[i] - left
+				case 2:
+					d = cur[i] - up
+				case 3:
+					d = cur[i] - byte((int(left)+int(up))/2)
+				default:
+					d = cur[i] - paethPredictor(left, up, upLeft)
+				}
+				row = append(row, d)
+				score += abs(int(int8(d)))
+			}
+			if bestScore < 0 || score < bestScore {
+				best, bestScore = row, score
+			}
+		}
+		out = append(out, best...)
+		prev = cur
+	}
+	return out
+}
+
+func TestEncodePNGPredictorMatchesReference(t *testing.T) {
+	cases := []struct {
+		colors, bpc, columns, rows int
+	}{
+		{1, 8, 31, 9}, {3, 8, 17, 12}, {4, 8, 13, 10}, {3, 16, 7, 6}, {1, 1, 29, 8}, {1, 4, 5, 7}, {32, 8, 2, 3},
+	}
+	for _, tc := range cases {
+		rowBytes := (tc.columns*tc.colors*tc.bpc + 7) / 8
+		bpp := max((tc.colors*tc.bpc+7)/8, 1)
+		data := make([]byte, rowBytes*tc.rows)
+		seed := uint32(tc.colors*131 + tc.bpc*17 + tc.columns) //nolint:gosec // Small test constants.
+		for i := range data {
+			// A ramp with noise, so more than one filter type wins a row.
+			seed = seed*1664525 + 1013904223
+			data[i] = byte(i/3+(i/rowBytes)*5) + byte(seed>>29) //nolint:gosec // Wrapping is the point.
+		}
+		got, err := EncodePNGPredictor(data, tc.colors, tc.bpc, tc.columns)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := referencePNGPredict(data, bpp, rowBytes); !bytes.Equal(got, want) {
+			t.Fatalf("%+v: the prediction differs from the reference", tc)
+		}
+	}
+}
+
+// failingWriter accepts limit bytes and then fails.
+type failingWriter struct {
+	limit, n int
+}
+
+var errWriterFull = errors.New("writer full")
+
+func (w *failingWriter) Write(p []byte) (int, error) {
+	if w.n+len(p) > w.limit {
+		return 0, errWriterFull
+	}
+	w.n += len(p)
+	return len(p), nil
+}
+
+func TestWritePNGPredictorStopsOnWriterError(t *testing.T) {
+	data := make([]byte, 10*100)
+	w := &failingWriter{limit: 250}
+	if err := WritePNGPredictor(w, data, 1, 8, 100); !errors.Is(err, errWriterFull) {
+		t.Fatalf("err = %v, want the writer's", err)
+	}
+	if w.n != 2*101 {
+		t.Fatalf("wrote %d bytes before stopping, want the 2 rows that fit", w.n)
+	}
+	var buf bytes.Buffer
+	if err := WritePNGPredictor(&buf, data, 1, 8, 100); err != nil {
+		t.Fatal(err)
+	}
+	want, err := EncodePNGPredictor(data, 1, 8, 100)
+	if err != nil || !bytes.Equal(buf.Bytes(), want) {
+		t.Fatalf("WritePNGPredictor wrote other bytes than EncodePNGPredictor returns (err %v)", err)
+	}
+	if err := WritePNGPredictor(&buf, data[:7], 1, 8, 100); !errors.Is(err, ErrPredictorLayout) {
+		t.Fatalf("err = %v, want ErrPredictorLayout", err)
+	}
+}
