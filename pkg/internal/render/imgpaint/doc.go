@@ -71,6 +71,10 @@
 //     by 2 interpolated image enlarged 100 by 50 pixels a sample; poppler
 //     shifts it the same way, and each page mismatches the render golden on
 //     about 14870 pixels for it.
+//   - litho inlineinterp_2b, complex_2b, megafont_2b, multipage_2b: PDFium
+//     (pypdfium2 4.30.0) and poppler's Cairo backend (pdftocairo 26.09.0)
+//     centre the samples as litho does: 0 pixels differ from litho inside the
+//     image on each page, so the shift is Splash's alone.
 //   - pdfjs issue7200.pdf: a 501 by 583 scan drawn into 449 by 522 pixels.
 //     Two evenly spaced taps per axis weighed each neighbour as much as the
 //     sample and blurred the text, 7931 pixels off the render golden; area

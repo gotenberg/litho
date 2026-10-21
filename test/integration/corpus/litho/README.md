@@ -1964,7 +1964,7 @@ those differences is adjudicated, and none is a litho defect left open:
 | File                                            | Page       | Differing pixels     | Why                                       |
 | ----------------------------------------------- | ---------- | -------------------- | ----------------------------------------- |
 | `pdfxonly_2b`, `iccbadcmyk_1b`, `iccbadcmyk_2b` | 1          | 3600, 3933, 3933     | DeviceCMYK through the output intent      |
-| `inlineinterp_2b`, `complex_2b`, `megafont_2b`  | 1          | 148178, 15169, 14874 | interpolation half a sample off (poppler) |
+| `inlineinterp_2b`, `complex_2b`, `megafont_2b`  | 1          | 148178, 14873, 14874 | interpolation half a sample off (poppler) |
 | `multipage_2b`                                  | 2          | 14873                | interpolation half a sample off (poppler) |
 | `inlinejpx_2b`                                  | 1          | 5600                 | poppler stops after an inline JPX image   |
 | `imagecolour_2b`                                | 1          | 15375                | colorant None and JPX colour (poppler)    |
@@ -1976,8 +1976,16 @@ those differences is adjudicated, and none is a litho defect left open:
   sample's value at the low corner of its cell, litho at its centre: ISO
   32000-1, 8.9.4 maps the image onto the unit square with each sample filling a
   cell, so enlarging must not move it. `pkg/internal/render/imgpaint` records
-  the measurement. The Square annotations of `complex_2b` and `forbidden_mix`,
-  which have no `/AP`, match: litho draws them from `/C`, `/IC`, the border and
+  the measurement. The 14873 pixels of `complex_2b` page 1 and `multipage_2b`
+  page 2 are one cause: the same 2 by 2 image (`_common.py`, `rgb_image`)
+  drawn into the same 200 by 100 point rectangle, the whole difference inside
+  it; `megafont_2b` builds that image itself and adds one pixel of a glyph
+  edge. poppler's Splash backend is alone: PDFium and poppler's own Cairo
+  backend (`pdftocairo`) paint all four pages the way litho does, with 0
+  differing pixels on `complex_2b`, `multipage_2b` and `inlineinterp_2b`, and 9
+  on `megafont_2b`, an edge they anti-alias and litho and Splash do not. The
+  Square annotations of `complex_2b` and `forbidden_mix`, which have no `/AP`,
+  match: litho draws them from `/C`, `/IC`, the border and
   `/CA` as poppler does (`pkg/internal/render/annot`, rendering only; ISO
   19005-2, 6.3.3 is still the rule both files break).
 - **`inlinejpx_2b`.** poppler paints the first inline JPXDecode image, warns
