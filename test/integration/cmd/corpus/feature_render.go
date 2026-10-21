@@ -62,6 +62,39 @@ const renderNeighbourhood = 1
 //     filter, gstate_2b paints rectangles Splash does not.
 const renderMaxDiffPerMillion = 10_000
 
+// renderMaxDiffPerInkMillion is the largest share of a page's inked pixels,
+// in parts per million, that may differ for the page to match: 50%. A pixel
+// is inked when either rendering puts it more than renderChannelTolerance
+// from the white background. The page bar above weighs a difference against
+// the whole page, so a page whose only content is a few glyphs passes it
+// with every glyph missing: one word on a Letter page covers well under 1%.
+// This bar weighs the same difference against what the page draws.
+//
+// A differing pixel is always inked: its channels lie more than
+// renderChannelTolerance apart, so one of them lies that far from white. The
+// share therefore runs from 0 to 100%, and a rendering that draws nothing
+// where the other draws something sits at 100%: each inked pixel of the one
+// is a differing pixel. The bar sits in the widest gap of the shares the
+// pages that pass the page bar show, above every page whose difference is
+// an edge one rasterizer places otherwise, and below every page where the
+// two draw different things.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 607 golden pages the page bar passes, 22 share more
+//     than 50% of their ink, all of them litho fixtures, and on each one
+//     renderer draws a glyph, a fill or an annotation the other does not (the
+//     litho corpus README lists and adjudicates them). The shares jump from
+//     53% to 40% (litho cmappredef_2b, limits_2b), the widest gap above 31%.
+//   - pdfjs issue11768_reduced: the CJK page the render feature's evidence
+//     adjudicates as matching shares 31% of its ink (71 of 227 pixels).
+//   - litho complex_2a, complex_2u, complex_3b, complex_4, typedreads_1b: an
+//     image interpolated half a sample apart and a box edge anti-aliased
+//     otherwise share 17% to 28%.
+//   - A planted blank golden fails the bar on every page that draws ink
+//     (TestComparePageInkShare).
+const renderMaxDiffPerInkMillion = 500_000
+
 // renderSizeSlack is how many pixels litho's page may differ from the
 // golden's along each axis. A crop box whose width is not a whole number of
 // units rounds to a pixel count either way; the pixels compared are the
@@ -218,6 +251,7 @@ type pageResult struct {
 	GoldenHeight int    `json:"golden_height,omitempty"`
 	Pixels       int    `json:"pixels,omitempty"`
 	DiffPixels   int    `json:"diff_pixels,omitempty"`
+	InkPixels    int    `json:"ink_pixels,omitempty"`
 	MaxDelta     int    `json:"max_delta,omitempty"`
 	Match        bool   `json:"match"`
 	Error        string `json:"error,omitempty"`
@@ -442,8 +476,11 @@ var errRenderSize = errors.New("page size differs from the golden's")
 // composed over white. A pixel differs when no pixel within
 // renderNeighbourhood of its place in the other image lies within
 // renderChannelTolerance of it, checked both ways, so an edge one rasterizer
-// put a pixel away from the other still matches. MaxDelta is the largest
-// channel difference at the same place, before the neighbourhood applies.
+// put a pixel away from the other still matches. The page matches when the
+// differing pixels stay within renderMaxDiffPerMillion of the page and within
+// renderMaxDiffPerInkMillion of the pixels either rendering inks. MaxDelta is
+// the largest channel difference at the same place, before the neighbourhood
+// applies.
 //
 // Cost: O(w*h) when the images agree pixel for pixel, O(w*h*(2r+1)^2) at
 // worst.
@@ -457,9 +494,13 @@ func comparePage(got, want image.Image) pageResult {
 	w, h := min(res.Width, res.GoldenWidth), min(res.Height, res.GoldenHeight)
 	g, wt := flattenOnWhite(got, w, h), flattenOnWhite(want, w, h)
 	res.Pixels = w * h
+	white := []uint8{0xff, 0xff, 0xff}
 	for y := range h {
 		for x := range w {
 			i := 3 * (y*w + x)
+			if channelDelta(g[i:i+3], white) > renderChannelTolerance || channelDelta(wt[i:i+3], white) > renderChannelTolerance {
+				res.InkPixels++
+			}
 			d := channelDelta(g[i:i+3], wt[i:i+3])
 			res.MaxDelta = max(res.MaxDelta, d)
 			if d <= renderChannelTolerance {
@@ -470,8 +511,16 @@ func comparePage(got, want image.Image) pageResult {
 			}
 		}
 	}
-	res.Match = int64(res.DiffPixels)*1_000_000 <= int64(renderMaxDiffPerMillion)*int64(res.Pixels)
+	res.Match = res.withinPageShare() &&
+		int64(res.DiffPixels)*1_000_000 <= int64(renderMaxDiffPerInkMillion)*int64(res.InkPixels)
 	return res
+}
+
+// withinPageShare reports whether the differing pixels stay within
+// renderMaxDiffPerMillion of the page, the bar alone, without the share of
+// the inked pixels renderMaxDiffPerInkMillion adds.
+func (r pageResult) withinPageShare() bool {
+	return int64(r.DiffPixels)*1_000_000 <= int64(renderMaxDiffPerMillion)*int64(r.Pixels)
 }
 
 // nearMatch reports whether a pixel within renderNeighbourhood of (x, y) in

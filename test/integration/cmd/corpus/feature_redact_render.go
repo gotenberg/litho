@@ -764,8 +764,11 @@ func popplerCheck(staging string, st redactRenderStaged) (*redactRenderCheck, st
 	// render cell finds the two apart, poppler's own decode of an image the
 	// redaction re-encoded from litho's decode changes the page however
 	// exact the redaction was (pdfjs JBIG2 halftone and refinement regions
-	// poppler garbles).
-	if cmp := comparePage(lithoBefore, decodedRGB(orig, bw, bh)); !cmp.Match {
+	// poppler garbles). It reads the page bar alone: the share of the ink
+	// the render cell also weighs withholds the oracle from a page where
+	// the renderers disagree on one glyph or annotation, while poppler's
+	// before and after still answer for the rest of the page.
+	if cmp := comparePage(lithoBefore, decodedRGB(orig, bw, bh)); !cmp.withinPageShare() {
 		check.OutsideNoOracle = fmt.Sprintf("poppler draws the source page apart from litho: %d of %d pixels differ", cmp.DiffPixels, cmp.Pixels)
 	} else {
 		check.OutsidePixels, check.Outside, check.OutsideBox, check.ImageSpill = o.countOutside(cropRGB(orig, bw, w, h), cropRGB(full, aw, w, h), w, renderChannelTolerance, renderNeighbourhood)

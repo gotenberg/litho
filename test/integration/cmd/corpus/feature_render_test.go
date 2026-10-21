@@ -90,20 +90,63 @@ func TestComparePageCatchesMissingAndMisplacedShapes(t *testing.T) {
 	}
 }
 
-// The share of differing pixels decides: 1% passes, more fails.
+// The share of differing pixels in the page decides the page bar: 1% passes,
+// more fails. Against a blank golden every inked pixel differs, so the ink bar
+// fails both pages; TestComparePageInkShare covers it.
 func TestComparePageDiffShare(t *testing.T) {
 	t.Parallel()
 
 	want := whitePage(100, 100)
 	at := whitePage(100, 100)
 	fill(at, image.Rect(0, 0, 10, 10), color.Black) // 100 of 10000 pixels: 1%
-	if res := comparePage(at, want); !res.Match || res.DiffPixels != 100 {
+	if res := comparePage(at, want); !res.withinPageShare() || res.Match || res.DiffPixels != 100 {
 		t.Errorf("1%% differing: %+v", res)
 	}
 	over := whitePage(100, 100)
 	fill(over, image.Rect(0, 0, 10, 11), color.Black)
-	if res := comparePage(over, want); res.Match || res.DiffPixels != 110 {
+	if res := comparePage(over, want); res.withinPageShare() || res.Match || res.DiffPixels != 110 {
 		t.Errorf("1.1%% differing: %+v", res)
+	}
+}
+
+// A blank golden against a page drawing a little text passes the page bar and
+// fails the ink bar; a one-pixel shift of the same text passes both, and the
+// share of the ink decides at 50%.
+func TestComparePageInkShare(t *testing.T) {
+	t.Parallel()
+
+	text := whitePage(612, 792)
+	for x := 50; x < 110; x += 8 { // one short word of 12-point glyphs
+		fill(text, image.Rect(x, 700, x+6, 709), color.Black)
+	}
+	blank := whitePage(612, 792)
+	res := comparePage(text, blank)
+	if !res.withinPageShare() || res.Match || res.DiffPixels != res.InkPixels || res.InkPixels == 0 {
+		t.Errorf("text against a blank golden: %+v", res)
+	}
+	if res := comparePage(blank, text); res.Match {
+		t.Errorf("blank page against text: %+v", res)
+	}
+
+	shifted := whitePage(612, 792)
+	for x := 51; x < 111; x += 8 {
+		fill(shifted, image.Rect(x, 700, x+6, 709), color.Black)
+	}
+	if res := comparePage(shifted, text); !res.Match || res.DiffPixels != 0 {
+		t.Errorf("text shifted by one pixel: %+v", res)
+	}
+
+	want := whitePage(200, 200)
+	fill(want, image.Rect(0, 0, 20, 20), color.Black) // 400 inked pixels
+	half := whitePage(200, 200)
+	fill(half, image.Rect(0, 0, 20, 10), color.Black) // 199 differ past the neighbourhood
+	if res := comparePage(half, want); !res.Match || res.DiffPixels != 199 || res.InkPixels != 400 {
+		t.Errorf("half the ink differing: %+v", res)
+	}
+	over := whitePage(200, 200)
+	fill(over, image.Rect(0, 0, 20, 9), color.Black)
+	if res := comparePage(over, want); res.Match || !res.withinPageShare() {
+		t.Errorf("more than half the ink differing: %+v", res)
 	}
 }
 
