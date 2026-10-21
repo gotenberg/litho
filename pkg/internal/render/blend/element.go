@@ -15,7 +15,8 @@ const rowsPerContextCheck = 64
 // Direct returns the group's colour plane when an element painted onto it
 // with the Normal blend mode, source over, no soft mask and its constant
 // alpha folded into its coverage, ends as [Group.Paint] would leave it, and
-// nil otherwise. That holds in an isolated, non-knockout group: per ISO
+// nil otherwise. That holds in an isolated, non-knockout group blending in sRGB, whose
+// plane is a canvas: per ISO
 // 32000-1, 11.4.8, with b = i-1 and Normal's B(Cb, Cs) = Cs, the colour
 // becomes (1 - αs)·Ci-1 + αs·Cs whatever the shape, and αi = αgi needs no
 // plane of its own. Only the shape plane is not kept: the group then takes
@@ -27,19 +28,20 @@ const rowsPerContextCheck = 64
 // The plane's origin is at [Group.Bounds].Min. A caller that paints on it
 // does so before [Group.Into], as it would call Paint.
 func (g *Group) Direct() *surface.Canvas {
-	if !g.attrs.Isolated || g.attrs.Knockout {
+	if !g.attrs.Isolated || g.attrs.Knockout || g.rgb == nil {
 		return nil
 	}
 	g.direct = true
-	return g.color
+	return g.rgb
 }
 
 // PaintCanvas composites src, the raster of one element (ISO 32000-1,
 // 11.4.4), into g: src's pixel (0, 0) is device pixel origin, its colour
 // premultiplied, and its alpha the element's object shape and object alpha
 // both, as anti-aliased coverage, an image's masks and the clip leave them
-// (11.3.7.2). params adds the graphics state's mode, constant alpha and soft
-// mask. An element that holds partial shape apart from partial alpha, which
+// (11.3.7.2). Its colour is sRGB, converted into the group's blending colour
+// space (11.3.4). params adds the graphics state's mode, constant alpha and
+// soft mask. An element that holds partial shape apart from partial alpha, which
 // matters only in a knockout group, is not represented: its shape is taken
 // as its alpha.
 func (g *Group) PaintCanvas(ctx context.Context, src *surface.Canvas, origin image.Point, params Params) error {
@@ -57,20 +59,21 @@ func (g *Group) PaintCanvas(ctx context.Context, src *surface.Canvas, origin ima
 			if a <= 0 {
 				continue
 			}
-			c := [3]float32{clamp01(p[0] / a), clamp01(p[1] / a), clamp01(p[2] / a)}
+			c := g.space.fromRGB([3]float32{clamp01(p[0] / a), clamp01(p[1] / a), clamp01(p[2] / a)})
 			fs, as := params.Source(x, y, a, a)
-			g.Paint(x, y, params.Mode, c, fs, as)
+			g.paint(x, y, params.Mode, c, fs, as)
 		}
 	}
 	return nil
 }
 
-// PaintCoverage composites one element of the single colour cs, an
-// unpremultiplied sRGB triple, into g: coverage holds its shape and alpha
+// PaintCoverage composites one element of the single colour cs, components
+// of the group's blending colour space, into g: coverage holds its shape and alpha
 // over the device rectangle rect, row by row, as a filled or stroked path's
 // anti-aliased coverage under the clip is both (ISO 32000-1, 11.3.7.2).
 // params adds the graphics state's mode, constant alpha and soft mask.
-func (g *Group) PaintCoverage(ctx context.Context, rect image.Rectangle, coverage []float32, cs [3]float32, params Params) error {
+func (g *Group) PaintCoverage(ctx context.Context, rect image.Rectangle, coverage []float32, cs Components, params Params) error {
+	stored := g.space.store(cs)
 	if len(coverage) < rect.Dx()*rect.Dy() {
 		return fmt.Errorf("%w: %d values for a %dx%d coverage", ErrCoverage, len(coverage), rect.Dx(), rect.Dy())
 	}
@@ -89,7 +92,7 @@ func (g *Group) PaintCoverage(ctx context.Context, rect image.Rectangle, coverag
 				continue
 			}
 			fs, as := params.Source(x, y, c, c)
-			g.Paint(x, y, params.Mode, cs, fs, as)
+			g.paint(x, y, params.Mode, stored, fs, as)
 		}
 	}
 	return nil

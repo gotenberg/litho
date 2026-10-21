@@ -16,8 +16,8 @@ import (
 func TestDirectMatchesPaint(t *testing.T) {
 	ctx := context.Background()
 	elements := []element{
-		{Normal, [3]float32{0.3, 0.8, 0.5}, image.Rect(1, 0, 4, 3), 0.6, 1},
-		{Normal, [3]float32{0.9, 0.1, 0.2}, image.Rect(0, 1, 3, 4), 1, 0.5},
+		{Normal, Components{0.3, 0.8, 0.5}, image.Rect(1, 0, 4, 3), 0.6, 1},
+		{Normal, Components{0.9, 0.1, 0.2}, image.Rect(0, 1, 3, 4), 1, 0.5},
 	}
 	for _, mode := range []Mode{Normal, Multiply, Difference} {
 		painted, direct := newPage(t), newPage(t)
@@ -69,7 +69,7 @@ func TestPaintCanvasMatchesPaint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cs := [3]float32{0.2, 0.7, 0.4}
+	cs := Components{0.2, 0.7, 0.4}
 	alphas := []float32{1, 0.5, 0, 0.25, 0.75, 1}
 	for i, a := range alphas {
 		src.BlendOver(i%3, i/3, cs[0], cs[1], cs[2], a)
@@ -102,7 +102,7 @@ func TestPaintCanvasMatchesPaint(t *testing.T) {
 
 // TestPaintCoverageRefusesShortCoverage checks the coverage length guard.
 func TestPaintCoverageRefusesShortCoverage(t *testing.T) {
-	err := newPage(t).PaintCoverage(context.Background(), image.Rect(0, 0, 2, 2), []float32{1}, [3]float32{}, Params{})
+	err := newPage(t).PaintCoverage(context.Background(), image.Rect(0, 0, 2, 2), []float32{1}, Components{}, Params{})
 	if !errors.Is(err, ErrCoverage) {
 		t.Errorf("err = %v, want ErrCoverage", err)
 	}

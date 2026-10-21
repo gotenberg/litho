@@ -38,7 +38,7 @@ func gradient(t *testing.T, backdrop Backdrop, attrs Attributes, alpha float32) 
 	for y := range 2 {
 		for x := 1; x < 12; x++ {
 			v := float32(x-1) / 10
-			g.Paint(x, y, Normal, [3]float32{v, v, v}, 1, alpha)
+			g.Paint(x, y, Normal, Components{v, v, v}, 1, alpha)
 		}
 	}
 	return g
@@ -50,7 +50,7 @@ func gradient(t *testing.T, backdrop Backdrop, attrs Attributes, alpha float32) 
 // luminosity; and an inverting /TR flips the values (11.6.5.2).
 func TestLuminosityMaskOfGradient(t *testing.T) {
 	ctx := context.Background()
-	black, white := [3]float32{}, [3]float32{1, 1, 1}
+	black, white := Components{}, Components{1, 1, 1}
 
 	m, err := LuminosityMask(ctx, gradient(t, Backdrop{}, Attributes{Isolated: true}, 1), black, nil, testBudget)
 	if err != nil {

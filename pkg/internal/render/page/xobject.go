@@ -154,7 +154,7 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 		r.skip("form XObject", err)
 		return nil
 	}
-	attrs, _, isGroup := r.groupAttrs(dict)
+	attrs, cs, isGroup := r.groupAttrs(dict)
 	isGroup = isGroup && honourGroup
 	resources, err := document.ResolveDict(r.ctx, r.doc, dict["Resources"])
 	if err != nil || resources == nil {
@@ -213,6 +213,7 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 	if !isGroup || r.elide(attrs, atDo, ref, resources) {
 		return r.run(ops, resources, formToDevice, s.depth+1)
 	}
+	attrs.Space = r.formSpace(attrs, cs, ref, resources)
 	return r.group(ops, resources, formToDevice, s.depth+1, bp, attrs, atDo)
 }
 
@@ -221,14 +222,10 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 // bounding box, under the clip, then composites the group into the one
 // being painted with fx (11.6.6). A non-isolated group starts from the
 // parent's stack (11.4.5), a knockout group composites each element with
-// that start (11.4.6). Blending stays in sRGB: a group's /CS is not a
-// blending space litho holds, so a group in DeviceCMYK or a calibrated
-// space blends as its colours look, which differs from blending in that
-// space for the modes whose result depends on the components (all but
-// Normal, and the separable modes on gray), and a /CS of DeviceCMYK does not
-// take K from one side as 11.3.5 makes the non-separable modes do. A group
-// past the render pixel budget paints its content into the parent instead,
-// counted in [TransparencyOverBudget].
+// that start (11.4.6). The group blends in the space attrs.Space holds
+// ([renderer.formSpace]) and reaches the parent converted to its space. A
+// group past the render pixel budget paints its content into the parent
+// instead, counted in [TransparencyOverBudget].
 func (r *renderer) group(ops []content.Operation, resources ast.PdfDict, base geom.Matrix, depth int, bp geom.Path, attrs blend.Attributes, fx effects) error {
 	parent := r.top().group
 	b, _ := bp.Bounds()
@@ -305,7 +302,12 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 			return nil
 		}
 		cr, cg, cb := conv.RGB(st.Fill.Components)
-		return r.imageFailed(r.paint(bounds, fx, func(v view, op surface.Opacity) error {
+		var native *blend.Components
+		if r.top().group.Space() != nil {
+			in := r.solidOf(s, st.Fill, [3]float32{cr, cg, cb}).in
+			native = &in
+		}
+		return r.imageFailed(r.paintAs(bounds, fx, native, func(v view, op surface.Opacity) error {
 			p, err := params(v, op)
 			if err != nil {
 				return err

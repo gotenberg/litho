@@ -36,8 +36,12 @@
 // Normal and no soft mask, in a group that lets it, is painted straight onto
 // the group's colour, and a group that would composite exactly as its
 // content painted into its parent gets no raster of its own, so opaque
-// content costs what it did before transparency was drawn. Blending is in
-// sRGB whatever a group's /CS.
+// content costs what it did before transparency was drawn. A group blends in
+// the grey or CMYK space its /CS names (11.3.4) when its content paints with
+// transparency, through [blend.Space]: a colour of that space, or one that
+// space converts from by the device formulas of 10.3, keeps its components,
+// any other arrives through its sRGB, and the page leaves in sRGB. RGB
+// spaces blend in sRGB.
 //
 // What the renderer does not draw is counted in the [Report] rather than
 // drawn wrongly: annotations with no appearance stream that ISO 32000-1

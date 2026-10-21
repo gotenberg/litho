@@ -15,7 +15,7 @@ const testBudget = 1 << 20
 // standing in for anti-aliased shape and an opacity.
 type element struct {
 	mode     Mode
-	color    [3]float32
+	color    Components
 	rect     image.Rectangle
 	coverage float32
 	opacity  float32
@@ -38,8 +38,8 @@ func newPage(t testing.TB) *Group {
 	if err != nil {
 		t.Fatal(err)
 	}
-	element{Normal, [3]float32{0.9, 0.6, 0.2}, image.Rect(0, 0, 2, 4), 1, 1}.paint(page)
-	element{Normal, [3]float32{0.1, 0.4, 0.7}, image.Rect(2, 0, 4, 4), 1, 0.5}.paint(page)
+	element{Normal, Components{0.9, 0.6, 0.2}, image.Rect(0, 0, 2, 4), 1, 1}.paint(page)
+	element{Normal, Components{0.1, 0.4, 0.7}, image.Rect(2, 0, 4, 4), 1, 0.5}.paint(page)
 	return page
 }
 
@@ -59,7 +59,7 @@ func sameCanvas(t *testing.T, got, want *surface.Canvas) {
 func TestIsolatedGroupOfOneObject(t *testing.T) {
 	ctx := context.Background()
 	for _, mode := range []Mode{Normal, Multiply, SoftLight, Luminosity} {
-		obj := element{mode, [3]float32{0.3, 0.8, 0.5}, image.Rect(1, 1, 4, 3), 0.6, 0.7}
+		obj := element{mode, Components{0.3, 0.8, 0.5}, image.Rect(1, 1, 4, 3), 0.6, 0.7}
 
 		direct := newPage(t)
 		obj.paint(direct)
@@ -85,9 +85,9 @@ func TestIsolatedGroupOfOneObject(t *testing.T) {
 func TestNonIsolatedGroupIsTransparent(t *testing.T) {
 	ctx := context.Background()
 	elements := []element{
-		{Multiply, [3]float32{0.3, 0.8, 0.5}, image.Rect(1, 0, 4, 3), 0.6, 0.7},
-		{Screen, [3]float32{0.9, 0.1, 0.2}, image.Rect(0, 1, 3, 4), 1, 0.5},
-		{Color, [3]float32{0.2, 0.2, 0.9}, image.Rect(1, 1, 3, 3), 0.8, 1},
+		{Multiply, Components{0.3, 0.8, 0.5}, image.Rect(1, 0, 4, 3), 0.6, 0.7},
+		{Screen, Components{0.9, 0.1, 0.2}, image.Rect(0, 1, 3, 4), 1, 0.5},
+		{Color, Components{0.2, 0.2, 0.9}, image.Rect(1, 1, 3, 3), 0.8, 1},
 	}
 
 	direct := newPage(t)
@@ -123,8 +123,8 @@ func near4(a, b [4]float32) bool {
 // it the later one replaces the earlier where it covers it fully, and
 // replaces a fraction of it where its shape is fractional (11.4.6).
 func TestKnockout(t *testing.T) {
-	red := element{Normal, [3]float32{1, 0, 0}, image.Rect(0, 0, 3, 1), 1, 0.5}
-	blue := element{Normal, [3]float32{0, 0, 1}, image.Rect(1, 0, 4, 1), 1, 0.5}
+	red := element{Normal, Components{1, 0, 0}, image.Rect(0, 0, 3, 1), 1, 0.5}
+	blue := element{Normal, Components{0, 0, 1}, image.Rect(1, 0, 4, 1), 1, 0.5}
 	// The blue object's last pixel has half coverage: shape 0.5.
 	bounds := image.Rect(0, 0, 4, 1)
 
@@ -184,14 +184,14 @@ func TestNonIsolatedKnockoutBlendsWithInitialBackdrop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page.Paint(0, 0, Normal, [3]float32{0.5, 0.5, 0.5}, 1, 1)
+	page.Paint(0, 0, Normal, Components{0.5, 0.5, 0.5}, 1, 1)
 
 	knock, err := NewGroup(page.Bounds(), page.Backdrop(), Attributes{Knockout: true}, testBudget)
 	if err != nil {
 		t.Fatal(err)
 	}
-	knock.Paint(0, 0, Normal, [3]float32{1, 0, 0}, 1, 1)
-	knock.Paint(0, 0, Multiply, [3]float32{0.5, 1, 1}, 1, 1)
+	knock.Paint(0, 0, Normal, Components{1, 0, 0}, 1, 1)
+	knock.Paint(0, 0, Multiply, Components{0.5, 1, 1}, 1, 1)
 	// Multiply with the grey backdrop, not with the red: (0.25, 0.5, 0.5).
 	if got, want := pixel(knock, 0, 0), [4]float32{0.25, 0.5, 0.5, 1}; !near4(got, want) {
 		t.Errorf("knockout multiply = %v, want %v", got, want)
@@ -204,7 +204,7 @@ func TestNonIsolatedKnockoutBlendsWithInitialBackdrop(t *testing.T) {
 	if got, want := pixel(inner, 0, 0), [4]float32{0.5, 0.5, 0.5, 1}; !near4(got, want) {
 		t.Errorf("nested group starts at %v, want the knockout's initial backdrop %v", got, want)
 	}
-	inner.Paint(0, 0, Multiply, [3]float32{0, 1, 1}, 1, 1)
+	inner.Paint(0, 0, Multiply, Components{0, 1, 1}, 1, 1)
 	if err := inner.Into(ctx, knock, Params{}); err != nil {
 		t.Fatal(err)
 	}

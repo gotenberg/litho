@@ -268,6 +268,15 @@ func profileTransform(ctx context.Context, doc *document.Document, obj ast.PdfOb
 // readProfileTransform reads the ICC profile stream obj and builds its
 // transform for the intent.
 func readProfileTransform(ctx context.Context, doc *document.Document, obj ast.PdfObject, intent icc.Intent) (*icc.Transform, error) {
+	p, err := readProfile(ctx, doc, obj)
+	if err != nil {
+		return nil, err
+	}
+	return p.NewTransform(intent)
+}
+
+// readProfile reads and parses the ICC profile stream obj.
+func readProfile(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*icc.Profile, error) {
 	stream, err := document.ResolveStream(ctx, doc, obj)
 	if err != nil {
 		return nil, fmt.Errorf("resolving ICC profile stream: %w", err)
@@ -289,11 +298,7 @@ func readProfileTransform(ctx context.Context, doc *document.Document, obj ast.P
 	if len(data) > maxICCProfileBytes {
 		return nil, fmt.Errorf("ICC profile exceeds the %d-byte safety cap", maxICCProfileBytes)
 	}
-	p, err := icc.Parse(data)
-	if err != nil {
-		return nil, err
-	}
-	return p.NewTransform(intent)
+	return icc.Parse(data)
 }
 
 // embeddedTransform returns the transform of an ICC profile an image's own

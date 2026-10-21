@@ -97,6 +97,41 @@ func (m Mode) Blend(cb, cs [3]float32) [3]float32 {
 	return cs
 }
 
+// blendIn returns B(cb, cs) for colours stored in a space of family kind:
+// additive, so a CMYK colour arrives complemented ([Space.store]).
+//
+// A separable mode applies to each component on its own; on complemented
+// CMYK components that is ISO 32000-1, 11.3.5's rule for a subtractive
+// space. A non-separable mode is defined on three components: a grey reads
+// as the RGB colour of three equal components, and a CMYK colour's
+// complemented C, M and Y as R, G and B, its K taken from the backdrop for
+// Hue, Saturation and Color and from the source for Luminosity (11.3.5.3).
+func (m Mode) blendIn(kind Kind, cb, cs Components) Components {
+	switch {
+	case m.base() == Normal:
+		return cs
+	case kind == RGB:
+		out := m.Blend([3]float32{cb[0], cb[1], cb[2]}, [3]float32{cs[0], cs[1], cs[2]})
+		return Components{out[0], out[1], out[2]}
+	case m.Separable():
+		var out Components
+		for i := range kind.Channels() {
+			out[i] = m.channel(cb[i], cs[i])
+		}
+		return out
+	case kind == Gray:
+		out := m.Blend([3]float32{cb[0], cb[0], cb[0]}, [3]float32{cs[0], cs[0], cs[0]})
+		return Components{clamp01(lum(out))}
+	case kind == CMYK:
+	}
+	out := m.Blend([3]float32{cb[0], cb[1], cb[2]}, [3]float32{cs[0], cs[1], cs[2]})
+	k := cb[3]
+	if m.base() == Luminosity {
+		k = cs[3]
+	}
+	return Components{out[0], out[1], out[2], k}
+}
+
 // channel applies a separable blend function of Table 136 to one component.
 func (m Mode) channel(cb, cs float32) float32 {
 	switch m.base() {

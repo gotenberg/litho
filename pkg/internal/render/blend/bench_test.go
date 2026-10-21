@@ -29,7 +29,7 @@ func benchGroup(b *testing.B, attrs Attributes) *Group {
 // partial shape and alpha, the per-pixel cost of 11.4.8.
 func benchmarkPaint(b *testing.B, mode Mode, attrs Attributes) {
 	g := benchGroup(b, attrs)
-	cs := [3]float32{0.2, 0.4, 0.9}
+	cs := Components{0.2, 0.4, 0.9}
 	b.ReportAllocs()
 	for b.Loop() {
 		for y := range benchSide {
@@ -60,7 +60,7 @@ func BenchmarkInto(b *testing.B) {
 	}
 	for y := range benchSide {
 		for x := range benchSide {
-			g.Paint(x, y, Multiply, [3]float32{0.2, 0.4, 0.9}, 1, 0.6)
+			g.Paint(x, y, Multiply, Components{0.2, 0.4, 0.9}, 1, 0.6)
 		}
 	}
 	b.ReportAllocs()
@@ -78,12 +78,12 @@ func BenchmarkLuminosityMask(b *testing.B) {
 	for y := range benchSide {
 		for x := range benchSide {
 			v := float32(x) / benchSide
-			g.Paint(x, y, Normal, [3]float32{v, v, v}, 1, 1)
+			g.Paint(x, y, Normal, Components{v, v, v}, 1, 1)
 		}
 	}
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := LuminosityMask(ctx, g, [3]float32{}, nil, benchSide*benchSide); err != nil {
+		if _, err := LuminosityMask(ctx, g, Components{}, nil, benchSide*benchSide); err != nil {
 			b.Fatal(err)
 		}
 	}

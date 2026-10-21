@@ -110,27 +110,32 @@ func AlphaMask(ctx context.Context, g *Group, tr *function.Function, maxPixels i
 
 // LuminosityMask derives a soft mask of /S /Luminosity from the rendered
 // group g (ISO 32000-1, 11.5.3): the group composited over a fully opaque
-// backdrop of colour bc, the /BC entry converted to sRGB, then reduced to
-// luminosity and passed through the transfer function tr (nil for
-// /Identity). Outside the group's bounds the mask is tr(Y(bc)) (11.6.5.2).
-// Its values cover the group's bounds and are refused beyond maxPixels.
+// backdrop of colour bc, the /BC entry as components of the group's blending
+// colour space, then reduced to luminosity and passed through the transfer
+// function tr (nil for /Identity). Outside the group's bounds the mask is
+// tr(Y(bc)) (11.6.5.2). Its values cover the group's bounds and are refused
+// beyond maxPixels.
 //
 // A non-isolated g is built over [Opaque](bc), so its elements blend with
-// the backdrop the mask defines. The luminosity is the DeviceRGB formula of
-// 11.5.3, Y = 0.30 R + 0.59 G + 0.11 B, applied to the sRGB blending space.
-func LuminosityMask(ctx context.Context, g *Group, bc [3]float32, tr *function.Function, maxPixels int64) (*Mask, error) {
+// the backdrop the mask defines. The luminosity of an RGB group is the
+// DeviceRGB formula of 11.5.3, Y = 0.30 R + 0.59 G + 0.11 B, applied to the
+// sRGB blending space; a grey group's is its grey, and a CMYK group's that
+// of the colour's sRGB.
+func LuminosityMask(ctx context.Context, g *Group, bc Components, tr *function.Function, maxPixels int64) (*Mask, error) {
 	t, err := newTransfer(tr)
 	if err != nil {
 		return nil, err
 	}
-	return deriveMask(ctx, g, maxPixels, t.apply(lum(bc)), func(i int) float32 {
+	b := g.space.store(bc)
+	return deriveMask(ctx, g, maxPixels, t.apply(g.space.luminosity(b)), func(i int) float32 {
 		c, _, a := g.result(i)
-		// 11.5.3: C = (1 - αg)·C0 + αg·Cg.
-		var mixed [3]float32
-		for k := range 3 {
-			mixed[k] = (1-a)*bc[k] + a*c[k]
+		// 11.5.3: C = (1 - αg)·C0 + αg·Cg, a weighted sum that holds in the
+		// complemented form of a subtractive space too.
+		var mixed Components
+		for k := range g.n {
+			mixed[k] = (1-a)*b[k] + a*c[k]
 		}
-		return t.apply(lum(mixed))
+		return t.apply(g.space.luminosity(mixed))
 	})
 }
 

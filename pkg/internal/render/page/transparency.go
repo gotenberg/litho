@@ -117,6 +117,15 @@ func (r *renderer) directView() (view, bool) {
 // is drawn opaque into a layer over its bounds, which is then composited into
 // the group with the blend mode, constant alpha and soft mask of fx.
 func (r *renderer) paint(bounds image.Rectangle, fx effects, draw func(v view, op surface.Opacity) error) error {
+	return r.paintAs(bounds, fx, nil, draw)
+}
+
+// paintAs is [renderer.paint] for an element of one colour, whose components
+// in the blending colour space of the group being painted native holds when
+// that space is not sRGB: its layer's alpha is then composited in that
+// colour, which keeps it from a trip through sRGB. A nil native composites
+// the layer's colour.
+func (r *renderer) paintAs(bounds image.Rectangle, fx effects, native *blend.Components, draw func(v view, op surface.Opacity) error) error {
 	if fx.opacity.Transparent() {
 		return nil
 	}
@@ -125,6 +134,11 @@ func (r *renderer) paint(bounds image.Rectangle, fx effects, draw func(v view, o
 	}
 	top := r.top()
 	area := bounds.Intersect(top.group.Bounds()).Intersect(r.clipRect())
+	if top.group.Space() != nil {
+		// A group in another space than sRGB has no direct plane, so every
+		// element takes a layer: one under a small clip path spans the clip.
+		area = area.Intersect(r.clipMaskBounds())
+	}
 	if area.Empty() {
 		return nil
 	}
@@ -144,20 +158,30 @@ func (r *renderer) paint(bounds image.Rectangle, fx effects, draw func(v view, o
 	if err := draw(view{canvas: layer, x: area.Min.X, y: area.Min.Y}, surface.Opaque); err != nil {
 		return err
 	}
+	if native != nil && top.group.Space() != nil {
+		alpha := make([]float32, layer.Width*layer.Height)
+		for i := range alpha {
+			alpha[i] = layer.Pix[4*i+3]
+		}
+		if err := top.group.PaintCoverage(r.ctx, area, alpha, *native, fx.params(mask)); err != nil {
+			return fmt.Errorf("compositing: %w", err)
+		}
+		return nil
+	}
 	if err := top.group.PaintCanvas(r.ctx, layer, area.Min, fx.params(mask)); err != nil {
 		return fmt.Errorf("compositing: %w", err)
 	}
 	return nil
 }
 
-// paintSolid paints coverage cov in the sRGB colour c, as [renderer.paint]
-// does, without a layer: a solid colour's coverage is its shape and alpha.
-func (r *renderer) paintSolid(cov *raster.Coverage, c [3]float32, fx effects) error {
+// paintSolid paints coverage cov in the colour c, as [renderer.paint] does,
+// without a layer: a solid colour's coverage is its shape and alpha.
+func (r *renderer) paintSolid(cov *raster.Coverage, c solid, fx effects) error {
 	if cov == nil || cov.Empty() || fx.opacity.Transparent() {
 		return nil
 	}
 	if v, ok := r.directView(); ok && !fx.blends() {
-		raster.PaintSolid(v.canvas, v.coverage(cov), c[0], c[1], c[2], fx.opacity.Alpha())
+		raster.PaintSolid(v.canvas, v.coverage(cov), c.rgb[0], c.rgb[1], c.rgb[2], fx.opacity.Alpha())
 		return nil
 	}
 	mask, err := r.softMask(fx.mask)
@@ -165,7 +189,7 @@ func (r *renderer) paintSolid(cov *raster.Coverage, c [3]float32, fx effects) er
 		return err
 	}
 	rect := image.Rect(cov.X, cov.Y, cov.X+cov.Width, cov.Y+cov.Height)
-	if err := r.top().group.PaintCoverage(r.ctx, rect, cov.A, c, fx.params(mask)); err != nil {
+	if err := r.top().group.PaintCoverage(r.ctx, rect, cov.A, c.in, fx.params(mask)); err != nil {
 		return fmt.Errorf("compositing: %w", err)
 	}
 	return nil
@@ -319,14 +343,19 @@ func (r *renderer) normalOnly(ref ast.PdfIndirectRef, resources ast.PdfDict) boo
 	if v, ok := r.normalForms[ref.ObjectNum]; ok && ref.ObjectNum != 0 {
 		return v
 	}
-	v := r.scanNormal(resources, 0, map[int]bool{ref.ObjectNum: true})
+	v := r.scanNormal(resources, false, 0, map[int]bool{ref.ObjectNum: true})
 	if ref.ObjectNum != 0 {
 		r.normalForms[ref.ObjectNum] = v
 	}
 	return v
 }
 
-func (r *renderer) scanNormal(resources ast.PdfDict, depth int, seen map[int]bool) bool {
+// scanNormal reports whether the resources, and those of the forms and Type 3
+// glyphs they name, depth by depth, blend with Normal only and name no
+// knockout group; with alpha set, also that they paint opaque: no graphics
+// state with a constant alpha below 1 or a soft mask (ISO 32000-1, 11.6.4),
+// and no image with a soft mask of its own (11.6.5.3).
+func (r *renderer) scanNormal(resources ast.PdfDict, alpha bool, depth int, seen map[int]bool) bool {
 	switch {
 	case depth > maxBlendScanDepth:
 		return false
@@ -339,7 +368,7 @@ func (r *renderer) scanNormal(resources ast.PdfDict, depth int, seen map[int]boo
 			if err != nil || gs == nil {
 				continue
 			}
-			if !r.normalBlend(gs["BM"]) {
+			if !r.normalBlend(gs["BM"]) || alpha && r.translucentState(gs) {
 				return false
 			}
 		}
@@ -366,11 +395,14 @@ func (r *renderer) scanNormal(resources ast.PdfDict, depth int, seen map[int]boo
 				if attrs, _, isGroup := r.groupAttrs(dict); isGroup && attrs.Knockout {
 					return false
 				}
+				if alpha && r.maskedImage(dict) {
+					return false
+				}
 			} else if d, err := document.ResolveDict(r.ctx, r.doc, v); err == nil {
 				dict = d
 			}
 			sub, err := document.ResolveDict(r.ctx, r.doc, dict["Resources"])
-			if err == nil && sub != nil && !r.scanNormal(sub, depth+1, seen) {
+			if err == nil && sub != nil && !r.scanNormal(sub, alpha, depth+1, seen) {
 				return false
 			}
 		}

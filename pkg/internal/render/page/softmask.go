@@ -175,10 +175,13 @@ func (r *renderer) maskOf(sm *graphics.SoftMask, kind ast.PdfName, ref ast.PdfIn
 	matrix geom.Matrix, box [4]float64, attrs blend.Attributes, cs ast.PdfObject, resources ast.PdfDict,
 ) (*blend.Mask, error) {
 	tr := r.maskTransfer(sm.Dict["TR"])
-	var bc [3]float32
+	// The group blends in its /CS, which also gives /BC its components
+	// (Table 144) and the luminosity its reading (11.5.3).
+	attrs.Space = r.groupSpace(cs, resources)
+	var bc blend.Components
 	backdrop := blend.Backdrop{}
 	if kind == "Luminosity" {
-		bc = r.backdropColor(sm.Dict["BC"], cs, resources)
+		bc = r.backdropColor(sm.Dict["BC"], cs, resources, attrs.Space)
 		backdrop = blend.Opaque(bc)
 	}
 
@@ -246,25 +249,31 @@ func (r *renderer) maskTransfer(obj ast.PdfObject) *function.Function {
 }
 
 // backdropColor reads a luminosity mask's /BC (ISO 32000-1, Table 144): the
-// components of a colour in the group's colour space cs, converted to sRGB.
-// Absent, it is black. A group with no /CS reads the components as the
-// device space of their count. A colour that does not convert is skipped
-// and black applies.
-func (r *renderer) backdropColor(obj, cs ast.PdfObject, resources ast.PdfDict) [3]float32 {
+// components of a colour in the group's colour space cs, returned as
+// components of sp, the group's blending colour space: as they are when sp
+// is the space cs names, converted to sRGB otherwise. Absent, it is black, the
+// initial colour of the space (8.6.5). A group with no /CS reads the
+// components as the device space of their count. A colour that does not
+// convert is skipped and black applies.
+func (r *renderer) backdropColor(obj, cs ast.PdfObject, resources ast.PdfDict, sp *blend.Space) blend.Components {
+	black := blend.Components{}
+	if sp.Kind() == blend.CMYK {
+		black[3] = 1
+	}
 	if obj == nil {
-		return [3]float32{}
+		return black
 	}
 	arr, err := document.ResolveArray(r.ctx, r.doc, obj)
 	if err != nil {
 		r.skip("soft mask backdrop", err)
-		return [3]float32{}
+		return black
 	}
 	comps := make([]float64, 0, len(arr))
 	for _, e := range arr {
 		f, ok := document.Number(e)
 		if !ok {
 			r.skip("soft mask backdrop", errors.New("a /BC entry is no number"))
-			return [3]float32{}
+			return black
 		}
 		comps = append(comps, f)
 	}
@@ -279,16 +288,22 @@ func (r *renderer) backdropColor(obj, cs ast.PdfObject, resources ast.PdfDict) [
 			space = ast.PdfName("DeviceCMYK")
 		default:
 			r.skip("soft mask backdrop", fmt.Errorf("/BC of %d components and no group /CS", len(comps)))
-			return [3]float32{}
+			return black
 		}
 	}
 	conv, err := colorconv.ForObject(r.ctx, r.doc, space, resources, r.colorOptions())
 	if err != nil {
 		r.skip("soft mask backdrop", err)
-		return [3]float32{}
+		return black
+	}
+	if sp != nil && cs != nil && len(comps) == sp.Kind().Channels() {
+		return componentsOf(comps, len(comps))
 	}
 	cr, cg, cb := conv.RGB(comps)
-	return [3]float32{cr, cg, cb}
+	if sp != nil {
+		return sp.FromRGB([3]float32{cr, cg, cb})
+	}
+	return blend.Components{cr, cg, cb}
 }
 
 // sub returns a renderer that paints into root, a group over a device raster

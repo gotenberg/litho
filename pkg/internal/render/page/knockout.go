@@ -24,7 +24,7 @@ const textKnockoutShare = 4
 // with.
 type knockGlyph struct {
 	cov   *raster.Coverage
-	color [3]float32
+	color solid
 	fx    effects
 }
 
@@ -57,7 +57,7 @@ func (r *renderer) glyphCoverage(s *scope, st *graphics.State, cov *raster.Cover
 		return nil
 	}
 	cr, cg, cb := conv.RGB(c.Components)
-	s.text.knock = append(s.text.knock, knockGlyph{cov: cov, color: [3]float32{cr, cg, cb}, fx: fx})
+	s.text.knock = append(s.text.knock, knockGlyph{cov: cov, color: r.solidOf(s, c, [3]float32{cr, cg, cb}), fx: fx})
 	s.text.held += int64(cov.Width) * int64(cov.Height)
 	if s.text.held > r.budget/textKnockoutShare {
 		return r.flushText(s)
@@ -114,7 +114,7 @@ func (r *renderer) flushText(s *scope) error {
 		if err != nil {
 			return err
 		}
-		if err := g.PaintCoverage(r.ctx, coverageRect(k.cov), k.cov.A, k.color, k.fx.params(mask)); err != nil {
+		if err := g.PaintCoverage(r.ctx, coverageRect(k.cov), k.cov.A, k.color.in, k.fx.params(mask)); err != nil {
 			return err
 		}
 	}

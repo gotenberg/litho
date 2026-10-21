@@ -19,11 +19,16 @@
 // (11.5.2, 11.5.3) through an optional /TR transfer function, as a [Mask]
 // whose values cover the group's bounds alone.
 //
-// The blending colour space is sRGB: every colour this package sees is three
-// components in [0, 1], already converted by the caller. A group's own /CS,
-// blending in CMYK (whose non-separable modes take K from one side, 11.3.5)
-// and spot colorants are later work. Colours are stored premultiplied by
-// alpha, the way [surface.Canvas] holds them.
+// A group blends in a blending colour space (11.3.4), its [Attributes.Space]:
+// sRGB, the nil [Space], or the grey or CMYK space a [Space] describes, whose
+// [Converter] connects it with sRGB. Painted colours are [Components] of the
+// group's space, rasters arrive in sRGB and are converted, and a group
+// composited into a parent of another space is converted to it. A CMYK colour
+// is held as its complement, so the subtractive rule of 11.3.5 and the
+// compositing formulas of 11.4 share one arithmetic; the non-separable modes
+// take K from one side (11.3.5.3). Spot colorants stay outside: a Separation
+// colour reaches a group in its alternate space. Colours are stored
+// premultiplied by alpha, the way [surface.Canvas] holds them.
 //
 // A [Group] is not safe for concurrent writes. A child reads its parent's
 // planes only in [NewGroup] and writes them only in [Group.Into], so distinct

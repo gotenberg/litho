@@ -135,7 +135,9 @@ func WithRenderBackground(c color.Color) RenderOption {
 // profile. It draws transparency: constant alpha, the sixteen blend modes
 // (ColorDodge and ColorBurn by the edition of ISO 32000 the document's
 // version names), soft masks, isolated and knockout transparency groups and
-// text knockout, blending in sRGB. An annotation with no appearance stream
+// text knockout, blending in the grey or CMYK space a transparency group's
+// /CS names where its content paints with transparency, and in sRGB
+// otherwise. An annotation with no appearance stream
 // draws as ISO 32000-1 defines it from its dictionary for the Square,
 // Circle, Line, Polygon, PolyLine, Ink, text markup and Link types, and not
 // at all for the icon and text types (Text, FreeText, Stamp and the like);

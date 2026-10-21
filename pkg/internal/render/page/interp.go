@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/graphics/function"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -55,6 +56,17 @@ type renderer struct {
 	// normalForms keeps, per form, whether its content blends with Normal
 	// only ([renderer.normalOnly]).
 	normalForms map[int]bool
+	// opaqueForms keeps, per form, whether its content paints with Normal
+	// and no transparency at all ([renderer.paintsOpaque]).
+	opaqueForms map[int]bool
+	// lastMask keeps the bounds of the clip mask last asked about
+	// ([renderer.clipMaskBounds]).
+	lastMask maskBounds
+	// spaces keeps the blending colour spaces of groups, and tints the tint
+	// transforms of colours composited in them, by their definitions
+	// ([renderer.groupSpace], [renderer.tintIn]).
+	spaces map[string]*blend.Space
+	tints  map[string]*function.Function
 	// mergedResources keeps, per form, its /Resources
 	// with the page's names it lacks ([renderer.withPageNames]).
 	mergedResources map[ast.PdfIndirectRef]ast.PdfDict
@@ -527,7 +539,7 @@ func (r *renderer) paintCoverage(s *scope, cov *raster.Coverage, c graphics.Colo
 		return nil
 	}
 	cr, cg, cb := conv.RGB(c.Components)
-	return r.paintSolid(cov, [3]float32{cr, cg, cb}, r.effectsOf(r.m.Current(), a))
+	return r.paintSolid(cov, r.solidOf(s, c, [3]float32{cr, cg, cb}), r.effectsOf(r.m.Current(), a))
 }
 
 // components resolves the component count of a shading's colour space.

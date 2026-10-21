@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/graphics/function"
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
@@ -89,6 +90,12 @@ type Options struct {
 	// Omit names the kinds of content left out of the page; the zero value
 	// draws everything. See [Content].
 	Omit Content
+	// GroupSpace composites the page group in the grey or CMYK space its
+	// /Group /CS names whatever its content (ISO 32000-1, 11.4.7), as a
+	// writer of the composite in that space needs it. Unset, the page group
+	// blends there only when its content blends with another mode than
+	// Normal ([RenderGroup]).
+	GroupSpace bool
 }
 
 // Content is a set of kinds of content, told apart by the operator that
@@ -150,6 +157,53 @@ func (r *Report) count(key string) {
 // does not parse leaves the page blank; the render fails only on ctx or a
 // budget.
 func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts Options) (*surface.Canvas, Report, error) {
+	res, report, err := RenderGroup(ctx, doc, pg, opts)
+	if err != nil {
+		return nil, report, err
+	}
+	c, err := res.Canvas(ctx)
+	if err != nil {
+		return nil, report, err
+	}
+	return c, report, nil
+}
+
+// Result is a rendered page: its page group, and its sRGB canvas.
+type Result struct {
+	// Group is the page group (ISO 32000-1, 11.4.7), over the background
+	// too, in its blending colour space ([blend.Group.Space]): sRGB, or the
+	// grey or CMYK space its /Group /CS names, which Space then holds.
+	Group *blend.Group
+	// Space is the page's /Group /CS object when Group blends in the space
+	// it names, and nil when Group blends in sRGB.
+	Space ast.PdfObject
+
+	canvas *surface.Canvas
+	budget int64
+}
+
+// Canvas returns the page in sRGB, the page group over the background: the
+// group's own canvas when it blends in sRGB, otherwise its colours
+// converted on the first call, a canvas the size of the page held to the
+// render pixel budget. Painting the group afterwards does not reach a
+// converted canvas.
+func (res *Result) Canvas(ctx context.Context) (*surface.Canvas, error) {
+	if res.canvas == nil {
+		c, err := res.Group.RGB(ctx, res.budget)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrTooLarge, err)
+		}
+		res.canvas = c
+	}
+	return res.canvas, nil
+}
+
+// RenderGroup draws pg as [Render] does and returns the page group, whose
+// sRGB canvas [Result.Canvas] makes when it is first asked for. The page group blends in the grey or CMYK space its /Group /CS
+// names (ISO 32000-1, 11.3.4, 11.4.7) when [Options.GroupSpace] asks for it
+// or its content blends with another mode than Normal, and in sRGB, the
+// space of the device the renderer draws for, otherwise.
+func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page, opts Options) (*Result, Report, error) {
 	var report Report
 	g, err := PageGeometry(pg, opts.DPI)
 	if err != nil {
@@ -185,6 +239,9 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 		offscreen:   &offscreen{},
 		masks:       newMaskCache(),
 		normalForms: make(map[int]bool),
+		opaqueForms: make(map[int]bool),
+		spaces:      make(map[string]*blend.Space),
+		tints:       make(map[string]*function.Function),
 		shadings:    make(map[ast.PdfIndirectRef]*shade.Shading),
 		patterns:    make(map[ast.PdfIndirectRef]*shade.Pattern),
 		fonts:       glyph.NewCache(doc, glyph.Options{Substitutes: opts.Fonts}),
@@ -195,13 +252,14 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 	}
 	// 11.4.7: the page is an isolated group over a transparent backdrop,
 	// composited with the medium afterwards; its own /Group may make it a
-	// knockout group.
-	attrs, _, _ := r.groupAttrs(pg.Dict)
+	// knockout group and name its blending colour space.
+	attrs, cs, _ := r.groupAttrs(pg.Dict)
+	space := r.pageSpace(cs, pg.DrawResources, opts.GroupSpace)
 	var root *blend.Group
 	if attrs.Knockout {
-		root, err = blend.NewGroup(image.Rect(0, 0, g.Width, g.Height), blend.Backdrop{}, blend.Attributes{Isolated: true, Knockout: true}, budget)
+		root, err = blend.NewGroup(image.Rect(0, 0, g.Width, g.Height), blend.Backdrop{}, blend.Attributes{Isolated: true, Knockout: true, Space: space}, budget)
 	} else {
-		root, err = blend.NewPage(g.Width, g.Height, budget)
+		root, err = blend.NewPageIn(g.Width, g.Height, space, budget)
 	}
 	if err != nil {
 		return nil, report, fmt.Errorf("%w: %w", ErrTooLarge, err)
@@ -217,11 +275,23 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 			return nil, report, err
 		}
 	}
-	canvas := root.Canvas()
-	if bg := opts.Background; bg[3] > 0 {
-		underlay(canvas, bg)
+	res := &Result{Group: root, budget: budget}
+	if space == nil {
+		res.canvas = root.Canvas()
+		if bg := opts.Background; bg[3] > 0 {
+			underlay(res.canvas, bg)
+		}
+		return res, report, nil
 	}
-	return canvas, report, nil
+	res.Space = cs
+	if bg := opts.Background; bg[3] > 0 {
+		paper := space.White()
+		if bg[0] < 1 || bg[1] < 1 || bg[2] < 1 {
+			paper = space.FromRGB([3]float32{bg[0], bg[1], bg[2]})
+		}
+		root.Underlay(paper, bg[3])
+	}
+	return res, report, nil
 }
 
 // underlay composites c over the unpremultiplied colour bg, the medium the
