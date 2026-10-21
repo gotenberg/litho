@@ -167,30 +167,47 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //     /F, boxed from /Border and /C by both, which match.
 //   - pdfjs bug886717: 45 Link annotations whose /AP /N is an empty stream,
 //     boxed by poppler from /Border; poppler's own rendering with
-//     -hide-annotations matches litho's page (1291 pixels, 0.26%).
+//     -hide-annotations matches litho's page (1291 pixels, 0.26%), and so
+//     does PDFium's (1428 pixels, 0.28%, 5.9% of the ink).
 //   - pdfjs Pages-tree-refs: /Count 2 over one leaf and a /Kids cycle 3, 4,
 //     5, 3; poppler writes a 1 by 1 golden for a page 2, litho reports one
-//     page.
+//     page, and PDFium counts two but fails to load the second.
 //   - pdfjs bug1978317: poppler refuses page 1, its /Annots past its 32768
-//     cap, and writes a 1 by 1 golden.
+//     cap, and writes a 1 by 1 golden. The annotations are borderless links
+//     (/BS /W 0) that draw nothing. With them removed poppler draws the page,
+//     and litho differs by 6951 pixels (1.43%, 15.9% of the ink): 3-point
+//     glyphs FreeType hints onto other rows, and underlines a half-pixel
+//     clip cuts, which Splash moves into the clip and litho paints at half
+//     coverage.
 //   - pdfjs bitmap-halftone-skip-grid-template2, issue17871_top_right: JBIG2
 //     halftone regions poppler draws as nothing; bitmap-refine-tpgron: a
 //     JBIG2 refinement with TPGRON poppler garbles. litho draws the test
 //     image, and the pdf.js image goldens of the three agree with it.
+//     PDFium draws bitmap-refine-tpgron and issue17871_top_right as litho
+//     does (0 pixels differ) and garbles the skipped halftone grid.
 //   - pdfjs bug1671312_reduced: an unembedded Helvetica,Bold whose /Widths
 //     m is 608 against the substitute's 889; poppler draws every glyph 0.68
-//     wide at the same positions.
+//     wide at the same positions. The /Widths are a regular face's shifted
+//     out of place (s and e 326), so litho, scaling each glyph to its
+//     width, draws "ses" narrow; PDFium scales none, and each of the three
+//     differs from the others by 31 to 54 pixels (12% to 19% of the ink).
 //   - pdfjs issue15594_reduced: an unembedded Calibri, Identity-H,
 //     Adobe-Identity, no /ToUnicode: litho draws CIDs 9, 80, 109, 263, 386
 //     and 442 as ÄÖÜäöü through the Calibri glyph order, as PDF.js does;
-//     poppler draws U+0009, P, m, ć, Ƃ and ƺ.
+//     poppler draws U+0009, P, m, ć, Ƃ and ƺ, and PDFium a third reading
+//     (69% of the ink differs from poppler, 90% from PDFium).
 //   - govdocs thread_100_100161, thread_200_200618 pages 1 to 3: an
 //     unembedded CourierNewPSMT (Serif flag set) poppler draws in DejaVu
-//     Sans Mono, litho in Nimbus Mono PS.
+//     Sans Mono, litho in Nimbus Mono PS. PDFium draws a Courier as litho
+//     does: 325 to 477 pixels differ, 1.0% to 2.6% of the ink, against 28%
+//     to 32% from poppler.
 //   - pdfjs issue7200: a scan reduced 10:9, which poppler averages over
 //     whole samples and litho weighs by area (package render/imgpaint).
+//     PDFium agrees with litho: 1270 pixels (0.25%) differ, against 6055
+//     (1.21%) from poppler.
 //   - pdfjs issue12705: small Hebrew text whose glyph edges fall a pixel
 //     apart, 1.16% of a 250 by 50 page: within reason, but over the bar.
+//     PDFium draws it as litho does, 0 pixels apart.
 //   - pdfjs issue11768_reduced: an embedded Adobe-Japan1 CIDFontType2
 //     under a CMap stream that uses UniJIS-UTF8-H. poppler drew nothing
 //     without poppler-data's CMaps; with them both renderers draw it and
@@ -202,6 +219,10 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //     face. cmapcollect_1b, cmappredef_2b, cmapusevert_1b
 //     and cmapverabase_2b: embedded fonts of CJK collections with no
 //     /ToUnicode, whose text poppler drew only with poppler-data.
+//   - pdfjs, govdocs: the 10 pdfjs and 2 govdocs files above are every
+//     render mismatch of the two corpora under the ink bar, re-read with
+//     PDFium (pypdfium2 4.30.0) as a third renderer at 72 dpi: none is a
+//     litho defect.
 type renderFeature struct {
 	render pageRenderer
 
