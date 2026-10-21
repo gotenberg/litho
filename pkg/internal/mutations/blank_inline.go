@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math"
 	"reflect"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -87,6 +88,9 @@ type inlineImageBytes struct {
 	start, end int
 	// data is what lies between the white-space byte after ID and the EI.
 	data []byte
+	// keys are the dictionary's keys in the order the stream writes them
+	// ([parser.Parser.InlineImageKeys]).
+	keys []ast.PdfName
 }
 
 // blankInlineImage returns the edit that rewrites the inline image box names
@@ -172,7 +176,7 @@ func blankInlineImage(
 		return SpanEdit{}, fmt.Errorf("%w: operation %d: %w", ErrInlineImageInRegion, box.Op, err)
 	}
 
-	dict, err := inlineImageDict(ctx, alloc, doc, page, inline)
+	dict, err := inlineImageDict(ctx, alloc, doc, page, inline, loc.keys)
 	if err != nil {
 		return SpanEdit{}, fmt.Errorf("operation %d: %w", box.Op, err)
 	}
@@ -528,15 +532,22 @@ func isIndexedSpace(cs ast.PdfObject) bool {
 // full name, a name through the page's /ColorSpace resources, and an Indexed
 // array, abbreviated or not, over either. The result names no object, so the
 // image decoders read it as they read an image XObject's.
+//
+// order lists the keys of inline in the order the stream writes them. The
+// entries are read in that order, and any key it leaves out after them in
+// sorted order, so a refusal names the first offending entry the stream
+// writes, the same one every run.
 func inlineImageDict(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	page *document.Page,
 	inline ast.PdfDict,
+	order []ast.PdfName,
 ) (ast.PdfDict, error) {
 	dict := ast.PdfDict{"Type": ast.PdfName("XObject"), "Subtype": ast.PdfName("Image")}
-	for key, v := range inline {
+	for _, key := range inlineKeyOrder(inline, order) {
+		v := inline[key]
 		full, known := inlineImageKeys[key]
 		if !known {
 			// A key Table 93 does not list may mean something to a reader
@@ -571,6 +582,27 @@ func inlineImageDict(
 		dict["ColorSpace"] = resolved
 	}
 	return dict, nil
+}
+
+// inlineKeyOrder returns the keys of inline, each once: those order names, in
+// its order, then the rest sorted.
+func inlineKeyOrder(inline ast.PdfDict, order []ast.PdfName) []ast.PdfName {
+	keys := make([]ast.PdfName, 0, len(inline))
+	seen := make(map[ast.PdfName]bool, len(inline))
+	for _, k := range order {
+		if _, ok := inline[k]; ok && !seen[k] {
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	rest := make([]ast.PdfName, 0, len(inline)-len(keys))
+	for k := range inline {
+		if !seen[k] {
+			rest = append(rest, k)
+		}
+	}
+	slices.Sort(rest)
+	return append(keys, rest...)
 }
 
 // inlineFilterNames returns the filters f names, a name or an array of names,
@@ -727,6 +759,7 @@ func locateInlineImage(ctx context.Context, data []byte, r content.ByteRange, di
 		return inlineImageBytes{}, errInlineBytes
 	}
 	idEnd := start + int(p.Position())
+	keys := p.InlineImageKeys()
 
 	if other := ends.End(ctx, idEnd, dict); other != r.End {
 		return inlineImageBytes{}, fmt.Errorf("readers end its data at offsets %d and %d", r.End, other)
@@ -743,7 +776,7 @@ func locateInlineImage(ctx context.Context, data []byte, r content.ByteRange, di
 	if dataStart < end-len("EI") && isContentWhiteSpace(data[dataStart]) {
 		dataStart++
 	}
-	return inlineImageBytes{start: start, end: end, data: data[dataStart : end-len("EI")]}, nil
+	return inlineImageBytes{start: start, end: end, data: data[dataStart : end-len("EI")], keys: keys}, nil
 }
 
 // inlineImageKeyword returns the offset in span, the bytes of a BI

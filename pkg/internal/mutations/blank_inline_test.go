@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -354,6 +355,21 @@ func TestRedactPageRegions_InlineImageRefusals(t *testing.T) {
 				t.Errorf("registered %d objects while refusing", n)
 			}
 		})
+	}
+}
+
+// TestRedactPageRegions_InlineImageRefusalNamesTheFirstEntry covers pdfjs
+// issue14256, whose inline image writes three keys both ways: the refusal named
+// whichever one a map iteration reached first, /Height, /Width or
+// /BitsPerComponent from run to run. It names the first the stream writes,
+// every run.
+func TestRedactPageRegions_InlineImageRefusalNamesTheFirstEntry(t *testing.T) {
+	doc, page := inlineFixture(t, placeInline("/BPC 8 /W 1 /H 1 /Height 1 /Width 1 /BitsPerComponent 8 /CS /G", []byte{7}), "", "")
+	for range 64 {
+		_, err := RedactPageRegions(context.Background(), writer.NewObjAllocator(20), doc, page, [][4]float64{{0, 0, 612, 792}})
+		if !errors.Is(err, ErrInlineImageInRegion) || !strings.Contains(err.Error(), "writes /Height twice") {
+			t.Fatalf("err = %v, want ErrInlineImageInRegion naming /Height, the first key written twice", err)
+		}
 	}
 }
 

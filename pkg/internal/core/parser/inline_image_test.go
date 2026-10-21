@@ -3,11 +3,30 @@ package parser
 import (
 	"bytes"
 	"context"
+	"slices"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 )
+
+// TestParseInlineImageHeaderKeepsKeyOrder pins that InlineImageKeys lists the
+// header's keys in the order the stream writes them, each once, which the
+// dictionary itself does not keep.
+func TestParseInlineImageHeaderKeepsKeyOrder(t *testing.T) {
+	t.Parallel()
+
+	data := []byte("/BPC 8 /W 1 /H 1 /D [0 1] /W 2 /Height 1 ID x EI")
+	p := NewParser(lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0)))
+	if _, err := p.ParseInlineImageHeader(context.Background()); err != nil {
+		t.Fatalf("ParseInlineImageHeader: %v", err)
+	}
+	want := []ast.PdfName{"BPC", "W", "H", "D", "Height"}
+	if got := p.InlineImageKeys(); !slices.Equal(got, want) {
+		t.Errorf("keys = %v, want %v", got, want)
+	}
+}
 
 // TestParseInlineImageHeaderStopsAfterID pins that the header of an inline
 // image leaves the parser just past ID, reading no image data, and that

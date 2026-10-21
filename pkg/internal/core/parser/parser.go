@@ -105,6 +105,9 @@ type Parser struct {
 	// skippedKey reports that the last [Parser.ParseInlineImageHeader] skipped
 	// a token that stood where a key of the dictionary stands.
 	skippedKey bool
+	// inlineKeys holds the keys the last [Parser.ParseInlineImageHeader]
+	// kept, in the order the stream writes them.
+	inlineKeys []ast.PdfName
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -1632,6 +1635,7 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error) {
 	dict := ast.PdfDict{}
 	p.skippedKey = false
+	p.inlineKeys = nil
 
 	// Parse key/value pairs until the ID keyword.
 	for {
@@ -1697,6 +1701,9 @@ func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error
 			}
 			continue
 		}
+		if _, seen := dict[keyName]; !seen {
+			p.inlineKeys = append(p.inlineKeys, keyName)
+		}
 		dict[keyName] = val
 	}
 
@@ -1713,6 +1720,13 @@ func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error
 // dictionary stands, which ISO 32000-1, 8.9.7 requires to be a name.
 func (p *Parser) SkippedInlineImageKey() bool {
 	return p.skippedKey
+}
+
+// InlineImageKeys returns the keys of the dictionary the last
+// [Parser.ParseInlineImageHeader] returned, each once, in the order the
+// stream first writes them. The dictionary itself keeps no order.
+func (p *Parser) InlineImageKeys() []ast.PdfName {
+	return p.inlineKeys
 }
 
 // ResumeAt moves the parser to offset in the data it reads, from where it
