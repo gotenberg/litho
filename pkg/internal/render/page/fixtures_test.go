@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 )
 
 // white is the background every fixture is drawn over, as pdftoppm draws.
@@ -26,6 +27,21 @@ type fixture struct {
 	catalog string
 	content string
 	objs    []string
+	// substitute is the program served for every font the fixture does not
+	// embed, nil for none: such fonts then draw placeholders.
+	substitute []byte
+}
+
+// options returns the options a fixture is drawn with: 72 dpi over white,
+// with its substitute program, if any.
+func (f fixture) options() Options {
+	opts := Options{DPI: 72, Background: white}
+	if f.substitute != nil {
+		opts.Fonts = func(context.Context, glyph.Request) ([]glyph.Candidate, error) {
+			return []glyph.Candidate{func(context.Context) ([]byte, error) { return f.substitute, nil }}, nil
+		}
+	}
+	return opts
 }
 
 // bytes serialises the fixture.
@@ -89,7 +105,7 @@ func open(t testing.TB, data []byte, lim limits.Limits) (*document.Document, *do
 func draw(t testing.TB, f fixture) (*image.NRGBA, Report) {
 	t.Helper()
 	doc, pg := open(t, f.bytes(), limits.Limits{})
-	c, report, err := Render(context.Background(), doc, pg, Options{DPI: 72, Background: white})
+	c, report, err := Render(context.Background(), doc, pg, f.options())
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}

@@ -564,20 +564,8 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 		// mandate a default). CIDFont /DW defaults to 1000 per spec and is set below.
 	}
 
-	// Try to extract ToUnicode CMap. Cache by stream object number so fonts
-	// sharing the same ToUnicode stream avoid redundant decode+parse.
 	if tuObj, ok := fontDict["ToUnicode"]; ok {
-		if ref, isRef := tuObj.(ast.PdfIndirectRef); isRef {
-			if cached, hit := doc.CachedCMap(ref.ObjectNum); hit {
-				if c, ok := cached.(*cmap.CMap); ok {
-					font.ToUnicode = c
-				}
-			} else {
-				font.ToUnicode = parseAndCacheToUnicode(ctx, doc, tuObj, ref.ObjectNum)
-			}
-		} else {
-			font.ToUnicode = parseToUnicode(ctx, doc, tuObj)
-		}
+		font.ToUnicode = ResolveToUnicode(ctx, doc, fontDict)
 		// When /ToUnicode is a name like /Identity-H (not a valid CMap stream),
 		// the PDF producer intends character codes to be direct Unicode values.
 		// Set the Identity fallback for Type0 fonts in this case.
@@ -809,6 +797,29 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	)
 
 	return font, nil
+}
+
+// ResolveToUnicode returns the CMap of fontDict's own /ToUnicode stream (ISO
+// 32000-1, 9.10.3), nil when the font has none, it does not parse, or it maps
+// no code. Unlike [Font.ToUnicode], it never holds a table litho synthesises
+// from the encoding, the collection or the font program. The parsed CMap is
+// cached by stream object number, so fonts sharing a stream parse it once.
+func ResolveToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) *cmap.CMap {
+	tuObj, ok := fontDict["ToUnicode"]
+	if !ok {
+		return nil
+	}
+	ref, isRef := tuObj.(ast.PdfIndirectRef)
+	if !isRef {
+		return parseToUnicode(ctx, doc, tuObj)
+	}
+	if cached, hit := doc.CachedCMap(ref.ObjectNum); hit {
+		if c, ok := cached.(*cmap.CMap); ok {
+			return c
+		}
+		return nil
+	}
+	return parseAndCacheToUnicode(ctx, doc, tuObj, ref.ObjectNum)
 }
 
 // parseAndCacheToUnicode parses a ToUnicode CMap stream and caches the result

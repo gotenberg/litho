@@ -205,16 +205,26 @@ func (f *Font) substituteGlyph(ctx context.Context, code Code, g *Glyph) {
 // threshold, not spec-mandated.
 const widthTolerance = 0.001
 
-// selectSubstitute returns the substitute's glyph for code.
+// selectSubstitute returns the substitute's glyph for code. A simple font's
+// code selects it by the glyph name its encoding gives the code, then by the
+// character [Font.codeRune] reads; a Type 0 font's code by the character
+// [Font.cidRune] reads. Either character goes through the substitute's
+// Unicode cmap, then the Adobe Glyph List name of the character.
 func (f *Font) selectSubstitute(code Code) (glyphRef, bool) {
 	name := ""
+	var (
+		r  rune
+		ok bool
+	)
 	if f.kind == kindSimple {
 		name = f.enc.names[code.Bytes[0]]
 		if ref, ok := f.prog.byName(name); ok && name != "" && name != notdefName {
 			return ref, true
 		}
+		r, ok = f.codeRune(code, name)
+	} else {
+		r, ok = f.cidRune(code)
 	}
-	r, ok := f.codeRune(code, name)
 	if !ok {
 		return glyphRef{}, false
 	}
@@ -256,6 +266,46 @@ func (f *Font) codeRune(code Code, name string) (rune, bool) {
 		return r, ok
 	}
 	return 0, false
+}
+
+// cidRune returns the character a Type 0 font's code stands for when the
+// font draws with a substitute: the one character the font's own /ToUnicode
+// CMap gives the code (ISO 32000-1, 9.10.3), else the one its Adobe character
+// collection's UCS2 CMap gives the CID the encoding selects (9.10.2, steps a
+// to e). A code neither gives one character has none, and draws a
+// placeholder.
+//
+// Neither the CID read as a character nor the CID read as a glyph index of the
+// substitute stands in: a CID indexes its collection (9.7.3), and /CIDToGIDMap
+// maps CIDs to the glyphs of the embedded program only (9.7.4.2, Table 117).
+// This is stricter than poppler, which reads the CID of an Adobe-Identity font
+// without /ToUnicode as a character, and than PDF.js, which knows the glyph
+// order of some standard fonts (Calibri among them); both guesses draw some
+// other glyph whenever the font was laid out with another glyph order.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15594_reduced: an unembedded Calibri, Identity-H,
+//     Adobe-Identity, no /ToUnicode. PDF.js draws CIDs 9, 80, 109, 263, 386
+//     and 442 as ÄÖÜäöü through its Calibri glyph map, poppler as U+0009, P,
+//     m, ć, Ƃ and ƺ; litho draws six placeholders.
+func (f *Font) cidRune(code Code) (rune, bool) {
+	if f.toUnicode != nil {
+		if s, ok := f.toUnicode.Mapping[string(code.Bytes)]; ok {
+			if r, size := utf8.DecodeRuneInString(s); r != utf8.RuneError && size == len(s) {
+				return r, true
+			}
+		}
+	}
+	if f.collection == nil {
+		return 0, false
+	}
+	cid, mapped := f.cid(code)
+	if !mapped {
+		return 0, false
+	}
+	r, ok := f.collection[cid]
+	return r, ok && r != 0
 }
 
 // glyphRune reads a glyph name as the character the Adobe Glyph List, its

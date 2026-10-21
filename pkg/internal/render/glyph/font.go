@@ -136,6 +136,12 @@ type Font struct {
 	// litho cannot read; cidToGID is nil for an Identity /CIDToGIDMap.
 	cids     *cmap.CIDMap
 	cidToGID []uint16
+	// toUnicode and collection give the characters a Type 0 font's codes
+	// stand for when it draws with a substitute: the font's own /ToUnicode
+	// CMap, and the CID-to-Unicode table of its Adobe character collection.
+	// Both are nil for an embedded font and when the font has none.
+	toUnicode  *cmap.CMap
+	collection map[int]rune
 
 	// Type 3 fonts.
 	type3 *type3Font
@@ -299,12 +305,17 @@ func (f *Font) loadType0(ctx context.Context, doc *document.Document, fontDict a
 		f.prog, f.source = prog, SourceEmbedded
 		return nil
 	}
+	ordering := cidOrdering(ctx, doc, cidFont)
+	f.toUnicode = typography.ResolveToUnicode(ctx, doc, fontDict)
+	if collection, ok := strings.CutPrefix(ordering, "Adobe-"); ok {
+		f.collection = cmap.AdobeCIDToUnicode(collection)
+	}
 	req := Request{
 		BaseFont: nameOf(ctx, doc, cidFont["BaseFont"]),
 		Subtype:  f.subtype,
 		Flags:    int(document.Float(desc["Flags"])),
 		Encoding: nameOf(ctx, doc, fontDict["Encoding"]),
-		Ordering: cidOrdering(ctx, doc, cidFont),
+		Ordering: ordering,
 	}
 	return f.substitute(ctx, req, opts)
 }
@@ -457,10 +468,12 @@ func (f *Font) cid(code Code) (int, bool) {
 	return decoded[0].CID, decoded[0].Mapped
 }
 
-// cidGlyph returns the glyph a CID selects: through /CIDToGIDMap for a
-// CIDFontType2 font, through the charset of a CID-keyed CFF program for a
-// CIDFontType0 font (ISO 32000-1, 9.7.4.2). A CID the map does not cover
-// selects glyph 0, .notdef.
+// cidGlyph returns the glyph a CID selects in the embedded program: through
+// /CIDToGIDMap for a CIDFontType2 font, through the charset of a CID-keyed
+// CFF program for a CIDFontType0 font (ISO 32000-1, 9.7.4.2). A CID the map
+// does not cover selects glyph 0, .notdef. A substitute program takes no part:
+// Table 117 maps CIDs to the glyph indices of the embedded program, which a
+// substitute's glyph order does not share.
 func (f *Font) cidGlyph(cid int) (glyphRef, bool) {
 	if f.subtype == "CIDFontType2" {
 		gid := cid
