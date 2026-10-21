@@ -68,6 +68,10 @@ type Font struct {
 	// Identity-V, whose codes are two bytes each (ISO 32000-1, 9.7.5.2,
 	// Table 118). See [Font.codeAligned] and [decodeNextCode].
 	identityEncoding bool
+	// gbkCodes reports a simple font read through GBK-EUC-H rather than one
+	// byte a code, whose producer wrote two-byte GBK codes under a Latin
+	// encoding. See [isChineseFaceName] and [decodeNextCode].
+	gbkCodes bool
 	// cidFontMetrics reports a Type 0 font whose /DescendantFonts names a
 	// CIDFont dictionary, whose /W and /DW give every CID its width (ISO
 	// 32000-1, 9.7.4.3). Without one no width is stated. See
@@ -769,6 +773,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 				if embedded || isChineseFaceName(string(bfName)) && simpleBaseEncodingName(ctx, doc, fontDict) == "WinAnsiEncoding" {
 					if cm := cmap.LoadPredefinedCMap("GBK-EUC-H"); cm != nil {
 						font.ToUnicode = cm
+						font.gbkCodes = true
 					}
 				}
 				if !embedded {

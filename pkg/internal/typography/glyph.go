@@ -368,6 +368,12 @@ const spaceCharCode = 0x20
 //     "Data de Vencimento". Read a byte at a time they read as PDF.js reads
 //     them, and redacting a quarter of page 1, or a band through it, no
 //     longer refuses. No other file of the six text corpora moves.
+//   - pdfjs issue18208.pdf: the same CMaps map each shown code by its
+//     two-byte value, <0050> for "P". Looked up by value, 459 codes read
+//     through the CMap that read through the encoding before, to the same
+//     characters. No file of the seven corpora shows a byte pair its simple
+//     font's /ToUnicode maps; litho tounicodepair_2u.pdf plants one, and read
+//     two bytes a mapped pair it read "HeXYworld" for "Hello world".
 func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn bool) {
 	if font.SuppressExtraction {
 		// No route to Unicode exists for this font (see
@@ -390,7 +396,18 @@ func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn 
 			return s, 2, false, false
 		}
 	}
-	if font.ToUnicode != nil {
+	if font.ToUnicode != nil && font.Subtype != "Type0" && !font.gbkCodes {
+		// A simple font's codes are one byte each (ISO 32000-1, 9.6.1), so
+		// a /ToUnicode CMap whose codespace ranges are wider does not make
+		// two bytes one code, mapped or not: taken together, the second
+		// code drew no glyph and moved nothing, and the line read one glyph
+		// in two. An unmapped byte takes the single-byte paths below. A
+		// font read through GBK-EUC-H ([Font.gbkCodes]) keeps its two-byte
+		// codes, the leniency [isChineseFaceName] records.
+		if s, found := font.ToUnicode.MapByte(data[0]); found {
+			return s, 1, false, false
+		}
+	} else if font.ToUnicode != nil {
 		n, char, ok = font.ToUnicode.Map(data)
 	}
 	if ok {
@@ -411,11 +428,9 @@ func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn 
 	}
 
 	if n > 1 && font.Subtype != "Type0" {
-		// A simple font's codes are one byte each (ISO 32000-1, 9.6.1), so a
-		// /ToUnicode CMap whose codespace ranges are wider does not make two
-		// bytes one code: taken together, the second code drew no glyph and
-		// moved nothing, and the line read one glyph in two. The code
-		// takes the single-byte paths below.
+		// Only a font read through GBK-EUC-H gets here. A two-byte code
+		// that reading leaves unmapped takes the single-byte paths below,
+		// as every other simple font's code does (ISO 32000-1, 9.6.1).
 		n = 0
 	}
 	if n > 1 {

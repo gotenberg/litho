@@ -489,6 +489,27 @@ func (c *CMap) mapLongestPrefix(data []byte) (int, string, bool) {
 	return 0, "", false
 }
 
+// MapByte returns the Unicode string c maps the one-byte character code b
+// to, as a simple font reads it: a simple font's codes are one byte each
+// (ISO 32000-1, 9.6.1), so a codespace that declares wider codes does not
+// make two bytes one code. The entry whose source code has the value b
+// counts at any width, the one-byte <41> first, then <0041> and the wider
+// zero-padded forms: PDF.js keys a /ToUnicode map by the code's value
+// (src/core/evaluator.js, readToUnicode) and looks a simple font's byte up
+// there (src/core/fonts.js, charsToGlyphs). An entry whose value exceeds a
+// byte, such as <4142>, no simple-font code reaches.
+func (c *CMap) MapByte(b byte) (string, bool) {
+	var key [maxCodeBytes]byte
+	for width := 1; width <= maxCodeBytes; width++ {
+		key[width-1] = b
+		if val, ok := c.Mapping[string(key[:width])]; ok {
+			return val, true
+		}
+		key[width-1] = 0
+	}
+	return "", false
+}
+
 // codeLengths returns the sorted distinct byte lengths from codespace ranges.
 func (c *CMap) codeLengths() []int {
 	seen := make(map[int]bool, 4)

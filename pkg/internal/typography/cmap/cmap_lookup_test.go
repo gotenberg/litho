@@ -111,3 +111,32 @@ func mustParse(t *testing.T, src string) *CMap {
 	}
 	return cm
 }
+
+// TestCMapMapByte pins that a one-byte code reads the entry whose source code
+// has its value, at any width, the one-byte entry first, and never the entry
+// of a wider value that begins with it.
+func TestCMapMapByte(t *testing.T) {
+	t.Parallel()
+
+	cm, err := Parse(context.Background(), []byte("begincmap\n"+
+		"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"+
+		"4 beginbfchar\n<0041> <0061>\n<4142> <0078>\n<42> <0062>\n<0042> <0079>\nendbfchar\n"+
+		"1 beginbfrange\n<0050> <0051> <0070>\nendbfrange\nendcmap\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	for _, tc := range []struct {
+		code byte
+		want string
+		ok   bool
+	}{
+		{'A', "a", true},
+		{'B', "b", true},
+		{'Q', "q", true},
+		{'C', "", false},
+	} {
+		if got, ok := cm.MapByte(tc.code); got != tc.want || ok != tc.ok {
+			t.Errorf("MapByte(%q) = %q, %v; want %q, %v", tc.code, got, ok, tc.want, tc.ok)
+		}
+	}
+}

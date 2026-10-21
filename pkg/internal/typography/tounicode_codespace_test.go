@@ -71,3 +71,34 @@ func TestDecodeNextCode_IdentityControlCodeStaysTwoBytes(t *testing.T) {
 		t.Fatalf("decoded %q, want %q", got, want)
 	}
 }
+
+// TestDecodeNextCode_SimpleFontMappedPairStaysOneByte pins that a simple
+// font's codes stay one byte each (ISO 32000-1, 9.6.1) when its /ToUnicode
+// CMap declares a two-byte codespace and maps a byte pair of the string: the
+// pair <4142> names no code of the font. Each byte reads its own entry, <41>
+// or <0042> at the code's value, as PDF.js reads it, and a byte no entry maps
+// takes the font's encoding.
+func TestDecodeNextCode_SimpleFontMappedPairStaysOneByte(t *testing.T) {
+	t.Parallel()
+
+	tu, err := cmap.Parse(context.Background(), []byte("begincmap\n"+
+		"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"+
+		"3 beginbfchar\n<4142> <0078>\n<41> <0041>\n<0042> <0042>\nendbfchar\nendcmap\n"))
+	if err != nil {
+		t.Fatalf("cmap.Parse: %v", err)
+	}
+	font := &Font{Subtype: "TrueType", ToUnicode: tu, Encoding: map[byte]rune{'C': 'C'}}
+	data := []byte("ABC")
+	var got string
+	for len(data) > 0 {
+		char, n, skip, _ := decodeNextCode(font, data)
+		if n != 1 || skip {
+			t.Fatalf("code %q: consumed %d bytes, skip %v; want 1 byte, no skip", data[0], n, skip)
+		}
+		got += char
+		data = data[n:]
+	}
+	if got != "ABC" {
+		t.Errorf("decoded %q, want %q", got, "ABC")
+	}
+}
