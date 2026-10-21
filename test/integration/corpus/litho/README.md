@@ -266,6 +266,7 @@ one deliberately rather than diffing it against a fresh build.
 | `ttnoenc_2b.pdf`       | PDF/A-2b     | Embedded TrueType fonts carrying no `/Encoding`, by `cmap` set   |
 | `sharednested_2b.pdf`  | PDF/A-2b     | Forms and a pattern two pages share and bind alike or apart      |
 | `transparency_2b.pdf`  | PDF/A-2b     | Knockout groups, luminosity masks with /BC and /TR, blend modes  |
+| `annotsynth_2b.pdf`    | PDF/A-2b     | Polygon, Underline and Squiggly annotations with no `/AP`        |
 
 ### Must-not-fire controls
 
@@ -562,6 +563,7 @@ are covered under [Known divergences](#known-divergences).
 | `annots_1b.pdf`        | 16   | 14   | 14   | 12   | 12   | 14   | 12   | 12   | 10  | 10   | 11   | 12   | 8    |
 | `annotshare_ua1.pdf`   | 6    | 4    | 5    | 4    | 5    | 6    | 5    | 6    | 7   | 7    | 8    | 6    | 4    |
 | `annotstruct_ua2.pdf`  | 13   | 12   | 12   | 12   | 12   | 14   | 14   | 14   | 10  | 9    | 9    | 8    | 13   |
+| `annotsynth_2b.pdf`    | 8    | 5    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
 | `baretree_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `blendcs_4.pdf`        | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 6    | 6    |
@@ -1948,8 +1950,8 @@ paints (144 and 184 grey) and poppler does not (244 114 22 and 97 155 205 for
 the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`). `iccbadcmyk_2b.pdf` paints
 the same grey and mismatched before the renderer converted colour too.
 
-**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 16 pages
-of 13 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
+**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 15 pages
+of 12 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
 tolerance. Each difference is adjudicated, and none is a litho defect left open:
 
 | File                                            | Page       | Differing pixels     | Why                                       |
@@ -1957,7 +1959,6 @@ tolerance. Each difference is adjudicated, and none is a litho defect left open:
 | `pdfxonly_2b`, `iccbadcmyk_1b`, `iccbadcmyk_2b` | 1          | 3600, 3933, 3933     | DeviceCMYK through the output intent      |
 | `inlineinterp_2b`, `complex_2b`, `megafont_2b`  | 1          | 148178, 15169, 14874 | interpolation half a sample off (poppler) |
 | `multipage_2b`                                  | 2          | 14873                | interpolation half a sample off (poppler) |
-| `complex_2b`, `forbidden_mix`                   | 1          | 295 of 15169, 5000   | a Square annotation with no `/AP`         |
 | `inlinejpx_2b`                                  | 1          | 5600                 | poppler stops after an inline JPX image   |
 | `imagecolour_2b`                                | 1          | 15375                | colorant None and JPX colour (poppler)    |
 | `pageboxes_2b`                                  | 1, 2, 3    | page size            | page boxes read as pdf.js reads them      |
@@ -1968,12 +1969,10 @@ tolerance. Each difference is adjudicated, and none is a litho defect left open:
   sample's value at the low corner of its cell, litho at its centre: ISO
   32000-1, 8.9.4 maps the image onto the unit square with each sample filling a
   cell, so enlarging must not move it. `pkg/internal/render/imgpaint` records
-  the measurement. The `complex_2b` pixels beyond the image are its Square
-  annotation.
-- **Square annotations without an appearance stream.** poppler builds a
-  rectangle from `/C`, `/IC` and `/CA`. litho draws appearance streams only
-  (`pkg/internal/render/annot`): building one from the dictionary is a
-  remediation matter, and ISO 19005-2, 6.3.3 is the rule both files break.
+  the measurement. The Square annotations of `complex_2b` and `forbidden_mix`,
+  which have no `/AP`, match: litho draws them from `/C`, `/IC`, the border and
+  `/CA` as poppler does (`pkg/internal/render/annot`, rendering only; ISO
+  19005-2, 6.3.3 is still the rule both files break).
 - **`inlinejpx_2b`.** poppler paints the first inline JPXDecode image, warns
   `Problem with skipping JPEG2000 box, stream error`, and paints nothing after
   it: not the second JPX image, the JBIG2, CCITT and Flate images, nor the form.
@@ -8565,16 +8564,42 @@ fails `6.2.4.3/2`, DeviceGray `6.2.4.3/4`, and every
 page holding transparency `6.2.10/2` at PDF/A-2b. veraPDF 1.30.2 and litho
 report the same rule set in all thirteen cells.
 
+### `annotsynth_2b.pdf`
+
+The renderer draws an annotation with no appearance stream from its dictionary
+where ISO 32000-1, 12.5.6 defines how (`pkg/internal/render/annot`, rendering
+only). The render goldens of the corpora held Square, Circle, Line, PolyLine,
+Ink, Highlight, StrikeOut and Link annotations with no `/AP`, but no Polygon,
+Underline or Squiggly, so the `render` cell compared none of them. The page
+draws, in DeviceRGB:
+
+| Annotation | Draws                                                                  |
+| ---------- | ---------------------------------------------------------------------- |
+| Polygon    | a triangle filled blue with a red border 3 wide                        |
+| Polygon    | a pentagon filled yellow with a dashed border, at `/CA` 0.5 over a bar |
+| Underline  | a red line along the bottom of two quadrilaterals over cyan bars       |
+| Squiggly   | a green zig-zag along the bottom of a quadrilateral over a cyan bar    |
+
+Rendered at 72 dpi, litho matches poppler 26.09.0 (320 differing pixels of
+40000), where litho drawing appearance streams only left all four undrawn.
+
+Each annotation lacks the `/AP` ISO 19005-2, 6.3.3 requires, so `6.3.3/1` fires
+at PDF/A-2 and later, and the file declares no OutputIntent, so DeviceRGB fails
+`6.2.4.3/2`. PDF/A-1 requires no appearance stream; there the Polygon, a PDF
+1.5 type, fails `6.5.2/1`, the `/C` and `/IC` arrays `6.5.3/3`, the `/CA` of 0.5
+`6.5.3/1`, and DeviceRGB `6.2.3.3/1`. veraPDF 1.30.2 and litho report the same
+rule set in all thirteen cells.
+
 ## Scope
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-213 x 13 = 2769 cells, the whole hand-measured matrix. litho and veraPDF return
+214 x 13 = 2782 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2745 of the 2769 cells. The 24
+fixtures exist to protect, and it holds in 2758 of the 2782 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
@@ -8587,7 +8612,7 @@ fourteen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_
 `pagelabels_2b`, `qshyphen_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2769 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 2782 and moves only `ruleset_mismatch`, and on
 those fourteen cells it moves both. Every exception sits in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
 fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
@@ -8614,11 +8639,11 @@ and states the clause behind its verdict. It either gives the right reading,
 where ISO 32000-1, 9.10.2 or the page geometry decides it, or marks the page
 unscored, where the readers disagree only on codes 9.10.2 gives no Unicode
 value, since no reading of those is right. Where PDF.js and litho agree, the
-golden stands. Of the 213 fixtures, 205 match and 8 are unscored
+golden stands. Of the 214 fixtures, 206 match and 8 are unscored
 (`cmapcidtext_2b`, `cmapnotdef_2b`, `cmaps_2b`, `cmapusecmap_2b`,
 `cmapusestream_2b`, `cmapverabase_2b`, `type0nodesc_2b`, `usecmap_2u`; page 16
 of `fontcopies_2b` too, whose other pages score), so the cell's `matched`,
-`words_match` and `chars_match` all read 205 and a mismatch is a regression.
+`words_match` and `chars_match` all read 206 and a mismatch is a regression.
 A new fixture needs
 its golden regenerated at provisioning, and an override when PDF.js reads it
 wrong.
