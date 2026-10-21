@@ -79,6 +79,15 @@ type Skip struct {
 //     colour.
 //   - pdfjs transparency_group.pdf: a group's blending space becomes the
 //     target, which moves a blend by up to 3 levels on 10 pixels.
+//   - litho (215 files), pdfjs and govdocs (79 files each the render goldens
+//     sample), images included, converted to the built-in CMYK through the
+//     ICC engine and rendered at 72 dpi: no colour moves past the gamut
+//     mapping of sRGB blue, 71.7 ΔE*ab, on 1% of a page, but where a PDF/X
+//     intent the conversion keeps changes what DeviceCMYK means.
+//   - litho sharedarray_2b.pdf, resinherit_2b.pdf, baretree_2b.pdf, pdfjs
+//     issue18973.pdf: a stream two pages' /Contents arrays share, /Resources
+//     naming a missing object or no dictionary, and a /Contents element
+//     naming a missing object, which each left a page unconverted.
 func Content(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, pages []*document.Page, target Target, opts Options) (*Report, error) {
 	s, err := NewSession(doc, alloc, target, opts)
 	if err != nil {

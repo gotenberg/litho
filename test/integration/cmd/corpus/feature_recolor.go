@@ -106,6 +106,23 @@ const (
 //
 // The PDFs are those the render goldens cover, as for redact-render, whose
 // fonts serve both renderings so an unembedded font draws alike.
+//
+// # Corpus evidence
+//
+//   - litho (215 files), pdfjs and govdocs (79 sampled files each): 201, 78
+//     and 79 match; 10 litho files and no other are refused, each for a
+//     construct the file holds on purpose (a colour space naming a resource,
+//     33 colorants, a 3-bit or 2-channel JPEG 2000 image, an /Lzw or doubled
+//     /Interpolate inline image, a shading function of the wrong output
+//     count, an undecodable content stream); pdfjs print_protection.pdf does
+//     not open.
+//   - litho defaultbox_2b.pdf, viewerboxes_2b.pdf: ink_moved on the pages
+//     without a usable media box, which every full rewrite gives a size of
+//     its own (see their known divergences), the conversion aside.
+//   - litho pdfxonly_2b.pdf, twoprofile_1b.pdf: colour_drift of 80.6 and
+//     83.5. Each keeps a GTS_PDFX intent over another CMYK profile before
+//     the PDF/A one the conversion sets, and the renderer reads DeviceCMYK
+//     through the first intent of four components.
 type recolorFeature struct {
 	// convert runs the conversion; tests replace it to plant a defect.
 	convert func(ctx context.Context, w *pdf.Writer) (*pdf.ColorReport, error)
