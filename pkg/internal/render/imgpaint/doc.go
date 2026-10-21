@@ -44,9 +44,20 @@
 // mask, and differs in three places. It interpolates an upsampled image below
 // a 4x enlargement even without /Interpolate. It paints one more pixel past an
 // image edge that falls exactly on a pixel boundary, then resamples the image
-// across the wider span. Its bilinear filter is not centred on the samples,
-// which shifts an interpolated enlargement by about a device pixel.
+// across the wider span. Its bilinear filter is not centred on the samples:
+// it places each sample's value at the low corner of the sample's cell, which
+// shifts an interpolated enlargement half a sample toward the grid's origin.
+// litho keeps the centred reading: 8.9.4 maps the image onto the unit square,
+// each sample filling a cell of it, so the value a cell holds belongs at its
+// centre, and enlarging an image must not move it.
 //
 // Functions in this package keep no state; they may run concurrently on
 // distinct canvases.
+//
+// # Corpus evidence
+//
+//   - litho inlineinterp_2b.pdf: a 4 by 1 interpolated image enlarged to 250
+//     pixels a sample; poppler peaks each sample at the left edge of its cell
+//     (x 100, 350, 600 for samples 0, 1, 2), litho at its centre (225, 475,
+//     725). The page mismatches the render golden on 148309 pixels for it.
 package imgpaint
