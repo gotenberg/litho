@@ -2,6 +2,7 @@ package glyph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -26,8 +27,10 @@ type Cache struct {
 	bytes int64
 }
 
-// cacheEntry is a loaded font, or the error loading it gave, which is cached
-// too so a broken font is not reread at every Tf.
+// cacheEntry is a loaded font, or the [ErrNotAFont] error loading it gave,
+// which is cached too so a dictionary that is no font is not reread at every
+// Tf. A failure of [Options.Substitutes] is not cached: the provider may serve
+// the font at the next request.
 type cacheEntry struct {
 	font *Font
 	err  error
@@ -53,9 +56,11 @@ func (c *Cache) Font(ctx context.Context, fontObj ast.PdfObject) (*Font, error) 
 		return entry.font, entry.err
 	}
 	font, err := Load(ctx, c.doc, fontObj, c.opts)
-	if err != nil && ctx.Err() != nil {
-		// A cancelled load says nothing about the font.
-		return nil, err
+	if err != nil && (ctx.Err() != nil || !errors.Is(err, ErrNotAFont)) {
+		// A cancelled load says nothing about the font, and a provider that
+		// failed may serve the next request: only a dictionary that is no
+		// font is a verdict on the font itself.
+		return font, err
 	}
 	size := int64(0)
 	if font != nil {
