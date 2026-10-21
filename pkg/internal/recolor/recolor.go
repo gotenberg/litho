@@ -74,9 +74,9 @@ type Skip struct {
 //   - pdfjs calrgb.pdf, govdocs thread_300_300924.pdf: CalRGB converted
 //     exactly, where the renderer reads it through 8-bit tables, up to 4 and
 //     9 levels apart in a near-zero channel of a saturated colour.
-//   - govdocs thread_300_300253.pdf: Separation spaces over a Lab alternate,
-//     which the renderer cannot read and paints black, convert to their
-//     colour.
+//   - govdocs thread_300_300253.pdf: Separation spaces over a Lab alternate
+//     convert to their colour, which the renderer also paints since it reads
+//     a Lab alternate.
 //   - pdfjs transparency_group.pdf: a group's blending space becomes the
 //     target, which moves a blend by up to 3 levels on 10 pixels.
 //   - litho (215 files), pdfjs and govdocs (79 files each the render goldens

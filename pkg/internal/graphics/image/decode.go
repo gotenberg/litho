@@ -621,19 +621,18 @@ func decodeSeparation(
 		return nil, fmt.Errorf("separation colour space has %d entries, want [/Separation name alternate tint]", len(cs))
 	}
 
-	alternate := resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": cs[2]})
-	altComps := imageComponents(alternate)
-	if altComps == 0 {
-		return nil, fmt.Errorf("separation image over unsupported alternate colour space %q", alternate)
+	alt, ok := resolveTintAlternate(ctx, doc, cs[2], renderingIntent(ctx, doc, dict), cc)
+	if !ok {
+		return nil, fmt.Errorf("separation image over unsupported alternate colour space %q", alt.name)
 	}
 
 	tint, err := function.New(ctx, doc, cs[3])
 	if err != nil {
 		return nil, fmt.Errorf("separation image tint transform: %w", err)
 	}
-	if tint.Outputs() != altComps {
+	if tint.Outputs() != alt.comps {
 		return nil, fmt.Errorf("separation tint transform yields %d values for a %d-component alternate space %q",
-			tint.Outputs(), altComps, alternate)
+			tint.Outputs(), alt.comps, alt.name)
 	}
 
 	unpacked, err := unpackSamples(data, width, height, 1, bitsPerComp, true)
@@ -649,15 +648,13 @@ func decodeSeparation(
 	// one.
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, 1), 1)
 
-	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict), cc))
-	cal := alternateCal(ctx, doc, cs[2], altComps)
 	var lut [256]color.RGBA
 	for s := range 256 {
 		out, err := tint.Eval([]float64{float64(dec[0][s]) / 255})
 		if err != nil {
 			return nil, fmt.Errorf("evaluating separation tint transform: %w", err)
 		}
-		lut[s] = alternateToRGB(alternate, conv, cal, out)
+		lut[s] = alt.rgb(out)
 	}
 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -713,10 +710,9 @@ func decodeDeviceN(
 			width, height, colorants, work, int64(maxDeviceNWork))
 	}
 
-	alternate := resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": cs[2]})
-	altComps := imageComponents(alternate)
-	if altComps == 0 {
-		return nil, fmt.Errorf("devicen image over unsupported alternate colour space %q", alternate)
+	alt, ok := resolveTintAlternate(ctx, doc, cs[2], renderingIntent(ctx, doc, dict), cc)
+	if !ok {
+		return nil, fmt.Errorf("devicen image over unsupported alternate colour space %q", alt.name)
 	}
 
 	tint, err := function.New(ctx, doc, cs[3])
@@ -731,9 +727,9 @@ func decodeDeviceN(
 		return nil, fmt.Errorf("devicen tint transform takes %d inputs for a %d-colorant space",
 			tint.Inputs(), colorants)
 	}
-	if tint.Outputs() != altComps {
+	if tint.Outputs() != alt.comps {
 		return nil, fmt.Errorf("devicen tint transform yields %d values for a %d-component alternate space %q",
-			tint.Outputs(), altComps, alternate)
+			tint.Outputs(), alt.comps, alt.name)
 	}
 
 	unpacked, err := unpackSamples(data, width, height, colorants, bitsPerComp, true)
@@ -750,8 +746,6 @@ func decodeDeviceN(
 	// one.
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, colorants), colorants)
 
-	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict), cc))
-	cal := alternateCal(ctx, doc, cs[2], altComps)
 	memo := make(map[string]color.RGBA)
 	inputs := make([]float64, colorants)
 	tuple := make([]byte, colorants)
@@ -775,7 +769,7 @@ func decodeDeviceN(
 				if err != nil {
 					return nil, fmt.Errorf("evaluating devicen tint transform: %w", err)
 				}
-				rgb = alternateToRGB(alternate, conv, cal, out)
+				rgb = alt.rgb(out)
 				if len(memo) < maxTintMemo {
 					memo[key] = rgb
 				}
@@ -816,11 +810,9 @@ func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, col
 // through its tint transform and alternate space (ISO 32000-1, 8.6.6.4 and
 // 8.6.6.5). It is not safe for concurrent use: conv remembers colours.
 type tintConverter struct {
-	tint      *function.Function
-	alternate string
-	conv      *converter
-	cal       *calSpace
-	in        []float64
+	tint *function.Function
+	alt  tintAlternate
+	in   []float64
 }
 
 // newTintConverter reads the tint transform and alternate space of the
@@ -829,26 +821,19 @@ func newTintConverter(ctx context.Context, doc *document.Document, cs ast.PdfArr
 	if len(cs) < 4 {
 		return nil, fmt.Errorf("tinted colour space has %d entries, want [family names alternate tint]", len(cs))
 	}
-	alternate := resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": cs[2]})
-	altComps := imageComponents(alternate)
-	if altComps == 0 {
-		return nil, fmt.Errorf("tinted colour space over unsupported alternate colour space %q", alternate)
+	alt, ok := resolveTintAlternate(ctx, doc, cs[2], intent, cc)
+	if !ok {
+		return nil, fmt.Errorf("tinted colour space over unsupported alternate colour space %q", alt.name)
 	}
 	tint, err := function.New(ctx, doc, cs[3])
 	if err != nil {
 		return nil, fmt.Errorf("tint transform: %w", err)
 	}
-	if tint.Inputs() != colorants || tint.Outputs() != altComps {
+	if tint.Inputs() != colorants || tint.Outputs() != alt.comps {
 		return nil, fmt.Errorf("tint transform maps %d inputs to %d values for %d colorants over %q",
-			tint.Inputs(), tint.Outputs(), colorants, alternate)
+			tint.Inputs(), tint.Outputs(), colorants, alt.name)
 	}
-	return &tintConverter{
-		tint:      tint,
-		alternate: alternate,
-		conv:      newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, intent, cc)),
-		cal:       alternateCal(ctx, doc, cs[2], altComps),
-		in:        make([]float64, colorants),
-	}, nil
+	return &tintConverter{tint: tint, alt: alt, in: make([]float64, colorants)}, nil
 }
 
 // rgb converts one tuple of tints, a byte per colorant as an 8-bit sample
@@ -861,7 +846,7 @@ func (tc *tintConverter) rgb(tints []byte) (color.RGBA, error) {
 	if err != nil {
 		return color.RGBA{}, fmt.Errorf("evaluating tint transform: %w", err)
 	}
-	return alternateToRGB(tc.alternate, tc.conv, tc.cal, v), nil
+	return tc.alt.rgb(v), nil
 }
 
 // alternateCal returns the CalGray or CalRGB space the alternate obj of a
@@ -889,14 +874,69 @@ func alternateCal(ctx context.Context, doc *document.Document, obj ast.PdfObject
 	return cal
 }
 
-// alternateToRGB converts one colour expressed in an alternate space to RGB,
-// through conv when the alternate space is colour managed and through cal
-// when it is CalGray or CalRGB. Values arrive in [0, 1] as the tint
-// transform's /Range defines them.
-func alternateToRGB(alternate string, conv *converter, cal *calSpace, v []float64) color.RGBA {
+// tintAlternate is the alternate space of a Separation or DeviceN space
+// (ISO 32000-1, 8.6.6.4 and 8.6.6.5), into which its tint transform maps a
+// tint, read as the decoder reads an image in that space.
+type tintAlternate struct {
+	// name is the space [resolveColorSpace] names, "Lab" for a Lab space.
+	name  string
+	comps int
+	// conv is set when the space is colour managed, cal when it is CalGray
+	// or CalRGB, lab when it is Lab.
+	conv *converter
+	cal  *calSpace
+	lab  *labParams
+}
+
+// resolveTintAlternate reads the alternate space obj of a Separation or
+// DeviceN space, and reports false, with the space's name, when the decoder
+// cannot convert it.
+//
+// ISO 32000-1, 8.6.6.4 lets the alternate be any device or CIE-based space,
+// Lab among them, whose components the tint transform yields as the L*, a*
+// and b* values of 8.6.5.4, not in [0, 1]. A Lab space with no usable
+// /WhitePoint is refused, as [resolveLabParams] refuses it.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300253.pdf: four PANTONE Separation spaces over a
+//     D50 Lab alternate, the only tinted spaces over Lab in any corpus, whose
+//     fills litho painted black where poppler 26.09.0 and PDFium paint the
+//     NTP and NIEHS logos blue and teal. Page 1 at 72 dpi went from 10251 to
+//     5485 pixels apart from poppler's, the rest substitute fonts.
+func resolveTintAlternate(ctx context.Context, doc *document.Document, obj ast.PdfObject, intent icc.Intent, cc colorContext) (tintAlternate, bool) {
+	name := resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": obj})
+	alt := tintAlternate{name: name}
+	if name == "Lab" {
+		lab, ok := resolveLabParams(ctx, doc, obj)
+		if !ok {
+			return alt, false
+		}
+		alt.comps, alt.lab = 3, &lab
+		return alt, true
+	}
+	alt.comps = imageComponents(name)
+	if alt.comps == 0 {
+		return alt, false
+	}
+	alt.conv = newConverter(colorTransform(ctx, doc, obj, name, alt.comps, intent, cc))
+	alt.cal = alternateCal(ctx, doc, obj, alt.comps)
+	return alt, true
+}
+
+// rgb converts one colour expressed in the alternate space to sRGB: through
+// lab when the space is Lab, through conv when it is colour managed, and
+// through cal when it is CalGray or CalRGB. Values arrive as the tint
+// transform's /Range defines them: L*, a* and b* for Lab, [0, 1] otherwise.
+func (a tintAlternate) rgb(v []float64) color.RGBA {
 	unit := func(f float64) uint8 {
 		return uint8(min(max(f, 0), 1)*255 + 0.5)
 	}
+	if a.lab != nil {
+		r, g, b := labValuesToRGB(v[0], v[1], v[2], *a.lab)
+		return color.RGBA{R: r, G: g, B: b, A: 255}
+	}
+	conv, cal := a.conv, a.cal
 	if conv != nil {
 		var px [4]byte
 		for i := range px[:conv.t.Components()] {
@@ -913,7 +953,7 @@ func alternateToRGB(alternate string, conv *converter, cal *calSpace, v []float6
 		r, g, b := cal.convertRGB(unit(v[0]), unit(v[1]), unit(v[2]))
 		return color.RGBA{R: r, G: g, B: b, A: 255}
 	}
-	switch alternate {
+	switch a.name {
 	case "DeviceGray":
 		g := unit(v[0])
 		return color.RGBA{R: g, G: g, B: g, A: 255}
@@ -1183,9 +1223,23 @@ func labEntryToRGB(e [4]byte, p labParams) (uint8, uint8, uint8) {
 	decode := func(v byte, lo, hi float64) float64 {
 		return lo + float64(v)*(hi-lo)/255
 	}
-	lStar := decode(e[0], 0, 100)
-	aStar := decode(e[1], p.aMin, p.aMax)
-	bStar := decode(e[2], p.bMin, p.bMax)
+	return labValuesToRGB(decode(e[0], 0, 100), decode(e[1], p.aMin, p.aMax), decode(e[2], p.bMin, p.bMax), p)
+}
+
+// labValuesToRGB converts the L*, a* and b* values of a colour in a Lab space
+// to sRGB, by the path [labEntryToRGB] describes. Each value is first clipped
+// to its range, L* to [0, 100] and a* and b* to /Range, the nearest valid
+// value ISO 32000-1, 8.6.5.4, Table 65 adjusts a value outside it to.
+func labValuesToRGB(lStar, aStar, bStar float64, p labParams) (uint8, uint8, uint8) {
+	clip := func(v, lo, hi float64) float64 {
+		if math.IsNaN(v) {
+			return lo
+		}
+		return min(max(v, lo), hi)
+	}
+	lStar = clip(lStar, 0, 100)
+	aStar = clip(aStar, p.aMin, p.aMax)
+	bStar = clip(bStar, p.bMin, p.bMax)
 
 	g := func(x float64) float64 {
 		if x >= 6.0/29.0 {

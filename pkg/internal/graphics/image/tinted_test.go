@@ -325,8 +325,14 @@ func TestDecodeImage_SeparationRefusalsSurvive(t *testing.T) {
 	}{
 		{
 			"an alternate space with no component count",
-			"[/Separation /Spot1 [/Lab << /WhitePoint [0.9505 1 1.089] >>] 5 0 R]",
+			"[/Separation /Spot1 /Pattern 5 0 R]",
 			"<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >>",
+			"unsupported alternate",
+		},
+		{
+			"a Lab alternate space with no /WhitePoint",
+			"[/Separation /Spot1 [/Lab << /Range [-100 100 -100 100] >>] 5 0 R]",
+			"<< /FunctionType 2 /Domain [0 1] /Range [0 100 -100 100 -100 100] /C0 [100 0 0] /C1 [0 0 0] /N 1 >>",
 			"unsupported alternate",
 		},
 		{
@@ -352,6 +358,45 @@ func TestDecodeImage_SeparationRefusalsSurvive(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: refusal %q does not mention %q", tc.name, err, tc.want)
+		}
+	}
+}
+
+// TestDecodeImage_SeparationOverLab pins that a Separation image over a Lab
+// alternate reads the tint transform's output as L*, a* and b* (ISO 32000-1,
+// 8.6.6.4 and 8.6.5.4). With a D65 white the adaptation to sRGB is the
+// identity, so L* 100 is white, L* 0 black, and the sRGB red's Lab value red.
+func TestDecodeImage_SeparationOverLab(t *testing.T) {
+	t.Parallel()
+
+	const cs = "[/Separation /Spot1 [/Lab << /WhitePoint [0.9505 1 1.089] /Range [-128 127 -128 127] >>] 5 0 R]"
+	// Two transforms: tint 0 to white and full tint to sRGB red (L* 53.24,
+	// a* 80.09, b* 67.20 under D65), or to black.
+	for _, tc := range []struct {
+		name string
+		c1   string
+		full color.RGBA
+	}{
+		{"to red", "[53.2408 80.0925 67.2032]", color.RGBA{R: 255, A: 255}},
+		{"to black", "[0 0 0]", color.RGBA{A: 255}},
+	} {
+		objs := append(tintedImagePDF(cs, []byte{0, 0, 255, 255}),
+			"<< /FunctionType 2 /Domain [0 1] /Range [0 100 -128 127 -128 127] /C0 [100 0 0] /C1 "+tc.c1+" /N 1 >>")
+		ctx, doc, page := imagePDF(t, objs)
+
+		img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+		if err != nil {
+			t.Fatalf("%s: DecodeImage: %v", tc.name, err)
+		}
+		for x, want := range []color.RGBA{{R: 255, G: 255, B: 255, A: 255}, tc.full} {
+			r, g, b, _ := img.At(2*x, 0).RGBA()
+			got := [3]int{int(r >> 8), int(g >> 8), int(b >> 8)}
+			for ch, w := range []uint8{want.R, want.G, want.B} {
+				if d := got[ch] - int(w); d < -1 || d > 1 {
+					t.Errorf("%s: pixel %d is %v, want %v", tc.name, 2*x, got, want)
+					break
+				}
+			}
 		}
 	}
 }

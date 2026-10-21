@@ -71,7 +71,10 @@ const (
 	d65Cal = "/WhitePoint [0.9505 1 1.089]"
 	srgbM  = "/Matrix [0.4124 0.2126 0.0193 0.3576 0.7152 0.1192 0.1805 0.0722 0.9505]"
 	labDef = "[/Lab << /WhitePoint [0.9642 1 0.8249] /Range [-128 127 -128 127] >>]"
-	sepDef = "[/Separation /Spot /DeviceCMYK 7 0 R]"
+	// labTint maps a tint to L* from 100 down to 0, neutral, as the PANTONE
+	// spaces of govdocs thread_300_300253.pdf map theirs.
+	labTint = "<< /FunctionType 2 /Domain [0 1] /Range [0 100 -128 127 -128 127] /C0 [100 0 0] /C1 [0 0 0] /N 1 >>"
+	sepDef  = "[/Separation /Spot /DeviceCMYK 7 0 R]"
 )
 
 // colorCase is one colour in one space: the space's definition, written
@@ -294,6 +297,11 @@ func TestHandComputed(t *testing.T) {
 		{"Lab black", labDef, []float64{0, 0, 0}, [3]int{0, 0, 0}},
 		// L* 50 quantises to 50.196, Y = ((50.196+16)/116)^3 = 0.1859, sRGB 119.
 		{"Lab grey", labDef, []float64{50, 0, 0}, [3]int{119, 119, 119}},
+		// The tint 0.5 quantises to 128/255, which the transform maps to L*
+		// 49.80: Y = ((49.80+16)/116)^3 = 0.1826, sRGB 118 (8.6.6.4).
+		{"Separation over Lab", "[/Separation /Spot " + labDef + " " + labTint + "]", []float64{0.5}, [3]int{118, 118, 118}},
+		// L* 120 lies past its range and clips to 100 (8.6.5.4, Table 65).
+		{"Separation over Lab clips", "[/Separation /Spot " + labDef + " << /FunctionType 2 /Domain [0 1] /C0 [120 0 0] /C1 [0 0 0] /N 1 >>]", []float64{0}, [3]int{255, 255, 255}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
