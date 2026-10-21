@@ -25,13 +25,14 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		"Directory of TrueType, OpenType or CFF font files, searched recursively, to draw the fonts the document does not embed: a font takes the file of its name, its family, or a metric-compatible family (Arial for Helvetica); a font no file serves draws its glyphs as boxes")
 	systemFonts := fs.Bool("system-fonts", false,
 		"Also search the operating system's font directories, after --font-dir, for the fonts the document does not embed; the pages then depend on the fonts installed on this host")
+	forPrint := fs.Bool("print", false, "Draw the annotations a viewer prints rather than those it shows on screen")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	files := fs.Args()
 	if len(files) != 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] -o PREFIX <file>")
+		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] [--print] -o PREFIX <file>")
 		return exitError
 	}
 	opts := []pdf.RenderOption{pdf.WithRenderDPI(*dpi)}
@@ -74,6 +75,11 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 			pageNums = append(pageNums, i)
 		}
 	}
+	target := pdf.RenderForView
+	if *forPrint {
+		target = pdf.RenderForPrint
+	}
+	opts = append(opts, pdf.WithRenderTarget(target))
 	for _, p := range pageNums {
 		img, err := r.RenderPage(ctx, p, opts...)
 		if err != nil {

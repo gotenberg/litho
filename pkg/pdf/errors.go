@@ -80,7 +80,8 @@ var (
 	ErrRenderTooLarge = errors.New("page render exceeds its budget")
 
 	// ErrInvalidRenderOptions is returned, wrapped, by [Reader.RenderPage]
-	// when [WithRenderDPI] is not positive and finite.
+	// when [WithRenderDPI] is not positive and finite, or [WithRenderTarget]
+	// names no [RenderTarget].
 	ErrInvalidRenderOptions = errors.New("invalid render options")
 
 	// ErrInvalidPageNumber is returned when a page number is outside the

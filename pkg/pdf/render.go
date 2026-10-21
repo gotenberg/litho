@@ -10,6 +10,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/gotenberg/litho/pkg/internal/render/annot"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 )
 
@@ -28,6 +29,31 @@ type renderOpts struct {
 	// (render_fonts.go).
 	fonts       []FontProvider
 	systemFonts *fontFiles
+	// target selects the annotations drawn.
+	target RenderTarget
+}
+
+// RenderTarget selects which annotations [Reader.RenderPage] draws over a
+// page, by the annotation flags of ISO 32000-1, 12.5.3.
+type RenderTarget uint8
+
+const (
+	// RenderForView draws the annotations a viewer shows on screen: those
+	// without the /NoView flag. It is the default, and what poppler's
+	// pdftoppm draws.
+	RenderForView RenderTarget = iota
+	// RenderForPrint draws the annotations a viewer prints: those with the
+	// /Print flag.
+	RenderForPrint
+)
+
+// WithRenderTarget selects the annotations drawn: [RenderForView] (the
+// default) or [RenderForPrint]. Any other value makes [Reader.RenderPage]
+// fail with [ErrInvalidRenderOptions].
+func WithRenderTarget(t RenderTarget) RenderOption {
+	return func(o *renderOpts) {
+		o.target = t
+	}
 }
 
 // WithRenderDPI sets the resolution, in pixels per inch: a page 612 units wide
@@ -54,16 +80,17 @@ func WithRenderBackground(c color.Color) RenderOption {
 // its /Rotate and /UserUnit applied, each side rounded up to whole pixels.
 //
 // The renderer is litho's own. It draws paths, strokes, clipping, images and
-// inline images with their masks, shadings and shading patterns, form
-// XObjects, and text in every rendering mode, Type 3 fonts included, in
-// colours converted to sRGB as litho decodes images: every colour space of
-// ISO 32000-1, 8.6, the default colour spaces of the resources and the output
-// intents of the page and the document honoured, uncalibrated DeviceCMYK
-// through [WithDefaultCMYKProfile] or litho's built-in printer profile. It
-// does not draw tiling patterns, annotations, or the effect of soft masks,
-// blend modes and transparency groups yet; content using them is drawn
-// without them. Content a document's default optional content configuration
-// hides is not drawn.
+// inline images with their masks, shadings, shading and tiling patterns, form
+// XObjects, text in every rendering mode, Type 3 fonts included, and the
+// appearance streams of the page's annotations ([WithRenderTarget] selects
+// which), in colours converted to sRGB as litho decodes images: every colour
+// space of ISO 32000-1, 8.6, the default colour spaces of the resources and
+// the output intents of the page and the document honoured, uncalibrated
+// DeviceCMYK through [WithDefaultCMYKProfile] or litho's built-in printer
+// profile. It does not draw an annotation with no appearance stream, or the
+// effect of soft masks, blend modes and transparency groups yet; content
+// using them is drawn without them. Content a document's default optional
+// content configuration hides is not drawn.
 //
 // Glyphs are drawn from the programs the document embeds. litho bundles no
 // font program, so a font the document does not embed draws its glyphs as
@@ -72,10 +99,10 @@ func WithRenderBackground(c color.Color) RenderOption {
 // supplies a program for it.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
-// [ErrInvalidRenderOptions] for a bad resolution, and [ErrRenderTooLarge] when
-// the page passes [Limits.MaxRenderPixels]. An image, shading or form the
-// file damages is left out of the page, as a viewer leaves it out, and logged
-// at Debug.
+// [ErrInvalidRenderOptions] for a bad resolution or target, and
+// [ErrRenderTooLarge] when the page passes [Limits.MaxRenderPixels]. An image,
+// shading, pattern or form the file damages is left out of the page, as a
+// viewer leaves it out, and logged at Debug.
 //
 // RenderPage is safe for concurrent use with every other read of the
 // [Reader], RenderPage included: each call draws into its own raster and
@@ -85,6 +112,15 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 	o := renderOpts{dpi: DefaultRenderDPI, background: color.White}
 	for _, opt := range opts {
 		opt(&o)
+	}
+	var mode annot.Mode
+	switch o.target {
+	case RenderForView:
+		mode = annot.View
+	case RenderForPrint:
+		mode = annot.Print
+	default:
+		return nil, fmt.Errorf("page %d: %w: render target %d", pageNum, ErrInvalidRenderOptions, o.target)
 	}
 	pg, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -102,9 +138,10 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 		providers = append(slices.Clip(providers), o.systemFonts)
 	}
 	canvas, report, err := page.Render(ctx, r.doc, pg, page.Options{
-		DPI:        o.dpi,
-		Background: bg,
-		Fonts:      renderFontProvider(r.logger(), providers),
+		DPI:         o.dpi,
+		Background:  bg,
+		Fonts:       renderFontProvider(r.logger(), providers),
+		Annotations: mode,
 	})
 	if err != nil {
 		switch {

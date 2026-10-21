@@ -128,7 +128,7 @@
 //     [WithClipPathText], [WithClippedText], [WithArtifacts].
 //   - [Reader.RenderPage] takes [RenderOption]: [WithRenderDPI],
 //     [WithRenderBackground], [WithRenderFontProvider],
-//     [WithRenderFontFiles], [WithRenderSystemFonts].
+//     [WithRenderFontFiles], [WithRenderSystemFonts], [WithRenderTarget].
 //   - [Writer.WriteTo], [Split], [Merge], [Pipeline.WriteTo],
 //     [Pipeline.Split] and [Pipeline.Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
