@@ -105,10 +105,10 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 // has none: litho then draws such fonts as placeholder boxes, and the feature
 // says so once.
 //
-// Some mismatches are adjudicated and stay. litho draws no appearance for an
-// annotation without one (package render/annot, a decided policy: ISO
-// 32000-1, 12.5.5 makes /AP optional and synthesising one is remediation's
-// job), where poppler synthesises it from /C, /IC, /BS and /Border. Poppler
+// Some mismatches are adjudicated and stay. Like poppler, litho draws an
+// annotation with no appearance stream from its dictionary where ISO
+// 32000-1, 12.5.6 defines how (package render/annot), and draws no Text,
+// FreeText, Stamp or other icon or text annotation without one. Poppler
 // strokes a link's /Border over its appearance stream, an xpdf legacy: per
 // 12.5.5 the appearance stream is the annotation's appearance, and an empty
 // one draws nothing. Poppler stops at the /Count of a page tree whose
@@ -127,9 +127,9 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //
 //   - pdfjs annotation-square-circle-without-appearance, issue13447: Square,
 //     Circle, Line, PolyLine, Ink, Highlight and StrikeOut annotations with
-//     no /AP, drawn by poppler only.
+//     no /AP, which both renderers build from the dictionary and which match.
 //   - govdocs thread_300_300511 page 2: Link annotations with no /AP and no
-//     /F, boxed by poppler from /Border and /C only.
+//     /F, boxed from /Border and /C by both, which match.
 //   - pdfjs bug886717: 45 Link annotations whose /AP /N is an empty stream,
 //     boxed by poppler from /Border; poppler's own rendering with
 //     -hide-annotations matches litho's page (1291 pixels, 0.26%).

@@ -9,10 +9,15 @@
 // [Reason]. The package paints nothing: the renderer runs each appearance as
 // a form XObject.
 //
-// An annotation with no appearance stream is skipped, never synthesised.
-// Building an appearance from /DA, /V or /C is a remediation matter (see the
-// appearance fixers of package remediation), not something a viewer of the
-// file as written does.
+// An annotation with no appearance stream is skipped, unless
+// [Options.Synthesize] asks for one: [Collect] then builds, for drawing only,
+// what ISO 32000-1 defines from the dictionary for Square, Circle, Line,
+// Polygon, PolyLine, Ink, the text markup types and a Link's border, as
+// viewers do (see [Appearance.Synthesized]). Text, FreeText, Stamp,
+// FileAttachment, Sound, Popup and Widget annotations need a viewer's icons
+// or fonts and stay skipped. Writing an appearance into the file from /DA,
+// /V or /C is a remediation matter (see the appearance fixers of package
+// remediation).
 //
 // Optional content (/OC) and the /NoRotate and /NoZoom flags are reported, not
 // applied: the caller knows the optional-content configuration and the page's

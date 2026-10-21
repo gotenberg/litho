@@ -26,6 +26,12 @@ const (
 type Options struct {
 	// Mode is [View] by default.
 	Mode Mode
+
+	// Synthesize builds an appearance for an annotation that has no
+	// appearance stream, for the subtypes whose appearance ISO 32000-1
+	// defines from the dictionary alone (see [Appearance.Synthesized]).
+	// Without it such an annotation is skipped with [ReasonNoAppearance].
+	Synthesize bool
 }
 
 // Annotation flags, ISO 32000-1, 12.5.3, Table 165.
@@ -103,6 +109,12 @@ type Appearance struct {
 	// FormOC is the appearance stream's own /OC entry as written, nil when
 	// absent (8.11.3.3).
 	FormOC ast.PdfObject
+
+	// Synthesized reports that the file holds no appearance stream for the
+	// annotation and Stream is one [Collect] built from its dictionary, as
+	// [Options.Synthesize] asks. Stream then draws in default user space:
+	// FormMatrix and A are the identity, and BBox covers the drawing.
+	Synthesized bool
 }
 
 // Transform returns FormMatrix.Mul(A), the matrix that maps form space to
@@ -266,7 +278,21 @@ func collectOne(ctx context.Context, doc *document.Document, elem ast.PdfObject,
 
 	stream, streamRef, state, ok := normalAppearance(ctx, doc, dict)
 	if !ok {
-		return Appearance{}, subtype, ReasonNoAppearance
+		if !opts.Synthesize {
+			return Appearance{}, subtype, ReasonNoAppearance
+		}
+		app, ok := synthesize(ctx, doc, dict, subtype, rect)
+		if !ok {
+			return Appearance{}, subtype, ReasonNoAppearance
+		}
+		app.Ref = refOf(elem)
+		app.Subtype = subtype
+		app.State = state
+		app.Flags = flags
+		app.NoRotate = flags&FlagNoRotate != 0
+		app.NoZoom = flags&FlagNoZoom != 0
+		app.OC = dict["OC"]
+		return app, subtype, 0
 	}
 
 	// An appearance stream is run as a form XObject (12.5.5) whatever its

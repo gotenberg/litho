@@ -39,8 +39,9 @@
 // sRGB whatever a group's /CS.
 //
 // What the renderer does not draw is counted in the [Report] rather than
-// drawn wrongly: annotations with no appearance stream, and transparency
-// whose rasters would pass the render pixel budget.
+// drawn wrongly: annotations with no appearance stream that ISO 32000-1
+// gives no geometry for, and transparency whose rasters would pass the render
+// pixel budget.
 //
 // Every allocation sized by the page is held to the render pixel budget, and
 // the work of one render to [maxRenderOperators] operators; ctx is checked

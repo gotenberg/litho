@@ -13,13 +13,16 @@ import (
 
 // annotations draws the page's annotation appearances over its content, in
 // /Annots order (ISO 32000-1, 12.5.5), as [annot.Collect] selects them for
-// mode. Widgets whose appearances the form marks stale are drawn from the
-// stream the file holds and counted ([renderer.needAppearances]). Each runs as a form XObject from the initial
+// mode. An annotation with no appearance stream is drawn from its
+// dictionary where ISO 32000-1 defines how ([annot.Options.Synthesize]), and
+// counted as unsupported otherwise. Widgets whose appearances the form marks
+// stale are drawn from the stream the file holds and counted
+// ([renderer.needAppearances]). Each runs as a form XObject from the initial
 // graphics state, placed by Algorithm 8.1 and clipped to its /BBox, unless
 // optional content hides the annotation (its /OC, 8.11.3.3) or its
 // appearance stream (the stream's /OC).
 func (r *renderer) annotations(g Geometry, mode annot.Mode) error {
-	apps, skips, err := annot.Collect(r.ctx, r.doc, r.page, annot.Options{Mode: mode})
+	apps, skips, err := annot.Collect(r.ctx, r.doc, r.page, annot.Options{Mode: mode, Synthesize: true})
 	if err != nil {
 		return fmt.Errorf("collecting annotations: %w", err)
 	}

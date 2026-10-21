@@ -63,8 +63,60 @@ var annotPopplerFixtures = map[string]fixture{
 	},
 }
 
+// synthPopplerFixtures join popplerFixtures: annotations with no appearance
+// stream, drawn from their dictionaries (annot.Options.Synthesize) as
+// poppler builds them. Each stays clear of the places litho reads ISO
+// 32000-1 where poppler does not: /RD, a transparent /C, a grey or CMYK
+// Link /C and /LLO are checked by hand in TestSynthesizedAnnotations.
+var synthPopplerFixtures = map[string]fixture{
+	// A filled square with a 4-unit border, a half-opaque circle over a
+	// blue bar, a dashed CMYK square and a circle filled in CMYK cyan
+	// with no /C (a black border one unit wide).
+	"annot_synth_geometry": {
+		page:    "/Annots [5 0 R 6 0 R 7 0 R 8 0 R]",
+		content: "0 0 1 rg 60 50 10 50 re f",
+		objs: []string{
+			"<< /Type /Annot /Subtype /Square /Rect [5 55 45 95] /F 4 /C [1 0 0] /IC [0 0 1] /BS << /W 4 >> >>",
+			"<< /Type /Annot /Subtype /Circle /Rect [55 55 95 95] /F 4 /C [0 0.5 0] /IC [1 1 0] /Border [0 0 3] /CA 0.5 >>",
+			"<< /Type /Annot /Subtype /Square /Rect [5 5 45 45] /F 4 /C [0 0 0 1] /BS << /W 2 /S /D /D [4 2] >> >>",
+			"<< /Type /Annot /Subtype /Circle /Rect [55 5 95 45] /F 4 /IC [1 0 0 0] >>",
+		},
+	},
+	// Lines with endings and leader lines, a polyline with endings and a
+	// filled polygon.
+	"annot_synth_lines": {
+		page: "/Annots [5 0 R 6 0 R 7 0 R 8 0 R]",
+		objs: []string{
+			"<< /Type /Annot /Subtype /Line /Rect [5 70 95 90] /F 4 /L [10 80 90 80] /LE [/ClosedArrow /Circle] " +
+				"/IC [1 0 0] /C [0 0 1] /BS << /W 2 >> >>",
+			"<< /Type /Annot /Subtype /Line /Rect [5 45 95 70] /F 4 /L [10 50 90 55] /LL 8 /LLE 3 /LE [/Square /OpenArrow] >>",
+			"<< /Type /Annot /Subtype /PolyLine /Rect [5 5 75 40] /F 4 /Vertices [10 10 30 35 50 15 70 35] " +
+				"/LE [/Diamond /RClosedArrow] /C [0 0.6 0] /IC [1 1 0] /BS << /W 1.5 >> >>",
+			"<< /Type /Annot /Subtype /Polygon /Rect [70 5 100 45] /F 4 /Vertices [75 10 95 10 85 40] /C [1 0 0] /IC [0 0 1] /Border [0 0 2] >>",
+		},
+	},
+	// Ink, the four text markup types (a highlight multiplied over a cyan
+	// bar) and Link borders: solid, dashed, width 0 and underlined.
+	"annot_synth_markup": {
+		page:    "/Annots [5 0 R 6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R]",
+		content: "0 1 1 rg 50 80 45 10 re f",
+		objs: []string{
+			"<< /Type /Annot /Subtype /Ink /Rect [5 55 45 95] /F 4 /InkList [[10 90 20 70 30 90 40 70] [10 60 40 60]] /C [1 0 0] /BS << /W 3 >> >>",
+			"<< /Type /Annot /Subtype /Highlight /Rect [50 80 95 90] /F 4 /QuadPoints [50 90 95 90 50 80 95 80] /C [1 1 0] >>",
+			"<< /Type /Annot /Subtype /Underline /Rect [50 62 95 70] /F 4 /QuadPoints [50 70 95 70 50 62 95 62] /C [1 0 0] >>",
+			"<< /Type /Annot /Subtype /StrikeOut /Rect [50 45 95 55] /F 4 /QuadPoints [50 55 95 55 50 45 95 45] /C [0 0 1] >>",
+			"<< /Type /Annot /Subtype /Squiggly /Rect [50 28 95 40] /F 4 /QuadPoints [50 40 95 40 50 28 95 28] /C [0 0.5 0] >>",
+			"<< /Type /Annot /Subtype /Link /Rect [5 5 45 25] /Border [0 0 2] /C [1 0 0] >>",
+			"<< /Type /Annot /Subtype /Link /Rect [50 5 95 20] /BS << /W 1 /S /D /D [3 2] >> /C [0 0 1] >>",
+			"<< /Type /Annot /Subtype /Link /Rect [5 30 45 40] /Border [0 0 0] /C [0 1 0] >>",
+			"<< /Type /Annot /Subtype /Link /Rect [5 42 45 50] /BS << /S /U /W 2 >> /C [1 0 1] >>",
+		},
+	},
+}
+
 func init() {
 	maps.Copy(popplerFixtures, annotPopplerFixtures)
+	maps.Copy(popplerFixtures, synthPopplerFixtures)
 }
 
 func drawMode(t *testing.T, f fixture, mode annot.Mode) (*Report, map[[2]int]rgb) {
@@ -129,13 +181,49 @@ func TestAnnotationNoRotate(t *testing.T) {
 
 func TestAnnotationWithoutAppearance(t *testing.T) {
 	t.Parallel()
-	_, report := draw(t, fixture{
-		page: "/Annots [5 0 R]",
-		objs: []string{"<< /Type /Annot /Subtype /Square /Rect [10 10 30 30] /F 4 /C [1 0 0] >>"},
+	// A text annotation's icon is the viewer's (ISO 32000-1, 12.5.6.4):
+	// with no appearance stream nothing is drawn, and it is counted. The
+	// square beside it is drawn from its dictionary and is not.
+	img, report := draw(t, fixture{
+		page: "/Annots [5 0 R 6 0 R]",
+		objs: []string{
+			"<< /Type /Annot /Subtype /Text /Rect [60 60 80 80] /F 4 /C [1 0 0] >>",
+			"<< /Type /Annot /Subtype /Square /Rect [10 10 30 30] /F 4 /IC [1 0 0] /Border [0 0 0] >>",
+		},
 	})
 	if report.Unsupported[UnsupportedAnnotation] != 1 {
 		t.Errorf("report %v, want one annotation without appearance", report.Unsupported)
 	}
+	expect(t, img, 2, map[[2]int]rgb{{20, 80}: red, {70, 30}: paper})
+}
+
+// TestSynthesizedAnnotations checks, by hand, the readings of ISO 32000-1
+// the poppler fixtures avoid because poppler departs from them.
+func TestSynthesizedAnnotations(t *testing.T) {
+	t.Parallel()
+	img, _ := draw(t, fixture{
+		page: "/Annots [5 0 R 6 0 R 7 0 R 8 0 R]",
+		objs: []string{
+			// /RD [left top right bottom] insets the square to x 30 to 50,
+			// y 60 to 90 (12.5.6.8); poppler ignores /RD.
+			"<< /Type /Annot /Subtype /Square /Rect [10 50 60 95] /F 4 /C [] /IC [0 0 1] /BS << /W 4 >> /RD [20 5 10 10] >>",
+			// A transparent /C strokes nothing (Table 164); poppler
+			// strokes black.
+			"<< /Type /Annot /Subtype /Square /Rect [70 50 95 95] /F 4 /C [] /IC [1 0 0] /BS << /W 4 >> >>",
+			// A grey /C (Table 164); poppler strokes a grey Link black.
+			"<< /Type /Annot /Subtype /Link /Rect [5 5 45 25] /Border [0 0 4] /C [0.5] >>",
+			// Leader lines start /LLO off the points (Table 175): at
+			// x 60 from y 15 up to y 30.
+			"<< /Type /Annot /Subtype /Line /Rect [55 5 95 45] /F 4 /L [60 10 90 10] /LL 15 /LLO 5 /BS << /W 2 >> >>",
+		},
+	})
+	grey := rgb{128, 128, 128}
+	expect(t, img, 2, map[[2]int]rgb{
+		{20, 20}: paper, {40, 20}: blue, {40, 45}: paper,
+		{71, 20}: red,
+		{5, 85}:  grey, {25, 85}: paper,
+		{60, 88}: paper, {60, 78}: black, {75, 75}: black,
+	})
 }
 
 func TestAnnotationOverUnreadableContent(t *testing.T) {
