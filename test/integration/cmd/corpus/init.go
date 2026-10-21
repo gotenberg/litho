@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -8,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // runInit provisions one or more corpora via Docker. For each corpus,
@@ -52,6 +55,10 @@ func runInit(args []string) int {
 	return 0
 }
 
+// corpusImage is the tag of the image provisioning builds and runs, and the one
+// the redact-render feature renders with poppler in (see [renderWithPoppler]).
+const corpusImage = "litho-corpus-builder"
+
 // provisionCorpus builds the corpus Docker image at the pinned versions and
 // runs it with the testdata directory bind-mounted at /output.
 //
@@ -87,7 +94,7 @@ func provisionCorpus(m *Manifest, pins *resolvedPins) error {
 	if dockerCtx == "" || !hasDockerfile(dockerCtx) {
 		return fmt.Errorf("docker context not found at %q", dockerCtx)
 	}
-	const image = "litho-corpus-builder"
+	image := corpusImage
 
 	fmt.Printf("%s: building shared corpus image (%s)...\n", m.Name, image)
 	build := exec.Command("docker", dockerBuildArgs(image, dockerCtx, pins)...) //nolint:gosec // build context is the fixed corpus directory, pins are validated by parsePins
@@ -313,4 +320,86 @@ func featuresFromGoldens(m *Manifest) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// popplerJob is one page pdftoppm renders: Page of the PDF at PDF into the PNG
+// at PNG plus ".png", both paths relative to the batch directory.
+type popplerJob struct {
+	PDF  string
+	Page int
+	PNG  string
+}
+
+// popplerBatchTimeout caps the one container that renders a corpus run's
+// pages. Anti-hang guard, not a performance target: pdftoppm draws a page at
+// 72 dpi in well under a second, and the script bounds each page with a
+// timeout of its own, so half an hour is far above a run of thousands of
+// pages.
+const popplerBatchTimeout = 30 * time.Minute
+
+// popplerRenderScript renders every line of jobs.tsv, PDF, page and PNG root
+// separated by tabs, with the settings gen-render.sh draws the render goldens
+// with: 72 dpi, the crop box, anti-aliased text and vectors, annotations
+// drawn. Keep the two in step. A page pdftoppm cannot render leaves no PNG
+// and its message in the root plus ".err"; 120 seconds bound one page, as
+// RENDER_TIMEOUT does there.
+const popplerRenderScript = `#!/bin/bash
+set -eu
+pdftoppm -v > /rr/poppler-version.txt 2>&1 || true
+render() {
+  if ! timeout 120 pdftoppm -r 72 -cropbox -aa yes -aaVector yes -f "$2" -l "$2" -singlefile -png "/rr/$1" "/rr/$3" 2> "/rr/$3.err"; then
+    rm -f "/rr/$3.png"
+  fi
+}
+export -f render
+parallel --colsep '\t' -j "$(nproc)" render {1} {2} {3} :::: /rr/jobs.tsv
+`
+
+// errPopplerUnavailable reports that the corpus image's poppler could not
+// render: no Docker, no image, or a container that failed.
+var errPopplerUnavailable = errors.New("poppler unavailable")
+
+// renderWithPoppler renders jobs with the pdftoppm of [corpusImage], in one
+// container for the whole batch, dir bind-mounted at /rr, and returns the
+// poppler version the image runs. The container runs without a network and as
+// the calling user, so the PNGs it writes are the caller's to remove.
+func renderWithPoppler(ctx context.Context, dir string, jobs []popplerJob) (string, error) {
+	docker, err := exec.LookPath("docker")
+	if err != nil {
+		return "", fmt.Errorf("%w: docker not on PATH", errPopplerUnavailable)
+	}
+	inspect := exec.CommandContext(ctx, docker, "image", "inspect", "--format", "{{.Id}}", corpusImage) //nolint:gosec // docker from LookPath, fixed arguments
+	if err := inspect.Run(); err != nil {
+		return "", fmt.Errorf("%w: image %s not built (make corpus-init): %w", errPopplerUnavailable, corpusImage, err)
+	}
+	var list strings.Builder
+	for _, j := range jobs {
+		fmt.Fprintf(&list, "%s\t%d\t%s\n", j.PDF, j.Page, j.PNG)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "jobs.tsv"), []byte(list.String()), 0o600); err != nil {
+		return "", fmt.Errorf("write poppler jobs: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "render.sh"), []byte(popplerRenderScript), 0o600); err != nil {
+		return "", fmt.Errorf("write poppler script: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, popplerBatchTimeout)
+	defer cancel()
+	args := []string{"run", "--rm", "--network", "none", "-e", "HOME=/tmp"}
+	if uid, gid := os.Getuid(), os.Getgid(); uid >= 0 && gid >= 0 {
+		args = append(args, "--user", fmt.Sprintf("%d:%d", uid, gid))
+	}
+	args = append(args, "-v", dir+":/rr", "--entrypoint", "/bin/bash", corpusImage, "/rr/render.sh")
+	run := exec.CommandContext(ctx, docker, args...) //nolint:gosec // docker from LookPath, dir is our staging directory
+	if out, err := run.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("%w: docker run: %w: %s", errPopplerUnavailable, err, firstLine(out))
+	}
+	out, err := os.ReadFile(filepath.Join(dir, "poppler-version.txt")) //nolint:gosec // our staging directory
+	if err != nil {
+		return "", fmt.Errorf("%w: no version report: %w", errPopplerUnavailable, err)
+	}
+	version, _, err := parseDottedVersion(out)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errPopplerUnavailable, err)
+	}
+	return version, nil
 }

@@ -35,6 +35,7 @@ var featureRegistry = append([]FeatureFactory{
 	func() Feature { return newSchematronFeature() },
 	func() Feature { return newImageDecodeFeature() },
 	func() Feature { return newRenderFeature() },
+	func() Feature { return newRedactRenderFeature() },
 	func() Feature { return newDeterminismFeature() },
 }, mutationFeatureFactories()...)
 

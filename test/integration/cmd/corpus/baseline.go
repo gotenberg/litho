@@ -88,6 +88,18 @@ var costMetrics = map[string]bool{
 	// The determinism cell counts the (PDF, operation) cells whose two runs
 	// wrote different bytes. See determinismFeature.
 	metricNondeterministic: true,
+
+	// The redact-render cell counts the redactions a check failed on, the
+	// ones that failed outright, and the ones whose poppler half did not run,
+	// which is no pass. See redactRenderFeature.
+	metricOutsideChanged:        true,
+	metricInsideLeaked:          true,
+	metricOutsideChangedLitho:   true,
+	metricOutsideChangedPoppler: true,
+	metricInsideLeakedLitho:     true,
+	metricInsideLeakedPoppler:   true,
+	metricRedactFailed:          true,
+	metricPopplerUnavailable:    true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any
@@ -110,6 +122,17 @@ var uncomparedMetrics = map[string]bool{
 	// count fails promise_broken or signature_invalid instead.
 	metricFieldSigned:  true,
 	metricFieldRefused: true,
+
+	// The redact-render inventory: refusals are the documented outcome for
+	// content a redaction cannot remove exactly, poppler_no_oracle counts
+	// source pages poppler draws apart from litho, and image_spill the
+	// by-design reach of sample-exact blanking. A defect in what they count
+	// fails outside_changed or inside_leaked instead; scenarios_run, the
+	// coverage, stays gated as good-when-higher.
+	metricRedactRefused:    true,
+	metricRedactIncomplete: true,
+	metricPopplerNoOracle:  true,
+	metricImageSpill:       true,
 }
 
 // defaultBaselinePath returns the canonical baseline location. The

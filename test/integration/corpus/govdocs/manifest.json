@@ -23,6 +23,7 @@
     "metadata": "goldens/metadata",
     "imagedecode": "goldens/images",
     "render": "goldens/render",
+    "redact-render": "goldens/render",
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
     "remediation-aggressive": "goldens/compliance"

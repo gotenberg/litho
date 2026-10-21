@@ -8,6 +8,7 @@
     "metadata": "goldens/metadata",
     "imagedecode": "goldens/images",
     "render": "goldens/render",
+    "redact-render": "goldens/render",
     "merge-catalog": "goldens/text"
   },
   "skips": {

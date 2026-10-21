@@ -9,6 +9,7 @@
     "bookmarks": "goldens/bookmarks",
     "split": "goldens/text",
     "merge": "goldens/merges",
-    "merge-empty": "goldens/merge-empty"
+    "merge-empty": "goldens/merge-empty",
+    "redact-render": "goldens/text"
   }
 }

@@ -31,7 +31,8 @@
     "mutate-redact": "goldens/compliance",
     "determinism": "goldens/compliance",
     "text": "goldens/text",
-    "render": "goldens/render"
+    "render": "goldens/render",
+    "redact-render": "goldens/render"
   },
   "golden_overrides": {
     "text": "text-overrides.json"
