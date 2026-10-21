@@ -552,7 +552,7 @@ func fixForbiddenActionsOnPages(ctx context.Context, s *actionSplice, catalog as
 	}
 
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool))
 
 	var fixes []string
 	for i, pe := range pages {

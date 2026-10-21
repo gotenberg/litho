@@ -63,7 +63,7 @@ func ParseCFF2(data []byte) (*Font, error) {
 		return nil, fmt.Errorf("%w: Top DICT out of bounds", ErrInvalidCFF)
 	}
 	// The Global Subr INDEX follows the Top DICT.
-	_, gsubrs, err := parseCFF2INDEX(data, topEnd)
+	gsubrs, err := parseCFF2INDEX(data, topEnd)
 	if err != nil {
 		return nil, fmt.Errorf("reading the Global Subr INDEX: %w", err)
 	}
@@ -74,7 +74,7 @@ func ParseCFF2(data []byte) (*Font, error) {
 	if top.charStrings <= 0 || top.charStrings >= len(data) {
 		return nil, fmt.Errorf("%w: no CharStrings INDEX", ErrInvalidCFF)
 	}
-	_, charStrings, err := parseCFF2INDEX(data, top.charStrings)
+	charStrings, err := parseCFF2INDEX(data, top.charStrings)
 	if err != nil {
 		return nil, fmt.Errorf("reading the CharStrings INDEX: %w", err)
 	}
@@ -99,15 +99,16 @@ func ParseCFF2(data []byte) (*Font, error) {
 
 // parseCFF2INDEX reads a CFF2 INDEX, whose count is a Card32 (OpenType
 // specification, CFF2 table, INDEX data).
-func parseCFF2INDEX(data []byte, pos int) (endPos int, entries [][]byte, err error) {
+func parseCFF2INDEX(data []byte, pos int) ([][]byte, error) {
 	if pos < 0 || pos+4 > len(data) {
-		return 0, nil, ErrTruncated
+		return nil, ErrTruncated
 	}
 	count := binary.BigEndian.Uint32(data[pos : pos+4])
 	if uint64(count) > uint64(len(data)) {
-		return 0, nil, ErrTruncated
+		return nil, ErrTruncated
 	}
-	return parseINDEXBody(data, pos+4, int(count))
+	_, entries, err := parseINDEXBody(data, pos+4, int(count))
+	return entries, err
 }
 
 // cff2Top is what the outline reader takes from a CFF2 Top DICT. Offsets it
@@ -289,7 +290,7 @@ func (f *Font) readCFF2FDArray(data []byte, top cff2Top, matrix geom.Matrix) err
 	if top.fdArray <= 0 || top.fdArray >= len(data) {
 		return fmt.Errorf("%w: a CFF2 program without FDArray", ErrInvalidCFF)
 	}
-	_, fds, err := parseCFF2INDEX(data, top.fdArray)
+	fds, err := parseCFF2INDEX(data, top.fdArray)
 	if err != nil {
 		return fmt.Errorf("reading the FDArray: %w", err)
 	}
@@ -363,7 +364,7 @@ func (f *Font) readCFF2Private(data []byte, size, offset int) (outlinePrivate, e
 			return outlinePrivate{}, fmt.Errorf("%w: Subrs offset out of bounds", ErrInvalidCFF)
 		}
 		var err error
-		if _, p.subrs, err = parseCFF2INDEX(data, at); err != nil {
+		if p.subrs, err = parseCFF2INDEX(data, at); err != nil {
 			return outlinePrivate{}, fmt.Errorf("reading a local Subrs INDEX: %w", err)
 		}
 		if hasNilEntry(p.subrs) {

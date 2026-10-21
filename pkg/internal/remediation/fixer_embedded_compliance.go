@@ -153,7 +153,7 @@ func fixEmbeddedCompliance(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	if len(inline) == 0 {
 		return fixes, nil
 	}
-	if _, err := rewriteInlineFileSpecs(ctx, alloc, doc, func(container int, path string, spec ast.PdfDict) (ast.PdfObject, bool) {
+	if err := rewriteInlineFileSpecs(ctx, alloc, doc, func(container int, path string, spec ast.PdfDict) (ast.PdfObject, bool) {
 		if _, ok := spec["EF"]; !ok || !inline[inlineSpecAt{container: container, path: path}] {
 			return nil, false
 		}

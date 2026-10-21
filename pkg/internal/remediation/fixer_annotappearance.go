@@ -59,7 +59,7 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	}
 
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool))
 
 	var count int
 	for _, pe := range pages {

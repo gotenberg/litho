@@ -62,7 +62,7 @@ func runStampPDF(ctx context.Context, args []string, _stdout, stderr io.Writer) 
 	// the stamp is opened with the same -p as the target. Variadic for exactly
 	// this reason, as insert passes its target and source. This command has no
 	// encryption flag, so it is never encrypting.
-	warnEncryptionDropped(stderr, false, r, stampReader)
+	warnEncryptionDropped(stderr, r, stampReader)
 
 	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)

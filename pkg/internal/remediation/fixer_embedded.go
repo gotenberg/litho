@@ -104,7 +104,7 @@ func fixEmbeddedSubtype(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		}
 		patchEmbeddedFileTypes(ctx, alloc, doc, spec, &count)
 	}
-	if _, err := rewriteInlineFileSpecs(ctx, alloc, doc, func(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
+	if err := rewriteInlineFileSpecs(ctx, alloc, doc, func(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
 		patchEmbeddedFileTypes(ctx, alloc, doc, spec, &count)
 		return nil, false
 	}); err != nil {

@@ -746,7 +746,7 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 		seen:           make(map[int]bool),
 	}
 
-	walkChildren(ctx, state, kidsObj, "", 0, 0)
+	walkChildren(ctx, state, kidsObj, 0, 0)
 
 	// Heading rules §7.4.2 t1 (no skipped levels) and §7.4.4 t2/t3 (no mixed
 	// H and H1-H6) are PDF/UA-1 only. PDF/UA-2 has no analogue: ISO 14289-2
@@ -867,7 +867,7 @@ func buildRoleMapIndex(ctx context.Context, doc *document.Document, structTreeRo
 
 // walkChildren processes the /K entry of a structure element (may be a single
 // element or an array).
-func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, parentType ast.PdfName, depth int, lastHeadingLevel int) {
+func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, depth int, lastHeadingLevel int) {
 	if ctx.Err() != nil || depth > maxStructTreeDepth {
 		return
 	}
@@ -886,7 +886,7 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 		if err != nil || dict == nil {
 			return
 		}
-		walkElement(ctx, state, dict, parentType, depth, lastHeadingLevel)
+		walkElement(ctx, state, dict, depth, lastHeadingLevel)
 		return
 	}
 	// A /K array written as an object of its own is walked once, as an
@@ -931,7 +931,7 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 				}
 			}
 
-			walkElement(ctx, state, dict, parentType, depth, lastHeadingLevel)
+			walkElement(ctx, state, dict, depth, lastHeadingLevel)
 		}
 	}
 }
@@ -975,7 +975,7 @@ func validateCaptionKidPositions(ctx context.Context, state *walkState, elem ast
 //   - govdocs thread_400_400934.pdf: writes its notes as /Footnote, mapped to
 //     /Note, without /ID, and veraPDF reports ISO 14289-1, 7.9 t1 while
 //     litho, reading /S, did not.
-func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parentType ast.PdfName, depth int, lastHeadingLevel int) {
+func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, depth int, lastHeadingLevel int) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -1002,8 +1002,8 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// adopts the PDF 2.0 standard structure namespace whose containment is
 	// defined by ISO/TS 32005, whereas PDF/UA-1 uses the ISO 32000-1 §7.2
 	// parent/child tables checked separately below. The effective parent comes
-	// from the walk state, not the literal parentType: root children see
-	// "StructTreeRoot" and NonStruct wrappers are transparent.
+	// from the walk state: root children see "StructTreeRoot" and NonStruct
+	// wrappers are transparent.
 	if state.profile == "PDF/UA-2" {
 		validateISO32005(ctx, state, elem, typeName, state.iso32005Parent)
 		validateCaptionKidPositions(ctx, state, elem)
@@ -1216,7 +1216,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 			state.ua1Parent = ua1ParentRef{key: selfKey}
 			state.ua1ParentSeq = selfSeq
 		}
-		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
+		walkChildren(ctx, state, kObj, depth+1, lastHeadingLevel)
 		state.iso32005Parent, state.ua1Parent = prevISOParent, prevUA1Parent
 		state.ua1ParentSeq = prevUA1ParentSeq
 	}
@@ -1320,7 +1320,7 @@ func walkTypelessElement(ctx context.Context, state *walkState, elem ast.PdfDict
 	}
 	prevISOParent, prevUA1Parent := state.iso32005Parent, state.ua1Parent
 	state.iso32005Parent, state.ua1Parent = "", ua1ParentRef{}
-	walkChildren(ctx, state, kObj, "", depth+1, lastHeadingLevel)
+	walkChildren(ctx, state, kObj, depth+1, lastHeadingLevel)
 	state.iso32005Parent, state.ua1Parent = prevISOParent, prevUA1Parent
 }
 

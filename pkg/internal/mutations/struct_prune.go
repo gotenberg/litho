@@ -593,7 +593,7 @@ func (p *structPrune) idTree(ctx context.Context, tree ast.PdfObject) (ast.PdfOb
 	}
 	return pruneDestNameTree(ctx, p.alloc, p.doc, tree, dropWhen(func(value ast.PdfObject) bool {
 		return !p.subtree(ctx, value)
-	}), 0)
+	}))
 }
 
 // parentTree drops the /ParentTree entries whose elements describe removed

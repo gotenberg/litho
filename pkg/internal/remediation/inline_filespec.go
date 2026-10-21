@@ -27,7 +27,7 @@ type inlineFileSpecRepair func(container int, path string, spec ast.PdfDict) (as
 
 // rewriteInlineFileSpecs offers every /Type /Filespec dictionary written inline
 // in an indirect object to repair, and writes back each object in which repair
-// replaced one. It returns the number of objects written back.
+// replaced one.
 //
 // ISO 32000-1, 7.11.3 does not require a file specification to be an indirect
 // object, so one can sit anywhere a value can: an annotation's /FS or /AF
@@ -43,8 +43,8 @@ type inlineFileSpecRepair func(container int, path string, spec ast.PdfDict) (as
 // so an earlier fixer's pending rewrite is the one repaired. Keys are visited in
 // sorted order: a repair that allocates objects numbers them in a stable order,
 // and the output bytes do not vary between runs.
-func rewriteInlineFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, repair inlineFileSpecRepair) (int, error) {
-	n, err := walkNumberedObjects(ctx, alloc, doc,
+func rewriteInlineFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, repair inlineFileSpecRepair) error {
+	_, err := walkNumberedObjects(ctx, alloc, doc,
 		func(objNum int, d ast.PdfDict) (ast.PdfDict, bool) {
 			rebuilt, changed := rewriteInlineValue(ctx, doc, d, objNum, "", 0, repair)
 			nd, ok := rebuilt.(ast.PdfDict)
@@ -56,9 +56,9 @@ func rewriteInlineFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc
 			return na, changed && ok
 		})
 	if err != nil {
-		return n, fmt.Errorf("repairing inline file specifications: %w", err)
+		return fmt.Errorf("repairing inline file specifications: %w", err)
 	}
-	return n, nil
+	return nil
 }
 
 // rewriteInlineValue returns obj, a value at depth below the top of object

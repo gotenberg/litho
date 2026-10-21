@@ -64,7 +64,7 @@ func fixSepCanon(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		return nil, nil
 	}
 	var pageEntries []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool))
 
 	// Collect canonical (alt, tintFunc) per colorant name on the first
 	// pass.

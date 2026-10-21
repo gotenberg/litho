@@ -70,7 +70,7 @@ func pruneWebCaptureSets(
 		newRoot, treeChanged, treeTruncated := pruneDestNameTree(ctx, alloc, doc, root,
 			func(value ast.PdfObject) (ast.PdfObject, bool) {
 				return contentSetKept(ctx, alloc, doc, value, removed)
-			}, 0)
+			})
 		if treeTruncated {
 			truncated = true
 		}

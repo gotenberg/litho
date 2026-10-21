@@ -73,7 +73,7 @@ func TestTreeWalks_SharedKidsArrayFanOut(t *testing.T) {
 		{"pruneDestNameTree", func(t *testing.T) error {
 			doc, alloc := newMutationDoc(t, sharedKidsTreePDF())
 			keep := func(v ast.PdfObject) (ast.PdfObject, bool) { return v, false }
-			pruneDestNameTree(context.Background(), alloc, doc, root, keep, 0)
+			pruneDestNameTree(context.Background(), alloc, doc, root, keep)
 			return nil
 		}},
 		{"readNameTree", func(t *testing.T) error {

@@ -165,7 +165,7 @@ func stripEFFromFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *
 //     remediation, where litho saw one.
 func stripEFFromInlineFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (int, error) {
 	count := 0
-	_, err := rewriteInlineFileSpecs(ctx, alloc, doc, func(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
+	err := rewriteInlineFileSpecs(ctx, alloc, doc, func(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
 		if _, hasEF := spec["EF"]; !hasEF {
 			return nil, false
 		}

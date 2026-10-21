@@ -149,7 +149,7 @@ func runConvertColors(ctx context.Context, args []string, stdout, stderr io.Writ
 	defer closer()
 
 	// This command has no encryption flag, so it is never encrypting.
-	warnEncryptionDropped(stderr, false, r)
+	warnEncryptionDropped(stderr, r)
 
 	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)

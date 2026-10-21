@@ -35,7 +35,7 @@ func runDelete(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	defer closer()
 
 	// This command has no encryption flag, so it can never be encrypting.
-	warnEncryptionDropped(stderr, false, r)
+	warnEncryptionDropped(stderr, r)
 
 	pageCount, err := r.PageCount(ctx)
 	if err != nil {

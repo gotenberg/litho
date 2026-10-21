@@ -42,7 +42,7 @@ func TestLIContentByStandardType(t *testing.T) {
 			doc, _ := objsDocPDF(t, "<< /Type /Catalog >>")
 			var results []Violation
 			state := &walkState{results: &results, profile: "PDF/UA-2", doc: doc, roleMap: tt.roleMap, seen: make(map[int]bool)}
-			walkElement(context.Background(), state, tt.item, "L", 0, 0)
+			walkElement(context.Background(), state, tt.item, 0, 0)
 			if fired := hasRule(results, Rule_14289_2_8_2_5_25_t02); fired != tt.fires {
 				t.Errorf("8.2.5.25 t2 fired = %v, want %v (%v)", fired, tt.fires, results)
 			}

@@ -39,7 +39,7 @@ func runSetMetadata(ctx context.Context, args []string, _stdout, stderr io.Write
 	defer closer()
 
 	// This command has no encryption flag, so it can never be encrypting.
-	warnEncryptionDropped(stderr, false, r)
+	warnEncryptionDropped(stderr, r)
 
 	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)

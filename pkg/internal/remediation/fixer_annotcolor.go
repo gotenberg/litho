@@ -136,7 +136,7 @@ func fixAnnotColor(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		return nil, nil
 	}
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool))
 
 	var count int
 	for _, pe := range pages {
@@ -222,7 +222,7 @@ func annotColorPresent(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		return false
 	}
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool))
 	for _, pe := range pages {
 		if ctx.Err() != nil {
 			return false

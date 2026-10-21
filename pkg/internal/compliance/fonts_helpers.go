@@ -529,7 +529,7 @@ func fontFileKeys(subtype string) []ast.PdfName {
 // consumer can read, which is what the embedding rules ask (ISO 19005-2,
 // 6.2.11.4.1 t1 and its restatements). fontSub is the font's own /Subtype, the
 // descendant's for a CIDFont, and selects the keys that may hold the program.
-func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict, fontSub string, part int) bool {
+func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict, fontSub string) bool {
 	if fd == nil {
 		return false
 	}
@@ -1015,7 +1015,7 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
-	if !isFontEmbedded(ctx, doc, fd, fontSubtype(ctx, doc, fontDict), PDFAPart(profile)) {
+	if !isFontEmbedded(ctx, doc, fd, fontSubtype(ctx, doc, fontDict)) {
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 

@@ -104,9 +104,7 @@ func scrubPageAnnotations(
 		if !isRef {
 			return fmt.Errorf("%w: an annotation on a page carries the text in %s", ErrAnnotationNotAddressable, hits[0])
 		}
-		if paints, err := appearancePaintsText(ctx, doc, annot); err != nil {
-			return err
-		} else if paints {
+		if appearancePaintsText(ctx, doc, annot) {
 			return fmt.Errorf("%w: annotation %d carries the text in %s", ErrAnnotationAppearanceHoldsText, ref.ObjectNum, hits[0])
 		}
 
@@ -159,28 +157,31 @@ func annotTextHits(ctx context.Context, doc *document.Document, annot ast.PdfDic
 // appearance paints something so clearing the value would leave it on screen.
 // An appearance litho cannot read counts as painting, because an appearance it
 // cannot prove empty is one it cannot prove clean.
-func appearancePaintsText(ctx context.Context, doc *document.Document, annot ast.PdfDict) (bool, error) {
+func appearancePaintsText(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
 	apObj, ok := annot["AP"]
 	if !ok {
-		return false, nil
+		return false
 	}
 	apDict, err := document.ResolveDict(ctx, doc, apObj)
 	if err != nil || apDict == nil {
-		return false, nil //nolint:nilerr // An unresolvable /AP is null (ISO 32000-1, 7.3.10): no appearance paints text.
+		// An unresolvable /AP is null (ISO 32000-1, 7.3.10): no appearance
+		// paints text.
+		return false
 	}
 	normal, ok := apDict["N"]
 	if !ok {
-		return false, nil
+		return false
 	}
 	stream, err := document.ResolveStream(ctx, doc, normal)
 	if err != nil || stream.Dict == nil {
 		// A /N that is a sub-dictionary of states rather than a stream, or one
 		// that will not resolve: unread, so not provably clean.
-		return true, nil //nolint:nilerr // A deliberate fallback, see above.
+		return true
 	}
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return true, nil //nolint:nilerr // An appearance that does not decode is not provably clean.
+		// An appearance that does not decode is not provably clean.
+		return true
 	}
-	return bytes.Contains(data, []byte("Tj")) || bytes.Contains(data, []byte("TJ")), nil
+	return bytes.Contains(data, []byte("Tj")) || bytes.Contains(data, []byte("TJ"))
 }

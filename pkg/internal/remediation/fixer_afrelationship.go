@@ -64,7 +64,7 @@ func fixAFRelationship(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	// this scope.
 	part3 := compliance.PDFAPart(profile) == 3
 	inline := inlineFileSpecAF{alloc: alloc, promote: part3}
-	if _, err := rewriteInlineFileSpecs(ctx, alloc, doc, inline.repair); err != nil {
+	if err := rewriteInlineFileSpecs(ctx, alloc, doc, inline.repair); err != nil {
 		return nil, err
 	}
 	count += inline.relationships
@@ -260,7 +260,7 @@ func fixAFInFileAttachmentAnnots(ctx context.Context, doc *document.Document, al
 		return 0
 	}
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool))
 
 	count := 0
 	for _, pe := range pages {

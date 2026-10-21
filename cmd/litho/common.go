@@ -301,7 +301,7 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 	// None of these commands has an encryption flag, so none can ever be
 	// encrypting. decrypt opts out: see withoutEncryptionWarning.
 	if !cmdCfg.skipEncryptionWarning {
-		warnEncryptionDropped(stderr, false, r)
+		warnEncryptionDropped(stderr, r)
 	}
 
 	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)

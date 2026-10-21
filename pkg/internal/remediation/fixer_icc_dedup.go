@@ -48,7 +48,7 @@ func fixICCDedup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		return nil, nil
 	}
 	var pageEntries []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool))
 
 	visited := make(map[int]bool)
 	count := 0

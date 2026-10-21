@@ -1308,8 +1308,8 @@ func buildElement(doc *schemaDoc, raw *rawElement, ns string) (*Element, error) 
 	}
 	el := &Element{
 		Name:      QName{Namespace: ns, Local: raw.Name},
-		MinOccurs: occursOrDefault(raw.MinOccurs, 1),
-		MaxOccurs: occursOrDefault(raw.MaxOccurs, 1),
+		MinOccurs: occursOrDefault(raw.MinOccurs),
+		MaxOccurs: occursOrDefault(raw.MaxOccurs),
 		Nillable:  isTrueBoolean(raw.Nillable),
 		Default:   raw.Default,
 		Fixed:     raw.Fixed,
@@ -1576,8 +1576,8 @@ func buildParticles(doc *schemaDoc, els []rawElement, wcs []rawWildcard, nested 
 		out = append(out, Particle{Wildcard: &Wildcard{
 			Namespace:       wcs[i].Namespace,
 			ProcessContents: wcs[i].ProcessContents,
-			MinOccurs:       occursOrDefault(wcs[i].MinOccurs, 1),
-			MaxOccurs:       occursOrDefault(wcs[i].MaxOccurs, 1),
+			MinOccurs:       occursOrDefault(wcs[i].MinOccurs),
+			MaxOccurs:       occursOrDefault(wcs[i].MaxOccurs),
 		}})
 	}
 	if len(nested) > 0 {
@@ -1794,16 +1794,19 @@ var wellKnownPrefixes = map[string]string{
 	"ccts": "urn:un:unece:uncefact:documentation:standard:CoreComponentsTechnicalSpecification:2",
 }
 
-func occursOrDefault(raw string, def int) int {
+// occursOrDefault reads a minOccurs or maxOccurs attribute. An absent or
+// unreadable one reads as 1, the default both attributes take (XML Schema 1.0
+// Part 1, 3.3.2 and 3.10.2).
+func occursOrDefault(raw string) int {
 	if raw == "" {
-		return def
+		return 1
 	}
 	if raw == "unbounded" {
 		return MaxUnbounded
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
-		return def
+		return 1
 	}
 	return n
 }

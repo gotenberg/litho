@@ -66,7 +66,8 @@ func encryptWriteOptions(userPwd, ownerPwd, algorithm string, stderr io.Writer) 
 // encrypted input means the output loses protection the input had.
 //
 // This is the form for a command that has no encryption flag of its own, which
-// is fourteen of the seventeen emitters. One message used to advise "Pass
+// is fourteen of the seventeen emitters. Such a command never encrypts its
+// output, so this form takes no encrypting argument. One message used to advise "Pass
 // --user-password to encrypt the output" for every one of them. That was true
 // of the five page operations it was written for, and became wrong when
 // `bbed371f` widened the warning to every output-producing command: those
@@ -76,8 +77,8 @@ func encryptWriteOptions(userPwd, ownerPwd, algorithm string, stderr io.Writer) 
 //
 // README.md already documents three remedies, one per family. The two variants
 // below carry the other two, so the message a caller sees and the manual agree.
-func warnEncryptionDropped(stderr io.Writer, encrypting bool, readers ...*pdf.Reader) {
-	warnEncryptionDroppedWithRemedy(stderr, encrypting,
+func warnEncryptionDropped(stderr io.Writer, readers ...*pdf.Reader) {
+	warnEncryptionDroppedWithRemedy(stderr, false,
 		"Run litho encrypt on the result to protect it again.", readers...)
 }
 

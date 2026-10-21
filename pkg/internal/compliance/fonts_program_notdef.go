@@ -90,7 +90,7 @@ func programNotdefCodes(ctx context.Context, doc *document.Document, fontDict as
 // read. An empty name is a code the program names nothing.
 func programGlyphName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) func(byte) string {
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
-	if fd == nil || !isFontEmbedded(ctx, doc, fd, fontSubtype(ctx, doc, fontDict), 0) {
+	if fd == nil || !isFontEmbedded(ctx, doc, fd, fontSubtype(ctx, doc, fontDict)) {
 		return nil
 	}
 	if obj, ok := fd["FontFile"]; ok {

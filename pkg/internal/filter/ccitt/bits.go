@@ -39,13 +39,13 @@ func (r *bitReader) zeros(limit int) (int, bool) {
 // endOfLine consumes an end-of-line code, eleven or more zero bits then a one
 // (T.4, 4.1.2: fill bits of any length may precede it), and reports whether
 // one was there.
-func (r *bitReader) endOfLine() (bool, error) {
+func (r *bitReader) endOfLine() bool {
 	n, one := r.zeros(1 << 30)
 	if !one || n < 11 {
-		return false, nil
+		return false
 	}
 	r.pos += n + 1
-	return true, nil
+	return true
 }
 
 // more reports whether a row can still begin here. Twelve zero bits with no

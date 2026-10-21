@@ -67,7 +67,7 @@ func fixFileSpecFUF(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		count++
 	}
 
-	if _, err := rewriteInlineFileSpecs(ctx, alloc, doc, func(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
+	if err := rewriteInlineFileSpecs(ctx, alloc, doc, func(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
 		patched := fileSpecFUFPatch(ctx, doc, spec)
 		if patched == nil {
 			return nil, false

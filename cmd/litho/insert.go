@@ -45,7 +45,7 @@ func runInsert(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 
 	// Either input losing its protection is worth reporting, and this command
 	// has no encryption flag, so it can never be encrypting.
-	warnEncryptionDropped(stderr, false, r, srcReader)
+	warnEncryptionDropped(stderr, r, srcReader)
 
 	var srcPageList []int
 	if *sourcePages != "" {

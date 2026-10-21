@@ -103,7 +103,7 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	}
 
 	var pageEntries []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool))
 
 	// The fixer runs only on a document reporting a page boundary violation,
 	// so the page tree walk the candidate sizes cost is paid rarely.

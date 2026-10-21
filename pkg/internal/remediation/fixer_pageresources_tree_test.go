@@ -95,7 +95,7 @@ func walkedPageEntries(t *testing.T, alloc *writer.ObjAllocator, doc *document.D
 		t.Fatal("the document has no catalog")
 	}
 	var walked []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)["Pages"], &walked, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)["Pages"], &walked, make(map[int]bool))
 	entries := make(map[int]annotPageEntry, len(walked))
 	for _, pe := range walked {
 		if pe.ref.ObjectNum > 0 {

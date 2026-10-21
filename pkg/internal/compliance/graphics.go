@@ -405,7 +405,9 @@ func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resourc
 		found := checkTransferFunction(ctx, doc, gs, profile, part, pageNum, string(gsName))
 		found = append(found, checkHTPKey(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
 		found = append(found, checkRenderingIntent(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
-		found = append(found, checkOverprint(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
+		// An ExtGState's /OPM 1 is no violation on its own: ISO 19005-2/3/4,
+		// 6.2.4.2 t2 judges it per ICCBased CMYK space it reaches, which
+		// checkICCBasedProfiles does (see [overprintModeRule]).
 		for range times {
 			results = append(results, found...)
 		}
@@ -827,44 +829,5 @@ func checkRenderingIntent(ctx context.Context, doc *document.Document, gs ast.Pd
 	if !validRenderingIntents[string(ri)] {
 		return failf(renderingIntentRule(part), "page %d, ExtGState %s, intent %s", pageNum, gsName, ri)
 	}
-	return nil
-}
-
-func checkOverprint(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, _ int, _ string) []Violation {
-	// Overprint checks apply to parts 2+ and 4 only.
-	if part < 2 {
-		return nil
-	}
-
-	opmObj, hasOPM := gs["OPM"]
-	if !hasOPM {
-		return nil
-	}
-
-	opm, err := document.ResolveInt(ctx, doc, opmObj)
-	if err != nil {
-		doc.Logger.Debug("compliance.graphics: cannot resolve OPM value", "error", err)
-		return nil
-	}
-
-	// OPM shall not be 1 when overprint is enabled in certain conditions.
-	// Only flag when overprint stroke (OP) or overprint fill (op) is true.
-	if opm != 1 {
-		return nil
-	}
-
-	// When OPM is 1, check whether overprint is active. If OP or op keys
-	// are not present, overprint defaults to false and OPM=1 is harmless.
-	_, hasOP := gs["OP"]
-	_, hasop := gs["op"]
-	if !hasOP && !hasop {
-		return nil
-	}
-
-	// PDF/A parts 2-4 define no standalone rule for OPM=1; the restriction is
-	// expressed through colour-space-specific overprint validation, not a bare
-	// OPM check. Emitting a violation here without a matching rule would be a
-	// false positive, so OPM=1 with active overprint is left to those checks.
-
 	return nil
 }

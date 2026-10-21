@@ -89,7 +89,7 @@ func fixAnnotFlags(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	}
 
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool))
 	sheets := readAnnotSheets(ctx, alloc, doc, pages)
 
 	var plan removalPlan

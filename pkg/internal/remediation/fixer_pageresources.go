@@ -68,7 +68,7 @@ func fixPageResources(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	}
 
 	var pageEntries []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool))
 
 	count := 0
 	for _, pe := range pageEntries {
@@ -322,7 +322,7 @@ func pageTreeEntries(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	}
 	var walked []annotPageEntry
 	if pagesObj, ok := catalog["Pages"]; ok {
-		collectPageRefs(ctx, alloc, doc, pagesObj, &walked, make(map[int]bool), 0)
+		collectPageRefs(ctx, alloc, doc, pagesObj, &walked, make(map[int]bool))
 	}
 	if sameWalk(walked, pages) {
 		return walked

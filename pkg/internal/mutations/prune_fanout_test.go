@@ -73,7 +73,7 @@ func TestPruneDestNameTree_DoubledKidsStayLinear(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		pruneDestNameTree(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 5}, keepEverything, 0)
+		pruneDestNameTree(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 5}, keepEverything)
 		close(done)
 	}()
 

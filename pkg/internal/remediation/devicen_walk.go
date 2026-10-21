@@ -83,7 +83,7 @@ func (w *deviceNWalk) walkPages(ctx context.Context) error {
 		return nil
 	}
 	var pageEntries []annotPageEntry
-	collectPageRefs(ctx, w.alloc, w.doc, pagesObj, &pageEntries, make(map[int]bool), 0)
+	collectPageRefs(ctx, w.alloc, w.doc, pagesObj, &pageEntries, make(map[int]bool))
 
 	for _, pe := range pageEntries {
 		if err := ctx.Err(); err != nil {

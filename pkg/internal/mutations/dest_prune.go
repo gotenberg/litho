@@ -591,9 +591,9 @@ func dropWhen(gone func(value ast.PdfObject) bool) nameTreeDropFunc {
 // The third result reports that the walk stopped at its depth bound with part
 // of the tree unread, so absence of a drop is not evidence there was nothing to
 // drop.
-func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, drop nameTreeDropFunc, depth int) (ast.PdfObject, bool, bool) {
+func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, drop nameTreeDropFunc) (ast.PdfObject, bool, bool) {
 	truncated := false
-	obj, dropped := pruneDestNameTreeAt(ctx, alloc, doc, nodeObj, drop, make(map[int]bool), depth, &truncated)
+	obj, dropped := pruneDestNameTreeAt(ctx, alloc, doc, nodeObj, drop, make(map[int]bool), 0, &truncated)
 	return obj, dropped, truncated
 }
 
@@ -604,7 +604,7 @@ func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 // when the root node is written inline, whether anything was dropped, and
 // whether the walk stopped at its depth bound with part of the tree unread.
 func PruneNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, tree ast.PdfObject, gone func(value ast.PdfObject) bool) (ast.PdfObject, bool, bool) {
-	return pruneDestNameTree(ctx, alloc, doc, tree, dropWhen(gone), 0)
+	return pruneDestNameTree(ctx, alloc, doc, tree, dropWhen(gone))
 }
 
 // pruneDestNameTreeAt is [pruneDestNameTree] carrying the nodes already walked.
@@ -758,7 +758,7 @@ func pruneCatalogDestinations(
 				newRoot, dropped, destsTruncated := pruneDestNameTree(ctx, alloc, doc, destsRoot,
 					dropWhen(func(value ast.PdfObject) bool {
 						return destTargetsRemoved(ctx, doc, value, removed, 0)
-					}), 0)
+					}))
 				if destsTruncated {
 					truncated = true
 				}

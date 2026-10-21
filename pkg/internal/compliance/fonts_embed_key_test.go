@@ -53,23 +53,23 @@ func TestIsFontEmbedded_CIDFontType0RejectsFontFile(t *testing.T) {
 	cff := ast.NewStream(ast.PdfDict{"Subtype": ast.PdfName("CIDFontType0C")}, []byte(readableCFF()))
 
 	wrongKey := ast.PdfDict{"FontFile": prog}
-	if isFontEmbedded(ctx, nopDoc(), wrongKey, "CIDFontType0", 2) {
+	if isFontEmbedded(ctx, nopDoc(), wrongKey, "CIDFontType0") {
 		t.Error("CIDFontType0 via /FontFile must not count as embedded")
 	}
 
 	rightKey := ast.PdfDict{"FontFile3": cff}
-	if !isFontEmbedded(ctx, nopDoc(), rightKey, "CIDFontType0", 2) {
+	if !isFontEmbedded(ctx, nopDoc(), rightKey, "CIDFontType0") {
 		t.Error("CIDFontType0 via /FontFile3 must count as embedded")
 	}
 
 	// A simple Type1 font keeps /FontFile as valid embedding.
-	if !isFontEmbedded(ctx, nopDoc(), wrongKey, "Type1", 2) {
+	if !isFontEmbedded(ctx, nopDoc(), wrongKey, "Type1") {
 		t.Error("Type1 via /FontFile must count as embedded")
 	}
 
 	// A /FontFile3 naming no glyph format embeds nothing readable.
 	noSubtype := ast.PdfDict{"FontFile3": prog}
-	if isFontEmbedded(ctx, nopDoc(), noSubtype, "Type1", 2) {
+	if isFontEmbedded(ctx, nopDoc(), noSubtype, "Type1") {
 		t.Error("/FontFile3 with no /Subtype must not count as embedded")
 	}
 }

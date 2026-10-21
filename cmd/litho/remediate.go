@@ -92,7 +92,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if _, facturX := facturxVariants[*profile]; pdfaProfiles[*profile] != "" || facturX {
 		warnEncryptionDroppedByPDFA(stderr, false, r)
 	} else {
-		warnEncryptionDropped(stderr, false, r)
+		warnEncryptionDropped(stderr, r)
 	}
 
 	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)

@@ -164,7 +164,7 @@ func decode(ctx context.Context, data []byte, p Params, block bool, maxRows int)
 	if block && p.K < 0 {
 		// EOFB is two end-of-line codes (T.6, 2.4.3).
 		for range 2 {
-			if eol, err := d.r.endOfLine(); err != nil || !eol {
+			if !d.r.endOfLine() {
 				break
 			}
 		}
@@ -188,10 +188,7 @@ func (d *decoder) row() (bool, error) {
 	if d.p.EncodedByteAlign {
 		d.r.align()
 	}
-	eol, err := d.r.endOfLine()
-	if err != nil {
-		return false, err
-	}
+	eol := d.r.endOfLine()
 	twoD := d.p.K < 0
 	if d.p.K > 0 {
 		tag, ok := d.r.bit()
@@ -203,14 +200,15 @@ func (d *decoder) row() (bool, error) {
 	// A second end-of-line where a row should begin is the end-of-block
 	// pattern: RTC (T.4, 4.1.4) or EOFB (T.6, 2.4.3).
 	if eol || d.p.K < 0 {
-		if end, err := d.r.endOfLine(); err != nil || end {
-			return false, err
+		if d.r.endOfLine() {
+			return false, nil
 		}
 	}
 	if !d.r.more() {
 		return false, nil
 	}
 	d.ref, d.cur = d.cur, d.ref[:0]
+	var err error
 	if twoD {
 		err = d.row2D()
 	} else {

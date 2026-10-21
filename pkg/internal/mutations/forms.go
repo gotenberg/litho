@@ -1379,10 +1379,7 @@ func textFieldAppearance(
 		return ast.PdfStream{}, false
 	}
 
-	fontRes, resourceName, ok := appearanceFont(ctx, doc, alloc, catalogDict, fontName)
-	if !ok {
-		return ast.PdfStream{}, false
-	}
+	fontRes, resourceName := appearanceFont(ctx, doc, alloc, catalogDict, fontName)
 
 	// Sit the baseline so the line is vertically centred in the box, with a
 	// small left inset so the glyphs do not touch the border.
@@ -1463,13 +1460,13 @@ func appearanceFont(
 	alloc *writer.ObjAllocator,
 	catalogDict ast.PdfDict,
 	fontName string,
-) (ast.PdfObject, string, bool) {
+) (ast.PdfObject, string) {
 	if fontName != "" {
 		if acroForm, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["AcroForm"]); err == nil && acroForm != nil {
 			if dr, err := resolveDictAllocFirst(ctx, alloc, doc, acroForm["DR"]); err == nil && dr != nil {
 				if fonts, err := resolveDictAllocFirst(ctx, alloc, doc, dr["Font"]); err == nil && fonts != nil {
 					if fontObj, ok := fonts[ast.PdfName(fontName)]; ok {
-						return fontObj, fontName, true
+						return fontObj, fontName
 					}
 				}
 			}
@@ -1482,7 +1479,7 @@ func appearanceFont(
 		"BaseFont": ast.PdfName("Helvetica"),
 		"Encoding": ast.PdfName("WinAnsiEncoding"),
 	})
-	return ref, fallbackFontName, true
+	return ref, fallbackFontName
 }
 
 // parseDefaultAppearance reads the font name, size and colour operators out of

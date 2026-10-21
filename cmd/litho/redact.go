@@ -151,7 +151,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	// Redaction is the case that matters most: the caller proved they hold the
 	// password, removed confidential content, and got back a document anyone
 	// can open. This command has no encryption flag, so it is never encrypting.
-	warnEncryptionDropped(stderr, false, r)
+	warnEncryptionDropped(stderr, r)
 
 	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)

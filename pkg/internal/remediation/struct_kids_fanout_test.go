@@ -56,7 +56,7 @@ func TestCollectPageRefs_SharedKidsArrayFanOut(t *testing.T) {
 		"[3 0 R << /Type /Pages /Kids 4 0 R /Count 1 >> << /Type /Pages /Kids 4 0 R /Count 1 >>]",
 	))
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 2}, &pages, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 2}, &pages, make(map[int]bool))
 	if ctx.Err() != nil {
 		t.Fatal("the walk did not end before the deadline")
 	}

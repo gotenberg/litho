@@ -122,10 +122,7 @@ func Decode(ctx context.Context, data []byte, colorTransform, statedHeight int, 
 	if !d.sawScan {
 		return nil, 0, 0, 0, fmt.Errorf("%w: no scan", ErrMalformed)
 	}
-	out, err := d.pixels(colorTransform)
-	if err != nil {
-		return nil, 0, 0, 0, err
-	}
+	out := d.pixels(colorTransform)
 	return out, len(d.comps), d.width, d.height, nil
 }
 
@@ -717,7 +714,7 @@ func idct(coef []int16, q *[64]int32, out *[64]byte) {
 
 // pixels reconstructs the samples of every component and assembles the
 // output rows.
-func (d *decoder) pixels(colorTransform int) ([]byte, error) {
+func (d *decoder) pixels(colorTransform int) []byte {
 	planes := make([][]byte, len(d.comps))
 	var block [64]byte
 	for ci, c := range d.comps {
@@ -762,7 +759,7 @@ func (d *decoder) pixels(colorTransform int) ([]byte, error) {
 			}
 		}
 	}
-	return out, nil
+	return out
 }
 
 // transform reports whether the colour components are YCbCr or YCCK: as an

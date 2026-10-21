@@ -136,7 +136,7 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	}
 
 	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool))
 
 	var fixes []string
 	for i, pe := range pages {
@@ -214,8 +214,8 @@ const maxPageTreeDepth = 100
 
 // collectPageRefs recursively collects page dicts with their indirect refs,
 // each linked to the /Pages node whose /Kids listed it.
-func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, pages *[]annotPageEntry, seen map[int]bool, depth int) {
-	collectPageTree(ctx, alloc, doc, obj, nil, 0, pages, seen, depth)
+func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, pages *[]annotPageEntry, seen map[int]bool) {
+	collectPageTree(ctx, alloc, doc, obj, nil, 0, pages, seen, 0)
 }
 
 // collectPageTree is [collectPageRefs] for obj listed at index kid in the
