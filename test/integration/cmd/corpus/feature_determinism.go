@@ -76,6 +76,8 @@ type determinismOp struct {
 //     split-reconstruct cell nondeterministic, or both, in 10 of 10 runs.
 //   - litho: planted, a serializer that writes dictionary keys unsorted counts
 //     787 of the 966 cells nondeterministic.
+//   - litho (217 files): flatten-transparency writes the same bytes three
+//     times over on every file, the 20 it flattens included.
 //   - litho filestruct_1b: planted, the random trailer /ID remediation drew
 //     before it derived one counts its two remediation cells, the only ones
 //     it moves.
@@ -113,6 +115,9 @@ func newDeterminismFeature() *determinismFeature {
 		}},
 		determinismOp{name: "split-reconstruct", runs: determinismBookmarkRuns, run: func(ctx context.Context, data []byte, _ string) ([]byte, error) {
 			return splitReconstructForDeterminism(ctx, data)
+		}},
+		determinismOp{name: "flatten-transparency", runs: determinismRuns, run: func(ctx context.Context, data []byte, _ string) ([]byte, error) {
+			return flattenForDeterminism(ctx, data)
 		}},
 	)
 	return &determinismFeature{ops: ops, assigned: make(map[string]int)}
@@ -371,6 +376,28 @@ func generateBookmarksForDeterminism(ctx context.Context, data []byte) ([]byte, 
 	w.GenerateBookmarks(determinismBookmarkOptions(), pdf.BookmarkReplace)
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
+		return nil, fmt.Errorf("writing: %w", err)
+	}
+	return out.Bytes(), nil
+}
+
+// flattenForDeterminism flattens the transparency of data with
+// [pdf.Writer.FlattenTransparency] at its default resolution and returns the
+// bytes written. A document with nothing to flatten is written whole all the
+// same, as the flatten-transparency command writes it.
+func flattenForDeterminism(ctx context.Context, data []byte) ([]byte, error) {
+	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, fmt.Errorf("opening: %w", err)
+	}
+	defer r.Close()
+	w := pdf.NewWriter(r)
+	defer w.Close()
+	if _, err := w.FlattenTransparency(ctx); err != nil {
+		return nil, fmt.Errorf("flattening: %w", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out, pdf.WithFullRewrite()); err != nil {
 		return nil, fmt.Errorf("writing: %w", err)
 	}
 	return out.Bytes(), nil

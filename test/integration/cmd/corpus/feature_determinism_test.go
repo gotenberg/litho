@@ -106,7 +106,7 @@ func TestDeterminismFeature_LeavesOutTheRandomMutations(t *testing.T) {
 		names = append(names, op.name)
 	}
 	got := strings.Join(names, ",")
-	for _, want := range []string{"remediation", "remediation-aggressive", "mutate-stamp", "mutate-pages", "mutate-autotag", "mutate-flatten", "mutate-redact", "generate-bookmarks", "split-reconstruct"} {
+	for _, want := range []string{"remediation", "remediation-aggressive", "mutate-stamp", "mutate-pages", "mutate-autotag", "mutate-flatten", "mutate-redact", "generate-bookmarks", "split-reconstruct", "flatten-transparency"} {
 		if !strings.Contains(","+got+",", ","+want+",") {
 			t.Errorf("operations %s lack %s", got, want)
 		}
@@ -119,18 +119,18 @@ func TestDeterminismFeature_LeavesOutTheRandomMutations(t *testing.T) {
 }
 
 // TestDeterminismFeature_BookmarkOperationsComeLast pins that the bookmark
-// generations take the fixture slots after every other operation, so adding
-// them moved no fixture's assignment, and that every operation runs at least
-// twice.
+// generations take the fixture slots after every operation before them, and
+// transparency flattening the slot after theirs, so adding each moved no
+// fixture's assignment, and that every operation runs at least twice.
 func TestDeterminismFeature_BookmarkOperationsComeLast(t *testing.T) {
 	t.Parallel()
 
 	ops := newDeterminismFeature().ops
-	if len(ops) < 2 {
-		t.Fatalf("%d operations, want at least the two bookmark ones", len(ops))
+	if len(ops) < 3 {
+		t.Fatalf("%d operations, want at least the two bookmark ones and flattening", len(ops))
 	}
-	if got := ops[len(ops)-2].name + "," + ops[len(ops)-1].name; got != "generate-bookmarks,split-reconstruct" {
-		t.Errorf("last operations %s, want generate-bookmarks,split-reconstruct", got)
+	if got := ops[len(ops)-3].name + "," + ops[len(ops)-2].name + "," + ops[len(ops)-1].name; got != "generate-bookmarks,split-reconstruct,flatten-transparency" {
+		t.Errorf("last operations %s, want generate-bookmarks,split-reconstruct,flatten-transparency", got)
 	}
 	for _, op := range ops {
 		if op.runs < 2 {
