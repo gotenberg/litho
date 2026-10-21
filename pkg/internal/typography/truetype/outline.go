@@ -147,6 +147,17 @@ func CFFTable(data []byte) ([]byte, error) {
 	return TableData(data, records, "CFF ")
 }
 
+// CFF2Table returns the 'CFF2' table of an OpenType program whose outlines
+// are CFF2 (OpenType specification, CFF2 table), for cff.ParseCFF2 to read. It
+// fails on a program that carries no such table.
+func CFF2Table(data []byte) ([]byte, error) {
+	records, err := ParseTableDirectory(data)
+	if err != nil {
+		return nil, err
+	}
+	return TableData(data, records, "CFF2")
+}
+
 // NumGlyphs returns the number of glyphs the program holds: the maxp count,
 // lowered to the offsets loca holds.
 func (f *Font) NumGlyphs() int {

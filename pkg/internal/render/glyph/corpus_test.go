@@ -191,3 +191,40 @@ func TestCacheResource(t *testing.T) {
 		t.Error("an undefined resource name loaded a font")
 	}
 }
+
+// TestCorpusCFF2 pins fontcff2_2b.pdf's five fonts over an OpenType program
+// with CFF2 outlines: each draws the program's glyphs A and B, rectangles 700
+// and 500 units tall, as poppler does, not a placeholder.
+func TestCorpusCFF2(t *testing.T) {
+	t.Parallel()
+	doc := fixture(t, "fontcff2_2b.pdf")
+	cache := NewCache(doc, Options{})
+	for _, tt := range []struct {
+		num  int
+		a, b []byte
+	}{
+		{5, []byte{0x41}, []byte{0x42}},
+		{6, []byte{0, 1}, []byte{0, 2}},
+		{7, []byte{0x41}, []byte{0x42}},
+		{8, []byte{0, 1}, []byte{0, 2}},
+		{9, []byte{0x41}, []byte{0x42}},
+	} {
+		f := fixtureFont(t, cache, tt.num)
+		if p, ok := f.prog.(*cffProgram); !ok || p.hmtx == nil {
+			t.Fatalf("font %d draws from %T, want a CFF2 program", tt.num, f.prog)
+		}
+		for _, c := range []struct {
+			code   []byte
+			height float64
+		}{{tt.a, 700}, {tt.b, 500}} {
+			g := glyphOf(t, f, c.code...)
+			if g.Source != SourceEmbedded || g.Notdef || g.Unreadable {
+				t.Errorf("font %d code % X: source %v, notdef %v, unreadable %v", tt.num, c.code, g.Source, g.Notdef, g.Unreadable)
+				continue
+			}
+			if b, ok := g.Outline.Bounds(); !ok || b.Max.Y-b.Min.Y != c.height {
+				t.Errorf("font %d code % X: bounds %v, want %v tall", tt.num, c.code, b, c.height)
+			}
+		}
+	}
+}

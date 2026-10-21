@@ -3,6 +3,7 @@ package glyph
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -102,12 +103,16 @@ func parseProgram(ctx context.Context, data []byte) (program, error) {
 
 // parseSfnt reads a TrueType or OpenType program: the glyf outlines of a
 // TrueType program, or the CFF table of an OpenType one with CFF outlines
-// (OpenType specification, CFF table), and in both cases the cmap and post
-// tables a simple font's codes are looked up in (ISO 32000-1, 9.6.6.4).
+// (OpenType specification, CFF table) or its CFF2 table (CFF2 table), and in
+// all cases the cmap and post tables a simple font's codes are looked up in
+// (ISO 32000-1, 9.6.6.4).
 func parseSfnt(ctx context.Context, data []byte) (program, error) {
 	tables := readSfntTables(ctx, data)
 	if bytes.HasPrefix(data, []byte("OTTO")) {
 		table, err := truetype.CFFTable(data)
+		if errors.Is(err, truetype.ErrTableNotFound) {
+			return parseCFF2Sfnt(data, tables)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrBadProgram, err)
 		}
@@ -162,12 +167,16 @@ func (p *trueTypeProgram) sfnt() *sfntTables { return p.tables }
 
 func (p *trueTypeProgram) size() int { return p.n }
 
-// cffProgram is a bare CFF program or the CFF table of an OpenType one.
+// cffProgram is a bare CFF program or the CFF or CFF2 table of an OpenType
+// one.
 type cffProgram struct {
 	font *cff.Font
 	// tables are the OpenType program's cmap and post, nil for a bare CFF.
 	tables *sfntTables
-	n      int
+	// hmtx holds a CFF2 program's advances, which its charstrings do not
+	// state; nil for a CFF program, whose charstrings do.
+	hmtx *truetype.HMetrics
+	n    int
 }
 
 func (p *cffProgram) byName(name string) (glyphRef, bool) {
@@ -209,7 +218,11 @@ func (p *cffProgram) draw(ctx context.Context, ref glyphRef) (geom.Path, geom.Ma
 	if err != nil {
 		return geom.Path{}, m, 0, fmt.Errorf("drawing CFF glyph %d: %w", ref.gid, err)
 	}
-	return g.Path, m, m.ApplyVector(geom.Point{X: g.Advance}).X, nil
+	advance := g.Advance
+	if p.hmtx != nil {
+		advance = p.hmtx.Advance(ref.gid)
+	}
+	return g.Path, m, m.ApplyVector(geom.Point{X: advance}).X, nil
 }
 
 func (p *cffProgram) sfnt() *sfntTables { return p.tables }
