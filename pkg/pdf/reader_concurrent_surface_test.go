@@ -120,6 +120,7 @@ func TestConcurrentPageReadersSurface(t *testing.T) {
 	readers := []func(context.Context, int){
 		func(c context.Context, p int) { _, _ = r.Extract3DModels(c, p) },
 		func(c context.Context, p int) { _, _ = r.ExtractAnnotations(c, p) },
+		func(c context.Context, p int) { _, _ = r.ExtractColorSpaces(c, p) },
 		func(c context.Context, p int) { _, _ = r.ExtractGeoData(c, p) },
 		func(c context.Context, p int) { _, _ = r.ExtractImages(c, p) },
 		func(c context.Context, p int) { _, _ = r.ExtractLines(c, p) },

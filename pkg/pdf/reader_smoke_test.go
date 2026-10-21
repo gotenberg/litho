@@ -113,6 +113,9 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 		if _, err := r.ExtractRedactedText(ctx, p); err != nil {
 			t.Errorf("ExtractRedactedText(%d): %v", p, err)
 		}
+		if _, err := r.ExtractColorSpaces(ctx, p); err != nil {
+			t.Errorf("ExtractColorSpaces(%d): %v", p, err)
+		}
 	}
 
 	// Full-document text extraction.
