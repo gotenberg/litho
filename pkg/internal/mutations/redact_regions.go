@@ -157,6 +157,12 @@ type RedactReport struct {
 	// file. Runs that decode to nothing are dropped for the same reason an
 	// empty token is refused outright.
 	RemovedText []string
+	// RemovedGlyphBoxes holds, in user space, the box each removed glyph
+	// paints, in the order the page drew them: every glyph, whatever its
+	// character, a space among them, and one with no character. A glyph
+	// counts when this box meets a region, so its ink can reach past the
+	// region, and these are where the page changed for it.
+	RemovedGlyphBoxes [][4]float64
 	// BlankedImages names the images whose covered samples were overwritten:
 	// an image XObject by its resource name, an inline image as
 	// [graphics.InlineImageName].
@@ -381,6 +387,9 @@ func redactPageRegions(
 		// marked content can go on both sides.
 		picked     []bool
 		glyphMCIDs []int
+		// boxes runs parallel to glyphs too: the box each glyph paints
+		// ([glyphBox]).
+		boxes [][4]float64
 		// fontRef is the font every glyph of this operator was drawn with: one
 		// show-text operator paints with whatever Tf last selected. It holds
 		// typography.FontUnattributable until a glyph names a font, so an
@@ -416,6 +425,7 @@ func redactPageRegions(
 		}
 		c.glyphs = append(c.glyphs, el.Text)
 		c.picked = append(c.picked, selected)
+		c.boxes = append(c.boxes, glyphBox(box))
 		c.glyphMCIDs = append(c.glyphMCIDs, el.MCID)
 		if el.MCID >= 0 {
 			c.mcids = append(c.mcids, el.MCID)
@@ -472,8 +482,14 @@ func redactPageRegions(
 				fontRemoved[c.fontRef] += c.inside
 			}
 			report.RemovedText = append(report.RemovedText, split.removedText...)
+			for k, b := range c.boxes {
+				if c.picked[k] {
+					report.RemovedGlyphBoxes = append(report.RemovedGlyphBoxes, b)
+				}
+			}
 			continue
 		}
+		report.RemovedGlyphBoxes = append(report.RemovedGlyphBoxes, tally[origin].boxes...)
 		spans = append(spans, ranges[origin])
 		// Counted here rather than from the selected set, so it is reached only
 		// after the partial-coverage refusal above: an operator that stays is
@@ -837,6 +853,13 @@ func stagedBox(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 type boxUnion struct {
 	x0, y0, x1, y1 float64
 	set            bool
+}
+
+// glyphBox returns the rectangle zone covers, the box selection tests a glyph
+// by ([heuristics.ElementZone]).
+func glyphBox(zone heuristics.Zone) [4]float64 {
+	minX, minY, maxX, maxY := heuristics.ZoneBounds(zone)
+	return [4]float64{minX, minY, maxX, maxY}
 }
 
 // add widens the union by the rectangle box's first four entries describe, a

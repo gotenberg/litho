@@ -76,6 +76,12 @@ type RedactReport struct {
 	// string per operator, in the order the pages drew them. An operator split
 	// at its glyphs gives one string per run of removed glyphs.
 	RemovedText []string
+	// RemovedGlyphBoxes maps a 1-based page number to the box, in user space,
+	// each glyph removed from it paints, in the order the page drew them:
+	// every glyph, whatever its character, a space among them. A glyph is
+	// removed when this box meets a region, so its ink may reach past the
+	// region, and these boxes are where the page changed for it.
+	RemovedGlyphBoxes map[int][][4]float64
 	// BlankedImages names the images whose covered samples were overwritten:
 	// an image XObject by its resource name, an inline image as "(inline)".
 	BlankedImages []string
@@ -634,6 +640,12 @@ func groupRedactRegions(regions []RedactRegion, pageCount int) (map[int][][4]flo
 // mergePageRedaction folds one page's result into the document-wide report.
 func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactReport) {
 	out.RemovedText = append(out.RemovedText, in.RemovedText...)
+	if len(in.RemovedGlyphBoxes) > 0 {
+		if out.RemovedGlyphBoxes == nil {
+			out.RemovedGlyphBoxes = make(map[int][][4]float64)
+		}
+		out.RemovedGlyphBoxes[pageNum] = append(out.RemovedGlyphBoxes[pageNum], in.RemovedGlyphBoxes...)
+	}
 	out.BlankedImages = append(out.BlankedImages, in.BlankedImages...)
 	out.RemovedPaths += in.RemovedPaths
 	out.ClippedPaths += in.ClippedPaths

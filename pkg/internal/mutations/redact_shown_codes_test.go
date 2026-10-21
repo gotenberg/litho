@@ -140,3 +140,25 @@ func TestRedactPageRegions_PlacesUnmappedCodes(t *testing.T) {
 		t.Errorf("code 0000, outside the region, is gone: %q", got)
 	}
 }
+
+// TestRedactPageRegions_ReportsEveryRemovedGlyphBox pins that the report holds
+// the box of every glyph removed, the space among them, which extraction reads
+// as no text and a caller checking the page would otherwise not see go.
+func TestRedactPageRegions_ReportsEveryRemovedGlyphBox(t *testing.T) {
+	doc, page := shownCodesFixture(t, "BT /F1 12 Tf 100 700 Td (A B) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET")
+	report, err := RedactPageRegions(context.Background(), writer.NewObjAllocator(20), doc, page, [][4]float64{{0, 690, 612, 730}})
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+	if len(report.RemovedGlyphBoxes) != 3 {
+		t.Fatalf("RemovedGlyphBoxes = %v, want the boxes of A, the space and B", report.RemovedGlyphBoxes)
+	}
+	for i, b := range report.RemovedGlyphBoxes {
+		if b[0] < 100 || b[2] <= b[0] || b[1] > 700 || b[3] <= 700 {
+			t.Errorf("box %d = %v, want one on the line at 700 from x 100", i, b)
+		}
+	}
+	if s := report.RemovedGlyphBoxes[1]; s[0] < report.RemovedGlyphBoxes[0][2]-0.01 {
+		t.Errorf("the space's box %v starts before A's ends at %v", s, report.RemovedGlyphBoxes[0][2])
+	}
+}
