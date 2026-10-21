@@ -1934,6 +1934,18 @@ colours, so the remediated outputs keep `6.2.4.2/1` (`6.2.3.2/1` at PDF/A-1) on
 litho and report nothing on veraPDF: the remediation features' `disagreement`
 reads 11 in each mode, one per PDF/A level.
 
+**DeviceCMYK painted through the output intent's profile.** The renderer
+converts colour as the image decoder does: an uncalibrated DeviceCMYK colour
+goes through the destination profile of the page's or the document's output
+intent (ISO 32000-2, 14.11.5), else litho's built-in CMYK printer profile.
+poppler 26.09.0 converts DeviceCMYK with its own fixed formula whatever the
+intents say, so the `render` cell mismatches `pdfxonly_2b.pdf` and
+`iccbadcmyk_1b.pdf`: their intents' profiles map every CMYK colour to a
+neutral grey (the fixtures' `A2B0` tables keep a and b at 128), which litho
+paints (144 and 184 grey) and poppler does not (244 114 22 and 97 155 205 for
+the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`). `iccbadcmyk_2b.pdf` paints
+the same grey and mismatched before the renderer converted colour too.
+
 The mechanism is veraPDF's object identity, not a rule. `BaseValidator` (core
 1.30.2, `checkRequired`, line 328) pushes a model object onto its work stack
 only when its `getID()` is not yet in `idSet`, and `GFPDObject` (validation
