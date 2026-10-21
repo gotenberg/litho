@@ -272,6 +272,7 @@ one deliberately rather than diffing it against a fresh build.
 | `flattentext_2b.pdf`   | PDF/A-2b     | Transparency over, under and on text, which flattening keeps     |
 | `blendspace_2b.pdf`    | PDF/A-2b     | Blend modes, knockout and a soft mask in CMYK and grey groups    |
 | `flattenannots_2b.pdf` | PDF/A-2b     | Transparent annotations, which flattening draws into the page    |
+| `flattenrefuse_1b.pdf` | PDF/A-1b     | Transparency on a page flattening refuses, beside one it takes   |
 
 ### Must-not-fire controls
 
@@ -620,6 +621,7 @@ are covered under [Known divergences](#known-divergences).
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
 | `filledrules_ua1.pdf`  | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `flattenannots_2b.pdf` | 12   | 9    | 8    | 5    | 6    | 9    | 6    | 7    | 9   | 9    | 10   | 11   | 8    |
+| `flattenrefuse_1b.pdf` | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 6    | 6    |
 | `flattentext_2b.pdf`   | 11   | 8    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 7    | 6    |
 | `fnlimits_1b.pdf`      | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 5   | 5    | 6    | 6    | 6    |
 | `fontcff2_2b.pdf`      | 8    | 5    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
@@ -8818,6 +8820,37 @@ fails `6.2.4.3/2`, DeviceGray `6.2.4.3/4`, and every page holding
 transparency `6.2.10/2` at PDF/A-2b; the Square with no appearance fails
 `6.3.3/1` and the hidden one `6.3.2/2`. veraPDF 1.30.2 and litho report the
 same rule set in all thirteen cells.
+
+### `flattenrefuse_1b.pdf`
+
+A PDF/A-1 remediation flattens the transparency ISO 19005-1, 6.4 forbids, page
+by page when a page refuses, and sets opaque what flattening leaves. Every page
+the corpora flatten fits the render pixel budget at some resolution, so no
+page reached the refusal. This file holds one beside a page that flattens:
+
+| Page | Size (pt)   | Draws                                                             |
+| ---- | ----------- | ----------------------------------------------------------------- |
+| 1    | 612 x 792   | a red square at ca 0.5 over a blue band                           |
+| 2    | 2000 x 2000 | the same, the square inside eight nested isolated knockout groups |
+
+Flattening composites page 2 with two page-sized planes for each open isolated
+knockout group, which no renderer can elide, and eight of them pass the 50
+million pixel render budget at every resolution it tries, down to 72 dpi:
+`litho flatten-transparency` refuses the file. Its PDF/A-1a and PDF/A-1b
+remediations, default and aggressive, flatten page 1 and set page 2's
+transparency opaque, and veraPDF 1.30.2 and litho report nothing on the
+outputs. Page 1 of the output draws like its source; page 2 draws its square
+opaque, as the opaque normalization does. Each group holds one element,
+composited over the group's transparent initial backdrop and the result over
+the page (ISO 32000-1, 11.4.6 and 11.4.7), so a renderer drawing page 2
+without the groups draws the same page: litho at 72 dpi paints the groups past
+its budget into the page, and poppler 26.09.0 draws both pages as litho does.
+
+The file declares no OutputIntent, so DeviceRGB fails `6.2.3.3/1` at PDF/A-1b
+and `6.2.4.3/2` at the later parts; the groups fail `6.4/3` and the constant
+alpha `6.4/6` at PDF/A-1b, and `6.2.10/2` at PDF/A-2b, where the pages state no
+`/Group`. veraPDF 1.30.2 and litho report the same rule set in all thirteen
+cells.
 
 ## Scope
 
