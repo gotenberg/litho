@@ -107,6 +107,14 @@ var costMetrics = map[string]bool{
 	metricOutOfTarget:   true,
 	metricInkMoved:      true,
 	metricColourDrift:   true,
+	// Its JPEG run counts the same, and the outputs larger than the lossless
+	// run's; jpeg_files and jpeg_pages_checked, its coverage, stay gated as
+	// good-when-higher.
+	metricJPEGFailed:      true,
+	metricJPEGGrew:        true,
+	metricJPEGOutOfTarget: true,
+	metricJPEGInkMoved:    true,
+	metricJPEGColourDrift: true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any
@@ -147,6 +155,9 @@ var uncomparedMetrics = map[string]bool{
 	// pages_checked, the coverage, stays gated as good-when-higher.
 	metricRecolorRefused:   true,
 	metricGroupOutOfTarget: true,
+	// The bytes the JPEG run saves move with any encoder change, which
+	// jpeg_grew bounds from the side that matters.
+	metricJPEGSavedKiB: true,
 }
 
 // defaultBaselinePath returns the canonical baseline location. The

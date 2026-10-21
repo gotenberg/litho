@@ -84,7 +84,37 @@ const (
 	// metricColourDrift counts the pages whose ink changed colour past
 	// [recolorDeltaE].
 	metricColourDrift = "colour_drift"
+
+	// metricJPEGFiles counts the PDFs whose JPEG run, under
+	// [pdf.WithJPEGQuality] at [recolorJPEGQuality], wrote other bytes than
+	// the lossless run: the coverage of the option.
+	metricJPEGFiles = "jpeg_files"
+	// metricJPEGChecked counts the pages the JPEG run's checks ran on.
+	metricJPEGChecked = "jpeg_pages_checked"
+	// metricJPEGFailed counts the PDFs whose JPEG run failed where the
+	// lossless run did not: a conversion, write or reopen error, a qpdf
+	// class the input does not have, or a page that does not render.
+	metricJPEGFailed = "jpeg_failed"
+	// metricJPEGGrew counts the PDFs whose JPEG output is larger than the
+	// lossless output, which the option promises never happens.
+	metricJPEGGrew = "jpeg_grew"
+	// metricJPEGOutOfTarget, metricJPEGInkMoved and metricJPEGColourDrift
+	// are out_of_target, ink_moved and colour_drift for the JPEG output,
+	// its rendering checked against the lossless output's.
+	metricJPEGOutOfTarget = "jpeg_out_of_target"
+	metricJPEGInkMoved    = "jpeg_ink_moved"
+	metricJPEGColourDrift = "jpeg_colour_drift"
+	// metricJPEGSavedKiB sums, in KiB, what the JPEG outputs save over the
+	// lossless ones: an inventory.
+	metricJPEGSavedKiB = "jpeg_saved_kib"
 )
+
+// recolorJPEGQuality is the quality of the cell's JPEG run: libjpeg's
+// default (75) and the quality most producers write at sit below it, and
+// [pdf.WithJPEGQuality] subsamples the chroma below 90, so the run exercises
+// the subsampled encoder at the setting a caller shrinking a converted
+// document picks first.
+const recolorJPEGQuality = 85
 
 // recolorFeature converts each PDF to CMYK with [pdf.Writer.ConvertColors]
 // and [pdf.CMYKColorTarget], the built-in CC0-derived printer profile of the
@@ -106,6 +136,20 @@ const (
 // 32000-1, 11.6.6) in another family counts in group_out_of_target, an
 // inventory, since the page paints no colour in it.
 //
+// A PDF whose conversion converted an image, and whose bytes name the
+// DCTDecode filter or its inline abbreviation DCT, is converted a second time
+// with [pdf.WithJPEGQuality] at [recolorJPEGQuality], which re-encodes the
+// converted DCTDecode images as JPEG. The byte test skips the PDFs the option
+// cannot change, at the cost of missing an inline JPEG inside a compressed
+// content stream. When that writes other bytes than the
+// lossless run (jpeg_files), the JPEG output must open and pass qpdf like the
+// lossless one (jpeg_failed), be no larger (jpeg_grew), paint in the target
+// (jpeg_out_of_target), and render with the ink and colours of the lossless
+// output, by the same bars (jpeg_ink_moved, jpeg_colour_drift). The JPEG
+// output is checked against the lossless output, not the source, so the
+// checks measure what the lossy encoding changes, and a page the lossless
+// run fails does not fail twice. A failed JPEG check fails the PDF.
+//
 // The PDFs are those the render goldens cover, as for redact-render, whose
 // fonts serve both renderings so an unembedded font draws alike.
 //
@@ -126,10 +170,19 @@ const (
 //     a GTS_PDFX intent over another CMYK profile, through which the renderer
 //     reads the converted DeviceCMYK, 80.6 and 83.5 ΔE*ab from the source on
 //     the last two; with pdf.WithReplacedOutputIntents all four match.
+//   - pdfjs, govdocs: the JPEG run re-encodes 5 and 24 files, every one
+//     passing and none larger, 2264 and 22269 KiB saved; 1 and 6 more name
+//     DCTDecode and write the lossless bytes. Without the byte test the run
+//     also converts 15 and 8 files naming no JPEG filter, and changes none.
+//   - litho: no fixture converts a JPEG (undecodable_2b's is refused), so
+//     the run re-encodes nothing there.
 type recolorFeature struct {
-	// convert runs the conversion; tests replace it to plant a defect.
-	convert func(ctx context.Context, w *pdf.Writer) (*pdf.ColorReport, error)
+	// convert runs the conversion with the options given; tests replace it
+	// to plant a defect.
+	convert func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error)
 	qpdf    string
+	// jpegQuality is the JPEG run's quality, 0 for no JPEG run.
+	jpegQuality int
 
 	mu      sync.RWMutex
 	sampled map[string]bool
@@ -137,9 +190,12 @@ type recolorFeature struct {
 }
 
 func newRecolorFeature() *recolorFeature {
-	f := &recolorFeature{convert: func(ctx context.Context, w *pdf.Writer) (*pdf.ColorReport, error) {
-		return w.ConvertColors(ctx, pdf.CMYKColorTarget())
-	}}
+	f := &recolorFeature{
+		convert: func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error) {
+			return w.ConvertColors(ctx, pdf.CMYKColorTarget(), opts...)
+		},
+		jpegQuality: recolorJPEGQuality,
+	}
 	if p, err := exec.LookPath("qpdf"); err == nil {
 		f.qpdf = p
 	}
@@ -184,6 +240,30 @@ type recolorOutput struct {
 	QPDF         []string          `json:"qpdf,omitempty"`
 	Report       *pdf.ColorReport  `json:"report,omitempty"`
 	Pages        []recolorPageEval `json:"pages,omitempty"`
+	// JPEG is the JPEG run, nil when it did not run.
+	JPEG *recolorJPEGRun `json:"jpeg,omitempty"`
+}
+
+// recolorJPEGRun is the JPEG run's output.
+type recolorJPEGRun struct {
+	// Error says why the run failed; Size and LosslessSize are the bytes of
+	// its output and the lossless run's.
+	Error        string `json:"error,omitempty"`
+	Size         int    `json:"size"`
+	LosslessSize int    `json:"lossless_size"`
+	// Reencoded reports an output other than the lossless run's; the page
+	// checks run only then.
+	Reencoded bool              `json:"reencoded,omitempty"`
+	QPDF      []string          `json:"qpdf,omitempty"`
+	Pages     []recolorPageEval `json:"pages,omitempty"`
+}
+
+// failed reports whether the run fails a check.
+func (j *recolorJPEGRun) failed() bool {
+	if j.Error != "" || len(j.QPDF) > 0 || j.Size > j.LosslessSize {
+		return true
+	}
+	return slices.ContainsFunc(j.Pages, recolorPageEval.failed)
 }
 
 // recolorPageEval is one page's checks.
@@ -279,17 +359,57 @@ func (f *recolorFeature) run(ctx context.Context, pdfPath string) recolorOutput 
 	if fonts != nil {
 		opts = append(opts, fonts)
 	}
+	renders := make([]image.Image, 0, min(pages, renderMaxPages))
 	for page := 1; page <= min(pages, renderMaxPages); page++ {
-		out.Pages = append(out.Pages, recolorCheckPage(ctx, src, after, page, opts))
+		eval, rendered := recolorCheckPage(ctx, src, after, page, opts)
+		out.Pages = append(out.Pages, eval)
+		renders = append(renders, rendered)
+	}
+	if f.jpegQuality > 0 && report.ConvertedImages > 0 && bytes.Contains(input, []byte("/DCT")) {
+		out.JPEG = f.runJPEG(ctx, src, input, output, renders, opts)
 	}
 	return out
 }
 
-// convertOnce converts src on a Writer of its own and writes the result.
-func (f *recolorFeature) convertOnce(ctx context.Context, src *pdf.Reader) ([]byte, *pdf.ColorReport, error) {
+// runJPEG converts src again under [pdf.WithJPEGQuality] and checks the
+// output against the lossless run's, output, whose first pages renders holds
+// (nil for a page that did not render).
+func (f *recolorFeature) runJPEG(ctx context.Context, src *pdf.Reader, input, output []byte, renders []image.Image, opts []pdf.RenderOption) *recolorJPEGRun {
+	run := &recolorJPEGRun{LosslessSize: len(output)}
+	jpegOut, _, err := f.convertOnce(ctx, src, pdf.WithJPEGQuality(f.jpegQuality))
+	if err != nil {
+		run.Error = err.Error()
+		return run
+	}
+	run.Size = len(jpegOut)
+	if bytes.Equal(jpegOut, output) {
+		return run
+	}
+	run.Reencoded = true
+	after, err := pdf.Open(ctx, bytes.NewReader(jpegOut), int64(len(jpegOut)))
+	if err != nil {
+		run.Error = fmt.Sprintf("output does not open: %v", err)
+		return run
+	}
+	defer after.Close()
+	run.QPDF = f.newQPDFKinds(ctx, input, jpegOut)
+	for i, lossless := range renders {
+		page := i + 1
+		eval := recolorSpaceCheck(ctx, src, after, page)
+		if eval.RenderError == "" && lossless != nil {
+			recolorRenderCheck(ctx, lossless, after, page, opts, &eval)
+		}
+		run.Pages = append(run.Pages, eval)
+	}
+	return run
+}
+
+// convertOnce converts src on a Writer of its own, with opts, and writes the
+// result.
+func (f *recolorFeature) convertOnce(ctx context.Context, src *pdf.Reader, opts ...pdf.ColorOption) ([]byte, *pdf.ColorReport, error) {
 	w := pdf.NewWriter(src)
 	defer w.Close()
-	report, err := f.convert(ctx, w)
+	report, err := f.convert(ctx, w, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -325,8 +445,38 @@ func (f *recolorFeature) newQPDFKinds(ctx context.Context, input, output []byte)
 }
 
 // recolorCheckPage runs the colour space check and the two rendering checks
-// on one page.
-func recolorCheckPage(ctx context.Context, src, after *pdf.Reader, page int, opts []pdf.RenderOption) recolorPageEval {
+// on one page, and returns the output's rendering, nil when the page did not
+// render.
+func recolorCheckPage(ctx context.Context, src, after *pdf.Reader, page int, opts []pdf.RenderOption) (recolorPageEval, image.Image) {
+	eval := recolorSpaceCheck(ctx, src, after, page)
+	if eval.RenderError != "" {
+		return eval, nil
+	}
+	before, err := src.RenderPage(ctx, page, opts...)
+	if err != nil {
+		// The source page does not render, so there is nothing to compare:
+		// that is the render cell's to report.
+		return eval, nil
+	}
+	return eval, recolorRenderCheck(ctx, before, after, page, opts, &eval)
+}
+
+// recolorRenderCheck renders the page of after and runs the two rendering
+// checks against before into eval. It returns the rendering, nil when the
+// page did not render.
+func recolorRenderCheck(ctx context.Context, before image.Image, after *pdf.Reader, page int, opts []pdf.RenderOption, eval *recolorPageEval) image.Image {
+	converted, err := after.RenderPage(ctx, page, opts...)
+	if err != nil {
+		eval.RenderError = fmt.Sprintf("render: %v", err)
+		return nil
+	}
+	eval.Pixels, eval.InkMoved, eval.ColourDrift, eval.MaxDeltaE, eval.SizeChanged = compareRecolored(before, converted)
+	return converted
+}
+
+// recolorSpaceCheck lists the colour spaces the page of after paints in
+// outside the target.
+func recolorSpaceCheck(ctx context.Context, src, after *pdf.Reader, page int) recolorPageEval {
 	eval := recolorPageEval{Page: page}
 	uses, err := after.ExtractColorSpaces(ctx, page)
 	if err != nil {
@@ -354,19 +504,6 @@ func recolorCheckPage(ctx context.Context, src, after *pdf.Reader, page int, opt
 		}
 		eval.OutOfTarget = append(eval.OutOfTarget, desc)
 	}
-
-	before, err := src.RenderPage(ctx, page, opts...)
-	if err != nil {
-		// The source page does not render, so there is nothing to compare:
-		// that is the render cell's to report.
-		return eval
-	}
-	converted, err := after.RenderPage(ctx, page, opts...)
-	if err != nil {
-		eval.RenderError = fmt.Sprintf("render: %v", err)
-		return eval
-	}
-	eval.Pixels, eval.InkMoved, eval.ColourDrift, eval.MaxDeltaE, eval.SizeChanged = compareRecolored(before, converted)
 	return eval
 }
 
@@ -548,7 +685,9 @@ func (f *recolorFeature) Compare(fixtureID string, output []byte) Verdict {
 	m := map[string]int{
 		metricRecolorChecked: 0, metricRecolorRefused: 0, metricRecolorFailed: 0, metricReopenFailed: 0,
 		metricQPDFFailed: 0, metricOutOfTarget: 0, metricGroupOutOfTarget: 0, metricInkMoved: 0,
-		metricColourDrift: 0, metricRenderFailed: 0,
+		metricColourDrift: 0, metricRenderFailed: 0, metricJPEGFiles: 0, metricJPEGChecked: 0,
+		metricJPEGFailed: 0, metricJPEGGrew: 0, metricJPEGOutOfTarget: 0, metricJPEGInkMoved: 0,
+		metricJPEGColourDrift: 0, metricJPEGSavedKiB: 0,
 	}
 	switch {
 	case out.Refused:
@@ -586,6 +725,10 @@ func (f *recolorFeature) Compare(fixtureID string, output []byte) Verdict {
 			failed = true
 		}
 	}
+	if out.JPEG != nil {
+		countJPEGRun(out.JPEG, m)
+		failed = failed || out.JPEG.failed()
+	}
 	v := Verdict{FixtureID: fixtureID, Match: !failed, Score: 1, Metrics: m}
 	if failed {
 		v.Score = 0
@@ -598,4 +741,35 @@ func (f *recolorFeature) Compare(fixtureID string, output []byte) Verdict {
 		}
 	}
 	return v
+}
+
+// countJPEGRun adds the JPEG run's checks to m.
+func countJPEGRun(j *recolorJPEGRun, m map[string]int) {
+	if j.Reencoded {
+		m[metricJPEGFiles]++
+	}
+	if j.Size > j.LosslessSize {
+		m[metricJPEGGrew]++
+	} else if j.Error == "" {
+		m[metricJPEGSavedKiB] += (j.LosslessSize - j.Size) / 1024
+	}
+	failed := j.Error != "" || len(j.QPDF) > 0
+	for _, p := range j.Pages {
+		m[metricJPEGChecked]++
+		if len(p.OutOfTarget) > 0 {
+			m[metricJPEGOutOfTarget]++
+		}
+		if p.inkFailed() {
+			m[metricJPEGInkMoved]++
+		}
+		if p.driftFailed() {
+			m[metricJPEGColourDrift]++
+		}
+		if p.RenderError != "" {
+			failed = true
+		}
+	}
+	if failed {
+		m[metricJPEGFailed]++
+	}
 }

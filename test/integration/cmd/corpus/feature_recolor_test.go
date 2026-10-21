@@ -95,7 +95,7 @@ func TestInRecolorTarget(t *testing.T) {
 }
 
 // runRecolor runs the feature on body with convert planted, and scores it.
-func runRecolor(t *testing.T, body string, convert func(context.Context, *pdf.Writer) (*pdf.ColorReport, error)) Verdict {
+func runRecolor(t *testing.T, body string, convert func(context.Context, *pdf.Writer, ...pdf.ColorOption) (*pdf.ColorReport, error)) Verdict {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "in.pdf")
 	if err := os.WriteFile(path, redactKindPDF(body), 0o600); err != nil {
@@ -111,7 +111,7 @@ func runRecolor(t *testing.T, body string, convert func(context.Context, *pdf.Wr
 }
 
 // keepColours plants a conversion that converts nothing and reports success.
-func keepColours(context.Context, *pdf.Writer) (*pdf.ColorReport, error) {
+func keepColours(context.Context, *pdf.Writer, ...pdf.ColorOption) (*pdf.ColorReport, error) {
 	return &pdf.ColorReport{Target: "DeviceCMYK"}, nil
 }
 
@@ -135,7 +135,7 @@ func TestRecolorFeature_Plants(t *testing.T) {
 	if v.Match || v.Metrics[metricOutOfTarget] != 1 {
 		t.Errorf("RGB left in RGB: match %v, out_of_target %d", v.Match, v.Metrics[metricOutOfTarget])
 	}
-	v = runRecolor(t, cmykBody, func(ctx context.Context, w *pdf.Writer) (*pdf.ColorReport, error) {
+	v = runRecolor(t, cmykBody, func(ctx context.Context, w *pdf.Writer, _ ...pdf.ColorOption) (*pdf.ColorReport, error) {
 		if err := w.StampText(pdf.TextStamp{Text: "PLANTED PLANTED", FontSize: 40, Opacity: 1}); err != nil {
 			return nil, err
 		}
@@ -144,13 +144,13 @@ func TestRecolorFeature_Plants(t *testing.T) {
 	if v.Match || v.Metrics[metricInkMoved] != 1 {
 		t.Errorf("stamp: match %v, ink_moved %d; %s", v.Match, v.Metrics[metricInkMoved], mismatchText(v))
 	}
-	v = runRecolor(t, cmykBody, func(context.Context, *pdf.Writer) (*pdf.ColorReport, error) {
+	v = runRecolor(t, cmykBody, func(context.Context, *pdf.Writer, ...pdf.ColorOption) (*pdf.ColorReport, error) {
 		return nil, errors.Join(pdf.ErrColorConversionRefused, errors.New("planted"))
 	})
 	if !v.Skipped || v.Metrics[metricRecolorRefused] != 1 {
 		t.Errorf("refusal: %+v", v)
 	}
-	v = runRecolor(t, cmykBody, func(context.Context, *pdf.Writer) (*pdf.ColorReport, error) {
+	v = runRecolor(t, cmykBody, func(context.Context, *pdf.Writer, ...pdf.ColorOption) (*pdf.ColorReport, error) {
 		return nil, errors.New("planted failure")
 	})
 	if v.Match || v.Metrics[metricRecolorFailed] != 1 {
