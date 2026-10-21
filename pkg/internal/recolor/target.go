@@ -9,10 +9,15 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
-// Converter converts one colour of a source space to the target's
-// components. in holds the source components, out receives the target's,
-// each in [0, 1] unless the source space defines another range (Lab, an
-// ICCBased /Range). A Converter is safe for concurrent use.
+// Converter converts one colour of a source colour space to the target
+// space. in holds the source components in the units colour operators and
+// decoded image samples give them: L* on [0, 100] and a*, b* on /Range for
+// Lab, a /Range for ICCBased, tints on [0, 1] for Separation and DeviceN,
+// [0, 1] otherwise (ISO 32000-1, 8.6, Table 90). out receives the target's
+// components on [0, 1], one per component of the target.
+//
+// A Converter need not be safe for concurrent use: recolouring calls each
+// from one goroutine at a time.
 type Converter interface {
 	Convert(in, out []float64)
 }

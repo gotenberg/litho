@@ -426,8 +426,8 @@ func (s *session) planICC(ctx context.Context, arr ast.PdfArray, depth int) *spa
 	return p
 }
 
-// maxIndexedHival is the largest index of an Indexed space (ISO 32000-1,
-// 8.6.6.3).
+// maxIndexedHival is the largest index of an Indexed space, which ISO
+// 32000-1, 8.6.6.3 allows: the colour table holds at most 256 entries.
 const maxIndexedHival = 255
 
 // planIndexed plans an Indexed space (ISO 32000-1, 8.6.6.3): its indices

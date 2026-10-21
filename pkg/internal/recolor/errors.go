@@ -17,3 +17,9 @@ var (
 	// be sampled into the target within [maxSampledEntries].
 	ErrTooManyColorants = errors.New("too many colorants to resample")
 )
+
+// ErrImageNotConverted reports an image the conversion leaves as it is
+// because it cannot convert it exactly: its samples do not decode, its colour
+// space is not one an image may have, or it carries an entry a re-encoded
+// image would lose. The wrapping error says which.
+var ErrImageNotConverted = errors.New("image not converted")

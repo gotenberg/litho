@@ -1,7 +1,7 @@
 // Package recolor converts the colour of a document to one target colour
 // space: the colour operators of page, form, pattern, annotation appearance
-// and Type 3 glyph content, the colour spaces resources define, and the
-// shadings they paint (ISO 32000-1, 8.6 and 8.7).
+// and Type 3 glyph content, the colour spaces resources define, the shadings
+// they paint, and the samples of images (ISO 32000-1, 8.6, 8.7 and 8.9).
 //
 // Process colour (the device, CIE-based and ICC-based families) converts to
 // the [Target]. Spot colour (Separation and DeviceN) keeps its colorants by
