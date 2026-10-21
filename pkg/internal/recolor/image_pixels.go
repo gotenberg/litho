@@ -8,6 +8,7 @@ import (
 	"image/color"
 	"maps"
 	"math"
+	"math/bits"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -15,12 +16,33 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/imgpaint"
 )
 
-// memoBits sizes the table a pixel conversion remembers colours in: 4096
-// slots. Anti-DoS guard, not spec-mandated: the table is direct-mapped and
-// never grows, so an image of a million distinct colours costs a million
-// conversions and a fixed few hundred kilobytes, while the few thousand
-// colours of a flat illustration all fit.
-const memoBits = 12
+// memoBits caps the table a pixel conversion remembers colours in at 65536
+// slots, and an image of fewer pixels gets a table no larger than its pixel
+// count rounded up to a power of two. Anti-DoS guard, not spec-mandated: the
+// table is direct-mapped and never grows, so an image of a million distinct
+// colours costs a million conversions and at most a megabyte, while the
+// colours of a flat illustration and most of a photograph's fit. It is not
+// the renderer's colour memo (colorconv's memoBits, 4096 slots), which
+// serves the few colours of one page's operators, not an image's pixels.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17289.pdf: its six JPEG 2000 photographs, 1.9 to 7.9
+//     megapixels, hold 30014 to 128930 distinct colours each, of which 4096
+//     slots catch 80 to 87% of the pixels and 65536 slots 95 to 98%.
+const memoBits = 16
+
+// memoMultiplier spreads a pixel's key over the memo's slots: the slot is
+// the top bits of their product, Fibonacci hashing (Knuth, TAOCP vol. 3,
+// 6.4), 2^64 over the golden ratio, so every bit of the key reaches the
+// top bits.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17289.pdf: the FNV-1a step it replaces, a multiplication
+//     by a 40-bit prime, left the blue sample of an RGB key out of the top
+//     bits, and 4096 slots caught 18 to 39% of the pixels, not 80 to 87%.
+const memoMultiplier = 0x9E3779B97F4A7C15
 
 // sampleEntries are the image dictionary entries that describe the samples
 // as stored, which a re-encoded image replaces (ISO 32000-1, 8.9.5, Table
@@ -102,7 +124,7 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
-	encoded, parms, outFilter, err := im.encodeImage(ctx, out, width, height, px.tc, outBPC, outBPC == 8 && im.jpegSource(ctx, stream, filterName))
+	encoded, parms, outFilter, err := im.encodeImage(ctx, out, width, height, px.tc, outBPC, filterName, outBPC == 8 && im.jpegSource(ctx, stream, filterName))
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
@@ -401,9 +423,13 @@ func (p *pixelConverter) run(ctx context.Context, black []float64) ([]byte, erro
 	useMemo := p.matte == nil && r.comps*r.bpc < 64
 	var memoKeys []uint64
 	var memoVals []byte
+	// The slot is the top shift bits of the hash.
+	shift := 64
 	if useMemo {
-		memoKeys = make([]uint64, 1<<memoBits)
-		memoVals = make([]byte, (1<<memoBits)*pixelBytes)
+		slotBits := min(memoBits, bits.Len(uint(r.width*r.height-1)))
+		shift -= slotBits
+		memoKeys = make([]uint64, 1<<slotBits)
+		memoVals = make([]byte, (1<<slotBits)*pixelBytes)
 	}
 
 	blackBytes := make([]byte, pixelBytes)
@@ -430,10 +456,9 @@ func (p *pixelConverter) run(ctx context.Context, black []float64) ([]byte, erro
 			}
 			px := dst[x*pixelBytes : (x+1)*pixelBytes]
 			if useMemo {
-				// FNV-1a over the key, folded to the table, and the key
-				// stored plus one so the zero key is told from an empty slot.
-				h := (key ^ 14695981039346656037) * 1099511628211
-				slot := int(h >> (64 - memoBits))
+				// The key is stored plus one so the zero key is told from
+				// an empty slot.
+				slot := int((key * memoMultiplier) >> shift) //nolint:gosec // Below 1 << memoBits.
 				if memoKeys[slot] == key+1 {
 					copy(px, memoVals[slot*pixelBytes:(slot+1)*pixelBytes])
 					continue
@@ -555,7 +580,7 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
-	encoded, parms, outFilter, err := im.encodeImage(ctx, out, width, height, px.tc, 8, im.jpegSource(ctx, stream, "JPXDecode"))
+	encoded, parms, outFilter, err := im.encodeImage(ctx, out, width, height, px.tc, 8, "JPXDecode", im.jpegSource(ctx, stream, "JPXDecode"))
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}

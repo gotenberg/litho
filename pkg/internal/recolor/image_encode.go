@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -35,9 +36,21 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 // 32000-1, 7.4.4), and false, with no data, as soon as the compressed bytes
 // pass limit, a negative limit for none.
 func flateCompress(data []byte, limit int) ([]byte, bool, error) {
+	return flateCompressFrom(func(w io.Writer) error {
+		_, err := w.Write(data)
+		return err
+	}, limit)
+}
+
+// flateCompressFrom is [flateCompress] over the bytes write writes, which
+// stops writing at the first error it is handed, so the bytes past the
+// limit are never produced. The compressed bytes depend on the bytes alone,
+// not on how write splits them: the compressor buffers its input into
+// blocks of its own.
+func flateCompressFrom(write func(io.Writer) error, limit int) ([]byte, bool, error) {
 	out := &limitedBuffer{limit: limit}
 	w := zlib.NewWriter(out)
-	_, err := w.Write(data)
+	err := write(w)
 	if err == nil {
 		err = w.Close()
 	}
@@ -58,7 +71,9 @@ func flateCompress(data []byte, limit int) ([]byte, bool, error) {
 // larger; else it keeps the lossless encoding (see [encodeSamples]). The
 // lossless encodings stop as soon as they pass the JPEG's size, which then
 // wins whatever the rest would compress to, so the decision and the output
-// are those of encoding both in full.
+// are those of encoding both in full. source is the last filter of the
+// source image, which says which lossless encoding to try first (see
+// [encodeSamples]).
 //
 // # Corpus evidence
 //
@@ -66,9 +81,9 @@ func flateCompress(data []byte, limit int) ([]byte, bool, error) {
 //     litho file holding a JPEG 2000 image (417 files): converted to CMYK,
 //     lossless and at quality 85, the outputs are byte for byte those of
 //     encoding in full.
-//   - pdfjs issue17289.pdf: the conversion at quality 85 takes 13.6 s, 14.9
-//     s encoding in full.
-func (im *Images) encodeImage(ctx context.Context, samples []byte, width, height, comps, bpc int, lossy bool) ([]byte, ast.PdfDict, ast.PdfName, error) {
+//   - pdfjs issue17289.pdf: the conversion at quality 85 took 13.6 s, 14.9
+//     s encoding in full, before the faster pixel memo and DCT.
+func (im *Images) encodeImage(ctx context.Context, samples []byte, width, height, comps, bpc int, source ast.PdfName, lossy bool) ([]byte, ast.PdfDict, ast.PdfName, error) {
 	var jpeg []byte
 	limit := -1
 	if lossy && bpc == 8 {
@@ -80,7 +95,7 @@ func (im *Images) encodeImage(ctx context.Context, samples []byte, width, height
 			jpeg, limit = data, len(data)
 		}
 	}
-	encoded, parms, fits, err := encodeSamples(samples, width, comps, bpc, limit)
+	encoded, parms, fits, err := encodeSamples(samples, width, comps, bpc, limit, source == "DCTDecode" || source == "JPXDecode")
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("%w: %w", ErrImageNotConverted, err)
 	}
@@ -113,7 +128,7 @@ const subsampleBelowQuality = 90
 //   - pdfjs, govdocs, litho: the 41 files holding JPEG 2000 images that
 //     convert to CMYK grow from 58.8 MB to 275.9 MB lossless and 182.5 MB
 //     at quality 85, their JPEG 2000 images alone from 21.1 MB to 211.0 MB
-//     under Flate; pdfjs issue17289.pdf 59768197 -> 29291179 bytes.
+//     under Flate; pdfjs issue17289.pdf 59768197 -> 29287778 bytes.
 //   - pdfjs issue9650.pdf: its JPEG 2000 images stay under Flate, which
 //     holds them in fewer bytes than JPEG at 85, and issue11004.pdf barely
 //     shrinks (43312716 -> 43161977 bytes) for the same reason.
@@ -159,11 +174,11 @@ func (im *Images) jpegSource(ctx context.Context, stream ast.PdfStream, filterNa
 //
 //   - pdfjs (79 render-sampled files) converted to CMYK: 102.9 MB lossless,
 //     100.6 / 101.1 / 101.9 MB at quality 85 / 90 / 95, 5 files holding
-//     JPEGs (issue13999 742906 -> 445165 bytes at 85); the recolor cell
+//     JPEGs (issue13999 742906 -> 445163 bytes at 85); the recolor cell
 //     matches 78 in every mode, no page with colour drift past 75 ΔE*ab.
 //   - govdocs (79 render-sampled files): 107.4 MB lossless, 84.5 / 87.9 /
 //     93.8 MB at 85 / 90 / 95, 24 files holding JPEGs (thread_200_200427
-//     4304820 -> 904563 bytes at 85); the recolor cell matches 79 in every
+//     4304820 -> 904014 bytes at 85); the recolor cell matches 79 in every
 //     mode, no drift.
 //   - govdocs thread_100_100452, thread_100_100651, thread_300_300034: at
 //     95 the lossless encoding is no larger, so the file keeps its size.
@@ -203,28 +218,76 @@ func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height,
 // gradients, and adds a byte a row to flat art that compresses well anyway.
 // Equal sizes keep the unpredicted data, so the output depends on the
 // samples alone.
-func encodeSamples(samples []byte, width, comps, bpc, limit int) ([]byte, ast.PdfDict, bool, error) {
-	plain, plainFits, err := flateCompress(samples, limit)
-	if err != nil {
-		return nil, nil, false, fmt.Errorf("compressing the samples: %w", err)
+//
+// The second encoding stops as soon as it passes the first one's size, past
+// which it loses the comparison, so the one tried first is compressed in
+// full and the other mostly not. predictFirst tries the prediction first,
+// for samples decoded from a JPEG or JPEG 2000 photograph, which the
+// prediction holds in fewer bytes; the result is the same in either order.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17289.pdf: its six JPEG 2000 photographs converted to CMYK
+//     compress to fewer bytes predicted than plain.
+func encodeSamples(samples []byte, width, comps, bpc, limit int, predictFirst bool) ([]byte, ast.PdfDict, bool, error) {
+	plainOf := func(limit int) ([]byte, bool, error) {
+		plain, fits, err := flateCompress(samples, limit)
+		if err != nil {
+			return nil, false, fmt.Errorf("compressing the samples: %w", err)
+		}
+		return plain, fits, nil
 	}
-	predicted, err := filter.EncodePNGPredictor(samples, comps, bpc, width)
-	if err != nil {
-		return nil, nil, false, fmt.Errorf("predicting the samples: %w", err)
+	// The rows are predicted as the compressor takes them, so a compression
+	// that stops at its limit stops the prediction with it.
+	packedOf := func(limit int) ([]byte, bool, error) {
+		packed, fits, err := flateCompressFrom(func(w io.Writer) error {
+			return filter.WritePNGPredictor(w, samples, comps, bpc, width)
+		}, limit)
+		if err != nil {
+			return nil, false, fmt.Errorf("compressing the predicted samples: %w", err)
+		}
+		return packed, fits, nil
 	}
-	// Past the plain data's size the predicted data loses the comparison
-	// below, so its compression stops there too.
-	if plainFits && (limit < 0 || len(plain) < limit) {
-		limit = len(plain)
+	// below returns the limit of the second encoding, the first one's size
+	// when it fits below the limit.
+	below := func(first []byte, fits bool) int {
+		if fits && (limit < 0 || len(first) < limit) {
+			return len(first)
+		}
+		return limit
 	}
-	packed, packedFits, err := flateCompress(predicted, limit)
-	if err != nil {
-		return nil, nil, false, fmt.Errorf("compressing the predicted samples: %w", err)
+	var plain, packed []byte
+	var plainFits, packedFits bool
+	var err error
+	if predictFirst {
+		if packed, packedFits, err = packedOf(limit); err != nil {
+			return nil, nil, false, err
+		}
+		// A plain encoding of the predicted one's size wins the tie.
+		if plain, plainFits, err = plainOf(below(packed, packedFits)); err != nil {
+			return nil, nil, false, err
+		}
+		if plainFits {
+			packedFits = false
+		}
+	} else {
+		if plain, plainFits, err = plainOf(limit); err != nil {
+			return nil, nil, false, err
+		}
+		// A predicted encoding of the plain one's size loses the tie, so it
+		// stops one byte short of it.
+		packedLimit := below(plain, plainFits)
+		if plainFits && packedLimit == len(plain) {
+			packedLimit--
+		}
+		if packed, packedFits, err = packedOf(packedLimit); err != nil {
+			return nil, nil, false, err
+		}
 	}
 	switch {
 	case !plainFits && !packedFits:
 		return nil, nil, false, nil
-	case !packedFits, plainFits && len(packed) >= len(plain):
+	case !packedFits:
 		return plain, nil, true, nil
 	}
 	parms := ast.PdfDict{"Predictor": ast.PdfInt(15), "Columns": ast.PdfInt(width)}
