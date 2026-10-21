@@ -484,8 +484,9 @@ type GlyphAdvance struct {
 	// boundaries cannot be cut at.
 	Aligned bool
 	// Emitted reports that the code produced a text element. A code the
-	// extractor consumed without emitting one did not move the text matrix
-	// either, so it advances differently from what a viewer draws.
+	// extractor consumed without emitting one has no placed glyph: its
+	// length or its width is one the font does not state, so where it and
+	// the codes after it draw is litho's reading, not one a viewer shares.
 	Emitted bool
 	// Before and After are Tm as the code started and as it ended.
 	Before, After [6]float64

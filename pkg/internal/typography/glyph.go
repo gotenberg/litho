@@ -46,17 +46,33 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		}
 
 		char, n, skip, standIn := decodeNextCode(font, data)
-		if skip {
-			// Multi-byte codespace consumed bytes without a mapping
-			// and the caller opted out of emitting anything. Advance
-			// the byte stream but leave the text matrix and elements
-			// untouched.
+
+		charCode := int(data[0])
+		if n == 2 && len(data) >= 2 {
+			charCode = int(data[0])<<8 | int(data[1])
+		}
+		// Metrics are keyed by CID, which the encoding CMap gives the code
+		// (ISO 32000-1, 9.7.4.3 and 9.7.6.2); see [Font.metricCID].
+		cid := font.metricCID(data[:min(n, len(data))], charCode)
+
+		aligned := font.codeAligned(data, n)
+		if skip && !placesUnmappedCode(font, aligned) {
+			// No glyph is placed for the code, but it still moves the text
+			// position by the width read for the bytes taken, as any shown
+			// code does (ISO 32000-1, 9.4.4).
+			before := state.Text.Tm
+			advanceTextMatrix(state, font, fontSize, n, charCode, cid)
 			machine.RecordGlyphAdvance(graphics.GlyphAdvance{
-				Bytes: n, Aligned: font.codeAligned(data, n),
-				Before: state.Text.Tm, After: state.Text.Tm, RenderingMode: state.Text.Tmode,
+				Bytes: n, Aligned: aligned,
+				Before: before, After: state.Text.Tm, RenderingMode: state.Text.Tmode,
 			})
 			data = data[n:]
 			continue
+		}
+		if skip {
+			// A glyph with no character, placed as an unresolved
+			// single-byte glyph is ([placesUnmappedCode]).
+			char, standIn = "", false
 		}
 
 		// Decompose standard ligatures to their component characters so
@@ -75,15 +91,6 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		tx, ty := rise*tm[2]+tm[4], rise*tm[3]+tm[5]
 		x := tx*ctm[0] + ty*ctm[2] + ctm[4]
 		y := tx*ctm[1] + ty*ctm[3] + ctm[5]
-
-		charCode := int(data[0])
-		if n == 2 && len(data) >= 2 {
-			charCode = int(data[0])<<8 | int(data[1])
-		}
-
-		// Metrics are keyed by CID, which the encoding CMap gives the code
-		// (ISO 32000-1, 9.7.4.3 and 9.7.6.2); see [Font.metricCID].
-		cid := font.metricCID(data[:min(n, len(data))], charCode)
 
 		pageWidth := computeGlyphPageWidth(state, font, fontSize, char, cid)
 
@@ -133,13 +140,51 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		before := state.Text.Tm
 		advanceTextMatrix(state, font, fontSize, n, charCode, cid)
 		machine.RecordGlyphAdvance(graphics.GlyphAdvance{
-			Bytes: n, Aligned: font.codeAligned(data, n), Emitted: true,
+			Bytes: n, Aligned: aligned, Emitted: true,
 			Before: before, After: state.Text.Tm, RenderingMode: state.Text.Tmode,
 		})
 
 		data = data[n:]
 	}
 	return nil
+}
+
+// placesUnmappedCode reports whether processText places a glyph, as an
+// element with no character, for a code [decodeNextCode] reads no character
+// for. Such a code still selects a glyph, the .notdef glyph at worst
+// (ISO 32000-1, 9.7.6.3), whose width the CIDFont's /W and /DW state
+// (9.7.4.3), so it is drawn and advances the text position as any glyph
+// does (9.4.4). PDF.js advances every code it shows by its width, whatever
+// character it reads for it (src/core/evaluator.js, buildTextContentItem).
+//
+// The glyph is placed only when both its extent and its length are known:
+// aligned reports that the code was split where the font's encoding splits
+// it ([Font.codeAligned]), and a Type 0 font must name a CIDFont dictionary
+// ([Font.cidFontMetrics]), without which 9.7.4.3 states no width. A code
+// either leaves out still advances, by the width litho reads for the bytes
+// taken, and is recorded unemitted, so a redaction keeping it refuses
+// rather than trust a position no viewer is bound to share.
+//
+// # Corpus evidence
+//
+//   - litho cmapusecmap_2b.pdf, cmapverabase_2b.pdf, usecmap_2u.pdf: codes
+//     a /ToUnicode CMap maps to nothing, or an empty one leaves unmapped, are
+//     placed, and a region over a quarter of their page, or a band through
+//     it, no longer refuses.
+//   - litho cmaps_2b.pdf, type0nodesc_2b.pdf: a CMap name outside Table 118
+//     and Type 0 fonts with no CIDFont stay unplaced, and redacting their
+//     page still refuses.
+//   - govdocs thread_300_300034.pdf pages 29 and 30: the unmapped <0004>
+//     codes inside "<" and ">" left gaps read as word spaces, "< Population
+//     Viability >". Placed, they cover their width, and the line reads
+//     "<Population Viability>", as PDF.js reads it.
+//   - litho fontcopies_2b.pdf page 16: a line of one unmapped code reads as
+//     an empty line, where PDF.js reads a line too.
+//   - All corpora: placing the codes makes no other file of the six text
+//     corpora read other text, and changes the redaction outcome of no page
+//     of pdfjs, govdocs or pdfcpu.
+func placesUnmappedCode(font *Font, aligned bool) bool {
+	return aligned && (font.Subtype != "Type0" || font.cidFontMetrics)
 }
 
 // advancesBackward reports whether a horizontal glyph advances against the
@@ -270,9 +315,10 @@ const spaceCharCode = 0x20
 
 // decodeNextCode maps the next glyph code in data to a UTF-8 character.
 // Returns the decoded character, the number of bytes consumed, and a
-// skip flag that tells the caller to continue past the consumed bytes
-// without emitting an element (used for unmapped CID fallbacks that
-// should not produce visible output).
+// skip flag reporting a code that reads as no character (unmapped CID
+// fallbacks that should not produce visible output). The code still draws a
+// glyph and advances the text position: [placesUnmappedCode] says whether
+// the caller places that glyph.
 //
 // standIn reports a code of a Type 0 font that no mapping gives a character,
 // so ISO 32000-1, 9.10.2 gives it no Unicode value: char is then the code's

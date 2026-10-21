@@ -178,10 +178,11 @@ var ErrRegionCoversClippingText = errors.New("region covers text that also clips
 // whole.
 //
 // Selection is by the glyph boxes extraction places, and such a code has none:
-// its glyph is drawn by a viewer (the font's .notdef, or a program glyph with
-// no Unicode value) where extraction cannot say, and the codes after it move
-// by an advance extraction did not count. Keeping it could keep a glyph inside
-// the region, so the page is refused instead.
+// its length or its width is one the font does not state (a CMap name outside
+// ISO 32000-1, Table 118, or a Type 0 font without a CIDFont), so where a
+// viewer draws its glyph and the codes after it, extraction cannot say.
+// Keeping it could keep a glyph inside the region, so the page is refused
+// instead.
 var ErrTextNotPlaceable = errors.New("page shows text whose glyphs cannot be placed")
 
 // ErrTextPositionAmbiguous reports a page showing text after a Q, inside a

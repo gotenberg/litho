@@ -68,6 +68,11 @@ type Font struct {
 	// Identity-V, whose codes are two bytes each (ISO 32000-1, 9.7.5.2,
 	// Table 118). See [Font.codeAligned] and [decodeNextCode].
 	identityEncoding bool
+	// cidFontMetrics reports a Type 0 font whose /DescendantFonts names a
+	// CIDFont dictionary, whose /W and /DW give every CID its width (ISO
+	// 32000-1, 9.7.4.3). Without one no width is stated. See
+	// [placesUnmappedCode].
+	cidFontMetrics bool
 
 	// widthStated marks the [Font.Widths] entries a simple font's /Widths
 	// array states as numbers, index for index; nil when [Font.Widths] came
@@ -1384,6 +1389,7 @@ func resolveType0Metrics(ctx context.Context, doc *document.Document, fontDict a
 				doc.Logger.Debug("resolving CIDFont dict", slog.Any("err", err))
 			}
 			if cidDict != nil {
+				font.cidFontMetrics = true
 				// /DW is the default glyph width for CIDFonts (default 1000 per spec).
 				font.MissingWidth = 1000.0
 				if dwObj, ok := cidDict["DW"]; ok {

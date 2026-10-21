@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -12,8 +13,8 @@ import (
 )
 
 // shownCodesFixture builds a one-page document whose content is body, with
-// Helvetica as /F1 and, as /F2, an Identity-H Type0 font whose /ToUnicode maps
-// code 0041 alone.
+// Helvetica as /F1, as /F2 an Identity-H Type0 font whose /ToUnicode maps code
+// 0041 alone, and as /F3 the same font without /DescendantFonts.
 func shownCodesFixture(t *testing.T, body string) (*document.Document, *document.Page) {
 	t.Helper()
 	ctx := context.Background()
@@ -24,13 +25,14 @@ func shownCodesFixture(t *testing.T, body string) (*document.Document, *document
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
-		"5 0 obj\n<< /Font << /F1 4 0 R /F2 7 0 R >> >>\nendobj\n" +
+		"5 0 obj\n<< /Font << /F1 4 0 R /F2 7 0 R /F3 10 0 R >> >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 5 0 R /Contents 6 0 R >>\nendobj\n" +
 		"6 0 obj\n<< /Length " + strconv.Itoa(len(body)) + " >>\nstream\n" + body + "\nendstream\nendobj\n" +
 		"7 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /Litho /Encoding /Identity-H /DescendantFonts [8 0 R] /ToUnicode 9 0 R >>\nendobj\n" +
 		"8 0 obj\n<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Litho /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /DW 1000 >>\nendobj\n" +
 		"9 0 obj\n<< /Length " + strconv.Itoa(len(cmap)) + " >>\nstream\n" + cmap + "\nendstream\nendobj\n" +
-		"trailer\n<< /Size 10 /Root 1 0 R >>\n%%EOF\n")
+		"10 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /Litho /Encoding /Identity-H /ToUnicode 9 0 R >>\nendobj\n" +
+		"trailer\n<< /Size 11 /Root 1 0 R >>\n%%EOF\n")
 	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
@@ -86,12 +88,13 @@ func TestRedactPageRegions_RefusesAnAmbiguousTextPosition(t *testing.T) {
 }
 
 // TestRedactPageRegions_RefusesAPageShowingUnplaceableCodes covers a kept
-// operator showing code 0000, which the font's /ToUnicode leaves unmapped:
-// extraction reads no glyph and no advance for it, so the glyph a viewer
-// draws cannot be ruled out of the region, as litho corpus cmaps_2b,
-// type0nodesc_2b and usecmap_2u show.
+// operator showing code 0000, which the font's /ToUnicode leaves unmapped,
+// through a Type 0 font naming no CIDFont: ISO 32000-1, 9.7.4.3 then states no
+// width for it, so the glyph a viewer draws, and every code after it, cannot
+// be ruled out of the region, as litho corpus cmaps_2b and type0nodesc_2b
+// show.
 func TestRedactPageRegions_RefusesAPageShowingUnplaceableCodes(t *testing.T) {
-	doc, page := shownCodesFixture(t, "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F2 12 Tf 100 600 Td <00000041> Tj ET")
+	doc, page := shownCodesFixture(t, "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F3 12 Tf 100 600 Td <00000041> Tj ET")
 	alloc := writer.NewObjAllocator(20)
 
 	_, err := RedactPageRegions(context.Background(), alloc, doc, page, [][4]float64{{0, 690, 612, 730}})
@@ -106,5 +109,34 @@ func TestRedactPageRegions_RefusesAPageShowingUnplaceableCodes(t *testing.T) {
 	}
 	if got := newPageContents(t, alloc, page.Ref.ObjectNum); bytes.Contains(got, []byte("<00000041>")) {
 		t.Errorf("the operator is still in the page content: %q", got)
+	}
+}
+
+// TestRedactPageRegions_PlacesUnmappedCodes covers code 0000 of an Identity-H
+// font over a CIDFont, which the /ToUnicode leaves unmapped, as litho corpus
+// usecmap_2u shows: it draws a glyph /DW wide (ISO 32000-1, 9.7.4.3), so a
+// region elsewhere keeps its operator, and a region over the glyph after it,
+// placed one /DW advance on, splits it there.
+func TestRedactPageRegions_PlacesUnmappedCodes(t *testing.T) {
+	doc, page := shownCodesFixture(t, "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F2 12 Tf 100 600 Td <00000041> Tj ET")
+	if _, err := RedactPageRegions(context.Background(), writer.NewObjAllocator(20), doc, page, [][4]float64{{0, 690, 612, 730}}); err != nil {
+		t.Fatalf("region over SECRET: %v", err)
+	}
+
+	// Code 0000 spans x 100 to 112 at 12 Tf; 0041 spans 112 to 124.
+	alloc := writer.NewObjAllocator(20)
+	report, err := RedactPageRegions(context.Background(), alloc, doc, page, [][4]float64{{113, 590, 123, 620}})
+	if err != nil {
+		t.Fatalf("region over 0041: %v", err)
+	}
+	if !slices.Contains(report.RemovedText, "A") {
+		t.Errorf("RemovedText = %q, want the A shown after code 0000", report.RemovedText)
+	}
+	got := newPageContents(t, alloc, page.Ref.ObjectNum)
+	if bytes.Contains(got, []byte("0041")) {
+		t.Errorf("code 0041 is still in the page content: %q", got)
+	}
+	if !bytes.Contains(got, []byte("<0000>")) {
+		t.Errorf("code 0000, outside the region, is gone: %q", got)
 	}
 }
