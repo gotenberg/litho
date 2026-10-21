@@ -135,10 +135,13 @@ func WithRenderBackground(c color.Color) RenderOption {
 // profile. It draws transparency: constant alpha, the sixteen blend modes
 // (ColorDodge and ColorBurn by the edition of ISO 32000 the document's
 // version names), soft masks, isolated and knockout transparency groups and
-// text knockout, blending in sRGB. It does not draw an annotation with no
-// appearance stream. Content a document's default optional content
-// configuration hides is not drawn, nor are the kinds of content
-// [WithRenderContent] leaves out.
+// text knockout, blending in sRGB. An annotation with no appearance stream
+// draws as ISO 32000-1 defines it from its dictionary for the Square,
+// Circle, Line, Polygon, PolyLine, Ink, text markup and Link types, and not
+// at all for the icon and text types (Text, FreeText, Stamp and the like);
+// nothing is written into the document. Content a document's default
+// optional content configuration hides is not drawn, nor are the kinds of
+// content [WithRenderContent] leaves out.
 //
 // Glyphs are drawn from the programs the document embeds. litho bundles no
 // font program, so a font the document does not embed draws its glyphs as
