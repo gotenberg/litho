@@ -57,13 +57,24 @@ type Group struct {
 	// initial holds α0·C0 and α0. It is nil for an isolated group, whose
 	// initial backdrop is transparent.
 	initial *surface.Canvas
+	// direct marks a group [Group.Direct] handed its colour plane to, whose
+	// shape plane misses what was painted there.
+	direct bool
 }
 
 // NewPage returns the page group of a width × height page: isolated and
 // non-knockout over a transparent backdrop (ISO 32000-1, 11.4.7). Its
 // [Group.Canvas] is then composited over the medium's colour.
+//
+// A page group keeps no shape plane: it is composited with the medium, never
+// into another group, so nothing reads its shape, which it takes as its
+// alpha where [Group.Into] or a soft mask asks.
 func NewPage(width, height int, maxPixels int64) (*Group, error) {
-	return NewGroup(image.Rect(0, 0, width, height), Backdrop{}, Attributes{Isolated: true}, maxPixels)
+	color, err := surface.NewCanvas(width, height, maxPixels)
+	if err != nil {
+		return nil, fmt.Errorf("allocating page group colour: %w", err)
+	}
+	return &Group{bounds: image.Rect(0, 0, width, height), attrs: Attributes{Isolated: true}, color: color}, nil
 }
 
 // NewGroup returns an empty group covering bounds, in device pixels, with
@@ -193,7 +204,9 @@ func (g *Group) Paint(x, y int, mode Mode, cs [3]float32, fs, as float32) {
 		p[k] = (1-fs)*p[k] + ct
 	}
 	p[3] = union(a0, ag)
-	g.shape.A[i] = union(g.shape.A[i], fs)
+	if g.shape != nil {
+		g.shape.A[i] = union(g.shape.A[i], fs)
+	}
 	if g.alpha != nil {
 		g.alpha.A[i] = ag
 	}
@@ -204,10 +217,17 @@ func (g *Group) Paint(x, y int, mode Mode, cs [3]float32, fs, as float32) {
 // and the alpha α.
 func (g *Group) result(i int) (c [3]float32, f, a float32) {
 	p := g.color.Pix[4*i : 4*i+4]
-	f = g.shape.A[i]
 	a = p[3]
+	if g.shape != nil {
+		f = g.shape.A[i]
+	}
 	if g.alpha != nil {
 		a = g.alpha.A[i]
+	}
+	if g.direct || g.shape == nil {
+		// What was painted straight onto the colour plane covered at least
+		// its alpha.
+		f = max(f, a)
 	}
 	if a <= 0 {
 		return c, f, a
@@ -260,8 +280,8 @@ type Params struct {
 	Mode Mode
 	// Opacity is the constant alpha, CA or ca. The zero value is opaque.
 	Opacity surface.Opacity
-	// SoftMask holds the soft mask's values over the device, nil for /None.
-	SoftMask *surface.Mask
+	// SoftMask is the soft mask, nil for /None.
+	SoftMask *Mask
 	// AlphaIsShape makes the soft mask and the constant alpha shape rather
 	// than opacity (the AIS entry, 11.6.4.3).
 	AlphaIsShape bool

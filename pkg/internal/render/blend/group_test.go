@@ -221,7 +221,7 @@ func TestSoftMaskParams(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.Set(1, 0, 0.5)
-	p := Params{Opacity: surface.NewOpacity(0.8), SoftMask: m}
+	p := Params{Opacity: surface.NewOpacity(0.8), SoftMask: NewMask(m, image.Point{}, 0)}
 	if fs, as := p.Source(1, 0, 0.9, 0.9); !near32(fs, 0.9) || !near32(as, 0.36) {
 		t.Errorf("opacity mask: fs, as = %g, %g, want 0.9, 0.36", fs, as)
 	}

@@ -83,7 +83,7 @@ func BenchmarkLuminosityMask(b *testing.B) {
 	}
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := LuminosityMask(ctx, g, [3]float32{}, nil, benchSide, benchSide, benchSide*benchSide); err != nil {
+		if _, err := LuminosityMask(ctx, g, [3]float32{}, nil, benchSide*benchSide); err != nil {
 			b.Fatal(err)
 		}
 	}

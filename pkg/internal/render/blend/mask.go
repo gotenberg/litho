@@ -59,17 +59,50 @@ func (t transfer) apply(v float32) float32 {
 	return t.table[i] + (t.table[i+1]-t.table[i])*frac
 }
 
+// Mask is a soft mask over the device (ISO 32000-1, 11.6.5.2): its values
+// over a rectangle of device pixels, and one value everywhere else. A mask
+// derived from a group holds values over the group's bounds alone, since
+// outside them the group is transparent and the mask constant, so a small
+// group makes a small mask whatever the page's size.
+//
+// A Mask is immutable and safe for concurrent reads.
+type Mask struct {
+	values  *surface.Mask
+	origin  image.Point
+	outside float32
+}
+
+// NewMask returns the mask holding values, whose pixel (0, 0) is device
+// pixel origin, and outside everywhere else.
+func NewMask(values *surface.Mask, origin image.Point, outside float32) *Mask {
+	return &Mask{values: values, origin: origin, outside: clamp01(outside)}
+}
+
+// At returns the mask's value at device pixel (x, y).
+func (m *Mask) At(x, y int) float32 {
+	x, y = x-m.origin.X, y-m.origin.Y
+	if x < 0 || y < 0 || x >= m.values.Width || y >= m.values.Height {
+		return m.outside
+	}
+	return m.values.A[y*m.values.Width+x]
+}
+
+// Pixels returns how many pixels the mask holds values for.
+func (m *Mask) Pixels() int64 {
+	return int64(m.values.Width) * int64(m.values.Height)
+}
+
 // AlphaMask derives a soft mask of /S /Alpha from the rendered group g (ISO
 // 32000-1, 11.5.2): the group alpha αgn, the backdrop factored out, through
 // the transfer function tr (nil for /Identity). Outside the group's bounds,
-// the mask is tr(0) (11.6.5.2). The mask covers width × height device
-// pixels and is refused beyond maxPixels.
-func AlphaMask(ctx context.Context, g *Group, tr *function.Function, width, height int, maxPixels int64) (*surface.Mask, error) {
+// the mask is tr(0) (11.6.5.2). Its values cover the group's bounds and are
+// refused beyond maxPixels.
+func AlphaMask(ctx context.Context, g *Group, tr *function.Function, maxPixels int64) (*Mask, error) {
 	t, err := newTransfer(tr)
 	if err != nil {
 		return nil, err
 	}
-	return deriveMask(ctx, g, width, height, maxPixels, t.apply(0), func(i int) float32 {
+	return deriveMask(ctx, g, maxPixels, t.apply(0), func(i int) float32 {
 		_, _, a := g.result(i)
 		return t.apply(a)
 	})
@@ -80,18 +113,17 @@ func AlphaMask(ctx context.Context, g *Group, tr *function.Function, width, heig
 // backdrop of colour bc, the /BC entry converted to sRGB, then reduced to
 // luminosity and passed through the transfer function tr (nil for
 // /Identity). Outside the group's bounds the mask is tr(Y(bc)) (11.6.5.2).
-// The mask covers width × height device pixels and is refused beyond
-// maxPixels.
+// Its values cover the group's bounds and are refused beyond maxPixels.
 //
 // A non-isolated g is built over [Opaque](bc), so its elements blend with
 // the backdrop the mask defines. The luminosity is the DeviceRGB formula of
 // 11.5.3, Y = 0.30 R + 0.59 G + 0.11 B, applied to the sRGB blending space.
-func LuminosityMask(ctx context.Context, g *Group, bc [3]float32, tr *function.Function, width, height int, maxPixels int64) (*surface.Mask, error) {
+func LuminosityMask(ctx context.Context, g *Group, bc [3]float32, tr *function.Function, maxPixels int64) (*Mask, error) {
 	t, err := newTransfer(tr)
 	if err != nil {
 		return nil, err
 	}
-	return deriveMask(ctx, g, width, height, maxPixels, t.apply(lum(bc)), func(i int) float32 {
+	return deriveMask(ctx, g, maxPixels, t.apply(lum(bc)), func(i int) float32 {
 		c, _, a := g.result(i)
 		// 11.5.3: C = (1 - αg)·C0 + αg·Cg.
 		var mixed [3]float32
@@ -102,28 +134,21 @@ func LuminosityMask(ctx context.Context, g *Group, bc [3]float32, tr *function.F
 	})
 }
 
-// deriveMask fills a width × height mask with outside, then with value(i)
-// at every pixel the group covers, i the group-local index.
-func deriveMask(ctx context.Context, g *Group, width, height int, maxPixels int64, outside float32, value func(i int) float32) (*surface.Mask, error) {
-	m, err := surface.NewMask(width, height, maxPixels)
+// deriveMask returns the mask holding value(i) at every pixel of the
+// group's bounds, i the group-local index, and outside elsewhere.
+func deriveMask(ctx context.Context, g *Group, maxPixels int64, outside float32, value func(i int) float32) (*Mask, error) {
+	w, h := g.bounds.Dx(), g.bounds.Dy()
+	m, err := surface.NewMask(w, h, maxPixels)
 	if err != nil {
 		return nil, fmt.Errorf("allocating soft mask: %w", err)
 	}
-	if outside != 0 {
-		for i := range m.A {
-			m.A[i] = outside
-		}
-	}
-	area := g.bounds.Intersect(image.Rect(0, 0, width, height))
-	w := g.bounds.Dx()
-	for y := area.Min.Y; y < area.Max.Y; y++ {
+	for y := range h {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("deriving soft mask: %w", err)
 		}
-		row := (y - g.bounds.Min.Y) * w
-		for x := area.Min.X; x < area.Max.X; x++ {
-			m.A[y*width+x] = value(row + x - g.bounds.Min.X)
+		for x := range w {
+			m.A[y*w+x] = value(y*w + x)
 		}
 	}
-	return m, nil
+	return NewMask(m, g.bounds.Min, outside), nil
 }

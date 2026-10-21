@@ -12,9 +12,12 @@
 // same arithmetic. [Group.Into] then composites the finished group into its
 // parent as one object, the backdrop of a non-isolated group factored out.
 // The page itself is a [Group]: isolated, non-knockout, over a transparent
-// backdrop (11.4.7). [AlphaMask] and [LuminosityMask] derive a soft mask from
-// a rendered group (11.5.2, 11.5.3) through an optional /TR transfer
-// function.
+// backdrop (11.4.7). [Group.PaintCanvas] and [Group.PaintCoverage] composite
+// one element's raster or coverage, and [Group.Direct] hands out the colour
+// plane of a group where Normal source-over painting needs no more.
+// [AlphaMask] and [LuminosityMask] derive a soft mask from a rendered group
+// (11.5.2, 11.5.3) through an optional /TR transfer function, as a [Mask]
+// whose values cover the group's bounds alone.
 //
 // The blending colour space is sRGB: every colour this package sees is three
 // components in [0, 1], already converted by the caller. A group's own /CS,

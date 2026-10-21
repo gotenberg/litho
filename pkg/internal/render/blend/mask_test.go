@@ -52,7 +52,7 @@ func TestLuminosityMaskOfGradient(t *testing.T) {
 	ctx := context.Background()
 	black, white := [3]float32{}, [3]float32{1, 1, 1}
 
-	m, err := LuminosityMask(ctx, gradient(t, Backdrop{}, Attributes{Isolated: true}, 1), black, nil, 13, 2, testBudget)
+	m, err := LuminosityMask(ctx, gradient(t, Backdrop{}, Attributes{Isolated: true}, 1), black, nil, testBudget)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestLuminosityMaskOfGradient(t *testing.T) {
 
 	// The same ramp, non-isolated over the white backdrop the mask defines,
 	// at half alpha: the group colour is the ramp, so C = (1 + v) / 2.
-	m, err = LuminosityMask(ctx, gradient(t, Opaque(white), Attributes{}, 0.5), white, nil, 13, 2, testBudget)
+	m, err = LuminosityMask(ctx, gradient(t, Opaque(white), Attributes{}, 0.5), white, nil, testBudget)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestLuminosityMaskOfGradient(t *testing.T) {
 	}
 
 	invert := exponential(t, ast.PdfArray{ast.PdfInt(1)}, ast.PdfArray{ast.PdfInt(0)}, 1)
-	m, err = LuminosityMask(ctx, gradient(t, Backdrop{}, Attributes{Isolated: true}, 1), black, invert, 13, 2, testBudget)
+	m, err = LuminosityMask(ctx, gradient(t, Backdrop{}, Attributes{Isolated: true}, 1), black, invert, testBudget)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestLuminosityMaskOfGradient(t *testing.T) {
 func TestAlphaMask(t *testing.T) {
 	ctx := context.Background()
 	square := exponential(t, ast.PdfArray{ast.PdfInt(0)}, ast.PdfArray{ast.PdfInt(1)}, 2)
-	m, err := AlphaMask(ctx, gradient(t, Backdrop{}, Attributes{Isolated: true}, 0.6), square, 13, 2, testBudget)
+	m, err := AlphaMask(ctx, gradient(t, Backdrop{}, Attributes{Isolated: true}, 0.6), square, testBudget)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestTransferArity(t *testing.T) {
 	rgb := exponential(t, ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0)},
 		ast.PdfArray{ast.PdfInt(1), ast.PdfInt(1), ast.PdfInt(1)}, 1)
 	g := gradient(t, Backdrop{}, Attributes{Isolated: true}, 1)
-	if _, err := AlphaMask(context.Background(), g, rgb, 13, 2, testBudget); !errors.Is(err, ErrTransfer) {
+	if _, err := AlphaMask(context.Background(), g, rgb, testBudget); !errors.Is(err, ErrTransfer) {
 		t.Errorf("err = %v, want ErrTransfer", err)
 	}
 }
