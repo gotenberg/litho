@@ -319,7 +319,18 @@ func (f *Font) codeRune(code Code, name string) (rune, bool) {
 	}
 	m := f.metrics
 	if m.ToUnicode != nil {
-		if s, ok := m.ToUnicode.Mapping[string(code.Bytes)]; ok {
+		var (
+			s  string
+			ok bool
+		)
+		if f.kind == kindSimple {
+			// A simple font's code is one byte at any codespace width (ISO
+			// 32000-1, 9.6.1), as text extraction reads it.
+			s, ok = m.ToUnicode.MapByte(code.Bytes[0])
+		} else {
+			s, ok = m.ToUnicode.Mapping[string(code.Bytes)]
+		}
+		if ok {
 			if r, size := utf8.DecodeRuneInString(s); r != utf8.RuneError && size == len(s) {
 				return r, true
 			}

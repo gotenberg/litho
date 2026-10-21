@@ -9,6 +9,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
+	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
@@ -484,5 +486,21 @@ func TestParseCIDToGIDMap(t *testing.T) {
 	}
 	if got := parseCIDToGIDMap(make([]byte, 2*maxCIDs+10)); len(got) != maxCIDs {
 		t.Errorf("an oversized stream gave %d entries, want %d", len(got), maxCIDs)
+	}
+}
+
+// TestCodeRuneReadsSimpleFontByteThroughWiderToUnicode checks a simple font's
+// one-byte code finds the character a /ToUnicode CMap maps at a two-byte
+// width, <0041>, as text extraction reads it (ISO 32000-1, 9.6.1).
+func TestCodeRuneReadsSimpleFontByteThroughWiderToUnicode(t *testing.T) {
+	f := &Font{
+		kind: kindSimple,
+		metrics: &typography.Font{
+			ToUnicode: &cmap.CMap{Mapping: map[string]string{"\x00\x41": "Z"}},
+		},
+	}
+	r, ok := f.codeRune(Code{Bytes: []byte{0x41}}, "")
+	if !ok || r != 'Z' {
+		t.Fatalf("codeRune(0x41) = %q, %v; want 'Z', true", r, ok)
 	}
 }
