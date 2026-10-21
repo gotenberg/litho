@@ -120,7 +120,7 @@ func TestRedactRenderCatchesPlantedLeaks(t *testing.T) {
 		data := redactKindPDF(kind.body)
 
 		broken := newTestRedactRender()
-		broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion) error { return nil }
+		broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion) (*pdf.RedactReport, error) { return nil, nil }
 		v, sc := runRedactRender(t, broken, data, "p1-quarter")
 		if sc.Litho == nil || sc.Litho.Inside == 0 || v.Metrics[metricInsideLeaked] == 0 {
 			t.Errorf("%s: a redaction that left the content passed the inside check: %+v", kind.name, sc.Litho)
@@ -144,10 +144,9 @@ func TestRedactRenderCatchesPlantedLeaks(t *testing.T) {
 func TestRedactRenderCatchesChangesOutside(t *testing.T) {
 	t.Parallel()
 	f := newTestRedactRender()
-	f.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) error {
+	f.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) (*pdf.RedactReport, error) {
 		region.Rect = [4]float64{-1000, -1000, 1000, 1000}
-		_, err := w.Redact(ctx, []pdf.RedactRegion{region})
-		return err
+		return w.Redact(ctx, []pdf.RedactRegion{region})
 	}
 	data := redactKindPDF("0 0 1 rg 80 80 40 40 re f 1 0 0 rg 10 10 20 20 re f")
 	v, sc := runRedactRender(t, f, data, "p1-quarter")

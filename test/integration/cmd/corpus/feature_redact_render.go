@@ -255,8 +255,9 @@ type redactRenderFeature struct {
 	// pin returns the poppler version the batch must report, "" to accept
 	// any.
 	pin func() string
-	// redact applies a scenario's region; tests replace it to plant a leak.
-	redact func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) error
+	// redact applies a scenario's region and returns its report, nil when it
+	// has none; tests replace it to plant a leak.
+	redact func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) (*pdf.RedactReport, error)
 
 	mu sync.RWMutex
 	// sampled names the PDFs in scope, nil for every PDF.
@@ -270,9 +271,8 @@ func newRedactRenderFeature() *redactRenderFeature {
 		workers: runtime.NumCPU(),
 		poppler: renderWithPoppler,
 		pin:     popplerPin,
-		redact: func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) error {
-			_, err := w.Redact(ctx, []pdf.RedactRegion{region})
-			return err
+		redact: func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) (*pdf.RedactReport, error) {
+			return w.Redact(ctx, []pdf.RedactRegion{region})
 		},
 		outputs: make(map[string][]byte),
 	}
@@ -575,7 +575,7 @@ func (f *redactRenderFeature) prepareOne(ctx context.Context, staging string, id
 		res.out.Scenarios = append(res.out.Scenarios, redactRenderOutcome{Name: sc.name, Page: sc.page, Rect: rect})
 		outcome := &res.out.Scenarios[len(res.out.Scenarios)-1]
 
-		output, err := f.redactOnce(ctx, src, pdf.RedactRegion{Page: sc.page, Rect: rect})
+		output, report, err := f.redactOnce(ctx, src, pdf.RedactRegion{Page: sc.page, Rect: rect})
 		if err != nil {
 			outcome.Cause = err.Error()
 			switch {
@@ -594,7 +594,11 @@ func (f *redactRenderFeature) prepareOne(ctx context.Context, staging string, id
 			continue
 		}
 		geom := redactPageGeometry(pg)
-		sets := newRedactPixelSets(geom, rect, text)
+		var removed [][4]float64
+		if report != nil {
+			removed = report.RemovedGlyphBoxes[sc.page]
+		}
+		sets := newRedactPixelSets(geom, rect, text, removed)
 		check, images := lithoCheck(ctx, src, after, sc.page, sets, before, opts)
 		after.Close()
 		outcome.Litho = check
@@ -631,18 +635,20 @@ func (f *redactRenderFeature) prepareOne(ctx context.Context, staging string, id
 	return res
 }
 
-// redactOnce applies one region to a Writer over src and writes the result.
-func (f *redactRenderFeature) redactOnce(ctx context.Context, src *pdf.Reader, region pdf.RedactRegion) ([]byte, error) {
+// redactOnce applies one region to a Writer over src and writes the result,
+// with the redaction's report.
+func (f *redactRenderFeature) redactOnce(ctx context.Context, src *pdf.Reader, region pdf.RedactRegion) ([]byte, *pdf.RedactReport, error) {
 	w := pdf.NewWriter(src)
 	defer w.Close()
-	if err := f.redact(ctx, w, region); err != nil {
-		return nil, err
+	report, err := f.redact(ctx, w, region)
+	if err != nil {
+		return nil, nil, err
 	}
 	var buf bytes.Buffer
 	if err := w.WriteTo(ctx, &buf); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes(), report, nil
 }
 
 // lithoCheck renders page before and after with litho and runs both checks,
@@ -1049,7 +1055,8 @@ func (g redactGeometry) deviceRect(r [4]float64) [4]float64 {
 type redactPixelSets struct {
 	w, h int
 	// region is the region in device space; excluded holds the device boxes
-	// of the text runs the region meets, each dilated by the margin.
+	// of the text runs the region meets and of the glyphs the redaction
+	// removed, each dilated by the margin.
 	region   [4]float64
 	excluded [][4]float64
 	// spill marks, w pixels a row, the pixels where litho's images-only
@@ -1081,7 +1088,23 @@ func (s *redactPixelSets) markSpill(before, after []uint8) {
 	}
 }
 
-func newRedactPixelSets(g redactGeometry, rect [4]float64, text []models.TextElement) *redactPixelSets {
+// newRedactPixelSets returns the pixel sets of a scenario whose region is rect
+// on a page of geometry g, text the runs extraction reads on the page.
+//
+// removed holds the boxes of the glyphs the redaction removed
+// ([pdf.RedactReport.RemovedGlyphBoxes]). A glyph goes whole when its box
+// meets the region, so its ink past the region changes by design. The text
+// runs alone miss some of them: extraction drops a run whose characters are
+// all white space, though its glyphs may paint, as a font may draw a glyph
+// for U+2002. Only the outside check reads the exclusions, so the inside
+// check still sees any glyph the redaction kept inside the region.
+//
+// # Corpus evidence
+//
+//   - litho cmapverabase_2b page 1, band: a glyph shown for U+2002 inks 3.8
+//     points past the band's top edge. Removed, it changed 12 pixels poppler
+//     draws outside the band, which the text runs did not exclude.
+func newRedactPixelSets(g redactGeometry, rect [4]float64, text []models.TextElement, removed [][4]float64) *redactPixelSets {
 	r := [4]float64{min(rect[0], rect[2]), min(rect[1], rect[3]), max(rect[0], rect[2]), max(rect[1], rect[3])}
 	sets := &redactPixelSets{w: g.w, h: g.h, region: g.deviceRect(r)}
 	for _, el := range text {
@@ -1090,6 +1113,9 @@ func newRedactPixelSets(g redactGeometry, rect [4]float64, text []models.TextEle
 			continue
 		}
 		sets.excluded = append(sets.excluded, grow(g.deviceRect(ink), redactRenderMargin))
+	}
+	for _, box := range removed {
+		sets.excluded = append(sets.excluded, grow(g.deviceRect(box), redactRenderMargin))
 	}
 	return sets
 }
