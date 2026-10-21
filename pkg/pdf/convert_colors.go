@@ -121,6 +121,8 @@ type colorOpts struct {
 	bpc          bool
 	convertSpots bool
 	keepIntents  bool
+	// replaceIntents is [WithReplacedOutputIntents].
+	replaceIntents bool
 }
 
 // WithColorIntent converts every colour with the rendering intent i. Default
@@ -153,6 +155,19 @@ func WithoutOutputIntent() ColorOption {
 	return func(o *colorOpts) { o.keepIntents = true }
 }
 
+// WithReplacedOutputIntents points every output intent of another subtype
+// than GTS_PDFA1 whose destination profile is another profile of the
+// target's component count, a GTS_PDFX intent among them, at the target's
+// profile, keeping its /S and /OutputConditionIdentifier, so DeviceCMYK means
+// the target everywhere. Without it, a CMYK target on a document keeping such
+// an intent fails with [ErrOutputIntentConflict]. It applies under
+// [WithoutOutputIntent] too, which then leaves only the PDF/A intents alone.
+// [OutputIntentColorTarget] converts to the document's own intent and has
+// nothing to replace.
+func WithReplacedOutputIntents() ColorOption {
+	return func(o *colorOpts) { o.replaceIntents = true }
+}
+
 // ColorReport describes what [Writer.ConvertColors] converted.
 // Values must not be shared across goroutines without synchronization.
 type ColorReport struct {
@@ -178,6 +193,9 @@ type ColorReport struct {
 	// KeptOutputIntents lists the /S of each output intent of another
 	// subtype the conversion left as it was, GTS_PDFX among them.
 	KeptOutputIntents []string
+	// ReplacedOutputIntents lists the /OutputConditionIdentifier of each
+	// intent [WithReplacedOutputIntents] pointed at the target profile.
+	ReplacedOutputIntents []string
 }
 
 // ConvertColors converts every colour the document paints to target: the
@@ -199,14 +217,20 @@ type ColorReport struct {
 // GTS_PDFA1 intents take its profile, or one is added. An intent of any other
 // subtype, a PDF/X intent among them, is kept as it was and named in
 // [ColorReport.KeptOutputIntents]: only the producer can restate the printing
-// condition a document was prepared for. [WithoutOutputIntent] leaves every
-// intent alone. The [OutputIntentColorTarget] changes no intent.
+// condition a document was prepared for. [WithReplacedOutputIntents] points
+// those over another profile of the target's component count at the target's
+// profile, keeping their subtype and printing condition, where a CMYK target
+// otherwise refuses them. [WithoutOutputIntent] leaves the GTS_PDFA1 intents
+// alone. The [OutputIntentColorTarget] changes no intent.
 //
 // It runs eagerly rather than queueing, because the caller must learn whether
 // the document converts before writing it, and it forces a full rewrite.
-// Two ways it refuses, both leaving the [Writer] exactly as it was:
+// Three ways it refuses, each leaving the [Writer] exactly as it was:
 // [ErrInvalidColorTarget] or [ErrNoOutputIntent] when the target names no
-// profile litho converts to, and [ErrColorConversionRefused] when a colour the
+// profile litho converts to, [ErrOutputIntentConflict] when a CMYK target
+// meets a kept output intent over another CMYK profile, through which viewers
+// would read the converted DeviceCMYK ([WithReplacedOutputIntents] points such
+// intents at the target), and [ErrColorConversionRefused] when a colour the
 // document paints cannot be converted: converting part of a document leaves
 // colours in two spaces where the caller asked for one.
 //
@@ -270,6 +294,19 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		restoreTrailer()
 		return nil, err
 	}
+	// ISO 32000-1, 14.11.5: an intent's destination profile is what the
+	// device colours of a document mean, and viewers read DeviceCMYK through
+	// the first intent of four components. A kept intent over another CMYK
+	// profile would make the converted colours print as another device's.
+	var conflicts []mutations.OutputIntentConflict
+	if resolved.components == 4 && target.kind != targetOutputIntent {
+		conflicts = mutations.ConflictingOutputIntents(ctx, alloc, doc, resolved.profile, resolved.components)
+		if len(conflicts) > 0 && !o.replaceIntents {
+			restoreTrailer()
+			return nil, fmt.Errorf("%w: the %s intent %q; WithReplacedOutputIntents points it at the target profile",
+				ErrOutputIntentConflict, conflicts[0].Subtype, conflicts[0].Condition)
+		}
+	}
 
 	engine := w.recolor
 	if engine == nil {
@@ -301,19 +338,39 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 	if !o.convertSpots {
 		report.KeptSpotColorants = slices.Compact(slices.Sorted(slices.Values(result.keptSpots)))
 	}
-	if !o.keepIntents && resolved.setsIntent {
-		intentResult, intentErr := mutations.SetOutputIntent(ctx, alloc, doc, mutations.OutputIntentSpec{
-			Profile:    resolved.profile,
-			Components: resolved.components,
-			Condition:  resolved.condition,
-			Registry:   resolved.registry,
-			Info:       resolved.info,
-		})
+	spec := mutations.OutputIntentSpec{
+		Profile:    resolved.profile,
+		Components: resolved.components,
+		Condition:  resolved.condition,
+		Registry:   resolved.registry,
+		Info:       resolved.info,
+	}
+	setIntent := !o.keepIntents && resolved.setsIntent
+	if setIntent || len(conflicts) > 0 {
+		// One profile object for every intent the conversion writes, as ISO
+		// 19005-2, 6.2.3 asks of the intents of a PDF/A file.
+		spec.ProfileRef = alloc.Alloc(mutations.ProfileStream(spec))
+	}
+	if setIntent {
+		intentResult, intentErr := mutations.SetOutputIntent(ctx, alloc, doc, spec)
 		if intentErr != nil {
 			restoreTrailer()
 			return nil, fmt.Errorf("%w: %w", ErrColorConversionRefused, intentErr)
 		}
 		report.OutputIntent, report.KeptOutputIntents = intentResult.Action, intentResult.Kept
+	}
+	if len(conflicts) > 0 {
+		replaced, replaceErr := mutations.RetargetOutputIntents(ctx, alloc, doc, spec.Profile, spec.Components, spec.ProfileRef)
+		if replaceErr != nil {
+			restoreTrailer()
+			return nil, fmt.Errorf("%w: %w", ErrColorConversionRefused, replaceErr)
+		}
+		for _, c := range replaced {
+			report.ReplacedOutputIntents = append(report.ReplacedOutputIntents, c.Condition)
+			if i := slices.Index(report.KeptOutputIntents, c.Subtype); i >= 0 {
+				report.KeptOutputIntents = slices.Delete(report.KeptOutputIntents, i, i+1)
+			}
+		}
 	}
 
 	// Nothing converted and no intent set: leave the Writer untouched rather

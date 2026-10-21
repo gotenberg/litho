@@ -64,7 +64,9 @@ const (
 	metricRecolorChecked = "pages_checked"
 	// metricRecolorRefused counts the PDFs [pdf.Writer.ConvertColors] refused
 	// with [pdf.ErrColorConversionRefused], its documented answer for a
-	// colour it cannot convert, which is no failure.
+	// colour it cannot convert, or with [pdf.ErrOutputIntentConflict], its
+	// answer for a kept output intent over another CMYK profile, which are
+	// no failures.
 	metricRecolorRefused = "recolor_refused"
 	// metricRecolorFailed counts the PDFs whose conversion or write failed
 	// with any other error.
@@ -109,20 +111,21 @@ const (
 //
 // # Corpus evidence
 //
-//   - litho (215 files), pdfjs and govdocs (79 sampled files each): 201, 78
-//     and 79 match; 10 litho files and no other are refused, each for a
+//   - litho (215 files), pdfjs and govdocs (79 sampled files each): 199, 78
+//     and 79 match; 14 litho files and no other are refused, 10 for a
 //     construct the file holds on purpose (a colour space naming a resource,
 //     33 colorants, a 3-bit or 2-channel JPEG 2000 image, an /Lzw or doubled
 //     /Interpolate inline image, a shading function of the wrong output
-//     count, an undecodable content stream); pdfjs print_protection.pdf does
-//     not open.
+//     count, an undecodable content stream) and 4 for a GTS_PDFX intent;
+//     pdfjs print_protection.pdf does not open.
 //   - litho defaultbox_2b.pdf, viewerboxes_2b.pdf: ink_moved on the pages
 //     without a usable media box, which every full rewrite gives a size of
 //     its own (see their known divergences), the conversion aside.
-//   - litho pdfxonly_2b.pdf, twoprofile_1b.pdf: colour_drift of 80.6 and
-//     83.5. Each keeps a GTS_PDFX intent over another CMYK profile before
-//     the PDF/A one the conversion sets, and the renderer reads DeviceCMYK
-//     through the first intent of four components.
+//   - litho iccbadcmyk_2b.pdf, pdfxnoprofile_2b.pdf, pdfxonly_2b.pdf,
+//     twoprofile_1b.pdf: refused with pdf.ErrOutputIntentConflict. Each keeps
+//     a GTS_PDFX intent over another CMYK profile, through which the renderer
+//     reads the converted DeviceCMYK, 80.6 and 83.5 ΔE*ab from the source on
+//     the last two; with pdf.WithReplacedOutputIntents all four match.
 type recolorFeature struct {
 	// convert runs the conversion; tests replace it to plant a defect.
 	convert func(ctx context.Context, w *pdf.Writer) (*pdf.ColorReport, error)
@@ -246,7 +249,7 @@ func (f *recolorFeature) run(ctx context.Context, pdfPath string) recolorOutput 
 	output, report, err := f.convertOnce(ctx, src)
 	if err != nil {
 		out.Error = err.Error()
-		if errors.Is(err, pdf.ErrColorConversionRefused) {
+		if errors.Is(err, pdf.ErrColorConversionRefused) || errors.Is(err, pdf.ErrOutputIntentConflict) {
 			out.Refused = true
 		} else {
 			out.Failed = true

@@ -555,6 +555,19 @@ var (
 	// was.
 	ErrColorConversionRefused = errors.New("colour conversion refused: the document paints a colour that cannot be converted")
 
+	// ErrOutputIntentConflict is returned by [Writer.ConvertColors] for a
+	// CMYK target, [CMYKColorTarget] or an [ICCColorTarget] over a CMYK
+	// profile, when the document keeps an output intent of another subtype
+	// than GTS_PDFA1, a GTS_PDFX intent among them, whose destination profile
+	// is another CMYK profile: viewers read DeviceCMYK through that intent
+	// (ISO 32000-1, 14.11.5), so the converted colours would print as another
+	// device's. The error names the intent's /OutputConditionIdentifier.
+	// [WithReplacedOutputIntents] points such intents at the target profile
+	// instead. It is a sentinel of its own, not an [ErrColorConversionRefused]:
+	// every colour converts, the document's printing condition is what
+	// disagrees. The [Writer] is left as it was.
+	ErrOutputIntentConflict = errors.New("an output intent the conversion keeps names another CMYK profile than the target's")
+
 	// ErrInvalidLimits is returned, wrapped in an error naming the field, by
 	// [Limits.Validate], and by [Open] and [OpenFile] when a budget given to
 	// [WithLimits] is negative or above its ceiling. See [Limits].

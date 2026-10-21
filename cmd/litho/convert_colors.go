@@ -24,6 +24,9 @@ type convertColorsResult struct {
 	KeptSpotColorants    []string `json:"keptSpotColorants,omitempty"`
 	OutputIntent         string   `json:"outputIntent,omitempty"`
 	KeptOutputIntents    []string `json:"keptOutputIntents,omitempty"`
+	// ReplacedOutputIntents names the intents --replace-output-intents
+	// pointed at the target profile, by /OutputConditionIdentifier.
+	ReplacedOutputIntents []string `json:"replacedOutputIntents,omitempty"`
 }
 
 // renderingIntents maps the --intent values, the rendering intent names of
@@ -42,6 +45,7 @@ type convertColorsFlags struct {
 	target, profile, intent string
 	bpc, convertSpots       bool
 	noOutputIntent          bool
+	replaceOutputIntents    bool
 }
 
 // colorTarget returns the target and options the flags select, reading the
@@ -87,6 +91,9 @@ func (f convertColorsFlags) colorTarget() (pdf.ColorTarget, []pdf.ColorOption, e
 	if f.noOutputIntent {
 		opts = append(opts, pdf.WithoutOutputIntent())
 	}
+	if f.replaceOutputIntents {
+		opts = append(opts, pdf.WithReplacedOutputIntents())
+	}
 	return target, opts, nil
 }
 
@@ -105,12 +112,13 @@ func runConvertColors(ctx context.Context, args []string, stdout, stderr io.Writ
 	fs.BoolVar(&f.bpc, "bpc", false, "Apply black point compensation")
 	fs.BoolVar(&f.convertSpots, "convert-spots", false, "Convert spot colours (Separation, DeviceN) to process colour instead of keeping them")
 	fs.BoolVar(&f.noOutputIntent, "no-output-intent", false, "Leave the output intents as they are instead of making the target the output intent")
+	fs.BoolVar(&f.replaceOutputIntents, "replace-output-intents", false, "Point a PDF/X or other non-PDF/A output intent over another CMYK profile at the target profile instead of refusing")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	if fs.NArg() < 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho convert-colors <file> [--target output-intent|cmyk|rgb|gray|icc] [--profile profile.icc] [--cmyk-profile profile.icc] [--intent NAME] [--bpc] [--convert-spots] [--no-output-intent] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho convert-colors <file> [--target output-intent|cmyk|rgb|gray|icc] [--profile profile.icc] [--cmyk-profile profile.icc] [--intent NAME] [--bpc] [--convert-spots] [--no-output-intent] [--replace-output-intents] -o out.pdf")
 		return exitError
 	}
 	if *format != "text" && *format != "json" {
@@ -177,15 +185,16 @@ func runConvertColors(ctx context.Context, args []string, stdout, stderr io.Writ
 // printConvertColorsReport writes the report in format, text or json.
 func printConvertColorsReport(stdout, stderr io.Writer, format, file string, report *pdf.ColorReport) int {
 	result := convertColorsResult{
-		File:                 file,
-		Target:               report.Target,
-		ConvertedOperators:   report.ConvertedOperators,
-		ConvertedColorSpaces: report.ConvertedColorSpaces,
-		ConvertedImages:      report.ConvertedImages,
-		ConvertedShadings:    report.ConvertedShadings,
-		KeptSpotColorants:    report.KeptSpotColorants,
-		OutputIntent:         report.OutputIntent,
-		KeptOutputIntents:    report.KeptOutputIntents,
+		File:                  file,
+		Target:                report.Target,
+		ConvertedOperators:    report.ConvertedOperators,
+		ConvertedColorSpaces:  report.ConvertedColorSpaces,
+		ConvertedImages:       report.ConvertedImages,
+		ConvertedShadings:     report.ConvertedShadings,
+		KeptSpotColorants:     report.KeptSpotColorants,
+		OutputIntent:          report.OutputIntent,
+		KeptOutputIntents:     report.KeptOutputIntents,
+		ReplacedOutputIntents: report.ReplacedOutputIntents,
 	}
 	if format == "json" {
 		enc := json.NewEncoder(stdout)
@@ -206,6 +215,9 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 	}
 	if len(result.KeptOutputIntents) > 0 {
 		fmt.Fprintf(stdout, "Kept output intent(s): %s\n", strings.Join(result.KeptOutputIntents, ", "))
+	}
+	if len(result.ReplacedOutputIntents) > 0 {
+		fmt.Fprintf(stdout, "Output intent(s) pointed at the target profile: %s\n", strings.Join(result.ReplacedOutputIntents, ", "))
 	}
 	return exitOK
 }

@@ -32,7 +32,8 @@ func TestConvertColorsFlags_SelectTheTarget(t *testing.T) {
 		{"default", func(*convertColorsFlags) {}, pdf.OutputIntentColorTarget(), 1, ""},
 		{"cmyk with every option", func(f *convertColorsFlags) {
 			f.target, f.intent, f.bpc, f.convertSpots, f.noOutputIntent = "cmyk", "Perceptual", true, true, true
-		}, pdf.CMYKColorTarget(), 4, ""},
+			f.replaceOutputIntents = true
+		}, pdf.CMYKColorTarget(), 5, ""},
 		{"rgb", func(f *convertColorsFlags) { f.target = "rgb" }, pdf.RGBColorTarget(), 1, ""},
 		{"gray", func(f *convertColorsFlags) { f.target = "gray" }, pdf.GrayColorTarget(), 1, ""},
 		{"icc", func(f *convertColorsFlags) { f.target, f.profile = "icc", profile }, pdf.ICCColorTarget([]byte("bytes")), 1, ""},
@@ -157,5 +158,58 @@ func TestConvertColors_Usage(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "Usage: litho convert-colors") {
 		t.Errorf("stderr = %q", stderr.String())
+	}
+}
+
+// TestConvertColors_OutputIntentConflict pins --replace-output-intents end to
+// end: without it a CMYK target under a PDF/X intent over another CMYK
+// profile exits 1 naming the printing condition and writes nothing, and with
+// it the intent is pointed at the target and reported.
+func TestConvertColors_OutputIntentConflict(t *testing.T) {
+	profile, err := os.ReadFile("../../pkg/internal/graphics/icc/testdata/v4-cmyk-lut.icc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /OutputIntents [<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) /DestOutputProfile 5 0 R >>] >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+		"<< /Length 22 >>\nstream\n1 0 0 rg 0 0 9 9 re f\nendstream",
+		fmt.Sprintf("<< /N 4 /Length %d >>\nstream\n%s\nendstream", len(profile), profile),
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offs := make([]int, len(objs)+1)
+	for i, o := range objs {
+		offs[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", offs[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	src := writeTempPDF(t, b.Bytes())
+
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(), []string{"convert-colors", "--target", "cmyk", "-o", out, src}, &stdout, &stderr); rc != exitError {
+		t.Fatalf("exit %d, want %d; stderr: %s", rc, exitError, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "FOGRA39") {
+		t.Errorf("stderr does not name the printing condition: %q", stderr.String())
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("a refused conversion left %s behind (stat: %v)", out, err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if rc := run(context.Background(), []string{"convert-colors", "--target", "cmyk", "--replace-output-intents", "-o", out, src}, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("exit %d; stderr: %s", rc, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "pointed at the target profile: FOGRA39") {
+		t.Errorf("stdout = %q", stdout.String())
 	}
 }
