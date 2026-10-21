@@ -24,6 +24,7 @@
     "imagedecode": "goldens/images",
     "render": "goldens/render",
     "redact-render": "goldens/render",
+    "recolor": "goldens/render",
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
     "remediation-aggressive": "goldens/compliance"

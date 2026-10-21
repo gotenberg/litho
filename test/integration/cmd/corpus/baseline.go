@@ -100,6 +100,13 @@ var costMetrics = map[string]bool{
 	metricInsideLeakedPoppler:   true,
 	metricRedactFailed:          true,
 	metricPopplerUnavailable:    true,
+
+	// The recolor cell counts the conversions that failed and the pages a
+	// check failed on. See recolorFeature.
+	metricRecolorFailed: true,
+	metricOutOfTarget:   true,
+	metricInkMoved:      true,
+	metricColourDrift:   true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any
@@ -133,6 +140,13 @@ var uncomparedMetrics = map[string]bool{
 	metricRedactIncomplete: true,
 	metricPopplerNoOracle:  true,
 	metricImageSpill:       true,
+
+	// The recolor inventory: a refusal is the documented answer for a colour
+	// the conversion cannot convert, and a group blending space is no colour
+	// a page paints. A defect fails out_of_target or colour_drift instead;
+	// pages_checked, the coverage, stays gated as good-when-higher.
+	metricRecolorRefused:   true,
+	metricGroupOutOfTarget: true,
 }
 
 // defaultBaselinePath returns the canonical baseline location. The

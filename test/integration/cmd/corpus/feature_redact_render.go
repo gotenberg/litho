@@ -287,9 +287,24 @@ func (f *redactRenderFeature) OncePerPDF() {}
 // LoadGoldens reads which PDFs the render goldens cover and their fonts. A
 // directory with no render index puts every PDF in scope.
 func (f *redactRenderFeature) LoadGoldens(dir string) error {
+	sampled, fonts, err := loadRenderSample(dir)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	f.sampled, f.fonts = sampled, fonts
+	f.mu.Unlock()
+	return nil
+}
+
+// loadRenderSample reads which PDFs the render goldens under dir cover, nil
+// when dir holds no render index (every PDF in scope), and the option that
+// draws with the fonts the goldens were drawn with, nil when it holds none.
+// It returns [ErrNoGoldens] when dir does not exist.
+func loadRenderSample(dir string) (map[string]bool, pdf.RenderOption, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return ErrNoGoldens
+		return nil, nil, ErrNoGoldens
 	}
 	var sampled map[string]bool
 	for _, e := range entries {
@@ -298,7 +313,7 @@ func (f *redactRenderFeature) LoadGoldens(dir string) error {
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name())) //nolint:gosec // golden under the corpus testdata root
 		if err != nil {
-			return fmt.Errorf("read %s: %w", e.Name(), err)
+			return nil, nil, fmt.Errorf("read %s: %w", e.Name(), err)
 		}
 		var idx renderIndex
 		if json.Unmarshal(data, &idx) != nil || idx.DPI != renderDPI {
@@ -313,10 +328,7 @@ func (f *redactRenderFeature) LoadGoldens(dir string) error {
 	if info, err := os.Stat(filepath.Join(dir, renderFontsDir)); err == nil && info.IsDir() {
 		fonts = pdf.WithRenderFontFiles(os.DirFS(filepath.Join(dir, renderFontsDir)))
 	}
-	f.mu.Lock()
-	f.sampled, f.fonts = sampled, fonts
-	f.mu.Unlock()
-	return nil
+	return sampled, fonts, nil
 }
 
 func (f *redactRenderFeature) HasGolden(fixtureID string) bool {

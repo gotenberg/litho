@@ -32,7 +32,8 @@
     "determinism": "goldens/compliance",
     "text": "goldens/text",
     "render": "goldens/render",
-    "redact-render": "goldens/render"
+    "redact-render": "goldens/render",
+    "recolor": "goldens/render"
   },
   "golden_overrides": {
     "text": "text-overrides.json"
