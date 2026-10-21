@@ -74,6 +74,15 @@ type renderer struct {
 	type3Depth int
 	// tiling holds the render's tiling patterns and tiles, made on first use.
 	tiling *tilingState
+	// omit is the content left out ([Options.Omit]). It is cleared where a
+	// kind's own content runs: a Type 3 glyph description, a pattern cell, a
+	// soft mask's group.
+	omit Content
+}
+
+// omits reports whether the render leaves out content of kind k.
+func (r *renderer) omits(k Content) bool {
+	return r.omit&k != 0
 }
 
 // scope is one content stream being run: the page's or a form's.
@@ -311,7 +320,7 @@ func (r *renderer) paintPath(s *scope, operator string) error {
 		}
 	}
 	st := r.m.Current()
-	if !st.SkipExtraction && !s.path.Empty() {
+	if !st.SkipExtraction && !s.path.Empty() && !r.omits(Paths) {
 		var err error
 		switch operator {
 		case "f", "F", "B", "b":

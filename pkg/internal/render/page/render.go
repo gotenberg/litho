@@ -86,7 +86,45 @@ type Options struct {
 	// pdftoppm draws them) or those it prints ([annot.Print]), by the flags
 	// of ISO 32000-1, 12.5.3.
 	Annotations annot.Mode
+	// Omit names the kinds of content left out of the page; the zero value
+	// draws everything. See [Content].
+	Omit Content
 }
+
+// Content is a set of kinds of content, told apart by the operator that
+// paints them, as Ghostscript's FILTERTEXT, FILTERIMAGE and FILTERVECTOR
+// tell them apart.
+//
+// A kind left out paints nothing, but keeps every other effect: a path
+// still clips (ISO 32000-1, 8.5.4), text in a clipping mode still adds its
+// glyphs to the clip at ET (9.3.6), and text still advances the text
+// position. The kind is the outermost painting operator's: a Type 3 glyph
+// description is text however it paints (9.6.5), and the cells of a tiling
+// pattern are the fill or stroke they paint (8.7.3.1). An annotation appearance
+// is the annotation (12.5.5), drawn whole. A soft mask's group
+// (11.6.5.2) shapes what it masks rather than painting, so it is drawn
+// whole. A form XObject is a container: its content is told apart operator
+// by operator.
+type Content uint8
+
+const (
+	// Text is what the text-showing operators paint (9.4.3, Table 109).
+	Text Content = 1 << iota
+	// Paths is what the path-painting operators paint (8.5.3.1, Table 60),
+	// in a colour, a shading pattern or a tiling pattern.
+	Paths
+	// Images is what Do paints for an image XObject and what BI paints,
+	// stencil masks included (8.9).
+	Images
+	// Shadings is what sh paints (8.7.4.2).
+	Shadings
+	// Annotations is the annotation appearances drawn over the content
+	// (12.5.5), each whole whatever kinds it paints.
+	Annotations
+)
+
+// AllContent holds every kind of [Content].
+const AllContent = Text | Paths | Images | Shadings | Annotations
 
 // Report says what a render left out.
 type Report struct {
@@ -153,6 +191,7 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 		colorCache:  &colorconv.Cache{},
 		glyphs:      make(map[glyphKey]glyph.Glyph),
 		type3:       make(map[glyphKey][]content.Operation),
+		omit:        opts.Omit,
 	}
 	// 11.4.7: the page is an isolated group over a transparent backdrop,
 	// composited with the medium afterwards; its own /Group may make it a
@@ -171,8 +210,12 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 	if err := r.run(ops, pg.Resources, g.Matrix, 0); err != nil {
 		return nil, report, err
 	}
-	if err := r.annotations(g, opts.Annotations); err != nil {
-		return nil, report, err
+	if opts.Omit&Annotations == 0 {
+		// An appearance stream is the annotation (12.5.5): drawn whole.
+		r.omit = 0
+		if err := r.annotations(g, opts.Annotations); err != nil {
+			return nil, report, err
+		}
 	}
 	canvas := root.Canvas()
 	if bg := opts.Background; bg[3] > 0 {

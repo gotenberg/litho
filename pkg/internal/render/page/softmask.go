@@ -303,5 +303,8 @@ func (r *renderer) sub(width, height int, device geom.Matrix, root *blend.Group)
 	s.groups = []frame{{group: root, direct: root.Direct()}}
 	s.masks = newMaskCache()
 	s.chain = slices.Clone(r.chain)
+	// What a soft mask's group and a pattern's cells paint belongs to the
+	// element they shape or fill, whose kind decided whether it is drawn.
+	s.omit = 0
 	return &s
 }

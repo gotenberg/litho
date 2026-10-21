@@ -47,7 +47,7 @@ var inlineSpaces = map[ast.PdfName]ast.PdfName{
 // inlineImage paints the inline image of a BI operation, whose operands the
 // parse gave as the dictionary and the data ([content.InlineImageData]).
 func (r *renderer) inlineImage(s *scope, op content.Operation) error {
-	if r.m.Current().SkipExtraction || len(op.Operands) != 2 {
+	if r.m.Current().SkipExtraction || len(op.Operands) != 2 || r.omits(Images) {
 		return nil
 	}
 	inline, ok := op.Operands[0].(ast.PdfDict)

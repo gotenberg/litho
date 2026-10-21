@@ -54,6 +54,9 @@ func (r *renderer) do(s *scope, op content.Operation) error {
 	}
 	switch subtype {
 	case "Image":
+		if r.omits(Images) {
+			return nil
+		}
 		return r.image(s, name, stream)
 	case "Form":
 		ref, _ := obj.(ast.PdfIndirectRef)

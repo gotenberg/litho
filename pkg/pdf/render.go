@@ -31,6 +31,51 @@ type renderOpts struct {
 	systemFonts *fontFiles
 	// target selects the annotations drawn.
 	target RenderTarget
+	// content selects the kinds of content drawn.
+	content RenderContent
+}
+
+// RenderContent is a set of kinds of content [Reader.RenderPage] draws, told
+// apart by the operator that paints them, as Ghostscript's -dFILTERTEXT,
+// -dFILTERIMAGE and -dFILTERVECTOR tell them apart. Combine kinds with |.
+//
+// Content of a kind left out paints nothing and keeps every other effect: a
+// path still clips (ISO 32000-1, 8.5.4) and text in a clipping mode still
+// clips (9.3.6). The kind is the painting operator's: a Type 3 glyph is text
+// whatever its description paints, the cells of a tiling pattern belong to
+// the fill or stroke they paint, an annotation is drawn whole with its
+// appearance stream, and a form XObject's content is told apart
+// operator by operator.
+type RenderContent uint8
+
+const (
+	// RenderText is what the text-showing operators paint (ISO 32000-1,
+	// 9.4.3).
+	RenderText RenderContent = 1 << iota
+	// RenderPaths is what the path-painting operators fill and stroke (ISO
+	// 32000-1, 8.5.3), in a colour or a pattern.
+	RenderPaths
+	// RenderImages is what image XObjects and inline images paint, image
+	// masks included (ISO 32000-1, 8.9).
+	RenderImages
+	// RenderShadings is what the sh operator paints (ISO 32000-1, 8.7.4.2).
+	RenderShadings
+	// RenderAnnotations is the annotation appearances drawn over the page
+	// ([WithRenderTarget] selects which), each whole whatever it paints.
+	RenderAnnotations
+)
+
+// RenderAllContent holds every kind of [RenderContent]: what
+// [Reader.RenderPage] draws by default.
+const RenderAllContent = RenderText | RenderPaths | RenderImages | RenderShadings | RenderAnnotations
+
+// WithRenderContent draws only the kinds of content c holds, over the
+// background. Default [RenderAllContent]. A value holding a bit no kind
+// names makes [Reader.RenderPage] fail with [ErrInvalidRenderOptions].
+func WithRenderContent(c RenderContent) RenderOption {
+	return func(o *renderOpts) {
+		o.content = c
+	}
 }
 
 // RenderTarget selects which annotations [Reader.RenderPage] draws over a
@@ -92,7 +137,8 @@ func WithRenderBackground(c color.Color) RenderOption {
 // version names), soft masks, isolated and knockout transparency groups and
 // text knockout, blending in sRGB. It does not draw an annotation with no
 // appearance stream. Content a document's default optional content
-// configuration hides is not drawn.
+// configuration hides is not drawn, nor are the kinds of content
+// [WithRenderContent] leaves out.
 //
 // Glyphs are drawn from the programs the document embeds. litho bundles no
 // font program, so a font the document does not embed draws its glyphs as
@@ -111,7 +157,7 @@ func WithRenderBackground(c color.Color) RenderOption {
 // reads the document through its caches, which serialise themselves.
 func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOption) (_ image.Image, err error) {
 	defer recoverToError(r.logger(), "Reader.RenderPage", &err)
-	o := renderOpts{dpi: DefaultRenderDPI, background: color.White}
+	o := renderOpts{dpi: DefaultRenderDPI, background: color.White, content: RenderAllContent}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -123,6 +169,9 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 		mode = annot.Print
 	default:
 		return nil, fmt.Errorf("page %d: %w: render target %d", pageNum, ErrInvalidRenderOptions, o.target)
+	}
+	if o.content&^RenderAllContent != 0 {
+		return nil, fmt.Errorf("page %d: %w: render content %#x", pageNum, ErrInvalidRenderOptions, uint8(o.content))
 	}
 	pg, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -144,6 +193,7 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 		Background:  bg,
 		Fonts:       renderFontProvider(r.logger(), providers),
 		Annotations: mode,
+		Omit:        omittedContent(o.content),
 	})
 	if err != nil {
 		switch {
@@ -163,4 +213,25 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 		r.logger().Debug("render: drawn without some constructs", attrs...)
 	}
 	return canvas.Image(), nil
+}
+
+// omittedContent returns the kinds of content the renderer leaves out when
+// [Reader.RenderPage] draws c.
+func omittedContent(c RenderContent) page.Content {
+	var omit page.Content
+	for _, k := range []struct {
+		public   RenderContent
+		internal page.Content
+	}{
+		{RenderText, page.Text},
+		{RenderPaths, page.Paths},
+		{RenderImages, page.Images},
+		{RenderShadings, page.Shadings},
+		{RenderAnnotations, page.Annotations},
+	} {
+		if c&k.public == 0 {
+			omit |= k.internal
+		}
+	}
+	return omit
 }

@@ -34,7 +34,7 @@ func (r *renderer) resource(s *scope, kind, name ast.PdfName) ast.PdfObject {
 // the current clip, in the fill alpha (11.6.4.4).
 func (r *renderer) shading(s *scope, op content.Operation) error {
 	st := r.m.Current()
-	if st.SkipExtraction || len(op.Operands) != 1 || r.clip().empty() {
+	if st.SkipExtraction || len(op.Operands) != 1 || r.clip().empty() || r.omits(Shadings) {
 		return nil
 	}
 	name, ok := op.Operands[0].(ast.PdfName)

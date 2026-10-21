@@ -267,8 +267,9 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 		// with any other.
 		mode = 0
 	}
-	fill := mode&3 == 0 || mode&3 == 2
-	strokes := mode&3 == 1 || mode&3 == 2
+	// Text left out keeps its clipping (9.3.6) and paints nothing.
+	fill := (mode&3 == 0 || mode&3 == 2) && !r.omits(Text)
+	strokes := (mode&3 == 1 || mode&3 == 2) && !r.omits(Text)
 	if g.Source == glyph.SourcePlaceholder {
 		r.report.count(PlaceholderGlyph)
 	}
@@ -382,6 +383,10 @@ func (r *renderer) type3Glyph(s *scope, key glyphKey, g glyph.Glyph, glyphToUser
 		}
 		r.syncClips()
 	}()
+	// The description is the glyph: what it paints is text, drawn whole.
+	savedOmit := r.omit
+	r.omit = 0
+	defer func() { r.omit = savedOmit }()
 	st := r.m.Current()
 	st.CTM = [6]float64(glyphToUser.Mul(geom.Matrix(st.CTM)))
 	return r.run(ops, resources, r.toDevice(), s.depth+1)
