@@ -121,10 +121,17 @@ func assertOpaque(t testing.TB, data []byte) {
 // text and paints no transparency.
 func checkFlattened(t *testing.T, f fixture) ([]byte, *Report) {
 	t.Helper()
+	return checkFlattenedWithin(t, f, 8)
+}
+
+// checkFlattenedWithin is [checkFlattened] with pixels allowed tolerance
+// levels apart.
+func checkFlattenedWithin(t *testing.T, f fixture, tolerance int) ([]byte, *Report) {
+	t.Helper()
 	in := f.bytes()
 	out, report := flattenBytes(t, in, Options{})
 	for _, dpi := range []float64{72, 150} {
-		if d := differing(renderAt(t, in, dpi), renderAt(t, out, dpi), 8); d > 0.01 {
+		if d := differing(renderAt(t, in, dpi), renderAt(t, out, dpi), tolerance); d > 0.01 {
 			t.Errorf("at %v dpi %.2f%% of the pixels differ", dpi, 100*d)
 		}
 	}
