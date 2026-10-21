@@ -756,7 +756,11 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 	if record.runFonts {
 		runs = &runRecorder{fonts: make([]runFont, 0, estimatedCap)}
 	}
-	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr, runs); err != nil {
+	resources := page.DrawResources
+	if record.merged {
+		resources = page.Resources
+	}
+	if err := extractTextRecursive(ctx, doc, machine, resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr, runs); err != nil {
 		return extraction{}, err
 	}
 
@@ -808,11 +812,18 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 }
 
 // extractionRecord names what [extractElements] records beside the
-// elements.
+// elements, and which resources the page's names resolve in.
 type extractionRecord struct {
 	origins  bool
 	fontRefs bool
 	runFonts bool
+	// merged resolves the page's names in [document.Page.Resources], the
+	// merge of every ancestor's, rather than in the dictionary a viewer
+	// draws with, [document.Page.DrawResources]. A caller removing or
+	// measuring content reads what any lenient viewer may draw, so a
+	// redaction misses no text a viewer resolving past the page's own
+	// /Resources shows.
+	merged bool
 }
 
 // extraction is what [extractElements] returns: the elements and, parallel
@@ -842,7 +853,8 @@ const OriginUnattributable = -1
 const FontUnattributable = -1
 
 // ExtractElements extracts text from a page's content [content.Operation]
-// values as raw spatial [models.TextElement] entries.
+// values as raw spatial [models.TextElement] entries. The page's names
+// resolve in [document.Page.DrawResources], as a viewer draws them.
 func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
 	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{})
 	return ex.elements, err
@@ -864,8 +876,12 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 //
 // The origins describe these elements as returned. [CoalesceElements] merges
 // and drops entries, so origins do not survive it; correlate first.
+//
+// The page's names resolve in [document.Page.Resources], the merge of every
+// ancestor's: a caller editing content by its origins reaches all a lenient
+// viewer may draw.
 func ExtractElementsWithOrigins(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, []int, error) {
-	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{origins: true})
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{origins: true, merged: true})
 	return ex.elements, ex.origins, err
 }
 
@@ -880,9 +896,10 @@ func ExtractElementsWithOrigins(ctx context.Context, doc *document.Document, mac
 //
 // An element drawn inside a form XObject reports [OriginUnattributable] and
 // [FontUnattributable]: its bytes are in the form's own stream, and the form
-// selects its fonts from its own resources.
+// selects its fonts from its own resources. The page's names resolve as
+// [ExtractElementsWithOrigins] resolves them.
 func ExtractElementsWithAttribution(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, []int, []int, error) {
-	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{origins: true, fontRefs: true})
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{origins: true, fontRefs: true, merged: true})
 	return ex.elements, ex.origins, ex.fontRefs, err
 }
 
@@ -1062,6 +1079,7 @@ func rectsIntersect(a, b [4]float64) bool {
 }
 
 // ExtractText extracts text from a page's content operations and reconstructs it via [ReconstructText].
+// The page's names resolve as [ExtractElements] resolves them.
 func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, config ExtractionConfig) (string, error) {
 	machine.StripArtifacts = config.StripArtifacts
 

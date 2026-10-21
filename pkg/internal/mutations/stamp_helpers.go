@@ -381,7 +381,7 @@ func latestPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			doc.Logger.Debug("latestPage: staged /Resources did not resolve, keeping the source's",
 				slog.Int("page", page.Ref.ObjectNum), slog.Any("err", err))
 		} else if d, ok := obj.(ast.PdfDict); ok {
-			p.Resources = d
+			p.Resources, p.DrawResources = d, d
 		}
 	}
 	return &p

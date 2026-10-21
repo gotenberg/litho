@@ -86,7 +86,7 @@ func StagedPages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 func stagedPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef, dict ast.PdfDict) *document.Page {
 	page := &document.Page{Ref: ref, Dict: dict, UserUnit: 1}
 	if res, err := resolveDictAllocFirst(ctx, alloc, doc, dict["Resources"]); err == nil {
-		page.Resources = res
+		page.Resources, page.DrawResources = res, res
 	}
 	box := func(key ast.PdfName) ast.PdfArray {
 		return stagedRectangle(ctx, alloc, doc, dict[key])

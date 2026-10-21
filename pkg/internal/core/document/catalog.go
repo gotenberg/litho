@@ -34,11 +34,14 @@ type PageTree struct {
 // an ancestor /Pages node. Dict holds the page's own entries verbatim.
 //
 // Resources is the page's /Resources merged key by key with every ancestor's,
-// a leniency for reading (see [traversePageTree]). InheritedResources is the
-// /Resources entry of the nearest ancestor on the page tree walk that states
-// one, as written: the dictionary ISO 32000-1, 7.7.3.4 hands whole to a page
-// stating none. An ancestor states one unless the entry is absent or null
-// (ISO 32000-1, 7.3.7); any other value ends the search, as veraPDF reads it.
+// a leniency for reading (see [traversePageTree]): the superset of every name
+// a reader resolves, for callers that must miss none, redaction and change
+// detection among them. DrawResources is the dictionary a viewer draws the
+// page's content with. InheritedResources is the /Resources entry of the
+// nearest ancestor on the page tree walk that states one, as written: the
+// dictionary ISO 32000-1, 7.7.3.4 hands whole to a page stating none. An
+// ancestor states one unless the entry is absent or null (ISO 32000-1, 7.3.7);
+// any other value ends the search, as veraPDF reads it.
 // A writer that gives a page /Resources of its own builds them from
 // InheritedResources, never from Resources, which can name a resource the
 // page cannot reach.
@@ -62,6 +65,25 @@ type Page struct {
 	// InheritedResources is the nearest ancestor's /Resources entry, as
 	// written, nil when none states one.
 	InheritedResources ast.PdfObject
+
+	// DrawResources is the /Resources dictionary of the nearest node, the
+	// page first, whose entry is a dictionary, whole, nil when none is. ISO
+	// 32000-1, 7.7.3.4 hands an inheritable attribute down only to a page
+	// that omits it, so a name missing from the dictionary a page states is
+	// undefined there, whatever an ancestor's defines. A reference to a
+	// missing object is null (ISO 32000-1, 7.3.10) and a null entry is
+	// absent (7.3.7), so either inherits. An entry of another type is no
+	// dictionary a viewer can read, and inherits too, as poppler reads it.
+	// Compliance reads any present non-null entry as the page's own instead,
+	// as veraPDF does (see InheritedResources).
+	//
+	// # Corpus evidence
+	//
+	//   - litho resinherit_2b.pdf: poppler draws nothing for the font F6 and
+	//     the colour space CS4 page 2 names past the /Resources it states,
+	//     reports "Unknown font tag 'F6'", and draws the text of page 4, whose
+	//     /Resources names a missing object, in its ancestor's F4.
+	DrawResources ast.PdfDict
 }
 
 // SetBoxes sets the page's boundaries from the entries that declare them, each
@@ -386,7 +408,7 @@ func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page
 	// the stack.
 	visited := make(map[int]bool)
 	done := make(map[int]bool)
-	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, nil, 0, &pages, visited, done, 0)
+	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, nil, nil, 0, &pages, visited, done, 0)
 	if err != nil {
 		return nil, fmt.Errorf("traversing page tree: %w", err)
 	}
@@ -477,7 +499,7 @@ const MaxPageTreeDepth = maxPageTreeDepth
 //     <</Im11 ...>> while most pages state a /Resources holding only /Font
 //     and /ColorSpace, so the /Resources merge reports Im11 on every page
 //     and qpdf reports it only on the first.
-func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedResourcesEntry ast.PdfObject, inheritedMediaBox, inheritedCropBox ast.PdfArray, inheritedRotate int, pages *[]*Page, visited, done map[int]bool, depth int) error {
+func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources, inheritedDrawResources ast.PdfDict, inheritedResourcesEntry ast.PdfObject, inheritedMediaBox, inheritedCropBox ast.PdfArray, inheritedRotate int, pages *[]*Page, visited, done map[int]bool, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("page tree traversal canceled: %w", err)
 	}
@@ -512,8 +534,18 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	// that is what qpdf implements: it pushes an ancestor's /Resources onto a
 	// page only when the page states none. The merge instead keeps a page whose
 	// own dictionary is partial working, at the cost of listing a resource the
-	// page cannot legally name.
+	// page cannot legally name. A caller drawing the page reads DrawResources,
+	// which follows 7.7.3.4.
 	currentResources := mergeResourceDicts(ctx, doc, inheritedResources, node)
+
+	// The dictionary a viewer draws a kid with (see [Page.DrawResources]):
+	// this node's, whole, when its /Resources is a dictionary.
+	currentDrawResources := inheritedDrawResources
+	if entry, ok := node["Resources"]; ok {
+		if d, err := ResolveDict(ctx, doc, entry); err == nil && d != nil {
+			currentDrawResources = d
+		}
+	}
 
 	// What ISO 32000-1, 7.7.3.4 hands a kid stating no /Resources: this
 	// node's entry, whole, when it states one (see [Page]).
@@ -629,7 +661,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 				continue
 			}
 
-			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentResourcesEntry, currentMediaBox, currentCropBox, currentRotate, pages, visited, done, depth+1)
+			err = traversePageTree(ctx, doc, kidDict, kidRef, currentResources, currentDrawResources, currentResourcesEntry, currentMediaBox, currentCropBox, currentRotate, pages, visited, done, depth+1)
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
 					return fmt.Errorf("traversing page tree kid: %w", err)
@@ -653,11 +685,12 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		}
 
 		page := &Page{
-			Ref:       nodeRef,
-			Dict:      node,
-			Resources: currentResources,
-			Rotate:    currentRotate,
-			UserUnit:  userUnit,
+			Ref:           nodeRef,
+			Dict:          node,
+			Resources:     currentResources,
+			DrawResources: currentDrawResources,
+			Rotate:        currentRotate,
+			UserUnit:      userUnit,
 
 			InheritedResources: inheritedResourcesEntry,
 		}

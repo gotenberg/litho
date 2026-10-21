@@ -69,8 +69,11 @@ func stagedPageDict(alloc *writer.ObjAllocator, page *document.Page) ast.PdfDict
 
 // stagedResources returns the resource dictionary of the page as alloc stages
 // it: the /Resources of its staged dict, resolved alloc-first, or the
-// resources it inherits in the document when that dict names none (ISO
-// 32000-1, 7.7.3.4) or they do not resolve to a dictionary.
+// resources the page tree walk merges for it when that dict names none or
+// they do not resolve to a dictionary. The merge reaches more than ISO
+// 32000-1, 7.7.3.4 hands the page (see [document.Page]), deliberately: a
+// form a lenient viewer draws past the page's own dictionary is then still
+// judged to paint text, and kept out of an /Artifact.
 func stagedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ast.PdfDict {
 	if res, ok := stagedPageDict(alloc, page)["Resources"]; ok {
 		if d, err := stagedDict(ctx, alloc, doc, res); err == nil && d != nil {

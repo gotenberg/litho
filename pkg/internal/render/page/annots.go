@@ -81,7 +81,7 @@ func (r *renderer) annotation(a annot.Appearance, g Geometry) error {
 
 	// 7.8.3: an appearance with no /Resources names the page's; one whose
 	// /Resources does not read draws with none, as annot.Collect decides.
-	resources := r.page.Resources
+	resources := r.page.DrawResources
 	if !a.PageResources {
 		resources = a.Resources
 		if resources == nil {

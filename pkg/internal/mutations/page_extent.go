@@ -145,7 +145,7 @@ func PageDictContentExtent(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	page := stagedPage(ctx, alloc, doc, ref, dict)
 	if page.Resources == nil && resources != nil {
 		if res, err := resolveDictAllocFirst(ctx, alloc, doc, resources); err == nil {
-			page.Resources = res
+			page.Resources, page.DrawResources = res, res
 		}
 	}
 	return PageContentExtent(ctx, alloc, doc, page)

@@ -207,7 +207,7 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 		return nil, report, fmt.Errorf("%w: %w", ErrTooLarge, err)
 	}
 	r.groups = []frame{{group: root, direct: root.Direct()}}
-	if err := r.run(ops, pg.Resources, g.Matrix, 0); err != nil {
+	if err := r.run(ops, pg.DrawResources, g.Matrix, 0); err != nil {
 		return nil, report, err
 	}
 	if opts.Omit&Annotations == 0 {
