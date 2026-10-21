@@ -28,8 +28,11 @@ type Link struct {
 	in, out int
 	// direct is the table of a DeviceLink profile, which replaces the rest.
 	direct *pipeline
-	src    *toPCS
-	dst    *fromPCS
+	// pcs marks a link from the profile connection space ([NewPCSLink]),
+	// whose inputs are XYZ itself and src is nil.
+	pcs bool
+	src *toPCS
+	dst *fromPCS
 	// scale and offset adjust XYZ between the two sides, for the absolute
 	// colorimetric intent or black point compensation; nil leaves it as is.
 	scale, offset *[3]float64
@@ -90,6 +93,44 @@ func NewLink(src, dst *Profile, opts TransformOptions) (*Link, error) {
 	return l, nil
 }
 
+// NewPCSLink builds the transform from the profile connection space, CIE XYZ
+// relative to D50 (ICC.1:2010, 6.3), to dst's data colour space. It is the
+// destination half of a [Link], for a source that reaches the PCS by
+// formulas of its own, such as a CalRGB space (ISO 32000-1, 8.6.5.3).
+//
+// Unlike a [Link] from a profile, [Link.Convert] takes the XYZ values
+// themselves, Y = 1 at the PCS white, and does not clip them: a colour
+// outside dst's gamut, a CalRGB primary outside the visible gamut among them,
+// reaches dst's table, which maps it into the gamut. Black point compensation
+// maps the PCS black, XYZ 0, onto dst's black point, as for a source profile
+// on an ideal medium; the absolute colorimetric intent scales from the D50
+// white.
+func NewPCSLink(dst *Profile, opts TransformOptions) (*Link, error) {
+	if dst == nil {
+		return nil, fmt.Errorf("%w: no destination profile", ErrUnsupported)
+	}
+	if err := checkDeviceClass(dst); err != nil {
+		return nil, err
+	}
+	intent := opts.Intent & 3
+	d, err := dst.fromPCS(intent)
+	if err != nil {
+		return nil, fmt.Errorf("reading the destination profile: %w", err)
+	}
+	l := &Link{in: 3, out: d.n, dst: d, pcs: true}
+	switch {
+	case intent == AbsoluteColorimetric:
+		wd := dst.mediaWhite()
+		l.scale = &[3]float64{d50[0] / wd[0], d50[1] / wd[1], d50[2] / wd[2]}
+		l.offset = &[3]float64{}
+	case opts.BlackPointCompensation || bpcForced(dst, intent):
+		if bd := dst.destinationBlackPoint(intent); bd != [3]float64{} {
+			l.scale, l.offset = blackPointScale([3]float64{}, bd)
+		}
+	}
+	return l, nil
+}
+
 // checkDeviceClass refuses a profile a [Link] cannot connect through the PCS:
 // a DeviceLink, abstract or named colour profile, which has no device side
 // to convert from or to, and a class ICC.1:2010, 7.2.5, Table 18 does not
@@ -137,9 +178,22 @@ func (l *Link) OutputChannels() int {
 }
 
 // Convert converts one colour: in holds [Link.InputChannels] components and
-// out receives [Link.OutputChannels].
+// out receives [Link.OutputChannels]. A link from [NewPCSLink] takes XYZ.
 func (l *Link) Convert(in, out []float64) {
 	var v [maxOutputs]float64
+	if l.pcs {
+		xyz := [3]float64{in[0], in[1], in[2]}
+		if s, o := l.scale, l.offset; s != nil {
+			for i := range xyz {
+				xyz[i] = s[i]*xyz[i] + o[i]
+			}
+		}
+		l.dst.eval(xyz, &v)
+		for i := range l.out {
+			out[i] = clamp01(v[i])
+		}
+		return
+	}
 	for i := range l.in {
 		v[i] = clamp01(in[i])
 	}
