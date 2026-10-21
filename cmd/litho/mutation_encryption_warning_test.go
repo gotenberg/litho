@@ -21,7 +21,8 @@ import (
 // removes confidential content, and gets back a document anyone can open.
 //
 // The plaintext-out DEFAULT is untouched and remains deliberate, exactly as
-// `f2a37513` left it. Only the silence is closed.
+// `f2a37513` left it. Only the silence is closed. convert-colors, which came
+// later, warns from the start and has its row in the table.
 
 // encFixtures carries the inputs the table needs, built once per subtest so a
 // command that writes cannot disturb another's source.
@@ -112,6 +113,9 @@ func TestMutationCommands_WarnWhenEncryptionIsDropped(t *testing.T) {
 		}},
 		{"redact", func(f encFixtures, out string) []string {
 			return []string{"redact", "-p", "s3cret", "-region", "1:0,650,600,120", "-o", out, f.onePage}
+		}},
+		{"convert-colors", func(f encFixtures, out string) []string {
+			return []string{"convert-colors", "-p", "s3cret", "--target", "cmyk", "-o", out, f.doc}
 		}},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {

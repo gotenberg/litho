@@ -66,11 +66,70 @@ func targetsEqual(a, b pdf.ColorTarget) bool {
 	return fmt.Sprintf("%+v", a) == fmt.Sprintf("%+v", b)
 }
 
+// unconvertibleImagePDF draws an RGB image whose samples do not decode, which
+// a colour conversion cannot convert and refuses.
+func unconvertibleImagePDF() []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>",
+		"<< /Length 16 >>\nstream\n1 0 0 rg /Im0 Do\nendstream",
+		"<< /Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length 9 >>\nstream\nnot flate\nendstream",
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offs := make([]int, len(objs)+1)
+	for i, o := range objs {
+		offs[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", offs[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
+}
+
+// TestConvertColors_ConvertsToCMYK pins a conversion end to end: exit 0, the
+// report on stdout, and an output that paints in DeviceCMYK alone.
+func TestConvertColors_ConvertsToCMYK(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+	out := filepath.Join(t.TempDir(), "out.pdf")
+
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(), []string{"convert-colors", "--target", "cmyk", "-o", out, src}, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("exit %d; stderr: %s", rc, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "to DeviceCMYK") || !strings.Contains(stdout.String(), "Output intent: added") {
+		t.Errorf("stdout = %q", stdout.String())
+	}
+	data, err := os.ReadFile(out) //nolint:gosec // out is the test's own temp file
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	uses, err := r.ExtractColorSpaces(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range uses {
+		if u.Family != "DeviceCMYK" {
+			t.Errorf("the output paints in %s", u.Family)
+		}
+	}
+}
+
 // TestConvertColors_RefusalWritesNothing pins that a refused conversion
 // exits with an error, says why, and leaves no output file, and that the
 // encryption warning comes before the work, as for redact.
 func TestConvertColors_RefusalWritesNothing(t *testing.T) {
-	src := encryptTempPDF(t, writeTempPDF(t, untaggedTextPDF()), "s3cret")
+	src := encryptTempPDF(t, writeTempPDF(t, unconvertibleImagePDF()), "s3cret")
 	out := filepath.Join(t.TempDir(), "out.pdf")
 
 	var stdout, stderr bytes.Buffer
