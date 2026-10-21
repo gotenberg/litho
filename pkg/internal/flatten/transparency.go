@@ -157,6 +157,11 @@ type contentInfo struct {
 	// group reports a form XObject holding a transparency group, this one
 	// or one it paints.
 	group bool
+	// states reports a form XObject whose resources hold a graphics state
+	// that sets transparency, this one or one it paints, whether or not
+	// anything paints with it: ISO 19005-1, 6.4 reads every graphics state
+	// a resource dictionary holds.
+	states bool
 	// bounds holds what the content paints, in the space of its stream,
 	// unless unbounded: content whose extent the scan does not measure,
 	// text and shadings, which then reaches as far as a form's /BBox. A
@@ -241,6 +246,9 @@ func (s *scanner) form(ctx context.Context, obj ast.PdfObject, stream ast.PdfStr
 	}
 	info := s.stream(ctx, ops, resources, depth, chain)
 	info.group = info.group || groupTransparency(ctx, s.doc, stream.Dict)
+	if own, err := document.ResolveDict(ctx, s.doc, stream.Dict["Resources"]); err == nil && own != nil {
+		info.states = info.states || statesSetTransparency(ctx, s.doc, own)
+	}
 	_, bbox := formGeometry(ctx, s.doc, stream.Dict)
 	if info.unbounded {
 		info.bounds, info.unbounded = bbox, false
@@ -401,6 +409,7 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 				info.text = info.text || inner.text
 				info.textTransparent = info.textTransparent || inner.textTransparent
 				info.group = info.group || inner.group
+				info.states = info.states || inner.states
 				info.transparent = info.transparent || inner.transparent || stateTransparent(st, paintBoth)
 			}
 		}

@@ -104,3 +104,37 @@ func TestFlattenCountsTransparentAnnotations(t *testing.T) {
 		t.Errorf("transparent annotations %d, want 1", report.TransparentAnnotations)
 	}
 }
+
+// TestFlattenKeptFormsLoseTheirTransparentStates pins that a form the page
+// keeps, which names a graphics state setting transparency it paints nothing
+// with, is pointed at a copy whose state sets none: ISO 19005-1, 6.4 reads
+// every graphics state a resource dictionary holds, used or not.
+func TestFlattenKeptFormsLoseTheirTransparentStates(t *testing.T) {
+	t.Parallel()
+	out, _ := checkFlattened(t, fixture{
+		resources: "/XObject << /Fm 7 0 R >>",
+		content:   "/Fm Do",
+		objs:      []string{stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Resources << /ExtGState << /G 6 0 R >> >>", "0 0 1 rg 10 10 30 30 re f /G gs")},
+	})
+	ctx := context.Background()
+	doc, pg := open(t, out)
+	res, ok := pg.Dict["Resources"].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("page resources %T", pg.Dict["Resources"])
+	}
+	xobjects, err := document.ResolveDict(ctx, doc, res["XObject"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	form, err := document.ResolveStream(ctx, doc, xobjects["Fm"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	own, err := document.ResolveDict(ctx, doc, form.Dict["Resources"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statesSetTransparency(ctx, doc, own) {
+		t.Error("the form the page keeps still names a graphics state setting transparency")
+	}
+}

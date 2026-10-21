@@ -13,8 +13,9 @@ import (
 // keptForms readies the XObjects of a page whose operations ops are edited
 // by edits, against resources, and reports whether it changed xobjects, the
 // page's new /XObject subdictionary. A form the page keeps drawing that
-// holds a transparency group, or paints a form that does, is pointed at a
-// copy without one (see [flattener.ungroup]). A name only removed operations
+// holds a transparency group or a graphics state setting transparency, or
+// paints a form that does, is pointed at a copy without either (see
+// [flattener.ungroup]). A name only removed operations
 // drew is dropped, so the image or form whose painting a composite took over
 // leaves the page's resources, unless a form the page keeps has no resources
 // of its own and may draw it by that name (ISO 32000-2, 7.8.3).
@@ -42,7 +43,7 @@ func (f *flattener) keptForms(ctx context.Context, ops []content.Operation, edit
 		if _, own := stream.Dict["Resources"]; !own {
 			inheriting = true
 		}
-		if !f.scan.form(ctx, obj, stream, resources, 1, nil).group {
+		if info := f.scan.form(ctx, obj, stream, resources, 1, nil); !info.group && !info.states {
 			continue
 		}
 		copied, err := f.ungroup(ctx, obj, stream, 1)
@@ -67,14 +68,24 @@ func (f *flattener) keptForms(ctx context.Context, ops []content.Operation, edit
 }
 
 // ungroup returns a copy of the form XObject obj without its transparency
-// group, and whose resources name such copies of the forms it paints that
-// hold one. The form paints no transparency: the
-// group of opaque content paints exactly as the content painted without it
-// (ISO 32000-2, 11.4.5, 11.4.6, 11.6.6). The copy is a new object, its
+// group, whose graphics states set no transparency (see [neutralState]), and
+// whose resources name such copies of the forms it paints that need one. The
+// form paints no transparency: the group of opaque content paints exactly as
+// the content painted without it (ISO 32000-2, 11.4.5, 11.4.6, 11.6.6), and a
+// state it sets transparency with paints nothing, or the form would have been
+// composited. ISO 19005-1, 6.4 reads every graphics state a resource
+// dictionary holds, used or not. The copy is a new object, its
 // content the original's bytes: an annotation appearance may still paint the
 // original under a constant alpha, where the group does change how it
 // composites. A form deeper than the form-depth budget, which the renderer
 // skips, is returned as it is.
+//
+// # Corpus evidence
+//
+//   - litho paintop_2b.pdf: the appearance of its Square names a state at ca
+//     0.5 and paints nothing with it. Drawn into the page by annotation
+//     flattening, the form kept the state, and PDF/A-1b validation still found
+//     ISO 19005-1, 6.4 test 6.
 func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.PdfStream, depth int) (ast.PdfObject, error) {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 	if isRef {
@@ -110,7 +121,7 @@ func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.P
 			if subtype, err := document.ResolveName(ctx, f.doc, inner.Dict["Subtype"]); err != nil || subtype != "Form" {
 				continue
 			}
-			if !f.scan.form(ctx, xobjects[name], inner, own, depth+1, nil).group {
+			if info := f.scan.form(ctx, xobjects[name], inner, own, depth+1, nil); !info.group && !info.states {
 				continue
 			}
 			copied, err := f.ungroup(ctx, xobjects[name], inner, depth+1)
@@ -120,6 +131,9 @@ func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.P
 			xobjects[name] = copied
 		}
 		resources["XObject"] = xobjects
+		if _, err := f.neutralStates(ctx, resources); err != nil {
+			return nil, err
+		}
 		dict["Resources"] = resources
 	}
 	copied := f.alloc.Alloc(ast.NewLazyStream(dict, stream.Bytes))
@@ -198,21 +212,17 @@ func (f *flattener) transparentAnnotations(ctx context.Context, dict ast.PdfDict
 	return n
 }
 
-// statesSetTransparency reports whether a graphics state dictionary of dict's
-// own resources sets transparency, painting with it or not: an appearance
-// that names one still holds transparency (ISO 19005-1, 6.4 reads every
-// ExtGState a resource dictionary holds).
-func (f *flattener) statesSetTransparency(ctx context.Context, dict ast.PdfDict) bool {
-	resources, err := document.ResolveDict(ctx, f.doc, dict["Resources"])
-	if err != nil || resources == nil {
-		return false
-	}
-	states, err := document.ResolveDict(ctx, f.doc, resources["ExtGState"])
+// statesSetTransparency reports whether a graphics state dictionary of
+// resources sets transparency, painting with it or not: a form or an
+// appearance that names one still holds transparency (ISO 19005-1, 6.4 reads
+// every ExtGState a resource dictionary holds).
+func statesSetTransparency(ctx context.Context, doc *document.Document, resources ast.PdfDict) bool {
+	states, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil {
 		return false
 	}
 	for _, name := range slices.Sorted(maps.Keys(states)) {
-		if gs, err := document.ResolveDict(ctx, f.doc, states[name]); err == nil && stateNeedsNeutral(ctx, f.doc, gs) {
+		if gs, err := document.ResolveDict(ctx, doc, states[name]); err == nil && stateNeedsNeutral(ctx, doc, gs) {
 			return true
 		}
 	}
@@ -244,7 +254,7 @@ func (f *flattener) appearanceTransparent(ctx context.Context, annot ast.PdfDict
 			continue
 		}
 		info := f.scan.form(ctx, obj, stream, nil, 1, nil)
-		if info.transparent || info.group || f.statesSetTransparency(ctx, stream.Dict) {
+		if info.transparent || info.group || info.states {
 			return true
 		}
 	}
