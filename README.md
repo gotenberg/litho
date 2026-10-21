@@ -309,7 +309,7 @@ r, err := pdf.OpenFile(ctx, "doc.pdf", pdf.WithFilterPlugin(myDecoder))
 ## Development
 
 ```bash
-make fmt && make lint # zero-warnings policy
+make fmt && make lint # zero-warnings policy, pinned golangci-lint
 make test-unit        # go test -race ./...
 make bench            # go test -bench=. -benchmem ./...
 make corpus           # score against the veraPDF, PDF.js, and pdfcpu corpora

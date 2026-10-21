@@ -4,13 +4,14 @@ litho is a pure-Go PDF Conforming Processor. Two rules override everything else:
 
 - Module: `github.com/gotenberg/litho`
 - Go: 1.27.0+
+- Lint: `make fmt`, `make lint` and `make lint-todo` run golangci-lint at the version the Makefile pins (`GOLANGCI_LINT_VERSION`) through `go run`, not the copy on your `PATH`
 - Optional: Docker (corpus provisioning, at the tool versions `test/integration/corpus/versions.env` pins)
 
 ## Quick start
 
 ```bash
 go build ./cmd/litho
-make fmt && make lint # zero warnings policy
+make fmt && make lint # zero warnings policy, pinned golangci-lint
 make test-unit        # go test -race ./...
 make bench            # go test -bench=. -benchmem ./...
 ```

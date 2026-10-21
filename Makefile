@@ -2,10 +2,16 @@
 help: ## Show the help
 	@grep -hE '^[A-Za-z0-9_ \-]*?:.*##.*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
+# golangci-lint runs at a pinned version, so a Homebrew upgrade cannot move the
+# findings under the zero-warnings policy. v2.14.0 builds on Go 1.27. An env var
+# of the same name overrides it.
+GOLANGCI_LINT_VERSION ?= v2.14.0
+GOLANGCI_LINT = go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
 .PHONY: fmt
 fmt: ## Format Golang codebase and "optimize" the dependencies
 	go fix ./...
-	golangci-lint fmt
+	$(GOLANGCI_LINT) fmt
 	go mod tidy
 
 .PHONY: prettify
@@ -13,12 +19,12 @@ prettify: ## Format non-Golang codebase
 	npx prettier --write .
 
 .PHONY: lint
-lint: ## Lint Golang codebase
-	golangci-lint run
+lint: ## Lint Golang codebase with the pinned golangci-lint (GOLANGCI_LINT_VERSION)
+	$(GOLANGCI_LINT) run
 
 .PHONY: lint-todo
 lint-todo: ## Find TODOs in Golang codebase
-	golangci-lint run --no-config --enable godox
+	$(GOLANGCI_LINT) run --no-config --enable godox
 
 # unparam publishes no releases, so the pin is a module pseudo-version. The
 # 2025-10-27 commit, built on golang.org/x/tools v0.38.0, aborts on Go 1.27 with
