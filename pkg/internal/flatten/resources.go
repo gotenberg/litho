@@ -230,7 +230,7 @@ func (f *flattener) neutralPattern(ctx context.Context, obj ast.PdfObject, keep 
 			if !f.scan.form(ctx, xobjects[name], inner, own, 2, nil).group {
 				continue
 			}
-			copied, err := f.ungroup(ctx, xobjects[name], inner, own, 2)
+			copied, err := f.ungroup(ctx, xobjects[name], inner, 2)
 			if err != nil {
 				return nil, err
 			}

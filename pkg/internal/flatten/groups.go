@@ -45,7 +45,7 @@ func (f *flattener) keptForms(ctx context.Context, ops []content.Operation, edit
 		if !f.scan.form(ctx, obj, stream, resources, 1, nil).group {
 			continue
 		}
-		copied, err := f.ungroup(ctx, obj, stream, resources, 1)
+		copied, err := f.ungroup(ctx, obj, stream, 1)
 		if err != nil {
 			return false, err
 		}
@@ -66,16 +66,16 @@ func (f *flattener) keptForms(ctx context.Context, ops []content.Operation, edit
 	return changed, nil
 }
 
-// ungroup returns a copy of the form XObject obj, painted against parent,
-// without its transparency group, and whose resources name such copies of
-// the forms it paints that hold one. The form paints no transparency: the
+// ungroup returns a copy of the form XObject obj without its transparency
+// group, and whose resources name such copies of the forms it paints that
+// hold one. The form paints no transparency: the
 // group of opaque content paints exactly as the content painted without it
 // (ISO 32000-2, 11.4.5, 11.4.6, 11.6.6). The copy is a new object, its
 // content the original's bytes: an annotation appearance may still paint the
 // original under a constant alpha, where the group does change how it
 // composites. A form deeper than the form-depth budget, which the renderer
 // skips, is returned as it is.
-func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.PdfStream, parent ast.PdfDict, depth int) (ast.PdfObject, error) {
+func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.PdfStream, depth int) (ast.PdfObject, error) {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 	if isRef {
 		if copied, ok := f.ungrouped[ref.ObjectNum]; ok {
@@ -113,7 +113,7 @@ func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.P
 			if !f.scan.form(ctx, xobjects[name], inner, own, depth+1, nil).group {
 				continue
 			}
-			copied, err := f.ungroup(ctx, xobjects[name], inner, own, depth+1)
+			copied, err := f.ungroup(ctx, xobjects[name], inner, depth+1)
 			if err != nil {
 				return nil, err
 			}
