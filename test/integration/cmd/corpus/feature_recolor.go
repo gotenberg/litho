@@ -181,6 +181,10 @@ const recolorJPEGQuality = 85
 //     JPEG 2000 images and keeps the lossless bytes, Flate holding images
 //     that small in fewer; no fixture converts a JPEG (undecodable_2b's is
 //     refused).
+//   - pdfjs issue17289.pdf: each conversion takes 12 to 14 s, so the source
+//     renderings, the lossless run and the JPEG run in sequence took 33 s,
+//     past the 20 s fixture timeout; side by side they take 15.3 s, and
+//     17.2 s with 5 fixtures at once.
 type recolorFeature struct {
 	// convert runs the conversion with the options given; tests replace it
 	// to plant a defect.
@@ -330,7 +334,122 @@ func (f *recolorFeature) run(ctx context.Context, pdfPath string) recolorOutput 
 		return out
 	}
 	defer src.Close()
+	f.mu.RLock()
+	fonts := f.fonts
+	f.mu.RUnlock()
+	opts := []pdf.RenderOption{pdf.WithRenderDPI(renderDPI)}
+	if fonts != nil {
+		opts = append(opts, fonts)
+	}
 
+	// The source's renderings, the lossless run and the JPEG run go side by
+	// side, each on a goroutine of its own, since none needs another's
+	// work until its checks: in sequence they pass the fixture timeout on a
+	// document of large images. Every worker is cancelled and waited for on
+	// every return, so none outlives the run.
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	defer cancel()
+
+	sources := &recolorSourceRenders{done: make(chan struct{})}
+	wg.Go(func() { sources.render(ctx, src, opts) })
+	var prep *recolorJPEGPrep
+	jpegDone := make(chan struct{})
+	jpegRun := f.jpegQuality > 0 && namesImageCodec(input)
+	if jpegRun {
+		wg.Go(func() {
+			defer close(jpegDone)
+			prep = f.prepareJPEG(ctx, src, input, opts)
+		})
+	}
+
+	output, renders := f.runLossless(ctx, src, input, opts, sources, &out)
+	if output == nil || !jpegRun || out.Report.ConvertedImages == 0 {
+		return out
+	}
+	select {
+	case <-jpegDone:
+	case <-ctx.Done():
+		out.JPEG = &recolorJPEGRun{LosslessSize: len(output), Error: ctx.Err().Error()}
+		return out
+	}
+	out.JPEG = prep.finish(output, renders)
+	return out
+}
+
+// recolorSourceRenders holds the source's renderings of its first pages,
+// rendered on a goroutine of their own: nil for a page that did not render.
+// They are read only after done is closed.
+type recolorSourceRenders struct {
+	done   chan struct{}
+	images []image.Image
+	// panicked says why the rendering stopped on a panic, which fails the
+	// run as a panic of the run itself would.
+	panicked string
+}
+
+// render renders the source's first pages, recovering a panic into
+// panicked.
+func (r *recolorSourceRenders) render(ctx context.Context, src *pdf.Reader, opts []pdf.RenderOption) {
+	defer close(r.done)
+	defer func() {
+		if p := recover(); p != nil {
+			r.panicked = fmt.Sprintf("panic rendering the source: %v", p)
+		}
+	}()
+	pages, err := src.PageCount(ctx)
+	if err != nil {
+		return
+	}
+	for page := 1; page <= min(pages, renderMaxPages); page++ {
+		// A source page that does not render leaves nothing to compare:
+		// that is the render cell's to report.
+		img, err := src.RenderPage(ctx, page, opts...)
+		if err != nil {
+			img = nil
+		}
+		r.images = append(r.images, img)
+	}
+}
+
+// page waits for the renderings and returns the page's, nil when it did not
+// render or ctx ends first.
+func (r *recolorSourceRenders) page(ctx context.Context, page int) image.Image {
+	select {
+	case <-r.done:
+	case <-ctx.Done():
+		return nil
+	}
+	if page > len(r.images) {
+		return nil
+	}
+	return r.images[page-1]
+}
+
+// panic waits for the renderings and returns why they stopped on a panic,
+// "" for none or when ctx ends first.
+func (r *recolorSourceRenders) panic(ctx context.Context) string {
+	select {
+	case <-r.done:
+		return r.panicked
+	case <-ctx.Done():
+		return ""
+	}
+}
+
+// namesImageCodec reports whether input names the DCTDecode filter, its
+// inline abbreviation DCT, or the JPXDecode filter, the sources
+// [pdf.WithJPEGQuality] re-encodes.
+func namesImageCodec(input []byte) bool {
+	return bytes.Contains(input, []byte("/DCT")) || bytes.Contains(input, []byte("/JPXDecode"))
+}
+
+// runLossless runs the lossless conversion and its checks into out. It
+// returns the output and the renderings of its first pages (nil for a page
+// that did not render), or a nil output when the conversion or the output
+// failed.
+func (f *recolorFeature) runLossless(ctx context.Context, src *pdf.Reader, input []byte, opts []pdf.RenderOption, sources *recolorSourceRenders, out *recolorOutput) ([]byte, []image.Image) {
 	output, report, err := f.convertOnce(ctx, src)
 	if err != nil {
 		out.Error = err.Error()
@@ -339,14 +458,14 @@ func (f *recolorFeature) run(ctx context.Context, pdfPath string) recolorOutput 
 		} else {
 			out.Failed = true
 		}
-		return out
+		return nil, nil
 	}
 	out.Report = report
 	after, err := pdf.Open(ctx, bytes.NewReader(output), int64(len(output)))
 	if err != nil {
 		out.ReopenFailed = true
 		out.Error = fmt.Sprintf("output does not open: %v", err)
-		return out
+		return nil, nil
 	}
 	defer after.Close()
 	out.QPDF = f.newQPDFKinds(ctx, input, output)
@@ -355,54 +474,109 @@ func (f *recolorFeature) run(ctx context.Context, pdfPath string) recolorOutput 
 	if err != nil {
 		out.ReopenFailed = true
 		out.Error = fmt.Sprintf("output page count: %v", err)
-		return out
-	}
-	f.mu.RLock()
-	fonts := f.fonts
-	f.mu.RUnlock()
-	opts := []pdf.RenderOption{pdf.WithRenderDPI(renderDPI)}
-	if fonts != nil {
-		opts = append(opts, fonts)
+		return nil, nil
 	}
 	renders := make([]image.Image, 0, min(pages, renderMaxPages))
 	for page := 1; page <= min(pages, renderMaxPages); page++ {
-		eval, rendered := recolorCheckPage(ctx, src, after, page, opts)
+		eval := recolorSpaceCheck(ctx, src, after, page)
+		var rendered image.Image
+		if eval.RenderError == "" {
+			if before := sources.page(ctx, page); before != nil {
+				rendered = recolorRenderCheck(ctx, before, after, page, opts, &eval)
+			}
+		}
 		out.Pages = append(out.Pages, eval)
 		renders = append(renders, rendered)
 	}
-	if f.jpegQuality > 0 && report.ConvertedImages > 0 && (bytes.Contains(input, []byte("/DCT")) || bytes.Contains(input, []byte("/JPXDecode"))) {
-		out.JPEG = f.runJPEG(ctx, src, input, output, renders, opts)
+	if p := sources.panic(ctx); p != "" {
+		out.Failed = true
+		out.Error = p
+		return nil, nil
 	}
-	return out
+	return output, renders
 }
 
-// runJPEG converts src again under [pdf.WithJPEGQuality] and checks the
-// output against the lossless run's, output, whose first pages renders holds
-// (nil for a page that did not render).
-func (f *recolorFeature) runJPEG(ctx context.Context, src *pdf.Reader, input, output []byte, renders []image.Image, opts []pdf.RenderOption) *recolorJPEGRun {
-	run := &recolorJPEGRun{LosslessSize: len(output)}
-	jpegOut, _, err := f.convertOnce(ctx, src, pdf.WithJPEGQuality(f.jpegQuality))
+// recolorJPEGPrep is what the JPEG run finds on its own, before the
+// lossless output it is checked against is known.
+type recolorJPEGPrep struct {
+	err    string
+	output []byte
+	qpdf   []string
+	// pages holds the colour space check of each of the first pages, and
+	// renders their renderings, nil for a page that did not render.
+	pages   []recolorPageEval
+	renders []image.Image
+}
+
+// prepareJPEG converts src under [pdf.WithJPEGQuality], and checks and
+// renders the first pages of the output. It recovers a panic into the
+// error, since it runs on a goroutine of its own, out of Run's guard.
+func (f *recolorFeature) prepareJPEG(ctx context.Context, src *pdf.Reader, input []byte, opts []pdf.RenderOption) (prep *recolorJPEGPrep) {
+	prep = &recolorJPEGPrep{}
+	defer func() {
+		if r := recover(); r != nil {
+			prep = &recolorJPEGPrep{err: fmt.Sprintf("panic: %v", r)}
+		}
+	}()
+	output, _, err := f.convertOnce(ctx, src, pdf.WithJPEGQuality(f.jpegQuality))
 	if err != nil {
-		run.Error = err.Error()
+		prep.err = err.Error()
+		return prep
+	}
+	prep.output = output
+	after, err := pdf.Open(ctx, bytes.NewReader(output), int64(len(output)))
+	if err != nil {
+		prep.err = fmt.Sprintf("output does not open: %v", err)
+		return prep
+	}
+	defer after.Close()
+	prep.qpdf = f.newQPDFKinds(ctx, input, output)
+	pages, err := after.PageCount(ctx)
+	if err != nil {
+		prep.err = fmt.Sprintf("output page count: %v", err)
+		return prep
+	}
+	for page := 1; page <= min(pages, renderMaxPages); page++ {
+		eval := recolorSpaceCheck(ctx, src, after, page)
+		var rendered image.Image
+		if eval.RenderError == "" {
+			if rendered, err = after.RenderPage(ctx, page, opts...); err != nil {
+				eval.RenderError = fmt.Sprintf("render: %v", err)
+			}
+		}
+		prep.pages = append(prep.pages, eval)
+		prep.renders = append(prep.renders, rendered)
+	}
+	return prep
+}
+
+// finish checks the JPEG output against the lossless run's, output, whose
+// first pages renders holds (nil for a page that did not render).
+func (prep *recolorJPEGPrep) finish(output []byte, renders []image.Image) *recolorJPEGRun {
+	run := &recolorJPEGRun{LosslessSize: len(output), Error: prep.err}
+	if prep.output == nil {
+		if run.Error == "" {
+			run.Error = "the JPEG run wrote nothing"
+		}
 		return run
 	}
-	run.Size = len(jpegOut)
-	if bytes.Equal(jpegOut, output) {
+	run.Size = len(prep.output)
+	if bytes.Equal(prep.output, output) {
 		return run
 	}
 	run.Reencoded = true
-	after, err := pdf.Open(ctx, bytes.NewReader(jpegOut), int64(len(jpegOut)))
-	if err != nil {
-		run.Error = fmt.Sprintf("output does not open: %v", err)
+	if prep.err != "" {
 		return run
 	}
-	defer after.Close()
-	run.QPDF = f.newQPDFKinds(ctx, input, jpegOut)
+	run.QPDF = prep.qpdf
 	for i, lossless := range renders {
-		page := i + 1
-		eval := recolorSpaceCheck(ctx, src, after, page)
+		if i >= len(prep.pages) {
+			run.Pages = append(run.Pages, recolorPageEval{Page: i + 1, RenderError: "the JPEG output lacks the page"})
+			continue
+		}
+		eval := prep.pages[i]
 		if eval.RenderError == "" && lossless != nil {
-			recolorRenderCheck(ctx, lossless, after, page, opts, &eval)
+			eval.Pixels, eval.InkMoved, eval.ColourDrift, eval.MaxDeltaE, eval.SizeChanged = compareRecolored(lossless, prep.renders[i])
 		}
 		run.Pages = append(run.Pages, eval)
 	}
@@ -447,23 +621,6 @@ func (f *recolorFeature) newQPDFKinds(ctx context.Context, input, output []byte)
 	}
 	sort.Strings(fresh)
 	return fresh
-}
-
-// recolorCheckPage runs the colour space check and the two rendering checks
-// on one page, and returns the output's rendering, nil when the page did not
-// render.
-func recolorCheckPage(ctx context.Context, src, after *pdf.Reader, page int, opts []pdf.RenderOption) (recolorPageEval, image.Image) {
-	eval := recolorSpaceCheck(ctx, src, after, page)
-	if eval.RenderError != "" {
-		return eval, nil
-	}
-	before, err := src.RenderPage(ctx, page, opts...)
-	if err != nil {
-		// The source page does not render, so there is nothing to compare:
-		// that is the render cell's to report.
-		return eval, nil
-	}
-	return eval, recolorRenderCheck(ctx, before, after, page, opts, &eval)
 }
 
 // recolorRenderCheck renders the page of after and runs the two rendering
