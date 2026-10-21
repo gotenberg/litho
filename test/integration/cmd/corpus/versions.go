@@ -85,9 +85,13 @@ var localToolPins = map[string]bool{
 // The pdfcpu archive hashes and the poppler tarball hash are not listed. Each checks the download of the
 // release PDFCPU_VERSION names for one architecture, and a golden made on
 // either architecture is the same golden, so a hash says nothing about it. The
-// poppler hash checks the tarball of the release POPPLER_VERSION names. The
-// render goldens depend on the Debian release poppler builds on, which
-// supplies its FreeType and the fonts it substitutes for unembedded ones.
+// poppler hash checks the tarball of the release POPPLER_VERSION names, and
+// the poppler-data and Noto Sans CJK hashes the downloads of the releases
+// POPPLER_DATA_VERSION and NOTO_CJK_SANS_VERSION name. The render goldens
+// depend on the Debian release poppler builds on, which supplies its FreeType
+// and the latin fonts it substitutes for unembedded ones, on poppler-data,
+// without which it draws no glyph of most CJK fonts, and on the CJK fonts it
+// substitutes.
 //
 // # Corpus evidence
 //
@@ -105,7 +109,7 @@ var stagePins = map[string][]string{
 	"goldens/merges":             {"PDFCPU_VERSION"},
 	"goldens/merge-empty":        {"PDFCPU_VERSION"},
 	"goldens/facturx-validity":   {"MUSTANG_VERSION", "JRE_VERSION"},
-	"goldens/render":             {"POPPLER_VERSION", "POPPLER_DEBIAN_RELEASE", "POPPLER_DEBIAN_IMAGE_DIGEST"},
+	"goldens/render":             {"POPPLER_VERSION", "POPPLER_DEBIAN_RELEASE", "POPPLER_DEBIAN_IMAGE_DIGEST", "POPPLER_DATA_VERSION", "NOTO_CJK_SANS_VERSION"},
 	"goldens/facturx-schematron": {"KOSIT_VERSION", "XRECHNUNG_CONFIG_TAG", "XRECHNUNG_CONFIG_ASSET", "EN16931_VERSION", "MUSTANG_VERSION", "JRE_VERSION"},
 }
 

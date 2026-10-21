@@ -41,7 +41,9 @@ FROM --platform=linux/amd64 verapdf/cli:v${VERAPDF_VERSION}${VERAPDF_IMAGE_DIGES
 # PDFs with are enabled: no Qt, GLib, C++ wrapper, network, TIFF or
 # signature backends. fonts-urw-base35 provides the metric-compatible
 # substitutes for the standard 14 fonts (ISO 32000-1, 9.6.2.2), and
-# fonts-dejavu-core the fallback for any other unembedded font.
+# fonts-dejavu-core the fallback for any other unembedded font. poppler-data
+# and Noto Sans CJK, installed after the build so a bump of either keeps the
+# build's cache, serve the CJK character collections.
 FROM debian:${POPPLER_DEBIAN_RELEASE}-slim${POPPLER_DEBIAN_IMAGE_DIGEST:+@}${POPPLER_DEBIAN_IMAGE_DIGEST} AS poppler-build
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates curl xz-utils cmake g++ make pkg-config \
@@ -66,7 +68,52 @@ RUN : "${POPPLER_VERSION:?build through corpus init, which passes versions.env}"
     -DENABLE_LIBTIFF=OFF -DENABLE_NSS3=OFF -DENABLE_GPGME=OFF -DENABLE_HARFBUZZ=OFF \
     -DBUILD_GTK_TESTS=OFF -DBUILD_QT5_TESTS=OFF -DBUILD_QT6_TESTS=OFF \
     -DBUILD_CPP_TESTS=OFF -DBUILD_MANUAL_TESTS=OFF \
+    -DPOPPLER_DATADIR=/opt/poppler/share/poppler \
   && cmake --build build -j "$(nproc)" --target pdftoppm pdfinfo
+# poppler-data: the CMaps and CID-to-Unicode tables of the Adobe CJK
+# character collections, at the POPPLER_DATADIR the build above names, inside
+# the bundle. Without them poppler draws no glyph of a font of Adobe-GB1,
+# -CNS1, -Japan1 or -Korea1 that has no /ToUnicode, and none of a font whose
+# /Encoding is one of their CMaps (ISO 32000-1, 9.7.5.2, Table 118).
+ARG POPPLER_DATA_VERSION
+ARG POPPLER_DATA_SHA256
+RUN : "${POPPLER_DATA_VERSION:?build through corpus init, which passes versions.env}" \
+  && : "${POPPLER_DATA_SHA256:?build through corpus init, which passes versions.env}" \
+  && cd /tmp \
+  && curl -fSLO "https://poppler.freedesktop.org/poppler-data-${POPPLER_DATA_VERSION}.tar.gz" \
+  && if ! echo "${POPPLER_DATA_SHA256}  poppler-data-${POPPLER_DATA_VERSION}.tar.gz" | sha256sum -c -; then \
+    echo "poppler-data-${POPPLER_DATA_VERSION}.tar.gz does not match POPPLER_DATA_SHA256=${POPPLER_DATA_SHA256}" >&2 && exit 1; \
+  fi \
+  && tar -xzf "poppler-data-${POPPLER_DATA_VERSION}.tar.gz" \
+  && make -C "poppler-data-${POPPLER_DATA_VERSION}" install prefix=/opt/poppler \
+  && rm -rf "/tmp/poppler-data-${POPPLER_DATA_VERSION}" "/tmp/poppler-data-${POPPLER_DATA_VERSION}.tar.gz"
+# Noto Sans CJK: poppler draws an unembedded font of a CJK collection with
+# the first font fontconfig offers that supports the collection's language
+# (ja for Adobe-Japan1, ko, zh-cn, zh-tw), and with any font when none does.
+# One Regular face per region, the region's subset OpenType font, each
+# checked against the SHA-256 versions.env pins. bundle-poppler copies them
+# with the other fonts.
+ARG NOTO_CJK_SANS_VERSION
+ARG NOTO_SANS_JP_SHA256
+ARG NOTO_SANS_KR_SHA256
+ARG NOTO_SANS_SC_SHA256
+ARG NOTO_SANS_TC_SHA256
+RUN : "${NOTO_CJK_SANS_VERSION:?build through corpus init, which passes versions.env}" \
+  && dir=/usr/share/fonts/opentype/noto-cjk \
+  && base="https://github.com/notofonts/noto-cjk/raw/Sans${NOTO_CJK_SANS_VERSION}" \
+  && mkdir -p "${dir}" \
+  && for spec in "JP ${NOTO_SANS_JP_SHA256}" "KR ${NOTO_SANS_KR_SHA256}" \
+    "SC ${NOTO_SANS_SC_SHA256}" "TC ${NOTO_SANS_TC_SHA256}"; do \
+    set -- ${spec}; \
+    : "${2:?build through corpus init, which passes versions.env}"; \
+    file="NotoSans$1-Regular.otf"; \
+    curl -fSL -o "${dir}/${file}" "${base}/Sans/SubsetOTF/$1/${file}" || exit 1; \
+    if ! echo "$2  ${dir}/${file}" | sha256sum -c -; then \
+      echo "${file} does not match NOTO_SANS_$1_SHA256=$2" >&2 && exit 1; \
+    fi; \
+  done \
+  && curl -fSL -o "${dir}/LICENSE" "${base}/LICENSE"
+COPY lib/70-noto-cjk.conf /etc/fonts/conf.d/70-noto-cjk.conf
 COPY lib/bundle-poppler.sh /usr/local/bin/bundle-poppler
 RUN bash /usr/local/bin/bundle-poppler /tmp/build/utils /opt/poppler pdftoppm pdfinfo \
   && rm -rf /tmp/build "/tmp/poppler-${POPPLER_VERSION}" "/tmp/poppler-${POPPLER_VERSION}.tar.xz"
