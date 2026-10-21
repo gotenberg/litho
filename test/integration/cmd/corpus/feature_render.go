@@ -98,7 +98,9 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //
 // litho bundles no font program, and poppler draws the fonts a document does
 // not embed with the fonts of the image it runs in: URW base 35, the
-// metric-compatible stand-ins of the standard 14 fonts, and DejaVu. For a like
+// metric-compatible stand-ins of the standard 14 fonts, DejaVu, and the Noto
+// Sans CJK face of each CJK character collection's region, which litho asks
+// for by name for a CIDFont of that collection. For a like
 // for like comparison, provisioning copies those fonts to
 // goldens/render/fonts, and the feature hands them to litho through
 // [pdf.WithRenderFontFiles]. Testdata provisioned before the copy existed
@@ -156,7 +158,17 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //     whole samples and litho weighs by area (package render/imgpaint).
 //   - pdfjs issue12705: small Hebrew text whose glyph edges fall a pixel
 //     apart, 1.16% of a 250 by 50 page: within reason, but over the bar.
-//   - pdfjs issue11768_reduced: poppler draws nothing.
+//   - pdfjs issue11768_reduced: an embedded Adobe-Japan1 CIDFontType2
+//     under a CMap stream that uses UniJIS-UTF8-H. poppler drew nothing
+//     without poppler-data's CMaps; with them both renderers draw it and
+//     match (71 pixels differ).
+//   - litho cmapcidtext_2b, fontembed_2b: unembedded Adobe-Japan1 fonts
+//     showing B, A and U+3042, which poppler drew as nothing and litho with
+//     Nimbus Sans, U+3042 as a box; both now draw them with Noto Sans JP,
+//     and 1 and 60 pixels differ, 4 and 130 before litho asked for the CJK
+//     face. cmapcollect_1b, cmappredef_2b, cmapusevert_1b
+//     and cmapverabase_2b: embedded fonts of CJK collections with no
+//     /ToUnicode, whose text poppler drew only with poppler-data.
 type renderFeature struct {
 	render pageRenderer
 

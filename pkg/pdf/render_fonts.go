@@ -16,7 +16,11 @@ import (
 // font draws each glyph as a hollow box as wide as the width the font
 // declares.
 //
-// [Reader.RenderPage] asks p for each such font by its /BaseFont, then by the
+// [Reader.RenderPage] asks p for each such font by its /BaseFont; for a
+// CIDFont of an Adobe CJK character collection (Adobe-GB1, -CNS1, -Japan1,
+// -Korea1), then by the PostScript names of the Noto Sans CJK and Source Han
+// Sans Regular faces of the collection's region (NotoSansJP-Regular,
+// NotoSansCJKjp-Regular, SourceHanSansJP-Regular for Adobe-Japan1); then by the
 // standard 14 font whose metrics stand in for it (ISO 32000-1, 9.6.2.2),
 // chosen by name or by its descriptor's /Flags, and draws with the first
 // program that parses: a TrueType or OpenType program, a bare CFF program or

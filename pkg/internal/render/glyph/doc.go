@@ -37,8 +37,10 @@
 //
 // litho bundles no font program. A font without an embedded program, or whose
 // program will not parse, asks [Options.Substitutes] for a program, first by
-// its own name, then by the standard 14 font whose metrics stand in for it,
-// chosen by name or failing that by its descriptor's /Flags. A simple font's
+// its own name, then, for a CIDFont of an Adobe CJK character collection, by
+// the faces that cover the collection's script, then by the standard 14 font
+// whose metrics stand in for it, chosen by name or failing that by its
+// descriptor's /Flags. A simple font's
 // code selects the substitute's glyph by its glyph name or the character it
 // stands for. A Type 0 font's code selects it by the character the font's
 // /ToUnicode CMap, its Adobe collection's UCS2 CMap or, for a non-embedded

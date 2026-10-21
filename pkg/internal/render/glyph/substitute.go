@@ -88,8 +88,10 @@ func (f *Font) substitute(ctx context.Context, req Request, opts Options) error 
 
 // substituteRequests lists what a font the document does not embed is asked
 // for, in order: its own name, which a provider matches against the faces it
-// holds; then the standard 14 font (ISO 32000-1, 9.6.2.2) whose metrics stand
-// in for it, the family a viewer draws it with, chosen by name where text
+// holds; for a CIDFont of an Adobe CJK character collection, the faces of
+// [cjkStandIns] that cover the collection's script; then the standard 14
+// font (ISO 32000-1, 9.6.2.2) whose metrics stand in for it, the family a
+// viewer draws it with, chosen by name where text
 // extraction's metric table names one ([typography.Standard14StandIn]) and
 // otherwise by the descriptor's /Flags: FixedPitch for Courier, Serif for
 // Times, any other for Helvetica, with the weight and slant the flags and the
@@ -100,6 +102,11 @@ func (f *Font) substitute(ctx context.Context, req Request, opts Options) error 
 // its codes (9.8.2, Table 123, Symbolic).
 func substituteRequests(req Request) []Request {
 	out := []Request{req}
+	for _, face := range cjkStandIns[req.Ordering] {
+		r := req
+		r.BaseFont = face
+		out = append(out, r)
+	}
 	name := req.BaseFont
 	if hasSubsetTag(name) {
 		name = name[7:]
@@ -122,6 +129,28 @@ func substituteRequests(req Request) []Request {
 		out = append(out, r)
 	}
 	return out
+}
+
+// cjkStandIns names, by character collection (ISO 32000-1, 9.7.3, Registry
+// and Ordering joined by a hyphen), the PostScript names of the Regular faces
+// that cover the collection's script, best first: the region's subset Noto
+// Sans CJK font, its pan-CJK Noto Sans CJK face and the Source Han Sans faces
+// of the same design. A latin standard 14 face draws none of the characters
+// the collection exists for. Poppler draws such a font with the first face
+// fontconfig offers that supports the collection's language (GlobalParams.cc,
+// getFontLang: Adobe-GB1 zh-cn, Adobe-CNS1 zh-tw, Adobe-Japan1 ja,
+// Adobe-Korea1 ko), and the corpus image ships the subset faces, so both
+// renderers draw a CJK font the file does not embed with the same face. A
+// drawing choice, not spec-mandated: the /CIDSystemInfo of ISO 32000-1,
+// 9.7.3 names the character collection, not a font to draw it with.
+//
+//nolint:gochecknoglobals // static lookup table
+var cjkStandIns = map[string][]string{
+	"Adobe-Japan1": {"NotoSansJP-Regular", "NotoSansCJKjp-Regular", "SourceHanSansJP-Regular", "SourceHanSans-Regular"},
+	"Adobe-Japan2": {"NotoSansJP-Regular", "NotoSansCJKjp-Regular", "SourceHanSansJP-Regular", "SourceHanSans-Regular"},
+	"Adobe-Korea1": {"NotoSansKR-Regular", "NotoSansCJKkr-Regular", "SourceHanSansKR-Regular", "SourceHanSansK-Regular"},
+	"Adobe-GB1":    {"NotoSansSC-Regular", "NotoSansCJKsc-Regular", "SourceHanSansCN-Regular", "SourceHanSansSC-Regular"},
+	"Adobe-CNS1":   {"NotoSansTC-Regular", "NotoSansCJKtc-Regular", "SourceHanSansTW-Regular", "SourceHanSansTC-Regular"},
 }
 
 // flagsStandIn names the standard 14 font that stands in for a font no

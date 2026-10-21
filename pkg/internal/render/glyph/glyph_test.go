@@ -351,19 +351,25 @@ func TestSubstituteRequestsAndScaling(t *testing.T) {
 func TestSubstituteRequestOrder(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
-		name  string
-		flags int
-		want  []string
+		name     string
+		flags    int
+		ordering string
+		want     []string
 	}{
-		{"Arial", 32, []string{"Arial", "Helvetica"}},
-		{"Helvetica", 32, []string{"Helvetica"}},
-		{"ArialNarrow-Bold", 32, []string{"ArialNarrow-Bold", "Helvetica-Narrow-Bold", "Helvetica-Bold"}},
-		{"Melior-Italic", 2 | 32, []string{"Melior-Italic", "Times-Italic"}},
-		{"Mono", 1 | 32, []string{"Mono", "Courier"}},
-		{"WPIconicSymbolsA", 4, []string{"WPIconicSymbolsA"}},
+		{"Arial", 32, "", []string{"Arial", "Helvetica"}},
+		{"Helvetica", 32, "", []string{"Helvetica"}},
+		{"ArialNarrow-Bold", 32, "", []string{"ArialNarrow-Bold", "Helvetica-Narrow-Bold", "Helvetica-Bold"}},
+		{"Melior-Italic", 2 | 32, "", []string{"Melior-Italic", "Times-Italic"}},
+		{"Mono", 1 | 32, "", []string{"Mono", "Courier"}},
+		{"WPIconicSymbolsA", 4, "", []string{"WPIconicSymbolsA"}},
+		// A CIDFont of a CJK collection asks for the faces that cover its
+		// script before a latin stand-in; an Identity one does not.
+		{"MS-Mincho", 2 | 32, "Adobe-Japan1", append(append([]string{"MS-Mincho"}, cjkStandIns["Adobe-Japan1"]...), "Times-Roman")},
+		{"Batang", 32, "Adobe-Korea1", append(append([]string{"Batang"}, cjkStandIns["Adobe-Korea1"]...), "Helvetica")},
+		{"Calibri", 32, "Adobe-Identity", []string{"Calibri", "Helvetica"}},
 	} {
 		var got []string
-		for _, r := range substituteRequests(Request{BaseFont: c.name, Flags: c.flags}) {
+		for _, r := range substituteRequests(Request{BaseFont: c.name, Flags: c.flags, Ordering: c.ordering}) {
 			got = append(got, r.BaseFont)
 		}
 		if len(got) != len(c.want) {
