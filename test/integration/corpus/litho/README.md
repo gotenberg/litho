@@ -267,6 +267,7 @@ one deliberately rather than diffing it against a fresh build.
 | `sharednested_2b.pdf`  | PDF/A-2b     | Forms and a pattern two pages share and bind alike or apart      |
 | `transparency_2b.pdf`  | PDF/A-2b     | Knockout groups, luminosity masks with /BC and /TR, blend modes  |
 | `annotsynth_2b.pdf`    | PDF/A-2b     | Polygon, Underline and Squiggly annotations with no `/AP`        |
+| `recolorimg_2b.pdf`    | PDF/A-2b     | 16-bit, Lab, colour-key, matted and /Decode images to recolour   |
 
 ### Must-not-fire controls
 
@@ -504,6 +505,8 @@ violation but is exempt, so a firing is a false positive.
 | `cmappredef_2b`                           | `P5`: a code `/90ms-RKSJ-H`'s notdef range maps to a CID present       | ISO 32000-1, 9.7.6.3         |
 | `cmapverabase_2b`                         | `K2`: codes an `/Adobe-KR-9 usecmap` base maps to glyphs present       | ISO 32000-1, 9.7.5.4         |
 | `cmapverabase_2b`                         | `K6`: U+2002, which veraPDF's `/UniGB-UTF16-H` maps to a CID present   | ISO 32000-1, 9.7.5.2         |
+| `recolorimg_2b`                           | `Im16`, an ICCBased image at 16 bits a component                       | ISO 19005-2, 6.2.8           |
+| `recolorimg_2b`                           | `ImKey`, an image with a colour-key `/Mask` array                      | ISO 19005-2, 6.2.8           |
 | `remapchain_ua2`                          | `Div`: a `/RoleMap` chain through `Section` that ends on `Sect`        | ISO 14289-2, 8.2.4 t4        |
 | `remapchain_ua2`                          | PDF 1.7 `Sect`: a `/RoleMapNS` chain through a custom `Section`        | ISO 14289-2, 8.2.4 t4        |
 | `stdremap_ua2`                            | PDF 2.0 `Sect`: an element the `/RoleMap` entry for `Sect` misses      | ISO 32000-2, 14.8.6          |
@@ -702,6 +705,7 @@ are covered under [Known divergences](#known-divergences).
 | `remapchain_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 4    | 0    |
 | `readcolumns_ua1.pdf`  | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `readorder_ua1.pdf`    | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
+| `recolorimg_2b.pdf`    | 7    | 4    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `redactcopies_2b.pdf`  | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `redactrefs_ua1.pdf`   | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 4    | 5    |
 | `redactvectors_4.pdf`  | 8    | 6    | 11   | 9    | 9    | 10   | 8    | 8    | 5   | 4    | 4    | 8    | 8    |
@@ -8626,12 +8630,12 @@ rule set in all thirteen cells.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-214 x 13 = 2782 cells, the whole hand-measured matrix. litho and veraPDF return
+215 x 13 = 2795 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2758 of the 2782 cells. The 24
+fixtures exist to protect, and it holds in 2771 of the 2795 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
@@ -8640,12 +8644,12 @@ each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-fourteen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `boxorigin_2b`,
-`pagelabels_2b`, `qshyphen_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
+fifteen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `boxorigin_2b`,
+`pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2782 and moves only `ruleset_mismatch`, and on
-those fourteen cells it moves both. Every exception sits in the manifest's
+rule class leaves `matched` at 2795 and moves only `ruleset_mismatch`, and on
+those fifteen cells it moves both. Every exception sits in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
 fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
 the text scoreboard names the rules only one side reports. A 25th cell in the
