@@ -64,6 +64,31 @@ var popplerFixtures = map[string]fixture{
 			"0 0.6 0 rg -20 -20 100 100 re f 1 g 5 5 30 30 re f 0 g 10 10 m 30 10 l 20 30 l h f")},
 	},
 	"rotated": {page: "/MediaBox [0 0 120 80] /Rotate 90", content: "1 0 0 rg 0 0 30 20 re f 0 0 1 RG 4 w 10 70 m 110 10 l S"},
+	"text": {
+		page: textPage,
+		content: "BT 0 g /F 10 Tf 5 90 Td (AB AB) Tj 0 -12 Td 2 Tc 5 Tw (A A) Tj 0 -12 Td 0 Tc 0 Tw [(A) -300 (B) 500 (A)] TJ " +
+			"0 -12 Td 60 Tz 3 Ts (ABAB) Tj 100 Tz 0 Ts ET " +
+			"BT 1 0 0 rg 0 0 1 RG 1 w /F 24 Tf 1 Tr 5 30 Td (AB) Tj 2 Tr 40 0 Td (A) Tj 3 Tr (B) Tj ET " +
+			"q BT 7 Tr /F 30 Tf 1 0 0 1 60 5 cm 0 0 Td (AB) Tj ET 0 0.6 0 rg 0 0 100 50 re f Q " +
+			"BT 0 Tr 0 0 1 rg /F 12 Tf 0.7 0.7 -0.7 0.7 70 60 Tm (AAB) Tj ET",
+		objs: trueTypeObjs(),
+	},
+	"type3": {
+		page:    textPage,
+		content: "0 0 1 rg BT /F 20 Tf 5 70 Td (abab) Tj 0.5 0 0 1 5 30 Tm 1 0 0 rg (ba) Tj ET",
+		objs: []string{
+			"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0] " +
+				"/CharProcs << /a 6 0 R /b 7 0 R >> /Encoding << /Type /Encoding /Differences [97 /a /b] >> " +
+				"/FirstChar 97 /LastChar 98 /Widths [1000 1200] >>",
+			stream("", "1000 0 d0 0 0.6 0 rg 0 0 800 800 re f 1 g 200 200 400 400 re f"),
+			stream("", "1200 0 0 0 1000 800 d1 1 1 0 rg 0 0 m 1000 0 l 500 800 l h f"),
+		},
+	},
+	"vertical": {
+		page:    textPage,
+		content: "0 g BT /F 16 Tf 20 95 Td <000200030002> Tj 30 0 Td [<0002> 400 <0003> -300 <0002>] TJ ET",
+		objs:    identityVObjs(),
+	},
 }
 
 // TestWritePopplerFixtures writes the PDFs of popplerFixtures to the

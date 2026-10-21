@@ -12,10 +12,18 @@
 // matrix, bounding box and resources. Content hidden by optional content
 // (8.11) paints nothing, its clipping included as a viewer applies it.
 //
+// Text (9.4) is drawn glyph by glyph through [glyph]: each outline under the
+// text rendering matrix, the text position advancing by the widths the font
+// declares (9.4.4), in every rendering mode of 9.3.6, the clipping modes
+// adding the outlines to the clip at ET. A Type 3 glyph runs its description
+// (9.6.5), its colours its own after d0 and the fill colour's after d1. A
+// font the document does not embed draws with a program [Options.Fonts]
+// supplies, or as placeholder boxes, counted in the [Report].
+//
 // What the renderer does not draw yet is counted in the [Report] rather than
-// drawn wrongly: text, tiling patterns, soft masks, blend modes other than
-// Normal and transparency groups, which a form XObject's content is painted
-// without. Annotations are not drawn.
+// drawn wrongly: tiling patterns, soft masks, blend modes other than Normal
+// and transparency groups, which a form XObject's content is painted without.
+// Annotations are not drawn.
 //
 // Every allocation sized by the page is held to the render pixel budget, and
 // the work of one render to [maxRenderOperators] operators; ctx is checked

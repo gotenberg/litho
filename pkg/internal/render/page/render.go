@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
 )
@@ -38,8 +39,10 @@ const clipBudgetShare = 8
 
 // Unsupported constructs, the keys of [Report.Unsupported].
 const (
-	// UnsupportedText counts text-showing operators (ISO 32000-1, 9.4.3).
-	UnsupportedText = "text"
+	// PlaceholderGlyph counts glyphs drawn as the hollow box of a font
+	// neither the document nor [Options.Fonts] supplies a program for
+	// (ISO 32000-1, 9.6.2.2 leaves a substitute to the reader).
+	PlaceholderGlyph = "placeholder glyph"
 	// UnsupportedTilingPattern counts fills and strokes with a tiling
 	// pattern (8.7.3), which paint nothing.
 	UnsupportedTilingPattern = "tiling pattern"
@@ -68,6 +71,10 @@ type Options struct {
 	// Background is the unpremultiplied RGBA colour, each channel in [0, 1],
 	// the page is drawn over. The zero value leaves it transparent.
 	Background [4]float32
+	// Fonts supplies programs for the fonts the document does not embed
+	// ([glyph.Options.Substitutes]); nil supplies none, and their glyphs
+	// draw as placeholders.
+	Fonts glyph.Provider
 }
 
 // Report says what a render left out.
@@ -134,6 +141,9 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 		clips:     []*clip{newClip(g.Width, g.Height)},
 		shadings:  make(map[ast.PdfIndirectRef]*shade.Shading),
 		patterns:  make(map[ast.PdfIndirectRef]*shade.Pattern),
+		fonts:     glyph.NewCache(doc, glyph.Options{Substitutes: opts.Fonts}),
+		glyphs:    make(map[glyphKey]glyph.Glyph),
+		type3:     make(map[glyphKey][]content.Operation),
 	}
 	if err := r.run(ops, pg.Resources, g.Matrix, 0); err != nil {
 		return nil, report, err

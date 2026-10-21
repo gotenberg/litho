@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
+	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
@@ -44,6 +45,13 @@ type renderer struct {
 	// transfers keeps the transfer functions compiled so far, by the value
 	// /TR or /TR2 states (maxTransferCache).
 	transfers map[string]*transfer
+	// fonts loads the fonts text is shown in; glyphs and type3 keep the
+	// glyphs resolved and the Type 3 glyph descriptions parsed so far, and
+	// type3Depth counts the descriptions being run.
+	fonts      *glyph.Cache
+	glyphs     map[glyphKey]glyph.Glyph
+	type3      map[glyphKey][]content.Operation
+	type3Depth int
 }
 
 // scope is one content stream being run: the page's or a form's.
@@ -64,6 +72,10 @@ type scope struct {
 	hasCur   bool
 	clipRule raster.FillRule
 	clipSet  bool
+
+	// text is the text object being shown, which a Type 3 glyph
+	// description, a stream of its own, does not share.
+	text textObject
 }
 
 // run executes ops, the content of one stream.
@@ -111,11 +123,14 @@ func (r *renderer) exec(s *scope, op content.Operation) error {
 		return r.inlineImage(s, op)
 	case "sh":
 		return r.shading(s, op)
-	case "Tj", "TJ":
-		r.report.count(UnsupportedText)
-		return nil
-	case "'", "\"":
-		r.report.count(UnsupportedText)
+	case "Tj", "TJ", "'", "\"":
+		return r.showText(s, op)
+	case "BT":
+		s.beginText()
+	case "ET":
+		if err := r.endText(s); err != nil {
+			return err
+		}
 	case "Q":
 		if len(r.m.Stack) <= s.floor {
 			return nil

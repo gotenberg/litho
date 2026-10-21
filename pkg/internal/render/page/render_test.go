@@ -210,7 +210,9 @@ func TestReportsUnsupported(t *testing.T) {
 			stream("/PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >>", "0 g 0 0 5 5 re f"),
 		},
 	})
-	want := map[string]int{UnsupportedText: 2, UnsupportedTilingPattern: 1, UnsupportedBlendMode: 1}
+	// Helvetica is not embedded and no provider serves it: a and b draw
+	// placeholders.
+	want := map[string]int{PlaceholderGlyph: 2,UnsupportedTilingPattern: 1, UnsupportedBlendMode: 1}
 	for k, n := range want {
 		if report.Unsupported[k] != n {
 			t.Errorf("%s: %d, want %d (report %v)", k, report.Unsupported[k], n, report.Unsupported)
