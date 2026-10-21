@@ -25,7 +25,8 @@
 //     /FontMatrix with the font's /Resources (9.6.5).
 //
 // A code that selects no glyph the program holds draws the program's .notdef
-// glyph (9.6.6.3, 9.7.6.3).
+// glyph (9.6.6.3, 9.7.6.3), and nothing when the program holds none, as a
+// bare CFF program with an empty CharStrings INDEX does.
 //
 // # Advance
 //
@@ -51,8 +52,9 @@
 // glyph whose advance differs from the declared width is scaled horizontally
 // to it, as viewers draw it. A font no substitute serves, and a glyph its
 // substitute lacks, draws a placeholder: a hollow box as wide as the declared
-// width and as tall as the font's bounding box. [Glyph.Source] says which
-// path each glyph took.
+// width and as tall as the font's bounding box. A simple font's code that
+// stands for no glyph, unnamed by its encoding and given no character, draws
+// nothing. [Glyph.Source] says which path each glyph took.
 //
 // # Concurrency
 //

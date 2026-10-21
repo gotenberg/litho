@@ -229,6 +229,30 @@ func (p *cffProgram) sfnt() *sfntTables { return p.tables }
 
 func (p *cffProgram) size() int { return p.n }
 
+// emptyProgram is an embedded program that reads but defines no glyph, a
+// bare CFF program whose CharStrings INDEX is empty ([embeddedProgram]).
+// Every lookup fails and it holds no .notdef, so each code it shows draws
+// nothing and advances by its declared width.
+type emptyProgram struct {
+	n int
+}
+
+func (p *emptyProgram) byName(string) (glyphRef, bool) { return glyphRef{}, false }
+
+func (p *emptyProgram) byGID(int) (glyphRef, bool) { return glyphRef{}, false }
+
+func (p *emptyProgram) byCID(int) (glyphRef, bool) { return glyphRef{}, false }
+
+func (p *emptyProgram) notdef() (glyphRef, bool) { return glyphRef{}, false }
+
+func (p *emptyProgram) draw(context.Context, glyphRef) (geom.Path, geom.Matrix, float64, error) {
+	return geom.Path{}, geom.Matrix{0.001, 0, 0, 0.001, 0, 0}, 0, errNoGlyph
+}
+
+func (p *emptyProgram) sfnt() *sfntTables { return nil }
+
+func (p *emptyProgram) size() int { return p.n }
+
 // type1Program is a Type 1 program.
 type type1Program struct {
 	font *type1.Font

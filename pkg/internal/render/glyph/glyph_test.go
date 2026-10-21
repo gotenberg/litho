@@ -348,6 +348,68 @@ func TestSubstituteRequestsAndScaling(t *testing.T) {
 	}
 }
 
+// TestSubstituteNotdefCodesDrawNothing pins the codes a font's encoding names
+// no glyph for: with a substitute they draw nothing, as poppler and PDFium
+// draw them (litho unembednames_2u), while a named glyph the substitute
+// lacks still draws a placeholder.
+func TestSubstituteNotdefCodesDrawNothing(t *testing.T) {
+	t.Parallel()
+	program := fontbuild.TrueType{PostScriptName: "Sub", Family: "Sub", Subfamily: "Regular", Glyphs: glyphs}.Build()
+	provider := func(context.Context, Request) ([]Candidate, error) {
+		return []Candidate{func(context.Context) ([]byte, error) { return program, nil }}, nil
+	}
+	f := load(t, unembedded("Melior", 32), Options{Substitutes: provider})
+	if f.Source() != SourceSubstitute {
+		t.Fatalf("Source() = %v, want substitute", f.Source())
+	}
+	// WinAnsiEncoding names no glyph at codes 0 and 1.
+	for _, code := range []byte{0, 1} {
+		g := glyphOf(t, f, code)
+		if g.Source != SourceSubstitute || !g.Notdef || !g.Outline.Empty() {
+			t.Errorf("code %#x: source %v, notdef %v, outline empty %v; want nothing drawn", code, g.Source, g.Notdef, g.Outline.Empty())
+		}
+		if !near(g.Advance, 0.5) {
+			t.Errorf("code %#x advances %v, want the declared 0.5", code, g.Advance)
+		}
+	}
+	if g := glyphOf(t, f, 'A'); g.Source != SourceSubstitute || g.Notdef {
+		t.Errorf("code A: source %v, notdef %v; want the substitute's glyph", g.Source, g.Notdef)
+	}
+	if g := glyphOf(t, f, 'Z'); g.Source != SourcePlaceholder || g.Outline.Empty() {
+		t.Errorf("code Z: source %v, outline empty %v; want a placeholder box", g.Source, g.Outline.Empty())
+	}
+}
+
+// TestSymbolicSubstituteDrawsByName pins a symbolic font no standard font
+// answers to (litho ttencoding_2b): it draws with the stand-in its flags give,
+// its codes selecting glyphs by the names its encoding gives them.
+func TestSymbolicSubstituteDrawsByName(t *testing.T) {
+	t.Parallel()
+	program := fontbuild.TrueType{PostScriptName: "Sub", Family: "Sub", Subfamily: "Regular", Glyphs: glyphs}.Build()
+	var asked []string
+	provider := func(_ context.Context, req Request) ([]Candidate, error) {
+		asked = append(asked, req.BaseFont)
+		if req.BaseFont != "Helvetica" {
+			return nil, nil
+		}
+		return []Candidate{func(context.Context) ([]byte, error) { return program, nil }}, nil
+	}
+	for _, encoding := range []ast.PdfObject{ast.PdfName("WinAnsiEncoding"), nil} {
+		asked = nil
+		d := simpleFont("TrueType", descriptor(4, "", nil, nil), encoding, 722)
+		d["BaseFont"] = ast.PdfName("LithoSym")
+		f := load(t, d, Options{Substitutes: provider})
+		if f.Source() != SourceSubstitute {
+			t.Fatalf("encoding %v: Source() = %v after asking %v, want substitute", encoding, f.Source(), asked)
+		}
+		for _, code := range []byte{'A', 'B'} {
+			if g := glyphOf(t, f, code); g.Source != SourceSubstitute || g.Notdef {
+				t.Errorf("encoding %v code %q: source %v, notdef %v", encoding, code, g.Source, g.Notdef)
+			}
+		}
+	}
+}
+
 func TestSubstituteRequestOrder(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -361,7 +423,9 @@ func TestSubstituteRequestOrder(t *testing.T) {
 		{"ArialNarrow-Bold", 32, "", []string{"ArialNarrow-Bold", "Helvetica-Narrow-Bold", "Helvetica-Bold"}},
 		{"Melior-Italic", 2 | 32, "", []string{"Melior-Italic", "Times-Italic"}},
 		{"Mono", 1 | 32, "", []string{"Mono", "Courier"}},
-		{"WPIconicSymbolsA", 4, "", []string{"WPIconicSymbolsA"}},
+		// A symbolic font no standard font answers to asks for the stand-in
+		// its flags give, as poppler and PDFium draw it.
+		{"WPIconicSymbolsA", 4, "", []string{"WPIconicSymbolsA", "Helvetica"}},
 		// A CIDFont of a CJK collection asks for the faces that cover its
 		// script before a latin stand-in; an Identity one does not.
 		{"MS-Mincho", 2 | 32, "Adobe-Japan1", append(append([]string{"MS-Mincho"}, cjkStandIns["Adobe-Japan1"]...), "Times-Roman")},

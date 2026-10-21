@@ -97,9 +97,17 @@ func (f *Font) substitute(ctx context.Context, req Request, opts Options) error 
 // Times, any other for Helvetica, with the weight and slant the flags and the
 // name's style words give. A narrow face (Narrow, Condensed, Compressed)
 // asks for Helvetica-Narrow first, the width class the provider's
-// metric-compatible families answer. A symbolic font whose name no standard
-// font answers to asks for nothing more: a Latin face draws other glyphs at
-// its codes (9.8.2, Table 123, Symbolic).
+// metric-compatible families answer. A symbolic font (9.8.2, Table 123)
+// asks for the stand-in its flags give like any other: its codes select the
+// stand-in's glyphs by the names its encoding gives them, as poppler and
+// PDFium draw it, where a placeholder would hide text both show.
+//
+// # Corpus evidence
+//
+//   - litho ttencoding_2b: two symbolic TrueType fonts no standard font
+//     answers to, one under WinAnsiEncoding and one with no /Encoding, show
+//     41 42; poppler and PDFium draw A and B with the face they draw the
+//     nonsymbolic ones with.
 func substituteRequests(req Request) []Request {
 	out := []Request{req}
 	for _, face := range cjkStandIns[req.Ordering] {
@@ -113,9 +121,6 @@ func substituteRequests(req Request) []Request {
 	}
 	std, ok := typography.Standard14StandIn(name)
 	if !ok {
-		if req.Flags&flagSymbolic != 0 && req.Flags&flagNonsymbolic == 0 {
-			return out
-		}
 		std = flagsStandIn(name, req.Flags)
 	}
 	if narrow(name) && strings.HasPrefix(std, "Helvetica") {
@@ -206,10 +211,16 @@ func containsAny(s string, words ...string) bool {
 // does the same for a glyph wider than its width (canvas.js, showText, the
 // remeasure branch); scaling a narrower one too keeps a substitute line as
 // long as the font's own would be. A code the substitute holds no glyph for
-// draws a placeholder.
+// draws a placeholder, unless it selects .notdef ([Font.selectsNotdef]): it
+// then draws nothing.
 func (f *Font) substituteGlyph(ctx context.Context, code Code, g *Glyph) {
 	ref, ok := f.selectSubstitute(code)
 	if !ok {
+		if f.selectsNotdef(code) {
+			g.Source, g.Notdef = SourceSubstitute, true
+			g.Matrix = geom.Matrix{0.001, 0, 0, 0.001, 0, 0}
+			return
+		}
 		f.placeholderGlyph(code, g)
 		return
 	}
@@ -225,6 +236,34 @@ func (f *Font) substituteGlyph(ctx context.Context, code Code, g *Glyph) {
 	if advance > 0 && g.Advance > 0 && math.Abs(g.Advance/advance-1) > widthTolerance {
 		g.Matrix = m.Mul(geom.Matrix{g.Advance / advance, 0, 0, 1, 0, 0})
 	}
+}
+
+// selectsNotdef reports a simple font's code that stands for no glyph: its
+// encoding gives it no glyph name, or the name .notdef, and no /ToUnicode or
+// encoding table gives it a character. Such a code selects the .notdef glyph
+// of whatever program draws the font (ISO 32000-1, 9.6.6.3), and the .notdef
+// of a program the document does not embed is unknown: a substitute's own
+// .notdef (DejaVu's box, the URW faces' empty glyph) is another program's
+// design. It draws nothing, as poppler and PDFium draw it. A code that stands
+// for a character the substitute lacks still draws a placeholder, which shows
+// text the page holds and litho cannot draw.
+//
+// # Corpus evidence
+//
+//   - litho unembednames_2u: an unembedded Helvetica shows codes 01 and 80,
+//     which StandardEncoding leaves unnamed, and a symbolic Arial TrueType
+//     codes 00 and 01, which WinAnsiEncoding leaves unnamed; poppler and
+//     PDFium draw none of the four.
+func (f *Font) selectsNotdef(code Code) bool {
+	if f.kind != kindSimple {
+		return false
+	}
+	name := f.enc.names[code.Bytes[0]]
+	if name != "" && name != notdefName {
+		return false
+	}
+	_, ok := f.codeRune(code, "")
+	return !ok
 }
 
 // widthTolerance is the relative difference between a substitute glyph's

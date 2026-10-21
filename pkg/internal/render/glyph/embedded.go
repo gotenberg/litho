@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 )
 
 // fontFileKeys are the font descriptor entries that embed a font program
@@ -16,6 +17,13 @@ var fontFileKeys = [...]ast.PdfName{"FontFile", "FontFile2", "FontFile3"}
 // descriptor embeds, or nil when it embeds none litho can read. A program
 // that does not parse is logged and treated as absent, so the font draws as
 // one the document does not embed.
+//
+// A bare CFF program whose CharStrings INDEX reads but holds no charstring is
+// embedded all the same: it defines no glyph, .notdef included, so every code
+// draws nothing ([emptyProgram]). ISO 32000-1, 9.6.6.3 and 9.7.6.3 send a code
+// the program holds no glyph for to the program's .notdef, never to another
+// program, and poppler and PDFium draw such a font as nothing. Compliance
+// counts the font as embedded too (ISO 19005-2, 6.2.11.4.1 t1).
 func embeddedProgram(ctx context.Context, doc *document.Document, desc ast.PdfDict) ([]byte, program) {
 	if desc == nil {
 		return nil, nil
@@ -31,6 +39,9 @@ func embeddedProgram(ctx context.Context, doc *document.Document, desc ast.PdfDi
 		}
 		prog, err := parseProgram(ctx, data)
 		if err != nil {
+			if _, _, empty := cff.EmptyCharStrings(data); empty {
+				return data, &emptyProgram{n: len(data)}
+			}
 			doc.Logger.Debug("glyph: embedded font program does not parse", slog.String("key", string(key)), slog.Any("err", err))
 			continue
 		}

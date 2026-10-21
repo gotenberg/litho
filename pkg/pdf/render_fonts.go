@@ -25,7 +25,8 @@ import (
 // chosen by name or by its descriptor's /Flags, and draws with the first
 // program that parses: a TrueType or OpenType program, a bare CFF program or
 // a Type 1 program. [FontRequest.Codes] is empty. A glyph the program lacks
-// draws a box, and one whose advance differs from the declared width is
+// draws a box, a code the font's encoding names no glyph for draws nothing,
+// and a glyph whose advance differs from the declared width is
 // scaled to it, so text keeps the positions the document gives it. An error
 // p returns is logged at Debug and the font draws boxes.
 //

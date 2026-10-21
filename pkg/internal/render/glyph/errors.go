@@ -15,3 +15,7 @@ var ErrFontNotFound = errors.New("font resource not found")
 // through a substitute or a placeholder; the sentinel only reaches the
 // debug log.
 var ErrBadProgram = errors.New("unreadable font program")
+
+// errNoGlyph reports a draw from a program that defines no glyph, which no
+// lookup of [emptyProgram] hands out.
+var errNoGlyph = errors.New("the program defines no glyph")

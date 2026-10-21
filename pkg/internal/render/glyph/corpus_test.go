@@ -154,6 +154,44 @@ func TestCacheConcurrentUse(t *testing.T) {
 	wg.Wait()
 }
 
+// TestCorpusEmptyCFFDrawsNothing pins fontemptycs_2b.pdf, whose bare CFF
+// programs hold an empty CharStrings INDEX: each font draws from its own
+// program, which defines no glyph and no .notdef, so every code draws
+// nothing, as poppler and PDFium draw it, rather than a substitute or a box.
+// Objects 8 to 12 are the simple fonts E1 to E5, 5, 6, 14 and 15 the Type 0
+// fonts C1, C2, K1 and K2.
+func TestCorpusEmptyCFFDrawsNothing(t *testing.T) {
+	t.Parallel()
+	doc := fixture(t, "fontemptycs_2b.pdf")
+	cache := NewCache(doc, Options{})
+	for _, num := range []int{8, 9, 10, 11, 12} {
+		f := fixtureFont(t, cache, num)
+		if f.Source() != SourceEmbedded {
+			t.Errorf("font %d source %v, want embedded", num, f.Source())
+		}
+		for _, code := range []byte{'A', 'B'} {
+			if g := glyphOf(t, f, code); g.Source != SourceEmbedded || !g.Notdef || !g.Outline.Empty() {
+				t.Errorf("font %d code %q: source %v, notdef %v, outline empty %v", num, code, g.Source, g.Notdef, g.Outline.Empty())
+			}
+		}
+	}
+	for _, num := range []int{5, 6, 14, 15} {
+		f := fixtureFont(t, cache, num)
+		if f.Source() != SourceEmbedded {
+			t.Errorf("font %d source %v, want embedded", num, f.Source())
+		}
+		for _, cid := range []byte{1, 2} {
+			if g := glyphOf(t, f, 0, cid); !g.Notdef || !g.Outline.Empty() {
+				t.Errorf("font %d CID %d: notdef %v, outline empty %v", num, cid, g.Notdef, g.Outline.Empty())
+			}
+		}
+	}
+	// The whole program the empty ones are cut from still draws.
+	if g := glyphOf(t, fixtureFont(t, cache, 13), 'A'); g.Notdef || g.Outline.Empty() {
+		t.Errorf("font 13 (EK) code A: notdef %v, outline empty %v", g.Notdef, g.Outline.Empty())
+	}
+}
+
 func BenchmarkGlyph(b *testing.B) {
 	data, err := os.ReadFile("../../../../test/integration/corpus/litho/pdfs/fontleft_2b.pdf")
 	if err != nil {
