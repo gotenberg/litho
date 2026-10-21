@@ -119,9 +119,9 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 // CIDFontType2 without /ToUnicode as Unicode, and picks a sans-serif fallback through fontconfig where the
 // name and the descriptor's Serif flag (9.8.2, Table 123) ask for Courier.
 // litho selects a CIDFont's substitute glyph by the character its /ToUnicode
-// or its Adobe collection's UCS2 CMap gives the code (9.10.2), and draws a
-// placeholder for a code neither gives one: a CID indexes its collection
-// (9.7.3), and /CIDToGIDMap indexes the embedded program alone (9.7.4.2).
+// or its Adobe collection's UCS2 CMap gives the code (9.10.2), or, for a
+// non-embedded Identity CIDFontType2, the glyph order PDF.js knows for the
+// face it names: its CIDs are that face's glyph indices (9.7.4.2).
 //
 // # Corpus evidence
 //
@@ -147,9 +147,8 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //     wide at the same positions.
 //   - pdfjs issue15594_reduced: an unembedded Calibri, Identity-H,
 //     Adobe-Identity, no /ToUnicode: litho draws CIDs 9, 80, 109, 263, 386
-//     and 442 as six placeholders (1029 pixels differ), poppler as U+0009,
-//     P, m, ć, Ƃ and ƺ, PDF.js as ÄÖÜäöü through the Calibri glyph order it
-//     assumes.
+//     and 442 as ÄÖÜäöü through the Calibri glyph order, as PDF.js does;
+//     poppler draws U+0009, P, m, ć, Ƃ and ƺ.
 //   - govdocs thread_100_100161, thread_200_200618 pages 1 to 3: an
 //     unembedded CourierNewPSMT (Serif flag set) poppler draws in DejaVu
 //     Sans Mono, litho in Nimbus Mono PS.

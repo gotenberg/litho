@@ -269,26 +269,37 @@ func (f *Font) codeRune(code Code, name string) (rune, bool) {
 }
 
 // cidRune returns the character a Type 0 font's code stands for when the
-// font draws with a substitute: the one character the font's own /ToUnicode
-// CMap gives the code (ISO 32000-1, 9.10.3), else the one its Adobe character
-// collection's UCS2 CMap gives the CID the encoding selects (9.10.2, steps a
-// to e). A code neither gives one character has none, and draws a
-// placeholder.
+// font draws with a substitute, from the first of three sources that gives
+// one character:
 //
-// Neither the CID read as a character nor the CID read as a glyph index of the
-// substitute stands in: a CID indexes its collection (9.7.3), and /CIDToGIDMap
-// maps CIDs to the glyphs of the embedded program only (9.7.4.2, Table 117).
-// This is stricter than poppler, which reads the CID of an Adobe-Identity font
-// without /ToUnicode as a character, and than PDF.js, which knows the glyph
-// order of some standard fonts (Calibri among them); both guesses draw some
-// other glyph whenever the font was laid out with another glyph order.
+//   - the font's own /ToUnicode CMap at the code (ISO 32000-1, 9.10.3);
+//   - its Adobe character collection's UCS2 CMap at the CID the encoding
+//     selects (9.10.2, steps a to e);
+//   - the glyph order of the host face a non-embedded Identity CIDFontType2
+//     names, at the CID ([typography.StandardFontGlyphMap]). Under an
+//     Identity CMap the code is the CID (9.7.5.2), and with no /CIDToGIDMap
+//     stream the CID is the glyph index of the program the file was laid out
+//     with (9.7.4.2, Table 117), the face installed where it was produced.
+//     9.10.2 leaves such a font's characters to the reader; PDF.js reads the
+//     glyph index through the glyph order of the face its name stands for
+//     (src/core/fonts.js, fallbackToSystemFont, with the tables of
+//     src/core/standard_fonts.js, getGlyphMapForStandardFonts and its Arial
+//     Black and Calibri supplements, at the PDFJS_REVISION versions.env
+//     pins), and so does litho.
+//
+// A code no source gives one character draws a placeholder. Neither the CID
+// read as a character nor the CID read as a glyph index of the substitute
+// stands in: a CID indexes its collection (9.7.3), and /CIDToGIDMap maps CIDs
+// to the glyphs of the embedded program only (9.7.4.2), never to a
+// substitute's own glyph order. Poppler reads the CID of an Adobe-Identity
+// font without /ToUnicode as a character.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue15594_reduced: an unembedded Calibri, Identity-H,
-//     Adobe-Identity, no /ToUnicode. PDF.js draws CIDs 9, 80, 109, 263, 386
-//     and 442 as ÄÖÜäöü through its Calibri glyph map, poppler as U+0009, P,
-//     m, ć, Ƃ and ƺ; litho draws six placeholders.
+//     Adobe-Identity, no /ToUnicode. The Calibri glyph order reads CIDs 9,
+//     80, 109, 263, 386 and 442 as ÄÖÜäöü, which litho draws, as PDF.js
+//     does; poppler draws U+0009, P, m, ć, Ƃ and ƺ.
 func (f *Font) cidRune(code Code) (rune, bool) {
 	if f.toUnicode != nil {
 		if s, ok := f.toUnicode.Mapping[string(code.Bytes)]; ok {
@@ -297,15 +308,18 @@ func (f *Font) cidRune(code Code) (rune, bool) {
 			}
 		}
 	}
-	if f.collection == nil {
-		return 0, false
-	}
 	cid, mapped := f.cid(code)
 	if !mapped {
 		return 0, false
 	}
-	r, ok := f.collection[cid]
-	return r, ok && r != 0
+	if r, ok := f.collection[cid]; ok && r != 0 {
+		return r, true
+	}
+	if f.glyphOrder != nil && cid >= 0 && cid <= math.MaxUint16 {
+		r, ok := f.glyphOrder[uint16(cid)] //nolint:gosec // cid is bounded to a uint16 above.
+		return r, ok && r != 0
+	}
+	return 0, false
 }
 
 // glyphRune reads a glyph name as the character the Adobe Glyph List, its

@@ -2,7 +2,9 @@ package page
 
 import (
 	_ "embed"
+	"fmt"
 	"maps"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
@@ -136,19 +138,52 @@ func TestSubstituteVertical(t *testing.T) {
 
 func TestSubstituteWithoutUnicodeDrawsPlaceholder(t *testing.T) {
 	t.Parallel()
-	// Adobe-Identity without /ToUnicode leaves its CIDs no character: CID 4,
-	// A in the Calibri glyph order PDF.js assumes, and CID 2, the
-	// substitute's A read as a glyph index, each draw a hollow box, x 5..17
-	// and 17..29.
+	// An Adobe-Identity Melior without /ToUnicode, a face of no known glyph
+	// order, leaves its CIDs no character: CID 65, U+0041 read as a
+	// character, and CID 2, the substitute's A read as a glyph index, each
+	// draw a hollow box, x 5..17 and 17..29.
+	objs := unembeddedType0("Identity-H", "Identity", "[2 [600] 65 [600]]", "")
+	for i := range objs {
+		objs[i] = strings.ReplaceAll(objs[i], "/Calibri", "/Melior")
+	}
 	f := fixture{
 		page:       textPage,
-		content:    "0 g BT /F 20 Tf 5 70 Td <00040002> Tj ET",
-		objs:       unembeddedType0("Identity-H", "Identity", "[2 [600] 4 [600]]", ""),
+		content:    "0 g BT /F 20 Tf 5 70 Td <00410002> Tj ET",
+		objs:       objs,
 		substitute: substituteProgram,
 	}
 	img, report := draw(t, f)
 	expect(t, img, 0, map[[2]int]rgb{{5, 25}: black, {11, 25}: paper, {23, 25}: paper})
 	if n := report.Unsupported[PlaceholderGlyph]; n != 2 {
 		t.Errorf("%d placeholders, want 2", n)
+	}
+}
+
+func TestSubstituteByGlyphOrder(t *testing.T) {
+	t.Parallel()
+	// The codes of pdfjs issue15594_reduced: an Adobe-Identity Calibri
+	// without /ToUnicode, whose CIDs are glyph indices of Calibri. Its glyph
+	// order reads CIDs 9, 80, 109, 263, 386 and 442 as ÄÖÜäöü, which the
+	// substitute holds. Each glyph is 10 wide at 20 points: x 5..15, 15..25
+	// and so on to 65.
+	var glyphs []fontbuild.Glyph
+	for _, r := range "ÄÖÜäöü" {
+		glyphs = append(glyphs, fontbuild.Glyph{Name: fmt.Sprintf("uni%04X", r), Unicode: r, Advance: 500})
+	}
+	program := fontbuild.TrueType{PostScriptName: "LithoUmlauts", Family: "LithoUmlauts", Subfamily: "Regular", Glyphs: glyphs}.Build()
+	f := fixture{
+		page:       textPage,
+		content:    "0 g BT /F 20 Tf 5 70 Td <00090050006D0107018201BA> Tj ET",
+		objs:       unembeddedType0("Identity-H", "Identity", "[9 [500] 80 [500] 109 [500] 263 [500] 386 [500] 442 [500]]", ""),
+		substitute: program,
+	}
+	img, report := draw(t, f)
+	want := map[[2]int]rgb{{4, 25}: paper, {66, 25}: paper}
+	for i := range 6 {
+		want[[2]int{10 + 10*i, 25}] = black
+	}
+	expect(t, img, 0, want)
+	if n := report.Unsupported[PlaceholderGlyph]; n != 0 {
+		t.Errorf("%d placeholders, want none", n)
 	}
 }

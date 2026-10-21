@@ -2503,16 +2503,45 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 //     now differ from theirs only in spacing or, for issue13916.pdf, in the
 //     U+0000 PDF.js emits for glyph ID 0.
 func applyStandardFontGlyphMap(ctx context.Context, doc *document.Document, fontDict, cidDict ast.PdfDict, font *Font) bool {
-	if cidFontHasEmbeddedProgram(ctx, doc, fontDict) || !isIdentityEncoding(ctx, doc, fontDict) || isCJKOrdering(ctx, doc, fontDict) {
+	m := standardFontGlyphMap(ctx, doc, fontDict, cidDict)
+	if m == nil {
 		return false
+	}
+	if font.GIDToUnicode == nil {
+		font.GIDToUnicode = make(map[uint16]rune, len(m))
+	}
+	maps.Copy(font.GIDToUnicode, m)
+	return true
+}
+
+// StandardFontGlyphMap returns the glyph ID to Unicode table PDF.js reads
+// the Type 0 font fontDict with, under the gate [applyStandardFontGlyphMap]
+// states, or nil when the font fails it. It also requires that no
+// /CIDToGIDMap stream remaps the CIDs: only under the Identity mapping is a
+// CID the glyph index of the font the file was laid out with (ISO 32000-1,
+// 9.7.4.2, Table 117). The table is shared and must be treated as read-only.
+func StandardFontGlyphMap(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[uint16]rune {
+	cidDict := descendantCIDFont(ctx, doc, fontDict)
+	if cidDict == nil || hasCIDToGIDMapStream(ctx, doc, fontDict) {
+		return nil
+	}
+	return standardFontGlyphMap(ctx, doc, fontDict, cidDict)
+}
+
+// standardFontGlyphMap returns PDF.js's glyph table for a non-embedded
+// Identity CIDFontType2, nil when the gate of [applyStandardFontGlyphMap]
+// rejects the font.
+func standardFontGlyphMap(ctx context.Context, doc *document.Document, fontDict, cidDict ast.PdfDict) map[uint16]rune {
+	if cidFontHasEmbeddedProgram(ctx, doc, fontDict) || !isIdentityEncoding(ctx, doc, fontDict) || isCJKOrdering(ctx, doc, fontDict) {
+		return nil
 	}
 	subtype, err := document.ResolveName(ctx, doc, cidDict["Subtype"])
 	if err != nil {
 		doc.Logger.Debug("resolving CIDFont Subtype for the standard font glyph map", slog.Any("err", err))
-		return false
+		return nil
 	}
 	if subtype != "CIDFontType2" {
-		return false
+		return nil
 	}
 	baseFont, err := document.ResolveName(ctx, doc, cidDict["BaseFont"])
 	if err != nil {
@@ -2524,15 +2553,7 @@ func applyStandardFontGlyphMap(ctx context.Context, doc *document.Document, font
 			doc.Logger.Debug("resolving FontName for the standard font glyph map", slog.Any("err", err))
 		}
 	}
-	m := stdfonts.IdentityGlyphMap(stdfonts.PDFJSFontName(stripSubsetTag(string(fontName)), stripSubsetTag(string(baseFont))))
-	if m == nil {
-		return false
-	}
-	if font.GIDToUnicode == nil {
-		font.GIDToUnicode = make(map[uint16]rune, len(m))
-	}
-	maps.Copy(font.GIDToUnicode, m)
-	return true
+	return stdfonts.IdentityGlyphMap(stdfonts.PDFJSFontName(stripSubsetTag(string(fontName)), stripSubsetTag(string(baseFont))))
 }
 
 // cidFontHasEmbeddedProgram reports whether a Type0 font's descendant

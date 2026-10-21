@@ -139,9 +139,14 @@ type Font struct {
 	// toUnicode and collection give the characters a Type 0 font's codes
 	// stand for when it draws with a substitute: the font's own /ToUnicode
 	// CMap, and the CID-to-Unicode table of its Adobe character collection.
-	// Both are nil for an embedded font and when the font has none.
+	// They and glyphOrder are nil for an embedded font and when the font has
+	// none.
 	toUnicode  *cmap.CMap
 	collection map[int]rune
+	// glyphOrder reads the CIDs of a non-embedded Identity CIDFontType2 as
+	// glyph indices of the host face its name stands for, nil when no known
+	// glyph order applies ([typography.StandardFontGlyphMap]).
+	glyphOrder map[uint16]rune
 
 	// Type 3 fonts.
 	type3 *type3Font
@@ -310,6 +315,7 @@ func (f *Font) loadType0(ctx context.Context, doc *document.Document, fontDict a
 	if collection, ok := strings.CutPrefix(ordering, "Adobe-"); ok {
 		f.collection = cmap.AdobeCIDToUnicode(collection)
 	}
+	f.glyphOrder = typography.StandardFontGlyphMap(ctx, doc, fontDict)
 	req := Request{
 		BaseFont: nameOf(ctx, doc, cidFont["BaseFont"]),
 		Subtype:  f.subtype,

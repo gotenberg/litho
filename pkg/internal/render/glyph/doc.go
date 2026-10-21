@@ -41,9 +41,10 @@
 // chosen by name or failing that by its descriptor's /Flags. A simple font's
 // code selects the substitute's glyph by its glyph name or the character it
 // stands for. A Type 0 font's code selects it by the character the font's
-// /ToUnicode CMap or, failing that, its Adobe collection's UCS2 CMap gives
-// it, never by its CID: /CIDToGIDMap indexes the embedded program alone
-// (9.7.4.2, Table 117). The advance stays the declared /W or /W2 metric
+// /ToUnicode CMap, its Adobe collection's UCS2 CMap or, for a non-embedded
+// Identity CIDFontType2, the glyph order PDF.js knows for the face it names
+// gives it; never by its CID as a substitute glyph index: /CIDToGIDMap
+// indexes the embedded program alone (9.7.4.2, Table 117). The advance stays the declared /W or /W2 metric
 // (9.7.4.3). A substitute
 // glyph whose advance differs from the declared width is scaled horizontally
 // to it, as viewers draw it. A font no substitute serves, and a glyph its
