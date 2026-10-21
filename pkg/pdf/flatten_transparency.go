@@ -48,10 +48,11 @@ type FlattenedPage struct {
 	// transparent or opaque, inside a region: text stays above the image,
 	// so they now draw above it. Their look is approximated.
 	TextReordered int
-	// TransparentText counts the text objects that painted with
-	// transparency themselves (a constant alpha below 1, a blend mode, a
-	// soft mask): they now draw opaque in their own colour. Their look is
-	// approximated.
+	// TransparentText counts the text objects whose own transparency the
+	// output approximates: a constant alpha composited over white where the
+	// text lay over other content, a soft mask or a blend mode dropped. Text
+	// on the paper and text under an alpha of 0 are drawn exactly and not
+	// counted.
 	TransparentText int
 	// GroupRemoved reports that the page's transparency group was removed.
 	GroupRemoved bool
@@ -85,12 +86,20 @@ type FlattenReport struct {
 // Text is never rasterised. The images are composited without the page's
 // text, and every text object stays in the content as it was, with its
 // marked content and structure, drawn above the image, so the page stays
-// searchable and its tags survive. Two cases change how such text looks,
-// and the report counts both: text a transparent object was drawn over now
-// draws above it, and text that was itself transparent now draws opaque in
-// its own colour. Composited text over an arbitrary backdrop has no single
-// opaque colour (11.3.7.2), so litho keeps the text's colour rather than
-// guess one.
+// searchable and its tags survive. Its own transparency is reproduced where
+// opaque text can: text under a constant alpha of 0, which paints nothing, is
+// drawn in rendering mode 3, which [Reader.ExtractText] leaves out unless
+// [WithInvisibleText] is given, as it leaves out any invisible text; text
+// under an alpha between 0 and 1 with the Normal, Multiply or Darken blend
+// mode is drawn in its colour composited over white, exact where it lies on
+// the paper (11.3.5, 11.3.7.2). The report counts the text whose look this
+// approximates: text over other content composited over white, text under a
+// soft mask or another blend mode, drawn opaque in its own colour, and text
+// something was drawn over in a region, which now draws above it.
+//
+// The renderer blends in sRGB whatever a group's /CS, so a blend mode in a
+// group whose blending space is CMYK or grey composites as its colours look
+// in sRGB rather than in that space (11.3.4).
 //
 // Annotations are left as they are and counted: an appearance composites
 // over the page as a viewer draws it. Call [Writer.FlattenForm] first to
@@ -148,7 +157,11 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 	doc := w.reader.doc
 	pages, err := w.reader.resolvePages(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("resolving pages: %w", err)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, false, ctxErr
+		}
+		// A page tree that does not read leaves no page to flatten.
+		return nil, false, fmt.Errorf("%w: resolving pages: %w", ErrTransparencyFlatteningRefused, err)
 	}
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if err := ctx.Err(); err != nil {

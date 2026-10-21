@@ -576,7 +576,8 @@ var (
 	ErrInvalidFlattenOptions = errors.New("invalid transparency flattening options")
 
 	// ErrTransparencyFlatteningRefused is returned by
-	// [Writer.FlattenTransparency] when a page cannot be flattened: its
+	// [Writer.FlattenTransparency] when the document's page tree does not
+	// read, or a page cannot be flattened: its
 	// regions do not settle within the passes litho allows them, its
 	// transparency does not fit the render pixel budget even at screen
 	// resolution, or it cannot be written back. The error names the page.

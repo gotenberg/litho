@@ -129,6 +129,45 @@ func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.P
 	return copied, nil
 }
 
+// plainImages replaces, in xobjects, each image whose /SMask is no soft mask
+// image, such as the name /None, with a copy without the entry, reporting
+// whether it replaced any. Such an entry masks nothing (ISO 32000-2, 8.9.5,
+// Table 87 makes /SMask a stream), so the image draws the same, and ISO
+// 19005-1, 6.4 still reads the key as transparency. The copies are new
+// objects, their samples the original's bytes.
+func (f *flattener) plainImages(ctx context.Context, xobjects ast.PdfDict) bool {
+	changed := false
+	for _, name := range slices.Sorted(maps.Keys(xobjects)) {
+		obj := xobjects[name]
+		ref, isRef := obj.(ast.PdfIndirectRef)
+		if isRef {
+			if copied, ok := f.images[ref.ObjectNum]; ok {
+				if copied != nil {
+					xobjects[name], changed = copied, true
+				}
+				continue
+			}
+		}
+		var copied ast.PdfObject
+		stream, err := document.ResolveStream(ctx, f.doc, obj)
+		if err == nil && stream.Dict != nil {
+			subtype, _ := document.ResolveName(ctx, f.doc, stream.Dict["Subtype"]) //nolint:errcheck // Deliberate: a subtype that does not read names no image.
+			if _, has := stream.Dict["SMask"]; has && subtype == "Image" && !imageTransparent(ctx, f.doc, stream.Dict) {
+				dict := maps.Clone(stream.Dict)
+				delete(dict, "SMask")
+				copied = f.alloc.Alloc(ast.NewLazyStream(dict, stream.Bytes))
+			}
+		}
+		if isRef {
+			f.images[ref.ObjectNum] = copied
+		}
+		if copied != nil {
+			xobjects[name], changed = copied, true
+		}
+	}
+	return changed
+}
+
 // transparentAnnotations counts the annotations of a page dictionary that
 // paint with transparency: a constant opacity /CA below 1 (ISO 32000-2,
 // 12.5.2), or a normal appearance that holds a transparency group or paints
@@ -159,6 +198,27 @@ func (f *flattener) transparentAnnotations(ctx context.Context, dict ast.PdfDict
 	return n
 }
 
+// statesSetTransparency reports whether a graphics state dictionary of dict's
+// own resources sets transparency, painting with it or not: an appearance
+// that names one still holds transparency (ISO 19005-1, 6.4 reads every
+// ExtGState a resource dictionary holds).
+func (f *flattener) statesSetTransparency(ctx context.Context, dict ast.PdfDict) bool {
+	resources, err := document.ResolveDict(ctx, f.doc, dict["Resources"])
+	if err != nil || resources == nil {
+		return false
+	}
+	states, err := document.ResolveDict(ctx, f.doc, resources["ExtGState"])
+	if err != nil {
+		return false
+	}
+	for _, name := range slices.Sorted(maps.Keys(states)) {
+		if gs, err := document.ResolveDict(ctx, f.doc, states[name]); err == nil && stateNeedsNeutral(ctx, f.doc, gs) {
+			return true
+		}
+	}
+	return false
+}
+
 // appearanceTransparent reports whether a normal appearance of annot, a
 // stream or a dictionary of streams by state, holds a transparency group or
 // paints with transparency.
@@ -184,7 +244,7 @@ func (f *flattener) appearanceTransparent(ctx context.Context, annot ast.PdfDict
 			continue
 		}
 		info := f.scan.form(ctx, obj, stream, nil, 1, nil)
-		if info.transparent || info.group {
+		if info.transparent || info.group || f.statesSetTransparency(ctx, stream.Dict) {
 			return true
 		}
 	}

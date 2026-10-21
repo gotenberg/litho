@@ -124,13 +124,16 @@ func neutralState(ctx context.Context, doc *document.Document, gs ast.PdfDict) a
 	return out
 }
 
-// neutralPatterns replaces, in resources, every pattern whose graphics
-// states set transparency with a copy whose do not, reporting whether it
-// replaced any: a tiling pattern's own resources (ISO 32000-2, 8.7.3.1), a
-// shading pattern's /ExtGState (8.7.4.1). Painting with such a pattern is a
-// transparent unit, which a region's image takes over, so what still names
-// the pattern paints nothing with it. The copies are new objects.
-func (f *flattener) neutralPatterns(ctx context.Context, resources ast.PdfDict) (bool, error) {
+// neutralPatterns replaces, in resources, every pattern that paints with
+// transparency with a copy that does not, reporting whether it replaced any.
+// Painting with such a pattern is a transparent unit, which a region's image
+// takes over, so what still names the pattern is a colour operator that
+// paints nothing with it: a tiling pattern (ISO 32000-2, 8.7.3.1) becomes an
+// empty cell, a shading pattern's /ExtGState (8.7.4.1) sets no transparency.
+// Text is the exception, as it is never rasterised: a tiling pattern text
+// paints with, named in text, keeps its cell, with its graphics states made
+// opaque. The copies are new objects.
+func (f *flattener) neutralPatterns(ctx context.Context, resources ast.PdfDict, text map[string]bool) (bool, error) {
 	patterns, err := document.ResolveDict(ctx, f.doc, resources["Pattern"])
 	if err != nil || patterns == nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -142,18 +145,20 @@ func (f *flattener) neutralPatterns(ctx context.Context, resources ast.PdfDict) 
 	for _, name := range slices.Sorted(maps.Keys(patterns)) {
 		obj := patterns[name]
 		ref, isRef := obj.(ast.PdfIndirectRef)
+		keep := text[string(name)]
+		key := patternKey{num: ref.ObjectNum, keep: keep}
 		copied, known := ast.PdfObject(nil), false
 		if isRef {
-			copied, known = f.patterns[ref.ObjectNum]
+			copied, known = f.patterns[key]
 		}
 		if !known {
-			c, err := f.neutralPattern(ctx, obj)
+			c, err := f.neutralPattern(ctx, obj, keep)
 			if err != nil {
 				return false, err
 			}
 			copied = c
 			if isRef {
-				f.patterns[ref.ObjectNum] = copied
+				f.patterns[key] = copied
 			}
 		}
 		if copied != nil {
@@ -170,9 +175,17 @@ func (f *flattener) neutralPatterns(ctx context.Context, resources ast.PdfDict) 
 	return true, nil
 }
 
+// patternKey names the copy [flattener.neutralPatterns] makes of a pattern:
+// its object number and whether text paints with it.
+type patternKey struct {
+	num  int
+	keep bool
+}
+
 // neutralPattern returns the copy [flattener.neutralPatterns] puts in place
-// of the pattern obj, or nil when it sets no transparency.
-func (f *flattener) neutralPattern(ctx context.Context, obj ast.PdfObject) (ast.PdfObject, error) {
+// of the pattern obj, or nil when it paints no transparency. keep keeps a
+// tiling pattern's cell.
+func (f *flattener) neutralPattern(ctx context.Context, obj ast.PdfObject, keep bool) (ast.PdfObject, error) {
 	// What does not resolve is null (ISO 32000-2, 7.3.10): no pattern a
 	// viewer paints with, so nothing to copy.
 	resolved, err := document.ResolveObject(ctx, f.doc, obj)
@@ -181,14 +194,53 @@ func (f *flattener) neutralPattern(ctx context.Context, obj ast.PdfObject) (ast.
 	}
 	switch v := resolved.(type) {
 	case ast.PdfStream:
+		if !keep && f.scan.tiling(ctx, obj, v, 1, nil) {
+			dict := maps.Clone(v.Dict)
+			for _, key := range []ast.PdfName{"Filter", "DecodeParms", "DL"} {
+				delete(dict, key)
+			}
+			dict["Resources"] = ast.PdfDict{}
+			dict["Length"] = ast.PdfInt(0)
+			return f.alloc.Alloc(ast.NewStream(dict, nil)), nil
+		}
 		own, err := document.ResolveDict(ctx, f.doc, v.Dict["Resources"])
 		if err != nil || own == nil {
 			return nil, ctx.Err()
 		}
 		resources := maps.Clone(own)
 		changed, err := f.neutralStates(ctx, resources)
-		if err != nil || !changed {
+		if err != nil {
 			return nil, err
+		}
+		// A form the cell paints keeps its painting and loses its
+		// transparency group, as a form the page keeps does (see
+		// [flattener.ungroup]).
+		xobjects, err := f.subdict(ctx, resources, "XObject")
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range slices.Sorted(maps.Keys(xobjects)) {
+			inner, err := document.ResolveStream(ctx, f.doc, xobjects[name])
+			if err != nil || inner.Dict == nil {
+				continue
+			}
+			if subtype, err := document.ResolveName(ctx, f.doc, inner.Dict["Subtype"]); err != nil || subtype != "Form" {
+				continue
+			}
+			if !f.scan.form(ctx, xobjects[name], inner, own, 2, nil).group {
+				continue
+			}
+			copied, err := f.ungroup(ctx, xobjects[name], inner, own, 2)
+			if err != nil {
+				return nil, err
+			}
+			xobjects[name], changed = copied, true
+		}
+		if !changed {
+			return nil, nil
+		}
+		if len(xobjects) > 0 {
+			resources["XObject"] = xobjects
 		}
 		dict := maps.Clone(v.Dict)
 		dict["Resources"] = resources
@@ -300,6 +352,9 @@ func (f *flattener) copyTextForm(ctx context.Context, stream ast.PdfStream, pare
 	}
 	inText, clipping := false, false
 	var path []int
+	// textPatterns names the patterns the copy's text paints with: the
+	// copy paints with no other.
+	textPatterns := make(map[string]bool)
 	for i, op := range ops {
 		if i%opsPerContextCheck == 0 {
 			if err := ctx.Err(); err != nil {
@@ -318,10 +373,17 @@ func (f *flattener) copyTextForm(ctx context.Context, stream ast.PdfStream, pare
 			if !showText(op.Operator) {
 				continue
 			}
-			if outcome := f.scan.textOutcome(ctx, m.Current(), formRes); outcome.edited {
+			st := m.Current()
+			if p := textPaints(st.Text.Tmode); p.fill && st.Fill.Pattern != "" {
+				textPatterns[st.Fill.Pattern] = true
+			}
+			if p := textPaints(st.Text.Tmode); p.stroke && st.Stroke.Pattern != "" {
+				textPatterns[st.Stroke.Pattern] = true
+			}
+			if outcome := f.scan.textOutcome(ctx, st, formRes); outcome.edited {
 				edits = append(edits, mutations.SpanEdit{
 					Span:        ranges[i],
-					Replacement: wrapped(outcome.edit, data[ranges[i].Start:ranges[i].End]),
+					Replacement: append(append([]byte{'\n'}, wrapped(outcome.edit, data[ranges[i].Start:ranges[i].End])...), '\n'),
 				})
 			}
 		case op.Operator == "W" || op.Operator == "W*":
@@ -369,7 +431,7 @@ func (f *flattener) copyTextForm(ctx context.Context, stream ast.PdfStream, pare
 	if _, err := f.neutralStates(ctx, resources); err != nil {
 		return ast.PdfIndirectRef{}, err
 	}
-	if _, err := f.neutralPatterns(ctx, resources); err != nil {
+	if _, err := f.neutralPatterns(ctx, resources, textPatterns); err != nil {
 		return ast.PdfIndirectRef{}, err
 	}
 	delete(resources, "XObject")

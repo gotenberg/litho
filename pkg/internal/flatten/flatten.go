@@ -112,9 +112,12 @@ type flattener struct {
 	// text.
 	states map[int]ast.PdfObject
 	forms  map[copyKey]ast.PdfIndirectRef
-	// patterns maps a pattern's object number to its copy whose graphics
-	// states set no transparency, nil for one that needs none.
-	patterns map[int]ast.PdfObject
+	// patterns maps a pattern to its copy that paints no transparency, nil
+	// for one that needs none.
+	patterns map[patternKey]ast.PdfObject
+	// images maps an image's object number to its copy without an /SMask
+	// that masks nothing, nil for one that needs none.
+	images map[int]ast.PdfObject
 	// names counts the resource names this run added, so each is new.
 	names int
 	// scan reads the forms of the page being flattened.
@@ -143,7 +146,8 @@ func Document(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 		forms:  make(map[copyKey]ast.PdfIndirectRef),
 
 		ungrouped: make(map[int]ast.PdfObject),
-		patterns:  make(map[int]ast.PdfObject),
+		patterns:  make(map[patternKey]ast.PdfObject),
+		images:    make(map[int]ast.PdfObject),
 	}
 	report := &Report{}
 	for i, pg := range pages {
@@ -283,11 +287,11 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 	if err != nil {
 		return pr, false, err
 	}
-	patternsChanged, err := f.neutralPatterns(ctx, resources)
+	patternsChanged, err := f.neutralPatterns(ctx, resources, a.TextPatterns)
 	if err != nil {
 		return pr, false, err
 	}
-	statesChanged = statesChanged || patternsChanged
+	statesChanged = statesChanged || patternsChanged || f.plainImages(ctx, xobjects)
 	dict := mutations.LatestPageDict(f.alloc, pg)
 	_, hasGroup := dict["Group"]
 	pr.GroupRemoved = hasGroup && groupTransparency(ctx, f.doc, dict)

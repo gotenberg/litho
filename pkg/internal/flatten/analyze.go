@@ -130,6 +130,8 @@ type Analysis struct {
 	// TextEdits maps the show operators that painted with transparency to
 	// what is drawn around them once it is gone (see [scanner.textOutcome]).
 	TextEdits map[int]TextEdit
+	// TextPatterns names the patterns text paints with.
+	TextPatterns map[string]bool
 	// Hidden lists the transparent units, other than text, that paint
 	// nothing on the page: no clip and crop box leave them area. Removing
 	// them changes nothing a viewer shows.
@@ -162,6 +164,8 @@ type walker struct {
 	// textEdits maps a show operator to what is drawn around it once
 	// transparency is gone; see [scanner.textOutcome].
 	textEdits map[int]TextEdit
+	// textPatterns names the patterns text paints with.
+	textPatterns map[string]bool
 
 	pathStart, pathOps int
 	pathRect, clipping bool
@@ -190,6 +194,8 @@ func Analyze(ctx context.Context, doc *document.Document, page *document.Page, o
 		textFor: make(map[int]int),
 
 		textEdits: make(map[int]TextEdit),
+
+		textPatterns: make(map[string]bool),
 	}
 	w.m.Doc, w.m.Resources = doc, page.DrawResources
 	w.m.RecordPathBoxes = true
@@ -210,7 +216,7 @@ func Analyze(ctx context.Context, doc *document.Document, page *document.Page, o
 	if err := w.textBoxes(page, ops, a.Units); err != nil {
 		return nil, err
 	}
-	a.TextEdits = w.textEdits
+	a.TextEdits, a.TextPatterns = w.textEdits, w.textPatterns
 	for i, u := range a.Units {
 		if u.blended && !u.Transparent && a.drawnUnder(i) {
 			a.Units[i].Transparent = true
@@ -301,6 +307,12 @@ func (w *walker) step(i int, op content.Operation) {
 	if showText(op.Operator) && w.inText {
 		w.textShows = true
 		w.shows = append(w.shows, i)
+		if p := textPaints(st.Text.Tmode); p.fill && st.Fill.Pattern != "" {
+			w.textPatterns[st.Fill.Pattern] = true
+		}
+		if p := textPaints(st.Text.Tmode); p.stroke && st.Stroke.Pattern != "" {
+			w.textPatterns[st.Stroke.Pattern] = true
+		}
 		outcome := w.scan.textOutcome(w.ctx, st, w.res)
 		if outcome.edited {
 			w.textEdits[i] = outcome.edit
