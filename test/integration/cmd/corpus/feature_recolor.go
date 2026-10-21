@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -35,15 +36,21 @@ const recolorInkLevel = renderChannelTolerance
 //
 // A conversion to a printing condition moves every colour outside the
 // condition's gamut to its boundary, by design, and the sRGB primaries lie far
-// outside a press's: the bar is set for the failures that are not a gamut
-// mapping, a channel read in the wrong order, an inverted tint or a colour
-// left black, which move a colour by 60 to 150. ΔE*ab is used over ΔE 2000
+// outside a press's: the bar sits just above the largest move a correct
+// relative colorimetric conversion through the built-in CMYK profile gives
+// any sRGB colour, 71.7 for sRGB blue (TestRecolorDeltaE_Derivation), so a
+// gamut mapping always passes, and the failures that are no gamut mapping, a
+// channel read in the wrong order, an inverted tint or a colour left black,
+// move most colours of a page by more and fail it. ΔE*ab is used over ΔE 2000
 // because the bar is coarse and its arithmetic is plain.
 //
-// TODO: [wave C1] measure the largest ΔE*ab a relative colorimetric
-// conversion through the built-in CMYK profile gives any sRGB colour once
-// the recolour engine joins, and set the bar just above it.
-const recolorDeltaE = 50
+// # Corpus evidence
+//
+//   - litho complex_2b.pdf, megafont_2b.pdf, multipage_2b.pdf,
+//     transparency_2b.pdf: saturated sRGB blue covers 1% of a page at 52 to
+//     71.7, which a bar of 50 failed.
+//   - govdocs thread_000_000753.pdf: the same at 53.5.
+const recolorDeltaE = 75
 
 // recolorMaxPerMillion is the largest share of a page's pixels, in parts per
 // million, the ink check or the colour check may fail for the page to pass:
@@ -306,8 +313,18 @@ func recolorCheckPage(ctx context.Context, src, after *pdf.Reader, page int, opt
 		eval.RenderError = fmt.Sprintf("colour spaces: %v", err)
 		return eval
 	}
+	// A name the source's resources already leave undefined selects no
+	// colour space in either, so no conversion can put it in the target.
+	undefined := map[string]bool{}
+	if srcUses, err := src.ExtractColorSpaces(ctx, page); err == nil {
+		for _, u := range srcUses {
+			if u.Family == "" {
+				undefined[undefinedKey(u)] = true
+			}
+		}
+	}
 	for _, u := range uses {
-		if inRecolorTarget(u) {
+		if inRecolorTarget(u) || u.Family == "" && undefined[undefinedKey(u)] {
 			continue
 		}
 		desc := fmt.Sprintf("%s %s %s %s #%d", u.Source, u.Operator, u.Name, spaceString(u), u.Object)
@@ -333,15 +350,30 @@ func recolorCheckPage(ctx context.Context, src, after *pdf.Reader, page int, opt
 	return eval
 }
 
+// undefinedKey names a use of a colour space name its resources leave
+// undefined: how it is selected, and the name. The object number is left
+// out, since the full rewrite of the output renumbers objects.
+func undefinedKey(u models.ColorSpaceUse) string {
+	return u.Source + "|" + u.Operator + "|" + u.Name
+}
+
 // inRecolorTarget reports whether u paints in the target: DeviceCMYK, a spot
 // colour over it, an Indexed space over it, or a Pattern space, whose
 // shadings and tiles are reported as uses of their own (and whose
-// underlying space, when it has one, must be in the target).
+// underlying space, when it has one, must be in the target). A spot colour
+// whose colorants are all None or All paints in no space of its own: None
+// marks nothing and All marks every separation of the device (ISO 32000-1,
+// 8.6.6.4), which a conversion keeps as they are.
 func inRecolorTarget(u models.ColorSpaceUse) bool {
 	switch u.Family {
 	case recolorFamily:
 		return true
-	case "Separation", "DeviceN", "Indexed":
+	case "Separation", "DeviceN":
+		if len(u.Colorants) > 0 && !slices.ContainsFunc(u.Colorants, func(c string) bool { return c != "None" && c != "All" }) {
+			return true
+		}
+		return u.Alternate != nil && inRecolorTarget(*u.Alternate)
+	case "Indexed":
 		return u.Alternate != nil && inRecolorTarget(*u.Alternate)
 	case "Pattern":
 		return u.Alternate == nil || inRecolorTarget(*u.Alternate)
@@ -366,9 +398,23 @@ func spaceString(u models.ColorSpaceUse) string {
 
 // compareRecolored compares the source's rendering a with the output's b:
 // pixels is a's pixel count; moved counts the pixels that are ink in one and
-// have no ink within [renderNeighbourhood] in the other; drift counts the ink
-// pixels of a with no pixel of b within the neighbourhood closer than
+// have no ink within [renderNeighbourhood] in the other, nor any pixel as
+// close in colour as the ink level is to white; drift counts the ink pixels
+// of a with no pixel of b within the neighbourhood closer than
 // [recolorDeltaE], and maxDE is the largest of those smallest differences.
+//
+// The colour condition on moved keeps a pale area, a light gradient behind a
+// slide's text, whose conversion moves it by a few levels across
+// [recolorInkLevel] from counting as ink that appeared or vanished: such a
+// pixel lies as close to its counterpart as a pixel just past the ink level
+// lies to white, where a mark added or removed differs from what was there by
+// far more.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000859.pdf: page 3's light blue background, 17 ΔE*ab
+//     at most from the source, crosses the ink level on 70872 pixels, 18% of
+//     the page.
 func compareRecolored(a, b image.Image) (pixels, moved, drift int, maxDE float64, sizeChanged bool) {
 	ab, bb := a.Bounds(), b.Bounds()
 	if ab.Dx() != bb.Dx() || ab.Dy() != bb.Dy() {
@@ -377,6 +423,8 @@ func compareRecolored(a, b image.Image) (pixels, moved, drift int, maxDE float64
 	w, h := ab.Dx(), ab.Dy()
 	la, ia := labPixels(a)
 	lb, ib := labPixels(b)
+	level := 1 - float64(recolorInkLevel)/255
+	inkDE := deltaE76(srgbToLab([3]float64{1, 1, 1}), srgbToLab([3]float64{level, level, level}))
 	r := renderNeighbourhood
 	near := func(x, y int, fn func(i int) bool) bool {
 		for dy := -r; dy <= r; dy++ {
@@ -392,10 +440,10 @@ func compareRecolored(a, b image.Image) (pixels, moved, drift int, maxDE float64
 	for y := range h {
 		for x := range w {
 			i := y*w + x
-			if ia[i] && !near(x, y, func(j int) bool { return ib[j] }) {
+			if ia[i] && !near(x, y, func(j int) bool { return ib[j] || deltaE76(la[i], lb[j]) <= inkDE }) {
 				moved++
 			}
-			if ib[i] && !near(x, y, func(j int) bool { return ia[j] }) {
+			if ib[i] && !near(x, y, func(j int) bool { return ia[j] || deltaE76(lb[i], la[j]) <= inkDE }) {
 				moved++
 			}
 			if !ia[i] {

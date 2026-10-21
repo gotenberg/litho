@@ -51,6 +51,16 @@ func TestCompareRecolored_Discriminates(t *testing.T) {
 	if _, moved, _, _, _ := compareRecolored(src, recolorSquare(25, 25, red)); moved == 0 {
 		t.Error("a square that moved is not reported")
 	}
+	// A pale square a conversion moves a few levels across the ink level
+	// stays where it was.
+	pale := recolorSquare(10, 10, color.NRGBA{R: 188, G: 210, B: 240, A: 255})
+	if _, moved, drift, _, _ := compareRecolored(pale, recolorSquare(10, 10, color.NRGBA{R: 195, G: 212, B: 236, A: 255})); moved != 0 || drift != 0 {
+		t.Errorf("a pale square across the ink level: moved %d drift %d, want 0 and 0", moved, drift)
+	}
+	// A pale square that vanishes is reported.
+	if _, moved, _, _, _ := compareRecolored(recolorSquare(10, 10, color.NRGBA{R: 150, G: 150, B: 150, A: 255}), recolorSquare(10, 10, color.White)); moved != 100 {
+		t.Errorf("a grey square that vanished: moved %d, want 100", moved)
+	}
 	if _, _, _, _, size := compareRecolored(src, image.NewNRGBA(image.Rect(0, 0, 41, 40))); !size {
 		t.Error("a size change is not reported")
 	}
@@ -68,6 +78,9 @@ func TestInRecolorTarget(t *testing.T) {
 		{models.ColorSpaceUse{Family: "DeviceCMYK"}, true},
 		{models.ColorSpaceUse{Family: "Separation", Alternate: cmyk}, true},
 		{models.ColorSpaceUse{Family: "DeviceN", Alternate: rgb}, false},
+		{models.ColorSpaceUse{Family: "Separation", Alternate: rgb, Colorants: []string{"None"}}, true},
+		{models.ColorSpaceUse{Family: "DeviceN", Alternate: rgb, Colorants: []string{"None", "All"}}, true},
+		{models.ColorSpaceUse{Family: "DeviceN", Alternate: rgb, Colorants: []string{"None", "Gold"}}, false},
 		{models.ColorSpaceUse{Family: "Indexed", Alternate: cmyk}, true},
 		{models.ColorSpaceUse{Family: "Pattern"}, true},
 		{models.ColorSpaceUse{Family: "Pattern", Alternate: rgb}, false},
@@ -112,6 +125,11 @@ func TestRecolorFeature_Plants(t *testing.T) {
 
 	if v := runRecolor(t, cmykBody, keepColours); !v.Match || v.Metrics[metricRecolorChecked] != 1 {
 		t.Errorf("CMYK control: %+v", v)
+	}
+	// A name the source's resources leave undefined selects no space, in
+	// the output as in the source.
+	if v := runRecolor(t, "/Undefined cs "+cmykBody, keepColours); !v.Match || v.Metrics[metricOutOfTarget] != 0 {
+		t.Errorf("undefined name: %+v", v)
 	}
 	v := runRecolor(t, "1 0 0 rg 50 50 100 100 re f", keepColours)
 	if v.Match || v.Metrics[metricOutOfTarget] != 1 {
