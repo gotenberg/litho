@@ -271,6 +271,7 @@ one deliberately rather than diffing it against a fresh build.
 | `tounicodepair_2u.pdf` | PDF/A-2u     | A simple font's two-byte /ToUnicode mapping a shown byte pair    |
 | `flattentext_2b.pdf`   | PDF/A-2b     | Transparency over, under and on text, which flattening keeps     |
 | `blendspace_2b.pdf`    | PDF/A-2b     | Blend modes, knockout and a soft mask in CMYK and grey groups    |
+| `flattenannots_2b.pdf` | PDF/A-2b     | Transparent annotations, which flattening draws into the page    |
 
 ### Must-not-fire controls
 
@@ -618,6 +619,7 @@ are covered under [Known divergences](#known-divergences).
 | `fieldkids_2b.pdf`     | 6    | 3    | 5    | 2    | 3    | 6    | 3    | 4    | 5   | 5    | 6    | 8    | 6    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
 | `filledrules_ua1.pdf`  | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
+| `flattenannots_2b.pdf` | 12   | 9    | 8    | 5    | 6    | 9    | 6    | 7    | 9   | 9    | 10   | 11   | 8    |
 | `flattentext_2b.pdf`   | 11   | 8    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 7    | 6    |
 | `fnlimits_1b.pdf`      | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 5   | 5    | 6    | 6    | 6    |
 | `fontcff2_2b.pdf`      | 8    | 5    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
@@ -8761,7 +8763,7 @@ cell compared a group blending outside sRGB. Every colour is DeviceCMYK:
 | ---- | ------------------------------------------------------------------------------------- |
 | 1    | in a CMYK page group, an isolated CMYK group of a cyan square and a magenta one       |
 |      | Multiply over its right half, and an isolated knockout CMYK group of the same squares |
-|      | Multiply at ca 0.7 over yellow                                                         |
+|      | Multiply at ca 0.7 over yellow                                                        |
 | 2    | a luminosity mask whose group blends cyan and magenta Multiply in DeviceGray, over a  |
 |      | black fill                                                                            |
 | 3    | in a CMYK page group, black ink and cyan ink at ca 0.5, each over the other           |
@@ -8776,6 +8778,46 @@ draws all three pages like their source.
 The file declares no OutputIntent, so DeviceCMYK fails `6.2.4.3/3` at
 PDF/A-2b. veraPDF 1.30.2 and litho report the same rule set in all thirteen
 cells.
+
+### `flattenannots_2b.pdf`
+
+`Writer.FlattenTransparency` draws into the page content the appearance of each
+annotation that paints with transparency, as a viewer places it (ISO 32000-1,
+12.5.5, Algorithm 8.1), leaves the annotation with an appearance that paints
+nothing, and flattens the page. The corpora hold transparent annotations, but
+the `flatten` cell's render sample reaches few kinds, none synthesised from its
+dictionary, no annotation a viewer draws under a transparent one, and no
+stroked straight line, whose path box has no area. Every glyph is a Type 3
+glyph painting in the text's colour, with a `/ToUnicode` map:
+
+| Page | `/Annots`, in order                                                                |
+| ---- | ---------------------------------------------------------------------------------- |
+| 1    | an opaque Circle the Highlight overlaps, a Multiply Highlight over text with a     |
+|      | closed Popup, a Square at `/CA` 0.5 with an opaque appearance, a Square at `/CA`   |
+|      | 0.5 with no appearance, an opaque Ink apart from the rest, a hidden Square at 0.5  |
+| 2    | a FreeText whose background paints at ca 0.6 under opaque text                     |
+| 3    | an Ink annotation stroking a straight line at ca 0.7 below text                    |
+| 4    | the same Ink line through the text, and a FreeText whose text paints at ca 0.6 too |
+
+Flattened, page 1 draws four annotations into its content: the Highlight and
+both Squares paint with transparency, the one with no appearance drawn as litho
+synthesises it, and the Circle, which a viewer drew under the Highlight, is
+drawn before it so the order holds. The Popup and the opaque Ink stay
+annotations, and the hidden Square loses its appearance with nothing drawn
+(`EmptiedAnnotations` 1). The FreeText's text joins its page's text. The
+`flatten` cell renders the first three pages, and litho and poppler 26.09.0
+draw each like its source; before wave F2 the cell skipped the file as having
+nothing to flatten, with eight annotations left painting with transparency.
+Page 4 holds what flattening approximates and reports: the text the Ink line
+crosses draws above it untinted (`TextUnderTransparency` 1), and the
+FreeText's transparent text draws opaque (`TransparentText` 1). No
+transparency is left.
+
+The file declares no OutputIntent and its pages no `/Group`, so DeviceRGB
+fails `6.2.4.3/2`, DeviceGray `6.2.4.3/4`, and every page holding
+transparency `6.2.10/2` at PDF/A-2b; the Square with no appearance fails
+`6.3.3/1` and the hidden one `6.3.2/2`. veraPDF 1.30.2 and litho report the
+same rule set in all thirteen cells.
 
 ## Scope
 
