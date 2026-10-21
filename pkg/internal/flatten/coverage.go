@@ -47,32 +47,39 @@ const maxCoverRects = 4096
 // those are is read from three renderings at the composite's resolution:
 // the composite, the page drawn whole, and its text drawn alone.
 type coverage struct {
-	f         *flattener
-	pg        *document.Page
-	g         page.Geometry
-	dpi       float64
-	composite *surface.Canvas
-	// whole and text are rendered when a region first needs them.
-	whole, text *surface.Canvas
+	f   *flattener
+	pg  *document.Page
+	g   page.Geometry
+	dpi float64
+	// result is the composite; it, the page drawn whole and its text
+	// alone are drawn in sRGB when a region first needs them, each with the
+	// page group in the space the composite blended in.
+	result                 *page.Result
+	composite, whole, text *surface.Canvas
 }
 
-// renders draws the page whole and its text alone, once.
+// renders converts the composite to sRGB and draws the page whole and its
+// text alone, once.
 func (c *coverage) renders(ctx context.Context) error {
 	if c.whole != nil {
 		return nil
 	}
-	whole, _, err := page.Render(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: page.Annotations})
+	composite, err := c.result.Canvas(ctx)
+	if err != nil {
+		return fmt.Errorf("converting the composite at %v dpi: %w", c.dpi, err)
+	}
+	whole, _, err := page.Render(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: page.Annotations, GroupSpace: true})
 	if err != nil {
 		return fmt.Errorf("rendering the page whole at %v dpi: %w", c.dpi, err)
 	}
-	text, _, err := page.Render(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: page.Paths | page.Images | page.Shadings | page.Annotations})
+	text, _, err := page.Render(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: page.Paths | page.Images | page.Shadings | page.Annotations, GroupSpace: true})
 	if err != nil {
 		return fmt.Errorf("rendering the page's text at %v dpi: %w", c.dpi, err)
 	}
-	if whole.Width != c.composite.Width || whole.Height != c.composite.Height || text.Width != whole.Width || text.Height != whole.Height {
+	if whole.Width != composite.Width || whole.Height != composite.Height || text.Width != whole.Width || text.Height != whole.Height {
 		return fmt.Errorf("%w: renderings of the page at %v dpi differ in size", ErrTooComplex, c.dpi)
 	}
-	c.whole, c.text = whole, text
+	c.composite, c.whole, c.text = composite, whole, text
 	return nil
 }
 

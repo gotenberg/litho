@@ -22,7 +22,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
-	"github.com/gotenberg/litho/pkg/internal/render/surface"
 )
 
 // DefaultDPI is the resolution regions are composited at when the caller
@@ -226,14 +225,14 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 	removed := make(map[int]bool)
 	clippedBy := make(map[int][]Rect)
 	if len(a.Regions) > 0 {
-		canvas, g, dpi, err := f.render(ctx, pg)
+		res, g, dpi, err := f.render(ctx, pg)
 		if err != nil {
 			return pr, false, err
 		}
 		pr.Regions, pr.DPI = len(a.Regions), dpi
-		cover := &coverage{f: f, pg: pg, g: g, dpi: dpi, composite: canvas}
+		cover := &coverage{f: f, pg: pg, g: g, dpi: dpi, result: res}
 		for _, r := range a.Regions {
-			img, ok, err := f.regionImage(canvas, g, a.crop, r.Box, xobjects)
+			img, ok, err := f.regionImage(res, g, a.crop, r.Box, xobjects)
 			if err != nil {
 				return pr, false, err
 			}
@@ -349,7 +348,7 @@ func (f *flattener) subdict(ctx context.Context, resources ast.PdfDict, category
 // run's resolution or, when the page's transparency does not fit the render
 // pixel budget there, at the highest of the halved resolutions down to
 // [minRetryDPI] it fits.
-func (f *flattener) render(ctx context.Context, pg *document.Page) (*surface.Canvas, page.Geometry, float64, error) {
+func (f *flattener) render(ctx context.Context, pg *document.Page) (*page.Result, page.Geometry, float64, error) {
 	dpi := f.dpi
 	budget := f.doc.Limits().WithDefaults().MaxRenderPixels
 	for {
@@ -362,16 +361,17 @@ func (f *flattener) render(ctx context.Context, pg *document.Page) (*surface.Can
 			dpi *= math.Sqrt(float64(budget)/float64(px)) * 0.999
 			continue
 		}
-		canvas, report, err := page.Render(ctx, f.doc, pg, page.Options{
+		res, report, err := page.RenderGroup(ctx, f.doc, pg, page.Options{
 			DPI:        dpi,
 			Background: [4]float32{1, 1, 1, 1},
 			Omit:       page.Text | page.Annotations,
+			GroupSpace: true,
 		})
 		if err != nil {
 			return nil, page.Geometry{}, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
 		}
 		if report.Unsupported[page.TransparencyOverBudget] == 0 {
-			return canvas, g, dpi, nil
+			return res, g, dpi, nil
 		}
 		if dpi/2 < minRetryDPI {
 			return nil, page.Geometry{}, 0, fmt.Errorf("%w: the page's transparency does not fit the render pixel budget at %v dpi", ErrTooComplex, dpi)
@@ -397,27 +397,19 @@ type regionImg struct {
 // are what the page's edge leaves of a pixel. Drawn at another resolution, a
 // composite holding them reaches past the edge the page's own content stops
 // at.
-func (f *flattener) regionImage(canvas *surface.Canvas, g page.Geometry, crop, box Rect, xobjects ast.PdfDict) (regionImg, bool, error) {
+func (f *flattener) regionImage(res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict) (regionImg, bool, error) {
+	size := res.Group.Bounds().Size()
 	dev := transformRect(g.Matrix, box)
 	paper := transformRect(g.Matrix, crop)
 	x0 := max(0, int(math.Floor(dev.MinX))-pixelMargin, int(math.Ceil(paper.MinX-pixelEpsilon)))
 	y0 := max(0, int(math.Floor(dev.MinY))-pixelMargin, int(math.Ceil(paper.MinY-pixelEpsilon)))
-	x1 := min(canvas.Width, int(math.Ceil(dev.MaxX))+pixelMargin, int(math.Floor(paper.MaxX+pixelEpsilon)))
-	y1 := min(canvas.Height, int(math.Ceil(dev.MaxY))+pixelMargin, int(math.Floor(paper.MaxY+pixelEpsilon)))
+	x1 := min(size.X, int(math.Ceil(dev.MaxX))+pixelMargin, int(math.Floor(paper.MaxX+pixelEpsilon)))
+	y1 := min(size.Y, int(math.Ceil(dev.MaxY))+pixelMargin, int(math.Floor(paper.MaxY+pixelEpsilon)))
 	if x0 >= x1 || y0 >= y1 {
 		return regionImg{}, false, nil
 	}
 	w, h := x1-x0, y1-y0
-	samples := make([]byte, 0, 3*w*h)
-	for y := y0; y < y1; y++ {
-		for x := x0; x < x1; x++ {
-			r, gr, b, a := canvas.At(x, y)
-			if a > 0 {
-				r, gr, b = r/a, gr/a, b/a
-			}
-			samples = append(samples, to8(r), to8(gr), to8(b))
-		}
-	}
+	samples, space := f.compositeSamples(res, image.Rect(x0, y0, x1, y1))
 	var buf bytes.Buffer
 	zw := zlib.NewWriter(&buf)
 	if _, err := zw.Write(samples); err != nil {
@@ -431,7 +423,7 @@ func (f *flattener) regionImage(canvas *surface.Canvas, g page.Geometry, crop, b
 		"Subtype":          ast.PdfName("Image"),
 		"Width":            ast.PdfInt(w),
 		"Height":           ast.PdfInt(h),
-		"ColorSpace":       ast.PdfArray{ast.PdfName("ICCBased"), f.srgbProfile()},
+		"ColorSpace":       space,
 		"BitsPerComponent": ast.PdfInt(8),
 		"Filter":           ast.PdfName("FlateDecode"),
 		"Length":           ast.PdfInt(buf.Len()),
@@ -448,6 +440,41 @@ func (f *flattener) regionImage(canvas *surface.Canvas, g page.Geometry, crop, b
 	return regionImg{name: name, matrix: unit.Mul(inv), px: image.Rect(x0, y0, x1, y1)}, true, nil
 }
 
+// compositeSamples returns the 8-bit samples of the composite res holds over
+// the device pixels px, and the colour space they are in. A page group that
+// blended in the grey or CMYK space its /Group /CS names gives its samples in
+// that space, under that /CS object: ISO 32000-2, 11.4.7 composites the page
+// in it, so the composite of a CMYK page stays CMYK, whose separations a
+// print workflow reads. Any other gives sRGB samples, under the sRGB profile.
+func (f *flattener) compositeSamples(res *page.Result, px image.Rectangle) ([]byte, ast.PdfObject) {
+	if res.Space == nil {
+		samples := make([]byte, 0, 3*px.Dx()*px.Dy())
+		for y := px.Min.Y; y < px.Max.Y; y++ {
+			for x := px.Min.X; x < px.Max.X; x++ {
+				r, gr, b, a := res.Group.Canvas().At(x, y)
+				if a > 0 {
+					r, gr, b = r/a, gr/a, b/a
+				}
+				samples = append(samples, to8(r), to8(gr), to8(b))
+			}
+		}
+		return samples, ast.PdfArray{ast.PdfName("ICCBased"), f.srgbProfile()}
+	}
+	n := res.Group.Space().Kind().Channels()
+	samples := make([]byte, 0, n*px.Dx()*px.Dy())
+	for y := px.Min.Y; y < px.Max.Y; y++ {
+		for x := px.Min.X; x < px.Max.X; x++ {
+			// The page group lies over opaque white paper, so every pixel's
+			// colour is whole.
+			c, _ := res.Group.Components(x, y)
+			for k := range n {
+				samples = append(samples, to8(c[k]))
+			}
+		}
+	}
+	return samples, res.Space
+}
+
 // to8 returns v, in [0, 1], as an 8-bit sample.
 func to8(v float32) byte {
 	switch {
@@ -460,8 +487,8 @@ func to8(v float32) byte {
 }
 
 // srgbProfile returns the sRGB ICC profile stream the images' colour space
-// names, allocating it once. The renderer composites in sRGB (IEC 61966-2-1),
-// so that is what the samples mean.
+// names, allocating it once. A page group with no grey or CMYK /CS composites
+// in sRGB (IEC 61966-2-1), so that is what its samples mean.
 func (f *flattener) srgbProfile() ast.PdfObject {
 	if f.srgb == nil {
 		profile := icc.SRGBProfile()

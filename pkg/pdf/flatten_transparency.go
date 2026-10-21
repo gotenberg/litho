@@ -102,9 +102,10 @@ type FlattenReport struct {
 // soft mask or another blend mode, drawn opaque in its own colour, and text
 // transparent content drawn over it left visible, now drawn above it untinted.
 //
-// The renderer blends in sRGB whatever a group's /CS, so a blend mode in a
-// group whose blending space is CMYK or grey composites as its colours look
-// in sRGB rather than in that space (11.3.4).
+// A page whose transparency group names a grey or CMYK /CS is composited in
+// that space (ISO 32000-2, 11.4.7), and its composites are images in it, so a
+// CMYK page keeps its inks. Any other page is composited in sRGB, and its
+// composites are sRGB images.
 //
 // Annotations are left as they are and counted: an appearance composites
 // over the page as a viewer draws it. Call [Writer.FlattenForm] first to
