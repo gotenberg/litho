@@ -24,10 +24,13 @@ import (
 //
 // the flags gen-render.sh draws the corpus goldens with. A fixture with a
 // substitute program is written with it as fonts/<name>.ttf, and drawn with
-// poppler finding no other font, so both draw the same substitute:
+// poppler finding no other font, so both draw the same substitute. The
+// pdftoppm on the image's PATH is a wrapper that points fontconfig at the
+// bundle's fonts, so the binary runs through the bundle's loader:
 //
 //	printf '<fontconfig><dir>/in/fonts</dir><cachedir>/tmp/fc</cachedir></fontconfig>' > $dir/fonts.conf
-//	docker run --rm --entrypoint pdftoppm -e FONTCONFIG_FILE=/in/fonts.conf -v $dir:/in litho-corpus-builder ...
+//	docker run --rm --entrypoint /opt/poppler/lib/ld.so -e FONTCONFIG_FILE=/in/fonts.conf -v $dir:/in \
+//	  litho-corpus-builder --library-path /opt/poppler/lib /opt/poppler/libexec/pdftoppm ...
 var popplerFixtures = map[string]fixture{
 	"fill_rules": {content: "0 g 10 10 80 80 re 30 30 40 40 re f* 1 0 0 rg 20 20 m 50 95 l 80 20 l h 15 60 m 85 60 l 50 5 l h f"},
 	"strokes": {content: "0 0 1 RG 6 w 0 J 0 j 10 85 m 40 95 l 70 85 l S 1 J 1 j 10 65 m 40 75 l 70 65 l S " +

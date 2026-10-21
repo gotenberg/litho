@@ -23,17 +23,30 @@ func init() {
 //go:embed testdata/dejavu_sans_ab.ttf
 var dejaVuSansAB []byte
 
-// substitutePopplerFixtures join popplerFixtures: an unembedded Identity-H
-// Calibri whose /ToUnicode gives CIDs 9, 80 and 109 the characters A, B and
-// space, drawn with DejaVu Sans. /W states DejaVu's advances, so neither
-// renderer rescales a glyph. Poppler reads an Adobe-Identity font through
-// its /ToUnicode as litho does; read as glyph indices under the Identity
-// /CIDToGIDMap, the CIDs would select glyphs the subset does not hold.
+// substitutePopplerFixtures join popplerFixtures, each an unembedded
+// Identity-H Calibri drawn with DejaVu Sans. /W states DejaVu's advances, so
+// neither renderer rescales a glyph.
+//
+//   - subst_tounicode: an Adobe-Identity font whose /ToUnicode gives CIDs 9,
+//     80 and 109 the characters A, B and space. Poppler reads it through its
+//     /ToUnicode as litho does; read as glyph indices under the Identity
+//     /CIDToGIDMap, the CIDs would select glyphs the subset does not hold.
+//   - subst_collection: an Adobe-Japan1 font with no /ToUnicode, whose CIDs
+//     34, 35 and 1 its collection's UCS2 CMap reads as A, B and space
+//     (ISO 32000-1, 9.10.2). Poppler reads them through poppler-data's
+//     Adobe-Japan1 CID-to-Unicode table and, finding no font that supports
+//     Japanese, draws with the one font it is given.
 var substitutePopplerFixtures = map[string]fixture{
 	"subst_tounicode": {
 		page:       textPage,
 		content:    "0 g BT /F 30 Tf 5 60 Td <00090050006D0009> Tj 0 -40 Td <0050006D00090050> Tj ET",
 		objs:       unembeddedType0("Identity-H", "Identity", "[9 [684] 80 [686] 109 [318]]", substituteToUnicode),
+		substitute: dejaVuSansAB,
+	},
+	"subst_collection": {
+		page:       textPage,
+		content:    "0 g BT /F 30 Tf 5 60 Td <0022002300010022> Tj 0 -40 Td <0023000100220023> Tj ET",
+		objs:       unembeddedType0("Identity-H", "Japan1", "[1 [318] 34 [684 686]]", ""),
 		substitute: dejaVuSansAB,
 	},
 }
@@ -86,8 +99,7 @@ var substituteFixtures = map[string]fixture{
 		substitute: substituteProgram,
 	},
 	// Adobe-Japan1 CIDs 34, 35 and 1 are A, B and space in its UCS2 CMap.
-	// The pinned poppler holds no Adobe-Japan1 language pack and draws no
-	// glyph of this font, so it has no poppler golden.
+	// substitutePopplerFixtures draws the same font against poppler.
 	"subst_collection": {
 		page:       textPage,
 		content:    "0 g BT /F 20 Tf 5 70 Td <002200230001002200230022> Tj ET",
