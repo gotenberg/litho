@@ -43,6 +43,19 @@ const subsampleBelowQuality = 90
 // since it is then better on both counts, or when the image is past what a
 // JPEG frame holds (more than 65535 pixels a side). The output depends on
 // the samples and the quality alone.
+//
+// # Corpus evidence
+//
+//   - pdfjs (79 render-sampled files) converted to CMYK: 102.9 MB lossless,
+//     100.6 / 101.1 / 101.9 MB at quality 85 / 90 / 95, 5 files holding
+//     JPEGs (issue13999 742906 -> 445165 bytes at 85); the recolor cell
+//     matches 78 in every mode, no page with colour drift past 75 ΔE*ab.
+//   - govdocs (79 render-sampled files): 107.4 MB lossless, 84.5 / 87.9 /
+//     93.8 MB at 85 / 90 / 95, 24 files holding JPEGs (thread_200_200427
+//     4304820 -> 904563 bytes at 85); the recolor cell matches 79 in every
+//     mode, no drift.
+//   - govdocs thread_100_100452, thread_100_100651, thread_300_300034: at
+//     95 the lossless encoding is no larger, so the file keeps its size.
 func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height, comps, losslessSize int) ([]byte, bool, error) {
 	q := im.cfg.JPEGQuality
 	if q == 0 {
