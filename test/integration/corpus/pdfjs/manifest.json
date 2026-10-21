@@ -10,6 +10,7 @@
     "render": "goldens/render",
     "redact-render": "goldens/render",
     "recolor": "goldens/render",
+    "flatten": "goldens/render",
     "merge-catalog": "goldens/text"
   },
   "skips": {

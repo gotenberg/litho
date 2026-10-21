@@ -115,6 +115,14 @@ var costMetrics = map[string]bool{
 	metricJPEGOutOfTarget: true,
 	metricJPEGInkMoved:    true,
 	metricJPEGColourDrift: true,
+
+	// The flatten cell counts the flattenings that failed and the PDFs and
+	// pages a check failed on. See flattenFeature.
+	metricFlattenFailed:           true,
+	metricFlattenLithoMismatch:    true,
+	metricFlattenPopplerMismatch:  true,
+	metricFlattenTextChanged:      true,
+	metricFlattenTransparencyLeft: true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any

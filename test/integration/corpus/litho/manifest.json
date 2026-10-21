@@ -33,7 +33,8 @@
     "text": "goldens/text",
     "render": "goldens/render",
     "redact-render": "goldens/render",
-    "recolor": "goldens/render"
+    "recolor": "goldens/render",
+    "flatten": "goldens/render"
   },
   "golden_overrides": {
     "text": "text-overrides.json"
