@@ -153,3 +153,50 @@ func mustProfile(t testing.TB, data []byte) *icc.Profile {
 	}
 	return p
 }
+
+// TestStreamBesideASharedOneConverts converts the stream of a page's
+// /Contents that another page's array does not share, where the shared one
+// was converted with the first page.
+func TestStreamBesideASharedOneConverts(t *testing.T) {
+	f := fixture{pages: []fixturePage{
+		{content: "1 0 0 rg", contents: "[4 0 R 7 0 R]"},
+		{content: "0 1 0 rg", contents: "[6 0 R 7 0 R]"},
+	}, objs: []string{stream("", "0 0 1 rg")}}
+	r := recolor(t, f, cmyk, naive(Options{}))
+	for num, want := range map[int]string{4: " 0 1 1 0 k", 6: " 1 0 1 0 k", 7: " 1 1 0 0 k"} {
+		if got := string(decode(t, r, ast.PdfIndirectRef{ObjectNum: num})); got != want {
+			t.Errorf("object %d = %q, want %q", num, got, want)
+		}
+	}
+	if len(r.report.Skipped) != 0 {
+		t.Errorf("skipped %v", r.report.Skipped)
+	}
+}
+
+// TestMissingObjectsReadAsNull converts a page whose /Resources and one
+// /Contents element name objects the file lacks, which read as null (ISO
+// 32000-1, 7.3.10).
+func TestMissingObjectsReadAsNull(t *testing.T) {
+	f := fixture{pages: []fixturePage{{dict: "/Resources 99 0 R", content: "1 0 0 rg", contents: "[98 0 R 4 0 R]"}}}
+	r := recolor(t, f, cmyk, naive(Options{}))
+	if got := string(decode(t, r, ast.PdfIndirectRef{ObjectNum: 4})); got != " 0 1 1 0 k" {
+		t.Errorf("content = %q", got)
+	}
+	if len(r.report.Skipped) != 0 {
+		t.Errorf("skipped %v", r.report.Skipped)
+	}
+}
+
+// TestICCSpaceOfTheTargetIsWrittenInTheTarget writes the colour of an
+// ICCBased space that reads as the target, here through its device fallback
+// since its profile does not parse, with the target's operator.
+func TestICCSpaceOfTheTargetIsWrittenInTheTarget(t *testing.T) {
+	f := onePage("/Resources << /ColorSpace << /C [/ICCBased 5 0 R] >> >>", "/C cs 0 0 0 1 sc",
+		stream("/N 4", "not a profile"))
+	r := recolor(t, f, cmyk, naive(Options{}))
+	// cs sets the initial colour of an ICCBased space, 0 in each component
+	// (ISO 32000-1, 8.6.8, Table 74).
+	if got, want := r.text(0), "0 0 0 0 k\n0 0 0 1 k"; got != want {
+		t.Errorf("content:\n%s\nwant:\n%s", got, want)
+	}
+}

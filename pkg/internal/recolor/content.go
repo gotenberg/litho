@@ -48,6 +48,9 @@ type contentRewriter struct {
 	// pendingImages counts the inline images of the stream being rewritten,
 	// which count once the rewrite stands.
 	pendingImages int
+	// dry marks a read for the colour state alone ([contentRewriter.advance]),
+	// which converts no inline image.
+	dry bool
 }
 
 func (s *session) newContentRewriter(ctx context.Context, res ast.PdfDict) *contentRewriter {
@@ -162,6 +165,29 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 }
 
 // isWhite reports a white-space character (ISO 32000-1, 7.2.2, Table 1).
+// advance reads data for the colour state it leaves, writing nothing: a
+// stream another page converted, which the next stream of this page
+// continues (ISO 32000-1, 7.8.2).
+func (cr *contentRewriter) advance(ctx context.Context, data []byte) error {
+	ops, _, err := parseContent(ctx, data)
+	if err != nil {
+		return err
+	}
+	cr.dry = true
+	defer func() { cr.dry = false }()
+	for i, op := range ops {
+		if i%contentCheckInterval == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
+		if _, _, err := cr.operation(ctx, op); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func isWhite(b byte) bool {
 	switch b {
 	case 0, '\t', '\n', '\f', '\r', ' ':
@@ -270,7 +296,7 @@ func (cr *contentRewriter) operation(ctx context.Context, op content.Operation) 
 // cannot convert is left and reported.
 func (cr *contentRewriter) inlineImage(ctx context.Context, op content.Operation) ([]byte, bool, error) {
 	s := cr.s
-	if len(op.Operands) != 2 {
+	if cr.dry || len(op.Operands) != 2 {
 		return nil, false, nil
 	}
 	dict, ok := op.Operands[0].(ast.PdfDict)

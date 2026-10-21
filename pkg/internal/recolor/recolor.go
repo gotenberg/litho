@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -193,8 +194,15 @@ func (s *session) rewritePage(ctx context.Context, page *document.Page) error {
 	}
 	res, err := s.resolveDict(ctx, resObj)
 	if err != nil {
-		s.skip(page.Ref.ObjectNum, "page resources", err)
-		return nil
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		// Resources that are no dictionary, or a reference to an object
+		// the file lacks, which ISO 32000-1, 7.3.10 reads as null, define
+		// nothing: the page paints as one without resources, as the
+		// renderer draws it, and its content still converts.
+		s.doc.Logger.Debug("recolor: page resources read as none", slog.Int("page", page.Ref.ObjectNum), slog.Any("err", err))
+		res, resObj = nil, nil
 	}
 
 	contentsChanged, newContents, err := s.rewritePageContents(ctx, dict["Contents"], res)
@@ -240,7 +248,9 @@ func (s *session) rewritePage(ctx context.Context, page *document.Page) error {
 // streams that read as one (ISO 32000-1, 7.8.2). Each stream is rewritten in
 // place when each reads on its own as its part of the whole; otherwise, as
 // when an operator's operands lie in one stream and the operator in the next,
-// the page gets one stream of the whole. It reports whether the content
+// the page gets one stream of the whole. A stream another page's /Contents
+// shares, which that page converted, is read for the colour state it leaves
+// and not converted again. It reports whether the content
 // changed, and the new /Contents when the page dictionary must name another.
 func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, res ast.PdfDict) (bool, ast.PdfObject, error) {
 	if obj == nil {
@@ -249,7 +259,13 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 	var list []ast.PdfObject
 	resolved, err := s.resolve(ctx, obj)
 	if err != nil {
-		return false, nil, err
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, nil, ctxErr
+		}
+		// A /Contents naming an object the file lacks is null (ISO
+		// 32000-1, 7.3.10): the page paints nothing of its own.
+		s.doc.Logger.Debug("recolor: /Contents reads as null", slog.Any("err", err))
+		return false, nil, nil
 	}
 	switch v := resolved.(type) {
 	case ast.PdfArray:
@@ -264,15 +280,28 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 	// direct marks a stream written inline, which has no number to be
 	// replaced at: the page then gets one stream of the whole.
 	shared, direct := false, false
+	// done marks the streams another page already converted.
+	done := make(map[int]bool)
 	for _, o := range list {
 		ref, isRef := o.(ast.PdfIndirectRef)
 		direct = direct || !isRef
 		if isRef && s.seen[ref.ObjectNum] {
-			shared = true
+			shared, done[ref.ObjectNum] = true, true
 		}
-		st, err := s.resolveStream(ctx, o)
-		if err != nil {
-			return false, nil, err
+		el, err := s.resolve(ctx, o)
+		if _, isNull := el.(ast.PdfNull); err != nil || el == nil || isNull {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return false, nil, ctxErr
+			}
+			// A reference to an object the file lacks is null (ISO
+			// 32000-1, 7.3.10): the element paints nothing, as the
+			// renderer reads it, and the rest of the page converts.
+			s.doc.Logger.Debug("recolor: a /Contents element reads as null", slog.Any("err", err))
+			continue
+		}
+		st, ok := el.(ast.PdfStream)
+		if !ok {
+			return false, nil, fmt.Errorf("%w: a /Contents element that is a %T", ErrUnsupportedSpace, el)
 		}
 		data, err := s.doc.DecodeStream(ctx, st)
 		if err != nil {
@@ -282,12 +311,9 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 		joined.Write(data)
 		joined.WriteByte('\n')
 	}
-	if shared {
-		// A stream another page already showed was converted with that
-		// page's resources and state; it is not converted twice.
+	if len(streams) == 0 {
 		return false, nil, nil
 	}
-
 	perStream := true
 	whole, _, err := parseContent(ctx, joined.Bytes())
 	if err != nil {
@@ -305,6 +331,12 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 	perStream = perStream && sameOperations(parts, whole)
 
 	cr := s.newContentRewriter(ctx, res)
+	if shared && (!perStream || direct) {
+		// A stream another page already showed was converted with that
+		// page's resources and state, and is not converted twice; the
+		// rest can be converted beside it only stream by stream.
+		return false, nil, fmt.Errorf("%w: a content stream another page shows, in a /Contents that reads only as one stream", ErrUnsupportedSpace)
+	}
 	if !perStream || direct {
 		out, changed, err := cr.rewrite(ctx, joined.Bytes())
 		if err != nil || !changed {
@@ -330,6 +362,14 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 	}
 	var writes []pending
 	for _, st := range streams {
+		if done[st.obj.(ast.PdfIndirectRef).ObjectNum] {
+			// Converted with another page; read for the colour state it
+			// leaves the next stream in.
+			if err := cr.advance(ctx, st.data); err != nil {
+				return false, nil, err
+			}
+			continue
+		}
 		out, changed, err := cr.rewrite(ctx, st.data)
 		if err != nil {
 			return false, nil, err

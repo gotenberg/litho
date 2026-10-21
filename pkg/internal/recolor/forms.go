@@ -6,7 +6,6 @@ import (
 	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
 // rewriteStreamContent converts the content of a form, pattern or glyph
@@ -113,17 +112,15 @@ func (s *session) rewritePainting(ctx context.Context, stream ast.PdfStream, par
 	return nil, false, nil
 }
 
-// rewritePattern converts a pattern (ISO 32000-1, 8.7): a coloured tiling
-// pattern's content (8.7.3.2), or a shading pattern's shading (8.7.4). An
-// uncoloured tiling pattern's content sets no colour (8.7.3.3), and stays.
+// rewritePattern converts a pattern (ISO 32000-1, 8.7): a tiling pattern's
+// content (8.7.3), or a shading pattern's shading (8.7.4). An uncoloured
+// tiling pattern's colour operators set no colour (8.7.3.3), and convert all
+// the same: what it draws stays as it was, and the output names no space
+// beside the target.
 func (s *session) rewritePattern(ctx context.Context, obj ast.PdfObject, depth int) (ast.PdfObject, bool, error) {
 	return s.edit(ctx, obj, "pattern", func(resolved ast.PdfObject) (ast.PdfObject, bool, error) {
 		switch v := resolved.(type) {
 		case ast.PdfStream:
-			paint, _ := document.ResolveInt(ctx, s.doc, v.Dict["PaintType"])
-			if paint != 1 {
-				return nil, false, nil
-			}
 			if err := s.checkDepth(depth + 1); err != nil {
 				return nil, false, err
 			}
@@ -144,7 +141,8 @@ func (s *session) rewritePattern(ctx context.Context, obj ast.PdfObject, depth i
 // rewriteType3 converts the glyph descriptions of a Type 3 font (ISO
 // 32000-1, 9.6.5), painted with the font's /Resources or, lacking them, the
 // resources of the content that shows the font. A glyph that begins with d1
-// sets no colour of its own (Table 113), and stays.
+// sets no colour of its own (Table 113), and its colour operators convert
+// all the same, as an uncoloured pattern's do.
 func (s *session) rewriteType3(ctx context.Context, obj ast.PdfObject, parent ast.PdfDict, depth int) (ast.PdfObject, bool, error) {
 	return s.edit(ctx, obj, "Type 3 font", func(resolved ast.PdfObject) (ast.PdfObject, bool, error) {
 		font, ok := resolved.(ast.PdfDict)
@@ -170,9 +168,6 @@ func (s *session) rewriteType3(ctx context.Context, obj ast.PdfObject, parent as
 				stream, ok := g.(ast.PdfStream)
 				if !ok {
 					return nil, false, nil
-				}
-				if uncolored, err := s.startsWithD1(ctx, stream); err != nil || uncolored {
-					return nil, false, err
 				}
 				out, changed, err := s.rewriteStreamContent(ctx, stream, res)
 				if err != nil || !changed {
@@ -200,17 +195,4 @@ func (s *session) rewriteType3(ctx context.Context, obj ast.PdfObject, parent as
 		}
 		return out, changed, nil
 	})
-}
-
-// startsWithD1 reports a glyph description whose first operator is d1.
-func (s *session) startsWithD1(ctx context.Context, stream ast.PdfStream) (bool, error) {
-	data, err := s.doc.DecodeStream(ctx, stream)
-	if err != nil {
-		return false, fmt.Errorf("decoding glyph: %w", err)
-	}
-	ops, _, err := parseContent(ctx, data)
-	if err != nil {
-		return false, err
-	}
-	return len(ops) > 0 && ops[0].Operator == "d1", nil
 }

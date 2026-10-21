@@ -364,7 +364,21 @@ func (s *session) planCIE(ctx context.Context, family string, arr ast.PdfArray) 
 // planICC plans an ICCBased space (ISO 32000-1, 8.6.5.5): its profile, or
 // its /Alternate, or the device space of its component count, when the
 // profile cannot be read, as 8.6.5.5 lets a reader fall back.
+//
+// A space that reads as the target itself, its profile the target's or its
+// fallback the target's family, still converts, as the identity: the
+// operators and images selecting it are written in the target's family, so
+// the output names no ICCBased space beside the target.
 func (s *session) planICC(ctx context.Context, arr ast.PdfArray, depth int) *spacePlan {
+	p := s.readICC(ctx, arr, depth)
+	if p.kind == planIdentity && p.n == s.t.n {
+		return &spacePlan{kind: planConvert, n: p.n, conv: identity{}, initial: p.initial}
+	}
+	return p
+}
+
+// readICC is [session.planICC] before an identity becomes a conversion.
+func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int) *spacePlan {
 	if len(arr) < 2 {
 		return &spacePlan{kind: planUnknown, err: fmt.Errorf("%w: ICCBased without a stream", ErrUnsupportedSpace)}
 	}
@@ -378,12 +392,17 @@ func (s *session) planICC(ctx context.Context, arr ast.PdfArray, depth int) *spa
 		return &spacePlan{kind: planUnknown, err: fmt.Errorf("%w: ICCBased /N %d", ErrUnsupportedSpace, n)}
 	}
 	fallback := func() *spacePlan {
+		p := s.planDevice(ctx, [5]string{1: SpaceGray, 3: SpaceRGB, 4: SpaceCMYK}[n], "", nil)
 		if alt, ok := stream.Dict["Alternate"]; ok {
-			if p := s.plan(ctx, alt, nil, depth+1); p.n == n && (p.kind == planConvert || p.kind == planIdentity) {
-				return p
+			if a := s.plan(ctx, alt, nil, depth+1); a.n == n && (a.kind == planConvert || a.kind == planIdentity) {
+				p = a
 			}
 		}
-		return s.planDevice(ctx, [5]string{1: SpaceGray, 3: SpaceRGB, 4: SpaceCMYK}[n], "", nil)
+		// The space is still ICCBased, whose initial colour is 0 in each
+		// component (8.6.8, Table 74), whatever its fallback's is.
+		q := *p
+		q.initial = make([]float64, n)
+		return &q
 	}
 	data, err := s.doc.DecodeStream(ctx, stream)
 	if err != nil {

@@ -143,7 +143,9 @@ func TestShadingPatternAndTilingPattern(t *testing.T) {
 	if got := string(decode(t, r, ast.PdfIndirectRef{ObjectNum: 7})); got != " 0.5 0.5 0.5 rg 0 0 5 5 re f" {
 		t.Errorf("coloured tiling pattern: %q", got)
 	}
-	if got := string(decode(t, r, ast.PdfIndirectRef{ObjectNum: 8})); got != "0.5 g 0 0 5 5 re f" {
+	// An uncoloured cell's colour operators set no colour (ISO 32000-1,
+	// 8.7.3.3): they convert, and still set none.
+	if got := string(decode(t, r, ast.PdfIndirectRef{ObjectNum: 8})); got != " 0.5 0.5 0.5 rg 0 0 5 5 re f" {
 		t.Errorf("uncoloured tiling pattern: %q", got)
 	}
 }

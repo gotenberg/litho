@@ -79,8 +79,8 @@ func TestType3Glyphs(t *testing.T) {
 		t.Errorf("d0 glyph: %q", got)
 	}
 	// A d1 glyph's colour operators are ignored (ISO 32000-1, 9.6.5,
-	// Table 113): it is left.
-	if got := string(decode(t, r, ast.PdfIndirectRef{ObjectNum: 7})); got != "1 0 0 0 1 1 d1 1 0 0 rg 0 0 1 1 re f" {
+	// Table 113): they convert, and are still ignored.
+	if got := string(decode(t, r, ast.PdfIndirectRef{ObjectNum: 7})); got != "1 0 0 0 1 1 d1 0 1 1 0 k 0 0 1 1 re f" {
 		t.Errorf("d1 glyph: %q", got)
 	}
 }
