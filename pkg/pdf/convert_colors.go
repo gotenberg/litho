@@ -273,7 +273,7 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 
 	engine := w.recolor
 	if engine == nil {
-		engine = recolorUnavailable
+		engine = recolorDocument
 	}
 	result, err := engine(ctx, alloc, doc, pages, recolorRequest{
 		family:                 resolved.family,

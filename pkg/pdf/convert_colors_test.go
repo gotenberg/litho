@@ -298,7 +298,15 @@ func TestConvertColors_ICCTarget(t *testing.T) {
 func TestConvertColors_RefusalLeavesTheWriter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	src := recolorPDF("")
+	// An image whose samples do not decode, which the built-in engine
+	// cannot convert.
+	src := colorFixturePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>",
+		colorStream("", "1 0 0 rg /Im0 Do"),
+		colorStream("/Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", "not flate"),
+	})
 
 	w := NewWriter(openColorPDF(t, src))
 	t.Cleanup(func() { _ = w.Close() })

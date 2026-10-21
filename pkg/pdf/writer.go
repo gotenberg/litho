@@ -982,8 +982,8 @@ type Writer struct {
 	intermediate bool
 
 	// recolor is the colour conversion engine [Writer.ConvertColors] runs,
-	// nil for the built-in one. Tests set it to drive the API around an
-	// engine of their own.
+	// nil for the built-in one, [recolorDocument]. Tests set it to drive the
+	// API around an engine of their own.
 	recolor recolorEngine
 }
 
