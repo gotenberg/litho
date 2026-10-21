@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/draw"
+	"maps"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -55,9 +56,9 @@ var (
 // Separation, DeviceN or Lab, or a JPX image taking its colour from its own
 // data, is written in sRGB, the space the decode converts its pixels to, and
 // states it by litho's sRGB profile ([icc.SRGBProfile]). See [srgbColorSpace]
-// for why not DeviceRGB. Any /SMask is carried over untouched, because a
-// soft mask is a separate grayscale image that stays valid against the new
-// samples and dropping it would change transparency outside the region.
+// for why not DeviceRGB. A /SMask is replaced by a copy whose covered samples
+// are opaque (see [blankSoftMask]): the mask holds the picture's shape, and
+// dropping it would change transparency outside the region.
 //
 // A stencil mask is rewritten as a stencil mask instead. It supplies a shape
 // rather than a picture, so transcoding it to DeviceRGB would stop it taking the
@@ -124,8 +125,20 @@ func blankImage(
 			ErrImageCarriesSampleEntries, box.Name)
 	}
 
+	// Decoding reads the image as the file holds it, its own soft mask
+	// included; the replacements below copy /SMask from stream.
+	source := stream
 	if !isStencil {
-		native, ok, err := pdfimage.DecodeStreamNative(ctx, doc, page, ast.PdfName(box.Name), stream)
+		smask, err := blankSoftMask(ctx, alloc, doc, page, box, zones, stream.Dict)
+		if err != nil {
+			return 0, err
+		}
+		if smask != nil {
+			// A copy: the source's dictionary is not edited.
+			stream.Dict = maps.Clone(stream.Dict)
+			stream.Dict["SMask"] = smask
+		}
+		native, ok, err := pdfimage.DecodeStreamNative(ctx, doc, page, ast.PdfName(box.Name), source)
 		if err != nil {
 			return 0, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 		}
@@ -136,7 +149,7 @@ func blankImage(
 
 	// The samples as stored: the replacement keeps the image's soft mask, so a
 	// /Matte on it still describes them.
-	img, err := pdfimage.DecodeStreamSamples(ctx, doc, page, ast.PdfName(box.Name), stream)
+	img, err := pdfimage.DecodeStreamSamples(ctx, doc, page, ast.PdfName(box.Name), source)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 	}
@@ -233,6 +246,86 @@ func blankImage(
 		return 0, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
 	return ref.ObjectNum, nil
+}
+
+// blankSoftMask returns a replacement for the /SMask of the picture dict
+// describes, its samples the zones cover made opaque, or nil when the picture
+// has none.
+//
+// A soft mask is the picture's shape (ISO 32000-1, 11.6.5.3): carried over as
+// it was, it went on drawing the outline of what the blanked samples showed,
+// the black of the blank painted where the picture was opaque and the page
+// showing through where it was not. The litho text of a cover set as an
+// image with alpha (pdfcpu WaldenFull.pdf) stayed readable after its page
+// was redacted whole. A covered sample made opaque paints the blank whole.
+// The mask is written anew rather than edited in place, as another picture
+// may share it; its /Matte stays, since an opaque sample needs no un-matting.
+func blankSoftMask(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	page *document.Page,
+	box graphics.ImageBox,
+	zones []heuristics.Zone,
+	dict ast.PdfDict,
+) (ast.PdfObject, error) {
+	obj, present := dict["SMask"]
+	if !present {
+		return nil, nil
+	}
+	resolved, err := resolveAllocFirst(ctx, alloc, doc, obj)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %q: soft mask: %w", ErrImageNotDecodable, box.Name, err)
+	}
+	mask, ok := resolved.(ast.PdfStream)
+	if !ok {
+		// /SMask /None, or anything that is no stream, masks nothing.
+		return nil, nil
+	}
+	if _, present := mask.Dict["Decode"]; present && !pdfimage.AppliesDecodeArray(ctx, doc, mask.Dict) {
+		return nil, fmt.Errorf("%w: %q: its soft mask carries a /Decode the decode does not apply",
+			ErrImageCarriesSampleEntries, box.Name)
+	}
+	img, err := pdfimage.DecodeStreamSamples(ctx, doc, page, ast.PdfName(box.Name+" /SMask"), mask)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %q: soft mask: %w", ErrImageNotDecodable, box.Name, err)
+	}
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	if w <= 0 || h <= 0 {
+		return nil, fmt.Errorf("%w: %q: its soft mask has no samples", ErrImageNotDecodable, box.Name)
+	}
+	gray := image.NewGray(bounds)
+	draw.Draw(gray, bounds, img, bounds.Min, draw.Src)
+	// The mask maps onto the unit square as the picture does, whatever its
+	// own resolution (11.6.5.3), so the same sample test applies.
+	if _, err := forCoveredSamples(box, zones, w, h, func(px, py int) {
+		gray.Pix[gray.PixOffset(bounds.Min.X+px, bounds.Min.Y+py)] = 0xff
+	}); err != nil {
+		return nil, fmt.Errorf("%q: soft mask: %w", box.Name, err)
+	}
+	samples := make([]byte, 0, w*h)
+	for y := range h {
+		i := gray.PixOffset(bounds.Min.X, bounds.Min.Y+y)
+		samples = append(samples, gray.Pix[i:i+w]...)
+	}
+	compressed, err := flateCompress(samples)
+	if err != nil {
+		return nil, fmt.Errorf("compressing the blanked soft mask of %q: %w", box.Name, err)
+	}
+	out := ast.PdfDict{
+		"Type":             ast.PdfName("XObject"),
+		"Subtype":          ast.PdfName("Image"),
+		"Width":            ast.PdfInt(w),
+		"Height":           ast.PdfInt(h),
+		"ColorSpace":       ast.PdfName("DeviceGray"),
+		"BitsPerComponent": ast.PdfInt(8),
+		"Filter":           ast.PdfName("FlateDecode"),
+	}
+	if matte, present := mask.Dict["Matte"]; present {
+		out["Matte"] = matte
+	}
+	return alloc.Alloc(ast.NewStream(out, compressed)), nil
 }
 
 // srgbColorSpace allocates litho's sRGB profile as an ICC profile stream and
