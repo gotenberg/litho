@@ -268,6 +268,7 @@ one deliberately rather than diffing it against a fresh build.
 | `transparency_2b.pdf`  | PDF/A-2b     | Knockout groups, luminosity masks with /BC and /TR, blend modes  |
 | `annotsynth_2b.pdf`    | PDF/A-2b     | Polygon, Underline and Squiggly annotations with no `/AP`        |
 | `recolorimg_2b.pdf`    | PDF/A-2b     | 16-bit, Lab, colour-key, matted and /Decode images to recolour   |
+| `tounicodepair_2u.pdf` | PDF/A-2u     | A simple font's two-byte /ToUnicode mapping a shown byte pair    |
 
 ### Must-not-fire controls
 
@@ -744,6 +745,7 @@ are covered under [Known divergences](#known-divergences).
 | `texlig_2b.pdf`        | 6    | 2    | 5    | 1    | 3    | 6    | 2    | 4    | 5   | 5    | 6    | 9    | 8    |
 | `threed_4e.pdf`        | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 11   | 8    |
 | `threedcs_4.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 5    | 7    | 8    | 6    |
+| `tounicodepair_2u.pdf` | 4    | 2    | 3    | 0    | 0    | 4    | 1    | 1    | 4   | 4    | 5    | 7    | 6    |
 | `trailer_2b.pdf`       | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `transparency_2b.pdf`  | 10   | 7    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 6    | 6    |
 | `treekids_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
@@ -8633,16 +8635,38 @@ at PDF/A-2 and later, and the file declares no OutputIntent, so DeviceRGB fails
 `6.5.3/1`, and DeviceRGB `6.2.3.3/1`. veraPDF 1.30.2 and litho report the same
 rule set in all thirteen cells.
 
+### `tounicodepair_2u.pdf`
+
+ISO 32000-1, 9.6.1 makes a simple font's codes one byte each, so a
+`/ToUnicode` CMap whose codespace is two bytes wide does not make a byte pair
+one code. PDF.js keys the CMap by each code's value and looks each byte up
+there, so `<006C>` maps code `6C`; veraPDF looks a simple font's code up by its
+value too. No file of the seven corpora shows a byte pair its simple font's
+`/ToUnicode` maps. Font `F1` embeds a Type 1 program on `StandardEncoding`
+holding the glyphs it shows, and its `/ToUnicode` declares `<0000>` to
+`<FFFF>`, maps every shown code by its two-byte value, and maps the pairs
+`<6C6C>` to `X` and `<6F20>` to `Y`. The page shows one line:
+
+| Line          | litho and PDF.js read | Read two bytes a mapped pair |
+| ------------- | --------------------- | ---------------------------- |
+| `Hello world` | `Hello world`         | `HeXYworld`                  |
+
+`TestExtractTextReadsASimpleFontOneByteACode` in `pkg/pdf` reads the fixture,
+and fails on the reading before wave C2. Redacting the first ten glyphs leaves
+`d`. Every shown code has a Unicode value, so the file conforms at PDF/A-2b and
+PDF/A-2u; elsewhere only the claim and the profile's own structure rules fire.
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+
 ## Scope
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-215 x 13 = 2795 cells, the whole hand-measured matrix. litho and veraPDF return
+216 x 13 = 2808 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2771 of the 2795 cells. The 24
+fixtures exist to protect, and it holds in 2784 of the 2808 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
@@ -8651,12 +8675,12 @@ each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-fifteen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `boxorigin_2b`,
-`pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1`
+seventeen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `boxorigin_2b`,
+`pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2795 and moves only `ruleset_mismatch`, and on
-those fifteen cells it moves both. Every exception sits in the manifest's
+rule class leaves `matched` at 2808 and moves only `ruleset_mismatch`, and on
+those seventeen cells it moves both. Every exception sits in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
 fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
 the text scoreboard names the rules only one side reports. A 25th cell in the
