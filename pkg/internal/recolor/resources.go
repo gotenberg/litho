@@ -14,8 +14,9 @@ import (
 // target removes the default space of its own family, which would otherwise
 // reinterpret the target's colour written with the device operators (ISO
 // 32000-1, 8.6.5.6), and an ICCBased target is added under the name content
-// sets it by. Image XObjects stay: their samples are the images' recolouring.
-// depth is the form nesting the resources are reached at.
+// sets it by. Image XObjects convert through the session's [Images], read
+// against these resources as the source holds them. depth is the form
+// nesting the resources are reached at.
 func (s *session) rewriteResources(ctx context.Context, obj ast.PdfObject, depth int) (ast.PdfObject, bool, error) {
 	if obj == nil {
 		return nil, false, nil
@@ -56,7 +57,7 @@ func (s *session) rewriteResources(ctx context.Context, obj ast.PdfObject, depth
 			return nil, false, err
 		}
 		v, ch, err = s.rewriteEach(ctx, res["XObject"], "XObjects", func(o ast.PdfObject) (ast.PdfObject, bool, error) {
-			return s.rewriteForm(ctx, o, res, depth+1)
+			return s.rewriteXObject(ctx, o, res, depth+1)
 		})
 		if err := set("XObject", v, ch, err); err != nil {
 			return nil, false, err
@@ -69,6 +70,26 @@ func (s *session) rewriteResources(ctx context.Context, obj ast.PdfObject, depth
 		}
 		return out, changed, nil
 	})
+}
+
+// rewriteXObject converts an XObject res names: an image through the
+// session's [Images], which writes it at its own number, a form through
+// [session.rewriteForm]. An image it cannot convert is left and reported.
+func (s *session) rewriteXObject(ctx context.Context, obj ast.PdfObject, res ast.PdfDict, depth int) (ast.PdfObject, bool, error) {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		if st, err := s.resolveStream(ctx, ref); err == nil {
+			if sub, _ := s.resolveName(ctx, st.Dict["Subtype"]); sub == "Image" {
+				if _, err := s.images.ConvertXObject(ctx, ref, res, nil); err != nil {
+					if ctxErr := ctx.Err(); ctxErr != nil {
+						return obj, false, ctxErr
+					}
+					s.skip(ref.ObjectNum, "image", err)
+				}
+				return obj, false, nil
+			}
+		}
+	}
+	return s.rewriteForm(ctx, obj, res, depth)
 }
 
 // rewriteEach applies f to each entry of a resource category dictionary, in

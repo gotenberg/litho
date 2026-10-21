@@ -70,17 +70,30 @@ func TestMalformedOperandsStay(t *testing.T) {
 	}
 }
 
-func TestInlineImageKeptByteForByte(t *testing.T) {
+func TestInlineImageConvertedWithTheContent(t *testing.T) {
 	img := "BI /W 2 /H 1 /CS /RGB /BPC 8 ID \xff\x00\x00\x00\xff\x00 EI"
 	f := onePage("", "1 0 0 rg q 2 0 0 1 0 0 cm "+img+" Q 0 1 0 rg")
 	r := recolor(t, f, cmyk, naive(Options{}))
 	stream := r.resolve(r.pages[0].Dict["Contents"])
-	data := decode(t, r, stream)
-	if !strings.Contains(string(data), img) {
-		t.Errorf("inline image changed:\n%q", data)
+	data := string(decode(t, r, stream))
+	if strings.Contains(data, img) || !strings.Contains(data, "/CS /DeviceCMYK") {
+		t.Errorf("inline image not written in the target:\n%q\n%v", data, r.report.Skipped)
 	}
-	if !strings.HasPrefix(string(data), " 0 1 1 0 k") {
+	if !strings.HasPrefix(data, " 0 1 1 0 k") || !strings.HasSuffix(data, "1 0 1 0 k") {
 		t.Errorf("content: %q", data)
+	}
+	if r.report.Operators != 2 || r.report.Images.Converted != 1 {
+		t.Errorf("report: %d operators, %d images converted, want 2 and 1", r.report.Operators, r.report.Images.Converted)
+	}
+}
+
+func TestInlineImageInTargetKeptByteForByte(t *testing.T) {
+	img := "BI /W 1 /H 1 /CS /CMYK /BPC 8 ID \x00\xff\xff\x00 EI"
+	f := onePage("", "1 0 0 rg "+img)
+	r := recolor(t, f, cmyk, naive(Options{}))
+	data := string(decode(t, r, r.resolve(r.pages[0].Dict["Contents"])))
+	if !strings.Contains(data, img) {
+		t.Errorf("inline image in the target changed:\n%q", data)
 	}
 }
 

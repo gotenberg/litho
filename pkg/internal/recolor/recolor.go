@@ -23,8 +23,14 @@ type Report struct {
 	Spaces int
 	// Shadings counts the shadings converted.
 	Shadings int
-	// SpotsKept counts the spot colour spaces kept with their colorants.
-	SpotsKept int
+	// SpotsKept counts the spot colour spaces kept with their colorants,
+	// and KeptColorants names their colorants, once each, in the order
+	// the walk met them.
+	SpotsKept     int
+	KeptColorants []string
+	// Images counts what the conversion of image XObjects and inline images
+	// did. A refused image is also listed in Skipped.
+	Images ImageReport
 	// Skipped lists the objects left unconverted.
 	Skipped []Skip
 }
@@ -45,11 +51,12 @@ type Skip struct {
 // place of the original. The objects are read as alloc queues them, so an
 // earlier edit carries.
 //
-// Image samples, of image XObjects and inline images, are not converted here;
-// their dictionaries are kept valid, since the colour spaces they name keep
-// their component counts. A soft mask's group (ISO 32000-1, 11.6.5.2) is not
-// converted either: its colour computes an opacity, which a conversion would
-// change.
+// The image XObjects its resources name and the inline images its content
+// draws are converted with it, through the same plans, read against the
+// source's resources, so an image in a device space reads through the default
+// colour space the source gives it (ISO 32000-1, 8.6.5.6) before the content
+// pass removes the target family's. A soft mask (ISO 32000-1, 11.6.5) is not
+// converted: its colour computes an opacity, which a conversion would change.
 //
 // It returns an error only for an invalid target or a cancelled context. An
 // object it cannot convert is left and listed in the report.
@@ -97,7 +104,11 @@ func NewSession(doc *document.Document, alloc *writer.ObjAllocator, target Targe
 	if err != nil {
 		return nil, err
 	}
-	return &Session{s: newSession(doc, alloc, t, opts, &Report{})}, nil
+	s, err := newSession(doc, alloc, t, opts, &Report{})
+	if err != nil {
+		return nil, err
+	}
+	return &Session{s: s}, nil
 }
 
 // Pages converts the content of pages, as [Content] describes.
@@ -145,8 +156,9 @@ func (s *Session) Target() ast.PdfObject {
 	return s.s.t.spaceObject()
 }
 
-// Report returns what the session converted so far.
+// Report returns what the session converted so far, its images included.
 func (s *Session) Report() *Report {
+	s.s.report.Images = s.s.images.Report()
 	return s.s.report
 }
 

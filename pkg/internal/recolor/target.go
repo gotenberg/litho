@@ -113,10 +113,7 @@ type Options struct {
 }
 
 // defaultEngine is the engine [Options] select when they name none.
-//
-// TODO: [c1 join] replace the naive stand-in with the ICC engine's
-// icc.NewTransform once its output direction lands.
-var defaultEngine Engine = naiveEngine{}
+var defaultEngine Engine = iccEngine{}
 
 func (o Options) engine() Engine {
 	if o.Engine != nil {

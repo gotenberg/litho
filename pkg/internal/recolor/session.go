@@ -32,10 +32,13 @@ type session struct {
 	seen       map[int]bool
 	plans      map[string]*spacePlan
 	transforms map[string]transformEntry
+	// images converts the image XObjects and inline images the walk
+	// reaches, through the session's own plans (see [sessionColors]).
+	images *Images
 }
 
-func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo, opts Options, report *Report) *session {
-	return &session{
+func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo, opts Options, report *Report) (*session, error) {
+	s := &session{
 		doc:        doc,
 		alloc:      alloc,
 		t:          t,
@@ -46,6 +49,18 @@ func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo
 		plans:      make(map[string]*spacePlan),
 		transforms: make(map[string]transformEntry),
 	}
+	cfg := ImageConfig{
+		Colors:       sessionColors{s: s},
+		Space:        t.spaceObject(),
+		Components:   t.n,
+		ConvertSpots: opts.ConvertSpots,
+	}
+	images, err := NewImages(doc, alloc, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrUnsupportedTarget, err)
+	}
+	s.images = images
+	return s, nil
 }
 
 // resolve chases obj to the object the source holds: the original of an
@@ -216,10 +231,12 @@ func newStream(dict ast.PdfDict, data []byte) (ast.PdfStream, error) {
 }
 
 // maxSampledEntries bounds the grid points of a sampled function recolouring
-// writes. Anti-DoS guard, not spec-mandated: ISO 32000-1, 7.10.2 puts no
-// bound on /Size. 65536 points of four 16-bit outputs is half a megabyte,
-// and leaves a 1-input function its full [maxSamplesPerInput] and a 4-colorant
-// DeviceN 16 points per colorant.
+// writes, under the default image budget. Anti-DoS guard, not spec-mandated:
+// ISO 32000-1, 7.10.2 puts no bound on /Size. The grid is an image of the
+// tint transform, one point per pixel, so it scales with the document's image
+// budget ([limits.Limits.ScaleImageCap]): 65536 points of four 16-bit outputs
+// is half a megabyte, and leaves a 1-input function its full
+// [maxSamplesPerInput] and a 4-colorant DeviceN 16 points per colorant.
 const maxSampledEntries = 1 << 16
 
 // maxSamplesPerInput is the most samples a sampled function takes along one
@@ -229,19 +246,19 @@ const maxSampledEntries = 1 << 16
 const maxSamplesPerInput = 256
 
 // samplesPerInput returns how many samples each of m inputs takes: the most
-// whose grid fits [maxSampledEntries], at most [maxSamplesPerInput], and
+// whose grid fits limit points, at most [maxSamplesPerInput], and
 // [ErrTooManyColorants] when not even 2 fit.
-func samplesPerInput(m int) (int, error) {
+func samplesPerInput(m int, limit int64) (int, error) {
 	k := maxSamplesPerInput
 	for k >= 2 {
-		total := 1
+		total := int64(1)
 		for range m {
-			total *= k
-			if total > maxSampledEntries {
+			total *= int64(k)
+			if total > limit {
 				break
 			}
 		}
-		if total <= maxSampledEntries {
+		if total <= limit {
 			return k, nil
 		}
 		k--
@@ -254,7 +271,7 @@ func samplesPerInput(m int) (int, error) {
 // linear interpolation, and returns its reference.
 func (s *session) sampledFunction(ctx context.Context, domain []float64, outN int, eval func(in, out []float64)) (ast.PdfIndirectRef, error) {
 	m := len(domain) / 2
-	k, err := samplesPerInput(m)
+	k, err := samplesPerInput(m, s.doc.Limits().ScaleImageCap(maxSampledEntries))
 	if err != nil {
 		return ast.PdfIndirectRef{}, err
 	}

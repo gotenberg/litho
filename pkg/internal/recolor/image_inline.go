@@ -76,6 +76,23 @@ var inlineNames = map[ast.PdfName]ast.PdfName{
 func (im *Images) ConvertInline(ctx context.Context, dict ast.PdfDict, data []byte, resources, page ast.PdfDict) (ast.PdfDict, []byte, ImageOutcome, error) {
 	im.mu.Lock()
 	defer im.mu.Unlock()
+	return im.convertInline(ctx, dict, data, resources, page)
+}
+
+// ConvertInlineIn is [Images.ConvertInline] writing a converted image in
+// space, in place of [ImageConfig.InlineSpace]: the name an ICCBased target
+// takes in the resources of the stream that draws the image, which differs
+// from one resource dictionary to another.
+func (im *Images) ConvertInlineIn(ctx context.Context, dict ast.PdfDict, data []byte, resources, page ast.PdfDict, space ast.PdfObject) (ast.PdfDict, []byte, ImageOutcome, error) {
+	im.mu.Lock()
+	defer im.mu.Unlock()
+	saved := im.cfg.InlineSpace
+	im.cfg.InlineSpace = space
+	defer func() { im.cfg.InlineSpace = saved }()
+	return im.convertInline(ctx, dict, data, resources, page)
+}
+
+func (im *Images) convertInline(ctx context.Context, dict ast.PdfDict, data []byte, resources, page ast.PdfDict) (ast.PdfDict, []byte, ImageOutcome, error) {
 	full, err := expandInline(dict)
 	if err != nil {
 		im.count(ImageUnchanged, err)

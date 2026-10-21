@@ -18,6 +18,10 @@ import (
 // is built once per space, however many images name it.
 func (im *Images) convertIndexed(ctx context.Context, stream ast.PdfStream, sp imageSpace, resources, page ast.PdfDict, inline bool) (ast.PdfStream, ImageOutcome, error) {
 	key := fmt.Sprintf("%t|%v%s", inline, sp.obj, defaultsKey(ctx, im.doc, resources))
+	if inline {
+		// An inline image's table names the target as its resources do.
+		key = fmt.Sprintf("%s|%v", key, im.cfg.InlineSpace)
+	}
 	space, cached := im.indexed[key]
 	if !cached {
 		var err error

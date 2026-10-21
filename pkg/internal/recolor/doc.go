@@ -12,10 +12,15 @@
 // pattern or the base space of an uncoloured one.
 //
 // Colour moves between spaces through an [Engine], device values to device
-// values through the profile connection space. A [Converter] converts one
-// source space's colours to the target's components.
+// values through the profile connection space: by default the ICC engine of
+// package icc (ICC.1:2010), with CalGray, CalRGB and Lab spaces carried to the
+// connection space by the formulas of ISO 32000-1, 8.6.5. A [Converter]
+// converts one source space's colours to the target's components.
 //
 // [Content] walks a document's pages, writing every object it changes to a
 // [writer.ObjAllocator] in place of the original, so an object several pages
-// share is converted once.
+// share is converted once. The images the walk reaches convert in the same
+// [Session], through the same plans: [Images] converts their samples, or the
+// colour table of an Indexed image, and a spot colour image keeps the space
+// the colour operators keep.
 package recolor

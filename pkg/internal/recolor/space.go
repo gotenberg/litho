@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -65,6 +66,9 @@ type spacePlan struct {
 	base *spacePlan
 	// spot marks a Separation or DeviceN space kept under the spot policy.
 	spot bool
+	// fixed marks a Separation or DeviceN space over All or None, whose
+	// tints stay under either policy and no conversion carries.
+	fixed bool
 	// err is why a planUnknown space could not be read.
 	err error
 }
@@ -580,11 +584,13 @@ func (s *session) planSpot(ctx context.Context, family string, arr ast.PdfArray,
 	none := true
 	for _, name := range names {
 		if name == "All" {
+			unchanged.fixed = true
 			return unchanged
 		}
 		none = none && name == "None"
 	}
 	if none {
+		unchanged.fixed = true
 		return unchanged
 	}
 	alt := s.plan(ctx, arr[2], nil, depth+1)
@@ -592,6 +598,7 @@ func (s *session) planSpot(ctx context.Context, family string, arr ast.PdfArray,
 	case planIdentity:
 		if !s.opts.ConvertSpots {
 			unchanged.spot = true
+			s.keepColorants(names)
 			return unchanged
 		}
 	case planConvert:
@@ -628,7 +635,19 @@ func (s *session) planSpot(ctx context.Context, family string, arr ast.PdfArray,
 	copy(def, arr)
 	def[2], def[3] = s.t.spaceObject(), fnRef
 	s.report.SpotsKept++
+	s.keepColorants(names)
 	return &spacePlan{kind: planKeep, n: n, initial: initial, def: def, spot: true}
+}
+
+// keepColorants records the colorants of a kept spot colour in the report,
+// once each.
+func (s *session) keepColorants(names []ast.PdfName) {
+	for _, name := range names {
+		if name == "None" || slices.Contains(s.report.KeptColorants, string(name)) {
+			continue
+		}
+		s.report.KeptColorants = append(s.report.KeptColorants, string(name))
+	}
 }
 
 // tintConverter evaluates a tint transform, then converts the alternate

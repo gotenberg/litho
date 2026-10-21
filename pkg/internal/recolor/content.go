@@ -42,8 +42,12 @@ type contentRewriter struct {
 	stack []colorState
 	// name is the resource name of an ICCBased target in res.
 	name ast.PdfName
-	// operators counts the operators rewritten.
-	operators int
+	// operators counts the colour operators rewritten, and images the
+	// inline images.
+	operators, images int
+	// pendingImages counts the inline images of the stream being rewritten,
+	// which count once the rewrite stands.
+	pendingImages int
 }
 
 func (s *session) newContentRewriter(ctx context.Context, res ast.PdfDict) *contentRewriter {
@@ -83,7 +87,7 @@ type edit struct {
 // parseContent reads a content stream as a viewer draws it: every operator,
 // through the stray tokens where validation stops ([content.WholeStream]).
 func parseContent(ctx context.Context, data []byte) ([]content.Operation, []content.ByteRange, error) {
-	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.WholeStream())
+	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.WholeStream(), content.InlineImageData())
 	if err != nil {
 		return nil, nil, fmt.Errorf("parsing content: %w", err)
 	}
@@ -102,6 +106,7 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 	if err != nil {
 		return nil, false, err
 	}
+	cr.pendingImages = 0
 	var edits []edit
 	var want []content.Operation
 	for i, op := range ops {
@@ -136,21 +141,37 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 		out.WriteByte(' ')
 		out.Write(e.text)
 		pos = e.span.End
+		// An inline image's span takes the white space after its EI, so
+		// the next operator may follow with none of its own.
+		if pos < len(data) && !isWhite(data[pos]) {
+			out.WriteByte(' ')
+		}
 	}
 	out.Write(data[pos:])
-	got, err := content.ParseStreamData(ctx, out.Bytes(), content.WholeStream())
+	got, err := content.ParseStreamData(ctx, out.Bytes(), content.WholeStream(), content.InlineImageData())
 	if err != nil {
 		return nil, false, fmt.Errorf("reading the rewritten content back: %w", err)
 	}
 	if !sameOperations(got, want) {
 		return nil, false, fmt.Errorf("%w: the rewritten content reads as other operations", ErrUnsupportedSpace)
 	}
-	cr.operators += len(edits)
+	cr.operators += len(edits) - cr.pendingImages
+	cr.images += cr.pendingImages
+	cr.pendingImages = 0
 	return out.Bytes(), true, nil
 }
 
+// isWhite reports a white-space character (ISO 32000-1, 7.2.2, Table 1).
+func isWhite(b byte) bool {
+	switch b {
+	case 0, '\t', '\n', '\f', '\r', ' ':
+		return true
+	}
+	return false
+}
+
 func parseOps(ctx context.Context, text []byte) ([]content.Operation, error) {
-	ops, err := content.ParseStreamData(ctx, text, content.WholeStream())
+	ops, err := content.ParseStreamData(ctx, text, content.WholeStream(), content.InlineImageData())
 	if err != nil {
 		return nil, fmt.Errorf("reading a rewritten operator: %w", err)
 	}
@@ -219,6 +240,8 @@ func (cr *contentRewriter) operation(ctx context.Context, op content.Operation) 
 			return nil, false, nil
 		}
 		return cr.write(stroke, p, p.initial, "")
+	case "BI":
+		return cr.inlineImage(ctx, op)
 	case "sc", "scn", "SC", "SCN":
 		stroke := op.Operator[0] == 'S'
 		p := cr.state.fill
@@ -238,6 +261,45 @@ func (cr *contentRewriter) operation(ctx context.Context, op content.Operation) 
 		return cr.convert(stroke, p, op.Operands)
 	}
 	return nil, false, nil
+}
+
+// inlineImage converts an inline image (ISO 32000-1, 8.9.7) through the
+// session's [Images], against the resources of the stream as the source holds
+// them, and writes it back in the target: its device family's name, or the
+// name the target's ICCBased space takes in those resources. An image it
+// cannot convert is left and reported.
+func (cr *contentRewriter) inlineImage(ctx context.Context, op content.Operation) ([]byte, bool, error) {
+	s := cr.s
+	if len(op.Operands) != 2 {
+		return nil, false, nil
+	}
+	dict, ok := op.Operands[0].(ast.PdfDict)
+	data, isData := op.Operands[1].(ast.PdfString)
+	if !ok || !isData {
+		return nil, false, nil
+	}
+	var space ast.PdfObject = cr.name
+	if s.t.device() {
+		space = s.t.spaceObject()
+	}
+	out, outData, outcome, err := s.images.ConvertInlineIn(ctx, dict, []byte(data), cr.res, nil, space)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, false, ctxErr
+		}
+		s.skip(0, "inline image", err)
+		return nil, false, nil
+	}
+	if outcome == ImageUnchanged {
+		return nil, false, nil
+	}
+	text, err := InlineImageOperator(ctx, out, outData)
+	if err != nil {
+		s.skip(0, "inline image", err)
+		return nil, false, nil
+	}
+	cr.pendingImages++
+	return text, true, nil
 }
 
 func (cr *contentRewriter) set(stroke bool, p *spacePlan) {

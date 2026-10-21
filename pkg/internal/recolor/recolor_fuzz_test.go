@@ -17,7 +17,10 @@ func fuzzSession(t testing.TB) (*session, *contentRewriter) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := newSession(doc, writer.NewObjAllocator(doc.HighestObjectNumber(context.Background())), ti, Options{Engine: naiveEngine{}}, &Report{})
+	s, err := newSession(doc, writer.NewObjAllocator(doc.HighestObjectNumber(context.Background())), ti, Options{Engine: naiveEngine{}}, &Report{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	return s, s.newContentRewriter(context.Background(), pages[0].Resources)
 }
 
