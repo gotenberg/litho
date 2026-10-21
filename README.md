@@ -42,6 +42,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 - Stamp text, images, and PDF overlays for watermarks.
 - Encrypt (RC4, AES-128, AES-256), decrypt, and sign (PKCS#7/CMS or PAdES B-B to B-LTA, with RFC 3161 timestamps, incremental).
 - Flatten forms, set metadata and form fields, and manage attachments and bookmarks.
+- Convert every colour to CMYK, RGB, grey, an ICC profile or the document's output intent, keeping spot colours.
 - Chain operations through a `Pipeline` with managed intermediate storage.
 
 ## Install
@@ -216,6 +217,9 @@ litho merge --compact --recompress-images --subset-fonts -o merged.pdf a.pdf b.p
 litho pipe document.pdf rotate --angle 90 stamp-text --text "DRAFT" -o out.pdf
 litho pipe document.pdf rotate --angle 90 remediate --profile PDF/UA-1 -o out.pdf
 
+# Convert every colour to CMYK, the built-in SWOP profile becoming the output intent.
+litho convert-colors --target cmyk -o cmyk.pdf document.pdf
+
 # Redact, encrypt and sign.
 litho redact --region 1:72,700,200,24 -o redacted.pdf document.pdf
 litho encrypt --user-password secret -o encrypted.pdf document.pdf
@@ -231,6 +235,10 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 ### Redaction
 
 `litho redact` removes the text, images and paths each `--region page:x,y,width,height` covers, cuts every path reaching outside a region at its edge (the geometry inside is removed, the rest is painted under a clip that excludes the region), clears the copies of the removed text that annotations, form fields, outline titles and the metadata hold, then scans the output for every removed string. It refuses, and writes nothing, when content cannot be removed exactly or a copy survives in the redacted page's own resources and annotations, the structure tree, the metadata or any other object. A copy that only pages outside the regions draw, in their content, forms or annotation appearances, is a warning: a region removes what it covers on its own page, as a Redact annotation applies to the page it sits on (ISO 32000-2, 12.5.6.23). The command prints one warning per copy on stderr, naming the pages and object, writes the output, and lists the copies under `copiesOnOtherPages` with `-f json`. `--strict` refuses those copies too. In Go, `Writer.Redact` reports them in `RedactReport.CopiesOnOtherPages`, and `pdf.WithStrictRedaction` refuses them.
+
+### Colour conversion
+
+`litho convert-colors` converts every colour a document paints to one target, `Writer.ConvertColors` in Go: the colour operators of every page, form, pattern, Type 3 glyph and annotation appearance, their colour space resources, shadings, image XObjects and inline images. `--target` names it: `output-intent` (the default, the document's own output intent), `cmyk` (the built-in CGATS TR 001 profile, or `--cmyk-profile`), `rgb` (sRGB), `gray`, or `icc` with `--profile profile.icc`, which writes an ICCBased space. Colours convert through ICC profiles with litho's own colour engine, and a device colour reads as the renderer reads it: through the default colour space its resources give it, else the document's output intent of its component count, else the built-in profiles. The rendering intent is relative colorimetric unless `--intent` names another, and `--bpc` compensates black points. Spot colours, Separation and DeviceN, keep their colorants, which the report lists, and convert only their alternate space; `--convert-spots` converts them to process colour. A target whose profile is an output or display profile becomes the document's PDF/A output intent unless `--no-output-intent` is given, and an intent of another subtype, a PDF/X one among them, is kept as it was. Images are re-encoded losslessly under Flate, so a JPEG or JPEG 2000 image grows. The conversion refuses, and writes nothing, when anything the document paints cannot be converted: an image whose samples do not decode, or a colour space litho cannot read.
 
 ### Signing
 
