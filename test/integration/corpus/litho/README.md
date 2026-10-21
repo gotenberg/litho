@@ -1998,7 +1998,7 @@ those differences is adjudicated, and none is a litho defect left open:
   `/Kids` an array of references. poppler renders such a page as an empty 1 by
   1 image, and litho draws the page dictionary where the array holds it.
 
-The other 22 pages differ by at most 1% of the page and by more than half of
+The other 19 pages differ by at most 1% of the page and by more than half of
 the pixels either renderer inks: on each, one renderer draws a glyph, a fill or
 an annotation the other does not. PDFium (pypdfium2 4.30.0, at 72 dpi) is the
 third reading. The pages where litho differs from both, and `resinherit_2b`
@@ -2007,9 +2007,6 @@ open:
 
 | File                    | Page | Differing / inked    | Who differs | Why                                                                                                                |
 | ----------------------- | ---- | -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
-| `fontemptycs_2b`        | 1    | 544 / 670            | litho       | substitutes for an embedded program with no glyph; poppler and PDFium draw nothing                                 |
-| `unembednames_2u`       | 1    | 213 / 367            | litho       | boxes for the `.notdef` codes of unembedded fonts, which the others draw as nothing                                |
-| `ttencoding_2b`         | 1    | 274 / 506            | litho       | boxes for codes of unembedded TrueType fonts the others map to A and B                                             |
 | `filestruct_1b`         | 1    | 1200 / 1422          | litho       | draws a widget's `/AP` under `/NeedAppearances true`, which the others rebuild empty                               |
 | `sharednested_2b`       | 1, 2 | 705, 798 / 970, 1158 | litho       | resolves no name a form's empty `/Resources` lacks; the others fall back to the page's                             |
 | `undecodable_2b`        | 2    | 60 / 60              | litho       | decodes `[/Foo /FlateDecode]` past the unknown `/Foo`; the others draw nothing                                     |
@@ -2028,6 +2025,16 @@ open:
 | `parentreach_2b`        | 2    | 25 / 25              | undefined   | a one-input tint transform under nine colorants: litho black, poppler orange                                       |
 
 The cell's ink bar counts them; the 1% page bar alone passed every one.
+
+Three more were litho's alone and now match. `fontemptycs_2b` draws nothing
+for a CFF program with no glyph, where litho drew a substitute or a box: the
+program is embedded, and 9.6.6.3 and 9.7.6.3 send a code it lacks to its own
+`.notdef`, which it does not hold. `unembednames_2u` draws nothing for the
+codes its encodings leave unnamed, where litho drew boxes; 78 of its 219 inked
+pixels still differ, since litho advances an unnamed code of the unembedded
+Helvetica by 1000 and poppler by 0. `ttencoding_2b` draws A and B
+for its symbolic TrueType fonts with the stand-in the flags give, as poppler
+and PDFium do, where litho asked for no substitute and drew boxes.
 
 The mechanism is veraPDF's object identity, not a rule. `BaseValidator` (core
 1.30.2, `checkRequired`, line 328) pushes a model object onto its work stack
