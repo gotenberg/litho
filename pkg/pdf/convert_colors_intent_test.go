@@ -65,6 +65,26 @@ func TestConvertColors_RefusesAConflictingIntent(t *testing.T) {
 	}
 }
 
+// TestConvertColors_ConflictingVersion5Intent refuses a CMYK target under a
+// kept PDF/X intent over a version 5 CMYK profile too: litho converts no
+// colour through an ICC.2 profile, yet the intent still names another
+// profile than the target's (ISO 19005-2, 6.2.3 t2).
+func TestConvertColors_ConflictingVersion5Intent(t *testing.T) {
+	t.Parallel()
+	profile, err := os.ReadFile("../internal/graphics/icc/testdata/v4-cmyk-lut.icc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile[8] = 5
+	intent := "<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) /DestOutputProfile 5 0 R >>"
+	src := recolorPDF("/OutputIntents ["+intent+"]", colorStream("/N 4", string(profile)))
+	w := NewWriter(openColorPDF(t, src))
+	t.Cleanup(func() { _ = w.Close() })
+	if _, err := w.ConvertColors(context.Background(), CMYKColorTarget()); !errors.Is(err, ErrOutputIntentConflict) {
+		t.Fatalf("err = %v, want ErrOutputIntentConflict", err)
+	}
+}
+
 // TestConvertColors_ReplacedOutputIntents points the PDF/X intent at the
 // target profile, the one object the added PDF/A intent names too, keeping
 // its subtype and printing condition.

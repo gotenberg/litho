@@ -7,6 +7,7 @@ import (
 	stdimage "image"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -43,6 +44,13 @@ func flatTable(n int, lStar float64) []byte {
 		b = binary.BigEndian.AppendUint16(b, 65535)
 	}
 	return b
+}
+
+// version5 returns profile with its header stating version 5.0, an ICC.2
+// profile no PDF version admits (ISO 32000-1, 8.6.5.5, Table 67).
+func version5(profile []byte) []byte {
+	profile[8] = 5
+	return profile
 }
 
 // flatProfile builds an ICC profile of the data colour space whose tables
@@ -177,6 +185,10 @@ func TestDecodeImage_ICCBasedReadsItsProfile(t *testing.T) {
 			"a profile of another space reads as DeviceCMYK", 4, flatProfile("RGB ", 25),
 			[]byte{255, 0, 0, 0, 0, 0, 0, 255}, [][3]int{cyan, black},
 		},
+		{
+			"a version 5 profile reads as DeviceCMYK", 4, version5(flatProfile("CMYK", 25)),
+			[]byte{255, 0, 0, 0, 0, 0, 0, 255}, [][3]int{cyan, black},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -202,6 +214,7 @@ func TestDecodeImage_DeviceCMYKReadsTheOutputIntent(t *testing.T) {
 		want   [3]int
 	}{
 		{"the output intent", true, nil, grey25},
+		{"the built-in profile over a version 5 output intent", true, nil, cyan},
 		{"the output intent over the caller's profile", true, flatProfile("CMYK", 50), grey25},
 		{"the caller's profile", false, flatProfile("CMYK", 50), grey50},
 		{"the built-in profile", false, nil, cyan},
@@ -213,8 +226,11 @@ func TestDecodeImage_DeviceCMYKReadsTheOutputIntent(t *testing.T) {
 			if tc.intent {
 				catalog = outputIntent
 			}
-			ctx, doc, page := managedPDF(t, catalog, "/DeviceCMYK", "", 1, samples,
-				profileObj(4, flatProfile("CMYK", 25)))
+			profile := flatProfile("CMYK", 25)
+			if strings.Contains(tc.name, "version 5") {
+				profile = version5(profile)
+			}
+			ctx, doc, page := managedPDF(t, catalog, "/DeviceCMYK", "", 1, samples, profileObj(4, profile))
 			doc.CMYKProfile = tc.caller
 			wantPixels(t, ctx, doc, page, tc.want)
 		})

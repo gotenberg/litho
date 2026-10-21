@@ -109,6 +109,32 @@ func TestParse_Refuses(t *testing.T) {
 	}
 }
 
+// TestParse_RefusesICC2 refuses a version 5 profile, an ICC.2 one no PDF
+// version admits, while DataComponents still reads its data colour space.
+// Version 4 and 2 profiles, and a version 3 one no ICC.1 edition carries,
+// parse.
+func TestParse_RefusesICC2(t *testing.T) {
+	t.Parallel()
+
+	for version, want := range map[byte]bool{2: true, 3: true, 4: true, 5: false, 6: false} {
+		data := rgbProfile()
+		data[8] = version
+		_, err := Parse(data)
+		if want && err != nil {
+			t.Errorf("version %d: %v, want a profile", version, err)
+		}
+		if !want && !errors.Is(err, ErrUnsupported) {
+			t.Errorf("version %d: %v, want %v", version, err, ErrUnsupported)
+		}
+		if n, err := DataComponents(data); err != nil || n != 3 {
+			t.Errorf("version %d: DataComponents = %d, %v, want 3", version, n, err)
+		}
+	}
+	if _, err := DataComponents(make([]byte, 100)); !errors.Is(err, ErrMalformed) {
+		t.Errorf("DataComponents of a short profile: %v, want %v", err, ErrMalformed)
+	}
+}
+
 // TestNewTransform_Limits refuses a CLUT past maxCLUTEntries before reading
 // it: 255 points over eight inputs.
 func TestNewTransform_Limits(t *testing.T) {

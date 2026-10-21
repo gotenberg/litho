@@ -297,8 +297,10 @@ func conflicting(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	if data == nil || bytes.Equal(data, profile) {
 		return string(subtype), false
 	}
-	p, err := icc.Parse(data)
-	if err != nil || p.Components() != components {
+	// A profile litho cannot convert through, version 5 among them, still
+	// names another profile, which ISO 19005-2, 6.2.3 t2 forbids.
+	n, err := icc.DataComponents(data)
+	if err != nil || n != components {
 		return string(subtype), false
 	}
 	return string(subtype), true

@@ -20,15 +20,70 @@ type Profile struct {
 	// "CMYK" or "GRAY", and PCS the profile connection space, "XYZ " or "Lab ".
 	// A DeviceLink profile names its output colour space in PCS (7.2.7).
 	Space, PCS string
-	// Version is the major version, 2 or 4.
+	// Version is the major version, 2 or 4. [Parse] refuses 5 and later.
 	Version byte
 	tags    map[string][]byte
 }
 
+// iccMAXVersion is the first major version that is not ICC.1: version 5 is
+// ICC.2 (iccMAX, ISO 20677-1), a different profile format whose processing
+// elements and tag types an ICC.1 engine does not read.
+const iccMAXVersion = 5
+
 // Parse reads an ICC profile's header and tag table (ICC.1:2010, 7.2 and
 // 7.3). The tag data is read only when a transform is built, and it aliases
 // data, which the caller must not modify while the profile is in use.
+//
+// A profile of major version 5 or later fails with [ErrUnsupported]. ISO
+// 32000-1, 8.6.5.5, Table 67 lists the ICC.1 editions an ICCBased space
+// reads, up to version 4.2 (ICC.1:2004-10), and ISO 32000-2, 8.6.5.5 adds
+// ICC.1:2010 (ISO 15076-1, version 4.3): an ICC.2 profile is none of them,
+// so it is a profile the reader does not support, which Table 66 has fall
+// back to another space, and an output intent's profile of that version
+// characterises nothing litho can convert through. A version below 2, or 3,
+// which no ICC.1 edition carries, is read as ICC.1, as LittleCMS reads it.
+//
+// The readers disagree on version 5, so the specification decides it:
+// LittleCMS 2.16, which poppler converts through, refuses a version past
+// 5.0.0 but reads 5.0.0 itself, qcms, which PDF.js converts through, checks
+// no version, and veraPDF 1.30.2 fails a version 5 profile in an output
+// intent or an ICCBased space at every PDF/A part (ISO 19005-2, 6.2.3 and
+// 6.2.4.2).
+//
+// # Corpus evidence
+//
+//   - All corpora: 5 of the 3,916 ICC profile streams state version 5.0, in
+//     litho iccbadcmyk_1b.pdf, iccbadgray_1b.pdf and iccbased_4.pdf and the
+//     veraPDF 6-2-3-t01-fail-d pair; none is embedded in a JPEG 2000 image.
+//   - litho iccbadcmyk_1b.pdf: DeviceCMYK read through the version 5 output
+//     intent painted a neutral grey; read through the built-in profile, the
+//     page matches poppler's.
 func Parse(data []byte) (*Profile, error) {
+	p, err := parse(data)
+	if err != nil {
+		return nil, err
+	}
+	if p.Version >= iccMAXVersion {
+		return nil, fmt.Errorf("%w: version %d.%d profile, which is not ICC.1", ErrUnsupported, data[8], data[9]>>4)
+	}
+	return p, nil
+}
+
+// DataComponents returns the number of components of the profile data's
+// colour space, as [Profile.Components] counts them, whatever the profile's
+// version: which space a profile characterises does not depend on whether
+// litho converts colours through it. It fails as [Parse] fails on a
+// malformed profile.
+func DataComponents(data []byte) (int, error) {
+	p, err := parse(data)
+	if err != nil {
+		return 0, err
+	}
+	return p.Components(), nil
+}
+
+// parse is [Parse] without its version check.
+func parse(data []byte) (*Profile, error) {
 	if len(data) < 132 {
 		return nil, fmt.Errorf("%w: %d bytes", ErrMalformed, len(data))
 	}
