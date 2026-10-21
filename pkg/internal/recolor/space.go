@@ -88,7 +88,7 @@ func (s *session) planName(ctx context.Context, name ast.PdfName, res ast.PdfDic
 	spaces, _ := s.resolveDict(ctx, res["ColorSpace"])
 	def, ok := spaces[name]
 	if !ok {
-		return &spacePlan{kind: planUnknown, err: fmt.Errorf("%w: no /ColorSpace resource %q", ErrUnsupportedSpace, name)}
+		return &spacePlan{kind: planUnknown, err: fmt.Errorf("%w: no /ColorSpace resource %q", ErrUnsupportedSpace, string(name))}
 	}
 	return s.planDefinition(ctx, def, res)
 }
@@ -190,7 +190,7 @@ func (s *session) plan(ctx context.Context, def ast.PdfObject, defaults ast.PdfD
 		}
 		return p
 	}
-	return unknown(fmt.Errorf("%w: family %q", ErrUnsupportedSpace, family))
+	return unknown(fmt.Errorf("%w: family %q", ErrUnsupportedSpace, string(family)))
 }
 
 // planDevice plans a device space: the default space of the resources when
