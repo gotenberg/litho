@@ -1956,9 +1956,9 @@ paints (144 and 184 grey) and poppler does not (244 114 22 and 97 155 205 for
 the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`). `iccbadcmyk_2b.pdf` paints
 the same grey and mismatched before the renderer converted colour too.
 
-**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 37 pages
-of 31 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
-tolerance. 15 pages of 12 fixtures differ by more than 1% of the page. Each of
+**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 31 pages
+of 27 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
+tolerance. 16 pages of 13 fixtures differ by more than 1% of the page. Each of
 those differences is adjudicated, and none is a litho defect left open:
 
 | File                                            | Page       | Differing pixels     | Why                                       |
@@ -1970,6 +1970,7 @@ those differences is adjudicated, and none is a litho defect left open:
 | `imagecolour_2b`                                | 1          | 15375                | colorant None and JPX colour (poppler)    |
 | `pageboxes_2b`                                  | 1, 2, 3    | page size            | page boxes read as pdf.js reads them      |
 | `kidsarray_2b`, `kidsrepair_1b`                 | 2 and 3, 3 | 1 by 1 golden        | poppler draws no page written in `/Kids`  |
+| `patternglyph_2b`                               | 3          | 2500                 | poppler paints sub-pixel cells solid      |
 
 - **Interpolation.** Each fixture enlarges a 2 by 2 or 4 by 1 image with
   `/Interpolate true` fifty times or more. poppler's bilinear filter places a
@@ -2023,32 +2024,39 @@ those differences is adjudicated, and none is a litho defect left open:
     poppler.
 - **`pageboxes_2b`.** litho renders the crop box as pdf.js reads it, 612 by
   792, and poppler 500 by 700 (see the section on this file).
+- **`patternglyph_2b` page 3.** A Type 3 glyph fills its 10 by 10 pixel box
+  with a nested tiling pattern whose cells, in glyph space, are 0.2 pixels
+  wide, each holding a red square 0.1 pixels wide. The squares cover a quarter
+  of every pixel: litho paints the box 255 191 191, as PDFium (pypdfium2
+  4.30.0) does within one unit, and poppler paints it solid red. litho matched
+  poppler only while it adjusted the cell's rectangles, which grew each 0.1
+  pixel square to a whole pixel; a tiling cell paints without stroke
+  adjustment, from the initial `/SA` false (ISO 32000-1, 10.6.5).
 - **Pages written directly in `/Kids`.** ISO 32000-1, 7.7.3.2, Table 29 makes
   `/Kids` an array of references. poppler renders such a page as an empty 1 by
   1 image, and litho draws the page dictionary where the array holds it.
 
-The other 17 pages differ by at most 1% of the page and by more than half of
+The other 15 pages differ by at most 1% of the page and by more than half of
 the pixels either renderer inks: on each, one renderer draws a glyph, a fill or
 an annotation the other does not. PDFium (pypdfium2 4.30.0, at 72 dpi) is the
 third reading. The pages where litho differs from both are litho divergences
 and stay open:
 
-| File                    | Page | Differing / inked    | Who differs | Why                                                                                          |
-| ----------------------- | ---- | -------------------- | ----------- | -------------------------------------------------------------------------------------------- |
-| `filestruct_1b`         | 1    | 1200 / 1422          | litho       | draws a widget's `/AP` under `/NeedAppearances true`, which the others rebuild empty         |
-| `sharednested_2b`       | 1, 2 | 610, 610 / 970, 1158 | litho       | snaps a tiling cell's hairline on its `/BBox` edge outside the clip; the others draw it grey |
-| `afref_3b`              | 1    | 80 / 80              | poppler     | strokes a Link's `/Border` over an empty appearance stream (12.5.5)                          |
-| `linkfont_ua2`          | 1    | 720 / 1345           | poppler     | the same `/Border` stroke over six links                                                     |
-| `annotshare_ua1`        | 1, 2 | 202, 202 / 358, 202  | poppler     | draws its own icon for a Text annotation with no `/AP`                                       |
-| `formmedia_ua1`         | 1    | 2400 / 4495          | poppler     | draws no Screen annotation; litho and PDFium paint their appearance                          |
-| `sigcms_2b`             | 1    | 677 / 964            | poppler     | builds a text field's appearance from `/V` with no `/NeedAppearances`                        |
-| `cmapusecmap_2b`        | 1    | 176 / 176            | poppler     | litho maps codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing       |
-| `undecodable_2b`        | 3    | 60 / 60              | poppler     | draws nothing for `[/FlateDecode /Foo]`, which litho and PDFium read                         |
-| `offlimits_1b`          | 3    | 100 / 100            | poppler     | paints no image while no colour space is selected; litho and PDFium paint it grey            |
-| `fontclaims_2b`         | 1    | 50 / 80              | poppler     | draws no glyph for the last show, which litho and PDFium draw as A                           |
-| `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156  | undefined   | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box          |
-| `type0nodesc_2b`        | 1    | 176 / 237            | undefined   | Type 0 fonts with no descendant: litho boxes, poppler nothing, PDFium a substitute           |
-| `parentreach_2b`        | 2    | 25 / 25              | undefined   | a one-input tint transform under nine colorants: litho black, poppler orange                 |
+| File                    | Page | Differing / inked   | Who differs | Why                                                                                    |
+| ----------------------- | ---- | ------------------- | ----------- | -------------------------------------------------------------------------------------- |
+| `filestruct_1b`         | 1    | 1200 / 1422         | litho       | draws a widget's `/AP` under `/NeedAppearances true`, which the others rebuild empty   |
+| `afref_3b`              | 1    | 80 / 80             | poppler     | strokes a Link's `/Border` over an empty appearance stream (12.5.5)                    |
+| `linkfont_ua2`          | 1    | 720 / 1345          | poppler     | the same `/Border` stroke over six links                                               |
+| `annotshare_ua1`        | 1, 2 | 202, 202 / 358, 202 | poppler     | draws its own icon for a Text annotation with no `/AP`                                 |
+| `formmedia_ua1`         | 1    | 2400 / 4495         | poppler     | draws no Screen annotation; litho and PDFium paint their appearance                    |
+| `sigcms_2b`             | 1    | 677 / 964           | poppler     | builds a text field's appearance from `/V` with no `/NeedAppearances`                  |
+| `cmapusecmap_2b`        | 1    | 176 / 176           | poppler     | litho maps codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing |
+| `undecodable_2b`        | 3    | 60 / 60             | poppler     | draws nothing for `[/FlateDecode /Foo]`, which litho and PDFium read                   |
+| `offlimits_1b`          | 3    | 100 / 100           | poppler     | paints no image while no colour space is selected; litho and PDFium paint it grey      |
+| `fontclaims_2b`         | 1    | 50 / 80             | poppler     | draws no glyph for the last show, which litho and PDFium draw as A                     |
+| `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156 | undefined   | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box    |
+| `type0nodesc_2b`        | 1    | 176 / 237           | undefined   | Type 0 fonts with no descendant: litho boxes, poppler nothing, PDFium a substitute     |
+| `parentreach_2b`        | 2    | 25 / 25             | undefined   | a one-input tint transform under nine colorants: litho black, poppler orange           |
 
 The cell's ink bar counts them; the 1% page bar alone passed every one.
 
@@ -2066,7 +2074,13 @@ Three causes of these rows were litho's and are closed. A form whose `/Resources
 name now resolves it in the page's resources, as poppler and PDFium do (ISO
 32000-1, 7.8.3 grants it only to a form with no `/Resources`), so the
 `sharednested_2b` forms stroke at the page's `/GS0` line width; a tiling cell
-keeps its own resources, which both renderers draw it with. And litho reads
+keeps its own resources, which both renderers draw it with. Its cell's
+hairline, which litho snapped to whole pixels, now paints at half strength
+across two rows, its bottom edge on the cell's `/BBox` clipped to the half
+inside, as PDFium paints it and poppler, which draws a cell on a Splash of its
+own that never turns stroke adjustment on: a cell runs from the initial
+graphics state, whose `/SA` is false (10.6.5). Both pages match, 35 pixels
+apart where poppler shifts its resampled cells by a row. And litho reads
 nothing from a content stream whose chain decodes past a filter it cannot
 decode, so `undecodable_2b` page 2 now matches. A `cs` or `CS` naming no
 colour space, and colour operands that do not fit the space in force, now leave
