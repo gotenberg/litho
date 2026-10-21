@@ -23,12 +23,14 @@ test/integration/
 │   │   └── run-kosit.sh        KoSIT Schematron runner (shared)
 │   ├── pdfjs/
 │   │   ├── download.sh
+│   │   ├── flatten-scope.json  Widens the flatten cell to the whole corpus
 │   │   └── manifest.json
 │   ├── verapdf/
 │   │   ├── download.sh
 │   │   └── manifest.json
 │   ├── govdocs/
 │   │   ├── download.sh
+│   │   ├── flatten-scope.json  Widens the flatten cell to the whole corpus
 │   │   ├── manifest.json
 │   │   └── text-overrides.json Corrections to the PDF.js text goldens, with reasons
 │   ├── pdf20/
@@ -238,7 +240,7 @@ A PDF whose conversion converted an image and whose bytes name `DCTDecode` (or i
 - extract, on every page, the source's text, white space aside and invisible text included (`text_changed`): text is never rasterised, and text under a constant alpha of 0 is drawn in rendering mode 3, which the default extraction leaves out as invisible;
 - paint no transparency (`transparency_left`): flattening it again changes no page, and PDF/A-1b validation finds no ISO 19005-1, 6.4 violation. Annotations left transparent, which `annotations_left` counts, excuse both: flattening leaves annotations as they are, and the rewrite that writes the output bakes a signed signature widget's appearance into the page.
 
-`pages_skipped` counts the pages whose content does not read, left as they are. `flatten_failed`, `litho_mismatch`, `poppler_mismatch`, `text_changed` and `transparency_left` are cost metrics, and `pages_checked` is the coverage. It runs on `litho` and the `pdfjs` and `govdocs` render samples.
+`pages_skipped` counts the pages whose content does not read, left as they are. `flatten_failed`, `litho_mismatch`, `poppler_mismatch`, `text_changed` and `transparency_left` are cost metrics, and `pages_checked` is the coverage. It runs on the render sample of a corpus, which is all of `litho`, or on every PDF of a corpus whose `flatten-scope.json` sets `whole_corpus` (`pdfjs` and `govdocs`): the cell renders with poppler itself and takes only the fonts of the render goldens, so it needs no golden of its own. The scope file's `exclude` drops a PDF, with the reason, when one run of the cell on it takes more CPU than a quarter of the 3-minute fixture timeout, past which a loaded run times it out (`pdfjs`: `issue18765`, `issue19281`, `issue19319`).
 
 ### Mutation features
 
@@ -377,7 +379,7 @@ Fields:
 - `profile_mode`: how PDFs become fixtures. `expand` (default) cartesian-products every PDF over `profiles`; `none` drops the cartesian and emits one fixture per PDF; `auto` reads each PDF's XMP claim and emits one fixture per PDF, keyed by the claimed profile when present.
 - `profiles`: veraPDF profile directory names. Drives the cartesian under `expand`, acts as the allow-set for accepted XMP claims under `auto`, and is ignored under `none`.
 - `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from. The provisioning Docker image only generates goldens for features listed here, so dropping `text` + `metadata` from the veraPDF corpus skips the (slow) PDF.js generator entirely.
-- `golden_overrides`: maps feature name to a committed file, relative to the corpus source directory, that corrects goldens the oracle reads wrong. Only `text` takes one, and any corpus may carry one (litho and govdocs do). Each entry records the oracle's reading it replaces, so it fails its fixture when the oracle changes, and gives the right reading or marks the page unscored, with the clause behind it; the goldens stay the oracle's raw output.
+- `golden_overrides`: maps feature name to a committed file, relative to the corpus source directory, that corrects goldens the oracle reads wrong. `text` and `flatten` take one. A `text` override file (litho and govdocs carry one) corrects the PDF.js goldens: each entry records the oracle's reading it replaces, so it fails its fixture when the oracle changes, and gives the right reading or marks the page unscored, with the clause behind it; the goldens stay the oracle's raw output. A `flatten` scope file (pdfjs and govdocs carry one) widens the `flatten` cell from the render sample to the whole corpus (see [Transparency flattening](#transparency-flattening)).
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
 
 ## See also

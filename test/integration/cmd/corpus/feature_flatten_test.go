@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/png"
 	"os"
@@ -171,5 +172,49 @@ func TestFlattenFeature_PopplerUnavailableDoesNotPass(t *testing.T) {
 	}
 	if v, _ := runFlatten(t, f, transparentKindPDF(flattenBody)); v.Match || v.Metrics[metricPopplerUnavailable] == 0 {
 		t.Errorf("verdict %+v, want a mismatch counting poppler_unavailable", v)
+	}
+}
+
+// TestFlattenFeature_ScopeFile pins the scope file: without one the cell
+// runs on the render sample, whole_corpus widens it to every PDF, an
+// exclusion drops a PDF under any profile, the next corpus's goldens clear
+// the exclusions, and an entry without a reason or an unknown field fails
+// the load.
+func TestFlattenFeature_ScopeFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	write("sampled.json", fmt.Sprintf(`{"id":"sampled","dpi":%d,"page_count":1,"pages":[]}`, renderDPI))
+	f := newTestFlatten()
+	if err := f.LoadGoldens(dir); err != nil {
+		t.Fatal(err)
+	}
+	if !f.HasGolden("sampled") || f.HasGolden("other") {
+		t.Fatal("without a scope file the cell runs on the render sample")
+	}
+	if err := f.LoadOverrides(write("scope.json", `{"whole_corpus":true,"exclude":{"heavy":"too slow"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if !f.HasGolden("sampled") || !f.HasGolden("other") || f.HasGolden("heavy") || f.HasGolden("PDF_A-2b/heavy") {
+		t.Error("whole_corpus puts every PDF but the excluded ones in scope")
+	}
+	if err := f.LoadGoldens(dir); err != nil {
+		t.Fatal(err)
+	}
+	if f.HasGolden("other") || f.HasGolden("heavy") {
+		t.Error("reloading the goldens restores the render sample")
+	}
+	if err := f.LoadOverrides(write("noreason.json", `{"whole_corpus":true,"exclude":{"heavy":" "}}`)); !errors.Is(err, errFlattenScopeInvalid) {
+		t.Errorf("an exclusion without a reason: %v, want %v", err, errFlattenScopeInvalid)
+	}
+	if err := f.LoadOverrides(write("unknown.json", `{"whole_corpus":true,"include":["a"]}`)); err == nil {
+		t.Error("an unknown field loads")
 	}
 }

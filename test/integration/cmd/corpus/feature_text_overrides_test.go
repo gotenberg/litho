@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -39,20 +40,20 @@ func TestGoldenOverrideFilesAreWellFormed(t *testing.T) {
 				t.Errorf("%s: overrides %s, which takes none", path, feature)
 				continue
 			}
-			overrides, err := readTextOverrides(filepath.Join(filepath.Dir(path), rel))
+			named, err := overrideFixtures(feature, filepath.Join(filepath.Dir(path), rel))
 			if err != nil {
 				t.Errorf("%s: %v", path, err)
 				continue
 			}
+			checked++
 			pdfDir, ok := overridePDFDir(path, m)
-			for _, o := range overrides {
-				checked++
+			for _, fixture := range named {
 				if !ok {
 					continue
 				}
-				pdf := filepath.Join(pdfDir, o.Fixture+".pdf")
+				pdf := filepath.Join(pdfDir, fixture+".pdf")
 				if _, err := os.Stat(pdf); err != nil {
-					t.Errorf("%s: %s page %d names no committed fixture: %v", rel, o.Fixture, o.Page, err)
+					t.Errorf("%s: %s names no committed fixture: %v", rel, fixture, err)
 				}
 			}
 		}
@@ -81,6 +82,34 @@ func overridePDFDir(path string, m Manifest) (dir string, ok bool) {
 		return provisioned, true
 	}
 	return "", false
+}
+
+// overrideFixtures parses the override file of feature at path and returns
+// the fixtures its entries name.
+func overrideFixtures(feature, path string) ([]string, error) {
+	switch feature {
+	case "text":
+		overrides, err := readTextOverrides(path)
+		if err != nil {
+			return nil, err
+		}
+		names := make([]string, 0, len(overrides))
+		for _, o := range overrides {
+			names = append(names, o.Fixture)
+		}
+		return names, nil
+	case "flatten":
+		scope, err := readFlattenScope(path)
+		if err != nil {
+			return nil, err
+		}
+		names := make([]string, 0, len(scope.Exclude))
+		for id := range scope.Exclude {
+			names = append(names, id)
+		}
+		return names, nil
+	}
+	return nil, fmt.Errorf("no reader for the %s override file", feature)
 }
 
 func takesOverrides(feature string) bool {

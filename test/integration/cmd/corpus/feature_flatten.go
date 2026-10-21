@@ -71,29 +71,40 @@ const (
 //
 // A PDF with nothing to flatten is skipped (flatten_unchanged), a refusal
 // counts in flatten_refused and skips it, and any other error counts in
-// flatten_failed. The PDFs are those the render goldens cover, whose fonts
-// serve litho's renderings so an unembedded font draws alike.
+// flatten_failed. The PDFs are those the render goldens cover, or every PDF
+// of the corpus when its scope file says so (see [flattenScopeFile]): the
+// cell runs poppler itself, so it needs no poppler golden, only the fonts of
+// the render goldens, which serve litho's renderings so an unembedded font
+// draws alike.
 //
 // # Corpus evidence
 //
 //   - litho (217 files, flattentext_2b among them): 20 flattened, all
 //     match; 197 have no transparency.
-//   - pdfjs render sample (79 files): 20 of 21 flattened match;
-//     issue18973.pdf changes its text on page 45, the page whose content
-//     does not read, which the rewrite writing the output gives its signed
-//     signature widget's appearance, as every rewrite does.
-//   - govdocs: 1 of the 79 sampled files flattens and matches, and 34 of
-//     all 1091, all matching.
-//   - pdfjs, all 1202 files: 240 of 248 flattened match. The rest are what
-//     flattening approximates by design: a watermark a transparent black
-//     box tinted, now drawn above it untinted (issue18466.pdf), a watermark
-//     composited over the paper drawn over a drawing (issue12810.pdf),
-//     hairlines and pixel-snapped edges the 300 dpi composite draws thinner
-//     or softer at 72 dpi (issue17779.pdf, issue18529.pdf, issue20914.pdf),
-//     Type 3 glyphs that paint with transparency, which stay text
-//     (issue16127.pdf, issue19971.pdf), and issue18973.pdf above. The text
-//     the covering images of issue16800.pdf and the black box of
-//     issue18466.pdf hide stays hidden, and in the content.
+//   - govdocs, all 1091 files (scope file): 34 flatten, all match, and
+//     1057 have no transparency.
+//   - pdfjs, all 1202 files but the 3 the scope file excludes for cost and
+//     the 1 the manifest skips: 237 of 245 flattened match, 942 have no
+//     transparency, 4 are refused (issue14982.pdf past the render pixel
+//     budget; REDHAT-1531897-0.pdf, bug1020226.pdf and issue15590.pdf, whose
+//     page tree does not resolve) and 7 do not open without a password. The
+//     3 excluded files flattened and matched on an idle machine, which made
+//     240 of 248.
+//   - pdfjs: the 8 mismatches are what flattening approximates by design. A
+//     watermark a transparent black box tinted is now drawn above it
+//     untinted (issue18466.pdf: litho_mismatch, poppler_mismatch). A
+//     watermark composited over the paper is drawn over a drawing
+//     (issue12810.pdf: poppler_mismatch). Hairlines and pixel-snapped edges
+//     the 300 dpi composite draws thinner or softer at 72 dpi
+//     (issue17779.pdf: poppler_mismatch; issue18529.pdf, issue20914.pdf:
+//     litho_mismatch, poppler_mismatch). Type 3 glyphs that paint with
+//     transparency stay text (issue16127.pdf, issue19971.pdf:
+//     transparency_left). issue18973.pdf changes its text on page 45, the
+//     page whose content does not read, which the rewrite writing the
+//     output gives its signed signature widget's appearance, as every
+//     rewrite does (text_changed).
+//   - pdfjs: the text the covering images of issue16800.pdf and the black
+//     box of issue18466.pdf hide stays hidden, and in the content.
 type flattenFeature struct {
 	workers int
 	// flatten runs the flattening; tests replace it to plant a defect.
@@ -105,8 +116,11 @@ type flattenFeature struct {
 
 	mu      sync.RWMutex
 	sampled map[string]bool
-	fonts   pdf.RenderOption
-	outputs map[string][]byte
+	// excluded holds the PDFs the corpus's scope file leaves out, with
+	// why (see [flattenScopeFile]).
+	excluded map[string]string
+	fonts    pdf.RenderOption
+	outputs  map[string][]byte
 }
 
 func newFlattenFeature() *flattenFeature {
@@ -135,7 +149,7 @@ func (f *flattenFeature) LoadGoldens(dir string) error {
 		return err
 	}
 	f.mu.Lock()
-	f.sampled, f.fonts = sampled, fonts
+	f.sampled, f.fonts, f.excluded = sampled, fonts, nil
 	f.mu.Unlock()
 	return nil
 }
@@ -143,7 +157,79 @@ func (f *flattenFeature) LoadGoldens(dir string) error {
 func (f *flattenFeature) HasGolden(fixtureID string) bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.sampled == nil || f.sampled[baseFixtureID(fixtureID)]
+	id := baseFixtureID(fixtureID)
+	if _, ok := f.excluded[id]; ok {
+		return false
+	}
+	return f.sampled == nil || f.sampled[id]
+}
+
+// flattenScopeFile is the layout of a committed flatten scope file (see
+// [Manifest.GoldenOverrides]). It replaces the render sample, which the
+// cell reads its scope from, for a corpus whose render goldens cover one PDF
+// in sixteen: the cell needs no poppler golden, since it runs poppler on the
+// source and the output itself, so its scope can be the whole corpus. A PDF
+// with nothing to flatten costs one analysis and skips.
+//
+// A PDF on which one run of the cell, measured on its own, takes more CPU
+// time than a quarter of [prepareFixtureTimeout] is excluded. The quarter
+// keeps a fourfold margin under the timeout the cell runs each PDF under,
+// which a heavier PDF overruns once the run's other workers load the
+// machine, a verdict that then depends on the load rather than on litho.
+//
+// # Corpus evidence
+//
+//   - pdfjs: issue18765.pdf (99 s of CPU), issue19319.pdf (75 s) and
+//     issue19281.pdf (53 s) pass the bar, and the first two time out under
+//     a load of 50; the next heaviest, issue16127.pdf, takes 37 s.
+//   - govdocs: the heaviest, thread_200_200744.pdf, takes 16 s.
+type flattenScopeFile struct {
+	// WholeCorpus puts every PDF of the corpus in scope, not only those
+	// the render goldens cover.
+	WholeCorpus bool `json:"whole_corpus"`
+	// Exclude maps a PDF, by file name without its extension, to why the
+	// cell leaves it out.
+	Exclude map[string]string `json:"exclude,omitempty"`
+}
+
+// errFlattenScopeInvalid flags a scope file that breaks its contract (see
+// [flattenScopeFile]).
+var errFlattenScopeInvalid = errors.New("invalid flatten scope")
+
+// readFlattenScope parses and validates a flatten scope file.
+func readFlattenScope(path string) (flattenScopeFile, error) {
+	var scope flattenScopeFile
+	data, err := os.ReadFile(path) //nolint:gosec // path comes from the committed corpus manifest
+	if err != nil {
+		return scope, fmt.Errorf("read %s: %w", path, err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&scope); err != nil {
+		return scope, fmt.Errorf("parse %s: %w", path, err)
+	}
+	for id, reason := range scope.Exclude {
+		if id == "" || strings.TrimSpace(reason) == "" {
+			return scope, fmt.Errorf("%w: exclusion %q gives no reason", errFlattenScopeInvalid, id)
+		}
+	}
+	return scope, nil
+}
+
+// LoadOverrides reads the corpus's flatten scope file (see
+// [flattenScopeFile]).
+func (f *flattenFeature) LoadOverrides(path string) error {
+	scope, err := readFlattenScope(path)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if scope.WholeCorpus {
+		f.sampled = nil
+	}
+	f.excluded = scope.Exclude
+	return nil
 }
 
 // flattenOutput is the feature's per-PDF output.

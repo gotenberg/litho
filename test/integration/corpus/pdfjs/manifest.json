@@ -13,6 +13,9 @@
     "flatten": "goldens/render",
     "merge-catalog": "goldens/text"
   },
+  "golden_overrides": {
+    "flatten": "flatten-scope.json"
+  },
   "skips": {
     "bug1393476": "infinite loop in xref parsing"
   }
