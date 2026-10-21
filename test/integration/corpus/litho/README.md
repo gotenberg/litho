@@ -8735,9 +8735,10 @@ page 2's groups are composited with their text above them, and page 3's
 invisible text is drawn in rendering mode 3 and its stroked text in mode 0.
 The `flatten` cell renders those three pages, and litho and poppler 26.09.0
 draw each like its source. Pages 4 and 5 hold what flattening approximates and
-reports: the text under the rectangles draws above them (`TextReordered` 2),
-the text over the band and the soft-masked text draw opaque (`TransparentText`
-2). The cell's text and transparency checks read all five pages; no
+reports: the text the Screen rectangle tinted draws above it untinted
+(`TextUnderTransparency` 1; Multiply leaves black text black, which stays
+exact), the text over the band and the soft-masked text draw opaque
+(`TransparentText` 2). The cell's text and transparency checks read all five pages; no
 transparency is left.
 
 The file declares no OutputIntent and its pages no `/Group`, so DeviceRGB

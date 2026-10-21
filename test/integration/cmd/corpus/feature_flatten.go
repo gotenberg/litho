@@ -84,16 +84,16 @@ const (
 //     signature widget's appearance, as every rewrite does.
 //   - govdocs: 1 of the 79 sampled files flattens and matches, and 34 of
 //     all 1091, all matching.
-//   - pdfjs, all 1202 files: 238 of 248 flattened match. The rest are what
-//     flattening approximates by design or no oracle reads: text a
-//     transparent image covered now drawn above it (issue16800.pdf page 3,
-//     issue18466.pdf), a watermark composited over the paper drawn over a
-//     drawing (issue12810.pdf), hairlines and pixel-snapped edges the 300
-//     dpi composite draws thinner or softer at 72 dpi (issue17779.pdf,
-//     issue18529.pdf, issue20914.pdf), Type 3 glyphs that paint with
-//     transparency, which stay text (issue16127.pdf, issue19971.pdf), a
-//     source page past the render budget (issue19517.pdf), and
-//     issue18973.pdf above.
+//   - pdfjs, all 1202 files: 240 of 248 flattened match. The rest are what
+//     flattening approximates by design: a watermark a transparent black
+//     box tinted, now drawn above it untinted (issue18466.pdf), a watermark
+//     composited over the paper drawn over a drawing (issue12810.pdf),
+//     hairlines and pixel-snapped edges the 300 dpi composite draws thinner
+//     or softer at 72 dpi (issue17779.pdf, issue18529.pdf, issue20914.pdf),
+//     Type 3 glyphs that paint with transparency, which stay text
+//     (issue16127.pdf, issue19971.pdf), and issue18973.pdf above. The text
+//     the covering images of issue16800.pdf and the black box of
+//     issue18466.pdf hide stays hidden, and in the content.
 type flattenFeature struct {
 	workers int
 	// flatten runs the flattening; tests replace it to plant a defect.

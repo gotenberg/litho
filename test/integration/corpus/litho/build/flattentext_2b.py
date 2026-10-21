@@ -28,11 +28,12 @@ draws the same in every renderer:
 What flattening makes of each, by ISO 32000-2, 11: the text on page 1's bare
 page is drawn exactly in its colour composited over white (Normal and Multiply
 give the source colour over white, 11.3.5); page 2's groups are composited and
-their text drawn above, the second square of the knockout group no longer over
-its text; page 3's invisible text is drawn in rendering mode 3 and the stroked
+their text drawn above, kept hidden where the source hid it; page 3's
+invisible text is drawn in rendering mode 3 and the stroked
 text in mode 0, both exact. Pages 4 and 5 hold what flattening approximates and
-reports: text under the rectangles draws above them, the text over the band
-and the soft-masked text draw opaque. The flatten cell renders the first three
+reports: the text the Screen rectangle tinted draws above it untinted (the
+Multiply one leaves black text black, which stays exact), the text over the
+band and the soft-masked text draw opaque. The flatten cell renders the first three
 pages; its text and transparency checks read all five.
 
 The file declares no OutputIntent and its pages no /Group, so every page that

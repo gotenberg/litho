@@ -166,7 +166,7 @@ func TestFlattenKeepsTextAboveTheComposite(t *testing.T) {
 		content: "q /GS1 gs 0 0 1 rg 0 0 60 60 re f Q BT /F1 12 Tf 10 20 Td (Hello) Tj ET",
 	})
 	pr := report.Pages[0]
-	if pr.KeptText != 1 || pr.TransparentText != 0 || pr.TextReordered != 0 {
+	if pr.KeptText != 1 || pr.TransparentText != 0 || pr.TextUnderTransparency != 0 {
 		t.Errorf("report %+v, want one text object kept", pr)
 	}
 }

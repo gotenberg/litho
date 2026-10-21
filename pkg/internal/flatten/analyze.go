@@ -69,9 +69,6 @@ type Unit struct {
 	// blended reports a text object whose colours were composited over
 	// the paper: exact unless something drawn before it lies under it.
 	blended bool
-	// textCovered reports a form that paints something after showing
-	// text, which its copy holding only its text no longer draws over it.
-	textCovered bool
 	// textTransparent reports a form showing text with a transparency its
 	// copy holding only its text approximates.
 	textTransparent bool
@@ -93,12 +90,9 @@ type Region struct {
 	// Text lists, in order, the units showing text inside Box that stay in
 	// the content, drawn above the image.
 	Text []int
-	// TextReordered counts the text the region's image now lies under
-	// though something it composites was drawn over it: a text unit among
-	// Text that a later unit drawn up to the region's last transparent unit
-	// overlapped, and a removed form that paints after showing text. The
-	// text stays above the image, without what covered it.
-	TextReordered int
+	// Last is the index of the region's last transparent unit: text drawn
+	// before it can lie under what the image composites.
+	Last int
 }
 
 // position is the graphics state in force before one operation.
@@ -401,7 +395,6 @@ func (w *walker) do(i int, op content.Operation, st *graphics.State, ctm geom.Ma
 			Transparent: info.transparent || stateTransparent(st, paintBoth),
 			HasText:     info.text,
 			Group:       info.group,
-			textCovered: info.textCovered,
 
 			textTransparent: info.textTransparent,
 			hides:           paints{fill: st.FillAlpha <= 0, stroke: st.StrokeAlpha <= 0},
@@ -578,7 +571,7 @@ func (a *Analysis) regions() error {
 	}
 	sort.Slice(regs, func(i, j int) bool { return regs[i].insert < regs[j].insert })
 	for _, r := range regs {
-		out := Region{Box: r.box, Insert: r.insert}
+		out := Region{Box: r.box, Insert: r.insert, Last: r.last}
 		for i, u := range a.Units {
 			if u.First < r.insert || !u.Box.Overlaps(r.box) {
 				continue
@@ -586,17 +579,11 @@ func (a *Analysis) regions() error {
 			switch {
 			case u.Kind == KindText:
 				out.Text = append(out.Text, i)
-				if i < r.last && r.overlappedLater(a, i) {
-					out.TextReordered++
-				}
 			case i <= r.last && !u.Transparent && !r.coveredLater(a, i):
 				// No transparency is drawn over it: it paints what the image
 				// holds where it stands, so it stays as it is.
 			case i <= r.last && a.removed(u):
 				out.Removed = append(out.Removed, i)
-				if u.textCovered {
-					out.TextReordered++
-				}
 			case i <= r.last:
 				out.Clipped = append(out.Clipped, i)
 			case u.HasText:
@@ -640,19 +627,6 @@ func (a *Analysis) drawnUnder(i int) bool {
 func (r *growing) coveredLater(a *Analysis, i int) bool {
 	for _, j := range r.transparent {
 		if j > i && a.Units[j].Box.Overlaps(a.Units[i].Box) {
-			return true
-		}
-	}
-	return false
-}
-
-// overlappedLater reports whether a unit other than text that the region's
-// image takes over, removed or clipped out of it, was drawn over text unit i
-// after it: i now draws above what covered it.
-func (r *growing) overlappedLater(a *Analysis, i int) bool {
-	for j := i + 1; j <= r.last; j++ {
-		u := a.Units[j]
-		if u.Kind != KindText && u.Box.Overlaps(a.Units[i].Box) && (u.Transparent || r.coveredLater(a, j)) {
 			return true
 		}
 	}

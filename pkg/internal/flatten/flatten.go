@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"log/slog"
 	"maps"
 	"math"
@@ -64,10 +65,10 @@ type PageReport struct {
 	// KeptText counts the text objects and text-showing forms inside a
 	// region kept as text above its image.
 	KeptText int
-	// TextReordered counts the text objects something drawn after them
-	// overlapped, a region's image now holding it: they draw above the
-	// image, without what covered them.
-	TextReordered int
+	// TextUnderTransparency counts the text objects, and forms showing
+	// text, that transparent content drawn over them left visible: they
+	// draw above the image, without that content's tint over them.
+	TextUnderTransparency int
 	// TransparentText counts the text objects that painted with
 	// transparency, now drawn opaque.
 	TransparentText int
@@ -230,14 +231,20 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 			return pr, false, err
 		}
 		pr.Regions, pr.DPI = len(a.Regions), dpi
+		cover := &coverage{f: f, pg: pg, g: g, dpi: dpi, composite: canvas}
 		for _, r := range a.Regions {
-			name, matrix, ok, err := f.regionImage(canvas, g, a.crop, r.Box, xobjects)
+			img, ok, err := f.regionImage(canvas, g, a.crop, r.Box, xobjects)
 			if err != nil {
 				return pr, false, err
 			}
 			if ok {
 				e := edit(r.Insert)
-				e.before = append(e.before, f.drawImage(a.positions[r.Insert], r.Box, name, matrix)...)
+				e.before = append(e.before, f.drawImage(a.positions[r.Insert], r.Box, img.name, img.matrix)...)
+				n, err := cover.hideCovered(ctx, a, r, img, edit)
+				if err != nil {
+					return pr, false, err
+				}
+				pr.TextUnderTransparency += n
 			}
 			for _, u := range r.Removed {
 				removed[u] = true
@@ -246,7 +253,6 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 				clippedBy[u] = append(clippedBy[u], r.Box)
 			}
 			pr.KeptText += len(r.Text)
-			pr.TextReordered += r.TextReordered
 		}
 	}
 	for _, u := range a.Hidden {
@@ -374,9 +380,16 @@ func (f *flattener) render(ctx context.Context, pg *document.Page) (*surface.Can
 	}
 }
 
+// regionImg is a region's composite: its XObject name, the matrix that maps
+// the unit square onto its pixels in default user space, and those pixels.
+type regionImg struct {
+	name   ast.PdfName
+	matrix geom.Matrix
+	px     image.Rectangle
+}
+
 // regionImage crops box from canvas into a new image XObject named in
-// xobjects, returning its name and the matrix that maps the unit square onto
-// its pixels in default user space. A box no pixel of the page holds gives
+// xobjects. A box no pixel of the page holds gives
 // no image.
 //
 // The image holds whole pixels of the page only: the raster rounds the page
@@ -384,7 +397,7 @@ func (f *flattener) render(ctx context.Context, pg *document.Page) (*surface.Can
 // are what the page's edge leaves of a pixel. Drawn at another resolution, a
 // composite holding them reaches past the edge the page's own content stops
 // at.
-func (f *flattener) regionImage(canvas *surface.Canvas, g page.Geometry, crop, box Rect, xobjects ast.PdfDict) (ast.PdfName, geom.Matrix, bool, error) {
+func (f *flattener) regionImage(canvas *surface.Canvas, g page.Geometry, crop, box Rect, xobjects ast.PdfDict) (regionImg, bool, error) {
 	dev := transformRect(g.Matrix, box)
 	paper := transformRect(g.Matrix, crop)
 	x0 := max(0, int(math.Floor(dev.MinX))-pixelMargin, int(math.Ceil(paper.MinX-pixelEpsilon)))
@@ -392,7 +405,7 @@ func (f *flattener) regionImage(canvas *surface.Canvas, g page.Geometry, crop, b
 	x1 := min(canvas.Width, int(math.Ceil(dev.MaxX))+pixelMargin, int(math.Floor(paper.MaxX+pixelEpsilon)))
 	y1 := min(canvas.Height, int(math.Ceil(dev.MaxY))+pixelMargin, int(math.Floor(paper.MaxY+pixelEpsilon)))
 	if x0 >= x1 || y0 >= y1 {
-		return "", geom.Matrix{}, false, nil
+		return regionImg{}, false, nil
 	}
 	w, h := x1-x0, y1-y0
 	samples := make([]byte, 0, 3*w*h)
@@ -408,10 +421,10 @@ func (f *flattener) regionImage(canvas *surface.Canvas, g page.Geometry, crop, b
 	var buf bytes.Buffer
 	zw := zlib.NewWriter(&buf)
 	if _, err := zw.Write(samples); err != nil {
-		return "", geom.Matrix{}, false, fmt.Errorf("compressing a composite: %w", err)
+		return regionImg{}, false, fmt.Errorf("compressing a composite: %w", err)
 	}
 	if err := zw.Close(); err != nil {
-		return "", geom.Matrix{}, false, fmt.Errorf("compressing a composite: %w", err)
+		return regionImg{}, false, fmt.Errorf("compressing a composite: %w", err)
 	}
 	ref := f.alloc.Alloc(ast.NewStream(ast.PdfDict{
 		"Type":             ast.PdfName("XObject"),
@@ -427,12 +440,12 @@ func (f *flattener) regionImage(canvas *surface.Canvas, g page.Geometry, crop, b
 	xobjects[name] = ref
 	inv, ok := g.Matrix.Invert()
 	if !ok {
-		return "", geom.Matrix{}, false, fmt.Errorf("%w: the page maps to no device area", ErrTooComplex)
+		return regionImg{}, false, fmt.Errorf("%w: the page maps to no device area", ErrTooComplex)
 	}
 	// The unit square's bottom edge is the image's last row (ISO 32000-2,
 	// 8.9.4), the bottom of the pixels in device space, whose y grows down.
 	unit := geom.Matrix{float64(w), 0, 0, -float64(h), float64(x0), float64(y1)}
-	return name, unit.Mul(inv), true, nil
+	return regionImg{name: name, matrix: unit.Mul(inv), px: image.Rect(x0, y0, x1, y1)}, true, nil
 }
 
 // to8 returns v, in [0, 1], as an 8-bit sample.

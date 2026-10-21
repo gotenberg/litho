@@ -163,8 +163,6 @@ type contentInfo struct {
 	// form's bounds are cut to its /BBox (ISO 32000-2, 8.10.1).
 	bounds    Rect
 	unbounded bool
-	// textCovered reports something painted after text was shown.
-	textCovered bool
 	// textTransparent reports text whose transparency a copy holding only
 	// the text does not reproduce exactly: its colours composited over the
 	// paper, which the form's other content may not be, or dropped.
@@ -362,7 +360,6 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 		st := m.Current()
 		if p, ok := pathPaints(op.Operator); ok {
 			info.transparent = info.transparent || s.painting(ctx, st, p, resources, depth, chain)
-			info.textCovered = info.textCovered || info.text
 			if boxes := m.PathBoxes(); len(boxes) > before {
 				pb := boxes[len(boxes)-1]
 				r := rectOf(pb.MinX, pb.MinY, pb.MaxX, pb.MaxY)
@@ -382,10 +379,9 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 				info.textTransparent = info.textTransparent || outcome.approx || outcome.blended
 			}
 		case op.Operator == "sh":
-			info.unbounded, info.textCovered = true, info.textCovered || info.text
+			info.unbounded = true
 			info.transparent = info.transparent || stateTransparent(st, paintFill)
 		case op.Operator == "BI":
-			info.textCovered = info.textCovered || info.text
 			info.bounds = info.bounds.Union(transformRect(ctm, Rect{0, 0, 1, 1}))
 			info.transparent = info.transparent || stateTransparent(st, paintFill)
 		case op.Operator == "Do":
@@ -395,16 +391,12 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 			}
 			switch subtype {
 			case "Image":
-				info.textCovered = info.textCovered || info.text
 				info.bounds = info.bounds.Union(transformRect(ctm, Rect{0, 0, 1, 1}))
 				info.transparent = info.transparent || stateTransparent(st, paintFill) || imageTransparent(ctx, s.doc, stream.Dict)
 			case "Form":
 				inner := s.form(ctx, obj, stream, resources, depth+1, chain)
 				matrix, _ := formGeometry(ctx, s.doc, stream.Dict)
 				info.bounds = info.bounds.Union(transformRect(matrix.Mul(ctm), inner.bounds))
-				// What the inner form paints covers the text shown before it,
-				// and its own text covered within it.
-				info.textCovered = info.textCovered || inner.textCovered || (info.text && inner.bounds != (Rect{}))
 				info.text = info.text || inner.text
 				info.textTransparent = info.textTransparent || inner.textTransparent
 				info.group = info.group || inner.group

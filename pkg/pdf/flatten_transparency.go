@@ -44,10 +44,12 @@ type FlattenedPage struct {
 	// KeptText counts the text objects, and forms showing text, inside a
 	// region that stay text, drawn above its image.
 	KeptText int
-	// TextReordered counts the text objects something was drawn over,
-	// transparent or opaque, inside a region: text stays above the image,
-	// so they now draw above it. Their look is approximated.
-	TextReordered int
+	// TextUnderTransparency counts the text objects, and forms showing
+	// text, that transparent content drawn over them left visible: text
+	// stays above the image, so they draw without that content's tint over
+	// them. Their look is approximated. Text the source hid under content
+	// drawn after it stays hidden and is not counted.
+	TextUnderTransparency int
 	// TransparentText counts the text objects whose own transparency the
 	// output approximates: a constant alpha composited over white where the
 	// text lay over other content, a soft mask or a blend mode dropped. Text
@@ -92,10 +94,13 @@ type FlattenReport struct {
 // [WithInvisibleText] is given, as it leaves out any invisible text; text
 // under an alpha between 0 and 1 with the Normal, Multiply or Darken blend
 // mode is drawn in its colour composited over white, exact where it lies on
-// the paper (11.3.5, 11.3.7.2). The report counts the text whose look this
+// the paper (11.3.5, 11.3.7.2). Text that content drawn after it hid in the
+// source stays hidden (ISO 32000-1, 8.2 paints in content order): where it did
+// not show, the image is drawn again after it, clipped to those pixels, and
+// the text stays in the content. The report counts the text whose look this
 // approximates: text over other content composited over white, text under a
 // soft mask or another blend mode, drawn opaque in its own colour, and text
-// something was drawn over in a region, which now draws above it.
+// transparent content drawn over it left visible, now drawn above it untinted.
 //
 // The renderer blends in sRGB whatever a group's /CS, so a blend mode in a
 // group whose blending space is CMYK or grey composites as its colours look
@@ -183,14 +188,14 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 	}
 	for _, p := range result.Pages {
 		report.Pages = append(report.Pages, FlattenedPage{
-			Page:            p.Page + 1,
-			Regions:         p.Regions,
-			DPI:             p.DPI,
-			Rasterized:      p.Removed,
-			KeptText:        p.KeptText,
-			TextReordered:   p.TextReordered,
-			TransparentText: p.TransparentText,
-			GroupRemoved:    p.GroupRemoved,
+			Page:                  p.Page + 1,
+			Regions:               p.Regions,
+			DPI:                   p.DPI,
+			Rasterized:            p.Removed,
+			KeptText:              p.KeptText,
+			TextUnderTransparency: p.TextUnderTransparency,
+			TransparentText:       p.TransparentText,
+			GroupRemoved:          p.GroupRemoved,
 		})
 	}
 	if alloc.Writes() == staged {

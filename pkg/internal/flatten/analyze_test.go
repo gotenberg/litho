@@ -39,7 +39,8 @@ func TestAnalyzeTransparencyOverBackdrop(t *testing.T) {
 func TestAnalyzeTextStaysAboveTheImage(t *testing.T) {
 	t.Parallel()
 	// The text drawn first lies under the transparent square: the image is
-	// drawn before it, so it stays above, and is counted.
+	// drawn before it, so it stays above, before the region's last
+	// transparent unit.
 	a := analyze(t, fixture{content: "BT /F1 12 Tf 10 20 Td (Hi) Tj ET /GS1 gs 1 0 0 rg 0 0 50 50 re f"})
 	if got := kinds(a); got != "text path*" {
 		t.Fatalf("units %q", got)
@@ -48,8 +49,8 @@ func TestAnalyzeTextStaysAboveTheImage(t *testing.T) {
 	if r.Insert != 0 || !slices.Equal(r.Removed, []int{1}) || !slices.Equal(r.Text, []int{0}) {
 		t.Fatalf("insert %d removed %v text %v, want 0 [1] [0]", r.Insert, r.Removed, r.Text)
 	}
-	if r.TextReordered != 1 {
-		t.Errorf("text reordered %d, want 1", r.TextReordered)
+	if r.Last != 1 {
+		t.Errorf("last %d, want 1", r.Last)
 	}
 }
 
@@ -94,12 +95,11 @@ func TestAnalyzeOnlyWhatTransparencyCoversIsTakenOver(t *testing.T) {
 		t.Errorf("removed %v clipped %v, want [0 2] and none", r.Removed, r.Clipped)
 	}
 	// The black square covers the text and the transparent square covers
-	// it: the square is clipped out of the region, and the text, now above
-	// the image, is counted.
+	// it: the square is clipped out of the region.
 	a = analyze(t, fixture{content: "BT /F1 12 Tf 10 20 Td (Hi) Tj ET 0 g 0 0 40 40 re f q /GS1 gs 1 0 0 rg 5 5 40 40 re f Q"})
 	r = a.Regions[0]
-	if !slices.Equal(r.Clipped, []int{1}) || r.TextReordered != 1 {
-		t.Errorf("clipped %v reordered %d, want [1] and 1", r.Clipped, r.TextReordered)
+	if !slices.Equal(r.Clipped, []int{1}) || !slices.Equal(r.Text, []int{0}) {
+		t.Errorf("clipped %v text %v, want [1] and [0]", r.Clipped, r.Text)
 	}
 }
 
