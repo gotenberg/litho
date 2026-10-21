@@ -272,7 +272,7 @@ func (e *encoder) transform(ctx context.Context) error {
 	var in [64]float64
 	blocks := 0
 	for _, c := range e.comps {
-		q := &e.quant[c.table]
+		div := fdctDivisors(&e.quant[c.table])
 		c.coeffs = make([]int16, c.bw*c.bh*64)
 		for by := range c.bh {
 			for bx := range c.bw {
@@ -288,7 +288,7 @@ func (e *encoder) transform(ctx context.Context) error {
 						in[y*8+x] = float64(row[min(bx*8+x, c.cw-1)]) - 128
 					}
 				}
-				fdct(&in, q, c.coeffs[(by*c.bw+bx)*64:(by*c.bw+bx+1)*64])
+				fdct(&in, &div, c.coeffs[(by*c.bw+bx)*64:(by*c.bw+bx+1)*64])
 			}
 		}
 		// The plane is not read again.
@@ -297,29 +297,56 @@ func (e *encoder) transform(ctx context.Context) error {
 	return nil
 }
 
+// The factors of the Arai-Agui-Nakajima factorisation of the 8-point DCT
+// (Arai, Agui and Nakajima, "A fast DCT-SQ scheme for images", Trans. IEICE
+// E71(11), 1988), as the Independent JPEG Group's jfdctflt.c applies them:
+// five multiplications a row, the output of each scaled by aanScale.
+var (
+	aanC4    = math.Cos(4 * math.Pi / 16)
+	aanC6    = math.Cos(6 * math.Pi / 16)
+	aanC2mC6 = math.Cos(2*math.Pi/16) - math.Cos(6*math.Pi/16)
+	aanC2pC6 = math.Cos(2*math.Pi/16) + math.Cos(6*math.Pi/16)
+	// aanScale holds the factor the factorisation leaves on output k, 1 for
+	// k = 0 and sqrt(2) cos(k pi/16) otherwise.
+	aanScale = func() (s [8]float64) {
+		s[0] = 1
+		for k := 1; k < 8; k++ {
+			s[k] = math.Sqrt2 * math.Cos(float64(k)*math.Pi/16)
+		}
+		return s
+	}()
+)
+
+// fdctDivisors returns what [fdct] divides each output of the
+// factorisation by, in natural order: the quantizer of q (T.81, A.3.4) times
+// the scale the factorisation leaves on the row and the column, times the 8
+// of the two C(u)C(v)/4 normalisations it leaves out.
+func fdctDivisors(q *[64]int) [64]float64 {
+	var div [64]float64
+	for i := range div {
+		div[i] = float64(q[i]) * aanScale[i/8] * aanScale[i%8] * 8
+	}
+	return div
+}
+
 // fdct computes the forward DCT of one level-shifted block (T.81, A.3.3),
 // S(v,u) = C(u)C(v)/4 sum s(y,x) cos((2x+1)u pi/16) cos((2y+1)v pi/16), whose
-// factors are those of the inverse transform, and quantizes it by q (A.3.4),
-// writing the coefficients in zig-zag order (Figure A.6).
-func fdct(in *[64]float64, q *[64]int, out []int16) {
-	var tmp [64]float64
-	for y := range 8 {
-		for u := range 8 {
-			s := 0.0
-			for x := range 8 {
-				s += idctCos[x][u] * in[y*8+x]
-			}
-			tmp[y*8+u] = s
-		}
+// factors are those of the inverse transform, and quantizes it by the
+// quantizers div folds in (A.3.4, see [fdctDivisors]), writing the
+// coefficients in zig-zag order (Figure A.6). It computes the transform
+// through the Arai-Agui-Nakajima factorisation, in place, rows then columns:
+// the same coefficients as the sums of the definition up to floating-point
+// rounding, at a fraction of the multiplications.
+func fdct(in *[64]float64, div *[64]float64, out []int16) {
+	for r := range 8 {
+		aan8(in[r*8:r*8+8], 1)
+	}
+	for c := range 8 {
+		aan8(in[c:], 8)
 	}
 	for k := range 64 {
 		i := zigzag[k]
-		v, u := i/8, i%8
-		s := 0.0
-		for y := range 8 {
-			s += idctCos[y][v] * tmp[y*8+u]
-		}
-		c := int(math.Round(s / float64(q[i])))
+		c := int(math.Round(in[i] / div[i]))
 		if k == 0 {
 			c = min(max(c, minDC), maxDC)
 		} else {
@@ -327,6 +354,37 @@ func fdct(in *[64]float64, q *[64]int, out []int16) {
 		}
 		out[k] = int16(c) //nolint:gosec // Clamped to the 11-bit range of baseline coefficients.
 	}
+}
+
+// aan8 transforms the eight values of d stride apart in place, each output k
+// left scaled by aanScale[k] (jfdctflt.c's even and odd parts).
+func aan8(d []float64, stride int) {
+	_ = d[7*stride] // One bounds check for the eight accesses.
+	d0, d1, d2, d3 := d[0], d[stride], d[2*stride], d[3*stride]
+	d4, d5, d6, d7 := d[4*stride], d[5*stride], d[6*stride], d[7*stride]
+	t0, t7 := d0+d7, d0-d7
+	t1, t6 := d1+d6, d1-d6
+	t2, t5 := d2+d5, d2-d5
+	t3, t4 := d3+d4, d3-d4
+
+	t10, t13 := t0+t3, t0-t3
+	t11, t12 := t1+t2, t1-t2
+	d[0] = t10 + t11
+	d[4*stride] = t10 - t11
+	z1 := (t12 + t13) * aanC4
+	d[2*stride] = t13 + z1
+	d[6*stride] = t13 - z1
+
+	t10, t11, t12 = t4+t5, t5+t6, t6+t7
+	z5 := (t10 - t12) * aanC6
+	z2 := aanC2mC6*t10 + z5
+	z4 := aanC2pC6*t12 + z5
+	z3 := t11 * aanC4
+	z11, z13 := t7+z3, t7-z3
+	d[5*stride] = z13 + z2
+	d[3*stride] = z13 - z2
+	d[stride] = z11 + z4
+	d[7*stride] = z11 - z4
 }
 
 // symbolSink takes the symbols and extra bits a scan codes, in order.

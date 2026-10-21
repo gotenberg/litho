@@ -333,6 +333,76 @@ func TestEncodeHonoursContext(t *testing.T) {
 	}
 }
 
+// TestFDCTMatchesDefinition checks the factorised transform against the
+// sums of T.81, A.3.3, unquantized and through the quantizers of every
+// quality's tables.
+func TestFDCTMatchesDefinition(t *testing.T) {
+	seed := uint32(3)
+	one := [64]int{}
+	for i := range one {
+		one[i] = 1
+	}
+	unit := fdctDivisors(&one)
+	tables := []*[64]int{&one}
+	for _, q := range []int{10, 50, 85, 95} {
+		luma, chroma := scaledQuant(&lumaQuant, q), scaledQuant(&chromaQuant, q)
+		tables = append(tables, &luma, &chroma)
+	}
+	differ, total := 0, 0
+	for range 2000 {
+		var block [64]float64
+		for i := range block {
+			seed = seed*1664525 + 1013904223
+			block[i] = float64(seed>>24) - 128
+		}
+		var want [64]float64
+		for v := range 8 {
+			for u := range 8 {
+				s := 0.0
+				for y := range 8 {
+					for x := range 8 {
+						s += idctCos[x][u] * idctCos[y][v] * block[y*8+x]
+					}
+				}
+				want[v*8+u] = s
+			}
+		}
+		got := block
+		for r := range 8 {
+			aan8(got[r*8:r*8+8], 1)
+		}
+		for c := range 8 {
+			aan8(got[c:], 8)
+		}
+		for i := range got {
+			if d := math.Abs(got[i]/unit[i] - want[i]); d > 1e-9 {
+				t.Fatalf("coefficient %d: %v, want %v", i, got[i]/unit[i], want[i])
+			}
+		}
+		for _, q := range tables {
+			div := fdctDivisors(q)
+			in := block
+			out := make([]int16, 64)
+			fdct(&in, &div, out)
+			for k, c := range out {
+				i := zigzag[k]
+				ref := math.Round(want[i] / float64(q[i]))
+				ref = min(max(ref, -maxAC), maxAC)
+				total++
+				if float64(c) != ref {
+					// Only a quotient within rounding error of a half may
+					// round the other way.
+					if math.Abs(float64(c)-ref) > 1 || math.Abs(math.Abs(want[i]/float64(q[i])-math.Trunc(want[i]/float64(q[i])))-0.5) > 1e-9 {
+						t.Fatalf("quantized coefficient %d: %d, want %v", i, c, ref)
+					}
+					differ++
+				}
+			}
+		}
+	}
+	t.Logf("%d of %d quantized coefficients round the other way", differ, total)
+}
+
 func BenchmarkEncode(b *testing.B) {
 	ctx := context.Background()
 	src := testPhoto(512, 512, 3)
