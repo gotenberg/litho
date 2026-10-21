@@ -13,8 +13,12 @@ const maxTags = 1024
 // Profile is a parsed ICC profile (ICC.1:2010, 7): the header fields a colour
 // transform needs and the data of each tag.
 type Profile struct {
+	// Class is the profile/device class signature (ICC.1:2010, 7.2.5, Table
+	// 18), such as "mntr", "prtr", "scnr" or "link".
+	Class string
 	// Space is the data colour space signature (Table 19), such as "RGB ",
 	// "CMYK" or "GRAY", and PCS the profile connection space, "XYZ " or "Lab ".
+	// A DeviceLink profile names its output colour space in PCS (7.2.7).
 	Space, PCS string
 	// Version is the major version, 2 or 4.
 	Version byte
@@ -32,6 +36,7 @@ func Parse(data []byte) (*Profile, error) {
 		return nil, fmt.Errorf("%w: no profile file signature", ErrMalformed)
 	}
 	p := &Profile{
+		Class:   string(data[12:16]),
 		Space:   string(data[16:20]),
 		PCS:     string(data[20:24]),
 		Version: data[8],
@@ -63,6 +68,40 @@ func (p *Profile) Components() int {
 		return 3
 	case "CMYK":
 		return 4
+	}
+	return 0
+}
+
+// ColorSpace returns the data colour space signature (ICC.1:2010, Table 19).
+func (p *Profile) ColorSpace() string {
+	return p.Space
+}
+
+// Channels returns the number of channels of the profile's data colour
+// space, or 0 for a signature ICC.1:2010, Table 19 does not list.
+func (p *Profile) Channels() int {
+	return spaceChannels(p.Space)
+}
+
+// spaceChannels returns the channel count of a colour space signature
+// (ICC.1:2010, Table 19). The n-colour spaces '2CLR' to 'FCLR' name their
+// channel count, 2 to 15, in a hexadecimal digit.
+func spaceChannels(sig string) int {
+	switch sig {
+	case "GRAY":
+		return 1
+	case "XYZ ", "Lab ", "Luv ", "YCbr", "Yxy ", "RGB ", "HSV ", "HLS ", "CMY ":
+		return 3
+	case "CMYK":
+		return 4
+	}
+	if len(sig) == 4 && sig[1:] == "CLR" {
+		switch c := sig[0]; {
+		case c >= '2' && c <= '9':
+			return int(c - '0')
+		case c >= 'A' && c <= 'F':
+			return int(c-'A') + 10
+		}
 	}
 	return 0
 }

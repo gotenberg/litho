@@ -2,8 +2,63 @@ package icc
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+// FuzzLink feeds arbitrary data to the profile reader and connects what it
+// reads to the sRGB profile both ways, and as a DeviceLink, under every
+// intent with and without black point compensation, converting colours
+// through each link it builds. The contract is crash-freedom: every input
+// either converts or returns an error carrying a sentinel.
+func FuzzLink(f *testing.F) {
+	seeds := [][]byte{rgbProfile(), greyProfile(), cmykProfile(), extendedProfile(), deviceLinkProfile(), sixColourProfile(), v4RGBDisplayProfile(), CMYKPrinterProfile()}
+	for _, name := range []string{"v4-cmyk-lut.icc", "v4-rgb-lut-xyz.icc"} {
+		data, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			f.Fatal(err)
+		}
+		seeds = append(seeds, data)
+	}
+	for _, p := range seeds {
+		f.Add(p)
+		f.Add(p[:len(p)/2])
+	}
+	srgb, err := Parse(SRGBProfile())
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		p, err := Parse(data)
+		if err != nil {
+			return
+		}
+		convert := func(l *Link, err error) {
+			if err != nil {
+				if !errors.Is(err, ErrMalformed) && !errors.Is(err, ErrUnsupported) && !errors.Is(err, ErrLimit) {
+					t.Fatalf("error without a sentinel: %v", err)
+				}
+				return
+			}
+			in, out := make([]float64, l.InputChannels()), make([]float64, l.OutputChannels())
+			for v := range 3 {
+				for i := range in {
+					in[i] = float64(v) / 2
+				}
+				l.Convert(in, out)
+			}
+		}
+		convert(NewLink(p, nil, TransformOptions{}))
+		for intent := range Intent(4) {
+			for _, bpc := range []bool{false, true} {
+				opts := TransformOptions{Intent: intent, BlackPointCompensation: bpc}
+				convert(NewLink(p, srgb, opts))
+				convert(NewLink(srgb, p, opts))
+			}
+		}
+	})
+}
 
 // FuzzProfile feeds arbitrary data to the profile reader and, when it reads
 // and builds a transform, converts colours through it. The contract is

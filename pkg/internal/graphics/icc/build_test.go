@@ -10,6 +10,15 @@ import (
 // colour space, connection space and version, then the tag table and the
 // tags, each padded to four bytes.
 func buildProfile(space, pcs string, version byte, tags map[string][]byte) []byte {
+	class := "mntr"
+	if space == "CMYK" {
+		class = "prtr"
+	}
+	return buildClassProfile(class, space, pcs, version, tags)
+}
+
+// buildClassProfile is buildProfile with the device class named.
+func buildClassProfile(class, space, pcs string, version byte, tags map[string][]byte) []byte {
 	sigs := make([]string, 0, len(tags))
 	for sig := range tags {
 		sigs = append(sigs, sig)
@@ -17,10 +26,7 @@ func buildProfile(space, pcs string, version byte, tags map[string][]byte) []byt
 	sort.Strings(sigs)
 	header := make([]byte, 128)
 	header[8] = version
-	copy(header[12:], "mntr")
-	if space == "CMYK" {
-		copy(header[12:], "prtr")
-	}
+	copy(header[12:], class)
 	copy(header[16:], space)
 	copy(header[20:], pcs)
 	copy(header[36:], "acsp")
@@ -31,9 +37,17 @@ func buildProfile(space, pcs string, version byte, tags map[string][]byte) []byt
 	table := binary.BigEndian.AppendUint32(nil, uint32(len(sigs)))
 	offset := 128 + 4 + 12*len(sigs)
 	var body []byte
+	// Tags of the same data share it, as ICC.1:2010, 7.3.1 allows.
+	placed := make(map[string]int)
 	for _, sig := range sigs {
 		data := tags[sig]
 		table = append(table, sig...)
+		if at, ok := placed[string(data)]; ok {
+			table = binary.BigEndian.AppendUint32(table, uint32(at))
+			table = binary.BigEndian.AppendUint32(table, uint32(len(data)))
+			continue
+		}
+		placed[string(data)] = offset + len(body)
 		table = binary.BigEndian.AppendUint32(table, uint32(offset+len(body)))
 		table = binary.BigEndian.AppendUint32(table, uint32(len(data)))
 		body = append(body, data...)
