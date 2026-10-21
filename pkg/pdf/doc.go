@@ -157,8 +157,8 @@
 //   - [Writer.Redact] takes [RedactOption]: [WithStrictRedaction].
 //   - [Writer.ConvertColors] takes [ColorOption]: [WithColorIntent],
 //     [WithBlackPointCompensation], [WithSpotConversion],
-//     [WithoutOutputIntent], [WithReplacedOutputIntents]. Its [ColorTarget]
-//     is one of
+//     [WithoutOutputIntent], [WithReplacedOutputIntents], [WithJPEGQuality].
+//     Its [ColorTarget] is one of
 //     [OutputIntentColorTarget], [CMYKColorTarget], [RGBColorTarget],
 //     [GrayColorTarget] and [ICCColorTarget].
 //

@@ -62,6 +62,14 @@ type ImageConfig struct {
 	// Intent is the rendering intent of an image whose dictionary states
 	// none (ISO 32000-1, 8.6.5.8), "" for relative colorimetric.
 	Intent ast.PdfName
+	// JPEGQuality, 1 to 100, re-encodes an image whose source filter is
+	// DCTDecode, once converted at 8 bits a component, as a baseline JPEG
+	// at that quality (see [dct.Encode]) instead of losslessly: the source
+	// was lossy already, and its samples, kept exactly, compress several
+	// times worse under FlateDecode. 0 keeps every image lossless. A
+	// JPXDecode source stays lossless, and an image's /SMask and /Mask are
+	// kept as the lossless re-encoding keeps them.
+	JPEGQuality int
 }
 
 // ImageOutcome says what converting an image did.
@@ -95,9 +103,10 @@ type EncodedSize struct {
 type ImageReport struct {
 	Converted, Palettes, SpotsKept, Unchanged, Refused int
 	// Encoded sums the encoded sizes of the converted images by the last
-	// filter of the source, "" for none. A DCTDecode or JPXDecode image
-	// comes out under FlateDecode, which litho can encode losslessly, and
-	// grows: a lossy codec's samples are what a lossless one keeps.
+	// filter of the source, "" for none. A JPXDecode image comes out under
+	// FlateDecode, which litho can encode losslessly, and grows: a lossy
+	// codec's samples are what a lossless one keeps. A DCTDecode image does
+	// too, unless [ImageConfig.JPEGQuality] re-encodes it as JPEG.
 	Encoded map[string]EncodedSize
 }
 
@@ -135,6 +144,9 @@ func NewImages(doc *document.Document, alloc *writer.ObjAllocator, cfg ImageConf
 	}
 	if cfg.Components < 1 || cfg.Components > maxImageComponents {
 		return nil, fmt.Errorf("recolor: a target of %d components", cfg.Components)
+	}
+	if cfg.JPEGQuality < 0 || cfg.JPEGQuality > 100 {
+		return nil, fmt.Errorf("recolor: a JPEG quality of %d, outside 1 to 100", cfg.JPEGQuality)
 	}
 	if cfg.InlineSpace == nil {
 		if name, ok := cfg.Space.(ast.PdfName); ok {

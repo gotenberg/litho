@@ -100,6 +100,10 @@ type Options struct {
 	// through its tint transform. By default spot colour keeps its colorants,
 	// and only its alternate space converts.
 	ConvertSpots bool
+	// JPEGQuality re-encodes the converted images whose source was
+	// DCTDecode as baseline JPEG at this quality, 1 to 100, where 0 keeps
+	// every image lossless (see [ImageConfig.JPEGQuality]).
+	JPEGQuality int
 	// DeviceGray, DeviceRGB and DeviceCMYK are the profiles the device spaces
 	// of the source mean: the document's output intent where the renderer
 	// reads the device space through it (ISO 32000-1, 14.11.5), so the

@@ -123,6 +123,11 @@ type colorOpts struct {
 	keepIntents  bool
 	// replaceIntents is [WithReplacedOutputIntents].
 	replaceIntents bool
+	// jpegQuality is [WithJPEGQuality]'s, and jpegQualitySet whether it was
+	// given at all, so a 0 it was given is refused rather than read as the
+	// lossless default.
+	jpegQuality    int
+	jpegQualitySet bool
 }
 
 // WithColorIntent converts every colour with the rendering intent i. Default
@@ -166,6 +171,21 @@ func WithoutOutputIntent() ColorOption {
 // nothing to replace.
 func WithReplacedOutputIntents() ColorOption {
 	return func(o *colorOpts) { o.replaceIntents = true }
+}
+
+// WithJPEGQuality re-encodes each converted image whose source filter is
+// DCTDecode as a baseline JPEG (ITU-T T.81) at quality q, 1 to 100, on the
+// scale of the Independent JPEG Group's libjpeg, which most encoders share.
+// By default every converted image is re-encoded losslessly under
+// FlateDecode, which keeps the converted samples exactly but makes a JPEG
+// source several times larger: its samples were lossy already, and Flate
+// compresses them poorly. A JPEG 2000 source stays lossless, and an image's
+// soft mask and mask are kept as the lossless re-encoding keeps them. An
+// image the lossless encoding holds in fewer bytes stays lossless. A q
+// outside 1 to 100 makes [Writer.ConvertColors] fail with
+// [ErrInvalidColorTarget].
+func WithJPEGQuality(q int) ColorOption {
+	return func(o *colorOpts) { o.jpegQuality, o.jpegQualitySet = q, true }
 }
 
 // ColorReport describes what [Writer.ConvertColors] converted.
@@ -263,6 +283,9 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 	if !ok {
 		return nil, fmt.Errorf("%w: rendering intent %d", ErrInvalidColorTarget, o.intent)
 	}
+	if o.jpegQualitySet && (o.jpegQuality < 1 || o.jpegQuality > 100) {
+		return nil, fmt.Errorf("%w: JPEG quality %d, outside 1 to 100", ErrInvalidColorTarget, o.jpegQuality)
+	}
 
 	if err := w.promotePageTree(ctx); err != nil {
 		return nil, err
@@ -319,6 +342,7 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		intent:                 intent,
 		blackPointCompensation: o.bpc,
 		convertSpots:           o.convertSpots,
+		jpegQuality:            o.jpegQuality,
 	})
 	if err != nil {
 		restoreTrailer()

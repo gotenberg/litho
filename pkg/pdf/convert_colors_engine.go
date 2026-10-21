@@ -31,6 +31,8 @@ type recolorRequest struct {
 	// [WithBlackPointCompensation] and [WithSpotConversion].
 	blackPointCompensation bool
 	convertSpots           bool
+	// jpegQuality is the quality of [WithJPEGQuality], 0 for lossless.
+	jpegQuality int
 }
 
 // recolorResult counts what the engine converted.
@@ -81,6 +83,7 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		Intent:                 req.intent,
 		BlackPointCompensation: req.blackPointCompensation,
 		ConvertSpots:           req.convertSpots,
+		JPEGQuality:            req.jpegQuality,
 		DeviceGray:             gray,
 		DeviceRGB:              rgb,
 		DeviceCMYK:             cmyk,

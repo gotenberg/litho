@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,8 +35,8 @@ func TestConvertColorsFlags_SelectTheTarget(t *testing.T) {
 		{"default", func(*convertColorsFlags) {}, pdf.OutputIntentColorTarget(), 1, ""},
 		{"cmyk with every option", func(f *convertColorsFlags) {
 			f.target, f.intent, f.bpc, f.convertSpots, f.noOutputIntent = "cmyk", "Perceptual", true, true, true
-			f.replaceOutputIntents = true
-		}, pdf.CMYKColorTarget(), 5, ""},
+			f.replaceOutputIntents, f.jpegQuality = true, 85
+		}, pdf.CMYKColorTarget(), 6, ""},
 		{"rgb", func(f *convertColorsFlags) { f.target = "rgb" }, pdf.RGBColorTarget(), 1, ""},
 		{"gray", func(f *convertColorsFlags) { f.target = "gray" }, pdf.GrayColorTarget(), 1, ""},
 		{"icc", func(f *convertColorsFlags) { f.target, f.profile = "icc", profile }, pdf.ICCColorTarget([]byte("bytes")), 1, ""},
@@ -147,6 +150,73 @@ func TestConvertColors_RefusalWritesNothing(t *testing.T) {
 	if _, err := os.Stat(out); !os.IsNotExist(err) {
 		t.Errorf("a refused conversion left %s behind (stat: %v)", out, err)
 	}
+}
+
+// TestConvertColors_JPEGQuality pins --jpeg-quality end to end: a JPEG
+// converted under it comes out as DCTDecode, and a quality out of range is
+// refused with the reason and writes nothing.
+func TestConvertColors_JPEGQuality(t *testing.T) {
+	src := writeTempPDF(t, jpegImagePDF(t))
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(), []string{"convert-colors", "--target", "gray", "--jpeg-quality", "80", "-o", out, src}, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("exit %d; stderr: %s", rc, stderr.String())
+	}
+	data, err := os.ReadFile(out) //nolint:gosec // out is the test's own temp file
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte("/DCTDecode")) {
+		t.Errorf("the converted image is not a JPEG; stdout: %q", stdout.String())
+	}
+
+	bad := filepath.Join(t.TempDir(), "bad.pdf")
+	stderr.Reset()
+	if rc := run(context.Background(), []string{"convert-colors", "--target", "gray", "--jpeg-quality", "101", "-o", bad, src}, &stdout, &stderr); rc != exitError {
+		t.Fatalf("exit %d, want %d", rc, exitError)
+	}
+	if !strings.Contains(stderr.String(), "JPEG quality 101") {
+		t.Errorf("stderr = %q", stderr.String())
+	}
+	if _, err := os.Stat(bad); !os.IsNotExist(err) {
+		t.Errorf("a refused conversion left %s behind (stat: %v)", bad, err)
+	}
+}
+
+// jpegImagePDF draws one RGB JPEG of colour gradients.
+func jpegImagePDF(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for y := range 64 {
+		for x := range 64 {
+			img.Set(x, y, color.RGBA{R: uint8(x * 4), G: uint8(y * 4), B: uint8(x + y), A: 255})
+		}
+	}
+	var jpg bytes.Buffer
+	if err := jpeg.Encode(&jpg, img, &jpeg.Options{Quality: 85}); err != nil {
+		t.Fatal(err)
+	}
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 64 64] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>",
+		"<< /Length 28 >>\nstream\nq 64 0 0 64 0 0 cm /Im0 Do Q\nendstream",
+		fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width 64 /Height 64 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length %d >>\nstream\n%s\nendstream", jpg.Len(), jpg.String()),
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offs := make([]int, len(objs)+1)
+	for i, o := range objs {
+		offs[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", offs[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return b.Bytes()
 }
 
 // TestConvertColors_Usage pins the usage line of a call missing its output.

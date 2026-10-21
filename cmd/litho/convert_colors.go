@@ -46,6 +46,8 @@ type convertColorsFlags struct {
 	bpc, convertSpots       bool
 	noOutputIntent          bool
 	replaceOutputIntents    bool
+	// jpegQuality is --jpeg-quality, 0 to keep every image lossless.
+	jpegQuality int
 }
 
 // colorTarget returns the target and options the flags select, reading the
@@ -94,6 +96,11 @@ func (f convertColorsFlags) colorTarget() (pdf.ColorTarget, []pdf.ColorOption, e
 	if f.replaceOutputIntents {
 		opts = append(opts, pdf.WithReplacedOutputIntents())
 	}
+	if f.jpegQuality != 0 {
+		// A quality outside 1 to 100 is passed on for the library to refuse
+		// with its reason.
+		opts = append(opts, pdf.WithJPEGQuality(f.jpegQuality))
+	}
 	return target, opts, nil
 }
 
@@ -113,12 +120,13 @@ func runConvertColors(ctx context.Context, args []string, stdout, stderr io.Writ
 	fs.BoolVar(&f.convertSpots, "convert-spots", false, "Convert spot colours (Separation, DeviceN) to process colour instead of keeping them")
 	fs.BoolVar(&f.noOutputIntent, "no-output-intent", false, "Leave the output intents as they are instead of making the target the output intent")
 	fs.BoolVar(&f.replaceOutputIntents, "replace-output-intents", false, "Point a PDF/X or other non-PDF/A output intent over another CMYK profile at the target profile instead of refusing")
+	fs.IntVar(&f.jpegQuality, "jpeg-quality", 0, "Re-encode converted JPEG images as JPEG at this quality, 1 to 100, instead of losslessly (0: lossless)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	if fs.NArg() < 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho convert-colors <file> [--target output-intent|cmyk|rgb|gray|icc] [--profile profile.icc] [--cmyk-profile profile.icc] [--intent NAME] [--bpc] [--convert-spots] [--no-output-intent] [--replace-output-intents] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho convert-colors <file> [--target output-intent|cmyk|rgb|gray|icc] [--profile profile.icc] [--cmyk-profile profile.icc] [--intent NAME] [--bpc] [--convert-spots] [--no-output-intent] [--replace-output-intents] [--jpeg-quality 1-100] -o out.pdf")
 		return exitError
 	}
 	if *format != "text" && *format != "json" {

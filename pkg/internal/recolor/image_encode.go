@@ -3,10 +3,14 @@ package recolor
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 )
 
 // flateCompress returns data compressed as /FlateDecode reads it (ISO
@@ -21,6 +25,50 @@ func flateCompress(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// subsampleBelowQuality is the JPEG quality from which [Images.encodeJPEG]
+// keeps the chroma of a three-component image at full resolution, and below
+// which it halves it (4:2:0). It is ImageMagick's rule for its JPEG writer
+// (the -sampling-factor default: 2x2 unless the quality is 90 or more): a
+// quality asked that high asks for the colour edges 4:2:0 softens, and below
+// it the luminance error dominates what subsampling saves.
+const subsampleBelowQuality = 90
+
+// encodeJPEG re-encodes converted samples, rows of width x height pixels of
+// comps components at 8 bits, as a baseline JPEG at the configured quality,
+// with Huffman tables optimized for the image (ITU-T T.81, Annex K.2). It
+// reports false, to keep the lossless encoding, when no quality is
+// configured, when the lossless encoding of losslessSize bytes is no larger,
+// since it is then better on both counts, or when the image is past what a
+// JPEG frame holds (more than 65535 pixels a side). The output depends on
+// the samples and the quality alone.
+func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height, comps, losslessSize int) ([]byte, bool, error) {
+	q := im.cfg.JPEGQuality
+	if q == 0 {
+		return nil, false, nil
+	}
+	opts := dct.EncodeOptions{Quality: q, OptimizeHuffman: true}
+	if q < subsampleBelowQuality {
+		opts.Subsampling = dct.Subsample420
+	}
+	data, err := dct.Encode(ctx, samples, width, height, comps, opts)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, false, ctxErr
+		}
+		if errors.Is(err, dct.ErrInvalidInput) {
+			// The lossless encoding holds what a JPEG frame cannot, so the
+			// image converts all the same.
+			im.doc.Logger.Debug("recolor: keeping an image lossless that JPEG cannot hold", slog.Any("err", err))
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("%w: encoding JPEG: %w", ErrImageNotConverted, err)
+	}
+	if len(data) >= losslessSize {
+		return nil, false, nil
+	}
+	return data, true, nil
 }
 
 // encodeSamples compresses image samples losslessly: rows of width pixels of

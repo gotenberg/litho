@@ -28,9 +28,10 @@ const memoBits = 12
 var sampleEntries = []ast.PdfName{"Filter", "DecodeParms", "Decode", "Length", "BitsPerComponent", "ColorSpace", "SMaskInData", "DL"}
 
 // convertPixels converts an image's samples one pixel at a time and
-// re-encodes them losslessly under FlateDecode. An image of one component at
-// 8 bits or fewer is converted by its colour table instead, see
-// [Images.convertToIndexed].
+// re-encodes them losslessly under FlateDecode, or, under
+// [ImageConfig.JPEGQuality], a DCTDecode source as JPEG (see
+// [Images.encodeJPEG]). An image of one component at 8 bits or fewer is
+// converted by its colour table instead, see [Images.convertToIndexed].
 //
 // The samples are read as the filters leave them, not through the image
 // decoder's sRGB reading, and each pixel's components are taken through the
@@ -105,6 +106,16 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 	if err != nil {
 		return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
 	}
+	outFilter := ast.PdfName("FlateDecode")
+	if filterName == "DCTDecode" && outBPC == 8 {
+		lossy, ok, err := im.encodeJPEG(ctx, out, width, height, px.tc, len(encoded))
+		if err != nil {
+			return stream, ImageUnchanged, err
+		}
+		if ok {
+			encoded, parms, outFilter = lossy, nil, "DCTDecode"
+		}
+	}
 
 	newDict := maps.Clone(dict)
 	for _, key := range sampleEntries {
@@ -115,7 +126,7 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 		newDict["ColorSpace"] = im.cfg.InlineSpace
 	}
 	newDict["BitsPerComponent"] = ast.PdfInt(outBPC)
-	newDict["Filter"] = ast.PdfName("FlateDecode")
+	newDict["Filter"] = outFilter
 	if parms != nil {
 		newDict["DecodeParms"] = parms
 	}

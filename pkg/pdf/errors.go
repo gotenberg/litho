@@ -536,7 +536,9 @@ var (
 	// ErrInvalidColorTarget is returned by [Writer.ConvertColors] when the
 	// profile [ICCColorTarget] names, or the one the document's output intent
 	// carries, is not an ICC profile of a grey, RGB or CMYK data colour space
-	// litho can convert colours to. The [Writer] is left as it was.
+	// litho can convert colours to, or when a [ColorOption] is out of
+	// range: a rendering intent no constant names, a [WithJPEGQuality]
+	// outside 1 to 100. The [Writer] is left as it was.
 	ErrInvalidColorTarget = errors.New("invalid colour conversion target")
 
 	// ErrNoOutputIntent is returned by [Writer.ConvertColors] for the

@@ -54,6 +54,7 @@ func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo
 		Space:        t.spaceObject(),
 		Components:   t.n,
 		ConvertSpots: opts.ConvertSpots,
+		JPEGQuality:  opts.JPEGQuality,
 	}
 	images, err := NewImages(doc, alloc, cfg)
 	if err != nil {
