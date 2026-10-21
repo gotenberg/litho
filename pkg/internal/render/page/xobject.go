@@ -144,7 +144,7 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 	if err != nil || resources == nil {
 		resources = s.resources
 	}
-	ops, err := content.ParsePageContent(r.ctx, r.doc, stream, content.SplitGluedOperators(), content.InlineImageData())
+	ops, err := content.ParsePageContent(r.ctx, r.doc, stream, content.SplitGluedOperators(), content.InlineImageData(), content.ViewerFilterChains())
 	if err != nil {
 		if fatal(err) {
 			return err

@@ -319,6 +319,9 @@ type readOptions struct {
 	whole bool
 	// inlineData keeps the data of each inline image. See [InlineImageData].
 	inlineData bool
+	// viewerChains reads no stream whose filter chain decodes past a filter
+	// it skipped. See [ViewerFilterChains].
+	viewerChains bool
 }
 
 // readsAsVeraPDF reports whether a parse under o reads the stream as veraPDF
@@ -468,6 +471,35 @@ func WholeStream() Option {
 func InlineImageData() Option {
 	return func(o *readOptions) {
 		o.inlineData = true
+	}
+}
+
+// ViewerFilterChains has [ParsePageContent] read nothing from a content
+// stream whose filter chain runs a filter on data an earlier filter litho
+// cannot decode handed on still encoded ([filter.DecodeReport.SkippedMidChain]),
+// as the renderers read it. A chain whose undecodable filters all end it is
+// read as the filters before them decode it.
+//
+// ISO 32000-1, 7.3.8.2 (Table 5) applies the filters of /Filter in the order
+// given, each to the output of the one before, so a filter the reader cannot
+// apply leaves it nothing the next one is defined on. Without the option a
+// parse reads the chain without that filter, as PDF.js reads it (its
+// unknown-filter warning hands the stream on unchanged) and as veraPDF reads
+// it for a filter it does not decode before the last of the chain.
+//
+// It is for the renderer, whose page poppler and PDFium draw blank there.
+//
+// # Corpus evidence
+//
+//   - litho undecodable_2b.pdf: poppler 26.09.0 and PDFium (pypdfium2 4.30.0) draw
+//     nothing for page 2, [/Foo /FlateDecode] over Flate data, where litho
+//     drew the probe. On page 3, [/FlateDecode /Foo], PDFium and litho draw
+//     it, and poppler nothing.
+//   - All corpora: no other file writes a filter litho cannot decode before
+//     another of its chain.
+func ViewerFilterChains() Option {
+	return func(o *readOptions) {
+		o.viewerChains = true
 	}
 }
 
@@ -857,13 +889,19 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		return nil, fmt.Errorf("invalid node type for ParsePageContent: %T", node)
 	}
 
+	o := optionsOf(ctx, opts)
 	limit := doc.Limits().MaxPageContentBytes()
 	var allData []byte
 	for _, s := range streams {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		data, err := doc.DecodeStream(ctx, s)
+		data, report, err := doc.DecodeStreamReport(ctx, s)
+		if err == nil && o.viewerChains && report.SkippedMidChain {
+			doc.Logger.Debug("content stream decodes past a filter litho cannot decode; skipping",
+				slog.Any("skipped", report.Skipped))
+			continue
+		}
 		if errors.Is(err, filter.ErrSalvagedStream) {
 			// The document's decoder refuses salvaged data
 			// (pdf.WithStrictStreams): skipping the stream would hand on a
@@ -892,7 +930,6 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		slog.Int("total_bytes", len(allData)),
 	)
 
-	o := optionsOf(ctx, opts)
 	p := newParser(allData, o)
 	ops, err := parseOperations(ctx, p, o, allData, nil, nil)
 	if err != nil {

@@ -156,7 +156,7 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 		return nil, report, err
 	}
 	budget := doc.Limits().WithDefaults().MaxRenderPixels
-	ops, err := content.ParsePageContent(ctx, doc, pg.Dict, content.SplitGluedOperators(), content.InlineImageData())
+	ops, err := content.ParsePageContent(ctx, doc, pg.Dict, content.SplitGluedOperators(), content.InlineImageData(), content.ViewerFilterChains())
 	if err != nil {
 		if fatal(err) {
 			return nil, report, fmt.Errorf("parsing page content: %w", err)

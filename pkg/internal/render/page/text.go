@@ -397,7 +397,7 @@ func (r *renderer) type3Ops(key glyphKey, g glyph.Glyph) ([]content.Operation, e
 	if ops, ok := r.type3[key]; ok {
 		return ops, nil
 	}
-	ops, err := content.ParsePageContent(r.ctx, r.doc, *g.CharProc, content.SplitGluedOperators(), content.InlineImageData())
+	ops, err := content.ParsePageContent(r.ctx, r.doc, *g.CharProc, content.SplitGluedOperators(), content.InlineImageData(), content.ViewerFilterChains())
 	if err != nil {
 		return nil, fmt.Errorf("parsing a Type 3 glyph description: %w", err)
 	}

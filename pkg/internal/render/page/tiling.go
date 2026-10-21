@@ -140,7 +140,7 @@ func (r *renderer) compileTiling(obj ast.PdfObject) (*tilingPattern, error) {
 	if res, err := document.ResolveDict(r.ctx, r.doc, dict["Resources"]); err == nil && res != nil {
 		tp.resources = res
 	}
-	tp.ops, err = content.ParsePageContent(r.ctx, r.doc, stream, content.SplitGluedOperators(), content.InlineImageData())
+	tp.ops, err = content.ParsePageContent(r.ctx, r.doc, stream, content.SplitGluedOperators(), content.InlineImageData(), content.ViewerFilterChains())
 	if err != nil {
 		return nil, fmt.Errorf("parsing tiling pattern content: %w", err)
 	}

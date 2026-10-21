@@ -135,6 +135,11 @@ type DecodeReport struct {
 	// data cut where it happens to end, so its bytes are whole as far as
 	// litho can tell, and the stream is not [DecodeReport.Incomplete].
 	Salvaged []ast.PdfName
+	// SkippedMidChain reports that a filter decoded data a skipped filter
+	// handed on still encoded: a filter of Skipped stands before one that
+	// ran, so what that one decoded is not what the chain encodes. A chain
+	// whose skipped filters all end it decodes everything before them.
+	SkippedMidChain bool
 }
 
 // Incomplete reports whether the decoded bytes fall short of the whole
@@ -178,6 +183,9 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict b
 	}
 	for i, f := range filters {
 		decoded, derr := d.applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
+		if len(report.Skipped) > 0 && (derr == nil || keepsDecoded(decoded, derr)) {
+			report.SkippedMidChain = true
+		}
 		if derr != nil && keepsDecoded(decoded, derr) {
 			if d.refusesSalvaged() {
 				return nil, report, fmt.Errorf("%w: %w", ErrSalvagedStream, derr)
