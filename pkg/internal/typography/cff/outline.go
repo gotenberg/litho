@@ -23,20 +23,25 @@ var defaultFontMatrix = geom.Matrix{0.001, 0, 0, 0.001, 0, 0}
 // Font is a CFF font program read for its glyph outlines: the charstrings,
 // the subroutines they call, the Private DICT widths and the FontMatrix of
 // each glyph. It reads the first font of the FontSet, name-keyed or CID-keyed,
-// whose charstrings are Type 2.
+// whose charstrings are Type 2, or a CFF2 table ([ParseCFF2]).
 //
-// A Font is immutable once [ParseFont] returns it and is safe for concurrent
-// use.
+// A Font is immutable once [ParseFont] or [ParseCFF2] returns it and is safe
+// for concurrent use.
 type Font struct {
 	charStrings [][]byte
 	globalSubrs [][]byte
 	// privates holds one entry for a name-keyed program and one per Font DICT
 	// of a CID-keyed program's FDArray, in FDArray order.
 	privates []outlinePrivate
-	// fdForGID maps a CID-keyed program's glyph to its Font DICT, nil for a
-	// name-keyed program.
-	fdForGID []byte
+	// fdForGID maps a CID-keyed or CFF2 program's glyph to its Font DICT,
+	// nil for a name-keyed program.
+	fdForGID []uint16
 	cid      bool
+	// cff2 marks a CFF2 program ([ParseCFF2]), whose charstrings blend and
+	// state no width, and regionCounts holds the region count of each of its
+	// ItemVariationData.
+	cff2         bool
+	regionCounts []int
 	// byName maps a name-keyed program's glyph names to their glyphs, which a
 	// seac endchar resolves its operands through. byCID maps a CID-keyed
 	// program's CIDs to their glyphs.
@@ -52,6 +57,9 @@ type outlinePrivate struct {
 	nominalWidthX float64
 	defaultWidthX float64
 	matrix        geom.Matrix
+	// regions is k, the region count a CFF2 blend takes under the Private
+	// DICT's vsindex, or noVariationStore.
+	regions int
 }
 
 // Glyph is one glyph outline in glyph space, the units the charstrings draw
@@ -256,7 +264,11 @@ func (f *Font) readFDArray(data []byte, top outlineTop) error {
 		private.matrix = cidFontMatrix(top.matrix, top.hasMatrix, matrix, hasMatrix)
 		f.privates = append(f.privates, private)
 	}
-	f.fdForGID = parseFDSelect(data, top.fdSelect, len(f.charStrings))
+	fdSelect := parseFDSelect(data, top.fdSelect, len(f.charStrings))
+	f.fdForGID = make([]uint16, len(fdSelect))
+	for gid, fd := range fdSelect {
+		f.fdForGID[gid] = uint16(fd)
+	}
 	return nil
 }
 
@@ -370,6 +382,7 @@ func (f *Font) GlyphOutline(ctx context.Context, gid int) (geom.Path, error) {
 // short, and on a seac whose glyphs the charset does not name. A glyph whose
 // charstring states no width, an empty one included, advances by the Private
 // DICT's defaultWidthX (section 3.1), as the package's width readers take it.
+// A CFF2 glyph advances by 0: its charstring states no width, 'hmtx' does.
 //
 // # Corpus evidence
 //

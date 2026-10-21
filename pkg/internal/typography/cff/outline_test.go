@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -36,7 +37,10 @@ func outlineFontPath(name string) string {
 // testdata/type2_ops.cff, a font crafted to run every Type 2 path operator,
 // the flex family, local and global subroutines (one pushing the width),
 // hintmask and cntrmask over implicit vstems and multi-byte masks, vstemhm,
-// a seac endchar and glyphs with and without a width operand.
+// a seac endchar and glyphs with and without a width operand, and
+// testdata/cff2_ops.cff2, a CFF2 table build_cff2_ops.py crafts to run blend
+// and vsindex in charstrings and Private DICTs, two Font DICTs and 121
+// operands at once.
 func loadOutlineGoldens(t *testing.T) map[string]outlineGolden {
 	t.Helper()
 	raw, err := os.ReadFile("testdata/outlines_golden.json")
@@ -115,7 +119,11 @@ func TestGlyphMatchesFontTools(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			f, err := ParseFont(data)
+			parse := ParseFont
+			if strings.HasSuffix(name, ".cff2") {
+				parse = ParseCFF2
+			}
+			f, err := parse(data)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -89,11 +89,15 @@ func (r *charstringRun) glyph(gid int, origin geom.Point, inSeac bool) (float64,
 	if r.random == 0 {
 		r.random = randomSeed
 	}
+	private := r.font.privateFor(gid)
 	m := &type2Machine{
 		run:    r,
-		subrs:  r.font.privateFor(gid).subrs,
+		subrs:  private.subrs,
 		pt:     origin,
 		inSeac: inSeac,
+	}
+	if r.font.cff2 {
+		m.startCFF2(private)
 	}
 	m.lbias = int(subrBias(len(m.subrs)))
 	m.gbias = int(subrBias(len(r.font.globalSubrs)))
@@ -121,6 +125,9 @@ type type2Machine struct {
 	widthDone, hasWidth bool
 	width               float64
 	ended, inSeac       bool
+	// regions is k, the region count a CFF2 blend takes, and stackLimit
+	// the argument stack limit: Type 2's 48, CFF2's 513.
+	regions, stackLimit int
 }
 
 // errCharstringTruncated reports a charstring that ends inside an operand
@@ -183,6 +190,14 @@ func (m *type2Machine) exec(cs []byte, depth int) error {
 			continue
 		}
 		i++
+		if m.run.font.cff2 {
+			if handled, err := m.cff2Operator(b); handled {
+				if err != nil {
+					return err
+				}
+				continue
+			}
+		}
 		switch b {
 		case csEscape:
 			if i >= len(cs) {
@@ -234,8 +249,12 @@ func (m *type2Machine) exec(cs []byte, depth int) error {
 
 // push adds an operand to the argument stack.
 func (m *type2Machine) push(v float64) error {
-	if len(m.stack) >= type2ArgStack {
-		return fmt.Errorf("%w: more than %d operands", ErrInvalidCharstring, type2ArgStack)
+	limit := type2ArgStack
+	if m.stackLimit > 0 {
+		limit = m.stackLimit
+	}
+	if len(m.stack) >= limit {
+		return fmt.Errorf("%w: more than %d operands", ErrInvalidCharstring, limit)
 	}
 	m.stack = append(m.stack, v)
 	return nil
@@ -476,6 +495,11 @@ func (m *type2Machine) endchar() error {
 // arithmetic, storage and conditional operators, which leave their result on
 // the stack (sections 4.1, 4.4 and 4.5). A reserved one clears the stack.
 func (m *type2Machine) escape(op byte) error {
+	if m.run.font.cff2 && !isFlex(op) {
+		// CFF2 keeps only the flex family of the escape operators.
+		m.stack = m.stack[:0]
+		return nil
+	}
 	switch op {
 	case csHflex, csFlex, csHflex1, csFlex1:
 		if err := m.flex(op); err != nil {

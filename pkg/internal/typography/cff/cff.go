@@ -462,12 +462,15 @@ func NameKeyedGlyphs(data []byte) (glyphs int, defaultWidthX float64, ok bool) {
 // parseINDEX reads a CFF INDEX structure and returns the end offset and
 // the data entries as byte slices.
 func parseINDEX(data []byte, pos int) (endPos int, entries [][]byte, err error) {
-	if pos+2 > len(data) {
+	if pos < 0 || pos+2 > len(data) {
 		return 0, nil, ErrTruncated
 	}
-	count := int(binary.BigEndian.Uint16(data[pos : pos+2]))
-	pos += 2
+	return parseINDEXBody(data, pos+2, int(binary.BigEndian.Uint16(data[pos:pos+2])))
+}
 
+// parseINDEXBody reads the offSize, offsets and data of an INDEX of count
+// entries whose count field ends at pos: a Card16 in CFF, a Card32 in CFF2.
+func parseINDEXBody(data []byte, pos, count int) (endPos int, entries [][]byte, err error) {
 	if count == 0 {
 		return pos, nil, nil
 	}
@@ -482,6 +485,11 @@ func parseINDEX(data []byte, pos int) (endPos int, entries [][]byte, err error) 
 		return 0, nil, fmt.Errorf("%w: invalid offSize %d", ErrInvalidCFF, offSize)
 	}
 
+	// A count past the data cannot hold its offsets; checking it first keeps
+	// the product below from overflowing on a Card32 count.
+	if count > len(data) {
+		return 0, nil, ErrTruncated
+	}
 	offsetArraySize := (count + 1) * offSize
 	if pos+offsetArraySize > len(data) {
 		return 0, nil, ErrTruncated
