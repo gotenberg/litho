@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-20T19:14:34Z",
+  "captured_at": "2026-10-21T05:54:06Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -100,11 +100,11 @@
           "skipped": 0
         },
         "render": {
-          "matched": 1,
-          "mismatched": 78,
+          "matched": 76,
+          "mismatched": 3,
           "skipped": 0,
           "metrics": {
-            "pages_match": 14,
+            "pages_match": 209,
             "render_failed": 0
           }
         },
@@ -274,11 +274,11 @@
           }
         },
         "render": {
-          "matched": 174,
-          "mismatched": 37,
+          "matched": 198,
+          "mismatched": 13,
           "skipped": 1,
           "metrics": {
-            "pages_match": 269,
+            "pages_match": 300,
             "render_failed": 6
           }
         },
@@ -395,11 +395,11 @@
           "skipped": 1
         },
         "render": {
-          "matched": 33,
-          "mismatched": 44,
+          "matched": 63,
+          "mismatched": 14,
           "skipped": 3,
           "metrics": {
-            "pages_match": 46,
+            "pages_match": 88,
             "render_failed": 2
           }
         },
