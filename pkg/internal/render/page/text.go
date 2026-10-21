@@ -60,6 +60,10 @@ const (
 type textObject struct {
 	clip    geom.Path
 	clipped bool
+	// knock holds the glyphs painted under text knockout, held pixels
+	// their coverage ([renderer.glyphCoverage]).
+	knock []knockGlyph
+	held  int64
 }
 
 // beginText starts a text object (ISO 32000-1, 9.4.1).
@@ -74,12 +78,15 @@ func (s *scope) beginText() {
 // a clipping mode leaves the clip alone, as poppler (SplashOutputDev,
 // endTextObject) and PDF.js (canvas.js, endText) leave it.
 func (r *renderer) endText(s *scope) error {
+	if err := r.flushText(s); err != nil {
+		return err
+	}
 	t := s.text
 	s.text = textObject{}
 	if !t.clipped {
 		return nil
 	}
-	c, err := r.clip().withPath(t.clip, raster.NonZero, r.canvas.Width, r.canvas.Height, r.budget)
+	c, err := r.clip().withPath(t.clip, raster.NonZero, r.width, r.height, r.budget)
 	if err != nil {
 		if fatal(err) {
 			return err
@@ -267,6 +274,11 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 	}
 	if g.CharProc != nil {
 		if fill || strokes {
+			// A Type 3 glyph paints as its description's own elements, after
+			// the glyphs held for the knockout.
+			if err := r.flushText(s); err != nil {
+				return err
+			}
 			return r.type3Glyph(s, key, g, glyphToUser)
 		}
 		return nil
@@ -280,11 +292,10 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 	toDevice := r.toDevice()
 	device := g.Outline.Transform(glyphToUser.Mul(toDevice))
 	if fill {
-		r.noteEffects(st)
 		cov, err := r.coverage(device, raster.NonZero)
 		if err != nil {
 			r.skip("glyph", err)
-		} else if err := r.paintCoverage(s, cov, st.Fill, st.FillAlpha); err != nil {
+		} else if err := r.glyphCoverage(s, st, cov, st.Fill, st.FillAlpha); err != nil {
 			return err
 		}
 	}
@@ -305,7 +316,6 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 // state's line parameters, as S strokes a path (ISO 32000-1, 9.3.6: the
 // stroking modes stroke the glyph outline with the stroke parameters).
 func (r *renderer) strokeGlyph(s *scope, st *graphics.State, user geom.Path, toDevice geom.Matrix) error {
-	r.noteEffects(st)
 	style := stroke.Style{
 		Width:      st.LineWidth,
 		Cap:        stroke.Cap(st.LineCap),
@@ -324,7 +334,7 @@ func (r *renderer) strokeGlyph(s *scope, st *graphics.State, user geom.Path, toD
 		r.skip("glyph stroke", err)
 		return nil
 	}
-	return r.paintCoverage(s, cov, st.Stroke, st.StrokeAlpha)
+	return r.glyphCoverage(s, st, cov, st.Stroke, st.StrokeAlpha)
 }
 
 // type3Glyph runs a Type 3 glyph description (ISO 32000-1, 9.6.5): in a saved

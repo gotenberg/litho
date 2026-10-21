@@ -67,7 +67,7 @@ func (r *renderer) needAppearances() bool {
 func (r *renderer) annotation(a annot.Appearance, g Geometry) error {
 	r.m = graphics.NewMachine([4]float64{})
 	r.m.Doc = r.doc
-	r.clips = []*clip{newClip(r.canvas.Width, r.canvas.Height)}
+	r.clips = []*clip{newClip(r.width, r.height)}
 	r.chain = r.chain[:0]
 
 	place := a.A

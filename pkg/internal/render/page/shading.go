@@ -2,6 +2,7 @@ package page
 
 import (
 	"fmt"
+	"image"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -53,17 +54,20 @@ func (r *renderer) shading(s *scope, op content.Operation) error {
 		r.skip("shading", err)
 		return nil
 	}
-	r.noteEffects(st)
 	conv, paints := r.colorForObject(s, sh.ColorSpace())
 	if !paints {
 		return nil
 	}
-	mask, err := r.clip().mask1(r.canvas.Width, r.canvas.Height, r.budget)
+	toDevice := r.toDevice()
+	err = r.paint(r.clipRect(), r.effectsOf(st, st.FillAlpha), func(v view, op surface.Opacity) error {
+		mask, err := r.clipIn(v)
+		if err != nil {
+			return err
+		}
+		t := shade.Target{Canvas: v.canvas, Clip: mask, Opacity: op, Convert: conv}
+		return sh.Paint(r.ctx, t, v.matrix(toDevice))
+	})
 	if err != nil {
-		return err
-	}
-	t := shade.Target{Canvas: r.canvas, Clip: mask, Opacity: surface.NewOpacity(st.FillAlpha), Convert: conv}
-	if err := sh.Paint(r.ctx, t, r.toDevice()); err != nil {
 		if fatal(err) {
 			return err
 		}
@@ -120,16 +124,22 @@ func (r *renderer) patternFill(s *scope, cov *raster.Coverage, c graphics.Color,
 	if !paints {
 		return nil
 	}
-	mask, err := surface.NewMask(r.canvas.Width, r.canvas.Height, r.budget)
+	rect := image.Rect(cov.X, cov.Y, cov.X+cov.Width, cov.Y+cov.Height)
+	err = r.paint(rect, r.effectsOf(r.m.Current(), a), func(v view, op surface.Opacity) error {
+		mask, err := surface.NewMask(v.canvas.Width, v.canvas.Height, r.budget)
+		if err != nil {
+			return fmt.Errorf("%w: pattern coverage: %w", ErrTooLarge, err)
+		}
+		area := rect.Intersect(image.Rect(v.x, v.y, v.x+v.canvas.Width, v.y+v.canvas.Height))
+		for y := area.Min.Y; y < area.Max.Y; y++ {
+			from := (y-cov.Y)*cov.Width + area.Min.X - cov.X
+			to := (y-v.y)*mask.Width + area.Min.X - v.x
+			copy(mask.A[to:to+area.Dx()], cov.A[from:from+area.Dx()])
+		}
+		t := shade.Target{Canvas: v.canvas, Clip: mask, Opacity: op, Convert: conv}
+		return pat.Fill(r.ctx, t, v.matrix(s.base))
+	})
 	if err != nil {
-		return fmt.Errorf("%w: pattern coverage: %w", ErrTooLarge, err)
-	}
-	for y := range cov.Height {
-		row := (cov.Y + y) * mask.Width
-		copy(mask.A[row+cov.X:row+cov.X+cov.Width], cov.A[y*cov.Width:(y+1)*cov.Width])
-	}
-	t := shade.Target{Canvas: r.canvas, Clip: mask, Opacity: surface.NewOpacity(a), Convert: conv}
-	if err := pat.Fill(r.ctx, t, s.base); err != nil {
 		if fatal(err) {
 			return err
 		}

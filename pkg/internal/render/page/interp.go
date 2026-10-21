@@ -8,25 +8,27 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
-	"github.com/gotenberg/litho/pkg/internal/render/surface"
 )
 
 // renderer carries one render.
 type renderer struct {
-	ctx       context.Context //nolint:containedctx // one render's context, never kept past Render
-	doc       *document.Document
-	page      *document.Page
-	canvas    *surface.Canvas
-	device    geom.Matrix // the page's default user space to device pixels
-	budget    int64       // render pixel budget
-	clipLimit int64       // pixels the live clip masks may hold
-	report    *Report
+	ctx  context.Context //nolint:containedctx // one render's context, never kept past Render
+	doc  *document.Document
+	page *document.Page
+	// width and height are the device raster's size: the page's, or a
+	// pattern tile's in the renderer its cells run in.
+	width, height int
+	device        geom.Matrix // the page's default user space to device pixels
+	budget        int64       // render pixel budget
+	clipLimit     int64       // pixels the live clip masks may hold
+	report        *Report
 
 	m *graphics.Machine
 	// clips is the clip of each graphics state of m.Stack, index for index.
@@ -36,6 +38,22 @@ type renderer struct {
 	// chain holds the object numbers of the forms being painted, outermost
 	// first, so a form that paints itself is caught.
 	chain []int
+	// depth is how many forms enclose the stream being run.
+	depth int
+
+	// groups is the stack of transparency groups being painted, the page
+	// group at the bottom; every painting goes into the top one.
+	groups []frame
+	// edition is the edition of ISO 32000 the blend modes follow.
+	edition blend.Edition
+	// offscreen counts the pixels of the rasters besides the page, shared
+	// with the renderers of pattern cells and soft masks.
+	offscreen *offscreen
+	// masks keeps the soft masks rendered in this renderer's device space.
+	masks *maskCache
+	// normalForms keeps, per form, whether its content blends with Normal
+	// only ([renderer.normalOnly]).
+	normalForms map[int]bool
 
 	shadings map[ast.PdfIndirectRef]*shade.Shading
 	patterns map[ast.PdfIndirectRef]*shade.Pattern
@@ -89,6 +107,10 @@ func (r *renderer) run(ops []content.Operation, resources ast.PdfDict, base geom
 	r.m.ActiveOCs = activeOCs(r.ctx, r.doc, resources)
 	defer func() { r.m.Resources, r.m.ActiveOCs = prevRes, prevOC }()
 
+	prevDepth := r.depth
+	r.depth = depth
+	defer func() { r.depth = prevDepth }()
+
 	s := &scope{resources: resources, base: base, depth: depth, floor: len(r.m.Stack)}
 	for _, op := range ops {
 		r.ops++
@@ -104,11 +126,22 @@ func (r *renderer) run(ops []content.Operation, resources ast.PdfDict, base geom
 			return err
 		}
 	}
-	return nil
+	// A text object the stream leaves open paints its knocked-out glyphs.
+	return r.flushText(s)
 }
 
 // exec runs one operator. It returns only an error that ends the render.
 func (r *renderer) exec(s *scope, op content.Operation) error {
+	if len(s.text.knock) > 0 {
+		switch op.Operator {
+		case "S", "s", "f", "F", "f*", "B", "B*", "b", "b*", "Do", "BI", "sh", "BT":
+			// What a text object holds back for its knockout paints before
+			// anything painted after it (9.3.8).
+			if err := r.flushText(s); err != nil {
+				return err
+			}
+		}
+	}
 	switch op.Operator {
 	case "m", "l", "c", "v", "y", "h", "re":
 		r.construct(s, op)
@@ -178,7 +211,7 @@ func (r *renderer) setClip(c *clip) error {
 		}
 		live += cl.owns(parent)
 	}
-	if int64(live)*int64(r.canvas.Width)*int64(r.canvas.Height) > r.clipLimit {
+	if int64(live)*int64(r.width)*int64(r.height) > r.clipLimit {
 		return fmt.Errorf("%w: %d live clip masks exceed %d times the render pixel budget", ErrTooLarge, live, clipBudgetShare)
 	}
 	return nil
@@ -299,7 +332,7 @@ func (r *renderer) paintPath(s *scope, operator string) error {
 	if !s.clipSet {
 		return nil
 	}
-	c, err := r.clip().withPath(s.path, s.clipRule, r.canvas.Width, r.canvas.Height, r.budget)
+	c, err := r.clip().withPath(s.path, s.clipRule, r.width, r.height, r.budget)
 	if err != nil {
 		if fatal(err) {
 			return err
@@ -310,21 +343,9 @@ func (r *renderer) paintPath(s *scope, operator string) error {
 	return r.setClip(c)
 }
 
-// noteEffects counts the transparency parameters of st the renderer does not
-// apply yet.
-func (r *renderer) noteEffects(st *graphics.State) {
-	if st.SoftMask != nil {
-		r.report.count(UnsupportedSoftMask)
-	}
-	if st.BlendMode != "" && st.BlendMode != "Normal" && st.BlendMode != "Compatible" {
-		r.report.count(UnsupportedBlendMode)
-	}
-}
-
 // fill fills the current path with rule in the fill colour (ISO 32000-1,
 // 8.5.3.3).
 func (r *renderer) fill(s *scope, rule raster.FillRule, st *graphics.State) error {
-	r.noteEffects(st)
 	path := s.path
 	if adj, ok := adjustedRect(path); ok {
 		path = adj
@@ -346,7 +367,7 @@ func (r *renderer) coverage(p geom.Path, rule raster.FillRule) (*raster.Coverage
 	if b, ok := p.Bounds(); !ok || b.Max.X <= c.rect.Min.X || b.Min.X >= c.rect.Max.X || b.Max.Y <= c.rect.Min.Y || b.Min.Y >= c.rect.Max.Y {
 		return &raster.Coverage{}, nil
 	}
-	cov, err := raster.Fill(p, rule, r.canvas.Width, r.canvas.Height, c.mask)
+	cov, err := raster.Fill(p, rule, r.width, r.height, c.mask)
 	if err != nil {
 		return nil, fmt.Errorf("rasterising: %w", err)
 	}
@@ -358,7 +379,6 @@ func (r *renderer) coverage(p geom.Path, rule raster.FillRule) (*raster.Coverage
 // 8.5.3.2). The path is mapped back to user space so the pen is the line
 // width in user space; a CTM that cannot be inverted strokes nothing.
 func (r *renderer) stroke(s *scope, st *graphics.State) error {
-	r.noteEffects(st)
 	m := r.toDevice()
 	inv, ok := m.Invert()
 	if !ok {
@@ -385,19 +405,9 @@ func (r *renderer) stroke(s *scope, st *graphics.State) error {
 	return r.paintCoverage(s, cov, st.Stroke, st.StrokeAlpha)
 }
 
-// alpha32 clamps a constant alpha to [0, 1].
-func alpha32(a float64) float32 {
-	switch {
-	case !(a > 0):
-		return 0
-	case a >= 1:
-		return 1
-	}
-	return float32(a)
-}
-
 // paintCoverage paints cov in colour c at constant alpha a: a solid colour,
-// or a shading pattern (ISO 32000-1, 8.7.3.1).
+// or a pattern (ISO 32000-1, 8.7.3.1), through the current group with the
+// effects of the graphics state.
 func (r *renderer) paintCoverage(s *scope, cov *raster.Coverage, c graphics.Color, a float64) error {
 	if cov == nil || cov.Empty() {
 		return nil
@@ -410,8 +420,7 @@ func (r *renderer) paintCoverage(s *scope, cov *raster.Coverage, c graphics.Colo
 		return nil
 	}
 	cr, cg, cb := conv.RGB(c.Components)
-	raster.PaintSolid(r.canvas, cov, cr, cg, cb, alpha32(a))
-	return nil
+	return r.paintSolid(cov, [3]float32{cr, cg, cb}, r.effectsOf(r.m.Current(), a))
 }
 
 // components resolves the component count of a shading's colour space.

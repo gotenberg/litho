@@ -3,6 +3,7 @@ package page
 import (
 	"errors"
 	"fmt"
+	"image"
 	"math"
 	"slices"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
@@ -69,9 +71,8 @@ type tilingPattern struct {
 type tilingState struct {
 	compiled map[ast.PdfIndirectRef]*tilingPattern
 	tiles    map[tileKey]*surface.Canvas
-	// cached counts the pixels of tiles, live the pixels of the offscreen
-	// rasters patterns are drawing into now.
-	cached, live int64
+	// cached counts the pixels of tiles.
+	cached int64
 }
 
 // tileKey names a tile: the pattern, how its space maps to the tile's
@@ -232,8 +233,11 @@ func (r *renderer) tilingFill(s *scope, cov *raster.Coverage, c graphics.Color, 
 		return nil
 	}
 	defer src.release()
-	composite(r.canvas, cov, alpha32(a), src, tp.paintType == paintTypeUncoloured, stencil)
-	return nil
+	rect := image.Rect(cov.X, cov.Y, cov.X+cov.Width, cov.Y+cov.Height)
+	return r.paint(rect, r.effectsOf(r.m.Current(), a), func(v view, op surface.Opacity) error {
+		composite(v, cov, op.Alpha(), src, tp.paintType == paintTypeUncoloured, stencil)
+		return nil
+	})
 }
 
 // patternSource is where the pixels of a tiling pattern come from: a raster
@@ -353,17 +357,6 @@ func cellRange(tp *tilingPattern, region geom.Rect) (i0, i1, j0, j1 float64) {
 	return i0, i1, j0, j1
 }
 
-// reserve counts n pixels of offscreen raster against the render pixel
-// budget, refusing them past it, and returns their release.
-func (r *renderer) reserve(n int64) (func(), error) {
-	ts := r.tilingCaches()
-	if n > r.budget-ts.live {
-		return nil, fmt.Errorf("%w: pattern rasters of %d pixels exceed the render pixel budget", ErrTooLarge, ts.live+n)
-	}
-	ts.live += n
-	return func() { ts.live -= n }, nil
-}
-
 // directSource draws the cells of tp that cover cov into a raster of cov's
 // size, each where it falls, p mapping pattern space to device space.
 func (r *renderer) directSource(s *scope, tp *tilingPattern, resources ast.PdfDict, p geom.Matrix, cov *raster.Coverage) (*patternSource, error) {
@@ -371,7 +364,7 @@ func (r *renderer) directSource(s *scope, tp *tilingPattern, resources ast.PdfDi
 	if err != nil {
 		return nil, err
 	}
-	dst, err := surface.NewCanvas(cov.Width, cov.Height, r.budget)
+	dst, err := blend.NewPage(cov.Width, cov.Height, r.budget)
 	if err != nil {
 		release()
 		return nil, fmt.Errorf("%w: pattern raster: %w", ErrTooLarge, err)
@@ -381,7 +374,7 @@ func (r *renderer) directSource(s *scope, tp *tilingPattern, resources ast.PdfDi
 		release()
 		return nil, err
 	}
-	return &patternSource{canvas: dst, release: release, direct: true, ox: cov.X, oy: cov.Y}, nil
+	return &patternSource{canvas: dst.Canvas(), release: release, direct: true, ox: cov.X, oy: cov.Y}, nil
 }
 
 // tile returns the tile of tp of w by h pixels, toTile mapping pattern space
@@ -402,12 +395,13 @@ func (r *renderer) tile(s *scope, tp *tilingPattern, resources ast.PdfDict, toTi
 	if err != nil {
 		return nil, nil, err
 	}
-	t, err := surface.NewCanvas(w, h, r.budget)
+	g, err := blend.NewPage(w, h, r.budget)
 	if err != nil {
 		release()
 		return nil, nil, fmt.Errorf("%w: pattern tile: %w", ErrTooLarge, err)
 	}
-	if err := r.drawCells(s, tp, resources, t, toTile); err != nil {
+	t := g.Canvas()
+	if err := r.drawCells(s, tp, resources, g, toTile); err != nil {
 		release()
 		return nil, nil, err
 	}
@@ -420,31 +414,29 @@ func (r *renderer) tile(s *scope, tp *tilingPattern, resources ast.PdfDict, toTi
 	return t, release, nil
 }
 
-// drawCells runs tp's content once per cell that overlaps dst, toDst mapping
-// pattern space to dst's pixels. A tile's edges cut cells that the tile's
+// drawCells runs tp's content once per cell that overlaps dst, an isolated
+// group of the tile's or the painted area's size, toDst mapping pattern space
+// to its pixels. A tile's edges cut cells that the tile's
 // neighbours continue, so a tile drawn this way repeats seamlessly.
 //
 // The cells run in a renderer of their own, sharing the render's budgets and
 // caches, from the initial graphics state (ISO 32000-1, 8.7.3.1: the cell is
 // painted in its own space, independent of the state where the pattern is
-// used) with the CTM of the cell's place. Each cell is its own copy: a
+// used) with the CTM of the cell's place, into dst as the group the cells'
+// transparency composites in. Each cell is its own copy: a
 // pattern used inside the cell maps into the moved cell's space.
-func (r *renderer) drawCells(s *scope, tp *tilingPattern, resources ast.PdfDict, dst *surface.Canvas, toDst geom.Matrix) error {
+func (r *renderer) drawCells(s *scope, tp *tilingPattern, resources ast.PdfDict, dst *blend.Group, toDst geom.Matrix) error {
 	inv, ok := toDst.Invert()
 	if !ok {
 		return nil
 	}
-	i0, i1, j0, j1 := cellRange(tp, regionIn(inv, 0, 0, float64(dst.Width), float64(dst.Height)))
+	w, h := dst.Bounds().Dx(), dst.Bounds().Dy()
+	i0, i1, j0, j1 := cellRange(tp, regionIn(inv, 0, 0, float64(w), float64(h)))
 	if n := (i1 - i0 + 1) * (j1 - j0 + 1); !(n <= maxPatternCells) {
 		return fmt.Errorf("pattern of %.0f cells exceeds %d", n, maxPatternCells)
 	}
-	sub := *r
-	sub.canvas = dst
-	sub.device = geom.Identity
-	sub.m = graphics.NewMachine([4]float64{})
-	sub.m.Doc = r.doc
-	sub.clips = []*clip{newClip(dst.Width, dst.Height)}
-	sub.chain = append(slices.Clone(r.chain), tp.ref.ObjectNum)
+	sub := r.sub(w, h, geom.Identity, dst)
+	sub.chain = append(sub.chain, tp.ref.ObjectNum)
 	defer func() { r.ops = sub.ops }()
 	for j := j0; j <= j1; j++ {
 		for i := i0; i <= i1; i++ {
@@ -480,7 +472,7 @@ func (r *renderer) drawCell(s *scope, tp *tilingPattern, resources ast.PdfDict, 
 	bp.LineTo(cell.Apply(b.Max))
 	bp.LineTo(cell.Apply(geom.Point{X: b.Min.X, Y: b.Max.Y}))
 	bp.Close()
-	c, err := r.clip().withPath(bp, raster.NonZero, r.canvas.Width, r.canvas.Height, r.budget)
+	c, err := r.clip().withPath(bp, raster.NonZero, r.width, r.height, r.budget)
 	if err != nil {
 		if fatal(err) {
 			return err
@@ -497,23 +489,23 @@ func (r *renderer) drawCell(s *scope, tp *tilingPattern, resources ast.PdfDict, 
 	return r.run(tp.ops, resources, cell, s.depth+1)
 }
 
-// composite paints src through cov at constant alpha a onto dst,
-// source-over. An uncoloured pattern paints its raster's coverage in the
+// composite paints src through cov, device pixels, at constant alpha a into
+// v, source-over. An uncoloured pattern paints its raster's coverage in the
 // colour stencil.
-func composite(dst *surface.Canvas, cov *raster.Coverage, a float32, src *patternSource, uncoloured bool, stencil [3]float32) {
+func composite(v view, cov *raster.Coverage, a float32, src *patternSource, uncoloured bool, stencil [3]float32) {
 	if a <= 0 {
 		return
 	}
-	t := src.canvas
+	t, dst := src.canvas, v.canvas
 	for y := range cov.Height {
 		dy := cov.Y + y
-		if dy < 0 || dy >= dst.Height {
+		if dy < v.y || dy >= v.y+dst.Height {
 			continue
 		}
 		for x := range cov.Width {
 			k := cov.A[y*cov.Width+x] * a
 			dx := cov.X + x
-			if k <= 0 || dx < 0 || dx >= dst.Width {
+			if k <= 0 || dx < v.x || dx >= v.x+dst.Width {
 				continue
 			}
 			var pr, pg, pb, pa float32
@@ -531,7 +523,7 @@ func composite(dst *surface.Canvas, cov *raster.Coverage, a float32, src *patter
 			if uncoloured {
 				pr, pg, pb = stencil[0]*pa, stencil[1]*pa, stencil[2]*pa
 			}
-			i := 4 * (dy*dst.Width + dx)
+			i := 4 * ((dy-v.y)*dst.Width + dx - v.x)
 			keep := 1 - min(1, pa*k)
 			dst.Pix[i] = pr*k + dst.Pix[i]*keep
 			dst.Pix[i+1] = pg*k + dst.Pix[i+1]*keep

@@ -15,7 +15,7 @@ import (
 // raster of the page, under the current clip, and its coverage then paints
 // the pattern as a filled path's would, in the fill alpha.
 func (r *renderer) patternStencil(s *scope, mask *imgpaint.Alpha, p imgpaint.Params, st *graphics.State) error {
-	w, h := r.canvas.Width, r.canvas.Height
+	w, h := r.width, r.height
 	release, err := r.reserve(int64(w) * int64(h))
 	if err != nil {
 		return err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -11,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
+	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
@@ -45,15 +47,12 @@ const (
 	// neither the document nor [Options.Fonts] supplies a program for
 	// (ISO 32000-1, 9.6.2.2 leaves a substitute to the reader).
 	PlaceholderGlyph = "placeholder glyph"
-	// UnsupportedSoftMask counts paintings under a soft mask (11.6.5.2),
-	// painted unmasked.
-	UnsupportedSoftMask = "soft mask"
-	// UnsupportedBlendMode counts paintings under a blend mode other than
-	// Normal (11.3.5), painted with Normal.
-	UnsupportedBlendMode = "blend mode"
-	// UnsupportedGroup counts form XObjects that are transparency groups
-	// (11.6.6), painted as plain content.
-	UnsupportedGroup = "transparency group"
+	// TransparencyOverBudget counts transparency groups, soft masks and the
+	// knockout groups of text objects (ISO 32000-1, 11.4, 11.6.5.2, 9.3.8)
+	// whose rasters would pass the render pixel budget: their content is
+	// painted into the enclosing group as plain content, unmasked, or glyph
+	// by glyph.
+	TransparencyOverBudget = "transparency over budget"
 	// UnsupportedAnnotation counts annotations with no appearance stream
 	// (ISO 32000-1, 12.5.5), which draw nothing: a viewer may build one from
 	// the annotation's other entries, litho does not.
@@ -117,14 +116,6 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 		return nil, report, err
 	}
 	budget := doc.Limits().WithDefaults().MaxRenderPixels
-	canvas, err := surface.NewCanvas(g.Width, g.Height, budget)
-	if err != nil {
-		return nil, report, fmt.Errorf("%w: %w", ErrTooLarge, err)
-	}
-	if opts.Background[3] > 0 {
-		bg := opts.Background
-		canvas.Fill(bg[0], bg[1], bg[2], bg[3])
-	}
 	ops, err := content.ParsePageContent(ctx, doc, pg.Dict, content.SplitGluedOperators(), content.InlineImageData())
 	if err != nil {
 		if fatal(err) {
@@ -139,30 +130,74 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 	m := graphics.NewMachine([4]float64{})
 	m.Doc = doc
 	r := &renderer{
-		ctx:        ctx,
-		doc:        doc,
-		page:       pg,
-		canvas:     canvas,
-		device:     g.Matrix,
-		budget:     budget,
-		clipLimit:  clipBudgetShare * budget,
-		report:     &report,
-		m:          m,
-		clips:      []*clip{newClip(g.Width, g.Height)},
-		shadings:   make(map[ast.PdfIndirectRef]*shade.Shading),
-		patterns:   make(map[ast.PdfIndirectRef]*shade.Pattern),
-		fonts:      glyph.NewCache(doc, glyph.Options{Substitutes: opts.Fonts}),
-		colorCache: &colorconv.Cache{},
-		glyphs:     make(map[glyphKey]glyph.Glyph),
-		type3:      make(map[glyphKey][]content.Operation),
+		ctx:         ctx,
+		doc:         doc,
+		page:        pg,
+		width:       g.Width,
+		height:      g.Height,
+		device:      g.Matrix,
+		budget:      budget,
+		clipLimit:   clipBudgetShare * budget,
+		report:      &report,
+		m:           m,
+		clips:       []*clip{newClip(g.Width, g.Height)},
+		edition:     blend.EditionFor(doc.Version),
+		offscreen:   &offscreen{},
+		masks:       newMaskCache(),
+		normalForms: make(map[int]bool),
+		shadings:    make(map[ast.PdfIndirectRef]*shade.Shading),
+		patterns:    make(map[ast.PdfIndirectRef]*shade.Pattern),
+		fonts:       glyph.NewCache(doc, glyph.Options{Substitutes: opts.Fonts}),
+		colorCache:  &colorconv.Cache{},
+		glyphs:      make(map[glyphKey]glyph.Glyph),
+		type3:       make(map[glyphKey][]content.Operation),
 	}
+	// 11.4.7: the page is an isolated group over a transparent backdrop,
+	// composited with the medium afterwards; its own /Group may make it a
+	// knockout group.
+	attrs, _, _ := r.groupAttrs(pg.Dict)
+	var root *blend.Group
+	if attrs.Knockout {
+		root, err = blend.NewGroup(image.Rect(0, 0, g.Width, g.Height), blend.Backdrop{}, blend.Attributes{Isolated: true, Knockout: true}, budget)
+	} else {
+		root, err = blend.NewPage(g.Width, g.Height, budget)
+	}
+	if err != nil {
+		return nil, report, fmt.Errorf("%w: %w", ErrTooLarge, err)
+	}
+	r.groups = []frame{{group: root, direct: root.Direct()}}
 	if err := r.run(ops, pg.Resources, g.Matrix, 0); err != nil {
 		return nil, report, err
 	}
 	if err := r.annotations(g, opts.Annotations); err != nil {
 		return nil, report, err
 	}
+	canvas := root.Canvas()
+	if bg := opts.Background; bg[3] > 0 {
+		underlay(canvas, bg)
+	}
 	return canvas, report, nil
+}
+
+// underlay composites c over the unpremultiplied colour bg, the medium the
+// page group is composited with (ISO 32000-1, 11.4.7).
+func underlay(c *surface.Canvas, bg [4]float32) {
+	a := min(bg[3], 1)
+	r, g, b := bg[0]*a, bg[1]*a, bg[2]*a
+	for i := 0; i < len(c.Pix); i += 4 {
+		switch keep := 1 - c.Pix[i+3]; {
+		case keep <= 0:
+			continue
+		case keep >= 1:
+			c.Pix[i], c.Pix[i+1], c.Pix[i+2], c.Pix[i+3] = r, g, b, a
+			continue
+		}
+		keep := 1 - c.Pix[i+3]
+		c.Pix[i] += r * keep
+		c.Pix[i+1] += g * keep
+		c.Pix[i+2] += b * keep
+		c.Pix[i+3] += a * keep
+	}
 }
 
 // fatal reports whether err ends the render: a cancelled or expired ctx, or a

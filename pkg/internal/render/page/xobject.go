@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
+	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/imgpaint"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
@@ -60,21 +61,15 @@ func (r *renderer) do(s *scope, op content.Operation) error {
 	return nil
 }
 
-// form paints a form XObject (ISO 32000-1, 8.10.1): its content runs in a
-// saved graphics state with /Matrix concatenated to the CTM and the clip
-// narrowed to /BBox, against its own /Resources, or those of the stream that
-// paints it when it has none (7.8.3 keeps that reading for older files). A
-// transparency group (11.6.6) is painted as plain content for now.
+// form paints a form XObject named by Do.
 func (r *renderer) form(s *scope, ref ast.PdfIndirectRef, stream ast.PdfStream) error {
-	if lim := r.doc.Limits().WithDefaults().MaxFormDepth; s.depth+1 > lim {
-		r.skip("form XObject", fmt.Errorf("nested deeper than %d forms", lim))
-		return nil
-	}
-	if ref.ObjectNum != 0 && slices.Contains(r.chain, ref.ObjectNum) {
-		r.skip("form XObject", fmt.Errorf("form %d paints itself", ref.ObjectNum))
-		return nil
-	}
-	dict := stream.Dict
+	return r.formXObject(s, ref, stream, true)
+}
+
+// formGeometry reads a form's /Matrix, the identity when it is absent or
+// does not read as six numbers, and its /BBox (ISO 32000-1, 8.10.2, Table
+// 95).
+func (r *renderer) formGeometry(dict ast.PdfDict) (geom.Matrix, [4]float64, error) {
 	matrix := geom.Identity
 	if v, err := document.ResolveArray(r.ctx, r.doc, dict["Matrix"]); err == nil && len(v) == 6 {
 		for i, e := range v {
@@ -86,24 +81,61 @@ func (r *renderer) form(s *scope, ref ast.PdfIndirectRef, stream ast.PdfStream) 
 			matrix[i] = f
 		}
 	}
+	var box [4]float64
 	bbox, err := document.ResolveArray(r.ctx, r.doc, dict["BBox"])
 	if err != nil || len(bbox) != 4 {
 		// Table 95 requires /BBox; poppler skips a form without a usable one.
-		r.skip("form XObject", fmt.Errorf("no usable /BBox: %w", err))
-		return nil
+		return matrix, box, fmt.Errorf("no usable /BBox: %w", err)
 	}
-	var box [4]float64
 	for i, e := range bbox {
 		f, ok := document.Number(e)
 		if !ok {
-			r.skip("form XObject", errors.New("a /BBox entry is no number"))
-			return nil
+			return matrix, box, errors.New("a /BBox entry is no number")
 		}
 		box[i] = f
 	}
-	if _, isGroup := dict["Group"]; isGroup {
-		r.report.count(UnsupportedGroup)
+	return matrix, box, nil
+}
+
+// boxPath returns the rectangle box, [x0 y0 x1 y1], through m.
+func boxPath(m geom.Matrix, box [4]float64) geom.Path {
+	var p geom.Path
+	p.MoveTo(m.Apply(geom.Point{X: box[0], Y: box[1]}))
+	p.LineTo(m.Apply(geom.Point{X: box[2], Y: box[1]}))
+	p.LineTo(m.Apply(geom.Point{X: box[2], Y: box[3]}))
+	p.LineTo(m.Apply(geom.Point{X: box[0], Y: box[3]}))
+	p.Close()
+	return p
+}
+
+// formXObject paints a form XObject (ISO 32000-1, 8.10.1): its content runs
+// in a saved graphics state with /Matrix concatenated to the CTM and the
+// clip narrowed to /BBox, against its own /Resources, or those of the stream
+// that paints it when it has none (7.8.3 keeps that reading for older
+// files).
+//
+// When honourGroup is set, a transparency group XObject (11.6.6) paints
+// into a group of its own ([renderer.group]): its content starts from the
+// Normal blend mode, alphas of 1 and no soft mask, and those in force at the
+// Do composite the group as a whole, ca for its alpha. A soft mask's group
+// is painted with honourGroup unset, into the group its caller made.
+func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfStream, honourGroup bool) error {
+	if lim := r.doc.Limits().WithDefaults().MaxFormDepth; s.depth+1 > lim {
+		r.skip("form XObject", fmt.Errorf("nested deeper than %d forms", lim))
+		return nil
 	}
+	if ref.ObjectNum != 0 && slices.Contains(r.chain, ref.ObjectNum) {
+		r.skip("form XObject", fmt.Errorf("form %d paints itself", ref.ObjectNum))
+		return nil
+	}
+	dict := stream.Dict
+	matrix, box, err := r.formGeometry(dict)
+	if err != nil {
+		r.skip("form XObject", err)
+		return nil
+	}
+	attrs, _, isGroup := r.groupAttrs(dict)
+	isGroup = isGroup && honourGroup
 	resources, err := document.ResolveDict(r.ctx, r.doc, dict["Resources"])
 	if err != nil || resources == nil {
 		resources = s.resources
@@ -117,6 +149,7 @@ func (r *renderer) form(s *scope, ref ast.PdfIndirectRef, stream ast.PdfStream) 
 		return nil
 	}
 
+	atDo := r.effectsOf(r.m.Current(), r.m.Current().FillAlpha)
 	savedStack, savedMarked := len(r.m.Stack), len(r.m.MarkedContent)
 	if err := r.m.ExecuteOne(r.ctx, content.Operation{Operator: "q"}); err != nil {
 		return fmt.Errorf("saving state for a form: %w", err)
@@ -131,15 +164,17 @@ func (r *renderer) form(s *scope, ref ast.PdfIndirectRef, stream ast.PdfStream) 
 	}()
 	st := r.m.Current()
 	st.CTM = [6]float64(matrix.Mul(geom.Matrix(st.CTM)))
+	if isGroup {
+		// 11.6.6: before the group's content runs, the blend mode is
+		// initialised to Normal, both alpha constants to 1 and the soft mask
+		// to None.
+		st.BlendMode, st.SoftMask = "Normal", nil
+		st.StrokeAlpha, st.FillAlpha = 1, 1
+	}
 	formToDevice := r.toDevice()
 
-	var bp geom.Path
-	bp.MoveTo(formToDevice.Apply(geom.Point{X: box[0], Y: box[1]}))
-	bp.LineTo(formToDevice.Apply(geom.Point{X: box[2], Y: box[1]}))
-	bp.LineTo(formToDevice.Apply(geom.Point{X: box[2], Y: box[3]}))
-	bp.LineTo(formToDevice.Apply(geom.Point{X: box[0], Y: box[3]}))
-	bp.Close()
-	c, err := r.clip().withPath(bp, raster.NonZero, r.canvas.Width, r.canvas.Height, r.budget)
+	bp := boxPath(formToDevice, box)
+	c, err := r.clip().withPath(bp, raster.NonZero, r.width, r.height, r.budget)
 	if err != nil {
 		if fatal(err) {
 			return err
@@ -153,42 +188,108 @@ func (r *renderer) form(s *scope, ref ast.PdfIndirectRef, stream ast.PdfStream) 
 
 	r.chain = append(r.chain, ref.ObjectNum)
 	defer func() { r.chain = r.chain[:len(r.chain)-1] }()
-	return r.run(ops, resources, formToDevice, s.depth+1)
+	if !isGroup || r.elide(attrs, atDo, ref, resources) {
+		return r.run(ops, resources, formToDevice, s.depth+1)
+	}
+	return r.group(ops, resources, formToDevice, s.depth+1, bp, attrs, atDo)
+}
+
+// group paints ops, a transparency group's content (ISO 32000-1, 11.4),
+// into a group of its own over the device pixels of bp, the group's
+// bounding box, under the clip, then composites the group into the one
+// being painted with fx (11.6.6). A non-isolated group starts from the
+// parent's stack (11.4.5), a knockout group composites each element with
+// that start (11.4.6). Blending stays in sRGB: a group's /CS is not a
+// blending space litho holds, so a group in DeviceCMYK or a calibrated
+// space blends as its colours look, which differs from blending in that
+// space for the modes whose result depends on the components (all but
+// Normal, and the separable modes on gray), and a /CS of DeviceCMYK does not
+// take K from one side as 11.3.5 makes the non-separable modes do. A group
+// past the render pixel budget paints its content into the parent instead,
+// counted in [TransparencyOverBudget].
+func (r *renderer) group(ops []content.Operation, resources ast.PdfDict, base geom.Matrix, depth int, bp geom.Path, attrs blend.Attributes, fx effects) error {
+	parent := r.top().group
+	b, _ := bp.Bounds()
+	bounds := r.pixelRect(b).Intersect(r.clipRect()).Intersect(parent.Bounds())
+	if bounds.Empty() {
+		return nil
+	}
+	g, release, err := r.newGroup(bounds, parent.Backdrop(), attrs)
+	if err != nil {
+		return err
+	}
+	if g == nil {
+		r.report.count(TransparencyOverBudget)
+		return r.run(ops, resources, base, depth)
+	}
+	defer release()
+	r.groups = append(r.groups, frame{group: g, direct: g.Direct()})
+	err = r.run(ops, resources, base, depth)
+	r.groups = r.groups[:len(r.groups)-1]
+	if err != nil || fx.opacity.Transparent() {
+		return err
+	}
+	mask, err := r.softMask(fx.mask)
+	if err != nil {
+		return err
+	}
+	if err := g.Into(r.ctx, parent, fx.params(mask)); err != nil {
+		return fmt.Errorf("compositing a transparency group: %w", err)
+	}
+	return nil
 }
 
 // image paints an image XObject or an inline image (ISO 32000-1, 8.9): the
 // unit square through the CTM, in the fill alpha (11.6.4.4), made
-// transparent by its /SMask, or by its /Mask when it has none (11.6.5.3). An
-// image mask (8.9.6.2) paints the fill colour through its samples.
+// transparent by its /SMask, or by its /Mask when it has none (11.6.5.3),
+// and by the soft mask of the graphics state, the two multiplied (11.6.5.3,
+// 11.6.4.3). An image mask (8.9.6.2) paints the fill colour through its
+// samples.
 func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error {
 	c := r.clip()
 	if c.empty() {
 		return nil
 	}
 	st := r.m.Current()
-	r.noteEffects(st)
 	dict := stream.Dict
 	interpolate, _ := document.ResolveBool(r.ctx, r.doc, dict["Interpolate"])
-	clipMask, err := c.mask1(r.canvas.Width, r.canvas.Height, r.budget)
-	if err != nil {
-		return err
+	toDevice := r.toDevice()
+	bounds := r.unitSquareRect(toDevice).Intersect(r.clipRect())
+	if bounds.Empty() {
+		return nil
 	}
-	p := imgpaint.Params{Matrix: r.toDevice(), Interpolate: bool(interpolate), Opacity: surface.NewOpacity(st.FillAlpha), Clip: clipMask}
+	fx := r.effectsOf(st, st.FillAlpha)
+	params := func(v view, op surface.Opacity) (imgpaint.Params, error) {
+		clipMask, err := r.clipIn(v)
+		return imgpaint.Params{Matrix: v.matrix(toDevice), Interpolate: bool(interpolate), Opacity: op, Clip: clipMask}, err
+	}
 
 	if isMask, _ := document.ResolveBool(r.ctx, r.doc, dict["ImageMask"]); isMask {
 		img, err := pdfimage.DecodeMask(r.ctx, r.doc, name, stream)
 		if err != nil {
 			return r.imageFailed(err)
 		}
+		stencil := imgpaint.StencilMask(img, bool(interpolate))
 		if st.Fill.Space.Family == graphics.FamilyPattern {
-			return r.imageFailed(r.patternStencil(s, imgpaint.StencilMask(img, bool(interpolate)), p, st))
+			clipMask, err := c.mask1(r.width, r.height, r.budget)
+			if err != nil {
+				return err
+			}
+			p := imgpaint.Params{Matrix: toDevice, Interpolate: bool(interpolate), Clip: clipMask}
+			return r.imageFailed(r.patternStencil(s, stencil, p, st))
 		}
 		conv, paints := r.colorFor(s, st.Fill.Space)
 		if !paints {
 			return nil
 		}
 		cr, cg, cb := conv.RGB(st.Fill.Components)
-		return r.imageFailed(imgpaint.DrawStencil(r.ctx, r.canvas, imgpaint.StencilMask(img, bool(interpolate)), cr, cg, cb, p))
+		return r.imageFailed(r.paint(bounds, fx, func(v view, op surface.Opacity) error {
+			p, err := params(v, op)
+			if err != nil {
+				return err
+			}
+			return imgpaint.DrawStencil(r.ctx, v.canvas, stencil, cr, cg, cb, p)
+		}))
 	}
 
 	img, err := pdfimage.DecodePainted(r.ctx, r.doc, name, stream, s.resources, r.page.Dict)
@@ -199,7 +300,14 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 		return err
 	}
 	b := img.Bounds()
-	return r.imageFailed(imgpaint.Draw(r.ctx, r.canvas, img, r.imageMasks(name, stream, b.Dx(), b.Dy()), p))
+	masks := r.imageMasks(name, stream, b.Dx(), b.Dy())
+	return r.imageFailed(r.paint(bounds, fx, func(v view, op surface.Opacity) error {
+		p, err := params(v, op)
+		if err != nil {
+			return err
+		}
+		return imgpaint.Draw(r.ctx, v.canvas, img, masks, p)
+	}))
 }
 
 // imageFailed returns err when it ends the render, and otherwise skips the

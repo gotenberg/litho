@@ -87,10 +87,12 @@ func WithRenderBackground(c color.Color) RenderOption {
 // space of ISO 32000-1, 8.6, the default colour spaces of the resources and
 // the output intents of the page and the document honoured, uncalibrated
 // DeviceCMYK through [WithDefaultCMYKProfile] or litho's built-in printer
-// profile. It does not draw an annotation with no appearance stream, or the
-// effect of soft masks, blend modes and transparency groups yet; content
-// using them is drawn without them. Content a document's default optional
-// content configuration hides is not drawn.
+// profile. It draws transparency: constant alpha, the sixteen blend modes
+// (ColorDodge and ColorBurn by the edition of ISO 32000 the document's
+// version names), soft masks, isolated and knockout transparency groups and
+// text knockout, blending in sRGB. It does not draw an annotation with no
+// appearance stream. Content a document's default optional content
+// configuration hides is not drawn.
 //
 // Glyphs are drawn from the programs the document embeds. litho bundles no
 // font program, so a font the document does not embed draws its glyphs as

@@ -23,10 +23,24 @@
 // font the document does not embed draws with a program [Options.Fonts]
 // supplies, or as placeholder boxes, counted in the [Report].
 //
-// What the renderer does not draw yet is counted in the [Report] rather than
-// drawn wrongly: soft masks, blend modes other than Normal and transparency
-// groups, which a form XObject's content is painted without, and annotations
-// with no appearance stream.
+// Transparency (11) goes through one sink: every painting, fills, strokes,
+// glyphs, images, image masks, shadings, pattern cells and the forms of
+// annotation appearances, is an element composited into the transparency
+// group being painted by [blend], with the blend mode, constant alpha, alpha
+// source flag and soft mask of the graphics state. The page is the root
+// group (11.4.7), a form XObject with a transparency /Group paints into a
+// group of its own (11.6.6), isolated or knockout as it says, and a soft
+// mask's group renders into a mask (11.6.5.2). With TK true the glyphs of a
+// text object composite as one element (9.3.8). An element that blends with
+// Normal and no soft mask, in a group that lets it, is painted straight onto
+// the group's colour, and a group that would composite exactly as its
+// content painted into its parent gets no raster of its own, so opaque
+// content costs what it did before transparency was drawn. Blending is in
+// sRGB whatever a group's /CS.
+//
+// What the renderer does not draw is counted in the [Report] rather than
+// drawn wrongly: annotations with no appearance stream, and transparency
+// whose rasters would pass the render pixel budget.
 //
 // Every allocation sized by the page is held to the render pixel budget, and
 // the work of one render to [maxRenderOperators] operators; ctx is checked
