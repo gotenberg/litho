@@ -2689,6 +2689,14 @@ func (w *Writer) materialize(ctx context.Context) (undo func(), err error) {
 	if len(w.mutations) == 0 && len(w.rewriteOverrides) == 0 && !w.trailerDirty && !w.decrypt {
 		return func() {}, nil
 	}
+	return w.materializeNow(ctx)
+}
+
+// materializeNow writes the document as [Writer.materialize] does, with
+// nothing queued as well: a full rewrite of an unedited document still draws
+// its signed signatures into their pages (see
+// [mutations.BakeSignaturesForRewrite]).
+func (w *Writer) materializeNow(ctx context.Context) (undo func(), err error) {
 	prevDropped := slices.Clone(w.droppedSignatures)
 	path, err := w.writeTempFile(ctx, w, "litho-staged-*.pdf")
 	if err != nil {

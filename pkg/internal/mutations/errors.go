@@ -494,3 +494,7 @@ var ErrSeedValueUnmet = errors.New("signature field seed value cannot be met")
 // subfilter a seed value dictionary chose then gives way to the next one it
 // accepts (see [WriteWithSignature]).
 var ErrSubFilterUnwritable = errors.New("the signer cannot write the signature's subfilter")
+
+// ErrInvalidAnnotation reports an annotation [BakeAnnotations] was asked to
+// bake that the page's /Annots array does not hold as a dictionary.
+var ErrInvalidAnnotation = errors.New("annotation is not a dictionary of the page")

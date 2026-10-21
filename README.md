@@ -220,7 +220,8 @@ litho pipe document.pdf rotate --angle 90 remediate --profile PDF/UA-1 -o out.pd
 # Convert every colour to CMYK, the built-in SWOP profile becoming the output intent.
 litho convert-colors --target cmyk -o cmyk.pdf document.pdf
 
-# Composite live transparency into opaque images at 300 dpi, text kept as text.
+# Composite live transparency into opaque images at 300 dpi, text kept as text,
+# transparent annotations drawn into the page first.
 litho flatten-transparency -o flat.pdf document.pdf
 
 # Redact, encrypt and sign.

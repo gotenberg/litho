@@ -185,9 +185,9 @@ func (f *flattener) plainImages(ctx context.Context, xobjects ast.PdfDict) bool 
 // transparentAnnotations counts the annotations of a page dictionary that
 // paint with transparency: a constant opacity /CA below 1 (ISO 32000-2,
 // 12.5.2), or a normal appearance that holds a transparency group or paints
-// with transparency (12.5.5). Flattening leaves annotations as they are: an
-// appearance composites over the page as a viewer draws it, and baking one
-// into the page is what flattening form fields or annotations does first.
+// with transparency (12.5.5). [Document] leaves annotations as they are: an
+// appearance composites over the page as a viewer draws it, and [Annotations]
+// bakes the ones it can into the page first.
 func (f *flattener) transparentAnnotations(ctx context.Context, dict ast.PdfDict) int {
 	annots, err := document.ResolveArray(ctx, f.doc, dict["Annots"])
 	if err != nil {
@@ -199,13 +199,7 @@ func (f *flattener) transparentAnnotations(ctx context.Context, dict ast.PdfDict
 		if err != nil || annot == nil {
 			continue
 		}
-		if ca, err := document.ResolveObject(ctx, f.doc, annot["CA"]); err == nil {
-			if v, ok := document.Number(ca); ok && v < 1 {
-				n++
-				continue
-			}
-		}
-		if f.appearanceTransparent(ctx, annot) {
+		if f.annotationTransparent(ctx, annot) {
 			n++
 		}
 	}

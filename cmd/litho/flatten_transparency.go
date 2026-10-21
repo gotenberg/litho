@@ -15,7 +15,7 @@ type flattenTransparencyResult struct {
 	File  string                    `json:"file"`
 	Pages []flattenTransparencyPage `json:"pages"`
 	// TransparentAnnotations counts the annotations left painting with
-	// transparency, which the command does not flatten.
+	// transparency, which the command does not draw into the page.
 	TransparentAnnotations int `json:"transparentAnnotations"`
 	// SkippedPages lists the pages whose content does not read, left as
 	// they are.
@@ -32,6 +32,8 @@ type flattenTransparencyPage struct {
 	TextUnderTransparency int     `json:"textUnderTransparency"`
 	TransparentText       int     `json:"transparentText"`
 	GroupRemoved          bool    `json:"groupRemoved,omitempty"`
+	Annotations           int     `json:"annotations,omitempty"`
+	EmptiedAnnotations    int     `json:"emptiedAnnotations,omitempty"`
 }
 
 func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -42,12 +44,13 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 	password := fs.String("p", "", "PDF password")
 	format := fs.String("f", "text", "Report format: text or json")
 	dpi := fs.Float64("dpi", 300, "Resolution transparent regions are composited at, in pixels per inch")
+	printed := fs.Bool("printed-annotations", false, "Draw every printed annotation into the page, not only those painting with transparency")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	if fs.NArg() < 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho flatten-transparency <file> [--dpi N] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho flatten-transparency <file> [--dpi N] [--printed-annotations] -o out.pdf")
 		return exitError
 	}
 	if *format != "text" && *format != "json" {
@@ -70,7 +73,11 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 
 	// Before the output file exists: a refused flattening leaves nothing
 	// behind.
-	report, err := w.FlattenTransparency(ctx, pdf.WithFlattenDPI(*dpi))
+	opts := []pdf.FlattenOption{pdf.WithFlattenDPI(*dpi)}
+	if *printed {
+		opts = append(opts, pdf.WithFlattenPrintedAnnotations())
+	}
+	report, err := w.FlattenTransparency(ctx, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "flattening transparency: %v\n", err)
 		return exitError
@@ -107,7 +114,7 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 		TransparentAnnotations: report.TransparentAnnotations,
 		SkippedPages:           report.SkippedPages,
 	}
-	regions, approximated := 0, 0
+	regions, approximated, annotations, emptied := 0, 0, 0, 0
 	for _, p := range report.Pages {
 		result.Pages = append(result.Pages, flattenTransparencyPage{
 			Page:                  p.Page,
@@ -118,8 +125,12 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 			TextUnderTransparency: p.TextUnderTransparency,
 			TransparentText:       p.TransparentText,
 			GroupRemoved:          p.GroupRemoved,
+			Annotations:           p.Annotations,
+			EmptiedAnnotations:    p.EmptiedAnnotations,
 		})
 		regions += p.Regions
+		annotations += p.Annotations
+		emptied += p.EmptiedAnnotations
 		approximated += p.TextUnderTransparency + p.TransparentText
 	}
 	if format == "json" {
@@ -139,6 +150,12 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 		fmt.Fprintf(stdout, "Page %d: %d region(s) at %g dpi, %d object(s) rasterized, %d text object(s) kept as text\n",
 			p.Page, p.Regions, p.DPI, p.Rasterized, p.KeptText)
 	}
+	if annotations > 0 {
+		fmt.Fprintf(stdout, "Drew %d annotation(s) into the page content\n", annotations)
+	}
+	if emptied > 0 {
+		fmt.Fprintf(stdout, "Removed the transparent appearance of %d annotation(s) a viewer does not display\n", emptied)
+	}
 	if approximated > 0 {
 		fmt.Fprintf(stdout, "Approximated %d text object(s): transparency on text it could not reproduce, or text drawn above the transparency that showed it tinted\n", approximated)
 	}
@@ -146,7 +163,7 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 		fmt.Fprintf(stdout, "Left %d page(s) whose content does not read as they are: %v\n", len(result.SkippedPages), result.SkippedPages)
 	}
 	if result.TransparentAnnotations > 0 {
-		fmt.Fprintf(stdout, "Left %d annotation(s) painting with transparency: annotations are not flattened\n", result.TransparentAnnotations)
+		fmt.Fprintf(stdout, "Left %d annotation(s) painting with transparency: form fields (flatten-form draws them), pop-ups, and annotations litho cannot draw\n", result.TransparentAnnotations)
 	}
 	return exitOK
 }

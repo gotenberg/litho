@@ -1,10 +1,12 @@
 package pdf
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/flatten"
@@ -16,7 +18,8 @@ type FlattenOption func(*flattenOpts)
 
 // flattenOpts holds what the [FlattenOption] values set.
 type flattenOpts struct {
-	dpi float64
+	dpi     float64
+	printed bool
 }
 
 // WithFlattenDPI composites transparent regions at dpi pixels per inch.
@@ -27,6 +30,15 @@ type flattenOpts struct {
 // with [ErrInvalidFlattenOptions].
 func WithFlattenDPI(dpi float64) FlattenOption {
 	return func(o *flattenOpts) { o.dpi = dpi }
+}
+
+// WithFlattenPrintedAnnotations draws into the page content every
+// annotation a viewer prints (its Print flag set, ISO 32000-1, Table 165), not
+// only those that paint with transparency, so the output shows them without
+// annotation support. See [Writer.FlattenTransparency] for what is drawn and
+// which annotations stay as they are.
+func WithFlattenPrintedAnnotations() FlattenOption {
+	return func(o *flattenOpts) { o.printed = true }
 }
 
 // FlattenedPage describes what [Writer.FlattenTransparency] did to one page.
@@ -58,6 +70,12 @@ type FlattenedPage struct {
 	TransparentText int
 	// GroupRemoved reports that the page's transparency group was removed.
 	GroupRemoved bool
+	// Annotations counts the annotations whose appearance was drawn into
+	// the page's content, and EmptiedAnnotations those painting with
+	// transparency that a viewer does not display, whose appearance was
+	// removed with nothing drawn in its place.
+	Annotations        int
+	EmptiedAnnotations int
 }
 
 // FlattenReport describes what [Writer.FlattenTransparency] did.
@@ -66,8 +84,10 @@ type FlattenReport struct {
 	// Pages lists the pages it changed, in order.
 	Pages []FlattenedPage
 	// TransparentAnnotations counts the annotations left painting with
-	// transparency. Annotations are not flattened: [Writer.FlattenForm]
-	// first bakes form fields into the page content.
+	// transparency, which [Writer.FlattenTransparency] does not draw into
+	// the page: form field widgets, which [Writer.FlattenForm] bakes, pop-ups,
+	// annotations under optional content or kept upright on a rotated page,
+	// and annotations with no appearance litho can draw.
 	TransparentAnnotations int
 	// SkippedPages lists the 1-based numbers of the pages whose content does
 	// not read, a stream that does not decode or a reference to an object
@@ -107,10 +127,25 @@ type FlattenReport struct {
 // CMYK page keeps its inks. Any other page is composited in sRGB, and its
 // composites are sRGB images.
 //
-// Annotations are left as they are and counted: an appearance composites
-// over the page as a viewer draws it. Call [Writer.FlattenForm] first to
-// bake form fields into the content. A Type 3 glyph's description is text
-// too (9.6.5), so transparency a glyph paints with stays in it.
+// An annotation that paints with transparency, or with
+// [WithFlattenPrintedAnnotations] any annotation a viewer prints, is drawn
+// into the page content first, after what the page draws, as a viewer draws
+// it (ISO 32000-1, 12.5.5, Algorithm 8.1), and flattened with the page. The
+// annotation stays, with an appearance that paints nothing: a link keeps its
+// action, a comment its pop-up and text, and the structure tree its object
+// reference to it, while the drawing is marked as an artifact in a tagged
+// document. An annotation a viewer does not display (Hidden or NoView) loses
+// its transparent appearance with nothing drawn. Form field widgets stay as
+// they are: call [Writer.FlattenForm] first to bake them. A signed signature
+// field leaves the document with this rewrite, as with any other, its
+// appearance drawn into the page ([Writer.DroppedSignatures]); when it paints
+// with transparency it is drawn before flattening, so that transparency is
+// flattened too. Pop-ups, annotations under optional content, annotations a
+// viewer keeps upright on a rotated page, and annotations whose appearance
+// litho cannot draw stay as they are, and those painting with transparency
+// are counted in [FlattenReport.TransparentAnnotations]. A Type 3 glyph's
+// description is text too (9.6.5), so transparency a glyph paints with stays
+// in it.
 //
 // It runs eagerly, like [Writer.ConvertColors], and works on the document as
 // the Writer holds it when it runs: edits queued before it are written to a
@@ -145,14 +180,151 @@ func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption)
 	if err != nil {
 		return nil, err
 	}
-	report, changed, err := w.flattenTransparency(ctx, o)
-	if err != nil || !changed {
+	baked, undoBake, err := w.bakeAnnotations(ctx, o)
+	if err != nil {
 		undo()
-		if err != nil {
-			return nil, err
+		return nil, err
+	}
+	saved, savedFolded, savedForce := w.rewriteOverrides, w.folded, w.forceRewrite
+	report, changed, err := w.flattenTransparency(ctx, o)
+	if err == nil && changed && baked.signaturesPending() {
+		// The output is a rewrite, which draws the signed signatures into
+		// their pages: drawn before the flattening, the transparency they
+		// paint with is flattened too.
+		w.rewriteOverrides, w.folded, w.forceRewrite = saved, savedFolded, savedForce
+		var undoSignatures func()
+		undoSignatures, err = w.rewriteSignatures(ctx)
+		if err == nil {
+			undoAnnotations := undoBake
+			undoBake = func() {
+				undoSignatures()
+				undoAnnotations()
+			}
+			report, changed, err = w.flattenTransparency(ctx, o)
 		}
 	}
+	if err != nil {
+		undoBake()
+		undo()
+		return nil, err
+	}
+	if !changed && !baked.changed() {
+		undo()
+	}
+	baked.addTo(report)
 	return report, nil
+}
+
+// bakedAnnotations is what [Writer.bakeAnnotations] did.
+type bakedAnnotations struct {
+	report *flatten.AnnotationReport
+	// rewritten reports that the document was written out and reopened.
+	rewritten bool
+}
+
+// changed reports whether the bake changed the document the Writer holds.
+func (b bakedAnnotations) changed() bool { return b.rewritten }
+
+// signaturesPending reports a signed signature painting with transparency
+// that the bake left in place: no rewrite drew it into its page yet.
+func (b bakedAnnotations) signaturesPending() bool {
+	return b.report != nil && b.report.Signatures && !b.rewritten
+}
+
+// addTo records the bake in report: the pages whose annotations it drew or
+// emptied, in page order.
+func (b bakedAnnotations) addTo(report *FlattenReport) {
+	if b.report == nil {
+		return
+	}
+	page := func(i int) *FlattenedPage {
+		at, found := slices.BinarySearchFunc(report.Pages, i+1, func(p FlattenedPage, page int) int { return cmp.Compare(p.Page, page) })
+		if !found {
+			report.Pages = slices.Insert(report.Pages, at, FlattenedPage{Page: i + 1})
+		}
+		return &report.Pages[at]
+	}
+	for i, n := range b.report.Baked {
+		page(i).Annotations = n
+	}
+	for i, n := range b.report.Emptied {
+		page(i).EmptiedAnnotations = n
+	}
+}
+
+// bakeAnnotations draws into the page content the annotations
+// [flatten.Annotations] selects and, when it drew any, writes the document
+// out and reopens it, so the renderer the flattening composites with reads
+// the drawing. The rewrite is full: it draws every signed signature into its
+// page (see [mutations.BakeSignaturesForRewrite]), as the write after the
+// flattening would. undo restores the Writer as it was before.
+//
+// A signed signature [flatten.Annotations] selects alone forces no rewrite:
+// an incremental write keeps the signature valid, and a document whose only
+// transparency it paints is not rewritten for it. The caller draws it with
+// [Writer.rewriteSignatures] once the flattening rewrites the document
+// anyway.
+func (w *Writer) bakeAnnotations(ctx context.Context, o flattenOpts) (bakedAnnotations, func(), error) {
+	noop := func() {}
+	if err := w.promotePageTree(ctx); err != nil {
+		return bakedAnnotations{}, noop, err
+	}
+	doc := w.reader.doc
+	pages, err := w.reader.resolvePages(ctx)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return bakedAnnotations{}, noop, ctxErr
+		}
+		// The flattening refuses a page tree that does not read.
+		return bakedAnnotations{}, noop, nil
+	}
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	if err := ctx.Err(); err != nil {
+		return bakedAnnotations{}, noop, err
+	}
+	seedAllocator(alloc, w.rewriteOverrides)
+	staged := alloc.Writes()
+	report, err := flatten.Annotations(ctx, alloc, doc, pages, flatten.AnnotationOptions{Printed: o.printed})
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+			return bakedAnnotations{}, noop, err
+		}
+		return bakedAnnotations{}, noop, fmt.Errorf("%w: %w", ErrTransparencyFlatteningRefused, err)
+	}
+	if alloc.Writes() == staged {
+		return bakedAnnotations{report: report}, noop, nil
+	}
+	prevOverrides, prevFolded, prevForce := w.rewriteOverrides, w.folded, w.forceRewrite
+	w.rewriteOverrides = alloc.Pending()
+	w.folded = len(w.mutations)
+	w.forceRewrite = true
+	undo, err := w.materializeNow(ctx)
+	if err != nil {
+		w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
+		return bakedAnnotations{}, noop, err
+	}
+	return bakedAnnotations{report: report, rewritten: true}, func() {
+		undo()
+		w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
+	}, nil
+}
+
+// rewriteSignatures writes the document out whole and reopens it, which draws
+// its signed signatures into their pages and leaves them out (see
+// [mutations.BakeSignaturesForRewrite]). undo restores the Writer as it was
+// before.
+func (w *Writer) rewriteSignatures(ctx context.Context) (func(), error) {
+	prevForce := w.forceRewrite
+	w.forceRewrite = true
+	undo, err := w.materializeNow(ctx)
+	if err != nil {
+		w.forceRewrite = prevForce
+		return nil, err
+	}
+	return func() {
+		undo()
+		w.forceRewrite = prevForce
+	}, nil
 }
 
 // flattenTransparency flattens the document the Writer holds, reporting

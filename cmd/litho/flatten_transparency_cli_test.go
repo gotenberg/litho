@@ -76,3 +76,31 @@ func TestFlattenTransparency_RefusesABadResolution(t *testing.T) {
 		t.Errorf("stderr %q", stderr.String())
 	}
 }
+
+// TestFlattenTransparency_PrintedAnnotations pins --printed-annotations: an
+// opaque printed annotation, a square with no appearance that litho
+// synthesises from its colour (ISO 32000-1, 12.5.6.8), is drawn into the page
+// only with the flag.
+func TestFlattenTransparency_PrintedAnnotations(t *testing.T) {
+	t.Parallel()
+	data := bytes.Replace(transparentCLIPDF(), []byte("/Contents 4 0 R "),
+		[]byte("/Contents 4 0 R /Annots [<< /Type /Annot /Subtype /Square /Rect [150 150 190 190] /F 4 /C [1 0 0] >>] "), 1)
+	src := writeTempPDF(t, data)
+	for _, tc := range []struct {
+		args []string
+		want bool
+	}{
+		{nil, false},
+		{[]string{"--printed-annotations"}, true},
+	} {
+		out := filepath.Join(t.TempDir(), "out.pdf")
+		var stdout, stderr bytes.Buffer
+		args := append(append([]string{"flatten-transparency"}, tc.args...), "-o", out, src)
+		if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
+			t.Fatalf("%v: exit %d: %s", tc.args, rc, stderr.String())
+		}
+		if got := strings.Contains(stdout.String(), "Drew 1 annotation(s) into the page content"); got != tc.want {
+			t.Errorf("%v: report %q, drew an annotation %v, want %v", tc.args, stdout.String(), got, tc.want)
+		}
+	}
+}

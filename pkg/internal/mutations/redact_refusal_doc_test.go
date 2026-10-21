@@ -38,6 +38,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrSignatureFieldLocked":          "WriteWithSignature",
 	"ErrSeedValueUnmet":                "WriteWithSignature",
 	"ErrSubFilterUnwritable":           "the Signer WriteWithSignature calls",
+	"ErrInvalidAnnotation":             "BakeAnnotations",
 }
 
 // TestRedactPageRegionsDocNamesEveryRefusal pins the refusal list on

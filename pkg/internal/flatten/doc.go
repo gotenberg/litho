@@ -19,4 +19,8 @@
 // removed and the image is drawn where the first of them was, so the units
 // drawn after it keep their order. Text is never rasterised: it stays in the
 // content stream, above the image, its marked content intact.
+//
+// [Annotations] runs first: it draws into the page content the appearance of
+// each annotation that paints with transparency, so the page flattening
+// composites it with the rest.
 package flatten

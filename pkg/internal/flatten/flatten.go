@@ -80,7 +80,8 @@ type Report struct {
 	// Pages lists the pages it changed, in order.
 	Pages []PageReport
 	// TransparentAnnotations counts the annotations left painting with
-	// transparency: flattening leaves annotations as they are.
+	// transparency: [Document] leaves annotations as they are, and those
+	// [Annotations] bakes paint with transparency no more.
 	TransparentAnnotations int
 	// Skipped lists, by index from 0, the pages whose content does not
 	// read: they are left as they are, as a viewer draws them, which is

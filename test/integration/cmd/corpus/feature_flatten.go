@@ -46,8 +46,8 @@ const (
 	// annotation was left transparent.
 	metricFlattenTransparencyLeft = "transparency_left"
 	// metricFlattenAnnotations counts the PDFs whose annotations are left
-	// painting with transparency, which flattening does not reach: an
-	// inventory.
+	// painting with transparency, which flattening does not draw into the
+	// page (see [pdf.FlattenReport.TransparentAnnotations]): an inventory.
 	metricFlattenAnnotations = "annotations_left"
 	// metricFlattenSkippedPages counts the pages whose content does not
 	// read, left as they are: an inventory.
@@ -79,8 +79,11 @@ const (
 //
 // # Corpus evidence
 //
-//   - litho (217 files, flattentext_2b among them): 20 flattened, all
-//     match; 197 have no transparency.
+//   - litho (218 files, flattentext_2b and flattenannots_2b among them): 25
+//     flattened, all match; 193 have no transparency. Before annotations
+//     were drawn into the page, 20 flattened and 5 left annotations painting
+//     with transparency; 1 does now, laterreads_2u.pdf, whose Screen
+//     annotation has no appearance stream.
 //   - govdocs, all 1091 files (scope file): 34 flatten, all match, and
 //     1057 have no transparency.
 //   - pdfjs, all 1202 files but the 3 the scope file excludes for cost and
@@ -105,6 +108,14 @@ const (
 //     rewrite does (text_changed).
 //   - pdfjs: the text the covering images of issue16800.pdf and the black
 //     box of issue18466.pdf hide stays hidden, and in the content.
+//   - pdfjs, all 1202 files, drawn without the render goldens' fonts: 266 of
+//     276 flattened match, against 239 of 248 before annotations were drawn
+//     into the page, and 10 files leave annotations painting with
+//     transparency, against 62. The one new mismatch is issue7821.pdf, whose
+//     Stamp fills a pattern in a transparency group that litho's renderer
+//     draws apart from poppler 26.09.0 and PDFium on the source page too
+//     (1,046 pixels apart from PDFium at 72 dpi); the composite carries
+//     litho's drawing.
 type flattenFeature struct {
 	workers int
 	// flatten runs the flattening; tests replace it to plant a defect.
@@ -433,7 +444,11 @@ func (f *flattenFeature) prepareOne(ctx context.Context, staging string, n int, 
 		res.out.Error = fmt.Sprintf("output page count: %v", err)
 		return res
 	}
-	res.out.TextChanged = textChanges(ctx, src, after, pages)
+	drawn := make(map[int]bool)
+	for _, p := range report.Pages {
+		drawn[p.Page] = p.Annotations > 0
+	}
+	res.out.TextChanged = textChanges(ctx, src, after, pages, drawn)
 	res.out.Reflattened, res.out.Transparency64 = f.transparencyLeft(ctx, after)
 
 	f.mu.RLock()
@@ -512,8 +527,12 @@ func (f *flattenFeature) transparencyLeft(ctx context.Context, after *pdf.Reader
 // every text object, but a removed form XObject ends a text run where it
 // stood, which can move where the extractor puts a space, and text under a
 // constant alpha of 0 is drawn in rendering mode 3, which the default
-// extraction leaves out as invisible.
-func textChanges(ctx context.Context, src, after *pdf.Reader, pages int) []int {
+// extraction leaves out as invisible. On a page in drawn, annotations were
+// drawn into the content, and the text their appearances show joins the
+// page's, which the extraction leaves out of an annotation: there the page
+// changes when a character of the source's text is missing from the
+// output's.
+func textChanges(ctx context.Context, src, after *pdf.Reader, pages int, drawn map[int]bool) []int {
 	var changed []int
 	for page := 1; page <= pages; page++ {
 		a, errA := src.ExtractText(ctx, page, pdf.WithInvisibleText())
@@ -526,11 +545,27 @@ func textChanges(ctx context.Context, src, after *pdf.Reader, pages int) []int {
 		if errors.Is(errB, pdf.ErrRequiresOCR) {
 			errB = nil
 		}
-		if (errA == nil) != (errB == nil) || strings.Join(strings.Fields(a), "") != strings.Join(strings.Fields(b), "") {
+		before, out := strings.Join(strings.Fields(a), ""), strings.Join(strings.Fields(b), "")
+		if (errA == nil) != (errB == nil) || before != out && (!drawn[page] || !runesWithin(before, out)) {
 			changed = append(changed, page)
 		}
 	}
 	return changed
+}
+
+// runesWithin reports whether every character of a occurs in b at least as
+// many times.
+func runesWithin(a, b string) bool {
+	count := make(map[rune]int)
+	for _, r := range b {
+		count[r]++
+	}
+	for _, r := range a {
+		if count[r]--; count[r] < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // lithoPair compares litho's renderings of page in src and after, and

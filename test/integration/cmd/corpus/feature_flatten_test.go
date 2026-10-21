@@ -162,6 +162,32 @@ func TestFlattenFeature_Plants(t *testing.T) {
 	}
 }
 
+// TestFlattenFeature_DrawnAnnotationsStillLoseNoText pins the text check on
+// a page annotations were drawn into, where the text their appearances show
+// joins the page's: a flattening that drops a character of the source's text
+// still fails it.
+func TestFlattenFeature_DrawnAnnotationsStillLoseNoText(t *testing.T) {
+	t.Parallel()
+	f := newTestFlatten()
+	f.flatten = func(ctx context.Context, w *pdf.Writer) (*pdf.FlattenReport, error) {
+		if _, err := w.Redact(ctx, []pdf.RedactRegion{{Page: 1, Rect: [4]float64{15, 150, 100, 185}}}); err != nil {
+			return nil, err
+		}
+		report, err := w.FlattenTransparency(ctx)
+		if err != nil {
+			return nil, err
+		}
+		report.Pages[0].Annotations = 1
+		return report, nil
+	}
+	if v, _ := runFlatten(t, f, transparentKindPDF(flattenBody)); v.Match || v.Metrics[metricFlattenTextChanged] != 1 {
+		t.Errorf("text dropped beside drawn annotations: %+v", v)
+	}
+	if !runesWithin("Kept", "AKBeCpt") || runesWithin("Kept", "Kpt") {
+		t.Error("runesWithin does not count characters")
+	}
+}
+
 // TestFlattenFeature_PopplerUnavailableDoesNotPass requires a run whose
 // poppler half could not run to fail rather than pass on litho's half.
 func TestFlattenFeature_PopplerUnavailableDoesNotPass(t *testing.T) {
