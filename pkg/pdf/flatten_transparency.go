@@ -103,7 +103,8 @@ type FlattenReport struct {
 //
 // Annotations are left as they are and counted: an appearance composites
 // over the page as a viewer draws it. Call [Writer.FlattenForm] first to
-// bake form fields into the content.
+// bake form fields into the content. A Type 3 glyph's description is text
+// too (9.6.5), so transparency a glyph paints with stays in it.
 //
 // It runs eagerly, like [Writer.ConvertColors], and works on the document as
 // the Writer holds it when it runs: edits queued before it are written to a
