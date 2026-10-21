@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
 	"slices"
 	"sort"
@@ -48,6 +49,14 @@ import (
 //     reports [ErrPartialOperatorCoverage]: a code read at a length the font's
 //     encoding does not give it, text added to the clipping path, or a TJ
 //     number under a horizontal scaling other than 100.
+//   - A show-text operator removed whole whose glyphs add to the clipping path
+//     reports [ErrRegionCoversClippingText], since removing it would widen the
+//     clip for everything after it; and a show-text operator kept, whole or
+//     split, that shows a code extraction read no glyph for reports
+//     [ErrTextNotPlaceable], since that glyph cannot be ruled out of the
+//     region. A page showing text after a Q inside a text object that undoes
+//     a moved text matrix reports [ErrTextPositionAmbiguous]: viewers place
+//     that text in two places.
 //   - A removed show-text operator whose advance later text on its line
 //     depends on, and which no TJ number can reproduce, reports
 //     [ErrTextAdvanceUnknown]. The removal puts that advance back otherwise,
@@ -235,6 +244,9 @@ func redactPageRegions(
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.SplitGluedOperators())
 	if err != nil {
 		return RedactReport{}, fmt.Errorf("parsing page content: %w", err)
+	}
+	if i := ambiguousTextPosition(ops); i >= 0 {
+		return RedactReport{}, fmt.Errorf("%w: operation %d", ErrTextPositionAmbiguous, i)
 	}
 
 	machine := graphics.NewMachine(pageBox(ctx, alloc, doc, page))
@@ -440,6 +452,9 @@ func redactPageRegions(
 		if tally[origin].outside == 0 {
 			removedOps[origin] = true
 		}
+	}
+	if err := checkShownCodes(machine.GlyphAdvances(), removedOps); err != nil {
+		return RedactReport{}, err
 	}
 	splits := make(map[int][]byte)
 
@@ -841,4 +856,74 @@ func (u *boxUnion) add(box ast.PdfArray) {
 	}
 	u.x0, u.y0 = math.Min(u.x0, x0), math.Min(u.y0, y0)
 	u.x1, u.y1 = math.Max(u.x1, x1), math.Max(u.y1, y1)
+}
+
+// checkShownCodes refuses what the page's show-text operators make unsafe to
+// edit: an operator removed whole whose glyphs add to the clipping path
+// ([ErrRegionCoversClippingText]), and an operator kept, whole or split, that
+// shows a code extraction read no glyph for ([ErrTextNotPlaceable]). glyphs
+// holds each operator's codes by its index; removed names the operators
+// removed whole. Operators are checked in order, so a refusal names the same
+// one every run.
+func checkShownCodes(glyphs map[int][]graphics.GlyphAdvance, removed map[int]bool) error {
+	for _, origin := range slices.Sorted(maps.Keys(glyphs)) {
+		for _, g := range glyphs[origin] {
+			switch {
+			case removed[origin] && g.RenderingMode >= 4 && g.RenderingMode <= 7: //nolint:mnd // ISO 32000-1, 9.3.6, Table 106: modes 4 to 7 add to the clipping path
+				return fmt.Errorf("%w: operation %d, text rendering mode %d", ErrRegionCoversClippingText, origin, g.RenderingMode)
+			case !removed[origin] && !g.Emitted && g.Bytes > 0:
+				return fmt.Errorf("%w: operation %d", ErrTextNotPlaceable, origin)
+			}
+		}
+	}
+	return nil
+}
+
+// ambiguousTextPosition returns the index of the first show-text operator of
+// ops placed after a Q, inside a text object, that undoes a q saved inside it
+// with the text matrix moved in between (see [ErrTextPositionAmbiguous]), or
+// -1. A Tm sets the matrix outright, so the two readings agree again after
+// one.
+func ambiguousTextPosition(ops []content.Operation) int {
+	inText, ambiguous := false, false
+	var frames []bool
+	moved := func() {
+		for i := range frames {
+			frames[i] = true
+		}
+	}
+	for i, op := range ops {
+		switch op.Operator {
+		case "BT":
+			inText, ambiguous, frames = true, false, frames[:0]
+		case "ET":
+			inText = false
+		case "q":
+			if inText {
+				frames = append(frames, false)
+			}
+		case "Q":
+			if inText && len(frames) > 0 {
+				ambiguous = ambiguous || frames[len(frames)-1]
+				frames = frames[:len(frames)-1]
+			}
+		case "Tm":
+			if inText {
+				moved()
+				ambiguous = false
+			}
+		case "Td", "TD", "T*":
+			if inText {
+				moved()
+			}
+		case "Tj", "TJ", "'", "\"":
+			if inText {
+				if ambiguous {
+					return i
+				}
+				moved()
+			}
+		}
+	}
+	return -1
 }

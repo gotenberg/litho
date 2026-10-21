@@ -149,7 +149,11 @@ type RedactReport struct {
 //   - [ErrRedactionRefused] when something cannot be removed exactly: a region
 //     covering only some of a text run that cannot be split at its glyphs
 //     (a run a region covers only partly is otherwise split, the covered
-//     glyphs removed and the rest kept where they were), a shading paint (sh)
+//     glyphs removed and the rest kept where they were), text in a clipping
+//     text rendering mode, whose removal would widen the clip for what
+//     follows, text showing a code no glyph was read for anywhere on the page,
+//     whose glyph cannot be placed, text a Q inside its text object moves
+//     for some viewers and not others, a shading paint (sh)
 //     whose clip the region meets, a clipping path, a straddling path it
 //     cannot cut and clip at the region, a stroke whose width cannot be read,
 //     content drawn by a form XObject, or an image whose samples cannot be

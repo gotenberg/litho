@@ -163,6 +163,39 @@ var ErrRegionCoversAShading = errors.New("region covers a shading paint")
 // page as a side effect of clearing part of it.
 var ErrRegionCoversAClippedPath = errors.New("region covers a path that also clips")
 
+// ErrRegionCoversClippingText reports a region selecting a show-text operator
+// whose text rendering mode adds its glyphs to the clipping path.
+//
+// Modes 4 to 7 make the glyph outlines part of the clip for everything drawn
+// after the text object (ISO 32000-1, 9.3.6, Table 106). Removing the operator
+// widens that clip, so what it masked paints outside the region too: text set
+// in mode 7 over a filled rectangle turns into the whole rectangle. It is the
+// text counterpart of [ErrRegionCoversAClippedPath].
+var ErrRegionCoversClippingText = errors.New("region covers text that also clips")
+
+// ErrTextNotPlaceable reports a page whose content shows a code the text
+// extraction read no glyph for, outside the operators the redaction removes
+// whole.
+//
+// Selection is by the glyph boxes extraction places, and such a code has none:
+// its glyph is drawn by a viewer (the font's .notdef, or a program glyph with
+// no Unicode value) where extraction cannot say, and the codes after it move
+// by an advance extraction did not count. Keeping it could keep a glyph inside
+// the region, so the page is refused instead.
+var ErrTextNotPlaceable = errors.New("page shows text whose glyphs cannot be placed")
+
+// ErrTextPositionAmbiguous reports a page showing text after a Q, inside a
+// text object, that undoes a q saved after the text object began, when the
+// text matrix moved between them.
+//
+// ISO 32000-1, 8.2, Figure 9 allows no q or Q inside a text object, so no
+// clause says whether Q restores the text matrix there, and viewers read it
+// both ways: PDF.js and litho restore it, poppler keeps it. The text after
+// the Q then sits in two places, and a region clearing the one litho reads
+// leaves the one poppler draws (litho corpus qshyphen_2b, whose `q 0 -30 Td Q`
+// puts a word a line lower in poppler).
+var ErrTextPositionAmbiguous = errors.New("page shows text whose position viewers read two ways")
+
 // ErrImageNotAddressable reports an image the mutation cannot replace because
 // it has no indirect reference of its own.
 //
