@@ -40,6 +40,17 @@ func TestRender_WritesOnePNGPerPage(t *testing.T) {
 	}
 }
 
+// TestRender_FontFlags renders with a font directory and the system fonts.
+func TestRender_FontFlags(t *testing.T) {
+	src := writeTempPDF(t, minimalPDF())
+	prefix := filepath.Join(t.TempDir(), "page")
+	var stdout, stderr bytes.Buffer
+	args := []string{"render", "--dpi", "18", "--font-dir", t.TempDir(), "--system-fonts", "-o", prefix, src}
+	if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("exit %d, stderr %q", rc, stderr.String())
+	}
+}
+
 // TestRender_Refusals pins the usage error without -o, a resolution the
 // library refuses, and the render pixel budget the global flag sets.
 func TestRender_Refusals(t *testing.T) {
@@ -52,6 +63,8 @@ func TestRender_Refusals(t *testing.T) {
 		{[]string{"render", src}, "Usage: litho render"},
 		{[]string{"render", "--dpi", "0", "-o", prefix, src}, "invalid render options"},
 		{[]string{"--max-render-pixels", "1000", "render", "-o", prefix, src}, "page render exceeds its budget"},
+		{[]string{"render", "--font-dir", filepath.Join(t.TempDir(), "missing"), "-o", prefix, src}, "--font-dir"},
+		{[]string{"render", "--font-dir", src, "-o", prefix, src}, "is not a directory"},
 	} {
 		var stdout, stderr bytes.Buffer
 		if rc := run(context.Background(), tc.args, &stdout, &stderr); rc != exitError {

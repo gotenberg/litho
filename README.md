@@ -244,7 +244,7 @@ In Go, `pdf.NewSigner` builds the same signer from a certificate and any `crypto
 
 ### Rendering
 
-`litho render` draws pages with litho's own renderer, `Reader.RenderPage` in Go, which returns an `*image.NRGBA` at the resolution `pdf.WithRenderDPI` sets, over the colour `pdf.WithRenderBackground` sets, white by default. It draws paths, strokes, clipping, images with their masks, shadings and shading patterns, and form XObjects. It does not yet draw text, tiling patterns or annotations, nor apply soft masks, blend modes, transparency groups or colour management: colours convert with the device formulas, and spaces other than the device and ICC-based ones paint mid-grey. `--max-render-pixels` bounds the pixels of one page.
+`litho render` draws pages with litho's own renderer, `Reader.RenderPage` in Go, which returns an `*image.NRGBA` at the resolution `pdf.WithRenderDPI` sets, over the colour `pdf.WithRenderBackground` sets, white by default. It draws paths, strokes, clipping, images with their masks, shadings and shading patterns, form XObjects, and text in every rendering mode, Type 3 fonts included. litho bundles no font program: a font the document does not embed draws with a program `--font-dir DIR` or `--system-fonts` supplies (`pdf.WithRenderFontFiles`, `pdf.WithRenderSystemFonts`, `pdf.WithRenderFontProvider` in Go), matched by name, family or metric-compatible family, and otherwise as boxes as wide as the widths it declares. It does not yet draw tiling patterns or annotations, nor apply soft masks, blend modes, transparency groups or colour management: colours convert with the device formulas, and spaces other than the device and ICC-based ones paint mid-grey. `--max-render-pixels` bounds the pixels of one page.
 
 ### Resource limits
 
