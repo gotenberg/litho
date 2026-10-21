@@ -306,7 +306,11 @@ func (r *renderer) noteEffects(st *graphics.State) {
 // 8.5.3.3).
 func (r *renderer) fill(s *scope, rule raster.FillRule, st *graphics.State) error {
 	r.noteEffects(st)
-	cov, err := r.coverage(s.path, rule)
+	path := s.path
+	if adj, ok := adjustedRect(path); ok {
+		path = adj
+	}
+	cov, err := r.coverage(path, rule)
 	if err != nil {
 		r.skip("fill", err)
 		return nil
@@ -354,7 +358,7 @@ func (r *renderer) stroke(s *scope, st *graphics.State) error {
 		r.skip("stroke", err)
 		return nil
 	}
-	cov, err := r.coverage(outline, raster.NonZero)
+	cov, err := r.coverage(adjustOutline(outline, s.path, style, m), raster.NonZero)
 	if err != nil {
 		r.skip("stroke", err)
 		return nil
