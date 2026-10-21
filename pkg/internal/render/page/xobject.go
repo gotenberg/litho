@@ -96,10 +96,25 @@ func (r *renderer) formGeometry(dict ast.PdfDict) (geom.Matrix, [4]float64, erro
 		if !ok {
 			return matrix, box, errors.New("a /BBox entry is no number")
 		}
-		box[i] = f
+		box[i] = max(-maxBBoxCoordinate, min(f, maxBBoxCoordinate))
 	}
 	return matrix, box, nil
 }
+
+// maxBBoxCoordinate bounds each /BBox coordinate a form is clipped to.
+// Anti-overflow guard, not spec-mandated: ISO 32000-1, Annex C, Table C.1
+// expects readers to hold reals near ±3.4×10^38, and a /BBox of ±9×10^307
+// mapped to device space past 72 dpi overflows to infinity, leaving a clip
+// that holds nothing, so the form drew at 72 dpi and vanished at 300. A
+// box clamped to a billion units clips nothing a page shows: the largest
+// page, 14,400 units by a /UserUnit of 75,000 (Annex C.2), is about a
+// billion units wide.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20872.pdf: a form of /BBox ±8.99×10^307 drew the whole page
+//     at 72 dpi and nothing at 240 or 300.
+const maxBBoxCoordinate = 1e9
 
 // boxPath returns the rectangle box, [x0 y0 x1 y1], through m.
 func boxPath(m geom.Matrix, box [4]float64) geom.Path {
