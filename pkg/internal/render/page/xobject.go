@@ -116,7 +116,8 @@ func boxPath(m geom.Matrix, box [4]float64) geom.Path {
 // in a saved graphics state with /Matrix concatenated to the CTM and the
 // clip narrowed to /BBox, against its own /Resources, or those of the stream
 // that paints it when it has none (7.8.3 keeps that reading for older
-// files).
+// files). A name its own /Resources lacks resolves in the page's
+// ([renderer.withPageNames]).
 //
 // When honourGroup is set, a transparency group XObject (11.6.6) paints
 // into a group of its own ([renderer.group]): its content starts from the
@@ -143,6 +144,8 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 	resources, err := document.ResolveDict(r.ctx, r.doc, dict["Resources"])
 	if err != nil || resources == nil {
 		resources = s.resources
+	} else {
+		resources = r.withPageNames(ref, resources)
 	}
 	ops, err := content.ParsePageContent(r.ctx, r.doc, stream, content.SplitGluedOperators(), content.InlineImageData(), content.ViewerFilterChains())
 	if err != nil {

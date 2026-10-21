@@ -54,6 +54,9 @@ type renderer struct {
 	// normalForms keeps, per form, whether its content blends with Normal
 	// only ([renderer.normalOnly]).
 	normalForms map[int]bool
+	// mergedResources keeps, per form, its /Resources
+	// with the page's names it lacks ([renderer.withPageNames]).
+	mergedResources map[ast.PdfIndirectRef]ast.PdfDict
 
 	shadings map[ast.PdfIndirectRef]*shade.Shading
 	patterns map[ast.PdfIndirectRef]*shade.Pattern

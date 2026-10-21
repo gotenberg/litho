@@ -162,6 +162,8 @@ func (r *renderer) renderSoftMask(sm *graphics.SoftMask) (*blend.Mask, bool, err
 	resources, err := document.ResolveDict(r.ctx, r.doc, stream.Dict["Resources"])
 	if err != nil || resources == nil {
 		resources, own = r.m.Resources, false
+	} else {
+		resources = r.withPageNames(ref, resources)
 	}
 	m, err := r.maskOf(sm, kind, ref, stream, matrix, box, attrs, cs, resources)
 	return m, own, err
