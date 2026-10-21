@@ -1950,9 +1950,10 @@ paints (144 and 184 grey) and poppler does not (244 114 22 and 97 155 205 for
 the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`). `iccbadcmyk_2b.pdf` paints
 the same grey and mismatched before the renderer converted colour too.
 
-**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 15 pages
-of 12 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
-tolerance. Each difference is adjudicated, and none is a litho defect left open:
+**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 37 pages
+of 31 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
+tolerance. 15 pages of 12 fixtures differ by more than 1% of the page. Each of
+those differences is adjudicated, and none is a litho defect left open:
 
 | File                                            | Page       | Differing pixels     | Why                                       |
 | ----------------------------------------------- | ---------- | -------------------- | ----------------------------------------- |
@@ -1992,6 +1993,37 @@ tolerance. Each difference is adjudicated, and none is a litho defect left open:
 - **Pages written directly in `/Kids`.** ISO 32000-1, 7.7.3.2, Table 29 makes
   `/Kids` an array of references. poppler renders such a page as an empty 1 by
   1 image, and litho draws the page dictionary where the array holds it.
+
+The other 22 pages differ by at most 1% of the page and by more than half of
+the pixels either renderer inks: on each, one renderer draws a glyph, a fill or
+an annotation the other does not. PDFium (pypdfium2 4.30.0, at 72 dpi) is the
+third reading. The pages where litho differs from both, and `resinherit_2b`
+page 2, where poppler alone reads the spec, are litho divergences and stay
+open:
+
+| File                    | Page | Differing / inked    | Who differs | Why                                                                                                                |
+| ----------------------- | ---- | -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| `fontemptycs_2b`        | 1    | 544 / 670            | litho       | substitutes for an embedded program with no glyph; poppler and PDFium draw nothing                                 |
+| `unembednames_2u`       | 1    | 213 / 367            | litho       | boxes for the `.notdef` codes of unembedded fonts, which the others draw as nothing                                |
+| `ttencoding_2b`         | 1    | 274 / 506            | litho       | boxes for codes of unembedded TrueType fonts the others map to A and B                                             |
+| `filestruct_1b`         | 1    | 1200 / 1422          | litho       | draws a widget's `/AP` under `/NeedAppearances true`, which the others rebuild empty                               |
+| `sharednested_2b`       | 1, 2 | 705, 798 / 970, 1158 | litho       | resolves no name a form's empty `/Resources` lacks; the others fall back to the page's                             |
+| `undecodable_2b`        | 2    | 60 / 60              | litho       | decodes `[/Foo /FlateDecode]` past the unknown `/Foo`; the others draw nothing                                     |
+| `resinherit_2b`         | 2    | 135 / 158            | poppler     | a litho divergence: litho and PDFium resolve `F6` past the page's own `/Resources`, which 7.7.3.4 hands down whole |
+| `afref_3b`              | 1    | 80 / 80              | poppler     | strokes a Link's `/Border` over an empty appearance stream (12.5.5)                                                |
+| `linkfont_ua2`          | 1    | 720 / 1345           | poppler     | the same `/Border` stroke over six links                                                                           |
+| `annotshare_ua1`        | 1, 2 | 202, 202 / 358, 202  | poppler     | draws its own icon for a Text annotation with no `/AP`                                                             |
+| `formmedia_ua1`         | 1    | 2400 / 4495          | poppler     | draws no Screen annotation; litho and PDFium paint their appearance                                                |
+| `sigcms_2b`             | 1    | 677 / 964            | poppler     | builds a text field's appearance from `/V` with no `/NeedAppearances`                                              |
+| `cmapusecmap_2b`        | 1    | 176 / 176            | poppler     | litho maps codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing                             |
+| `undecodable_2b`        | 3    | 60 / 60              | poppler     | draws nothing for `[/FlateDecode /Foo]`, which litho and PDFium read                                               |
+| `offlimits_1b`          | 3    | 100 / 100            | poppler     | paints no image while no colour space is selected; litho and PDFium paint it grey                                  |
+| `fontclaims_2b`         | 1    | 50 / 80              | poppler     | draws no glyph for the last show, which litho and PDFium draw as A                                                 |
+| `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156  | undefined   | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box                                |
+| `type0nodesc_2b`        | 1    | 176 / 237            | undefined   | Type 0 fonts with no descendant: litho boxes, poppler nothing, PDFium a substitute                                 |
+| `parentreach_2b`        | 2    | 25 / 25              | undefined   | a one-input tint transform under nine colorants: litho black, poppler orange                                       |
+
+The cell's ink bar counts them; the 1% page bar alone passed every one.
 
 The mechanism is veraPDF's object identity, not a rule. `BaseValidator` (core
 1.30.2, `checkRequired`, line 328) pushes a model object onto its work stack
