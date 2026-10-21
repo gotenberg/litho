@@ -3,6 +3,7 @@ package page
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -184,12 +185,100 @@ func (r *renderer) exec(s *scope, op content.Operation) error {
 		if len(r.m.Stack) <= s.floor {
 			return nil
 		}
+	case "cs", "CS":
+		return r.selectSpace(op)
+	case "sc", "SC", "scn", "SCN":
+		if !r.fitsSpace(op) {
+			return nil
+		}
 	}
 	if err := r.m.ExecuteOne(r.ctx, op); err != nil {
 		return fmt.Errorf("executing %s: %w", op.Operator, err)
 	}
 	r.syncClips()
 	return nil
+}
+
+// selectSpace runs cs or CS, leaving the current colour space and colour as
+// they were when the operand names a colour space the resources do not
+// define.
+//
+// ISO 32000-1, 8.6.8, Table 74 requires the operand to name a colour space
+// family or an entry of the /ColorSpace subdictionary of the resources, and
+// says nothing of one that names neither. The graphics machine selects an
+// unresolved space, which compliance judges as such, and the renderer painted
+// it black. Deliberate leniency toward that construct, as the renderers draw
+// it: poppler 26.09.0 (Gfx::opSetFillColorSpace reports "Bad color space" and
+// changes nothing) and PDFium (pypdfium2 4.30.0) keep the space and colour in
+// force, so a later sc or scn reads its components in it. PDF.js
+// (ColorSpaceUtils.parse, "Unrecognized ColorSpace") selects DeviceGray
+// instead, which agrees with them while DeviceGray is in force.
+//
+// # Corpus evidence
+//
+//   - litho resinherit_2b.pdf page 2: /CS4 cs, which the page's own
+//     /Resources do not define (7.7.3.4), then 1 scn. poppler fills it white
+//     in the initial DeviceGray. Read without the resources of an ancestor,
+//     litho filled it black.
+//   - A crafted page (TestUndefinedColourSpaceKeepsTheCurrentOne): red in
+//     DeviceRGB, an undefined cs, then 0 0 1 sc fills blue in poppler and
+//     PDFium, black in PDF.js.
+func (r *renderer) selectSpace(op content.Operation) error {
+	st := r.m.Current()
+	fill, stroke := st.Fill, st.Stroke
+	if err := r.m.ExecuteOne(r.ctx, op); err != nil {
+		return fmt.Errorf("executing %s: %w", op.Operator, err)
+	}
+	st = r.m.Current()
+	switch {
+	case op.Operator == "cs" && st.Fill.Space.Family == "":
+		r.skip("colour space", fmt.Errorf("cs names %q, which no resource defines", st.Fill.Space.Resource))
+		st.Fill = fill
+	case op.Operator == "CS" && st.Stroke.Space.Family == "":
+		r.skip("colour space", fmt.Errorf("CS names %q, which no resource defines", st.Stroke.Space.Resource))
+		st.Stroke = stroke
+	}
+	return nil
+}
+
+// fitsSpace reports whether the operands of sc, SC, scn or SCN are as many
+// numbers as the colour space in force has components, or the space is a
+// Pattern space or one the machine could not resolve, which the paint itself
+// judges.
+//
+// ISO 32000-1, 8.6.8, Table 74 makes the number of operands depend on the
+// current colour space, and says nothing of a colour with another count. The
+// renderer leaves the colour in force then, as poppler 26.09.0 draws it
+// (Gfx::opSetFillColor and its siblings report "Incorrect number of
+// arguments" and change nothing). PDFium (pypdfium2 4.30.0) agrees on too few
+// operands and reads the leading ones of too many.
+//
+// # Corpus evidence
+//
+//   - litho csnames_2b.pdf page 3: /CS2 names /CS0, which no reader takes as
+//     a colour space, so DeviceGray stays in force, and 1 0 0 sc then fills
+//     black in poppler.
+func (r *renderer) fitsSpace(op content.Operation) bool {
+	st := r.m.Current()
+	space := st.Fill.Space
+	if op.Operator == "SC" || op.Operator == "SCN" {
+		space = st.Stroke.Space
+	}
+	if space.Family == "" || space.Family == graphics.FamilyPattern || space.Components == 0 {
+		return true
+	}
+	n := 0
+	for _, v := range op.Operands {
+		if _, ok := document.Number(v); ok {
+			n++
+		}
+	}
+	if n == space.Components {
+		return true
+	}
+	r.doc.Logger.Debug("render: colour operands do not fit the colour space; keeping the colour",
+		slog.String("operator", op.Operator), slog.Int("operands", n), slog.Int("components", space.Components))
+	return false
 }
 
 // syncClips keeps r.clips as long as the machine's stack: a q copies the
