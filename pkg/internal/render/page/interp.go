@@ -41,6 +41,9 @@ type renderer struct {
 
 	// colorCache keeps the colour converters of the render's page.
 	colorCache colorconv.Cache
+	// transfers keeps the transfer functions compiled so far, by the value
+	// /TR or /TR2 states (maxTransferCache).
+	transfers map[string]*transfer
 }
 
 // scope is one content stream being run: the page's or a form's.

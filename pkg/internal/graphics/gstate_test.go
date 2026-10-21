@@ -346,3 +346,23 @@ func BenchmarkGraphicsStateOperators(b *testing.B) {
 		}
 	}
 }
+
+func TestGraphicsState_ExtGStateTransfer(t *testing.T) {
+	tr := ast.PdfName("Identity")
+	m := testMachine()
+	m.Resources = ast.PdfDict{"ExtGState": ast.PdfDict{
+		"TR":   ast.PdfDict{"TR": tr},
+		"Both": ast.PdfDict{"TR": tr, "TR2": ast.PdfName("Default")},
+		"None": ast.PdfDict{"LW": num(2)},
+	}}
+	if s := run(t, m, op("gs", ast.PdfName("TR"))); s.Transfer != tr {
+		t.Errorf("/TR: Transfer = %v, want %v", s.Transfer, tr)
+	}
+	if s := run(t, m, op("gs", ast.PdfName("None"))); s.Transfer != tr {
+		t.Errorf("a state without TR changed Transfer to %v", s.Transfer)
+	}
+	// Table 58: TR2 takes precedence over TR.
+	if s := run(t, m, op("gs", ast.PdfName("Both"))); s.Transfer != ast.PdfName("Default") {
+		t.Errorf("/TR2 beside /TR: Transfer = %v, want /Default", s.Transfer)
+	}
+}

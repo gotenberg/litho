@@ -215,9 +215,10 @@ func handleFlatness(_ context.Context, _ *Machine, state *State, op content.Oper
 // the parameters of the named /ExtGState resource (8.4.5, Table 58). A name
 // that does not resolve to a dictionary changes nothing.
 //
-// The device-dependent entries (TR, TR2, BG, BG2, UCR, UCR2, HT; 10.1) are
-// not modelled: the renderer this state serves targets one device space and
-// takes no device-specific transfer or halftone. Font is recorded on
+// The device-dependent entries BG, BG2, UCR, UCR2 and HT (10.1) are not
+// modelled: the renderer this state serves targets one device space and
+// takes no device-specific generation or halftone. TR and TR2 are recorded as
+// written on [State.Transfer], which the renderer applies to its output. Font is recorded on
 // [TextState.GStateFont] rather than [TextState.Tf], which names a /Font
 // resource and drives text extraction: extraction keeps its reading.
 func handleExtGState(ctx context.Context, m *Machine, state *State, op content.Operation) {
@@ -318,6 +319,13 @@ func (m *Machine) applyExtGState(ctx context.Context, state *State, gs ast.PdfDi
 	}
 	if v, ok := boolean("SA"); ok {
 		state.StrokeAdjustment = v
+	}
+	// Table 58: TR2 is TR that may also be /Default, and takes precedence
+	// over TR in a dictionary that holds both.
+	if obj, ok := gs["TR2"]; ok {
+		state.Transfer = m.resolvable(obj)
+	} else if obj, ok := gs["TR"]; ok {
+		state.Transfer = m.resolvable(obj)
 	}
 	if obj := resolved("BM"); obj != nil {
 		state.BlendMode = m.blendMode(ctx, obj)

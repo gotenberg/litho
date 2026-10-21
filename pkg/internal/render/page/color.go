@@ -32,7 +32,8 @@ func (r *renderer) colorOptions() colorconv.Options {
 // its base (8.7.3.3). It reports false when the space paints nothing, a
 // Separation or DeviceN over the colorant None only (8.6.6.4, 8.6.6.5), and
 // the caller paints nothing. A space that cannot be converted is skipped and
-// paints [fallbackConverter]'s black.
+// paints [fallbackConverter]'s black. The converter applies the transfer
+// function of the current graphics state (10.5) after the conversion.
 func (r *renderer) colorFor(s *scope, space graphics.ColorSpace) (colorconv.Converter, bool) {
 	conv, err := colorconv.For(r.ctx, r.doc, space, s.resources, r.colorOptions())
 	return r.converterOrFallback(conv, err)
@@ -48,10 +49,10 @@ func (r *renderer) colorForObject(s *scope, obj ast.PdfObject) (colorconv.Conver
 func (r *renderer) converterOrFallback(conv colorconv.Converter, err error) (colorconv.Converter, bool) {
 	switch {
 	case err == nil:
-		return conv, true
+		return r.withTransfer(conv), true
 	case errors.Is(err, colorconv.ErrPaintsNothing):
 		return nil, false
 	}
 	r.skip("colour space", err)
-	return fallbackConverter{}, true
+	return r.withTransfer(fallbackConverter{}), true
 }

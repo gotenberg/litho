@@ -92,6 +92,10 @@ type State struct {
 	Smoothness float64
 	// StrokeAdjustment is set by an ExtGState /SA (10.6.5).
 	StrokeAdjustment bool
+	// Transfer is the transfer function an ExtGState /TR or /TR2 sets
+	// (10.5), as written: a function, an array of four, or the name
+	// /Identity or /Default. nil is the initial, device-default one.
+	Transfer ast.PdfObject
 	// StrokeOverprint, FillOverprint and OverprintMode are set by an
 	// ExtGState's OP, op and OPM (8.6.7).
 	StrokeOverprint bool

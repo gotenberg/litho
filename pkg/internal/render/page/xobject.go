@@ -196,6 +196,9 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 	if err != nil {
 		return r.imageFailed(err)
 	}
+	if img, err = r.transferImage(img); err != nil {
+		return err
+	}
 	b := img.Bounds()
 	return r.imageFailed(imgpaint.Draw(r.ctx, r.canvas, img, r.imageMasks(name, stream, b.Dx(), b.Dy()), p))
 }
