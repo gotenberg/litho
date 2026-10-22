@@ -26,7 +26,10 @@ drawing shows. reversed names its /Rect corners in the other order (ISO
 32000-1, 7.9.5). collapsed has no area: a viewer draws nothing of it.
 
 The fields are text fields that hold no value, so the appearance is all there
-is to draw. The file declares an RGB OutputIntent, and every widget prints.
+is to draw. Each widget is tagged under a Form element of its own, so the
+flattened appearances are tagged content: drawn unmarked into a document with
+no structure tree, they fail PDF/UA, which the source does not. The file
+declares an RGB OutputIntent, and every widget prints.
 
 See ../README.md for the authoritative expected firing set.
 """
@@ -106,24 +109,48 @@ WIDGETS = [
     ("collapsed", [350, 50, 350, 50], [0, 0, 20, 20], None, (0.9, 0.9, 0.9)),
 ]
 
-fields = []
-for name, rect, bbox, matrix, fill in WIDGETS:
-    fields.append(
-        pdf.make_indirect(
-            Dictionary(
-                Type=Name.Annot,
-                Subtype=Name.Widget,
-                FT=Name.Tx,
-                T=String(name),
-                Rect=Array(rect),
-                P=page,
-                F=PRINT,
-                AP=Dictionary(N=appearance(bbox, fill, matrix)),
-            )
+struct_root = pdf.make_indirect(Dictionary(Type=Name.StructTreeRoot))
+document = pdf.make_indirect(Dictionary(Type=Name.StructElem, S=Name.Document, P=struct_root))
+
+fields, elements, nums = [], [], []
+for key, (name, rect, bbox, matrix, fill) in enumerate(WIDGETS):
+    widget = pdf.make_indirect(
+        Dictionary(
+            Type=Name.Annot,
+            Subtype=Name.Widget,
+            FT=Name.Tx,
+            T=String(name),
+            Rect=Array(rect),
+            P=page,
+            F=PRINT,
+            StructParent=key,
+            AP=Dictionary(N=appearance(bbox, fill, matrix)),
         )
     )
+    element = pdf.make_indirect(
+        Dictionary(
+            Type=Name.StructElem,
+            S=Name.Form,
+            P=document,
+            Pg=page,
+            K=Dictionary(Type=Name.OBJR, Obj=widget),
+        )
+    )
+    fields.append(widget)
+    elements.append(element)
+    nums.extend([key, element])
 
 page.Annots = Array(fields)
 pdf.Root.AcroForm = Dictionary(Fields=Array(fields))
+
+# Each widget is tagged under a Form element of its own (ISO 32000-1,
+# 14.8.4.4), so flattening draws each appearance as that element's content
+# rather than as unmarked content, which PDF/UA forbids (ISO 14289-1, 7.1).
+document.K = Array(elements)
+struct_root.K = document
+struct_root.ParentTree = pdf.make_indirect(Dictionary(Nums=Array(nums)))
+struct_root.ParentTreeNextKey = len(WIDGETS)
+pdf.Root.StructTreeRoot = struct_root
+pdf.Root.MarkInfo = Dictionary(Marked=True)
 attach_xmp(pdf, xmp_packet(part=2, conformance="B"))
 save(pdf, "formplacement_2b.pdf")

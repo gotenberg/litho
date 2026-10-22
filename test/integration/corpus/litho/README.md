@@ -647,7 +647,7 @@ are covered under [Known divergences](#known-divergences).
 | `formhidden_ua1.pdf`   | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 5    |
 | `formmark_ua1.pdf`     | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 2    | 3    |
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
-| `formplacement_2b.pdf` | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
+| `formplacement_2b.pdf` | 2    | 1    | 1    | 0    | 1    | 2    | 1    | 2    | 4   | 4    | 5    | 5    | 7    |
 | `formreuse_ua1.pdf`    | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 10   | 8    |
 | `formshare_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 5    | 7    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
@@ -8916,7 +8916,8 @@ box it gets onto the annotation's `/Rect`. Flattening a form, and the drawing
 of signed signatures every rewrite does, translated the appearance to the first
 corner `/Rect` names instead, right only for a box at the origin sized to
 `/Rect`. The corpora reach few other appearances, none turned by `/Matrix`, so
-this file holds one text field, with no value, per case:
+this file holds one text field, with no value, per case, each widget tagged
+under a `Form` element of its own:
 
 | Field       | `/Rect`             | `/BBox`             | `/Matrix`           | A viewer draws it      |
 | ----------- | ------------------- | ------------------- | ------------------- | ---------------------- |
@@ -8937,17 +8938,23 @@ shows. `reversed` names its corners in the other order (7.9.5), and
 26.09.0 draw them in the source: litho's and poppler's renderings of the output
 match the source's to the pixel at 72 dpi, and `collapsed` leaves drawing
 nothing. The translation drew every case but `control` elsewhere, 21,996
-pixels apart from the source in poppler's rendering. The output fails what the
-source fails at every PDF/A level, and at PDF/UA the untagged drawing replaces
-the widget rules (`7.1/3` for `7.18.x` at PDF/UA-1, `8.2.2/1` for `8.9.3.3/1`
-at PDF/UA-2), on litho and veraPDF 1.30.2 alike. Remediation and transparency
-flattening write the same bytes as before: the file holds no signed signature.
+pixels apart from the source in poppler's rendering. Each appearance is drawn
+as the content of its widget's `Form` element. The output fails what the source
+fails at every PDF/A level, and at PDF/UA it passes the widget rules the source
+fails (`7.18.1/3` and `7.18.3/1` at PDF/UA-1; `8.9.3.3/1`, `8.10.2.3/1` and
+`8.9.2.4.13/1` at PDF/UA-2) and fails nothing new, on litho and veraPDF 1.30.2
+alike. Untagged, as the file first was, the drawing went into the page
+unmarked, as `FlattenForm` draws into a document with no structure tree, and
+added `7.1/3` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2 to the `mutate-flatten`
+cell. The file holds no signed signature, so a rewrite draws nothing more.
 
 The file declares an RGB OutputIntent and every widget prints, so it conforms
 to PDF/A-2b. The other cells report what the part-2, level-B claim draws at
-the levels it does not match: identification, tagging, at part 4 the
-`%PDF-1.7` header, and `6.9/5` at PDF/A-4f.
-veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+the levels it does not match: identification, at part 4 the `%PDF-1.7`
+header, `6.9/5` at PDF/A-4f, and at PDF/UA the document-level rules
+flattening does not touch (`5/1`, `7.1/10` and `7.2/33` at PDF/UA-1).
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells, on
+the source and on the `flatten-form` output.
 
 ### `smaskindata_2b.pdf`
 
