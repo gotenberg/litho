@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"maps"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -58,7 +59,9 @@ var (
 // states it by litho's sRGB profile ([icc.SRGBProfile]). See [srgbColorSpace]
 // for why not DeviceRGB. A /SMask is replaced by a copy whose covered samples
 // are opaque (see [blankSoftMask]): the mask holds the picture's shape, and
-// dropping it would change transparency outside the region.
+// dropping it would change transparency outside the region. The soft mask a
+// JPX picture carries in its data becomes such an /SMask (see
+// [blankDataSoftMask]).
 //
 // A stencil mask is rewritten as a stencil mask instead. It supplies a shape
 // rather than a picture, so transcoding it to DeviceRGB would stop it taking the
@@ -128,10 +131,16 @@ func blankImage(
 	// Decoding reads the image as the file holds it, its own soft mask
 	// included; the replacements below copy /SMask from stream.
 	source := stream
+	var dataMask *pdfimage.DataSoftMask
 	if !isStencil {
 		smask, err := blankSoftMask(ctx, alloc, doc, page, box, zones, stream.Dict)
 		if err != nil {
 			return 0, err
+		}
+		if smask == nil {
+			if smask, dataMask, err = blankDataSoftMask(ctx, alloc, doc, box, zones, stream); err != nil {
+				return 0, err
+			}
 		}
 		if smask != nil {
 			// A copy: the source's dictionary is not edited.
@@ -143,13 +152,24 @@ func blankImage(
 			return 0, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 		}
 		if ok {
+			if dataMask != nil && dataMask.Premultiplied {
+				// The explicit /SMask composites straight colour (11.6.5.3).
+				pdfimage.Unpremultiply(native.Data, dataMask.Alpha, native.Width*native.Height, native.Components)
+			}
 			return ref.ObjectNum, blankNative(alloc, ref, stream, box, zones, native)
 		}
 	}
 
 	// The samples as stored: the replacement keeps the image's soft mask, so a
-	// /Matte on it still describes them.
-	img, err := pdfimage.DecodeStreamSamples(ctx, doc, page, ast.PdfName(box.Name), source)
+	// /Matte on it still describes them. A picture whose data held its soft
+	// mask is read as it paints, its colour straight, and its opacity is the
+	// replacement's /SMask.
+	var img image.Image
+	if dataMask != nil {
+		img, err = pdfimage.DecodePainted(ctx, doc, ast.PdfName(box.Name), source, page.Resources, page.Dict)
+	} else {
+		img, err = pdfimage.DecodeStreamSamples(ctx, doc, page, ast.PdfName(box.Name), source)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 	}
@@ -163,6 +183,11 @@ func blankImage(
 	// Work on NRGBA for a predictable byte order, matching buildPNGXObject.
 	canvas := image.NewNRGBA(bounds)
 	draw.Draw(canvas, bounds, img, bounds.Min, draw.Src)
+	if dataMask != nil {
+		for i := 3; i < len(canvas.Pix); i += 4 {
+			canvas.Pix[i] = 0xff
+		}
+	}
 
 	// The RGB replacement is opaque, so a picture whose pixels are not
 	// would start painting where it painted nothing: an image in a space over
@@ -295,18 +320,26 @@ func blankSoftMask(
 	if w <= 0 || h <= 0 {
 		return nil, fmt.Errorf("%w: %q: its soft mask has no samples", ErrImageNotDecodable, box.Name)
 	}
-	gray := image.NewGray(bounds)
-	draw.Draw(gray, bounds, img, bounds.Min, draw.Src)
+	gray := image.NewGray(image.Rect(0, 0, w, h))
+	draw.Draw(gray, gray.Bounds(), img, bounds.Min, draw.Src)
+	return blankedMaskStream(alloc, box, zones, gray, mask.Dict["Matte"])
+}
+
+// blankedMaskStream allocates the soft mask gray, whose origin is (0, 0),
+// with the samples the zones cover made opaque (see [blankSoftMask]), and
+// returns its reference. matte, when not nil, is the /Matte it keeps.
+func blankedMaskStream(alloc *writer.ObjAllocator, box graphics.ImageBox, zones []heuristics.Zone, gray *image.Gray, matte ast.PdfObject) (ast.PdfObject, error) {
+	w, h := gray.Bounds().Dx(), gray.Bounds().Dy()
 	// The mask maps onto the unit square as the picture does, whatever its
 	// own resolution (11.6.5.3), so the same sample test applies.
 	if _, err := forCoveredSamples(box, zones, w, h, func(px, py int) {
-		gray.Pix[gray.PixOffset(bounds.Min.X+px, bounds.Min.Y+py)] = 0xff
+		gray.Pix[gray.PixOffset(px, py)] = 0xff
 	}); err != nil {
 		return nil, fmt.Errorf("%q: soft mask: %w", box.Name, err)
 	}
 	samples := make([]byte, 0, w*h)
 	for y := range h {
-		i := gray.PixOffset(bounds.Min.X, bounds.Min.Y+y)
+		i := gray.PixOffset(0, y)
 		samples = append(samples, gray.Pix[i:i+w]...)
 	}
 	compressed, err := flateCompress(samples)
@@ -322,10 +355,56 @@ func blankSoftMask(
 		"BitsPerComponent": ast.PdfInt(8),
 		"Filter":           ast.PdfName("FlateDecode"),
 	}
-	if matte, present := mask.Dict["Matte"]; present {
+	if matte != nil {
 		out["Matte"] = matte
 	}
 	return alloc.Alloc(ast.NewStream(out, compressed)), nil
+}
+
+// blankDataSoftMask returns the explicit replacement of the soft mask a
+// JPXDecode picture carries in its data (ISO 32000-1, Table 89 /SMaskInData),
+// its samples the zones cover made opaque as [blankSoftMask] makes them, and
+// that mask; both nil when the picture carries none or names an /SMask, which
+// takes its place. The replacement image is no JPXDecode image, for which
+// alone Table 89 defines /SMaskInData, so the data's mask becomes the /SMask
+// Table 89 lets a reader create from it. Dropping it painted the picture
+// opaque around the region, the colour its data held where it was
+// transparent.
+func blankDataSoftMask(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	box graphics.ImageBox,
+	zones []heuristics.Zone,
+	stream ast.PdfStream,
+) (ast.PdfObject, *pdfimage.DataSoftMask, error) {
+	if _, present := stream.Dict["SMask"]; present {
+		return nil, nil, nil
+	}
+	w, errW := document.ResolveInt(ctx, doc, stream.Dict["Width"])
+	h, errH := document.ResolveInt(ctx, doc, stream.Dict["Height"])
+	if errW != nil || errH != nil || w <= 0 || h <= 0 || w > math.MaxInt32 || h > math.MaxInt32 {
+		return nil, nil, fmt.Errorf("%w: %q: no image size for the soft mask of its data", ErrImageNotDecodable, box.Name)
+	}
+	m, err := pdfimage.ReadSMaskInData(ctx, doc, stream, int(w), int(h))
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
+	}
+	if m == nil {
+		return nil, nil, nil
+	}
+	// Premultiplication is undone on the data's values, before /Decode
+	// maps them; a /Decode would have to be undone first.
+	if _, present := stream.Dict["Decode"]; present && m.Premultiplied {
+		return nil, nil, fmt.Errorf("%w: %q carries a /Decode over colour premultiplied by its opacity",
+			ErrImageCarriesSampleEntries, box.Name)
+	}
+	gray := &image.Gray{Pix: slices.Clone(m.Alpha), Stride: int(w), Rect: image.Rect(0, 0, int(w), int(h))}
+	ref, err := blankedMaskStream(alloc, box, zones, gray, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ref, m, nil
 }
 
 // srgbColorSpace allocates litho's sRGB profile as an ICC profile stream and
