@@ -283,6 +283,7 @@ one deliberately rather than diffing it against a fresh build.
 | `smaskbudget_2b.pdf`   | PDF/A-2b     | A soft mask and a group whose rasters pass the render budget     |
 | `greyintent_2b.pdf`    | PDF/A-2b     | Transparency in pages whose group names no space, grey intent    |
 | `formimgname_2b.pdf`   | PDF/A-2b     | A page image and a form's image under one resource name          |
+| `sharedimage_2b.pdf`   | PDF/A-2b     | Images page 1 paints beside page 2, which a redaction copies     |
 
 ### Must-not-fire controls
 
@@ -753,6 +754,7 @@ are covered under [Known divergences](#known-divergences).
 | `sharedstream_2b.pdf`  | 5    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 6   | 6    | 7    | 9    | 9    |
 | `sharednested_2b.pdf`  | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `sharedicc_2b.pdf`     | 4\*  | 2\*  | 4\*  | 2\*  | 2\*  | 4\*  | 2\*  | 2\*  | 3\* | 3\*  | 4\*  | 5    | 6    |
+| `sharedimage_2b.pdf`   | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sharedtag_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 6    | 7    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
@@ -9247,9 +9249,17 @@ region, the centred quarter and the centre band. Before the fix, all three
 half: 40,000 pixels each for the whole page and the quarter, 6,800 for the
 band, the form's checker still drawn. The quarter also blanked the page's
 ramp, which no region covered, and the outside check read it as image spill.
-Redaction now refuses all three with `ErrRegionInFormXObject`, as it refuses
-other content a form draws, and so `mutate-redact` refuses the file by design.
-A fix that blanks the image the form paints in place would pass the cell too.
+Redaction now blanks the image the form paints, the one the form's own
+resources name, and leaves the page's ramp whole: all three scenarios pass on
+litho's half with nothing left inside the regions and nothing changed outside
+them, the band's 1,200 changed pixels being the checker's samples that
+straddle its edges, which the cell reads as image spill. The form's image is
+painted once, so it is blanked in place; one a form drew on two pages would
+refuse with `ErrImageShared`, since a blanked copy would have to sit in the
+form both pages draw. With the raster fallback the form is rasterised
+instead. `mutate-redact` now writes the file: veraPDF 1.30.2 and litho report
+the same rule set on its output in all thirteen cells, the source's plus the
+`6.1.3` trailer tests at part 4, which clearing the metadata adds by design.
 
 The file declares no OutputIntent and no `/Metadata`, so DeviceRGB and
 DeviceGray fail `6.2.3.3/1` and `6.2.3.3/3` at PDF/A-1, `6.2.4.3/2` and
@@ -9258,6 +9268,35 @@ DeviceGray fail `6.2.3.3/1` and `6.2.3.3/3` at PDF/A-1, `6.2.4.3/2` and
 `%PDF-1.7` header (`6.1.2/1`) and PDF/A-4f `6.9/5`, and the PDF/UA cells their
 tagging and metadata rules. veraPDF 1.30.2 and litho
 report the same rule set in all thirteen cells.
+
+### `sharedimage_2b.pdf`
+
+A redaction blanks the samples a region covers by rewriting the image, and every
+other placement of that image shows the result. Where the regions do not cover
+the same samples at every placement, litho now blanks a copy: the copy's covered
+samples are cleared, the copy joins the page's resources under a new name, and
+only the covered `Do` paints it. Before, the redaction refused with
+`ErrImageShared`. No fixture here painted one image in two places, so neither
+`mutate-redact` nor `redact-render` reached the copy on this corpus. Both pages
+share one `/Resources` dictionary naming two 4 x 4 DeviceGray images, each
+placed as a 100-point square on a 400 x 400 page:
+
+| Image   | Samples | Soft mask       | Page 1                      | Page 2       |
+| ------- | ------- | --------------- | --------------------------- | ------------ |
+| `Logo`  | 0x80    | none            | at (50, 250) and (250, 250) | at (50, 250) |
+| `Photo` | 0x40    | 4 x 4, all 0xC0 | at (150, 50)                | at (150, 50) |
+
+Redacting all of page 1 gives each of its three placements a copy of its own,
+the Photo's with a blanked soft mask of its own, and leaves page 2 and both
+images as they were; the centred quarter of page 1 covers a different corner of
+each placement, and each gets its own copy too. poppler 26.09.0 paints both
+outputs as litho does.
+
+The RGB output intent covers DeviceGray, so the file is conforming at PDF/A-2b.
+The soft mask fails `6.4/2` at PDF/A-1b; the other cells are the identification
+and tagging rules of their parts. veraPDF 1.30.2 and litho report the same rule
+set in all thirteen cells, on the source and on the output of the whole-page
+redaction, whose added rules are the metadata ones a redaction clears by design.
 
 ## Scope
 
