@@ -151,30 +151,41 @@ func artifactTags() *flattenTags {
 }
 
 // untaggedTags returns the tagging state for the baked appearances of a
-// document with no structure tree: [artifactTags] when its metadata claims
-// PDF/UA or WTPDF conformance ([compliance.ClaimsAccessibility]), nil
-// otherwise, which draws them unmarked.
+// document with no structure tree: [artifactTags] when
+// [untaggedArtifacts] says to mark them, nil otherwise, which draws them
+// unmarked.
+func untaggedTags(ctx context.Context, doc *document.Document, catalog ast.PdfDict) *flattenTags {
+	if untaggedArtifacts(ctx, doc, catalog) {
+		return artifactTags()
+	}
+	return nil
+}
+
+// untaggedArtifacts reports whether a drawing baked into the page content of
+// a document with no structure tree goes in marked as an artifact: when its
+// metadata claims PDF/UA or WTPDF conformance
+// ([compliance.ClaimsAccessibility]). Every bake that draws an annotation's
+// appearance into an untagged page decides by it: [FlattenForm], the
+// signature bakes and [BakeAnnotations].
 //
 // ISO 14289-1, 7.1 and ISO 14289-2, 8.2.2 require every piece of page content
 // of a document that claims conformance to be tagged or marked as an
 // artifact, and with no structure element to tag it under, unmarked content
-// fails the claim where the widget did not. The drawing goes in as a plain
-// /Artifact sequence (ISO 32000-1, 14.8.2.2.1): Table 330 makes every
-// property optional, and none of its /Type values fits a field's look,
+// fails the claim where the annotation did not. The drawing goes in as a
+// plain /Artifact sequence (ISO 32000-1, 14.8.2.2.1): Table 330 makes every
+// property optional, and none of its /Type values fits an annotation's look,
 // Pagination naming running heads, Layout typographic ornaments and Page
 // production marks. A document that claims neither keeps the drawing as plain
 // content: default text extraction leaves artifacts out, and a flattened
-// field's value is text a reader extracts afterwards.
+// field's value or a drawn annotation's text is text a reader extracts
+// afterwards.
 //
 // # Corpus evidence
 //
 //   - All corpora: drawn unmarked, the FlattenForm output of 75 untagged
 //     files failed ISO 14289-1, 7.1 test 3 where the source passed it.
-func untaggedTags(ctx context.Context, doc *document.Document, catalog ast.PdfDict) *flattenTags {
-	if compliance.ClaimsAccessibility(ctx, doc, catalog) {
-		return artifactTags()
-	}
-	return nil
+func untaggedArtifacts(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+	return compliance.ClaimsAccessibility(ctx, doc, catalog)
 }
 
 // load reads the parent tree and the object references the first time a widget

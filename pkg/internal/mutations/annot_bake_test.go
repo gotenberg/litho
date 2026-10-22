@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -143,6 +144,45 @@ func TestBakeAnnotationsMarksArtifacts(t *testing.T) {
 	}
 	if got := pageContent(t, alloc, doc, page); !strings.Contains(got, "/Artifact BMC\nq 1 0 0 1 0 0 cm /FlatAnnot5 Do Q\nEMC") {
 		t.Errorf("content %q does not mark the drawing as an artifact", got)
+	}
+}
+
+// TestBakeAnnotationsUntaggedClaim pins how an untagged document's drawing is
+// marked: as an artifact when its metadata claims PDF/UA-1 (ISO 14289-1, 7.1
+// requires page content to be tagged or an artifact), and as plain content
+// otherwise, which default text extraction returns.
+func TestBakeAnnotationsUntaggedClaim(t *testing.T) {
+	t.Parallel()
+	const xmp = `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+		`<rdf:Description rdf:about="" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"><pdfuaid:part>1</pdfuaid:part></rdf:Description>` +
+		`</rdf:RDF></x:xmpmeta>`
+	for _, claim := range []bool{false, true} {
+		t.Run(fmt.Sprintf("claim=%v", claim), func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			objs := bakeObjs("")
+			if claim {
+				objs = bakeObjs("/Metadata 7 0 R")
+			}
+			objs = append(objs, fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(xmp), xmp))
+			doc, page, alloc := bakeDoc(t, fieldObjsPDF(objs))
+			ap, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: 5})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := BakeAnnotations(ctx, alloc, doc, page, []AnnotationBake{
+				{Index: 0, Appearance: ap, AppearanceRef: ast.PdfIndirectRef{ObjectNum: 5}, Matrix: [6]float64{1, 0, 0, 1, 0, 0}},
+			}); err != nil {
+				t.Fatalf("BakeAnnotations: %v", err)
+			}
+			got := pageContent(t, alloc, doc, page)
+			if !strings.Contains(got, "q 1 0 0 1 0 0 cm /FlatAnnot5 Do Q") {
+				t.Fatalf("content %q does not draw the appearance", got)
+			}
+			if marked := strings.Contains(got, "/Artifact BMC\nq 1 0 0 1 0 0 cm /FlatAnnot5 Do Q\nEMC"); marked != claim {
+				t.Errorf("content %q: drawing marked as an artifact %v, want %v", got, marked, claim)
+			}
+		})
 	}
 }
 

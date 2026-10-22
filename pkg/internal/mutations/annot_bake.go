@@ -58,7 +58,10 @@ type AnnotationBake struct {
 // In a tagged document the drawing is marked as an artifact (ISO 32000-1,
 // 14.8.2.2): it is the look of an annotation the structure tree still reaches
 // by its object reference, and ISO 14289-1, 7.1 requires page content to be
-// tagged or an artifact.
+// tagged or an artifact. A document with no structure tree gets the same
+// marking only when its metadata claims PDF/UA or WTPDF, as [FlattenForm]
+// marks a baked widget (see [untaggedArtifacts]); otherwise the drawing is
+// plain page content.
 //
 // # Corpus evidence
 //
@@ -80,7 +83,7 @@ func BakeAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		return fmt.Errorf("resolving page /Annots: %w", err)
 	}
 	open, closing := "", ""
-	if documentTagged(ctx, alloc, doc) {
+	if bakesArtifacts(ctx, alloc, doc) {
 		open, closing = "/Artifact BMC\n", "EMC\n"
 	}
 
@@ -222,9 +225,10 @@ func hoistOne(alloc *writer.ObjAllocator, obj ast.PdfObject, depth int) ast.PdfO
 	return alloc.Alloc(s)
 }
 
-// documentTagged reports whether the catalog, as alloc stages it, holds a
-// structure tree.
-func documentTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) bool {
+// bakesArtifacts reports whether [BakeAnnotations] marks its drawing as an
+// artifact: the catalog, as alloc stages it, holds a structure tree, or holds
+// none and [untaggedArtifacts] says to mark it.
+func bakesArtifacts(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) bool {
 	ref, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return false
@@ -233,8 +237,10 @@ func documentTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	if err != nil {
 		return false
 	}
-	_, tagged := catalog["StructTreeRoot"]
-	return tagged
+	if _, tagged := catalog["StructTreeRoot"]; tagged {
+		return true
+	}
+	return untaggedArtifacts(ctx, doc, catalog)
 }
 
 // matrixOperands writes m as the six operands of cm, to a millionth of a

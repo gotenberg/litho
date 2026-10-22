@@ -156,7 +156,11 @@ type FlattenReport struct {
 // annotation stays, with an appearance that paints nothing: a link keeps its
 // action, a comment its pop-up and text, and the structure tree its object
 // reference to it, while the drawing is marked as an artifact in a tagged
-// document. An annotation a viewer does not display (Hidden or NoView) loses
+// document (ISO 14289-1, 7.1). A document with no structure tree keeps the
+// drawing as plain page content, which default [Reader.ExtractText] returns,
+// unless its XMP metadata claims PDF/UA (pdfuaid:part) or WTPDF: the drawing
+// is then marked as an artifact, as [Writer.FlattenForm] marks a baked
+// widget. An annotation a viewer does not display (Hidden or NoView) loses
 // its transparent appearance with nothing drawn. Form field widgets stay as
 // they are: call [Writer.FlattenForm] first to bake them. A signed signature
 // field leaves the document with this rewrite, as with any other, its
