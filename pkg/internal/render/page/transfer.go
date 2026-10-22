@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -170,13 +171,23 @@ func (r *renderer) withTransfer(conv colorconv.Converter) colorconv.Converter {
 const transferRowsPerContextCheck = 64
 
 // transferImage returns img with the current transfer applied to its colour,
-// img itself when the transfer is the identity. img is the decoder's opaque
-// colour, its transparency carried by its masks. The copy has img's size,
-// which the image decoder already held to the image pixel budget.
+// img itself when the transfer is the identity. img is the decoder's colour,
+// its transparency carried by its masks: an *image.NRGBA holds straight
+// colour beside the opacity of its data, which the masks already took, so its
+// colour is read without that alpha. The copy has img's size, which the image
+// decoder already held to the image pixel budget.
 func (r *renderer) transferImage(img image.Image) (image.Image, error) {
 	t := r.currentTransfer()
 	if t == nil {
 		return img, nil
+	}
+	if own, ok := img.(*image.NRGBA); ok {
+		opaque := *own
+		opaque.Pix = slices.Clone(own.Pix)
+		for i := 3; i < len(opaque.Pix); i += 4 {
+			opaque.Pix[i] = 0xff
+		}
+		img = &opaque
 	}
 	b := img.Bounds()
 	out := image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))

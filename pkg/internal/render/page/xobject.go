@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"log/slog"
 	"math"
@@ -331,16 +332,25 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 	if err != nil {
 		return r.imageFailed(err)
 	}
+	b := img.Bounds()
+	var masks imgpaint.Masks
+	if own, ok := img.(*image.NRGBA); ok {
+		// The decoder returns an image's own opacity as its alpha: the soft
+		// mask a JPXDecode image carries in its data (Table 89
+		// /SMaskInData), which it applies only where no /SMask is named. It
+		// is a soft mask, so it overrides /Mask as /SMask does (11.6.5.3).
+		masks.SMask = imgpaint.OwnAlpha(own, bool(interpolate))
+	} else {
+		masks, err = r.imageMasks(name, stream, b.Dx(), b.Dy(), toDevice)
+		if err != nil {
+			// A mask that cannot be read leaves no telling what it hides, and
+			// painting the image opaque would show it all (ISO 32000-1, 8.9.6
+			// and 11.6.5.3): the image is skipped instead.
+			return r.imageFailed(err)
+		}
+	}
 	if img, err = r.transferImage(img); err != nil {
 		return err
-	}
-	b := img.Bounds()
-	masks, err := r.imageMasks(name, stream, b.Dx(), b.Dy(), toDevice)
-	if err != nil {
-		// A mask that cannot be read leaves no telling what it hides, and
-		// painting the image opaque would show it all (ISO 32000-1, 8.9.6
-		// and 11.6.5.3): the image is skipped instead.
-		return r.imageFailed(err)
 	}
 	return r.imageFailed(r.paint(bounds, fx, func(v view, op surface.Opacity) error {
 		p, err := params(v, op)

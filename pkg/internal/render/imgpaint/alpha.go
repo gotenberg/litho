@@ -54,6 +54,22 @@ func StencilMask(img image.Image, interpolate bool) *Alpha {
 	return greyPlane(img, interpolate, true)
 }
 
+// OwnAlpha returns the plane of the opacity a decoded image carries in its
+// own samples, its alpha channel: the soft mask a JPXDecode image holds in
+// its data (ISO 32000-1, 8.9.5, Table 89 /SMaskInData), which the decoder
+// returns beside straight colour. It stands where an /SMask plane stands.
+func OwnAlpha(img *image.NRGBA, interpolate bool) *Alpha {
+	b := img.Bounds()
+	out := &Alpha{Width: b.Dx(), Height: b.Dy(), A: make([]uint8, b.Dx()*b.Dy()), Interpolate: interpolate}
+	for y := range out.Height {
+		row := img.Pix[img.PixOffset(b.Min.X, b.Min.Y+y):]
+		for x := range out.Width {
+			out.A[y*out.Width+x] = row[4*x+3]
+		}
+	}
+	return out
+}
+
 func greyPlane(img image.Image, interpolate, invert bool) *Alpha {
 	b := img.Bounds()
 	out := &Alpha{Width: b.Dx(), Height: b.Dy(), A: make([]uint8, b.Dx()*b.Dy()), Interpolate: interpolate}
