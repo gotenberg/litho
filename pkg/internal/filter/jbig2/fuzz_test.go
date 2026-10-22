@@ -72,7 +72,7 @@ func FuzzDecode(f *testing.F) {
 		if small, err := Decode(context.Background(), data, globals, fuzzSmallCap); err == nil && int64(small.Width)*int64(small.Height) > fuzzSmallCap {
 			t.Fatalf("%dx%d page decoded under a %d-pixel cap", small.Width, small.Height, int64(fuzzSmallCap))
 		}
-		bm, err := Decode(context.Background(), data, globals, DefaultMaxBitmapPixels)
+		bm, err := Decode(context.Background(), data, globals, DefaultMaxBitmapBytes)
 		checkErr := Check(context.Background(), data, globals)
 		if (errors.Is(err, ErrUnsupported) && !errors.Is(checkErr, ErrUnsupported)) || (err == nil && checkErr != nil) {
 			t.Fatalf("Check = %v, Decode = %v", checkErr, err)

@@ -7,31 +7,50 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/mq"
 )
 
-// maxDecodedAreas bounds the total area one Decode call decodes or draws,
-// counted in bitmap caps: every region, every symbol bitmap, and every symbol
-// instance a text region draws. It is an anti-DoS guard, not spec-mandated:
-// each bitmap is capped by the cap Decode is given, but a short stream can
-// declare many of them, and arithmetically coded data costs time in proportion
-// to the area it covers however few bytes back it, since the decoder reads
-// 1-bits past the end of its data. Four page-sized areas leave room for a page
-// drawn in overlapping regions and intermediate buffers, while refusing
-// thousands of empty full-size ones.
+// maxDecodedAreas bounds the work one Decode call does, counted in units of
+// the bitmap cap: maxDecodedAreas times it. It is an anti-DoS guard, not
+// spec-mandated: each bitmap is capped by the cap Decode is given, but a short
+// stream can declare many of them, and arithmetically coded data costs time in
+// proportion to the area it covers however few bytes back it, since the
+// decoder reads 1-bits past the end of its data.
+//
+// Each step is charged in the unit its time follows. A bitmap the decoder
+// codes, a generic or refinement region, a symbol, a collective bitmap, a
+// gray-scale bitplane, costs a pixel a pixel (budget.charge). A bitmap that is
+// only allocated, filled and drawn into, a text or halftone region, and each
+// symbol instance or pattern drawn, costs a byte a byte, since filling and
+// [Bitmap.combine] work eight pixels at once (budget.chargeBuffer). Under the
+// default budget the total is 400 million units, so a stream of coded regions
+// costs the time it did when the bitmap cap counted pixels, while a page-sized
+// text region over a scan pays for its bytes, not its pixels. Four page-sized
+// areas leave room for a page drawn in overlapping regions and intermediate
+// buffers, while refusing thousands of empty full-size ones.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18896.pdf: a 19926x16012 text region, 39.9 MB, drawing 44.7
+//     million pixels of symbol instances from a dictionary of 44.3 million
+//     pixels: 408 million units when the region and its instances counted
+//     pixels, 90 million when they count bytes.
+//   - pdfjs issue17190.pdf: one 28087x19866 generic region, 558 million
+//     pixels, past the total and refused; the image decoder refuses it as an
+//     image before decoding anyway.
 const maxDecodedAreas = 4
 
 // Decode decodes one page of JBIG2 data in the embedded organisation (ITU-T
 // T.88, D.3; ISO 32000-1, 7.4.7) and returns its bitmap. globals holds the
-// global segments of a JBIG2Globals stream and may be empty. maxPixels caps
-// the area of every bitmap the call decodes, and maxDecodedAreas times it
-// their total; [DefaultMaxBitmapPixels] is the cap of the default image
-// budget.
+// global segments of a JBIG2Globals stream and may be empty. maxBytes caps
+// the bytes of every bitmap the call decodes, rows padded to whole bytes, and
+// maxDecodedAreas times it the work of the call (see maxDecodedAreas);
+// [DefaultMaxBitmapBytes] is the cap of the default image budget.
 //
 // The page decoded is the one named by the first page information segment in
 // data. Global segments, and segments of that page, are processed in order;
 // segments associated with any other page are skipped.
 //
 // Decode is safe for concurrent use: it keeps no state between calls.
-func Decode(ctx context.Context, data, globals []byte, maxPixels int64) (*Bitmap, error) {
-	d := &decoder{budget: budget{area: maxPixels}}
+func Decode(ctx context.Context, data, globals []byte, maxBytes int64) (*Bitmap, error) {
+	d := &decoder{budget: budget{bytes: maxBytes}}
 	err := walkSegments(data, globals, func(seg segment) (bool, error) {
 		if err := d.process(ctx, seg); err != nil {
 			return false, err
@@ -151,35 +170,49 @@ type auxRegion struct {
 	info regionInfo
 }
 
-// budget counts the area of the bitmaps one Decode call decodes or draws
-// against maxDecodedAreas bitmap caps.
+// budget holds each bitmap one Decode call decodes or draws to the bitmap
+// cap, in bytes, and counts the work of the call against maxDecodedAreas
+// times it.
 type budget struct {
 	used int64
-	// area is the cap on one bitmap Decode was given, or 0 for
-	// DefaultMaxBitmapPixels.
-	area int64
+	// bytes is the cap on one bitmap Decode was given, or 0 for
+	// DefaultMaxBitmapBytes.
+	bytes int64
 }
 
-// areaCap returns the cap on the area of one bitmap. A nil budget has the
+// byteCap returns the cap on the bytes of one bitmap. A nil budget has the
 // default cap.
-func (b *budget) areaCap() int64 {
-	if b == nil || b.area <= 0 {
-		return DefaultMaxBitmapPixels
+func (b *budget) byteCap() int64 {
+	if b == nil || b.bytes <= 0 {
+		return DefaultMaxBitmapBytes
 	}
-	return b.area
+	return b.bytes
 }
 
-// charge counts width x height pixels, refusing any single area above
-// areaCap and any total above maxDecodedAreas times it.
+// charge counts a width x height bitmap the call decodes, a unit a pixel,
+// refusing a bitmap whose bytes pass byteCap and a total past maxDecodedAreas
+// times it.
 func (b *budget) charge(width, height int64) error {
-	limit := b.areaCap()
-	if areaExceeds(width, height, limit) {
-		return fmt.Errorf("%w: region of %dx%d pixels exceeds %d", ErrLimit, width, height, limit)
+	return b.add(width, height, width)
+}
+
+// chargeBuffer counts a width x height bitmap the call allocates or draws
+// without decoding it, a unit a byte, under the bounds of charge.
+func (b *budget) chargeBuffer(width, height int64) error {
+	return b.add(width, height, rowBytes(width))
+}
+
+// add charges units x height units for a width x height bitmap.
+func (b *budget) add(width, height, units int64) error {
+	limit := b.byteCap()
+	if bitmapExceeds(width, height, limit) {
+		return fmt.Errorf("%w: region of %dx%d pixels exceeds %d bytes", ErrLimit, width, height, limit)
 	}
-	b.used += width * height
-	if total := maxDecodedAreas * limit; b.used > total {
-		return fmt.Errorf("%w: regions total more than %d pixels", ErrLimit, total)
+	total := maxDecodedAreas * limit
+	if areaExceeds(units, height, total-b.used) {
+		return fmt.Errorf("%w: regions total more than %d units of work", ErrLimit, total)
 	}
+	b.used += units * height
 	return nil
 }
 
@@ -284,8 +317,8 @@ func (d *decoder) pageInformation(seg segment) error {
 		d.heightUnknown = true
 		h = 0
 	}
-	if limit := d.budget.areaCap(); areaExceeds(int64(width), h, limit) {
-		return fmt.Errorf("%w: bitmap of %dx%d pixels exceeds %d", ErrLimit, width, h, limit)
+	if limit := d.budget.byteCap(); bitmapExceeds(int64(width), h, limit) {
+		return fmt.Errorf("%w: bitmap of %dx%d pixels exceeds %d bytes", ErrLimit, width, h, limit)
 	}
 	page, err := newBitmap(int(width), int(h))
 	if err != nil {
@@ -312,7 +345,7 @@ func (d *decoder) endOfStripe(seg segment) error {
 			return err
 		}
 	}
-	d.stripeEnd = int(min(endRow+1, d.budget.areaCap()))
+	d.stripeEnd = int(min(endRow+1, d.budget.byteCap()))
 	return nil
 }
 
@@ -322,10 +355,10 @@ func (d *decoder) growPage(height int64) error {
 	if height <= int64(d.page.Height) {
 		return nil
 	}
-	limit := d.budget.areaCap()
+	limit := d.budget.byteCap()
 	height = min(height, limit+1)
-	if areaExceeds(int64(d.page.Width), height, limit) {
-		return fmt.Errorf("%w: bitmap of %dx%d pixels exceeds %d", ErrLimit, d.page.Width, height, limit)
+	if bitmapExceeds(int64(d.page.Width), height, limit) {
+		return fmt.Errorf("%w: bitmap of %dx%d pixels exceeds %d bytes", ErrLimit, d.page.Width, height, limit)
 	}
 	grown, err := newBitmap(d.page.Width, int(height))
 	if err != nil {
@@ -455,8 +488,8 @@ func (d *decoder) textRegion(ctx context.Context, seg segment) (*Bitmap, regionI
 	if err != nil {
 		return nil, regionInfo{}, err
 	}
-	if limit := d.budget.areaCap(); areaExceeds(ts.info.width, ts.info.height, limit) {
-		return nil, regionInfo{}, fmt.Errorf("%w: text region of %dx%d pixels exceeds %d", ErrLimit, ts.info.width, ts.info.height, limit)
+	if limit := d.budget.byteCap(); bitmapExceeds(ts.info.width, ts.info.height, limit) {
+		return nil, regionInfo{}, fmt.Errorf("%w: text region of %dx%d pixels exceeds %d bytes", ErrLimit, ts.info.width, ts.info.height, limit)
 	}
 	p := ts.params
 	p.width, p.height = int(ts.info.width), int(ts.info.height)
@@ -490,8 +523,8 @@ func (d *decoder) refinementRegion(ctx context.Context, seg segment) error {
 	if err != nil {
 		return err
 	}
-	if limit := d.budget.areaCap(); areaExceeds(info.width, info.height, limit) {
-		return fmt.Errorf("%w: refinement region of %dx%d pixels exceeds %d", ErrLimit, info.width, info.height, limit)
+	if limit := d.budget.byteCap(); bitmapExceeds(info.width, info.height, limit) {
+		return fmt.Errorf("%w: refinement region of %dx%d pixels exceeds %d bytes", ErrLimit, info.width, info.height, limit)
 	}
 	c := &cursor{b: seg.data, off: regionInfoSize}
 	flags := c.u8()

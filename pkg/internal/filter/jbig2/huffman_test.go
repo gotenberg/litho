@@ -151,7 +151,7 @@ func TestDecode_AnnexH1TextBothCodings(t *testing.T) {
 			for _, i := range tc.segs {
 				stream = append(stream, raw[i]...)
 			}
-			got, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapPixels)
+			got, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapBytes)
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}

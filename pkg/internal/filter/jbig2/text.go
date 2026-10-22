@@ -54,7 +54,9 @@ type textSource interface {
 	refines() (bool, error)
 	// refine decodes a symbol instance's refined bitmap (6.4.11 steps 1-7).
 	refine(ctx context.Context, p textParams, symbol *Bitmap) (*Bitmap, error)
-	charge(width, height int64) error
+	// chargeBuffer charges the region buffer and each instance drawn into it
+	// (budget.chargeBuffer).
+	chargeBuffer(width, height int64) error
 }
 
 // decodeText runs the text region decoding procedure of ITU-T T.88, 6.4.5,
@@ -63,7 +65,7 @@ func decodeText(ctx context.Context, p textParams, src textSource) (*Bitmap, err
 	if p.numInstances > maxTextInstances {
 		return nil, fmt.Errorf("%w: text region of %d symbol instances exceeds %d", ErrLimit, p.numInstances, maxTextInstances)
 	}
-	if err := src.charge(int64(p.width), int64(p.height)); err != nil {
+	if err := src.chargeBuffer(int64(p.width), int64(p.height)); err != nil {
 		return nil, err
 	}
 	region, err := newBitmap(p.width, p.height)
@@ -165,10 +167,10 @@ func decodeText(ctx context.Context, p textParams, src textSource) (*Bitmap, err
 			if p.refCorner == cornerBottomLeft || p.refCorner == cornerBottomRight {
 				y -= h - 1
 			}
-			// Drawing costs time in proportion to the symbol's area, so every
+			// Drawing costs time in proportion to the symbol's bytes, so every
 			// instance is charged, or a million instances of one large symbol
 			// would escape the budget that bounds each region.
-			if err := src.charge(w, h); err != nil {
+			if err := src.chargeBuffer(w, h); err != nil {
 				return nil, err
 			}
 			if err := region.combine(symbol, x, y, p.combineOp); err != nil {
@@ -192,7 +194,7 @@ func decodeText(ctx context.Context, p textParams, src textSource) (*Bitmap, err
 // deltas, ITU-T T.88 6.4.11 step 6 and Table 12, reading the bitmap from st.
 func refineSymbol(ctx context.Context, p textParams, symbol *Bitmap, rdw, rdh, rdx, rdy int64, st *arithState) (*Bitmap, error) {
 	w, h := int64(symbol.Width)+rdw, int64(symbol.Height)+rdh
-	if w < 0 || h < 0 || areaExceeds(w, h, st.budget.areaCap()) {
+	if w < 0 || h < 0 || bitmapExceeds(w, h, st.budget.byteCap()) {
 		return nil, fmt.Errorf("%w: refined symbol of %dx%d pixels", ErrMalformed, w, h)
 	}
 	// Table 12 gives GRREFERENCEDX as RDWI/2 + RDXI. T.88 (2000) does not
@@ -234,7 +236,9 @@ func (st *arithState) refines() (bool, error) {
 	return ri != 0, err
 }
 
-func (st *arithState) charge(width, height int64) error { return st.budget.charge(width, height) }
+func (st *arithState) chargeBuffer(width, height int64) error {
+	return st.budget.chargeBuffer(width, height)
+}
 
 func (st *arithState) refine(ctx context.Context, p textParams, symbol *Bitmap) (*Bitmap, error) {
 	var deltas [4]int64
@@ -288,7 +292,9 @@ func (h *huffText) refines() (bool, error) {
 	return b != 0, err
 }
 
-func (h *huffText) charge(width, height int64) error { return h.budget.charge(width, height) }
+func (h *huffText) chargeBuffer(width, height int64) error {
+	return h.budget.chargeBuffer(width, height)
+}
 
 func (h *huffText) refine(ctx context.Context, p textParams, symbol *Bitmap) (*Bitmap, error) {
 	var deltas [4]int64

@@ -57,10 +57,12 @@ type Limits struct {
 	// MaxImagePixels bounds Width x Height of one image. [Reader.DecodeImage]
 	// and an image's Decode function refuse a larger image before decoding
 	// it, and decoded samples past four bytes a pixel of it, with
-	// [ErrImageTooLarge]. The pixel and sample caps of the DCTDecode,
-	// JPXDecode and JBIG2Decode codecs scale with it, so a codestream is held
-	// to the same budget whatever its dictionary declares. Default
-	// 100,000,000, at most 2^30.
+	// [ErrImageTooLarge]. The sample caps of the DCTDecode and JPXDecode
+	// codecs scale with it, so a codestream is held to the same budget
+	// whatever its dictionary declares. JBIG2Decode, one bit a pixel, is held
+	// to its bytes: a bitmap may take a byte for each pixel of the budget, so
+	// a mask past it, which is read reduced to the size it is drawn at, still
+	// decodes. Default 100,000,000, at most 2^30.
 	MaxImagePixels int64
 
 	// MaxEmbeddedFileBytes bounds the decoded size of an embedded PDF that

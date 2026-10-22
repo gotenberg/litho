@@ -179,7 +179,7 @@ func decodeSymbols(ctx context.Context, h symbolHeader, inSyms []*Bitmap, st *ar
 			return nil, err
 		}
 		height += dh
-		if height < 0 || height > st.budget.areaCap() {
+		if height < 0 || height > st.budget.byteCap() {
 			return nil, fmt.Errorf("%w: height class height %d", ErrMalformed, height)
 		}
 		var width int64
@@ -193,7 +193,7 @@ func decodeSymbols(ctx context.Context, h symbolHeader, inSyms []*Bitmap, st *ar
 				return nil, fmt.Errorf("%w: height classes hold more than the %d symbols declared", ErrMalformed, h.numNew)
 			}
 			width += dw
-			if width < 0 || areaExceeds(width, height, st.budget.areaCap()) {
+			if width < 0 || bitmapExceeds(width, height, st.budget.byteCap()) {
 				return nil, fmt.Errorf("%w: symbol of %dx%d pixels", ErrMalformed, width, height)
 			}
 			bs, err := decodeSymbolBitmap(ctx, h, int(width), int(height), all, st)
@@ -393,7 +393,7 @@ func decodeSymbolsHuffman(ctx context.Context, h symbolHeader, inSyms []*Bitmap,
 			return nil, err
 		}
 		height += dh
-		if height < 0 || height > hs.budget.areaCap() {
+		if height < 0 || height > hs.budget.byteCap() {
 			return nil, fmt.Errorf("%w: height class height %d", ErrMalformed, height)
 		}
 		var width, total int64
@@ -411,7 +411,7 @@ func decodeSymbolsHuffman(ctx context.Context, h symbolHeader, inSyms []*Bitmap,
 			}
 			width += dw
 			total += width
-			if limit := hs.budget.areaCap(); width < 0 || areaExceeds(width, height, limit) || areaExceeds(total, height, limit) {
+			if limit := hs.budget.byteCap(); width < 0 || bitmapExceeds(width, height, limit) || bitmapExceeds(total, height, limit) {
 				return nil, fmt.Errorf("%w: symbol of %dx%d pixels", ErrMalformed, width, height)
 			}
 			if !h.refagg {

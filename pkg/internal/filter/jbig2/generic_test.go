@@ -58,7 +58,7 @@ func TestDecode_GenericTemplatesRoundTrip(t *testing.T) {
 
 					src := testImage(97, 71, uint64(template+1))
 					stream := genericStream(src.Width, src.Height, template, tpgdon, at, encodeGeneric(src, template, tpgdon, at))
-					got, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapPixels)
+					got, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapBytes)
 					if err != nil {
 						t.Fatalf("Decode: %v", err)
 					}
@@ -75,7 +75,7 @@ func TestDecode_GenericTemplatesRoundTrip(t *testing.T) {
 			src := sltpImage(template)
 			at := encNominalAT[template]
 			stream := genericStream(src.Width, src.Height, template, true, at, encodeGeneric(src, template, true, at))
-			got, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapPixels)
+			got, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapBytes)
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}

@@ -131,7 +131,7 @@ func decodeHalftone(ctx context.Context, seg segment, dict *patternDict, b *budg
 	if err != nil {
 		return nil, regionInfo{}, err
 	}
-	if err := b.charge(h.info.width, h.info.height); err != nil {
+	if err := b.chargeBuffer(h.info.width, h.info.height); err != nil {
 		return nil, regionInfo{}, err
 	}
 	region, err := newBitmap(int(h.info.width), int(h.info.height))
@@ -142,7 +142,9 @@ func decodeHalftone(ctx context.Context, seg segment, dict *patternDict, b *budg
 	if len(dict.patterns) == 0 {
 		return nil, regionInfo{}, fmt.Errorf("%w: halftone region over an empty pattern dictionary", ErrMalformed)
 	}
-	if limit := b.areaCap(); areaExceeds(h.gridW, h.gridH, limit) {
+	// The grid holds a gray-scale value a cell, not a bit, so it is held to
+	// a cell per byte of the bitmap cap rather than to a bitmap's bytes.
+	if limit := b.byteCap(); areaExceeds(h.gridW, h.gridH, limit) {
 		return nil, regionInfo{}, fmt.Errorf("%w: halftone grid of %dx%d cells exceeds %d", ErrLimit, h.gridW, h.gridH, limit)
 	}
 	pw, ph := int64(dict.patterns[0].Width), int64(dict.patterns[0].Height)
@@ -190,7 +192,7 @@ func decodeHalftone(ctx context.Context, seg segment, dict *patternDict, b *budg
 				return nil, regionInfo{}, fmt.Errorf("%w: gray-scale value %d of %d patterns", ErrMalformed, v, len(dict.patterns))
 			}
 			x, y := cell(ng, mg)
-			if err := b.charge(pw, ph); err != nil {
+			if err := b.chargeBuffer(pw, ph); err != nil {
 				return nil, regionInfo{}, err
 			}
 			if err := region.combine(dict.patterns[v], x, y, h.combineOp); err != nil {

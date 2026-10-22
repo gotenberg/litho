@@ -131,7 +131,7 @@ func TestDecode_AnnexH1GenericRegion(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			bm, err := Decode(context.Background(), concat(raw[tc.page], raw[tc.generic]), nil, DefaultMaxBitmapPixels)
+			bm, err := Decode(context.Background(), concat(raw[tc.page], raw[tc.generic]), nil, DefaultMaxBitmapBytes)
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}
@@ -179,7 +179,7 @@ func TestDecode_UnknownLengthGenericRegion(t *testing.T) {
 	golden := annexH1Golden(t)
 
 	full := concat(raw[8], withUnknownLength(t, raw[11], 44))
-	bm, err := Decode(context.Background(), full, nil, DefaultMaxBitmapPixels)
+	bm, err := Decode(context.Background(), full, nil, DefaultMaxBitmapBytes)
 	if err != nil {
 		t.Fatalf("Decode with every row: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestDecode_UnknownLengthGenericRegion(t *testing.T) {
 	// With 20 rows the region stops at page row 11+20; below it the page
 	// keeps its default pixel value 0.
 	short := concat(raw[8], withUnknownLength(t, raw[11], 20))
-	bm, err = Decode(context.Background(), short, nil, DefaultMaxBitmapPixels)
+	bm, err = Decode(context.Background(), short, nil, DefaultMaxBitmapBytes)
 	if err != nil {
 		t.Fatalf("Decode with 20 rows: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestDecode_UnknownLengthGenericRegion(t *testing.T) {
 	}
 
 	// A row count above the stated height is malformed.
-	if _, err := Decode(context.Background(), concat(raw[8], withUnknownLength(t, raw[11], 45)), nil, DefaultMaxBitmapPixels); !errors.Is(err, ErrMalformed) {
+	if _, err := Decode(context.Background(), concat(raw[8], withUnknownLength(t, raw[11], 45)), nil, DefaultMaxBitmapBytes); !errors.Is(err, ErrMalformed) {
 		t.Errorf("row count 45 over a 44-row region: err = %v, want ErrMalformed", err)
 	}
 }
@@ -235,7 +235,7 @@ func TestDecode_StripedPageOfUnknownHeight(t *testing.T) {
 	binary.BigEndian.PutUint16(pageInfo[dataAt+17:], 0x8000|56)
 
 	stream := concat(pageInfo, raw[11], segmentBytes(12, typeEndOfStripe, 2, binary.BigEndian.AppendUint32(nil, 55)))
-	bm, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapPixels)
+	bm, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapBytes)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestDecode_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, err := Decode(context.Background(), tc.data, nil, DefaultMaxBitmapPixels); !errors.Is(err, tc.want) {
+			if _, err := Decode(context.Background(), tc.data, nil, DefaultMaxBitmapBytes); !errors.Is(err, tc.want) {
 				t.Errorf("err = %v, want %v", err, tc.want)
 			}
 		})
@@ -297,6 +297,14 @@ func TestDecode_ChargeBoundsTotalArea(t *testing.T) {
 	}
 	if err := b.charge(1, 1); !errors.Is(err, ErrLimit) {
 		t.Errorf("pixel past four page-sized areas: err = %v, want ErrLimit", err)
+	}
+	// 80,000 x 10,000 pixels hold 100 MB, within the bitmap cap, but cost
+	// the decoding time of 800 million pixels, twice the total.
+	if err := (&budget{}).charge(80_000, 10_000); !errors.Is(err, ErrLimit) {
+		t.Errorf("bitmap of 800 million pixels: err = %v, want ErrLimit", err)
+	}
+	if err := (&budget{}).charge(40_000, 10_000); err != nil {
+		t.Errorf("bitmap of 400 million pixels in 50 MB refused: %v", err)
 	}
 	if err := (&budget{}).charge(0xFFFFFFFF, 0xFFFFFFFF); !errors.Is(err, ErrLimit) {
 		t.Errorf("2^32-1 square region: err = %v, want ErrLimit", err)
@@ -342,31 +350,68 @@ func TestBitmapCombine(t *testing.T) {
 }
 
 // TestDecode_CapScales pins that the cap Decode is given moves every bitmap
-// bound with it: the 64x56 page of Annex H.1 decodes under a cap of exactly
-// its area and is refused under one pixel less, and the total the budget
-// admits is four of those caps.
+// bound with it: the 64x56 page of Annex H.1, 3584 pixels in 448 bytes,
+// decodes under a cap of a quarter of its pixels, since the pixels the budget
+// admits in total are four caps, and is refused under a cap one byte short of
+// the page's bytes.
 func TestDecode_CapScales(t *testing.T) {
 	t.Parallel()
 
 	raw := annexH1(t)
 	stream := concat(raw[8], raw[11])
-	if _, err := Decode(context.Background(), stream, nil, 64*56); err != nil {
-		t.Fatalf("Decode under a cap of the page's area: %v", err)
+	if _, err := Decode(context.Background(), stream, nil, 64*56/4); err != nil {
+		t.Fatalf("Decode under a cap of a quarter of the page's pixels: %v", err)
 	}
-	if _, err := Decode(context.Background(), stream, nil, 64*56-1); !errors.Is(err, ErrLimit) {
-		t.Errorf("Decode under a cap one pixel short: err = %v, want ErrLimit", err)
+	if _, err := Decode(context.Background(), stream, nil, 64/8*56-1); !errors.Is(err, ErrLimit) {
+		t.Errorf("Decode under a cap one byte short of the page: err = %v, want ErrLimit", err)
 	}
 
-	b := &budget{area: 100}
+	b := &budget{bytes: 100}
 	for i := range 4 {
 		if err := b.charge(10, 10); err != nil {
-			t.Fatalf("area %d of a 100-pixel cap refused: %v", i+1, err)
+			t.Fatalf("area %d of 100 pixels refused: %v", i+1, err)
 		}
 	}
 	if err := b.charge(1, 1); !errors.Is(err, ErrLimit) {
 		t.Errorf("pixel past four 100-pixel areas: err = %v, want ErrLimit", err)
 	}
-	if err := (&budget{area: 100}).charge(11, 10); !errors.Is(err, ErrLimit) {
-		t.Errorf("110-pixel region under a 100-pixel cap: err = %v, want ErrLimit", err)
+	if err := (&budget{bytes: 100}).charge(81, 10); !errors.Is(err, ErrLimit) {
+		t.Errorf("110-byte bitmap under a 100-byte cap: err = %v, want ErrLimit", err)
+	}
+}
+
+// TestBitmapCap_CountsPaddedBytes pins that the bitmap cap counts bytes as a
+// [Bitmap] holds them, rows padded to whole bytes: eight pixels share a byte,
+// while a bitmap one pixel wide pays a byte a pixel, so it is never admitted
+// at more pixels than the cap names.
+func TestBitmapCap_CountsPaddedBytes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		width, height, limit int64
+		want                 bool
+	}{
+		{800, 1000, 100_000, false},
+		{801, 1000, 100_000, true},
+		{1, 100_000, 100_000, false},
+		{1, 100_001, 100_000, true},
+		{7, 100_001, 100_000, true},
+		{0, 1 << 40, 100_000, false},
+		{-8, 1 << 40, 100_000, false},
+		{0xFFFFFFFF, 0xFFFFFFFF, DefaultMaxBitmapBytes, true},
+	} {
+		if got := bitmapExceeds(tc.width, tc.height, tc.limit); got != tc.want {
+			t.Errorf("bitmapExceeds(%d, %d, %d) = %v, want %v", tc.width, tc.height, tc.limit, got, tc.want)
+		}
+	}
+	b := &budget{bytes: 100}
+	if err := b.charge(1, 100); err != nil {
+		t.Fatalf("one-pixel-wide bitmap of 100 bytes refused: %v", err)
+	}
+	if err := (&budget{bytes: 100}).charge(1, 101); !errors.Is(err, ErrLimit) {
+		t.Errorf("one-pixel-wide bitmap of 101 bytes: err = %v, want ErrLimit", err)
+	}
+	if b.used != 100 {
+		t.Errorf("one-pixel-wide bitmap of 100 rows counted %d pixels, want 100", b.used)
 	}
 }

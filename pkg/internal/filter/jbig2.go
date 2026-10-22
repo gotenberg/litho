@@ -25,8 +25,8 @@ import (
 // [ErrUnsupportedFilter], the way the pipeline expects of any filter it cannot
 // decode; malformed data is an error of its own.
 //
-// The bitmap cap scales with the image budget of lim, and the globals stream
-// decodes under its stream budget.
+// The bitmap cap, in bytes ([jbig2.DefaultMaxBitmapBytes]), scales with the
+// image budget of lim, and the globals stream decodes under its stream budget.
 //
 // # Corpus evidence
 //
@@ -38,15 +38,16 @@ func decodeJBIG2(ctx context.Context, data []byte, parms ast.PdfDict, lim limits
 	if err != nil {
 		return nil, err
 	}
-	bm, err := jbig2.Decode(ctx, data, globals, lim.ScaleImageCap(jbig2.DefaultMaxBitmapPixels))
+	bm, err := jbig2.Decode(ctx, data, globals, lim.ScaleImageCap(jbig2.DefaultMaxBitmapBytes))
 	if err != nil {
 		return nil, jbig2Error(err)
 	}
-	out := make([]byte, len(bm.Data))
+	// The bitmap is this call's own, so it inverts in place: a copy would
+	// hold the page twice, up to two bitmap caps.
 	for i, b := range bm.Data {
-		out[i] = ^b
+		bm.Data[i] = ^b
 	}
-	return out, nil
+	return bm.Data, nil
 }
 
 // probeJBIG2 is the probe of JBIG2Decode (see codecProbes): decodeJBIG2 with
