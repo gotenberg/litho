@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -27,6 +29,20 @@ type convertColorsResult struct {
 	// ReplacedOutputIntents names the intents --replace-output-intents
 	// pointed at the target profile, by /OutputConditionIdentifier.
 	ReplacedOutputIntents []string `json:"replacedOutputIntents,omitempty"`
+	// TargetProfile, SourceProfiles and IntentFallbacks say which profiles
+	// the conversion read and where a rendering intent fell back (see
+	// [pdf.ColorReport]).
+	TargetProfile   string              `json:"targetProfile"`
+	SourceProfiles  map[string][]string `json:"sourceProfiles,omitempty"`
+	IntentFallbacks []intentFallback    `json:"intentFallbacks,omitempty"`
+}
+
+// intentFallback is one [pdf.IntentFallback] in the JSON report.
+type intentFallback struct {
+	Target     bool   `json:"target"`
+	Components int    `json:"components"`
+	Profile    string `json:"profile"`
+	Table      string `json:"table"`
 }
 
 // renderingIntents maps the --intent values, the rendering intent names of
@@ -203,6 +219,11 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 		OutputIntent:          report.OutputIntent,
 		KeptOutputIntents:     report.KeptOutputIntents,
 		ReplacedOutputIntents: report.ReplacedOutputIntents,
+		TargetProfile:         report.TargetProfile,
+		SourceProfiles:        report.SourceProfiles,
+	}
+	for _, fb := range report.IntentFallbacks {
+		result.IntentFallbacks = append(result.IntentFallbacks, intentFallback(fb))
 	}
 	if format == "json" {
 		enc := json.NewEncoder(stdout)
@@ -226,6 +247,18 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 	}
 	if len(result.ReplacedOutputIntents) > 0 {
 		fmt.Fprintf(stdout, "Output intent(s) pointed at the target profile: %s\n", strings.Join(result.ReplacedOutputIntents, ", "))
+	}
+	fmt.Fprintf(stdout, "Target profile: %s\n", result.TargetProfile)
+	for _, family := range slices.Sorted(maps.Keys(result.SourceProfiles)) {
+		fmt.Fprintf(stdout, "%s read through: %s\n", family, strings.Join(result.SourceProfiles[family], ", "))
+	}
+	for _, fb := range result.IntentFallbacks {
+		side := "source"
+		if fb.Target {
+			side = "target"
+		}
+		fmt.Fprintf(stdout, "Rendering intent fell back to the %s table of a %s %d-component %s profile\n",
+			fb.Table, side, fb.Components, fb.Profile)
 	}
 	return exitOK
 }

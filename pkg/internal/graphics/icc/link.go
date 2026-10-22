@@ -33,6 +33,9 @@ type Link struct {
 	pcs bool
 	src *toPCS
 	dst *fromPCS
+	// srcFallback and dstFallback name the table each side was read through
+	// in place of the intent's own (see [Link.Fallbacks]).
+	srcFallback, dstFallback Fallback
 	// scale and offset adjust XYZ between the two sides, for the absolute
 	// colorimetric intent or black point compensation; nil leaves it as is.
 	scale, offset *[3]float64
@@ -75,7 +78,10 @@ func NewLink(src, dst *Profile, opts TransformOptions) (*Link, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading the destination profile: %w", err)
 	}
-	l := &Link{in: s.n, out: d.n, src: s, dst: d}
+	l := &Link{
+		in: s.n, out: d.n, src: s, dst: d,
+		srcFallback: src.fallback("A2B", intent), dstFallback: dst.fallback("B2A", intent),
+	}
 	switch {
 	case intent == AbsoluteColorimetric:
 		// Per ICC.1:2010, 6.2, absolute XYZ is relative XYZ scaled by the
@@ -117,7 +123,7 @@ func NewPCSLink(dst *Profile, opts TransformOptions) (*Link, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading the destination profile: %w", err)
 	}
-	l := &Link{in: 3, out: d.n, dst: d, pcs: true}
+	l := &Link{in: 3, out: d.n, dst: d, pcs: true, dstFallback: dst.fallback("B2A", intent)}
 	switch {
 	case intent == AbsoluteColorimetric:
 		wd := dst.mediaWhite()
@@ -165,6 +171,63 @@ func newDeviceLink(p *Profile) (*Link, error) {
 		return nil, fmt.Errorf("%w: DeviceLink table of %d inputs and %d outputs for %d and %d channels", ErrMalformed, lut.in, lut.out, in, out)
 	}
 	return &Link{in: in, out: out, direct: lut}, nil
+}
+
+// Fallback names the table a profile was read through when it holds none for
+// the rendering intent a [Link] was built for.
+type Fallback uint8
+
+const (
+	// NoFallback is a profile read as the intent asks: through the intent's
+	// own table, or through a matrix and tone curves, which serve every
+	// intent alike (ICC.1:2010, 8.4 to 8.6).
+	NoFallback Fallback = iota
+	// PerceptualFallback is a profile read through its perceptual table, the
+	// one ICC.1:2010, 6.2 has a profile without the intent's table fall back
+	// to.
+	PerceptualFallback
+	// MatrixFallback is a profile holding tables for other intents than the
+	// one asked, and no perceptual table, read through its matrix and tone
+	// curves.
+	MatrixFallback
+)
+
+// String returns "perceptual", "matrix", or "" for [NoFallback].
+func (f Fallback) String() string {
+	switch f {
+	case PerceptualFallback:
+		return "perceptual"
+	case MatrixFallback:
+		return "matrix"
+	case NoFallback:
+	}
+	return ""
+}
+
+// Fallbacks reports the table each side of the link was read through in place
+// of the one for its rendering intent. The source is [NoFallback] for a link
+// from the PCS or a DeviceLink profile, whose one table serves every intent
+// (ICC.1:2010, 8.8). The absolute colorimetric intent reads the relative
+// colorimetric tables by definition (6.2), which is no fallback.
+func (l *Link) Fallbacks() (src, dst Fallback) {
+	return l.srcFallback, l.dstFallback
+}
+
+// fallback returns the table [Profile.intentTag] reads for the intent instead
+// of the intent's own, for the kind "A2B" or "B2A".
+func (p *Profile) fallback(kind string, intent Intent) Fallback {
+	if _, ok := p.tags[kind+string("0121"[intent&3])]; ok {
+		return NoFallback
+	}
+	if _, ok := p.tags[kind+"0"]; ok {
+		return PerceptualFallback
+	}
+	for _, n := range []string{"1", "2"} {
+		if _, ok := p.tags[kind+n]; ok {
+			return MatrixFallback
+		}
+	}
+	return NoFallback
 }
 
 // InputChannels returns the number of components [Link.Convert] takes.

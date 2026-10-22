@@ -34,6 +34,15 @@ type Report struct {
 	Images ImageReport
 	// Skipped lists the objects left unconverted.
 	Skipped []Skip
+	// DeviceProfiles maps each device space the walk read ([SpaceGray],
+	// [SpaceRGB], [SpaceCMYK]) to where the profiles it read the space
+	// through came from, sorted, once each: [ProfileGiven], [ProfileTarget],
+	// [ProfileBuiltin], [ProfileBuiltinFallback] or [ProfileDefaultSpace].
+	DeviceProfiles map[string][]string
+	// IntentFallbacks lists, once per profile, the profiles read through
+	// another table than the one for the rendering intent, in the order the
+	// walk built their transforms.
+	IntentFallbacks []IntentFallback
 }
 
 // Skip is an object recolouring left as it was.

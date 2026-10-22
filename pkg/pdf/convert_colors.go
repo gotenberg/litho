@@ -216,6 +216,72 @@ type ColorReport struct {
 	// ReplacedOutputIntents lists the /OutputConditionIdentifier of each
 	// intent [WithReplacedOutputIntents] pointed at the target profile.
 	ReplacedOutputIntents []string
+	// TargetProfile says where the profile the colours were converted to
+	// came from: [ProfileSourceOutputIntent] for [OutputIntentColorTarget],
+	// [ProfileSourceCaller] for [ICCColorTarget] and for a
+	// [CMYKColorTarget] read in the profile of [WithDefaultCMYKProfile], and
+	// [ProfileSourceBuiltin] for litho's own profiles.
+	TargetProfile string
+	// SourceProfiles maps each device family the conversion read colours of
+	// ("DeviceGray", "DeviceRGB", "DeviceCMYK") to where the profiles it read
+	// the family through came from, sorted, once each: the output intent's
+	// (ISO 32000-1, 14.11.5), the caller's, the target's for the target's own
+	// family, litho's built-in one, the built-in one standing in for an
+	// output intent or caller profile litho cannot convert through
+	// ([ProfileSourceBuiltinFallback]), or a Default colour space of the
+	// resources (8.6.5.6). An ICCBased space litho cannot read through its
+	// own profile, read as its device family, is counted under that family.
+	SourceProfiles map[string][]string
+	// IntentFallbacks lists, once per profile, each profile a conversion read
+	// through another table than the one for the rendering intent: a profile
+	// without that table is read through its perceptual one (ICC.1:2010,
+	// 6.2), or through its matrix and tone curves when it has no perceptual
+	// table either. Empty when every profile held the intent's table or
+	// serves every intent alike.
+	IntentFallbacks []IntentFallback
+}
+
+// Where a profile [Writer.ConvertColors] read came from, as
+// [ColorReport.TargetProfile], [ColorReport.SourceProfiles] and
+// [IntentFallback.Profile] name it.
+const (
+	// ProfileSourceBuiltin is litho's built-in profile of a device family.
+	ProfileSourceBuiltin = "builtin"
+	// ProfileSourceBuiltinFallback is litho's built-in profile standing in
+	// for an output intent or caller profile litho cannot convert through.
+	ProfileSourceBuiltinFallback = "builtin-fallback"
+	// ProfileSourceCaller is a profile the caller gave: [ICCColorTarget]'s,
+	// or [WithDefaultCMYKProfile]'s.
+	ProfileSourceCaller = "caller"
+	// ProfileSourceOutputIntent is the destination profile of the document's
+	// output intent (ISO 32000-1, 14.11.5).
+	ProfileSourceOutputIntent = "output-intent"
+	// ProfileSourceTarget is the target's profile, which the target's own
+	// device family means when nothing else names a profile for it.
+	ProfileSourceTarget = "target"
+	// ProfileSourceDefaultSpace is a Default colour space of the resources
+	// (ISO 32000-1, 8.6.5.6) read in place of a device family.
+	ProfileSourceDefaultSpace = "default-space"
+	// ProfileSourceDocument is a profile the document embeds, an ICCBased
+	// space's (8.6.5.5).
+	ProfileSourceDocument = "document"
+)
+
+// IntentFallback is a profile [Writer.ConvertColors] read through another
+// table than the one for the rendering intent [WithColorIntent] selects.
+// IntentFallback values are immutable and safe for concurrent use.
+type IntentFallback struct {
+	// Target is true for the target's profile, false for a source's.
+	Target bool
+	// Components is the number of components of the profile's data colour
+	// space: 1, 3 or 4.
+	Components int
+	// Profile says where the profile came from, one of the ProfileSource
+	// constants.
+	Profile string
+	// Table is the table the profile was read through: "perceptual" or
+	// "matrix" (its matrix and tone curves).
+	Table string
 }
 
 // ConvertColors converts every colour the document paints to target: the
@@ -358,6 +424,14 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		ConvertedColorSpaces: result.colorSpaces,
 		ConvertedImages:      result.images,
 		ConvertedShadings:    result.shadings,
+		TargetProfile:        resolved.source,
+		SourceProfiles:       result.sourceProfiles,
+		IntentFallbacks:      result.intentFallbacks,
+	}
+	for i := range report.IntentFallbacks {
+		if report.IntentFallbacks[i].Target {
+			report.IntentFallbacks[i].Profile = resolved.source
+		}
 	}
 	if !o.convertSpots {
 		report.KeptSpotColorants = slices.Compact(slices.Sorted(slices.Values(result.keptSpots)))
@@ -414,6 +488,8 @@ type resolvedColorTarget struct {
 	family     string
 	profile    []byte
 	components int
+	// source is where profile came from ([ColorReport.TargetProfile]).
+	source string
 	// setsIntent reports whether the target becomes the document's output
 	// intent, and condition, registry and info are the entries it names its
 	// printing condition with (ISO 32000-1, 14.11.5, Table 365).
@@ -447,18 +523,20 @@ func resolveColorTarget(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		if err != nil {
 			return t, err
 		}
-		t.profile = profile
+		t.profile, t.source = profile, ProfileSourceOutputIntent
 	case targetCMYK:
 		t.profile, t.condition, t.registry = icc.CMYKPrinterProfile(), builtinCMYKCondition, iccRegistry
+		t.source = ProfileSourceBuiltin
 		if doc.CMYKProfile != nil {
 			t.profile, t.condition, t.registry = bytes.Clone(doc.CMYKProfile), customCondition, ""
+			t.source = ProfileSourceCaller
 		}
 	case targetRGB:
-		t.profile, t.condition = icc.SRGBProfile(), "sRGB IEC61966-2.1"
+		t.profile, t.condition, t.source = icc.SRGBProfile(), "sRGB IEC61966-2.1", ProfileSourceBuiltin
 	case targetGray:
-		t.profile, t.condition = icc.SGrayProfile(), customCondition
+		t.profile, t.condition, t.source = icc.SGrayProfile(), customCondition, ProfileSourceBuiltin
 	case targetICC:
-		t.profile, t.condition = target.profile, customCondition
+		t.profile, t.condition, t.source = target.profile, customCondition, ProfileSourceCaller
 	default:
 		return t, fmt.Errorf("%w: unknown target", ErrInvalidColorTarget)
 	}

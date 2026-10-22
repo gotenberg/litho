@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -41,6 +42,10 @@ type recolorResult struct {
 	// keptSpots names the colorants of the Separation and DeviceN spaces
 	// the engine kept, their alternate space converted.
 	keptSpots []string
+	// sourceProfiles and intentFallbacks are [ColorReport.SourceProfiles]
+	// and [ColorReport.IntentFallbacks].
+	sourceProfiles  map[string][]string
+	intentFallbacks []IntentFallback
 }
 
 // recolorEngine rewrites the colours of every page of doc, and of everything
@@ -78,7 +83,7 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		}
 		target.ColorSpace = ast.PdfArray{ast.PdfName(graphics.FamilyICCBased), alloc.Alloc(stream)}
 	}
-	gray, rgb, cmyk := deviceProfiles(ctx, alloc, doc)
+	gray, rgb, cmyk, cmykFromCaller := deviceProfiles(ctx, alloc, doc)
 	report, err := recolor.Content(ctx, doc, alloc, pages, target, recolor.Options{
 		Intent:                 req.intent,
 		BlackPointCompensation: req.blackPointCompensation,
@@ -105,14 +110,95 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		images:      report.Images.Converted + report.Images.Palettes,
 		shadings:    report.Shadings,
 		keptSpots:   report.KeptColorants,
+
+		sourceProfiles:  sourceProfiles(report.DeviceProfiles, cmykFromCaller),
+		intentFallbacks: intentFallbacks(report.IntentFallbacks, cmykFromCaller),
 	}, nil
+}
+
+// deviceFamilies maps the data colour space signatures of package recolor to
+// the device family names a [ColorReport] uses.
+var deviceFamilies = map[string]string{ //nolint:gochecknoglobals // static lookup table, ICC.1:2010 Table 19 to ISO 32000-1 8.6.4
+	recolor.SpaceGray: graphics.FamilyDeviceGray,
+	recolor.SpaceRGB:  graphics.FamilyDeviceRGB,
+	recolor.SpaceCMYK: graphics.FamilyDeviceCMYK,
+}
+
+// profileSource names where a profile package recolor read came from, as a
+// [ColorReport] spells it: a profile the options gave a device space is the
+// output intent's, except DeviceCMYK's when cmykFromCaller.
+func profileSource(space, provenance string, cmykFromCaller bool) string {
+	switch provenance {
+	case recolor.ProfileGiven:
+		if space == recolor.SpaceCMYK && cmykFromCaller {
+			return ProfileSourceCaller
+		}
+		return ProfileSourceOutputIntent
+	case recolor.ProfileTarget:
+		return ProfileSourceTarget
+	case recolor.ProfileBuiltin:
+		return ProfileSourceBuiltin
+	case recolor.ProfileBuiltinFallback:
+		return ProfileSourceBuiltinFallback
+	case recolor.ProfileDefaultSpace:
+		return ProfileSourceDefaultSpace
+	}
+	return ProfileSourceDocument
+}
+
+// sourceProfiles translates package recolor's DeviceProfiles.
+func sourceProfiles(in map[string][]string, cmykFromCaller bool) map[string][]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(in))
+	for space, provenances := range in {
+		family, ok := deviceFamilies[space]
+		if !ok {
+			continue
+		}
+		var sources []string
+		for _, p := range provenances {
+			sources = append(sources, profileSource(space, p, cmykFromCaller))
+		}
+		slices.Sort(sources)
+		out[family] = slices.Compact(sources)
+	}
+	return out
+}
+
+// intentFallbacks translates package recolor's IntentFallbacks.
+func intentFallbacks(in []recolor.IntentFallback, cmykFromCaller bool) []IntentFallback {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]IntentFallback, 0, len(in))
+	for _, f := range in {
+		fb := IntentFallback{Target: f.Target, Table: f.Table.String()}
+		switch f.Space {
+		case recolor.SpaceGray:
+			fb.Components = 1
+		case recolor.SpaceCMYK:
+			fb.Components = 4
+		default:
+			fb.Components = 3
+		}
+		// The target's own provenance is [ColorReport.TargetProfile], which
+		// [Writer.ConvertColors] fills in.
+		if !f.Target {
+			fb.Profile = profileSource(f.Space, f.Profile, cmykFromCaller)
+		}
+		out = append(out, fb)
+	}
+	return out
 }
 
 // deviceProfiles returns the profiles the device spaces of doc mean: the
 // destination profile of its first output intent of each component count,
 // and for DeviceCMYK the caller's default CMYK profile lacking one. nil
-// leaves a space to litho's built-in reading.
-func deviceProfiles(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (gray, rgb, cmyk []byte) {
+// leaves a space to litho's built-in reading. cmykFromCaller reports a
+// DeviceCMYK profile that is the caller's rather than an output intent's.
+func deviceProfiles(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (gray, rgb, cmyk []byte, cmykFromCaller bool) {
 	if ref, ok := mutations.CatalogRef(ctx, doc); ok {
 		if catalog, err := mutations.LiveCatalogDict(ctx, alloc, doc, ref); err == nil {
 			// An output intent that does not resolve characterises nothing,
@@ -140,9 +226,9 @@ func deviceProfiles(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		}
 	}
 	if cmyk == nil && doc.CMYKProfile != nil {
-		cmyk = bytes.Clone(doc.CMYKProfile)
+		cmyk, cmykFromCaller = bytes.Clone(doc.CMYKProfile), true
 	}
-	return gray, rgb, cmyk
+	return gray, rgb, cmyk, cmykFromCaller
 }
 
 // firstProfile returns first, or next when first is nil: the first profile found.

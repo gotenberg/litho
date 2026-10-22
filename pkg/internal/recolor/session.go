@@ -9,6 +9,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -32,6 +33,12 @@ type session struct {
 	seen       map[int]bool
 	plans      map[string]*spacePlan
 	transforms map[string]transformEntry
+	// targetFellBack marks a target fallback already in the report's
+	// IntentFallbacks, which every transform to the target shares.
+	targetFellBack bool
+	// noteMu guards the report's DeviceProfiles, which a converter notes
+	// on its first conversion, from whichever goroutine runs it.
+	noteMu sync.Mutex
 	// images converts the image XObjects and inline images the walk
 	// reaches, through the session's own plans (see [sessionColors]).
 	images *Images

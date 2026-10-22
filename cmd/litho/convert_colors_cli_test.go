@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -281,5 +282,42 @@ func TestConvertColors_OutputIntentConflict(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "pointed at the target profile: FOGRA39") {
 		t.Errorf("stdout = %q", stdout.String())
+	}
+}
+
+// TestConvertColors_ReportsTheProfiles pins that the report names where the
+// target profile came from, in both formats: the built-in one by default,
+// the --cmyk-profile file as the caller's.
+func TestConvertColors_ReportsTheProfiles(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+	profile := filepath.Join("..", "..", "pkg", "internal", "graphics", "icc", "profiles", "CGATS001Compat-v2-micro.icc")
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{nil, "builtin"},
+		{[]string{"--cmyk-profile", profile}, "caller"},
+	} {
+		out := filepath.Join(t.TempDir(), "out.pdf")
+		var stdout, stderr bytes.Buffer
+		args := append([]string{"convert-colors", "--target", "cmyk", "-o", out}, tc.args...)
+		if rc := run(context.Background(), append(args, src), &stdout, &stderr); rc != exitOK {
+			t.Fatalf("exit %d; stderr: %s", rc, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Target profile: "+tc.want+"\n") {
+			t.Errorf("%v: stdout = %q", tc.args, stdout.String())
+		}
+
+		stdout.Reset()
+		if rc := run(context.Background(), append(append(args, "-f", "json"), src), &stdout, &stderr); rc != exitOK {
+			t.Fatalf("exit %d; stderr: %s", rc, stderr.String())
+		}
+		var result convertColorsResult
+		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		if result.TargetProfile != tc.want {
+			t.Errorf("%v: targetProfile = %q, want %q", tc.args, result.TargetProfile, tc.want)
+		}
 	}
 }

@@ -206,7 +206,7 @@ func (s *session) planDevice(ctx context.Context, space, defaultName string, def
 		p := s.plan(ctx, d, nil, 1, pdfimage.RoleSpace)
 		if p.kind == planConvert || p.kind == planIdentity {
 			if p.n == (Endpoint{Space: space}).components() {
-				return p
+				return s.notingPlan(p, space, ProfileDefaultSpace)
 			}
 		}
 	}
@@ -219,8 +219,12 @@ func (s *session) planDevice(ctx context.Context, space, defaultName string, def
 	case SpaceCMYK:
 		profile = s.opts.DeviceCMYK
 	}
-	if profile == nil && s.t.device() && s.t.end.Space == space {
-		profile = s.t.end.Profile
+	provenance := ProfileGiven
+	if profile == nil {
+		provenance = ProfileBuiltin
+		if s.t.device() && s.t.end.Space == space {
+			profile, provenance = s.t.end.Profile, ProfileTarget
+		}
 	}
 	end := Endpoint{Space: space, Profile: defaultProfile(space, profile)}
 	n := end.components()
@@ -234,8 +238,9 @@ func (s *session) planDevice(ctx context.Context, space, defaultName string, def
 		// intent's printer profile without an AToB table, gives way to the
 		// built-in one, as the renderer reads the device space.
 		p = s.planEndpoint(Endpoint{Space: space, Profile: defaultProfile(space, nil)}, nil, initial)
+		provenance = ProfileBuiltinFallback
 	}
-	return p
+	return s.notingPlan(p, space, provenance)
 }
 
 // planEndpoint plans a space whose colour, mapped by pre to the endpoint
@@ -267,6 +272,8 @@ func (s *session) transform(end Endpoint) (Converter, error) {
 	conv, err := s.opts.engine().Transform(end, s.t.end, s.opts)
 	if err != nil {
 		err = fmt.Errorf("building the %q transform: %w", end.Space, err)
+	} else {
+		s.noteFallbacks(end, conv)
 	}
 	s.transforms[key] = transformEntry{conv: conv, err: err}
 	return conv, err
