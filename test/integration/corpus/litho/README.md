@@ -9171,10 +9171,13 @@ litho renders page 1's mask group at half the resolution, and paints page 2's
 group content into the page at the group's alpha: both pages are 0 pixels
 apart from poppler 26.09.0 at 72 dpi under the render cell's tolerances. Before, page 1 drew red over the whole page,
 749,500 pixels per million apart from poppler, and page 2 an opaque red square,
-250,000 apart. `litho flatten-transparency` refuses the file, as it refuses a
-page whose transparency it can only composite approximately at 72 dpi, and the
-PDF/A-1b remediation sets its transparency opaque; veraPDF 1.30.2 and litho
-report nothing on that output.
+250,000 apart. Flattening composites page 1 at the last resolution it tries,
+127 dpi, with the mask drawn coarse (`CoarseMasks` 1), and refuses page 2,
+whose group it cannot composite, so `litho flatten-transparency` refuses the
+file. The PDF/A-1b remediation flattens page 1, 375 pixels per million apart
+from the source in poppler's rendering, and sets page 2's transparency opaque;
+veraPDF 1.30.2 and litho report nothing on that output. Before, it set both
+pages opaque, and page 1 drew red over the whole page.
 
 The file declares no OutputIntent and its pages no `/Group`, so DeviceRGB fails
 `6.2.3.3/1` at PDF/A-1b and `6.2.4.3/2` at the later parts; the soft mask fails
