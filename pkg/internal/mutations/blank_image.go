@@ -81,7 +81,7 @@ func blankImage(
 		return 0, ErrInlineImageInRegion
 	}
 
-	ref, ok := imageXObjectRef(ctx, doc, page, box.Name)
+	ref, ok := imageXObjectRef(ctx, doc, page, box)
 	if !ok {
 		return 0, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
@@ -664,10 +664,33 @@ func latestImageStream(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	return stream, nil
 }
 
-// imageXObjectRef returns the indirect reference the page's resources use for
-// the named image, which is the object the replacement has to take the place
-// of. An image written directly into the resource dictionary has none.
-func imageXObjectRef(ctx context.Context, doc *document.Document, page *document.Page, name string) (ast.PdfIndirectRef, bool) {
+// imageXObjectRef returns the indirect reference of the image box paints,
+// which is the object the replacement has to take the place of. An image
+// written directly into the resource dictionary has none.
+//
+// The machine names the object it resolved the Do to ([graphics.ImageBox]
+// ObjNum), in the resources of the stream that drew it: a form XObject's own
+// for an image a form draws. Its name alone says nothing outside those
+// resources, and read in the page's it named another image, or none: an
+// image a form drew under the name the page gives its own picture blanked the
+// page's picture where the form's lay, and left the form's image whole inside
+// the region. The name is read in the page's resources only when the machine
+// resolved no object.
+//
+// # Corpus evidence
+//
+//   - pdfcpu VectorApple, the centred quarter of page 1 with the raster
+//     fallback: two forms drew images named /Im0 inside the region; both
+//     blankings rewrote the page's own /Im0, a shadow below the region, which
+//     turned black, and the forms' images kept their samples.
+func imageXObjectRef(ctx context.Context, doc *document.Document, page *document.Page, box graphics.ImageBox) (ast.PdfIndirectRef, bool) {
+	if box.ObjNum != 0 {
+		return ast.PdfIndirectRef{ObjectNum: box.ObjNum}, true
+	}
+	if box.FormDepth > 0 {
+		return ast.PdfIndirectRef{}, false
+	}
+	name := box.Name
 	xobjObj, present := page.Resources["XObject"]
 	if !present {
 		return ast.PdfIndirectRef{}, false
