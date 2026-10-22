@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
@@ -48,18 +49,45 @@ func (c *clip) empty() bool {
 	return c.rect.Max.X <= c.rect.Min.X || c.rect.Max.Y <= c.rect.Min.Y
 }
 
-// axisRect returns the rectangle path p outlines when it is one closed
-// subpath of four corners with axis-aligned edges, as re writes one under a
-// matrix that does not rotate.
+// axisRect returns the rectangle path p outlines when it is one subpath of
+// four corners with axis-aligned edges, as re writes one under a matrix
+// that does not rotate. The subpath is closed implicitly (ISO 32000-1,
+// 8.5.3.1), so it may end with h, with a fifth point back on the first, with
+// both, or with neither: poppler takes any such path for a rectangle
+// (SplashClip::clipToPath closes the subpath and tests its four segments),
+// and the rectangle then clips as [snapRows] and [pixelRect] say.
+//
+// # Corpus evidence
+//
+//   - govdocs, pdfjs, pdfcpu: rectangles drawn with m and four l, or with
+//     re then h, which litho clipped as paths. Taken for rectangles, with
+//     glyphs tested pixel by pixel ([clip.binaryIn]), 73 of the first three
+//     pages of every PDF of the seven corpora move at 72 dpi: 34 come
+//     closer to poppler and 7 move away, 31 closer to PDFium and 8 away,
+//     and none changes its verdict against poppler. 7 are render-cell
+//     pages and all still match (govdocs thread_300_300499 page 1: 2346 to
+//     1318 differing pixels).
+//   - govdocs thread_000_000149 page 2: moves away from both (2724 to 2946
+//     differing pixels from poppler): an image's bottom edge falls inside
+//     the row the clip now keeps whole, a row litho covers by the image's
+//     area and poppler paints lighter.
+//   - litho, pdfjs, govdocs, pdfcpu: no flatten, redact-render or recolor
+//     verdict changes; two flatten page checks count a few more inked
+//     pixels (pdfjs freeculture page 2: 10993 to 11160).
 func axisRect(p geom.Path) (geom.Rect, bool) {
 	ops := p.Ops
-	if len(ops) == 6 && ops[4] == geom.LineTo && ops[5] == geom.Close {
+	// h on a closed subpath closes nothing more (8.5.2.1).
+	for len(ops) > 0 && ops[len(ops)-1] == geom.Close {
+		ops = ops[:len(ops)-1]
+	}
+	if len(ops) == 5 && ops[4] == geom.LineTo {
 		// A fifth point back on the first closes the same rectangle.
 		if !near(p.Pts[4], p.Pts[0]) {
 			return geom.Rect{}, false
 		}
 		ops = ops[:4]
-	} else if len(ops) != 5 || ops[4] != geom.Close {
+	}
+	if len(ops) != 4 {
 		return geom.Rect{}, false
 	}
 	if ops[0] != geom.MoveTo || ops[1] != geom.LineTo || ops[2] != geom.LineTo || ops[3] != geom.LineTo {
@@ -149,13 +177,23 @@ func pixelRect(r geom.Rect) geom.Rect {
 // quarter pixel (SplashClip::clipAALine). A mask already holding the
 // rectangle keeps the coverage it holds.
 //
+// The clip's other paths keep their exact coverage: SplashClip::test also
+// passes or fails each pixel of a group against them, at one cell of the
+// pixel ([raster.Shape.SampleIn]), but PDFium composites a group through
+// their coverage, as litho does, and the two disagree.
+//
 // # Corpus evidence
 //
-//   - govdocs, litho, pdfjs, pdfcpu: with glyphs ([clip.applyPixelRect])
+//   - govdocs, litho, pdfjs, pdfcpu: with glyphs ([clip.binaryIn])
 //     and groups cut at whole pixels, no render-cell or redact-render page
 //     moves; 25 flatten-cell page checks over 21 files move by a few
 //     pixels (pdfjs issue14562: 4225 to 4346 differing pixels of 327260
 //     inked), and none changes its verdict.
+//   - pdfjs issue6961, issue8019, transparency_group: groups under clipping
+//     paths that are no rectangle. Tested pixel by pixel, the pages come
+//     closer to poppler (23 to 3, 1267 to 680 and 30 to 11 differing
+//     pixels) and move away from PDFium (1 to 6, 2336 to 2591 and 5 to 6);
+//     no other page of the corpora moves.
 func (c *clip) wholePixels() *clip {
 	if c.inMask {
 		return c
@@ -163,6 +201,93 @@ func (c *clip) wholePixels() *clip {
 	// The whole-page coverage cached under the old rectangle does not hold
 	// under the widened one, so the copy starts without it.
 	return &clip{node: c.node, rect: pixelRect(c.rect)}
+}
+
+// binaryIn returns, over box, row by row, 1 at each pixel poppler's
+// SplashClip::test passes and 0 elsewhere: a pixel in c's rectangle widened
+// to whole pixels ([pixelRect]) whose sample cell every other path of c
+// reaches ([raster.Shape.SampleIn]). Splash draws a filled glyph's bitmap
+// through that test (Splash::fillGlyph2), so a glyph keeps its whole
+// coverage at each pixel it passes. ISO 32000-1, 8.5.4 leaves the
+// rasterisation of the clipping path to the renderer; this is poppler's
+// convention, not a spec rule, and the one page it moves comes closer to
+// PDFium too.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400358 page 1: glyphs under clipping paths that
+//     are no rectangle. Tested pixel by pixel, the page comes closer to
+//     poppler (904 to 894 differing pixels) and to PDFium (603 to 597);
+//     govdocs thread_000_000583 and pdfjs issue17069 move by 5 and 3
+//     pixels, no closer to either.
+func (c *clip) binaryIn(box image.Rectangle, width, height int) []float32 {
+	out := rectIn(pixelRect(c.rect), nil, box, width, height)
+	if c.node == nil {
+		return out
+	}
+	return testsIn(c.node.tests, box, out)
+}
+
+// maxClipTests bounds the paths a clip keeps for its pixel test
+// ([clip.binaryIn]): one more first folds them into a mask of the page.
+// Anti-DoS guard, not spec-mandated: each glyph painted under the clip
+// tests every path over its pixels, so a stream of W n without q would make
+// each glyph cost as many tests as it set paths. 8 holds the clips of real
+// pages, as [maxLazyClipDepth] does.
+const maxClipTests = 8
+
+// clipTest is one path of a clip as its pixel test reads it: the path's
+// shape, or a mask of 0 and 1 over the page folding several.
+type clipTest struct {
+	shape *raster.Shape
+	mask  *surface.Mask
+}
+
+// folded returns the mask c's pixel test folds paths into, nil when it
+// folds none.
+func (c *clip) folded() *surface.Mask {
+	if c.node == nil || len(c.node.tests) == 0 {
+		return nil
+	}
+	return c.node.tests[0].mask
+}
+
+// testsWith returns the tests of c's paths with shape added, folded into a
+// mask of the page past [maxClipTests].
+func (c *clip) testsWith(shape *raster.Shape, width, height int, budget int64) ([]clipTest, error) {
+	var tests []clipTest
+	if c.node != nil {
+		tests = c.node.tests
+	}
+	if len(tests) >= maxClipTests {
+		m, err := surface.NewMask(width, height, budget)
+		if err != nil {
+			return nil, fmt.Errorf("%w: clip mask: %w", ErrTooLarge, err)
+		}
+		for i := range m.A {
+			m.A[i] = 1
+		}
+		m.A = testsIn(tests, image.Rect(0, 0, width, height), m.A)
+		tests = []clipTest{{mask: m}}
+	}
+	return append(slices.Clip(tests), clipTest{shape: shape}), nil
+}
+
+// testsIn multiplies values, over box row by row, by the pixel test of each
+// of tests, and returns values.
+func testsIn(tests []clipTest, box image.Rectangle, values []float32) []float32 {
+	for _, t := range tests {
+		var in []float32
+		if t.mask != nil {
+			in = maskIn(t.mask, box)
+		} else {
+			in = t.shape.SampleIn(box)
+		}
+		for i, v := range in {
+			values[i] *= v
+		}
+	}
+	return values
 }
 
 // withPath returns c narrowed to the device-space path p filled with rule
@@ -188,7 +313,12 @@ func (c *clip) withPath(p geom.Path, rule raster.FillRule, snap bool, width, hei
 			return nil, err
 		}
 	}
+	tests, err := c.testsWith(shape, width, height, budget)
+	if err != nil {
+		return nil, err
+	}
 	n := &clipNode{
+		tests:     tests,
 		path:      p,
 		rule:      rule,
 		shape:     shape,
@@ -353,6 +483,9 @@ const maxLazyClipDepth = 8
 type clipNode struct {
 	// values is the coverage over the page once made, nil before.
 	values *surface.Mask
+	// tests are the paths of the clip down the chain, kept for the pixel
+	// test of [clip.binaryIn].
+	tests []clipTest
 	// path is the clipping path, filled with rule, and shape the path
 	// flattened.
 	path  geom.Path
@@ -482,37 +615,16 @@ func (c *clip) applyRect(cov *raster.Coverage) {
 	}
 }
 
-// applyPixelRect keeps cov in the whole device pixels the rectangle touches
-// ([pixelRect]) and clears it elsewhere, as poppler clips a glyph: Splash
-// draws a filled glyph's bitmap pixel by pixel where SplashClip::test passes
-// (Splash::fillGlyph2), so a pixel the clipping rectangle touches keeps the
-// glyph's whole coverage. ISO 32000-1, 8.5.4 leaves that rasterisation to
-// the renderer; this is poppler's convention, not a spec rule.
-func (c *clip) applyPixelRect(cov *raster.Coverage) {
-	if c.inMask {
-		return
-	}
-	r := pixelRect(c.rect)
-	for y := range cov.Height {
-		row := cov.A[y*cov.Width : (y+1)*cov.Width]
-		if fy := float64(cov.Y + y); fy < r.Min.Y || fy+1 > r.Max.Y {
-			clear(row)
-			continue
-		}
-		for x := range row {
-			if fx := float64(cov.X + x); fx < r.Min.X || fx+1 > r.Max.X {
-				row[x] = 0
-			}
-		}
-	}
-}
-
 // owns reports the masks c holds that parent does not share, for the budget
 // of the masks a render keeps alive. A node not made yet counts as the mask
-// it stands for.
+// it stands for, and the mask its pixel test folds paths into counts too
+// ([maxClipTests]).
 func (c *clip) owns(parent *clip) int {
 	n := 0
 	if c.node != nil && (parent == nil || c.node != parent.node) {
+		n++
+	}
+	if m := c.folded(); m != nil && (parent == nil || m != parent.folded()) {
 		n++
 	}
 	if c.full != nil && (parent == nil || c.full != parent.full) {

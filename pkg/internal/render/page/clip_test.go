@@ -1,6 +1,7 @@
 package page
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -156,5 +157,68 @@ func TestPixelRect(t *testing.T) {
 		if got := pixelRect(tt.in); got != tt.want {
 			t.Errorf("pixelRect(%v) = %v, want %v", tt.in, got, tt.want)
 		}
+	}
+}
+
+// TestWholePixelClipPaths clips to a path that is no rectangle and covers
+// 0.4 of column 49 and half of column 50. poppler tests each pixel of a
+// glyph it fills alone at the top-left cell of its 4 by 4 grid: column 49's
+// cell lies outside, column 50's inside, so the glyph paints column 50 solid
+// and leaves column 49 bare. A fill keeps the exact coverage, and so does a
+// transparency group, as PDFium composites one.
+func TestWholePixelClipPaths(t *testing.T) {
+	t.Parallel()
+	const clipPath = "49.6 0 m 50.5 0 l 50.5 100 l 49.6 100 l 49.6 50 l h W n "
+	sample := map[[2]int]rgb{{49, 50}: paper, {50, 50}: black, {48, 50}: paper, {51, 50}: paper}
+	exact := map[[2]int]rgb{{49, 50}: {153, 153, 153}, {50, 50}: {128, 128, 128}, {48, 50}: paper, {51, 50}: paper}
+	for name, tt := range map[string]struct {
+		f    fixture
+		want map[[2]int]rgb
+	}{
+		"glyph": {
+			f:    fixture{page: textPage, content: clipPath + "0 g BT /F 200 Tf 0 40 Td (A) Tj ET", objs: trueTypeObjs()},
+			want: sample,
+		},
+		"group": {
+			f: fixture{
+				page:    "/Resources << /XObject << /Fm 5 0 R >> >>",
+				content: clipPath + "/Fm Do",
+				objs:    []string{stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >>", "0 g 0 0 100 100 re f")},
+			},
+			want: exact,
+		},
+		"fill": {f: fixture{content: clipPath + "0 g 0 0 100 100 re f"}, want: exact},
+		// Past maxClipTests paths, the test folds them into a mask of the
+		// page, which tests as they did.
+		"glyph under many paths": {
+			f:    fixture{page: textPage, content: strings.Repeat(clipPath, maxClipTests+2) + "0 g BT /F 200 Tf 0 40 Td (A) Tj ET", objs: trueTypeObjs()},
+			want: sample,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			img, _ := draw(t, tt.f)
+			expect(t, img, 2, tt.want)
+		})
+	}
+}
+
+// TestUnclosedRectClip clips to rectangles drawn without re: four corners
+// closed implicitly, or a fifth point back on the first. Either is a
+// rectangle, as poppler takes it, so the clip keeps whole rows.
+func TestUnclosedRectClip(t *testing.T) {
+	t.Parallel()
+	want := map[[2]int]rgb{{50, 50}: black, {50, 49}: paper, {50, 51}: paper}
+	for name, path := range map[string]string{
+		"four corners":              "0 49.5 m 100 49.5 l 100 50 l 0 50 l",
+		"back on the first":         "0 49.5 m 100 49.5 l 100 50 l 0 50 l 0 49.5 l",
+		"back on the first, closed": "0 49.5 m 100 49.5 l 100 50 l 0 50 l 0 49.5 l h",
+		"re closed again":           "0 49.5 100 0.5 re h",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			img, _ := draw(t, fixture{content: path + " W n 0 g 0 0 100 100 re f"})
+			expect(t, img, 0, want)
+		})
 	}
 }

@@ -497,21 +497,23 @@ func (r *renderer) coverage(p geom.Path, rule raster.FillRule) (*raster.Coverage
 
 // glyphFill rasterises the device outline of a glyph as [renderer.coverage]
 // does, its coverage before the clip taken from [Options.Shared] when the
-// render shares one, the clipping rectangle cut at whole pixels with whole
-// ([clip.applyPixelRect]) and at the exact edge otherwise.
+// render shares one. With whole, the clip lets each pixel through whole or
+// not at all ([clip.binaryIn]), as poppler draws a glyph's bitmap: Splash
+// paints it pixel by pixel where SplashClip::test passes
+// (Splash::fillGlyph2). Otherwise the clip cuts the glyph at its exact edge.
 func (r *renderer) glyphFill(p geom.Path, whole bool) (*raster.Coverage, error) {
 	return r.pathCoverage(p, raster.NonZero, true, whole)
 }
 
 // pathCoverage is [renderer.coverage], glyph marking a glyph outline and
-// whole cutting the clipping rectangle at whole pixels.
+// whole testing the clip pixel by pixel.
 func (r *renderer) pathCoverage(p geom.Path, rule raster.FillRule, glyph, whole bool) (*raster.Coverage, error) {
 	c := r.clip()
 	if c.empty() {
 		return &raster.Coverage{}, nil
 	}
 	rect := c.rect
-	if whole && !c.inMask {
+	if whole {
 		rect = pixelRect(rect)
 	}
 	b, ok := p.Bounds()
@@ -521,8 +523,9 @@ func (r *renderer) pathCoverage(p geom.Path, rule raster.FillRule, glyph, whole 
 	if !r.anyWithin(r.pixelRect(b)) {
 		return &raster.Coverage{}, nil
 	}
+	// Tested pixel by pixel, the clip's paths do not multiply the coverage.
 	var made *surface.Mask
-	if c.node != nil && c.node.values != nil {
+	if c.node != nil && c.node.values != nil && !whole {
 		made = c.node.values
 	}
 	var cov *raster.Coverage
@@ -549,23 +552,28 @@ func (r *renderer) pathCoverage(p geom.Path, rule raster.FillRule, glyph, whole 
 			return nil, fmt.Errorf("rasterising: %w", err)
 		}
 	}
-	if c.node != nil && made == nil && !cov.Empty() {
+	box := image.Rect(cov.X, cov.Y, cov.X+cov.Width, cov.Y+cov.Height)
+	switch {
+	case cov.Empty():
+	case whole:
+		for i, v := range c.binaryIn(box, r.width, r.height) {
+			cov.A[i] *= v
+		}
+	case c.node != nil && made == nil:
 		// The clip's coverage over the pixels the path covers multiplies
 		// the path's, as [raster.Fill] multiplies by a mask.
-		values, err := c.node.in(image.Rect(cov.X, cov.Y, cov.X+cov.Width, cov.Y+cov.Height))
+		values, err := c.node.in(box)
 		if err != nil {
 			return nil, err
 		}
 		for i, v := range values {
 			cov.A[i] *= v
 		}
-	}
-	if whole {
-		c.applyPixelRect(cov)
-	} else {
+		c.applyRect(cov)
+	default:
 		c.applyRect(cov)
 	}
-	r.keepWithin(cov.A, image.Rect(cov.X, cov.Y, cov.X+cov.Width, cov.Y+cov.Height))
+	r.keepWithin(cov.A, box)
 	return cov, nil
 }
 

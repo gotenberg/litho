@@ -6,6 +6,7 @@ import (
 	"image"
 	"math"
 	"slices"
+	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
@@ -137,6 +138,10 @@ type Shape struct {
 	// them, and bounds the box scan computes the coverage over.
 	sorted []edge
 	bounds image.Rectangle
+	// samples holds the segments [Shape.SampleIn] reads, made on its first
+	// call.
+	samples     []sampleSeg
+	samplesOnce sync.Once
 }
 
 // NewShape flattens path for coverage under rule over a raster of width ×
