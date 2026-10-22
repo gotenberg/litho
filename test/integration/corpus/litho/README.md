@@ -276,6 +276,7 @@ one deliberately rather than diffing it against a fresh build.
 | `iccalternate_2b.pdf`  | PDF/A-2b     | ICCBased spaces no engine can use, read as their CIE /Alternate  |
 | `formplacement_2b.pdf` | PDF/A-2b     | Widget appearances a viewer places by Algorithm 8.1, not a shift |
 | `smaskindata_2b.pdf`   | PDF/A-2b     | JPEG 2000 images whose data holds their soft mask, both kinds    |
+| `flattentiles_1b.pdf`  | PDF/A-1b     | Transparency over a photograph and a chart, composited in tiles  |
 
 ### Must-not-fire controls
 
@@ -625,6 +626,7 @@ are covered under [Known divergences](#known-divergences).
 | `filledrules_ua1.pdf`  | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 4    | 6    |
 | `flattenannots_2b.pdf` | 12   | 9    | 8    | 5    | 6    | 9    | 6    | 7    | 9   | 9    | 10   | 11   | 8    |
 | `flattenrefuse_1b.pdf` | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 6    | 6    |
+| `flattentiles_1b.pdf`  | 6    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 7   | 7    | 8    | 6    | 6    |
 | `flattentext_2b.pdf`   | 11   | 8    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 7    | 6    |
 | `fnlimits_1b.pdf`      | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 5   | 5    | 6    | 6    | 6    |
 | `fontcff2_2b.pdf`      | 8    | 5    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
@@ -8975,6 +8977,37 @@ The file declares no OutputIntent and its page no `/Group`, so DeviceRGB fails
 transparency `6.2.10/2` at PDF/A-2 and PDF/A-3. ISO 19005-1, 6.4 names `/SMask`,
 not `/SMaskInData`, and veraPDF 1.30.2 reports no 6.4 rule at PDF/A-1b. veraPDF
 1.30.2 and litho report the same rule set in all thirteen cells.
+
+### `flattentiles_1b.pdf`
+
+A PDF/A-1 remediation encodes a composite of images and shadings only as JPEG
+at quality 90, and cuts a composite mixing a photograph with vector art into
+128-pixel tiles: those only images and shadings reach are JPEG, the others stay
+lossless. The corpus files that reach the tiles are govdocs reports of tens of
+megabytes. This page holds one such region:
+
+| Draws                                                                    |
+| ------------------------------------------------------------------------ |
+| a 160 x 120 photograph, smooth colour with grain, over 192 x 144 pt      |
+| a stroked chart beside it: a frame, a polyline and filled triangle marks |
+| a red band at ca 0.5 across both, which joins them into one region       |
+
+The band's composite at 300 dpi is cut into a JPEG tile over the photograph, a
+lossless tile over the chart, whose frame, line and marks reach it, and a
+lossless strip along the band's bottom, too short to hold 256 colours. The
+PDF/A-1b remediation, default and aggressive, writes 105,289 bytes, where one
+lossless composite took 111,451, and `litho flatten-transparency
+--jpeg-quality 90` 73,044 bytes, where the lossless default takes 79,206.
+litho and poppler 26.09.0 draw each output like its source; drawn at 72, 150
+and 300 dpi by litho, poppler and PDFium, the tiled output shows no seam: no
+row or column where it departs from the lossless one, and no paper between the
+tiles. veraPDF 1.30.2 and litho report nothing on the PDF/A-1b remediation.
+
+The file declares no OutputIntent, so DeviceRGB fails `6.2.3.3/1` and
+DeviceGray `6.2.3.3/3` at PDF/A-1b and `6.2.4.3/2` and `6.2.4.3/4` at the later
+parts; the constant alpha fails `6.4/6` at PDF/A-1b and `6.2.10/2` at PDF/A-2b,
+where the page states no `/Group`. veraPDF 1.30.2 and litho report the same rule
+set in all thirteen cells.
 
 ## Scope
 
