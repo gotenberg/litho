@@ -69,6 +69,11 @@ type PageReport struct {
 	// resolution they were composited at, 0 when there were none.
 	Regions int
 	DPI     float64
+	// CoarseMasks counts the soft masks the composite drew at a fraction of
+	// its resolution, since their groups did not fit the render pixel budget
+	// even at [minRetryDPI]: their opacity is approximated within a few
+	// pixels of where each mask changes.
+	CoarseMasks int
 	// Removed counts the painting elements whose painting the images took
 	// over.
 	Removed int
@@ -258,11 +263,11 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 		// The composite and the renderings that read what it covers draw
 		// the same page.
 		shared := page.NewShared(f.doc.Limits().WithDefaults().MaxRenderPixels)
-		res, g, dpi, err := f.render(ctx, pg, shared)
+		res, g, dpi, coarse, err := f.render(ctx, pg, shared)
 		if err != nil {
 			return pr, false, err
 		}
-		pr.Regions, pr.DPI = len(a.Regions), dpi
+		pr.Regions, pr.DPI, pr.CoarseMasks = len(a.Regions), dpi, coarse
 		cover := &coverage{f: f, pg: pg, g: g, dpi: dpi, result: res, shared: shared}
 		// The renderings are read no further than this page.
 		defer cover.release()
@@ -393,14 +398,16 @@ func (f *flattener) subdict(ctx context.Context, resources ast.PdfDict, category
 // render draws pg without its text and annotations over white paper, at the
 // run's resolution or, when the page's transparency does not fit the render
 // pixel budget there, at the highest of the halved resolutions down to
-// [minRetryDPI] it fits.
-func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.Shared) (*page.Result, page.Geometry, float64, error) {
+// [minRetryDPI] it fits, with the count of soft masks it drew coarse
+// ([page.Report.CoarseMasks]): at the last resolution tried, a composite
+// whose soft masks alone did not fit is accepted with them coarse.
+func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.Shared) (*page.Result, page.Geometry, float64, int, error) {
 	dpi := f.dpi
 	budget := f.doc.Limits().WithDefaults().MaxRenderPixels
 	for {
 		g, err := page.PageGeometry(pg, dpi)
 		if err != nil {
-			return nil, page.Geometry{}, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
+			return nil, page.Geometry{}, 0, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
 		}
 		if px := int64(g.Width) * int64(g.Height); px > budget {
 			// Scale to the budget at once rather than halving towards it.
@@ -416,14 +423,20 @@ func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.
 			Pool:       f.pool,
 		})
 		if err != nil {
-			return nil, page.Geometry{}, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
+			return nil, page.Geometry{}, 0, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
 		}
-		if report.Unsupported[page.TransparencyOverBudget] == 0 {
-			return res, g, dpi, nil
+		last := dpi/2 < minRetryDPI
+		if report.Unsupported[page.TransparencyOverBudget] == 0 && (report.CoarseMasks == 0 || last) {
+			// At the last resolution a composite whose soft masks rendered
+			// coarser is accepted: a coarse mask approximates the opacity
+			// only within a few pixels of where it changes, where the
+			// opaque normalization a refusal leads to would show what the
+			// mask hides everywhere (ISO 32000-1, 11.6.5.2).
+			return res, g, dpi, report.CoarseMasks, nil
 		}
 		res.Release(f.pool)
-		if dpi/2 < minRetryDPI {
-			return nil, page.Geometry{}, 0, fmt.Errorf("%w: the page's transparency does not fit the render pixel budget at %v dpi", ErrTooComplex, dpi)
+		if last {
+			return nil, page.Geometry{}, 0, 0, fmt.Errorf("%w: the page's transparency does not fit the render pixel budget at %v dpi", ErrTooComplex, dpi)
 		}
 		dpi /= 2
 	}

@@ -69,6 +69,12 @@ type FlattenedPage struct {
 	// resolution they were composited at, 0 when there were none.
 	Regions int
 	DPI     float64
+	// CoarseMasks counts the soft masks composited at a fraction of DPI:
+	// their groups did not fit [Limits.MaxRenderPixels] even at the lowest
+	// resolution flattening tries, so their opacity is approximated within a
+	// few pixels of where each mask changes. Flattening refuses a page whose
+	// transparency does not fit otherwise.
+	CoarseMasks int
 	// Rasterized counts the painting operations (paths, images, shadings,
 	// form XObjects) whose painting the images took over.
 	Rasterized int
@@ -393,6 +399,7 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 			Page:                  p.Page + 1,
 			Regions:               p.Regions,
 			DPI:                   p.DPI,
+			CoarseMasks:           p.CoarseMasks,
 			Rasterized:            p.Removed,
 			KeptText:              p.KeptText,
 			TextUnderTransparency: p.TextUnderTransparency,

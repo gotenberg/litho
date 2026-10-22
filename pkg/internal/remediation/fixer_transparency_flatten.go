@@ -180,10 +180,11 @@ func describeFlattening(report *flatten.Report, refused int) []string {
 	if report == nil || len(report.Pages) == 0 {
 		return nil
 	}
-	var regions, kept, approximated, jpeg int
+	var regions, kept, approximated, jpeg, coarse int
 	dpi := 0.0
 	for _, p := range report.Pages {
 		regions += p.Regions
+		coarse += p.CoarseMasks
 		kept += p.KeptText
 		approximated += p.TextUnderTransparency + p.TransparentText
 		jpeg += p.JPEG
@@ -204,6 +205,9 @@ func describeFlattening(report *flatten.Report, refused int) []string {
 	lines := []string{line}
 	if approximated > 0 {
 		lines = append(lines, fmt.Sprintf("flattening drew %d text object(s) opaque that painted with or under transparency", approximated))
+	}
+	if coarse > 0 {
+		lines = append(lines, fmt.Sprintf("flattening composited %d soft mask(s) at a coarser resolution, past the render pixel budget", coarse))
 	}
 	return lines
 }

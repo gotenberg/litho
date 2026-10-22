@@ -31,8 +31,8 @@ func TestSoftMaskPastBudget(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if report.Unsupported[TransparencyOverBudget] != 1 {
-				t.Errorf("report %v, want one soft mask over budget", report.Unsupported)
+			if report.CoarseMasks != 1 || len(report.Unsupported) != 0 {
+				t.Errorf("report %+v, want one coarse soft mask and nothing left out", report)
 			}
 			expect(t, c.Image(), 2, map[[2]int]rgb{{5, 50}: red, {40, 10}: red, {60, 50}: blue, {95, 90}: blue})
 		})
@@ -137,8 +137,8 @@ func TestPatternCellReturnsMaskPixels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Unsupported[TransparencyOverBudget] != 0 {
-		t.Errorf("report %v, want nothing over budget", report.Unsupported)
+	if report.CoarseMasks != 0 || report.Unsupported[TransparencyOverBudget] != 0 {
+		t.Errorf("report %+v, want nothing over budget", report)
 	}
 	expect(t, c.Image(), 2, map[[2]int]rgb{{25, 75}: red, {75, 25}: red})
 }

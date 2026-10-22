@@ -108,9 +108,10 @@ func (r *renderer) keepMask(key maskKey, m *blend.Mask, kept ...ast.PdfDict) {
 // softMask returns the soft mask sm installs (ISO 32000-1, 11.6.5.2), nil
 // for none. A mask that does not render, its /G missing or damaged, is
 // skipped and the painting goes unmasked, as a viewer paints it. One past
-// the render pixel budget is counted in [TransparencyOverBudget] and
-// renders coarser ([renderer.maskGroup]); past [maxMaskReduction] it hides
-// what it masks, rather than showing what the file masks out.
+// the render pixel budget renders coarser ([renderer.maskGroup]), counted in
+// [Report.CoarseMasks]; past [maxMaskReduction] it hides what it masks,
+// rather than showing what the file masks out, counted in
+// [TransparencyOverBudget].
 func (r *renderer) softMask(sm *graphics.SoftMask) (*blend.Mask, error) {
 	if sm == nil {
 		return nil, nil
@@ -222,7 +223,7 @@ func (r *renderer) maskOf(sm *graphics.SoftMask, kind ast.PdfName, ref ast.PdfIn
 
 	width, height, device := r.width, r.height, r.device
 	if scale > 1 {
-		r.report.count(TransparencyOverBudget)
+		r.report.CoarseMasks++
 		width, height = ceilDiv(width, scale), ceilDiv(height, scale)
 		device = device.Mul(geom.Matrix{1 / float64(scale), 0, 0, 1 / float64(scale), 0, 0})
 	}

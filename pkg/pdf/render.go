@@ -223,6 +223,9 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 		}
 		r.logger().Debug("render: drawn without some constructs", attrs...)
 	}
+	if report.CoarseMasks > 0 {
+		r.logger().Debug("render: soft masks drawn at a coarser resolution", slog.Int("page", pageNum), slog.Int("masks", report.CoarseMasks))
+	}
 	return canvas.Image(), nil
 }
 

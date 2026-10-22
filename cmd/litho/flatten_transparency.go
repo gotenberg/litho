@@ -27,6 +27,7 @@ type flattenTransparencyPage struct {
 	Page                  int     `json:"page"`
 	Regions               int     `json:"regions"`
 	DPI                   float64 `json:"dpi,omitempty"`
+	CoarseMasks           int     `json:"coarseMasks,omitempty"`
 	Rasterized            int     `json:"rasterized"`
 	KeptText              int     `json:"keptText"`
 	TextUnderTransparency int     `json:"textUnderTransparency"`
@@ -122,6 +123,7 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 			Page:                  p.Page,
 			Regions:               p.Regions,
 			DPI:                   p.DPI,
+			CoarseMasks:           p.CoarseMasks,
 			Rasterized:            p.Rasterized,
 			KeptText:              p.KeptText,
 			TextUnderTransparency: p.TextUnderTransparency,
@@ -154,6 +156,9 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 			p.Page, p.Regions, p.DPI, p.Rasterized, p.KeptText)
 		if p.JPEGImages > 0 {
 			fmt.Fprintf(stdout, "Page %d: %d composite(s) encoded as JPEG\n", p.Page, p.JPEGImages)
+		}
+		if p.CoarseMasks > 0 {
+			fmt.Fprintf(stdout, "Page %d: %d soft mask(s) composited at a coarser resolution, past the render pixel budget\n", p.Page, p.CoarseMasks)
 		}
 	}
 	if annotations > 0 {

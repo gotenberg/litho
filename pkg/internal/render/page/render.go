@@ -50,11 +50,12 @@ const (
 	PlaceholderGlyph = "placeholder glyph"
 	// TransparencyOverBudget counts transparency groups, soft masks and the
 	// knockout groups of text objects (ISO 32000-1, 11.4, 11.6.5.2, 9.3.8)
-	// whose rasters would pass the render pixel budget. A group's content is
-	// painted into the enclosing group, each element through the group's
-	// blend mode, alpha and soft mask; a soft mask's group renders at a
-	// fraction of the device resolution, or, past that, the mask hides what
-	// it masks; a knockout text object paints glyph by glyph.
+	// whose rasters would pass the render pixel budget, drawn other than the
+	// file draws them. A group's content is painted into the enclosing
+	// group, each element through the group's blend mode, alpha and soft
+	// mask; a soft mask that does not fit even at a fraction of the device
+	// resolution hides what it masks ([Report.CoarseMasks] counts those that
+	// fit); a knockout text object paints glyph by glyph.
 	TransparencyOverBudget = "transparency over budget"
 	// UnsupportedAnnotation counts annotations with no appearance stream
 	// (ISO 32000-1, 12.5.5) litho cannot build one for, which draw nothing:
@@ -155,6 +156,12 @@ type Report struct {
 	// Unsupported counts the constructs drawn without some of their effect,
 	// or not at all, by the keys above.
 	Unsupported map[string]int
+	// CoarseMasks counts the soft masks whose group would pass the render
+	// pixel budget and was rendered at a fraction of the device resolution
+	// instead: drawn with their effect, approximated within a few pixels of
+	// where the mask changes (see [renderer.maskGroup]). A mask that does not
+	// fit even so is counted in [TransparencyOverBudget].
+	CoarseMasks int
 }
 
 func (r *Report) count(key string) {
