@@ -476,18 +476,33 @@ func (r *renderer) fill(s *scope, rule raster.FillRule, st *graphics.State) erro
 
 // coverage rasterises the device path p under the current clip.
 func (r *renderer) coverage(p geom.Path, rule raster.FillRule) (*raster.Coverage, error) {
+	return r.clippedCoverage(p, rule, false)
+}
+
+// clippedCoverage rasterises the device path p under the current clip, its
+// rectangle cut at whole pixels with whole ([clip.applyPixelRect]) and at the
+// exact edge otherwise.
+func (r *renderer) clippedCoverage(p geom.Path, rule raster.FillRule, whole bool) (*raster.Coverage, error) {
 	c := r.clip()
 	if c.empty() {
 		return &raster.Coverage{}, nil
 	}
-	if b, ok := p.Bounds(); !ok || b.Max.X <= c.rect.Min.X || b.Min.X >= c.rect.Max.X || b.Max.Y <= c.rect.Min.Y || b.Min.Y >= c.rect.Max.Y {
+	rect := c.rect
+	if whole && !c.inMask {
+		rect = pixelRect(rect)
+	}
+	if b, ok := p.Bounds(); !ok || b.Max.X <= rect.Min.X || b.Min.X >= rect.Max.X || b.Max.Y <= rect.Min.Y || b.Min.Y >= rect.Max.Y {
 		return &raster.Coverage{}, nil
 	}
 	cov, err := raster.Fill(p, rule, r.width, r.height, c.mask)
 	if err != nil {
 		return nil, fmt.Errorf("rasterising: %w", err)
 	}
-	c.applyRect(cov)
+	if whole {
+		c.applyPixelRect(cov)
+	} else {
+		c.applyRect(cov)
+	}
 	return cov, nil
 }
 

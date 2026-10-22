@@ -122,6 +122,44 @@ func snapRows(r geom.Rect) geom.Rect {
 	return r
 }
 
+// pixelRect returns r with its four edges moved outward to whole device
+// pixels, within [rowSnapTolerance] of a pixel boundary kept on it. A
+// rectangle with no width or height keeps none.
+func pixelRect(r geom.Rect) geom.Rect {
+	if !(r.Max.X > r.Min.X) || !(r.Max.Y > r.Min.Y) {
+		return r
+	}
+	r.Min.X = math.Floor(r.Min.X + rowSnapTolerance)
+	r.Max.X = math.Ceil(r.Max.X - rowSnapTolerance)
+	return snapRows(r)
+}
+
+// wholePixels returns c with its rectangle widened to the whole device
+// pixels it touches, in columns as in rows ([pixelRect]), the clip a
+// transparency group composites under. ISO 32000-1, 11.4 composites a
+// group's result as one object under the clip and leaves the edge pixels to
+// the renderer; this is poppler's convention, not a spec rule. Splash paints
+// a group's content unclipped into a bitmap of its own
+// (SplashOutputDev::beginTransparencyGroup) and composites it pixel by pixel
+// where SplashClip::test passes (Splash::composite), which keeps the columns
+// floor(xMin) to ceil(xMax)-1 whole, where a fill or an image cuts them at a
+// quarter pixel (SplashClip::clipAALine). A mask already holding the
+// rectangle keeps the coverage it holds.
+//
+// # Corpus evidence
+//
+//   - govdocs, litho, pdfjs, pdfcpu: with glyphs ([clip.applyPixelRect])
+//     and groups cut at whole pixels, no render-cell or redact-render page
+//     moves; 25 flatten-cell page checks over 21 files move by a few
+//     pixels (pdfjs issue14562: 4225 to 4346 differing pixels of 327260
+//     inked), and none changes its verdict.
+func (c *clip) wholePixels() *clip {
+	if c.inMask {
+		return c
+	}
+	return &clip{mask: c.mask, rect: pixelRect(c.rect)}
+}
+
 // withPath returns c narrowed to the device-space path p filled with rule
 // (ISO 32000-1, 8.5.4): a rectangle narrows the rectangle, any other shape
 // makes a mask of the intersection. With snap, a rectangle first takes
@@ -210,6 +248,31 @@ func (c *clip) applyRect(cov *raster.Coverage) {
 				continue
 			}
 			row[x] *= fy * overlap(float64(cov.X+x), c.rect.Min.X, c.rect.Max.X)
+		}
+	}
+}
+
+// applyPixelRect keeps cov in the whole device pixels the rectangle touches
+// ([pixelRect]) and clears it elsewhere, as poppler clips a glyph: Splash
+// draws a filled glyph's bitmap pixel by pixel where SplashClip::test passes
+// (Splash::fillGlyph2), so a pixel the clipping rectangle touches keeps the
+// glyph's whole coverage. ISO 32000-1, 8.5.4 leaves that rasterisation to
+// the renderer; this is poppler's convention, not a spec rule.
+func (c *clip) applyPixelRect(cov *raster.Coverage) {
+	if c.inMask {
+		return
+	}
+	r := pixelRect(c.rect)
+	for y := range cov.Height {
+		row := cov.A[y*cov.Width : (y+1)*cov.Width]
+		if fy := float64(cov.Y + y); fy < r.Min.Y || fy+1 > r.Max.Y {
+			clear(row)
+			continue
+		}
+		for x := range row {
+			if fx := float64(cov.X + x); fx < r.Min.X || fx+1 > r.Max.X {
+				row[x] = 0
+			}
 		}
 	}
 }

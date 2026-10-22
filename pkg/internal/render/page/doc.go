@@ -7,7 +7,8 @@
 // The driver itself handles what paints: path construction and painting
 // (8.5.2, 8.5.3) through [raster] and [stroke], clipping (8.5.4) with true
 // path masks, a rectangle widened to the device rows it touches as viewers
-// clip one, colour converted to sRGB by [colorconv] (8.6), images and
+// clip one, and to its whole pixels for a filled glyph or a transparency
+// group, colour converted to sRGB by [colorconv] (8.6), images and
 // inline images (8.9) through the image decoder and [imgpaint], shadings and
 // shading patterns (8.7.4) through [shade], tiling patterns (8.7.3) whose
 // cells it runs into tiles or over the painted area, and form XObjects (8.10)

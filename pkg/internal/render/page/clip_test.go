@@ -93,3 +93,68 @@ func TestSnapRows(t *testing.T) {
 		}
 	}
 }
+
+// TestWholePixelClipColumns clips to a rectangle one pixel wide that cuts
+// columns 49 and 50 in half. poppler cuts a glyph it fills alone and a
+// transparency group at whole pixels, and both columns paint solid; a fill,
+// an image and a form that is no group keep half coverage, as Splash's
+// quarter-pixel cut gives them.
+func TestWholePixelClipColumns(t *testing.T) {
+	t.Parallel()
+	const clipCols = "49.5 0 1 100 re W n "
+	half := rgb{128, 128, 128}
+	cut := map[[2]int]rgb{{49, 50}: half, {50, 50}: half, {48, 50}: paper, {51, 50}: paper}
+	whole := map[[2]int]rgb{{49, 50}: black, {50, 50}: black, {48, 50}: paper, {51, 50}: paper}
+	form := func(group string) fixture {
+		return fixture{
+			page:    "/Resources << /XObject << /Fm 5 0 R >> >>",
+			content: clipCols + "/Fm Do",
+			objs:    []string{stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100]"+group, "0 g 0 0 100 100 re f")},
+		}
+	}
+	for name, tt := range map[string]struct {
+		f    fixture
+		want map[[2]int]rgb
+	}{
+		"glyph": {
+			f:    fixture{page: textPage, content: clipCols + "0 g BT /F 200 Tf 0 40 Td (A) Tj ET", objs: trueTypeObjs()},
+			want: whole,
+		},
+		"isolated group": {f: form(" /Group << /S /Transparency /I true >>"), want: whole},
+		"group":          {f: form(" /Group << /S /Transparency >>"), want: whole},
+		"form":           {f: form(""), want: cut},
+		"fill":           {f: fixture{content: clipCols + "0 g 0 0 100 100 re f"}, want: cut},
+		"image": {
+			f: fixture{
+				page:    "/Resources << /XObject << /Im 5 0 R >> >>",
+				content: clipCols + "q 100 0 0 100 0 0 cm /Im Do Q",
+				objs:    []string{stream("/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", "\x00")},
+			},
+			want: cut,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			img, _ := draw(t, tt.f)
+			expect(t, img, 2, tt.want)
+		})
+	}
+}
+
+func TestPixelRect(t *testing.T) {
+	t.Parallel()
+	rect := func(x0, y0, x1, y1 float64) geom.Rect {
+		return geom.Rect{Min: geom.Point{X: x0, Y: y0}, Max: geom.Point{X: x1, Y: y1}}
+	}
+	for _, tt := range []struct{ in, want geom.Rect }{
+		{rect(1.25, 2.5, 3.75, 2.75), rect(1, 2, 4, 3)},
+		{rect(1, 2, 4, 3), rect(1, 2, 4, 3)},
+		{rect(1-1e-9, 2, 4+1e-9, 3), rect(1, 2, 4, 3)},
+		{rect(1.5, 2, 1.5, 3), rect(1.5, 2, 1.5, 3)},
+		{rect(1, 2.4, 4, 2.4), rect(1, 2.4, 4, 2.4)},
+	} {
+		if got := pixelRect(tt.in); got != tt.want {
+			t.Errorf("pixelRect(%v) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}

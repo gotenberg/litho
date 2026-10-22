@@ -206,6 +206,11 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 		r.skip("form XObject", err)
 		return nil
 	}
+	if isGroup {
+		// A group's content reaches the page through the clip at whole
+		// pixels, elided or not, as poppler composites every group.
+		c = c.wholePixels()
+	}
 	if err := r.setClip(c); err != nil {
 		return err
 	}
