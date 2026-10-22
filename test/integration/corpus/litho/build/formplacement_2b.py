@@ -27,8 +27,8 @@ drawing shows. reversed names its /Rect corners in the other order (ISO
 
 The fields are text fields that hold no value, so the appearance is all there
 is to draw. Each widget is tagged under a Form element of its own, so the
-flattened appearances are tagged content: drawn unmarked into a document with
-no structure tree, they fail PDF/UA, which the source does not. The file
+flattened appearances are tagged content (formuntagged_ua1.pdf covers the
+untagged case). The file
 declares an RGB OutputIntent, and every widget prints.
 
 See ../README.md for the authoritative expected firing set.

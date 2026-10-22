@@ -275,6 +275,7 @@ one deliberately rather than diffing it against a fresh build.
 | `flattenrefuse_1b.pdf` | PDF/A-1b     | Transparency on a page flattening refuses, beside one it takes   |
 | `iccalternate_2b.pdf`  | PDF/A-2b     | ICCBased spaces no engine can use, read as their CIE /Alternate  |
 | `formplacement_2b.pdf` | PDF/A-2b     | Widget appearances a viewer places by Algorithm 8.1, not a shift |
+| `formuntagged_ua1.pdf` | PDF/UA-1     | Painting widgets in a document with no structure tree            |
 | `smaskindata_2b.pdf`   | PDF/A-2b     | JPEG 2000 images whose data holds their soft mask, both kinds    |
 | `flattentiles_1b.pdf`  | PDF/A-1b     | Transparency over a photograph and a chart, composited in tiles  |
 
@@ -651,6 +652,7 @@ are covered under [Known divergences](#known-divergences).
 | `formreuse_ua1.pdf`    | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 10   | 8    |
 | `formshare_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 5    | 7    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
+| `formuntagged_ua1.pdf` | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 4    | 5    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `gotochain_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 1    |
 | `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
@@ -8944,9 +8946,9 @@ fails at every PDF/A level, and at PDF/UA it passes the widget rules the source
 fails (`7.18.1/3` and `7.18.3/1` at PDF/UA-1; `8.9.3.3/1`, `8.10.2.3/1` and
 `8.9.2.4.13/1` at PDF/UA-2) and fails nothing new, on litho and veraPDF 1.30.2
 alike. Untagged, as the file first was, the drawing went into the page
-unmarked, as `FlattenForm` draws into a document with no structure tree, and
-added `7.1/3` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2 to the `mutate-flatten`
-cell. The file holds no signed signature, so a rewrite draws nothing more.
+unmarked, which added `7.1/3` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2 to the
+`mutate-flatten` cell; `FlattenForm` now marks such a drawing as an artifact
+(see `formuntagged_ua1.pdf`). The file holds no signed signature, so a rewrite draws nothing more.
 
 The file declares an RGB OutputIntent and every widget prints, so it conforms
 to PDF/A-2b. The other cells report what the part-2, level-B claim draws at
@@ -8955,6 +8957,46 @@ header, `6.9/5` at PDF/A-4f, and at PDF/UA the document-level rules
 flattening does not touch (`5/1`, `7.1/10` and `7.2/33` at PDF/UA-1).
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells, on
 the source and on the `flatten-form` output.
+
+### `formuntagged_ua1.pdf`
+
+ISO 14289-1, 7.1 and ISO 14289-2, 8.2.2 require every piece of page content
+to be tagged as real content or marked as an artifact. A widget is not page
+content, so a document with no structure tree passes both tests while its page
+draws nothing of its own. Flattening the form draws each appearance into the
+page, where no structure element can take it, so `FlattenForm` and both
+signature bakes mark it as an artifact (ISO 32000-1, 14.8.2.2), a plain
+`/Artifact` sequence: Table 330 makes every property optional, and no artifact
+`/Type` names a field's look. The other fixtures whose widgets paint are
+tagged, and the untagged ones paint nothing, so this file gives the
+`mutate-flatten` cell the shape:
+
+| Field     | Kind      | `/Rect`            | Appearance                                   |
+| --------- | --------- | ------------------ | -------------------------------------------- |
+| `name`    | text      | `[40 220 240 250]` | a light box, a dark corner and a border      |
+| `agree`   | check box | `[40 170 60 190]`  | `/On`, a filled square, selected by `/AS`    |
+| `comment` | text      | `[40 60 360 140]`  | the same box, its `/BBox` offset from `0, 0` |
+
+The page's own content draws nothing. The file has no `/StructTreeRoot` and no
+`/MarkInfo`, claims PDF/UA-1 in its XMP, and declares an RGB OutputIntent.
+
+`litho flatten-form` draws the three appearances where litho and poppler
+26.09.0 draw them in the source, to the pixel at 72 dpi, each inside an
+`/Artifact` sequence. The output fails a subset of what the source fails at
+all thirteen levels, on litho and veraPDF 1.30.2 alike: with the widgets gone
+it passes the annotation rules (`7.18.3/1`, no `/Tabs`, and `7.18.4/1`, no
+`Form` element, at PDF/UA-1; `8.9.3.3/1`, no `/Tabs`, at PDF/UA-2) and adds
+nothing. Drawn unmarked, as before, the output added `7.1/3` at PDF/UA-1 and
+`8.2.2/1` at PDF/UA-2 on both tools.
+
+The file also fails `6.2/1` (no `/MarkInfo`) at both PDF/UA parts, the missing
+structure tree (`7.1/11`, `8.2.1/1`), and at PDF/UA-2 the identification
+`5/2` and `5/5` its PDF/UA-1 claim draws. The PDF/A cells report the missing
+PDF/A identification and the undescribed `pdfuaid` schema (`6.7.9` at part 1,
+`6.6.2.3.1` at parts 2 and 3), at level A the tagging, at part 4 the
+`%PDF-1.7` header, and `6.9/5` at PDF/A-4f. veraPDF 1.30.2 and litho report
+the same rule set in all thirteen cells, on the source and on the
+`flatten-form` output.
 
 ### `smaskindata_2b.pdf`
 
