@@ -32,6 +32,9 @@ type Report struct {
 	// Images counts what the conversion of image XObjects and inline images
 	// did. A refused image is also listed in Skipped.
 	Images ImageReport
+	// Overprint says how the conversion changed what overprinting paintings
+	// print.
+	Overprint OverprintReport
 	// Skipped lists the objects left unconverted.
 	Skipped []Skip
 	// DeviceProfiles maps each device space the walk read ([SpaceGray],
@@ -130,12 +133,18 @@ func NewSession(doc *document.Document, alloc *writer.ObjAllocator, target Targe
 	return &Session{s: s}, nil
 }
 
-// Pages converts the content of pages, as [Content] describes.
+// Pages converts the content of pages, as [Content] describes, then rewrites
+// the graphics state dictionaries overprinting needs rewritten
+// ([OverprintReport]). It is called once per session, with every page: a
+// dictionary is rewritten only when no painting of pages needs it as it was.
 func (s *Session) Pages(ctx context.Context, pages []*document.Page) error {
 	for i, page := range pages {
 		if err := s.s.rewritePage(ctx, page); err != nil {
 			return fmt.Errorf("recolouring page %d: %w", i+1, err)
 		}
+	}
+	if err := s.s.finishOverprint(ctx); err != nil {
+		return fmt.Errorf("rewriting overprint modes: %w", err)
 	}
 	return nil
 }
@@ -356,6 +365,7 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 		return false, nil, fmt.Errorf("%w: a content stream another page shows, in a /Contents that reads only as one stream", ErrUnsupportedSpace)
 	}
 	if !perStream || direct {
+		cr.id = s.streamID("contents", streams[0].obj)
 		out, changed, err := cr.rewrite(ctx, joined.Bytes())
 		if err != nil || !changed {
 			return false, nil, err
@@ -380,6 +390,7 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 	}
 	var writes []pending
 	for _, st := range streams {
+		cr.id = s.streamID("content", st.obj)
 		if done[st.obj.(ast.PdfIndirectRef).ObjectNum] {
 			// Converted with another page; read for the colour state it
 			// leaves the next stream in.
@@ -472,7 +483,17 @@ func (s *session) rewriteAppearanceStream(ctx context.Context, obj ast.PdfObject
 		if !ok {
 			return nil, false, nil
 		}
-		return s.rewritePainting(ctx, stream, nil, 1, true)
+		return s.rewritePainting(ctx, stream, nil, 1, true, s.streamID("appearance", obj))
 	})
 	return err
+}
+
+// streamID names a stream in the session's overprint judgements: by its
+// object number, or, for a direct one, by a number of the session's own.
+func (s *session) streamID(kind string, obj ast.PdfObject) string {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		return fmt.Sprintf("%s %d", kind, ref.ObjectNum)
+	}
+	s.anonymous++
+	return fmt.Sprintf("%s #%d", kind, s.anonymous)
 }

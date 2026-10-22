@@ -170,6 +170,12 @@ func (t targetInfo) device() bool {
 	return t.Family != graphics.FamilyICCBased
 }
 
+// cmyk reports a target overprint mode 1 governs: DeviceCMYK, or an
+// ICCBased space of four components (see [contentRewriter.judgeColor]).
+func (t targetInfo) cmyk() bool {
+	return t.Family == graphics.FamilyDeviceCMYK || (t.Family == graphics.FamilyICCBased && t.n == 4)
+}
+
 // spaceObject returns the colour space object the target is written as in a
 // definition: a family name, or the caller's ICCBased object.
 func (t targetInfo) spaceObject() ast.PdfObject {

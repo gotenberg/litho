@@ -42,6 +42,10 @@ type session struct {
 	// images converts the image XObjects and inline images the walk
 	// reaches, through the session's own plans (see [sessionColors]).
 	images *Images
+	// overprint gathers what the conversion does to overprinting paintings.
+	overprint *overprintLedger
+	// anonymous numbers the direct streams judged for overprint.
+	anonymous int
 }
 
 func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo, opts Options, report *Report) (*session, error) {
@@ -55,6 +59,7 @@ func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo
 		seen:       make(map[int]bool),
 		plans:      make(map[string]*spacePlan),
 		transforms: make(map[string]transformEntry),
+		overprint:  newOverprintLedger(),
 	}
 	cfg := ImageConfig{
 		Colors:       sessionColors{s: s},

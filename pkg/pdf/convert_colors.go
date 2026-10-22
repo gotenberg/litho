@@ -239,6 +239,21 @@ type ColorReport struct {
 	// table either. Empty when every profile held the intent's table or
 	// serves every intent alike.
 	IntentFallbacks []IntentFallback
+	// OverprintPreserved counts the paintings under overprint (ISO
+	// 32000-1, 8.6.7) that print as they did because the conversion wrote
+	// the graphics state dictionaries in force at them, OverprintStates of
+	// them, with /OPM 0: colour converted into CMYK under overprint mode 1
+	// would otherwise leave the inks of its zero components unpainted.
+	OverprintPreserved int
+	OverprintStates    int
+	// OverprintChanged counts the paintings under overprint that print
+	// otherwise once converted, on a device that overprints: a spot colour
+	// converted to process colour paints every process ink where it
+	// painted its own alone, and a CMYK colour painted under overprint mode
+	// 1 paints the inks its zero components left unpainted, or stops
+	// leaving them. Viewers draw without overprinting by default, so the
+	// change shows only in print or in an overprint preview.
+	OverprintChanged int
 }
 
 // Where a profile [Writer.ConvertColors] read came from, as
@@ -427,6 +442,9 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		TargetProfile:        resolved.source,
 		SourceProfiles:       result.sourceProfiles,
 		IntentFallbacks:      result.intentFallbacks,
+		OverprintPreserved:   result.overprintPreserved,
+		OverprintStates:      result.overprintStates,
+		OverprintChanged:     result.overprintChanged,
 	}
 	for i := range report.IntentFallbacks {
 		if report.IntentFallbacks[i].Target {

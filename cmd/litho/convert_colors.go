@@ -35,6 +35,11 @@ type convertColorsResult struct {
 	TargetProfile   string              `json:"targetProfile"`
 	SourceProfiles  map[string][]string `json:"sourceProfiles,omitempty"`
 	IntentFallbacks []intentFallback    `json:"intentFallbacks,omitempty"`
+	// OverprintPreserved, OverprintStates and OverprintChanged are
+	// [pdf.ColorReport]'s counts of the paintings under overprint.
+	OverprintPreserved int `json:"overprintPreserved,omitempty"`
+	OverprintStates    int `json:"overprintStates,omitempty"`
+	OverprintChanged   int `json:"overprintChanged,omitempty"`
 }
 
 // intentFallback is one [pdf.IntentFallback] in the JSON report.
@@ -228,6 +233,9 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 		ReplacedOutputIntents: report.ReplacedOutputIntents,
 		TargetProfile:         report.TargetProfile,
 		SourceProfiles:        report.SourceProfiles,
+		OverprintPreserved:    report.OverprintPreserved,
+		OverprintStates:       report.OverprintStates,
+		OverprintChanged:      report.OverprintChanged,
 	}
 	for _, fb := range report.IntentFallbacks {
 		result.IntentFallbacks = append(result.IntentFallbacks, intentFallback(fb))
@@ -266,6 +274,12 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 		}
 		fmt.Fprintf(stdout, "Rendering intent fell back to the %s table of a %s %d-component %s profile\n",
 			fb.Table, side, fb.Components, fb.Profile)
+	}
+	if result.OverprintPreserved > 0 {
+		fmt.Fprintf(stdout, "Kept %d overprinting painting(s) as they print, writing %d graphics state(s) with overprint mode 0\n", result.OverprintPreserved, result.OverprintStates)
+	}
+	if result.OverprintChanged > 0 {
+		fmt.Fprintf(stdout, "Warning: %d overprinting painting(s) print otherwise on a device that overprints\n", result.OverprintChanged)
 	}
 	return exitOK
 }

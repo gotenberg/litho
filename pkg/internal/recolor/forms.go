@@ -10,13 +10,16 @@ import (
 
 // rewriteStreamContent converts the content of a form, pattern or glyph
 // stream painted with the resources res and returns the stream to write in
-// its place. It returns false when nothing in it converts.
-func (s *session) rewriteStreamContent(ctx context.Context, stream ast.PdfStream, res ast.PdfDict) (ast.PdfStream, bool, error) {
+// its place. It returns false when nothing in it converts. id names the
+// stream in overprint judgements, "" for one not judged on its own
+// ([contentRewriter.id]).
+func (s *session) rewriteStreamContent(ctx context.Context, stream ast.PdfStream, res ast.PdfDict, id string) (ast.PdfStream, bool, error) {
 	data, err := s.doc.DecodeStream(ctx, stream)
 	if err != nil {
 		return ast.PdfStream{}, false, fmt.Errorf("decoding content: %w", err)
 	}
 	cr := s.newContentRewriter(ctx, res)
+	cr.id = id
 	out, changed, err := cr.rewrite(ctx, data)
 	if err != nil || !changed {
 		return ast.PdfStream{}, false, err
@@ -55,15 +58,18 @@ func (s *session) rewriteForm(ctx context.Context, obj ast.PdfObject, parent ast
 		if err := s.checkDepth(depth); err != nil {
 			return nil, false, err
 		}
-		return s.rewritePainting(ctx, stream, parent, depth, true)
+		// A form's overprinting is judged where it is painted, under the
+		// state it inherits there ([contentRewriter.judgeDo]).
+		return s.rewritePainting(ctx, stream, parent, depth, true, "")
 	})
 }
 
 // rewritePainting converts a stream that paints with resources: a form, a
 // tiling pattern, an appearance stream, painted with its /Resources or,
 // lacking them, parent. group reports a stream that may carry a
-// transparency group, which a pattern does not.
-func (s *session) rewritePainting(ctx context.Context, stream ast.PdfStream, parent ast.PdfDict, depth int, group bool) (ast.PdfObject, bool, error) {
+// transparency group, which a pattern does not. id names the stream in
+// overprint judgements ([session.rewriteStreamContent]).
+func (s *session) rewritePainting(ctx context.Context, stream ast.PdfStream, parent ast.PdfDict, depth int, group bool, id string) (ast.PdfObject, bool, error) {
 	resObj := stream.Dict["Resources"]
 	res := parent
 	if resObj != nil {
@@ -73,7 +79,7 @@ func (s *session) rewritePainting(ctx context.Context, stream ast.PdfStream, par
 		}
 		res = r
 	}
-	out, changed, err := s.rewriteStreamContent(ctx, stream, res)
+	out, changed, err := s.rewriteStreamContent(ctx, stream, res, id)
 	if err != nil {
 		return nil, false, err
 	}
@@ -124,7 +130,9 @@ func (s *session) rewritePattern(ctx context.Context, obj ast.PdfObject, depth i
 			if err := s.checkDepth(depth + 1); err != nil {
 				return nil, false, err
 			}
-			return s.rewritePainting(ctx, v, nil, depth+1, false)
+			// A tiling pattern's cell paints under the graphics state of
+			// the pattern's establishment (8.7.3.1), not the painting's.
+			return s.rewritePainting(ctx, v, nil, depth+1, false, s.streamID("pattern", obj))
 		case ast.PdfDict:
 			sh, ch, err := s.rewriteShading(ctx, v["Shading"])
 			if err != nil || !ch {
@@ -169,7 +177,9 @@ func (s *session) rewriteType3(ctx context.Context, obj ast.PdfObject, parent as
 				if !ok {
 					return nil, false, nil
 				}
-				out, changed, err := s.rewriteStreamContent(ctx, stream, res)
+				// TODO: a glyph inherits the overprinting of the text that
+				// shows it (9.6.5); it is not judged.
+				out, changed, err := s.rewriteStreamContent(ctx, stream, res, "")
 				if err != nil || !changed {
 					return nil, false, err
 				}

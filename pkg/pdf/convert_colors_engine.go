@@ -46,6 +46,9 @@ type recolorResult struct {
 	// and [ColorReport.IntentFallbacks].
 	sourceProfiles  map[string][]string
 	intentFallbacks []IntentFallback
+	// overprintPreserved, overprintStates and overprintChanged are what
+	// [ColorReport] says of overprinting paintings.
+	overprintPreserved, overprintStates, overprintChanged int
 }
 
 // recolorEngine rewrites the colours of every page of doc, and of everything
@@ -111,8 +114,11 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		shadings:    report.Shadings,
 		keptSpots:   report.KeptColorants,
 
-		sourceProfiles:  sourceProfiles(report.DeviceProfiles, cmykFromCaller),
-		intentFallbacks: intentFallbacks(report.IntentFallbacks, cmykFromCaller),
+		sourceProfiles:     sourceProfiles(report.DeviceProfiles, cmykFromCaller),
+		intentFallbacks:    intentFallbacks(report.IntentFallbacks, cmykFromCaller),
+		overprintPreserved: report.Overprint.Preserved,
+		overprintStates:    report.Overprint.States,
+		overprintChanged:   report.Overprint.Changed + report.Overprint.FormsUnread,
 	}, nil
 }
 

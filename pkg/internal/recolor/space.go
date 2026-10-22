@@ -70,6 +70,10 @@ type spacePlan struct {
 	// fixed marks a Separation or DeviceN space over All or None, whose
 	// tints stay under either policy and no conversion carries.
 	fixed bool
+	// spotConverted marks a Separation or DeviceN space converted to
+	// process colour, and cmyk a space overprint mode 1 governs, DeviceCMYK
+	// or a four-component ICCBased space (see [contentRewriter.judgeColor]).
+	spotConverted, cmyk bool
 	// err is why a planUnknown space could not be read.
 	err error
 }
@@ -170,15 +174,25 @@ func (s *session) plan(ctx context.Context, def ast.PdfObject, defaults ast.PdfD
 	case graphics.FamilyDeviceRGB, "RGB":
 		return s.planDevice(ctx, SpaceRGB, "DefaultRGB", defaults)
 	case graphics.FamilyDeviceCMYK, "CMYK":
-		return s.planDevice(ctx, SpaceCMYK, "DefaultCMYK", defaults)
+		return markCMYK(s.planDevice(ctx, SpaceCMYK, "DefaultCMYK", defaults))
 	case graphics.FamilyCalGray, graphics.FamilyCalRGB, graphics.FamilyLab:
 		return s.planCIE(ctx, string(family), arr)
 	case graphics.FamilyICCBased:
-		return s.planICC(ctx, arr, depth, role)
+		p := s.planICC(ctx, arr, depth, role)
+		if p.n == 4 {
+			return markCMYK(p)
+		}
+		return p
 	case graphics.FamilyIndexed, "I":
 		return s.planIndexed(ctx, arr, depth)
 	case graphics.FamilySeparation, graphics.FamilyDeviceN:
-		return s.planSpot(ctx, string(family), arr, depth, s.opts.ConvertSpots)
+		p := s.planSpot(ctx, string(family), arr, depth, s.opts.ConvertSpots)
+		if p.kind == planConvert {
+			q := *p
+			q.spotConverted = true
+			return &q
+		}
+		return p
 	case graphics.FamilyPattern:
 		p := &spacePlan{kind: planPattern}
 		if len(arr) > 1 {
@@ -194,6 +208,13 @@ func (s *session) plan(ctx context.Context, def ast.PdfObject, defaults ast.PdfD
 		return p
 	}
 	return unknown(fmt.Errorf("%w: family %q", ErrUnsupportedSpace, string(family)))
+}
+
+// markCMYK returns a copy of p marked as a space overprint mode 1 governs.
+func markCMYK(p *spacePlan) *spacePlan {
+	q := *p
+	q.cmyk = true
+	return &q
 }
 
 // planDevice plans a device space: the default space of the resources when

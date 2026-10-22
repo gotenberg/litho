@@ -27,9 +27,14 @@ const targetResourceBase = "LithoTarget"
 const maxTargetNames = 1000
 
 // colorState is the fill and stroke colour spaces in force (ISO 32000-1,
-// 8.6.8), as their plans.
+// 8.6.8), as their plans, with what judging overprint reads: the colours set
+// in them, the overprint parameters (8.6.7) and the text rendering mode
+// (9.3.6), all of which q and Q save and restore (8.4.2).
 type colorState struct {
-	fill, stroke *spacePlan
+	fill, stroke           *spacePlan
+	fillComps, strokeComps []float64
+	overprint              overprintState
+	tr                     int
 }
 
 // contentRewriter rewrites the colour operators of the content streams that
@@ -51,6 +56,11 @@ type contentRewriter struct {
 	// dry marks a read for the colour state alone ([contentRewriter.advance]),
 	// which converts no inline image.
 	dry bool
+	// id names the stream in the session's overprint judgements, "" for a
+	// stream whose overprinting is judged where it is painted, a form's, or
+	// not at all, a glyph's. depth is the form nesting a judgement reads.
+	id    string
+	depth int
 }
 
 func (s *session) newContentRewriter(ctx context.Context, res ast.PdfDict) *contentRewriter {
@@ -118,7 +128,7 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 				return nil, false, err
 			}
 		}
-		repl, ok, err := cr.operation(ctx, op)
+		repl, ok, err := cr.operation(ctx, i, op)
 		if err != nil {
 			return nil, false, err
 		}
@@ -181,7 +191,7 @@ func (cr *contentRewriter) advance(ctx context.Context, data []byte) error {
 				return err
 			}
 		}
-		if _, _, err := cr.operation(ctx, op); err != nil {
+		if _, _, err := cr.operation(ctx, i, op); err != nil {
 			return err
 		}
 	}
@@ -227,9 +237,11 @@ func sameOperations(a, b []content.Operation) bool {
 // The colour operators of ISO 32000-1, 8.6.8, Table 74 select a space and
 // colour: one whose space converts is written as the target's operator with
 // the converted colour; the others stay, their spaces' definitions rewritten
-// in the resources.
-func (cr *contentRewriter) operation(ctx context.Context, op content.Operation) ([]byte, bool, error) {
+// in the resources. index is op's place in its stream, by which overprint
+// judgements name it.
+func (cr *contentRewriter) operation(ctx context.Context, index int, op content.Operation) ([]byte, bool, error) {
 	s := cr.s
+	cr.judgeOperation(ctx, index, op)
 	switch op.Operator {
 	case "q":
 		cr.stack = append(cr.stack, cr.state)
@@ -250,6 +262,7 @@ func (cr *contentRewriter) operation(ctx context.Context, op content.Operation) 
 		stroke := op.Operator[0] < 'a'
 		p := s.planDefinition(ctx, ast.PdfName(family), cr.res)
 		cr.set(stroke, p)
+		cr.setComps(stroke, p, op.Operands)
 		return cr.convert(stroke, p, op.Operands)
 	case "cs", "CS":
 		stroke := op.Operator == "CS"
@@ -262,6 +275,7 @@ func (cr *contentRewriter) operation(ctx context.Context, op content.Operation) 
 		}
 		p := s.planName(ctx, name, cr.res)
 		cr.set(stroke, p)
+		cr.setComps(stroke, p, nil)
 		if !p.convertible() {
 			return nil, false, nil
 		}
@@ -284,6 +298,7 @@ func (cr *contentRewriter) operation(ctx context.Context, op content.Operation) 
 			}
 			return cr.convertPattern(stroke, p.base, op.Operands[:len(op.Operands)-1], name)
 		}
+		cr.setComps(stroke, p, op.Operands)
 		return cr.convert(stroke, p, op.Operands)
 	}
 	return nil, false, nil
@@ -326,6 +341,20 @@ func (cr *contentRewriter) inlineImage(ctx context.Context, op content.Operation
 	}
 	cr.pendingImages++
 	return text, true, nil
+}
+
+// setComps records the colour operands set in p, the space's initial colour
+// when operands is nil or not its component count of numbers.
+func (cr *contentRewriter) setComps(stroke bool, p *spacePlan, operands []ast.PdfObject) {
+	comps, ok := operandsOf(operands, p.n)
+	if !ok {
+		comps = p.initial
+	}
+	if stroke {
+		cr.state.strokeComps = comps
+	} else {
+		cr.state.fillComps = comps
+	}
 }
 
 func (cr *contentRewriter) set(stroke bool, p *spacePlan) {

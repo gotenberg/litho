@@ -285,6 +285,30 @@ func TestConvertColors_OutputIntentConflict(t *testing.T) {
 	}
 }
 
+// TestConvertColorsReport_Overprint pins how the report states what the
+// conversion did to overprinting paintings, in text and in JSON.
+func TestConvertColorsReport_Overprint(t *testing.T) {
+	t.Parallel()
+	report := &pdf.ColorReport{Target: "DeviceCMYK", OverprintPreserved: 3, OverprintStates: 1, OverprintChanged: 2}
+	var text, js, errs bytes.Buffer
+	if code := printConvertColorsReport(&text, &errs, "text", "in.pdf", report); code != exitOK {
+		t.Fatalf("text: exit %d, %s", code, errs.String())
+	}
+	for _, want := range []string{"Kept 3 overprinting painting(s) as they print, writing 1 graphics state(s)", "Warning: 2 overprinting painting(s) print otherwise"} {
+		if !strings.Contains(text.String(), want) {
+			t.Errorf("text report %q lacks %q", text.String(), want)
+		}
+	}
+	if code := printConvertColorsReport(&js, &errs, "json", "in.pdf", report); code != exitOK {
+		t.Fatalf("json: exit %d, %s", code, errs.String())
+	}
+	for _, want := range []string{`"overprintPreserved": 3`, `"overprintStates": 1`, `"overprintChanged": 2`} {
+		if !strings.Contains(js.String(), want) {
+			t.Errorf("JSON report %s lacks %s", js.String(), want)
+		}
+	}
+}
+
 // TestConvertColors_ReportsTheProfiles pins that the report names where the
 // target profile came from, in both formats: the built-in one by default,
 // the --cmyk-profile file as the caller's.
