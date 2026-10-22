@@ -701,7 +701,8 @@ const (
 // too). A plain translation to the /Rect corner drew any appearance whose box
 // is offset, sized apart from /Rect, or rotated by /Matrix somewhere else
 // than the viewer showed it. The drawing goes inside the marked content tags
-// gives it (see [flattenTags]). All page-dict
+// gives it (see [flattenTags]), or, with nil tags, a document with no
+// structure tree, inside an /Artifact sequence. All page-dict
 // mutations (XObject resource additions, /Contents append, /Annots trim) are
 // accumulated into a single draft and written with exactly one
 // [writer.ObjAllocator.AllocAt] call per page, the same invariant
@@ -718,6 +719,11 @@ const (
 //   - verapdf PDF_UA-1 7.18.1-t03-pass-d.pdf, pdfjs bug1723568.pdf: carry a
 //     widget whose /Rect has no area, which the translation drew at the full
 //     size of its /BBox.
+//   - All corpora, untagged files: drawn unmarked, the FlattenForm output of
+//     75 files failed ISO 14289-1, 7.1 test 3 where the source passed it.
+//     Marked as artifacts, none does, and no output fails a rule the unmarked
+//     drawing passed, at PDF/A-2b and PDF/UA-1, and on the litho corpus at
+//     all thirteen profiles.
 func flattenPageWidgets(
 	ctx context.Context,
 	doc *document.Document,
@@ -726,6 +732,16 @@ func flattenPageWidgets(
 	tags *flattenTags,
 	decide func(annotObj ast.PdfObject, annotDict ast.PdfDict) (widgetOutcome, ast.PdfStream),
 ) {
+	// A document with no structure tree has no element to tag a drawing
+	// under, and unmarked page content fails ISO 14289-1, 7.1 and ISO
+	// 14289-2, 8.2.2, which the widget did not. The drawing is marked as an
+	// artifact (ISO 32000-1, 14.8.2.2.1). It goes in as a plain /Artifact
+	// sequence: Table 330 makes every property optional, and none of its
+	// /Type values fits a field's look, Pagination naming running heads,
+	// Layout typographic ornaments and Page production marks.
+	if tags == nil {
+		tags = artifactTags()
+	}
 	// Start from the latest pending version of the page dict so the edit
 	// composes correctly with any prior mutation that has already
 	// rewritten this page, its /Annots included.

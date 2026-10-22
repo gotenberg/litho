@@ -88,13 +88,11 @@ func InsertPages(
 		return fmt.Errorf("reading the target's structure tree: %w", err)
 	}
 	targetTagged := target != nil || !targetUsable
-	marking := bakeUnmarked
-	switch {
-	case targetUsable && hasStructTree(ctx, srcDoc):
+	// No structure element of the target encloses a copied widget unless
+	// the pages carry their structure into it.
+	marking := bakeArtifacts
+	if targetUsable && hasStructTree(ctx, srcDoc) {
 		marking = bakeTagged
-	case targetTagged:
-		// No structure element of the target encloses a copied widget.
-		marking = bakeArtifacts
 	}
 
 	pagesObj, ok := catalogDict["Pages"]

@@ -108,7 +108,9 @@ func pageContent(ctx context.Context, t *testing.T, data []byte, pageNum int) st
 	return out.String()
 }
 
-// pageText returns the text litho extracts from the 1-based page of data.
+// pageText returns the text litho extracts from the 1-based page of data,
+// artifacts included: a baked appearance no structure element takes is drawn
+// as an artifact, which the default extraction leaves out.
 func pageText(ctx context.Context, t *testing.T, data []byte, pageNum int) string {
 	t.Helper()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -116,7 +118,7 @@ func pageText(ctx context.Context, t *testing.T, data []byte, pageNum int) strin
 		t.Fatalf("Open: %v", err)
 	}
 	defer r.Close()
-	text, err := r.ExtractText(ctx, pageNum)
+	text, err := r.ExtractText(ctx, pageNum, WithArtifacts())
 	if err != nil {
 		t.Fatalf("ExtractText(%d): %v", pageNum, err)
 	}

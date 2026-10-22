@@ -112,3 +112,83 @@ func TestFlattenFormPlacesByAlgorithm81(t *testing.T) {
 		})
 	}
 }
+
+// drawnContent returns the content streams pending holds that draw a baked
+// appearance.
+func drawnContent(ctx context.Context, t *testing.T, pending map[int]ast.PdfObject) []string {
+	t.Helper()
+	var drawn []string
+	for _, obj := range pending {
+		s, ok := obj.(ast.PdfStream)
+		if !ok {
+			continue
+		}
+		body, err := s.Bytes(ctx)
+		if err != nil {
+			t.Fatalf("Bytes: %v", err)
+		}
+		if strings.Contains(string(body), " Do Q") {
+			drawn = append(drawn, string(body))
+		}
+	}
+	return drawn
+}
+
+// requireArtifacts fails t unless each appearance drawn holds an artifact
+// marking.
+func requireArtifacts(t *testing.T, drawn []string) {
+	t.Helper()
+	if len(drawn) == 0 {
+		t.Fatal("no appearance drawn")
+	}
+	for _, d := range drawn {
+		if n := strings.Count(d, " Do Q"); n != strings.Count(d, "/Artifact BMC q ") || n != strings.Count(d, " Do Q EMC") {
+			t.Errorf("drawing = %q, want each appearance marked as an artifact", d)
+		}
+	}
+}
+
+// TestFlattenFormMarksAnUntaggedDrawingAsAnArtifact pins that a document with
+// no structure tree gets each flattened appearance as an artifact. ISO
+// 14289-1, 7.1 and ISO 14289-2, 8.2.2 require page content to be tagged or an
+// artifact, and with no structure element to tag it under, unmarked content
+// added a failure the source did not have.
+func TestFlattenFormMarksAnUntaggedDrawingAsAnArtifact(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := placementFormPDF("[20 200 100 260]", "/BBox [0 0 80 60]")
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	if err := FlattenForm(ctx, alloc, doc); err != nil {
+		t.Fatalf("FlattenForm: %v", err)
+	}
+	requireArtifacts(t, drawnContent(ctx, t, alloc.Pending()))
+}
+
+// TestBakeSignaturesForRewriteMarksAnUntaggedDrawingAsAnArtifact pins the same
+// for the signed signatures a full rewrite of an untagged document draws.
+func TestBakeSignaturesForRewriteMarksAnUntaggedDrawingAsAnArtifact(t *testing.T) {
+	t.Parallel()
+	ctx, doc, _ := setFormDoc(t, certifiedFormObjs())
+	overrides, err := BakeSignaturesForRewrite(ctx, doc, nil)
+	if err != nil {
+		t.Fatalf("BakeSignaturesForRewrite: %v", err)
+	}
+	requireArtifacts(t, drawnContent(ctx, t, overrides))
+}
+
+// TestBakeSignedSignaturesMarksAnUntaggedPageCopyAsAnArtifact pins the same
+// for the signed signatures a copy of an untagged document's pages draws.
+func TestBakeSignedSignaturesMarksAnUntaggedPageCopyAsAnArtifact(t *testing.T) {
+	t.Parallel()
+	ctx, doc, _ := setFormDoc(t, certifiedFormObjs())
+	pages := readerPages(ctx, doc, mustCatalog(t, ctx, doc))
+	overrides, err := bakeSignedSignatures(ctx, doc, pages[:1], pageCopyOverrides(pages[:1]), bakeTagged)
+	if err != nil {
+		t.Fatalf("bakeSignedSignatures: %v", err)
+	}
+	requireArtifacts(t, drawnContent(ctx, t, overrides))
+}

@@ -23,7 +23,8 @@ const (
 
 // flattenTags keeps a tagged document's structure tree in step with the widgets
 // [FlattenForm] removes. A nil *flattenTags stands for an untagged document,
-// and every method is a no-op on it.
+// and every method is a no-op on it: [flattenPageWidgets] then marks each
+// drawing as an artifact through [artifactTags].
 //
 // ISO 14289-1, 7.1 and ISO 14289-2, 8.2.2 require every piece of page content
 // to be tagged as real content or marked as an artifact. A widget is not page
