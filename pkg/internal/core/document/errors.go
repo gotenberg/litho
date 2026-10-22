@@ -3,6 +3,8 @@ package document
 import (
 	"errors"
 	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/panicerr"
 )
 
 // Sentinel errors for distinct document-level failure states.
@@ -28,8 +30,9 @@ var (
 	// boundary returns it, and so does a worker goroutine that recovers its own
 	// panic, since the boundary's recover runs on the calling goroutine and
 	// never sees one raised on another. pkg/pdf re-exports it as
-	// pdf.ErrInternalPanic.
-	ErrInternalPanic = errors.New("internal panic recovered while processing the document")
+	// pdf.ErrInternalPanic. It is [panicerr.ErrInternalPanic], which the
+	// codecs below the document wrap from their own workers.
+	ErrInternalPanic = panicerr.ErrInternalPanic
 )
 
 // Sentinel classes of the raw-byte format violations the document's checks
