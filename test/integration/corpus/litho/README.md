@@ -275,6 +275,7 @@ one deliberately rather than diffing it against a fresh build.
 | `flattenrefuse_1b.pdf` | PDF/A-1b     | Transparency on a page flattening refuses, beside one it takes   |
 | `iccalternate_2b.pdf`  | PDF/A-2b     | ICCBased spaces no engine can use, read as their CIE /Alternate  |
 | `formplacement_2b.pdf` | PDF/A-2b     | Widget appearances a viewer places by Algorithm 8.1, not a shift |
+| `smaskindata_2b.pdf`   | PDF/A-2b     | JPEG 2000 images whose data holds their soft mask, both kinds    |
 
 ### Must-not-fire controls
 
@@ -745,6 +746,7 @@ are covered under [Known divergences](#known-divergences).
 | `siglock_2b.pdf`       | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
 | `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
 | `sizetie_2b.pdf`       | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
+| `smaskindata_2b.pdf`   | 5    | 2    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 6    | 6    |
 | `stdremap_ua2.pdf`     | 4    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `structcopy_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 0    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
@@ -1985,6 +1987,7 @@ those differences is adjudicated, and none is a litho defect left open:
 | `pageboxes_2b`                                 | 1, 2, 3    | page size            | page boxes read as pdf.js reads them      |
 | `kidsarray_2b`, `kidsrepair_1b`                | 2 and 3, 3 | 1 by 1 golden        | poppler draws no page written in `/Kids`  |
 | `patternglyph_2b`                              | 3          | 2500                 | poppler paints sub-pixel cells solid      |
+| `smaskindata_2b`                               | 1          | 15768                | JPX opacity from the data (poppler)       |
 
 - **Interpolation.** Each fixture enlarges a 2 by 2 or 4 by 1 image with
   `/Interpolate true` fifty times or more. poppler's bilinear filter places a
@@ -2046,6 +2049,21 @@ those differences is adjudicated, and none is a litho defect left open:
   poppler only while it adjusted the cell's rectangles, which grew each 0.1
   pixel square to a whole pixel; a tiling cell paints without stroke
   adjustment, from the initial `/SA` false (ISO 32000-1, 10.6.5).
+- **`smaskindata_2b`.** poppler applies neither image's `/SMaskInData` (ISO
+  32000-1, Table 89): it paints both squares opaque, their four channels read
+  out of step into stripes. PDFium (pypdfium2 4.30.0) composites `ImStraight`,
+  whose colour comes from its data, as litho does, within 47 levels where it
+  smooths the 32 pixels over 90 points, and paints `ImPremul`, which names
+  `/DeviceRGB`, opaque, black outside its disc (7750 pixels from litho, 10328
+  between PDFium and poppler). litho's reading is the specification's and the
+  codec's: its decoding of both images matches OpenJPEG 2.5's, opacity and
+  colour, premultiplication undone (T.800, Table I.16), and the two discs
+  composite to the same picture. The pdfjs files `issue11306`, `issue16782`
+  and `isssue18194`, the only `/SMaskInData` images of the other corpora, read
+  the same way: litho's decoding matches OpenJPEG's to within 1 level of
+  opacity and 2 of colour; poppler paints `issue11306`'s stroke over an opaque
+  black box and `issue16782`'s cloud in grey stripes, and PDFium composites
+  `issue16782`'s cloud as litho does.
 - **Pages written directly in `/Kids`.** ISO 32000-1, 7.7.3.2, Table 29 makes
   `/Kids` an array of references. poppler renders such a page as an empty 1 by
   1 image, and litho draws the page dictionary where the array holds it.
@@ -8928,6 +8946,35 @@ to PDF/A-2b. The other cells report what the part-2, level-B claim draws at
 the levels it does not match: identification, tagging, at part 4 the
 `%PDF-1.7` header, and `6.9/5` at PDF/A-4f.
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+
+### `smaskindata_2b.pdf`
+
+ISO 32000-1, 8.9.5, Table 89 lets a JPXDecode image say, by `/SMaskInData`,
+that the opacity channel of its JPEG 2000 data is its soft mask: 1 for straight
+colour, 2 for colour preblended with the background, which JPEG 2000
+premultiplies against zero (ITU-T T.800, Table I.16). The image decoder and the
+renderer apply it, and an explicit `/SMask` takes its place. The only such
+images in the corpora are three pdfjs files, all value 1 and none in the render
+sample, so the `render` cell drew none. The page draws two 32 by 32 RGBA images
+over yellow and blue bands, each a gradient whose opacity falls from 255 at its
+centre to 0 at a radius of 14 pixels:
+
+| Image        | Data                                                   | Entries                                       |
+| ------------ | ------------------------------------------------------ | --------------------------------------------- |
+| `ImStraight` | straight colour, an opacity channel (`cdef` type 1)    | `/SMaskInData 1`, colour from its sRGB `colr` |
+| `ImPremul`   | colour premultiplied, a premultiplied opacity (type 2) | `/SMaskInData 2`, `/ColorSpace /DeviceRGB`    |
+
+litho draws both as the same disc with the bands showing through its edge. Its
+decoding of each image matches OpenJPEG 2.5's (`opj_decompress`), opacity and
+colour, premultiplication undone for `ImPremul`. The two other renderers read
+the file apart from litho and from each other (see
+[the pages the render cell leaves mismatched](#known-divergences)).
+
+The file declares no OutputIntent and its page no `/Group`, so DeviceRGB fails
+`6.2.3.3/1` at PDF/A-1 and `6.2.4.3/2` at the later parts, and the page holding
+transparency `6.2.10/2` at PDF/A-2 and PDF/A-3. ISO 19005-1, 6.4 names `/SMask`,
+not `/SMaskInData`, and veraPDF 1.30.2 reports no 6.4 rule at PDF/A-1b. veraPDF
+1.30.2 and litho report the same rule set in all thirteen cells.
 
 ## Scope
 
