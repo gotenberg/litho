@@ -437,6 +437,9 @@ func (r *renderer) drawCells(s *scope, tp *tilingPattern, resources ast.PdfDict,
 		return fmt.Errorf("pattern of %.0f cells exceeds %d", n, maxPatternCells)
 	}
 	sub := r.sub(w, h, geom.Identity, dst)
+	// The cells' soft masks belong to the tile's pixels, and their pixels
+	// return to the budget once the cells are drawn.
+	defer sub.masks.empty()
 	sub.chain = append(sub.chain, tp.ref.ObjectNum)
 	sub.unadjusted = true
 	defer func() { r.ops = sub.ops }()

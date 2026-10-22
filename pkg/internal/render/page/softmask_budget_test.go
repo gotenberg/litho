@@ -108,3 +108,37 @@ func TestGroupPastBudgetKeepsEffects(t *testing.T) {
 		})
 	}
 }
+
+// TestPatternCellReturnsMaskPixels checks that the soft masks a tiling
+// pattern's cells render return their pixels to the render pixel budget
+// once the cells are drawn: the page's soft mask after the pattern fits the
+// budget only with them back, and was rendered coarser while the cell's
+// cached mask held them.
+func TestPatternCellReturnsMaskPixels(t *testing.T) {
+	t.Parallel()
+	gray := "/Type /XObject /Subtype /Form /Group << /S /Transparency /CS /DeviceGray >> "
+	f := fixture{
+		page: "/Resources << /Pattern << /P 5 0 R >> " +
+			"/ExtGState << /M << /SMask << /S /Luminosity /G 7 0 R >> >> >> >>",
+		content: "/Pattern cs /P scn 0 0 50 50 re f /M gs 1 0 0 rg 0 0 100 100 re f",
+		objs: []string{
+			tilePattern("/PaintType 1 /BBox [0 0 50 50] /XStep 50 /YStep 50 "+
+				"/Resources << /ExtGState << /C << /SMask << /S /Luminosity /G 6 0 R >> >> >> >>",
+				"/C gs 0 1 0 rg 0 0 50 50 re f"),
+			stream(gray+"/BBox [0 0 50 50]", "1 g 0 0 50 50 re f"),
+			stream(gray+"/BBox [0 0 100 100]", "1 g 0 0 100 100 re f"),
+		},
+	}
+	// The page's mask group over 100 x 100 pixels holds four planes and a
+	// layer, 50,000 pixels: it fits 51,000 with nothing else held, and not
+	// beside the cell mask's 2,500.
+	doc, pg := open(t, f.bytes(), limits.Limits{MaxRenderPixels: 51_000})
+	c, report, err := Render(context.Background(), doc, pg, f.options())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Unsupported[TransparencyOverBudget] != 0 {
+		t.Errorf("report %v, want nothing over budget", report.Unsupported)
+	}
+	expect(t, c.Image(), 2, map[[2]int]rgb{{25, 75}: red, {75, 25}: red})
+}
