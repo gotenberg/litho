@@ -161,6 +161,22 @@ func TestInlineImage(t *testing.T) {
 	expect(t, img, 0, map[[2]int]rgb{{15, 85}: red, {25, 85}: blue})
 }
 
+// TestInlineImageBothSpellings draws an inline image that writes three keys
+// both abbreviated and in full, as pdfjs issue14256.pdf does, many times: the
+// abbreviations win every time. Read in full, the image would be one sample
+// wide and two high with inverted colours, so a run that let a full key win
+// paints other pixels. Map iteration order used to pick the winner.
+func TestInlineImageBothSpellings(t *testing.T) {
+	t.Parallel()
+	const content = "q 20 0 0 10 10 10 cm BI /W 2 /Width 1 /H 1 /Height 2 /CS /RGB /BPC 8 " +
+		"/D [0 1 0 1 0 1] /Decode [1 0 1 0 1 0] ID \xff\x00\x00\x00\x00\xff EI Q"
+	const runs = 32
+	for range runs {
+		img, _ := draw(t, fixture{content: content})
+		expect(t, img, 0, map[[2]int]rgb{{15, 85}: red, {25, 85}: blue, {15, 81}: red, {25, 89}: blue})
+	}
+}
+
 // axial is a type 2 shading from black at x 0 to white at x 100.
 const axial = "<< /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 100 0] " +
 	"/Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> >>"

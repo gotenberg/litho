@@ -67,13 +67,33 @@ func (r *renderer) inlineImage(s *scope, op content.Operation) error {
 // dictionary it abbreviates (ISO 32000-1, 8.9.7), its colour space resolved
 // through the resources of the stream: a device space by its full name, any
 // other name through /ColorSpace, and an Indexed array over either.
+//
+// A key written both abbreviated and in full takes the abbreviation's value.
+// ISO 32000-1, 8.9.7, Table 93 makes the abbreviation the inline image's
+// spelling of the key and does not say which of two spellings wins; pdf.js
+// reads the abbreviation first (dict.get("W", "Width")), and the PDF
+// Association's test file names the abbreviations the correct ones. Folding
+// both spellings in one pass over the map let its random order pick the
+// winner, so the same page rendered differently from run to run.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14256.pdf: page 1 writes /W and /Width, /H and /Height,
+//     /BPC and /BitsPerComponent, /F and /Filter, /CS and /ColorSpace, /D and
+//     /Decode in one image each, and rendered six different PNGs in six runs.
 func (r *renderer) inlineDict(s *scope, inline ast.PdfDict) (ast.PdfDict, error) {
 	dict := ast.PdfDict{"Type": ast.PdfName("XObject"), "Subtype": ast.PdfName("Image")}
 	for k, v := range inline {
-		if full, ok := inlineKeys[k]; ok {
-			k = full
+		if _, abbreviated := inlineKeys[k]; !abbreviated {
+			dict[k] = v
 		}
-		dict[k] = v
+	}
+	// Each abbreviation names a distinct full key, so this pass writes every
+	// key once whatever the map's order.
+	for k, v := range inline {
+		if full, ok := inlineKeys[k]; ok {
+			dict[full] = v
+		}
 	}
 	// The data runs to EI, whatever length the dictionary states.
 	delete(dict, "Length")
