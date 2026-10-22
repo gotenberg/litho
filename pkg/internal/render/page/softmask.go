@@ -323,5 +323,7 @@ func (r *renderer) sub(width, height int, device geom.Matrix, root *blend.Group)
 	// What a soft mask's group and a pattern's cells paint belongs to the
 	// element they shape or fill, whose kind decided whether it is drawn.
 	s.omit = 0
+	// [Options.Within] marks pixels of the page, not of this raster.
+	s.within, s.shared = nil, nil
 	return &s
 }

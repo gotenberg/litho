@@ -21,13 +21,19 @@ type Plane struct {
 // colour channels, refusing one larger than maxPixels or a channel count
 // outside 1 to [MaxPlaneChannels].
 func NewPlane(width, height, channels int, maxPixels int64) (*Plane, error) {
+	var pool *Pool
+	return pool.NewPlane(width, height, channels, maxPixels)
+}
+
+// newPlaneHeader checks a plane's size and returns it with no pixels.
+func newPlaneHeader(width, height, channels int, maxPixels int64) (*Plane, error) {
 	if channels < 1 || channels > MaxPlaneChannels {
 		return nil, fmt.Errorf("%w: %d colour channels", ErrTooLarge, channels)
 	}
 	if err := checkSize(width, height, maxPixels); err != nil {
 		return nil, err
 	}
-	return &Plane{Width: width, Height: height, Channels: channels, Pix: make([]float32, (channels+1)*width*height)}, nil
+	return &Plane{Width: width, Height: height, Channels: channels}, nil
 }
 
 // Canvas returns a plane of three channels as a [Canvas] sharing its pixels,

@@ -31,6 +31,41 @@ type Params struct {
 	// Clip is the current clip as coverage, the size of the canvas; nil
 	// clips nothing.
 	Clip *surface.Mask
+	// ClipRect, when not empty, is the part of the canvas Clip covers,
+	// Clip then having its size: the canvas pixels outside it are clipped
+	// away. A clip over the pixels an image can reach costs those pixels
+	// rather than the canvas's.
+	ClipRect image.Rectangle
+}
+
+// clipAt returns the clip's coverage of canvas pixel (x, y), 1 without a
+// clip.
+func (p *Params) clipAt(x, y int) float32 {
+	if p.Clip == nil {
+		return 1
+	}
+	if p.ClipRect.Empty() {
+		return p.Clip.A[y*p.Clip.Width+x]
+	}
+	if !(image.Point{X: x, Y: y}).In(p.ClipRect) {
+		return 0
+	}
+	return p.Clip.A[(y-p.ClipRect.Min.Y)*p.Clip.Width+x-p.ClipRect.Min.X]
+}
+
+// checkClip reports a clip that does not fit the canvas dst.
+func (p *Params) checkClip(dst *surface.Canvas) error {
+	switch {
+	case p.Clip == nil:
+		return nil
+	case p.ClipRect.Empty():
+		if p.Clip.Width != dst.Width || p.Clip.Height != dst.Height {
+			return fmt.Errorf("%w: %dx%d clip on a %dx%d canvas", ErrBadClip, p.Clip.Width, p.Clip.Height, dst.Width, dst.Height)
+		}
+	case p.Clip.Width != p.ClipRect.Dx() || p.Clip.Height != p.ClipRect.Dy() || !p.ClipRect.In(image.Rect(0, 0, dst.Width, dst.Height)):
+		return fmt.Errorf("%w: %dx%d clip over %v on a %dx%d canvas", ErrBadClip, p.Clip.Width, p.Clip.Height, p.ClipRect, dst.Width, dst.Height)
+	}
+	return nil
 }
 
 // Masks are the transparency an image's dictionary adds to its colour.
@@ -159,8 +194,8 @@ type job struct {
 }
 
 func (j *job) run(ctx context.Context, dst *surface.Canvas, p Params) error {
-	if p.Clip != nil && (p.Clip.Width != dst.Width || p.Clip.Height != dst.Height) {
-		return fmt.Errorf("%w: %dx%d clip on a %dx%d canvas", ErrBadClip, p.Clip.Width, p.Clip.Height, dst.Width, dst.Height)
+	if err := p.checkClip(dst); err != nil {
+		return err
 	}
 	constAlpha := p.Opacity.Alpha()
 	if !(constAlpha > 0) {
@@ -173,6 +208,11 @@ func (j *job) run(ctx context.Context, dst *surface.Canvas, p Params) error {
 		return nil
 	}
 	x0, y0, x1, y1 := deviceBounds(p.Matrix, dst.Width, dst.Height)
+	if p.Clip != nil && !p.ClipRect.Empty() {
+		// The pixels outside the clip's rectangle are clipped away.
+		x0, y0 = max(x0, p.ClipRect.Min.X), max(y0, p.ClipRect.Min.Y)
+		x1, y1 = min(x1, p.ClipRect.Max.X), min(y1, p.ClipRect.Max.Y)
+	}
 	if x0 >= x1 || y0 >= y1 {
 		return nil
 	}
@@ -203,7 +243,7 @@ func (j *job) run(ctx context.Context, dst *surface.Canvas, p Params) error {
 			}
 			clip := float32(1)
 			if p.Clip != nil {
-				if clip = p.Clip.A[y*p.Clip.Width+x]; clip <= 0 {
+				if clip = p.clipAt(x, y); clip <= 0 {
 					continue
 				}
 			}

@@ -403,22 +403,32 @@ type maskBounds struct {
 // through, the whole raster when the clip is a rectangle alone.
 func (r *renderer) clipMaskBounds() image.Rectangle {
 	c := r.clip()
-	m := c.mask
-	if m == nil || m.Width != r.width || m.Height != r.height {
+	if c.node == nil {
 		return image.Rect(0, 0, r.width, r.height)
 	}
 	if r.lastMask.clip == c {
 		return r.lastMask.bounds
 	}
 	// Only the clip's rectangle can let a pixel through, so only it is
-	// scanned.
+	// scanned, and of it only the pixels the clip's shapes can cover.
 	sx0, sx1, sy0, sy1 := c.span(r.width, r.height)
-	x0, y0, x1, y1 := sx1, sy1, sx0, sy0
-	for y := sy0; y < sy1; y++ {
-		row := m.A[y*m.Width+sx0 : y*m.Width+sx1]
+	scan := image.Rect(sx0, sy0, sx1, sy1)
+	if c.node.values == nil {
+		scan = scan.Intersect(c.node.bounds)
+	}
+	values, err := c.node.in(scan)
+	if err != nil {
+		// A clip whose coverage cannot be made bounds nothing; the
+		// element's own painting meets the error.
+		r.doc.Logger.Debug("render: clip bounds", slog.Any("err", err))
+		return image.Rect(0, 0, r.width, r.height)
+	}
+	x0, y0, x1, y1 := scan.Max.X, scan.Max.Y, scan.Min.X, scan.Min.Y
+	for y := scan.Min.Y; y < scan.Max.Y; y++ {
+		row := values[(y-scan.Min.Y)*scan.Dx() : (y-scan.Min.Y+1)*scan.Dx()]
 		for i, v := range row {
 			if v > 0 {
-				x := sx0 + i
+				x := scan.Min.X + i
 				x0, x1 = min(x0, x), max(x1, x+1)
 				y0, y1 = min(y0, y), max(y1, y+1)
 			}

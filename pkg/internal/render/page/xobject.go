@@ -164,7 +164,7 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 	} else {
 		resources = r.withPageNames(ref, resources)
 	}
-	ops, err := content.ParsePageContent(r.ctx, r.doc, stream, content.SplitGluedOperators(), content.InlineImageData(), content.ViewerFilterChains())
+	ops, err := r.formContent(ref, stream)
 	if err != nil {
 		if fatal(err) {
 			return err
@@ -213,6 +213,10 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 	}
 	if err := r.setClip(c); err != nil {
 		return err
+	}
+	if !r.anyWithin(r.clipRect()) {
+		// The form paints within its box alone.
+		return nil
 	}
 
 	r.chain = append(r.chain, ref.ObjectNum)
@@ -281,13 +285,13 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 	interpolate, _ := document.ResolveBool(r.ctx, r.doc, dict["Interpolate"])
 	toDevice := r.toDevice()
 	bounds := r.unitSquareRect(toDevice).Intersect(r.clipRect())
-	if bounds.Empty() {
+	if bounds.Empty() || !r.anyWithin(bounds) {
 		return nil
 	}
 	fx := r.effectsOf(st, st.FillAlpha)
 	params := func(v view, op surface.Opacity) (imgpaint.Params, error) {
-		clipMask, err := r.clipIn(v)
-		return imgpaint.Params{Matrix: v.matrix(toDevice), Interpolate: bool(interpolate), Opacity: op, Clip: clipMask}, err
+		clipMask, clipRect, err := r.clipIn(v, bounds)
+		return imgpaint.Params{Matrix: v.matrix(toDevice), Interpolate: bool(interpolate), Opacity: op, Clip: clipMask, ClipRect: clipRect}, err
 	}
 
 	if isMask, _ := document.ResolveBool(r.ctx, r.doc, dict["ImageMask"]); isMask {

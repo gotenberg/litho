@@ -46,6 +46,13 @@ func (g *Group) Direct() *surface.Canvas {
 // as its alpha.
 func (g *Group) PaintCanvas(ctx context.Context, src *surface.Canvas, origin image.Point, params Params) error {
 	area := image.Rect(origin.X, origin.Y, origin.X+src.Width, origin.Y+src.Height).Intersect(g.bounds)
+	// An element repeats its colours pixel after pixel, an image scaled up
+	// most of all, so the last conversion is kept, as [Group.RGB] keeps it.
+	var (
+		last   [3]float32
+		lastCS Components
+		seen   bool
+	)
 	for y := area.Min.Y; y < area.Max.Y; y++ {
 		if (y-area.Min.Y)%rowsPerContextCheck == 0 {
 			if err := ctx.Err(); err != nil {
@@ -59,9 +66,12 @@ func (g *Group) PaintCanvas(ctx context.Context, src *surface.Canvas, origin ima
 			if a <= 0 {
 				continue
 			}
-			c := g.space.fromRGB([3]float32{clamp01(p[0] / a), clamp01(p[1] / a), clamp01(p[2] / a)})
+			rgb := [3]float32{clamp01(p[0] / a), clamp01(p[1] / a), clamp01(p[2] / a)}
+			if !seen || rgb != last {
+				lastCS, last, seen = g.space.fromRGB(rgb), rgb, true
+			}
 			fs, as := params.Source(x, y, a, a)
-			g.paint(x, y, params.Mode, c, fs, as)
+			g.paint(x, y, params.Mode, lastCS, fs, as)
 		}
 	}
 	return nil

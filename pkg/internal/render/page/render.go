@@ -96,6 +96,21 @@ type Options struct {
 	// blends there only when its content blends with another mode than
 	// Normal ([RenderGroup]).
 	GroupSpace bool
+	// Within, when not nil, marks the device pixels the caller reads: one
+	// value per pixel of the page, 1 at those and 0 elsewhere. The render
+	// skips painting the others, which it leaves unpainted or partly painted,
+	// and paints the marked ones as it paints them without Within: every
+	// value it computes for a pixel depends on that pixel alone, and the
+	// marked ones keep theirs. A caller that reads a few pixels of a page
+	// costs the work of those pixels rather than the page's.
+	Within *surface.Mask
+	// Shared, when not nil, holds what the renders of one page that pass it
+	// compute alike ([Shared]), so each is computed once.
+	Shared *Shared
+	// Pool, when not nil, provides the pixels of the page group
+	// ([surface.Pool]): a caller that draws page after page releases the
+	// groups it is done with to it ([Result.Release]).
+	Pool *surface.Pool
 }
 
 // Content is a set of kinds of content, told apart by the operator that
@@ -198,6 +213,16 @@ func (res *Result) Canvas(ctx context.Context) (*surface.Canvas, error) {
 	return res.canvas, nil
 }
 
+// Release hands the page group's pixels to pool, which the result must not be
+// read through afterwards. A nil pool keeps them.
+func (res *Result) Release(pool *surface.Pool) {
+	if pool == nil || res == nil || res.Group == nil {
+		return
+	}
+	pool.Release(res.Group.Plane().Pix)
+	res.Group, res.canvas = nil, nil
+}
+
 // RenderGroup draws pg as [Render] does and returns the page group, whose
 // sRGB canvas [Result.Canvas] makes when it is first asked for. The page group blends in the grey or CMYK space its /Group /CS
 // names (ISO 32000-1, 11.3.4, 11.4.7) when [Options.GroupSpace] asks for it
@@ -210,6 +235,9 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		return nil, report, err
 	}
 	budget := doc.Limits().WithDefaults().MaxRenderPixels
+	if w := opts.Within; w != nil && (w.Width != g.Width || w.Height != g.Height || len(w.A) != g.Width*g.Height) {
+		return nil, report, fmt.Errorf("%w: a %dx%d Within on a %dx%d page", ErrInvalidOptions, w.Width, w.Height, g.Width, g.Height)
+	}
 	ops, err := content.ParsePageContent(ctx, doc, pg.Dict, content.SplitGluedOperators(), content.InlineImageData(), content.ViewerFilterChains())
 	if err != nil {
 		if fatal(err) {
@@ -249,6 +277,12 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		glyphs:      make(map[glyphKey]glyph.Glyph),
 		type3:       make(map[glyphKey][]content.Operation),
 		omit:        opts.Omit,
+		within:      opts.Within,
+		shared:      opts.Shared,
+		forms:       newFormCache(),
+	}
+	if opts.Shared != nil {
+		r.forms = opts.Shared.forms
 	}
 	// 11.4.7: the page is an isolated group over a transparent backdrop,
 	// composited with the medium afterwards; its own /Group may make it a
@@ -259,7 +293,7 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 	if attrs.Knockout {
 		root, err = blend.NewGroup(image.Rect(0, 0, g.Width, g.Height), blend.Backdrop{}, blend.Attributes{Isolated: true, Knockout: true, Space: space}, budget)
 	} else {
-		root, err = blend.NewPageIn(g.Width, g.Height, space, budget)
+		root, err = blend.NewPageOn(opts.Pool, g.Width, g.Height, space, budget)
 	}
 	if err != nil {
 		return nil, report, fmt.Errorf("%w: %w", ErrTooLarge, err)

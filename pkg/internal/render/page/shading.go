@@ -59,12 +59,16 @@ func (r *renderer) shading(s *scope, op content.Operation) error {
 		return nil
 	}
 	toDevice := r.toDevice()
-	err = r.paint(r.clipRect(), r.effectsOf(st, st.FillAlpha), func(v view, op surface.Opacity) error {
-		mask, err := r.clipIn(v)
+	bounds := r.clipRect()
+	if !r.anyWithin(bounds) {
+		return nil
+	}
+	err = r.paint(bounds, r.effectsOf(st, st.FillAlpha), func(v view, op surface.Opacity) error {
+		mask, rect, err := r.clipIn(v, bounds)
 		if err != nil {
 			return err
 		}
-		t := shade.Target{Canvas: v.canvas, Clip: mask, Opacity: op, Convert: conv}
+		t := shade.Target{Canvas: v.canvas, Clip: mask, ClipRect: rect, Opacity: op, Convert: conv}
 		return sh.Paint(r.ctx, t, v.matrix(toDevice))
 	})
 	if err != nil {

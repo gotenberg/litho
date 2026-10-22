@@ -3,6 +3,7 @@ package shade
 import (
 	"context"
 	"fmt"
+	"image"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -78,6 +79,10 @@ type Target struct {
 	// by pixel: the clip for the sh operator, the shape's coverage times
 	// the clip for a pattern fill.
 	Clip *surface.Mask
+	// ClipRect, when not empty, is the part of the canvas Clip covers,
+	// Clip then having its size: the canvas pixels outside it are clipped
+	// away.
+	ClipRect image.Rectangle
 	// Opacity is the constant alpha (ISO 32000-1, 11.6.4.4). The zero value
 	// paints opaque.
 	Opacity surface.Opacity
@@ -118,9 +123,16 @@ func (s *Shading) paint(ctx context.Context, t Target, toDevice geom.Matrix, wit
 	if t.Canvas == nil || t.Convert == nil {
 		return fmt.Errorf("%w: a canvas and a converter are required", ErrTarget)
 	}
-	if t.Clip != nil && (t.Clip.Width != t.Canvas.Width || t.Clip.Height != t.Canvas.Height) {
-		return fmt.Errorf("%w: clip is %dx%d, canvas %dx%d", ErrTarget,
-			t.Clip.Width, t.Clip.Height, t.Canvas.Width, t.Canvas.Height)
+	switch {
+	case t.Clip == nil:
+	case t.ClipRect.Empty():
+		if t.Clip.Width != t.Canvas.Width || t.Clip.Height != t.Canvas.Height {
+			return fmt.Errorf("%w: clip is %dx%d, canvas %dx%d", ErrTarget,
+				t.Clip.Width, t.Clip.Height, t.Canvas.Width, t.Canvas.Height)
+		}
+	case t.Clip.Width != t.ClipRect.Dx() || t.Clip.Height != t.ClipRect.Dy() || !t.ClipRect.In(image.Rect(0, 0, t.Canvas.Width, t.Canvas.Height)):
+		return fmt.Errorf("%w: clip is %dx%d over %v, canvas %dx%d", ErrTarget,
+			t.Clip.Width, t.Clip.Height, t.ClipRect, t.Canvas.Width, t.Canvas.Height)
 	}
 	if t.Opacity.Transparent() {
 		return nil
@@ -173,14 +185,26 @@ func clipBounds(t Target) region {
 			}
 		}
 	}
+	if !t.ClipRect.Empty() && !r.empty() {
+		at := t.ClipRect.Min
+		r = region{r.x0 + at.X, r.y0 + at.Y, r.x1 + at.X, r.y1 + at.Y}
+	}
 	return r
 }
 
 // coverage returns the paint's alpha at pixel (x, y).
 func (p *painter) coverage(x, y int) float32 {
 	a := p.t.Opacity.Alpha()
-	if p.t.Clip != nil {
-		a *= p.t.Clip.A[y*p.t.Clip.Width+x]
+	c, at := p.t.Clip, p.t.ClipRect
+	switch {
+	case c == nil:
+	case at.Empty():
+		a *= c.A[y*c.Width+x]
+	case (image.Point{X: x, Y: y}).In(at):
+		a *= c.A[(y-at.Min.Y)*c.Width+x-at.Min.X]
+	default:
+		// Outside the clip's rectangle the clip is zero.
+		a *= 0
 	}
 	return a
 }

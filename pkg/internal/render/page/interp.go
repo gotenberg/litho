@@ -3,7 +3,9 @@ package page
 import (
 	"context"
 	"fmt"
+	"image"
 	"log/slog"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -17,6 +19,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
+	"github.com/gotenberg/litho/pkg/internal/render/surface"
 )
 
 // renderer carries one render.
@@ -31,6 +34,16 @@ type renderer struct {
 	budget        int64       // render pixel budget
 	clipLimit     int64       // pixels the live clip masks may hold
 	report        *Report
+
+	// within is [Options.Within], nil in the renderers of pattern cells and
+	// soft masks, whose rasters are not the page's.
+	within *surface.Mask
+	// withinTiles summarises within ([renderer.anyWithin]), made on first
+	// use.
+	withinTiles []bool
+	// shared is [Options.Shared], nil in the renderers of pattern cells and
+	// soft masks.
+	shared *Shared
 
 	m *graphics.Machine
 	// clips is the clip of each graphics state of m.Stack, index for index.
@@ -73,6 +86,9 @@ type renderer struct {
 
 	shadings map[ast.PdfIndirectRef]*shade.Shading
 	patterns map[ast.PdfIndirectRef]*shade.Pattern
+	// forms keeps the content of the form XObjects parsed so far
+	// ([renderer.formContent]), unless [Options.Shared] keeps it.
+	forms *formCache
 
 	// colorCache keeps the colour converters of the render's page. It is a
 	// pointer so the renderers a tiling pattern's cells run in share it, and
@@ -476,13 +492,20 @@ func (r *renderer) fill(s *scope, rule raster.FillRule, st *graphics.State) erro
 
 // coverage rasterises the device path p under the current clip.
 func (r *renderer) coverage(p geom.Path, rule raster.FillRule) (*raster.Coverage, error) {
-	return r.clippedCoverage(p, rule, false)
+	return r.pathCoverage(p, rule, false, false)
 }
 
-// clippedCoverage rasterises the device path p under the current clip, its
-// rectangle cut at whole pixels with whole ([clip.applyPixelRect]) and at the
-// exact edge otherwise.
-func (r *renderer) clippedCoverage(p geom.Path, rule raster.FillRule, whole bool) (*raster.Coverage, error) {
+// glyphFill rasterises the device outline of a glyph as [renderer.coverage]
+// does, its coverage before the clip taken from [Options.Shared] when the
+// render shares one, the clipping rectangle cut at whole pixels with whole
+// ([clip.applyPixelRect]) and at the exact edge otherwise.
+func (r *renderer) glyphFill(p geom.Path, whole bool) (*raster.Coverage, error) {
+	return r.pathCoverage(p, raster.NonZero, true, whole)
+}
+
+// pathCoverage is [renderer.coverage], glyph marking a glyph outline and
+// whole cutting the clipping rectangle at whole pixels.
+func (r *renderer) pathCoverage(p geom.Path, rule raster.FillRule, glyph, whole bool) (*raster.Coverage, error) {
 	c := r.clip()
 	if c.empty() {
 		return &raster.Coverage{}, nil
@@ -491,19 +514,118 @@ func (r *renderer) clippedCoverage(p geom.Path, rule raster.FillRule, whole bool
 	if whole && !c.inMask {
 		rect = pixelRect(rect)
 	}
-	if b, ok := p.Bounds(); !ok || b.Max.X <= rect.Min.X || b.Min.X >= rect.Max.X || b.Max.Y <= rect.Min.Y || b.Min.Y >= rect.Max.Y {
+	b, ok := p.Bounds()
+	if !ok || b.Max.X <= rect.Min.X || b.Min.X >= rect.Max.X || b.Max.Y <= rect.Min.Y || b.Min.Y >= rect.Max.Y {
 		return &raster.Coverage{}, nil
 	}
-	cov, err := raster.Fill(p, rule, r.width, r.height, c.mask)
-	if err != nil {
-		return nil, fmt.Errorf("rasterising: %w", err)
+	if !r.anyWithin(r.pixelRect(b)) {
+		return &raster.Coverage{}, nil
+	}
+	var made *surface.Mask
+	if c.node != nil && c.node.values != nil {
+		made = c.node.values
+	}
+	var cov *raster.Coverage
+	if glyph && rule == raster.NonZero && r.shared != nil {
+		shared, err := r.shared.fill(p, r.width, r.height)
+		if err != nil {
+			return nil, fmt.Errorf("rasterising: %w", err)
+		}
+		// The shared coverage is the path's alone; the mask multiplies a
+		// copy as [raster.Fill] multiplies its values.
+		cov = &raster.Coverage{X: shared.X, Y: shared.Y, Width: shared.Width, Height: shared.Height, A: slices.Clone(shared.A)}
+		if made != nil {
+			for y := range cov.Height {
+				row := cov.A[y*cov.Width : (y+1)*cov.Width]
+				in := made.A[(cov.Y+y)*made.Width+cov.X:]
+				for x := range row {
+					row[x] *= in[x]
+				}
+			}
+		}
+	} else {
+		var err error
+		if cov, err = raster.Fill(p, rule, r.width, r.height, made); err != nil {
+			return nil, fmt.Errorf("rasterising: %w", err)
+		}
+	}
+	if c.node != nil && made == nil && !cov.Empty() {
+		// The clip's coverage over the pixels the path covers multiplies
+		// the path's, as [raster.Fill] multiplies by a mask.
+		values, err := c.node.in(image.Rect(cov.X, cov.Y, cov.X+cov.Width, cov.Y+cov.Height))
+		if err != nil {
+			return nil, err
+		}
+		for i, v := range values {
+			cov.A[i] *= v
+		}
 	}
 	if whole {
 		c.applyPixelRect(cov)
 	} else {
 		c.applyRect(cov)
 	}
+	r.keepWithin(cov.A, image.Rect(cov.X, cov.Y, cov.X+cov.Width, cov.Y+cov.Height))
 	return cov, nil
+}
+
+// withinTile is the side, in device pixels, of the tiles [renderer.anyWithin]
+// summarises [Options.Within] in: a tile is marked when it holds a marked
+// pixel. 32 makes the summary a thousandth of the mask, and an element
+// whose bounds miss every marked tile costs the reading of its tiles.
+const withinTile = 32
+
+// anyWithin reports whether the device pixels b may hold a pixel
+// [Options.Within] marks, always true without it. An element that paints
+// within b alone paints nothing a caller reads when it reports false, and is
+// skipped.
+func (r *renderer) anyWithin(b image.Rectangle) bool {
+	if r.within == nil {
+		return true
+	}
+	b = b.Intersect(image.Rect(0, 0, r.width, r.height))
+	if b.Empty() {
+		return false
+	}
+	tw := (r.width + withinTile - 1) / withinTile
+	if r.withinTiles == nil {
+		r.withinTiles = make([]bool, tw*((r.height+withinTile-1)/withinTile))
+		for y := range r.height {
+			row := r.within.A[y*r.width : (y+1)*r.width]
+			for x, v := range row {
+				if v != 0 {
+					r.withinTiles[(y/withinTile)*tw+x/withinTile] = true
+				}
+			}
+		}
+	}
+	for ty := b.Min.Y / withinTile; ty <= (b.Max.Y-1)/withinTile; ty++ {
+		for tx := b.Min.X / withinTile; tx <= (b.Max.X-1)/withinTile; tx++ {
+			if r.withinTiles[ty*tw+tx] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// keepWithin zeroes the values, row by row over box, of the pixels
+// [Options.Within] leaves out, so nothing is painted there. The pixels it
+// keeps keep their values, so they paint as they would without it.
+func (r *renderer) keepWithin(values []float32, box image.Rectangle) {
+	if r.within == nil {
+		return
+	}
+	w := box.Dx()
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		row := values[(y-box.Min.Y)*w : (y-box.Min.Y+1)*w]
+		in := r.within.A[y*r.width+box.Min.X : y*r.width+box.Max.X]
+		for x, keep := range in {
+			if keep == 0 {
+				row[x] = 0
+			}
+		}
+	}
 }
 
 // stroke strokes the current path in the stroke colour (ISO 32000-1,

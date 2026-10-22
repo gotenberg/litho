@@ -3,6 +3,7 @@ package raster
 import (
 	"cmp"
 	"fmt"
+	"image"
 	"math"
 	"slices"
 
@@ -94,6 +95,23 @@ func Fill(path geom.Path, rule FillRule, width, height int, clip *surface.Mask) 
 	if clip != nil && (clip.Width != width || clip.Height != height) {
 		return nil, fmt.Errorf("%w: %dx%d clip on a %dx%d raster", ErrSizeMismatch, clip.Width, clip.Height, width, height)
 	}
+	s, err := flattenShape(path, rule, width, height)
+	if err != nil {
+		return nil, err
+	}
+	edges := s.edgesIn(image.Rect(0, 0, width, height))
+	if len(edges) == 0 {
+		return &Coverage{}, nil
+	}
+	return scan(edges, rule, clip), nil
+}
+
+// flattenShape flattens path into a [Shape] whose edges are not computed
+// yet.
+func flattenShape(path geom.Path, rule FillRule, width, height int) (*Shape, error) {
+	if width <= 0 || height <= 0 || width > math.MaxInt32 || height > math.MaxInt32 {
+		return nil, fmt.Errorf("%w: raster %dx%d", ErrSizeMismatch, width, height)
+	}
 	if rule != NonZero && rule != EvenOdd {
 		return nil, fmt.Errorf("%w: unknown fill rule %d", ErrInvalidPath, rule)
 	}
@@ -102,8 +120,123 @@ func Fill(path geom.Path, rule FillRule, width, height int, clip *surface.Mask) 
 	if err := f.run(path); err != nil {
 		return nil, fmt.Errorf("flattening the fill path: %w", err)
 	}
+	return &Shape{polys: f.out, rule: rule, width: width, height: height}, nil
+}
+
+// Shape is a path flattened once, in device space, over a raster of width ×
+// height pixels, whose coverage under its fill rule [Shape.CoverageIn]
+// computes over any part of the raster. A clipping path that holds back a few
+// small elements of a large page costs their rows rather than the page's.
+//
+// A Shape is immutable and safe for concurrent use.
+type Shape struct {
+	polys         []Polyline
+	rule          FillRule
+	width, height int
+	// sorted holds the edges inside the raster in the order [scan] sorts
+	// them, and bounds the box scan computes the coverage over.
+	sorted []edge
+	bounds image.Rectangle
+}
+
+// NewShape flattens path for coverage under rule over a raster of width ×
+// height pixels, as [Fill] flattens it.
+func NewShape(path geom.Path, rule FillRule, width, height int) (*Shape, error) {
+	s, err := flattenShape(path, rule, width, height)
+	if err != nil {
+		return nil, err
+	}
+	if edges := s.edgesIn(image.Rect(0, 0, width, height)); len(edges) > 0 {
+		sortEdges(edges)
+		s.sorted = edges
+		s.bounds = edgeBounds(edges)
+	}
+	return s, nil
+}
+
+// Bounds returns the pixels the shape's coverage can be above zero at: the
+// box [Fill] computes the coverage over.
+func (s *Shape) Bounds() image.Rectangle {
+	return s.bounds
+}
+
+// CoverageIn returns the coverage of the shape over box, a part of the
+// raster, row by row, each value multiplied by the matching value of clip
+// when clip is not nil, as [Fill] multiplies by its clip mask; clip holds a
+// value per pixel of box. The values are those [Fill] computes over the whole
+// raster, bit for bit: each row of box is scanned as Fill scans it, with the
+// same edges, bands and sums, and only the pixels of box are kept. The work
+// is that of box's rows, not the raster's.
+func (s *Shape) CoverageIn(box image.Rectangle, clip []float32) []float32 {
+	box = box.Intersect(image.Rect(0, 0, s.width, s.height))
+	out := make([]float32, box.Dx()*box.Dy())
+	part := box.Intersect(s.bounds)
+	if part.Empty() {
+		return out
+	}
+	edges := s.sorted
+	bx0, bx1 := s.bounds.Min.X, s.bounds.Max.X
+	acc := make([]float64, bx1-bx0)
+	diff := make([]float64, bx1-bx0+1)
+	var (
+		active []edge
+		cuts   []float64
+		cross  []crossing
+		next   int
+	)
+	w := box.Dx()
+	for y := part.Min.Y; y < part.Max.Y; y++ {
+		top := float64(y)
+		bot := top + 1
+		// The edges active on the row, in the order scan holds them: the
+		// sorted edges that start above its bottom and end below its top.
+		kept := active[:0]
+		for _, e := range active {
+			if e.y1 > top {
+				kept = append(kept, e)
+			}
+		}
+		active = kept
+		for next < len(edges) && edges[next].y0 < bot {
+			if edges[next].y1 > top {
+				active = append(active, edges[next])
+			}
+			next++
+		}
+		cuts, cross = scanRow(acc, diff, active, cuts, cross, s.rule, bx0, top, bot)
+		var run float64
+		at := (y-box.Min.Y)*w - box.Min.X
+		for x := range part.Max.X - bx0 {
+			run += diff[x]
+			if x+bx0 < part.Min.X {
+				continue
+			}
+			v := float32(min(max(acc[x]+run, 0), 1))
+			if clip != nil {
+				v *= clip[at+bx0+x]
+			}
+			out[at+bx0+x] = v
+		}
+		clear(acc)
+		clear(diff)
+	}
+	return out
+}
+
+// sortEdges sorts edges top to bottom, as [scan] does.
+func sortEdges(edges []edge) {
+	slices.SortFunc(edges, func(p, q edge) int { return cmp.Compare(p.y0, q.y0) })
+}
+
+// edgesIn returns the edges of the shape inside box, the parts left or right
+// of it pushed onto its sides (see [clipEdge]).
+func (s *Shape) edgesIn(box image.Rectangle) []edge {
+	view := geom.Rect{
+		Min: geom.Point{X: float64(box.Min.X), Y: float64(box.Min.Y)},
+		Max: geom.Point{X: float64(box.Max.X), Y: float64(box.Max.Y)},
+	}
 	var edges []edge
-	for _, pl := range f.out {
+	for _, pl := range s.polys {
 		n := len(pl.Pts)
 		if n < 2 {
 			continue
@@ -112,10 +245,21 @@ func Fill(path geom.Path, rule FillRule, width, height int, clip *surface.Mask) 
 			edges = clipEdge(edges, a, pl.Pts[(i+1)%n], view)
 		}
 	}
-	if len(edges) == 0 {
-		return &Coverage{}, nil
+	return edges
+}
+
+// edgeBounds returns the pixels edges span, the box [scan] computes the
+// coverage over.
+func edgeBounds(edges []edge) image.Rectangle {
+	minX, maxX := edges[0].x0, edges[0].x0
+	minY, maxY := edges[0].y0, edges[0].y1
+	for _, e := range edges {
+		minX = min(minX, e.x0, e.x1)
+		maxX = max(maxX, e.x0, e.x1)
+		minY = min(minY, e.y0)
+		maxY = max(maxY, e.y1)
 	}
-	return scan(edges, rule, clip), nil
+	return image.Rect(int(math.Floor(minX)), int(math.Floor(minY)), int(math.Ceil(maxX)), int(math.Ceil(maxY)))
 }
 
 // clipEdge appends the part of segment a→b inside the raster's rows, with the
@@ -185,7 +329,7 @@ func lerp(a, b, t float64) float64 {
 
 // scan converts the edges, all inside the raster, into coverage.
 func scan(edges []edge, rule FillRule, clip *surface.Mask) *Coverage {
-	slices.SortFunc(edges, func(p, q edge) int { return cmp.Compare(p.y0, q.y0) })
+	sortEdges(edges)
 	minX, maxX := edges[0].x0, edges[0].x0
 	maxY := edges[0].y1
 	for _, e := range edges {
@@ -225,30 +369,7 @@ func scan(edges []edge, rule FillRule, clip *surface.Mask) *Coverage {
 			}
 			next++
 		}
-		cuts = rowCuts(cuts[:0], active, top, bot)
-		for i := 1; i < len(cuts); i++ {
-			b0, b1 := cuts[i-1], cuts[i]
-			h := b1 - b0
-			if h <= 0 {
-				continue
-			}
-			ym := b0/2 + b1/2
-			cross = cross[:0]
-			for _, e := range active {
-				if e.y0 <= ym && ym < e.y1 {
-					x := lerp(e.x0, e.x1, (ym-e.y0)/(e.y1-e.y0))
-					cross = append(cross, crossing{x: x - float64(bx0), dir: e.dir})
-				}
-			}
-			slices.SortFunc(cross, func(p, q crossing) int { return cmp.Compare(p.x, q.x) })
-			winding := 0
-			for j := 0; j+1 < len(cross); j++ {
-				winding += cross[j].dir
-				if inside(rule, winding) {
-					addSpan(acc, diff, cross[j].x, cross[j+1].x, h)
-				}
-			}
-		}
+		cuts, cross = scanRow(acc, diff, active, cuts, cross, rule, bx0, top, bot)
 		var run float64
 		out := cov.A[row*cov.Width : (row+1)*cov.Width]
 		for x := range acc {
@@ -263,6 +384,37 @@ func scan(edges []edge, rule FillRule, clip *surface.Mask) *Coverage {
 		diff[len(acc)] = 0
 	}
 	return cov
+}
+
+// scanRow adds the coverage the active edges give the row [top, bot) to acc
+// and diff, whose index 0 is pixel bx0, band by band (see [rowCuts]), and
+// returns the cut and crossing buffers for the next row.
+func scanRow(acc, diff []float64, active []edge, cuts []float64, cross []crossing, rule FillRule, bx0 int, top, bot float64) ([]float64, []crossing) {
+	cuts = rowCuts(cuts[:0], active, top, bot)
+	for i := 1; i < len(cuts); i++ {
+		b0, b1 := cuts[i-1], cuts[i]
+		h := b1 - b0
+		if h <= 0 {
+			continue
+		}
+		ym := b0/2 + b1/2
+		cross = cross[:0]
+		for _, e := range active {
+			if e.y0 <= ym && ym < e.y1 {
+				x := lerp(e.x0, e.x1, (ym-e.y0)/(e.y1-e.y0))
+				cross = append(cross, crossing{x: x - float64(bx0), dir: e.dir})
+			}
+		}
+		slices.SortFunc(cross, func(p, q crossing) int { return cmp.Compare(p.x, q.x) })
+		winding := 0
+		for j := 0; j+1 < len(cross); j++ {
+			winding += cross[j].dir
+			if inside(rule, winding) {
+				addSpan(acc, diff, cross[j].x, cross[j+1].x, h)
+			}
+		}
+	}
+	return cuts, cross
 }
 
 // rowCuts returns the band boundaries of the row [top, bot): the uniform

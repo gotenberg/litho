@@ -201,26 +201,46 @@ func (r *renderer) clipRect() image.Rectangle {
 	return image.Rect(x0, y0, x1, y1)
 }
 
-// clipIn returns the current clip as a mask of v's size, nil when it clips
-// nothing.
-func (r *renderer) clipIn(v view) (*surface.Mask, error) {
-	full, err := r.clip().mask1(r.width, r.height, r.budget)
-	if err != nil || full == nil {
-		return full, err
+// clipIn returns the current clip over the part of v an element painting
+// within bounds, device pixels, can reach, and that part, in v's pixels: the
+// pixels of v outside it are clipped away. The mask is nil when the clip
+// clips nothing. An element costs the clip's values over its own pixels,
+// not a mask of the page, whether it paints into a layer of its size or
+// straight onto the page.
+func (r *renderer) clipIn(v view, bounds image.Rectangle) (*surface.Mask, image.Rectangle, error) {
+	c := r.clip()
+	// A pixel of margin absorbs the rounding of the element's bounds through
+	// the view's shifted matrix.
+	area := bounds.Inset(-1).
+		Intersect(image.Rect(v.x, v.y, v.x+v.canvas.Width, v.y+v.canvas.Height)).
+		Intersect(image.Rect(0, 0, r.width, r.height))
+	if area.Empty() {
+		if c.node == nil && c.whole(r.width, r.height) {
+			return nil, image.Rectangle{}, nil
+		}
+		// Nothing of the view lies under the clip: a single clipped-away
+		// pixel stands for the clip.
+		m, err := surface.NewMask(1, 1, r.budget)
+		if err != nil {
+			return nil, image.Rectangle{}, fmt.Errorf("%w: clip mask: %w", ErrTooLarge, err)
+		}
+		return m, image.Rect(0, 0, 1, 1), nil
 	}
-	if v.x == 0 && v.y == 0 && v.canvas.Width == r.width && v.canvas.Height == r.height {
-		return full, nil
-	}
-	m, err := surface.NewMask(v.canvas.Width, v.canvas.Height, r.budget)
+	values, err := c.in(area, r.width, r.height, r.budget)
 	if err != nil {
-		return nil, fmt.Errorf("%w: clip mask: %w", ErrTooLarge, err)
+		return nil, image.Rectangle{}, err
 	}
-	area := image.Rect(v.x, v.y, v.x+v.canvas.Width, v.y+v.canvas.Height).Intersect(image.Rect(0, 0, r.width, r.height))
-	for y := area.Min.Y; y < area.Max.Y; y++ {
-		dst := (y-v.y)*m.Width + area.Min.X - v.x
-		copy(m.A[dst:dst+area.Dx()], full.A[y*r.width+area.Min.X:y*r.width+area.Max.X])
+	if r.within != nil {
+		if values == nil {
+			values = maskIn(r.within, area)
+		} else {
+			r.keepWithin(values, area)
+		}
 	}
-	return m, nil
+	if values == nil {
+		return nil, image.Rectangle{}, nil
+	}
+	return &surface.Mask{Width: area.Dx(), Height: area.Dy(), A: values}, area.Sub(image.Pt(v.x, v.y)), nil
 }
 
 // pixelRect returns the device pixels b touches, clamped to the raster.

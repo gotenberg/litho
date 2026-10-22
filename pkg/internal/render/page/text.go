@@ -297,7 +297,7 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 		// rectangle, as poppler draws its bitmap; filled and stroked, it is a
 		// path that Splash fills and strokes as any other (SplashOutputDev::
 		// drawChar), cut at the exact edge.
-		cov, err := r.clippedCoverage(device, raster.NonZero, !strokes)
+		cov, err := r.glyphFill(device, !strokes)
 		if err != nil {
 			r.skip("glyph", err)
 		} else if err := r.glyphCoverage(s, st, cov, st.Fill, st.FillAlpha); err != nil {

@@ -92,18 +92,25 @@ func NewPage(width, height int, maxPixels int64) (*Group, error) {
 // NewPageIn returns the page group of [NewPage] blending in space, nil for
 // sRGB: the space the page's /Group /CS names (11.4.7).
 func NewPageIn(width, height int, space *Space, maxPixels int64) (*Group, error) {
+	return NewPageOn(nil, width, height, space, maxPixels)
+}
+
+// NewPageOn returns the page group of [NewPageIn], its colour plane taken
+// from pool ([surface.Pool]); a nil pool allocates it.
+func NewPageOn(pool *surface.Pool, width, height int, space *Space, maxPixels int64) (*Group, error) {
 	g := &Group{bounds: image.Rect(0, 0, width, height), attrs: Attributes{Isolated: true, Space: space}}
-	if err := g.allocColor(space, maxPixels); err != nil {
+	if err := g.allocColor(pool, space, maxPixels); err != nil {
 		return nil, fmt.Errorf("allocating page group colour: %w", err)
 	}
 	return g, nil
 }
 
-// allocColor sets g's space and allocates its colour plane.
-func (g *Group) allocColor(space *Space, maxPixels int64) error {
+// allocColor sets g's space and allocates its colour plane, on pool when it
+// is not nil.
+func (g *Group) allocColor(pool *surface.Pool, space *Space, maxPixels int64) error {
 	g.space, g.n = space, space.channels()
 	g.stride = g.n + 1
-	color, err := surface.NewPlane(g.bounds.Dx(), g.bounds.Dy(), g.n, maxPixels)
+	color, err := pool.NewPlane(g.bounds.Dx(), g.bounds.Dy(), g.n, maxPixels)
 	if err != nil {
 		return err
 	}
@@ -123,7 +130,7 @@ func NewGroup(bounds image.Rectangle, backdrop Backdrop, attrs Attributes, maxPi
 		space = backdrop.parent.space
 	}
 	g := &Group{bounds: bounds, attrs: attrs}
-	if err := g.allocColor(space, maxPixels); err != nil {
+	if err := g.allocColor(nil, space, maxPixels); err != nil {
 		return nil, fmt.Errorf("allocating group colour: %w", err)
 	}
 	shape, err := surface.NewMask(w, h, maxPixels)
@@ -215,6 +222,36 @@ func (g *Group) Components(x, y int) (Components, float32) {
 	return g.space.load(c), a
 }
 
+// ComponentsRow sets out[i] to the colour [Group.Components] returns for
+// pixel (x0+i, y), for x0 ≤ x0+i < x0+len(out): a caller reading a row
+// pays one call for it rather than one a pixel.
+func (g *Group) ComponentsRow(x0, y int, out []Components) {
+	w := g.bounds.Dx()
+	cmyk := g.space.Kind() == CMYK
+	for i := range out {
+		x := x0 + i
+		if x < 0 || y < 0 || x >= w || y >= g.bounds.Dy() {
+			out[i] = Components{}
+			continue
+		}
+		p := g.color.Pix[g.stride*(y*w+x):]
+		a := p[g.n]
+		if a <= 0 {
+			out[i] = Components{}
+			continue
+		}
+		var c Components
+		for k := range g.n {
+			c[k] = clamp01(p[k] / a)
+		}
+		if cmyk {
+			// [Space.load], inlined.
+			c = Components{1 - c[0], 1 - c[1], 1 - c[2], 1 - c[3]}
+		}
+		out[i] = c
+	}
+}
+
 // RGB returns the group's accumulated colour and alpha as an sRGB canvas:
 // [Group.Canvas] itself when the group blends in sRGB, otherwise each pixel
 // converted through the space's [Converter] into a new canvas, refused
@@ -261,6 +298,67 @@ func (g *Group) RGB(ctx context.Context, maxPixels int64) (*surface.Canvas, erro
 		}
 	}
 	return out, nil
+}
+
+// RGBReader reads pixels of a group's sRGB canvas, as [Group.RGB] makes it,
+// without making it: a caller that needs a few pixels of a page group in
+// another space converts those alone. It keeps the last conversion, as RGB
+// does, so it is not safe for concurrent use.
+type RGBReader struct {
+	g       *Group
+	last    Components
+	lastRGB [3]float32
+	seen    bool
+}
+
+// RGBReader returns a reader of the group's sRGB canvas.
+func (g *Group) RGBReader() *RGBReader {
+	return &RGBReader{g: g}
+}
+
+// At returns pixel (x, y) of the canvas [Group.RGB] makes, its origin at
+// [Group.Bounds].Min, bit for bit: the colour premultiplied, and zero
+// outside the group.
+func (r *RGBReader) At(x, y int) (red, green, blue, alpha float32) {
+	g := r.g
+	if g.rgb != nil {
+		return g.rgb.At(x, y)
+	}
+	if x < 0 || y < 0 || x >= g.bounds.Dx() || y >= g.bounds.Dy() {
+		return 0, 0, 0, 0
+	}
+	p := g.color.Pix[g.stride*(y*g.bounds.Dx()+x):]
+	a := p[g.n]
+	if a <= 0 {
+		return 0, 0, 0, 0
+	}
+	var c Components
+	for k := range g.n {
+		c[k] = clamp01(p[k] / a)
+	}
+	if !r.seen || c != r.last {
+		r.lastRGB, r.last, r.seen = g.space.toRGB(c), c, true
+	}
+	rgb := r.lastRGB
+	return rgb[0] * a, rgb[1] * a, rgb[2] * a, a
+}
+
+// Alpha returns the alpha of pixel (x, y), as [RGBReader.At] does, without
+// converting its colour.
+func (r *RGBReader) Alpha(x, y int) float32 {
+	g := r.g
+	if g.rgb != nil {
+		_, _, _, a := g.rgb.At(x, y)
+		return a
+	}
+	if x < 0 || y < 0 || x >= g.bounds.Dx() || y >= g.bounds.Dy() {
+		return 0
+	}
+	a := g.color.Pix[g.stride*(y*g.bounds.Dx()+x)+g.n]
+	if a <= 0 {
+		return 0
+	}
+	return a
 }
 
 // Paint composites one element's contribution at device pixel (x, y): colour

@@ -2,6 +2,7 @@ package page
 
 import (
 	"fmt"
+	"image"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -15,23 +16,25 @@ import (
 const rectTolerance = 1e-9
 
 // clip is the current clipping path (ISO 32000-1, 8.5.4) as the renderer
-// holds it: an axis-aligned device rectangle, intersected with a coverage
-// mask when a clip of any other shape has been set. Most clips are
+// holds it: an axis-aligned device rectangle, intersected with the coverage
+// of the clips of any other shape when one has been set. Most clips are
 // rectangles, a page's margins or a form's bounding box, and a rectangle
-// costs nothing to intersect, where a mask costs the page's pixels.
+// costs nothing to intersect. The other shapes are kept as paths
+// ([clipNode]) and rasterised over the pixels painted under them, until they
+// are rasterised over the whole page once.
 //
 // A clip is immutable once a graphics state holds it: q shares it, and
 // setting a clip makes a new one.
 type clip struct {
-	// mask is the coverage of the clips that are not rectangles, or nil.
-	mask *surface.Mask
+	// node is the coverage of the clips that are not rectangles, or nil.
+	node *clipNode
 	// rect is the intersection of the rectangles, in device pixels.
 	rect geom.Rect
-	// inMask reports that mask already holds rect, which then only bounds
+	// inMask reports that node already holds rect, which then only bounds
 	// the work.
 	inMask bool
-	// full is mask with rect applied, made the first time an image or a
-	// shading needs one mask, or nil.
+	// full is node's coverage over the page with rect applied, made the
+	// first time an element needs it over the whole page, or nil.
 	full *surface.Mask
 }
 
@@ -78,7 +81,7 @@ func near(a, b geom.Point) bool { return eq(a.X, b.X) && eq(a.Y, b.Y) }
 
 // intersectRect returns c narrowed to r.
 func (c *clip) intersectRect(r geom.Rect) *clip {
-	out := &clip{mask: c.mask, rect: geom.Rect{
+	out := &clip{node: c.node, rect: geom.Rect{
 		Min: geom.Point{X: max(c.rect.Min.X, r.Min.X), Y: max(c.rect.Min.Y, r.Min.Y)},
 		Max: geom.Point{X: min(c.rect.Max.X, r.Max.X), Y: min(c.rect.Max.Y, r.Max.Y)},
 	}}
@@ -157,12 +160,14 @@ func (c *clip) wholePixels() *clip {
 	if c.inMask {
 		return c
 	}
-	return &clip{mask: c.mask, rect: pixelRect(c.rect)}
+	// The whole-page coverage cached under the old rectangle does not hold
+	// under the widened one, so the copy starts without it.
+	return &clip{node: c.node, rect: pixelRect(c.rect)}
 }
 
 // withPath returns c narrowed to the device-space path p filled with rule
 // (ISO 32000-1, 8.5.4): a rectangle narrows the rectangle, any other shape
-// makes a mask of the intersection. With snap, a rectangle first takes
+// adds a [clipNode] of the intersection. With snap, a rectangle first takes
 // whole rows ([snapRows]), as a viewer clips to a clipping path or a form's
 // bounding box; a pattern cell keeps its exact box, so the cells of a tiling
 // meet without overlapping.
@@ -173,44 +178,269 @@ func (c *clip) withPath(p geom.Path, rule raster.FillRule, snap bool, width, hei
 		}
 		return c.intersectRect(r), nil
 	}
-	cur, err := c.mask1(width, height, budget)
+	shape, err := raster.NewShape(p, rule, width, height)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("clipping: computing the clip path: %w", err)
 	}
-	m, err := raster.Clip(p, rule, cur, width, height, budget)
-	if err != nil {
-		return nil, fmt.Errorf("clipping: %w", err)
+	prev := c.node
+	if prev != nil && prev.depth >= maxLazyClipDepth {
+		if err := prev.materialize(); err != nil {
+			return nil, err
+		}
 	}
-	return &clip{mask: m, rect: c.rect, inMask: true}, nil
+	n := &clipNode{
+		path:      p,
+		rule:      rule,
+		shape:     shape,
+		prev:      prev,
+		rect:      c.rect,
+		applyRect: !c.whole(width, height) && !c.inMask,
+		depth:     1,
+		bounds:    shape.Bounds(),
+		width:     width,
+		height:    height,
+		budget:    budget,
+	}
+	if prev != nil {
+		n.bounds = n.bounds.Intersect(prev.bounds)
+		n.depth += prev.depth
+	}
+	if n.applyRect {
+		x0, x1, y0, y1 := c.span(width, height)
+		n.bounds = n.bounds.Intersect(image.Rect(x0, y0, x1, y1))
+	}
+	return &clip{node: n, rect: c.rect, inMask: true}, nil
+}
+
+// whole reports whether the rectangle covers the page.
+func (c *clip) whole(width, height int) bool {
+	return c.rect.Min.X <= 0 && c.rect.Min.Y <= 0 && c.rect.Max.X >= float64(width) && c.rect.Max.Y >= float64(height)
 }
 
 // mask1 returns the clip as one mask, rectangle applied, nil when it clips to
 // the whole page. It is made once per clip.
 func (c *clip) mask1(width, height int, budget int64) (*surface.Mask, error) {
-	whole := c.rect.Min.X <= 0 && c.rect.Min.Y <= 0 && c.rect.Max.X >= float64(width) && c.rect.Max.Y >= float64(height)
-	if whole || c.inMask {
-		return c.mask, nil
+	var values *surface.Mask
+	if c.node != nil {
+		if err := c.node.materialize(); err != nil {
+			return nil, err
+		}
+		values = c.node.values
+	}
+	if c.whole(width, height) || c.inMask {
+		return values, nil
 	}
 	if c.full != nil {
 		return c.full, nil
 	}
+	m, err := rectMask(c.rect, values, width, height, budget)
+	if err != nil {
+		return nil, err
+	}
+	c.full = m
+	return m, nil
+}
+
+// rectMask returns the mask of rect over a raster of width × height pixels,
+// multiplied by values when it is not nil.
+func rectMask(rect geom.Rect, values *surface.Mask, width, height int, budget int64) (*surface.Mask, error) {
 	m, err := surface.NewMask(width, height, budget)
 	if err != nil {
 		return nil, fmt.Errorf("%w: clip mask: %w", ErrTooLarge, err)
 	}
-	x0, x1, y0, y1 := c.span(width, height)
+	x0, x1, y0, y1 := (&clip{rect: rect}).span(width, height)
 	for y := y0; y < y1; y++ {
-		fy := overlap(float64(y), c.rect.Min.Y, c.rect.Max.Y)
+		fy := overlap(float64(y), rect.Min.Y, rect.Max.Y)
 		for x := x0; x < x1; x++ {
-			v := fy * overlap(float64(x), c.rect.Min.X, c.rect.Max.X)
-			if c.mask != nil {
-				v *= c.mask.A[y*width+x]
+			v := fy * overlap(float64(x), rect.Min.X, rect.Max.X)
+			if values != nil {
+				v *= values.A[y*width+x]
 			}
 			m.A[y*width+x] = v
 		}
 	}
-	c.full = m
 	return m, nil
+}
+
+// in returns the values [clip.mask1] gives over box, a part of the page, row
+// by row, without making the mask when it is not made yet; nil when the clip
+// clips nothing.
+func (c *clip) in(box image.Rectangle, width, height int, budget int64) ([]float32, error) {
+	if c.full != nil || (c.node != nil && c.node.values != nil) {
+		m, err := c.mask1(width, height, budget)
+		if err != nil || m == nil {
+			return nil, err
+		}
+		return maskIn(m, box), nil
+	}
+	applyRect := !c.whole(width, height) && !c.inMask
+	if c.node == nil && !applyRect {
+		return nil, nil
+	}
+	var values []float32
+	if c.node != nil {
+		var err error
+		if values, err = c.node.in(box); err != nil {
+			return nil, err
+		}
+	}
+	if !applyRect {
+		return values, nil
+	}
+	return rectIn(c.rect, values, box, width, height), nil
+}
+
+// maskIn returns the values of m over box, row by row.
+func maskIn(m *surface.Mask, box image.Rectangle) []float32 {
+	out := make([]float32, box.Dx()*box.Dy())
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		at := (y - box.Min.Y) * box.Dx()
+		copy(out[at:at+box.Dx()], m.A[y*m.Width+box.Min.X:y*m.Width+box.Max.X])
+	}
+	return out
+}
+
+// rectIn returns the values [rectMask] gives over box, row by row, values
+// holding the values it multiplies by over box, or nil.
+func rectIn(rect geom.Rect, values []float32, box image.Rectangle, width, height int) []float32 {
+	out := make([]float32, box.Dx()*box.Dy())
+	x0, x1, y0, y1 := (&clip{rect: rect}).span(width, height)
+	span := image.Rect(x0, y0, x1, y1).Intersect(box)
+	w := box.Dx()
+	for y := span.Min.Y; y < span.Max.Y; y++ {
+		fy := overlap(float64(y), rect.Min.Y, rect.Max.Y)
+		for x := span.Min.X; x < span.Max.X; x++ {
+			i := (y-box.Min.Y)*w + x - box.Min.X
+			v := fy * overlap(float64(x), rect.Min.X, rect.Max.X)
+			if values != nil {
+				v *= values[i]
+			}
+			out[i] = v
+		}
+	}
+	return out
+}
+
+// maxLazyClipDepth bounds the clipping paths kept as paths on top of one
+// another: setting one more first rasterises the coverage under it over the
+// page. Anti-DoS guard, not spec-mandated: every element painted under a
+// chain of paths computes the coverage of each over its pixels, so a stream
+// of nested q W n would make each fill cost as many coverages as it nests. 8
+// holds the nesting of real pages, a form's bounding box and a few clips in
+// it, and keeps a fill under it to 8 coverages of its own pixels.
+const maxLazyClipDepth = 8
+
+// clipNode is the coverage of a clipping path that is not a rectangle,
+// intersected with the clip it was set under (ISO 32000-1, 8.5.4). It keeps
+// the path and computes its coverage over the pixels an element paints
+// ([clipNode.in]) until the coverage over the page is needed, or until the
+// pixels computed in parts reach the page's: it then rasterises the page
+// once ([clipNode.materialize]). Both give the values of the mask
+// [raster.Clip] makes of the path over the mask of the clip under it,
+// multiplied in the same order.
+//
+// The flattening composite of a page draws each element a composited region
+// overlaps outside the region under the crop box with the region's box cut
+// out, an even-odd clip as large as the page. A page whose elements were
+// each clipped so rasterised that page for every element.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18765.pdf: the flattened page sets 2,296 such clips around
+//     small paths; rasterising each over the 6975 x 2925 pixel page took 44
+//     s of the 66 s of CPU the source and the flattened page took to render
+//     at 72 dpi. The two renderings now take 5 s.
+type clipNode struct {
+	// values is the coverage over the page once made, nil before.
+	values *surface.Mask
+	// path is the clipping path, filled with rule, and shape the path
+	// flattened.
+	path  geom.Path
+	rule  raster.FillRule
+	shape *raster.Shape
+	// prev is the coverage of the clip the path was set under, nil when it
+	// had none; rect is that clip's rectangle, which multiplies prev when
+	// applyRect is set, as [clip.mask1] applies it.
+	prev      *clipNode
+	rect      geom.Rect
+	applyRect bool
+	// depth counts the nodes down the chain not made yet, this one included.
+	depth int
+	// bounds holds every pixel the coverage can be above zero at.
+	bounds image.Rectangle
+	// work counts the pixels computed in parts so far.
+	work int64
+
+	width, height int
+	budget        int64
+}
+
+// materialize computes the coverage over the page, once.
+func (n *clipNode) materialize() error {
+	if n.values != nil {
+		return nil
+	}
+	var cur *surface.Mask
+	if n.prev != nil {
+		if err := n.prev.materialize(); err != nil {
+			return err
+		}
+		cur = n.prev.values
+	}
+	if n.applyRect {
+		m, err := rectMask(n.rect, cur, n.width, n.height, n.budget)
+		if err != nil {
+			return err
+		}
+		cur = m
+	}
+	m, err := raster.Clip(n.path, n.rule, cur, n.width, n.height, n.budget)
+	if err != nil {
+		return fmt.Errorf("%w: clip mask: %w", ErrTooLarge, err)
+	}
+	n.values, n.prev, n.shape, n.depth = m, nil, nil, 0
+	return nil
+}
+
+// in returns the coverage over box, a part of the page, row by row.
+func (n *clipNode) in(box image.Rectangle) ([]float32, error) {
+	if n.values != nil {
+		return maskIn(n.values, box), nil
+	}
+	out := make([]float32, box.Dx()*box.Dy())
+	part := box.Intersect(n.bounds)
+	if part.Empty() {
+		return out, nil
+	}
+	n.work += int64(part.Dx()) * int64(part.Dy())
+	if n.work > int64(n.width)*int64(n.height) {
+		// The parts have cost the page: the page's coverage serves every
+		// element painted under the clip from here on.
+		if err := n.materialize(); err != nil {
+			return nil, err
+		}
+		return maskIn(n.values, box), nil
+	}
+	var pre []float32
+	if n.prev != nil {
+		var err error
+		if pre, err = n.prev.in(part); err != nil {
+			return nil, err
+		}
+	}
+	if n.applyRect {
+		pre = rectIn(n.rect, pre, part, n.width, n.height)
+	}
+	values := n.shape.CoverageIn(part, pre)
+	if part == box {
+		return values, nil
+	}
+	w := part.Dx()
+	for y := part.Min.Y; y < part.Max.Y; y++ {
+		at := (y-box.Min.Y)*box.Dx() + part.Min.X - box.Min.X
+		copy(out[at:at+w], values[(y-part.Min.Y)*w:(y-part.Min.Y+1)*w])
+	}
+	return out, nil
 }
 
 // span returns the pixels the rectangle touches, clamped to the page.
@@ -278,10 +508,11 @@ func (c *clip) applyPixelRect(cov *raster.Coverage) {
 }
 
 // owns reports the masks c holds that parent does not share, for the budget
-// of the masks a render keeps alive.
+// of the masks a render keeps alive. A node not made yet counts as the mask
+// it stands for.
 func (c *clip) owns(parent *clip) int {
 	n := 0
-	if c.mask != nil && (parent == nil || c.mask != parent.mask) {
+	if c.node != nil && (parent == nil || c.node != parent.node) {
 		n++
 	}
 	if c.full != nil && (parent == nil || c.full != parent.full) {
