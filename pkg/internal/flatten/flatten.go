@@ -293,7 +293,7 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 	if resources == nil {
 		resources = ast.PdfDict{}
 	}
-	xobjects, err := f.subdict(ctx, resources, "XObject")
+	xobjects, err := f.xobjects(ctx, resources)
 	if err != nil {
 		return pr, false, err
 	}
@@ -443,10 +443,10 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 	return pr, true, nil
 }
 
-// subdict returns a copy of the resource subdictionary category of
-// resources, set in resources, so the run can add to it.
-func (f *flattener) subdict(ctx context.Context, resources ast.PdfDict, category ast.PdfName) (ast.PdfDict, error) {
-	d, err := document.ResolveDict(ctx, f.doc, resources[category])
+// xobjects returns a copy of the /XObject subdictionary of resources, so the
+// run can add to it.
+func (f *flattener) xobjects(ctx context.Context, resources ast.PdfDict) (ast.PdfDict, error) {
+	d, err := document.ResolveDict(ctx, f.doc, resources["XObject"])
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, ctxErr

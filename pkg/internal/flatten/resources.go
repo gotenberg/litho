@@ -215,7 +215,7 @@ func (f *flattener) neutralPattern(ctx context.Context, obj ast.PdfObject, keep 
 		// A form the cell paints keeps its painting and loses its
 		// transparency group, as a form the page keeps does (see
 		// [flattener.ungroup]).
-		xobjects, err := f.subdict(ctx, resources, "XObject")
+		xobjects, err := f.xobjects(ctx, resources)
 		if err != nil {
 			return nil, err
 		}

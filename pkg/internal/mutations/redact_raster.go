@@ -360,7 +360,7 @@ func redactFormText(
 			}
 			inner, ok := innerObj.(ast.PdfStream)
 			if !ok {
-				return fmt.Errorf("%w: XObject %q is no form", ErrRegionInFormXObject, name)
+				return fmt.Errorf("%w: XObject %q is no form", ErrRegionInFormXObject, string(name))
 			}
 			innerData, err := doc.DecodeStream(ctx, inner)
 			if err != nil {

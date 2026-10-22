@@ -120,7 +120,7 @@ func Redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 	if resources == nil {
 		resources = ast.PdfDict{}
 	}
-	xobjects, err := f.subdict(ctx, resources, "XObject")
+	xobjects, err := f.xobjects(ctx, resources)
 	if err != nil {
 		return out, err
 	}

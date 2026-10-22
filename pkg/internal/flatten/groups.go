@@ -109,7 +109,7 @@ func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.P
 	}
 	if own != nil {
 		resources := maps.Clone(own)
-		xobjects, err := f.subdict(ctx, resources, "XObject")
+		xobjects, err := f.xobjects(ctx, resources)
 		if err != nil {
 			return nil, err
 		}
