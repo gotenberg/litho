@@ -120,6 +120,14 @@ type RedactReport struct {
 	// BlankedImages names the images whose covered samples were overwritten:
 	// an image XObject by its resource name, an inline image as "(inline)".
 	BlankedImages []string
+	// ImagesBlankedInCopy maps a 1-based page number to the images of
+	// BlankedImages that page blanked in a copy, by the resource name it drew
+	// them with. Each is also painted, or named, where the regions do not
+	// cover the same samples, so the covered placement was repointed at a
+	// blanked copy of its own and the image itself kept its samples for the
+	// others: it is still in the file. [WithStrictRedaction] refuses such an
+	// image instead.
+	ImagesBlankedInCopy map[int][]string
 	// RemovedPaths counts the painted paths removed.
 	RemovedPaths int
 	// ClippedPaths counts the painted paths that reached outside the regions:
@@ -272,10 +280,17 @@ type RedactReport struct {
 // on the same line keeps its position, because the run's advance is put back
 // in its place. A painted path reaching outside the regions loses its geometry
 // inside them, and the rest is painted under a clip that excludes them (see
-// [RedactReport.ClippedPaths]). An image is blanked by rewriting it, so an
+// [RedactReport.ClippedPaths]). An image is blanked by rewriting it, and an
 // image also painted somewhere the regions do not cover the same samples, on
-// another page, twice on one page, or by an annotation or a form, is refused
-// rather than blanked there too.
+// another page, twice on one page, or by an annotation or a form, is blanked
+// in a copy instead: the covered placement paints the copy under a new
+// resource name, and every other placement keeps the image as it was (see
+// [RedactReport.ImagesBlankedInCopy]). [WithStrictRedaction] refuses such an
+// image. An image a form XObject draws on the page is blanked in place when
+// every placement of it had the same samples covered; one also painted
+// elsewhere is refused, since the copy would have to sit in the form, which
+// every other placement of the form draws too. A form nested in a form is
+// not followed, and an image it draws is refused as well.
 //
 // The redaction holds whatever else the Writer does before or after it:
 // another Redact, auto-tagging, and a remediation, which comes after it since a
@@ -284,8 +299,8 @@ type RedactReport struct {
 // and [Writer.WriteTo] scans the output it is about to write for every removed
 // string. A stage can still rebuild a page from the source document
 // (auto-tagging marks up the original content stream), so when a removed
-// string is back, WriteTo applies the regions again on top of everything else
-// and scans once more. If a copy still survives, WriteTo refuses with
+// string, or an image blanked in a copy, is back, WriteTo applies the regions
+// again on top of everything else and scans once more. If a copy still survives, WriteTo refuses with
 // [ErrRedactionIncomplete] and writes nothing.
 //
 // An inline image is blanked in place: a new inline image with the covered
@@ -407,26 +422,10 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	if o.raster {
 		pageOpts.Rasterise = flatten.Redaction
 	}
-	report := &RedactReport{}
-	var blanked []int
-	for _, pageNum := range order {
-		pageReport, redactErr := mutations.RedactPageRegionsWith(
-			ctx, alloc, doc, pages[pageNum-1], byPage[pageNum], pageOpts)
-		if redactErr != nil {
-			restoreTrailer()
-			return nil, fmt.Errorf("%w: page %d: %w", ErrRedactionRefused, pageNum, redactErr)
-		}
-		mergePageRedaction(report, pageNum, pageReport)
-		blanked = appendNewObjects(blanked, pageReport.BlankedImageObjects)
-	}
-
-	// Blanking rewrites an image in place, so it is exact only when every
-	// place that paints the image had the same samples covered. That needs
-	// every page's regions at once, which is why it runs here rather than per
-	// page.
-	if useErr := mutations.CheckBlankedImageUses(ctx, alloc, doc, pages, byPage, blanked); useErr != nil {
+	report, copied, err := redactPages(ctx, alloc, doc, pages, byPage, order, o.strict, pageOpts)
+	if err != nil {
 		restoreTrailer()
-		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
+		return nil, err
 	}
 	// An annotation is one object however many pages list it, so removing it
 	// from one page is exact only when no other page still shows it. That
@@ -509,13 +508,14 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	w.rewriteOverrides = alloc.Pending()
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
-	w.recordRedaction(regions, needles, o.strict)
+	w.recordRedaction(regions, needles, o.strict, copied)
 	if o.pixelCheck {
 		if checkErr := w.checkRedactedOutput(ctx, before, regions, order, report.RemovedGlyphBoxes); checkErr != nil {
 			w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
 			w.redactions = w.redactions[:prevRedactions]
 			w.redactedTokens = w.redactedTokens[:prevTokens]
 			w.redactionTolerances = w.redactionTolerances[:prevTolerances]
+			w.redactionCopies = w.redactionCopies[:prevRedactions]
 			restoreTrailer()
 			return nil, checkErr
 		}
@@ -542,6 +542,75 @@ func (w *Writer) checkRedactedOutput(
 	}
 	defer release()
 	return checkRedactionPixels(ctx, before, after, regions, order, removed)
+}
+
+// redactPages applies the regions of byPage to each page of order, and
+// returns the report and the images it blanked in a copy rather than in place.
+//
+// Blanking rewrites an image in place, so it is exact only when every place
+// that paints the image had the same samples covered. That needs every page's
+// regions at once, so it is checked after all pages are redacted. An image
+// that fails it is blanked in a copy instead: the pages are redacted again
+// from the state before the first pass, with the covered placements of those
+// images repointed at copies of their own (see
+// mutations.RedactOptions.PrivateCopies). The image keeps its samples wherever
+// else it is painted, which is content no region selected.
+//
+// Under strict, a shared image refuses instead: [WithStrictRedaction] says the
+// regions select every occurrence of what must go, and the same samples
+// painted where no region covers them are one the selection missed.
+func redactPages(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	pages []*document.Page,
+	byPage map[int][][4]float64,
+	order []int,
+	strict bool,
+	pageOpts mutations.RedactOptions,
+) (*RedactReport, map[int]bool, error) {
+	snap := alloc.Snapshot()
+	var copied map[int]bool
+	for {
+		report := &RedactReport{}
+		var blanked []int
+		for _, pageNum := range order {
+			opts := pageOpts
+			opts.PrivateCopies = copied
+			pageReport, redactErr := mutations.RedactPageRegionsWith(
+				ctx, alloc, doc, pages[pageNum-1], byPage[pageNum], opts)
+			if redactErr != nil {
+				alloc.Restore(snap)
+				return nil, nil, fmt.Errorf("%w: page %d: %w", ErrRedactionRefused, pageNum, redactErr)
+			}
+			mergePageRedaction(report, pageNum, pageReport)
+			blanked = appendNewObjects(blanked, pageReport.BlankedImageObjects)
+		}
+
+		// A second pass blanks in place only the images the first found
+		// exclusive, on the same pages and regions, so a failure there is one
+		// a copy cannot lift and refuses as before.
+		if strict || copied != nil {
+			if useErr := mutations.CheckBlankedImageUses(ctx, alloc, doc, pages, byPage, blanked); useErr != nil {
+				alloc.Restore(snap)
+				return nil, nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
+			}
+			return report, copied, nil
+		}
+		shared, useErr := mutations.SharedBlankedImages(ctx, alloc, doc, pages, byPage, blanked)
+		if useErr != nil {
+			alloc.Restore(snap)
+			return nil, nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
+		}
+		if len(shared) == 0 {
+			return report, nil, nil
+		}
+		alloc.Restore(snap)
+		copied = make(map[int]bool, len(shared))
+		for _, objNum := range shared {
+			copied[objNum] = true
+		}
+	}
 }
 
 // otherPageCopies reports whether every hit of scan is a copy only pages
@@ -591,8 +660,12 @@ func seedAllocator(alloc *writer.ObjAllocator, overrides map[int]ast.PdfObject) 
 //
 // A redaction that tolerated copies on other pages also records the pages it
 // covered and its needles, so WriteTo tolerates the same copies and no others.
-func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, strict bool) {
+//
+// copied holds the images the redaction blanked in a copy rather than in
+// place, which WriteTo checks the composed pages for.
+func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, strict bool, copied map[int]bool) {
 	w.redactions = append(w.redactions, slices.Clone(regions))
+	w.redactionCopies = append(w.redactionCopies, copied)
 	w.redactedTokens = appendNewTokens(w.redactedTokens, needles)
 	if strict {
 		return
@@ -679,8 +752,15 @@ func appendNewTokens(tokens, add []string) []string {
 // is refused with [ErrRedactionIncomplete], and nothing is written: reporting
 // success over content still in the file is the failure redaction exists to
 // prevent.
+//
+// An image a redaction blanked in a copy comes back the same way, with no text
+// for the scan to find: the rebuilt content names the image, whose samples
+// were never touched. So each page such a redaction covered is also checked
+// for a placement of the image under its regions (see
+// [Writer.copiedImagesRestored]), which re-applies the redactions as a token
+// does, and refuses when the re-application leaves one.
 func (w *Writer) enforceRedactions(ctx context.Context, overrides map[int]ast.PdfObject) (map[int]ast.PdfObject, error) {
-	if len(w.redactedTokens) == 0 {
+	if len(w.redactedTokens) == 0 && !w.hasRedactionCopies() {
 		return overrides, nil
 	}
 	doc := w.reader.doc
@@ -692,39 +772,78 @@ func (w *Writer) enforceRedactions(ctx context.Context, overrides map[int]ast.Pd
 	}
 	seedAllocator(alloc, overrides)
 
-	scan, err := mutations.ScanOutputForTokens(ctx, alloc, doc, w.redactedTokens)
-	if err != nil {
-		return nil, fmt.Errorf("%w: scanning the composed output: %w", ErrRedactionIncomplete, err)
+	var pages []*document.Page
+	resolvePages := func() error {
+		if pages != nil {
+			return nil
+		}
+		resolved, err := w.reader.resolvePages(ctx)
+		if err != nil {
+			return fmt.Errorf("resolving pages: %w", err)
+		}
+		pages = resolved
+		return nil
 	}
-	if scan.Clean() {
-		return overrides, nil
+
+	var hits, unreadable int
+	if len(w.redactedTokens) > 0 {
+		scan, err := mutations.ScanOutputForTokens(ctx, alloc, doc, w.redactedTokens)
+		if err != nil {
+			return nil, fmt.Errorf("%w: scanning the composed output: %w", ErrRedactionIncomplete, err)
+		}
+		if !scan.Clean() {
+			if err := resolvePages(); err != nil {
+				return nil, err
+			}
+			if scan, err = w.untolerated(ctx, alloc, pages, scan); err != nil {
+				return nil, fmt.Errorf("%w: telling copies on other pages apart: %w", ErrRedactionIncomplete, err)
+			}
+			hits, unreadable = len(scan.Hits), len(scan.Unreadable)
+		}
 	}
-	pages, err := w.reader.resolvePages(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("resolving pages: %w", err)
+	imagesBack := false
+	if w.hasRedactionCopies() {
+		if err := resolvePages(); err != nil {
+			return nil, err
+		}
+		back, err := w.copiedImagesRestored(ctx, alloc, pages)
+		if err != nil {
+			return nil, err
+		}
+		imagesBack = back
 	}
-	if scan, err = w.untolerated(ctx, alloc, pages, scan); err != nil {
-		return nil, fmt.Errorf("%w: telling copies on other pages apart: %w", ErrRedactionIncomplete, err)
-	}
-	if scan.Clean() {
+	if hits == 0 && unreadable == 0 && !imagesBack {
 		return overrides, nil
 	}
 	doc.Logger.Debug("writer: a later stage restored redacted content, re-applying the redactions",
-		slog.Int("hits", len(scan.Hits)), slog.Int("unreadable", len(scan.Unreadable)))
+		slog.Int("hits", hits), slog.Int("unreadable", unreadable), slog.Bool("images", imagesBack))
 
 	tokens := slices.Clone(w.redactedTokens)
-	for _, regions := range w.redactions {
+	for i, regions := range w.redactions {
 		byPage, order, err := groupRedactRegions(regions, len(pages))
 		if err != nil {
 			return nil, err
 		}
 		for _, pageNum := range order {
-			pageReport, redactErr := mutations.RedactPageRegions(ctx, alloc, doc, pages[pageNum-1], byPage[pageNum])
+			pageReport, redactErr := mutations.RedactPageRegionsWith(
+				ctx, alloc, doc, pages[pageNum-1], byPage[pageNum], mutations.RedactOptions{PrivateCopies: w.redactionCopies[i]})
 			if redactErr != nil {
 				return nil, fmt.Errorf("%w: re-applying page %d at write time: %w", ErrRedactionRefused, pageNum, redactErr)
 			}
 			tokens = appendNewTokens(tokens, mutations.RedactionNeedles(pageReport.RemovedText))
 		}
+	}
+	if w.hasRedactionCopies() {
+		back, err := w.copiedImagesRestored(ctx, alloc, pages)
+		if err != nil {
+			return nil, err
+		}
+		if back {
+			return nil, fmt.Errorf("%w: a page still paints an image a redaction blanked in a copy", ErrRedactionIncomplete)
+		}
+	}
+	if len(tokens) == 0 {
+		return alloc.Pending(), nil
 	}
 	sanitized, sanErr := mutations.SanitizeDocument(ctx, alloc, doc, tokens)
 	if sanErr != nil && errors.Is(sanErr, mutations.ErrSanitizationIncomplete) {
@@ -742,6 +861,43 @@ func (w *Writer) enforceRedactions(ctx context.Context, overrides map[int]ast.Pd
 		return nil, fmt.Errorf("%w: %w", ErrRedactionIncomplete, sanErr)
 	}
 	return alloc.Pending(), nil
+}
+
+// hasRedactionCopies reports whether a recorded redaction blanked an image in
+// a copy.
+func (w *Writer) hasRedactionCopies() bool {
+	for _, copied := range w.redactionCopies {
+		if len(copied) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// copiedImagesRestored reports whether a page, as alloc stages it, paints an
+// image a recorded redaction blanked in a copy where that redaction's regions
+// meet it (see mutations.CopiedImagesPaintedInRegions).
+func (w *Writer) copiedImagesRestored(ctx context.Context, alloc *writer.ObjAllocator, pages []*document.Page) (bool, error) {
+	for i, regions := range w.redactions {
+		copied := w.redactionCopies[i]
+		if len(copied) == 0 {
+			continue
+		}
+		byPage, order, err := groupRedactRegions(regions, len(pages))
+		if err != nil {
+			return false, err
+		}
+		for _, pageNum := range order {
+			back, err := mutations.CopiedImagesPaintedInRegions(ctx, alloc, w.reader.doc, pages[pageNum-1], byPage[pageNum], copied)
+			if err != nil {
+				return false, fmt.Errorf("checking page %d for a restored image: %w", pageNum, err)
+			}
+			if back {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // groupRedactRegions collects the regions of each page, and returns the pages
@@ -774,6 +930,12 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 		out.RemovedGlyphBoxes[pageNum] = append(out.RemovedGlyphBoxes[pageNum], in.RemovedGlyphBoxes...)
 	}
 	out.BlankedImages = append(out.BlankedImages, in.BlankedImages...)
+	if len(in.ImagesBlankedInCopy) > 0 {
+		if out.ImagesBlankedInCopy == nil {
+			out.ImagesBlankedInCopy = make(map[int][]string)
+		}
+		out.ImagesBlankedInCopy[pageNum] = append(out.ImagesBlankedInCopy[pageNum], in.ImagesBlankedInCopy...)
+	}
 	out.RemovedPaths += in.RemovedPaths
 	out.ClippedPaths += in.ClippedPaths
 	out.RasterisedUnits += in.RasterisedUnits

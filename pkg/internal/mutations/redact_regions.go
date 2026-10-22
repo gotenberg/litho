@@ -161,8 +161,14 @@ type RedactReport struct {
 	// blanked, once each. An image is rewritten in place, so every other place
 	// that paints the same object shows the blanked samples too; a caller hands
 	// these to [CheckBlankedImageUses] to refuse a blanking that would reach
-	// past the regions.
+	// past the regions. An image blanked in a copy is not listed: the copy is
+	// painted by the covered placement alone.
 	BlankedImageObjects []int
+	// ImagesBlankedInCopy names, by the resource name the page drew them
+	// with, the images blanked in a copy (see [RedactOptions.PrivateCopies]),
+	// once each. The image itself keeps its samples wherever else it is
+	// painted, and is still in the file.
+	ImagesBlankedInCopy []string
 	// RemovedPaths counts the painted paths removed. Paths carry no text, so
 	// there is nothing for a scan to look for; the count is for the caller's
 	// report of what it did.
@@ -212,10 +218,11 @@ type pageRedaction struct {
 	composites map[int]bool
 	// formImages refuses an image a form XObject draws inside the regions
 	// with [ErrRegionInFormXObject] rather than blanking it, so the raster
-	// fallback takes the form: a blanked image a form draws is refused at
-	// the end anyway, as an image referenced outside the pages' own
-	// resources (see [CheckBlankedImageUses]).
+	// fallback takes the form.
 	formImages bool
+	// private names the images blanked in a copy rather than in place (see
+	// [RedactOptions.PrivateCopies]).
+	private map[int]bool
 }
 
 // redactPageRegions does the work of [RedactPageRegions], with opts.
@@ -316,6 +323,7 @@ func redactPageRegions(
 	var (
 		inlineEdits []SpanEdit
 		inlineEnds  *content.InlineImageEnds
+		copies      []privateCopy
 	)
 	for _, box := range machine.ShadingBoxes() {
 		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
@@ -352,14 +360,35 @@ func redactPageRegions(
 			report.BlankedImages = append(report.BlankedImages, box.Name)
 			continue
 		}
-		objNum, err := blankImage(ctx, alloc, doc, page, box, zones)
+		copied := box.ObjNum != 0 && opts.private[box.ObjNum]
+		if copied && box.FormDepth > 0 {
+			// The copy would have to be named in the form's resources and
+			// drawn by the form, which every other placement of the form
+			// draws too: only a copy of the form for this page would hold
+			// it, and the redaction does not copy forms.
+			return RedactReport{}, fmt.Errorf("%w: image %q is drawn by a form XObject, where no copy can be placed",
+				ErrImageShared, box.Name)
+		}
+		objNum, err := blankImage(ctx, alloc, doc, page, box, zones, copied)
 		if err != nil {
 			return RedactReport{}, err
 		}
 		report.BlankedImages = append(report.BlankedImages, box.Name)
+		if copied {
+			copies = append(copies, privateCopy{op: box.Op, objNum: objNum})
+			if !slices.Contains(report.ImagesBlankedInCopy, box.Name) {
+				report.ImagesBlankedInCopy = append(report.ImagesBlankedInCopy, box.Name)
+			}
+			continue
+		}
 		if !slices.Contains(report.BlankedImageObjects, objNum) {
 			report.BlankedImageObjects = append(report.BlankedImageObjects, objNum)
 		}
+	}
+
+	copyEdits, err := blankPrivateCopies(ctx, alloc, doc, page, ops, ranges, copies)
+	if err != nil {
+		return RedactReport{}, err
 	}
 
 	// Before any content is excised, so a refusal here happens while the page is
@@ -400,7 +429,7 @@ func redactPageRegions(
 		return RedactReport{}, err
 	}
 
-	if len(text.selected) == 0 && len(inlineEdits) == 0 && len(paths.edits) == 0 {
+	if len(text.selected) == 0 && len(inlineEdits) == 0 && len(copyEdits) == 0 && len(paths.edits) == 0 {
 		// An image may still have been blanked, so the report stands even when
 		// no operator was removed, and the page's own copies still have to go.
 		if len(report.BlankedImages) > 0 {
@@ -416,8 +445,9 @@ func redactPageRegions(
 	if err != nil {
 		return RedactReport{}, err
 	}
-	edits := make([]SpanEdit, 0, len(textEdits)+len(inlineEdits)+len(paths.edits))
+	edits := make([]SpanEdit, 0, len(textEdits)+len(inlineEdits)+len(copyEdits)+len(paths.edits))
 	edits = append(edits, inlineEdits...)
+	edits = append(edits, copyEdits...)
 	edits = append(edits, textEdits...)
 	edits = append(edits, paths.edits...)
 	if err := EditPageSpans(ctx, alloc, doc, page, edits); err != nil {

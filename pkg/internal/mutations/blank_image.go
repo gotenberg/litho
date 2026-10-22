@@ -69,6 +69,11 @@ var (
 // samples are stored. The replacement keeps /ImageMask at one bit a sample and
 // carries no /Decode, because the decode already folded that array into the
 // pixels; see [packStencilBits].
+//
+// With private set, the result goes to a new object rather than over the
+// image, which stays as it was for the placements that still paint it; see
+// [blankPrivateCopies], which repoints the covered Do at it. It returns the
+// number of the object written.
 func blankImage(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -76,6 +81,7 @@ func blankImage(
 	page *document.Page,
 	box graphics.ImageBox,
 	zones []heuristics.Zone,
+	private bool,
 ) (int, error) {
 	if box.Name == graphics.InlineImageName {
 		return 0, ErrInlineImageInRegion
@@ -84,6 +90,12 @@ func blankImage(
 	ref, ok := imageXObjectRef(ctx, doc, page, box)
 	if !ok {
 		return 0, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
+	}
+	dest := ref.ObjectNum
+	if private {
+		// Reserved now and written last: the soft mask and the colour space
+		// the replacement names are allocated in between.
+		dest = alloc.Alloc(ast.PdfNull{}).ObjectNum
 	}
 
 	// Alloc-first: an image an earlier placement or an earlier Redact already
@@ -156,7 +168,7 @@ func blankImage(
 				// The explicit /SMask composites straight colour (11.6.5.3).
 				pdfimage.Unpremultiply(native.Data, dataMask.Alpha, native.Width*native.Height, native.Components)
 			}
-			return ref.ObjectNum, blankNative(alloc, ref, stream, box, zones, native)
+			return dest, blankNative(alloc, dest, stream, box, zones, native)
 		}
 	}
 
@@ -267,10 +279,10 @@ func blankImage(
 		}
 	}
 
-	if !alloc.AllocAt(ref.ObjectNum, ast.NewStream(dict, compressed)) {
+	if !alloc.AllocAt(dest, ast.NewStream(dict, compressed)) {
 		return 0, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
-	return ref.ObjectNum, nil
+	return dest, nil
 }
 
 // blankSoftMask returns a replacement for the /SMask of the picture dict
@@ -474,7 +486,7 @@ func srgbColorSpace(alloc *writer.ObjAllocator) (ast.PdfArray, error) {
 // every component, or full black ink with no colour ink for four components.
 func blankNative(
 	alloc *writer.ObjAllocator,
-	ref ast.PdfIndirectRef,
+	dest int,
 	stream ast.PdfStream,
 	box graphics.ImageBox,
 	zones []heuristics.Zone,
@@ -512,7 +524,7 @@ func blankNative(
 	if smask, present := stream.Dict["SMask"]; present {
 		dict["SMask"] = smask
 	}
-	if !alloc.AllocAt(ref.ObjectNum, ast.NewStream(dict, compressed)) {
+	if !alloc.AllocAt(dest, ast.NewStream(dict, compressed)) {
 		return fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
 	return nil

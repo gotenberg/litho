@@ -67,6 +67,18 @@ type RedactOptions struct {
 	// removes the covered glyphs of those copies and runs on the page as
 	// rewritten. Nil refuses such a page.
 	Rasterise RasterFunc
+	// PrivateCopies names the image objects to blank in a copy rather than
+	// in place. Blanking in place changes every placement of the image, so
+	// it is exact only when every placement had the same samples covered,
+	// which [SharedBlankedImages] decides across the pages of a redaction.
+	// An image named here is copied instead: the copy's covered samples are
+	// blanked, the copy joins the page's resources under a fresh name, and
+	// only the Do the regions cover is repointed at it (see
+	// [blankPrivateCopies]). Every other placement keeps painting the image
+	// as it was, and each covered placement gets a copy of its own. A
+	// covered placement a form XObject draws has no Do in the page's stream
+	// to repoint, and reports [ErrImageShared].
+	PrivateCopies map[int]bool
 }
 
 // RedactPageRegionsWith is [RedactPageRegions] with options; see
@@ -96,10 +108,11 @@ func RedactPageRegionsWith(
 	// every edit is a fresh object handed to AllocAt, never an AST mutated in
 	// place, which is the condition writer.ObjAllocator.Snapshot documents.
 	snap := alloc.Snapshot()
-	report, err := redactPageRegions(ctx, alloc, doc, page, regions, pageRedaction{formImages: opts.Rasterise != nil})
+	report, err := redactPageRegions(ctx, alloc, doc, page, regions,
+		pageRedaction{formImages: opts.Rasterise != nil, private: opts.PrivateCopies})
 	if err != nil && opts.Rasterise != nil && rasterable(err) {
 		alloc.Restore(snap)
-		report, err = rasterThenRedact(ctx, alloc, doc, page, regions, opts.Rasterise)
+		report, err = rasterThenRedact(ctx, alloc, doc, page, regions, opts)
 	}
 	if err != nil {
 		alloc.Restore(snap)
@@ -121,7 +134,7 @@ func rasterThenRedact(
 	doc *document.Document,
 	page *document.Page,
 	regions [][4]float64,
-	rasterise RasterFunc,
+	opts RedactOptions,
 ) (RedactReport, error) {
 	page = latestPage(ctx, alloc, doc, page)
 	zones := regionZones(regions)
@@ -134,7 +147,7 @@ func rasterThenRedact(
 		// refused over: refusing again beats rewriting the page for nothing.
 		return RedactReport{}, fmt.Errorf("%w: no unit to rasterise", ErrRegionInFormXObject)
 	}
-	raster, err := rasterise(ctx, alloc, doc, page, seeds, regions)
+	raster, err := opts.Rasterise(ctx, alloc, doc, page, seeds, regions)
 	if err != nil {
 		return RedactReport{}, fmt.Errorf("rasterising %d unit(s): %w", len(seeds), err)
 	}
@@ -149,7 +162,8 @@ func rasterThenRedact(
 	for _, n := range raster.Images {
 		composites[n] = true
 	}
-	report, err := redactPageRegions(ctx, alloc, doc, page, regions, pageRedaction{composites: composites, formImages: true})
+	report, err := redactPageRegions(ctx, alloc, doc, page, regions,
+		pageRedaction{composites: composites, formImages: true, private: opts.PrivateCopies})
 	if err != nil {
 		return RedactReport{}, err
 	}

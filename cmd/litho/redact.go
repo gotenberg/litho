@@ -32,19 +32,20 @@ func (f *regionFlags) Set(val string) error {
 // what went rather than reporting a bare success: a caller has to be able to
 // check that what it meant to remove is what was removed.
 type redactResult struct {
-	File                    string        `json:"file"`
-	RemovedText             []string      `json:"removedText"`
-	BlankedImages           []string      `json:"blankedImages,omitempty"`
-	RemovedPaths            int           `json:"removedPaths"`
-	ClippedPaths            int           `json:"clippedPaths,omitempty"`
-	RasterisedUnits         int           `json:"rasterisedUnits,omitempty"`
-	RemovedAnnotations      []int         `json:"removedAnnotations,omitempty"`
-	DroppedPageEntries      []string      `json:"droppedPageEntries,omitempty"`
-	FontsFullyRemovedOnPage map[int][]int `json:"fontsFullyRemovedOnPage,omitempty"`
-	ScrubbedAnnotations     []int         `json:"scrubbedAnnotations,omitempty"`
-	ScrubbedFormFields      []int         `json:"scrubbedFormFields,omitempty"`
-	ScrubbedOutlineItems    []int         `json:"scrubbedOutlineItems,omitempty"`
-	CopiesOnOtherPages      []otherCopy   `json:"copiesOnOtherPages,omitempty"`
+	File                    string           `json:"file"`
+	RemovedText             []string         `json:"removedText"`
+	BlankedImages           []string         `json:"blankedImages,omitempty"`
+	ImagesBlankedInCopy     map[int][]string `json:"imagesBlankedInCopy,omitempty"`
+	RemovedPaths            int              `json:"removedPaths"`
+	ClippedPaths            int              `json:"clippedPaths,omitempty"`
+	RasterisedUnits         int              `json:"rasterisedUnits,omitempty"`
+	RemovedAnnotations      []int            `json:"removedAnnotations,omitempty"`
+	DroppedPageEntries      []string         `json:"droppedPageEntries,omitempty"`
+	FontsFullyRemovedOnPage map[int][]int    `json:"fontsFullyRemovedOnPage,omitempty"`
+	ScrubbedAnnotations     []int            `json:"scrubbedAnnotations,omitempty"`
+	ScrubbedFormFields      []int            `json:"scrubbedFormFields,omitempty"`
+	ScrubbedOutlineItems    []int            `json:"scrubbedOutlineItems,omitempty"`
+	CopiesOnOtherPages      []otherCopy      `json:"copiesOnOtherPages,omitempty"`
 }
 
 // otherCopy is a removed string a page outside the regions still draws. It is
@@ -108,7 +109,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	// such as an indexed image over DeviceCMYK, as RGB, and this profile is
 	// what its CMYK colours are read in when the document names none.
 	cmykProfile := fs.String("cmyk-profile", "", "ICC profile DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
-	strict := fs.Bool("strict", false, "Refuse when a page outside the regions still draws removed text, instead of warning")
+	strict := fs.Bool("strict", false, "Refuse when a place outside the regions still draws removed text or a blanked image, instead of warning")
 	rasterFallback := fs.Bool("raster-fallback", false, "Rasterise the form XObjects and shadings the regions reach, refused otherwise, as images cut out of the regions")
 	pixelCheck := fs.Bool("pixel-check", false, "Render each redacted page before and after, and refuse unless the regions show only paper or blanked images and nothing else changed")
 
@@ -215,6 +216,7 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		File:                    file,
 		RemovedText:             report.RemovedText,
 		BlankedImages:           report.BlankedImages,
+		ImagesBlankedInCopy:     report.ImagesBlankedInCopy,
 		RemovedPaths:            report.RemovedPaths,
 		ClippedPaths:            report.ClippedPaths,
 		RasterisedUnits:         report.RasterisedUnits,
@@ -234,6 +236,12 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 	for _, c := range result.CopiesOnOtherPages {
 		fmt.Fprintf(stderr, "warning: a copy of %q remains on page(s) %v, object %d (%s); --strict refuses it\n",
 			c.Token, c.Pages, c.ObjectNum, c.Where)
+	}
+	// So is an image blanked in a copy: the image keeps its samples, in the
+	// file and wherever else it is painted.
+	for _, page := range slices.Sorted(maps.Keys(result.ImagesBlankedInCopy)) {
+		fmt.Fprintf(stderr, "warning: page %d blanked image(s) %v in a copy; the image itself remains where else it is painted; --strict refuses it\n",
+			page, result.ImagesBlankedInCopy[page])
 	}
 
 	switch format {

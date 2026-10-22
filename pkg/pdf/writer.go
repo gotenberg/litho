@@ -957,6 +957,12 @@ type Writer struct {
 	// copies on other pages it reported rather than refused, so WriteTo
 	// tolerates them too (see [redactionTolerance]).
 	redactionTolerances []redactionTolerance
+	// redactionCopies runs parallel to redactions: the images each call
+	// blanked in a copy rather than in place, nil when none. A stage that
+	// rebuilds a page from the source content paints the image again, and no
+	// token scan sees it, so WriteTo checks for it (see
+	// [Writer.copiedImagesRestored]).
+	redactionCopies []map[int]bool
 
 	// droppedSignatures lists the signatures the writes that produce the
 	// output left out, each a full rewrite (see [Writer.DroppedSignatures]). A

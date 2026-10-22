@@ -2,6 +2,7 @@ package mutations
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -13,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
 // maxImageUseNesting bounds how deeply the walk in [CheckBlankedImageUses]
@@ -40,6 +42,15 @@ const (
 	// named here is painted by the page's own content, which is where the
 	// check measures placements.
 	useXObjects
+	// useForm is an XObject such a dictionary names other than a target: a
+	// form the page's content draws, and useFormResources and
+	// useFormXObjects its /Resources and their /XObject subdictionary. An
+	// image named there is painted by the form as the page draws it, and
+	// the check measures those placements too (see [targetImageBoxes]). A
+	// form one level deeper is a use it does not place.
+	useForm
+	useFormResources
+	useFormXObjects
 )
 
 // CheckBlankedImageUses refuses a blanking that would reach past the regions.
@@ -47,21 +58,25 @@ const (
 // Blanking rewrites the image object in place, so every other place that paints
 // the same object shows the blanked samples too: a logo repeated on every page,
 // or one picture drawn twice on a page, lost the samples under a region that
-// covered only one of its placements. It also keeps the blanking where a stage
-// that rebuilds a page from the source document still finds it, which a copy
-// under a new name would not survive.
+// covered only one of its placements. Where it is exact it is preferred over a
+// copy (see [RedactOptions.PrivateCopies]): the blanking stays where a stage
+// that rebuilds a page from the source document still finds it, while a copy
+// under a new name has to be checked for at write time (see
+// [CopiedImagesPaintedInRegions]).
 //
 // So an image blanked on the pages in byPage (page number to the regions of
 // this redaction) passes only when every place that paints it is one the check
 // can measure, and every such place had exactly the same samples covered:
 //
 //   - Each reference to the object must come through the page tree's own
-//     /Resources /XObject. Any other, a form's resources, an annotation
-//     appearance, a pattern, a soft mask, reports [ErrImageShared]: that paints
-//     it where this check does not look.
-//   - Each placement the pages' own content streams paint must cover the same
-//     samples as every other, including placements on pages this redaction does
-//     not touch, which cover none. A placement the machine cannot follow reports
+//     /Resources /XObject, or the /Resources /XObject of a form named there.
+//     Any other, a form nested in a form, an annotation appearance, a
+//     pattern, a soft mask, reports [ErrImageShared]: that paints it where
+//     this check does not look.
+//   - Each placement the pages' content streams paint, directly or through
+//     the forms they draw, must cover the same samples as every other,
+//     including placements on pages this redaction does not touch, which
+//     cover none. A placement the machine cannot follow reports
 //     [ErrImageShared] as well.
 func CheckBlankedImageUses(
 	ctx context.Context,
@@ -71,27 +86,83 @@ func CheckBlankedImageUses(
 	byPage map[int][][4]float64,
 	blanked []int,
 ) error {
+	conflicts, err := blankedImageConflicts(ctx, alloc, doc, pages, byPage, blanked)
+	if err != nil {
+		return err
+	}
+	for _, objNum := range blanked {
+		if reason := conflicts[objNum]; reason != nil {
+			return reason
+		}
+	}
+	return nil
+}
+
+// SharedBlankedImages returns, ascending, the images of blanked that
+// [CheckBlankedImageUses] would refuse to blank in place: those painted, or
+// referenced, somewhere the regions do not cover the same samples. A caller
+// redacts their covered placements again with each blanked in a copy instead
+// (see [RedactOptions.PrivateCopies]), which is exact whatever else paints
+// the image, for a placement the page's own content draws.
+//
+// A failure that names no image, a page whose content the check cannot run
+// or a walk nested past its bound, returns every image of blanked: the check
+// could not clear any of them. Only a done ctx returns an error.
+func SharedBlankedImages(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	pages []*document.Page,
+	byPage map[int][][4]float64,
+	blanked []int,
+) ([]int, error) {
+	conflicts, err := blankedImageConflicts(ctx, alloc, doc, pages, byPage, blanked)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		if !errors.Is(err, ErrImageShared) {
+			return nil, err
+		}
+		doc.Logger.Debug("image use check: blanking every image in a copy", slog.Any("reason", err))
+		return slices.Sorted(slices.Values(blanked)), nil
+	}
+	return slices.Sorted(maps.Keys(conflicts)), nil
+}
+
+// blankedImageConflicts returns, for each image of blanked that cannot be
+// blanked in place, the [ErrImageShared] saying why. An error is a failure
+// that names no single image.
+func blankedImageConflicts(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	pages []*document.Page,
+	byPage map[int][][4]float64,
+	blanked []int,
+) (map[int]error, error) {
 	if len(blanked) == 0 {
-		return nil
+		return nil, nil
 	}
 	targets := make(map[int]bool, len(blanked))
 	for _, objNum := range blanked {
 		targets[objNum] = true
 	}
 
-	if err := checkImageReferences(ctx, alloc, doc, targets); err != nil {
-		return err
+	conflicts, err := checkImageReferences(ctx, alloc, doc, targets)
+	if err != nil {
+		return nil, err
 	}
 
 	// covers[objNum] holds the covered-sample set of every placement found.
 	covers := make(map[int][][]uint64, len(blanked))
 	for i, page := range pages {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		pageCovers, err := placementCovers(ctx, alloc, doc, page, byPage[i+1], targets)
 		if err != nil {
-			return fmt.Errorf("page %d: %w", i+1, err)
+			return nil, fmt.Errorf("page %d: %w", i+1, err)
 		}
 		for objNum, sets := range pageCovers {
 			covers[objNum] = append(covers[objNum], sets...)
@@ -99,26 +170,32 @@ func CheckBlankedImageUses(
 	}
 
 	for _, objNum := range blanked {
+		if conflicts[objNum] != nil {
+			continue
+		}
 		sets := covers[objNum]
 		if len(sets) == 0 {
 			// The blanking happened, so a page paints the image; finding no
 			// placement means the check could not see it.
-			return fmt.Errorf("%w: no placement of object %d could be measured", ErrImageShared, objNum)
+			conflicts[objNum] = fmt.Errorf("%w: no placement of object %d could be measured", ErrImageShared, objNum)
+			continue
 		}
 		for _, set := range sets[1:] {
 			if !slices.Equal(set, sets[0]) {
-				return fmt.Errorf("%w: object %d is painted %d times and the regions cover a different part of it at each",
+				conflicts[objNum] = fmt.Errorf("%w: object %d is painted %d times and the regions cover a different part of it at each",
 					ErrImageShared, objNum, len(sets))
+				break
 			}
 		}
 	}
-	return nil
+	return conflicts, nil
 }
 
 // checkImageReferences walks the document as a full rewrite would write it,
-// alloc first, and refuses when a target is referenced from anywhere but a
-// page-tree /XObject dictionary.
-func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, targets map[int]bool) error {
+// alloc first, and returns, for each target referenced from anywhere but a
+// page-tree /XObject dictionary, the [ErrImageShared] saying so.
+func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, targets map[int]bool) (map[int]error, error) {
+	conflicts := make(map[int]error)
 	type visit struct {
 		objNum int
 		kind   useKind
@@ -134,16 +211,23 @@ func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		switch v := obj.(type) {
 		case ast.PdfIndirectRef:
 			if targets[v.ObjectNum] {
-				if kind != useXObjects {
-					return fmt.Errorf("%w: object %d is referenced outside the pages' own resources", ErrImageShared, v.ObjectNum)
+				if kind != useXObjects && kind != useFormXObjects && conflicts[v.ObjectNum] == nil {
+					conflicts[v.ObjectNum] = fmt.Errorf("%w: object %d is referenced outside the resources of the pages and the forms they draw",
+						ErrImageShared, v.ObjectNum)
 				}
 				return nil
 			}
-			// The XObject a page names is a thing of its own: a form's
-			// resources that paint the image are a use outside the page's
-			// content, so it is walked as one.
-			if kind == useXObjects {
+			// The XObject a page names is a thing of its own, a form whose
+			// resources the check follows one level down. One a form names
+			// is a use the check does not place.
+			switch kind {
+			case useXObjects:
+				kind = useForm
+			case useFormXObjects:
 				kind = useOther
+			case useOther, useCatalog, usePageTree, useResources, useForm, useFormResources:
+				// A reference elsewhere is walked under the kind it was
+				// reached by.
 			}
 			if next := (visit{v.ObjectNum, kind}); !visited[next] {
 				visited[next] = true
@@ -160,7 +244,11 @@ func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *
 				return walk(child, childKind, depth+1)
 			})
 		case ast.PdfStream:
-			return walkDictUses(v.Dict, useOther, func(child ast.PdfObject, childKind useKind) error {
+			streamKind := useOther
+			if kind == useForm {
+				streamKind = useForm
+			}
+			return walkDictUses(v.Dict, streamKind, func(child ast.PdfObject, childKind useKind) error {
 				return walk(child, childKind, depth+1)
 			})
 		}
@@ -170,26 +258,26 @@ func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	catalogRef, hasRef := CatalogRef(ctx, doc)
 	if hasRef {
 		if err := walk(catalogRef, useCatalog, 0); err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		catalog, err := document.ResolveCatalog(ctx, doc)
 		if err != nil {
-			return fmt.Errorf("resolving catalog: %w", err)
+			return nil, fmt.Errorf("resolving catalog: %w", err)
 		}
 		if err := walk(catalog.Dict, useCatalog, 0); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if info, ok := doc.Index.Trailer["Info"]; ok {
 		if err := walk(info, useOther, 0); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	for len(queue) > 0 {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		next := queue[0]
 		queue = queue[1:]
@@ -210,10 +298,10 @@ func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *
 			continue
 		}
 		if err := walk(obj, next.kind, 0); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return conflicts, nil
 }
 
 // walkDictUses visits each value of dict under the kind its key leads to.
@@ -241,6 +329,16 @@ func walkDictUses(dict ast.PdfDict, kind useKind, visit func(ast.PdfObject, useK
 		case useXObjects:
 			// Each value is an XObject the page's content can paint by name.
 			childKind = useXObjects
+		case useForm:
+			if key == "Resources" {
+				childKind = useFormResources
+			}
+		case useFormResources:
+			if key == "XObject" {
+				childKind = useFormXObjects
+			}
+		case useFormXObjects:
+			childKind = useFormXObjects
 		case useOther:
 			// Everything under a use the check cannot place stays one.
 		}
@@ -273,30 +371,9 @@ func placementCovers(
 	targets map[int]bool,
 ) (map[int][][]uint64, error) {
 	page = latestPage(ctx, alloc, doc, page)
-	if !resourcesNameTarget(ctx, alloc, doc, page.Resources, targets) {
-		return nil, nil
-	}
-
-	data, err := collectLatestPageContents(ctx, alloc, doc, page)
+	boxes, err := targetImageBoxes(ctx, alloc, doc, page, targets)
 	if err != nil {
-		return nil, fmt.Errorf("%w: assembling page content: %w", ErrImageShared, err)
-	}
-	ops, err := content.ParseStreamData(ctx, data, content.SplitGluedOperators())
-	if err != nil {
-		return nil, fmt.Errorf("%w: parsing page content: %w", ErrImageShared, err)
-	}
-	machine := graphics.NewMachine(pageBox(ctx, alloc, doc, page))
-	machine.Doc = doc
-	machine.Resources = page.Resources
-	machine.IgnoreOCVisibility = true
-	machine.RecordImageBoxes = true
-	// The page as staged, as [RedactPageRegions] reads it.
-	machine.Staged = alloc.Pending()
-	if err := machine.Execute(ctx, ops); err != nil {
-		return nil, fmt.Errorf("%w: running page content: %w", ErrImageShared, err)
-	}
-	if n := machine.UnresolvedXObjects(); n > 0 {
-		return nil, fmt.Errorf("%w: %d Do operators on the page could not be followed", ErrImageShared, n)
+		return nil, err
 	}
 
 	zones := make([]heuristics.Zone, 0, len(regions))
@@ -305,7 +382,7 @@ func placementCovers(
 	}
 
 	out := make(map[int][][]uint64)
-	for _, box := range machine.ImageBoxes() {
+	for _, box := range boxes {
 		if !targets[box.ObjNum] {
 			continue
 		}
@@ -327,8 +404,93 @@ func placementCovers(
 	return out, nil
 }
 
+// targetImageBoxes runs the content of page, as staged, and returns where it
+// paints the images: nil when its resources name no target, so a page that
+// cannot paint one is not run at all.
+func targetImageBoxes(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	page *document.Page,
+	targets map[int]bool,
+) ([]graphics.ImageBox, error) {
+	if !resourcesNameTarget(ctx, alloc, doc, page.Resources, targets) {
+		return nil, nil
+	}
+	data, err := collectLatestPageContents(ctx, alloc, doc, page)
+	if err != nil {
+		return nil, fmt.Errorf("%w: assembling page content: %w", ErrImageShared, err)
+	}
+	ops, err := content.ParseStreamData(ctx, data, content.SplitGluedOperators())
+	if err != nil {
+		return nil, fmt.Errorf("%w: parsing page content: %w", ErrImageShared, err)
+	}
+	machine := graphics.NewMachine(pageBox(ctx, alloc, doc, page))
+	machine.Doc = doc
+	machine.Resources = page.Resources
+	machine.IgnoreOCVisibility = true
+	machine.RecordImageBoxes = true
+	// The page as staged, as [RedactPageRegions] reads it.
+	machine.Staged = alloc.Pending()
+	// Run as the redaction runs it, through the forms the page draws, so a
+	// placement a form paints is measured where the redaction blanks it.
+	if _, _, err := typography.ExtractElementsAttributed(ctx, doc, machine, page, ops); err != nil {
+		return nil, fmt.Errorf("%w: running page content: %w", ErrImageShared, err)
+	}
+	if n := machine.UnresolvedXObjects(); n > 0 {
+		return nil, fmt.Errorf("%w: %d Do operators on the page could not be followed", ErrImageShared, n)
+	}
+	return machine.ImageBoxes(), nil
+}
+
+// CopiedImagesPaintedInRegions reports whether page, as alloc stages it,
+// paints one of the images in copied where a region meets it.
+//
+// A redaction that blanked a placement in a copy (see
+// [RedactOptions.PrivateCopies]) left the image itself whole, so a stage that
+// rebuilds the page from the source content, which names the image rather
+// than the copy, puts every covered sample back. No scan for text finds that.
+// A writer asks this of each page such a redaction covered before it writes,
+// and applies the redaction again when it answers true. A page whose content
+// it cannot run answers true as well: it has not shown the samples are gone.
+func CopiedImagesPaintedInRegions(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	page *document.Page,
+	regions [][4]float64,
+	copied map[int]bool,
+) (bool, error) {
+	if len(copied) == 0 || len(regions) == 0 {
+		return false, nil
+	}
+	page = latestPage(ctx, alloc, doc, page)
+	boxes, err := targetImageBoxes(ctx, alloc, doc, page, copied)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, ctxErr
+		}
+		doc.Logger.Debug("copied image check: page content could not be run", slog.Any("err", err))
+		return true, nil
+	}
+	zones := regionZones(regions)
+	for _, box := range boxes {
+		if !copied[box.ObjNum] {
+			continue
+		}
+		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
+		for _, z := range zones {
+			if heuristics.ZonesOverlap(painted, z) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 // resourcesNameTarget reports whether the /XObject dictionary of resources
-// names any target, so a page that cannot paint one is not run at all.
+// names any target or any form, which can draw one, so a page that cannot
+// paint one is not run at all.
 func resourcesNameTarget(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, targets map[int]bool) bool {
 	obj, ok := resources["XObject"]
 	if !ok {
@@ -345,8 +507,23 @@ func resourcesNameTarget(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		return false
 	}
 	for _, value := range xobjects {
-		if ref, isRef := value.(ast.PdfIndirectRef); isRef && targets[ref.ObjectNum] {
+		ref, isRef := value.(ast.PdfIndirectRef)
+		if !isRef {
+			continue
+		}
+		if targets[ref.ObjectNum] {
 			return true
+		}
+		obj, err := resolveAllocFirst(ctx, alloc, doc, ref)
+		if err != nil {
+			// The redaction's machine reports it as unresolved if the page
+			// draws it, so running the page is what decides.
+			return true
+		}
+		if stream, ok := obj.(ast.PdfStream); ok {
+			if subtype, _ := stream.Dict["Subtype"].(ast.PdfName); subtype == "Form" {
+				return true
+			}
 		}
 	}
 	return false

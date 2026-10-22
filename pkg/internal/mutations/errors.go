@@ -71,7 +71,11 @@ var ErrPartialOperatorCoverage = errors.New("region covers an operator only part
 // is also painted somewhere the regions do not cover the same samples. A
 // blanking rewrites the image object in place, so that other placement would
 // lose samples no region selected. Removing more than was asked changes the
-// page outside the region, so the redaction refuses and names the image.
+// page outside the region, so the check refuses and names the image. A
+// caller that can blank the image in a copy instead asks
+// [SharedBlankedImages] which images to copy (see
+// [RedactOptions.PrivateCopies]), and keeps this refusal for a strict
+// redaction, or for an image a copy cannot place.
 var ErrImageShared = errors.New("blanked image is also painted where the regions do not cover it")
 
 // ErrTextAdvanceUnknown is returned when a show-text operator selected for

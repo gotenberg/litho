@@ -133,15 +133,17 @@ func TestWriter_Redact_SecondCallKeepsImageBlanking(t *testing.T) {
 	}
 }
 
-// TestWriter_Redact_RefusesToBlankBeyondTheRegions pins that an image painted
-// in several places is blanked only when every place had the same samples
-// covered.
+// TestWriter_Redact_NeverBlanksBeyondTheRegions pins that an image painted in
+// several places is blanked in place only when every place had the same
+// samples covered, and in a copy the covered placement alone paints
+// otherwise. Under WithStrictRedaction a shared image refuses.
 //
 // Blanking rewrites the image object, so every placement of it shows the
 // result. A region over one placement blanked the others too, which is content
 // outside the region, and a logo on every page lost its copy on pages the
-// redaction never named.
-func TestWriter_Redact_RefusesToBlankBeyondTheRegions(t *testing.T) {
+// redaction never named. Refusing instead blocked the redaction of every page
+// carrying a logo the document repeats.
+func TestWriter_Redact_NeverBlanksBeyondTheRegions(t *testing.T) {
 	t.Parallel()
 
 	annotAppearance := "8 0 obj\n<< /Type /XObject /Subtype /Form /BBox [0 0 50 50] " +
@@ -151,45 +153,65 @@ func TestWriter_Redact_RefusesToBlankBeyondTheRegions(t *testing.T) {
 	outline := "20 0 obj\n<< /Type /Outlines /First 21 0 R /Last 21 0 R /Count 1 >>\nendobj\n" +
 		"21 0 obj\n<< /Title (Page one) /Parent 20 0 R /Dest [10 0 R /Fit] >>\nendobj\n"
 
+	// Sample points, page space, each the centre of one sample of a placement:
+	// top and bottom rows of the left placement, and the right one.
+	leftTop, leftBottom, right := [2]float64{112.5, 587.5}, [2]float64{112.5, 512.5}, [2]float64{312.5, 587.5}
+	annot := [2]float64{425, 125}
+	const blank, kept = 0, 0x80
+
+	type probe struct {
+		page int
+		at   [2]float64
+		want uint8
+	}
 	for _, tc := range []struct {
 		name    string
 		src     []byte
 		regions []RedactRegion
-		refused bool
+		// shared says the image is painted where the regions do not cover
+		// the same samples: blanked in a copy, refused under strict.
+		shared bool
+		probes []probe
 	}{
 		{
 			name:    "one of two placements on a page",
 			src:     imageDoc([]string{placeLeft + " " + placeRight}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
-			refused: true,
+			shared:  true,
+			probes:  []probe{{1, leftTop, blank}, {1, leftBottom, blank}, {1, right, kept}},
 		},
 		{
 			name:    "both placements on a page",
 			src:     imageDoc([]string{placeLeft + " " + placeRight}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 1, Rect: wholeRight}},
+			probes:  []probe{{1, leftTop, blank}, {1, right, blank}},
 		},
 		{
 			name:    "different parts of two placements",
 			src:     imageDoc([]string{placeLeft + " " + placeRight}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: topLeft}, {Page: 1, Rect: wholeRight}},
-			refused: true,
+			shared:  true,
+			probes:  []probe{{1, leftTop, blank}, {1, leftBottom, kept}, {1, right, blank}},
 		},
 		{
 			name:    "one of two pages",
 			src:     imageDoc([]string{placeLeft, placeLeft}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
-			refused: true,
+			shared:  true,
+			probes:  []probe{{1, leftTop, blank}, {2, leftTop, kept}},
 		},
 		{
 			name:    "every page",
 			src:     imageDoc([]string{placeLeft, placeLeft}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 2, Rect: wholeLeft}},
+			probes:  []probe{{1, leftTop, blank}, {2, leftTop, blank}},
 		},
 		{
 			name:    "also painted by an annotation appearance",
 			src:     imageDoc([]string{placeLeft}, "", "/Annots [9 0 R] ", annotAppearance),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
-			refused: true,
+			shared:  true,
+			probes:  []probe{{1, leftTop, blank}, {1, annot, kept}},
 		},
 		{
 			// An outline pointing at the page is not a use of the image: the
@@ -197,28 +219,84 @@ func TestWriter_Redact_RefusesToBlankBeyondTheRegions(t *testing.T) {
 			name:    "page named by an outline",
 			src:     imageDoc([]string{placeLeft}, "/Outlines 20 0 R ", "", outline),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
+			probes:  []probe{{1, leftTop, blank}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			out, err := redactRegions(t, tc.src, tc.regions...)
-			if tc.refused {
-				if !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrImageShared) {
-					t.Fatalf("Redact = %v, want ErrRedactionRefused wrapping ErrImageShared", err)
-				}
-				// A refusal leaves the Writer as it was, so the image survives
-				// everywhere it was painted.
-				if got := imageSamples(t, out, 1); !allSamples(got, 0x80) {
-					t.Fatalf("samples after a refused redaction = %v, want all 0x80", got)
-				}
-				return
-			}
+			out, report, err := redactWith(t, tc.src, tc.regions)
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
-			if got := imageSamples(t, out, 1); !allSamples(got, 0) {
-				t.Fatalf("samples = %v, want all 0", got)
+			for _, p := range tc.probes {
+				if got := renderedGray(t, out, p.page, p.at); !nearGray(got, p.want) {
+					t.Errorf("page %d at %v = %d, want %d", p.page, p.at, got, p.want)
+				}
+			}
+			copied := report.ImagesBlankedInCopy[1]
+			if tc.shared != (len(copied) > 0) {
+				t.Errorf("ImagesBlankedInCopy = %v, shared %v", report.ImagesBlankedInCopy, tc.shared)
+			}
+			if tc.shared {
+				// The image itself keeps its samples for its other placements.
+				if got := imageSamples(t, out, 1); !allSamples(got, kept) {
+					t.Errorf("/Im1 samples = %v, want all 0x80", got)
+				}
+			} else if got := imageSamples(t, out, 1); !allSamples(got, blank) {
+				t.Errorf("/Im1 samples = %v, want all 0", got)
+			}
+
+			_, _, strictErr := redactWith(t, tc.src, tc.regions, WithStrictRedaction())
+			if tc.shared != errors.Is(strictErr, mutations.ErrImageShared) {
+				t.Fatalf("strict Redact = %v, shared %v", strictErr, tc.shared)
+			}
+			if tc.shared && !errors.Is(strictErr, ErrRedactionRefused) {
+				t.Fatalf("strict Redact = %v, want ErrRedactionRefused", strictErr)
 			}
 		})
 	}
+}
+
+// redactWith opens src, runs one Redact over regions with opts and writes the
+// result. A refused redaction is returned as the error with the unchanged
+// document.
+func redactWith(t *testing.T, src []byte, regions []RedactRegion, opts ...RedactOption) ([]byte, *RedactReport, error) {
+	t.Helper()
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	report, redactErr := w.Redact(ctx, regions, opts...)
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	return out.Bytes(), report, redactErr
+}
+
+// renderedGray renders page of pdf at 72 dpi and returns the red channel at
+// the page-space point at, which on these gray images is the gray level.
+func renderedGray(t *testing.T, pdf []byte, page int, at [2]float64) uint8 {
+	t.Helper()
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(pdf), int64(len(pdf)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	img, err := r.RenderPage(ctx, page, WithRenderDPI(72))
+	if err != nil {
+		t.Fatalf("RenderPage %d: %v", page, err)
+	}
+	b := img.Bounds()
+	red, _, _, _ := img.At(b.Min.X+int(at[0]), b.Min.Y+b.Dy()-1-int(at[1])).RGBA()
+	return uint8(red >> 8)
+}
+
+// nearGray reports whether got is want, give or take what anti-aliasing and
+// colour conversion move a flat area by.
+func nearGray(got, want uint8) bool {
+	const tolerance = 8
+	return int(got) >= int(want)-tolerance && int(got) <= int(want)+tolerance
 }
