@@ -46,6 +46,8 @@ type renderOpts struct {
 	cmykProfile    *icc.Profile
 	cmykProfileSet bool
 	cmykProfileErr error
+	// overprint simulates overprinting ([WithOverprintSimulation]).
+	overprint bool
 }
 
 // RenderBox selects the page boundary [Reader.RenderPage] draws, by the page
@@ -223,6 +225,24 @@ func WithRenderBackground(c color.Color) RenderOption {
 	}
 }
 
+// WithOverprintSimulation draws the page as a device that prints CMYK
+// separations prints it, as an overprint preview shows it (ISO 32000-1,
+// 8.6.7): the page composites in DeviceCMYK, read through the document's
+// output intent or the default CMYK profile, and a painting under overprint
+// leaves the process inks it does not paint as they were. A DeviceCMYK colour
+// under overprint mode 1 leaves those its zero components name, and a
+// Separation or DeviceN colour of process colorants those it does not name.
+// A spot colorant has no separation of its own here: a colour naming one
+// paints through its alternate space and knocks out what lies under it.
+// Without it, the default, every painting knocks out what lies under it, as
+// viewers draw a page on screen and as poppler's pdftoppm draws it without
+// -overprint.
+func WithOverprintSimulation() RenderOption {
+	return func(o *renderOpts) {
+		o.overprint = true
+	}
+}
+
 // RenderPage draws the given 1-based page and returns it as an *image.NRGBA,
 // or an *image.CMYK under [WithRenderColorModel] ([RenderCMYK]), whose (0, 0)
 // is the top-left corner of the page's crop box, or of the boundary
@@ -242,8 +262,9 @@ func WithRenderBackground(c color.Color) RenderOption {
 // version names), soft masks, isolated and knockout transparency groups and
 // text knockout, blending in the grey or CMYK space a transparency group's
 // /CS names where its content paints with transparency, and in sRGB
-// otherwise, or in the device's CMYK under [RenderCMYK]. An annotation with
-// no appearance stream
+// otherwise, or in the device's CMYK under [RenderCMYK]. It draws without
+// overprinting unless [WithOverprintSimulation] asks for it. An annotation
+// with no appearance stream
 // draws as ISO 32000-1 defines it from its dictionary for the Square,
 // Circle, Line, Polygon, PolyLine, Ink, text markup and Link types, and not
 // at all for the icon and text types (Text, FreeText, Stamp and the like);
@@ -427,6 +448,7 @@ func (r *Reader) renderPage(ctx context.Context, pageNum int, opts []RenderOptio
 		Box:         box,
 		CMYK:        o.model == RenderCMYK,
 		CMYKProfile: o.cmykProfile,
+		Overprint:   o.overprint,
 	})
 	if err != nil {
 		switch {

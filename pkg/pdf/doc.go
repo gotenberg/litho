@@ -130,7 +130,8 @@
 //     [RenderOption]: [WithRenderDPI], [WithRenderBackground],
 //     [WithRenderFontProvider], [WithRenderFontFiles],
 //     [WithRenderSystemFonts], [WithRenderTarget], [WithRenderContent],
-//     [WithRenderBox], [WithRenderColorModel], [WithRenderCMYKProfile].
+//     [WithRenderBox], [WithRenderColorModel], [WithRenderCMYKProfile],
+//     [WithOverprintSimulation].
 //   - [Writer.WriteTo], [Split], [Merge], [Pipeline.WriteTo],
 //     [Pipeline.Split] and [Pipeline.Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],

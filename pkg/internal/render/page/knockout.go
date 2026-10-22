@@ -40,7 +40,7 @@ func coverageRect(cov *raster.Coverage) image.Rectangle {
 // ends ([renderer.flushText]). An opaque Normal glyph with nothing held back
 // knocks out what lies under it by painting over it, and paints at once. A
 // glyph in a pattern colour is painted on its own, outside the knockout.
-func (r *renderer) glyphCoverage(s *scope, st *graphics.State, cov *raster.Coverage, c graphics.Color, a float64) error {
+func (r *renderer) glyphCoverage(s *scope, st *graphics.State, cov *raster.Coverage, c graphics.Color, a float64, stroke bool) error {
 	if cov == nil || cov.Empty() {
 		return nil
 	}
@@ -50,13 +50,14 @@ func (r *renderer) glyphCoverage(s *scope, st *graphics.State, cov *raster.Cover
 		if err := r.flushText(s); err != nil {
 			return err
 		}
-		return r.paintCoverage(s, cov, c, a)
+		return r.paintCoverage(s, cov, c, a, stroke)
 	}
 	conv, paints := r.colorFor(s, c.Space)
 	if !paints {
 		return nil
 	}
 	cr, cg, cb := conv.RGB(c.Components)
+	fx.keep = r.overprintKeep(s, st, c, stroke)
 	s.text.knock = append(s.text.knock, knockGlyph{cov: cov, color: r.solidOf(s, c, [3]float32{cr, cg, cb}), fx: fx})
 	s.text.held += int64(cov.Width) * int64(cov.Height)
 	if s.text.held > r.budget/textKnockoutShare {

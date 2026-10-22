@@ -328,6 +328,7 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 		if r.top().group.Space() != nil {
 			in := r.solidOf(s, st.Fill, [3]float32{cr, cg, cb}).in
 			native = &in
+			fx.keep = r.overprintKeep(s, st, st.Fill, false)
 		}
 		return r.imageFailed(r.paintAs(bounds, fx, native, func(v view, op surface.Opacity) error {
 			p, err := params(v, op)

@@ -372,11 +372,13 @@ func (r *RGBReader) Alpha(x, y int) float32 {
 // call for the same element replaces the first rather than adding to it, as
 // a second element would. Pixels outside the group are ignored.
 func (g *Group) Paint(x, y int, mode Mode, cs Components, fs, as float32) {
-	g.paint(x, y, mode, g.space.store(cs), fs, as)
+	g.paint(x, y, mode, g.space.store(cs), fs, as, 0)
 }
 
-// paint is [Group.Paint] for a colour already stored as the group holds it.
-func (g *Group) paint(x, y int, mode Mode, cs Components, fs, as float32) {
+// paint is [Group.Paint] for a colour already stored as the group holds it,
+// leaving the components keep has bits for as the backdrop holds them
+// ([Params.Keep]).
+func (g *Group) paint(x, y int, mode Mode, cs Components, fs, as float32, keep uint8) {
 	if x < g.bounds.Min.X || y < g.bounds.Min.Y || x >= g.bounds.Max.X || y >= g.bounds.Max.Y {
 		return
 	}
@@ -428,6 +430,16 @@ func (g *Group) paint(x, y int, mode Mode, cs Components, fs, as float32) {
 			cb[k] = b[k] / ab
 		}
 		blended = mode.blendIn(g.space.Kind(), cb, cs)
+	}
+	if keep != 0 && ab > 0 && g.space.Kind() == CMYK {
+		// ISO 32000-1, 11.7.4.3: an overprinted component blends as
+		// B(cb, cs) = cb, which leaves it as the backdrop holds it where the
+		// element is opaque. Over no backdrop it takes the source's, no ink.
+		for k := range n {
+			if keep&(1<<k) != 0 {
+				blended[k] = b[k] / ab
+			}
+		}
 	}
 	// Ct = (fs - as)·αb·Cb + as·((1 - αb)·Cs + αb·B(Cb, Cs)), and
 	// αi·Ci = (1 - fs)·αi-1·Ci-1 + Ct, both premultiplied.
@@ -557,7 +569,7 @@ func (g *Group) Into(ctx context.Context, parent *Group, params Params) error {
 				c = convert(c, g.space, parent.space)
 			}
 			fs, as := params.Source(x, y, f, a)
-			parent.paint(x, y, params.Mode, c, fs, as)
+			parent.paint(x, y, params.Mode, c, fs, as, 0)
 		}
 	}
 	return nil
@@ -575,6 +587,12 @@ type Params struct {
 	// AlphaIsShape makes the soft mask and the constant alpha shape rather
 	// than opacity (the AIS entry, 11.6.4.3).
 	AlphaIsShape bool
+	// Keep has bit k set for each component k of a CMYK group the element
+	// overprints (ISO 32000-1, 8.6.7): the element leaves it as the
+	// backdrop holds it, by the compatible overprint blend function of
+	// 11.7.4.3. It applies to a CMYK group alone, where the element's
+	// components arrive as the group's own ([Group.PaintCoverage]).
+	Keep uint8
 }
 
 // Source returns the source shape and source alpha at device pixel (x, y) of

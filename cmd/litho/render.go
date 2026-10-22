@@ -56,13 +56,15 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	boxFlag := fs.String("box", "crop", "Page boundary to draw: crop, media, bleed, trim or art")
 	colorModel := fs.String("color-model", "rgb", "Colour model of the pages: rgb (PNG files) or cmyk (separated TIFF files of inks)")
 	outputProfile := fs.String("output-profile", "", "ICC profile of the CMYK device --color-model cmyk draws for (default: the document's CMYK output intent, else the built-in SWOP profile)")
+	overprint := fs.Bool("overprint", false,
+		"Simulate overprinting, as a CMYK printing device shows it: the page composites in CMYK and a painting under overprint leaves the process inks it does not paint as they were")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	files := fs.Args()
 	if len(files) != 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] [--print] [--report] [--cmyk-profile profile.icc] [--box crop|media|bleed|trim|art] [--color-model rgb|cmyk] [--output-profile profile.icc] -o PREFIX <file>")
+		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] [--print] [--report] [--cmyk-profile profile.icc] [--box crop|media|bleed|trim|art] [--color-model rgb|cmyk] [--output-profile profile.icc] [--overprint] -o PREFIX <file>")
 		return exitError
 	}
 	box, ok := renderBoxes[*boxFlag]
@@ -112,6 +114,9 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
+	}
+	if *overprint {
+		opts = append(opts, pdf.WithOverprintSimulation())
 	}
 	path := files[0]
 	r, closer, err := openPDF(ctx, path, *password, extra...)

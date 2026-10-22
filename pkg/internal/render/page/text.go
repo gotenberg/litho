@@ -300,7 +300,7 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 		cov, err := r.glyphFill(device, !strokes)
 		if err != nil {
 			r.skip("glyph", err)
-		} else if err := r.glyphCoverage(s, st, cov, st.Fill, st.FillAlpha); err != nil {
+		} else if err := r.glyphCoverage(s, st, cov, st.Fill, st.FillAlpha, false); err != nil {
 			return err
 		}
 	}
@@ -339,7 +339,7 @@ func (r *renderer) strokeGlyph(s *scope, st *graphics.State, user geom.Path, toD
 		r.skip("glyph stroke", err)
 		return nil
 	}
-	return r.glyphCoverage(s, st, cov, st.Stroke, st.StrokeAlpha)
+	return r.glyphCoverage(s, st, cov, st.Stroke, st.StrokeAlpha, true)
 }
 
 // type3Glyph runs a Type 3 glyph description (ISO 32000-1, 9.6.5): in a saved

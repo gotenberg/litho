@@ -33,7 +33,7 @@ func (r *renderer) patternStencil(s *scope, mask *imgpaint.Alpha, p imgpaint.Par
 	if cov.Empty() {
 		return nil
 	}
-	return r.paintCoverage(s, cov, st.Fill, st.FillAlpha)
+	return r.paintCoverage(s, cov, st.Fill, st.FillAlpha, false)
 }
 
 // coverageOf returns the alpha of c as a coverage over the pixels it

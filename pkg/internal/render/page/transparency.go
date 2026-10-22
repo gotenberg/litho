@@ -62,6 +62,8 @@ type effects struct {
 	opacity surface.Opacity
 	mask    *graphics.SoftMask
 	ais     bool
+	// keep is the components the painting overprints ([blend.Params.Keep]).
+	keep uint8
 }
 
 // effectsOf returns the effects of st on a painting at constant alpha alpha,
@@ -83,13 +85,13 @@ func (r *renderer) effectsOf(st *graphics.State, alpha float64) effects {
 // mode other than Normal, or a soft mask. Anything else composites as Normal
 // source over at its constant alpha, which painting onto a direct plane does.
 func (e effects) blends() bool {
-	return e.mode != blend.Normal || e.mask != nil
+	return e.mode != blend.Normal || e.mask != nil || e.keep != 0
 }
 
 // params returns the compositing parameters of e with mask, the soft mask
 // e.mask stands for.
 func (e effects) params(mask *blend.Mask) blend.Params {
-	return blend.Params{Mode: e.mode, Opacity: e.opacity, SoftMask: mask, AlphaIsShape: e.ais}
+	return blend.Params{Mode: e.mode, Opacity: e.opacity, SoftMask: mask, AlphaIsShape: e.ais, Keep: e.keep}
 }
 
 // top returns the group being painted.

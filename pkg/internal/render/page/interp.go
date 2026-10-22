@@ -110,6 +110,8 @@ type renderer struct {
 	// kind's own content runs: a Type 3 glyph description, a pattern cell, a
 	// soft mask's group.
 	omit Content
+	// overprint simulates overprinting ([Options.Overprint]).
+	overprint bool
 	// unadjusted turns stroke adjustment off ([renderer.adjusts]): set in
 	// the renderer a tiling pattern's cells run in.
 	unadjusted bool
@@ -487,7 +489,7 @@ func (r *renderer) fill(s *scope, rule raster.FillRule, st *graphics.State) erro
 		r.skip("fill", err)
 		return nil
 	}
-	return r.paintCoverage(s, cov, st.Fill, st.FillAlpha)
+	return r.paintCoverage(s, cov, st.Fill, st.FillAlpha, false)
 }
 
 // coverage rasterises the device path p under the current clip.
@@ -666,13 +668,14 @@ func (r *renderer) stroke(s *scope, st *graphics.State) error {
 		r.skip("stroke", err)
 		return nil
 	}
-	return r.paintCoverage(s, cov, st.Stroke, st.StrokeAlpha)
+	return r.paintCoverage(s, cov, st.Stroke, st.StrokeAlpha, true)
 }
 
 // paintCoverage paints cov in colour c at constant alpha a: a solid colour,
 // or a pattern (ISO 32000-1, 8.7.3.1), through the current group with the
-// effects of the graphics state.
-func (r *renderer) paintCoverage(s *scope, cov *raster.Coverage, c graphics.Color, a float64) error {
+// effects of the graphics state. stroke says c is the stroking colour, whose
+// overprint parameter is /OP rather than /op (8.6.7).
+func (r *renderer) paintCoverage(s *scope, cov *raster.Coverage, c graphics.Color, a float64, stroke bool) error {
 	if cov == nil || cov.Empty() {
 		return nil
 	}
@@ -684,7 +687,10 @@ func (r *renderer) paintCoverage(s *scope, cov *raster.Coverage, c graphics.Colo
 		return nil
 	}
 	cr, cg, cb := conv.RGB(c.Components)
-	return r.paintSolid(cov, r.solidOf(s, c, [3]float32{cr, cg, cb}), r.effectsOf(r.m.Current(), a))
+	st := r.m.Current()
+	fx := r.effectsOf(st, a)
+	fx.keep = r.overprintKeep(s, st, c, stroke)
+	return r.paintSolid(cov, r.solidOf(s, c, [3]float32{cr, cg, cb}), fx)
 }
 
 // components resolves the component count of a shading's colour space.

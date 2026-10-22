@@ -151,6 +151,12 @@ type Options struct {
 	// page: the output intent's, then the caller's default, then litho's
 	// built-in printer profile ([pdfimage.CMYKProfile]).
 	CMYKProfile *icc.Profile
+	// Overprint simulates overprinting (ISO 32000-1, 8.6.7), as a print
+	// preview shows it: the page group composites in DeviceCMYK, and a
+	// painting under overprint leaves the process colorants it does not
+	// paint as they were ([renderer.overprintKeep]). Unset, every painting
+	// knocks out what lies under it, as viewers draw a page on screen.
+	Overprint bool
 }
 
 // Content is a set of kinds of content, told apart by the operator that
@@ -242,7 +248,9 @@ type Result struct {
 	// names when it names none, which Space then holds.
 	Group *blend.Group
 	// Space is the page's /Group /CS object, or the default one, when Group
-	// blends in the space it names, and nil when Group blends in sRGB.
+	// blends in the space it names, the name DeviceCMYK when [Options.CMYK]
+	// or [Options.Overprint] composites the page there, and nil when Group
+	// blends in sRGB.
 	Space ast.PdfObject
 
 	canvas *surface.Canvas
@@ -341,6 +349,7 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		glyphs:      make(map[glyphKey]glyph.Glyph),
 		type3:       make(map[glyphKey][]content.Operation),
 		omit:        opts.Omit,
+		overprint:   opts.Overprint,
 		within:      opts.Within,
 		shared:      opts.Shared,
 		forms:       newFormCache(),
@@ -366,6 +375,17 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 			cs = opts.DefaultGroupSpace
 		}
 		space = r.pageSpace(cs, pg.DrawResources, opts.GroupSpace)
+		if opts.Overprint {
+			// The colorants overprinting leaves or paints are a CMYK
+			// device's: the page composites in DeviceCMYK, as the document's
+			// output intent or the default CMYK profile reads it (14.11.5),
+			// whatever its group names, as poppler's overprint preview
+			// composites in its CMYK and spot planes. [Result.Space] then
+			// names DeviceCMYK.
+			if sp := r.groupSpace(ast.PdfName(graphics.FamilyDeviceCMYK), pg.DrawResources); sp != nil {
+				space, cs = sp, ast.PdfName(graphics.FamilyDeviceCMYK)
+			}
+		}
 	}
 	var root *blend.Group
 	if attrs.Knockout {
