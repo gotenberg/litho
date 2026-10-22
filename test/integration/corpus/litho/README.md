@@ -279,6 +279,7 @@ one deliberately rather than diffing it against a fresh build.
 | `smaskindata_2b.pdf`   | PDF/A-2b     | JPEG 2000 images whose data holds their soft mask, both kinds    |
 | `flattentiles_1b.pdf`  | PDF/A-1b     | Transparency over a photograph and a chart, composited in tiles  |
 | `iccgroupalt_2b.pdf`   | PDF/A-2b     | Groups and transparent text in unusable ICC spaces' /Alternate   |
+| `flatuntagged_ua1.pdf` | PDF/UA-1     | Transparent annotations in a document with no structure tree     |
 
 ### Must-not-fire controls
 
@@ -630,6 +631,7 @@ are covered under [Known divergences](#known-divergences).
 | `flattenrefuse_1b.pdf` | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 6    | 6    |
 | `flattentiles_1b.pdf`  | 6    | 3    | 7    | 4    | 5    | 7    | 4    | 5    | 7   | 7    | 8    | 6    | 6    |
 | `flattentext_2b.pdf`   | 11   | 8    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 7    | 6    |
+| `flatuntagged_ua1.pdf` | 7    | 5    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 4    | 5    |
 | `fnlimits_1b.pdf`      | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 5   | 5    | 6    | 6    | 6    |
 | `fontcff2_2b.pdf`      | 8    | 5    | 7    | 4    | 5    | 7    | 4    | 5    | 5   | 5    | 6    | 9    | 9    |
 | `fontclaims_2b.pdf`    | 9    | 6    | 9    | 6    | 7    | 9    | 6    | 7    | 7   | 7    | 8    | 11   | 11   |
@@ -9099,6 +9101,52 @@ The file declares no OutputIntent, so DeviceRGB fails `6.2.4.3/2` and DeviceCMYK
 `6.2.4.3/3` at PDF/A-2b, `6.2.3.3/1` and `6.2.3.3/2` at PDF/A-1b; the
 transparency fails `6.2.10/2` at PDF/A-2b and four `6.4` tests at PDF/A-1b.
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+
+### `flatuntagged_ua1.pdf`
+
+ISO 14289-1, 7.1 and ISO 14289-2, 8.2.2 require every piece of page content
+of a document claiming conformance to be tagged as real content or marked as
+an artifact. An annotation is not page content, so a document with no
+structure tree passes both tests while its page draws nothing of its own.
+`FlattenTransparency` draws each annotation that paints with transparency into
+the page, where no structure element can take it. In a document whose XMP
+claims PDF/UA (`pdfuaid:part`) or WTPDF it marks the drawing as an artifact,
+as `FlattenForm` marks a baked widget (see `formuntagged_ua1.pdf`); a document
+claiming neither keeps it as plain content, which default text extraction
+returns. The corpora's untagged files that claim PDF/UA hold no annotation
+painting with transparency, so the `flatten` cell drew none:
+
+| Annotation | `/Rect`          | Appearance                                            |
+| ---------- | ---------------- | ----------------------------------------------------- |
+| Square     | `[10 10 60 60]`  | a blue square, `/CA` 0.5 and an ExtGState at `ca` 0.5 |
+| FreeText   | `[80 20 190 80]` | a background at `ca` 0.6 under opaque text `DEA`      |
+
+The page's own content draws nothing. Every glyph is a Type 3 glyph with a
+`/ToUnicode` map. The file has no `/StructTreeRoot` and no `/MarkInfo`, claims
+PDF/UA-1 in its XMP, and declares an RGB OutputIntent.
+
+`litho flatten-transparency` draws both annotations into the page, each inside
+an `/Artifact` sequence, and composites the two regions. The output fails a
+subset of what the source fails at all thirteen levels, on litho and veraPDF
+1.30.2 alike: with the transparency gone it passes `6.4/6` and `6.5.3/1` at
+PDF/A-1a and PDF/A-1b, and adds nothing. Drawn unmarked, as before, the output
+added `7.1/3` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2 on both tools. Default text
+extraction leaves the artifact text `DEA` out, and with artifacts returns it.
+litho and poppler 26.09.0 draw the output within 0.5% of the source's pixels at
+72 dpi, the composites' edges.
+
+The file also fails `6.2/1` (no `/MarkInfo`) at both PDF/UA parts, the missing
+structure tree (`7.1/11`, `8.2.1/1`), the annotations outside an `Annot`
+element (`7.18.1/1`) and the page with no `/Tabs` (`7.18.3/1`, `8.9.3.3/1`),
+and at PDF/UA-2 the identification `5/2` and `5/5` its PDF/UA-1 claim draws.
+The PDF/A cells report the missing PDF/A identification (`6.7.11/1` at part 1,
+`6.6.4/1` at parts 2 and 3, `6.7.3/1` at part 4) and the undescribed `pdfuaid`
+schema (`6.7.9` at part 1, `6.6.2.3.1` at parts 2 and 3), at level A the
+tagging, at part 4 the `%PDF-1.7` header, `6.9/5` at PDF/A-4f, and at PDF/A-1
+the appearances' constant alpha (`6.4/6`) and the Square's `/CA` 0.5
+(`6.5.3/1`). veraPDF 1.30.2 and litho report the
+same rule set in all thirteen cells, on the source and on the
+`flatten-transparency` output.
 
 ## Scope
 
