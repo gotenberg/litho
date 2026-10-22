@@ -280,6 +280,7 @@ one deliberately rather than diffing it against a fresh build.
 | `flattentiles_1b.pdf`  | PDF/A-1b     | Transparency over a photograph and a chart, composited in tiles  |
 | `iccgroupalt_2b.pdf`   | PDF/A-2b     | Groups and transparent text in unusable ICC spaces' /Alternate   |
 | `flatuntagged_ua1.pdf` | PDF/UA-1     | Transparent annotations in a document with no structure tree     |
+| `smaskbudget_2b.pdf`   | PDF/A-2b     | A soft mask and a group whose rasters pass the render budget     |
 
 ### Must-not-fire controls
 
@@ -754,6 +755,7 @@ are covered under [Known divergences](#known-divergences).
 | `siglock_2b.pdf`       | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
 | `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
 | `sizetie_2b.pdf`       | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
+| `smaskbudget_2b.pdf`   | 8    | 5    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 6    | 6    |
 | `smaskindata_2b.pdf`   | 5    | 2    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 6    | 6    |
 | `stdremap_ua2.pdf`     | 4    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `structcopy_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 0    |
@@ -9147,6 +9149,38 @@ the appearances' constant alpha (`6.4/6`) and the Square's `/CA` 0.5
 (`6.5.3/1`). veraPDF 1.30.2 and litho report the
 same rule set in all thirteen cells, on the source and on the
 `flatten-transparency` output.
+
+### `smaskbudget_2b.pdf`
+
+A renderer that cannot afford the raster of a graphics-state soft mask's group
+(ISO 32000-1, 11.6.5.2) or of a transparency group (11.4) must not paint what
+they hide. litho painted the masked content unmasked, and a group's content
+opaque, once their rasters passed the render pixel budget. Of the corpora's
+pages at 72 dpi only pdfjs `issue14982.pdf` (800 x 5424 pt) reaches the budget
+through a soft mask, and it has no render golden. Each page here is 4000 x 4000
+pt, 16 million pixels at 72 dpi, under the default budget of 50 million, where
+a non-isolated group over the page holds four planes and a layer, 80 million:
+
+| Page | Draws                                                                       |
+| ---- | --------------------------------------------------------------------------- |
+| 1    | a blue page, then red over it through a luminosity soft mask whose group is |
+|      | white in a central square and grey 0.5 in a band below it                   |
+| 2    | a blue page, then at ca 0.5 a non-isolated group holding a red square       |
+
+litho renders page 1's mask group at half the resolution, and paints page 2's
+group content into the page at the group's alpha: both pages are 0 pixels
+apart from poppler 26.09.0 at 72 dpi under the render cell's tolerances. Before, page 1 drew red over the whole page,
+749,500 pixels per million apart from poppler, and page 2 an opaque red square,
+250,000 apart. `litho flatten-transparency` refuses the file, as it refuses a
+page whose transparency it can only composite approximately at 72 dpi, and the
+PDF/A-1b remediation sets its transparency opaque; veraPDF 1.30.2 and litho
+report nothing on that output.
+
+The file declares no OutputIntent and its pages no `/Group`, so DeviceRGB fails
+`6.2.3.3/1` at PDF/A-1b and `6.2.4.3/2` at the later parts; the soft mask fails
+`6.4/1`, the group `6.4/3` and the constant alpha `6.4/6` at PDF/A-1b, and the
+pages `6.2.10/2` at PDF/A-2b. veraPDF 1.30.2 and litho report the same rule set
+in all thirteen cells.
 
 ## Scope
 
