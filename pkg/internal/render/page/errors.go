@@ -7,5 +7,6 @@ import "errors"
 // keeps past their share of it, or more operators than one render runs.
 var ErrTooLarge = errors.New("render exceeds its budget")
 
-// ErrInvalidOptions reports a resolution that is not positive and finite.
+// ErrInvalidOptions reports a resolution that is not positive and finite, or
+// a CMYK device profile that is not one ([Options.CMYKProfile]).
 var ErrInvalidOptions = errors.New("invalid render options")

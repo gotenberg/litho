@@ -241,6 +241,53 @@ func (r *renderer) linkFromRGB(cs ast.PdfObject) *icc.Link {
 	return link
 }
 
+// deviceCMYK returns the blending colour space of a page drawn for a CMYK
+// device ([Options.CMYK]): DeviceCMYK, read in profile, or in the profile
+// DeviceCMYK is read in for the page when profile is nil. Its key is
+// DeviceCMYK's, so the device colours [renderer.nativeColor] passes through
+// keep their components. A profile of another component count fails with
+// [ErrInvalidOptions].
+func (r *renderer) deviceCMYK(profile *icc.Profile) (*blend.Space, error) {
+	name := ast.PdfName(graphics.FamilyDeviceCMYK)
+	if profile == nil {
+		if sp := r.groupSpace(name, nil); sp != nil {
+			return sp, nil
+		}
+		// DeviceCMYK always converts; should it not, the device formulas
+		// of ISO 32000-1, 10.3 connect it with sRGB.
+		return blend.NewSpace(blend.CMYK, string(name), nil), nil
+	}
+	if profile.Components() != 4 {
+		return nil, fmt.Errorf("%w: a CMYK device profile of %d components", ErrInvalidOptions, profile.Components())
+	}
+	srgb, err := icc.Parse(icc.SRGBProfile())
+	if err != nil {
+		return nil, fmt.Errorf("reading the sRGB profile: %w", err)
+	}
+	toRGB, err := icc.NewLink(profile, srgb, icc.TransformOptions{Intent: icc.RelativeColorimetric})
+	if err != nil {
+		return nil, fmt.Errorf("%w: linking the CMYK device profile to sRGB: %w", ErrInvalidOptions, err)
+	}
+	conv := &blendConverter{kind: blend.CMYK, to: linkConverter{toRGB}, formula: blend.NewSpace(blend.CMYK, string(name), nil)}
+	link, err := icc.NewLink(srgb, profile, icc.TransformOptions{Intent: icc.RelativeColorimetric})
+	if err == nil && link.OutputChannels() == 4 {
+		conv.link = link
+	} else {
+		r.doc.Logger.Debug("render: no link from sRGB to the CMYK device profile; using the device formula", slog.Any("err", err))
+	}
+	return blend.NewSpace(blend.CMYK, string(name), conv), nil
+}
+
+// linkConverter reads colours through an ICC link to sRGB, a
+// [colorconv.Converter]. It is safe for concurrent use, as [icc.Link] is.
+type linkConverter struct{ link *icc.Link }
+
+func (c linkConverter) RGB(components []float64) (r, g, b float32) {
+	var out [3]float64
+	c.link.Convert(components, out[:])
+	return float32(out[0]), float32(out[1]), float32(out[2])
+}
+
 // solid is the colour of a painting of one colour: its sRGB, which a group
 // blending in sRGB takes, and its components in the blending colour space of
 // the group being painted when that is another.

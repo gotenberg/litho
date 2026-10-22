@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/gotenberg/litho/pkg/pdf"
 )
@@ -32,10 +33,11 @@ type renderPage struct {
 	Skipped                      int    `json:"skipped"`
 }
 
-// runRender draws pages to PNG files, one per page, named as pdftoppm names
-// them: the -o prefix, a hyphen, the page number and .png. With --report it
-// prints, instead of the file names, a JSON report of the pages written and
-// what each one approximated.
+// runRender draws pages to image files, one per page, named as pdftoppm names
+// them: the -o prefix, a hyphen, the page number and .png, or .tif for a CMYK
+// render, which a PNG file cannot hold. With --report it prints, instead of
+// the file names, a JSON report of the pages written and what each one
+// approximated.
 func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -51,16 +53,46 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	reportFlag := fs.Bool("report", false,
 		"Print a JSON report instead of the file names: each page's image and what it approximated (placeholder glyphs, synthesised or missing annotation appearances, stale widget appearances, transparency over the render budget, coarse soft masks, damaged constructs left out)")
 	cmykProfile := fs.String("cmyk-profile", "", cmykProfileUsage)
+	boxFlag := fs.String("box", "crop", "Page boundary to draw: crop, media, bleed, trim or art")
+	colorModel := fs.String("color-model", "rgb", "Colour model of the pages: rgb (PNG files) or cmyk (separated TIFF files of inks)")
+	outputProfile := fs.String("output-profile", "", "ICC profile of the CMYK device --color-model cmyk draws for (default: the document's CMYK output intent, else the built-in SWOP profile)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	files := fs.Args()
 	if len(files) != 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] [--print] [--report] [--cmyk-profile profile.icc] -o PREFIX <file>")
+		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] [--print] [--report] [--cmyk-profile profile.icc] [--box crop|media|bleed|trim|art] [--color-model rgb|cmyk] [--output-profile profile.icc] -o PREFIX <file>")
 		return exitError
 	}
-	opts := []pdf.RenderOption{pdf.WithRenderDPI(*dpi)}
+	box, ok := renderBoxes[*boxFlag]
+	if !ok {
+		fmt.Fprintf(stderr, "unknown --box %q. Valid: crop, media, bleed, trim, art\n", *boxFlag)
+		return exitError
+	}
+	opts := []pdf.RenderOption{pdf.WithRenderDPI(*dpi), pdf.WithRenderBox(box)}
+	cmyk := false
+	switch *colorModel {
+	case "rgb":
+	case "cmyk":
+		cmyk = true
+		opts = append(opts, pdf.WithRenderColorModel(pdf.RenderCMYK))
+	default:
+		fmt.Fprintf(stderr, "unknown --color-model %q. Valid: rgb, cmyk\n", *colorModel)
+		return exitError
+	}
+	if *outputProfile != "" {
+		if !cmyk {
+			fmt.Fprintln(stderr, "--output-profile needs --color-model cmyk")
+			return exitError
+		}
+		profile, err := os.ReadFile(filepath.Clean(*outputProfile))
+		if err != nil {
+			fmt.Fprintf(stderr, "reading the output profile: %v\n", err)
+			return exitError
+		}
+		opts = append(opts, pdf.WithRenderCMYKProfile(profile))
+	}
 	if *fontDir != "" {
 		info, err := os.Stat(*fontDir)
 		if err != nil {
@@ -118,7 +150,13 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 			return exitError
 		}
 		name := fmt.Sprintf("%s-%d.png", *output, p)
-		if err := writePNG(name, img); err != nil {
+		if c, ok := img.(*image.CMYK); ok {
+			name = fmt.Sprintf("%s-%d.tif", *output, p)
+			err = writeCMYKTIFF(name, c, *dpi)
+		} else {
+			err = writePNG(name, img)
+		}
+		if err != nil {
 			fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
 			return exitError
 		}
@@ -145,6 +183,15 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		}
 	}
 	return exitOK
+}
+
+// renderBoxes maps the --box values to the page boundaries they select.
+var renderBoxes = map[string]pdf.RenderBox{
+	"crop":  pdf.RenderCropBox,
+	"media": pdf.RenderMediaBox,
+	"bleed": pdf.RenderBleedBox,
+	"trim":  pdf.RenderTrimBox,
+	"art":   pdf.RenderArtBox,
 }
 
 // writePNG encodes img to the file name, replacing any file there.

@@ -129,7 +129,8 @@
 //   - [Reader.RenderPage] and [Reader.RenderPageReport] take
 //     [RenderOption]: [WithRenderDPI], [WithRenderBackground],
 //     [WithRenderFontProvider], [WithRenderFontFiles],
-//     [WithRenderSystemFonts], [WithRenderTarget], [WithRenderContent].
+//     [WithRenderSystemFonts], [WithRenderTarget], [WithRenderContent],
+//     [WithRenderBox], [WithRenderColorModel], [WithRenderCMYKProfile].
 //   - [Writer.WriteTo], [Split], [Merge], [Pipeline.WriteTo],
 //     [Pipeline.Split] and [Pipeline.Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],

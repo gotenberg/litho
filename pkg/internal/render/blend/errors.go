@@ -10,4 +10,7 @@ var (
 	// ErrCoverage indicates a coverage holding fewer values than its
 	// rectangle has pixels.
 	ErrCoverage = errors.New("blend: coverage smaller than its rectangle")
+	// ErrNotCMYK indicates a group read as CMYK ([Group.CMYK]) that does
+	// not blend in a CMYK space.
+	ErrNotCMYK = errors.New("blend: group does not blend in CMYK")
 )

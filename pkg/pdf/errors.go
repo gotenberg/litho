@@ -80,8 +80,12 @@ var (
 	ErrRenderTooLarge = errors.New("page render exceeds its budget")
 
 	// ErrInvalidRenderOptions is returned, wrapped, by [Reader.RenderPage]
-	// when [WithRenderDPI] is not positive and finite, or [WithRenderTarget]
-	// names no [RenderTarget].
+	// when [WithRenderDPI] is not positive and finite, [WithRenderTarget]
+	// names no [RenderTarget], [WithRenderContent] holds a bit no
+	// [RenderContent] names, [WithRenderBox] names no [RenderBox],
+	// [WithRenderColorModel] names no [RenderColorModel], or
+	// [WithRenderCMYKProfile] is given a profile litho cannot read CMYK
+	// through or is given for an RGB render.
 	ErrInvalidRenderOptions = errors.New("invalid render options")
 
 	// ErrInvalidPageNumber is returned when a page number is outside the

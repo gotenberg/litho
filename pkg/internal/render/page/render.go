@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
@@ -114,6 +115,24 @@ type Options struct {
 	// ([surface.Pool]): a caller that draws page after page releases the
 	// groups it is done with to it ([Result.Release]).
 	Pool *surface.Pool
+	// Box is the page boundary drawn, the crop box by default.
+	Box Box
+	// CMYK draws the page for a CMYK device, the page group blending in its
+	// CMYK space whatever the page's /Group /CS names ([Result.CMYK] reads
+	// it): ISO 32000-1, 11.4.7 composites a page group without a /CS in the
+	// device's own space, and leaves a converted page to the device. The
+	// space's components are those of DeviceCMYK, which passes through to
+	// the device unchanged, as do DeviceGray, entering as black ink alone,
+	// and a Separation or DeviceN colour whose alternate is DeviceCMYK
+	// (10.3, 8.6.6.4): a device colour space addresses the output device
+	// directly (8.6.4.1). Any other colour, an image's or a shading's
+	// included, converts through its sRGB into the device's CMYK profile.
+	CMYK bool
+	// CMYKProfile is the ICC profile of the CMYK device, which must describe
+	// four components. Nil takes the profile DeviceCMYK is read in for the
+	// page: the output intent's, then the caller's default, then litho's
+	// built-in printer profile ([pdfimage.CMYKProfile]).
+	CMYKProfile *icc.Profile
 }
 
 // Content is a set of kinds of content, told apart by the operator that
@@ -227,6 +246,18 @@ func (res *Result) Canvas(ctx context.Context) (*surface.Canvas, error) {
 	return res.canvas, nil
 }
 
+// CMYK returns the page in CMYK, over the background, the page group
+// composited with paper that takes no ink where neither covers it
+// ([blend.Group.CMYK]). Only a render with [Options.CMYK] set has one; any
+// other returns [blend.ErrNotCMYK].
+func (res *Result) CMYK(ctx context.Context) (*image.CMYK, error) {
+	img, err := res.Group.CMYK(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("reading the page as CMYK: %w", err)
+	}
+	return img, nil
+}
+
 // Release hands the page group's pixels to pool, which the result must not be
 // read through afterwards. A nil pool keeps them.
 func (res *Result) Release(pool *surface.Pool) {
@@ -244,7 +275,7 @@ func (res *Result) Release(pool *surface.Pool) {
 // space of the device the renderer draws for, otherwise.
 func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page, opts Options) (*Result, Report, error) {
 	var report Report
-	g, err := PageGeometry(pg, opts.DPI)
+	g, err := BoxGeometry(pg, opts.Box, opts.DPI)
 	if err != nil {
 		return nil, report, err
 	}
@@ -302,7 +333,16 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 	// composited with the medium afterwards; its own /Group may make it a
 	// knockout group and name its blending colour space.
 	attrs, cs, _ := r.groupAttrs(pg.Dict)
-	space := r.pageSpace(cs, pg.DrawResources, opts.GroupSpace)
+	var space *blend.Space
+	if opts.CMYK {
+		space, err = r.deviceCMYK(opts.CMYKProfile)
+		if err != nil {
+			return nil, report, err
+		}
+		cs = ast.PdfName(graphics.FamilyDeviceCMYK)
+	} else {
+		space = r.pageSpace(cs, pg.DrawResources, opts.GroupSpace)
+	}
 	var root *blend.Group
 	if attrs.Knockout {
 		root, err = blend.NewGroup(image.Rect(0, 0, g.Width, g.Height), blend.Backdrop{}, blend.Attributes{Isolated: true, Knockout: true, Space: space}, budget)

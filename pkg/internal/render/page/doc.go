@@ -1,8 +1,9 @@
 // Package page renders one PDF page into a [surface.Canvas]: it is the
 // content-stream driver that joins the renderer's parts.
 //
-// [Render] maps the page's crop box to device space at a resolution, with its
-// /Rotate and /UserUnit (ISO 32000-1, 7.7.3.3, Table 30), and walks the
+// [Render] maps the page's crop box, or the boundary [Options.Box] selects
+// (ISO 32000-1, 14.11.2), to device space at a resolution, with its /Rotate
+// and /UserUnit (7.7.3.3, Table 30), and walks the
 // page's content with a [graphics.Machine] holding the graphics state.
 // The driver itself handles what paints: path construction and painting
 // (8.5.2, 8.5.3) through [raster] and [stroke], clipping (8.5.4) with true
@@ -43,7 +44,9 @@
 // transparency, through [blend.Space]: a colour of that space, or one that
 // space converts from by the device formulas of 10.3, keeps its components,
 // any other arrives through its sRGB, and the page leaves in sRGB. RGB
-// spaces blend in sRGB.
+// spaces blend in sRGB. [Options.CMYK] draws the page for a CMYK device
+// instead: the page group blends in the device's CMYK whatever its /CS
+// names, and the page leaves as inks ([Result.CMYK]).
 //
 // What the renderer does not draw is counted in the [Report] rather than
 // drawn wrongly: annotations with no appearance stream that ISO 32000-1
