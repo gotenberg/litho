@@ -79,11 +79,12 @@ const (
 //
 // # Corpus evidence
 //
-//   - litho (225 files, flattentext_2b, flattenannots_2b, blendspace_2b,
-//     flattentiles_1b and smaskindata_2b among them): 28 flattened, all
-//     match; flattenrefuse_1b is refused, its second page past the render
-//     pixel budget; 196 have no transparency. Before annotations were drawn
-//     into the page, 20 flattened and 5 left annotations painting with
+//   - litho (228 files, flattentext_2b, flattenannots_2b, blendspace_2b,
+//     flattentiles_1b, smaskindata_2b, flatuntagged_ua1 and iccgroupalt_2b
+//     among them): 30 flattened, all match; flattenrefuse_1b and
+//     smaskbudget_2b are refused, a group on their second page past the
+//     render pixel budget; 196 have no transparency. Before annotations were
+//     drawn into the page, 20 flattened and 5 left annotations painting with
 //     transparency; 1 does now, laterreads_2u.pdf, whose Screen annotation
 //     has no appearance stream.
 //   - govdocs, all 1091 files (scope file): 34 flatten, all match, and
