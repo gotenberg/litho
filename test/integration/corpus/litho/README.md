@@ -273,6 +273,7 @@ one deliberately rather than diffing it against a fresh build.
 | `blendspace_2b.pdf`    | PDF/A-2b     | Blend modes, knockout and a soft mask in CMYK and grey groups    |
 | `flattenannots_2b.pdf` | PDF/A-2b     | Transparent annotations, which flattening draws into the page    |
 | `flattenrefuse_1b.pdf` | PDF/A-1b     | Transparency on a page flattening refuses, beside one it takes   |
+| `iccalternate_2b.pdf`  | PDF/A-2b     | ICCBased spaces no engine can use, read as their CIE /Alternate  |
 
 ### Must-not-fire controls
 
@@ -653,6 +654,7 @@ are covered under [Known divergences](#known-divergences).
 | `headingart_ua2.pdf`   | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
 | `headingnest_ua2.pdf`  | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
+| `iccalternate_2b.pdf`  | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `iccbadcmyk_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `iccbadcmyk_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 6   | 6    | 7    | 7    | 6    |
 | `iccbadgray_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
@@ -8853,6 +8855,36 @@ and `6.2.4.3/2` at the later parts; the groups fail `6.4/3` and the constant
 alpha `6.4/6` at PDF/A-1b, and `6.2.10/2` at PDF/A-2b, where the pages state no
 `/Group`. veraPDF 1.30.2 and litho report the same rule set in all thirteen
 cells.
+
+### `iccalternate_2b.pdf`
+
+An ICCBased space whose profile a reader cannot use reads as the space its
+stream's `/Alternate` names, the colour values taken as they are, and as the
+device space of `/N` components only when `/Alternate` is absent (ISO 32000-1,
+8.6.5.5, Table 66). The corpora's unusable profiles carry no `/Alternate` or
+name the device space of `/N`, which reads the same either way, so no cell
+reached an alternate of another family. Each profile here is a version 2.1
+monitor header with an empty tag table, as `iccbased_4.pdf`'s are: it holds no
+transform, so litho, poppler 26.09.0 (lcms2 reports "Can't create transform")
+and PDF.js all fall back to the alternate:
+
+| Draws                                   | Space                                              |
+| --------------------------------------- | -------------------------------------------------- |
+| a square, `50 20 -30 sc`                | an RGB header, `/Alternate` Lab, `/Range` of Lab's |
+| a square, `0.5 sc`                      | a GRAY header, `/Alternate` CalGray of gamma 1     |
+| a 2x1 image of two Lab samples          | the RGB-header space                               |
+| a 2x1 image of an Indexed space over it | Indexed, its base the RGB-header space             |
+
+litho read every one as the device space of `/N`, 381,700 pixels per million
+apart from poppler under the render cell's tolerances; it now reads the
+alternates and draws the page as poppler does, 0 pixels apart. `convert-colors`
+already read the alternate, and reads it now through the same rule.
+
+ISO 19005-2, 6.2.4.2 accepts the profiles' version and device class, and the
+file needs no OutputIntent: Lab and CalGray are CIE-based. It is compliant at
+PDF/A-2b; the other cells report the part number and the missing structure
+and language entries. veraPDF 1.30.2 and litho report the same rule set in all
+thirteen cells.
 
 ## Scope
 
