@@ -53,33 +53,61 @@ func ICCAlternate(ctx context.Context, doc *document.Document, profile ast.PdfDi
 	return alt, space.Family, true
 }
 
-// spaceRole is the position a colour space holds, which limits the families
+// ICCBasedUsable reports whether litho reads an ICCBased colour space whose
+// /N states n components through its profile stream profile for the intent:
+// the profile reads within the size cap, parses, yields a transform, and
+// describes n components (ISO 32000-1, 8.6.5.5, Table 66). Where it reports
+// false, Table 66 has a reader use the space's /Alternate ([ICCAlternate]),
+// or the device space of n components without one.
+//
+// It is the one test of a profile's usability in litho: the image decoder,
+// the renderer's colours and blending spaces, recolouring and flattening all
+// take a profile for unusable exactly where it reports false, so each reads
+// the space in the same colours. The answer is cached per profile object.
+func ICCBasedUsable(ctx context.Context, doc *document.Document, profile ast.PdfObject, n int, intent icc.Intent) bool {
+	return profileTransform(ctx, doc, profile, n, intent) != nil
+}
+
+// SpaceRole is the position a colour space holds, which limits the families
 // an /Alternate may substitute there.
-type spaceRole int
+type SpaceRole int
 
 const (
-	// roleSpace is the colour space of an image or a colour itself, which
+	// RoleSpace is the colour space of an image or a colour itself, which
 	// any family but Pattern may fill (ISO 32000-1, 8.6.5.5, Table 66).
-	roleSpace spaceRole = iota
-	// roleIndexedBase is the base of an Indexed space, which shall not be
+	RoleSpace SpaceRole = iota
+	// RoleIndexedBase is the base of an Indexed space, which shall not be
 	// another Indexed or a Pattern space (8.6.6.3).
-	roleIndexedBase
-	// roleTintAlternate is the alternate of a Separation or DeviceN space,
+	RoleIndexedBase
+	// RoleTintAlternate is the alternate of a Separation or DeviceN space,
 	// which shall not be a special space (8.6.6.4, 8.6.6.5).
-	roleTintAlternate
+	RoleTintAlternate
 )
 
 // admits reports whether a space of the family may hold the position.
-func (r spaceRole) admits(family string) bool {
+func (r SpaceRole) admits(family string) bool {
 	switch r {
-	case roleSpace:
+	case RoleSpace:
 		return true
-	case roleIndexedBase:
+	case RoleIndexedBase:
 		return family != graphics.FamilyIndexed
-	case roleTintAlternate:
+	case RoleTintAlternate:
 		return family != graphics.FamilyIndexed && family != graphics.FamilySeparation && family != graphics.FamilyDeviceN
 	}
 	return false
+}
+
+// SubstituteICCAlternate returns the colour space cs stands for in role once
+// the /Alternate of every ICCBased space whose profile litho cannot use for
+// the intent ([ICCBasedUsable]) replaces it, in the positions
+// [withICCAlternates] names, and whether anything was replaced. An alternate
+// the role does not admit, or a chain past [maxICCAlternateDepth], leaves the
+// space as it is, read in the device space of its /N. cs is not modified.
+//
+// The image decoder, the renderer, recolouring and flattening all substitute
+// through it, so each reads an unusable profile through the same space.
+func SubstituteICCAlternate(ctx context.Context, doc *document.Document, cs ast.PdfObject, intent icc.Intent, role SpaceRole) (ast.PdfObject, bool) {
+	return substituteICCAlternate(ctx, doc, cs, intent, role, 0)
 }
 
 // withICCAlternates returns dict with its /ColorSpace replaced where an
@@ -107,7 +135,7 @@ func withICCAlternates(ctx context.Context, doc *document.Document, dict ast.Pdf
 	if !ok {
 		return dict
 	}
-	sub, changed := substituteICCAlternate(ctx, doc, csObj, renderingIntent(ctx, doc, dict), roleSpace, 0)
+	sub, changed := substituteICCAlternate(ctx, doc, csObj, renderingIntent(ctx, doc, dict), RoleSpace, 0)
 	if !changed {
 		return dict
 	}
@@ -119,7 +147,7 @@ func withICCAlternates(ctx context.Context, doc *document.Document, dict ast.Pdf
 // substituteICCAlternate returns the space obj stands for in the role once
 // the /Alternate of every ICCBased space litho cannot use, in the positions
 // [withICCAlternates] names, replaces it, and whether anything was replaced.
-func substituteICCAlternate(ctx context.Context, doc *document.Document, obj ast.PdfObject, intent icc.Intent, role spaceRole, depth int) (ast.PdfObject, bool) {
+func substituteICCAlternate(ctx context.Context, doc *document.Document, obj ast.PdfObject, intent icc.Intent, role SpaceRole, depth int) (ast.PdfObject, bool) {
 	if depth > maxICCAlternateDepth {
 		doc.Logger.Debug("ICCBased /Alternate substitution past its depth cap", slog.Int("depth", depth))
 		return obj, false
@@ -147,12 +175,12 @@ func substituteICCAlternate(ctx context.Context, doc *document.Document, obj ast
 		}
 		return alt, true
 	case graphics.FamilyIndexed, graphics.FamilySeparation, graphics.FamilyDeviceN:
-		if role != roleSpace {
+		if role != RoleSpace {
 			return obj, false
 		}
-		pos, inner := 1, roleIndexedBase
+		pos, inner := 1, RoleIndexedBase
 		if family != graphics.FamilyIndexed {
-			pos, inner = 2, roleTintAlternate
+			pos, inner = 2, RoleTintAlternate
 		}
 		if pos >= len(arr) {
 			return obj, false
@@ -169,9 +197,9 @@ func substituteICCAlternate(ctx context.Context, doc *document.Document, obj ast
 }
 
 // unusableICCAlternate returns the /Alternate ([ICCAlternate]) of the
-// ICCBased space arr when litho cannot use its profile for the intent, and
-// false when it can, or when the space states no /N of 1, 3 or 4 (Table 66),
-// which leaves the readings that guess at it alone.
+// ICCBased space arr when litho cannot use its profile for the intent
+// ([ICCBasedUsable]), and false when it can, or when the space states no /N
+// of 1, 3 or 4 (Table 66), which leaves the readings that guess at it alone.
 func unusableICCAlternate(ctx context.Context, doc *document.Document, arr ast.PdfArray, intent icc.Intent) (ast.PdfObject, string, bool) {
 	stream, err := document.ResolveStream(ctx, doc, arr[1])
 	if err != nil || stream.Dict == nil {
@@ -181,7 +209,7 @@ func unusableICCAlternate(ctx context.Context, doc *document.Document, arr ast.P
 	if err != nil || (n != 1 && n != 3 && n != 4) {
 		return nil, "", false
 	}
-	if profileTransform(ctx, doc, arr[1], int(n), intent) != nil {
+	if ICCBasedUsable(ctx, doc, arr[1], int(n), intent) {
 		return nil, "", false
 	}
 	return ICCAlternate(ctx, doc, stream.Dict, int(n))

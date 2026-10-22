@@ -7,6 +7,8 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 )
 
 // TextEdit is what is drawn around one show operator so that, once its
@@ -85,7 +87,7 @@ func (s *scanner) textOutcome(ctx context.Context, st *graphics.State, resources
 			if !ok || !c.on || c.alpha >= 1 {
 				continue
 			}
-			over, blends := paperBlend(c.color, c.alpha)
+			over, blends := paperBlend(c.color, s.paperFamily(ctx, c.color, st.RenderingIntent), c.alpha)
 			if !blends {
 				ok = false
 				continue
@@ -121,17 +123,40 @@ func paperBlendMode(mode string) bool {
 	return false
 }
 
-// paperBlend returns colour c composited at alpha over white paper, in c's
-// own space, and false for a space with no such formula. In an additive space
+// paperFamily returns the family of the space colour c is drawn in under the
+// rendering intent: c's own, but for an ICCBased space whose profile litho
+// cannot use, which ISO 32000-1, 8.6.5.5, Table 66 has a reader replace by
+// its /Alternate, and the renderer with it ([pdfimage.SubstituteICCAlternate]).
+// That alternate's family decides where white paper lies, since the colour
+// values are taken as they are. It returns "" for an alternate that does not
+// describe.
+func (s *scanner) paperFamily(ctx context.Context, c graphics.Color, intent string) string {
+	if c.Space.Family != graphics.FamilyICCBased || c.Space.Object == nil {
+		return c.Space.Family
+	}
+	alt, ok := pdfimage.SubstituteICCAlternate(ctx, s.doc, c.Space.Object, icc.ParseIntent(intent), pdfimage.RoleSpace)
+	if !ok {
+		return c.Space.Family
+	}
+	space, err := graphics.DescribeColorSpace(ctx, s.doc, alt)
+	if err != nil {
+		return ""
+	}
+	return space.Family
+}
+
+// paperBlend returns colour c, drawn in a space of the family
+// ([scanner.paperFamily]), composited at alpha over white paper, in c's own
+// space, and false for a space with no such formula. In an additive space
 // (grey, RGB, their calibrated and ICC forms) white is every component at 1;
 // in a subtractive one (CMYK, a spot colour's tints) it is every component at
 // 0, no ink (ISO 32000-2, 8.6.6.4).
-func paperBlend(c graphics.Color, alpha float64) ([]float64, bool) {
+func paperBlend(c graphics.Color, family string, alpha float64) ([]float64, bool) {
 	if c.Pattern != "" || len(c.Components) == 0 {
 		return nil, false
 	}
 	var paper float64
-	switch c.Space.Family {
+	switch family {
 	case graphics.FamilyDeviceGray, graphics.FamilyDeviceRGB, graphics.FamilyCalGray, graphics.FamilyCalRGB:
 		paper = 1
 	case graphics.FamilyDeviceCMYK, graphics.FamilySeparation, graphics.FamilyDeviceN:

@@ -155,6 +155,34 @@ func TestAnalyzeForms(t *testing.T) {
 	}
 }
 
+// TestAnalyzeTransparentTextInUnusableICC checks that text in an ICCBased
+// space whose stream holds no profile composites over the paper of the space
+// it is drawn in, its /Alternate (ISO 32000-1, 8.6.5.5, Table 66): a spot
+// colour's tint, where the paper is tint 0 (8.6.6.4), not the grey of its
+// /N, where it is 1; and a Lab alternate, which no formula composites,
+// drops the text's transparency instead.
+func TestAnalyzeTransparentTextInUnusableICC(t *testing.T) {
+	t.Parallel()
+	const noProfile = "litho: not an ICC profile"
+	a := analyze(t, fixture{
+		resources: "/ColorSpace << /CS0 [/ICCBased 7 0 R] >>",
+		content:   "/GS1 gs /CS0 cs 0.6 sc BT /F1 12 Tf 10 20 Td (Hi) Tj ET",
+		objs: []string{stream("/N 1 /Alternate [/Separation /Spot /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 0 0] /N 1 >>]",
+			noProfile)},
+	})
+	if e := a.TextEdits[a.Units[0].First+3]; e.Prefix != "0.3 scn" || e.Suffix != "0.6 scn" {
+		t.Errorf("edit %+v, want tint 0.3 drawn and 0.6 put back", e)
+	}
+	a = analyze(t, fixture{
+		resources: "/ColorSpace << /CS0 [/ICCBased 7 0 R] >>",
+		content:   "/GS1 gs /CS0 cs 50 20 -30 sc BT /F1 12 Tf 10 20 Td (Hi) Tj ET",
+		objs:      []string{stream("/N 3 /Alternate [/Lab << /WhitePoint [0.9505 1 1.089] >>]", noProfile)},
+	})
+	if len(a.TextEdits) != 0 || !slices.Equal(a.TransparentText, []int{0}) {
+		t.Errorf("transparent text %v edits %v, want [0] and none", a.TransparentText, a.TextEdits)
+	}
+}
+
 func TestAnalyzeTransparentText(t *testing.T) {
 	t.Parallel()
 	// On the paper, half-transparent black is drawn exactly as opaque grey;

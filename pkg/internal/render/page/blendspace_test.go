@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 )
@@ -112,6 +113,53 @@ func TestCMYKPageGroupKeepsInk(t *testing.T) {
 	}
 	if res.Space != nil || res.Group.Space() != nil {
 		t.Errorf("unforced page group blends in %v, want sRGB", res.Space)
+	}
+}
+
+// TestUnusableICCGroupSpaceReadsAlternate checks ISO 32000-1, 8.6.5.5, Table
+// 66 for a page group's /CS: an ICCBased space whose stream holds no profile
+// blends as its /Alternate does. Under an alternate that is itself a usable
+// ICCBased CMYK space, a CIE-based space (8.6.5.1), the group blends in CMYK
+// and converts sRGB into the alternate's profile, as a group naming the
+// alternate directly does, not by the device formula. Under a Separation
+// alternate, which Table 147 admits as no blending space, it blends in sRGB.
+func TestUnusableICCGroupSpaceReadsAlternate(t *testing.T) {
+	t.Parallel()
+	render := func(t *testing.T, cs string, objs ...string) *Result {
+		t.Helper()
+		f := fixture{
+			page:    "/Group << /S /Transparency /CS " + cs + " >> /Resources << /ExtGState << /A << /ca 0.5 >> >> >>",
+			content: "/A gs 0 0 1 rg 0 0 100 100 re f",
+			objs:    objs,
+		}
+		doc, pg := open(t, f.bytes(), limits.Limits{})
+		res, _, err := RenderGroup(context.Background(), doc, pg, Options{DPI: 72, Background: white, GroupSpace: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	const noProfile = "litho: not an ICC profile"
+	profile := stream("/N 4", string(icc.CMYKPrinterProfile()))
+
+	direct := render(t, "[/ICCBased 5 0 R]", profile)
+	viaAlt := render(t, "[/ICCBased 6 0 R]", profile, stream("/N 4 /Alternate [/ICCBased 5 0 R]", noProfile))
+	if viaAlt.Group.Space() == nil || viaAlt.Group.Space().Kind() != blend.CMYK {
+		t.Fatalf("group over an ICCBased CMYK alternate blends in %v, want CMYK", viaAlt.Group.Space())
+	}
+	want, _ := direct.Group.Components(50, 50)
+	got, _ := viaAlt.Group.Components(50, 50)
+	for i := range 4 {
+		if d := got[i] - want[i]; d > 0.01 || d < -0.01 {
+			t.Errorf("half blue through the alternate = %v, the alternate's own group %v", got, want)
+			break
+		}
+	}
+
+	sep := render(t, "[/ICCBased 5 0 R]",
+		stream("/N 1 /Alternate [/Separation /Spot /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 0 0] /N 1 >>]", noProfile))
+	if sep.Space != nil || sep.Group.Space() != nil {
+		t.Errorf("group over a Separation alternate blends in %v, want sRGB", sep.Space)
 	}
 }
 

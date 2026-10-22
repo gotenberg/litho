@@ -107,7 +107,9 @@ func to8(v float32) uint8 {
 // for sRGB: when cs is absent or names an RGB space, which the renderer
 // blends in sRGB, or a space it does not blend in. DeviceGray, CalGray and a
 // one-component ICCBased space are grey; DeviceCMYK and a four-component
-// ICCBased space are CMYK. Spaces are kept per render by their definition.
+// ICCBased space are CMYK. An ICCBased space whose profile litho cannot use
+// sorts as its /Alternate does ([renderer.readGroupSpace]). Spaces are kept
+// per render by their definition.
 //
 // Lab and the special families are no blending space Table 147 admits, and
 // a calibrated or ICC RGB space blends in sRGB rather than in its own
@@ -121,9 +123,16 @@ func (r *renderer) groupSpace(cs ast.PdfObject, resources ast.PdfDict) *blend.Sp
 	if err != nil {
 		return nil
 	}
-	kind, key, ok := r.blendKind(resolved)
+	read, substituted := r.readGroupSpace(resolved)
+	kind, key, ok := r.blendKind(read)
 	if !ok {
 		return nil
+	}
+	if substituted {
+		// The space is still the group's /CS: colours selected in it keep
+		// their components ([renderer.nativeColor]), and it is told apart
+		// from the alternate named on its own.
+		key = fmt.Sprintf("%v", resolved)
 	}
 	if sp, ok := r.spaces[key]; ok {
 		return sp
@@ -135,13 +144,33 @@ func (r *renderer) groupSpace(cs ast.PdfObject, resources ast.PdfDict) *blend.Sp
 	}
 	conv := &blendConverter{kind: kind, to: to, formula: blend.NewSpace(kind, key, nil)}
 	if kind == blend.CMYK {
-		conv.link = r.linkFromRGB(resolved)
+		conv.link = r.linkFromRGB(read)
 	}
 	sp := blend.NewSpace(kind, key, conv)
 	if len(r.spaces) < maxBlendSpaces {
 		r.spaces[key] = sp
 	}
 	return sp
+}
+
+// readGroupSpace returns the resolved colour space a group whose resolved
+// /CS is cs blends in: cs, or the /Alternate of an ICCBased space whose
+// profile litho cannot use ([pdfimage.SubstituteICCAlternate]), which ISO
+// 32000-1, 8.6.5.5, Table 66 has a reader use in its place, and which the
+// group's colours are converted through ([colorconv.ForObject]). The intent
+// is relative colorimetric, the one those colours are read under. An
+// alternate that is a special space then blends in sRGB, as Table 147
+// admits none. It reports whether the alternate replaced cs.
+func (r *renderer) readGroupSpace(cs ast.PdfObject) (ast.PdfObject, bool) {
+	alt, ok := pdfimage.SubstituteICCAlternate(r.ctx, r.doc, cs, icc.RelativeColorimetric, pdfimage.RoleSpace)
+	if !ok {
+		return cs, false
+	}
+	resolved, err := document.ResolveObject(r.ctx, r.doc, alt)
+	if err != nil {
+		return cs, false
+	}
+	return resolved, true
 }
 
 // blendKind returns the blending family of the resolved colour space object

@@ -110,7 +110,7 @@ func (s *session) planDefinition(ctx context.Context, def ast.PdfObject, res ast
 			return p
 		}
 	}
-	p := s.plan(ctx, def, defaults, 0)
+	p := s.plan(ctx, def, defaults, 0, pdfimage.RoleSpace)
 	if cacheable && ctx.Err() == nil {
 		s.plans[key] = p
 	}
@@ -133,10 +133,12 @@ func (s *session) planKey(ctx context.Context, def ast.PdfObject, defaults ast.P
 	return sb.String(), sb.Len() <= maxPlanKeyBytes
 }
 
-// plan reads the definition def at nesting depth. defaults is the
+// plan reads the definition def at nesting depth, in role: the space
+// selected, an Indexed base or a spot colour's alternate, which limits the
+// /Alternate an unusable ICCBased profile gives way to there. defaults is the
 // /ColorSpace resource dictionary whose default spaces stand in for a device
 // space selected directly; a base or alternate space is read as written.
-func (s *session) plan(ctx context.Context, def ast.PdfObject, defaults ast.PdfDict, depth int) *spacePlan {
+func (s *session) plan(ctx context.Context, def ast.PdfObject, defaults ast.PdfDict, depth int, role pdfimage.SpaceRole) *spacePlan {
 	unknown := func(err error) *spacePlan {
 		return &spacePlan{kind: planUnknown, err: err}
 	}
@@ -172,7 +174,7 @@ func (s *session) plan(ctx context.Context, def ast.PdfObject, defaults ast.PdfD
 	case graphics.FamilyCalGray, graphics.FamilyCalRGB, graphics.FamilyLab:
 		return s.planCIE(ctx, string(family), arr)
 	case graphics.FamilyICCBased:
-		return s.planICC(ctx, arr, depth)
+		return s.planICC(ctx, arr, depth, role)
 	case graphics.FamilyIndexed, "I":
 		return s.planIndexed(ctx, arr, depth)
 	case graphics.FamilySeparation, graphics.FamilyDeviceN:
@@ -180,7 +182,7 @@ func (s *session) plan(ctx context.Context, def ast.PdfObject, defaults ast.PdfD
 	case graphics.FamilyPattern:
 		p := &spacePlan{kind: planPattern}
 		if len(arr) > 1 {
-			p.base = s.plan(ctx, arr[1], nil, depth+1)
+			p.base = s.plan(ctx, arr[1], nil, depth+1, pdfimage.RoleSpace)
 			p.n = p.base.n
 			switch {
 			case p.base.kind == planConvert:
@@ -201,7 +203,7 @@ func (s *session) planDevice(ctx context.Context, space, defaultName string, def
 	if d, ok := defaults[ast.PdfName(defaultName)]; ok {
 		// A default space that is no CIE-based space of the family's
 		// component count is ignored, as 8.6.5.6 requires it to be one.
-		p := s.plan(ctx, d, nil, 1)
+		p := s.plan(ctx, d, nil, 1, pdfimage.RoleSpace)
 		if p.kind == planConvert || p.kind == planIdentity {
 			if p.n == (Endpoint{Space: space}).components() {
 				return p
@@ -362,16 +364,16 @@ func (s *session) planCIE(ctx context.Context, family string, arr ast.PdfArray) 
 	}, initial)
 }
 
-// planICC plans an ICCBased space (ISO 32000-1, 8.6.5.5): its profile, or
-// its /Alternate, or the device space of its component count, when the
-// profile cannot be read, as 8.6.5.5 lets a reader fall back.
+// planICC plans an ICCBased space (ISO 32000-1, 8.6.5.5) in role: its
+// profile, or, when litho cannot use the profile, its /Alternate, or the
+// device space of its component count, as Table 66 has a reader fall back.
 //
 // A space that reads as the target itself, its profile the target's or its
 // fallback the target's family, still converts, as the identity: the
 // operators and images selecting it are written in the target's family, so
 // the output names no ICCBased space beside the target.
-func (s *session) planICC(ctx context.Context, arr ast.PdfArray, depth int) *spacePlan {
-	p := s.readICC(ctx, arr, depth)
+func (s *session) planICC(ctx context.Context, arr ast.PdfArray, depth int, role pdfimage.SpaceRole) *spacePlan {
+	p := s.readICC(ctx, arr, depth, role)
 	if p.kind == planIdentity && p.n == s.t.n {
 		return &spacePlan{kind: planConvert, n: p.n, conv: identity{}, initial: p.initial}
 	}
@@ -379,7 +381,13 @@ func (s *session) planICC(ctx context.Context, arr ast.PdfArray, depth int) *spa
 }
 
 // readICC is [session.planICC] before an identity becomes a conversion.
-func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int) *spacePlan {
+//
+// Whether the profile is usable is the image package's call
+// ([pdfimage.ICCBasedUsable]), and so is the alternate an unusable one gives
+// way to ([pdfimage.SubstituteICCAlternate]), its admissible families and
+// its nesting bound included: the renderer reads the space through both, so a
+// colour converts from the colour it is drawn in.
+func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int, role pdfimage.SpaceRole) *spacePlan {
 	if len(arr) < 2 {
 		return &spacePlan{kind: planUnknown, err: fmt.Errorf("%w: ICCBased without a stream", ErrUnsupportedSpace)}
 	}
@@ -394,10 +402,8 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int) *spa
 	}
 	fallback := func() *spacePlan {
 		p := s.planDevice(ctx, [5]string{1: SpaceGray, 3: SpaceRGB, 4: SpaceCMYK}[n], "", nil)
-		// The renderer's reading of Table 66 picks the alternate, so a space
-		// converts from the colours it is drawn in.
-		if alt, _, ok := pdfimage.ICCAlternate(ctx, s.doc, stream.Dict, n); ok {
-			if a := s.plan(ctx, alt, nil, depth+1); a.n == n && (a.kind == planConvert || a.kind == planIdentity) {
+		if alt, ok := pdfimage.SubstituteICCAlternate(ctx, s.doc, arr, s.opts.Intent, role); ok {
+			if a := s.plan(ctx, alt, nil, depth+1, role); a.n == n && (a.kind == planConvert || a.kind == planIdentity) {
 				p = a
 			}
 		}
@@ -406,6 +412,12 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int) *spa
 		q := *p
 		q.initial = make([]float64, n)
 		return &q
+	}
+	if !pdfimage.ICCBasedUsable(ctx, s.doc, arr[1], n, s.opts.Intent) {
+		if ctx.Err() != nil {
+			return &spacePlan{kind: planUnknown, err: ctx.Err()}
+		}
+		return fallback()
 	}
 	data, err := s.doc.DecodeStream(ctx, stream)
 	if err != nil {
@@ -445,8 +457,8 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int) *spa
 		return fallback()
 	}
 	if p.kind == planUnknown && ctx.Err() == nil {
-		// A profile the engine builds no transform from reads as its
-		// alternate, as the renderer reads it.
+		// A profile litho reads that the engine builds no transform from
+		// converts from the device space of its component count.
 		return fallback()
 	}
 	return p
@@ -463,7 +475,7 @@ func (s *session) planIndexed(ctx context.Context, arr ast.PdfArray, depth int) 
 	if len(arr) < 4 {
 		return &spacePlan{kind: planUnknown, n: 1, err: fmt.Errorf("%w: Indexed of %d elements", ErrUnsupportedSpace, len(arr))}
 	}
-	base := s.plan(ctx, arr[1], nil, depth+1)
+	base := s.plan(ctx, arr[1], nil, depth+1, pdfimage.RoleIndexedBase)
 	switch base.kind {
 	case planIdentity:
 		return keep
@@ -615,7 +627,7 @@ func (s *session) planSpot(ctx context.Context, family string, arr ast.PdfArray,
 		unchanged.fixed = true
 		return unchanged
 	}
-	alt := s.plan(ctx, arr[2], nil, depth+1)
+	alt := s.plan(ctx, arr[2], nil, depth+1, pdfimage.RoleTintAlternate)
 	switch alt.kind {
 	case planIdentity:
 		if !s.opts.ConvertSpots {

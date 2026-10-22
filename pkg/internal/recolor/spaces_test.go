@@ -204,6 +204,25 @@ func TestICCBasedSourceAndFallback(t *testing.T) {
 	}
 }
 
+// TestICCBasedFallbackFollowsRenderer checks that an unusable ICCBased
+// profile gives way where the renderer's reading does
+// ([pdfimage.SubstituteICCAlternate]): as a Separation's alternate, its own
+// /Alternate may not be another Separation (ISO 32000-1, 8.6.6.4), so it
+// reads as DeviceGray, the device space of its /N (8.6.5.5, Table 66), and
+// the inner spot's tint transform is never run.
+func TestICCBasedFallbackFollowsRenderer(t *testing.T) {
+	f := onePage("/Resources << /ColorSpace << /S0 [/Separation /Spot [/ICCBased 6 0 R] 5 0 R] >> >>",
+		"/S0 cs 0.5 sc",
+		"<< /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >>",
+		stream("/N 1 /Alternate [/Separation /Inner /DeviceCMYK 7 0 R]", "not a profile"),
+		"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 1 0] /N 1 >>")
+	r := recolor(t, f, cmyk, naive(Options{ConvertSpots: true}))
+	want := "0 0 0 0 k\n0 0 0 0.5 k"
+	if got := r.text(0); got != want {
+		t.Errorf("content:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestDefaultSpaces(t *testing.T) {
 	// DefaultRGB stands in for DeviceRGB (8.6.5.6): here a CalRGB whose
 	// first component is the sRGB blue primary, so rg's red paints blue.
