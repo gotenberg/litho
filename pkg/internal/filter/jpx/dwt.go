@@ -1,5 +1,7 @@
 package jpx
 
+import "context"
+
 // Lifting parameters of the 9-7 irreversible filter, T.800 Table F.4.
 const (
 	liftAlpha = -1.586134342059924
@@ -122,50 +124,54 @@ type plane struct {
 // each row, then each column, is interleaved into scratch space, filtered by
 // 1D_SR, and written back in order, which is HOR_SR (F.3.4) then VER_SR
 // (F.3.5) on the interleaved array.
-func reconstructLevel(p *plane, x0, y0, x1, y1, lw, lh int) {
-	w, h := x1-x0, y1-y0
-	n := max(w, h)
+//
+// HOR_SR filters each row apart from the others, and VER_SR each column, so
+// workers share the rows of a pass, then its columns, each with scratch space
+// of its own: every line goes through the same arithmetic as on one goroutine,
+// and the plane comes out the same.
+func reconstructLevel(ctx context.Context, p *plane, x0, y0, x1, y1, lw, lh int) error {
 	if p.ints != nil {
-		line := make([]int32, n)
-		ext := make([]int32, n+2*extension)
-		for y := range h {
-			row := p.ints[y*p.stride : y*p.stride+w]
+		return reconstruct(ctx, p.ints, p.stride, x0, y0, x1-x0, y1-y0, lw, lh, sr53)
+	}
+	return reconstruct(ctx, p.floats, p.stride, x0, y0, x1-x0, y1-y0, lw, lh, sr97)
+}
+
+// reconstruct is [reconstructLevel] over the values s of a plane of the given
+// stride, with sr the 1D_SR of the level's filter.
+func reconstruct[T int32 | float32](ctx context.Context, s []T, stride, x0, y0, w, h, lw, lh int, sr func([]T, int, []T)) error {
+	n := max(w, h)
+	nw := workersFor(h, minLinesPerWorker)
+	err := forEach(ctx, nw, nw, func(_, k int) error {
+		line := make([]T, n)
+		ext := make([]T, n+2*extension)
+		for y := k * h / nw; y < (k+1)*h/nw; y++ {
+			row := s[y*stride : y*stride+w]
 			spread(row, line[:w], x0, lw)
-			sr53(line[:w], x0, ext)
+			sr(line[:w], x0, ext)
 			copy(row, line[:w])
 		}
-		col := make([]int32, h)
-		for x := range w {
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	nw = workersFor(w, minLinesPerWorker)
+	return forEach(ctx, nw, nw, func(_, k int) error {
+		line := make([]T, n)
+		ext := make([]T, n+2*extension)
+		col := make([]T, h)
+		for x := k * w / nw; x < (k+1)*w/nw; x++ {
 			for y := range h {
-				col[y] = p.ints[y*p.stride+x]
+				col[y] = s[y*stride+x]
 			}
 			spread(col, line[:h], y0, lh)
-			sr53(line[:h], y0, ext)
+			sr(line[:h], y0, ext)
 			for y := range h {
-				p.ints[y*p.stride+x] = line[y]
+				s[y*stride+x] = line[y]
 			}
 		}
-		return
-	}
-	line := make([]float32, n)
-	ext := make([]float32, n+2*extension)
-	for y := range h {
-		row := p.floats[y*p.stride : y*p.stride+w]
-		spread(row, line[:w], x0, lw)
-		sr97(line[:w], x0, ext)
-		copy(row, line[:w])
-	}
-	col := make([]float32, h)
-	for x := range w {
-		for y := range h {
-			col[y] = p.floats[y*p.stride+x]
-		}
-		spread(col, line[:h], y0, lh)
-		sr97(line[:h], y0, ext)
-		for y := range h {
-			p.floats[y*p.stride+x] = line[y]
-		}
-	}
+		return nil
+	})
 }
 
 // spread interleaves src, its nlow low-pass coefficients followed by its

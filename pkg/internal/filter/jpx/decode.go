@@ -188,7 +188,9 @@ func decodeTile(ctx context.Context, cs *codestream, t *tile, budget *blockBudge
 		return err
 	}
 	for c := range d.comps {
-		d.comps[c].inverseTransform()
+		if err := d.comps[c].inverseTransform(ctx); err != nil {
+			return err
+		}
 	}
 	if d.transformed {
 		if err := inverseMCT(cs, d); err != nil {

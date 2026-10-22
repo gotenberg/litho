@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 )
 
 // tileDecoder decodes one tile: its coding parameters after the precedence
@@ -241,11 +242,29 @@ const maxReversibleBits = 31
 // orientation.
 var logGain = [4]int{bandLL: 0, bandHL: 1, bandLH: 1, bandHH: 2}
 
+// blockRun is the code-blocks of one sub-band of one precinct, numbered from
+// first in the order [tileDecoder.decodeBlocks] decodes the tile's blocks.
+type blockRun struct {
+	first  int
+	c, r   int
+	band   *band
+	blocks []codeBlock
+}
+
 // decodeBlocks decodes every code-block of the tile (T.800, Annex D) and
 // reconstructs its coefficients into the tile-components' planes (E.1).
+//
+// Code-blocks are coded independently of one another (D.1) and each writes
+// its own rectangle of its sub-band, so workers decode them in parallel, each
+// with a decoder of its own, and the planes come out as a serial decode leaves
+// them. The error is that of the first block in component, level, precinct,
+// sub-band and block order, and a level the reversible path cannot hold is
+// refused after the blocks before it, as the serial loop did.
 func (d *tileDecoder) decodeBlocks(ctx context.Context, cs *codestream) error {
-	t := &t1{}
+	var runs []blockRun
 	n := 0
+	var refused error
+collect:
 	for c := range d.comps {
 		tc := &d.comps[c]
 		w, h := tc.x1-tc.x0, tc.y1-tc.y0
@@ -258,27 +277,36 @@ func (d *tileDecoder) decodeBlocks(ctx context.Context, cs *codestream) error {
 		for r := range tc.resolutions {
 			res := &tc.resolutions[r]
 			if err := tc.checkReversible(res); err != nil {
-				return err
+				refused = err
+				break collect
 			}
 			for k := range res.precincts {
 				for i := range res.precincts[k].bands {
-					b := &res.bands[i]
-					for j := range res.precincts[k].bands[i].blocks {
-						if n++; n%256 == 0 {
-							if err := ctx.Err(); err != nil {
-								return err
-							}
-						}
-						cb := &res.precincts[k].bands[i].blocks[j]
-						if err := tc.decodeBlock(t, b, cb, cs.components[c].precision); err != nil {
-							return fmt.Errorf("code-block of component %d, level %d: %w", c, r, err)
-						}
+					blocks := res.precincts[k].bands[i].blocks
+					if len(blocks) == 0 {
+						continue
 					}
+					runs = append(runs, blockRun{first: n, c: c, r: r, band: &res.bands[i], blocks: blocks})
+					n += len(blocks)
 				}
 			}
 		}
 	}
-	return nil
+	nw := workersFor(n, minBlocksPerWorker)
+	decoders := make([]t1, nw)
+	err := forEach(ctx, n, nw, func(w, i int) error {
+		k := sort.Search(len(runs), func(k int) bool { return runs[k].first > i }) - 1
+		run := &runs[k]
+		tc := &d.comps[run.c]
+		if err := tc.decodeBlock(&decoders[w], run.band, &run.blocks[i-run.first], cs.components[run.c].precision); err != nil {
+			return fmt.Errorf("code-block of component %d, level %d: %w", run.c, run.r, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return refused
 }
 
 // decodeBlock decodes code-block cb of sub-band b and writes its reconstructed
@@ -332,9 +360,12 @@ func (tc *tileComponent) decodeBlock(t *t1, b *band, cb *codeBlock, precision in
 // inverseTransform is the IDWT procedure of T.800, F.3.1: starting from the
 // NLLL sub-band, each level reconstructs, in place, the level above from the
 // one below and its three high sub-bands, until the tile-component itself.
-func (tc *tileComponent) inverseTransform() {
+func (tc *tileComponent) inverseTransform(ctx context.Context) error {
 	for r := 1; r < len(tc.resolutions); r++ {
 		res, below := &tc.resolutions[r], &tc.resolutions[r-1]
-		reconstructLevel(&tc.coeffs, res.x0, res.y0, res.x1, res.y1, below.x1-below.x0, below.y1-below.y0)
+		if err := reconstructLevel(ctx, &tc.coeffs, res.x0, res.y0, res.x1, res.y1, below.x1-below.x0, below.y1-below.y0); err != nil {
+			return err
+		}
 	}
+	return nil
 }
