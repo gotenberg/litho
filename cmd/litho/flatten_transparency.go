@@ -36,6 +36,7 @@ type flattenTransparencyPage struct {
 	Annotations           int     `json:"annotations,omitempty"`
 	EmptiedAnnotations    int     `json:"emptiedAnnotations,omitempty"`
 	JPEGImages            int     `json:"jpegImages,omitempty"`
+	Overprinted           int     `json:"overprinted,omitempty"`
 }
 
 // flattenTransparencyFlags holds the flags that shape the flattening.
@@ -43,6 +44,7 @@ type flattenTransparencyFlags struct {
 	dpi         float64
 	printed     bool
 	jpegQuality int
+	overprint   bool
 	// cmykProfile is --cmyk-profile, the file the Reader is opened with as
 	// its default CMYK profile.
 	cmykProfile string
@@ -56,6 +58,7 @@ func registerFlattenTransparencyFlags(fs *flag.FlagSet) *flattenTransparencyFlag
 	fs.Float64Var(&f.dpi, "dpi", 300, "Resolution transparent regions are composited at, in pixels per inch")
 	fs.BoolVar(&f.printed, "printed-annotations", false, "Draw every printed annotation into the page, not only those painting with transparency")
 	fs.IntVar(&f.jpegQuality, "jpeg-quality", 0, "Encode a composite of images and shadings only, or the tiles of a mixed one that only images and shadings reach, as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every composite lossless)")
+	fs.BoolVar(&f.overprint, "overprint", false, "Composite regions as a CMYK printing device prints them, overprinting simulated, into DeviceCMYK images")
 	fs.StringVar(&f.cmykProfile, "cmyk-profile", "", cmykProfileUsage)
 	return &f
 }
@@ -65,6 +68,9 @@ func (f *flattenTransparencyFlags) options() []pdf.FlattenOption {
 	opts := []pdf.FlattenOption{pdf.WithFlattenDPI(f.dpi), pdf.WithFlattenJPEGQuality(f.jpegQuality)}
 	if f.printed {
 		opts = append(opts, pdf.WithFlattenPrintedAnnotations())
+	}
+	if f.overprint {
+		opts = append(opts, pdf.WithFlattenOverprintSimulation())
 	}
 	return opts
 }
@@ -82,7 +88,7 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 		return code
 	}
 	if fs.NArg() < 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho flatten-transparency <file> [--dpi N] [--printed-annotations] [--jpeg-quality Q] [--cmyk-profile profile.icc] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho flatten-transparency <file> [--dpi N] [--printed-annotations] [--jpeg-quality Q] [--overprint] [--cmyk-profile profile.icc] -o out.pdf")
 		return exitError
 	}
 	if *format != "text" && *format != "json" {
@@ -162,6 +168,7 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 			Annotations:           p.Annotations,
 			EmptiedAnnotations:    p.EmptiedAnnotations,
 			JPEGImages:            p.JPEGImages,
+			Overprinted:           p.Overprinted,
 		})
 		regions += p.Regions
 		annotations += p.Annotations
@@ -189,6 +196,9 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 		}
 		if p.CoarseMasks > 0 {
 			fmt.Fprintf(stdout, "Page %d: %d soft mask(s) composited at a coarser resolution, past the render pixel budget\n", p.Page, p.CoarseMasks)
+		}
+		if p.Overprinted > 0 {
+			fmt.Fprintf(stdout, "Page %d: %d object(s) painting under overprint composited into an image, overprinted only with --overprint\n", p.Page, p.Overprinted)
 		}
 	}
 	if annotations > 0 {

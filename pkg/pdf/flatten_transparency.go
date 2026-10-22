@@ -21,6 +21,7 @@ type flattenOpts struct {
 	dpi         float64
 	printed     bool
 	jpegQuality int
+	overprint   bool
 }
 
 // WithFlattenDPI composites transparent regions at dpi pixels per inch.
@@ -58,6 +59,19 @@ func WithFlattenPrintedAnnotations() FlattenOption {
 // makes [Writer.FlattenTransparency] fail with [ErrInvalidFlattenOptions].
 func WithFlattenJPEGQuality(q int) FlattenOption {
 	return func(o *flattenOpts) { o.jpegQuality = q }
+}
+
+// WithFlattenOverprintSimulation composites transparent regions as a device
+// that prints CMYK separations prints them, overprinting simulated (ISO
+// 32000-1, 8.6.7), as [WithOverprintSimulation] draws a page: the composites
+// are DeviceCMYK images that hold what overprinting printed, where an image
+// would otherwise knock out the inks overprinting left. A spot colorant has
+// no separation of its own here and knocks out through its alternate space.
+// By default a region composites as viewers draw it, and
+// [FlattenedPage.Overprinted] counts the paintings whose overprinting the
+// composite drops.
+func WithFlattenOverprintSimulation() FlattenOption {
+	return func(o *flattenOpts) { o.overprint = true }
 }
 
 // FlattenedPage describes what [Writer.FlattenTransparency] did to one page.
@@ -104,6 +118,13 @@ type FlattenedPage struct {
 	// JPEGImages counts the composites, or tiles of a composite, encoded as
 	// JPEG ([WithFlattenJPEGQuality]).
 	JPEGImages int
+	// Overprinted counts the painting operations under overprint (ISO
+	// 32000-1, 8.6.7) whose painting inside a region a composite took over.
+	// An image paints every ink it holds, so on a device that overprints
+	// their overprinting is lost, unless [WithFlattenOverprintSimulation]
+	// composites it into the image. Viewers draw without overprinting by
+	// default, so the loss shows only in print or in an overprint preview.
+	Overprinted int
 }
 
 // FlattenReport describes what [Writer.FlattenTransparency] did.
@@ -161,6 +182,8 @@ type FlattenReport struct {
 // Any other page is composited in sRGB, and its composites are sRGB images.
 // The order matters: flattening before a conversion composites in sRGB, and
 // the conversion then converts the composites.
+// [WithFlattenOverprintSimulation] composites every page in DeviceCMYK with
+// overprinting simulated.
 //
 // An annotation that paints with transparency, or with
 // [WithFlattenPrintedAnnotations] any annotation a viewer prints, is drawn
@@ -390,7 +413,7 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 	}
 	seedAllocator(alloc, w.rewriteOverrides)
 	staged := alloc.Writes()
-	result, err := flatten.Document(ctx, alloc, doc, pages, flatten.Options{DPI: o.dpi, JPEGQuality: o.jpegQuality})
+	result, err := flatten.Document(ctx, alloc, doc, pages, flatten.Options{DPI: o.dpi, JPEGQuality: o.jpegQuality, Overprint: o.overprint})
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
 			return nil, false, err
@@ -413,6 +436,7 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 			TransparentText:       p.TransparentText,
 			GroupRemoved:          p.GroupRemoved,
 			JPEGImages:            p.JPEG,
+			Overprinted:           p.Overprinted,
 		})
 	}
 	if alloc.Writes() == staged {

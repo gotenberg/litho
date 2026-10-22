@@ -48,6 +48,19 @@ const pixelMargin = 1
 const pixelEpsilon = 1e-6
 
 // Options configures [Document].
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 417 files that paint under overprint or belong to
+//     the litho corpus, flattened at 72 dpi, 9 composite 12 units painting
+//     under overprint (govdocs 3 files, pdfjs 6). Without Overprint every
+//     output is byte for byte the output before overprint was read.
+//   - govdocs, pdfjs: those 9 flattened with Overprint, drawn at 36 dpi with
+//     overprinting simulated, differ from the source drawn so by more than
+//     16 levels on fewer pixels than the outputs flattened without it on 6
+//     of their 16 pages, on as many on 9, and on one pixel more on
+//     govdocs thread_000_000163.pdf page 2; no file flips from flattened to
+//     refused.
 type Options struct {
 	// DPI is the resolution regions are composited at; 0 is [DefaultDPI].
 	DPI float64
@@ -60,6 +73,11 @@ type Options struct {
 	// others lossless (see [flattener.encodeTiles]). 0 keeps every
 	// composite lossless under Flate, one image per region.
 	JPEGQuality int
+	// Overprint composites regions as a CMYK device prints them, overprint
+	// simulated ([page.Options.Overprint]): the composites are DeviceCMYK
+	// images holding what overprinting printed. Unset, a region composites
+	// as viewers draw it, every painting knocking out what lies under it.
+	Overprint bool
 }
 
 // PageReport says what [Document] did to one page.
@@ -98,6 +116,11 @@ type PageReport struct {
 	// [image.ExtractImagesRecursive] lists them: those whose pixels a
 	// composite now holds, net of the composites.
 	ReplacedImages int
+	// Overprinted counts the units painting under overprint (ISO 32000-1,
+	// 8.6.7) whose painting inside a region a composite took over. An image
+	// paints every colorant it holds, so their overprinting is lost on a
+	// device that overprints, unless [Options.Overprint] composites it in.
+	Overprinted int
 }
 
 // Report says what [Document] did.
@@ -133,6 +156,8 @@ type flattener struct {
 	dpi   float64
 	// quality is [Options.JPEGQuality].
 	quality int
+	// overprint is [Options.Overprint].
+	overprint bool
 	// srgb is the ICC profile stream every image's colour space names.
 	srgb ast.PdfObject
 	// intentFamily is the device family the document's output intent
@@ -185,6 +210,7 @@ func Document(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 		states:  make(map[int]ast.PdfObject),
 		forms:   make(map[copyKey]ast.PdfIndirectRef),
 
+		overprint: opts.Overprint,
 		ungrouped: make(map[int]ast.PdfObject),
 		patterns:  make(map[patternKey]ast.PdfObject),
 		images:    make(map[int]ast.PdfObject),
@@ -265,6 +291,16 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 
 	removed := make(map[int]bool)
 	clippedBy := make(map[int][]Rect)
+	// overprinted marks the units under overprint whose painting inside a
+	// region a composite holds: those it takes over or clips, and those
+	// drawn under it, which it covers whole. Text stays above it.
+	overprinted := make(map[int]bool)
+	var overprinting []int
+	for u, unit := range a.Units {
+		if unit.Overprint && unit.Kind != KindText {
+			overprinting = append(overprinting, u)
+		}
+	}
 	if len(a.Regions) > 0 {
 		// The composite and the renderings that read what it covers draw
 		// the same page.
@@ -307,6 +343,13 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 			for _, u := range r.Clipped {
 				clippedBy[u] = append(clippedBy[u], r.Box)
 			}
+			for _, u := range overprinting {
+				unit := a.Units[u]
+				under := unit.Last < r.Insert && !unit.Box.Intersect(r.Box).Empty()
+				if under || slices.Contains(r.Removed, u) || slices.Contains(r.Clipped, u) {
+					overprinted[u] = true
+				}
+			}
 			pr.KeptText += len(r.Text)
 		}
 	}
@@ -319,6 +362,7 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 		}
 	}
 	pr.Removed = len(removed)
+	pr.Overprinted = len(overprinted)
 	for u := range removed {
 		if a.Units[u].textTransparent {
 			pr.TransparentText++
@@ -428,6 +472,7 @@ func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.
 			DefaultGroupSpace: f.deviceSpace(ctx, pg),
 			Shared:            shared,
 			Pool:              f.pool,
+			Overprint:         f.overprint,
 		})
 		if err != nil {
 			return nil, page.Geometry{}, 0, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)

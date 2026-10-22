@@ -74,6 +74,12 @@ func stateTransparent(st *graphics.State, p paints) bool {
 	return (p.fill && st.FillAlpha < 1) || (p.stroke && st.StrokeAlpha < 1)
 }
 
+// overprints reports whether painting p under st overprints (ISO 32000-1,
+// 8.6.7): /OP governs stroking, /op every other painting.
+func overprints(st *graphics.State, p paints) bool {
+	return (p.fill && st.FillOverprint) || (p.stroke && st.StrokeOverprint)
+}
+
 // extGStateTransparent reports whether a graphics state parameter dictionary
 // sets transparency (ISO 32000-2, 8.4.5, Table 57): a soft mask other than
 // /None, a constant alpha below 1, or a blend mode other than Normal and
@@ -180,6 +186,9 @@ type contentInfo struct {
 	// edges the scan does not measure: they reach as far as bounds.
 	edges          []Rect
 	edgesUnbounded bool
+	// overprint reports a path, image, inline image or shading painted
+	// under overprint (ISO 32000-1, 8.6.7), here or in a form it paints.
+	overprint bool
 }
 
 // maxEdgeBoxes bounds the boxes [contentInfo.edges] lists. Anti-DoS guard,
@@ -413,6 +422,7 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 			single := rects == 1 && curves == 0 && axisAligned(ctm)
 			rects, curves = 0, 0
 			info.transparent = info.transparent || s.painting(ctx, st, p, resources, depth, chain)
+			info.overprint = info.overprint || overprints(st, p)
 			if boxes := m.PathBoxes(); len(boxes) > before {
 				pb := boxes[len(boxes)-1]
 				reach := 0.0
@@ -446,9 +456,11 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 		case op.Operator == "sh":
 			info.unbounded = true
 			info.transparent = info.transparent || stateTransparent(st, paintFill)
+			info.overprint = info.overprint || overprints(st, paintFill)
 		case op.Operator == "BI":
 			info.bounds = info.bounds.Union(transformRect(ctm, Rect{0, 0, 1, 1}))
 			info.transparent = info.transparent || stateTransparent(st, paintFill)
+			info.overprint = info.overprint || overprints(st, paintFill)
 		case op.Operator == "Do":
 			obj, stream, subtype, ok := s.xobject(ctx, resources, op)
 			if !ok {
@@ -458,6 +470,7 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 			case "Image":
 				info.bounds = info.bounds.Union(transformRect(ctm, Rect{0, 0, 1, 1}))
 				info.transparent = info.transparent || stateTransparent(st, paintFill) || imageTransparent(ctx, s.doc, stream.Dict)
+				info.overprint = info.overprint || overprints(st, paintFill)
 			case "Form":
 				inner := s.form(ctx, obj, stream, resources, depth+1, chain)
 				matrix, _ := formGeometry(ctx, s.doc, stream.Dict)
@@ -473,6 +486,7 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 					info.addEdges(transformRect(matrix.Mul(ctm), b))
 				}
 				info.transparent = info.transparent || inner.transparent || stateTransparent(st, paintBoth)
+				info.overprint = info.overprint || inner.overprint || overprints(st, paintBoth)
 			}
 		}
 	}

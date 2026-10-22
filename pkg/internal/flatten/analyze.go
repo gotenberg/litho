@@ -72,6 +72,9 @@ type Unit struct {
 	// textTransparent reports a form showing text with a transparency its
 	// copy holding only its text approximates.
 	textTransparent bool
+	// Overprint reports a unit that paints under overprint (ISO 32000-1,
+	// 8.6.7), or a form whose content does.
+	Overprint bool
 }
 
 // Region is a part of the page composited into one image.
@@ -287,11 +290,11 @@ func (w *walker) step(i int, op content.Operation) {
 		}
 	case "sh":
 		if !w.inText {
-			w.units = append(w.units, Unit{Kind: KindShading, First: i, Last: i, Box: w.visible(w.crop), Transparent: stateTransparent(st, paintFill)})
+			w.units = append(w.units, Unit{Kind: KindShading, First: i, Last: i, Box: w.visible(w.crop), Transparent: stateTransparent(st, paintFill), Overprint: overprints(st, paintFill)})
 		}
 	case "BI":
 		if !w.inText {
-			w.units = append(w.units, Unit{Kind: KindInlineImage, First: i, Last: i, Box: w.visible(transformRect(ctm, Rect{0, 0, 1, 1})), Transparent: stateTransparent(st, paintFill)})
+			w.units = append(w.units, Unit{Kind: KindInlineImage, First: i, Last: i, Box: w.visible(transformRect(ctm, Rect{0, 0, 1, 1})), Transparent: stateTransparent(st, paintFill), Overprint: overprints(st, paintFill)})
 		}
 	case "Do":
 		if !w.inText {
@@ -332,6 +335,7 @@ func (w *walker) step(i int, op content.Operation) {
 				Box:         w.visible(r),
 				Transparent: w.scan.painting(w.ctx, st, p, w.res, 0, nil),
 				Clips:       w.clipping,
+				Overprint:   overprints(st, p),
 			})
 		}
 		w.endPath(ctm)
@@ -379,6 +383,7 @@ func (w *walker) do(i int, op content.Operation, st *graphics.State, ctm geom.Ma
 			Last:        i,
 			Box:         w.visible(transformRect(ctm, Rect{0, 0, 1, 1})),
 			Transparent: stateTransparent(st, paintFill) || imageTransparent(w.ctx, w.doc, stream.Dict),
+			Overprint:   overprints(st, paintFill),
 		})
 	case "Form":
 		info := w.scan.form(w.ctx, obj, stream, w.res, 1, nil)
@@ -399,6 +404,7 @@ func (w *walker) do(i int, op content.Operation, st *graphics.State, ctm geom.Ma
 
 			textTransparent: info.textTransparent,
 			hides:           paints{fill: st.FillAlpha <= 0, stroke: st.StrokeAlpha <= 0},
+			Overprint:       info.overprint || overprints(st, paintBoth),
 		})
 	}
 }

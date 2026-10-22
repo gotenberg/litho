@@ -91,7 +91,7 @@ func (c *coverage) renders(ctx context.Context, a *Analysis) error {
 	}
 	budget := c.f.doc.Limits().WithDefaults().MaxRenderPixels
 	shared := c.shared
-	text, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: page.Paths | page.Images | page.Shadings | page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Shared: shared, Pool: c.f.pool})
+	text, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: page.Paths | page.Images | page.Shadings | page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint})
 	if err != nil {
 		return fmt.Errorf("rendering the page's text at %v dpi: %w", c.dpi, err)
 	}
@@ -128,7 +128,7 @@ func (c *coverage) renders(ctx context.Context, a *Analysis) error {
 			}
 		}
 	}
-	whole, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Within: within, Shared: shared, Pool: c.f.pool})
+	whole, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Within: within, Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint})
 	if err != nil {
 		return fmt.Errorf("rendering the page whole at %v dpi: %w", c.dpi, err)
 	}

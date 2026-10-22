@@ -164,7 +164,8 @@
 //     [OutputIntentColorTarget], [CMYKColorTarget], [RGBColorTarget],
 //     [GrayColorTarget] and [ICCColorTarget].
 //   - [Writer.FlattenTransparency] takes [FlattenOption]: [WithFlattenDPI],
-//     [WithFlattenPrintedAnnotations], [WithFlattenJPEGQuality].
+//     [WithFlattenPrintedAnnotations], [WithFlattenJPEGQuality],
+//     [WithFlattenOverprintSimulation].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:
