@@ -246,23 +246,22 @@ func TestWriter_Redact_BlanksAnImageAFormDraws(t *testing.T) {
 	}
 }
 
-// TestWriter_Redact_RefusesASharedImageAFormDraws pins that an image a form
-// draws on two pages, under a region on one of them, refuses: blanked in
-// place it would change the other page, and a copy would have to sit in the
-// form, which both pages draw.
-func TestWriter_Redact_RefusesASharedImageAFormDraws(t *testing.T) {
+// TestWriter_Redact_StrictRefusesASharedImageAFormDraws pins that an image a
+// form draws on two pages, under a region on one of them, refuses under
+// WithStrictRedaction: the same samples are painted where no region covers
+// them. The default blanks it in a copy of the form (see
+// TestWriter_Redact_BlanksASharedFormImageInAFormCopy).
+func TestWriter_Redact_StrictRefusesASharedImageAFormDraws(t *testing.T) {
 	t.Parallel()
 
 	src := formImageDoc([]string{placeFormLeft, placeFormLeft})
-	for _, opts := range [][]RedactOption{nil, {WithStrictRedaction()}} {
-		out, _, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeLeft}}, opts...)
-		if !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrImageShared) {
-			t.Fatalf("Redact(%d options) = %v, want ErrRedactionRefused wrapping ErrImageShared", len(opts), err)
-		}
-		for page := 1; page <= 2; page++ {
-			if got := renderedGray(t, out, page, copyLeftTop); !nearGray(got, 0x40) {
-				t.Errorf("page %d after a refusal = %d, want 0x40", page, got)
-			}
+	out, _, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeLeft}}, WithStrictRedaction())
+	if !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrImageShared) {
+		t.Fatalf("Redact = %v, want ErrRedactionRefused wrapping ErrImageShared", err)
+	}
+	for page := 1; page <= 2; page++ {
+		if got := renderedGray(t, out, page, copyLeftTop); !nearGray(got, 0x40) {
+			t.Errorf("page %d after a refusal = %d, want 0x40", page, got)
 		}
 	}
 }

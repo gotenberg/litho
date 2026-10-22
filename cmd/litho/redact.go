@@ -36,6 +36,7 @@ type redactResult struct {
 	RemovedText             []string         `json:"removedText"`
 	BlankedImages           []string         `json:"blankedImages,omitempty"`
 	ImagesBlankedInCopy     map[int][]string `json:"imagesBlankedInCopy,omitempty"`
+	FormsCopied             map[int]int      `json:"formsCopied,omitempty"`
 	RemovedPaths            int              `json:"removedPaths"`
 	ClippedPaths            int              `json:"clippedPaths,omitempty"`
 	RasterisedUnits         int              `json:"rasterisedUnits,omitempty"`
@@ -217,6 +218,7 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		RemovedText:             report.RemovedText,
 		BlankedImages:           report.BlankedImages,
 		ImagesBlankedInCopy:     report.ImagesBlankedInCopy,
+		FormsCopied:             report.FormsCopied,
 		RemovedPaths:            report.RemovedPaths,
 		ClippedPaths:            report.ClippedPaths,
 		RasterisedUnits:         report.RasterisedUnits,
@@ -260,6 +262,10 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		}
 		if n := result.RasterisedUnits; n > 0 {
 			fmt.Fprintf(stdout, "Rasterised %d painting element(s) outside the regions\n", n)
+		}
+		for _, page := range slices.Sorted(maps.Keys(result.FormsCopied)) {
+			fmt.Fprintf(stdout, "Page %d draws %d copied form(s) holding images blanked in a copy\n",
+				page, result.FormsCopied[page])
 		}
 		if n := len(result.RemovedAnnotations); n > 0 {
 			fmt.Fprintf(stdout, "Removed %d annotation(s) inside the regions\n", n)

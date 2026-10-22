@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -738,6 +739,10 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	prevResources := machine.Resources
 	prevDepth := machine.FormDepth
 	prevOpIndex := machine.OpIndex
+	prevCalls := machine.FormCalls
+	// A fresh slice per call: an image recorded below keeps its own copy,
+	// and a sibling call must not write into an array a deeper one shares.
+	machine.FormCalls = append(slices.Clip(prevCalls), graphics.FormCall{Op: machine.OpIndex, ObjNum: objNum})
 	// No origins below the top level: these elements are drawn by the form's own
 	// content stream, and the caller's operation indices do not address it. No
 	// font references either, and for a sharper reason: the form selects its
@@ -749,6 +754,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	machine.Resources = prevResources
 	machine.FormDepth = prevDepth
 	machine.OpIndex = prevOpIndex
+	machine.FormCalls = prevCalls
 	machine.RestoreMarkedContent(mcSpans)
 	if objNum != 0 {
 		delete(visited, objNum)

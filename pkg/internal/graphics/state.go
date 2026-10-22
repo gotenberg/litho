@@ -249,6 +249,12 @@ type Machine struct {
 	// it, which is what leads a caller from a mark a form drew back to the Do
 	// on the page that drew the form.
 	PageOpIndex int
+	// FormCalls is the chain of Do operators whose form XObjects are
+	// executing below the page, outermost first: one per level of
+	// [Machine.FormDepth]. The caller driving the walk pushes and pops it,
+	// as it sets [Machine.FormDepth]. A recorded image carries a copy (see
+	// [ImageBox.Forms]).
+	FormCalls []FormCall
 	// pathStartOp is the OpIndex of the first construction operator of the path
 	// being built. Bounds alone do not say which bytes drew them, and removing a
 	// paint operator without the construction operators that fed it would leave

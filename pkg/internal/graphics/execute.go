@@ -3,6 +3,7 @@ package graphics
 import (
 	"context"
 	"math"
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -267,6 +268,19 @@ type ImageBox struct {
 	// image: the Do on the page that drew the form holding it, when
 	// FormDepth is not zero.
 	PageOp int
+	// Forms is the chain of form XObjects the image was painted through,
+	// outermost first, one [FormCall] per level of FormDepth: a copy of
+	// those forms is what a caller edits to change this placement alone.
+	// Nil when the page's own content painted the image.
+	Forms []FormCall
+}
+
+// FormCall is one Do that drew a form XObject: Op is the index of the Do in
+// the operations of the stream that ran it (the page's for the first call of
+// a chain, the enclosing form's for a later one), and ObjNum the form's
+// object number, 0 when its resource entry was not an indirect reference.
+type FormCall struct {
+	Op, ObjNum int
 }
 
 // ImageSpace maps a page-space point into the image's unit square, where (0,0)
@@ -332,6 +346,7 @@ func handleDoXObject(ctx context.Context, m *Machine, state *State, op content.O
 	box := imageBoxFromCTM(string(name), state.CTM)
 	box.ObjNum = objNum
 	box.Op, box.FormDepth, box.PageOp = m.OpIndex, m.FormDepth, m.PageOpIndex
+	box.Forms = slices.Clone(m.FormCalls)
 	m.imageBoxes = append(m.imageBoxes, box)
 }
 

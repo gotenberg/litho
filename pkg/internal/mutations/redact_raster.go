@@ -77,7 +77,9 @@ type RedactOptions struct {
 	// [blankPrivateCopies]). Every other placement keeps painting the image
 	// as it was, and each covered placement gets a copy of its own. A
 	// covered placement a form XObject draws has no Do in the page's stream
-	// to repoint, and reports [ErrImageShared].
+	// to repoint, so the form, and each form between it and the image, is
+	// copied for that placement and the copies repointed instead (see
+	// [formCopies.write]); a chain it cannot copy reports [ErrImageShared].
 	PrivateCopies map[int]bool
 }
 

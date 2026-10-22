@@ -128,6 +128,13 @@ type RedactReport struct {
 	// others: it is still in the file. [WithStrictRedaction] refuses such an
 	// image instead.
 	ImagesBlankedInCopy map[int][]string
+	// FormsCopied maps a 1-based page number to the form XObjects it now
+	// draws a copy of, because an image of ImagesBlankedInCopy was painted
+	// inside them: the form the page draws, and each form between it and
+	// the image, once per covered placement. The copy names the blanked
+	// image where the form named the image; the form itself is unchanged,
+	// and every other placement still draws it.
+	FormsCopied map[int]int
 	// RemovedPaths counts the painted paths removed.
 	RemovedPaths int
 	// ClippedPaths counts the painted paths that reached outside the regions:
@@ -287,10 +294,11 @@ type RedactReport struct {
 // resource name, and every other placement keeps the image as it was (see
 // [RedactReport.ImagesBlankedInCopy]). [WithStrictRedaction] refuses such an
 // image. An image a form XObject draws on the page is blanked in place when
-// every placement of it had the same samples covered; one also painted
-// elsewhere is refused, since the copy would have to sit in the form, which
-// every other placement of the form draws too. A form nested in a form is
-// not followed, and an image it draws is refused as well.
+// every placement of it had the same samples covered. One also painted
+// elsewhere is blanked in a copy too: the form, and each form nested between
+// it and the image, is copied for the covered placement, the copy names the
+// blanked image, and the page draws the copy, while every other placement
+// draws the form as it was (see [RedactReport.FormsCopied]).
 //
 // The redaction holds whatever else the Writer does before or after it:
 // another Redact, auto-tagging, and a remediation, which comes after it since a
@@ -935,6 +943,12 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 			out.ImagesBlankedInCopy = make(map[int][]string)
 		}
 		out.ImagesBlankedInCopy[pageNum] = append(out.ImagesBlankedInCopy[pageNum], in.ImagesBlankedInCopy...)
+	}
+	if in.FormsCopied > 0 {
+		if out.FormsCopied == nil {
+			out.FormsCopied = make(map[int]int)
+		}
+		out.FormsCopied[pageNum] += in.FormsCopied
 	}
 	out.RemovedPaths += in.RemovedPaths
 	out.ClippedPaths += in.ClippedPaths

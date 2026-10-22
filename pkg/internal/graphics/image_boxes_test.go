@@ -2,6 +2,7 @@ package graphics
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -62,7 +63,7 @@ func TestImageBoxes_RecordsPlacementWhenAsked(t *testing.T) {
 		Name: "Im1", MinX: 10, MinY: 20, MaxX: 110, MaxY: 70,
 		CTM: [6]float64{100, 0, 0, 50, 10, 20},
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("box = %+v, want %+v", got, want)
 	}
 	if n := m.UnresolvedXObjects(); n != 0 {
@@ -92,7 +93,7 @@ func TestImageBoxes_FlippedCTMReportsTheAreaCovered(t *testing.T) {
 		Name: "Im1", MinX: 60, MinY: 170, MaxX: 100, MaxY: 200,
 		CTM: [6]float64{-40, 0, 0, -30, 100, 200},
 	}
-	if boxes[0] != want {
+	if !reflect.DeepEqual(boxes[0], want) {
 		t.Errorf("box = %+v, want %+v", boxes[0], want)
 	}
 }
@@ -120,7 +121,7 @@ func TestImageBoxes_InlineImageIsRecorded(t *testing.T) {
 		Name: InlineImageName, MinX: 5, MinY: 15, MaxX: 85, MaxY: 55,
 		CTM: [6]float64{80, 0, 0, 40, 5, 15},
 	}
-	if boxes[0] != want {
+	if !reflect.DeepEqual(boxes[0], want) {
 		t.Errorf("box = %+v, want %+v", boxes[0], want)
 	}
 	// Nothing was looked up, so nothing can have failed to resolve.

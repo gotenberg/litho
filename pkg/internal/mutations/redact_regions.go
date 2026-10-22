@@ -169,6 +169,12 @@ type RedactReport struct {
 	// once each. The image itself keeps its samples wherever else it is
 	// painted, and is still in the file.
 	ImagesBlankedInCopy []string
+	// FormsCopied counts the form XObjects copied so that a placement of
+	// an image blanked in a copy could be repointed inside them: the form
+	// the page draws, and each form between it and the image, once per
+	// covered placement. The forms themselves are unchanged, and every
+	// other placement still draws them.
+	FormsCopied int
 	// RemovedPaths counts the painted paths removed. Paths carry no text, so
 	// there is nothing for a scan to look for; the count is for the caller's
 	// report of what it did.
@@ -324,6 +330,7 @@ func redactPageRegions(
 		inlineEdits []SpanEdit
 		inlineEnds  *content.InlineImageEnds
 		copies      []privateCopy
+		forms       = make(formCopies)
 	)
 	for _, box := range machine.ShadingBoxes() {
 		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
@@ -361,21 +368,23 @@ func redactPageRegions(
 			continue
 		}
 		copied := box.ObjNum != 0 && opts.private[box.ObjNum]
-		if copied && box.FormDepth > 0 {
-			// The copy would have to be named in the form's resources and
-			// drawn by the form, which every other placement of the form
-			// draws too: only a copy of the form for this page would hold
-			// it, and the redaction does not copy forms.
-			return RedactReport{}, fmt.Errorf("%w: image %q is drawn by a form XObject, where no copy can be placed",
-				ErrImageShared, box.Name)
-		}
 		objNum, err := blankImage(ctx, alloc, doc, page, box, zones, copied)
 		if err != nil {
 			return RedactReport{}, err
 		}
 		report.BlankedImages = append(report.BlankedImages, box.Name)
 		if copied {
-			copies = append(copies, privateCopy{op: box.Op, objNum: objNum})
+			if box.FormDepth > 0 {
+				// The copy has to be named in the form's resources and drawn
+				// by the form, which every other placement of the form draws
+				// too: so the form, and each form above it, is copied for
+				// this placement (see [formCopies.write]).
+				if err := forms.add(box, objNum); err != nil {
+					return RedactReport{}, err
+				}
+			} else {
+				copies = append(copies, privateCopy{op: box.Op, objNum: objNum})
+			}
 			if !slices.Contains(report.ImagesBlankedInCopy, box.Name) {
 				report.ImagesBlankedInCopy = append(report.ImagesBlankedInCopy, box.Name)
 			}
@@ -386,6 +395,12 @@ func redactPageRegions(
 		}
 	}
 
+	formCopyOps, formsCopied, err := forms.write(ctx, alloc, doc, page, ops)
+	if err != nil {
+		return RedactReport{}, err
+	}
+	copies = append(copies, formCopyOps...)
+	report.FormsCopied = formsCopied
 	copyEdits, err := blankPrivateCopies(ctx, alloc, doc, page, ops, ranges, copies)
 	if err != nil {
 		return RedactReport{}, err
