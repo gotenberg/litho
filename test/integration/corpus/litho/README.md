@@ -274,6 +274,7 @@ one deliberately rather than diffing it against a fresh build.
 | `flattenannots_2b.pdf` | PDF/A-2b     | Transparent annotations, which flattening draws into the page    |
 | `flattenrefuse_1b.pdf` | PDF/A-1b     | Transparency on a page flattening refuses, beside one it takes   |
 | `iccalternate_2b.pdf`  | PDF/A-2b     | ICCBased spaces no engine can use, read as their CIE /Alternate  |
+| `formplacement_2b.pdf` | PDF/A-2b     | Widget appearances a viewer places by Algorithm 8.1, not a shift |
 
 ### Must-not-fire controls
 
@@ -643,6 +644,7 @@ are covered under [Known divergences](#known-divergences).
 | `formhidden_ua1.pdf`   | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 5    |
 | `formmark_ua1.pdf`     | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 2    | 3    |
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
+| `formplacement_2b.pdf` | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 8    | 6    |
 | `formreuse_ua1.pdf`    | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 10   | 8    |
 | `formshare_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 5    | 7    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
@@ -8885,6 +8887,47 @@ file needs no OutputIntent: Lab and CalGray are CIE-based. It is compliant at
 PDF/A-2b; the other cells report the part number and the missing structure
 and language entries. veraPDF 1.30.2 and litho report the same rule set in all
 thirteen cells.
+
+### `formplacement_2b.pdf`
+
+A viewer draws a widget's appearance by ISO 32000-1, 12.5.5, Algorithm 8.1: it
+transforms the form's `/BBox` by its `/Matrix` and scales and translates the
+box it gets onto the annotation's `/Rect`. Flattening a form, and the drawing
+of signed signatures every rewrite does, translated the appearance to the first
+corner `/Rect` names instead, right only for a box at the origin sized to
+`/Rect`. The corpora reach few other appearances, none turned by `/Matrix`, so
+this file holds one text field, with no value, per case:
+
+| Field       | `/Rect`             | `/BBox`             | `/Matrix`           | A viewer draws it      |
+| ----------- | ------------------- | ------------------- | ------------------- | ---------------------- |
+| `control`   | `[20 200 100 260]`  | `[0 0 80 60]`       | none                | translated             |
+| `offset`    | `[120 200 200 260]` | `[200 100 280 160]` | none                | its box moved          |
+| `scaled`    | `[220 200 300 260]` | `[0 0 40 30]`       | none                | scaled by 2            |
+| `rotated`   | `[20 40 80 120]`    | `[0 0 80 60]`       | a quarter turn      | turned upright         |
+| `combined`  | `[120 40 180 120]`  | `[10 20 50 50]`     | a quarter turn      | turned, scaled by 2    |
+| `reversed`  | `[300 120 220 40]`  | `[0 0 80 80]`       | translates `40 -30` | the translation undone |
+| `collapsed` | `[350 50 350 50]`   | `[0 0 20 20]`       | none                | not at all             |
+
+Each appearance fills its box in a light colour, a dark square in its
+lower-left corner and a red border, so a drawing moved, unturned or unscaled
+shows. `reversed` names its corners in the other order (7.9.5), and
+`collapsed` has no area, so Algorithm 8.1 scales it to nothing.
+
+`litho flatten-form` draws the six visible appearances where litho and poppler
+26.09.0 draw them in the source: litho's and poppler's renderings of the output
+match the source's to the pixel at 72 dpi, and `collapsed` leaves drawing
+nothing. The translation drew every case but `control` elsewhere, 21,996
+pixels apart from the source in poppler's rendering. The output fails what the
+source fails at every PDF/A level, and at PDF/UA the untagged drawing replaces
+the widget rules (`7.1/3` for `7.18.x` at PDF/UA-1, `8.2.2/1` for `8.9.3.3/1`
+at PDF/UA-2), on litho and veraPDF 1.30.2 alike. Remediation and transparency
+flattening write the same bytes as before: the file holds no signed signature.
+
+The file declares an RGB OutputIntent and every widget prints, so it conforms
+to PDF/A-2b. The other cells report what the part-2, level-B claim draws at
+the levels it does not match: identification, tagging, at part 4 the
+`%PDF-1.7` header, and `6.9/5` at PDF/A-4f.
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
 
 ## Scope
 
