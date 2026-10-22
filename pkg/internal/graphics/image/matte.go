@@ -47,7 +47,7 @@ func unpreblend(ctx context.Context, doc *document.Document, name ast.PdfName, d
 	if _, _, indexed := indexedColorSpace(ctx, doc, dict); indexed {
 		return img
 	}
-	mr, mg, mb, ok := matteRGB(ctx, doc, cc.withDefaults(ctx, doc, dict), cc, matte)
+	mr, mg, mb, ok := matteRGB(ctx, doc, cc.effectiveSpaces(ctx, doc, dict), cc, matte)
 	if !ok {
 		doc.Logger.Debug("ignoring a /Matte that does not fit the image's colour space",
 			slog.String("image", string(name)), slog.Int("components", len(matte)))

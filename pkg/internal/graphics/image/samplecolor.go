@@ -55,7 +55,7 @@ type SampleColor struct {
 // pattern, and an uncoloured pattern's colour is read in its base space.
 func NewSampleColor(ctx context.Context, doc *document.Document, csObj ast.PdfObject, resources, page ast.PdfDict, intent icc.Intent) (*SampleColor, error) {
 	cc := colorContext{resources: resources, page: page}
-	dict := cc.withDefaults(ctx, doc, ast.PdfDict{"ColorSpace": csObj, "Intent": ast.PdfName(intent.String())})
+	dict := cc.effectiveSpaces(ctx, doc, ast.PdfDict{"ColorSpace": csObj, "Intent": ast.PdfName(intent.String())})
 	if pal, ok := resolveIndexedPalette(ctx, doc, dict, cc); ok {
 		return &SampleColor{
 			ranges:  []float64{0, 255},

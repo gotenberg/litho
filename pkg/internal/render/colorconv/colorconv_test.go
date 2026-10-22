@@ -55,8 +55,9 @@ func streamObj(dict, data string) string {
 	return fmt.Sprintf("<< %s /Length %d >>\nstream\n%s\nendstream", dict, len(data), data)
 }
 
-// sharedObjects are objects 4 to 8 of every test document: the content
-// stream, two ICC profiles and two tint transforms the cases refer to.
+// sharedObjects are objects 4 to 13 of every test document: the content
+// stream, two ICC profiles, two tint transforms and five ICCBased profile
+// streams holding no profile, whose /Alternate the cases refer to.
 func sharedObjects(content string) []string {
 	return []string{
 		streamObj("", content),
@@ -64,8 +65,22 @@ func sharedObjects(content string) []string {
 		streamObj("/N 4", string(icc.CMYKPrinterProfile())),
 		"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 0.5 0] /N 1 >>",
 		streamObj("/FunctionType 4 /Domain [0 1 0 1] /Range [0 1 0 1 0 1]", "{ 0.5 }"),
+		streamObj("/N 3 /Alternate "+labDef, noProfile),
+		streamObj("/N 1 /Alternate "+sepDef, noProfile),
+		streamObj("/N 4 /Alternate /DeviceRGB", noProfile),
+		streamObj("/N 3 /Alternate [/ICCBased 9 0 R]", noProfile),
+		streamObj("/N 3 /Alternate [/ICCBased 13 0 R]", noProfile),
 	}
 }
+
+// imageObject is the object number of the image [agreementDoc] adds after
+// the shared objects.
+const imageObject = 14
+
+// noProfile is the data of an ICCBased stream no colour engine reads as a
+// profile, which ISO 32000-1, 8.6.5.5, Table 66 has a reader replace by the
+// stream's /Alternate.
+const noProfile = "litho: not an ICC profile"
 
 const (
 	d65Cal = "/WhitePoint [0.9505 1 1.089]"
@@ -118,6 +133,20 @@ var oracleCases = []colorCase{
 	{name: "Indexed Separation", def: "[/Indexed " + sepDef + " 2 <0080FF>]", comps: []float64{1}, poppler: []uint8{246, 129, 152}, tol: 23},
 	{name: "ICCBased CMYK mix", def: "[/ICCBased 6 0 R]", comps: []float64{0, 0.5, 0.5, 0.2}, poppler: []uint8{204, 125, 101}, tol: 1},
 	{name: "Lab saturated", def: labDef, comps: []float64{90, -50, 60}, poppler: []uint8{149, 250, 101}, tol: 1},
+	// An ICCBased space whose stream holds no profile reads as its
+	// /Alternate (ISO 32000-1, 8.6.5.5, Table 66), the colour values taken
+	// as they are: the same square as the alternate space itself paints.
+	{name: "ICCBased Lab alternate", def: "[/ICCBased 9 0 R]", comps: []float64{50, 20, -30}, poppler: []uint8{133, 108, 170}, tol: 1},
+	{name: "ICCBased Separation alternate", def: "[/ICCBased 10 0 R]", comps: []float64{0.5}, poppler: []uint8{246, 129, 153}, tol: 23},
+	{name: "ICCBased ICCBased alternate", def: "[/ICCBased 12 0 R]", comps: []float64{50, 20, -30}, poppler: []uint8{133, 108, 170}, tol: 1},
+	{name: "Indexed ICCBased Lab alternate", def: "[/Indexed [/ICCBased 9 0 R] 1 <FF8080 80FF80>]", comps: []float64{1}, poppler: []uint8{255, 0, 127}, tol: 1},
+	// An /Alternate of 3 components under /N 4 breaks Table 66. Poppler
+	// rejects the whole space and paints with the colour before it; litho
+	// reads DeviceCMYK, as PDF.js does.
+	{name: "ICCBased alternate of other count", def: "[/ICCBased 11 0 R]", comps: []float64{1, 0, 0, 0}},
+	// An /Alternate naming its own space ends at the device space of /N, as
+	// Poppler's loop detection ends it.
+	{name: "ICCBased alternate cycle", def: "[/ICCBased 13 0 R]", comps: []float64{0.2, 0.4, 0.6}, poppler: []uint8{51, 102, 153}, tol: 1},
 }
 
 // oraclePage returns the content stream and colour space resources of the
@@ -222,7 +251,7 @@ func agreementDoc(t testing.TB, def string, samples []byte) testDoc {
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R" +
-			" /Resources << /ColorSpace << /CS " + def + " >> /XObject << /Im0 9 0 R >> >> >>",
+			" /Resources << /ColorSpace << /CS " + def + fmt.Sprintf(" >> /XObject << /Im0 %d 0 R >> >> >>", imageObject),
 	}, sharedObjects("")...)
 	objs = append(objs, streamObj("/Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace "+def, string(samples)))
 	ctx, doc, page := buildPDF(t, objs)

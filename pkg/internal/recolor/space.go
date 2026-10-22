@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 )
 
 // maxSpaceDepth bounds how deep colour space definitions nest: a Pattern
@@ -393,7 +394,9 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int) *spa
 	}
 	fallback := func() *spacePlan {
 		p := s.planDevice(ctx, [5]string{1: SpaceGray, 3: SpaceRGB, 4: SpaceCMYK}[n], "", nil)
-		if alt, ok := stream.Dict["Alternate"]; ok {
+		// The renderer's reading of Table 66 picks the alternate, so a space
+		// converts from the colours it is drawn in.
+		if alt, _, ok := pdfimage.ICCAlternate(ctx, s.doc, stream.Dict, n); ok {
 			if a := s.plan(ctx, alt, nil, depth+1); a.n == n && (a.kind == planConvert || a.kind == planIdentity) {
 				p = a
 			}

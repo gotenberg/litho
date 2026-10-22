@@ -44,6 +44,15 @@ type colorContext struct {
 	page ast.PdfDict
 }
 
+// effectiveSpaces returns dict with its /ColorSpace replaced by the space its
+// colours are read in: a default colour space where one stands in for a
+// device space ([colorContext.withDefaults]), then an /Alternate where it
+// stands in for an ICCBased space whose profile litho cannot use
+// ([withICCAlternates]). dict is not modified.
+func (cc colorContext) effectiveSpaces(ctx context.Context, doc *document.Document, dict ast.PdfDict) ast.PdfDict {
+	return withICCAlternates(ctx, doc, cc.withDefaults(ctx, doc, dict))
+}
+
 // withDefaults returns dict with its /ColorSpace replaced where a default
 // colour space stands in for a device space: the space itself, the base of an
 // Indexed space, or the alternate of a Separation or DeviceN space. A device
@@ -172,7 +181,9 @@ func renderingIntent(ctx context.Context, doc *document.Document, dict ast.PdfDi
 // An ICCBased space is read through its profile (ISO 32000-1, 8.6.5.5) when
 // the profile describes as many components as the samples hold. When it
 // cannot be used, as when a JPEG's codestream holds another count, the space
-// falls back to the device space its /N names. DeviceCMYK is read through
+// falls back to the device space its /N names. A profile unusable whatever
+// the samples hold has already given way to its /Alternate, when it has one
+// ([withICCAlternates]). DeviceCMYK is read through
 // [cmykTransform], and DeviceRGB and DeviceGray through [deviceTransform].
 // The CIE-based spaces keep their own readings, even where litho reads their
 // samples in the device space of their component count.

@@ -1523,8 +1523,9 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 //     that litho failed to decode from 375 to 3.
 func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, cc colorContext, native *NativeSamples) (image.Image, error) {
 	// A default colour space in the painting resources stands in for a device
-	// space from here on, for every reading of the colour space below.
-	stream.Dict = cc.withDefaults(ctx, doc, stream.Dict)
+	// space, and an /Alternate for an ICCBased space whose profile litho
+	// cannot use, from here on, for every reading of the colour space below.
+	stream.Dict = cc.effectiveSpaces(ctx, doc, stream.Dict)
 
 	width, err := resolveInt(ctx, doc, stream.Dict, "Width")
 	if err != nil {
