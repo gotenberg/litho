@@ -370,6 +370,20 @@ func blankedMaskStream(alloc *writer.ObjAllocator, box graphics.ImageBox, zones 
 // Table 89 lets a reader create from it. Dropping it painted the picture
 // opaque around the region, the colour its data held where it was
 // transparent.
+//
+// The replacement is nil, beside the mask, when blanking leaves the mask
+// opaque everywhere, as a region covering the whole picture does: it then
+// paints as no mask does. Where some opacity survives, the /SMask is kept
+// although ISO 19005-1, 6.4 forbids one and does not name /SMaskInData: the
+// redaction's promise is that nothing outside the region changes, and the
+// source already paints that transparency, which only an /SMask carries
+// outside JPEG 2000 data. A PDF/A-1 remediation flattens it afterwards.
+//
+// # Corpus evidence
+//
+//   - litho smaskindata_2b: a whole-page redaction wrote an all-opaque
+//     /SMask on both images, adding 6.4 test 2 at PDF/A-1a and 1b in the
+//     mutate-redact cell; none is written now.
 func blankDataSoftMask(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -400,6 +414,18 @@ func blankDataSoftMask(
 			ErrImageCarriesSampleEntries, box.Name)
 	}
 	gray := &image.Gray{Pix: slices.Clone(m.Alpha), Stride: int(w), Rect: image.Rect(0, 0, int(w), int(h))}
+	if _, err := forCoveredSamples(box, zones, int(w), int(h), func(px, py int) {
+		gray.Pix[gray.PixOffset(px, py)] = 0xff
+	}); err != nil {
+		return nil, nil, fmt.Errorf("%q: soft mask: %w", box.Name, err)
+	}
+	if !slices.ContainsFunc(gray.Pix, func(a byte) bool { return a != 0xff }) {
+		// A mask opaque everywhere paints as no mask does (ISO 32000-1,
+		// 11.6.5.3: the shape multiplies by 1), so none is written. An
+		// /SMask would add the ISO 19005-1, 6.4 test 2 violation the
+		// source, whose /SMaskInData that clause does not name, lacks.
+		return nil, m, nil
+	}
 	ref, err := blankedMaskStream(alloc, box, zones, gray, nil)
 	if err != nil {
 		return nil, nil, err
