@@ -19,6 +19,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -134,6 +135,11 @@ type flattener struct {
 	quality int
 	// srgb is the ICC profile stream every image's colour space names.
 	srgb ast.PdfObject
+	// intentFamily is the device family the document's output intent
+	// characterises ([pdfimage.OutputIntentsFamily]), read once when
+	// intentRead is set.
+	intentFamily string
+	intentRead   bool
 	// states maps a graphics state dictionary's object number to its copy
 	// without transparency, and forms a form's to its copy holding only its
 	// text.
@@ -415,12 +421,13 @@ func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.
 			continue
 		}
 		res, report, err := page.RenderGroup(ctx, f.doc, pg, page.Options{
-			DPI:        dpi,
-			Background: [4]float32{1, 1, 1, 1},
-			Omit:       page.Text | page.Annotations,
-			GroupSpace: true,
-			Shared:     shared,
-			Pool:       f.pool,
+			DPI:               dpi,
+			Background:        [4]float32{1, 1, 1, 1},
+			Omit:              page.Text | page.Annotations,
+			GroupSpace:        true,
+			DefaultGroupSpace: f.deviceSpace(ctx, pg),
+			Shared:            shared,
+			Pool:              f.pool,
 		})
 		if err != nil {
 			return nil, page.Geometry{}, 0, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
@@ -524,12 +531,65 @@ func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Ge
 	return img, true, nil
 }
 
+// deviceSpace returns the colour space the page group of pg composites in
+// when its /Group names no /CS ([page.Options.DefaultGroupSpace]): DeviceCMYK
+// or DeviceGray when the first output intent of the page, else of the
+// document, characterises a device of that family, and nil, sRGB, otherwise.
+//
+// ISO 32000-1, 11.4.7 and Table 147 leave the page group's space to the
+// reader when /CS is absent, which composites in its device's process space,
+// and 14.11.5 has the output intent describe the device the document is
+// prepared for: so a flattening, which composites once for every reader,
+// composites for that device, as a PDF/X document's page groups composite in
+// its intent's space. The device family names it rather than the intent's
+// profile, since the intent characterises DeviceCMYK and DeviceGray
+// (14.11.5) and every reader draws them through it, and a PDF/X-1a document
+// admits no ICCBased space. A document that intends no grey or CMYK device
+// composites in sRGB, the space a viewer composites in.
+//
+// # Corpus evidence
+//
+//   - All corpora: 141 of 5330 files intend a CMYK or grey device, and 23 of
+//     them flatten; every page but one of laterreads_2u.pdf names its group's
+//     /CS, so the flatten cell's 2521 files flatten byte for byte as before
+//     but that one, whose composite is now DeviceCMYK and still draws as its
+//     source in litho and poppler 26.09.0. PDF/A-1b and 1a remediation of
+//     litho and veraPDF's PDF/A-1 files, which flattens, is unchanged.
+//   - litho: converted to CMYK and then flattened, 16 outputs held sRGB
+//     composites, 58 of them; 2 still paint outside the target, through
+//     constructs other than a page group with no /CS (a /CS naming a
+//     /ColorSpace resource in pagegroup_2b.pdf, an annotation appearance
+//     synthesised from its RGB /C in annotsynth_2b.pdf).
+func (f *flattener) deviceSpace(ctx context.Context, pg *document.Page) ast.PdfObject {
+	// ISO 32000-2, 14.11.5: a page's own output intents override the
+	// document's.
+	family := pdfimage.OutputIntentsFamily(ctx, f.doc, pg.Dict["OutputIntents"])
+	if family == "" {
+		if !f.intentRead {
+			f.intentRead = true
+			if catalog, err := document.ResolveCatalog(ctx, f.doc); err != nil {
+				f.doc.Logger.Debug("flatten: resolving catalog for output intents", slog.Any("err", err))
+			} else {
+				f.intentFamily = pdfimage.OutputIntentsFamily(ctx, f.doc, catalog.Dict["OutputIntents"])
+			}
+		}
+		family = f.intentFamily
+	}
+	switch family {
+	case "DeviceCMYK", "DeviceGray":
+		return ast.PdfName(family)
+	}
+	return nil
+}
+
 // compositeSamples returns the 8-bit samples of the composite res holds over
 // the device pixels px, and the colour space they are in. A page group that
-// blended in the grey or CMYK space its /Group /CS names gives its samples in
-// that space, under that /CS object: ISO 32000-2, 11.4.7 composites the page
-// in it, so the composite of a CMYK page stays CMYK, whose separations a
-// print workflow reads. Any other gives sRGB samples, under the sRGB profile.
+// blended in the grey or CMYK space its /Group /CS names, or the output
+// intent's device names when it names none ([flattener.deviceSpace]), gives
+// its samples in that space, under that object: ISO 32000-2, 11.4.7
+// composites the page in it, so the composite of a CMYK page stays CMYK,
+// whose separations a print workflow reads. Any other gives sRGB samples,
+// under the sRGB profile.
 func (f *flattener) compositeSamples(res *page.Result, px image.Rectangle) ([]byte, ast.PdfObject) {
 	if res.Space == nil {
 		samples := make([]byte, 0, 3*px.Dx()*px.Dy())
@@ -572,8 +632,8 @@ func to8(v float32) byte {
 }
 
 // srgbProfile returns the sRGB ICC profile stream the images' colour space
-// names, allocating it once. A page group with no grey or CMYK /CS composites
-// in sRGB (IEC 61966-2-1), so that is what its samples mean.
+// names, allocating it once. A page group with no grey or CMYK /CS, on a
+// document that intends no grey or CMYK device, composites in sRGB (IEC 61966-2-1), so that is what its samples mean.
 func (f *flattener) srgbProfile() ast.PdfObject {
 	if f.srgb == nil {
 		profile := icc.SRGBProfile()

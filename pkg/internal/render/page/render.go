@@ -100,6 +100,12 @@ type Options struct {
 	// blends there only when its content blends with another mode than
 	// Normal ([RenderGroup]).
 	GroupSpace bool
+	// DefaultGroupSpace, when not nil, is the colour space object the page
+	// group blends in when the page's /Group names no /CS, or the page has
+	// no /Group: ISO 32000-1, 11.4.7 and Table 147 leave that space to the
+	// reader, and a caller compositing for an output device names the
+	// device's. A /CS the page names stands.
+	DefaultGroupSpace ast.PdfObject
 	// Within, when not nil, marks the device pixels the caller reads: one
 	// value per pixel of the page, 1 at those and 0 elsewhere. The render
 	// skips painting the others, which it leaves unpainted or partly painted,
@@ -232,10 +238,11 @@ func Render(ctx context.Context, doc *document.Document, pg *document.Page, opts
 type Result struct {
 	// Group is the page group (ISO 32000-1, 11.4.7), over the background
 	// too, in its blending colour space ([blend.Group.Space]): sRGB, or the
-	// grey or CMYK space its /Group /CS names, which Space then holds.
+	// grey or CMYK space its /Group /CS names, or [Options.DefaultGroupSpace]
+	// names when it names none, which Space then holds.
 	Group *blend.Group
-	// Space is the page's /Group /CS object when Group blends in the space
-	// it names, and nil when Group blends in sRGB.
+	// Space is the page's /Group /CS object, or the default one, when Group
+	// blends in the space it names, and nil when Group blends in sRGB.
 	Space ast.PdfObject
 
 	canvas *surface.Canvas
@@ -355,6 +362,9 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		}
 		cs = ast.PdfName(graphics.FamilyDeviceCMYK)
 	} else {
+		if cs == nil {
+			cs = opts.DefaultGroupSpace
+		}
 		space = r.pageSpace(cs, pg.DrawResources, opts.GroupSpace)
 	}
 	var root *blend.Group

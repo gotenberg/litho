@@ -95,7 +95,7 @@ func (s *session) rewritePainting(ctx context.Context, stream ast.PdfStream, par
 		newDict["Resources"], dictChanged = ast.PdfDict{"ColorSpace": ast.PdfDict{s.targetName(nil): s.t.ColorSpace}}, true
 	}
 	if group {
-		v, ch, err := s.rewriteGroup(ctx, dict["Group"])
+		v, ch, err := s.rewriteGroup(ctx, dict["Group"], false)
 		if err != nil {
 			return nil, false, err
 		}

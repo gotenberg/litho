@@ -130,8 +130,8 @@ type FlattenReport struct {
 // overlaps and must take along, is composited by litho's renderer into one
 // opaque image, drawn where the region's first object was, so what is drawn
 // after it keeps its order. Everything outside those regions stays vector
-// content, untouched. The images are in sRGB, the space the renderer
-// composites in.
+// content, untouched. The images are in the space the page composites in,
+// below.
 //
 // Text is never rasterised. The images are composited without the page's
 // text, and every text object stays in the content as it was, with its
@@ -152,8 +152,15 @@ type FlattenReport struct {
 //
 // A page whose transparency group names a grey or CMYK /CS is composited in
 // that space (ISO 32000-2, 11.4.7), and its composites are images in it, so a
-// CMYK page keeps its inks. Any other page is composited in sRGB, and its
-// composites are sRGB images.
+// CMYK page keeps its inks. A page whose group names no /CS, or that has no
+// group, is composited in the device space the first output intent of the
+// page, else of the document, characterises when that is DeviceCMYK or
+// DeviceGray (14.11.5), and its composites are DeviceCMYK or DeviceGray
+// images: so a document [Writer.ConvertColors] converted to CMYK, which makes
+// the target its output intent, stays CMYK, blended as its printer blends it.
+// Any other page is composited in sRGB, and its composites are sRGB images.
+// The order matters: flattening before a conversion composites in sRGB, and
+// the conversion then converts the composites.
 //
 // An annotation that paints with transparency, or with
 // [WithFlattenPrintedAnnotations] any annotation a viewer prints, is drawn

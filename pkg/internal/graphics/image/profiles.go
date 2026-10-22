@@ -91,3 +91,44 @@ func ICCBasedProfile(ctx context.Context, doc *document.Document, csObj ast.PdfO
 	}
 	return p
 }
+
+// OutputIntentsFamily returns the device colour space family the destination
+// profile of the first output intent of the /OutputIntents array obj
+// characterises (ISO 32000-1, 14.11.5): "DeviceGray", "DeviceRGB" or
+// "DeviceCMYK" for a profile of 1, 3 or 4 components. An intent with no
+// destination profile, or one that does not read, is passed over. It returns
+// "" when no intent has such a profile, or obj is no array.
+func OutputIntentsFamily(ctx context.Context, doc *document.Document, obj ast.PdfObject) string {
+	if obj == nil {
+		return ""
+	}
+	intents, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil {
+		doc.Logger.Debug("resolving /OutputIntents", slog.Any("err", err))
+		return ""
+	}
+	for _, e := range intents {
+		dict, err := document.ResolveDict(ctx, doc, e)
+		if err != nil || dict == nil {
+			continue
+		}
+		profile, ok := dict["DestOutputProfile"]
+		if !ok {
+			continue
+		}
+		p, err := readProfile(ctx, doc, profile)
+		if err != nil {
+			doc.Logger.Debug("reading an output intent's profile", slog.Any("err", err))
+			continue
+		}
+		switch p.Components() {
+		case 1:
+			return "DeviceGray"
+		case 3:
+			return "DeviceRGB"
+		case 4:
+			return "DeviceCMYK"
+		}
+	}
+	return ""
+}

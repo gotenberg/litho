@@ -245,7 +245,7 @@ func (s *session) rewritePage(ctx context.Context, page *document.Page) error {
 		out["Resources"], changed = ast.PdfDict{"ColorSpace": ast.PdfDict{s.targetName(nil): s.t.ColorSpace}}, true
 	}
 
-	v, ch, err = s.rewriteGroup(ctx, dict["Group"])
+	v, ch, err = s.rewriteGroup(ctx, dict["Group"], true)
 	if err != nil {
 		return err
 	}

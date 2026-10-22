@@ -185,14 +185,40 @@ func (s *session) rewriteDefinition(ctx context.Context, def ast.PdfObject) (ast
 
 // rewriteGroup writes a transparency group's blending space (ISO 32000-1,
 // 11.4.7, Table 147) in the target, where every colour it composites now is.
-func (s *session) rewriteGroup(ctx context.Context, obj ast.PdfObject) (ast.PdfObject, bool, error) {
+//
+// A page group that names no space is given the target when the target is
+// grey or CMYK (page set): Table 147 leaves such a page group's space to the
+// reader, which composites in its device's space, RGB on screen, so a
+// flattening or a print of the converted page would composite it outside the
+// target. An RGB target is left unnamed, since that is the space readers
+// composite in anyway. A form's group that names no space composites in its
+// parent's (11.4.5), so it follows the page's. A page with no group is given
+// none: recolouring does not tell whether its content composites, and a group
+// on a page of a PDF/A-1 file that composites nothing would add the
+// transparency group ISO 19005-1, 6.4 forbids. Such a page composites in the
+// device of the output intent the conversion makes the target (14.11.5).
+//
+// # Corpus evidence
+//
+//   - litho kidsrepair_1b.pdf, pagegroup_2b.pdf: the only files of the recolor
+//     cell's sample (386) whose page group names no space, so the only
+//     outputs a CMYK conversion changes; both still draw as their sources.
+func (s *session) rewriteGroup(ctx context.Context, obj ast.PdfObject, page bool) (ast.PdfObject, bool, error) {
 	if obj == nil {
 		return nil, false, nil
 	}
 	return s.edit(ctx, obj, "group", func(resolved ast.PdfObject) (ast.PdfObject, bool, error) {
 		d, ok := resolved.(ast.PdfDict)
-		if !ok || d["CS"] == nil {
+		if !ok {
 			return nil, false, nil
+		}
+		if d["CS"] == nil {
+			if !page || s.t.n == 3 || !s.transparencyGroup(ctx, d) {
+				return nil, false, nil
+			}
+			out := maps.Clone(d)
+			out["CS"] = s.t.spaceObject()
+			return out, true, nil
 		}
 		p := s.planDefinition(ctx, d["CS"], nil)
 		var cs ast.PdfObject
@@ -208,4 +234,13 @@ func (s *session) rewriteGroup(ctx context.Context, obj ast.PdfObject) (ast.PdfO
 		out["CS"] = cs
 		return out, true, nil
 	})
+}
+
+// transparencyGroup reports whether the group attributes dictionary d is a
+// transparency group's, /S /Transparency, the only subtype ISO 32000-1,
+// 8.10.3 defines and the only one /CS belongs to (Table 147).
+func (s *session) transparencyGroup(ctx context.Context, d ast.PdfDict) bool {
+	v, err := s.resolve(ctx, d["S"])
+	name, ok := v.(ast.PdfName)
+	return err == nil && ok && name == "Transparency"
 }
