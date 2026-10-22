@@ -53,8 +53,9 @@ type RedactOption func(*redactOpts)
 
 // redactOpts holds what [Writer.Redact] and its [RedactOption] values set.
 type redactOpts struct {
-	strict bool
-	raster bool
+	strict     bool
+	raster     bool
+	pixelCheck bool
 }
 
 // WithStrictRedaction makes [Writer.Redact] refuse with
@@ -229,6 +230,11 @@ type RedactReport struct {
 // metadata or any other object, still refuses. [WithStrictRedaction] refuses
 // copies on other pages too.
 //
+// The verification compares text, not pixels. [WithRedactionPixelCheck] adds
+// a third refusal, [ErrRedactionPixelCheck]: it renders each redacted page
+// before and after, and refuses unless the regions show only paper and
+// blanked images and nothing outside them changed.
+//
 // The document holds copies outside its pages too. Each home is cleared,
 // kept for the scan to judge, or left to the rewrite, as follows:
 //
@@ -334,6 +340,22 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...Red
 // redact applies regions as [Writer.Redact] describes, with the raster
 // fallback when o asks for it.
 func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpts) (*RedactReport, error) {
+	// The pixel check compares the redacted pages with the pages as staged
+	// before the redaction, which must be rendered from a document the
+	// redaction's passes have not started on.
+	var before *Reader
+	if o.pixelCheck {
+		staged, release, stagedErr := w.stagedReader(ctx)
+		if stagedErr != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, &RedactionPixelError{Err: fmt.Errorf("writing the staged document: %w", stagedErr)}
+		}
+		defer release()
+		before = staged
+	}
+
 	if err := w.promotePageTree(ctx); err != nil {
 		return nil, err
 	}
@@ -482,11 +504,44 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	// pending map worked incrementally, where source and destination numbering
 	// agree, but stomped the copier's destination allocations during a full
 	// rewrite and produced files whose trailer pointed at the wrong object.
+	prevOverrides, prevFolded, prevForce := w.rewriteOverrides, w.folded, w.forceRewrite
+	prevRedactions, prevTokens, prevTolerances := len(w.redactions), len(w.redactedTokens), len(w.redactionTolerances)
 	w.rewriteOverrides = alloc.Pending()
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
 	w.recordRedaction(regions, needles, o.strict)
+	if o.pixelCheck {
+		if checkErr := w.checkRedactedOutput(ctx, before, regions, order, report.RemovedGlyphBoxes); checkErr != nil {
+			w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
+			w.redactions = w.redactions[:prevRedactions]
+			w.redactedTokens = w.redactedTokens[:prevTokens]
+			w.redactionTolerances = w.redactionTolerances[:prevTolerances]
+			restoreTrailer()
+			return nil, checkErr
+		}
+	}
 	return report, nil
+}
+
+// checkRedactedOutput writes the Writer as [Writer.WriteTo] would, reopens
+// it, and runs the pixel check of [WithRedactionPixelCheck] on the pages of
+// order against before.
+func (w *Writer) checkRedactedOutput(
+	ctx context.Context,
+	before *Reader,
+	regions []RedactRegion,
+	order []int,
+	removed map[int][][4]float64,
+) error {
+	after, release, err := w.writeAndReopen(ctx, "litho-redact-after-*.pdf")
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return &RedactionPixelError{Err: fmt.Errorf("writing the redacted document: %w", err)}
+	}
+	defer release()
+	return checkRedactionPixels(ctx, before, after, regions, order, removed)
 }
 
 // otherPageCopies reports whether every hit of scan is a copy only pages

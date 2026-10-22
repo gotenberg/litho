@@ -314,6 +314,15 @@ var (
 	// to write, for example one a later stage put back.
 	ErrRedactionIncomplete = errors.New("redaction incomplete: a copy of the removed text survives in the document")
 
+	// ErrRedactionPixelCheck is returned by [Writer.Redact] under
+	// [WithRedactionPixelCheck] when a rendering of a redacted page still
+	// paints something other than paper or a blanked image inside a region,
+	// or changed outside the regions, or when the page could not be rendered
+	// to tell. The error is a [*RedactionPixelError] naming the page, the
+	// region and where, and it also matches [ErrRedactionRefused]. The
+	// [Writer] is left exactly as it was.
+	ErrRedactionPixelCheck = errors.New("redaction refused: a rendering of the redacted page does not show what the regions promise")
+
 	// ErrPageDeletionIncomplete is returned by [Writer.WriteTo] when
 	// [Writer.DeletePages] could not walk one of the document's reference
 	// structures to the bottom, because it nests deeper than that prune's depth
