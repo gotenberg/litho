@@ -518,6 +518,25 @@ func algorithm81(bbox geom.Rect, formMatrix geom.Matrix, rect geom.Rect) geom.Ma
 	return geom.Matrix{sx, 0, 0, sy, rect.Min.X - box.Min.X*sx, rect.Min.Y - box.Min.Y*sy}
 }
 
+// Placement returns the matrix A of ISO 32000-1, 12.5.5, Algorithm 8.1 that
+// places form, the dictionary of an annotation's appearance stream, on the
+// annotation's rectangle rect, as [Collect] places it in [Appearance.A]. A
+// caller that draws the appearance into page content applies A with cm before
+// invoking the form with Do, which applies the form's own /Matrix. It returns
+// false when rect or the form's /BBox is not a rectangle of four finite
+// numbers: [Collect] draws no such appearance.
+func Placement(ctx context.Context, doc *document.Document, rect ast.PdfObject, form ast.PdfDict) (geom.Matrix, bool) {
+	r, ok := readRect(ctx, doc, rect)
+	if !ok {
+		return geom.Matrix{}, false
+	}
+	bbox, ok := readRect(ctx, doc, form["BBox"])
+	if !ok {
+		return geom.Matrix{}, false
+	}
+	return algorithm81(bbox, readMatrix(ctx, doc, form["Matrix"]), r), true
+}
+
 // refOf returns obj's reference, zero when obj is direct.
 func refOf(obj ast.PdfObject) ast.PdfIndirectRef {
 	ref, _ := obj.(ast.PdfIndirectRef) // a direct object has no reference

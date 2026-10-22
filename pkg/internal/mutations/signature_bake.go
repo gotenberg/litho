@@ -34,9 +34,9 @@ import (
 //
 // A widget that shows nothing leaves without drawing: one the viewer does not
 // display (Hidden or NoView, ISO 32000-1, Table 165), one with no area, as an
-// invisible signature has, and one with no appearance stream. Drawing an
-// appearance at its /BBox, which is what flattening does, would put an
-// invisible signature's appearance on the page at full size.
+// invisible signature has, and one with no appearance stream. A viewer
+// scales an appearance onto a /Rect with no area to nothing (ISO 32000-1,
+// 12.5.5, Algorithm 8.1), so an invisible signature shows nothing.
 //
 // # Corpus evidence
 //

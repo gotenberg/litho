@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/render/annot"
 )
 
 // maxFieldTreeDepth bounds the walk up a widget's /Parent chain. It is an
@@ -693,13 +694,30 @@ const (
 // returns the appearance to draw with [widgetBaked]. An annotation whose /Rect
 // cannot place a drawing is kept instead of baked.
 //
-// Each appearance is drawn as a form XObject placed at the widget's /Rect,
-// inside the marked content tags gives it (see [flattenTags]). All page-dict
+// Each appearance is drawn as a form XObject placed on the widget's /Rect as a
+// viewer places it, by ISO 32000-1, 12.5.5, Algorithm 8.1: its /BBox,
+// transformed by its /Matrix, is scaled and translated onto /Rect (see
+// [annot.Placement], which litho's renderer and [BakeAnnotations] place by
+// too). A plain translation to the /Rect corner drew any appearance whose box
+// is offset, sized apart from /Rect, or rotated by /Matrix somewhere else
+// than the viewer showed it. The drawing goes inside the marked content tags
+// gives it (see [flattenTags]). All page-dict
 // mutations (XObject resource additions, /Contents append, /Annots trim) are
 // accumulated into a single draft and written with exactly one
 // [writer.ObjAllocator.AllocAt] call per page, the same invariant
 // [applyStampToPages] follows, so concurrent mutations cannot clobber each
 // other.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18058.pdf, issue9367.pdf, bug1723568.pdf, issue17069.pdf,
+//     bug1899804.pdf, issue16384.pdf: the translation drew a flattened page
+//     13773, 9098, 6584, 5058, 3827 and 2096 pixels apart from its source in
+//     litho's rendering at 72 dpi. Placed by Algorithm 8.1, each of the 15
+//     pages across all corpora that drew apart draws like its source.
+//   - verapdf PDF_UA-1 7.18.1-t03-pass-d.pdf, pdfjs bug1723568.pdf: carry a
+//     widget whose /Rect has no area, which the translation drew at the full
+//     size of its /BBox.
 func flattenPageWidgets(
 	ctx context.Context,
 	doc *document.Document,
@@ -755,9 +773,21 @@ func flattenPageWidgets(
 			remainingAnnots = append(remainingAnnots, annotObj)
 			continue
 		}
-		x1, y1, x2, y2 := rect[0], rect[1], rect[2], rect[3]
+		form := asFormXObject(apStream, rect[2]-rect[0], rect[3]-rect[1])
+		placement, ok := annot.Placement(ctx, doc, annotDict["Rect"], form.Dict)
+		if !ok {
+			remainingAnnots = append(remainingAnnots, annotObj)
+			continue
+		}
+		// A /Rect with no width or no height scales the appearance to
+		// nothing (Algorithm 8.1), so the viewer shows nothing of it and the
+		// widget leaves drawing nothing.
+		if placement.Det() == 0 {
+			tags.drop(ctx, alloc, doc, annotObj, annotDict)
+			continue
+		}
 
-		apRef := alloc.Alloc(asFormXObject(apStream, x2-x1, y2-y1))
+		apRef := alloc.Alloc(form)
 		xobjName := ast.PdfName(fmt.Sprintf("FlatAP%d", apRef.ObjectNum))
 
 		// On a tagged page the appearance is tagged under the widget's
@@ -767,8 +797,8 @@ func flattenPageWidgets(
 
 		// string(): PdfName.String already adds the slash, and "//Name Do"
 		// names no XObject, so the flattened appearance never drew.
-		stampOps = append(stampOps, fmt.Sprintf("\n%sq 1 0 0 1 %s %s cm /%s Do Q%s",
-			open, FormatFloat(x1), FormatFloat(y1), string(xobjName), closing))
+		stampOps = append(stampOps, fmt.Sprintf("\n%sq %s cm /%s Do Q%s",
+			open, matrixOperands(placement), string(xobjName), closing))
 		xobjectAdditions = append(xobjectAdditions, stampResource{
 			category: "XObject", name: xobjName, ref: apRef,
 		})
@@ -972,9 +1002,9 @@ func resolveWidgetAppearance(ctx context.Context, doc *document.Document, alloc 
 //
 // The box is only synthesised when absent: a stream that declares one is placed
 // by it, and overriding that would move the appearance. Width and height come
-// from /Rect, matching the translation the caller emits, and negative extents
-// are normalised because a rectangle's corners may be given in either order
-// (7.9.5).
+// from /Rect, so Algorithm 8.1 maps the box onto /Rect unscaled, and negative
+// extents are normalised because a rectangle's corners may be given in either
+// order (7.9.5).
 //
 // # Corpus evidence
 //

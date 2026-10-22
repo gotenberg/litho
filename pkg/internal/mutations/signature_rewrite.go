@@ -686,9 +686,9 @@ func widgetSignedField(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //
 // A widget the viewer does not display (Hidden or NoView, ISO 32000-1, Table
 // 165), one with no area, as an invisible signature has, and one with no
-// appearance stream draw nothing. Drawing an appearance at its /BBox, which is
-// what flattening does, would put an invisible signature's appearance on the
-// page at full size.
+// appearance stream draw nothing. A viewer scales an appearance onto a /Rect
+// with no area to nothing (ISO 32000-1, 12.5.5, Algorithm 8.1), so an
+// invisible signature shows nothing.
 func signedWidgetOutcome(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotDict ast.PdfDict) (widgetOutcome, ast.PdfStream) {
 	if annotationHiddenOrNoView(ctx, doc, annotDict) {
 		return widgetDropped, ast.PdfStream{}
