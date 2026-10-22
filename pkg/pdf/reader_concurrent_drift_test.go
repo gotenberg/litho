@@ -80,6 +80,7 @@ var racedOptionReaders = []string{
 	"VerifySignatures",
 	// TestRenderPageConcurrent, over a page that paints.
 	"RenderPage",
+	"RenderPageReport",
 }
 
 // readerMethodsByShape parses the package and groups exported *Reader methods

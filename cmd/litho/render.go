@@ -12,8 +12,30 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
+// renderResult is the JSON report of litho render --report.
+type renderResult struct {
+	File  string       `json:"file"`
+	Pages []renderPage `json:"pages"`
+}
+
+// renderPage is one page of the JSON report: the file it was written to and
+// what [pdf.RenderReport] counts.
+type renderPage struct {
+	Page                         int    `json:"page"`
+	Image                        string `json:"image"`
+	PlaceholderGlyphs            int    `json:"placeholderGlyphs"`
+	SynthesizedAnnotations       int    `json:"synthesizedAnnotations"`
+	AnnotationsWithoutAppearance int    `json:"annotationsWithoutAppearance"`
+	StaleAppearances             int    `json:"staleAppearances"`
+	TransparencyOverBudget       int    `json:"transparencyOverBudget"`
+	CoarseMasks                  int    `json:"coarseMasks"`
+	Skipped                      int    `json:"skipped"`
+}
+
 // runRender draws pages to PNG files, one per page, named as pdftoppm names
-// them: the -o prefix, a hyphen, the page number and .png.
+// them: the -o prefix, a hyphen, the page number and .png. With --report it
+// prints, instead of the file names, a JSON report of the pages written and
+// what each one approximated.
 func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -26,13 +48,15 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	systemFonts := fs.Bool("system-fonts", false,
 		"Also search the operating system's font directories, after --font-dir, for the fonts the document does not embed; the pages then depend on the fonts installed on this host")
 	forPrint := fs.Bool("print", false, "Draw the annotations a viewer prints rather than those it shows on screen")
+	reportFlag := fs.Bool("report", false,
+		"Print a JSON report instead of the file names: each page's image and what it approximated (placeholder glyphs, synthesised or missing annotation appearances, stale widget appearances, transparency over the render budget, coarse soft masks, damaged constructs left out)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	files := fs.Args()
 	if len(files) != 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] [--print] -o PREFIX <file>")
+		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] [--print] [--report] -o PREFIX <file>")
 		return exitError
 	}
 	opts := []pdf.RenderOption{pdf.WithRenderDPI(*dpi)}
@@ -80,8 +104,9 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		target = pdf.RenderForPrint
 	}
 	opts = append(opts, pdf.WithRenderTarget(target))
+	result := renderResult{File: path, Pages: make([]renderPage, 0, len(pageNums))}
 	for _, p := range pageNums {
-		img, err := r.RenderPage(ctx, p, opts...)
+		img, rep, err := r.RenderPageReport(ctx, p, opts...)
 		if err != nil {
 			fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
 			return exitError
@@ -91,7 +116,27 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 			fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
 			return exitError
 		}
-		fmt.Fprintln(stdout, name)
+		if !*reportFlag {
+			fmt.Fprintln(stdout, name)
+			continue
+		}
+		result.Pages = append(result.Pages, renderPage{
+			Page:                         p,
+			Image:                        name,
+			PlaceholderGlyphs:            rep.PlaceholderGlyphs,
+			SynthesizedAnnotations:       rep.SynthesizedAnnotations,
+			AnnotationsWithoutAppearance: rep.AnnotationsWithoutAppearance,
+			StaleAppearances:             rep.StaleAppearances,
+			TransparencyOverBudget:       rep.TransparencyOverBudget,
+			CoarseMasks:                  rep.CoarseMasks,
+			Skipped:                      rep.Skipped,
+		})
+	}
+	if *reportFlag {
+		if err := outputJSON(stdout, result); err != nil {
+			fmt.Fprintf(stderr, "writing report: %v\n", err)
+			return exitError
+		}
 	}
 	return exitOK
 }

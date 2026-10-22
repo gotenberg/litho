@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -73,5 +74,35 @@ func TestRender_Refusals(t *testing.T) {
 		if !strings.Contains(stderr.String(), tc.stderr) {
 			t.Errorf("%q: stderr %q, want it to hold %q", tc.args, stderr.String(), tc.stderr)
 		}
+	}
+}
+
+// TestRender_Report pins the JSON litho render --report prints in place of
+// the file names: one entry per page, with its image and the counts of
+// pdf.RenderReport. untaggedTextPDF shows text in a font it does not embed,
+// so the page reports placeholder glyphs.
+func TestRender_Report(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+	prefix := filepath.Join(t.TempDir(), "page")
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(), []string{"render", "--dpi", "18", "--report", "-o", prefix, src}, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("exit %d, stderr %q", rc, stderr.String())
+	}
+	var got renderResult
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not the JSON report: %v\n%s", err, stdout.String())
+	}
+	if got.File != src || len(got.Pages) != 1 {
+		t.Fatalf("report %+v, want one page of %s", got, src)
+	}
+	pg := got.Pages[0]
+	if pg.Page != 1 || pg.Image != prefix+"-1.png" {
+		t.Errorf("page entry %+v, want page 1 written to %s-1.png", pg, prefix)
+	}
+	if pg.PlaceholderGlyphs == 0 {
+		t.Errorf("page entry %+v, want placeholder glyphs for the unembedded font", pg)
+	}
+	if _, err := os.Stat(pg.Image); err != nil {
+		t.Errorf("the reported image: %v", err)
 	}
 }

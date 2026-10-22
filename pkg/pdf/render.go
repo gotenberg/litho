@@ -166,8 +166,105 @@ func WithRenderBackground(c color.Color) RenderOption {
 // RenderPage is safe for concurrent use with every other read of the
 // [Reader], RenderPage included: each call draws into its own raster and
 // reads the document through its caches, which serialise themselves.
+//
+// [Reader.RenderPageReport] draws the same page and also says what the
+// drawing approximated.
 func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOption) (_ image.Image, err error) {
 	defer recoverToError(r.logger(), "Reader.RenderPage", &err)
+	img, _, err := r.renderPage(ctx, pageNum, opts)
+	return img, err
+}
+
+// RenderReport says what [Reader.RenderPageReport] drew other than the file
+// asks, or did not draw: the parts of the image a caller should not take for
+// the page's exact look. Every count is zero for a page drawn as the file
+// describes it.
+// Values must not be shared across goroutines without synchronization.
+type RenderReport struct {
+	// PlaceholderGlyphs counts the glyphs drawn as hollow boxes, their font
+	// neither embedded nor supplied by [WithRenderFontProvider],
+	// [WithRenderFontFiles] or [WithRenderSystemFonts] (ISO 32000-1, 9.6.2.2
+	// leaves a substitute to the reader).
+	PlaceholderGlyphs int
+	// SynthesizedAnnotations counts the annotations drawn from an appearance
+	// litho built from the annotation dictionary, the file holding no
+	// appearance stream: the Square, Circle, Line, Polygon, PolyLine, Ink,
+	// text markup and Link types. ISO 32000-1, 12.5.5 leaves their look to
+	// the viewer, so another viewer may draw them otherwise.
+	SynthesizedAnnotations int
+	// AnnotationsWithoutAppearance counts the annotations not drawn at all:
+	// they hold no appearance stream and their look is a viewer's icon or
+	// text (Text, FreeText, Stamp and the like).
+	AnnotationsWithoutAppearance int
+	// StaleAppearances counts the form field widgets drawn from the
+	// appearance stream the file holds although the form's
+	// /NeedAppearances asks the viewer to build new ones (ISO 32000-1,
+	// 12.7.2): litho builds none, so the field may show an out-of-date value.
+	StaleAppearances int
+	// TransparencyOverBudget counts the transparency groups, soft masks and
+	// knockout text objects (ISO 32000-1, 11.4, 11.6.5.2, 9.3.8) whose
+	// rasters would pass [Limits.MaxRenderPixels], drawn other than the file
+	// asks: a group's content through the group's alpha and soft mask
+	// without the group, a soft mask hiding what it masks, a knockout text
+	// object glyph by glyph.
+	TransparencyOverBudget int
+	// CoarseMasks counts the soft masks drawn at a coarser resolution than
+	// the page to fit [Limits.MaxRenderPixels]: their effect is kept,
+	// approximated within a few pixels of where the mask changes.
+	CoarseMasks int
+	// Skipped counts the constructs the file damages, left out of the page
+	// as a viewer leaves them out: an image that does not decode or whose
+	// mask does not, a shading or pattern that does not compile, a form past
+	// [Limits.MaxFormDepth] or in a cycle.
+	Skipped int
+}
+
+// RenderPageReport draws the page as [Reader.RenderPage] draws it, with the
+// same options, errors and image, and returns a [RenderReport] counting what
+// the image approximates or leaves out. A caller that shows the image as the
+// page, or compares it against another renderer's, reads the report to know
+// where it may differ.
+//
+// RenderPageReport is safe for concurrent use with every other read of the
+// [Reader], as [Reader.RenderPage] is.
+func (r *Reader) RenderPageReport(ctx context.Context, pageNum int, opts ...RenderOption) (_ image.Image, _ RenderReport, err error) {
+	defer recoverToError(r.logger(), "Reader.RenderPageReport", &err)
+	img, rep, err := r.renderPage(ctx, pageNum, opts)
+	if err != nil {
+		return nil, RenderReport{}, err
+	}
+	return img, renderReport(r.logger(), rep), nil
+}
+
+// renderReport translates the renderer's report into the public one. A key
+// of [page.Report.Unsupported] it does not know is logged at Debug rather
+// than dropped silently; TestRenderReportCoversEveryKey keeps the switch
+// complete.
+func renderReport(logger *slog.Logger, rep page.Report) RenderReport {
+	out := RenderReport{CoarseMasks: rep.CoarseMasks, SynthesizedAnnotations: rep.Synthesized}
+	for _, k := range slices.Sorted(maps.Keys(rep.Unsupported)) {
+		n := rep.Unsupported[k]
+		switch k {
+		case page.PlaceholderGlyph:
+			out.PlaceholderGlyphs += n
+		case page.TransparencyOverBudget:
+			out.TransparencyOverBudget += n
+		case page.UnsupportedAnnotation:
+			out.AnnotationsWithoutAppearance += n
+		case page.StaleAppearance:
+			out.StaleAppearances += n
+		case page.Skipped:
+			out.Skipped += n
+		default:
+			logger.Debug("render: report key without a public field", slog.String("key", k), slog.Int("count", n))
+		}
+	}
+	return out
+}
+
+// renderPage draws the page for [Reader.RenderPage] and
+// [Reader.RenderPageReport], logging at Debug what the render approximated.
+func (r *Reader) renderPage(ctx context.Context, pageNum int, opts []RenderOption) (image.Image, page.Report, error) {
 	o := renderOpts{dpi: DefaultRenderDPI, background: color.White, content: RenderAllContent}
 	for _, opt := range opts {
 		opt(&o)
@@ -179,14 +276,14 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 	case RenderForPrint:
 		mode = annot.Print
 	default:
-		return nil, fmt.Errorf("page %d: %w: render target %d", pageNum, ErrInvalidRenderOptions, o.target)
+		return nil, page.Report{}, fmt.Errorf("page %d: %w: render target %d", pageNum, ErrInvalidRenderOptions, o.target)
 	}
 	if o.content&^RenderAllContent != 0 {
-		return nil, fmt.Errorf("page %d: %w: render content %#x", pageNum, ErrInvalidRenderOptions, uint8(o.content))
+		return nil, page.Report{}, fmt.Errorf("page %d: %w: render content %#x", pageNum, ErrInvalidRenderOptions, uint8(o.content))
 	}
 	pg, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
-		return nil, err
+		return nil, page.Report{}, err
 	}
 	var bg [4]float32
 	if o.background != nil {
@@ -209,11 +306,11 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 	if err != nil {
 		switch {
 		case errors.Is(err, page.ErrInvalidOptions):
-			return nil, fmt.Errorf("page %d: %w: %v", pageNum, ErrInvalidRenderOptions, err)
+			return nil, page.Report{}, fmt.Errorf("page %d: %w: %v", pageNum, ErrInvalidRenderOptions, err)
 		case errors.Is(err, page.ErrTooLarge):
-			return nil, fmt.Errorf("page %d: %w: %v", pageNum, ErrRenderTooLarge, err)
+			return nil, page.Report{}, fmt.Errorf("page %d: %w: %v", pageNum, ErrRenderTooLarge, err)
 		}
-		return nil, fmt.Errorf("rendering page %d: %w", pageNum, err)
+		return nil, page.Report{}, fmt.Errorf("rendering page %d: %w", pageNum, err)
 	}
 	if len(report.Unsupported) > 0 {
 		attrs := make([]any, 0, len(report.Unsupported)+1)
@@ -226,7 +323,7 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 	if report.CoarseMasks > 0 {
 		r.logger().Debug("render: soft masks drawn at a coarser resolution", slog.Int("page", pageNum), slog.Int("masks", report.CoarseMasks))
 	}
-	return canvas.Image(), nil
+	return canvas.Image(), report, nil
 }
 
 // omittedContent returns the kinds of content the renderer leaves out when

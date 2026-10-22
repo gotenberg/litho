@@ -14,8 +14,9 @@ import (
 // annotations draws the page's annotation appearances over its content, in
 // /Annots order (ISO 32000-1, 12.5.5), as [annot.Collect] selects them for
 // mode. An annotation with no appearance stream is drawn from its
-// dictionary where ISO 32000-1 defines how ([annot.Options.Synthesize]), and
-// counted as unsupported otherwise. Widgets whose appearances the form marks
+// dictionary where ISO 32000-1 defines how ([annot.Options.Synthesize]),
+// counted in [Report.Synthesized] when drawn, and counted as unsupported
+// otherwise. Widgets whose appearances the form marks
 // stale are drawn from the stream the file holds and counted
 // ([renderer.needAppearances]). Each runs as a form XObject from the initial
 // graphics state, placed by Algorithm 8.1 and clipped to its /BBox, unless
@@ -38,6 +39,9 @@ func (r *renderer) annotations(g Geometry, mode annot.Mode) error {
 		}
 		if !r.visible(a.OC) || !r.visible(a.FormOC) {
 			continue
+		}
+		if a.Synthesized {
+			r.report.Synthesized++
 		}
 		if err := r.annotation(a, g); err != nil {
 			return err

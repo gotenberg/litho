@@ -162,6 +162,11 @@ type Report struct {
 	// where the mask changes (see [renderer.maskGroup]). A mask that does not
 	// fit even so is counted in [TransparencyOverBudget].
 	CoarseMasks int
+	// Synthesized counts the annotations drawn from an appearance litho
+	// built from the dictionary, the file holding none (ISO 32000-1, 12.5.5
+	// leaves the look of such an annotation to the viewer, so another viewer
+	// may draw it otherwise).
+	Synthesized int
 }
 
 func (r *Report) count(key string) {

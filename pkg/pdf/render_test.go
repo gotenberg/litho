@@ -109,7 +109,7 @@ func TestRenderPageConcurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup
-	errs := make(chan error, 8)
+	errs := make(chan error, 16)
 	for range 8 {
 		wg.Add(1)
 		go func() {
@@ -121,6 +121,14 @@ func TestRenderPageConcurrent(t *testing.T) {
 			}
 			if string(got.(*image.NRGBA).Pix) != string(want.(*image.NRGBA).Pix) {
 				errs <- errors.New("a concurrent render differs")
+			}
+			got, rep, err := r.RenderPageReport(ctx, 1, WithRenderDPI(72))
+			if err != nil {
+				errs <- err
+				return
+			}
+			if string(got.(*image.NRGBA).Pix) != string(want.(*image.NRGBA).Pix) || rep != (RenderReport{}) {
+				errs <- errors.New("a concurrent render with its report differs")
 			}
 		}()
 	}
