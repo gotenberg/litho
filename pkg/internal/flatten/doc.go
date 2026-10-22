@@ -23,4 +23,8 @@
 // [Annotations] runs first: it draws into the page content the appearance of
 // each annotation that paints with transparency, so the page flattening
 // composites it with the rest.
+//
+// [Redaction] runs the same machinery for redaction's raster fallback: the
+// regions grow from the form XObjects and shading paints a redaction cannot
+// remove exactly, and their images are cut out of the redaction's regions.
 package flatten

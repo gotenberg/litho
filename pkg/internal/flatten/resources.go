@@ -278,6 +278,10 @@ func (f *flattener) textForm(ctx context.Context, op content.Operation, resource
 	}
 	ref, isRef := obj.(ast.PdfIndirectRef)
 	key := copyKey{num: ref.ObjectNum, hides: hides}
+	// A copy a page draws directly is its placement's own when the run
+	// edits copies by placement; the forms those copies draw stay shared, as
+	// the editing copies them before changing them.
+	isRef = isRef && (!f.private || depth != 1)
 	if isRef {
 		if copied, ok := f.forms[key]; ok {
 			return copied, nil
@@ -419,7 +423,7 @@ func (f *flattener) copyTextForm(ctx context.Context, stream ast.PdfStream, pare
 				remove(i, "")
 				continue
 			}
-			name := f.newName(xobjects, "FlatTx")
+			name := f.newName(xobjects, f.prefix("FlatTx", "Rt"))
 			xobjects[name] = copied
 			remove(i, "/"+string(name)+" Do")
 		}

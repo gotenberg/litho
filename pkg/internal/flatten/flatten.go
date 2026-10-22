@@ -186,6 +186,24 @@ type flattener struct {
 	// pool holds the pixels of the page renderings done with, which the
 	// next page's reuse.
 	pool *surface.Pool
+	// private makes each form a page draws that is replaced by its text a
+	// copy of its own, rather than one copy per form: [Redaction] edits
+	// each placement's copy for the regions it lies under.
+	private bool
+	// unmarked draws the images outside marked content unmarked rather than
+	// as artifacts: [Redaction] in a document with no structure tree that
+	// claims no accessibility conformance.
+	unmarked bool
+}
+
+// prefix returns the prefix of the resource names the run adds: flatten's,
+// or for [Redaction] short ones. A redaction scans the content it writes for
+// the text it removed, and a longer name is a word its scan can match.
+func (f *flattener) prefix(flat, redaction string) string {
+	if f.private {
+		return redaction
+	}
+	return flat
 }
 
 // Document removes the transparency of every page in pages, queuing the
@@ -318,7 +336,7 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 			if f.quality > 0 {
 				vector = f.vectorBoxes(ctx, a, ops, r)
 			}
-			img, ok, err := f.regionImage(ctx, res, g, a.crop, r.Box, xobjects, vector)
+			img, ok, err := f.regionImage(ctx, res, g, a.crop, r.Box, xobjects, vector, nil)
 			if err != nil {
 				return pr, false, err
 			}
@@ -330,7 +348,7 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 					}
 				}
 				e := edit(r.Insert)
-				e.before = append(e.before, f.drawImage(a.positions[r.Insert], r.Box, img.tiles)...)
+				e.before = append(e.before, f.drawImage(a.positions[r.Insert], r.Box, nil, img.tiles)...)
 				n, err := cover.hideCovered(ctx, a, r, img, edit)
 				if err != nil {
 					return pr, false, err
@@ -357,7 +375,7 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 		removed[u] = true
 	}
 	for _, u := range slices.Sorted(maps.Keys(removed)) {
-		if err := f.removeUnit(ctx, ops, a.Units[u], pg.DrawResources, xobjects, edit); err != nil {
+		if _, err := f.removeUnit(ctx, ops, a.Units[u], pg.DrawResources, xobjects, edit); err != nil {
 			return pr, false, err
 		}
 	}
@@ -522,7 +540,10 @@ type tileImg struct {
 // are what the page's edge leaves of a pixel. Drawn at another resolution, a
 // composite holding them reaches past the edge the page's own content stops
 // at.
-func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict, vector []Rect) (regionImg, bool, error) {
+//
+// holes lists boxes in default user space painted out of the image: every
+// pixel a box reaches is set to the paper's colour (see [paintOut]).
+func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict, vector, holes []Rect) (regionImg, bool, error) {
 	size := res.Group.Bounds().Size()
 	dev := transformRect(g.Matrix, box)
 	paper := transformRect(g.Matrix, crop)
@@ -535,6 +556,7 @@ func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Ge
 	}
 	px := image.Rect(x0, y0, x1, y1)
 	samples, space := f.compositeSamples(res, px)
+	paintOut(samples, px, len(samples)/(px.Dx()*px.Dy()), g.Matrix, holes)
 	var devVector []image.Rectangle
 	for _, v := range vector {
 		// The pixel margin takes in the antialiased edge of what the unit
@@ -563,7 +585,7 @@ func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Ge
 			"Filter":           ast.PdfName(t.filter),
 			"Length":           ast.PdfInt(len(t.data)),
 		}, t.data))
-		name := f.newName(xobjects, "FlatIm")
+		name := f.newName(xobjects, f.prefix("FlatIm", "Ri"))
 		xobjects[name] = ref
 		// The unit square's bottom edge is the image's last row (ISO
 		// 32000-2, 8.9.4), the bottom of the pixels in device space, whose
@@ -716,10 +738,14 @@ func (f *flattener) newName(dict ast.PdfDict, prefix string) ast.PdfName {
 // marked content the image is an artifact (ISO 32000-2, 14.8.2.2): what it
 // shows is content the page already tags, or the page's own background, and
 // ISO 14289-1, 7.1 wants untagged content marked so.
-func (f *flattener) drawImage(pos position, box Rect, tiles []tileImg) []byte {
+//
+// holes are boxes inside box the images do not paint: the clip is box with
+// them cut out by the even-odd rule (8.5.3.3.3).
+func (f *flattener) drawImage(pos position, box Rect, holes []Rect, tiles []tileImg) []byte {
 	var b strings.Builder
 	b.WriteString("\n")
-	if pos.marked == 0 {
+	artifact := pos.marked == 0 && !f.unmarked
+	if artifact {
 		b.WriteString("/Artifact BMC\n")
 	}
 	b.WriteString("q\n")
@@ -728,12 +754,19 @@ func (f *flattener) drawImage(pos position, box Rect, tiles []tileImg) []byte {
 		inv, _ := pos.ctm.Invert()
 		b.WriteString(matrixOperands(inv) + " cm\n")
 	}
-	for _, v := range []float64{box.MinX, box.MinY, box.MaxX - box.MinX, box.MaxY - box.MinY} {
-		b.WriteString(number(v) + " ")
+	for _, r := range append([]Rect{box}, holes...) {
+		for _, v := range []float64{r.MinX, r.MinY, r.MaxX - r.MinX, r.MaxY - r.MinY} {
+			b.WriteString(number(v) + " ")
+		}
+		b.WriteString("re\n")
 	}
-	b.WriteString("re W n\n")
+	if len(holes) > 0 {
+		b.WriteString("W* n\n")
+	} else {
+		b.WriteString("W n\n")
+	}
 	b.WriteString(drawTiles(tiles) + "Q\n")
-	if pos.marked == 0 {
+	if artifact {
 		b.WriteString("EMC\n")
 	}
 	return []byte(b.String())
@@ -771,14 +804,14 @@ func number(v float64) string {
 // removeUnit edits the operations of u, a unit a region's image takes over:
 // a path's painting operator becomes n when the path also clips, so the clip
 // stays (ISO 32000-2, 8.5.4), and the path is dropped otherwise; a form
-// showing text is replaced by a copy holding its text; anything else is
-// dropped.
-func (f *flattener) removeUnit(ctx context.Context, ops []content.Operation, u Unit, resources, xobjects ast.PdfDict, edit func(int) *opEdit) error {
+// showing text is replaced by a copy holding its text, whose reference it
+// returns; anything else is dropped.
+func (f *flattener) removeUnit(ctx context.Context, ops []content.Operation, u Unit, resources, xobjects ast.PdfDict, edit func(int) *opEdit) (ast.PdfIndirectRef, error) {
 	switch u.Kind {
 	case KindPath:
 		if u.Clips {
 			edit(u.Last).remove, edit(u.Last).replace = true, []byte("n")
-			return nil
+			return ast.PdfIndirectRef{}, nil
 		}
 		for i := u.First; i <= u.Last; i++ {
 			if pathOperator(ops[i].Operator) {
@@ -788,25 +821,26 @@ func (f *flattener) removeUnit(ctx context.Context, ops []content.Operation, u U
 	case KindForm:
 		if !u.HasText {
 			edit(u.First).remove = true
-			return nil
+			return ast.PdfIndirectRef{}, nil
 		}
 		ref, err := f.textForm(ctx, ops[u.First], resources, 1, u.hides)
 		if err != nil {
-			return err
+			return ast.PdfIndirectRef{}, err
 		}
 		e := edit(u.First)
 		e.remove = true
 		if ref.ObjectNum != 0 {
-			name := f.newName(xobjects, "FlatTx")
+			name := f.newName(xobjects, f.prefix("FlatTx", "Rt"))
 			xobjects[name] = ref
 			e.replace = []byte("/" + string(name) + " Do")
 		}
+		return ref, nil
 	case KindImage, KindInlineImage, KindShading:
 		edit(u.First).remove = true
 	case KindText:
 		// Text is never removed: it stays above the image.
 	}
-	return nil
+	return ast.PdfIndirectRef{}, nil
 }
 
 // wrapped returns original, the bytes of a show operator, between the

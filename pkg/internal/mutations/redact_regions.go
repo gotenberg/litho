@@ -9,7 +9,6 @@ import (
 	"math"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -18,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // RedactPageRegions clears what a page draws inside the given regions: it
@@ -71,6 +71,8 @@ import (
 //     [ErrRegionCoversAShading]: it fills that clip and has no geometry to cut.
 //   - A region selecting content a form XObject draws reports
 //     [ErrRegionInFormXObject], whose bytes are in the form's stream.
+//     [RedactPageRegionsWith] can rasterise such forms and shadings instead
+//     (see [RedactOptions.Rasterise]).
 //   - An image whose samples cannot be rewritten reports one of
 //     [ErrInlineImageInRegion] (an inline image whose bytes or colour space
 //     no replacement spliced into the stream can keep, see
@@ -125,19 +127,7 @@ func RedactPageRegions(
 	page *document.Page,
 	regions [][4]float64,
 ) (RedactReport, error) {
-	// Blanking an image queues its replacement before the remaining checks run,
-	// and a refusal after that has to leave nothing behind: a refused redaction
-	// registers no objects at all, or a caller that handled the error would
-	// still write a half-edited document. Restore is lossless here because
-	// every edit is a fresh object handed to AllocAt, never an AST mutated in
-	// place, which is the condition writer.ObjAllocator.Snapshot documents.
-	snap := alloc.Snapshot()
-	report, err := redactPageRegions(ctx, alloc, doc, page, regions)
-	if err != nil {
-		alloc.Restore(snap)
-		return RedactReport{}, err
-	}
-	return report, nil
+	return RedactPageRegionsWith(ctx, alloc, doc, page, regions, RedactOptions{})
 }
 
 // RedactReport says what a redaction removed, per vector.
@@ -207,14 +197,35 @@ type RedactReport struct {
 	// directly into /Annots is removed just the same, since removing an entry
 	// needs no object number, but it has none to report.
 	RemovedAnnotations []int
+	// RasterisedUnits counts the painting elements the raster fallback drew
+	// as images instead (see [RedactOptions.Rasterise]): the form XObjects
+	// and shading paints whose content the regions selected, and those drawn
+	// among them that the images took with them. The images hold nothing of
+	// the regions, and the units' text is kept as text.
+	RasterisedUnits int
 }
 
+// pageRedaction is what [redactPageRegions] does beyond [RedactPageRegions].
+type pageRedaction struct {
+	// composites names the images the raster fallback drew, which already
+	// show the regions cut out and are passed over rather than blanked.
+	composites map[int]bool
+	// formImages refuses an image a form XObject draws inside the regions
+	// with [ErrRegionInFormXObject] rather than blanking it, so the raster
+	// fallback takes the form: a blanked image a form draws is refused at
+	// the end anyway, as an image referenced outside the pages' own
+	// resources (see [CheckBlankedImageUses]).
+	formImages bool
+}
+
+// redactPageRegions does the work of [RedactPageRegions], with opts.
 func redactPageRegions(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	page *document.Page,
 	regions [][4]float64,
+	opts pageRedaction,
 ) (RedactReport, error) {
 	if len(regions) == 0 {
 		return RedactReport{}, nil
@@ -279,15 +290,10 @@ func redactPageRegions(
 	// the page was refused below.
 	machine.Staged = alloc.Pending()
 
-	elements, origins, fontRefs, err := typography.ExtractElementsWithAttribution(ctx, doc, machine, page, ops)
+	elements, attr, err := typography.ExtractElementsAttributed(ctx, doc, machine, page, ops)
 	if err != nil {
 		return RedactReport{}, fmt.Errorf("extracting page text: %w", err)
 	}
-
-	// Per-font counts, so a caller can be told which fonts this page no longer
-	// draws with once the removal is done.
-	fontGlyphs := make(map[int]int)
-	fontRemoved := make(map[int]int)
 
 	zones := regionZones(regions)
 
@@ -328,8 +334,11 @@ func redactPageRegions(
 				break
 			}
 		}
-		if !covered {
+		if !covered || (box.ObjNum != 0 && opts.composites[box.ObjNum]) {
 			continue
+		}
+		if opts.formImages && box.FormDepth > 0 {
+			return RedactReport{}, fmt.Errorf("%w: image %q", ErrRegionInFormXObject, box.Name)
 		}
 		if box.Name == graphics.InlineImageName {
 			if inlineEnds == nil {
@@ -370,181 +379,16 @@ func redactPageRegions(
 	report.RemovedPaths = paths.removed
 	report.ClippedPaths = paths.clipped
 
-	// Tally each operator's glyphs, because an operator leaves whole or stays
-	// whole: every glyph it drew has to agree about the regions.
-	//
-	// The glyphs are also where the removed text lives. One element is one
-	// glyph on this path (typography.CoalesceElements merges them into runs
-	// and is deliberately not called here), so the run an operator drew is its
-	// glyphs joined in the order they were appended.
-	type coverage struct {
-		inside, outside int
-		glyphs          []string
-		mcids           []int
-		// picked and glyphMCIDs run parallel to glyphs: whether each glyph
-		// met a region, and its marked-content identifier (-1 for none). A
-		// split operator removes some glyphs and keeps others, so its
-		// marked content can go on both sides.
-		picked     []bool
-		glyphMCIDs []int
-		// boxes runs parallel to glyphs too: the box each glyph paints
-		// ([glyphBox]).
-		boxes [][4]float64
-		// fontRef is the font every glyph of this operator was drawn with: one
-		// show-text operator paints with whatever Tf last selected. It holds
-		// typography.FontUnattributable until a glyph names a font, so an
-		// operator drawn with a font that has no object number is never
-		// mistaken for one drawn with object zero.
-		fontRef int
-	}
-	tally := make(map[int]*coverage)
-
-	for i, el := range elements {
-		selected := false
-		box := heuristics.ElementZone(el)
-		for _, z := range zones {
-			if heuristics.ZonesOverlap(box, z) {
-				selected = true
-				break
-			}
-		}
-		origin := origins[i]
-		if origin == typography.OriginUnattributable {
-			if selected {
-				return RedactReport{}, fmt.Errorf("%w: %q", ErrRegionInFormXObject, el.Text)
-			}
-			continue
-		}
-		if origin < 0 || origin >= len(ops) {
-			return RedactReport{}, fmt.Errorf("element %d reports operation %d, which is not one of %d", i, origin, len(ops))
-		}
-		c := tally[origin]
-		if c == nil {
-			c = &coverage{fontRef: typography.FontUnattributable}
-			tally[origin] = c
-		}
-		c.glyphs = append(c.glyphs, el.Text)
-		c.picked = append(c.picked, selected)
-		c.boxes = append(c.boxes, glyphBox(box))
-		c.glyphMCIDs = append(c.glyphMCIDs, el.MCID)
-		if el.MCID >= 0 {
-			c.mcids = append(c.mcids, el.MCID)
-		}
-		// The three slices are parallel, but guard the index rather than trust
-		// it: a mismatch would attribute glyphs to the wrong font silently.
-		if i < len(fontRefs) && fontRefs[i] != typography.FontUnattributable {
-			c.fontRef = fontRefs[i]
-			fontGlyphs[fontRefs[i]]++
-		}
-		if selected {
-			c.inside++
-		} else {
-			c.outside++
-		}
-	}
-
-	// Sorted, so a refusal names the same operator every run.
-	selected := make([]int, 0, len(tally))
-	for origin, c := range tally {
-		if c.inside > 0 {
-			selected = append(selected, origin)
-		}
-	}
-	sort.Ints(selected)
-
-	// An operator with glyphs on both sides is split rather than removed:
-	// its covered glyphs go and the rest stay where they were. See
-	// splitShowReplacement, which refuses whatever it cannot split exactly.
-	// Only whole removals count as removed for the pen, since a split
-	// operator keeps its full advance.
-	removedOps := make(map[int]bool, len(selected))
-	for _, origin := range selected {
-		if tally[origin].outside == 0 {
-			removedOps[origin] = true
-		}
-	}
-	if err := checkShownCodes(machine.GlyphAdvances(), removedOps); err != nil {
+	text, err := selectText(ctx, ops, elements, attr, machine, zones, func(el models.TextElement, _ int) error {
+		return fmt.Errorf("%w: %q", ErrRegionInFormXObject, el.Text)
+	})
+	if err != nil {
 		return RedactReport{}, err
 	}
-	splits := make(map[int][]byte)
-
-	spans := make([]content.ByteRange, 0, len(selected))
-	for _, origin := range selected {
-		if c := tally[origin]; c.outside > 0 {
-			split, err := splitShowReplacement(ctx, ops, origin, c.picked, c.glyphs, removedOps,
-				machine.GlyphAdvances()[origin], machine.ShowAdvances()[origin])
-			if err != nil {
-				return RedactReport{}, err
-			}
-			splits[origin] = split.replacement
-			spans = append(spans, ranges[origin])
-			if c.fontRef != typography.FontUnattributable {
-				fontRemoved[c.fontRef] += c.inside
-			}
-			report.RemovedText = append(report.RemovedText, split.removedText...)
-			for k, b := range c.boxes {
-				if c.picked[k] {
-					report.RemovedGlyphBoxes = append(report.RemovedGlyphBoxes, b)
-				}
-			}
-			continue
-		}
-		report.RemovedGlyphBoxes = append(report.RemovedGlyphBoxes, tally[origin].boxes...)
-		spans = append(spans, ranges[origin])
-		// Counted here rather than from the selected set, so it is reached only
-		// after the partial-coverage refusal above: an operator that stays is
-		// not a removal.
-		if c := tally[origin]; c.fontRef != typography.FontUnattributable {
-			fontRemoved[c.fontRef] += c.inside
-		}
-		// An unresolved glyph decodes to nothing, so a run of only those joins
-		// to "". Reporting that as removed text would hand a scan a token
-		// contained in every string, which is the same answer as scanning for
-		// nothing at all.
-		if run := strings.Join(tally[origin].glyphs, ""); run != "" {
-			report.RemovedText = append(report.RemovedText, run)
-		}
-	}
-	// A font every one of whose glyphs went is one this page no longer draws
-	// with, so its embedded outlines now describe only removed text.
-	for fontRef, drawn := range fontGlyphs {
-		if drawn > 0 && fontRemoved[fontRef] == drawn {
-			report.FontsFullyRemovedOnPage = append(report.FontsFullyRemovedOnPage, fontRef)
-		}
-	}
-	sort.Ints(report.FontsFullyRemovedOnPage)
-
-	// EditPageSpans sorts and rejects overlaps, so the two sets need no
-	// ordering here. A path run that somehow enclosed a show-text operator
-	// would be caught there as an overlap rather than silently merged.
-	//
-	// Which marked content went and which stayed. An identifier can appear on
-	// both sides when it covers operators the region split between, and the
-	// scrub has to see that rather than clear an element describing both.
-	removedMCIDs := make(map[int]bool)
-	survivingMCIDs := make(map[int]bool)
-	selectedOrigins := make(map[int]bool, len(selected))
-	for _, origin := range selected {
-		selectedOrigins[origin] = true
-		c := tally[origin]
-		for k, mcid := range c.glyphMCIDs {
-			switch {
-			case mcid < 0:
-			case c.picked[k] || c.outside == 0:
-				removedMCIDs[mcid] = true
-			default:
-				survivingMCIDs[mcid] = true
-			}
-		}
-	}
-	for origin, c := range tally {
-		if selectedOrigins[origin] {
-			continue
-		}
-		for _, mcid := range c.mcids {
-			survivingMCIDs[mcid] = true
-		}
-	}
+	report.RemovedText = append(report.RemovedText, text.removedText...)
+	report.RemovedGlyphBoxes = append(report.RemovedGlyphBoxes, text.glyphBoxes...)
+	report.FontsFullyRemovedOnPage = text.fontsFullyRemoved
+	removedMCIDs, survivingMCIDs := text.removedMCIDs, text.survivingMCIDs
 	for mcid := range removedMCIDs {
 		report.RemovedMCIDs = append(report.RemovedMCIDs, mcid)
 	}
@@ -556,7 +400,7 @@ func redactPageRegions(
 		return RedactReport{}, err
 	}
 
-	if len(spans) == 0 && len(inlineEdits) == 0 && len(paths.edits) == 0 {
+	if len(text.selected) == 0 && len(inlineEdits) == 0 && len(paths.edits) == 0 {
 		// An image may still have been blanked, so the report stands even when
 		// no operator was removed, and the page's own copies still have to go.
 		if len(report.BlankedImages) > 0 {
@@ -565,19 +409,16 @@ func redactPageRegions(
 		return report, nil
 	}
 
-	edits := make([]SpanEdit, 0, len(spans)+len(inlineEdits)+len(paths.edits))
-	edits = append(edits, inlineEdits...)
-	for _, origin := range selected {
-		if replacement, ok := splits[origin]; ok {
-			edits = append(edits, SpanEdit{Span: ranges[origin], Replacement: replacement})
-			continue
-		}
-		replacement, err := removedShowReplacement(ctx, ops, origin, removedOps, machine.ShowAdvances())
-		if err != nil {
-			return RedactReport{}, err
-		}
-		edits = append(edits, SpanEdit{Span: ranges[origin], Replacement: replacement})
+	// EditPageSpans sorts and rejects overlaps, so the sets need no ordering
+	// here. A path run that somehow enclosed a show-text operator would be
+	// caught there as an overlap rather than silently merged.
+	textEdits, err := text.edits(ctx, ops, ranges, machine)
+	if err != nil {
+		return RedactReport{}, err
 	}
+	edits := make([]SpanEdit, 0, len(textEdits)+len(inlineEdits)+len(paths.edits))
+	edits = append(edits, inlineEdits...)
+	edits = append(edits, textEdits...)
 	edits = append(edits, paths.edits...)
 	if err := EditPageSpans(ctx, alloc, doc, page, edits); err != nil {
 		return RedactReport{}, err

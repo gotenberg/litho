@@ -156,7 +156,8 @@
 //     [WithSigningTime], [WithSignatureField], [WithPAdES],
 //     [WithTimestampAuthority], [WithLTV], [WithValidationData].
 //   - [Writer.Timestamp] takes [TimestampOption]: [WithTimestampField].
-//   - [Writer.Redact] takes [RedactOption]: [WithStrictRedaction].
+//   - [Writer.Redact] takes [RedactOption]: [WithStrictRedaction],
+//     [WithRedactionRasterFallback].
 //   - [Writer.ConvertColors] takes [ColorOption]: [WithColorIntent],
 //     [WithBlackPointCompensation], [WithSpotConversion],
 //     [WithoutOutputIntent], [WithReplacedOutputIntents], [WithJPEGQuality].

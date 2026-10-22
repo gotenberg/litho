@@ -37,6 +37,7 @@ type redactResult struct {
 	BlankedImages           []string      `json:"blankedImages,omitempty"`
 	RemovedPaths            int           `json:"removedPaths"`
 	ClippedPaths            int           `json:"clippedPaths,omitempty"`
+	RasterisedUnits         int           `json:"rasterisedUnits,omitempty"`
 	RemovedAnnotations      []int         `json:"removedAnnotations,omitempty"`
 	DroppedPageEntries      []string      `json:"droppedPageEntries,omitempty"`
 	FontsFullyRemovedOnPage map[int][]int `json:"fontsFullyRemovedOnPage,omitempty"`
@@ -108,6 +109,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	// what its CMYK colours are read in when the document names none.
 	cmykProfile := fs.String("cmyk-profile", "", "ICC profile DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
 	strict := fs.Bool("strict", false, "Refuse when a page outside the regions still draws removed text, instead of warning")
+	rasterFallback := fs.Bool("raster-fallback", false, "Rasterise the form XObjects and shadings the regions reach, refused otherwise, as images cut out of the regions")
 
 	var regionSpecs regionFlags
 	fs.Var(&regionSpecs, "region", "Region to clear, page:x,y,width,height (repeatable, required)")
@@ -117,7 +119,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] -o out.pdf")
 		return exitError
 	}
 
@@ -162,6 +164,9 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	var redactOpts []pdf.RedactOption
 	if *strict {
 		redactOpts = append(redactOpts, pdf.WithStrictRedaction())
+	}
+	if *rasterFallback {
+		redactOpts = append(redactOpts, pdf.WithRedactionRasterFallback())
 	}
 	report, err := w.Redact(ctx, regions, redactOpts...)
 	if err != nil {
@@ -208,6 +213,7 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		BlankedImages:           report.BlankedImages,
 		RemovedPaths:            report.RemovedPaths,
 		ClippedPaths:            report.ClippedPaths,
+		RasterisedUnits:         report.RasterisedUnits,
 		RemovedAnnotations:      report.RemovedAnnotations,
 		DroppedPageEntries:      report.DroppedPageEntries,
 		FontsFullyRemovedOnPage: report.FontsFullyRemovedOnPage,
@@ -239,6 +245,9 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 			len(result.RemovedText), result.RemovedPaths, len(result.BlankedImages))
 		if n := result.ClippedPaths; n > 0 {
 			fmt.Fprintf(stdout, "Clipped %d path(s) at the region edges\n", n)
+		}
+		if n := result.RasterisedUnits; n > 0 {
+			fmt.Fprintf(stdout, "Rasterised %d painting element(s) outside the regions\n", n)
 		}
 		if n := len(result.RemovedAnnotations); n > 0 {
 			fmt.Fprintf(stdout, "Removed %d annotation(s) inside the regions\n", n)

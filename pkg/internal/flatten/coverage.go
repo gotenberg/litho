@@ -79,6 +79,9 @@ type coverage struct {
 	hidden, visible, grown []bool
 	// areas keeps what [coverage.read] found, by area.
 	areas map[image.Rectangle]readArea
+	// holes are disjoint boxes, in default user space, no overpaint draws
+	// in: [Redaction]'s regions, whose content the redaction removes.
+	holes []Rect
 }
 
 // renders draws the text of the page alone, then the page whole, once. The
@@ -387,7 +390,8 @@ func (c *coverage) overpaint(pos position, rects []image.Rectangle, img regionIm
 	}
 	var b strings.Builder
 	b.WriteString("\n")
-	if pos.marked == 0 {
+	artifact := pos.marked == 0 && (c.f == nil || !c.f.unmarked)
+	if artifact {
 		b.WriteString("/Artifact BMC\n")
 	}
 	b.WriteString("q\n")
@@ -412,8 +416,21 @@ func (c *coverage) overpaint(pos position, rects []image.Rectangle, img regionIm
 			tiles = append(tiles, t)
 		}
 	}
-	b.WriteString("W n\n" + drawTiles(tiles) + "Q\n")
-	if pos.marked == 0 {
+	b.WriteString("W n\n")
+	if len(c.holes) > 0 {
+		// A second clip narrows the first (ISO 32000-2, 8.5.4): an outer box
+		// holding the glyph pixels, the holes cut out by the even-odd rule.
+		outer := transformRect(inv, Rect{float64(reach.Min.X), float64(reach.Min.Y), float64(reach.Max.X), float64(reach.Max.Y)}).Outset(1)
+		for _, r := range append([]Rect{outer}, c.holes...) {
+			for _, v := range []float64{r.MinX, r.MinY, r.MaxX - r.MinX, r.MaxY - r.MinY} {
+				b.WriteString(number(v) + " ")
+			}
+			b.WriteString("re\n")
+		}
+		b.WriteString("W* n\n")
+	}
+	b.WriteString(drawTiles(tiles) + "Q\n")
+	if artifact {
 		b.WriteString("EMC\n")
 	}
 	return []byte(b.String())

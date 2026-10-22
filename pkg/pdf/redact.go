@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/flatten"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 )
 
@@ -53,6 +54,7 @@ type RedactOption func(*redactOpts)
 // redactOpts holds what [Writer.Redact] and its [RedactOption] values set.
 type redactOpts struct {
 	strict bool
+	raster bool
 }
 
 // WithStrictRedaction makes [Writer.Redact] refuse with
@@ -63,6 +65,38 @@ type redactOpts struct {
 // one.
 func WithStrictRedaction() RedactOption {
 	return func(o *redactOpts) { o.strict = true }
+}
+
+// WithRedactionRasterFallback makes [Writer.Redact] rasterise what it would
+// otherwise refuse because it cannot remove it exactly: content a form
+// XObject draws, an image among it, and a shading paint (sh) whose clip a
+// region meets. Those units, and the units drawn among them that an opaque
+// image over them must take with it, are drawn instead as opaque images of
+// the page at 300 dpi, clipped to the area they cover less the regions, and
+// removed from the content; [RedactReport.RasterisedUnits] counts them. The
+// images paint nothing inside the regions, and their samples there are the
+// paper's colour, so the file keeps nothing of what lay there. Text is never
+// rasterised: a form showing text keeps its text as text, the glyphs the
+// regions cover removed from it as from the page's own, and everything the
+// page draws outside those units stays as it was.
+//
+// Opt-in, because the fallback changes the page outside the regions: the
+// rasterised units lose their vector form there, at the image's resolution,
+// and show as litho's renderer draws them. Without it such a page is refused
+// with [ErrRedactionRefused], as a redaction that would change more than the
+// regions has to be asked for.
+//
+// An image a form XObject draws inside a region rasterises its form too:
+// blanked, it would change every other placement of the form, which the
+// redaction refuses. The renderer reads the document, not the edits queued on
+// the Writer, so a redaction with the fallback first writes the edits queued
+// before it to a temporary file and reopens it, as
+// [Writer.FlattenTransparency] does. A later stage that brings back removed
+// text makes [Writer.WriteTo] apply the regions again without the fallback,
+// refusing such a page rather than compositing a document the renderer cannot
+// read.
+func WithRedactionRasterFallback() RedactOption {
+	return func(o *redactOpts) { o.raster = true }
 }
 
 // RedactReport describes what a redaction removed, per vector.
@@ -97,6 +131,12 @@ type RedactReport struct {
 	// DroppedPageEntries names page entries dropped because they held a copy
 	// of what was removed, such as /Thumb.
 	DroppedPageEntries []string
+	// RasterisedUnits counts the painting elements that
+	// [WithRedactionRasterFallback] drew as images with the regions painted
+	// out instead of removing them: the form XObjects and shading paints
+	// whose content the regions selected, and those drawn among them that the
+	// images took with them.
+	RasterisedUnits int
 	// FontsFullyRemovedOnPage maps a 1-based page number to the object
 	// numbers of fonts whose every glyph on that page was removed.
 	//
@@ -165,6 +205,8 @@ type RedactReport struct {
 //     content drawn by a form XObject, or an image whose samples cannot be
 //     rewritten. Removing more than was asked, or reporting success over
 //     content still in the file, are both worse than refusing.
+//     [WithRedactionRasterFallback] rasterises the form XObjects and shading
+//     paints instead of refusing them.
 //   - [ErrRedactionIncomplete] when the passes succeed but the verification
 //     scan still finds a copy outside the content of other pages (see below),
 //     or could not read an object. The report names
@@ -273,6 +315,25 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...Red
 		opt(&o)
 	}
 
+	if !o.raster {
+		return w.redact(ctx, regions, o)
+	}
+	// The renderer the fallback composites with reads the document, not the
+	// edits queued on it, so those are written out first.
+	undo, err := w.materialize(ctx)
+	if err != nil {
+		return nil, err
+	}
+	report, err := w.redact(ctx, regions, o)
+	if err != nil {
+		undo()
+	}
+	return report, err
+}
+
+// redact applies regions as [Writer.Redact] describes, with the raster
+// fallback when o asks for it.
+func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpts) (*RedactReport, error) {
 	if err := w.promotePageTree(ctx); err != nil {
 		return nil, err
 	}
@@ -320,11 +381,15 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...Red
 	maps.Copy(preTrailer, doc.Index.Trailer)
 	restoreTrailer := func() { doc.Index.Trailer = preTrailer }
 
+	var pageOpts mutations.RedactOptions
+	if o.raster {
+		pageOpts.Rasterise = flatten.Redaction
+	}
 	report := &RedactReport{}
 	var blanked []int
 	for _, pageNum := range order {
-		pageReport, redactErr := mutations.RedactPageRegions(
-			ctx, alloc, doc, pages[pageNum-1], byPage[pageNum])
+		pageReport, redactErr := mutations.RedactPageRegionsWith(
+			ctx, alloc, doc, pages[pageNum-1], byPage[pageNum], pageOpts)
 		if redactErr != nil {
 			restoreTrailer()
 			return nil, fmt.Errorf("%w: page %d: %w", ErrRedactionRefused, pageNum, redactErr)
@@ -656,6 +721,7 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 	out.BlankedImages = append(out.BlankedImages, in.BlankedImages...)
 	out.RemovedPaths += in.RemovedPaths
 	out.ClippedPaths += in.ClippedPaths
+	out.RasterisedUnits += in.RasterisedUnits
 	out.RemovedAnnotations = append(out.RemovedAnnotations, in.RemovedAnnotations...)
 	out.DroppedPageEntries = append(out.DroppedPageEntries, in.DroppedPageEntries...)
 	if len(in.FontsFullyRemovedOnPage) > 0 {

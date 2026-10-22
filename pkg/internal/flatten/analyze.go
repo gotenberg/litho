@@ -178,6 +178,17 @@ type walker struct {
 
 // Analyze reads ops, the content of page, into units and regions.
 func Analyze(ctx context.Context, doc *document.Document, page *document.Page, ops []content.Operation) (*Analysis, error) {
+	return analyzeSeeded(ctx, doc, page, ops, nil)
+}
+
+// analyzeSeeded is [Analyze]. With seeds not nil, the regions grow from the units
+// that begin at the operations seeds names instead of the transparent ones:
+// a unit counts as [Unit.Transparent] when it is a form XObject or a shading
+// paint that begins there, and as nothing else, so the regions hold the
+// seeds and what an opaque image of them must take with them (see
+// [Redaction]). A seed whose box is empty paints nothing a viewer shows and
+// is listed in [Analysis.Hidden].
+func analyzeSeeded(ctx context.Context, doc *document.Document, page *document.Page, ops []content.Operation, seeds map[int]bool) (*Analysis, error) {
 	box := page.ViewedBox()
 	crop := rectOf(document.Float(box[0]), document.Float(box[1]), document.Float(box[2]), document.Float(box[3]))
 	w := &walker{
@@ -212,6 +223,19 @@ func Analyze(ctx context.Context, doc *document.Document, page *document.Page, o
 	a.Units = w.units
 	if err := w.textBoxes(page, ops, a.Units); err != nil {
 		return nil, err
+	}
+	if seeds != nil {
+		for i := range a.Units {
+			u := &a.Units[i]
+			u.Transparent = seeds[u.First] && (u.Kind == KindForm || u.Kind == KindShading)
+			if u.Transparent && u.Box.Empty() {
+				a.Hidden = append(a.Hidden, i)
+			}
+		}
+		if err := a.regions(); err != nil {
+			return nil, err
+		}
+		return a, nil
 	}
 	a.TextEdits, a.TextPatterns = w.textEdits, w.textPatterns
 	for i, u := range a.Units {

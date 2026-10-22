@@ -114,7 +114,8 @@ var ErrXObjectUnresolved = errors.New("page invokes an XObject that could not be
 // The content belongs to the form's own content stream, so no byte range in the
 // page's stream addresses it. Removing the Do that invoked the form would
 // erase everything else the form draws, so the mutation reports the region
-// rather than reaching for the only span it could name.
+// rather than reaching for the only span it could name, unless the raster
+// fallback is asked for ([RedactOptions.Rasterise]).
 var ErrRegionInFormXObject = errors.New("region selects content drawn by a form XObject")
 
 // ErrPathStraddlesRegion reports a painted path that lies only partly inside
@@ -150,7 +151,8 @@ var ErrRegionCoversAStrokedPath = errors.New("region covers a stroked path")
 // would clear the shading outside the region too. The region is checked
 // against the bounds of the clip in force, which contain all the shading can
 // paint; one that meets them is refused rather than reported clear while
-// shading ink stays inside it.
+// shading ink stays inside it, unless the raster fallback is asked for
+// ([RedactOptions.Rasterise]).
 var ErrRegionCoversAShading = errors.New("region covers a shading paint")
 
 // ErrRegionCoversAClippedPath reports a region meeting a path that a W or W*
