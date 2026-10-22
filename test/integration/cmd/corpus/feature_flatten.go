@@ -79,22 +79,22 @@ const (
 //
 // # Corpus evidence
 //
-//   - litho (220 files, flattentext_2b, flattenannots_2b and blendspace_2b
-//     among them): 26 flattened, all match; flattenrefuse_1b is refused, its
-//     second page past the render pixel budget; 193 have no transparency.
-//     Before annotations
-//     were drawn into the page, 20 flattened and 5 left annotations painting
-//     with transparency; 1 does now, laterreads_2u.pdf, whose Screen
-//     annotation has no appearance stream.
+//   - litho (225 files, flattentext_2b, flattenannots_2b, blendspace_2b,
+//     flattentiles_1b and smaskindata_2b among them): 28 flattened, all
+//     match; flattenrefuse_1b is refused, its second page past the render
+//     pixel budget; 196 have no transparency. Before annotations were drawn
+//     into the page, 20 flattened and 5 left annotations painting with
+//     transparency; 1 does now, laterreads_2u.pdf, whose Screen annotation
+//     has no appearance stream.
 //   - govdocs, all 1091 files (scope file): 34 flatten, all match, and
 //     1057 have no transparency.
-//   - pdfjs, all 1202 files but the 1 the manifest skips: 266 of 276
+//   - pdfjs, all 1202 files but the 1 the manifest skips: 267 of 276
 //     flattened match, 915 have no transparency, 4 are refused
 //     (issue14982.pdf past the render pixel budget; REDHAT-1531897-0.pdf,
 //     bug1020226.pdf and issue15590.pdf, whose page tree does not resolve)
 //     and 7 do not open without a password. issue18765.pdf, issue19281.pdf
 //     and issue19319.pdf, once left out for cost, flatten and match.
-//   - pdfjs: 8 of the 10 mismatches are what flattening approximates by
+//   - pdfjs: 8 of the 9 mismatches are what flattening approximates by
 //     design. A watermark a transparent black box tinted is now drawn above
 //     it untinted (issue18466.pdf: litho_mismatch, poppler_mismatch). A
 //     watermark composited over the paper is drawn over a drawing
@@ -111,12 +111,10 @@ const (
 //     that litho's renderer draws apart from poppler 26.09.0 and PDFium on
 //     the source page too (1,046 pixels apart from PDFium at 72 dpi); the
 //     composite carries litho's drawing (poppler_mismatch).
-//   - pdfjs issue16263.pdf: litho paints a 2x2 black image opaque because
-//     its 151-megapixel /SMask is past the image pixel budget (poppler and
-//     PDFium draw masked arrows, so poppler is no oracle), and since
-//     rectangular clips round to whole device rows the bars' edge rows
-//     differ between the 72 dpi source and the 300 dpi composite
-//     (litho_mismatch).
+//   - pdfjs issue16263.pdf: its 2x2 black image's 151-megapixel /SMask,
+//     past the image pixel budget, is read averaged down to the page's
+//     resolution, so litho draws the masked arrows poppler and PDFium draw,
+//     and the page matches; before, litho painted the image opaque.
 //   - pdfjs: the text the covering images of issue16800.pdf and the black
 //     box of issue18466.pdf hide stays hidden, and in the content.
 //   - pdfjs: drawing transparent annotations into the page took the files

@@ -1976,9 +1976,9 @@ states version 5.0, an ICC.2 profile ISO 32000-1, 8.6.5.5, Table 67 and ISO
 32000-2 do not list, so litho reads no colour through it and paints
 DeviceCMYK through its built-in profile, and the page matches poppler.
 
-**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 30 pages
-of 26 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
-tolerance. 15 pages of 12 fixtures differ by more than 1% of the page. Each of
+**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 31 pages
+of 27 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
+tolerance. 16 pages of 13 fixtures differ by more than 1% of the page. Each of
 those differences is adjudicated, and none is a litho defect left open:
 
 | File                                           | Page       | Differing pixels     | Why                                       |
@@ -9066,12 +9066,12 @@ set in all thirteen cells.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-220 x 13 = 2860 cells, the whole hand-measured matrix. litho and veraPDF return
+225 x 13 = 2925 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2836 of the 2860 cells. The 24
+fixtures exist to protect, and it holds in 2901 of the 2925 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
