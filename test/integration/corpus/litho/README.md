@@ -278,6 +278,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formuntagged_ua1.pdf` | PDF/UA-1     | Painting widgets in a document with no structure tree            |
 | `smaskindata_2b.pdf`   | PDF/A-2b     | JPEG 2000 images whose data holds their soft mask, both kinds    |
 | `flattentiles_1b.pdf`  | PDF/A-1b     | Transparency over a photograph and a chart, composited in tiles  |
+| `iccgroupalt_2b.pdf`   | PDF/A-2b     | Groups and transparent text in unusable ICC spaces' /Alternate   |
 
 ### Must-not-fire controls
 
@@ -667,6 +668,7 @@ are covered under [Known divergences](#known-divergences).
 | `iccbadgray_1b.pdf`    | 4    | 1    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `iccbadgray_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
+| `iccgroupalt_2b.pdf`   | 10   | 7    | 6    | 3    | 4    | 7    | 4    | 5    | 6   | 6    | 7    | 7    | 6    |
 | `iccv4gray_1b.pdf`     | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `iccv4intent_1b.pdf`   | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `iccv4space_1b.pdf`    | 4    | 1    | 4    | 1    | 2    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
@@ -9061,6 +9063,42 @@ DeviceGray `6.2.3.3/3` at PDF/A-1b and `6.2.4.3/2` and `6.2.4.3/4` at the later
 parts; the constant alpha fails `6.4/6` at PDF/A-1b and `6.2.10/2` at PDF/A-2b,
 where the page states no `/Group`. veraPDF 1.30.2 and litho report the same rule
 set in all thirteen cells.
+
+### `iccgroupalt_2b.pdf`
+
+An ICCBased space whose profile a reader cannot use reads as its stream's
+`/Alternate` (ISO 32000-1, 8.6.5.5, Table 66), and that holds where the space
+is a transparency group's blending colour space (11.3.4, Table 147) and where
+flattening composites transparent text over white paper in the text's own
+space (11.3.7.2). The corpora's unusable profiles in a group's `/CS` or under
+transparent text carry no `/Alternate`, or name the device space of `/N`, so
+no cell reached either. Each profile is a version 2.1 monitor header with an
+empty tag table, as `iccalternate_2b.pdf`'s are, and every glyph a Type 3 glyph
+painting in the text's colour:
+
+| Page | Draws                                                                        |
+| ---- | ---------------------------------------------------------------------------- |
+| 1    | an isolated group whose `/CS` has a CMYK header and `/Alternate` DeviceCMYK, |
+|      | blue at ca 0.6 over yellow, and an isolated group whose `/CS` has a GRAY     |
+|      | header and a Separation `/Alternate`, red then green Multiply                |
+| 2    | text at ca 0.5 in the GRAY-header space, tint 0.6                            |
+
+litho sorted a group's `/CS` by its `/N` alone: the second group blended in
+grey and read its composite as Separation tints, 6,400 pixels past the render
+cell's tolerance from poppler 26.09.0 at 72 dpi. A Separation is no blending
+space Table 147 admits, so the group now blends in sRGB and draws the black
+and green poppler draws, 0 pixels apart. The first group blends in CMYK either
+way, but converts sRGB colours into it through DeviceCMYK's profile, where it
+used the device formula for want of the header's. Flattening composited the
+text over paper of tint 1, the grey white of `/N` 1, and drew it as tint 0.8,
+1,294 pixels past the tolerance from its source; it now composites over tint
+0, no ink (8.6.6.4), and draws tint 0.3, as the source shows. `convert-colors`
+reads both spaces as before.
+
+The file declares no OutputIntent, so DeviceRGB fails `6.2.4.3/2` and DeviceCMYK
+`6.2.4.3/3` at PDF/A-2b, `6.2.3.3/1` and `6.2.3.3/2` at PDF/A-1b; the
+transparency fails `6.2.10/2` at PDF/A-2b and four `6.4` tests at PDF/A-1b.
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
 
 ## Scope
 
