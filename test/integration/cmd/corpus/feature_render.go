@@ -101,8 +101,23 @@ const renderMaxDiffPerInkMillion = 500_000
 // overlap of the two images.
 const renderSizeSlack = 1
 
-// metricRenderFailed counts the golden pages litho failed to render.
+// metricRenderFailed counts the golden pages litho failed to render: an
+// error from RenderPage, or a page it reported none for.
 const metricRenderFailed = "render_failed"
+
+// metricRenderSizeMismatch counts, in the render cell, the golden pages litho
+// rendered at another size than poppler's, past renderSizeSlack. Kept apart
+// from metricRenderFailed so a crash and a size disagreement read apart.
+//
+// # Corpus evidence
+//
+//   - litho kidsarray_2b pages 2 and 3, kidsrepair_1b page 3: 1 by 1 goldens
+//     poppler wrote for pages it did not render. pageboxes_2b pages 1 to 3:
+//     the page boxes litho reads as viewers do, 612 by 792 against 500 by
+//     700. These 6 were all of litho's render_failed before the split.
+//   - pdfjs bug1978317 page 1: a 1 by 1 golden; Pages-tree-refs page 2 is a
+//     page litho does not count and stays in render_failed.
+const metricRenderSizeMismatch = "render_size_mismatch"
 
 // renderFontsDir is the directory, under goldens/render, that holds the font
 // files poppler rendered the goldens with, mirroring the copy entrypoint.sh
@@ -285,6 +300,10 @@ type pageResult struct {
 	Match        bool   `json:"match"`
 	Error        string `json:"error,omitempty"`
 	GoldenError  string `json:"golden_error,omitempty"`
+	// SizeMismatch marks a page litho rendered at another size than the
+	// golden's, past renderSizeSlack: Error then says so, and the page
+	// counts in render_size_mismatch rather than render_failed.
+	SizeMismatch bool `json:"size_mismatch,omitempty"`
 }
 
 func (f *renderFeature) Name() string         { return "render" }
@@ -461,7 +480,7 @@ func (f *renderFeature) Compare(fixtureID string, output []byte) Verdict {
 	for _, p := range got.Pages {
 		byPage[p.Page] = p
 	}
-	matched, failed := 0, 0
+	matched, failed, sized := 0, 0, 0
 	var mismatches []json.RawMessage
 	for _, gp := range golden.Pages {
 		if gp.File == "" {
@@ -475,6 +494,8 @@ func (f *renderFeature) Compare(fixtureID string, output []byte) Verdict {
 		case res.Match:
 			matched++
 			continue
+		case res.SizeMismatch:
+			sized++
 		case res.Error != "":
 			failed++
 		}
@@ -488,7 +509,7 @@ func (f *renderFeature) Compare(fixtureID string, output []byte) Verdict {
 		FixtureID:  fixtureID,
 		Match:      matched == total,
 		Score:      float64(matched) / float64(total),
-		Metrics:    map[string]int{"pages_match": matched, metricRenderFailed: failed},
+		Metrics:    map[string]int{"pages_match": matched, metricRenderFailed: failed, metricRenderSizeMismatch: sized},
 		Mismatches: mismatches,
 	}
 	if !v.Match {
@@ -518,6 +539,7 @@ func comparePage(got, want image.Image) pageResult {
 	res := pageResult{Width: gb.Dx(), Height: gb.Dy(), GoldenWidth: wb.Dx(), GoldenHeight: wb.Dy()}
 	if absInt(res.Width-res.GoldenWidth) > renderSizeSlack || absInt(res.Height-res.GoldenHeight) > renderSizeSlack {
 		res.Error = fmt.Sprintf("%v: %dx%d, golden %dx%d", errRenderSize, res.Width, res.Height, res.GoldenWidth, res.GoldenHeight)
+		res.SizeMismatch = true
 		return res
 	}
 	w, h := min(res.Width, res.GoldenWidth), min(res.Height, res.GoldenHeight)

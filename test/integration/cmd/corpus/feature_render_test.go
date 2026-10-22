@@ -158,7 +158,7 @@ func TestComparePageSize(t *testing.T) {
 		t.Errorf("one pixel of slack: %+v", res)
 	}
 	res := comparePage(whitePage(102, 80), want)
-	if res.Match || !regexp.MustCompile(`102x80, golden 100x80`).MatchString(res.Error) {
+	if res.Match || !res.SizeMismatch || !regexp.MustCompile(`102x80, golden 100x80`).MatchString(res.Error) {
 		t.Errorf("two pixels too wide: %+v", res)
 	}
 }
@@ -313,6 +313,9 @@ func TestRenderFeatureScoresPages(t *testing.T) {
 		{Page: 1, File: "blank.1.png"},
 	}}, map[int]image.Image{1: whitePage(10, 10)})
 	writeRenderGolden(t, dir, renderIndex{ID: "broken", DPI: renderDPI, Error: "pdfinfo: no catalog"}, nil)
+	writeRenderGolden(t, dir, renderIndex{ID: "tiny", DPI: renderDPI, PageCount: 1, Pages: []renderIndexPage{
+		{Page: 1, File: "tiny.1.png"},
+	}}, map[int]image.Image{1: whitePage(1, 1)})
 
 	var asked []int
 	f := newRenderFeature()
@@ -341,8 +344,20 @@ func TestRenderFeatureScoresPages(t *testing.T) {
 		t.Errorf("rendered pages %v, want [1 3]: page 2 has no golden", asked)
 	}
 	v := f.Compare("PDF_A-2b/doc", out)
-	if v.Skipped || v.Match || v.Score != 0.5 || v.Metrics["pages_match"] != 1 || v.Metrics[metricRenderFailed] != 1 || len(v.Mismatches) != 1 {
+	if v.Skipped || v.Match || v.Score != 0.5 || v.Metrics["pages_match"] != 1 || v.Metrics[metricRenderFailed] != 1 ||
+		v.Metrics[metricRenderSizeMismatch] != 0 || len(v.Mismatches) != 1 {
 		t.Errorf("verdict: %+v", v)
+	}
+
+	// A page drawn at another size than the golden's counts apart from a
+	// page that failed to render.
+	out, err = f.Run(context.Background(), pdfPath, "tiny")
+	if err != nil {
+		t.Fatalf("run tiny: %v", err)
+	}
+	v = f.Compare("tiny", out)
+	if v.Match || v.Metrics[metricRenderFailed] != 0 || v.Metrics[metricRenderSizeMismatch] != 1 {
+		t.Errorf("a 1 by 1 golden: %+v", v)
 	}
 
 	out, err = f.Run(context.Background(), pdfPath, "blank")

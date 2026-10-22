@@ -172,7 +172,8 @@
           "skipped": 0,
           "metrics": {
             "pages_match": 210,
-            "render_failed": 0
+            "render_failed": 0,
+            "render_size_mismatch": 0
           }
         },
         "text": {
@@ -415,7 +416,8 @@
           "skipped": 1,
           "metrics": {
             "pages_match": 312,
-            "render_failed": 6
+            "render_failed": 0,
+            "render_size_mismatch": 6
           }
         },
         "text": {
@@ -634,7 +636,8 @@
           "skipped": 3,
           "metrics": {
             "pages_match": 92,
-            "render_failed": 2
+            "render_failed": 1,
+            "render_size_mismatch": 1
           }
         },
         "text": {

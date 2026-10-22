@@ -56,6 +56,8 @@ var costMetrics = map[string]bool{
 	"disagreement":      true,
 	"decode_failed":     true,
 	metricRenderFailed:  true,
+	// The render cell's size disagreements, split out of render_failed.
+	metricRenderSizeMismatch: true,
 
 	// The split catalog invariants count VIOLATIONS, so more is worse. Without
 	// an entry here the default good-when-higher rule would report split
