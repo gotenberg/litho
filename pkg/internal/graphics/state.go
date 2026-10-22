@@ -186,6 +186,7 @@ type Machine struct {
 	// as [Machine.RecordImageBoxes]. See [Machine.ShadingBoxes].
 	RecordShadingBoxes bool
 	shadingBoxes       []BoundingBox
+	shadingPageOps     []int
 	// RecordShowAdvances makes the text extractor remember how far each
 	// show-text operator of the page's own content stream moved the text
 	// matrix. Off by default for the same reason as [Machine.RecordImageBoxes].
@@ -228,6 +229,13 @@ type Machine struct {
 	// carries it, which is what lets a caller map a mark back to the operator
 	// that made it instead of re-deriving the correspondence by counting.
 	OpIndex int
+	// PageOpIndex is the position in the page's operation slice of the
+	// page-level operator now executing: the operator itself on the page, and
+	// the Do whose form XObject is executing below it. The caller driving the
+	// walk sets it, as it sets [Machine.OpIndex]. Recorded geometry carries
+	// it, which is what leads a caller from a mark a form drew back to the Do
+	// on the page that drew the form.
+	PageOpIndex int
 	// pathStartOp is the OpIndex of the first construction operator of the path
 	// being built. Bounds alone do not say which bytes drew them, and removing a
 	// paint operator without the construction operators that fed it would leave

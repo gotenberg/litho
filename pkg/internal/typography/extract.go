@@ -121,8 +121,10 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 // isolation.
 //
 // When origins is non-nil, one entry is appended to it per element appended to
-// elements, naming the index in ops of the operation that drew it.
-func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int, fontRefs *[]int, runs *runRecorder) error {
+// elements, naming the index in ops of the operation that drew it. pageOps is
+// the same, except that an element a form XObject drew is named by the Do
+// that drew the form.
+func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins, fontRefs, pageOps *[]int, runs *runRecorder) error {
 	if depth > doc.Limits().MaxFormDepth {
 		if doc != nil {
 			doc.Logger.Debug("form xobject max depth reached",
@@ -194,6 +196,9 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// Name the operator before it runs, so any geometry it records can say
 		// which operation drew it.
 		machine.OpIndex = opIdx
+		if depth == 0 {
+			machine.PageOpIndex = opIdx
+		}
 		// Errors from Execute are non-fatal: unknown/unsupported operators
 		// return errors but must not abort extraction of the rest.
 		_ = machine.ExecuteOne(ctx, op) //nolint:errcheck // Deliberate: an unsupported operator must not abort extraction of the rest, as the comment above says.
@@ -286,6 +291,11 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// their bytes are not in ops at all: mark them unattributable rather
 		// than name the Do, which would invite a caller to remove a whole form
 		// to reach one glyph drawn inside it.
+		if pageOps != nil {
+			for range len(*elements) - before {
+				*pageOps = append(*pageOps, opIdx)
+			}
+		}
 		if origins != nil {
 			origin := opIdx
 			if op.Operator == "Do" {
@@ -735,7 +745,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// different font than the one that drew them. The run fonts do pass
 	// down: they name the font by what the form selected, not by an object
 	// a caller could act on.
-	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil, nil, runs)
+	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil, nil, nil, runs)
 	machine.Resources = prevResources
 	machine.FormDepth = prevDepth
 	machine.OpIndex = prevOpIndex
@@ -797,6 +807,12 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 		fontRefs = make([]int, 0, estimatedCap)
 		fontRefsPtr = &fontRefs
 	}
+	var pageOps []int
+	var pageOpsPtr *[]int
+	if record.pageOps {
+		pageOps = make([]int, 0, estimatedCap)
+		pageOpsPtr = &pageOps
+	}
 	var runs *runRecorder
 	if record.runFonts {
 		runs = &runRecorder{fonts: make([]runFont, 0, estimatedCap)}
@@ -805,7 +821,7 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 	if record.merged {
 		resources = page.Resources
 	}
-	if err := extractTextRecursive(ctx, doc, machine, resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr, runs); err != nil {
+	if err := extractTextRecursive(ctx, doc, machine, resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr, pageOpsPtr, runs); err != nil {
 		return extraction{}, err
 	}
 
@@ -853,7 +869,7 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 	if runs != nil {
 		runFonts = runs.fonts
 	}
-	return extraction{elements: elements, origins: origins, fontRefs: fontRefs, runFonts: runFonts}, nil
+	return extraction{elements: elements, origins: origins, fontRefs: fontRefs, pageOps: pageOps, runFonts: runFonts}, nil
 }
 
 // extractionRecord names what [extractElements] records beside the
@@ -861,6 +877,7 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 type extractionRecord struct {
 	origins  bool
 	fontRefs bool
+	pageOps  bool
 	runFonts bool
 	// merged resolves the page's names in [document.Page.Resources], the
 	// merge of every ancestor's, rather than in the dictionary a viewer
@@ -877,6 +894,7 @@ type extraction struct {
 	elements []models.TextElement
 	origins  []int
 	fontRefs []int
+	pageOps  []int
 	runFonts []runFont
 }
 
@@ -946,6 +964,28 @@ func ExtractElementsWithOrigins(ctx context.Context, doc *document.Document, mac
 func ExtractElementsWithAttribution(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, []int, []int, error) {
 	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{origins: true, fontRefs: true, merged: true})
 	return ex.elements, ex.origins, ex.fontRefs, err
+}
+
+// Attribution says, parallel to the elements [ExtractElementsAttributed]
+// returns, where each came from.
+type Attribution struct {
+	// Origins and FontRefs are what [ExtractElementsWithAttribution]
+	// returns.
+	Origins, FontRefs []int
+	// PageOps names, for each element, the index in ops of the page-level
+	// operation that drew it: the show operator itself, or for an element a
+	// form XObject drew, where Origins reports [OriginUnattributable], the
+	// Do on the page that drew the form, however deep the form nests.
+	PageOps []int
+}
+
+// ExtractElementsAttributed is [ExtractElementsWithAttribution] that also
+// names, for an element a form XObject drew, the Do on the page that drew it
+// ([Attribution.PageOps]): a caller that cannot edit the form's stream can
+// still tell which placement of a form drew the element.
+func ExtractElementsAttributed(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, Attribution, error) {
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{origins: true, fontRefs: true, pageOps: true, merged: true})
+	return ex.elements, Attribution{Origins: ex.origins, FontRefs: ex.fontRefs, PageOps: ex.pageOps}, err
 }
 
 // CoalesceElements merges consecutive per-glyph [models.TextElement]

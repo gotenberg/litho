@@ -170,6 +170,7 @@ func (m *Machine) executeOp(ctx context.Context, op content.Operation) error {
 	if !ok {
 		if op.Operator == "sh" && m.RecordShadingBoxes {
 			m.shadingBoxes = append(m.shadingBoxes, m.Current().ClippingPath)
+			m.shadingPageOps = append(m.shadingPageOps, m.PageOpIndex)
 		}
 		m.recordUnknownOperator(op.Operator)
 		return nil
@@ -262,6 +263,10 @@ type ImageBox struct {
 	// BI whose bytes hold its samples; a non-zero FormDepth means a form
 	// XObject's stream holds them, which Op does not index.
 	Op, FormDepth int
+	// PageOp is the [Machine.PageOpIndex] of the operator that painted the
+	// image: the Do on the page that drew the form holding it, when
+	// FormDepth is not zero.
+	PageOp int
 }
 
 // ImageSpace maps a page-space point into the image's unit square, where (0,0)
@@ -326,7 +331,7 @@ func handleDoXObject(ctx context.Context, m *Machine, state *State, op content.O
 	}
 	box := imageBoxFromCTM(string(name), state.CTM)
 	box.ObjNum = objNum
-	box.Op, box.FormDepth = m.OpIndex, m.FormDepth
+	box.Op, box.FormDepth, box.PageOp = m.OpIndex, m.FormDepth, m.PageOpIndex
 	m.imageBoxes = append(m.imageBoxes, box)
 }
 
@@ -352,7 +357,7 @@ func handleInlineImage(_ context.Context, m *Machine, state *State, _ content.Op
 		return
 	}
 	box := imageBoxFromCTM(InlineImageName, state.CTM)
-	box.Op, box.FormDepth = m.OpIndex, m.FormDepth
+	box.Op, box.FormDepth, box.PageOp = m.OpIndex, m.FormDepth, m.PageOpIndex
 	m.imageBoxes = append(m.imageBoxes, box)
 }
 
@@ -918,6 +923,10 @@ type PathBox struct {
 	// merge into the next path, which the following paint operator would then
 	// draw. Removing a path would add one.
 	StartOp, EndOp int
+	// PageOp is the [Machine.PageOpIndex] of the paint operator: the Do on
+	// the page that drew the form holding the path, when FormDepth is not
+	// zero.
+	PageOp int
 	// Clipped reports that a W or W* took part in the path, so it both paints
 	// and narrows the clipping region for everything after it. Removing such a
 	// path would widen the clip and change how later content renders.
@@ -944,6 +953,7 @@ func handlePathPaint(_ context.Context, m *Machine, state *State, _ content.Oper
 			FormDepth: m.FormDepth,
 			StartOp:   m.pathStartOp,
 			EndOp:     m.OpIndex,
+			PageOp:    m.PageOpIndex,
 			Clipped:   m.pathClipped,
 			CTM:       state.CTM,
 		})
@@ -965,6 +975,13 @@ func handlePathPaint(_ context.Context, m *Machine, state *State, _ content.Oper
 // not what.
 func (m *Machine) ShadingBoxes() []BoundingBox {
 	return m.shadingBoxes
+}
+
+// ShadingPageOps returns, parallel to [Machine.ShadingBoxes], the
+// [Machine.PageOpIndex] of each sh operator: the sh itself on the page, or
+// the Do on the page that drew the form holding it.
+func (m *Machine) ShadingPageOps() []int {
+	return m.shadingPageOps
 }
 
 // PathBoxes returns where painted paths covered, in the order the content

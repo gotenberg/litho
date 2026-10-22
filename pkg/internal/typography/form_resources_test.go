@@ -79,7 +79,7 @@ func TestFormRecursionRestoresResources(t *testing.T) {
 	// page's fourth operator, after /Fm1 Do, q and cm, so its index is 3.
 	want := graphics.ImageBox{
 		Name: "Im1", ObjNum: 8, MinX: 10, MinY: 20, MaxX: 110, MaxY: 70,
-		CTM: [6]float64{100, 0, 0, 50, 10, 20}, Op: 3,
+		CTM: [6]float64{100, 0, 0, 50, 10, 20}, Op: 3, PageOp: 3,
 	}
 	if boxes[0] != want {
 		t.Errorf("box = %+v, want %+v", boxes[0], want)
