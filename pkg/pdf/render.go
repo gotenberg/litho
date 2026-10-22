@@ -158,7 +158,10 @@ func WithRenderBackground(c color.Color) RenderOption {
 // viewer leaves it out, and logged at Debug; so is an image whose mask
 // cannot be read, rather than painted showing what the mask hides. A mask
 // past [Limits.MaxImagePixels] is read at the resolution the page draws it
-// at.
+// at. A soft mask of the graphics state whose group would pass
+// [Limits.MaxRenderPixels] is drawn at a coarser resolution, and hides what
+// it masks when even that does not fit; a transparency group past it paints
+// its content through the group's alpha and soft mask, without the group.
 //
 // RenderPage is safe for concurrent use with every other read of the
 // [Reader], RenderPage included: each call draws into its own raster and

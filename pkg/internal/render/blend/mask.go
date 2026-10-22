@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
@@ -65,26 +66,79 @@ func (t transfer) apply(v float32) float32 {
 // outside them the group is transparent and the mask constant, so a small
 // group makes a small mask whatever the page's size.
 //
+// A mask derived from a group rendered at a fraction of the device
+// resolution ([Mask.Coarse]) holds one value for a square of device pixels
+// and reads between them bilinearly.
+//
 // A Mask is immutable and safe for concurrent reads.
 type Mask struct {
 	values  *surface.Mask
 	origin  image.Point
 	outside float32
+	// scale is how many device pixels one value spans along each axis, 1
+	// at device resolution.
+	scale int
 }
 
 // NewMask returns the mask holding values, whose pixel (0, 0) is device
 // pixel origin, and outside everywhere else.
 func NewMask(values *surface.Mask, origin image.Point, outside float32) *Mask {
-	return &Mask{values: values, origin: origin, outside: clamp01(outside)}
+	return &Mask{values: values, origin: origin, outside: clamp01(outside), scale: 1}
+}
+
+// ConstantMask returns the mask whose value is v at every device pixel. A
+// mask of 0 hides everything painted through it.
+func ConstantMask(v float32) *Mask {
+	return &Mask{values: &surface.Mask{}, outside: clamp01(v), scale: 1}
+}
+
+// Coarse returns m read as a mask derived at 1/scale of the device
+// resolution: its origin and its values count in squares of scale × scale
+// device pixels, and the value at a device pixel interpolates bilinearly
+// between the values around its centre. A scale below 2 returns m.
+func (m *Mask) Coarse(scale int) *Mask {
+	if scale < 2 {
+		return m
+	}
+	c := *m
+	c.scale = scale
+	return &c
 }
 
 // At returns the mask's value at device pixel (x, y).
 func (m *Mask) At(x, y int) float32 {
+	if m.scale > 1 {
+		return m.coarseAt(x, y)
+	}
 	x, y = x-m.origin.X, y-m.origin.Y
 	if x < 0 || y < 0 || x >= m.values.Width || y >= m.values.Height {
 		return m.outside
 	}
 	return m.values.A[y*m.values.Width+x]
+}
+
+// coarseAt returns the value of a coarse mask at device pixel (x, y): the
+// bilinear interpolation of the four values nearest the pixel's centre, the
+// nearest values along an edge, and outside past the values' extent.
+func (m *Mask) coarseAt(x, y int) float32 {
+	s := float64(m.scale)
+	u := (float64(x)+0.5)/s - float64(m.origin.X)
+	v := (float64(y)+0.5)/s - float64(m.origin.Y)
+	w, h := m.values.Width, m.values.Height
+	if u < 0 || v < 0 || u >= float64(w) || v >= float64(h) {
+		return m.outside
+	}
+	// Each value sits at the centre of its square.
+	u, v = u-0.5, v-0.5
+	fx, fy := math.Floor(u), math.Floor(v)
+	tx, ty := float32(u-fx), float32(v-fy)
+	x0, y0 := int(fx), int(fy)
+	x1, y1 := min(x0+1, w-1), min(y0+1, h-1)
+	x0, y0 = max(x0, 0), max(y0, 0)
+	a := m.values.A
+	top := a[y0*w+x0] + (a[y0*w+x1]-a[y0*w+x0])*tx
+	bottom := a[y1*w+x0] + (a[y1*w+x1]-a[y1*w+x0])*tx
+	return top + (bottom-top)*ty
 }
 
 // Pixels returns how many pixels the mask holds values for.

@@ -236,7 +236,8 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 // that start (11.4.6). The group blends in the space attrs.Space holds
 // ([renderer.formSpace]) and reaches the parent converted to its space. A
 // group past the render pixel budget paints its content into the parent
-// instead, counted in [TransparencyOverBudget].
+// instead, each element through the group's blend mode, alpha and soft
+// mask, counted in [TransparencyOverBudget].
 func (r *renderer) group(ops []content.Operation, resources ast.PdfDict, base geom.Matrix, depth int, bp geom.Path, attrs blend.Attributes, fx effects) error {
 	parent := r.top().group
 	b, _ := bp.Bounds()
@@ -250,6 +251,15 @@ func (r *renderer) group(ops []content.Operation, resources ast.PdfDict, base ge
 	}
 	if g == nil {
 		r.report.count(TransparencyOverBudget)
+		// The content paints into the parent without the group's
+		// compositing (11.4), each element carrying the group's blend mode,
+		// constant alpha and soft mask in place of the initial values 11.6.6
+		// gives it. That is exact for elements that do not overlap, and
+		// never shows what the group's mask or alpha hides.
+		st := r.m.Current()
+		st.BlendMode, st.SoftMask = fx.mode.String(), fx.mask
+		st.FillAlpha = float64(fx.opacity.Alpha())
+		st.StrokeAlpha = st.FillAlpha
 		return r.run(ops, resources, base, depth)
 	}
 	defer release()

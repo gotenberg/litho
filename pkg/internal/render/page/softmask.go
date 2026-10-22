@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"log/slog"
 	"reflect"
 	"slices"
 
@@ -25,8 +26,17 @@ import (
 // otherwise hold thousands of page-sized masks.
 const softMaskCacheShare = 4
 
+// maxMaskReduction is the coarsest a soft mask's group renders at when it
+// does not fit the render pixel budget at device resolution: one mask value
+// for a square of at most maxMaskReduction device pixels a side. A quality
+// floor, not spec-mandated nor a resource limit: past it the mask is too
+// coarse to stand for the one the file draws, and what it masks is hidden
+// instead. Sixteen pixels are 1.4 mm at 300 dpi, and a group needs that
+// reduction only when its planes pass 256 times what the budget has left.
+const maxMaskReduction = 16
+
 // errOverBudget reports a soft mask whose rasters would pass the render
-// pixel budget, which the painting then goes without.
+// pixel budget even at [maxMaskReduction], which then hides what it masks.
 var errOverBudget = errors.New("soft mask exceeds the render pixel budget")
 
 // maskKey names a soft mask as it renders: the dictionary the graphics
@@ -59,6 +69,15 @@ func newMaskCache() *maskCache {
 	return &maskCache{masks: make(map[maskKey]*blend.Mask)}
 }
 
+// empty drops every mask c holds and releases their pixels.
+func (c *maskCache) empty() {
+	for _, release := range c.release {
+		release()
+	}
+	clear(c.masks)
+	c.release, c.dicts, c.pixels = nil, nil, 0
+}
+
 // keepMask caches m under key, emptying the cache first when m would pass
 // its share of the budget. kept holds the dictionaries key names.
 func (r *renderer) keepMask(key maskKey, m *blend.Mask, kept ...ast.PdfDict) {
@@ -69,11 +88,7 @@ func (r *renderer) keepMask(key maskKey, m *blend.Mask, kept ...ast.PdfDict) {
 	}
 	capacity := r.budget / softMaskCacheShare
 	if c.pixels+px > capacity {
-		for _, release := range c.release {
-			release()
-		}
-		clear(c.masks)
-		c.release, c.dicts, c.pixels = nil, nil, 0
+		c.empty()
 	}
 	if px > capacity {
 		return
@@ -92,9 +107,10 @@ func (r *renderer) keepMask(key maskKey, m *blend.Mask, kept ...ast.PdfDict) {
 
 // softMask returns the soft mask sm installs (ISO 32000-1, 11.6.5.2), nil
 // for none. A mask that does not render, its /G missing or damaged, is
-// skipped and the painting goes unmasked, as a viewer paints it; one past
-// the render pixel budget is counted in [TransparencyOverBudget] and goes
-// unmasked too.
+// skipped and the painting goes unmasked, as a viewer paints it. One past
+// the render pixel budget is counted in [TransparencyOverBudget] and
+// renders coarser ([renderer.maskGroup]); past [maxMaskReduction] it hides
+// what it masks, rather than showing what the file masks out.
 func (r *renderer) softMask(sm *graphics.SoftMask) (*blend.Mask, error) {
 	if sm == nil {
 		return nil, nil
@@ -113,6 +129,8 @@ func (r *renderer) softMask(sm *graphics.SoftMask) (*blend.Mask, error) {
 	case err == nil:
 	case errors.Is(err, errOverBudget):
 		r.report.count(TransparencyOverBudget)
+		r.doc.Logger.Debug("render: hiding what a soft mask masks", slog.Any("err", err))
+		m = blend.ConstantMask(0)
 	case fatal(err):
 		return nil, err
 	default:
@@ -193,7 +211,7 @@ func (r *renderer) maskOf(sm *graphics.SoftMask, kind ast.PdfName, ref ast.PdfIn
 		// everywhere (11.6.5.2), which an empty one-pixel group does too.
 		bounds = image.Rect(0, 0, 1, 1)
 	}
-	g, release, err := r.newGroup(bounds, backdrop, attrs)
+	g, release, scale, err := r.maskGroup(bounds, backdrop, attrs)
 	if err != nil {
 		return nil, err
 	}
@@ -202,8 +220,20 @@ func (r *renderer) maskOf(sm *graphics.SoftMask, kind ast.PdfName, ref ast.PdfIn
 	}
 	defer release()
 
-	sub := r.sub(r.width, r.height, r.device, g)
-	sub.masks = r.masks
+	width, height, device := r.width, r.height, r.device
+	if scale > 1 {
+		r.report.count(TransparencyOverBudget)
+		width, height = ceilDiv(width, scale), ceilDiv(height, scale)
+		device = device.Mul(geom.Matrix{1 / float64(scale), 0, 0, 1 / float64(scale), 0, 0})
+	}
+	sub := r.sub(width, height, device, g)
+	if scale == 1 {
+		sub.masks = r.masks
+	} else {
+		// A coarse group's masks belong to its own device space, and their
+		// pixels return to the budget with it.
+		defer sub.masks.empty()
+	}
 	sub.m.Current().CTM = sm.CTM
 	parent := &scope{resources: resources, depth: r.depth}
 	err = sub.formXObject(parent, ref, stream, false)
@@ -212,18 +242,48 @@ func (r *renderer) maskOf(sm *graphics.SoftMask, kind ast.PdfName, ref ast.PdfIn
 		return nil, err
 	}
 
+	var m *blend.Mask
 	if kind == "Luminosity" {
-		m, err := blend.LuminosityMask(r.ctx, g, bc, tr, r.budget)
-		if err != nil {
+		if m, err = blend.LuminosityMask(r.ctx, g, bc, tr, r.budget); err != nil {
 			return nil, fmt.Errorf("deriving a luminosity mask: %w", err)
 		}
-		return m, nil
-	}
-	m, err := blend.AlphaMask(r.ctx, g, tr, r.budget)
-	if err != nil {
+	} else if m, err = blend.AlphaMask(r.ctx, g, tr, r.budget); err != nil {
 		return nil, fmt.Errorf("deriving an alpha mask: %w", err)
 	}
-	return m, nil
+	return m.Coarse(scale), nil
+}
+
+// maskGroup starts the group a soft mask's group paints into over bounds,
+// device pixels, and returns it with the release of its pixels and the
+// scale it renders at: 1, device resolution, when it fits the render pixel
+// budget there, and otherwise the smallest reduction up to
+// [maxMaskReduction] it fits at, its bounds then counted in squares of scale
+// device pixels. It returns a nil group, without error, when none fits.
+//
+// A soft mask only modulates the opacity of what it masks (ISO 32000-1,
+// 11.6.5.2), so a coarse one is a bounded approximation: rendered at
+// 1/scale, each value is close to the mean of the scale × scale values the
+// device-resolution mask holds, exactly so where its content is flat
+// colour, and reading them bilinearly ([blend.Mask.Coarse]) leaves the mask
+// exact wherever it does not change within scale device pixels. Within that
+// distance of an edge the value differs by at most the step the edge makes,
+// so an edge spreads over at most 2 × scale pixels instead of one. Hiding
+// what the mask covers, or showing it unmasked, errs by that step
+// everywhere.
+func (r *renderer) maskGroup(bounds image.Rectangle, backdrop blend.Backdrop, attrs blend.Attributes) (*blend.Group, func(), int, error) {
+	for scale := 1; scale <= maxMaskReduction; scale++ {
+		coarse := image.Rect(bounds.Min.X/scale, bounds.Min.Y/scale, ceilDiv(bounds.Max.X, scale), ceilDiv(bounds.Max.Y, scale))
+		g, release, err := r.newGroup(coarse, backdrop, attrs)
+		if err != nil || g != nil {
+			return g, release, scale, err
+		}
+	}
+	return nil, nil, 0, nil
+}
+
+// ceilDiv returns n / d rounded up, for n >= 0 and d > 0.
+func ceilDiv(n, d int) int {
+	return (n + d - 1) / d
 }
 
 // maskTransfer compiles a soft mask's /TR (ISO 32000-1, Table 144): nil for

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
+	"github.com/gotenberg/litho/pkg/internal/render/surface"
 )
 
 // exponential compiles a type 2 function from c0 to c1 with exponent n
@@ -111,6 +112,42 @@ func TestAlphaMask(t *testing.T) {
 	}
 	if got := m.At(0, 0); got != 0 {
 		t.Errorf("outside: %g, want 0", got)
+	}
+}
+
+// TestCoarseMask checks a mask read at 4 device pixels a value, its two
+// values over device pixels 4 to 11: exact at the centre of a square, linear
+// between two centres, the nearest value along its edges, and the outside
+// value past them.
+func TestCoarseMask(t *testing.T) {
+	values := &surface.Mask{Width: 2, Height: 1, A: []float32{0, 1}}
+	m := NewMask(values, image.Point{X: 1}, 0.25).Coarse(4)
+	for x, want := range map[int]float32{3: 0.25, 4: 0, 5: 0, 6: 0.125, 7: 0.375, 8: 0.625, 9: 0.875, 10: 1, 11: 1, 12: 0.25} {
+		if got := m.At(x, 0); !near32(got, want) {
+			t.Errorf("At(%d, 0) = %g, want %g", x, got, want)
+		}
+	}
+	if got := m.At(6, 4); got != 0.25 {
+		t.Errorf("below the values: %g, want the outside value 0.25", got)
+	}
+	if got := m.Pixels(); got != 2 {
+		t.Errorf("Pixels = %d, want 2", got)
+	}
+	if NewMask(values, image.Point{}, 0).Coarse(1).At(1, 0) != 1 {
+		t.Error("Coarse(1) changed the mask")
+	}
+}
+
+// TestConstantMask checks a mask of one value everywhere.
+func TestConstantMask(t *testing.T) {
+	m := ConstantMask(0)
+	for _, p := range []image.Point{{}, {-5, 3}, {1 << 20, 1 << 20}} {
+		if got := m.At(p.X, p.Y); got != 0 {
+			t.Errorf("At(%v) = %g, want 0", p, got)
+		}
+	}
+	if ConstantMask(2).At(0, 0) != 1 {
+		t.Error("ConstantMask(2) is not clamped to 1")
 	}
 }
 
