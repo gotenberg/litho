@@ -33,6 +33,8 @@ var forkFields = map[string]string{
 	"fontProgBytes":           "fresh",
 	"colorCache":              "fresh",
 	"colorCacheBytes":         "fresh",
+	"formCache":               "fresh",
+	"formCacheBytes":          "fresh",
 	"mu":                      "fresh",
 	"runMu":                   "fresh",
 	"xrefAugment":             "copied",

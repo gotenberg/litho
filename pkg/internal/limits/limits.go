@@ -13,9 +13,10 @@ import "fmt"
 type Limits struct {
 	// MaxStreamBytes bounds the decoded output of one stream. See
 	// [DefaultMaxStreamBytes]. The page content bound, the object-stream
-	// cache, the font-program cache and the colour-transform cache derive
-	// from it: see [Limits.MaxPageContentBytes], [Limits.MaxObjStmCacheBytes],
-	// [Limits.MaxFontProgCacheBytes] and [Limits.MaxColorCacheBytes].
+	// cache, the font-program cache, the colour-transform cache and the form
+	// content cache derive from it: see [Limits.MaxPageContentBytes],
+	// [Limits.MaxObjStmCacheBytes], [Limits.MaxFontProgCacheBytes],
+	// [Limits.MaxColorCacheBytes] and [Limits.MaxFormCacheBytes].
 	MaxStreamBytes int64
 
 	// MaxImagePixels bounds Width x Height of one image, and scales the
@@ -384,4 +385,36 @@ const colorCacheShare = 4
 // about 29 MB, and a document rarely holds more than one or two profiles.
 func (l Limits) MaxColorCacheBytes() int64 {
 	return max(l.WithDefaults().MaxStreamBytes/colorCacheShare, 1)
+}
+
+// formCacheShare divides the stream budget into the form content cache bound:
+// [Limits.MaxFormCacheBytes] is MaxStreamBytes over it. That method says why
+// the cache gets a quarter.
+const formCacheShare = 4
+
+// MaxFormCacheBytes returns the bound on the parsed form XObject content a
+// document keeps cached, counted in the bytes the parsed operators retain: a
+// quarter of MaxStreamBytes and never below 1, so 64 MiB under the default
+// budget. It is an anti-DoS guard, not spec-mandated: a crafted file can
+// define many large form XObjects (ISO 32000-1, 8.10), so the cache empties
+// rather than grows without bound. A form larger than the bound is not cached
+// and is parsed again at each use, which costs time, never a wrong answer.
+//
+// It moves with MaxStreamBytes, which bounds the content of each form the
+// cache holds: a caller that raises the budget to read a document of heavy
+// forms caches them too, and one that lowers it shrinks the cache. It is a
+// quarter of the budget, as the font-program and colour-transform caches are,
+// so the document's caches together stay within a small multiple of one
+// budget. A parsed operator retains about five times the content bytes it was
+// read from (see [Limits.MaxPageContentBytes]), so the default holds about 12
+// MiB of form content.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19281.pdf: extracting the text of its 350 pages before and
+//     after flattening spent 2.0 s of 9.9 s CPU parsing form XObjects, the
+//     same forms again on each page; with the cache, all content parsing
+//     takes 0.2 s.
+func (l Limits) MaxFormCacheBytes() int64 {
+	return max(l.WithDefaults().MaxStreamBytes/formCacheShare, 1)
 }

@@ -67,11 +67,13 @@ func TestScaleImageCap_MovesWithTheBudget(t *testing.T) {
 }
 
 // TestDerivedBounds_FollowTheStreamBudget pins the page content bound, the
-// object-stream cache bound, the font-program cache bound and the
-// colour-transform cache bound to the stream budget: at the default budget
-// each equals the constant it replaced, 64 MiB, 256 MiB, 64 MiB and 64 MiB,
-// and a raised or lowered budget moves all four, the page, font-program and
-// colour-transform bounds as a quarter of it and never below 1.
+// object-stream cache bound, the font-program cache bound, the
+// colour-transform cache bound and the form content cache bound to the stream
+// budget: at the default budget each equals the constant it replaced, 64 MiB,
+// 256 MiB, 64 MiB and 64 MiB, the form content bound 64 MiB as the
+// colour-transform bound is, and a raised or lowered budget moves all five,
+// the page, font-program, colour-transform and form content bounds as a
+// quarter of it and never below 1.
 func TestDerivedBounds_FollowTheStreamBudget(t *testing.T) {
 	t.Parallel()
 
@@ -98,6 +100,9 @@ func TestDerivedBounds_FollowTheStreamBudget(t *testing.T) {
 		}
 		if got := tc.l.MaxColorCacheBytes(); got != tc.colorCache {
 			t.Errorf("%s: MaxColorCacheBytes() = %d, want %d", tc.name, got, tc.colorCache)
+		}
+		if got := tc.l.MaxFormCacheBytes(); got != tc.colorCache {
+			t.Errorf("%s: MaxFormCacheBytes() = %d, want %d", tc.name, got, tc.colorCache)
 		}
 	}
 }

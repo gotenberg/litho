@@ -573,6 +573,51 @@ func applyTJKerning(machine *graphics.Machine, currentFont *Font, numVal float64
 	state.Text.Tm[5] += adjustment * state.Text.Tm[1]
 }
 
+// Variants of a form's parsed content in the document's form cache (see
+// [document.Document.CachedFormContent]): text extraction reads forms with
+// [content.SplitGluedOperators], whole or not as the context says.
+const (
+	formOpsVariantText = iota
+	formOpsVariantTextWhole
+)
+
+// parseFormOps returns the operations of the form XObject stream that target
+// names, parsed as text extraction reads them, through the document's form
+// cache. A form drawn on every page is then parsed once per document rather
+// than once per page. Only a form the file defines is cached: target is an
+// indirect reference the machine has not staged, since a staged form exists
+// only for the edit that staged it and its object number names a different
+// stream in the file.
+//
+// The cached operations are shared by every reader of the document, which
+// the extraction honours by only reading them.
+func parseFormOps(ctx context.Context, doc *document.Document, machine *graphics.Machine, target ast.PdfObject, stream ast.PdfStream) ([]content.Operation, error) {
+	ref, isRef := target.(ast.PdfIndirectRef)
+	if isRef {
+		if _, staged := machine.Staged[ref.ObjectNum]; staged {
+			isRef = false
+		}
+	}
+	if !isRef {
+		return content.ParsePageContent(ctx, doc, stream, content.SplitGluedOperators())
+	}
+	variant := formOpsVariantText
+	if content.ReadsWholeStreams(ctx) {
+		variant = formOpsVariantTextWhole
+	}
+	if cached, ok := doc.CachedFormContent(ref.ObjectNum, variant); ok {
+		if ops, ok := cached.([]content.Operation); ok {
+			return ops, nil
+		}
+	}
+	ops, err := content.ParsePageContent(ctx, doc, stream, content.SplitGluedOperators())
+	if err != nil {
+		return nil, err
+	}
+	doc.SetCachedFormContent(ref.ObjectNum, variant, ops, content.RetainedBytes(ops))
+	return ops, nil
+}
+
 // handleDoOp processes the Do operator, invoking a Form XObject by name
 // from the current resource dict. Non-Form XObjects (images, for example)
 // are silently skipped. Only Form streams carry content-stream ops the
@@ -632,7 +677,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 		return nil
 	}
 
-	formOps, err := content.ParsePageContent(ctx, doc, stream, content.SplitGluedOperators())
+	formOps, err := parseFormOps(ctx, doc, machine, targetObj, stream)
 	if err != nil {
 		return nil //nolint:nilerr // A form whose content does not parse contributes no text.
 	}

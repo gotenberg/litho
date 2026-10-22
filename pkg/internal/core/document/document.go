@@ -28,7 +28,8 @@ import (
 //
 // Concurrent use. Document is safe for concurrent use by multiple
 // goroutines after construction completes. All mutable caches
-// (objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache),
+// (objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache,
+// formCache),
 // the cross-reference entries, which a resolution that misses them rewrites
 // (see [Document.XRefEntries]), and the compliance scratch state
 // (ComplianceMode, formatViolations) are protected by internal locks. The format-violation record is keyed by object number
@@ -61,7 +62,9 @@ type Document struct {
 	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by limits.Limits.MaxFontProgCacheBytes
 	colorCache       map[[2]int]any      // colour transforms by profile object number and rendering intent
 	colorCacheBytes  int                 // bytes held in colorCache, bounded by limits.Limits.MaxColorCacheBytes
-	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, formatViolations and xrefEntries once construction completes
+	formCache        map[[2]int]any      // parsed form XObject content by form object number and parse variant
+	formCacheBytes   int64               // bytes retained by formCache, bounded by limits.Limits.MaxFormCacheBytes
+	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, formCache, formatViolations and xrefEntries once construction completes
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      xrefAugmentation    // runs the raw-bytes augmentation of xrefEntries to completion at most once
 	xrefAugmented    bool                // the augmentation added or overrode an entry; protected by mu
@@ -1375,6 +1378,8 @@ func (d *Document) ClearCaches() {
 	d.fontProgBytes = 0
 	d.colorCache = nil
 	d.colorCacheBytes = 0
+	d.formCache = nil
+	d.formCacheBytes = 0
 	d.formatViolations = nil
 	d.integerOverflows = nil
 	d.mu.Unlock()
@@ -1455,6 +1460,47 @@ func (d *Document) SetCachedColorTransform(objNum, intent int, t any, size int) 
 	}
 	d.colorCache[key] = t
 	d.colorCacheBytes += size
+}
+
+// CachedFormContent returns the parsed content cached for the form XObject
+// with the given object number, parsed as variant names.
+//
+// The value is shared by every caller, so callers must treat it as read-only:
+// what a form draws is read, never edited, through this cache.
+func (d *Document) CachedFormContent(objNum, variant int) (any, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	c, ok := d.formCache[[2]int{objNum, variant}]
+	return c, ok
+}
+
+// SetCachedFormContent stores the parsed content of the form XObject with the
+// given object number, parsed as variant names and retaining size bytes,
+// bounding the total at [limits.Limits.MaxFormCacheBytes] of the document's
+// budgets with an evict-all policy. The variant is the caller's: two parses
+// of one form that read its content differently store under distinct
+// variants. Content larger than the bound is not cached, so it cannot force
+// repeated evictions.
+//
+// Forms have strong locality: a form drawn on every page, a letterhead or a
+// watermark, is read once per page, which is what makes the cache pay.
+func (d *Document) SetCachedFormContent(objNum, variant int, c any, size int64) {
+	limit := d.Limits().MaxFormCacheBytes()
+	if size > limit {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	key := [2]int{objNum, variant}
+	if _, ok := d.formCache[key]; ok {
+		return
+	}
+	if d.formCache == nil || d.formCacheBytes+size > limit {
+		d.formCache = make(map[[2]int]any)
+		d.formCacheBytes = 0
+	}
+	d.formCache[key] = c
+	d.formCacheBytes += size
 }
 
 // CachedCMap returns a previously cached parsed CMap for the given stream

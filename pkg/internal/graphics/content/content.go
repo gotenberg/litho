@@ -338,7 +338,7 @@ func optionsOf(ctx context.Context, opts []Option) readOptions {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if whole, _ := ctx.Value(wholeStreamsKey{}).(bool); whole {
+	if ReadsWholeStreams(ctx) {
 		o.whole = true
 	}
 	return o

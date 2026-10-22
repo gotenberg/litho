@@ -268,3 +268,70 @@ func TestSetCachedColorTransform_FollowsTheStreamBudget(t *testing.T) {
 		t.Errorf("the default budget did not cache a %d-byte transform", bound+1)
 	}
 }
+
+// TestSetCachedFormContent_FollowsTheStreamBudget pins the form content cache
+// to [limits.Limits.MaxFormCacheBytes] of the document's budgets, a quarter of
+// the stream budget: content as large as the bound is cached, larger content
+// is not, and content that would take the cache past the bound empties it
+// first. Two variants of one form are held apart, [Document.ClearCaches] and
+// [Document.Fork] start empty, and the default document caches content the
+// lowered budget refuses.
+func TestSetCachedFormContent_FollowsTheStreamBudget(t *testing.T) {
+	t.Parallel()
+
+	data := limitsDocBytes(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [] /Count 0 >>",
+	)
+	ctx := context.Background()
+	const budget, bound, variant = 400, 100, 0
+
+	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(limits.Limits{MaxStreamBytes: budget}))
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	if got := doc.Limits().MaxFormCacheBytes(); got != bound {
+		t.Fatalf("MaxFormCacheBytes() = %d under a %d-byte budget, want %d", got, budget, bound)
+	}
+	cached := func(d *Document, nums ...int) []int {
+		var held []int
+		for _, n := range nums {
+			if _, ok := d.CachedFormContent(n, variant); ok {
+				held = append(held, n)
+			}
+		}
+		return held
+	}
+
+	doc.SetCachedFormContent(1, variant, "f1", bound+1)
+	if got := cached(doc, 1); len(got) != 0 {
+		t.Errorf("content past the %d-byte bound was cached", bound)
+	}
+	doc.SetCachedFormContent(2, variant, "f2", bound)
+	if got := cached(doc, 2); len(got) != 1 {
+		t.Errorf("content of exactly the bound was not cached")
+	}
+	doc.SetCachedFormContent(3, variant, "f3", 1)
+	if got := cached(doc, 2, 3); len(got) != 1 || got[0] != 3 {
+		t.Errorf("content past the remaining bound left the cache holding %v, want only [3]", got)
+	}
+	if _, ok := doc.CachedFormContent(3, variant+1); ok {
+		t.Errorf("another variant of form 3 read the cached content")
+	}
+	if got := cached(doc.Fork(), 3); len(got) != 0 {
+		t.Errorf("a fork read the cached content of form 3")
+	}
+	doc.ClearCaches()
+	if got := cached(doc, 3); len(got) != 0 {
+		t.Errorf("ClearCaches left form 3 cached")
+	}
+
+	def, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	def.SetCachedFormContent(1, variant, "f1", bound+1)
+	if got := cached(def, 1); len(got) != 1 {
+		t.Errorf("the default budget did not cache %d bytes of content", bound+1)
+	}
+}
