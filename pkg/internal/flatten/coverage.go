@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
@@ -46,48 +47,113 @@ const maxCoverRects = 4096
 // glyph pixels it covered, so they stay hidden as they were. Which pixels
 // those are is read from three renderings at the composite's resolution:
 // the composite, the page drawn whole, and its text drawn alone.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19319.pdf: converting the three renderings of each of its
+//     33 flattened CMYK pages to sRGB took 9.5 s of the 75 s of CPU its
+//     flattening took; reading the pixels of the text units alone takes
+//     about 3 s.
+//   - pdfjs issue19319.pdf: drawing the page whole at the glyph pixels alone
+//     took its flattening from 43 s to 38 s of CPU, and reading each area
+//     the text units share once, from 38 s to 37 s.
 type coverage struct {
 	f   *flattener
 	pg  *document.Page
 	g   page.Geometry
 	dpi float64
 	// result is the composite; it, the page drawn whole and its text
-	// alone are drawn in sRGB when a region first needs them, each with the
-	// page group in the space the composite blended in.
+	// alone are drawn when a region first needs them, each with the page
+	// group in the space the composite blended in, and read in sRGB pixel by
+	// pixel: only the pixels of the text units are read, so none is
+	// converted whole.
 	result                 *page.Result
-	composite, whole, text *surface.Canvas
+	composite, whole, text *blend.RGBReader
+	// shared is what the renderings of the page share ([page.Shared]), and
+	// wholeRes and textRes the renderings the readers read.
+	shared            *page.Shared
+	wholeRes, textRes *page.Result
+	// classes caches the class of each page pixel read ([coverage.classify]),
+	// and hidden, visible and grown are scratch the units share.
+	classes                []uint8
+	hidden, visible, grown []bool
+	// areas keeps what [coverage.read] found, by area.
+	areas map[image.Rectangle]readArea
 }
 
-// renders converts the composite to sRGB and draws the page whole and its
-// text alone, once.
-func (c *coverage) renders(ctx context.Context) error {
+// renders draws the text of the page alone, then the page whole, once. The
+// page drawn whole is read only at the glyph pixels of the text units the
+// regions keep hidden ([coverage.classify]), so it is drawn there alone
+// ([page.Options.Within]): its other pixels cost nothing.
+func (c *coverage) renders(ctx context.Context, a *Analysis) error {
 	if c.whole != nil {
 		return nil
 	}
-	composite, err := c.result.Canvas(ctx)
-	if err != nil {
-		return fmt.Errorf("converting the composite at %v dpi: %w", c.dpi, err)
-	}
-	whole, _, err := page.Render(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: page.Annotations, GroupSpace: true})
-	if err != nil {
-		return fmt.Errorf("rendering the page whole at %v dpi: %w", c.dpi, err)
-	}
-	text, _, err := page.Render(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: page.Paths | page.Images | page.Shadings | page.Annotations, GroupSpace: true})
+	budget := c.f.doc.Limits().WithDefaults().MaxRenderPixels
+	shared := c.shared
+	text, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: page.Paths | page.Images | page.Shadings | page.Annotations, GroupSpace: true, Shared: shared, Pool: c.f.pool})
 	if err != nil {
 		return fmt.Errorf("rendering the page's text at %v dpi: %w", c.dpi, err)
 	}
-	if whole.Width != composite.Width || whole.Height != composite.Height || text.Width != whole.Width || text.Height != whole.Height {
+	c.textRes = text
+	size := c.result.Group.Bounds().Size()
+	if text.Group.Bounds().Size() != size {
 		return fmt.Errorf("%w: renderings of the page at %v dpi differ in size", ErrTooComplex, c.dpi)
 	}
-	c.composite, c.whole, c.text = composite, whole, text
+	c.text = text.Group.RGBReader()
+	within, err := surface.NewMask(size.X, size.Y, budget)
+	if err != nil {
+		return fmt.Errorf("%w: the glyph pixels of the page at %v dpi: %w", ErrTooComplex, c.dpi, err)
+	}
+	// The units' boxes overlap, often as large as the page: they are marked
+	// first, and each marked pixel read once.
+	bounds := image.Rect(0, 0, size.X, size.Y)
+	var units image.Rectangle
+	for _, r := range a.Regions {
+		for _, u := range coveredUnits(a, r) {
+			px := c.unitPixels(a, u).Intersect(bounds)
+			units = units.Union(px)
+			for y := px.Min.Y; y < px.Max.Y; y++ {
+				row := within.A[y*size.X+px.Min.X : y*size.X+px.Max.X]
+				for x := range row {
+					row[x] = 1
+				}
+			}
+		}
+	}
+	for y := units.Min.Y; y < units.Max.Y; y++ {
+		for x := units.Min.X; x < units.Max.X; x++ {
+			if i := y*size.X + x; within.A[i] != 0 && !(c.text.Alpha(x, y) >= glyphAlpha) {
+				within.A[i] = 0
+			}
+		}
+	}
+	whole, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: page.Annotations, GroupSpace: true, Within: within, Shared: shared, Pool: c.f.pool})
+	if err != nil {
+		return fmt.Errorf("rendering the page whole at %v dpi: %w", c.dpi, err)
+	}
+	c.wholeRes = whole
+	if whole.Group.Bounds().Size() != size {
+		return fmt.Errorf("%w: renderings of the page at %v dpi differ in size", ErrTooComplex, c.dpi)
+	}
+	c.composite, c.whole = c.result.Group.RGBReader(), whole.Group.RGBReader()
 	return nil
 }
 
-// hideCovered draws region r's image again after each unit showing text that r's
-// last transparent unit follows, clipped to the glyph pixels the source did
-// not show, and returns how many such units stay visible under transparency
-// that the image no longer draws over them.
-func (c *coverage) hideCovered(ctx context.Context, a *Analysis, r Region, img regionImg, edit func(int) *opEdit) (int, error) {
+// release hands the pixels of the composite and of the renderings to the
+// flattening's pool once the page is done with them.
+func (c *coverage) release() {
+	c.composite, c.whole, c.text = nil, nil, nil
+	for _, res := range []*page.Result{c.result, c.wholeRes, c.textRes} {
+		res.Release(c.f.pool)
+	}
+	c.result, c.wholeRes, c.textRes = nil, nil, nil
+}
+
+// coveredUnits returns the units showing text whose glyphs region r may
+// keep hidden: those r's last transparent unit follows, and the forms
+// holding text r removes.
+func coveredUnits(a *Analysis, r Region) []int {
 	var units []int
 	for _, u := range r.Text {
 		if u < r.Last && a.Units[u].Kind == KindText {
@@ -99,10 +165,26 @@ func (c *coverage) hideCovered(ctx context.Context, a *Analysis, r Region, img r
 			units = append(units, u)
 		}
 	}
+	return units
+}
+
+// unitPixels returns the device pixels unit u's box touches, with a pixel
+// of margin for the antialiasing of its glyphs.
+func (c *coverage) unitPixels(a *Analysis, u int) image.Rectangle {
+	dev := transformRect(c.g.Matrix, a.Units[u].Box)
+	return image.Rect(int(math.Floor(dev.MinX))-1, int(math.Floor(dev.MinY))-1, int(math.Ceil(dev.MaxX))+1, int(math.Ceil(dev.MaxY))+1)
+}
+
+// hideCovered draws region r's image again after each unit showing text that r's
+// last transparent unit follows, clipped to the glyph pixels the source did
+// not show, and returns how many such units stay visible under transparency
+// that the image no longer draws over them.
+func (c *coverage) hideCovered(ctx context.Context, a *Analysis, r Region, img regionImg, edit func(int) *opEdit) (int, error) {
+	units := coveredUnits(a, r)
 	if len(units) == 0 {
 		return 0, nil
 	}
-	if err := c.renders(ctx); err != nil {
+	if err := c.renders(ctx, a); err != nil {
 		return 0, err
 	}
 	transparent := make(map[int]bool, len(a.TransparentText))
@@ -114,8 +196,7 @@ func (c *coverage) hideCovered(ctx context.Context, a *Analysis, r Region, img r
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		dev := transformRect(c.g.Matrix, a.Units[u].Box)
-		px := image.Rect(int(math.Floor(dev.MinX))-1, int(math.Floor(dev.MinY))-1, int(math.Ceil(dev.MaxX))+1, int(math.Ceil(dev.MaxY))+1).Intersect(img.px)
+		px := c.unitPixels(a, u).Intersect(img.px)
 		if px.Empty() {
 			continue
 		}
@@ -140,50 +221,119 @@ func (c *coverage) hideCovered(ctx context.Context, a *Analysis, r Region, img r
 // drawn over the composite differ from the source past approxLevel, which
 // transparent text, counted already, is spared.
 func (c *coverage) covered(px image.Rectangle, transparentText bool) ([]image.Rectangle, bool) {
+	// Units whose boxes cover the same pixels, as the page's own often do,
+	// read them once.
+	got, ok := c.areas[px]
+	if !ok {
+		got = c.read(px)
+		if c.areas == nil {
+			c.areas = make(map[image.Rectangle]readArea)
+		}
+		c.areas[px] = got
+	}
+	return got.rects, !transparentText && got.bad >= 4 && got.bad*20 > got.visible
+}
+
+// readArea is what [coverage.read] finds in an area of the page.
+type readArea struct {
+	rects        []image.Rectangle
+	visible, bad int
+}
+
+// read returns the rectangles of px holding the glyph pixels the source page
+// does not show, and counts the visible glyph pixels and those of them the
+// text drawn over the composite draws past approxLevel.
+func (c *coverage) read(px image.Rectangle) readArea {
 	w := px.Dx()
-	hidden := make([]bool, w*px.Dy())
-	visible := make([]bool, w*px.Dy())
+	n := w * px.Dy()
+	if len(c.hidden) < n {
+		c.hidden, c.visible, c.grown = make([]bool, n), make([]bool, n), make([]bool, n)
+	}
+	hidden, visible := c.hidden[:n], c.visible[:n]
+	clear(hidden)
+	clear(visible)
 	nHidden, nVisible, nBad := 0, 0, 0
 	for y := px.Min.Y; y < px.Max.Y; y++ {
 		for x := px.Min.X; x < px.Max.X; x++ {
-			tr, tg, tb, ta := c.text.At(x, y)
-			if ta < glyphAlpha {
-				continue
-			}
-			wr, wg, wb, _ := c.whole.At(x, y)
-			cr, cg, cb, _ := c.composite.At(x, y)
 			i := (y-px.Min.Y)*w + x - px.Min.X
-			if max(abs32(wr-cr), abs32(wg-cg), abs32(wb-cb)) <= coverLevel {
+			switch c.classify(x, y) {
+			case pixelHidden:
 				hidden[i] = true
 				nHidden++
-				continue
-			}
-			visible[i] = true
-			nVisible++
-			// The text drawn over the composite, source over (11.3.3).
-			keep := 1 - ta
-			if max(abs32(tr+cr*keep-wr), abs32(tg+cg*keep-wg), abs32(tb+cb*keep-wb)) > approxLevel {
+			case pixelVisible:
+				visible[i] = true
+				nVisible++
+			case pixelApproximated:
+				visible[i] = true
+				nVisible++
 				nBad++
 			}
 		}
 	}
-	bad := !transparentText && nBad >= 4 && nBad*20 > nVisible
-	if nHidden == 0 {
-		return nil, bad
+	got := readArea{visible: nVisible, bad: nBad}
+	switch {
+	case nHidden == 0:
+	case nVisible == 0:
+		got.rects = []image.Rectangle{px}
+	default:
+		got.rects = runs(px, hidden, visible, c.grown[:n])
 	}
-	if nVisible == 0 {
-		return []image.Rectangle{px}, bad
+	return got
+}
+
+// The classes of a page pixel [coverage.classify] tells apart.
+const (
+	pixelUnread uint8 = iota
+	// pixelNoGlyph holds no glyph pixel of the text drawn alone.
+	pixelNoGlyph
+	// pixelHidden is a glyph pixel the source page does not show.
+	pixelHidden
+	// pixelVisible is a glyph pixel the source shows, which the text drawn
+	// over the composite draws within approxLevel, and pixelApproximated
+	// one it draws further off.
+	pixelVisible
+	pixelApproximated
+)
+
+// classify returns the class of page pixel (x, y), read from the three
+// renderings once: the text units of a page overlap, and a pixel under
+// several is read for the first only.
+func (c *coverage) classify(x, y int) uint8 {
+	i := y*c.g.Width + x
+	if c.classes == nil {
+		c.classes = make([]uint8, c.g.Width*c.g.Height)
 	}
-	return runs(px, hidden, visible), bad
+	if cl := c.classes[i]; cl != pixelUnread {
+		return cl
+	}
+	cl := pixelNoGlyph
+	if c.text.Alpha(x, y) >= glyphAlpha {
+		tr, tg, tb, ta := c.text.At(x, y)
+		wr, wg, wb, _ := c.whole.At(x, y)
+		cr, cg, cb, _ := c.composite.At(x, y)
+		// The text drawn over the composite, source over (11.3.3).
+		keep := 1 - ta
+		switch {
+		case max(abs32(wr-cr), abs32(wg-cg), abs32(wb-cb)) <= coverLevel:
+			cl = pixelHidden
+		case max(abs32(tr+cr*keep-wr), abs32(tg+cg*keep-wg), abs32(tb+cb*keep-wb)) > approxLevel:
+			cl = pixelApproximated
+		default:
+			cl = pixelVisible
+		}
+	}
+	c.classes[i] = cl
+	return cl
 }
 
 // runs returns the rectangles holding the hidden pixels of px, each grown by
 // a pixel onto pixels no visible glyph holds, so the antialiased edge of a
 // hidden glyph is covered too: runs along each row, the same run on
-// consecutive rows joined into one rectangle.
-func runs(px image.Rectangle, hidden, visible []bool) []image.Rectangle {
+// consecutive rows joined into one rectangle. grown is scratch of hidden's
+// length.
+func runs(px image.Rectangle, hidden, visible, grown []bool) []image.Rectangle {
 	w, h := px.Dx(), px.Dy()
-	grown := make([]bool, len(hidden))
+	clear(grown)
 	for y := range h {
 		for x := range w {
 			if !hidden[y*w+x] {

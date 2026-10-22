@@ -20,8 +20,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
+	"github.com/gotenberg/litho/pkg/internal/render/surface"
 )
 
 // DefaultDPI is the resolution regions are composited at when the caller
@@ -145,6 +147,9 @@ type flattener struct {
 	// ungrouped maps a form's object number to its copy without
 	// transparency groups.
 	ungrouped map[int]ast.PdfObject
+	// pool holds the pixels of the page renderings done with, which the
+	// next page's reuse.
+	pool *surface.Pool
 }
 
 // Document removes the transparency of every page in pages, queuing the
@@ -172,6 +177,7 @@ func Document(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 		ungrouped: make(map[int]ast.PdfObject),
 		patterns:  make(map[patternKey]ast.PdfObject),
 		images:    make(map[int]ast.PdfObject),
+		pool:      &surface.Pool{},
 	}
 	report := &Report{}
 	for i, pg := range pages {
@@ -249,12 +255,17 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 	removed := make(map[int]bool)
 	clippedBy := make(map[int][]Rect)
 	if len(a.Regions) > 0 {
-		res, g, dpi, err := f.render(ctx, pg)
+		// The composite and the renderings that read what it covers draw
+		// the same page.
+		shared := page.NewShared(f.doc.Limits().WithDefaults().MaxRenderPixels)
+		res, g, dpi, err := f.render(ctx, pg, shared)
 		if err != nil {
 			return pr, false, err
 		}
 		pr.Regions, pr.DPI = len(a.Regions), dpi
-		cover := &coverage{f: f, pg: pg, g: g, dpi: dpi, result: res}
+		cover := &coverage{f: f, pg: pg, g: g, dpi: dpi, result: res, shared: shared}
+		// The renderings are read no further than this page.
+		defer cover.release()
 		for _, r := range a.Regions {
 			var vector []Rect
 			if f.quality > 0 {
@@ -383,7 +394,7 @@ func (f *flattener) subdict(ctx context.Context, resources ast.PdfDict, category
 // run's resolution or, when the page's transparency does not fit the render
 // pixel budget there, at the highest of the halved resolutions down to
 // [minRetryDPI] it fits.
-func (f *flattener) render(ctx context.Context, pg *document.Page) (*page.Result, page.Geometry, float64, error) {
+func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.Shared) (*page.Result, page.Geometry, float64, error) {
 	dpi := f.dpi
 	budget := f.doc.Limits().WithDefaults().MaxRenderPixels
 	for {
@@ -401,6 +412,8 @@ func (f *flattener) render(ctx context.Context, pg *document.Page) (*page.Result
 			Background: [4]float32{1, 1, 1, 1},
 			Omit:       page.Text | page.Annotations,
 			GroupSpace: true,
+			Shared:     shared,
+			Pool:       f.pool,
 		})
 		if err != nil {
 			return nil, page.Geometry{}, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
@@ -408,6 +421,7 @@ func (f *flattener) render(ctx context.Context, pg *document.Page) (*page.Result
 		if report.Unsupported[page.TransparencyOverBudget] == 0 {
 			return res, g, dpi, nil
 		}
+		res.Release(f.pool)
 		if dpi/2 < minRetryDPI {
 			return nil, page.Geometry{}, 0, fmt.Errorf("%w: the page's transparency does not fit the render pixel budget at %v dpi", ErrTooComplex, dpi)
 		}
@@ -519,11 +533,12 @@ func (f *flattener) compositeSamples(res *page.Result, px image.Rectangle) ([]by
 	}
 	n := res.Group.Space().Kind().Channels()
 	samples := make([]byte, 0, n*px.Dx()*px.Dy())
+	row := make([]blend.Components, px.Dx())
 	for y := px.Min.Y; y < px.Max.Y; y++ {
-		for x := px.Min.X; x < px.Max.X; x++ {
-			// The page group lies over opaque white paper, so every pixel's
-			// colour is whole.
-			c, _ := res.Group.Components(x, y)
+		// The page group lies over opaque white paper, so every pixel's
+		// colour is whole.
+		res.Group.ComponentsRow(px.Min.X, y, row)
+		for _, c := range row {
 			for k := range n {
 				samples = append(samples, to8(c[k]))
 			}
