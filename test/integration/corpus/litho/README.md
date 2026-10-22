@@ -282,6 +282,7 @@ one deliberately rather than diffing it against a fresh build.
 | `flatuntagged_ua1.pdf` | PDF/UA-1     | Transparent annotations in a document with no structure tree     |
 | `smaskbudget_2b.pdf`   | PDF/A-2b     | A soft mask and a group whose rasters pass the render budget     |
 | `greyintent_2b.pdf`    | PDF/A-2b     | Transparency in pages whose group names no space, grey intent    |
+| `formimgname_2b.pdf`   | PDF/A-2b     | A page image and a form's image under one resource name          |
 
 ### Must-not-fire controls
 
@@ -651,6 +652,7 @@ are covered under [Known divergences](#known-divergences).
 | `formcycle_ua1.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `formflat_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 6   | 6    | 7    | 1    | 3    |
 | `formhidden_ua1.pdf`   | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 5    |
+| `formimgname_2b.pdf`   | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 5    | 6    |
 | `formmark_ua1.pdf`     | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 2    | 3    |
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
 | `formplacement_2b.pdf` | 2    | 1    | 1    | 0    | 1    | 2    | 1    | 2    | 4   | 4    | 5    | 5    | 7    |
@@ -9223,6 +9225,39 @@ The pages paint transparency under an OutputIntent, so PDF/A-2b admits them
 constant alpha fails `6.4/6`, the blend mode `6.4/4` and the page group `6.4/3`,
 beside the part-2 identification `6.7.11/2`.
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+
+### `formimgname_2b.pdf`
+
+A form XObject resolves the names its content uses in its own `/Resources`
+(ISO 32000-1, 8.10.1, 7.8.3), so a form's `/Im0` can be another image than
+the page's `/Im0`. Redaction looked every image name up in the page's
+resources: a region covering the form's picture blanked the page's `/Im0`
+instead, left the form's picture whole, and reported success. govdocs
+`thread_000_000582` and `thread_400_400358` have this shape, outside the
+render sample the `redact-render` cell draws from:
+
+| Name             | Image                     | Drawn at (page space) |
+| ---------------- | ------------------------- | --------------------- |
+| page `/Im0`      | 8 x 8 grey ramp           | `[50 600 250 750]`    |
+| form `/Fm0 /Im0` | 8 x 8 yellow-cyan checker | `[206 296 406 496]`   |
+
+The form's picture sits at the centre of the page, inside the whole-page
+region, the centred quarter and the centre band. Before the fix, all three
+`redact-render` scenarios succeeded and failed the inside check on litho's
+half: 40,000 pixels each for the whole page and the quarter, 6,800 for the
+band, the form's checker still drawn. The quarter also blanked the page's
+ramp, which no region covered, and the outside check read it as image spill.
+Redaction now refuses all three with `ErrRegionInFormXObject`, as it refuses
+other content a form draws, and so `mutate-redact` refuses the file by design.
+A fix that blanks the image the form paints in place would pass the cell too.
+
+The file declares no OutputIntent and no `/Metadata`, so DeviceRGB and
+DeviceGray fail `6.2.3.3/1` and `6.2.3.3/3` at PDF/A-1, `6.2.4.3/2` and
+`6.2.4.3/4` at the later parts, and the missing packet fails `6.7.2/1`,
+`6.6.2.1/1` or `6.7.2.1/1`; the A levels add the missing structure, part 4 the
+`%PDF-1.7` header (`6.1.2/1`) and PDF/A-4f `6.9/5`, and the PDF/UA cells their
+tagging and metadata rules. veraPDF 1.30.2 and litho
+report the same rule set in all thirteen cells.
 
 ## Scope
 
