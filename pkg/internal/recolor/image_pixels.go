@@ -71,7 +71,8 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
-	if err := im.checkSMaskInData(ctx, dict); err != nil {
+	dataMask, err := im.readSMaskInData(ctx, stream, width, height)
+	if err != nil {
 		return stream, ImageUnchanged, err
 	}
 	filterName := lastFilter(ctx, im.doc, dict)
@@ -99,6 +100,11 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 	}
 	if raw.rows == 0 {
 		return stream, ImageUnchanged, fmt.Errorf("%w: the samples hold no whole row of the %dx%d image", ErrImageNotConverted, width, height)
+	}
+	if dataMask != nil && dataMask.premultiplied {
+		// The JPXDecode filter hands on 8 bits a component (7.4.9), the
+		// data's samples before /Decode, which maps them afterwards.
+		unpremultiply(raw.data, dataMask.alpha, width, raw.rows, raw.comps)
 	}
 	dec := imageDecode(ctx, im.doc, dict, raw.comps, sp.decodeDefault(raw.bpc))
 	conv, err := im.cfg.Colors.Converter(ctx, sp.obj, resources, page, im.imageIntent(ctx, dict))
@@ -142,6 +148,9 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 	if parms != nil {
 		newDict["DecodeParms"] = parms
 	}
+	if err := im.attachDataMask(newDict, dataMask, width, height); err != nil {
+		return stream, ImageUnchanged, err
+	}
 	if err := im.rewriteMasks(ctx, label, newDict, raw, matte, px.matteTarget); err != nil {
 		return stream, ImageUnchanged, err
 	}
@@ -165,18 +174,6 @@ func (im *Images) dimensions(ctx context.Context, dict ast.PdfDict) (int, int, e
 		return 0, 0, fmt.Errorf("%w: %dx%d pixels, past the image budget of %d", ErrImageNotConverted, w, h, maxPixels)
 	}
 	return int(w), int(h), nil
-}
-
-// checkSMaskInData refuses a JPXDecode image whose JPEG 2000 data carries
-// its soft mask (ISO 32000-1, 8.9.5, Table 89 /SMaskInData): re-encoded
-// under FlateDecode or DCTDecode, the mask would be lost, since only
-// JPXDecode data carries one (7.4.9) and the colour channels alone are
-// converted. The refusal holds under [ImageConfig.JPEGQuality] too.
-func (im *Images) checkSMaskInData(ctx context.Context, dict ast.PdfDict) error {
-	if v, err := document.ResolveInt(ctx, im.doc, dict["SMaskInData"]); err == nil && v != 0 {
-		return fmt.Errorf("%w: its JPEG 2000 data carries its soft mask (/SMaskInData %d)", ErrImageNotConverted, v)
-	}
-	return nil
 }
 
 // measureDCT takes a JPEG's component count from its decoded samples, as
@@ -538,8 +535,12 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
-	if err := im.checkSMaskInData(ctx, dict); err != nil {
+	dataMask, err := im.readSMaskInData(ctx, stream, width, height)
+	if err != nil {
 		return stream, ImageUnchanged, err
+	}
+	if dataMask != nil && dataMask.premultiplied && !dataMask.identity {
+		return stream, ImageUnchanged, fmt.Errorf("%w: a JPEG 2000 image premultiplied by its opacity, in a colour space of its data the decoder does not read as it is", ErrImageNotConverted)
 	}
 	// The decoder undoes a /Matte against the JPEG 2000 data's own colour,
 	// and a /Mask colour key compares samples in it: neither carries over
@@ -569,6 +570,11 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 			samples = append(samples, c.R, c.G, c.B)
 		}
 	}
+	if dataMask != nil && dataMask.premultiplied {
+		// The reading is the identity: the painted samples are the data's,
+		// a grey channel repeated three times.
+		unpremultiply(samples, dataMask.alpha, width, height, 3)
+	}
 	conv, err := im.cfg.Colors.Converter(ctx, srgbSpace(), nil, nil, im.imageIntent(ctx, dict))
 	if err != nil {
 		return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
@@ -596,6 +602,9 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 	newDict["Filter"] = outFilter
 	if parms != nil {
 		newDict["DecodeParms"] = parms
+	}
+	if err := im.attachDataMask(newDict, dataMask, width, height); err != nil {
+		return stream, ImageUnchanged, err
 	}
 	im.recordSize(ctx, stream, "JPXDecode", len(encoded))
 	return ast.NewStream(newDict, encoded), ImageConverted, nil

@@ -8,7 +8,6 @@ import (
 	"image/color"
 	"image/jpeg"
 	"os"
-	"strings"
 	"testing"
 )
 
@@ -160,20 +159,39 @@ func TestConvertColorsBuiltin_JPEGQualityKeeps16BitJPX(t *testing.T) {
 	}
 }
 
-// TestConvertColors_JPEGQualityRefusesSMaskInData pins that a JPEG 2000
-// image carrying its soft mask in its data (ISO 32000-1, 8.9.5, Table 89
-// /SMaskInData) is refused under WithJPEGQuality as by default: only
-// JPXDecode data carries such a mask (7.4.9), so neither re-encoding keeps
-// it.
-func TestConvertColors_JPEGQualityRefusesSMaskInData(t *testing.T) {
+// TestConvertColors_SMaskInDataBecomesSMask pins that a JPEG 2000 image
+// carrying its soft mask in its data (ISO 32000-1, 8.9.5, Table 89
+// /SMaskInData) converts, by default and under WithJPEGQuality, with the
+// mask extracted into an explicit /SMask: only JPXDecode data carries such a
+// mask (7.4.9), so a re-encoding drops the entry. rgba8.jp2 and
+// rgba8_premul.jp2 are 96 x 64 RGBA images written by OpenJPEG's
+// opj_compress (lossless) from PNGs, the second with its colour
+// premultiplied and its Channel Definition box retyping the opacity channel
+// as premultiplied (T.800, Table I.16). rgb8.j2k holds no opacity channel,
+// so the entry carries no mask and the image converts without one.
+func TestConvertColors_SMaskInDataBecomesSMask(t *testing.T) {
 	t.Parallel()
-	src := jpxColorPDF(t, "rgb8.j2k", "/ColorSpace /DeviceRGB /BitsPerComponent 8 /SMaskInData 1")
-	for _, opts := range [][]ColorOption{nil, {WithJPEGQuality(85)}} {
-		w := NewWriter(openColorPDF(t, src))
-		_, err := w.ConvertColors(context.Background(), CMYKColorTarget(), opts...)
-		if !errors.Is(err, ErrColorConversionRefused) || !strings.Contains(err.Error(), "SMaskInData") {
-			t.Errorf("%d options: %v, want ErrColorConversionRefused naming SMaskInData", len(opts), err)
+	cases := []struct {
+		file, extra string
+		masked      bool
+	}{
+		{"rgba8.jp2", "/ColorSpace /DeviceRGB /BitsPerComponent 8 /SMaskInData 1", true},
+		{"rgba8_premul.jp2", "/SMaskInData 2", true},
+		{"rgb8.j2k", "/ColorSpace /DeviceRGB /BitsPerComponent 8 /SMaskInData 1", false},
+	}
+	for _, tc := range cases {
+		src := jpxColorPDF(t, tc.file, tc.extra)
+		for _, opts := range [][]ColorOption{{WithoutOutputIntent()}, {WithoutOutputIntent(), WithJPEGQuality(85)}} {
+			report, out := convertBuiltin(t, src, CMYKColorTarget(), opts...)
+			if report.ConvertedImages != 1 {
+				t.Errorf("%s, %d options: report = %+v, want one converted image", tc.file, len(opts), report)
+			}
+			if bytes.Contains(out, []byte("/SMaskInData")) {
+				t.Errorf("%s, %d options: the output keeps /SMaskInData", tc.file, len(opts))
+			}
+			if got := bytes.Contains(out, []byte("/SMask ")); got != tc.masked {
+				t.Errorf("%s, %d options: /SMask written = %v, want %v", tc.file, len(opts), got, tc.masked)
+			}
 		}
-		_ = w.Close()
 	}
 }

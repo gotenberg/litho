@@ -126,6 +126,15 @@ func isIndexedSpace(cs ast.PdfObject) bool {
 	return ok && (name == "Indexed" || name == "I")
 }
 
+// JPXChannelByte converts a sample of a channel that is no palette index, of
+// the given depth and signedness, to the 8 bits the JPXDecode filter hands on
+// for a colour channel. Callers that render a JPEG 2000 image's other
+// channels, its opacity among them (T.800, I.5.3.6), read them at the scale of
+// its colours with it.
+func JPXChannelByte(v int32, precision int, signed bool) byte {
+	return jpxByte(v, precision, signed, false)
+}
+
 // jpxByte converts a sample of the given depth to the 8 bits the JPXDecode
 // filter hands on. An index stays as it is: an Indexed space has at most 256
 // entries. Other samples scale linearly onto 0 to 255, the mapping T.800,
