@@ -11,7 +11,8 @@
     "redact-render": "goldens/render",
     "recolor": "goldens/render",
     "flatten": "goldens/render",
-    "merge-catalog": "goldens/text"
+    "merge-catalog": "goldens/text",
+    "determinism": "goldens/render"
   },
   "golden_overrides": {
     "flatten": "flatten-scope.json"

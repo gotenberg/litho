@@ -5,6 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/draw"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,7 +109,7 @@ func TestDeterminismFeature_LeavesOutTheRandomMutations(t *testing.T) {
 		names = append(names, op.name)
 	}
 	got := strings.Join(names, ",")
-	for _, want := range []string{"remediation", "remediation-aggressive", "mutate-stamp", "mutate-pages", "mutate-autotag", "mutate-flatten", "mutate-redact", "generate-bookmarks", "split-reconstruct", "flatten-transparency"} {
+	for _, want := range []string{"remediation", "remediation-aggressive", "mutate-stamp", "mutate-pages", "mutate-autotag", "mutate-flatten", "mutate-redact", "generate-bookmarks", "split-reconstruct", "flatten-transparency", "render"} {
 		if !strings.Contains(","+got+",", ","+want+",") {
 			t.Errorf("operations %s lack %s", got, want)
 		}
@@ -120,17 +123,22 @@ func TestDeterminismFeature_LeavesOutTheRandomMutations(t *testing.T) {
 
 // TestDeterminismFeature_BookmarkOperationsComeLast pins that the bookmark
 // generations take the fixture slots after every operation before them, and
-// transparency flattening the slot after theirs, so adding each moved no
-// fixture's assignment, and that every operation runs at least twice.
+// transparency flattening the slot after theirs, then the render pass, so
+// adding each moved no fixture's assignment, and that every operation runs at
+// least twice.
 func TestDeterminismFeature_BookmarkOperationsComeLast(t *testing.T) {
 	t.Parallel()
 
 	ops := newDeterminismFeature().ops
-	if len(ops) < 3 {
-		t.Fatalf("%d operations, want at least the two bookmark ones and flattening", len(ops))
+	if len(ops) < 4 {
+		t.Fatalf("%d operations, want at least the two bookmark ones, flattening and rendering", len(ops))
 	}
-	if got := ops[len(ops)-3].name + "," + ops[len(ops)-2].name + "," + ops[len(ops)-1].name; got != "generate-bookmarks,split-reconstruct,flatten-transparency" {
-		t.Errorf("last operations %s, want generate-bookmarks,split-reconstruct,flatten-transparency", got)
+	var last []string
+	for _, op := range ops[len(ops)-4:] {
+		last = append(last, op.name)
+	}
+	if got := strings.Join(last, ","); got != "generate-bookmarks,split-reconstruct,flatten-transparency,render" {
+		t.Errorf("last operations %s, want generate-bookmarks,split-reconstruct,flatten-transparency,render", got)
 	}
 	for _, op := range ops {
 		if op.runs < 2 {
@@ -243,5 +251,119 @@ func TestDeterminismMetricIsACostMetric(t *testing.T) {
 	}
 	if v := newDeterminismFeature().Compare("id", raw); len(v.Metrics) != 1 {
 		t.Errorf("a matching cell emits %v, want the metric at zero", v.Metrics)
+	}
+	if !costMetrics[metricRenderPagesNondeterministic] {
+		t.Error("render_pages_nondeterministic is not a cost metric")
+	}
+	if costMetrics[metricRenderPagesChecked] || uncomparedMetrics[metricRenderPagesChecked] {
+		t.Error("render_pages_checked, the render pass's coverage, is not gated as good-when-higher")
+	}
+}
+
+// renderOnlyDeterminism returns a determinism feature loaded the way a
+// manifest mapping it to goldens/render loads it, so it runs the render pass
+// alone, with render as its page renderer.
+func renderOnlyDeterminism(t *testing.T, render pageRenderer) *determinismFeature {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "goldens", determinismRenderOnlyDir)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	f := newDeterminismFeature()
+	f.render = render
+	if err := f.LoadGoldens(dir); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+// TestDeterminismFeature_RenderPassCatchesANondeterministicRender plants a
+// renderer that draws page 1 one pixel apart in the second run, and expects
+// the render cell to count it, page and all, where the real renderer matches.
+func TestDeterminismFeature_RenderPassCatchesANondeterministicRender(t *testing.T) {
+	t.Parallel()
+
+	path := writeDeterminismPDF(t, "plain.pdf")
+
+	steady := runDeterminism(t, renderOnlyDeterminism(t, lithoRenderPage), path, "plain")
+	if !steady.Match || steady.Metrics[metricNondeterministic] != 0 ||
+		steady.Metrics[metricRenderPagesChecked] != 2 || steady.Metrics[metricRenderPagesNondeterministic] != 0 {
+		t.Errorf("real renderer: %+v, want a match over 2 pages with zero metrics", steady)
+	}
+
+	calls := 0
+	planted := func(ctx context.Context, r *pdf.Reader, page int, dpi float64, opts ...pdf.RenderOption) (image.Image, error) {
+		img, err := lithoRenderPage(ctx, r, page, dpi, opts...)
+		if err != nil {
+			return nil, err
+		}
+		calls++
+		// The first run draws pages 1 and 2, the second run's page 1 is call 3.
+		if calls != 3 {
+			return img, nil
+		}
+		out := image.NewRGBA(img.Bounds())
+		draw.Draw(out, out.Bounds(), img, img.Bounds().Min, draw.Src)
+		b := out.Bounds()
+		c := out.RGBAAt(b.Min.X, b.Min.Y)
+		out.SetRGBA(b.Min.X, b.Min.Y, color.RGBA{R: ^c.R, G: c.G, B: c.B, A: 0xff})
+		return out, nil
+	}
+	v := runDeterminism(t, renderOnlyDeterminism(t, planted), path, "plain")
+	if calls != 2*determinismRenderRuns {
+		t.Errorf("drew %d pages, want 2 pages in each of %d runs", calls, determinismRenderRuns)
+	}
+	if v.Match || v.Metrics[metricNondeterministic] != 1 ||
+		v.Metrics[metricRenderPagesChecked] != 2 || v.Metrics[metricRenderPagesNondeterministic] != 1 {
+		t.Errorf("planted renderer: %+v, want one nondeterministic cell, 1 of 2 pages", v)
+	}
+	if !strings.HasPrefix(v.Reason, determinismRenderOp+":") {
+		t.Errorf("reason %q does not name the render pass", v.Reason)
+	}
+}
+
+// TestDeterminismFeature_RenderPassSkipsAPDFThatDoesNotOpen pins that a file
+// litho cannot open, the same way twice, skips rather than scoring a match
+// over no page.
+func TestDeterminismFeature_RenderPassSkipsAPDFThatDoesNotOpen(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "broken.pdf")
+	if err := os.WriteFile(path, []byte("not a pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if v := runDeterminism(t, renderOnlyDeterminism(t, lithoRenderPage), path, "broken"); !v.Skipped {
+		t.Errorf("unopenable file: %+v, want skipped", v)
+	}
+}
+
+// TestDeterminismFeature_GoldenDirectoryPicksTheOperations pins that a
+// goldens/render directory keeps the render pass alone and that any other
+// directory keeps every operation, both drawing with the fonts of the
+// corpus's goldens/render/fonts.
+func TestDeterminismFeature_GoldenDirectoryPicksTheOperations(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.Join(t.TempDir(), "goldens")
+	fonts := filepath.Join(root, determinismRenderOnlyDir, renderFontsDir)
+	if err := os.MkdirAll(fonts, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	full := newDeterminismFeature()
+	n := len(full.ops)
+	if err := full.LoadGoldens(filepath.Join(root, "compliance")); err != nil {
+		t.Fatal(err)
+	}
+	if len(full.ops) != n || full.fontsDir != fonts {
+		t.Errorf("goldens/compliance: %d operations and fonts %q, want %d and %q", len(full.ops), full.fontsDir, n, fonts)
+	}
+
+	only := newDeterminismFeature()
+	if err := only.LoadGoldens(filepath.Join(root, determinismRenderOnlyDir)); err != nil {
+		t.Fatal(err)
+	}
+	if len(only.ops) != 1 || only.ops[0].name != determinismRenderOp || only.fontsDir != fonts {
+		t.Errorf("goldens/render: operations %+v and fonts %q, want the render pass alone and %q", only.ops, only.fontsDir, fonts)
 	}
 }

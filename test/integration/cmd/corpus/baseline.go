@@ -86,8 +86,11 @@ var costMetrics = map[string]bool{
 	metricSignatureInvalid: true,
 
 	// The determinism cell counts the (PDF, operation) cells whose two runs
-	// wrote different bytes. See determinismFeature.
-	metricNondeterministic: true,
+	// wrote different bytes, and the pages its render pass drew different
+	// pixels of; render_pages_checked, the pass's coverage, stays gated as
+	// good-when-higher. See determinismFeature.
+	metricNondeterministic:            true,
+	metricRenderPagesNondeterministic: true,
 
 	// The redact-render cell counts the redactions a check failed on, the
 	// ones that failed outright, and the ones whose poppler half did not run,
