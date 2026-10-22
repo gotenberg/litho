@@ -88,12 +88,12 @@ const (
 //     annotation has no appearance stream.
 //   - govdocs, all 1091 files (scope file): 34 flatten, all match, and
 //     1057 have no transparency.
-//   - pdfjs, all 1202 files but the 3 the scope file excludes for cost and
-//     the 1 the manifest skips: 263 of 273 flattened match, 915 have no
-//     transparency, 4 are refused (issue14982.pdf past the render pixel
-//     budget; REDHAT-1531897-0.pdf, bug1020226.pdf and issue15590.pdf, whose
-//     page tree does not resolve) and 7 do not open without a password. The
-//     3 excluded files flattened and matched on an idle machine.
+//   - pdfjs, all 1202 files but the 1 the manifest skips: 266 of 276
+//     flattened match, 915 have no transparency, 4 are refused
+//     (issue14982.pdf past the render pixel budget; REDHAT-1531897-0.pdf,
+//     bug1020226.pdf and issue15590.pdf, whose page tree does not resolve)
+//     and 7 do not open without a password. issue18765.pdf, issue19281.pdf
+//     and issue19319.pdf, once left out for cost, flatten and match.
 //   - pdfjs: 8 of the 10 mismatches are what flattening approximates by
 //     design. A watermark a transparent black box tinted is now drawn above
 //     it untinted (issue18466.pdf: litho_mismatch, poppler_mismatch). A
@@ -196,9 +196,14 @@ func (f *flattenFeature) HasGolden(fixtureID string) bool {
 //
 // # Corpus evidence
 //
-//   - pdfjs: issue18765.pdf (99 s of CPU), issue19319.pdf (75 s) and
-//     issue19281.pdf (53 s) pass the bar, and the first two time out under
-//     a load of 50; the next heaviest, issue16127.pdf, takes 37 s.
+//   - pdfjs: no PDF passes the bar. issue19281.pdf takes 38 s of CPU,
+//     issue19319.pdf 38 s, issue16127.pdf 17 s and issue18765.pdf 4 s, where
+//     they took 46 s, 71 s, 29 s and 62 s, measured back to back on a load
+//     of 4, before the renderer rasterised a clipping path over the pixels
+//     painted under it, and before the flattening drew the page whole only
+//     at the glyph pixels it reads. issue18765.pdf, issue19281.pdf and
+//     issue19319.pdf were excluded until then, the first and the last
+//     timing out under a load of 50.
 //   - govdocs: the heaviest, thread_200_200744.pdf, takes 16 s.
 type flattenScopeFile struct {
 	// WholeCorpus puts every PDF of the corpus in scope, not only those

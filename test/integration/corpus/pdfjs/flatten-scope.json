@@ -1,8 +1,3 @@
 {
-  "whole_corpus": true,
-  "exclude": {
-    "issue18765": "One run of the flatten cell takes 99 s of CPU on its own, past the quarter of the 3-minute fixture timeout the scope allows, and it timed out under a loaded run. It flattens and matches on an idle machine.",
-    "issue19281": "One run of the flatten cell takes 53 s of CPU on its own, past the quarter of the 3-minute fixture timeout the scope allows. It flattens and matches on an idle machine.",
-    "issue19319": "One run of the flatten cell takes 75 s of CPU on its own, past the quarter of the 3-minute fixture timeout the scope allows, most of it compositing the shadings of page 26 at 300 dpi, and it timed out under a loaded run. It flattens and matches on an idle machine."
-  }
+  "whole_corpus": true
 }
