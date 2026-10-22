@@ -281,6 +281,7 @@ one deliberately rather than diffing it against a fresh build.
 | `iccgroupalt_2b.pdf`   | PDF/A-2b     | Groups and transparent text in unusable ICC spaces' /Alternate   |
 | `flatuntagged_ua1.pdf` | PDF/UA-1     | Transparent annotations in a document with no structure tree     |
 | `smaskbudget_2b.pdf`   | PDF/A-2b     | A soft mask and a group whose rasters pass the render budget     |
+| `greyintent_2b.pdf`    | PDF/A-2b     | Transparency in pages whose group names no space, grey intent    |
 
 ### Must-not-fire controls
 
@@ -659,6 +660,7 @@ are covered under [Known divergences](#known-divergences).
 | `formuntagged_ua1.pdf` | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 4    | 5    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `gotochain_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 1    |
+| `greyintent_2b.pdf`    | 7    | 4    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
 | `gstate_2b.pdf`        | 9    | 7    | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
@@ -9193,6 +9195,34 @@ The file declares no OutputIntent and its pages no `/Group`, so DeviceRGB fails
 `6.4/1`, the group `6.4/3` and the constant alpha `6.4/6` at PDF/A-1b, and the
 pages `6.2.10/2` at PDF/A-2b. veraPDF 1.30.2 and litho report the same rule set
 in all thirteen cells.
+
+### `greyintent_2b.pdf`
+
+ISO 32000-1, 11.4.7 and Table 147 leave the blending colour space of a page
+group that names no `/CS` to the reader, and 14.11.5 has the output intent
+describe the device the document is prepared for. `Writer.FlattenTransparency`
+composites such a page in the intent's device space when that is DeviceCMYK or
+DeviceGray, so a document converted to CMYK stays CMYK through flattening. The
+corpora's 30 files with a grey intent flatten nothing, and of the 111 with a
+CMYK one only `laterreads_2u` flattens a page whose group names no space. The
+file's OutputIntent is a version 2.1 grey display profile, and every colour is
+DeviceGray:
+
+| Page | Draws                                                            |
+| ---- | ---------------------------------------------------------------- |
+| 1    | no `/Group`: a light square at ca 0.5 over a dark backdrop       |
+| 2    | a `/Group` with no `/CS`: a light square Multiply over a mid one |
+
+Flattened, each page's composite is a DeviceGray image, where it was an sRGB
+one before, and the `flatten` cell draws both pages like their source in litho
+and poppler 26.09.0. The PDF/A-1b remediation flattens both pages into DeviceGray
+images, and veraPDF 1.30.2 reports nothing on that output.
+
+The pages paint transparency under an OutputIntent, so PDF/A-2b admits them
+(ISO 19005-2, 6.2.10) and the file is compliant there; at PDF/A-1b the
+constant alpha fails `6.4/6`, the blend mode `6.4/4` and the page group `6.4/3`,
+beside the part-2 identification `6.7.11/2`.
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
 
 ## Scope
 
