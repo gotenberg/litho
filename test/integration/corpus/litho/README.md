@@ -9096,8 +9096,17 @@ way, but converts sRGB colours into it through DeviceCMYK's profile, where it
 used the device formula for want of the header's. Flattening composited the
 text over paper of tint 1, the grey white of `/N` 1, and drew it as tint 0.8,
 1,294 pixels past the tolerance from its source; it now composites over tint
-0, no ink (8.6.6.4), and draws tint 0.3, as the source shows. `convert-colors`
-reads both spaces as before.
+0, no ink (8.6.6.4), and draws tint 0.3, as the source shows.
+
+`convert-colors` kept the GRAY-header space's colours as the spot's tints and
+left the second group's `/CS` as it was, so the `recolor` cell found the page
+painting, and that group blending, outside DeviceCMYK. Colours in that space
+now convert through the Separation's tint transform, whatever the spot policy:
+the space selected is the ICCBased one, whose initial colour is 0 (8.6.8,
+Table 74), not the spot's 1. Both groups' `/CS` become the target.
+Converted to CMYK, the page differs from its source by at most ΔE 53.5 (CIE76),
+where the second group's Multiply now composites in CMYK; converted to RGB, by
+22.7.
 
 The file declares no OutputIntent, so DeviceRGB fails `6.2.4.3/2` and DeviceCMYK
 `6.2.4.3/3` at PDF/A-2b, `6.2.3.3/1` and `6.2.3.3/2` at PDF/A-1b; the

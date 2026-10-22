@@ -223,6 +223,30 @@ func TestICCBasedFallbackFollowsRenderer(t *testing.T) {
 	}
 }
 
+// TestICCBasedSpotAlternateConverts checks an ICCBased space whose profile
+// litho cannot use and whose /Alternate is a spot colour (ISO 32000-1,
+// 8.6.5.5, Table 66): under the default spot policy its colours convert to
+// the target through the spot's tint transform, the initial colour 0 of the
+// ICCBased space included (8.6.8, Table 74), and a transparency group
+// blending in it is written in the target (11.4.7, Table 147), so the page
+// paints in the target alone.
+func TestICCBasedSpotAlternateConverts(t *testing.T) {
+	f := onePage("/Group << /S /Transparency /CS [/ICCBased 5 0 R] >> /Resources << /ColorSpace << /S [/ICCBased 5 0 R] >> >>",
+		"/S cs 0.6 sc",
+		stream("/N 1 /Alternate [/Separation /Spot /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 0 0] /N 1 >>]",
+			"not a profile"))
+	r := recolor(t, f, cmyk, naive(Options{}))
+	if want, got := "0 0 0 0 k\n0 0.6 0 0 k", r.text(0); got != want {
+		t.Errorf("content:\n%s\nwant:\n%s", got, want)
+	}
+	if cs := r.dict(r.pages[0].Dict["Group"])["CS"]; cs != ast.PdfName("DeviceCMYK") {
+		t.Errorf("group /CS %v, want DeviceCMYK", cs)
+	}
+	if len(r.report.KeptColorants) != 0 {
+		t.Errorf("kept colorants %v, want none: no spot space is selected", r.report.KeptColorants)
+	}
+}
+
 func TestDefaultSpaces(t *testing.T) {
 	// DefaultRGB stands in for DeviceRGB (8.6.5.6): here a CalRGB whose
 	// first component is the sRGB blue primary, so rg's red paints blue.

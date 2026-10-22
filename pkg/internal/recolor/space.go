@@ -178,7 +178,7 @@ func (s *session) plan(ctx context.Context, def ast.PdfObject, defaults ast.PdfD
 	case graphics.FamilyIndexed, "I":
 		return s.planIndexed(ctx, arr, depth)
 	case graphics.FamilySeparation, graphics.FamilyDeviceN:
-		return s.planSpot(ctx, string(family), arr, depth)
+		return s.planSpot(ctx, string(family), arr, depth, s.opts.ConvertSpots)
 	case graphics.FamilyPattern:
 		p := &spacePlan{kind: planPattern}
 		if len(arr) > 1 {
@@ -403,7 +403,7 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int, role
 	fallback := func() *spacePlan {
 		p := s.planDevice(ctx, [5]string{1: SpaceGray, 3: SpaceRGB, 4: SpaceCMYK}[n], "", nil)
 		if alt, ok := pdfimage.SubstituteICCAlternate(ctx, s.doc, arr, s.opts.Intent, role); ok {
-			if a := s.plan(ctx, alt, nil, depth+1, role); a.n == n && (a.kind == planConvert || a.kind == planIdentity) {
+			if a := s.planICCAlternate(ctx, alt, depth+1, role); a.n == n && (a.kind == planConvert || a.kind == planIdentity) {
 				p = a
 			}
 		}
@@ -462,6 +462,23 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int, role
 		return fallback()
 	}
 	return p
+}
+
+// planICCAlternate plans alt, the /Alternate an ICCBased space whose profile
+// litho cannot use is read through (ISO 32000-1, 8.6.5.5, Table 66), in role.
+// A Separation or DeviceN alternate converts to the target through its tint
+// transform whatever the spot policy: the space selected is the ICCBased
+// one, whose colour components and initial colour are its own (8.6.8, Table
+// 74), so it cannot keep the spot's tints as a Separation space would, and
+// converting is what leaves the space, and a group blending in it (11.4.7,
+// Table 147), in the target.
+func (s *session) planICCAlternate(ctx context.Context, alt ast.PdfObject, depth int, role pdfimage.SpaceRole) *spacePlan {
+	if arr, err := s.resolveArray(ctx, alt); err == nil && len(arr) > 0 {
+		if family, err := s.resolveName(ctx, arr[0]); err == nil && (family == graphics.FamilySeparation || family == graphics.FamilyDeviceN) {
+			return s.planSpot(ctx, string(family), arr, depth, true)
+		}
+	}
+	return s.plan(ctx, alt, nil, depth, role)
 }
 
 // maxIndexedHival is the largest index of an Indexed space, which ISO
@@ -581,7 +598,7 @@ func (s *session) lookupBytes(ctx context.Context, obj ast.PdfObject) ([]byte, e
 // through the tint transform. A space over the colorant None alone paints
 // nothing, and one over All marks every separation, registration marks, so
 // both stay as they are under either policy.
-func (s *session) planSpot(ctx context.Context, family string, arr ast.PdfArray, depth int) *spacePlan {
+func (s *session) planSpot(ctx context.Context, family string, arr ast.PdfArray, depth int, convert bool) *spacePlan {
 	bad := func(err error) *spacePlan {
 		return &spacePlan{kind: planUnknown, err: fmt.Errorf("%w: %s: %w", ErrUnsupportedSpace, family, err)}
 	}
@@ -630,7 +647,7 @@ func (s *session) planSpot(ctx context.Context, family string, arr ast.PdfArray,
 	alt := s.plan(ctx, arr[2], nil, depth+1, pdfimage.RoleTintAlternate)
 	switch alt.kind {
 	case planIdentity:
-		if !s.opts.ConvertSpots {
+		if !convert {
 			unchanged.spot = true
 			s.keepColorants(names)
 			return unchanged
@@ -654,7 +671,7 @@ func (s *session) planSpot(ctx context.Context, family string, arr ast.PdfArray,
 		altConv = identity{}
 	}
 	tint := &tintConverter{fn: fn, mid: alt.n, next: altConv}
-	if s.opts.ConvertSpots {
+	if convert {
 		return &spacePlan{kind: planConvert, n: n, conv: tint, initial: initial}
 	}
 	domain := make([]float64, 0, 2*n)
