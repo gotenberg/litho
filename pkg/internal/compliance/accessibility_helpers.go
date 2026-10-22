@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func langRequiredRule(profile string) Rule {
@@ -350,6 +351,28 @@ func containsPDFUAIDPart(ctx context.Context, xmpData []byte, part string) bool 
 // avoid reporting an absent property under the value rule.
 func containsPDFUAIDProperty(ctx context.Context, xmpData []byte) bool {
 	return xmpScopedPropertyPresent(ctx, xmpData, xmpPdfuaIDNamespace, "part")
+}
+
+// ClaimsAccessibility reports whether the catalog's XMP metadata claims PDF/UA
+// or WTPDF conformance, read the way validation reads each claim: a
+// pdfuaid:part property of any value (ISO 14289-1 and ISO 14289-2, 5,
+// [containsPDFUAIDProperty]), or a PDF Declaration naming either WTPDF 1.0
+// level ([WTPDFDeclares]). A catalog with no readable metadata claims
+// nothing.
+func ClaimsAccessibility(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
+	xmpData, ok := readCatalogXMP(ctx, doc, catalog)
+	if !ok {
+		return false
+	}
+	if containsPDFUAIDProperty(ctx, xmpData) {
+		return true
+	}
+	for _, profile := range []models.WTPDFProfile{models.WTPDF1Accessibility, models.WTPDF1Reuse} {
+		if WTPDFDeclares(xmpData, WTPDFDeclarationURI(string(profile))) {
+			return true
+		}
+	}
+	return false
 }
 
 // containsPDFUAIDRev reports whether the XMP carries a pdfuaid:rev property

@@ -12,16 +12,36 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// uaClaimXMP is an XMP packet claiming PDF/UA-1 (ISO 14289-1, 5).
+const uaClaimXMP = `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"><pdfuaid:part>1</pdfuaid:part></rdf:Description>
+</rdf:RDF></x:xmpmeta>
+<?xpacket end="w"?>`
+
 // placementFormPDF builds a page with one widget whose appearance carries the
 // given /BBox and /Matrix entries, written as PDF source.
 func placementFormPDF(rect, form string) []byte {
+	return widgetFormPDF(rect, form, false)
+}
+
+// widgetFormPDF is [placementFormPDF], with an XMP packet claiming PDF/UA-1 when
+// claim is set. The document has no structure tree either way.
+func widgetFormPDF(rect, form string, claim bool) []byte {
 	appearance := "0 0 1 rg 0 0 10 10 re f"
+	catalog := "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>"
+	if claim {
+		catalog = "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> /Metadata 6 0 R >>"
+	}
 	objs := []string{
-		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
+		catalog,
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Annots [4 0 R] >>",
 		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (f) /F 4 /Rect " + rect + " /AP << /N 5 0 R >> >>",
 		fmt.Sprintf("<< /Type /XObject /Subtype /Form %s /Length %d >>\nstream\n%s\nendstream", form, len(appearance), appearance),
+	}
+	if claim {
+		objs = append(objs, fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(uaClaimXMP), uaClaimXMP))
 	}
 	var b bytes.Buffer
 	b.WriteString("%PDF-1.7\n")
@@ -135,60 +155,96 @@ func drawnContent(ctx context.Context, t *testing.T, pending map[int]ast.PdfObje
 }
 
 // requireArtifacts fails t unless each appearance drawn holds an artifact
-// marking.
-func requireArtifacts(t *testing.T, drawn []string) {
+// marking, or, with want false, unless none does.
+func requireArtifacts(t *testing.T, drawn []string, want bool) {
 	t.Helper()
 	if len(drawn) == 0 {
 		t.Fatal("no appearance drawn")
 	}
 	for _, d := range drawn {
-		if n := strings.Count(d, " Do Q"); n != strings.Count(d, "/Artifact BMC q ") || n != strings.Count(d, " Do Q EMC") {
+		n := strings.Count(d, " Do Q")
+		if want && (n != strings.Count(d, "/Artifact BMC q ") || n != strings.Count(d, " Do Q EMC")) {
 			t.Errorf("drawing = %q, want each appearance marked as an artifact", d)
+		}
+		if !want && strings.Contains(d, "/Artifact") {
+			t.Errorf("drawing = %q, want plain content", d)
 		}
 	}
 }
 
-// TestFlattenFormMarksAnUntaggedDrawingAsAnArtifact pins that a document with
-// no structure tree gets each flattened appearance as an artifact. ISO
-// 14289-1, 7.1 and ISO 14289-2, 8.2.2 require page content to be tagged or an
-// artifact, and with no structure element to tag it under, unmarked content
-// added a failure the source did not have.
-func TestFlattenFormMarksAnUntaggedDrawingAsAnArtifact(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	data := placementFormPDF("[20 200 100 260]", "/BBox [0 0 80 60]")
-	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
-	if err != nil {
-		t.Fatalf("NewDocument: %v", err)
-	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
-	if err := FlattenForm(ctx, alloc, doc); err != nil {
-		t.Fatalf("FlattenForm: %v", err)
-	}
-	requireArtifacts(t, drawnContent(ctx, t, alloc.Pending()))
+// claimedFormObjs returns certifiedFormObjs with an XMP packet claiming
+// PDF/UA-1 named by the catalog.
+func claimedFormObjs() []string {
+	objs := certifiedFormObjs()
+	objs[0] = strings.Replace(objs[0], "<< /Type /Catalog", fmt.Sprintf("<< /Type /Catalog /Metadata %d 0 R", len(objs)+1), 1)
+	return append(objs, fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(uaClaimXMP), uaClaimXMP))
 }
 
-// TestBakeSignaturesForRewriteMarksAnUntaggedDrawingAsAnArtifact pins the same
+// TestFlattenFormMarksAnUntaggedDrawingByTheClaim pins how a document with no
+// structure tree gets each flattened appearance. ISO 14289-1, 7.1 and ISO
+// 14289-2, 8.2.2 require the page content of a document claiming conformance
+// to be tagged or an artifact, so with a PDF/UA claim and no structure element
+// to tag it under, the drawing is an artifact. Without one it stays plain
+// content, which default text extraction returns.
+func TestFlattenFormMarksAnUntaggedDrawingByTheClaim(t *testing.T) {
+	t.Parallel()
+	for _, claim := range []bool{false, true} {
+		t.Run(fmt.Sprintf("claim=%v", claim), func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			data := widgetFormPDF("[20 200 100 260]", "/BBox [0 0 80 60]", claim)
+			doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+			if err != nil {
+				t.Fatalf("NewDocument: %v", err)
+			}
+			alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+			if err := FlattenForm(ctx, alloc, doc); err != nil {
+				t.Fatalf("FlattenForm: %v", err)
+			}
+			requireArtifacts(t, drawnContent(ctx, t, alloc.Pending()), claim)
+		})
+	}
+}
+
+// TestBakeSignaturesForRewriteMarksAnUntaggedDrawingByTheClaim pins the same
 // for the signed signatures a full rewrite of an untagged document draws.
-func TestBakeSignaturesForRewriteMarksAnUntaggedDrawingAsAnArtifact(t *testing.T) {
+func TestBakeSignaturesForRewriteMarksAnUntaggedDrawingByTheClaim(t *testing.T) {
 	t.Parallel()
-	ctx, doc, _ := setFormDoc(t, certifiedFormObjs())
-	overrides, err := BakeSignaturesForRewrite(ctx, doc, nil)
-	if err != nil {
-		t.Fatalf("BakeSignaturesForRewrite: %v", err)
+	for _, claim := range []bool{false, true} {
+		t.Run(fmt.Sprintf("claim=%v", claim), func(t *testing.T) {
+			t.Parallel()
+			objs := certifiedFormObjs()
+			if claim {
+				objs = claimedFormObjs()
+			}
+			ctx, doc, _ := setFormDoc(t, objs)
+			overrides, err := BakeSignaturesForRewrite(ctx, doc, nil)
+			if err != nil {
+				t.Fatalf("BakeSignaturesForRewrite: %v", err)
+			}
+			requireArtifacts(t, drawnContent(ctx, t, overrides), claim)
+		})
 	}
-	requireArtifacts(t, drawnContent(ctx, t, overrides))
 }
 
-// TestBakeSignedSignaturesMarksAnUntaggedPageCopyAsAnArtifact pins the same
-// for the signed signatures a copy of an untagged document's pages draws.
-func TestBakeSignedSignaturesMarksAnUntaggedPageCopyAsAnArtifact(t *testing.T) {
+// TestBakeSignedSignaturesMarksAnUntaggedPageCopyByTheClaim pins the same for
+// the signed signatures a copy of an untagged document's pages draws.
+func TestBakeSignedSignaturesMarksAnUntaggedPageCopyByTheClaim(t *testing.T) {
 	t.Parallel()
-	ctx, doc, _ := setFormDoc(t, certifiedFormObjs())
-	pages := readerPages(ctx, doc, mustCatalog(t, ctx, doc))
-	overrides, err := bakeSignedSignatures(ctx, doc, pages[:1], pageCopyOverrides(pages[:1]), bakeTagged)
-	if err != nil {
-		t.Fatalf("bakeSignedSignatures: %v", err)
+	for _, claim := range []bool{false, true} {
+		t.Run(fmt.Sprintf("claim=%v", claim), func(t *testing.T) {
+			t.Parallel()
+			objs := certifiedFormObjs()
+			if claim {
+				objs = claimedFormObjs()
+			}
+			ctx, doc, _ := setFormDoc(t, objs)
+			pages := readerPages(ctx, doc, mustCatalog(t, ctx, doc))
+			overrides, err := bakeSignedSignatures(ctx, doc, pages[:1], pageCopyOverrides(pages[:1]), bakeTagged)
+			if err != nil {
+				t.Fatalf("bakeSignedSignatures: %v", err)
+			}
+			requireArtifacts(t, drawnContent(ctx, t, overrides), claim)
+		})
 	}
-	requireArtifacts(t, drawnContent(ctx, t, overrides))
 }

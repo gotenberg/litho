@@ -1884,9 +1884,12 @@ func (w *Writer) SetFormField(name, value string) {
 // element that enclosed its widget, a Form element taking the PrintField role
 // of its field (ISO 32000-1, Table 348), or marked as an artifact when no
 // element did, so the page content stays tagged or artifact as ISO 14289-1,
-// 7.1 requires. On a document with no structure tree each one is marked as
-// an artifact (ISO 32000-1, 14.8.2.2), so flattening adds no unmarked
-// content.
+// 7.1 requires. A document with no structure tree keeps each one as plain
+// page content, which default [Reader.ExtractText] returns, unless its XMP
+// metadata claims PDF/UA (pdfuaid:part) or WTPDF: ISO 14289-1, 7.1 and ISO
+// 14289-2, 8.2.2 then require the content to be tagged or an artifact, and
+// each one is marked as an artifact (ISO 32000-1, 14.8.2.2), which
+// [WithArtifacts] extracts.
 func (w *Writer) FlattenForm() {
 	if w.refuseAfterRemediation("FlattenForm") != nil {
 		return

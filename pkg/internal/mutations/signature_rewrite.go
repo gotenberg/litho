@@ -157,6 +157,9 @@ func BakeSignaturesForRewrite(ctx context.Context, doc *document.Document, overr
 		return nil, fmt.Errorf("resolving the catalog whose signatures the rewrite drops: %w", err)
 	}
 	tags := newFlattenTags(ctx, alloc, doc, catalogRef, catalog)
+	if tags == nil {
+		tags = untaggedTags(ctx, doc, catalog)
+	}
 	for _, page := range StagedPages(ctx, alloc, doc, reader) {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("drawing the signatures into their pages: %w", err)

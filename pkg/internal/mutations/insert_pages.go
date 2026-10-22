@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -88,11 +89,14 @@ func InsertPages(
 		return fmt.Errorf("reading the target's structure tree: %w", err)
 	}
 	targetTagged := target != nil || !targetUsable
-	// No structure element of the target encloses a copied widget unless
-	// the pages carry their structure into it.
-	marking := bakeArtifacts
-	if targetUsable && hasStructTree(ctx, srcDoc) {
+	marking := bakeUnmarked
+	switch {
+	case targetUsable && hasStructTree(ctx, srcDoc):
 		marking = bakeTagged
+	case targetTagged, compliance.ClaimsAccessibility(ctx, doc, catalogDict):
+		// No structure element of the target encloses a copied widget (see
+		// [untaggedTags] for a target with no structure tree).
+		marking = bakeArtifacts
 	}
 
 	pagesObj, ok := catalogDict["Pages"]

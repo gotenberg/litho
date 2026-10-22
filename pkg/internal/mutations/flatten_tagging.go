@@ -8,6 +8,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -23,8 +24,8 @@ const (
 
 // flattenTags keeps a tagged document's structure tree in step with the widgets
 // [FlattenForm] removes. A nil *flattenTags stands for an untagged document,
-// and every method is a no-op on it: [flattenPageWidgets] then marks each
-// drawing as an artifact through [artifactTags].
+// and every method is a no-op on it: the drawing goes in unmarked, unless
+// [untaggedTags] gives the document [artifactTags].
 //
 // ISO 14289-1, 7.1 and ISO 14289-2, 8.2.2 require every piece of page content
 // to be tagged as real content or marked as an artifact. A widget is not page
@@ -147,6 +148,33 @@ func newFlattenTags(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 // element encloses the widget (ISO 32000-1, 14.8.2.2).
 func artifactTags() *flattenTags {
 	return &flattenTags{loaded: true}
+}
+
+// untaggedTags returns the tagging state for the baked appearances of a
+// document with no structure tree: [artifactTags] when its metadata claims
+// PDF/UA or WTPDF conformance ([compliance.ClaimsAccessibility]), nil
+// otherwise, which draws them unmarked.
+//
+// ISO 14289-1, 7.1 and ISO 14289-2, 8.2.2 require every piece of page content
+// of a document that claims conformance to be tagged or marked as an
+// artifact, and with no structure element to tag it under, unmarked content
+// fails the claim where the widget did not. The drawing goes in as a plain
+// /Artifact sequence (ISO 32000-1, 14.8.2.2.1): Table 330 makes every
+// property optional, and none of its /Type values fits a field's look,
+// Pagination naming running heads, Layout typographic ornaments and Page
+// production marks. A document that claims neither keeps the drawing as plain
+// content: default text extraction leaves artifacts out, and a flattened
+// field's value is text a reader extracts afterwards.
+//
+// # Corpus evidence
+//
+//   - All corpora: drawn unmarked, the FlattenForm output of 75 untagged
+//     files failed ISO 14289-1, 7.1 test 3 where the source passed it.
+func untaggedTags(ctx context.Context, doc *document.Document, catalog ast.PdfDict) *flattenTags {
+	if compliance.ClaimsAccessibility(ctx, doc, catalog) {
+		return artifactTags()
+	}
+	return nil
 }
 
 // load reads the parent tree and the object references the first time a widget

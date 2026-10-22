@@ -27,10 +27,10 @@ import (
 //
 // marking says how each drawn appearance is marked (see [bakeMarking]): tagged
 // under the structure element that enclosed its widget when the output carries
-// doc's structure, as [FlattenForm] tags one (see [flattenTags]), and marked
-// as an artifact otherwise, a document with no structure tree included (see
-// [flattenPageWidgets]). The elements the tagging rewrites join the
-// overrides, so the copy carries them.
+// doc's structure, as [FlattenForm] tags one (see [flattenTags]), marked as an
+// artifact in a tagged output that carries none of it, and in an output with
+// no structure tree as [untaggedTags] decides. The elements the tagging
+// rewrites join the overrides, so the copy carries them.
 //
 // A widget that shows nothing leaves without drawing: one the viewer does not
 // display (Hidden or NoView, ISO 32000-1, Table 165), one with no area, as an
@@ -92,8 +92,12 @@ func bakeSignedSignatures(
 		if catalogRef, ok := CatalogRef(ctx, doc); ok {
 			if catalog, err := LiveCatalogDict(ctx, alloc, doc, catalogRef); err == nil {
 				tags = newFlattenTags(ctx, alloc, doc, catalogRef, catalog)
+				if tags == nil {
+					tags = untaggedTags(ctx, doc, catalog)
+				}
 			}
 		}
+	case bakeUnmarked:
 	}
 	for _, page := range signed {
 		if err := ctx.Err(); err != nil {
@@ -119,14 +123,20 @@ func bakeSignedSignatures(
 type bakeMarking int
 
 const (
+	// bakeUnmarked draws each appearance unmarked, for an output with no
+	// structure tree that claims no PDF/UA or WTPDF conformance (see
+	// [untaggedTags]).
+	bakeUnmarked bakeMarking = iota
 	// bakeArtifacts marks each as an artifact, for an output that carries
 	// none of the source's structure, where no structure element encloses
-	// the copied widget (ISO 32000-1, 14.8.2.2).
-	bakeArtifacts bakeMarking = iota
+	// the copied widget (ISO 32000-1, 14.8.2.2): a tagged output, or an
+	// untagged one that claims PDF/UA or WTPDF.
+	bakeArtifacts
 	// bakeTagged tags each under the structure element that enclosed its
 	// widget, for an output that carries the source's structure (see
-	// [newStructSource]). A widget no element enclosed, and every widget of
-	// an untagged source, is marked as an artifact.
+	// [newStructSource]). A widget no element enclosed is marked as an
+	// artifact, and an untagged source's appearances as [untaggedTags]
+	// decides.
 	bakeTagged
 )
 

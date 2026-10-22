@@ -3,13 +3,14 @@
 PDF/UA-1.
 
 ISO 14289-1, 7.1 and ISO 14289-2, 8.2.2 require every piece of page content
-to be tagged as real content or marked as an artifact. A widget is not page
-content, so a document with no structure tree passes those tests while its
-page draws nothing. Flattening the form draws each appearance into the page,
-where there is no structure element to tag it under, so litho marks it as an
-artifact (ISO 32000-1, 14.8.2.2). The other litho fixtures with painting
-widgets are tagged, and the untagged ones paint nothing, so this fixture gives
-the gate the shape:
+of a document claiming conformance to be tagged as real content or marked as
+an artifact. A widget is not page content, so a document with no structure
+tree passes those tests while its page draws nothing. Flattening the form
+draws each appearance into the page, where there is no structure element to
+tag it under, so in a document claiming PDF/UA, as this one does, litho marks
+it as an artifact (ISO 32000-1, 14.8.2.2). The other litho fixtures with
+painting widgets are tagged, and the untagged ones paint nothing or claim no
+PDF/UA, so this fixture gives the gate the shape:
 
 | Field   | Kind       | /Rect             | Appearance                              |
 | ------- | ---------- | ----------------- | --------------------------------------- |

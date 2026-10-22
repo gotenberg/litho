@@ -8947,8 +8947,9 @@ fails (`7.18.1/3` and `7.18.3/1` at PDF/UA-1; `8.9.3.3/1`, `8.10.2.3/1` and
 `8.9.2.4.13/1` at PDF/UA-2) and fails nothing new, on litho and veraPDF 1.30.2
 alike. Untagged, as the file first was, the drawing went into the page
 unmarked, which added `7.1/3` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2 to the
-`mutate-flatten` cell; `FlattenForm` now marks such a drawing as an artifact
-(see `formuntagged_ua1.pdf`). The file holds no signed signature, so a rewrite draws nothing more.
+`mutate-flatten` cell (an untagged document gets artifacts only when it
+claims PDF/UA or WTPDF, see `formuntagged_ua1.pdf`). The file holds no signed
+signature, so a rewrite draws nothing more.
 
 The file declares an RGB OutputIntent and every widget prints, so it conforms
 to PDF/A-2b. The other cells report what the part-2, level-B claim draws at
@@ -8961,15 +8962,18 @@ the source and on the `flatten-form` output.
 ### `formuntagged_ua1.pdf`
 
 ISO 14289-1, 7.1 and ISO 14289-2, 8.2.2 require every piece of page content
-to be tagged as real content or marked as an artifact. A widget is not page
-content, so a document with no structure tree passes both tests while its page
-draws nothing of its own. Flattening the form draws each appearance into the
-page, where no structure element can take it, so `FlattenForm` and both
-signature bakes mark it as an artifact (ISO 32000-1, 14.8.2.2), a plain
-`/Artifact` sequence: Table 330 makes every property optional, and no artifact
-`/Type` names a field's look. The other fixtures whose widgets paint are
-tagged, and the untagged ones paint nothing, so this file gives the
-`mutate-flatten` cell the shape:
+of a document claiming conformance to be tagged as real content or marked as
+an artifact. A widget is not page content, so a document with no structure
+tree passes both tests while its page draws nothing of its own. Flattening the
+form draws each appearance into the page, where no structure element can take
+it. In a document whose XMP claims PDF/UA (`pdfuaid:part`) or WTPDF,
+`FlattenForm` and both signature bakes mark it as an artifact (ISO 32000-1,
+14.8.2.2), a plain `/Artifact` sequence: Table 330 makes every property
+optional, and no artifact `/Type` names a field's look. A document claiming
+neither keeps it as plain content, which default text extraction returns. The
+other fixtures whose widgets paint are tagged, and the untagged ones paint
+nothing or claim no PDF/UA, so this file gives the `mutate-flatten` cell the
+shape:
 
 | Field     | Kind      | `/Rect`            | Appearance                                   |
 | --------- | --------- | ------------------ | -------------------------------------------- |
