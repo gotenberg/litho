@@ -44,7 +44,12 @@ func pipeUsage(w io.Writer) {
 	fmt.Fprintln(w, "Stages: rotate, split, merge, delete, insert, encrypt, decrypt,")
 	fmt.Fprintln(w, "        autotag, set-metadata, set-form, flatten-form,")
 	fmt.Fprintln(w, "        set-bookmarks, attach, detach, stamp-text, stamp-image,")
-	fmt.Fprintln(w, "        stamp-pdf, remediate, sign, timestamp")
+	fmt.Fprintln(w, "        stamp-pdf, convert-colors, flatten-transparency, remediate,")
+	fmt.Fprintln(w, "        sign, timestamp")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "A --cmyk-profile on a convert-colors or flatten-transparency stage sets")
+	fmt.Fprintln(w, "how the document reads DeviceCMYK for every stage; two stages naming")
+	fmt.Fprintln(w, "different profiles are refused.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "remediate runs at most once, as the last stage but sign and timestamp,")
 	fmt.Fprintln(w, "and a PDF/A profile takes no encrypt stage. sign and timestamp run at")
@@ -97,7 +102,18 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		return exitError
 	}
 
-	r, closer, err := openPDF(ctx, inputFile, password)
+	cmykPath, err := pipeCMYKProfile(groups)
+	if err != nil {
+		fmt.Fprintf(stderr, "pipe: %v\n", err)
+		return exitError
+	}
+	extra, err := cmykProfileOptions(cmykPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "pipe: %v\n", err)
+		return exitError
+	}
+
+	r, closer, err := openPDF(ctx, inputFile, password, extra...)
 	if err != nil {
 		fmt.Fprintf(stderr, "pipe: %v\n", err)
 		return exitError
@@ -258,6 +274,11 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// Pipeline.WriteTo hands it to each Writer and each intermediate split or
 	// merge, since a stage that gives a page a media box gives it for good.
 	finalOpts := append(profileCompactWriteOptions(compacting, packingRefusedProfile), defaultPageSize.writeOptions()...)
+	// The standalone flatten-transparency rewrites a document with nothing to
+	// flatten whole all the same, and the stage writes what the command does.
+	if pipelineHasStage(groups, "flatten-transparency") {
+		finalOpts = append(finalOpts, pdf.WithFullRewrite())
+	}
 	// Whether the flags reached an incremental update, which carries no
 	// compaction, can only be known once the library has chosen the write.
 	var compactionSkipped bool
@@ -429,6 +450,7 @@ func splitStageGroups(args []string) [][]string {
 // these two entries cover -h, -help and --help.
 var boolStageFlags = map[string]bool{
 	"aggressive": true, "generate": true, "no-font-subset": true, "system-fonts": true, "pades": true, "ltv": true,
+	"bpc": true, "convert-spots": true, "no-output-intent": true, "replace-output-intents": true, "printed-annotations": true,
 	"h": true, "help": true,
 }
 
@@ -572,9 +594,19 @@ func pdfaEncryptionClause(profile string) string {
 // the stage's own FlagSet, which addStage builds later and keeps inside a
 // closure runPipe cannot reach.
 func stageProfileValue(group []string) string {
+	return stageFlagValue(group, "profile")
+}
+
+// stageFlagValue returns the value a stage group gives the flag flagName, in
+// any of the four spellings [stageProfileValue] reads, or "". The first
+// token, the stage name, is never read as a flag.
+func stageFlagValue(group []string, flagName string) string {
 	for i, arg := range group {
+		if i == 0 {
+			continue
+		}
 		name, value, hasEq := strings.Cut(arg, "=")
-		if name != "-profile" && name != "--profile" {
+		if name != "-"+flagName && name != "--"+flagName {
 			continue
 		}
 		if hasEq {
@@ -585,6 +617,49 @@ func stageProfileValue(group []string) string {
 		}
 	}
 	return ""
+}
+
+// cmykProfileStages names the stages that take --cmyk-profile, as their
+// standalone commands do.
+var cmykProfileStages = map[string]bool{
+	"convert-colors": true, "flatten-transparency": true,
+}
+
+// pipeCMYKProfile returns the --cmyk-profile the pipeline's stages give, or
+// "" when none does.
+//
+// The flag is an option of the Reader, [pdf.WithDefaultCMYKProfile], which
+// the standalone commands open their input with, so a stage cannot apply it
+// to itself alone: pipe opens its input with it, and every stage reads
+// DeviceCMYK through it, a reopened intermediate document included. Two
+// stages naming different files would read the same DeviceCMYK two ways, so
+// they are refused.
+func pipeCMYKProfile(groups [][]string) (string, error) {
+	var path string
+	for _, g := range groups {
+		if len(g) == 0 || !cmykProfileStages[g[0]] {
+			continue
+		}
+		v := stageFlagValue(g, "cmyk-profile")
+		if v == "" {
+			continue
+		}
+		if path != "" && v != path {
+			return "", fmt.Errorf("--cmyk-profile names %q and %q: DeviceCMYK takes one profile for the whole pipeline", path, v)
+		}
+		path = v
+	}
+	return path, nil
+}
+
+// pipelineHasStage reports whether a stage group runs the stage name.
+func pipelineHasStage(groups [][]string, name string) bool {
+	for _, g := range groups {
+		if len(g) > 0 && g[0] == name {
+			return true
+		}
+	}
+	return false
 }
 
 // stageCmds names every command that also runs as a pipeline stage.
@@ -602,13 +677,19 @@ func stageProfileValue(group []string) string {
 // prints nothing but the document (-o - streams it to stdout), so a redact
 // stage would either discard that report or corrupt the output by printing it.
 // Weakening a security contract to gain a stage is the wrong trade.
+//
+// convert-colors and flatten-transparency are stages although their commands
+// print a report, as remediate is: their reports describe what was converted
+// or approximated, and a conversion or flattening the library cannot do
+// whole is refused with an error, which the stage returns as the command
+// does. Nothing is left in the file that the report alone would have named.
 var stageCmds = map[string]bool{
 	"rotate": true, "split": true, "merge": true, "delete": true,
 	"insert": true, "encrypt": true, "decrypt": true, "set-metadata": true,
 	"set-form": true, "flatten-form": true, "set-bookmarks": true,
 	"attach": true, "detach": true, "stamp-text": true,
 	"stamp-image": true, "stamp-pdf": true, "remediate": true, "autotag": true,
-	"sign": true, "timestamp": true,
+	"sign": true, "timestamp": true, "convert-colors": true, "flatten-transparency": true,
 }
 
 func isStageCmd(s string) bool { return stageCmds[s] }
@@ -1238,6 +1319,43 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 	case "autotag":
 		p.Apply(func(_ context.Context, w *pdf.Writer) error {
 			*autoTagged = append(*autoTagged, w.AutoTag())
+			return nil
+		})
+
+	case "convert-colors":
+		// --cmyk-profile is read by pipeCMYKProfile before the input opens.
+		fs := flag.NewFlagSet("convert-colors", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		f := registerConvertColorsFlags(fs)
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		target, opts, err := f.colorTarget()
+		if err != nil {
+			return nil, err
+		}
+		// The report is discarded, as remediate's is: pipe prints nothing but
+		// the document. A conversion the library refuses fails the stage.
+		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
+			if _, err := w.ConvertColors(ctx, target, opts...); err != nil {
+				return fmt.Errorf("converting colours: %w", err)
+			}
+			return nil
+		})
+
+	case "flatten-transparency":
+		// --cmyk-profile is read by pipeCMYKProfile before the input opens.
+		fs := flag.NewFlagSet("flatten-transparency", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		f := registerFlattenTransparencyFlags(fs)
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		opts := f.options()
+		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
+			if _, err := w.FlattenTransparency(ctx, opts...); err != nil {
+				return fmt.Errorf("flattening transparency: %w", err)
+			}
 			return nil
 		})
 

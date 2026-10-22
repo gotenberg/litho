@@ -64,6 +64,26 @@ type convertColorsFlags struct {
 	replaceOutputIntents    bool
 	// jpegQuality is --jpeg-quality, 0 to keep every image lossless.
 	jpegQuality int
+	// cmykProfile is --cmyk-profile, the file the Reader is opened with as
+	// its default CMYK profile.
+	cmykProfile string
+}
+
+// registerConvertColorsFlags declares on fs the flags that choose the
+// conversion, which the command and its pipe stage share so their names and
+// defaults cannot drift apart.
+func registerConvertColorsFlags(fs *flag.FlagSet) *convertColorsFlags {
+	var f convertColorsFlags
+	fs.StringVar(&f.target, "target", "output-intent", "Colour space to convert to: output-intent, cmyk, rgb, gray or icc")
+	fs.StringVar(&f.profile, "profile", "", "ICC profile of --target icc")
+	fs.StringVar(&f.cmykProfile, "cmyk-profile", "", "ICC profile of --target cmyk, and the one DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
+	fs.StringVar(&f.intent, "intent", "RelativeColorimetric", "Rendering intent: RelativeColorimetric, Perceptual, Saturation or AbsoluteColorimetric")
+	fs.BoolVar(&f.bpc, "bpc", false, "Apply black point compensation")
+	fs.BoolVar(&f.convertSpots, "convert-spots", false, "Convert spot colours (Separation, DeviceN) to process colour instead of keeping them")
+	fs.BoolVar(&f.noOutputIntent, "no-output-intent", false, "Leave the output intents as they are instead of making the target the output intent")
+	fs.BoolVar(&f.replaceOutputIntents, "replace-output-intents", false, "Point a PDF/X or other non-PDF/A output intent over another CMYK profile at the target profile instead of refusing")
+	fs.IntVar(&f.jpegQuality, "jpeg-quality", 0, "Re-encode converted JPEG and 8-bit JPEG 2000 images as JPEG at this quality, 1 to 100, instead of losslessly (0: lossless)")
+	return &f
 }
 
 // colorTarget returns the target and options the flags select, reading the
@@ -127,16 +147,7 @@ func runConvertColors(ctx context.Context, args []string, stdout, stderr io.Writ
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	format := fs.String("f", "text", "Report format: text or json")
-	var f convertColorsFlags
-	fs.StringVar(&f.target, "target", "output-intent", "Colour space to convert to: output-intent, cmyk, rgb, gray or icc")
-	fs.StringVar(&f.profile, "profile", "", "ICC profile of --target icc")
-	cmykProfile := fs.String("cmyk-profile", "", "ICC profile of --target cmyk, and the one DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
-	fs.StringVar(&f.intent, "intent", "RelativeColorimetric", "Rendering intent: RelativeColorimetric, Perceptual, Saturation or AbsoluteColorimetric")
-	fs.BoolVar(&f.bpc, "bpc", false, "Apply black point compensation")
-	fs.BoolVar(&f.convertSpots, "convert-spots", false, "Convert spot colours (Separation, DeviceN) to process colour instead of keeping them")
-	fs.BoolVar(&f.noOutputIntent, "no-output-intent", false, "Leave the output intents as they are instead of making the target the output intent")
-	fs.BoolVar(&f.replaceOutputIntents, "replace-output-intents", false, "Point a PDF/X or other non-PDF/A output intent over another CMYK profile at the target profile instead of refusing")
-	fs.IntVar(&f.jpegQuality, "jpeg-quality", 0, "Re-encode converted JPEG and 8-bit JPEG 2000 images as JPEG at this quality, 1 to 100, instead of losslessly (0: lossless)")
+	f := registerConvertColorsFlags(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -155,14 +166,10 @@ func runConvertColors(ctx context.Context, args []string, stdout, stderr io.Writ
 		return exitError
 	}
 
-	var extra []pdf.OpenOption
-	if *cmykProfile != "" {
-		profile, err := os.ReadFile(filepath.Clean(*cmykProfile))
-		if err != nil {
-			fmt.Fprintf(stderr, "reading the CMYK profile: %v\n", err)
-			return exitError
-		}
-		extra = append(extra, pdf.WithDefaultCMYKProfile(profile))
+	extra, err := cmykProfileOptions(f.cmykProfile)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return exitError
 	}
 
 	r, closer, err := openPDF(ctx, fs.Arg(0), *password, extra...)

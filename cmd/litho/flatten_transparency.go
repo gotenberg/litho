@@ -38,6 +38,37 @@ type flattenTransparencyPage struct {
 	JPEGImages            int     `json:"jpegImages,omitempty"`
 }
 
+// flattenTransparencyFlags holds the flags that shape the flattening.
+type flattenTransparencyFlags struct {
+	dpi         float64
+	printed     bool
+	jpegQuality int
+	// cmykProfile is --cmyk-profile, the file the Reader is opened with as
+	// its default CMYK profile.
+	cmykProfile string
+}
+
+// registerFlattenTransparencyFlags declares on fs the flags that shape the
+// flattening, which the command and its pipe stage share so their names and
+// defaults cannot drift apart.
+func registerFlattenTransparencyFlags(fs *flag.FlagSet) *flattenTransparencyFlags {
+	var f flattenTransparencyFlags
+	fs.Float64Var(&f.dpi, "dpi", 300, "Resolution transparent regions are composited at, in pixels per inch")
+	fs.BoolVar(&f.printed, "printed-annotations", false, "Draw every printed annotation into the page, not only those painting with transparency")
+	fs.IntVar(&f.jpegQuality, "jpeg-quality", 0, "Encode a composite of images and shadings only, or the tiles of a mixed one that only images and shadings reach, as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every composite lossless)")
+	fs.StringVar(&f.cmykProfile, "cmyk-profile", "", cmykProfileUsage)
+	return &f
+}
+
+// options returns the flattening options the flags select.
+func (f *flattenTransparencyFlags) options() []pdf.FlattenOption {
+	opts := []pdf.FlattenOption{pdf.WithFlattenDPI(f.dpi), pdf.WithFlattenJPEGQuality(f.jpegQuality)}
+	if f.printed {
+		opts = append(opts, pdf.WithFlattenPrintedAnnotations())
+	}
+	return opts
+}
+
 func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("flatten-transparency", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -45,10 +76,7 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	format := fs.String("f", "text", "Report format: text or json")
-	dpi := fs.Float64("dpi", 300, "Resolution transparent regions are composited at, in pixels per inch")
-	printed := fs.Bool("printed-annotations", false, "Draw every printed annotation into the page, not only those painting with transparency")
-	jpegQuality := fs.Int("jpeg-quality", 0, "Encode a composite of images and shadings only, or the tiles of a mixed one that only images and shadings reach, as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every composite lossless)")
-	cmykProfile := fs.String("cmyk-profile", "", cmykProfileUsage)
+	f := registerFlattenTransparencyFlags(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -61,7 +89,7 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 		fmt.Fprintf(stderr, "unknown format %q. Valid: text, json\n", *format)
 		return exitError
 	}
-	extra, err := cmykProfileOptions(*cmykProfile)
+	extra, err := cmykProfileOptions(f.cmykProfile)
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
@@ -82,11 +110,7 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 
 	// Before the output file exists: a refused flattening leaves nothing
 	// behind.
-	opts := []pdf.FlattenOption{pdf.WithFlattenDPI(*dpi), pdf.WithFlattenJPEGQuality(*jpegQuality)}
-	if *printed {
-		opts = append(opts, pdf.WithFlattenPrintedAnnotations())
-	}
-	report, err := w.FlattenTransparency(ctx, opts...)
+	report, err := w.FlattenTransparency(ctx, f.options()...)
 	if err != nil {
 		fmt.Fprintf(stderr, "flattening transparency: %v\n", err)
 		return exitError

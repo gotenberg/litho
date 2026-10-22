@@ -142,6 +142,8 @@ func TestPipe_WarnsForEveryStageWhoseStandaloneCommandWarns(t *testing.T) {
 		{"remediate", func(encFixtures) []string { return []string{"remediate", "-profile", "PDF/A-2b"} }},
 		{"stamp-image", func(f encFixtures) []string { return []string{"stamp-image", "-image", f.png} }},
 		{"stamp-pdf", func(f encFixtures) []string { return []string{"stamp-pdf", "-stamp", f.stampPDF} }},
+		{"convert-colors", func(encFixtures) []string { return []string{"convert-colors", "-target", "rgb"} }},
+		{"flatten-transparency", func(encFixtures) []string { return []string{"flatten-transparency"} }},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			f := newEncFixtures(t)
