@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -284,7 +285,8 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 	}
 
 	if isMask, _ := document.ResolveBool(r.ctx, r.doc, dict["ImageMask"]); isMask {
-		img, err := pdfimage.DecodeMask(r.ctx, r.doc, name, stream)
+		cols, rows := maskFootprint(toDevice)
+		img, err := pdfimage.DecodeMaskAt(r.ctx, r.doc, name, stream, cols, rows)
 		if err != nil {
 			return r.imageFailed(err)
 		}
@@ -333,7 +335,13 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 		return err
 	}
 	b := img.Bounds()
-	masks := r.imageMasks(name, stream, b.Dx(), b.Dy())
+	masks, err := r.imageMasks(name, stream, b.Dx(), b.Dy(), toDevice)
+	if err != nil {
+		// A mask that cannot be read leaves no telling what it hides, and
+		// painting the image opaque would show it all (ISO 32000-1, 8.9.6
+		// and 11.6.5.3): the image is skipped instead.
+		return r.imageFailed(err)
+	}
 	return r.imageFailed(r.paint(bounds, fx, func(v view, op surface.Opacity) error {
 		p, err := params(v, op)
 		if err != nil {
@@ -358,47 +366,70 @@ func (r *renderer) imageFailed(err error) error {
 
 // imageMasks reads the masks of an image (ISO 32000-1, 8.9.5, Table 89): a
 // /SMask stream, else a /Mask stream (a stencil, 8.9.6.3) or array (a colour
-// key, 8.9.6.4). A mask that does not decode is left out, so the image paints
-// opaque.
-func (r *renderer) imageMasks(name ast.PdfName, stream ast.PdfStream, width, height int) imgpaint.Masks {
+// key, 8.9.6.4). toDevice maps the unit square the image and its masks fill
+// onto the device, which sizes a mask past the image budget (see
+// [pdfimage.DecodeMaskAt]). A mask that is present but does not decode is an
+// error: the caller skips the image rather than paint what the mask hides.
+// An /SMask that resolves to no stream, a /None or a reference to a missing
+// object (7.3.10), masks nothing.
+func (r *renderer) imageMasks(name ast.PdfName, stream ast.PdfStream, width, height int, toDevice geom.Matrix) (imgpaint.Masks, error) {
 	dict := stream.Dict
+	cols, rows := maskFootprint(toDevice)
 	if obj, ok := dict["SMask"]; ok {
 		if sm, err := document.ResolveStream(r.ctx, r.doc, obj); err == nil && sm.Dict != nil {
-			img, err := pdfimage.DecodeMask(r.ctx, r.doc, name+" soft mask", sm)
-			if err == nil {
-				interp, _ := document.ResolveBool(r.ctx, r.doc, sm.Dict["Interpolate"])
-				return imgpaint.Masks{SMask: imgpaint.SoftMask(img, bool(interp))}
+			sm.Dict = pdfimage.SoftMaskDict(r.ctx, r.doc, sm.Dict, width, height)
+			img, err := pdfimage.DecodeMaskAt(r.ctx, r.doc, name+" soft mask", sm, cols, rows)
+			if err != nil {
+				return imgpaint.Masks{}, fmt.Errorf("soft mask: %w", err)
 			}
-			r.skip("image soft mask", err)
+			interp, _ := document.ResolveBool(r.ctx, r.doc, sm.Dict["Interpolate"])
+			return imgpaint.Masks{SMask: imgpaint.SoftMask(img, bool(interp))}, nil
 		}
 	}
 	obj, ok := dict["Mask"]
 	if !ok {
-		return imgpaint.Masks{}
+		return imgpaint.Masks{}, nil
 	}
 	resolved, err := document.ResolveObject(r.ctx, r.doc, obj)
 	if err != nil {
-		r.skip("image mask", err)
-		return imgpaint.Masks{}
+		return imgpaint.Masks{}, fmt.Errorf("mask: %w", err)
 	}
 	switch v := resolved.(type) {
 	case ast.PdfStream:
-		img, err := pdfimage.DecodeMask(r.ctx, r.doc, name+" mask", v)
+		img, err := pdfimage.DecodeMaskAt(r.ctx, r.doc, name+" mask", v, cols, rows)
 		if err != nil {
-			r.skip("image mask", err)
-			return imgpaint.Masks{}
+			return imgpaint.Masks{}, fmt.Errorf("stencil mask: %w", err)
 		}
 		interp, _ := document.ResolveBool(r.ctx, r.doc, v.Dict["Interpolate"])
-		return imgpaint.Masks{Mask: imgpaint.StencilMask(img, bool(interp))}
+		return imgpaint.Masks{Mask: imgpaint.StencilMask(img, bool(interp))}, nil
 	case ast.PdfArray:
 		key, err := r.colorKey(stream, v, width, height)
 		if err != nil {
-			r.skip("image colour key", err)
-			return imgpaint.Masks{}
+			return imgpaint.Masks{}, err
 		}
-		return imgpaint.Masks{Mask: key}
+		return imgpaint.Masks{Mask: key}, nil
 	}
-	return imgpaint.Masks{}
+	return imgpaint.Masks{}, nil
+}
+
+// maskOversample is how many mask samples a mask past the image budget keeps
+// per device pixel along each axis. The reduced mask is box-averaged, and
+// twice the device resolution leaves the painter's sampling of it an edge
+// within half a pixel of where the full mask puts it.
+const maskOversample = 2
+
+// maskFootprint returns the grid, in samples, a mask filling the unit square
+// m maps onto the device is read at: maskOversample samples a device pixel
+// along each side of the square.
+func maskFootprint(m geom.Matrix) (cols, rows int) {
+	side := func(x, y float64) int {
+		v := math.Ceil(math.Hypot(x, y) * maskOversample)
+		if !(v >= 1) {
+			return 1
+		}
+		return int(min(v, math.MaxInt32))
+	}
+	return side(m[0], m[1]), side(m[2], m[3])
 }
 
 // colorKey reads the colour-key mask ranges of an image (ISO 32000-1,

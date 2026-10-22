@@ -176,3 +176,15 @@ func matteMaskDimensions(ctx context.Context, doc *document.Document, dict ast.P
 	doc.Logger.Debug("taking a matted soft mask's dimensions from its image")
 	return out
 }
+
+// SoftMaskDict returns the dictionary of the soft mask dict of an image of
+// width x height pixels as the decoder reads it: a mask carrying a /Matte
+// takes a /Width or /Height that is no positive integer from its image, as
+// [DecodeImage] takes it to undo the matte (ISO 32000-1, 11.6.5.3). A painter
+// masking the image then reads the mask the decoder unmatted it with.
+func SoftMaskDict(ctx context.Context, doc *document.Document, dict ast.PdfDict, width, height int) ast.PdfDict {
+	if _, ok := allNumbers(ctx, doc, dict["Matte"]); !ok {
+		return dict
+	}
+	return matteMaskDimensions(ctx, doc, dict, image.Rect(0, 0, width, height))
+}

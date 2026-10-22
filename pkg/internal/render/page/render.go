@@ -66,7 +66,7 @@ const (
 	// builds none, so it draws what is stored, possibly out of date.
 	StaleAppearance = "stale widget appearance"
 	// Skipped counts constructs the file damages: an image that does not
-	// decode, a shading or pattern that does not compile, a form past the
+	// decode or whose mask does not, a shading or pattern that does not compile, a form past the
 	// form-depth budget or in a cycle. A viewer skips them too.
 	Skipped = "skipped"
 )
