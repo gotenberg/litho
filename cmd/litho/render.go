@@ -50,13 +50,14 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	forPrint := fs.Bool("print", false, "Draw the annotations a viewer prints rather than those it shows on screen")
 	reportFlag := fs.Bool("report", false,
 		"Print a JSON report instead of the file names: each page's image and what it approximated (placeholder glyphs, synthesised or missing annotation appearances, stale widget appearances, transparency over the render budget, coarse soft masks, damaged constructs left out)")
+	cmykProfile := fs.String("cmyk-profile", "", cmykProfileUsage)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	files := fs.Args()
 	if len(files) != 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] [--print] [--report] -o PREFIX <file>")
+		fmt.Fprintln(stderr, "Usage: litho render [-p password] [--pages RANGE] [--dpi N] [--font-dir DIR] [--system-fonts] [--print] [--report] [--cmyk-profile profile.icc] -o PREFIX <file>")
 		return exitError
 	}
 	opts := []pdf.RenderOption{pdf.WithRenderDPI(*dpi)}
@@ -75,8 +76,13 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if *systemFonts {
 		opts = append(opts, pdf.WithRenderSystemFonts())
 	}
+	extra, err := cmykProfileOptions(*cmykProfile)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return exitError
+	}
 	path := files[0]
-	r, closer, err := openPDF(ctx, path, *password)
+	r, closer, err := openPDF(ctx, path, *password, extra...)
 	if err != nil {
 		fmt.Fprintf(stderr, "%s: %v\n", path, err)
 		return exitError

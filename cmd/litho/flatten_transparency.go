@@ -48,20 +48,26 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 	dpi := fs.Float64("dpi", 300, "Resolution transparent regions are composited at, in pixels per inch")
 	printed := fs.Bool("printed-annotations", false, "Draw every printed annotation into the page, not only those painting with transparency")
 	jpegQuality := fs.Int("jpeg-quality", 0, "Encode a composite of images and shadings only, or the tiles of a mixed one that only images and shadings reach, as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every composite lossless)")
+	cmykProfile := fs.String("cmyk-profile", "", cmykProfileUsage)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 	if fs.NArg() < 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho flatten-transparency <file> [--dpi N] [--printed-annotations] [--jpeg-quality Q] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho flatten-transparency <file> [--dpi N] [--printed-annotations] [--jpeg-quality Q] [--cmyk-profile profile.icc] -o out.pdf")
 		return exitError
 	}
 	if *format != "text" && *format != "json" {
 		fmt.Fprintf(stderr, "unknown format %q. Valid: text, json\n", *format)
 		return exitError
 	}
+	extra, err := cmykProfileOptions(*cmykProfile)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return exitError
+	}
 
-	r, closer, err := openPDF(ctx, fs.Arg(0), *password)
+	r, closer, err := openPDF(ctx, fs.Arg(0), *password, extra...)
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
