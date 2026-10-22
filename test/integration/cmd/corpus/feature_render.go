@@ -207,7 +207,15 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //     (1.21%) from poppler.
 //   - pdfjs issue12705: small Hebrew text whose glyph edges fall a pixel
 //     apart, 1.16% of a 250 by 50 page: within reason, but over the bar.
-//     PDFium draws it as litho does, 0 pixels apart.
+//     PDFium draws it as litho does, 0 pixels apart. The glyphs are Type 3
+//     glyphs that open with d1, which poppler draws into a bitmap cache
+//     and lays at the pixel holding each glyph's origin
+//     (SplashOutputDev::beginType3Char, Splash::fillGlyph), up to a pixel
+//     from where ISO 32000-1, 9.6.5 places them. Drawn that way, litho
+//     comes within 1 pixel of poppler and 111 from PDFium. Over the 71
+//     pages of all corpora that drawing moves, 53 come closer to poppler
+//     and 43 of 58 move away from PDFium, which places the glyphs exactly,
+//     as litho does.
 //   - pdfjs issue11768_reduced: an embedded Adobe-Japan1 CIDFontType2
 //     under a CMap stream that uses UniJIS-UTF8-H. poppler drew nothing
 //     without poppler-data's CMaps; with them both renderers draw it and
