@@ -1841,10 +1841,10 @@ func imageDecodeError(pageNum int, name string, err error) error {
 		return fmt.Errorf("page %d, image %q: %w", pageNum, name, err)
 	case errors.Is(err, pdfimage.ErrImageNotFound):
 		return fmt.Errorf("page %d, image %q: %w", pageNum, name, ErrImageNotFound)
-	case errors.Is(err, ErrImageTooLarge) || errors.Is(err, ErrStreamTooLarge) || errors.Is(err, ErrDamagedStream):
+	case errors.Is(err, ErrImageTooLarge) || errors.Is(err, ErrStreamTooLarge) || errors.Is(err, ErrDamagedStream) || errors.Is(err, ErrInternalPanic):
 		// A budget the caller can raise ([Limits]), or [WithStrictStreams],
-		// refused the image, and its sentinel is public, so the cause is
-		// wrapped alongside the contract.
+		// refused the image, or a decoding worker panicked, and its sentinel
+		// is public, so the cause is wrapped alongside the contract.
 		return fmt.Errorf("page %d, image %q: %w: %w", pageNum, name, ErrImageNotDecodable, err)
 	}
 	// The cause is formatted rather than wrapped: its sentinels are internal,

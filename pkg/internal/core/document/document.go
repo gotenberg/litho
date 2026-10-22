@@ -19,6 +19,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/panicerr"
 )
 
 // Document represents a parsed PDF document. It holds a reference to the
@@ -443,6 +444,7 @@ func (d *Document) DecodeStreamReport(ctx context.Context, stream ast.PdfStream)
 	// A nil d.Filters consults no plugin, so one call covers both paths and
 	// a skipped filter is logged whether or not plugins are registered.
 	data, report, err := d.Filters.DecodeStreamReport(ctx, stream)
+	err = panicerr.Log(d.Logger, err)
 	switch {
 	case report.Incomplete():
 		// The bytes are only partially decoded: a skipped filter left them
@@ -470,7 +472,8 @@ func (d *Document) DecodeStreamReport(ctx context.Context, stream ast.PdfStream)
 // which optional plugins are registered. The document's budgets still apply.
 func (d *Document) DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, stop ast.PdfName) ([]byte, bool, error) {
 	stream = d.resolveStreamFilterKeys(ctx, stream)
-	return d.Filters.DecodeStreamUpTo(ctx, stream, stop)
+	data, found, err := d.Filters.DecodeStreamUpTo(ctx, stream, stop)
+	return data, found, panicerr.Log(d.Logger, err)
 }
 
 // NewStreamReader returns a lazy [io.ReadCloser] using the document's filter
@@ -506,10 +509,12 @@ func (s salvageLogger) Close() error {
 }
 
 // logSalvage wraps a stream reader that records salvage so that closing it
-// logs what it recorded.
+// logs what it recorded. A reader over an image codec decodes before it is
+// returned, so a panic one of the codec's workers recovered arrives as err,
+// and is logged here.
 func (d *Document) logSalvage(rc io.ReadCloser, err error) (io.ReadCloser, error) {
 	if err != nil {
-		return nil, err
+		return nil, panicerr.Log(d.Logger, err)
 	}
 	if _, ok := rc.(salvageRecorder); !ok {
 		return rc, nil

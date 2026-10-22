@@ -36,6 +36,29 @@ func workersFor(n, per int) int {
 // paths over images too small to reach them; it is zero otherwise.
 var forcedWorkers atomic.Int32
 
+// workerHook, when set, runs in each worker of the parallel path before every
+// item. Tests outside the package set it, through [SetWorkerHookForTest], to
+// plant a worker panic; it is nil otherwise.
+var workerHook atomic.Pointer[func(item int)]
+
+// SetWorkerHookForTest makes every decode share its work among workers, two
+// at least, and run hook in each worker before every item, until the restore
+// function it returns is called. It exists for tests of the layers above this
+// package, which plant a panic in a worker to check how they report it; no
+// other code calls it. It affects every decode in the process, so a test that
+// calls it must not run in parallel.
+func SetWorkerHookForTest(workers int, hook func(item int)) (restore func()) {
+	forcedWorkers.Store(int32(max(2, min(workers, maxTestWorkers)))) //nolint:gosec // bounded by maxTestWorkers.
+	workerHook.Store(&hook)
+	return func() {
+		workerHook.Store(nil)
+		forcedWorkers.Store(0)
+	}
+}
+
+// maxTestWorkers bounds the workers [SetWorkerHookForTest] forces.
+const maxTestWorkers = 64
+
 // forEach calls work(w, i) for every i in [0, n), on nw workers, w being the
 // worker's index in [0, nw), so a worker keeps scratch state of its own. With
 // one worker it runs on the calling goroutine.
@@ -97,6 +120,9 @@ func forEach(ctx context.Context, n, nw int, work func(w, i int) error) error {
 				}
 				err := ctx.Err()
 				if err == nil {
+					if hook := workerHook.Load(); hook != nil {
+						(*hook)(item)
+					}
 					err = work(w, item)
 				}
 				if err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
+	"github.com/gotenberg/litho/pkg/internal/panicerr"
 )
 
 // dataSoftMask is the soft mask a JPXDecode image carries in its JPEG 2000
@@ -129,7 +130,9 @@ func (im *Images) readSMaskInData(ctx context.Context, stream ast.PdfStream, wid
 	}
 	mask.alpha, err = img.Render(ctx, opacity, filter.JPXChannelByte)
 	if err != nil {
-		return nil, fmt.Errorf("%w: decoding the JPEG 2000 opacity: %w", ErrImageNotConverted, err)
+		// Render runs below the document, so a panic its workers recovered
+		// is logged here, with the document logger.
+		return nil, fmt.Errorf("%w: decoding the JPEG 2000 opacity: %w", ErrImageNotConverted, panicerr.Log(im.doc.Logger, err))
 	}
 	return mask, nil
 }
