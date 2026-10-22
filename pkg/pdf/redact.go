@@ -240,11 +240,18 @@ type RedactReport struct {
 // and scans once more. If a copy still survives, WriteTo refuses with
 // [ErrRedactionIncomplete] and writes nothing.
 //
+// An inline image is blanked in place: a new inline image with the covered
+// samples overwritten replaces the bytes between BI and EI (ISO 32000-1,
+// 8.9.7), and [RedactReport.BlankedImages] names it "(inline)". One whose
+// data readers end at different bytes, whose dictionary writes a key both
+// abbreviated and in full or holds one ISO 32000-1, Table 93 does not list,
+// or whose colour space only an image XObject could name is refused instead.
+//
 // What this does NOT do: re-subset embedded fonts whose glyphs now describe
-// only removed text (see [RedactReport.FontsFullyRemovedOnPage]), and it cannot
-// remove content a form XObject draws or an inline image's samples, which it
-// refuses instead. Nor does it find a copy no comparison of text recognises:
-// text an image or a thumbnail inside an attachment draws, or an attachment in
+// only removed text (see [RedactReport.FontsFullyRemovedOnPage]), and it
+// cannot remove content a form XObject draws, which it refuses instead. Nor
+// does it find a copy no comparison of text recognises: text an image or a
+// thumbnail inside an attachment draws, or an attachment in
 // a format whose compression the scan does not know.
 func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...RedactOption) (_ *RedactReport, err error) {
 	defer recoverToError(w.logger(), "Writer.Redact", &err)
