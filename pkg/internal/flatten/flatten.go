@@ -52,8 +52,10 @@ type Options struct {
 	// JPEG at that quality (ITU-T T.81): one whose region paints only
 	// images and shadings, no filled or stroked path and no text, and whose
 	// pixels hold many colours, unless Flate holds it in no more bytes (see
-	// [flattener.encodeComposite]). 0 keeps every composite lossless under
-	// Flate.
+	// [flattener.encodeComposite]). A composite mixing photographs with
+	// vector art is cut into tiles, its photographic ones JPEG and the
+	// others lossless (see [flattener.encodeTiles]). 0 keeps every
+	// composite lossless under Flate, one image per region.
 	JPEGQuality int
 }
 
@@ -80,8 +82,9 @@ type PageReport struct {
 	TransparentText int
 	// GroupRemoved reports that the page's transparency group was removed.
 	GroupRemoved bool
-	// Composites counts the images drawn for the regions, and JPEG those
-	// of them encoded as JPEG ([Options.JPEGQuality]).
+	// Composites counts the images drawn for the regions, a region cut
+	// into tiles counting each, and JPEG those of them encoded as JPEG
+	// ([Options.JPEGQuality]).
 	Composites, JPEG int
 	// ReplacedImages counts the images the page lists fewer, as
 	// [image.ExtractImagesRecursive] lists them: those whose pixels a
@@ -253,18 +256,23 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 		pr.Regions, pr.DPI = len(a.Regions), dpi
 		cover := &coverage{f: f, pg: pg, g: g, dpi: dpi, result: res}
 		for _, r := range a.Regions {
-			photo := f.quality > 0 && f.photoUnits(ctx, a, ops, r)
-			img, ok, err := f.regionImage(ctx, res, g, a.crop, r.Box, xobjects, photo)
+			var vector []Rect
+			if f.quality > 0 {
+				vector = f.vectorBoxes(ctx, a, ops, r)
+			}
+			img, ok, err := f.regionImage(ctx, res, g, a.crop, r.Box, xobjects, vector)
 			if err != nil {
 				return pr, false, err
 			}
 			if ok {
-				pr.Composites++
-				if img.jpeg {
-					pr.JPEG++
+				pr.Composites += len(img.tiles)
+				for _, t := range img.tiles {
+					if t.jpeg {
+						pr.JPEG++
+					}
 				}
 				e := edit(r.Insert)
-				e.before = append(e.before, f.drawImage(a.positions[r.Insert], r.Box, img.name, img.matrix)...)
+				e.before = append(e.before, f.drawImage(a.positions[r.Insert], r.Box, img.tiles)...)
 				n, err := cover.hideCovered(ctx, a, r, img, edit)
 				if err != nil {
 					return pr, false, err
@@ -407,26 +415,35 @@ func (f *flattener) render(ctx context.Context, pg *document.Page) (*page.Result
 	}
 }
 
-// regionImg is a region's composite: its XObject name, the matrix that maps
-// the unit square onto its pixels in default user space, and those pixels.
+// regionImg is a region's composite: the images it is drawn as, in drawing
+// order, and the device pixels it covers.
 type regionImg struct {
+	tiles []tileImg
+	px    image.Rectangle
+}
+
+// tileImg is one image of a composite: its XObject name, the matrix that maps
+// the unit square onto its pixels in default user space, and those pixels.
+type tileImg struct {
 	name   ast.PdfName
 	matrix geom.Matrix
 	px     image.Rectangle
-	// jpeg reports a composite encoded as JPEG.
+	// jpeg reports an image encoded as JPEG.
 	jpeg bool
 }
 
-// regionImage crops box from canvas into a new image XObject named in
-// xobjects. A box no pixel of the page holds gives
-// no image.
+// regionImage crops box from canvas into new image XObjects named in
+// xobjects: one image, or tiles when f encodes photographic composites as
+// JPEG and vector, the boxes in default user space where the composite holds
+// sharp edges ([flattener.vectorBoxes]), leaves some of it photographic (see
+// [flattener.encodeTiles]). A box no pixel of the page holds gives no image.
 //
 // The image holds whole pixels of the page only: the raster rounds the page
 // up to whole pixels (see [page.PageGeometry]), and its last column and row
 // are what the page's edge leaves of a pixel. Drawn at another resolution, a
 // composite holding them reaches past the edge the page's own content stops
 // at.
-func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict, photo bool) (regionImg, bool, error) {
+func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict, vector []Rect) (regionImg, bool, error) {
 	size := res.Group.Bounds().Size()
 	dev := transformRect(g.Matrix, box)
 	paper := transformRect(g.Matrix, crop)
@@ -437,32 +454,47 @@ func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Ge
 	if x0 >= x1 || y0 >= y1 {
 		return regionImg{}, false, nil
 	}
-	w, h := x1-x0, y1-y0
-	samples, space := f.compositeSamples(res, image.Rect(x0, y0, x1, y1))
-	data, filterName, err := f.encodeComposite(ctx, samples, w, h, len(samples)/(w*h), photo)
+	px := image.Rect(x0, y0, x1, y1)
+	samples, space := f.compositeSamples(res, px)
+	var devVector []image.Rectangle
+	for _, v := range vector {
+		// The pixel margin takes in the antialiased edge of what the unit
+		// paints, as the region's image does.
+		d := transformRect(g.Matrix, v)
+		devVector = append(devVector, image.Rect(int(math.Floor(d.MinX))-pixelMargin, int(math.Floor(d.MinY))-pixelMargin, int(math.Ceil(d.MaxX))+pixelMargin, int(math.Ceil(d.MaxY))+pixelMargin))
+	}
+	inner := image.Rect(int(math.Floor(dev.MinX)), int(math.Floor(dev.MinY)), int(math.Ceil(dev.MaxX)), int(math.Ceil(dev.MaxY))).Intersect(px)
+	tiles, err := f.encodeTiles(ctx, samples, px, inner, len(samples)/(px.Dx()*px.Dy()), devVector)
 	if err != nil {
 		return regionImg{}, false, err
 	}
-	ref := f.alloc.Alloc(ast.NewStream(ast.PdfDict{
-		"Type":             ast.PdfName("XObject"),
-		"Subtype":          ast.PdfName("Image"),
-		"Width":            ast.PdfInt(w),
-		"Height":           ast.PdfInt(h),
-		"ColorSpace":       space,
-		"BitsPerComponent": ast.PdfInt(8),
-		"Filter":           ast.PdfName(filterName),
-		"Length":           ast.PdfInt(len(data)),
-	}, data))
-	name := f.newName(xobjects, "FlatIm")
-	xobjects[name] = ref
 	inv, ok := g.Matrix.Invert()
 	if !ok {
 		return regionImg{}, false, fmt.Errorf("%w: the page maps to no device area", ErrTooComplex)
 	}
-	// The unit square's bottom edge is the image's last row (ISO 32000-2,
-	// 8.9.4), the bottom of the pixels in device space, whose y grows down.
-	unit := geom.Matrix{float64(w), 0, 0, -float64(h), float64(x0), float64(y1)}
-	return regionImg{name: name, matrix: unit.Mul(inv), px: image.Rect(x0, y0, x1, y1), jpeg: filterName == "DCTDecode"}, true, nil
+	img := regionImg{px: px}
+	for _, t := range tiles {
+		ref := f.alloc.Alloc(ast.NewStream(ast.PdfDict{
+			"Type":             ast.PdfName("XObject"),
+			"Subtype":          ast.PdfName("Image"),
+			"Width":            ast.PdfInt(t.px.Dx()),
+			"Height":           ast.PdfInt(t.px.Dy()),
+			"ColorSpace":       space,
+			"BitsPerComponent": ast.PdfInt(8),
+			"Filter":           ast.PdfName(t.filter),
+			"Length":           ast.PdfInt(len(t.data)),
+		}, t.data))
+		name := f.newName(xobjects, "FlatIm")
+		xobjects[name] = ref
+		// The unit square's bottom edge is the image's last row (ISO
+		// 32000-2, 8.9.4), the bottom of the pixels in device space, whose
+		// y grows down. Each tile maps onto its own device pixels of the
+		// composite's grid, so the tiles draw the composite's pixels where
+		// one image would.
+		unit := geom.Matrix{float64(t.px.Dx()), 0, 0, -float64(t.px.Dy()), float64(t.px.Min.X), float64(t.px.Max.Y)}
+		img.tiles = append(img.tiles, tileImg{name: name, matrix: unit.Mul(inv), px: t.px, jpeg: t.filter == "DCTDecode"})
+	}
+	return img, true, nil
 }
 
 // compositeSamples returns the 8-bit samples of the composite res holds over
@@ -543,15 +575,15 @@ func (f *flattener) newName(dict ast.PdfDict, prefix string) ast.PdfName {
 	}
 }
 
-// drawImage returns the operators that draw the image name with matrix in
-// default user space at pos, clipped to box: the CTM in force there is undone
-// first. The image reaches past box by its pixel margin, and past the page
-// edge by the part of a pixel the raster rounds the page up to; the clip
-// keeps it to the area it composites. Outside
+// drawImage returns the operators that draw the images of tiles, in order,
+// each with its matrix in default user space, at pos, clipped to box: the CTM
+// in force there is undone first. The images reach past box by their pixel
+// margin, and past the page edge by the part of a pixel the raster rounds the
+// page up to; the clip keeps them to the area they composite. Outside
 // marked content the image is an artifact (ISO 32000-2, 14.8.2.2): what it
 // shows is content the page already tags, or the page's own background, and
 // ISO 14289-1, 7.1 wants untagged content marked so.
-func (f *flattener) drawImage(pos position, box Rect, name ast.PdfName, matrix geom.Matrix) []byte {
+func (f *flattener) drawImage(pos position, box Rect, tiles []tileImg) []byte {
 	var b strings.Builder
 	b.WriteString("\n")
 	if pos.marked == 0 {
@@ -567,11 +599,26 @@ func (f *flattener) drawImage(pos position, box Rect, name ast.PdfName, matrix g
 		b.WriteString(number(v) + " ")
 	}
 	b.WriteString("re W n\n")
-	b.WriteString(matrixOperands(matrix) + " cm\n/" + string(name) + " Do\nQ\n")
+	b.WriteString(drawTiles(tiles) + "Q\n")
 	if pos.marked == 0 {
 		b.WriteString("EMC\n")
 	}
 	return []byte(b.String())
+}
+
+// drawTiles returns the operators that draw the images of tiles, in order,
+// each with its matrix: one image is drawn with the matrix set in the graphics
+// state in force, each of several inside a q and Q of its own, so each matrix
+// maps from the same space.
+func drawTiles(tiles []tileImg) string {
+	if len(tiles) == 1 {
+		return matrixOperands(tiles[0].matrix) + " cm\n/" + string(tiles[0].name) + " Do\n"
+	}
+	var b strings.Builder
+	for _, t := range tiles {
+		b.WriteString("q\n" + matrixOperands(t.matrix) + " cm\n/" + string(t.name) + " Do\nQ\n")
+	}
+	return b.String()
 }
 
 // matrixOperands writes the six numbers of m as content stream operands.

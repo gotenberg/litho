@@ -246,14 +246,23 @@ func (c *coverage) overpaint(pos position, rects []image.Rectangle, img regionIm
 			b.WriteString(matrixOperands(back) + " cm\n")
 		}
 	}
+	var reach image.Rectangle
 	for _, r := range rects {
+		reach = reach.Union(r)
 		u := transformRect(inv, Rect{float64(r.Min.X), float64(r.Min.Y), float64(r.Max.X), float64(r.Max.Y)})
 		for _, v := range []float64{u.MinX, u.MinY, u.MaxX - u.MinX, u.MaxY - u.MinY} {
 			b.WriteString(number(v) + " ")
 		}
 		b.WriteString("re\n")
 	}
-	b.WriteString("W n\n" + matrixOperands(img.matrix) + " cm\n/" + string(img.name) + " Do\nQ\n")
+	// Only the tiles holding a pixel of the clip draw anything under it.
+	var tiles []tileImg
+	for _, t := range img.tiles {
+		if t.px.Overlaps(reach) {
+			tiles = append(tiles, t)
+		}
+	}
+	b.WriteString("W n\n" + drawTiles(tiles) + "Q\n")
 	if pos.marked == 0 {
 		b.WriteString("EMC\n")
 	}

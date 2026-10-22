@@ -172,9 +172,38 @@ type contentInfo struct {
 	// the text does not reproduce exactly: its colours composited over the
 	// paper, which the form's other content may not be, or dropped.
 	textTransparent bool
-	// vector reports painting a path or showing text somewhere: content
-	// whose edges a composite holds sharp, which JPEG blurs and rings.
-	vector bool
+	// edges holds the boxes, in the space of its stream, where a composite
+	// drawn without text holds a sharp edge, which JPEG blurs and rings: the
+	// box of a filled or stroked path, or the sides of a rectangle filled in
+	// a colour. Past [maxEdgeBoxes] boxes it holds their union.
+	// edgesUnbounded reports text that clips (ISO 32000-2, 9.3.6), whose
+	// edges the scan does not measure: they reach as far as bounds.
+	edges          []Rect
+	edgesUnbounded bool
+}
+
+// maxEdgeBoxes bounds the boxes [contentInfo.edges] lists. Anti-DoS guard,
+// not spec-mandated: a form of a million paths would list a million boxes,
+// each tested against every tile of a composite. Past it the boxes merge
+// into their union, which keeps a JPEG away from every edge and only loses
+// the tiles between them; 4096 lists the paths of a chart or a drawn page.
+const maxEdgeBoxes = 4096
+
+// addEdges adds boxes to the edges info lists, merging them into their
+// union past [maxEdgeBoxes].
+func (info *contentInfo) addEdges(boxes ...Rect) {
+	for _, b := range boxes {
+		if !b.Empty() {
+			info.edges = append(info.edges, b)
+		}
+	}
+	if len(info.edges) > maxEdgeBoxes {
+		var all Rect
+		for _, b := range info.edges {
+			all = all.Union(b)
+		}
+		info.edges = []Rect{all}
+	}
 }
 
 // scanner reads what form XObjects and tiling patterns paint, each object
@@ -359,6 +388,9 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 	m := graphics.NewMachine([4]float64{})
 	m.Doc, m.Resources = s.doc, resources
 	m.RecordPathBoxes = true
+	// rects and curves count the rectangles and the other segments of the
+	// path under construction.
+	rects, curves := 0, 0
 	for i, op := range ops {
 		if i%opsPerContextCheck == 0 && ctx.Err() != nil {
 			return info
@@ -368,9 +400,18 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 		if err := m.ExecuteOne(ctx, op); err != nil {
 			continue
 		}
+		switch op.Operator {
+		case "re":
+			rects++
+		case "m", "l", "c", "v", "y", "h":
+			curves++
+		case "n":
+			rects, curves = 0, 0
+		}
 		st := m.Current()
 		if p, ok := pathPaints(op.Operator); ok {
-			info.vector = info.vector || p.fill || p.stroke
+			single := rects == 1 && curves == 0 && axisAligned(ctm)
+			rects, curves = 0, 0
 			info.transparent = info.transparent || s.painting(ctx, st, p, resources, depth, chain)
 			if boxes := m.PathBoxes(); len(boxes) > before {
 				pb := boxes[len(boxes)-1]
@@ -380,12 +421,23 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 				}
 				r := pathBox(pb.MinX, pb.MinY, pb.MaxX, pb.MaxY, reach)
 				info.bounds = info.bounds.Union(r)
+				if single && (!p.fill || st.Fill.Pattern == "") {
+					// A rectangle filled in a colour has edges only along
+					// its sides, where a stroke paints too. A pattern can
+					// draw edges anywhere inside it.
+					info.addEdges(rectEdges(r, reach)...)
+				} else {
+					info.addEdges(r)
+				}
 			}
 			continue
 		}
 		switch {
 		case showText(op.Operator):
-			info.text, info.unbounded, info.vector = true, true, true
+			info.text, info.unbounded = true, true
+			if st.Text.Tmode >= 4 {
+				info.edgesUnbounded = true
+			}
 			if s.painting(ctx, st, textPaints(st.Text.Tmode), resources, depth, chain) {
 				info.transparent = true
 				outcome := s.textOutcome(ctx, st, resources)
@@ -414,7 +466,12 @@ func (s *scanner) stream(ctx context.Context, ops []content.Operation, resources
 				info.textTransparent = info.textTransparent || inner.textTransparent
 				info.group = info.group || inner.group
 				info.states = info.states || inner.states
-				info.vector = info.vector || inner.vector
+				if inner.edgesUnbounded {
+					info.addEdges(transformRect(matrix.Mul(ctm), inner.bounds))
+				}
+				for _, b := range inner.edges {
+					info.addEdges(transformRect(matrix.Mul(ctm), b))
+				}
 				info.transparent = info.transparent || inner.transparent || stateTransparent(st, paintBoth)
 			}
 		}

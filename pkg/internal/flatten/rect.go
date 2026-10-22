@@ -103,3 +103,32 @@ func transformRect(m geom.Matrix, r Rect) Rect {
 	}
 	return rectOf(out.MinX, out.MinY, out.MaxX, out.MaxY)
 }
+
+// edgeWidth is the width, in the units of the box it borders, given to the
+// edge of a filled rectangle: an edge has no area, and a box needs some to
+// overlap anything. Any width under a device pixel serves, since the pixel
+// margin added in device space takes in the antialiased pixels either side.
+const edgeWidth = 1e-3
+
+// rectEdges returns the boxes holding the edges of r, the box of an
+// axis-aligned rectangle painted with reach, half the width a stroke spreads
+// over its edges (0 for a fill): four strips along its sides, or r whole
+// when the strips would meet.
+func rectEdges(r Rect, reach float64) []Rect {
+	t := max(2*reach, edgeWidth)
+	if 2*t >= r.MaxX-r.MinX || 2*t >= r.MaxY-r.MinY {
+		return []Rect{r}
+	}
+	return []Rect{
+		{r.MinX, r.MinY, r.MinX + t, r.MaxY},
+		{r.MaxX - t, r.MinY, r.MaxX, r.MaxY},
+		{r.MinX, r.MinY, r.MaxX, r.MinY + t},
+		{r.MinX, r.MaxY - t, r.MaxX, r.MaxY},
+	}
+}
+
+// axisAligned reports whether m maps axis-aligned rectangles onto
+// axis-aligned rectangles: no shear and a turn by a multiple of 90 degrees.
+func axisAligned(m geom.Matrix) bool {
+	return (m[1] == 0 && m[2] == 0) || (m[0] == 0 && m[3] == 0)
+}

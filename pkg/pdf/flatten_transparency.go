@@ -49,9 +49,12 @@ func WithFlattenPrintedAnnotations() FlattenOption {
 // when its region paints only images and shadings, no filled or stroked path
 // and no text, whose sharp edges JPEG would blur, and its pixels hold at least
 // 256 colours. A composite Flate holds in no more bytes stays lossless. A
-// region mixing a photograph with vector art, a whole page often, stays
-// lossless whole. By default every
-// composite is encoded losslessly under FlateDecode. A q outside 1 to 100
+// region mixing photographs with vector art, a whole page often, is cut into
+// tiles on a grid of the composite's pixels, which abut without seams: a
+// tile only images and shadings reach whose pixels hold 256 colours is
+// encoded as JPEG, the others stay lossless, and the region stays one
+// lossless image when the tiles would not take fewer bytes. By default every
+// composite is encoded losslessly under FlateDecode, one image per region. A q outside 1 to 100
 // makes [Writer.FlattenTransparency] fail with [ErrInvalidFlattenOptions].
 func WithFlattenJPEGQuality(q int) FlattenOption {
 	return func(o *flattenOpts) { o.jpegQuality = q }
@@ -92,8 +95,8 @@ type FlattenedPage struct {
 	// removed with nothing drawn in its place.
 	Annotations        int
 	EmptiedAnnotations int
-	// JPEGImages counts the composites encoded as JPEG
-	// ([WithFlattenJPEGQuality]).
+	// JPEGImages counts the composites, or tiles of a composite, encoded as
+	// JPEG ([WithFlattenJPEGQuality]).
 	JPEGImages int
 }
 

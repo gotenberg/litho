@@ -46,7 +46,7 @@ func runFlattenTransparency(ctx context.Context, args []string, stdout, stderr i
 	format := fs.String("f", "text", "Report format: text or json")
 	dpi := fs.Float64("dpi", 300, "Resolution transparent regions are composited at, in pixels per inch")
 	printed := fs.Bool("printed-annotations", false, "Draw every printed annotation into the page, not only those painting with transparency")
-	jpegQuality := fs.Int("jpeg-quality", 0, "Encode a composite of images and shadings only as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every composite lossless)")
+	jpegQuality := fs.Int("jpeg-quality", 0, "Encode a composite of images and shadings only, or the tiles of a mixed one that only images and shadings reach, as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every composite lossless)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code

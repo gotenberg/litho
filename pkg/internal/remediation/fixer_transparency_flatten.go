@@ -22,16 +22,20 @@ const FlattenFixer = "transparency-flatten"
 // photographic composite at ([flatten.Options.JPEGQuality]): 90, at which a
 // composite keeps its chroma whole (see recolor.subsampleBelowQuality). A
 // composite of images and shadings is a photograph a lossless encoding holds
-// in several times the bytes, and every other composite stays lossless.
+// in several times the bytes, and a composite mixing photographs with vector
+// art is cut into tiles, its photographic ones JPEG and the others lossless.
 //
 // # Corpus evidence
 //
 //   - govdocs (34 files): the PDF/A-1b outputs weigh 177.2 MB with every
 //     composite lossless and 162.9 MB with photographic ones as JPEG, 8 files
 //     holding one (thread_300_300860 17556952 -> 4109245 bytes); the sources
-//     weigh 45.5 MB. Most of the rest is whole pages mixing photographs with
-//     vector art, which stay lossless (thread_000_000737 39.6 MB,
-//     thread_400_400019 30.0 MB). No output draws apart from its source.
+//     weigh 45.5 MB. Most of the rest was whole pages mixing photographs with
+//     vector art, lossless whole: cut into tiles, the outputs weigh 134.4 MB
+//     where they weighed 163.4 MB the commit before, thread_000_000737 39.6
+//     -> 20.3 MB and thread_400_400019 30.0 -> 20.5 MB. No output draws apart
+//     from its source, on any page of the 13 files the tiles change, in litho
+//     or in poppler 26.09.0.
 //   - verapdf: 23 of 522 files hold a JPEG composite, and no output draws
 //     apart from its source that did not before.
 const remediationJPEGQuality = 90
