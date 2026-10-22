@@ -96,9 +96,13 @@ const (
 // Default [RenderRGB].
 //
 // Under [RenderCMYK] the page is composited for a CMYK device: its
-// transparency blends in the device's CMYK whatever the page's own group
-// names, as ISO 32000-1, 11.4.7 has a device composite a page, and the image
-// holds the inks, over paper that takes none. DeviceCMYK colours reach the
+// transparency blends in the device's CMYK, and the image holds the inks,
+// over paper that takes none. A page group whose /CS names another space
+// blends in the device's CMYK too, a deliberate departure from ISO 32000-1,
+// 11.4.7 and 11.3.4, which blend it in that space: a CMYK device composites
+// in its process space, the difference shows only under blend modes other
+// than Normal, and blending in the group's space first would convert every
+// colour through sRGB once more on the way to the device. DeviceCMYK colours reach the
 // device unchanged, DeviceGray as black ink alone, and a Separation or
 // DeviceN colour whose alternate is DeviceCMYK as its tint transform's
 // output: a device colour space addresses the output device directly

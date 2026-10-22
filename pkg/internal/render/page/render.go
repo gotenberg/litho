@@ -118,10 +118,22 @@ type Options struct {
 	// Box is the page boundary drawn, the crop box by default.
 	Box Box
 	// CMYK draws the page for a CMYK device, the page group blending in its
-	// CMYK space whatever the page's /Group /CS names ([Result.CMYK] reads
-	// it): ISO 32000-1, 11.4.7 composites a page group without a /CS in the
-	// device's own space, and leaves a converted page to the device. The
-	// space's components are those of DeviceCMYK, which passes through to
+	// CMYK space ([Result.CMYK] reads it): ISO 32000-1, 11.4.7 composites a
+	// page group without a /CS in the device's own space, and leaves a
+	// converted page to the device.
+	//
+	// Deliberate leniency toward a page group whose /CS names another
+	// space, against 11.4.7 and 11.3.4, which blend the page group in the
+	// space its /CS names: the device's CMYK replaces it. A CMYK device
+	// composites in its process space, and the space a group blends in
+	// changes its result only under a blend mode other than Normal (11.3.5):
+	// Normal compositing is a weighted sum that any space keeps up to the
+	// conversion. Blending in a grey or ICCBased CMYK /CS first and
+	// converting the page to the device afterwards would pass every colour
+	// through sRGB once more, turning black ink into four inks. A /CS of
+	// /DeviceCMYK is the device's space already.
+	//
+	// The space's components are those of DeviceCMYK, which passes through to
 	// the device unchanged, as do DeviceGray, entering as black ink alone,
 	// and a Separation or DeviceN colour whose alternate is DeviceCMYK
 	// (10.3, 8.6.6.4): a device colour space addresses the output device
@@ -335,6 +347,8 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 	attrs, cs, _ := r.groupAttrs(pg.Dict)
 	var space *blend.Space
 	if opts.CMYK {
+		// The page group's /CS gives way to the device's CMYK, against
+		// ISO 32000-1, 11.4.7 and 11.3.4: see [Options.CMYK].
 		space, err = r.deviceCMYK(opts.CMYKProfile)
 		if err != nil {
 			return nil, report, err
