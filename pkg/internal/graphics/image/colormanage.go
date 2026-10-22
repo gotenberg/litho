@@ -42,6 +42,11 @@ type colorContext struct {
 	// page is the page dictionary, whose /OutputIntents replace the
 	// document's for that page (ISO 32000-2, 14.11.5).
 	page ast.PdfDict
+	// dataMask is the soft mask the image's JPEG 2000 data carries
+	// (ISO 32000-1, Table 89 /SMaskInData) when it is applied: its colour
+	// channels are unpremultiplied while they still hold the data's values,
+	// before any colour conversion, when the mask marks them premultiplied.
+	dataMask *DataSoftMask
 }
 
 // effectiveSpaces returns dict with its /ColorSpace replaced by the space its

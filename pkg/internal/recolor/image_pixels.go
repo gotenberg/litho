@@ -101,10 +101,10 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 	if raw.rows == 0 {
 		return stream, ImageUnchanged, fmt.Errorf("%w: the samples hold no whole row of the %dx%d image", ErrImageNotConverted, width, height)
 	}
-	if dataMask != nil && dataMask.premultiplied {
+	if dataMask != nil && dataMask.Premultiplied {
 		// The JPXDecode filter hands on 8 bits a component (7.4.9), the
 		// data's samples before /Decode, which maps them afterwards.
-		unpremultiply(raw.data, dataMask.alpha, width, raw.rows, raw.comps)
+		pdfimage.Unpremultiply(raw.data, dataMask.Alpha, width*raw.rows, raw.comps)
 	}
 	dec := imageDecode(ctx, im.doc, dict, raw.comps, sp.decodeDefault(raw.bpc))
 	conv, err := im.cfg.Colors.Converter(ctx, sp.obj, resources, page, im.imageIntent(ctx, dict))
@@ -539,9 +539,6 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
-	if dataMask != nil && dataMask.premultiplied && !dataMask.identity {
-		return stream, ImageUnchanged, fmt.Errorf("%w: a JPEG 2000 image premultiplied by its opacity, in a colour space of its data the decoder does not read as it is", ErrImageNotConverted)
-	}
 	// The decoder undoes a /Matte against the JPEG 2000 data's own colour,
 	// and a /Mask colour key compares samples in it: neither carries over
 	// to sRGB exactly.
@@ -555,6 +552,9 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 			return stream, ImageUnchanged, fmt.Errorf("%w: a JPEG 2000 image in its own colour space with a colour-key mask", ErrImageNotConverted)
 		}
 	}
+	// The decoder applies the data's soft mask as it reads it, with the
+	// colour straight: premultiplication is undone on the data's values,
+	// before the data's colour is read.
 	img, err := pdfimage.DecodePainted(ctx, im.doc, label, stream, resources, page)
 	if err != nil {
 		return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
@@ -569,11 +569,6 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 			c := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
 			samples = append(samples, c.R, c.G, c.B)
 		}
-	}
-	if dataMask != nil && dataMask.premultiplied {
-		// The reading is the identity: the painted samples are the data's,
-		// a grey channel repeated three times.
-		unpremultiply(samples, dataMask.alpha, width, height, 3)
 	}
 	conv, err := im.cfg.Colors.Converter(ctx, srgbSpace(), nil, nil, im.imageIntent(ctx, dict))
 	if err != nil {

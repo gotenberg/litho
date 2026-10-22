@@ -122,6 +122,21 @@ func TestSignatureOf_PixMatchesAt(t *testing.T) {
 	}
 }
 
+// TestSignatureOf_NRGBAStraight pins that an NRGBA image, a JPEG 2000 image
+// with the opacity of its data as alpha, is summed by its straight colour, as
+// gen-images.mjs sums PDF.js's RGBA buffer: a transparent pixel keeps its
+// colour rather than reading black.
+func TestSignatureOf_NRGBAStraight(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	img.SetNRGBA(0, 0, color.NRGBA{R: 200, G: 100, B: 50, A: 0})
+	img.SetNRGBA(1, 0, color.NRGBA{R: 200, G: 100, B: 50, A: 128})
+	sig := signatureOf(img.SubImage(image.Rect(0, 0, 2, 1)))
+	want := []float64{200, 100, 50, 200, 100, 50}
+	if !slices.Equal(sig.Sig, want) {
+		t.Errorf("sig: got %v, want %v", sig.Sig, want)
+	}
+}
+
 func TestImageDecodeFeature_RunAndCompare(t *testing.T) {
 	dir := t.TempDir()
 	pdfPath := filepath.Join(dir, "doc.pdf")

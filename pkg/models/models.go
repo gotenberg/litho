@@ -181,7 +181,8 @@ type Annotation struct {
 // the returned reader. Decode turns this image's samples into pixels on
 // demand. Filename can repeat on one page, since two form XObjects may each
 // name an image Im0, so Decode is the way to decode this entry rather than
-// another image of the same name.
+// another image of the same name. It decodes as Reader.DecodeImage in
+// package pdf does, an opacity the JPEG 2000 data carries included.
 // Values must not be shared across goroutines without synchronization.
 type ImageMeta struct {
 	Filename         string                                           `json:"filename"`

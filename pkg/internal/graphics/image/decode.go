@@ -1480,10 +1480,19 @@ func lookupImage(ctx context.Context, doc *document.Document, page *document.Pag
 }
 
 // decodeImageStream decodes the Image XObject stream that name refers to.
+// A JPXDecode image that carries its soft mask in its data (ISO 32000-1,
+// 8.9.5, Table 89 /SMaskInData) comes back as an *image.NRGBA holding that
+// opacity as its alpha and its colour straight: the mask is part of the
+// image's own samples, where an /SMask is an image of its own, which the
+// result leaves out. Premultiplied colour is undone (T.800, Table I.16).
 func decodeImageStream(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, cc colorContext) (image.Image, error) {
+	cc.dataMask = paintedDataMask(ctx, doc, name, stream)
 	img, err := decodeImagePixels(ctx, doc, name, stream, cc)
 	if err != nil {
 		return nil, err
+	}
+	if cc.dataMask != nil {
+		return withDataAlpha(img, cc.dataMask), nil
 	}
 	return unpreblend(ctx, doc, name, stream.Dict, cc, img), nil
 }
@@ -1619,6 +1628,15 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	}
 	if int64(len(decodedData)) > maxImageBytes {
 		return nil, fmt.Errorf("%w: its decoded samples exceed %d bytes", ErrImageTooLarge, maxImageBytes)
+	}
+	if m := cc.dataMask; m != nil && m.Premultiplied && native == nil && !bool(isMask) {
+		// The JPXDecode filter hands on the data's colour channels at 8 bits,
+		// before /Decode and any colour conversion: premultiplication is
+		// undone on the values it applied to (T.800, Table I.16). An index
+		// is no colour value, so an indexed image keeps its samples.
+		if _, _, indexed := indexedColorSpace(ctx, doc, stream.Dict); !indexed {
+			Unpremultiply(decodedData, m.Alpha, width*height, len(decodedData)/(width*height))
+		}
 	}
 	if jpxCol.ycc && !bool(isMask) {
 		yccToRGB(decodedData, jpxCol.neutral)

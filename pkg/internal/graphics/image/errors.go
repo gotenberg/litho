@@ -19,4 +19,9 @@ var (
 	// table, or a tinted space whose tint transform or alternate cannot be
 	// read.
 	ErrUnsupportedColorSpace = errors.New("colour space cannot be converted")
+
+	// ErrDataSoftMask reports a soft mask in the JPEG 2000 data of a
+	// JPXDecode image (ISO 32000-1, Table 89 /SMaskInData) that
+	// [ReadSMaskInData] cannot read as one soft mask over the image.
+	ErrDataSoftMask = errors.New("unusable /SMaskInData soft mask")
 )

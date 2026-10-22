@@ -1818,6 +1818,12 @@ func (r *Reader) imageDecoder(pageNum int, name string, decode func(context.Cont
 // drawn through a form XObject is not in the page's own resources. To decode
 // an entry whose Filename repeats on the page, call its Decode function.
 //
+// The pixels are the image's colour: an /SMask or /Mask is an image of its
+// own and is left out. A JPEG 2000 image that carries its soft mask in its
+// data (ISO 32000-1, Table 89 /SMaskInData 1 or 2, with no /SMask) comes back
+// as an *image.NRGBA holding that opacity as alpha beside straight colour,
+// premultiplied colour undone.
+//
 // It returns [ErrImageNotFound] when the page shows no image of that name and
 // [ErrImageNotDecodable] when litho cannot decode its samples.
 func (r *Reader) DecodeImage(ctx context.Context, pageNum int, name string) (_ image.Image, err error) {

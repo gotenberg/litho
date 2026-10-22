@@ -279,9 +279,9 @@ func signatureOf(img image.Image) imageSignature {
 	sums := make([]float64, gw*gh*3)
 	counts := make([]float64, gw*gh)
 	// The decoder returns Gray and RGBA images, whose stored bytes are what
-	// RGBA()>>8 reports, so their rows are summed from Pix, one run of
-	// columns per cell: going through At boxed every pixel in a color.Color
-	// and divided for its cell, which took 7 of the 18 seconds a file of 23
+	// RGBA()>>8 reports, and NRGBA ones (below), so their rows are summed
+	// from Pix, one run of columns per cell: going through At boxed every
+	// pixel in a color.Color and divided for its cell, which took 7 of the 18 seconds a file of 23
 	// page-sized scans spent, past the per-file budget. The sums are of
 	// integers, so they come out as the per-pixel loop's.
 	//
@@ -308,10 +308,23 @@ func signatureOf(img image.Image) imageSignature {
 				counts[c] += float64(starts[cx+1] - starts[cx])
 			}
 		}
-	case *image.RGBA:
+	case *image.RGBA, *image.NRGBA:
+		// An NRGBA image is a JPEG 2000 image with the opacity of its data
+		// (ISO 32000-1, Table 89 /SMaskInData) as alpha, its colour straight.
+		// PDF.js hands such an image over as RGBA too, and the signature reads
+		// its colour bytes as they are, alpha aside, so the Pix bytes are
+		// summed here rather than At's premultiplied colour.
+		var pix []uint8
+		var off func(x, y int) int
+		switch m := m.(type) {
+		case *image.RGBA:
+			pix, off = m.Pix, m.PixOffset
+		case *image.NRGBA:
+			pix, off = m.Pix, m.PixOffset
+		}
 		for y := range h {
 			base := (y * gh / h) * gw
-			row := m.Pix[m.PixOffset(b.Min.X, b.Min.Y+y):]
+			row := pix[off(b.Min.X, b.Min.Y+y):]
 			for cx := range gw {
 				var r, g, bl uint64
 				run := row[4*starts[cx] : 4*starts[cx+1]]

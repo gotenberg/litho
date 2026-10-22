@@ -215,3 +215,35 @@ func TestDecodeImage_Concurrent(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// TestDecodeImage_SMaskInData pins the public contract for a JPEG 2000 image
+// carrying its soft mask in its data (ISO 32000-1, Table 89 /SMaskInData):
+// DecodeImage returns an *image.NRGBA whose alpha is that opacity. rgba8.jp2
+// is transparent left of column 24 and opaque from column 72.
+func TestDecodeImage_SMaskInData(t *testing.T) {
+	t.Parallel()
+	data := jpxColorPDF(t, "rgba8.jp2", "/SMaskInData 1")
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Logf("closing reader: %v", err)
+		}
+	})
+	img, err := r.DecodeImage(context.Background(), 1, "Im0")
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	n, ok := img.(*image.NRGBA)
+	if !ok {
+		t.Fatalf("DecodeImage returned a %T, want *image.NRGBA", img)
+	}
+	if a := n.NRGBAAt(5, 5).A; a != 0 {
+		t.Errorf("alpha at (5, 5) = %d, want 0", a)
+	}
+	if a := n.NRGBAAt(80, 5).A; a != 255 {
+		t.Errorf("alpha at (80, 5) = %d, want 255", a)
+	}
+}
