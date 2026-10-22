@@ -1958,27 +1958,29 @@ goes through the destination profile of the page's or the document's output
 intent (ISO 32000-2, 14.11.5), else litho's built-in CMYK printer profile.
 poppler 26.09.0 converts DeviceCMYK with its own fixed formula whatever the
 intents say, so the `render` cell mismatches `pdfxonly_2b.pdf` and
-`iccbadcmyk_1b.pdf`: their intents' profiles map every CMYK colour to a
+`iccbadcmyk_2b.pdf`: their intents' profiles map every CMYK colour to a
 neutral grey (the fixtures' `A2B0` tables keep a and b at 128), which litho
 paints (144 and 184 grey) and poppler does not (244 114 22 and 97 155 205 for
-the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`). `iccbadcmyk_2b.pdf` paints
-the same grey and mismatched before the renderer converted colour too.
+the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`). `iccbadcmyk_1b.pdf`'s profile
+states version 5.0, an ICC.2 profile ISO 32000-1, 8.6.5.5, Table 67 and ISO
+32000-2 do not list, so litho reads no colour through it and paints
+DeviceCMYK through its built-in profile, and the page matches poppler.
 
-**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 31 pages
-of 27 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
-tolerance. 16 pages of 13 fixtures differ by more than 1% of the page. Each of
+**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 30 pages
+of 26 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
+tolerance. 15 pages of 12 fixtures differ by more than 1% of the page. Each of
 those differences is adjudicated, and none is a litho defect left open:
 
-| File                                            | Page       | Differing pixels     | Why                                       |
-| ----------------------------------------------- | ---------- | -------------------- | ----------------------------------------- |
-| `pdfxonly_2b`, `iccbadcmyk_1b`, `iccbadcmyk_2b` | 1          | 3600, 3933, 3933     | DeviceCMYK through the output intent      |
-| `inlineinterp_2b`, `complex_2b`, `megafont_2b`  | 1          | 148178, 14873, 14874 | interpolation half a sample off (poppler) |
-| `multipage_2b`                                  | 2          | 14873                | interpolation half a sample off (poppler) |
-| `inlinejpx_2b`                                  | 1          | 5600                 | poppler stops after an inline JPX image   |
-| `imagecolour_2b`                                | 1          | 15375                | colorant None and JPX colour (poppler)    |
-| `pageboxes_2b`                                  | 1, 2, 3    | page size            | page boxes read as pdf.js reads them      |
-| `kidsarray_2b`, `kidsrepair_1b`                 | 2 and 3, 3 | 1 by 1 golden        | poppler draws no page written in `/Kids`  |
-| `patternglyph_2b`                               | 3          | 2500                 | poppler paints sub-pixel cells solid      |
+| File                                           | Page       | Differing pixels     | Why                                       |
+| ---------------------------------------------- | ---------- | -------------------- | ----------------------------------------- |
+| `pdfxonly_2b`, `iccbadcmyk_2b`                 | 1          | 3600, 3933           | DeviceCMYK through the output intent      |
+| `inlineinterp_2b`, `complex_2b`, `megafont_2b` | 1          | 148178, 14873, 14874 | interpolation half a sample off (poppler) |
+| `multipage_2b`                                 | 2          | 14873                | interpolation half a sample off (poppler) |
+| `inlinejpx_2b`                                 | 1          | 5600                 | poppler stops after an inline JPX image   |
+| `imagecolour_2b`                               | 1          | 15375                | colorant None and JPX colour (poppler)    |
+| `pageboxes_2b`                                 | 1, 2, 3    | page size            | page boxes read as pdf.js reads them      |
+| `kidsarray_2b`, `kidsrepair_1b`                | 2 and 3, 3 | 1 by 1 golden        | poppler draws no page written in `/Kids`  |
+| `patternglyph_2b`                              | 3          | 2500                 | poppler paints sub-pixel cells solid      |
 
 - **Interpolation.** Each fixture enlarges a 2 by 2 or 4 by 1 image with
   `/Interpolate true` fifty times or more. poppler's bilinear filter places a
@@ -2012,9 +2014,9 @@ those differences is adjudicated, and none is a litho defect left open:
   the renderer skipped them, litho painted the None images black, from the
   decoder's transparent pixels.
 - **PDFium, the third reading.** pypdfium2 4.30.0 at 72 dpi, scored by the
-  cell's comparison, reads these five fixtures:
-  - `pdfxonly_2b`, `iccbadcmyk_1b`, `iccbadcmyk_2b`: PDFium matches poppler
-    pixel for pixel (3600, 3916 and 3916 from litho). Neither reads DeviceCMYK
+  cell's comparison, reads these four fixtures:
+  - `pdfxonly_2b`, `iccbadcmyk_2b`: PDFium matches poppler pixel for pixel
+    (3600 and 3916 from litho). Neither reads DeviceCMYK
     through an output intent, which litho does by decision (14.11.5).
   - `inlinejpx_2b`: PDFium paints none of the four JPXDecode or JBIG2Decode
     inline images, the form's included, and paints the CCF and Flate
@@ -8856,12 +8858,12 @@ cells.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-218 x 13 = 2834 cells, the whole hand-measured matrix. litho and veraPDF return
+220 x 13 = 2860 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2810 of the 2834 cells. The 24
+fixtures exist to protect, and it holds in 2836 of the 2860 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in

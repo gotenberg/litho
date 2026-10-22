@@ -79,23 +79,24 @@ const (
 //
 // # Corpus evidence
 //
-//   - litho (218 files, flattentext_2b and flattenannots_2b among them): 25
-//     flattened, all match; 193 have no transparency. Before annotations
+//   - litho (220 files, flattentext_2b, flattenannots_2b and blendspace_2b
+//     among them): 26 flattened, all match; flattenrefuse_1b is refused, its
+//     second page past the render pixel budget; 193 have no transparency.
+//     Before annotations
 //     were drawn into the page, 20 flattened and 5 left annotations painting
 //     with transparency; 1 does now, laterreads_2u.pdf, whose Screen
 //     annotation has no appearance stream.
 //   - govdocs, all 1091 files (scope file): 34 flatten, all match, and
 //     1057 have no transparency.
 //   - pdfjs, all 1202 files but the 3 the scope file excludes for cost and
-//     the 1 the manifest skips: 237 of 245 flattened match, 942 have no
+//     the 1 the manifest skips: 263 of 273 flattened match, 915 have no
 //     transparency, 4 are refused (issue14982.pdf past the render pixel
 //     budget; REDHAT-1531897-0.pdf, bug1020226.pdf and issue15590.pdf, whose
 //     page tree does not resolve) and 7 do not open without a password. The
-//     3 excluded files flattened and matched on an idle machine, which made
-//     240 of 248.
-//   - pdfjs: the 8 mismatches are what flattening approximates by design. A
-//     watermark a transparent black box tinted is now drawn above it
-//     untinted (issue18466.pdf: litho_mismatch, poppler_mismatch). A
+//     3 excluded files flattened and matched on an idle machine.
+//   - pdfjs: 8 of the 10 mismatches are what flattening approximates by
+//     design. A watermark a transparent black box tinted is now drawn above
+//     it untinted (issue18466.pdf: litho_mismatch, poppler_mismatch). A
 //     watermark composited over the paper is drawn over a drawing
 //     (issue12810.pdf: poppler_mismatch). Hairlines and pixel-snapped edges
 //     the 300 dpi composite draws thinner or softer at 72 dpi
@@ -106,16 +107,21 @@ const (
 //     page whose content does not read, which the rewrite writing the
 //     output gives its signed signature widget's appearance, as every
 //     rewrite does (text_changed).
+//   - pdfjs issue7821.pdf: its Stamp fills a pattern in a transparency group
+//     that litho's renderer draws apart from poppler 26.09.0 and PDFium on
+//     the source page too (1,046 pixels apart from PDFium at 72 dpi); the
+//     composite carries litho's drawing (poppler_mismatch).
+//   - pdfjs issue16263.pdf: litho paints a 2x2 black image opaque because
+//     its 151-megapixel /SMask is past the image pixel budget (poppler and
+//     PDFium draw masked arrows, so poppler is no oracle), and since
+//     rectangular clips round to whole device rows the bars' edge rows
+//     differ between the 72 dpi source and the 300 dpi composite
+//     (litho_mismatch).
 //   - pdfjs: the text the covering images of issue16800.pdf and the black
 //     box of issue18466.pdf hide stays hidden, and in the content.
-//   - pdfjs, all 1202 files, drawn without the render goldens' fonts: 266 of
-//     276 flattened match, against 239 of 248 before annotations were drawn
-//     into the page, and 10 files leave annotations painting with
-//     transparency, against 62. The one new mismatch is issue7821.pdf, whose
-//     Stamp fills a pattern in a transparency group that litho's renderer
-//     draws apart from poppler 26.09.0 and PDFium on the source page too
-//     (1,046 pixels apart from PDFium at 72 dpi); the composite carries
-//     litho's drawing.
+//   - pdfjs: drawing transparent annotations into the page took the files
+//     that leave annotations painting with transparency from 62 to 10 over
+//     the whole corpus, 4 of them in scope (annotations_left).
 type flattenFeature struct {
 	workers int
 	// flatten runs the flattening; tests replace it to plant a defect.
