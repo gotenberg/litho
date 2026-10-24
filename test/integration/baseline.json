@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-24T11:10:02Z",
+  "captured_at": "2026-10-24T15:28:34Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -150,14 +150,15 @@
           "mismatched": 1,
           "skipped": 0,
           "metrics": {
-            "fallback_incomplete": 6,
+            "fallback_incomplete": 4,
             "fallback_inside_leaked": 1,
-            "fallback_litho_reading": 0,
+            "fallback_litho_reading": 1,
             "fallback_outside_changed": 0,
             "fallback_poppler_no_oracle": 0,
             "fallback_refused": 58,
-            "fallback_resampled": 0,
-            "fallback_scenarios_run": 6,
+            "fallback_resampled": 2,
+            "fallback_scenarios_run": 8,
+            "fallback_strict_changed": 0,
             "image_spill": 0,
             "inside_leaked": 0,
             "inside_leaked_litho": 0,
@@ -167,12 +168,12 @@
             "outside_changed_poppler": 0,
             "poppler_no_oracle": 7,
             "poppler_unavailable": 0,
-            "rasterised_units": 17,
+            "rasterised_units": 19,
             "redaction_failed": 0,
-            "redaction_incomplete": 63,
+            "redaction_incomplete": 12,
             "redaction_refused": 67,
             "render_failed": 0,
-            "scenarios_run": 177
+            "scenarios_run": 228
           }
         },
         "render": {
@@ -199,7 +200,7 @@
     "litho": {
       "features": {
         "compliance": {
-          "matched": 3068,
+          "matched": 3094,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -207,19 +208,19 @@
           }
         },
         "determinism": {
-          "matched": 2596,
+          "matched": 2618,
           "mismatched": 0,
-          "skipped": 472,
+          "skipped": 476,
           "metrics": {
             "nondeterministic": 0,
-            "render_pages_checked": 357,
+            "render_pages_checked": 359,
             "render_pages_nondeterministic": 0
           }
         },
         "flatten": {
           "matched": 32,
           "mismatched": 0,
-          "skipped": 204,
+          "skipped": 206,
           "metrics": {
             "annotations_left": 1,
             "flatten_failed": 0,
@@ -238,7 +239,7 @@
           }
         },
         "mutate-autotag": {
-          "matched": 3064,
+          "matched": 3090,
           "mismatched": 4,
           "skipped": 0,
           "metrics": {
@@ -252,7 +253,7 @@
           }
         },
         "mutate-encrypt": {
-          "matched": 3068,
+          "matched": 3094,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -266,7 +267,7 @@
           }
         },
         "mutate-flatten": {
-          "matched": 3068,
+          "matched": 3094,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -280,7 +281,7 @@
           }
         },
         "mutate-pages": {
-          "matched": 3068,
+          "matched": 3094,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -294,7 +295,7 @@
           }
         },
         "mutate-redact": {
-          "matched": 2379,
+          "matched": 2405,
           "mismatched": 0,
           "skipped": 689,
           "metrics": {
@@ -307,7 +308,7 @@
           }
         },
         "mutate-sign": {
-          "matched": 3042,
+          "matched": 3068,
           "mismatched": 0,
           "skipped": 26,
           "metrics": {
@@ -324,7 +325,7 @@
           }
         },
         "mutate-stamp": {
-          "matched": 3068,
+          "matched": 3094,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -338,7 +339,7 @@
           }
         },
         "recolor": {
-          "matched": 220,
+          "matched": 222,
           "mismatched": 2,
           "skipped": 14,
           "metrics": {
@@ -354,7 +355,7 @@
             "jpeg_pages_checked": 1,
             "jpeg_saved_kib": 1,
             "out_of_target": 0,
-            "pages_checked": 331,
+            "pages_checked": 333,
             "qpdf_failed": 0,
             "recolor_failed": 0,
             "recolor_refused": 0,
@@ -363,7 +364,7 @@
           }
         },
         "redact-render": {
-          "matched": 236,
+          "matched": 238,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -374,8 +375,9 @@
             "fallback_poppler_no_oracle": 4,
             "fallback_refused": 48,
             "fallback_resampled": 6,
-            "fallback_scenarios_run": 76,
-            "image_spill": 5,
+            "fallback_scenarios_run": 77,
+            "fallback_strict_changed": 0,
+            "image_spill": 6,
             "inside_leaked": 0,
             "inside_leaked_litho": 0,
             "inside_leaked_poppler": 0,
@@ -384,67 +386,67 @@
             "outside_changed_poppler": 0,
             "poppler_no_oracle": 29,
             "poppler_unavailable": 0,
-            "rasterised_units": 123,
+            "rasterised_units": 124,
             "redaction_failed": 0,
             "redaction_incomplete": 2,
-            "redaction_refused": 120,
+            "redaction_refused": 121,
             "render_failed": 0,
-            "scenarios_run": 659
+            "scenarios_run": 664
           }
         },
         "remediation": {
-          "matched": 1328,
-          "mismatched": 1740,
+          "matched": 1352,
+          "mismatched": 1742,
           "skipped": 0,
           "metrics": {
             "disagreement": 11,
-            "fully_fixed": 1328,
-            "litho_fixed": 15054,
-            "litho_post": 3445,
-            "litho_pre": 18499,
+            "fully_fixed": 1352,
+            "litho_fixed": 15136,
+            "litho_post": 3447,
+            "litho_pre": 18583,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 15033,
-            "verapdf_post": 3434,
-            "verapdf_pre": 18467,
+            "verapdf_fixed": 15115,
+            "verapdf_post": 3436,
+            "verapdf_pre": 18551,
             "verapdf_regressed": 0
           }
         },
         "remediation-aggressive": {
-          "matched": 1419,
-          "mismatched": 1649,
+          "matched": 1443,
+          "mismatched": 1651,
           "skipped": 0,
           "metrics": {
             "disagreement": 11,
-            "fully_fixed": 1419,
-            "litho_fixed": 15527,
-            "litho_post": 2972,
-            "litho_pre": 18499,
+            "fully_fixed": 1443,
+            "litho_fixed": 15609,
+            "litho_post": 2974,
+            "litho_pre": 18583,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 15506,
-            "verapdf_post": 2961,
-            "verapdf_pre": 18467,
+            "verapdf_fixed": 15588,
+            "verapdf_post": 2963,
+            "verapdf_pre": 18551,
             "verapdf_regressed": 0
           }
         },
         "render": {
-          "matched": 207,
+          "matched": 209,
           "mismatched": 28,
           "skipped": 1,
           "metrics": {
-            "pages_match": 322,
+            "pages_match": 324,
             "render_failed": 0,
             "render_size_mismatch": 6
           }
         },
         "text": {
-          "matched": 228,
+          "matched": 230,
           "mismatched": 0,
           "skipped": 8,
           "metrics": {
-            "chars_match": 228,
-            "words_match": 228
+            "chars_match": 230,
+            "words_match": 230
           }
         }
       }
@@ -510,6 +512,7 @@
             "fallback_refused": 39,
             "fallback_resampled": 6,
             "fallback_scenarios_run": 20,
+            "fallback_strict_changed": 0,
             "image_spill": 0,
             "inside_leaked": 0,
             "inside_leaked_litho": 0,
@@ -517,14 +520,14 @@
             "outside_changed": 0,
             "outside_changed_litho": 0,
             "outside_changed_poppler": 0,
-            "poppler_no_oracle": 13,
+            "poppler_no_oracle": 16,
             "poppler_unavailable": 0,
             "rasterised_units": 55,
             "redaction_failed": 0,
-            "redaction_incomplete": 27,
+            "redaction_incomplete": 13,
             "redaction_refused": 57,
             "render_failed": 0,
-            "scenarios_run": 109
+            "scenarios_run": 123
           }
         },
         "split": {
@@ -576,7 +579,7 @@
             "pages_checked": 407,
             "pages_skipped": 1,
             "poppler_mismatch": 6,
-            "poppler_no_oracle": 29,
+            "poppler_no_oracle": 26,
             "poppler_unavailable": 0,
             "render_failed": 1,
             "reopen_failed": 0,
@@ -649,6 +652,7 @@
             "fallback_refused": 27,
             "fallback_resampled": 7,
             "fallback_scenarios_run": 20,
+            "fallback_strict_changed": 0,
             "image_spill": 0,
             "inside_leaked": 0,
             "inside_leaked_litho": 0,
@@ -656,14 +660,14 @@
             "outside_changed": 0,
             "outside_changed_litho": 0,
             "outside_changed_poppler": 0,
-            "poppler_no_oracle": 27,
+            "poppler_no_oracle": 28,
             "poppler_unavailable": 0,
             "rasterised_units": 20,
             "redaction_failed": 0,
-            "redaction_incomplete": 22,
+            "redaction_incomplete": 12,
             "redaction_refused": 36,
             "render_failed": 0,
-            "scenarios_run": 191
+            "scenarios_run": 201
           }
         },
         "render": {
