@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"math"
-	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -51,11 +50,9 @@ var errSceneOutsidePage = errors.New("region outside the page")
 // the glyphs text extraction reads on it, so a glyph can be judged by the
 // pixels it changes. Not safe for concurrent use.
 type textScene struct {
-	geo           page.Geometry
-	with, without *image.NRGBA
-	// alone is the page drawn with its text only, nil unless [textScene.draw]
-	// was asked for it.
-	alone *image.NRGBA
+	geo page.Geometry
+	// with is the page drawn whole by the last [textScene.judgeOwnInk].
+	with *image.NRGBA
 	// elements are the page's glyphs as [typography.ExtractElements] reads
 	// them, every optional content group and artifact included, and
 	// whiteFills is parallel to them.
@@ -69,8 +66,7 @@ type textScene struct {
 	painted [3][][4]float64
 	// rects is each element's ink box in pixels, empty when it has none or
 	// is not counted, and cover counts, per pixel, the rects covering it,
-	// saturating. Both are nil until [textScene.draw] or
-	// [textScene.showsOwnInk].
+	// saturating. Both are nil until [textScene.judgeOwnInk].
 	rects []image.Rectangle
 	cover []uint16
 }
@@ -164,48 +160,10 @@ func boxesMeet(a, b [4]float64) bool {
 	return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
 }
 
-// draw draws pg, whose scene s read, with and without its text, and with its
-// text alone when textOnly is set. It fails when the page cannot be drawn, or
-// when its glyph boxes pass [maxSceneCoverWork].
-//
-// region, when not the zero box, is the part of the page in default user space
-// to draw, reduced to the page's crop box: a caller judging a few glyphs
-// draws only where they lie, so a page of dense art costs the rasterisation
-// of that part alone.
-func (s *textScene) draw(ctx context.Context, r *Reader, pg *document.Page, region [4]float64, textOnly bool) error {
-	pg, box, err := s.frame(pg, region)
-	if err != nil {
-		return err
-	}
-	if s.with, err = s.render(ctx, r, pg, box, page.Options{}); err != nil {
-		return fmt.Errorf("drawing the page: %w", err)
-	}
-	if s.without, err = s.render(ctx, r, pg, box, page.Options{Omit: page.Text}); err != nil {
-		return fmt.Errorf("drawing the page without text: %w", err)
-	}
-	if s.with.Bounds() != s.without.Bounds() {
-		return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), s.without.Bounds())
-	}
-	if b := s.with.Bounds(); b.Dx() != s.geo.Width || b.Dy() != s.geo.Height {
-		return fmt.Errorf("page drawn as %v, its geometry %dx%d", b, s.geo.Width, s.geo.Height)
-	}
-	if textOnly {
-		// Clips stay in force with what they clip left out (the renderer
-		// keeps a path's or a text object's clip, 8.5.4 and 9.3.6), so text
-		// a clip removes paints nothing alone either.
-		if s.alone, err = s.render(ctx, r, pg, box, page.Options{Omit: page.Paths | page.Images | page.Shadings | page.Annotations}); err != nil {
-			return fmt.Errorf("drawing the page's text alone: %w", err)
-		}
-		if s.alone.Bounds() != s.with.Bounds() {
-			return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), s.alone.Bounds())
-		}
-	}
-	return s.countCover(ctx, func(int) bool { return true })
-}
-
 // frame sets the geometry s draws pg at and returns the page to draw and the
 // boundary drawn: the crop box, or region, when not the zero box, reduced to
-// the crop box (see [textScene.draw]).
+// the crop box. A caller judging a few glyphs draws only where they lie, so a
+// page of dense art costs the rasterisation of that part alone.
 func (s *textScene) frame(pg *document.Page, region [4]float64) (*document.Page, page.Box, error) {
 	box := page.CropBox
 	if region != [4]float64{} {
@@ -309,88 +267,6 @@ func (s *textScene) pixelRect(box [4]float64) image.Rectangle {
 		return image.Rectangle{}
 	}
 	return r
-}
-
-// runStats is what the pixels a run of glyphs alone covers say about it:
-// area counts the pixels the run's glyph boxes cover and no other glyph's box
-// does, changed those of them the run's text marks, and alone those it marks
-// drawn with nothing else, counted only when the scene drew that.
-//
-// background is the mean colour, each channel in [0, 1], the page shows over
-// the area without its text, and lumLow and lumHigh are the
-// [sceneLuminanceLow] and [sceneLuminanceHigh] percentiles of its relative
-// luminance.
-type runStats struct {
-	area, changed, alone int
-	background           [3]float64
-	lumLow, lumHigh      float64
-}
-
-// sceneLuminanceLow and sceneLuminanceHigh are the percentiles of a run's
-// background luminance [runStats] reports: its spread without the tenth of
-// its pixels at either end, where a shape's edge or an anti-aliased boundary
-// lies. Not spec-mandated.
-const (
-	sceneLuminanceLow  = 0.1
-	sceneLuminanceHigh = 0.9
-)
-
-// stats measures the run of glyphs whose indices run holds over the pixels
-// its glyph boxes alone cover: a glyph is judged where it can be told from
-// every other, since the drawing without text removes them all.
-func (s *textScene) stats(run []int) runStats {
-	var box image.Rectangle
-	for _, i := range run {
-		box = box.Union(s.rects[i])
-	}
-	var st runStats
-	if box.Empty() {
-		return st
-	}
-	own := make([]uint16, box.Dx()*box.Dy())
-	for _, i := range run {
-		r := s.rects[i]
-		for y := r.Min.Y; y < r.Max.Y; y++ {
-			for x := r.Min.X; x < r.Max.X; x++ {
-				own[(y-box.Min.Y)*box.Dx()+x-box.Min.X]++
-			}
-		}
-	}
-	w := s.with.Bounds().Dx()
-	// paper is the colour of the page a scene draws on.
-	paper := [3]byte{255, 255, 255}
-	var lums []float64
-	for y := box.Min.Y; y < box.Max.Y; y++ {
-		for x := box.Min.X; x < box.Max.X; x++ {
-			n := own[(y-box.Min.Y)*box.Dx()+x-box.Min.X]
-			if n == 0 || s.cover[y*w+x] != n {
-				continue
-			}
-			st.area++
-			o := s.with.PixOffset(x, y)
-			if inkChanged(s.with.Pix[o:o+3:o+3], s.without.Pix[o:o+3:o+3]) {
-				st.changed++
-			}
-			if s.alone != nil && inkChanged(s.alone.Pix[o:o+3:o+3], paper[:]) {
-				st.alone++
-			}
-			bg := s.without.Pix[o : o+3 : o+3]
-			r, g, b := float64(bg[0])/255, float64(bg[1])/255, float64(bg[2])/255
-			st.background[0] += r
-			st.background[1] += g
-			st.background[2] += b
-			lums = append(lums, relativeLuminance(r, g, b))
-		}
-	}
-	if st.area > 0 {
-		for c := range st.background {
-			st.background[c] /= float64(st.area)
-		}
-		slices.Sort(lums)
-		st.lumLow = lums[int(sceneLuminanceLow*float64(len(lums)-1))]
-		st.lumHigh = lums[int(sceneLuminanceHigh*float64(len(lums)-1))]
-	}
-	return st
 }
 
 // relativeLuminance is the relative luminance of an sRGB colour, each channel

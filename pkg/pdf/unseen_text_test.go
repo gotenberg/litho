@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 	"testing"
 
@@ -68,6 +69,54 @@ func TestExtractUnseenText(t *testing.T) {
 	}
 	if len(got) != len(want) {
 		t.Errorf("%d runs reported, want %d: %v", len(got), len(want), reasons)
+	}
+}
+
+// neighbourBoxPDF is a 400-point square page whose large "L" holds words
+// inside its glyph box and away from its ink:
+//
+//   - Hello, past the box's right edge, its "H" inside the box and seen, the
+//     rest under a white rectangle drawn after it;
+//   - Gone, wholly inside the box, under a white rectangle drawn after it;
+//   - Grey, wholly inside the box, 0.6 grey on the white page;
+//
+// and a black Shade under a white Shade set a point up and to the left,
+// the white seen only over the black.
+func neighbourBoxPDF() []byte {
+	const content = "BT 0 g /F1 300 Tf 20 40 Td (L) Tj ET\n" +
+		"BT 0 g /F1 10 Tf 176 290 Td (Hello) Tj ET\n" +
+		"1 g 184 280 100 30 re f\n" +
+		"BT 0 g /F1 10 Tf 90 150 Td (Gone) Tj ET\n" +
+		"1 g 85 140 50 25 re f\n" +
+		"BT 0.6 g /F1 10 Tf 90 320 Td (Grey) Tj ET\n" +
+		"BT 0 g /F1 24 Tf 220 100 Td (Shade) Tj ET\n" +
+		"BT 1 g /F1 24 Tf 219 101 Td (Shade) Tj ET\n"
+	return buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+}
+
+// TestExtractUnseenTextInsideNeighbourBox judges runs by their own ink: a
+// word whose ink lies only inside other glyphs' boxes shows, and one covered
+// there is reported, though no pixel of either is its alone.
+func TestExtractUnseenTextInsideNeighbourBox(t *testing.T) {
+	t.Parallel()
+	r := openLimited(t, neighbourBoxPDF(), Limits{})
+
+	got, err := r.ExtractUnseenText(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := map[string]models.UnseenReason{}
+	for _, u := range got {
+		reasons[u.Text] = u.Reason
+	}
+	if want := map[string]models.UnseenReason{"Gone": models.UnseenCovered}; !maps.Equal(reasons, want) {
+		t.Errorf("reported %v, want %v", reasons, want)
 	}
 }
 

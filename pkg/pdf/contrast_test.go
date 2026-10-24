@@ -107,6 +107,32 @@ func TestCheckTextContrast(t *testing.T) {
 	}
 }
 
+// TestCheckTextContrastInsideNeighbourBox judges the runs of
+// [neighbourBoxPDF] that show by their own ink, though no pixel of Hello,
+// Grey or the white Shade is theirs alone: Grey against the white page under
+// it, the white Shade against the black one under it.
+func TestCheckTextContrastInsideNeighbourBox(t *testing.T) {
+	t.Parallel()
+	r := openLimited(t, neighbourBoxPDF(), Limits{})
+
+	rep, err := r.CheckTextContrast(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// L, Hello, Grey and both Shades; Gone is covered.
+	if rep.Judged != 5 || rep.Undetermined != 0 {
+		t.Errorf("judged %d, undetermined %d; want 5 and 0", rep.Judged, rep.Undetermined)
+	}
+	got := failuresByText(rep)
+	grey, ok := got["Grey"]
+	if !ok || len(got) != 1 {
+		t.Fatalf("failures %v, want Grey alone", got)
+	}
+	if grey.BackgroundColor != [3]uint8{255, 255, 255} || math.Abs(grey.Ratio-2.85) > 0.05 {
+		t.Errorf("Grey = %+v, want about 2.85 against white", grey)
+	}
+}
+
 func TestCheckTextContrastErrors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

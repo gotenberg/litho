@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/models"
@@ -39,12 +40,17 @@ func invisibleMode(mode int) bool {
 // [Reader.ExtractText] drops the first two kinds and white on white by
 // default; [WithHiddenText] keeps them.
 //
-// The page is drawn three times at 72 dpi, with and without its text and with
-// its text alone, every optional content group shown as text extraction reads
-// them, its annotations drawn as a viewer shows them. A run of glyphs is
-// judged by the pixels its glyph boxes cover and no other glyph's does, so a
-// run overlapping other text everywhere it lies is not reported, nor is one
-// set vertically or turned that text extraction cannot place.
+// A run of glyphs shows by its own ink, as [Reader.ExtractText] judges white
+// text and [Writer.Redact] the copies of removed text: the page drawn
+// without the run differs from the page drawn whole inside the run's glyph
+// boxes, whatever other glyph's box also lies there. The page is drawn at
+// 72 dpi over the glyph boxes, with and without its text, every optional
+// content group shown as text extraction reads them, its annotations drawn
+// as a viewer shows them, and again with its text alone for the runs that do
+// not show; a run whose ink lies wholly under other runs' glyph boxes is
+// drawn without it alone, up to 16 such runs. A run past that bound
+// is not reported, nor is one set vertically or turned that text extraction
+// cannot place.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
 // [ErrFontMissing] when the page's text cannot be read, and
@@ -64,36 +70,81 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 		}
 		return nil, fmt.Errorf("page %d: %w", pageNum, err)
 	}
-	var out []models.UnseenText
-	var drawn bool
-	for _, run := range unseenRuns(s) {
-		first := s.elements[run[0]]
-		var reason models.UnseenReason
+	runs := unseenRuns(s)
+	reasons := make([]models.UnseenReason, len(runs))
+	var drawn []int
+	for k, run := range runs {
 		switch {
 		case invisibleMode(s.paints[run[0]].Mode):
-			reason = models.UnseenRenderMode
-		case first.IsClipped:
-			reason = models.UnseenOutsidePage
+			reasons[k] = models.UnseenRenderMode
+		case s.elements[run[0]].IsClipped:
+			reasons[k] = models.UnseenOutsidePage
 		default:
-			if !drawn {
-				if err := s.draw(ctx, r, pg, [4]float64{}, true); err != nil {
-					return nil, sceneError(pageNum, err)
-				}
-				drawn = true
-			}
-			st := s.stats(run)
-			switch {
-			case st.area == 0, st.changed > 0:
-				continue
-			case st.alone == 0:
-				reason = models.UnseenPaintsNothing
-			default:
-				reason = models.UnseenCovered
-			}
+			drawn = append(drawn, k)
 		}
-		out = append(out, unseenOf(s, run, reason))
+	}
+	if err := s.judgeUnseen(ctx, r, pg, runs, drawn, reasons); err != nil {
+		return nil, sceneError(pageNum, err)
+	}
+	var out []models.UnseenText
+	for k, run := range runs {
+		if reasons[k] != "" {
+			out = append(out, unseenOf(s, run, reasons[k]))
+		}
 	}
 	return out, nil
+}
+
+// judgeUnseen sets, in reasons, the reason each run drawn names shows
+// nowhere, leaving the runs that show, and those the judgement cannot
+// settle, without one. A run shows when its own ink marks the page as a
+// viewer shows it ([textScene.judgeOwnInk]); a run that does not is drawn
+// again with the page's text alone, and is covered when its own ink marks
+// that drawing, painting nothing otherwise.
+func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Page, runs [][]int, drawn []int, reasons []models.UnseenReason) error {
+	pick := func(idx []int) [][]int {
+		out := make([][]int, len(idx))
+		for j, k := range idx {
+			out[j] = runs[k]
+		}
+		return out
+	}
+	if len(drawn) == 0 {
+		return nil
+	}
+	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, pick(drawn), ownInkOptions{})
+	if err != nil {
+		return err
+	}
+	var unseen []int
+	for j, k := range drawn {
+		if verdicts[j] == inkUnseen {
+			unseen = append(unseen, k)
+		}
+	}
+	if len(unseen) == 0 {
+		return nil
+	}
+	// Clips stay in force with what they clip left out (the renderer keeps a
+	// path's or a text object's clip, ISO 32000-1, 8.5.4 and 9.3.6), so text
+	// a clip removes paints nothing alone either.
+	alone, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, pick(unseen),
+		ownInkOptions{omit: page.Paths | page.Images | page.Shadings | page.Annotations})
+	if err != nil {
+		return err
+	}
+	for j, k := range unseen {
+		switch alone[j] {
+		case inkSeen:
+			reasons[k] = models.UnseenCovered
+		case inkUnseen:
+			reasons[k] = models.UnseenPaintsNothing
+		case inkUnjudged:
+			// Unseen on the page, but past the bound drawn alone: no reason
+			// stands, and an advisory report claims none.
+		}
+	}
+	return nil
 }
 
 // sceneError wraps the failure to draw a scene for a page in the public

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
@@ -75,13 +76,20 @@ func WithEnhancedContrast() ContrastOption {
 // The text's colour is the one the content stream paints it in, converted to
 // sRGB as [Reader.RenderPage] converts it; text both filled and stroked is
 // judged by whichever of its two colours contrasts more, so a white letter
-// outlined in black is judged by its outline. The background is the page drawn
-// without its text at 72 dpi, averaged over the pixels the run's glyph boxes
-// cover and no other glyph's does; a run whose text marks none of them is
-// not seen and not judged (see [Reader.ExtractUnseenText]). A run whose colour
-// the content stream does not settle, painted with a pattern, transparency, a
-// blend mode or a soft mask, or by a Type 3 glyph that may set its own colour,
-// is counted in [models.ContrastReport.Undetermined] and not judged.
+// outlined in black is judged by its outline. A run is judged where its own ink
+// marks the page, as [Reader.ExtractUnseenText] judges it seen: the page
+// drawn at 72 dpi without the run differs there from the page drawn whole.
+// The background is what the page shows there without the run, averaged:
+// over the pixels the run's ink marks outside every other run's glyph boxes,
+// or, when it marks none, over all it marks with the page drawn without the
+// run alone, the page's other text under it included, so white text over a
+// dark offset shadow is judged against the shadow. A run whose own ink marks
+// no pixel is not seen and not judged, nor is one past the bound of 16 runs
+// a page whose ink lies wholly under other runs' glyph boxes, each drawn
+// apart. A run whose colour the content stream does not settle, painted with
+// a pattern, transparency, a blend mode or a soft mask, or by a Type 3 glyph
+// that may set its own colour, is counted in
+// [models.ContrastReport.Undetermined] and not judged.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
 // [ErrFontMissing] when the page's text cannot be read, and
@@ -110,13 +118,14 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 	if len(runs) == 0 {
 		return rep, nil
 	}
-	if err := s.draw(ctx, r, pg, [4]float64{}, false); err != nil {
+	under := make([]contrastSamples, len(runs))
+	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, runs, ownInkOptions{under: func(k int, px []byte) { under[k].add(px) }})
+	if err != nil {
 		return models.ContrastReport{}, sceneError(pageNum, err)
 	}
 	cache := &colorconv.Cache{}
-	for _, run := range runs {
-		st := s.stats(run)
-		if st.area == 0 || st.changed == 0 {
+	for k, run := range runs {
+		if verdicts[k] != inkSeen || len(under[k].lums) == 0 {
 			continue
 		}
 		inks, ok := r.textColours(ctx, s.paints[run[0]], pg.Dict, cache)
@@ -124,6 +133,7 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 			rep.Undetermined++
 			continue
 		}
+		st := under[k].stats()
 		ink := strongestInk(inks, st.background)
 		rep.Judged++
 		if f, short := contrastFinding(s, run, st, ink, o.enhanced); short {
@@ -257,6 +267,50 @@ func (r *Reader) textColour(ctx context.Context, p graphics.TextPaint, c graphic
 	}
 	red, green, blue := conv.RGB(c.Components)
 	return [3]float64{float64(red), float64(green), float64(blue)}, true
+}
+
+// contrastSamples collects the colours the page shows under the own ink of
+// one run ([ownInkOptions.under]).
+type contrastSamples struct {
+	sum  [3]float64
+	lums []float64
+}
+
+// add counts px, RGB in its three bytes.
+func (c *contrastSamples) add(px []byte) {
+	r, g, b := float64(px[0])/255, float64(px[1])/255, float64(px[2])/255
+	c.sum[0] += r
+	c.sum[1] += g
+	c.sum[2] += b
+	c.lums = append(c.lums, relativeLuminance(r, g, b))
+}
+
+// runStats is the background of one run: background is its mean colour,
+// each channel in [0, 1], and lumLow and lumHigh are the
+// [sceneLuminanceLow] and [sceneLuminanceHigh] percentiles of its relative
+// luminance.
+type runStats struct {
+	background      [3]float64
+	lumLow, lumHigh float64
+}
+
+// sceneLuminanceLow and sceneLuminanceHigh are the percentiles of a run's
+// background luminance [runStats] reports: its spread without the tenth of
+// its pixels at either end, where a shape's edge or an anti-aliased boundary
+// lies. Not spec-mandated.
+const (
+	sceneLuminanceLow  = 0.1
+	sceneLuminanceHigh = 0.9
+)
+
+// stats returns the background c sampled. It holds at least one sample.
+func (c *contrastSamples) stats() runStats {
+	n := float64(len(c.lums))
+	st := runStats{background: [3]float64{c.sum[0] / n, c.sum[1] / n, c.sum[2] / n}}
+	slices.Sort(c.lums)
+	st.lumLow = c.lums[int(sceneLuminanceLow*(n-1))]
+	st.lumHigh = c.lums[int(sceneLuminanceHigh*(n-1))]
+	return st
 }
 
 // contrastFinding measures one run painted in ink against its background and
