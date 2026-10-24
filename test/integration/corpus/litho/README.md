@@ -286,6 +286,7 @@ one deliberately rather than diffing it against a fresh build.
 | `sharedimage_2b.pdf`   | PDF/A-2b     | Images page 1 paints beside page 2, which a redaction copies     |
 | `t3overprint_2b.pdf`   | PDF/A-2b     | Type 3 glyphs with colours of their own, shown under overprint   |
 | `whitetext_2b.pdf`     | PDF/A-2b     | White text on a bar, an image and the bare page, read by drawing |
+| `annotdrawn_2b.pdf`    | PDF/A-2b     | Annotations with no `/AP` drawn where their `/Rect` does not sit |
 
 ### Must-not-fire controls
 
@@ -578,6 +579,7 @@ are covered under [Known divergences](#known-divergences).
 | `a4syntax_4.pdf`       | 17   | 15   | 21   | 19   | 19   | 21   | 19   | 19   | 16  | 17   | 18   | 13   | 8    |
 | `aakeys_4.pdf`         | 4    | 2    | 6    | 4    | 4    | 6    | 4    | 4    | 2   | 2    | 3    | 5    | 6    |
 | `afref_3b.pdf`         | 5    | 2    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 10   | 7    |
+| `annotdrawn_2b.pdf`    | 7    | 4    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
 | `annothidden_2b.pdf`   | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 11   | 6    |
 | `annotkinds_ua2.pdf`   | 7    | 7    | 8    | 8    | 8    | 8    | 8    | 8    | 5   | 5    | 6    | 8    | 10   |
 | `annotlang_ua1.pdf`    | 6    | 5    | 6    | 5    | 5    | 6    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
@@ -9360,6 +9362,40 @@ The RGB output intent covers the DeviceRGB colours, so the file is conforming
 at PDF/A-2b. The other cells are the identification and tagging rules of their
 parts. veraPDF 1.30.2 and litho report the same rule set in all thirteen
 cells.
+
+### `annotdrawn_2b.pdf`
+
+A viewer draws an annotation with no appearance stream from its dictionary
+where ISO 32000-1, 12.5.6 defines how: a Line from `/L` (12.5.6.7), a PolyLine
+from `/Vertices` (12.5.6.9), wherever `/Rect` sits. Redaction placed an
+annotation by `/Rect` alone, so a region the drawing crossed kept the
+annotation, the page went on showing it inside the region, and the redaction
+reported success. pdfjs `annotation-line-without-appearance-empty-Rect` has
+this shape, outside the render sample the `redact-render` cell draws from. The
+200 x 200 page holds a grey bar and two annotations, in DeviceRGB:
+
+| Annotation | `/Rect`             | Draws                                       |
+| ---------- | ------------------- | ------------------------------------------- |
+| Line       | `[0 0 0 0]`         | a red line 2 wide across the page at y 100  |
+| PolyLine   | `[170 170 190 190]` | a blue zig-zag 2 wide along the bottom edge |
+
+Before the fix, the centred quarter and the centre band succeeded and failed
+the inside check on both halves, litho's and poppler 26.09.0's: 192 and 320
+pixels of the red line still drawn. Redaction now places such an annotation by
+its `/Rect` and by the box its synthesised drawing covers: a region meeting
+either selects it, and it is removed only when both lie inside a region. The
+quarter and the band refuse with `ErrAnnotationStraddlesRegion`, the line
+reaching past the quarter and its `/Rect` lying outside the band; the whole
+page removes both annotations. litho renders the page as poppler does (1
+pixel of 40,000 differs).
+
+Both annotations lack an `/AP`. ISO 19005-2, 6.3.3 exempts the Line, whose
+`/Rect` has no area, and `6.3.3/1` fires for the PolyLine at PDF/A-2 and later.
+The file declares no OutputIntent, so DeviceRGB fails `6.2.4.3/2`. At PDF/A-1
+the PolyLine, a PDF 1.5 type, fails `6.5.2/1`, the `/C` arrays `6.5.3/3`,
+DeviceRGB `6.2.3.3/1`, and the part-2 claim `6.7.11/2`. veraPDF 1.30.2 and litho report the same rule set in
+all thirteen cells, on the source and on the output of the whole-page
+redaction.
 
 ## Scope
 
