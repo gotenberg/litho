@@ -13,8 +13,10 @@ import (
 // samePageCopyPDF builds a one-page document drawing "SECRET" at y=700, which
 // [coversSecret] removes, and a second "SECRET" at y=500, drawn as copy says:
 // "visible" in black, "invisible" in text rendering mode 3, "white" in white,
-// "offpage" past the media box, "clipped" outside a clipping path, and
-// "hiddenlayer" in an optional-content group that is off.
+// "offpage" past the media box, "clipped" outside a clipping path,
+// "hiddenlayer" in an optional-content group that is off, "underfill" under
+// an opaque rectangle painted after it, "underimage" under an image painted
+// after it, and "undertext" under larger text drawn after it.
 func samePageCopyPDF(copy string) []byte {
 	stream := func(num int, dict, data string) string {
 		return strconv.Itoa(num) + " 0 obj\n<< " + dict + " /Length " + strconv.Itoa(len(data)) +
@@ -27,16 +29,20 @@ func samePageCopyPDF(copy string) []byte {
 		"offpage":     "BT /F1 12 Tf 100 1500 Td (SECRET) Tj ET",
 		"clipped":     "q 0 0 50 50 re W n BT /F1 12 Tf 100 500 Td (SECRET) Tj ET Q",
 		"hiddenlayer": "/OC /L1 BDC BT /F1 12 Tf 100 500 Td (SECRET) Tj ET EMC",
+		"underfill":   "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET 0.2 0.4 0.8 rg 90 490 100 30 re f",
+		"underimage":  "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET q 100 0 0 30 90 490 cm /Im1 Do Q",
+		"undertext":   "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET BT /F1 40 Tf 95 495 Td (WWWW) Tj ET",
 	}[copy]
 	return []byte("%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
-		"/Resources << /Font << /F1 4 0 R >> /Properties << /L1 5 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
+		"/Resources << /Font << /F1 4 0 R >> /Properties << /L1 5 0 R >> /XObject << /Im1 7 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
 		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
 		"5 0 obj\n<< /Type /OCG /Name (L1) >>\nendobj\n" +
 		stream(6, "", "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET "+other) +
-		"trailer\n<< /Size 7 /Root 1 0 R >>\n%%EOF\n")
+		stream(7, "/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8", "\x40\x80\xc0") +
+		"trailer\n<< /Size 8 /Root 1 0 R >>\n%%EOF\n")
 }
 
 func TestWriter_Redact_WarnsAboutVisibleCopiesOnTheRedactedPage(t *testing.T) {
@@ -86,16 +92,19 @@ func TestWriter_Redact_StrictRefusesVisibleCopiesOnTheRedactedPage(t *testing.T)
 
 // TestWriter_Redact_RefusesHiddenCopiesOnTheRedactedPage pins the copies no
 // viewer shows: they are what a failed redaction leaves behind, so they still
-// refuse.
+// refuse. "underfill", "underimage" and "undertext" are told by drawing the
+// page, which runs without the pixel check too.
 func TestWriter_Redact_RefusesHiddenCopiesOnTheRedactedPage(t *testing.T) {
-	for _, copy := range []string{"invisible", "white", "offpage", "clipped", "hiddenlayer"} {
+	for _, copy := range []string{"invisible", "white", "offpage", "clipped", "hiddenlayer", "underfill", "underimage", "undertext"} {
 		t.Run(copy, func(t *testing.T) {
-			report, _, err := redactOtherPageCopy(t, samePageCopyPDF(copy))
-			if !errors.Is(err, ErrRedactionIncomplete) {
-				t.Fatalf("err = %v, want ErrRedactionIncomplete", err)
-			}
-			if report == nil || len(report.SurvivingCopies) == 0 || len(report.CopiesOnRedactedPages) != 0 {
-				t.Errorf("report = %+v, want the copy among SurvivingCopies", report)
+			for _, opts := range [][]RedactOption{nil, {WithoutRedactionPixelCheck()}} {
+				report, _, err := redactOtherPageCopy(t, samePageCopyPDF(copy), opts...)
+				if !errors.Is(err, ErrRedactionIncomplete) {
+					t.Fatalf("options %d: err = %v, want ErrRedactionIncomplete", len(opts), err)
+				}
+				if report == nil || len(report.SurvivingCopies) == 0 || len(report.CopiesOnRedactedPages) != 0 {
+					t.Errorf("options %d: report = %+v, want the copy among SurvivingCopies", len(opts), report)
+				}
 			}
 		})
 	}

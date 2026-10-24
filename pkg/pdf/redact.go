@@ -338,8 +338,12 @@ type RedactReport struct {
 // crop box, sits in no optional-content group that is off, and meets no
 // region: a copy no viewer shows, or one behind a region, is what a failed
 // redaction leaves, and still refuses, as does a copy a form XObject or an
-// annotation of the redacted page draws. [WithStrictRedaction] refuses these
-// copies too.
+// annotation of the redacted page draws. The page is also drawn as written,
+// at 72 dpi with and without its text over the copies' boxes, and a copy
+// that changes no pixel of its own, one a later fill, image or text paints
+// over, refuses as well; so does every copy on a page that cannot be drawn.
+// That drawing runs under [WithoutRedactionPixelCheck] too.
+// [WithStrictRedaction] refuses these copies too.
 //
 // The verification compares text, not pixels, so a pixel check follows it.
 // Redact renders each redacted page before and after at [RedactionCheckDPI],
@@ -630,41 +634,74 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	w.rewriteOverrides = alloc.Pending()
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
-	w.recordRedaction(regions, needles, o.strict, copied)
-	if !o.noPixelCheck {
-		removed := redactedGlyphs{boxes: report.RemovedGlyphBoxes, origins: report.removedGlyphOrigins}
-		if checkErr := w.checkRedactedOutput(ctx, before, regions, order, removed); checkErr != nil {
+	w.recordRedaction(regions, needles, o.strict, copied, report.CopiesOnRedactedPages)
+	judgeCopies := slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool { return len(h.Boxes) > 0 })
+	if judgeCopies || !o.noPixelCheck {
+		var check *redactedOutputCheck
+		if !o.noPixelCheck {
+			check = &redactedOutputCheck{
+				before: before, regions: regions, order: order,
+				removed: redactedGlyphs{boxes: report.RemovedGlyphBoxes, origins: report.removedGlyphOrigins},
+			}
+		}
+		unseen, checkErr := w.checkRedactedOutput(ctx, report.CopiesOnRedactedPages, check)
+		if checkErr != nil {
 			w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
 			w.redactions = w.redactions[:prevRedactions]
 			w.redactedTokens = w.redactedTokens[:prevTokens]
 			w.redactionTolerances = w.redactionTolerances[:prevTolerances]
 			w.redactionCopies = w.redactionCopies[:prevRedactions]
 			restoreTrailer()
+			if len(unseen) > 0 {
+				report.SurvivingCopies = unseen
+				report.CopiesOnOtherPages, report.CopiesOnRedactedPages = nil, nil
+				return report, checkErr
+			}
 			return nil, checkErr
 		}
 	}
 	return report, nil
 }
 
-// checkRedactedOutput writes the Writer as [Writer.WriteTo] would, reopens
-// it, and runs the pixel check of [Writer.Redact] on the pages of
-// order against before.
-func (w *Writer) checkRedactedOutput(
-	ctx context.Context,
-	before *Reader,
-	regions []RedactRegion,
-	order []int,
-	removed redactedGlyphs,
-) error {
+// redactedOutputCheck is what the pixel check of [Writer.Redact] compares the
+// written pages against.
+type redactedOutputCheck struct {
+	before  *Reader
+	regions []RedactRegion
+	order   []int
+	removed redactedGlyphs
+}
+
+// checkRedactedOutput writes the Writer as [Writer.WriteTo] would and
+// reopens it. It refuses with [ErrRedactionIncomplete] when a copy of
+// samePage that the drawing of its page does not show remains, returning
+// those copies (see [unseenSamePageCopies]), and then, when pixels is not
+// nil, runs the pixel check of [Writer.Redact] on the pages of pixels.order
+// against pixels.before.
+func (w *Writer) checkRedactedOutput(ctx context.Context, samePage []RedactionHit, pixels *redactedOutputCheck) ([]RedactionHit, error) {
 	after, release, err := w.writeAndReopen(ctx, "litho-redact-after-*.pdf")
 	if err != nil {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
-		return &RedactionPixelError{Err: fmt.Errorf("writing the redacted document: %w", err)}
+		if pixels == nil {
+			// The copies cannot be drawn, so none is proved seen.
+			return slices.Clone(samePage), fmt.Errorf("%w: writing the redacted document to draw the copies left on its pages: %w", ErrRedactionIncomplete, err)
+		}
+		return nil, &RedactionPixelError{Err: fmt.Errorf("writing the redacted document: %w", err)}
 	}
 	defer release()
-	return checkRedactionPixels(ctx, before, after, regions, order, removed)
+	unseen, err := unseenSamePageCopies(ctx, after, samePage)
+	if err != nil {
+		return nil, err
+	}
+	if len(unseen) > 0 {
+		return unseen, fmt.Errorf("%w: %d copies of removed text on the redacted pages that no drawing of the page shows", ErrRedactionIncomplete, len(unseen))
+	}
+	if pixels == nil {
+		return nil, nil
+	}
+	return nil, checkRedactionPixels(ctx, pixels.before, after, pixels.regions, pixels.order, pixels.removed)
 }
 
 // redactPages applies the regions of byPage to each page of order, and
@@ -795,7 +832,7 @@ func seedAllocator(alloc *writer.ObjAllocator, overrides map[int]ast.PdfObject) 
 //
 // copied holds the images the redaction blanked in a copy rather than in
 // place, which WriteTo checks the composed pages for.
-func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, strict bool, copied map[int]bool) {
+func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, strict bool, copied map[int]bool, samePage []RedactionHit) {
 	w.redactions = append(w.redactions, slices.Clone(regions))
 	w.redactionCopies = append(w.redactionCopies, copied)
 	w.redactedTokens = appendNewTokens(w.redactedTokens, needles)
@@ -806,6 +843,12 @@ func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, stric
 		pages:   make(map[int]bool, len(regions)),
 		regions: make(map[int][][4]float64, len(regions)),
 		tokens:  make(map[string]bool, len(needles)),
+		seen:    make(map[string]bool, len(samePage)),
+	}
+	for _, c := range samePage {
+		if len(c.Boxes) > 0 && len(c.Pages) > 0 {
+			tolerance.seen[seenCopyKey(c.Pages[0], c.Token, c.Boxes)] = true
+		}
 	}
 	for _, region := range regions {
 		tolerance.pages[region.Page] = true
@@ -819,11 +862,15 @@ func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, stric
 
 // redactionTolerance is what one non-strict [Writer.Redact] call lets survive:
 // a copy of one of its tokens that only pages outside its pages draw, and one
-// its pages draw as visible text outside its regions.
+// its pages draw as visible text outside its regions. seen holds the copies of
+// the second kind Redact drew and found shown ([seenCopyKey]): WriteTo cannot
+// draw the document it is writing, so it tolerates the same copies at the
+// same places and no others.
 type redactionTolerance struct {
 	pages   map[int]bool
 	regions map[int][][4]float64
 	tokens  map[string]bool
+	seen    map[string]bool
 }
 
 // untolerated drops from scan the hits some recorded redaction tolerates (see
@@ -851,9 +898,14 @@ func (w *Writer) untolerated(
 		if err != nil {
 			return mutations.ScanResult{}, err
 		}
-		_, kept, err = mutations.SplitSamePageCopies(ctx, alloc, w.reader.doc, pages, tolerance.regions, kept)
+		same, kept, err := mutations.SplitSamePageCopies(ctx, alloc, w.reader.doc, pages, tolerance.regions, kept)
 		if err != nil {
 			return mutations.ScanResult{}, err
+		}
+		for _, c := range same {
+			if len(c.Boxes) > 0 && !tolerance.seen[seenCopyKey(c.Page, c.Hit.Token, c.Boxes)] {
+				kept = append(kept, c.Hit)
+			}
 		}
 		others = append(others, kept...)
 		rest = others
