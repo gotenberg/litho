@@ -133,3 +133,60 @@ func TestOverprintConvertedSpotReported(t *testing.T) {
 		t.Errorf("kept spot: %+v", got)
 	}
 }
+
+// type3Page shows text in the Type 3 font /T3 under the graphics state
+// /GS0, overprinting with mode 1: glyph a, object 7, opens with d0 and
+// paints in red, glyph b, object 8, opens with d1 and paints in the text's
+// colour.
+func type3Page(show string) fixture {
+	return onePage("/Resources << /ExtGState << /GS0 5 0 R >> /Font << /T3 6 0 R >> >>",
+		"/GS0 gs BT /T3 1 Tf "+show+" ET",
+		"<< /Type /ExtGState /OP true /op true /OPM 1 >>",
+		"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1 1] /FontMatrix [1 0 0 1 0 0] /CharProcs << /a 7 0 R /b 8 0 R >> "+
+			"/Encoding << /Differences [97 /a /b] >> /FirstChar 97 /LastChar 98 /Widths [1 1] >>",
+		stream("", "1 0 d0 1 0 0 rg 0 0 1 1 re f"),
+		stream("", "1 0 0 0 1 1 d1 0 0 1 1 re f"))
+}
+
+func TestOverprintType3GlyphJudgedAtTheShow(t *testing.T) {
+	// ISO 32000-1, 9.6.5: a glyph description runs under the graphics state
+	// of the text that shows it. Glyph a's red, converted to CMYK under
+	// /OPM 1, would stop painting cyan and black: /OPM 0 keeps it. The
+	// text's own black, which the glyph does not paint, needs no /OPM 1.
+	r := recolor(t, type3Page("0 0 0 1 k (a) Tj"), cmyk, naive(Options{}))
+	if got := r.report.Overprint; got.Preserved != 1 || got.States != 1 || got.Changed != 0 {
+		t.Errorf("overprint report: %+v", got)
+	}
+	if m := opm(t, r.object(5)); m != 0 {
+		t.Errorf("/OPM %d, want 0", m)
+	}
+}
+
+func TestOverprintType3UncolouredGlyphJudgedAsText(t *testing.T) {
+	// Glyph b opens with d1 and paints in the text's colour (Table 113):
+	// the show is judged in that colour, glyph a's red not at all.
+	r := recolor(t, type3Page("1 0 0 rg (b) Tj"), cmyk, naive(Options{}))
+	if got := r.report.Overprint; got.Preserved != 1 || got.Changed != 0 {
+		t.Errorf("overprint report: %+v", got)
+	}
+	r = recolor(t, type3Page("0 0 0 1 k (b) Tj"), rgbTarget, naive(Options{}))
+	if got := r.report.Overprint; got.Changed != 1 {
+		t.Errorf("d1 glyph in CMYK: %+v", got)
+	}
+	// Glyph a, shown nowhere, is not judged.
+	r = recolor(t, type3Page("1 1 1 rg (b) Tj"), rgbTarget, naive(Options{}))
+	if got := r.report.Overprint; got != (OverprintReport{}) {
+		t.Errorf("unshown glyph judged: %+v", got)
+	}
+}
+
+func TestOverprintType3GlyphConvertedOutOfCMYKReported(t *testing.T) {
+	// A d0 glyph painting 0 1 1 0 k under /OPM 1 leaves cyan and black; in
+	// RGB it paints every ink. It counts once however often it is shown.
+	f := type3Page("[(a) 10 (a)] TJ (a) Tj")
+	f.objs[2] = stream("", "1 0 d0 0 1 1 0 k 0 0 1 1 re f")
+	r := recolor(t, f, rgbTarget, naive(Options{}))
+	if got := r.report.Overprint; got.Changed != 1 {
+		t.Errorf("overprint report: %+v", got)
+	}
+}

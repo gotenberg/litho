@@ -28,13 +28,15 @@ const maxTargetNames = 1000
 
 // colorState is the fill and stroke colour spaces in force (ISO 32000-1,
 // 8.6.8), as their plans, with what judging overprint reads: the colours set
-// in them, the overprint parameters (8.6.7) and the text rendering mode
-// (9.3.6), all of which q and Q save and restore (8.4.2).
+// in them, the overprint parameters (8.6.7), the text rendering mode (9.3.6)
+// and the font resource Tf selects (9.3.1), all of which q and Q save and
+// restore (8.4.2).
 type colorState struct {
 	fill, stroke           *spacePlan
 	fillComps, strokeComps []float64
 	overprint              overprintState
 	tr                     int
+	font                   ast.PdfName
 }
 
 // contentRewriter rewrites the colour operators of the content streams that
@@ -57,8 +59,8 @@ type contentRewriter struct {
 	// which converts no inline image.
 	dry bool
 	// id names the stream in the session's overprint judgements, "" for a
-	// stream whose overprinting is judged where it is painted, a form's, or
-	// not at all, a glyph's. depth is the form nesting a judgement reads.
+	// stream whose overprinting is judged where it is painted, a form's or a
+	// Type 3 glyph's. depth is the form nesting a judgement reads.
 	id    string
 	depth int
 }

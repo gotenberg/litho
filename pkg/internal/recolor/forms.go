@@ -177,8 +177,9 @@ func (s *session) rewriteType3(ctx context.Context, obj ast.PdfObject, parent as
 				if !ok {
 					return nil, false, nil
 				}
-				// TODO: a glyph inherits the overprinting of the text that
-				// shows it (9.6.5); it is not judged.
+				// A glyph's overprinting is judged where the text shows it,
+				// under the state it inherits there
+				// ([contentRewriter.judgeShow]).
 				out, changed, err := s.rewriteStreamContent(ctx, stream, res, "")
 				if err != nil || !changed {
 					return nil, false, err
