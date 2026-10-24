@@ -7,8 +7,67 @@ import (
 )
 
 // Intent is an ICC rendering intent (ICC.1:2010, 6.2), the values of the
-// profile header's field.
+// profile header's field, in its two low bits. The two bits above carry the
+// [BPC] choice a graphics state makes for colours converted under it
+// ([Intent.WithBPC]), so that every cache keyed on an intent keeps the two
+// apart. Code that reads the intent itself masks it with 3.
 type Intent int
+
+// BPC is the black point compensation a graphics state asks of a colour
+// conversion: the /UseBlackPtComp entry of an ExtGState (ISO 32000-2, Table
+// 57), whose initial value is /Default.
+type BPC int
+
+// The black point compensation choices of ISO 32000-2, Table 57.
+const (
+	// BPCDefault leaves the choice to litho, which compensates (see
+	// [Profile.NewTransform]).
+	BPCDefault BPC = iota
+	// BPCOn compensates.
+	BPCOn
+	// BPCOff does not compensate.
+	BPCOff
+)
+
+// ParseBPC returns the choice a /UseBlackPtComp name selects, and false for a
+// name Table 57 does not define.
+func ParseBPC(name string) (BPC, bool) {
+	switch name {
+	case "ON":
+		return BPCOn, true
+	case "OFF":
+		return BPCOff, true
+	case "Default":
+		return BPCDefault, true
+	}
+	return BPCDefault, false
+}
+
+// String returns the /UseBlackPtComp name of the choice (ISO 32000-2,
+// Table 57).
+func (b BPC) String() string {
+	switch b {
+	case BPCOn:
+		return "ON"
+	case BPCOff:
+		return "OFF"
+	case BPCDefault:
+		return "Default"
+	}
+	// Only [Intent.BPC] makes another value, from bits WithBPC never sets.
+	return "Default"
+}
+
+// WithBPC returns the intent with its black point compensation choice set to
+// b.
+func (i Intent) WithBPC(b BPC) Intent {
+	return i&3 | Intent(b&3)<<2
+}
+
+// BPC returns the black point compensation choice the intent carries.
+func (i Intent) BPC() BPC {
+	return BPC(i>>2) & 3
+}
 
 // The rendering intents.
 const (
@@ -90,6 +149,13 @@ type Transform struct {
 // dark grey where both viewers draw black. Absolute colorimetric keeps the
 // medium's own black, as Little CMS does under that intent.
 //
+// The intent's [BPC] choice overrides litho's: [BPCOff] builds the transform
+// without compensation, as a graphics state whose /UseBlackPtComp is /OFF
+// demands (ISO 32000-2, Table 57: the conversion shall not use it). [BPCOn]
+// and [BPCDefault] compensate; neither does so under absolute colorimetric,
+// whose purpose is to keep the medium's black, as Little CMS ignores its
+// compensation flag under that intent.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue2856: its YCC image blanked by a redaction, samples 0, 128,
@@ -103,7 +169,7 @@ func (p *Profile) NewTransform(intent Intent) (*Transform, error) {
 	if err != nil {
 		return nil, err
 	}
-	if intent&3 != AbsoluteColorimetric {
+	if intent&3 != AbsoluteColorimetric && intent.BPC() != BPCOff {
 		// sRGB is an ideal display medium: the darkest colorant of its
 		// matrix and tone curves is XYZ 0, the destination black point of
 		// the Adobe paper's estimate, so only the source side is estimated.

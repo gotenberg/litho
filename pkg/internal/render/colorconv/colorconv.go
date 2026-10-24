@@ -29,6 +29,10 @@ type Options struct {
 	// ExtGState /RI sets it (ISO 32000-1, 8.6.5.8). "" and an unrecognised
 	// name select relative colorimetric, the graphics state's initial intent.
 	Intent string
+	// BlackPointCompensation is the /UseBlackPtComp name of the graphics
+	// state (ISO 32000-2, Table 57). "" and an unrecognised name select
+	// /Default, the parameter's initial value.
+	BlackPointCompensation string
 	// Page is the page dictionary, whose /OutputIntents replace the
 	// document's for that page (ISO 32000-2, 14.11.5). It may be nil.
 	Page ast.PdfDict
@@ -77,7 +81,8 @@ func ForObject(ctx context.Context, doc *document.Document, obj ast.PdfObject, r
 	if isPattern(ctx, doc, obj) {
 		return nil, ErrPattern
 	}
-	intent := icc.ParseIntent(opts.Intent)
+	bpc, _ := icc.ParseBPC(opts.BlackPointCompensation) // an unrecognised name reads as /Default
+	intent := icc.ParseIntent(opts.Intent).WithBPC(bpc)
 	key, cacheable := cacheKey(ctx, doc, obj, resources, intent)
 	if cacheable && opts.Cache != nil {
 		if e, ok := opts.Cache.get(key); ok {
@@ -230,7 +235,8 @@ func (c *Cache) put(key string, e cacheEntry) {
 	}
 }
 
-// cacheKey spells out what a conversion depends on: the intent, the space as
+// cacheKey spells out what a conversion depends on: the intent, with the
+// black point compensation choice it carries, the space as
 // written, and the default colour spaces of the resources, which may stand in
 // for the space or its base. It reports false when the key passes
 // [maxKeyBytes].

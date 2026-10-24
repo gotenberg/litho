@@ -621,7 +621,7 @@ func decodeSeparation(
 		return nil, fmt.Errorf("separation colour space has %d entries, want [/Separation name alternate tint]", len(cs))
 	}
 
-	alt, ok := resolveTintAlternate(ctx, doc, cs[2], renderingIntent(ctx, doc, dict), cc)
+	alt, ok := resolveTintAlternate(ctx, doc, cs[2], cc.renderingIntent(ctx, doc, dict), cc)
 	if !ok {
 		return nil, fmt.Errorf("separation image over unsupported alternate colour space %q", alt.name)
 	}
@@ -710,7 +710,7 @@ func decodeDeviceN(
 			width, height, colorants, work, int64(maxDeviceNWork))
 	}
 
-	alt, ok := resolveTintAlternate(ctx, doc, cs[2], renderingIntent(ctx, doc, dict), cc)
+	alt, ok := resolveTintAlternate(ctx, doc, cs[2], cc.renderingIntent(ctx, doc, dict), cc)
 	if !ok {
 		return nil, fmt.Errorf("devicen image over unsupported alternate colour space %q", alt.name)
 	}
@@ -1096,7 +1096,7 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	if len(lookup) > want {
 		lookup = lookup[:want]
 	}
-	intent := renderingIntent(ctx, doc, dict)
+	intent := cc.renderingIntent(ctx, doc, dict)
 	if tinted {
 		rgb, err := tintTable(ctx, doc, tintArr, colorants, lookup, intent, cc)
 		if err != nil {
@@ -1559,7 +1559,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// data instead (ISO 32000-1, 7.4.9).
 	var jpxCol jpxColour
 	if _, stated := stream.Dict["ColorSpace"]; !stated && usesJPXDecode(ctx, doc, stream.Dict) {
-		jpxCol, err = jpxColorSpace(ctx, doc, stream, renderingIntent(ctx, doc, stream.Dict))
+		jpxCol, err = jpxColorSpace(ctx, doc, stream, cc.renderingIntent(ctx, doc, stream.Dict))
 		if err != nil {
 			return nil, fmt.Errorf("image %q: %w", string(name), err)
 		}
@@ -1825,7 +1825,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	if !isMask {
 		t := jpxCol.transform
 		if t == nil {
-			t = colorTransform(ctx, doc, stream.Dict["ColorSpace"], colorSpace, components, renderingIntent(ctx, doc, stream.Dict), cc)
+			t = colorTransform(ctx, doc, stream.Dict["ColorSpace"], colorSpace, components, cc.renderingIntent(ctx, doc, stream.Dict), cc)
 		}
 		conv = newConverter(t)
 	}

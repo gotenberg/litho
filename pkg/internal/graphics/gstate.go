@@ -27,7 +27,10 @@ const (
 	defaultMiterLimit      = 10.0
 	defaultFlatness        = 1.0
 	defaultRenderingIntent = "RelativeColorimetric"
-	defaultBlendMode       = "Normal"
+	// defaultBlackPointCompensation is the initial /UseBlackPtComp of ISO
+	// 32000-2, Table 57.
+	defaultBlackPointCompensation = "Default"
+	defaultBlendMode              = "Normal"
 )
 
 // DashPattern is the line dash pattern (ISO 32000-1, 8.4.3.6): the lengths of
@@ -82,6 +85,7 @@ func defaultGraphicsParams(state *State) {
 	state.LineJoin = LineJoinMiter
 	state.MiterLimit = defaultMiterLimit
 	state.RenderingIntent = defaultRenderingIntent
+	state.BlackPointCompensation = defaultBlackPointCompensation
 	state.Flatness = defaultFlatness
 	state.StrokeAlpha = 1
 	state.FillAlpha = 1
@@ -289,6 +293,14 @@ func (m *Machine) applyExtGState(ctx context.Context, state *State, gs ast.PdfDi
 	}
 	if name, ok := resolved("RI").(ast.PdfName); ok {
 		state.RenderingIntent = renderingIntent(name)
+	}
+	// ISO 32000-2, Table 57 defines /ON, /OFF and /Default; another value
+	// is ignored, as an invalid entry is, and leaves the parameter as it was.
+	if name, ok := resolved("UseBlackPtComp").(ast.PdfName); ok {
+		switch name {
+		case "ON", "OFF", "Default":
+			state.BlackPointCompensation = string(name)
+		}
 	}
 	// Per Table 58, OP sets the fill overprint too when op is absent.
 	if v, ok := boolean("OP"); ok {

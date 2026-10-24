@@ -118,6 +118,9 @@ type renderer struct {
 	spotTables []blend.SpotTable
 	// noTransfer leaves every transfer function out ([Options.NoTransfer]).
 	noTransfer bool
+	// defaultBPC reads every colour under /Default black point compensation
+	// ([Options.DefaultBlackPoint]).
+	defaultBPC bool
 	// glyphShown is [Options.Glyph], nil in the renderers of pattern cells
 	// and soft masks.
 	glyphShown func(origin geom.Point, bounds geom.Rect)

@@ -89,6 +89,82 @@ func TestNewTransform_BlackPointCompensation(t *testing.T) {
 	}
 }
 
+// TestNewTransform_BPCChoice pins that a graphics state's /UseBlackPtComp
+// (ISO 32000-2, Table 57) reaches the transform: /OFF keeps the grey
+// profile's black at its own dark grey, (34, 34, 34) as Little CMS 2.17
+// reads it uncompensated, while /ON and /Default compensate it to black. No
+// choice compensates under absolute colorimetric.
+func TestNewTransform_BPCChoice(t *testing.T) {
+	t.Parallel()
+
+	p, err := Parse(greyProfile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		intent Intent
+		bpc    BPC
+		want   byte
+	}{
+		{RelativeColorimetric, BPCDefault, 0},
+		{RelativeColorimetric, BPCOn, 0},
+		{RelativeColorimetric, BPCOff, 34},
+		{Perceptual, BPCOff, 34},
+		{AbsoluteColorimetric, BPCOn, 34},
+	} {
+		intent := tc.intent.WithBPC(tc.bpc)
+		if intent&3 != tc.intent || intent.BPC() != tc.bpc {
+			t.Fatalf("%s/%d: WithBPC packed %d", tc.intent, tc.bpc, intent)
+		}
+		tr, err := p.NewTransform(intent)
+		if err != nil {
+			t.Fatalf("%s/%d: %v", tc.intent, tc.bpc, err)
+		}
+		if r, g, b := tr.Convert([]byte{0}); r != tc.want || g != tc.want || b != tc.want {
+			t.Errorf("%s/%d: black reads %d,%d,%d, want %d", tc.intent, tc.bpc, r, g, b, tc.want)
+		}
+	}
+}
+
+// TestParseBPC pins the names ISO 32000-2, Table 57 defines, and that any
+// other is reported as such.
+func TestParseBPC(t *testing.T) {
+	t.Parallel()
+
+	for name, want := range map[string]BPC{"ON": BPCOn, "OFF": BPCOff, "Default": BPCDefault} {
+		if got, ok := ParseBPC(name); !ok || got != want {
+			t.Errorf("ParseBPC(%q) = %d, %v, want %d, true", name, got, ok, want)
+		}
+	}
+	for _, name := range []string{"", "on", "Off", "True"} {
+		if got, ok := ParseBPC(name); ok || got != BPCDefault {
+			t.Errorf("ParseBPC(%q) = %d, %v, want the default, false", name, got, ok)
+		}
+	}
+}
+
+// TestBuiltinCMYK_KeepsBPCChoicesApart pins that the shared built-in
+// transforms are kept per black point compensation choice: an /OFF reading
+// must not be served the compensated one.
+func TestBuiltinCMYK_KeepsBPCChoicesApart(t *testing.T) {
+	t.Parallel()
+
+	on, err := BuiltinCMYK(RelativeColorimetric)
+	if err != nil {
+		t.Fatal(err)
+	}
+	off, err := BuiltinCMYK(RelativeColorimetric.WithBPC(BPCOff))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if on == off {
+		t.Fatal("the /OFF reading shares the compensated transform")
+	}
+	if off.bpcScale != nil {
+		t.Error("the /OFF reading compensates")
+	}
+}
+
 // TestSRGBTable_MatchesTheFormula pins that the table encoding gives what the
 // sRGB formula gives: around every step between levels, where a misplaced
 // threshold would show, across the range, and past both ends.

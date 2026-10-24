@@ -85,6 +85,10 @@ type State struct {
 	Dash DashPattern
 	// RenderingIntent is set by ri or an ExtGState /RI (8.6.5.8).
 	RenderingIntent string
+	// BlackPointCompensation is the black point compensation colour
+	// conversions use, set by an ExtGState /UseBlackPtComp (ISO 32000-2,
+	// Table 57): "ON", "OFF" or "Default", its initial value.
+	BlackPointCompensation string
 	// Flatness is set by i or an ExtGState /FL (10.6.2). Smoothness is set by
 	// /SM (10.6.3) and stays 0 until an ExtGState sets it, since its initial
 	// value is device-dependent.

@@ -336,8 +336,11 @@ func (cp *redactCheckPage) checkInside(
 	// transfer function then maps to whatever it maps black to, white
 	// included (ISO 32000-1, 10.5): the colour is read before the transfer.
 	// The transfer maps every blanked sample alike, so leaving it out hides
-	// no picture.
-	onBlack, err := renderCheckRaster(ctx, doc, pg, page.Options{Omit: imagesOnly, Background: black, Within: within, Shared: shared, NoTransfer: true})
+	// no picture. Under /UseBlackPtComp /OFF (ISO 32000-2, Table 57) the
+	// darkest colour of a profile whose black is lighter than sRGB's draws
+	// as a grey, so the colours are read compensated, where that darkest
+	// colour is black and every lighter sample stays lighter.
+	onBlack, err := renderCheckRaster(ctx, doc, pg, page.Options{Omit: imagesOnly, Background: black, Within: within, Shared: shared, NoTransfer: true, DefaultBlackPoint: true})
 	if err != nil {
 		return &RedactionPixelError{Page: pageNum, Err: fmt.Errorf("rendering the redacted page's images over black: %w", err)}
 	}

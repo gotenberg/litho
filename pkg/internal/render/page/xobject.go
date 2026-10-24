@@ -347,7 +347,7 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 			return nil
 		}
 	}
-	img, err := pdfimage.DecodePainted(r.ctx, r.doc, name, stream, s.resources, r.page.Dict)
+	img, err := pdfimage.DecodePaintedBPC(r.ctx, r.doc, name, stream, s.resources, r.page.Dict, r.blackPointCompensation())
 	if err != nil {
 		return r.imageFailed(err)
 	}

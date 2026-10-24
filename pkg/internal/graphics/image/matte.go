@@ -107,7 +107,7 @@ func matteRGB(ctx context.Context, doc *document.Document, dict ast.PdfDict, cc 
 	// The matte is converted as the image's samples are, so a colour-managed
 	// image unblends against the colour its pixels were blended with.
 	space := resolveColorSpace(ctx, doc, dict)
-	if conv := newConverter(colorTransform(ctx, doc, dict["ColorSpace"], space, len(comp), renderingIntent(ctx, doc, dict), cc)); conv != nil {
+	if conv := newConverter(colorTransform(ctx, doc, dict["ColorSpace"], space, len(comp), cc.renderingIntent(ctx, doc, dict), cc)); conv != nil {
 		r, g, b := conv.convert(comp)
 		return r, g, b, true
 	}

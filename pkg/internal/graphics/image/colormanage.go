@@ -47,6 +47,10 @@ type colorContext struct {
 	// channels are unpremultiplied while they still hold the data's values,
 	// before any colour conversion, when the mask marks them premultiplied.
 	dataMask *DataSoftMask
+	// bpc is the /UseBlackPtComp of the graphics state the image is painted
+	// under (ISO 32000-2, Table 57): every colour it converts carries it
+	// ([colorContext.renderingIntent]).
+	bpc icc.BPC
 }
 
 // effectiveSpaces returns dict with its /ColorSpace replaced by the space its
@@ -162,9 +166,17 @@ func (cc colorContext) deviceDefault(ctx context.Context, doc *document.Document
 }
 
 // renderingIntent returns the rendering intent of an image dictionary's
-// /Intent. Per ISO 32000-1, 8.6.5.8 an unrecognised name selects relative
-// colorimetric, which is also the graphics state's initial intent, and so the
-// reading of an image that states none.
+// /Intent, carrying cc's black point compensation choice. Per ISO 32000-1,
+// 8.6.5.8 an unrecognised name selects relative colorimetric, which is also
+// the graphics state's initial intent, and so the reading of an image that
+// states none.
+func (cc colorContext) renderingIntent(ctx context.Context, doc *document.Document, dict ast.PdfDict) icc.Intent {
+	return renderingIntent(ctx, doc, dict).WithBPC(cc.bpc)
+}
+
+// renderingIntent returns the rendering intent of an image dictionary's
+// /Intent, under [colorContext.renderingIntent]'s rules, with no black point
+// compensation choice.
 func renderingIntent(ctx context.Context, doc *document.Document, dict ast.PdfDict) icc.Intent {
 	obj, ok := dict["Intent"]
 	if !ok {

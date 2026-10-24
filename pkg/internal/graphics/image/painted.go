@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
 // DecodePainted decodes the image stream a content stream paints, read
@@ -20,7 +21,14 @@ import (
 // stream may be an inline image whose dictionary has been written out in
 // full (8.9.7, Tables 93 and 94) over its data.
 func DecodePainted(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, resources, page ast.PdfDict) (image.Image, error) {
-	return decodeImageStream(ctx, doc, name, stream, colorContext{resources: resources, page: page})
+	return DecodePaintedBPC(ctx, doc, name, stream, resources, page, icc.BPCDefault)
+}
+
+// DecodePaintedBPC decodes as [DecodePainted] does, converting the image's
+// colours under bpc, the /UseBlackPtComp of the graphics state the image is
+// painted under (ISO 32000-2, Table 57).
+func DecodePaintedBPC(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, resources, page ast.PdfDict, bpc icc.BPC) (image.Image, error) {
+	return decodeImageStream(ctx, doc, name, stream, colorContext{resources: resources, page: page, bpc: bpc})
 }
 
 // DecodeMask decodes a mask stream: the /SMask of an image (ISO 32000-1,

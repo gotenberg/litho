@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 )
 
@@ -19,11 +20,27 @@ func (fallbackConverter) RGB([]float64) (r, g, b float32) {
 }
 
 // colorOptions returns what a conversion depends on beyond the space: the
-// rendering intent of the current graphics state (8.6.5.8), the page, whose
-// output intents replace the document's (ISO 32000-2, 14.11.5), and the
-// render's cache.
+// rendering intent of the current graphics state (8.6.5.8) and its black
+// point compensation (ISO 32000-2, Table 57), the page, whose output intents
+// replace the document's (ISO 32000-2, 14.11.5), and the render's cache.
 func (r *renderer) colorOptions() colorconv.Options {
-	return colorconv.Options{Intent: r.m.Current().RenderingIntent, Page: r.page.Dict, Cache: r.colorCache}
+	return colorconv.Options{
+		Intent:                 r.m.Current().RenderingIntent,
+		BlackPointCompensation: r.blackPointCompensation().String(),
+		Page:                   r.page.Dict,
+		Cache:                  r.colorCache,
+	}
+}
+
+// blackPointCompensation returns the black point compensation of the current
+// graphics state (ISO 32000-2, Table 57), which a colour or an image painted
+// under it is converted with, or /Default under [Options.DefaultBlackPoint].
+func (r *renderer) blackPointCompensation() icc.BPC {
+	if r.defaultBPC {
+		return icc.BPCDefault
+	}
+	bpc, _ := icc.ParseBPC(r.m.Current().BlackPointCompensation) // the machine keeps only names Table 57 defines
+	return bpc
 }
 
 // colorFor returns the converter of the colour space a fill or stroke colour

@@ -174,6 +174,33 @@ func TestGraphicsState_ExtGState(t *testing.T) {
 	}
 }
 
+// TestGraphicsState_UseBlackPtComp pins the /UseBlackPtComp entry of ISO
+// 32000-2, Table 57: /Default initially, /ON and /OFF set by gs, restored by
+// Q, and a name the table does not define ignored.
+func TestGraphicsState_UseBlackPtComp(t *testing.T) {
+	m := testMachine()
+	if got := m.Current().BlackPointCompensation; got != "Default" {
+		t.Fatalf("initial = %q, want Default", got)
+	}
+	m.Resources = ast.PdfDict{"ExtGState": ast.PdfDict{
+		"Off":   ast.PdfDict{"UseBlackPtComp": ast.PdfName("OFF")},
+		"On":    ast.PdfDict{"UseBlackPtComp": ast.PdfName("ON")},
+		"Bogus": ast.PdfDict{"UseBlackPtComp": ast.PdfName("off")},
+	}}
+	if s := run(t, m, op("q"), op("gs", ast.PdfName("Off"))); s.BlackPointCompensation != "OFF" {
+		t.Errorf("after /Off gs = %q, want OFF", s.BlackPointCompensation)
+	}
+	if s := run(t, m, op("gs", ast.PdfName("Bogus"))); s.BlackPointCompensation != "OFF" {
+		t.Errorf("an undefined name changed it to %q", s.BlackPointCompensation)
+	}
+	if s := run(t, m, op("Q")); s.BlackPointCompensation != "Default" {
+		t.Errorf("after Q = %q, want Default", s.BlackPointCompensation)
+	}
+	if s := run(t, m, op("gs", ast.PdfName("On"))); s.BlackPointCompensation != "ON" {
+		t.Errorf("after /On gs = %q, want ON", s.BlackPointCompensation)
+	}
+}
+
 func TestGraphicsState_ExtGStateUnresolvedIsInert(t *testing.T) {
 	before := *testMachine().Current()
 	m := testMachine()

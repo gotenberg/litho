@@ -166,6 +166,13 @@ type Options struct {
 	// redaction pixel check reads a blanked image's colour so, since a
 	// transfer function may map the darkest colour to any other.
 	NoTransfer bool
+	// DefaultBlackPoint draws every colour under the /Default black point
+	// compensation (ISO 32000-2, Table 57), which litho compensates under,
+	// whatever a graphics state's /UseBlackPtComp asks: the redaction pixel
+	// check reads a blanked image's colour so, since under /OFF the darkest
+	// colour of a profile whose black is lighter than sRGB's draws as a grey
+	// no blank can go below.
+	DefaultBlackPoint bool
 	// Glyph, when not nil, is called with each glyph the page paints from an
 	// outline, a placeholder's among them: its text origin, the text position
 	// it was shown at under the text rendering matrix (9.4.4), and the bounds
@@ -386,6 +393,7 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		omit:        opts.Omit,
 		overprint:   opts.Overprint,
 		noTransfer:  opts.NoTransfer,
+		defaultBPC:  opts.DefaultBlackPoint,
 		glyphShown:  opts.Glyph,
 		omitGlyph:   opts.OmitGlyph,
 		solid:       opts.SolidPlaceholders,

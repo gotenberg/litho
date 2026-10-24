@@ -14,9 +14,10 @@ import (
 var builtinCMYK []byte
 
 // builtinCMYKTransforms builds the built-in profile's transform once per
-// rendering intent.
-var builtinCMYKTransforms = func() [4]func() (*Transform, error) {
-	var ts [4]func() (*Transform, error)
+// rendering intent and black point compensation choice, indexed by the
+// [Intent] that carries both.
+var builtinCMYKTransforms = func() [16]func() (*Transform, error) {
+	var ts [16]func() (*Transform, error)
 	for i := range ts {
 		ts[i] = sync.OnceValues(func() (*Transform, error) {
 			p, err := Parse(builtinCMYK)
@@ -30,8 +31,9 @@ var builtinCMYKTransforms = func() [4]func() (*Transform, error) {
 }()
 
 // BuiltinCMYK returns the transform of litho's built-in CMYK profile for the
-// rendering intent: the reading of DeviceCMYK when neither the document nor
-// the caller names a profile for it. The transform is shared.
+// rendering intent and the black point compensation choice it carries: the
+// reading of DeviceCMYK when neither the document nor the caller names a
+// profile for it. The transform is shared.
 func BuiltinCMYK(intent Intent) (*Transform, error) {
-	return builtinCMYKTransforms[intent&3]()
+	return builtinCMYKTransforms[intent&15]()
 }
