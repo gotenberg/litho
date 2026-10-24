@@ -112,6 +112,10 @@ type renderer struct {
 	omit Content
 	// overprint simulates overprinting ([Options.Overprint]).
 	overprint bool
+	// spots names the colorant of each spot colorant plane of the page
+	// group, and spotTables gives its process inks ([renderer.spotPaint]).
+	spots      []ast.PdfName
+	spotTables []blend.SpotTable
 	// unadjusted turns stroke adjustment off ([renderer.adjusts]): set in
 	// the renderer a tiling pattern's cells run in.
 	unadjusted bool
@@ -689,8 +693,9 @@ func (r *renderer) paintCoverage(s *scope, cov *raster.Coverage, c graphics.Colo
 	cr, cg, cb := conv.RGB(c.Components)
 	st := r.m.Current()
 	fx := r.effectsOf(st, a)
-	fx.keep = r.overprintKeep(s, st, c, stroke)
-	return r.paintSolid(cov, r.solidOf(s, c, [3]float32{cr, cg, cb}), fx)
+	sol := r.solidOf(s, c, [3]float32{cr, cg, cb})
+	fx.keep, fx.spots = r.overprintPaint(s, st, c, stroke, &sol, true)
+	return r.paintSolid(cov, sol, fx)
 }
 
 // components resolves the component count of a shading's colour space.

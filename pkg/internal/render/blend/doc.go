@@ -26,8 +26,12 @@
 // composited into a parent of another space is converted to it. A CMYK colour
 // is held as its complement, so the subtractive rule of 11.3.5 and the
 // compositing formulas of 11.4 share one arithmetic; the non-separable modes
-// take K from one side (11.3.5.3). Spot colorants stay outside: a Separation
-// colour reaches a group in its alternate space. Colours are stored
+// take K from one side (11.3.5.3). Spot colorants stay outside, a Separation
+// colour reaching a group in its alternate space, except in the isolated
+// CMYK group of an overprint preview: [Group.EnableSpots] gives it up to
+// [MaxSpots] spot colorant planes, which [Params.Spots] paints and
+// [Group.CompositeSpots] folds into the process colorants through each
+// colorant's alternate colour. Colours are stored
 // premultiplied by alpha, the way [surface.Canvas] holds them.
 //
 // A [Group] is not safe for concurrent writes. A child reads its parent's

@@ -326,9 +326,9 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 		cr, cg, cb := conv.RGB(st.Fill.Components)
 		var native *blend.Components
 		if r.top().group.Space() != nil {
-			in := r.solidOf(s, st.Fill, [3]float32{cr, cg, cb}).in
-			native = &in
-			fx.keep = r.overprintKeep(s, st, st.Fill, false)
+			sol := r.solidOf(s, st.Fill, [3]float32{cr, cg, cb})
+			fx.keep, fx.spots = r.overprintPaint(s, st, st.Fill, false, &sol, true)
+			native = &sol.in
 		}
 		return r.imageFailed(r.paintAs(bounds, fx, native, func(v view, op surface.Opacity) error {
 			p, err := params(v, op)

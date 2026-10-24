@@ -71,7 +71,7 @@ func (g *Group) PaintCanvas(ctx context.Context, src *surface.Canvas, origin ima
 				lastCS, last, seen = g.space.fromRGB(rgb), rgb, true
 			}
 			fs, as := params.Source(x, y, a, a)
-			g.paint(x, y, params.Mode, lastCS, fs, as, 0)
+			g.paint(x, y, params.Mode, lastCS, fs, as, params.Keep&AllSpots, Components{})
 		}
 	}
 	return nil
@@ -102,7 +102,7 @@ func (g *Group) PaintCoverage(ctx context.Context, rect image.Rectangle, coverag
 				continue
 			}
 			fs, as := params.Source(x, y, c, c)
-			g.paint(x, y, params.Mode, stored, fs, as, params.Keep)
+			g.paint(x, y, params.Mode, stored, fs, as, params.Keep, params.Spots)
 		}
 	}
 	return nil

@@ -62,8 +62,11 @@ type effects struct {
 	opacity surface.Opacity
 	mask    *graphics.SoftMask
 	ais     bool
-	// keep is the components the painting overprints ([blend.Params.Keep]).
-	keep uint8
+	// keep is the components the painting overprints ([blend.Params.Keep]),
+	// and spots the ink it paints on the spot colorant planes
+	// ([blend.Params.Spots]).
+	keep  uint8
+	spots blend.Components
 }
 
 // effectsOf returns the effects of st on a painting at constant alpha alpha,
@@ -91,7 +94,7 @@ func (e effects) blends() bool {
 // params returns the compositing parameters of e with mask, the soft mask
 // e.mask stands for.
 func (e effects) params(mask *blend.Mask) blend.Params {
-	return blend.Params{Mode: e.mode, Opacity: e.opacity, SoftMask: mask, AlphaIsShape: e.ais, Keep: e.keep}
+	return blend.Params{Mode: e.mode, Opacity: e.opacity, SoftMask: mask, AlphaIsShape: e.ais, Keep: e.keep, Spots: e.spots}
 }
 
 // top returns the group being painted.
@@ -133,6 +136,11 @@ func (r *renderer) paintAs(bounds image.Rectangle, fx effects, native *blend.Com
 	}
 	if v, ok := r.directView(); ok && !fx.blends() {
 		return draw(v, fx.opacity)
+	}
+	if native == nil {
+		// An image, shading or pattern cell under overprint paints process
+		// colour alone, and leaves the spot colorant planes (8.6.7).
+		fx.keep |= r.spotKeep(r.m.Current().FillOverprint)
 	}
 	top := r.top()
 	area := bounds.Intersect(top.group.Bounds()).Intersect(r.clipRect())

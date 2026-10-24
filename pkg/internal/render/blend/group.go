@@ -76,6 +76,9 @@ type Group struct {
 	// direct marks a group [Group.Direct] handed its colour plane to, whose
 	// shape plane misses what was painted there.
 	direct bool
+	// spots holds the ink of each spot colorant plane premultiplied by the
+	// alpha, [MaxSpots] of them a pixel, nil until [Group.EnableSpots].
+	spots *surface.Plane
 }
 
 // NewPage returns the page group of a width × height page: isolated and
@@ -372,13 +375,14 @@ func (r *RGBReader) Alpha(x, y int) float32 {
 // call for the same element replaces the first rather than adding to it, as
 // a second element would. Pixels outside the group are ignored.
 func (g *Group) Paint(x, y int, mode Mode, cs Components, fs, as float32) {
-	g.paint(x, y, mode, g.space.store(cs), fs, as, 0)
+	g.paint(x, y, mode, g.space.store(cs), fs, as, 0, Components{})
 }
 
 // paint is [Group.Paint] for a colour already stored as the group holds it,
 // leaving the components keep has bits for as the backdrop holds them
-// ([Params.Keep]).
-func (g *Group) paint(x, y int, mode Mode, cs Components, fs, as float32, keep uint8) {
+// ([Params.Keep]), and painting spot the ink of each spot colorant plane
+// ([Params.Spots]) when the group keeps them.
+func (g *Group) paint(x, y int, mode Mode, cs Components, fs, as float32, keep uint8, spot Components) {
 	if x < g.bounds.Min.X || y < g.bounds.Min.Y || x >= g.bounds.Max.X || y >= g.bounds.Max.Y {
 		return
 	}
@@ -447,12 +451,48 @@ func (g *Group) paint(x, y int, mode Mode, cs Components, fs, as float32, keep u
 		ct := (fs-as)*b[k] + as*((1-ab)*cs[k]+ab*blended[k])
 		p[k] = (1-fs)*p[k] + ct
 	}
+	if g.spots != nil {
+		g.paintSpots(i, mode, spot, fs, as, ab, keep)
+	}
 	p[n] = union(a0, ag)
 	if g.shape != nil {
 		g.shape.A[i] = union(g.shape.A[i], fs)
 	}
 	if g.alpha != nil {
 		g.alpha.A[i] = ag
+	}
+}
+
+// paintSpots composites the spot colorant inks spot of an element into the
+// spot planes at local index i, by the formulas [Group.paint] applies to the
+// process colorants, ab the alpha of the backdrop. A spot plane holds ink,
+// not its complement, as a group holds CMYK ([Space.store]): 11.4's weighted
+// sums give the same result either way, and a plane allocated after painting
+// began then holds no ink at once. ISO 32000-1, 11.7.3: a separable blend
+// mode blends each spot colorant on its own, as the subtractive rule of
+// 11.3.5 blends a CMYK component, and a non-separable one, defined on the
+// process colour as a whole, blends spot colorants as Normal. A component
+// keep has the bit for overprints (11.7.4.3), as in [Group.paint]. Spot
+// planes belong to an isolated group alone ([Group.EnableSpots]): a
+// knockout group's backdrop holds no spot ink.
+func (g *Group) paintSpots(i int, mode Mode, spot Components, fs, as, ab float32, keep uint8) {
+	const s = MaxSpots + 1
+	q := g.spots.Pix[s*i : s*i+MaxSpots : s*i+MaxSpots]
+	for j := range MaxSpots {
+		var bs float32
+		if !g.attrs.Knockout {
+			bs = q[j]
+		}
+		blended := spot[j]
+		switch {
+		case ab <= 0:
+		case keep&SpotBit(j) != 0:
+			blended = bs / ab
+		case mode != Normal && mode.Separable():
+			blended = 1 - mode.channel(1-bs/ab, 1-spot[j])
+		}
+		ct := (fs-as)*bs + as*((1-ab)*spot[j]+ab*blended)
+		q[j] = (1-fs)*q[j] + ct
 	}
 }
 
@@ -569,7 +609,7 @@ func (g *Group) Into(ctx context.Context, parent *Group, params Params) error {
 				c = convert(c, g.space, parent.space)
 			}
 			fs, as := params.Source(x, y, f, a)
-			parent.paint(x, y, params.Mode, c, fs, as, 0)
+			parent.paint(x, y, params.Mode, c, fs, as, params.Keep&AllSpots, Components{})
 		}
 	}
 	return nil
@@ -591,8 +631,13 @@ type Params struct {
 	// overprints (ISO 32000-1, 8.6.7): the element leaves it as the
 	// backdrop holds it, by the compatible overprint blend function of
 	// 11.7.4.3. It applies to a CMYK group alone, where the element's
-	// components arrive as the group's own ([Group.PaintCoverage]).
+	// components arrive as the group's own ([Group.PaintCoverage]). Bits 4
+	// to 7 ([SpotBit]) name the spot colorant planes of a group that keeps
+	// them ([Group.EnableSpots]), which any element may leave.
 	Keep uint8
+	// Spots is the ink the element paints on each spot colorant plane of
+	// a group that keeps them, in [0, 1], as Keep leaves them.
+	Spots Components
 }
 
 // Source returns the source shape and source alpha at device pixel (x, y) of

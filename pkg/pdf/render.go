@@ -232,9 +232,12 @@ func WithRenderBackground(c color.Color) RenderOption {
 // leaves the process inks it does not paint as they were. A DeviceCMYK colour
 // under overprint mode 1 leaves those its zero components name, and a
 // Separation or DeviceN colour of process colorants those it does not name.
-// A spot colorant has no separation of its own here: a colour naming one
-// paints through its alternate space and knocks out what lies under it.
-// Without it, the default, every painting knocks out what lies under it, as
+// The first four spot colorants a page paints under overprint get
+// separations of their own: a colour naming one leaves the inks it does not
+// name under overprint, and each separation prints through its alternate
+// space once the page is drawn. A fifth spot colorant, and a spot colour
+// inside a transparency group, paints through its alternate space and
+// knocks out what lies under it. Without it, the default, every painting knocks out what lies under it, as
 // viewers draw a page on screen and as poppler's pdftoppm draws it without
 // -overprint.
 func WithOverprintSimulation() RenderOption {

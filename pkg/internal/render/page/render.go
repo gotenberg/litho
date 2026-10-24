@@ -154,7 +154,9 @@ type Options struct {
 	// Overprint simulates overprinting (ISO 32000-1, 8.6.7), as a print
 	// preview shows it: the page group composites in DeviceCMYK, and a
 	// painting under overprint leaves the process colorants it does not
-	// paint as they were ([renderer.overprintKeep]). Unset, every painting
+	// paint as they were ([renderer.overprintKeep]), and the spot colorants
+	// it does not paint, kept in planes of their own until the page is drawn
+	// ([renderer.spotPaint]). Unset, every painting
 	// knocks out what lies under it, as viewers draw a page on screen.
 	Overprint bool
 }
@@ -406,6 +408,9 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		if err := r.annotations(g, opts.Annotations); err != nil {
 			return nil, report, err
 		}
+	}
+	if err := r.compositeSpots(root); err != nil {
+		return nil, report, err
 	}
 	res := &Result{Group: root, budget: budget}
 	if space == nil {

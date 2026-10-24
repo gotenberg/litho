@@ -57,8 +57,11 @@ func (r *renderer) glyphCoverage(s *scope, st *graphics.State, cov *raster.Cover
 		return nil
 	}
 	cr, cg, cb := conv.RGB(c.Components)
-	fx.keep = r.overprintKeep(s, st, c, stroke)
-	s.text.knock = append(s.text.knock, knockGlyph{cov: cov, color: r.solidOf(s, c, [3]float32{cr, cg, cb}), fx: fx})
+	sol := r.solidOf(s, c, [3]float32{cr, cg, cb})
+	// The held glyphs composite into a knockout group of their own, which
+	// keeps no spot colorant planes.
+	fx.keep, fx.spots = r.overprintPaint(s, st, c, stroke, &sol, false)
+	s.text.knock = append(s.text.knock, knockGlyph{cov: cov, color: sol, fx: fx})
 	s.text.held += int64(cov.Width) * int64(cov.Height)
 	if s.text.held > r.budget/textKnockoutShare {
 		return r.flushText(s)
