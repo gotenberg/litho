@@ -290,6 +290,7 @@ one deliberately rather than diffing it against a fresh build.
 | `sharedformimg_2b.pdf` | PDF/A-2b     | An image forms draw on both pages, which a redaction copies      |
 | `transferfb_2b.pdf`    | PDF/A-2b     | A shading under an inverting /TR, which a redaction rasterises   |
 | `blankblack_2b.pdf`    | PDF/A-2b     | Images whose zero samples are not black, blanked by a redaction  |
+| `t3extent_2b.pdf`      | PDF/A-2b     | Type 3 glyphs painting a shading, a form, a bar past their box   |
 
 ### Must-not-fire controls
 
@@ -780,6 +781,7 @@ are covered under [Known divergences](#known-divergences).
 | `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 30   |
 | `symbolname_2u.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
+| `t3extent_2b.pdf`      | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `t3overprint_2b.pdf`   | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `tableregular_ua2.pdf` | 4    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 2    | 5    |
@@ -9315,6 +9317,36 @@ The soft mask fails `6.4/2` at PDF/A-1b; the other cells are the identification
 and tagging rules of their parts. veraPDF 1.30.2 and litho report the same rule
 set in all thirteen cells, on the source and on the output of the whole-page
 redaction, whose added rules are the metadata ones a redaction clears by design.
+
+### `t3extent_2b.pdf`
+
+A Type 3 glyph paints whatever its description paints (ISO 32000-1, 9.6.5):
+`/FontBBox` is the producer's statement of the glyphs' bounds, and a `d1` box
+does not clip either. Redaction once bounded a glyph whose description it could
+not bound, a shading or a form, by `/FontBBox`, so a region over the far side
+of what the glyph painted selected nothing and left the paint standing under
+it. No corpus file shows such a glyph painting past its font's box, so no cell
+reached it. The page, 400 by 400, shows three glyphs at Tf 10; font T3 states a
+`/FontBBox` of `[0 0 1000 1000]`, a 10-point square at each origin:
+
+| Glyph  | Opens with | Paints                                                      |
+| ------ | ---------- | ----------------------------------------------------------- |
+| T3 `A` | `d0`       | a grey shading over its own 120-point square clip at 20 20  |
+| T3 `B` | `d0`       | a form whose 120 by 20 box, at 20 260, it fills             |
+| T4 `A` | `d1`       | a black bar 120 by 30 at 20 180, past its 10-point `d1` box |
+
+T4 states a `/FontBBox` that holds the bar: poppler draws a `d1` glyph into a
+cache the size of that box and clips what lies past it, which litho's renderer
+does not. The `redact-render` cell's centred quarter `[100 100 300 300]` meets
+all three paintings and neither the `d1` box nor the box T3 states. Before,
+litho selected T4's bar alone and left 2204 pixels of the shading and the form
+inside the quarter; now the quarter removes all three glyphs, and litho's and
+poppler's renderings of the output are blank. litho renders the page as poppler
+26.09.0 does (no pixel past the `render` cell's channel tolerance).
+
+The RGB output intent covers DeviceGray, so the file is conforming at PDF/A-2b.
+The other cells are the identification, metadata and tagging rules of their
+parts. veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
 
 ### `t3overprint_2b.pdf`
 
