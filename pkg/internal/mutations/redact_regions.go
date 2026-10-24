@@ -153,6 +153,13 @@ type RedactReport struct {
 	// counts when this box meets a region, so its ink can reach past the
 	// region, and these are where the page changed for it.
 	RemovedGlyphBoxes [][4]float64
+	// RemovedGlyphOrigins holds, in user space, the origin of each glyph the
+	// page's own content stream showed that was removed: the text position
+	// it was shown at under the text rendering matrix (ISO 32000-1, 9.4.4).
+	// A glyph a form XObject drew has none. A renderer places the glyph it
+	// draws there, so a caller can find what it drew for a removed glyph,
+	// which can reach past the glyph's box.
+	RemovedGlyphOrigins [][2]float64
 	// BlankedImages names the images whose covered samples were overwritten:
 	// an image XObject by its resource name, an inline image as
 	// [graphics.InlineImageName].
@@ -431,6 +438,7 @@ func redactPageRegions(
 	}
 	report.RemovedText = append(report.RemovedText, text.removedText...)
 	report.RemovedGlyphBoxes = append(report.RemovedGlyphBoxes, text.glyphBoxes...)
+	report.RemovedGlyphOrigins = append(report.RemovedGlyphOrigins, text.glyphOrigins...)
 	report.FontsFullyRemovedOnPage = text.fontsFullyRemoved
 	removedMCIDs, survivingMCIDs := text.removedMCIDs, text.survivingMCIDs
 	for mcid := range removedMCIDs {

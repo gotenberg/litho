@@ -44,6 +44,14 @@ const redactCheckSelfTolerance = 16
 // dark grey.
 const redactCheckDarkLevel = 80
 
+// redactCheckOriginTolerance is how far apart, in device pixels at
+// [RedactionCheckDPI] on either axis, the origin the redaction reports for a
+// removed glyph and the origin the renderer draws a glyph at may lie and the
+// two still name one glyph. Both read the text position the same content
+// stream sets (ISO 32000-1, 9.4.4) in double precision, so they agree to far
+// less; a glyph shown next to another lies a fraction of its size away.
+const redactCheckOriginTolerance = 0.01
+
 // redactCheckChannelTolerance and redactCheckNeighbourhood are the outside
 // check's pixel rule: a pixel counts as unchanged when no channel moves by
 // more than the tolerance, or when a pixel within the neighbourhood of it in
@@ -73,7 +81,7 @@ type RedactionPixelError struct {
 	// still paint removed content.
 	Inside int
 	// Outside counts the pixels clear of every region, dilated by two pixels,
-	// and of the glyphs the redaction removed, that changed.
+	// and of what the glyphs the redaction removed painted, that changed.
 	Outside int
 	// Where bounds the failing pixels, in the page's default user space.
 	Where [4]float64
@@ -112,12 +120,17 @@ func (e *RedactionPixelError) Unwrap() []error {
 //
 //   - Inside each region, eroded by two pixels, the page paints nothing but
 //     paper and blanked images: its rendering equals its rendering with images
-//     alone, and those images, drawn over black, stay black, as blanked
-//     samples are.
+//     alone, and those images, drawn over black with every transfer function
+//     left out, stay black, as blanked samples are. A transfer function (ISO
+//     32000-1, 10.5) maps the darkest colour to any other, the same for every
+//     blanked sample, so it is left out of that rendering alone.
 //   - Outside the regions, dilated by two pixels, and the glyphs the
 //     redaction removed (a glyph goes whole when its box meets a region,
 //     [RedactReport.RemovedGlyphBoxes]), nothing changed but the samples image
-//     blanking rewrote, which it rewrites whole, past the region's edge.
+//     blanking rewrote, which it rewrites whole, past the region's edge. A
+//     removed glyph is cleared where its box lies and where the page drew
+//     it, found by its origin: a font the document does not embed draws as a
+//     placeholder box, which can reach past the glyph's box.
 //
 // The token scan proves the removed text is gone from the file; this proves
 // the page shows what the regions promise, which no scan of strings sees: a
@@ -136,16 +149,17 @@ func (e *RedactionPixelError) Unwrap() []error {
 //
 // # Corpus evidence
 //
-//   - litho, pdfjs, govdocs, pdfcpu: over the redact-render scenarios (637,
-//     178, 170 and 101 successful redactions), it refuses 2, both on govdocs
-//     thread_200_200806, whose removed glyphs draw as placeholders wider
-//     than the glyph boxes the font's /FontBBox gives.
+//   - govdocs thread_200_200806: removed glyphs of an unembedded Times-Bold
+//     drew as placeholders reaching a quarter em below their baseline, past
+//     the glyph boxes, and the check refused the quarter and band
+//     redactions until it cleared what the page drew for them.
+//   - govdocs thread_300_300662: a transfer function (/TR) paints a blanked
+//     image white, and the check refused the whole-page redaction until it
+//     left the transfer out of the rendering over black.
 //   - govdocs: over whole-page redactions of page 1 of all 1091 files, it
-//     refused 3 of 786 successes. Two were real leaks, a photograph a form
-//     XObject draws under the name of a page image (thread_000_000582,
-//     thread_400_400358), which Redact now refuses on its own. The third,
-//     thread_300_300662, blanks an image to black that a transfer function
-//     (/TR) paints white.
+//     refused two real leaks, a photograph a form XObject draws under the
+//     name of a page image (thread_000_000582, thread_400_400358), which
+//     Redact now refuses on its own.
 //   - pdfjs, govdocs, pdfcpu: one worker, a median of 37 ms more per
 //     redacted page (11, 106 and 69 ms; 112 ms per million pixels at 72
 //     dpi), 3.7 times the redaction alone, and 8.1 s at most.
@@ -153,17 +167,24 @@ func WithRedactionPixelCheck() RedactOption {
 	return func(o *redactOpts) { o.pixelCheck = true }
 }
 
+// redactedGlyphs is what a redaction reports of the glyphs it removed, by
+// 1-based page: the box of each ([RedactReport.RemovedGlyphBoxes]) and the
+// origin of each the page's own content showed, in the default user space.
+type redactedGlyphs struct {
+	boxes   map[int][][4]float64
+	origins map[int][][2]float64
+}
+
 // checkRedactionPixels runs the pixel check of [WithRedactionPixelCheck] on
 // each page of order, after rendering it from before, the document as it was
 // staged before the redaction, and after, the redacted output. regions are
-// the caller's, removed the boxes of the glyphs the redaction removed, by
-// page.
+// the caller's, removed what the redaction reports of the glyphs it removed.
 func checkRedactionPixels(
 	ctx context.Context,
 	before, after *Reader,
 	regions []RedactRegion,
 	order []int,
-	removed map[int][][4]float64,
+	removed redactedGlyphs,
 ) error {
 	for _, pageNum := range order {
 		var mine []RedactRegion
@@ -172,7 +193,7 @@ func checkRedactionPixels(
 				mine = append(mine, r)
 			}
 		}
-		if err := checkRedactedPage(ctx, before, after, pageNum, mine, removed[pageNum]); err != nil {
+		if err := checkRedactedPage(ctx, before, after, pageNum, mine, removed.boxes[pageNum], removed.origins[pageNum]); err != nil {
 			return err
 		}
 	}
@@ -186,9 +207,9 @@ type redactCheckPage struct {
 	inv geom.Matrix
 	// regions holds each region in device space, in the caller's order.
 	regions [][4]float64
-	// excluded holds the device boxes of the removed glyphs, dilated by the
-	// margin.
-	excluded [][4]float64
+	// excluded marks the pixels of the removed glyphs, their boxes and what
+	// the page drew for them, dilated by the margin.
+	excluded *surface.Mask
 }
 
 // checkRedactedPage runs both checks on one page.
@@ -198,6 +219,7 @@ func checkRedactedPage(
 	pageNum int,
 	regions []RedactRegion,
 	removed [][4]float64,
+	origins [][2]float64,
 ) error {
 	fail := func(err error) error {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -228,22 +250,30 @@ func checkRedactedPage(
 	if !ok {
 		return fail(fmt.Errorf("the page's device matrix %v does not invert", g.Matrix))
 	}
-	cp := &redactCheckPage{w: g.Width, h: g.Height, inv: inv}
+	budget := after.doc.Limits().WithDefaults().MaxRenderPixels
+	excluded, err := surface.NewMask(g.Width, g.Height, budget)
+	if err != nil {
+		return fail(err)
+	}
+	cp := &redactCheckPage{w: g.Width, h: g.Height, inv: inv, excluded: excluded}
 	for _, r := range regions {
 		cp.regions = append(cp.regions, deviceBox(g.Matrix, r.Rect))
 	}
 	for _, box := range removed {
-		cp.excluded = append(cp.excluded, growBox(deviceBox(g.Matrix, box), redactCheckMargin))
+		cp.exclude(growBox(deviceBox(g.Matrix, box), redactCheckMargin))
 	}
 
-	budget := after.doc.Limits().WithDefaults().MaxRenderPixels
 	white := [4]float32{1, 1, 1, 1}
 	afterShared := page.NewShared(budget)
-	beforeFull, err := renderCheckRaster(ctx, before.doc, bpg, 0, white, nil, nil)
+	drawn := newDrawnGlyphs(bg.Matrix, origins)
+	beforeFull, err := renderCheckRaster(ctx, before.doc, bpg, page.Options{Background: white, Glyph: drawn.observe})
 	if err != nil {
 		return fail(fmt.Errorf("rendering the page before: %w", err))
 	}
-	afterFull, err := renderCheckRaster(ctx, after.doc, apg, 0, white, nil, afterShared)
+	for _, b := range drawn.excused() {
+		cp.exclude(growBox(b, redactCheckMargin))
+	}
+	afterFull, err := renderCheckRaster(ctx, after.doc, apg, page.Options{Background: white, Shared: afterShared})
 	if err != nil {
 		return fail(fmt.Errorf("rendering the redacted page: %w", err))
 	}
@@ -283,11 +313,17 @@ func (cp *redactCheckPage) checkInside(
 		return nil
 	}
 	white, black := [4]float32{1, 1, 1, 1}, [4]float32{0, 0, 0, 1}
-	images, err := renderCheckRaster(ctx, doc, pg, page.AllContent&^page.Images, white, within, shared)
+	imagesOnly := page.AllContent &^ page.Images
+	images, err := renderCheckRaster(ctx, doc, pg, page.Options{Omit: imagesOnly, Background: white, Within: within, Shared: shared})
 	if err != nil {
 		return &RedactionPixelError{Page: pageNum, Err: fmt.Errorf("rendering the redacted page's images: %w", err)}
 	}
-	onBlack, err := renderCheckRaster(ctx, doc, pg, page.AllContent&^page.Images, black, within, shared)
+	// Blanking writes the darkest colour of an image's space, which a
+	// transfer function then maps to whatever it maps black to, white
+	// included (ISO 32000-1, 10.5): the colour is read before the transfer.
+	// The transfer maps every blanked sample alike, so leaving it out hides
+	// no picture.
+	onBlack, err := renderCheckRaster(ctx, doc, pg, page.Options{Omit: imagesOnly, Background: black, Within: within, Shared: shared, NoTransfer: true})
 	if err != nil {
 		return &RedactionPixelError{Page: pageNum, Err: fmt.Errorf("rendering the redacted page's images over black: %w", err)}
 	}
@@ -365,11 +401,11 @@ func (cp *redactCheckPage) checkOutside(
 		}
 	}
 	white := [4]float32{1, 1, 1, 1}
-	beforeImages, err := renderCheckRaster(ctx, beforeDoc, bpg, page.AllContent&^page.Images, white, within, nil)
+	beforeImages, err := renderCheckRaster(ctx, beforeDoc, bpg, page.Options{Omit: page.AllContent &^ page.Images, Background: white, Within: within})
 	if err != nil {
 		return &RedactionPixelError{Page: pageNum, Err: fmt.Errorf("rendering the page's images before: %w", err)}
 	}
-	afterImages, err := renderCheckRaster(ctx, afterDoc, apg, page.AllContent&^page.Images, white, within, shared)
+	afterImages, err := renderCheckRaster(ctx, afterDoc, apg, page.Options{Omit: page.AllContent &^ page.Images, Background: white, Within: within, Shared: shared})
 	if err != nil {
 		return &RedactionPixelError{Page: pageNum, Err: fmt.Errorf("rendering the redacted page's images: %w", err)}
 	}
@@ -407,12 +443,25 @@ func (cp *redactCheckPage) outside(x, y int) bool {
 			return false
 		}
 	}
-	for _, e := range cp.excluded {
-		if boxMeetsPixel(e, x, y) {
-			return false
+	return cp.excluded.A[y*cp.w+x] == 0
+}
+
+// exclude marks the pixels the device box b meets as excluded from the
+// outside check.
+func (cp *redactCheckPage) exclude(b [4]float64) {
+	// Clamped to the page first: a box past it, or one whose corners a file
+	// fills with non-numbers, reaches no pixel past the raster.
+	x0 := int(math.Floor(math.Min(math.Max(b[0], 0), float64(cp.w))))
+	y0 := int(math.Floor(math.Min(math.Max(b[1], 0), float64(cp.h))))
+	x1 := int(math.Ceil(math.Min(math.Max(b[2], 0), float64(cp.w))))
+	y1 := int(math.Ceil(math.Min(math.Max(b[3], 0), float64(cp.h))))
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			if boxMeetsPixel(b, x, y) {
+				cp.excluded.A[y*cp.w+x] = 1
+			}
 		}
 	}
-	return true
 }
 
 // userBox maps the device pixels b bounds back to the default user space.
@@ -460,26 +509,12 @@ func nearMatch(px, img []uint8, w, h, x, y int) bool {
 	return false
 }
 
-// renderCheckRaster renders pg of doc at [RedactionCheckDPI] without the kinds
-// of content omit names, over bg, and returns it as 8-bit RGB triples. within,
-// when not nil, limits the pixels painted ([page.Options.Within]).
-func renderCheckRaster(
-	ctx context.Context,
-	doc *document.Document,
-	pg *document.Page,
-	omit page.Content,
-	bg [4]float32,
-	within *surface.Mask,
-	shared *page.Shared,
-) ([]uint8, error) {
-	canvas, _, err := page.Render(ctx, doc, pg, page.Options{
-		DPI:         RedactionCheckDPI,
-		Background:  bg,
-		Annotations: annot.View,
-		Omit:        omit,
-		Within:      within,
-		Shared:      shared,
-	})
+// renderCheckRaster renders pg of doc at [RedactionCheckDPI] under opts, with
+// annotations drawn as a viewer shows them on screen, and returns it as 8-bit
+// RGB triples.
+func renderCheckRaster(ctx context.Context, doc *document.Document, pg *document.Page, opts page.Options) ([]uint8, error) {
+	opts.DPI, opts.Annotations = RedactionCheckDPI, annot.View
+	canvas, _, err := page.Render(ctx, doc, pg, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -553,6 +588,116 @@ func (b *pixelBounds) add(x, y int) {
 	b.n++
 	b.x0, b.y0 = min(b.x0, x), min(b.y0, y)
 	b.x1, b.y1 = max(b.x1, x+1), max(b.y1, y+1)
+}
+
+// drawnGlyphs finds, while the page as it was before the redaction renders,
+// what the renderer drew for each glyph the redaction removed: the glyphs
+// drawn at a removed glyph's origin. A removed glyph's box bounds the ink of
+// its font's glyphs, but a font the document does not embed draws as
+// placeholder boxes sized by the renderer, which can reach past it.
+//
+// A glyph drawn at an origin is taken for a removed one only while no more
+// glyphs are drawn there than were removed there: a glyph the redaction kept
+// at the origin of a removed one, which an overstruck or zero-width glyph
+// shares, could not be told apart, so none drawn there is taken, and what
+// they drew stays in the outside check.
+type drawnGlyphs struct {
+	m     geom.Matrix
+	cells map[drawnCell]*drawnOrigins
+	// matched holds the glyphs drawn at a removed glyph's origin, each with
+	// the cell its origin was found in.
+	matched []drawnGlyph
+}
+
+// drawnCell is a square of [redactCheckOriginTolerance] device pixels.
+type drawnCell struct{ x, y int64 }
+
+// drawnOrigins is what one cell holds: the device origins of the removed
+// glyphs that fall in it, and how many drawn glyphs were found at one of them.
+type drawnOrigins struct {
+	removed []geom.Point
+	drawn   int
+}
+
+// drawnGlyph is one glyph drawn at a removed glyph's origin.
+type drawnGlyph struct {
+	cell   drawnCell
+	bounds geom.Rect
+}
+
+// newDrawnGlyphs returns a drawnGlyphs for the removed glyph origins, given
+// in the default user space that m maps to device pixels.
+func newDrawnGlyphs(m geom.Matrix, origins [][2]float64) *drawnGlyphs {
+	d := &drawnGlyphs{m: m, cells: make(map[drawnCell]*drawnOrigins, len(origins))}
+	for _, o := range origins {
+		p := m.Apply(geom.Point{X: o[0], Y: o[1]})
+		c, ok := cellOf(p)
+		if !ok {
+			continue
+		}
+		cell := d.cells[c]
+		if cell == nil {
+			cell = &drawnOrigins{}
+			d.cells[c] = cell
+		}
+		cell.removed = append(cell.removed, p)
+	}
+	return d
+}
+
+// cellOf returns the cell holding the device point p, false for a point no
+// cell holds: one past the range of the cell index, or not a number.
+func cellOf(p geom.Point) (drawnCell, bool) {
+	x, y := math.Floor(p.X/redactCheckOriginTolerance), math.Floor(p.Y/redactCheckOriginTolerance)
+	if !(math.Abs(x) < 1<<52 && math.Abs(y) < 1<<52) {
+		return drawnCell{}, false
+	}
+	return drawnCell{int64(x), int64(y)}, true
+}
+
+// observe is the render's [page.Options.Glyph]: it keeps a glyph drawn within
+// [redactCheckOriginTolerance] of a removed glyph's origin, counted against
+// the cell that origin falls in. It keeps none past that cell's count of
+// removed glyphs, so what it holds stays within the removed glyphs' number.
+func (d *drawnGlyphs) observe(origin geom.Point, bounds geom.Rect) {
+	if len(d.cells) == 0 {
+		return
+	}
+	c, ok := cellOf(origin)
+	if !ok {
+		return
+	}
+	for dy := int64(-1); dy <= 1; dy++ {
+		for dx := int64(-1); dx <= 1; dx++ {
+			k := drawnCell{c.x + dx, c.y + dy}
+			cell := d.cells[k]
+			if cell == nil {
+				continue
+			}
+			for _, p := range cell.removed {
+				if math.Abs(p.X-origin.X) <= redactCheckOriginTolerance && math.Abs(p.Y-origin.Y) <= redactCheckOriginTolerance {
+					cell.drawn++
+					if cell.drawn <= len(cell.removed) {
+						d.matched = append(d.matched, drawnGlyph{cell: k, bounds: bounds})
+					}
+					return
+				}
+			}
+		}
+	}
+}
+
+// excused returns the device bounds of what the page drew for the removed
+// glyphs: those of the glyphs drawn at their origins, in the cells where no
+// more glyphs were drawn than removed.
+func (d *drawnGlyphs) excused() [][4]float64 {
+	var out [][4]float64
+	for _, g := range d.matched {
+		if cell := d.cells[g.cell]; cell.drawn <= len(cell.removed) {
+			out = append(out, [4]float64{g.bounds.Min.X, g.bounds.Min.Y, g.bounds.Max.X, g.bounds.Max.Y})
+		}
+	}
+	return out
 }
 
 // hasStagedEdits reports whether anything is queued on the Writer that its

@@ -187,6 +187,11 @@ type RedactReport struct {
 	// A stream it could not read is one it has not proved clean, so these
 	// fail the redaction as surely as a hit does.
 	UnreadableObjects []int
+
+	// removedGlyphOrigins maps a 1-based page number to the origin, in user
+	// space, of each glyph removed from the page's own content stream, which
+	// the pixel check of [WithRedactionPixelCheck] finds the drawn glyph by.
+	removedGlyphOrigins map[int][][2]float64
 }
 
 // Redact removes what the given regions cover and then clears the copies of
@@ -518,7 +523,8 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	w.forceRewrite = true
 	w.recordRedaction(regions, needles, o.strict, copied)
 	if o.pixelCheck {
-		if checkErr := w.checkRedactedOutput(ctx, before, regions, order, report.RemovedGlyphBoxes); checkErr != nil {
+		removed := redactedGlyphs{boxes: report.RemovedGlyphBoxes, origins: report.removedGlyphOrigins}
+		if checkErr := w.checkRedactedOutput(ctx, before, regions, order, removed); checkErr != nil {
 			w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
 			w.redactions = w.redactions[:prevRedactions]
 			w.redactedTokens = w.redactedTokens[:prevTokens]
@@ -539,7 +545,7 @@ func (w *Writer) checkRedactedOutput(
 	before *Reader,
 	regions []RedactRegion,
 	order []int,
-	removed map[int][][4]float64,
+	removed redactedGlyphs,
 ) error {
 	after, release, err := w.writeAndReopen(ctx, "litho-redact-after-*.pdf")
 	if err != nil {
@@ -936,6 +942,12 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 			out.RemovedGlyphBoxes = make(map[int][][4]float64)
 		}
 		out.RemovedGlyphBoxes[pageNum] = append(out.RemovedGlyphBoxes[pageNum], in.RemovedGlyphBoxes...)
+	}
+	if len(in.RemovedGlyphOrigins) > 0 {
+		if out.removedGlyphOrigins == nil {
+			out.removedGlyphOrigins = make(map[int][][2]float64)
+		}
+		out.removedGlyphOrigins[pageNum] = append(out.removedGlyphOrigins[pageNum], in.RemovedGlyphOrigins...)
 	}
 	out.BlankedImages = append(out.BlankedImages, in.BlankedImages...)
 	if len(in.ImagesBlankedInCopy) > 0 {

@@ -24,10 +24,12 @@ type textSelection struct {
 	removed map[int]bool
 	// splits maps a split operator to the run that replaces it.
 	splits map[int][]byte
-	// removedText and glyphBoxes are [RedactReport.RemovedText] and
-	// [RedactReport.RemovedGlyphBoxes] for this stream.
-	removedText []string
-	glyphBoxes  [][4]float64
+	// removedText, glyphBoxes and glyphOrigins are
+	// [RedactReport.RemovedText], [RedactReport.RemovedGlyphBoxes] and
+	// [RedactReport.RemovedGlyphOrigins] for this stream.
+	removedText  []string
+	glyphBoxes   [][4]float64
+	glyphOrigins [][2]float64
 	// removedMCIDs and survivingMCIDs name the marked-content identifiers
 	// with content removed and kept.
 	removedMCIDs, survivingMCIDs map[int]bool
@@ -78,9 +80,10 @@ func selectText(
 		// marked content can go on both sides.
 		picked     []bool
 		glyphMCIDs []int
-		// boxes runs parallel to glyphs too: the box each glyph paints
-		// ([glyphBox]).
-		boxes [][4]float64
+		// boxes and origins run parallel to glyphs too: the box each glyph
+		// paints ([glyphBox]), and its origin.
+		boxes   [][4]float64
+		origins [][2]float64
 		// fontRef is the font every glyph of this operator was drawn with: one
 		// show-text operator paints with whatever Tf last selected. It holds
 		// typography.FontUnattributable until a glyph names a font, so an
@@ -123,6 +126,7 @@ func selectText(
 		c.glyphs = append(c.glyphs, el.Text)
 		c.picked = append(c.picked, selected)
 		c.boxes = append(c.boxes, glyphBox(box))
+		c.origins = append(c.origins, [2]float64{el.X, el.Y})
 		c.glyphMCIDs = append(c.glyphMCIDs, el.MCID)
 		if el.MCID >= 0 {
 			c.mcids = append(c.mcids, el.MCID)
@@ -178,11 +182,13 @@ func selectText(
 			for k, b := range c.boxes {
 				if c.picked[k] {
 					sel.glyphBoxes = append(sel.glyphBoxes, b)
+					sel.glyphOrigins = append(sel.glyphOrigins, c.origins[k])
 				}
 			}
 			continue
 		}
 		sel.glyphBoxes = append(sel.glyphBoxes, tally[origin].boxes...)
+		sel.glyphOrigins = append(sel.glyphOrigins, tally[origin].origins...)
 		// Counted here rather than from the selected set, so it is reached only
 		// after the partial-coverage refusal above: an operator that stays is
 		// not a removal.
