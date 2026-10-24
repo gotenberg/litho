@@ -3,6 +3,8 @@ package page
 import (
 	"context"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
@@ -221,4 +223,83 @@ func TestCMYKPageGroupKeepsImageInk(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestCMYKLinksCompensateBlackPoints checks that the links between sRGB and a
+// CMYK blending space compensate black points (ISO 18619:2015), as litho's
+// reading of CMYK into sRGB does and as poppler's Little CMS transforms do.
+// The profile's black point is the version 4 perceptual reference black, so
+// compensation moves its shadows. The CMYK values are Little CMS 2.19's for
+// the same profiles, relative colorimetric with cmsFLAGS_BLACKPOINTCOMPENSATION:
+// uncompensated, sRGB black reaches 0.387 0.391 0.753 1, and K alone reads
+// 4 levels lighter than DeviceCMYK does in the same profile.
+func TestCMYKLinksCompensateBlackPoints(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join("..", "..", "graphics", "icc", "testdata", "v4-cmyk-lut.icc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := icc.Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantBlack := blend.Components{0.349, 0.315, 0.534, 0.983}
+	closeTo := func(got, want blend.Components) bool {
+		for i := range 4 {
+			if math.Abs(float64(got[i]-want[i])) > 0.005 {
+				return false
+			}
+		}
+		return true
+	}
+	ctx := context.Background()
+
+	t.Run("device", func(t *testing.T) {
+		t.Parallel()
+		f := fixture{content: "0 0 0 rg 0 0 100 100 re f"}
+		doc, pg := open(t, f.bytes(), limits.Limits{})
+		opts := f.options()
+		opts.CMYK, opts.CMYKProfile = true, profile
+		res, _, err := RenderGroup(ctx, doc, pg, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c, _ := res.Group.Components(50, 50); !closeTo(c, wantBlack) {
+			t.Errorf("sRGB black for the CMYK device = %v, want %v", c, wantBlack)
+		}
+		tr, err := profile.NewTransform(icc.RelativeColorimetric)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, g, b := tr.Convert([]byte{0, 0, 0, 255})
+		got := res.Group.Space().ToRGB(blend.Components{0, 0, 0, 1})
+		for i, want := range [3]uint8{r, g, b} {
+			if d := math.Abs(float64(got[i])*255 - float64(want)); d > 1 {
+				t.Errorf("K alone reads %v through the device, %d %d %d as DeviceCMYK in the profile", got, r, g, b)
+				break
+			}
+		}
+	})
+
+	t.Run("group", func(t *testing.T) {
+		t.Parallel()
+		f := fixture{
+			page:    "/Group << /S /Transparency /CS [/ICCBased 5 0 R] >>",
+			content: "0 0 0 rg 0 0 100 100 re f",
+			objs:    []string{stream("/N 4", string(data))},
+		}
+		doc, pg := open(t, f.bytes(), limits.Limits{})
+		opts := f.options()
+		opts.GroupSpace = true
+		res, _, err := RenderGroup(ctx, doc, pg, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sp := res.Group.Space(); sp == nil || sp.Kind() != blend.CMYK {
+			t.Fatalf("page group blends in %v, want CMYK", sp)
+		}
+		if c, _ := res.Group.Components(50, 50); !closeTo(c, wantBlack) {
+			t.Errorf("sRGB black in the ICCBased CMYK group = %v, want %v", c, wantBlack)
+		}
+	})
 }

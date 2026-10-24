@@ -34,9 +34,9 @@ const maxBlendSpaces = 1024
 // To sRGB it reads the space as [colorconv] reads a colour in it, so a
 // colour composited in the space shows as the same colour painted in sRGB
 // does. From sRGB it converts a CMYK space through an ICC link from sRGB to
-// the profile the space is read through, and a grey space, or a CMYK space
-// whose profile holds no tables back from the connection space, by the
-// device formulas of ISO 32000-1, 10.3.
+// the profile the space is read through ([cmykLinkOptions]), and a grey
+// space, or a CMYK space whose profile holds no tables back from the
+// connection space, by the device formulas of ISO 32000-1, 10.3.
 //
 // It is safe for concurrent use.
 type blendConverter struct {
@@ -233,7 +233,7 @@ func (r *renderer) linkFromRGB(cs ast.PdfObject) *icc.Link {
 		r.doc.Logger.Debug("render: reading the sRGB profile", slog.Any("err", err))
 		return nil
 	}
-	link, err := icc.NewLink(src, dst, icc.TransformOptions{Intent: icc.RelativeColorimetric})
+	link, err := icc.NewLink(src, dst, cmykLinkOptions())
 	if err != nil || link.OutputChannels() != 4 {
 		r.doc.Logger.Debug("render: no link from sRGB to the group's CMYK profile; using the device formula", slog.Any("err", err))
 		return nil
@@ -264,18 +264,48 @@ func (r *renderer) deviceCMYK(profile *icc.Profile) (*blend.Space, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading the sRGB profile: %w", err)
 	}
-	toRGB, err := icc.NewLink(profile, srgb, icc.TransformOptions{Intent: icc.RelativeColorimetric})
+	toRGB, err := icc.NewLink(profile, srgb, cmykLinkOptions())
 	if err != nil {
 		return nil, fmt.Errorf("%w: linking the CMYK device profile to sRGB: %w", ErrInvalidOptions, err)
 	}
 	conv := &blendConverter{kind: blend.CMYK, to: linkConverter{toRGB}, formula: blend.NewSpace(blend.CMYK, string(name), nil)}
-	link, err := icc.NewLink(srgb, profile, icc.TransformOptions{Intent: icc.RelativeColorimetric})
+	link, err := icc.NewLink(srgb, profile, cmykLinkOptions())
 	if err == nil && link.OutputChannels() == 4 {
 		conv.link = link
 	} else {
 		r.doc.Logger.Debug("render: no link from sRGB to the CMYK device profile; using the device formula", slog.Any("err", err))
 	}
 	return blend.NewSpace(blend.CMYK, string(name), conv), nil
+}
+
+// cmykLinkOptions returns the options of the ICC links between sRGB and a
+// CMYK blending space, both ways: the relative colorimetric intent the page
+// is read under (ISO 32000-1, 8.6.5.8), with black point compensation (ISO
+// 18619:2015). ISO 32000-1, 8.6.5.8 leaves how an intent is honoured to the
+// conforming reader. Compensating keeps the links the inverse of litho's
+// reading of CMYK into sRGB, which compensates ([icc.Profile.NewTransform]),
+// so a colour painted in sRGB into a CMYK group reads back as itself, and a
+// CMYK device's inks read as the page's DeviceCMYK does in the same profile.
+// poppler builds every Little CMS transform with
+// cmsFLAGS_BLACKPOINTCOMPENSATION, an ICC source to a CMYK display profile
+// included, and litho's links match Little CMS 2.19's under that flag.
+// PDFium converts to sRGB alone and has no CMYK link to compare with.
+// Uncompensated, sRGB black reached the profile's darkest clipped inks
+// rather than its black point, and a profile whose black is lighter than
+// sRGB's read K alone lighter through the device than through the page.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 11 distinct CMYK output intent profiles of 110
+//     files, every one with a black point above XYZ 0 read K alone through
+//     the device 14 to 118 levels lighter than through the page's DeviceCMYK
+//     reading; compensated, the two agree to the level.
+//   - litho, govdocs, pdfjs: the render, flatten, recolor and redact-render
+//     cells score as before. DeviceCMYK under litho's built-in profile, whose
+//     black point is XYZ 0, converts as before; only pdfjs issue8019 and
+//     issue19319 flatten to other composites, within the cell's bars.
+func cmykLinkOptions() icc.TransformOptions {
+	return icc.TransformOptions{Intent: icc.RelativeColorimetric, BlackPointCompensation: true}
 }
 
 // linkConverter reads colours through an ICC link to sRGB, a

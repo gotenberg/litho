@@ -44,10 +44,24 @@ func cmykAt(t *testing.T, img image.Image, x, y int) color.CMYK {
 }
 
 // inkBytes returns the 8-bit inks of the link from sRGB to the CMYK profile
-// dst for the sRGB colour rgb, as the renderer rounds them.
+// dst for the sRGB colour rgb, as the renderer rounds them: relative
+// colorimetric with black point compensation, the renderer's CMYK links.
 func inkBytes(t *testing.T, dst []byte, rgb []float64) color.CMYK {
 	t.Helper()
-	v := linked(t, icc.SRGBProfile(), dst, rgb)
+	sp, err := icc.Parse(icc.SRGBProfile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dp, err := icc.Parse(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := icc.NewLink(sp, dp, icc.TransformOptions{Intent: icc.RelativeColorimetric, BlackPointCompensation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := make([]float64, l.OutputChannels())
+	l.Convert(rgb, v)
 	b := func(f float64) uint8 { return uint8(math.Round(math.Min(math.Max(f, 0), 1) * 255)) }
 	return color.CMYK{C: b(v[0]), M: b(v[1]), Y: b(v[2]), K: b(v[3])}
 }
