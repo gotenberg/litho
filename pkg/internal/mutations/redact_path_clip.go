@@ -37,7 +37,10 @@ import (
 //     where it left: the region is convex and every point that still paints is
 //     outside it, so the closed loop the old run and the chord form winds zero
 //     times around any such point, and the fill under either rule (8.5.3.3) is
-//     unchanged outside the region.
+//     unchanged outside the region. The one geometry a rewrite adds inside a
+//     region is a slanted line placed from the region alone, which keeps a
+//     stroke that renderers did not snap to pixels unsnapped once the cut
+//     leaves it only lines along the axes (see [unadjustedMarker]).
 //
 // A stroke is cut at the region shrunk by the stroke's reach rather than at the
 // region itself, so the removed geometry, and the caps and chords the cut adds,
@@ -836,16 +839,17 @@ func clipPathRun(
 		if cut && !mayCut {
 			return "", false, errPathCutNeedsUndashedStroke
 		}
-		if stroke != nil && cut && attempt < maxJoinRefits {
+		var rsubs []subpath
+		if stroke != nil && cut {
 			rewritten, err := content.ParseStreamData(ctx, []byte(body))
 			if err != nil {
 				return "", false, fmt.Errorf("reading the rewritten path back: %w", err)
 			}
-			rsubs, _, err := parsePathRun(rewritten, 0, len(rewritten))
+			rsubs, _, err = parsePathRun(rewritten, 0, len(rewritten))
 			if err != nil {
 				return "", false, fmt.Errorf("reading the rewritten path back: %w", err)
 			}
-			if need := joinFactor(rsubs, paintCloses, *stroke); need > factor {
+			if need := joinFactor(rsubs, paintCloses, *stroke); attempt < maxJoinRefits && need > factor {
 				factor = need
 				continue
 			}
@@ -858,6 +862,11 @@ func clipPathRun(
 				return "", false, nil
 			}
 			return " " + kept, false, nil
+		}
+		if stroke != nil && cut && !axisAligned(subs, ctm, paintCloses) && axisAligned(rsubs, ctm, paintCloses) {
+			// First, so a paint operator that closes the last subpath still
+			// closes the one it closed.
+			body = unadjustedMarker(frame) + body
 		}
 		var b strings.Builder
 		b.WriteString(" ")
@@ -875,6 +884,68 @@ func clipPathRun(
 // subpath before painting: s, b and b* (ISO 32000-1, Table 60).
 func pathPaintCloses(operator string) bool {
 	return operator == "s" || operator == "b" || operator == "b*"
+}
+
+// axisAlignEpsilon is how far, in page units, the two ends of a line may part
+// on one axis for the line to run along the other. Not spec-mandated: it is
+// the rounding of a coordinate times the CTM, and matches the renderer's
+// tolerance at 72 dpi (package render/page, alignEpsilon).
+const axisAlignEpsilon = 1e-6
+
+// axisAligned reports whether every segment of subs is a line running along
+// a page axis, the closing segments a stroke draws included: the strokes a
+// renderer's stroke adjustment (ISO 32000-1, 10.6.5) snaps to whole device
+// pixels. poppler's Splash and litho's renderer adjust a stroke only when
+// its whole path is so; one curve or slanted segment anywhere leaves every
+// segment where it falls.
+func axisAligned(subs []subpath, ctm [6]float64, paintCloses bool) bool {
+	aligned := func(seg pathSeg) bool {
+		if seg.cubic {
+			return false
+		}
+		a, b := apply(ctm, seg.p[0]), apply(ctm, seg.p[3])
+		return math.Abs(a.x-b.x) <= axisAlignEpsilon || math.Abs(a.y-b.y) <= axisAlignEpsilon
+	}
+	for si, sp := range subs {
+		for _, seg := range sp.segs {
+			if !aligned(seg) {
+				return false
+			}
+		}
+		closed := sp.closed || (paintCloses && si == len(subs)-1)
+		if n := len(sp.segs); closed && n > 0 && !aligned(pathSeg{p: [4]bezPt{sp.segs[n-1].p[3], {}, {}, sp.start}}) {
+			return false
+		}
+	}
+	return true
+}
+
+// unadjustedMarker returns a subpath of one slanted line inside the first of
+// the frame's cuts, from its centre a quarter of its width and height toward
+// its upper right corner, or "" when the cut is too thin to hold one.
+//
+// A stroke the original path drew with a curve or a slanted segment is
+// unadjusted (see [axisAligned]). Cutting the region out can leave only
+// lines along the axes, which a renderer then snaps: a 1.5-unit rule that
+// covered three rows anti-aliased draws one row solid, and its ink outside
+// the region changes. The marker keeps the path unadjusted as the original
+// was. It depends on the cut alone, so it tells nothing of the removed
+// geometry, and its ink, within the stroke's reach of it, stays inside the
+// region, where the clip discards it.
+func unadjustedMarker(f cutFrame) string {
+	if len(f.cuts) == 0 {
+		return ""
+	}
+	c := f.cuts[0]
+	dx, dy := (c.x1-c.x0)/4, (c.y1-c.y0)/4
+	if dx <= axisAlignEpsilon || dy <= axisAlignEpsilon {
+		return ""
+	}
+	cx, cy := (c.x0+c.x1)/2, (c.y0+c.y1)/2
+	var e pathEmitter
+	e.nums("m", f.toUser(bezPt{cx, cy}))
+	e.nums("l", f.toUser(bezPt{cx + dx, cy + dy}))
+	return e.b.String()
 }
 
 // maxJoinRefits bounds how often [clipPathRun] redoes a cut for the joins its

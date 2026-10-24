@@ -459,6 +459,65 @@ func TestRedactPageRegions_ClipsAStrokedLineCrossingTheRegion(t *testing.T) {
 	assertNoStrokeInside(t, got, []cutRect{{200 + reach, 300 + reach, 300 - reach, 500 - reach}})
 }
 
+func TestRedactPageRegions_KeepsACutStrokeUnadjusted(t *testing.T) {
+	// The rule turns down a slanted segment inside the region, so what is
+	// left is one horizontal line, which renderers would snap to whole pixels
+	// where they left the original as it fell (govdocs thread_000_000753).
+	body := "0 J 1 j 1.5 w 473.4 302.58 m 444.6 302.58 l 426.18 284.52 l S"
+	regions := [][4]float64{{153, 198, 459, 594}}
+	_, got := redactAndRead(t, "<< >>", body, regions)
+
+	assertClearedExactly(t, []byte(body), got, regions)
+	_, painted, ok := bytes.Cut(got, []byte("W* n"))
+	if !ok {
+		t.Fatalf("no clip:\n%s", got)
+	}
+	ops, err := content.ParseStreamData(context.Background(), painted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subs, _, err := parsePathRun(ops, 0, len(ops)-2)
+	if err != nil {
+		t.Fatalf("%v:\n%s", err, painted)
+	}
+	if axisAligned(subs, [6]float64{1, 0, 0, 1, 0, 0}, false) {
+		t.Fatalf("the cut stroke is all axis-aligned lines, which renderers adjust:\n%s", got)
+	}
+	// The marker lies inside the cut and depends on it alone: its ends are
+	// the cut's centre and the point a quarter of the cut beyond it.
+	reach := 0.75*math.Sqrt2 + strokeReachSlack
+	cut := cutRect{153 + reach, 198 + reach, 459 - reach, 594 - reach}
+	cx, cy := (cut.x0+cut.x1)/2, (cut.y0+cut.y1)/2
+	marker := subs[0]
+	if len(marker.segs) != 1 || math.Abs(marker.start.x-cx) > 1e-3 || math.Abs(marker.start.y-cy) > 1e-3 {
+		t.Fatalf("want the marker first, from the cut's centre, got %+v:\n%s", marker, got)
+	}
+	assertNoStrokeInside(t, []byte("0 J 1 j 1.5 w "+opBytesAfterMarker(t, painted)), []cutRect{cut})
+}
+
+func TestRedactPageRegions_AddsNoMarkerToAnAlignedStroke(t *testing.T) {
+	// The rule was all axis-aligned lines before, and renderers adjusted it:
+	// the cut leaves it so, with no marker.
+	body := "0 J 1 j 1.5 w 473.4 302.58 m 444.6 302.58 l 444.6 284.52 l S"
+	regions := [][4]float64{{153, 198, 459, 594}}
+	_, got := redactAndRead(t, "<< >>", body, regions)
+
+	assertClearedExactly(t, []byte(body), got, regions)
+	reach := 0.75*math.Sqrt2 + strokeReachSlack
+	assertNoStrokeInside(t, got, []cutRect{{153 + reach, 198 + reach, 459 - reach, 594 - reach}})
+}
+
+// opBytesAfterMarker returns the painted bytes with the marker subpath, the
+// first m and l, removed.
+func opBytesAfterMarker(t *testing.T, painted []byte) string {
+	t.Helper()
+	fields := bytes.Fields(painted)
+	if len(fields) < 6 || string(fields[2]) != "m" || string(fields[5]) != "l" {
+		t.Fatalf("no marker first in %s", painted)
+	}
+	return string(bytes.Join(fields[6:], []byte(" ")))
+}
+
 func TestRedactPageRegions_ClipsACurveLikeASignature(t *testing.T) {
 	// A pen stroke looping through the region, as a vector signature draws.
 	body := "1.5 w 1 J 1 j 120 380 m 180 520 260 260 330 420 c 380 530 430 300 520 410 c S"

@@ -340,3 +340,19 @@ func TestRedactWithoutPixelCheckSkipsIt(t *testing.T) {
 		t.Fatalf("Redact without the pixel check rendered the page: %v", err)
 	}
 }
+
+// TestRedactKeepsACutStrokeUnadjusted cuts a 1.5-point rule whose path turns
+// down a slanted segment inside the region: what is left outside is one
+// horizontal line, which stroke adjustment would snap from three anti-aliased
+// rows to one solid row (govdocs thread_000_000753). The pixel check holds
+// the redaction to drawing the rule outside the region as before.
+func TestRedactKeepsACutStrokeUnadjusted(t *testing.T) {
+	ctx := context.Background()
+	body := "0 G 0 J 1 j 1.5 w 473.4 302.58 m 444.6 302.58 l 426.18 284.52 l S"
+	r := openPixelCheck(t, plantedPDF(body, plant{}))
+	w := NewWriter(r)
+	defer w.Close()
+	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{153, 198, 459, 594}}}); err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+}
