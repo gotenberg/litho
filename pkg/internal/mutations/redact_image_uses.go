@@ -47,7 +47,9 @@ const (
 	// useFormXObjects its /Resources and their /XObject subdictionary. An
 	// image named there is painted by the form as the page draws it, and
 	// the check measures those placements too (see [targetImageBoxes]). A
-	// form one level deeper is a use it does not place.
+	// form such a form names is one as well, down to the document's form
+	// depth budget, which is as deep as the run that measures placements
+	// reads: one deeper is a use it does not place.
 	useForm
 	useFormResources
 	useFormXObjects
@@ -69,10 +71,11 @@ const (
 // can measure, and every such place had exactly the same samples covered:
 //
 //   - Each reference to the object must come through the page tree's own
-//     /Resources /XObject, or the /Resources /XObject of a form named there.
-//     Any other, a form nested in a form, an annotation appearance, a
-//     pattern, a soft mask, reports [ErrImageShared]: that paints it where
-//     this check does not look.
+//     /Resources /XObject, or the /Resources /XObject of a form named there
+//     or nested in such a form, down to the document's form depth budget.
+//     Any other, a form nested deeper, an annotation appearance, a pattern,
+//     a soft mask, reports [ErrImageShared]: that paints it where this check
+//     does not look.
 //   - Each placement the pages' content streams paint, directly or through
 //     the forms they draw, must cover the same samples as every other,
 //     including placements on pages this redaction does not touch, which
@@ -211,18 +214,33 @@ func blankedImageConflicts(
 
 // checkImageReferences walks the document as a full rewrite would write it,
 // alloc first, and returns, for each target referenced from anywhere but a
-// page-tree /XObject dictionary, the [ErrImageShared] saying so.
+// page-tree /XObject dictionary or that of a form the pages draw, the
+// [ErrImageShared] saying so.
+//
+// A form is followed into the forms it names down to the document's form
+// depth budget, the depth [targetImageBoxes]' run reads to (a form the page
+// draws is at depth 1). Each object is walked once per kind and form depth it
+// is reached at, arrays written as objects of their own included, so a form
+// graph that names a form again, or fans out, is walked a bounded number of
+// times. A form reached past the budget by any chain is a use the check does
+// not place, even when a shorter chain also reaches it: the run measures the
+// placements of the shorter and skips those of the longer, which a viewer
+// reading deeper still paints.
 func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, targets map[int]bool) (map[int]error, error) {
 	conflicts := make(map[int]error)
+	maxFormDepth := doc.Limits().MaxFormDepth
 	type visit struct {
 		objNum int
 		kind   useKind
+		// formDepth is the depth of the form a useForm, useFormResources
+		// or useFormXObjects visit lies in, 0 for every other kind.
+		formDepth int
 	}
 	visited := make(map[visit]bool)
 	var queue []visit
 
-	var walk func(obj ast.PdfObject, kind useKind, depth int) error
-	walk = func(obj ast.PdfObject, kind useKind, depth int) error {
+	var walk func(obj ast.PdfObject, kind useKind, formDepth, depth int) error
+	walk = func(obj ast.PdfObject, kind useKind, formDepth, depth int) error {
 		if depth > maxImageUseNesting {
 			return fmt.Errorf("%w: objects nest deeper than %d levels", ErrImageShared, maxImageUseNesting)
 		}
@@ -236,30 +254,35 @@ func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *
 				return nil
 			}
 			// The XObject a page names is a thing of its own, a form whose
-			// resources the check follows one level down. One a form names
-			// is a use the check does not place.
+			// resources the check follows, and so is one a form names, a
+			// level deeper, as far as the run that measures placements
+			// reads. Past that it is a use the check does not place.
 			switch kind {
 			case useXObjects:
-				kind = useForm
+				kind, formDepth = useForm, 1
 			case useFormXObjects:
-				kind = useOther
+				if formDepth < maxFormDepth {
+					kind, formDepth = useForm, formDepth+1
+				} else {
+					kind, formDepth = useOther, 0
+				}
 			case useOther, useCatalog, usePageTree, useResources, useForm, useFormResources:
 				// A reference elsewhere is walked under the kind it was
 				// reached by.
 			}
-			if next := (visit{v.ObjectNum, kind}); !visited[next] {
+			if next := (visit{v.ObjectNum, kind, formDepth}); !visited[next] {
 				visited[next] = true
 				queue = append(queue, next)
 			}
 		case ast.PdfArray:
 			for _, item := range v {
-				if err := walk(item, kind, depth+1); err != nil {
+				if err := walk(item, kind, formDepth, depth+1); err != nil {
 					return err
 				}
 			}
 		case ast.PdfDict:
 			return walkDictUses(v, kind, func(child ast.PdfObject, childKind useKind) error {
-				return walk(child, childKind, depth+1)
+				return walk(child, childKind, childFormDepth(childKind, formDepth), depth+1)
 			})
 		case ast.PdfStream:
 			streamKind := useOther
@@ -267,7 +290,7 @@ func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *
 				streamKind = useForm
 			}
 			return walkDictUses(v.Dict, streamKind, func(child ast.PdfObject, childKind useKind) error {
-				return walk(child, childKind, depth+1)
+				return walk(child, childKind, childFormDepth(childKind, formDepth), depth+1)
 			})
 		}
 		return nil
@@ -275,7 +298,7 @@ func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *
 
 	catalogRef, hasRef := CatalogRef(ctx, doc)
 	if hasRef {
-		if err := walk(catalogRef, useCatalog, 0); err != nil {
+		if err := walk(catalogRef, useCatalog, 0, 0); err != nil {
 			return nil, err
 		}
 	} else {
@@ -283,12 +306,12 @@ func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if err != nil {
 			return nil, fmt.Errorf("resolving catalog: %w", err)
 		}
-		if err := walk(catalog.Dict, useCatalog, 0); err != nil {
+		if err := walk(catalog.Dict, useCatalog, 0, 0); err != nil {
 			return nil, err
 		}
 	}
 	if info, ok := doc.Index.Trailer["Info"]; ok {
-		if err := walk(info, useOther, 0); err != nil {
+		if err := walk(info, useOther, 0, 0); err != nil {
 			return nil, err
 		}
 	}
@@ -315,11 +338,23 @@ func checkImageReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if next.kind != usePageTree && next.kind != useCatalog && isPageTreeNode(obj) {
 			continue
 		}
-		if err := walk(obj, next.kind, 0); err != nil {
+		if err := walk(obj, next.kind, next.formDepth, 0); err != nil {
 			return nil, err
 		}
 	}
 	return conflicts, nil
+}
+
+// childFormDepth is the form depth a value reached under kind carries: the
+// enclosing form's for a kind that lies in a form, 0 for any other, so a
+// use the check does not place is walked once whatever depth it came from.
+func childFormDepth(kind useKind, formDepth int) int {
+	switch kind {
+	case useForm, useFormResources, useFormXObjects:
+		return formDepth
+	case useOther, useCatalog, usePageTree, useResources, useXObjects:
+	}
+	return 0
 }
 
 // walkDictUses visits each value of dict under the kind its key leads to.
