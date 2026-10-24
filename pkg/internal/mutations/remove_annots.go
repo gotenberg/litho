@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/internal/render/annot"
 )
 
 // removeRegionAnnotations drops the annotations sitting inside the zones and
@@ -62,29 +63,32 @@ func removeRegionAnnotations(
 			return nil, fmt.Errorf("%w: an entry of /Annots", ErrAnnotationNotPlaceable)
 		}
 
-		rect, ok := annotRect(ctx, doc, annot)
+		place, ok := annotZones(ctx, doc, annot)
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", ErrAnnotationNotPlaceable, annotLabel(entry))
 		}
 
 		selected := false
-		for _, z := range zones {
-			if heuristics.ZonesOverlap(rect, z) {
-				selected = true
-				break
+		for _, reach := range place.reaches {
+			for _, z := range zones {
+				if heuristics.ZonesOverlap(reach, z) {
+					selected = true
+				}
 			}
+		}
+		contained := true
+		for _, sits := range place.sits {
+			inOne := false
+			for _, z := range zones {
+				if heuristics.ZoneContains(z, sits) {
+					inOne = true
+				}
+			}
+			contained = contained && inOne
 		}
 		if !selected {
 			kept = append(kept, entry)
 			continue
-		}
-
-		contained := false
-		for _, z := range zones {
-			if heuristics.ZoneContains(z, rect) {
-				contained = true
-				break
-			}
 		}
 		if !contained {
 			return nil, fmt.Errorf("%w: %s", ErrAnnotationStraddlesRegion, annotLabel(entry))
@@ -372,20 +376,38 @@ func untagRegionAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc
 	return nil
 }
 
-// annotRect returns the annotation's rectangle as a zone.
+// annotZones returns where the annotation sits and draws (see [annotPlace]):
+// its rectangle, and the boxes of the appearance a viewer synthesises when
+// the annotation has none.
 //
 // [heuristics.ZoneFromRect] normalises the corners, which matters here: per
 // ISO 32000-1, 7.9.5 a rectangle may state either diagonal, so /Rect
 // [urx ury llx lly] is as valid as the other order and appears in real files.
 // Comparing un-normalised corners would silently miss those annotations.
-func annotRect(ctx context.Context, doc *document.Document, annot ast.PdfDict) (heuristics.Zone, bool) {
-	obj, ok := annot["Rect"]
+//
+// An annotation with an appearance stream draws inside /Rect (Algorithm 8.1,
+// ISO 32000-1, 12.5.5). One without draws what the viewer builds from its
+// dictionary, and a line, a polygon, ink or a quadrilateral is drawn from
+// /L, /Vertices, /InkList or /QuadPoints wherever /Rect sits
+// ([annot.SynthesizedBox]). Judged by /Rect alone, such an annotation drawn
+// across a region with its /Rect elsewhere was kept, and the page went on
+// showing it inside the region after a redaction reported success. The two
+// stay separate zones rather than one box holding both: a stale /Rect far
+// from the drawing would make that box cover regions neither meets.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-line-without-appearance-empty-Rect: a Line with
+//     /Rect [0 0 0 0] and /L across the page, drawn by poppler 26.09.0 and
+//     litho's renderer through a centred-quarter region the redaction left.
+func annotZones(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) (annotPlace, bool) {
+	obj, ok := annotDict["Rect"]
 	if !ok {
-		return heuristics.Zone{}, false
+		return annotPlace{}, false
 	}
 	arr, err := document.ResolveArray(ctx, doc, obj)
 	if err != nil || len(arr) != 4 {
-		return heuristics.Zone{}, false
+		return annotPlace{}, false
 	}
 	var r [4]float64
 	for i := range r {
@@ -395,15 +417,35 @@ func annotRect(ctx context.Context, doc *document.Document, annot ast.PdfDict) (
 		// annotation unplaceable that every other reader places without trouble.
 		elem, err := document.ResolveObject(ctx, doc, arr[i])
 		if err != nil {
-			return heuristics.Zone{}, false
+			return annotPlace{}, false
 		}
 		v, isNum := document.Number(elem)
 		if !isNum {
-			return heuristics.Zone{}, false
+			return annotPlace{}, false
 		}
 		r[i] = v
 	}
-	return heuristics.ZoneFromRect(r), true
+	rect := heuristics.ZoneFromRect(r)
+	place := annotPlace{reaches: []heuristics.Zone{rect}, sits: []heuristics.Zone{rect}}
+	if ink, path, drawn := annot.SynthesizedBox(ctx, doc, annotDict); drawn {
+		place.reaches = append(place.reaches, heuristics.ZoneFromRect([4]float64{ink.Min.X, ink.Min.Y, ink.Max.X, ink.Max.Y}))
+		place.sits = append(place.sits, heuristics.ZoneFromRect([4]float64{path.Min.X, path.Min.Y, path.Max.X, path.Max.Y}))
+	}
+	return place, true
+}
+
+// annotPlace is where an annotation sits and draws, as [annotZones] reads it.
+type annotPlace struct {
+	// reaches holds the zones a region selects the annotation by meeting
+	// one: /Rect, and the box the ink of a synthesised appearance cannot
+	// pass, which takes a sharp join's miter at its full reach.
+	reaches []heuristics.Zone
+	// sits holds the zones that must each lie inside a region for the
+	// annotation to be removed: /Rect, and the box of the points a
+	// synthesised appearance's paths pass through. The ink bound would
+	// refuse a link whose border runs along /Rect a few points inside a
+	// region's edge, its corners' miters taken at their full reach.
+	sits []heuristics.Zone
 }
 
 // annotLabel names an annotation for a refusal, so the same file always names

@@ -86,6 +86,101 @@ type border struct {
 	underline bool
 }
 
+// SynthesizedBox returns two boxes, in default user space, of the appearance
+// a viewer synthesises for the annotation dict, what [Collect] draws under
+// [Options.Synthesize] when the file holds no appearance stream for it: ink,
+// a box the ink of its strokes and fills cannot pass, and path, the box of
+// the points its paths pass through. It reads the annotation whatever its
+// flags. It returns false when dict has an appearance stream, when its /Rect
+// does not read, or when no appearance is synthesised for it.
+//
+// A line, a polygon, ink or a quadrilateral is drawn from /L, /Vertices,
+// /InkList or /QuadPoints (ISO 32000-1, 12.5.6.7, 12.5.6.9, 12.5.6.10,
+// 12.5.6.13), so its boxes may lie well apart from /Rect: viewers draw it
+// there whatever /Rect says.
+func SynthesizedBox(ctx context.Context, doc *document.Document, dict ast.PdfDict) (ink, path geom.Rect, ok bool) {
+	if _, _, _, has := normalAppearance(ctx, doc, dict); has {
+		return geom.Rect{}, geom.Rect{}, false
+	}
+	rect, ok := readRect(ctx, doc, dict["Rect"])
+	if !ok {
+		return geom.Rect{}, geom.Rect{}, false
+	}
+	subtype, err := document.ResolveName(ctx, doc, dict["Subtype"])
+	if err != nil {
+		doc.Logger.Debug("unreadable annotation /Subtype", slog.Any("err", err))
+	}
+	d, ok := synthDrawing(ctx, doc, dict, subtype, rect)
+	if !ok {
+		return geom.Rect{}, geom.Rect{}, false
+	}
+	ink = d.inkBounds()
+	if subtype == "Square" || subtype == "Circle" {
+		// [synthesize] clips a Square or a Circle to /Rect.
+		ink = geom.Rect{
+			Min: geom.Point{X: max(ink.Min.X, rect.Min.X), Y: max(ink.Min.Y, rect.Min.Y)},
+			Max: geom.Point{X: min(ink.Max.X, rect.Max.X), Y: min(ink.Max.Y, rect.Max.Y)},
+		}
+	}
+	return ink, d.pathBounds(), true
+}
+
+// inkBounds returns the box the drawing's ink reaches, shape by shape. The
+// content [drawing.content] writes keeps the default butt caps and miter
+// joins with a miter limit of 10 (ISO 32000-1, 8.4.3, Table 52), so a stroke
+// reaches half a width past a path of one segment and [miterReach] widths past
+// one whose segments join. [drawing.bounds] takes the far reach for every
+// shape, which suits a clip that must never cut the stroke but would make a
+// straight line reach five widths past its ends.
+func (d *drawing) inkBounds() geom.Rect {
+	var (
+		out   geom.Rect
+		found bool
+	)
+	for _, s := range d.shapes {
+		b, ok := s.path.Bounds()
+		if !ok {
+			continue
+		}
+		if s.paint != paintFill && d.strokes() {
+			reach := d.width / 2
+			if joins(s.path) {
+				reach = miterReach * d.width
+			}
+			b.Min.X -= reach
+			b.Min.Y -= reach
+			b.Max.X += reach
+			b.Max.Y += reach
+		}
+		if !found {
+			out, found = b, true
+			continue
+		}
+		out = union(out, b)
+	}
+	return out
+}
+
+// joins reports whether two segments of path meet: a subpath of more than one
+// segment, or a closed one.
+func joins(path geom.Path) bool {
+	segments := 0
+	for _, op := range path.Ops {
+		switch op {
+		case geom.MoveTo:
+			segments = 0
+		case geom.LineTo, geom.CubicTo:
+			segments++
+			if segments > 1 {
+				return true
+			}
+		case geom.Close:
+			return true
+		}
+	}
+	return false
+}
+
 // synthesize builds the appearance a viewer draws for an annotation with no
 // appearance stream, for the subtypes whose appearance ISO 32000-1 defines by
 // the dictionary alone: Square and Circle (12.5.6.8), Line (12.5.6.7),
@@ -94,6 +189,23 @@ type border struct {
 // subtype, which needs a viewer's icon or a font, and for a dictionary whose
 // geometry does not read.
 func synthesize(ctx context.Context, doc *document.Document, dict ast.PdfDict, subtype ast.PdfName, rect geom.Rect) (Appearance, bool) {
+	d, ok := synthDrawing(ctx, doc, dict, subtype, rect)
+	if !ok {
+		return Appearance{}, false
+	}
+	if subtype != "Square" && subtype != "Circle" {
+		// A line, a polygon, ink or a quadrilateral may reach past /Rect,
+		// which producers often leave stale: poppler 26.09.0 grows the
+		// box to cover the drawing, and so does this.
+		d.clip = union(rect, d.bounds())
+	}
+	d.opacity = readOpacity(ctx, doc, dict)
+	return d.appearance(rect), true
+}
+
+// synthDrawing builds the drawing [synthesize] serialises, false for a
+// subtype it does not draw or a dictionary whose geometry does not read.
+func synthDrawing(ctx context.Context, doc *document.Document, dict ast.PdfDict, subtype ast.PdfName, rect geom.Rect) (drawing, bool) {
 	var (
 		d  drawing
 		ok bool
@@ -112,17 +224,7 @@ func synthesize(ctx context.Context, doc *document.Document, dict ast.PdfDict, s
 	case "Link":
 		d, ok = synthLink(ctx, doc, dict, rect)
 	}
-	if !ok || len(d.shapes) == 0 {
-		return Appearance{}, false
-	}
-	if subtype != "Square" && subtype != "Circle" {
-		// A line, a polygon, ink or a quadrilateral may reach past /Rect,
-		// which producers often leave stale: poppler 26.09.0 grows the
-		// box to cover the drawing, and so does this.
-		d.clip = union(rect, d.bounds())
-	}
-	d.opacity = readOpacity(ctx, doc, dict)
-	return d.appearance(rect), true
+	return d, ok && len(d.shapes) > 0
 }
 
 // synthGeometry draws a Square or a Circle (ISO 32000-1, 12.5.6.8): the
@@ -477,6 +579,18 @@ func (d *drawing) strokes() bool {
 
 // bounds returns the box the drawing's strokes and fills reach.
 func (d *drawing) bounds() geom.Rect {
+	out := d.pathBounds()
+	reach := miterReach*d.width + 1
+	out.Min.X -= reach
+	out.Min.Y -= reach
+	out.Max.X += reach
+	out.Max.Y += reach
+	return out
+}
+
+// pathBounds returns the box of the drawing's paths, the points they pass
+// through, without the reach of their strokes.
+func (d *drawing) pathBounds() geom.Rect {
 	var (
 		out   geom.Rect
 		found bool
@@ -492,11 +606,6 @@ func (d *drawing) bounds() geom.Rect {
 		}
 		out = union(out, b)
 	}
-	reach := miterReach*d.width + 1
-	out.Min.X -= reach
-	out.Min.Y -= reach
-	out.Max.X += reach
-	out.Max.Y += reach
 	return out
 }
 
