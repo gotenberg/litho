@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/jpeg"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +22,9 @@ import (
 //   - "sharedform": the form page 2 paints is also in page 1's resources,
 //     though page 1 does not paint it.
 //   - "xmp": page 2's content draws it and page 2's XMP metadata stream holds it.
+//   - "images": no other copy of the text, but page 2 paints a JPEG whose
+//     bytes spell it in a comment segment, and page 1 paints, outside the
+//     region, an uncompressed image whose samples spell it.
 func otherPageCopyPDF(kind string) []byte {
 	stream := func(num int, dict, data string) string {
 		return strconv.Itoa(num) + " 0 obj\n<< " + dict + " /Length " + strconv.Itoa(len(data)) +
@@ -30,6 +35,7 @@ func otherPageCopyPDF(kind string) []byte {
 	form := "/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >>"
 
 	page1Res := "<< /Font << /F1 4 0 R >> >>"
+	page1Body := secret + " " + keep
 	page2Res := "<< /Font << /F1 4 0 R >> >>"
 	page2Extra := ""
 	page2Body := secret
@@ -47,6 +53,14 @@ func otherPageCopyPDF(kind string) []byte {
 		page2Extra = " /Annots [10 0 R]"
 		extra = stream(9, form, secret) +
 			"10 0 obj\n<< /Type /Annot /Subtype /Square /Rect [0 0 612 792] /AP << /N 9 0 R >> >>\nendobj\n"
+	case "images":
+		page1Res = "<< /Font << /F1 4 0 R >> /XObject << /Im 10 0 R >> >>"
+		page1Body += " q 60 0 0 10 100 100 cm /Im Do Q"
+		page2Res = "<< /XObject << /Im 9 0 R >> >>"
+		page2Body = "q 80 0 0 80 100 100 cm /Im Do Q"
+		image := "/Type /XObject /Subtype /Image /Width 8 /Height 8 /ColorSpace /DeviceGray /BitsPerComponent 8"
+		extra = stream(9, image+" /Filter /DCTDecode", string(jpegWithComment("SECRET"))) +
+			stream(10, "/Type /XObject /Subtype /Image /Width 6 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", "SECRET")
 	case "xmp":
 		page2Extra = " /Metadata 11 0 R"
 		extra = stream(11, "/Type /Metadata /Subtype /XML",
@@ -59,12 +73,25 @@ func otherPageCopyPDF(kind string) []byte {
 		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
 		"/Resources " + page1Res + " /Contents 6 0 R >>\nendobj\n" +
-		stream(6, "", secret+" "+keep) +
+		stream(6, "", page1Body) +
 		"7 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
 		"/Resources " + page2Res + " /Contents 8 0 R" + page2Extra + " >>\nendobj\n" +
 		stream(8, "", page2Body) +
 		extra +
 		"trailer\n<< /Size 12 /Root 1 0 R >>\n%%EOF\n")
+}
+
+// jpegWithComment encodes an 8 by 8 grey JPEG with a comment segment (ITU-T
+// T.81, B.2.4.5, the COM marker) holding text, written after the SOI marker.
+func jpegWithComment(text string) []byte {
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, image.NewGray(image.Rect(0, 0, 8, 8)), nil); err != nil {
+		panic(err)
+	}
+	data := buf.Bytes()
+	segLen := len(text) + 2
+	com := append([]byte{0xFF, 0xFE, byte(segLen >> 8), byte(segLen)}, text...)
+	return slices.Concat(data[:2], com, data[2:])
 }
 
 // redactOtherPageCopy redacts "SECRET" off page 1 and writes the result.
@@ -202,5 +229,33 @@ func TestWriter_Redact_CopiesOnOtherPagesHoldThroughAutoTag(t *testing.T) {
 	}
 	if !strings.Contains(second, "SECRET") {
 		t.Errorf("page 2 reads %q, want its own SECRET kept", second)
+	}
+}
+
+// TestWriter_Redact_IgnoresImageBytesSpellingTheText pins that the bytes of an
+// image are not searched for removed text: a JPEG another page paints whose
+// bytes spell the removed word, and an image on the redacted page whose
+// samples do, are pixels, not a copy a reader extracts (ISO 32000-1, 8.9.5,
+// 9.10.2). Both refused the redaction with ErrRedactionIncomplete before.
+func TestWriter_Redact_IgnoresImageBytesSpellingTheText(t *testing.T) {
+	report, out, err := redactOtherPageCopy(t, otherPageCopyPDF("images"))
+	if err != nil {
+		t.Fatalf("Redact: %v (surviving %+v)", err, report)
+	}
+	if len(report.SurvivingCopies) != 0 || len(report.CopiesOnOtherPages) != 0 {
+		t.Errorf("report names image bytes as copies: surviving %+v, other pages %+v",
+			report.SurvivingCopies, report.CopiesOnOtherPages)
+	}
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatalf("reopening the output: %v", err)
+	}
+	first, err := r.ExtractText(ctx, 1, WithHiddenText())
+	if err != nil {
+		t.Fatalf("ExtractText page 1: %v", err)
+	}
+	if strings.Contains(first, "SECRET") || !strings.Contains(first, "KEEP") {
+		t.Errorf("page 1 reads %q, want KEEP without SECRET", first)
 	}
 }

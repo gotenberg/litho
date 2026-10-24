@@ -54,6 +54,12 @@ func (w *scanWalk) markContent(ctx context.Context, ref ast.PdfIndirectRef) {
 	if !w.visited[ref.ObjectNum] {
 		return
 	}
+	if _, skipped := w.images[ref.ObjectNum]; skipped {
+		// Entered as an image whose data was skipped: content is read as
+		// bytes, so the data is scanned whole now, its strings included.
+		w.rescanSkippedImage(ctx, ref.ObjectNum)
+		return
+	}
 	obj, ok := w.resolve(ctx, ref)
 	if !ok {
 		return

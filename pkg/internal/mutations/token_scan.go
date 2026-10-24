@@ -115,7 +115,10 @@ func (r ScanResult) Clean() bool {
 // CMap is neither compared nor decoded (see [isBinarySlot]): no reader
 // extracts page text from it, so a match there refuses over a copy that is not
 // one. A stream the walk
-// also reaches through any other reference is compared as usual.
+// also reaches through any other reference is compared as usual. Nor is the
+// data of an image XObject, which is samples (see
+// [scanWalk.imageDataSkipped]), unless a slot that reads a stream as bytes
+// names it too.
 //
 // It is a check, not a proof. A token absent from every object may still be
 // recoverable from glyph advances left behind by a split text run
@@ -228,6 +231,12 @@ type scanWalk struct {
 	plain    map[int]bool
 	deferred map[int]ast.PdfStream
 
+	// images holds the image XObjects whose data the scan skipped, and
+	// readAsData the streams a slot reads as bytes whatever their dictionary
+	// says (see [scanWalk.imageDataSkipped]).
+	images     map[int]ast.PdfStream
+	readAsData map[int]bool
+
 	// wide holds each token spelled in UTF-16, big-endian then little-endian,
 	// built on first use (see [scanWalk.matchBytes]).
 	wide [][2][]byte
@@ -249,6 +258,8 @@ func newScanWalk(doc *document.Document, alloc *writer.ObjAllocator, tokens []st
 		contents:   make(map[int]bool),
 		plain:      make(map[int]bool),
 		deferred:   make(map[int]ast.PdfStream),
+		images:     make(map[int]ast.PdfStream),
+		readAsData: make(map[int]bool),
 	}
 }
 
@@ -290,6 +301,7 @@ func (w *scanWalk) walk(ctx context.Context, objNum int, obj ast.PdfObject, dept
 		}
 	case ast.PdfDict:
 		w.markPageContents(ctx, v)
+		w.markReadAsData(ctx, v)
 		// Keys are names, not text: a /Title key never carries a redacted word,
 		// its value does.
 		for key, item := range v {
@@ -608,6 +620,10 @@ func (w *scanWalk) scanDestsKeys(ctx context.Context, catalogNum int, catalog as
 // raises the stream budget to edit a heavy page can then scan that page too.
 func (w *scanWalk) scanStreamData(ctx context.Context, objNum int, stream ast.PdfStream) {
 	limit := w.doc.Limits().MaxPageContentBytes()
+	if w.imageDataSkipped(objNum, stream) {
+		w.scanStoredTail(ctx, objNum, stream, limit)
+		return
+	}
 	data, ok := w.readStream(ctx, objNum, stream, limit)
 	if !ok {
 		w.unreadable[objNum] = true

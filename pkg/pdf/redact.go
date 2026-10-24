@@ -288,7 +288,11 @@ type RedactReport struct {
 //     or digits, and for each such word drawn across shorter runs, as a
 //     producer that positions every glyph draws one. A run too short to
 //     identify anything, a lone space, letter or digit, is not looked for: it
-//     survives in nearly every document whatever was removed.
+//     survives in nearly every document whatever was removed. Nor does it
+//     read the samples of images, embedded font programs, CMaps or ICC
+//     profiles: no reader extracts text from them, and their bytes spell a
+//     short word by chance. A stream a page's content, an attachment, a
+//     metadata stream, JavaScript or an XFA form also names is read.
 //   - [ErrRedactionPixelCheck] when a rendering of a redacted page does not
 //     show what the regions promise (see below).
 //
