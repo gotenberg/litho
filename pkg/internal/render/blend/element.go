@@ -77,6 +77,52 @@ func (g *Group) PaintCanvas(ctx context.Context, src *surface.Canvas, origin ima
 	return nil
 }
 
+// PaintPlanes composites the raster of one element whose colour is already
+// in the group's blending colour space into g, as [Group.PaintCanvas] does
+// for one in sRGB: planes hold the element's components three to a plane,
+// in the red, green and blue channels, premultiplied, the first plane's
+// alpha its object shape and object alpha. Every plane is the element drawn
+// with the same coverage, so they share the alpha; pixel (0, 0) of each is
+// device pixel origin. A colour in the group's own space needs no
+// conversion (ISO 32000-1, 11.3.4), and none is made: a round trip through
+// sRGB would move a CMYK colour by what the sRGB gamut and the profile's
+// tables lose.
+func (g *Group) PaintPlanes(ctx context.Context, planes []*surface.Canvas, origin image.Point, params Params) error {
+	n := g.space.channels()
+	if len(planes) == 0 || len(planes) < (n+2)/3 {
+		return fmt.Errorf("%w: %d planes for %d components", ErrPlanes, len(planes), n)
+	}
+	src := planes[0]
+	for _, p := range planes[1:] {
+		if p.Width != src.Width || p.Height != src.Height {
+			return fmt.Errorf("%w: a %dx%d plane beside a %dx%d one", ErrPlanes, p.Width, p.Height, src.Width, src.Height)
+		}
+	}
+	area := image.Rect(origin.X, origin.Y, origin.X+src.Width, origin.Y+src.Height).Intersect(g.bounds)
+	for y := area.Min.Y; y < area.Max.Y; y++ {
+		if (y-area.Min.Y)%rowsPerContextCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("compositing an element: %w", err)
+			}
+		}
+		base := 4 * (y - origin.Y) * src.Width
+		for x := area.Min.X; x < area.Max.X; x++ {
+			i := base + 4*(x-origin.X)
+			a := src.Pix[i+3]
+			if a <= 0 {
+				continue
+			}
+			var c Components
+			for k := range n {
+				c[k] = clamp01(planes[k/3].Pix[i+k%3] / a)
+			}
+			fs, as := params.Source(x, y, a, a)
+			g.paint(x, y, params.Mode, g.space.store(c), fs, as, params.Keep&AllSpots, Components{})
+		}
+	}
+	return nil
+}
+
 // PaintCoverage composites one element of the single colour cs, components
 // of the group's blending colour space, into g: coverage holds its shape and alpha
 // over the device rectangle rect, row by row, as a filled or stroked path's

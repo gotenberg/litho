@@ -368,6 +368,15 @@ func (r *renderer) image(s *scope, name ast.PdfName, stream ast.PdfStream) error
 			return r.imageFailed(err)
 		}
 	}
+	if planes := r.nativeImage(s, name, stream, r.top().group.Space(), b.Dx(), b.Dy()); planes != nil {
+		return r.imageFailed(r.paintPlanes(bounds, fx, len(planes), func(v view, op surface.Opacity, k int) error {
+			p, err := params(v, op)
+			if err != nil {
+				return err
+			}
+			return imgpaint.Draw(r.ctx, v.canvas, planes[k], masks, p)
+		}))
+	}
 	if img, err = r.transferImage(img); err != nil {
 		return err
 	}

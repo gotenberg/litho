@@ -353,6 +353,108 @@ func (r *renderer) nativeColor(s *scope, c graphics.Color, sp *blend.Space) (ble
 	return blend.Components{}, false
 }
 
+// nativeImage returns the colour of an image of width by height samples in
+// sp, the blending colour space of the group being painted, as planes of
+// three components each in the red, green and blue channels
+// ([renderer.paintPlanes]), when it needs no trip through sRGB: the image's
+// /ColorSpace is one whose colours [renderer.nativeColor] passes through,
+// a device or ICC space, and its samples decode in it at that size. It
+// returns nil otherwise, and for samples a soft mask's /Matte preblends
+// (ISO 32000-1, 11.6.5.3), which the native reading leaves preblended.
+//
+// ISO 32000-1, 11.3.4 converts a colour painted into a group into the
+// group's blending colour space, which a colour already in it needs none
+// of: a DeviceCMYK image in a DeviceCMYK group composites its own inks, as
+// a DeviceCMYK fill does. Read through sRGB, a saturated ink comes back
+// as other inks: the sRGB it reads as lies outside the gamut the profile's
+// tables back from the connection space reach.
+//
+// # Corpus evidence
+//
+//   - litho blendspace_2b: the raster fallback's DeviceCMYK image of the
+//     page's process cyan, drawn back into the page's DeviceCMYK group,
+//     drew 1,755 pixels at 4 167 221 where the cyan fill beside it draws
+//     0 174 239; poppler 26.09.0 and PDFium draw both alike.
+//   - govdocs, pdfjs: flattening writes other composites for 9 files whose
+//     CMYK page groups draw images. Of the 16 pages, 11 differ less from the
+//     source by litho's rendering, 5 by at most 800 levels summed over the
+//     page more; the flatten, render and recolor cells score as before.
+func (r *renderer) nativeImage(s *scope, name ast.PdfName, stream ast.PdfStream, sp *blend.Space, width, height int) []image.Image {
+	cs, ok := stream.Dict["ColorSpace"]
+	if !ok || sp == nil {
+		return nil
+	}
+	space, err := graphics.DescribeColorSpace(r.ctx, r.doc, cs)
+	if err != nil {
+		return nil
+	}
+	switch space.Family {
+	case graphics.FamilyDeviceGray, graphics.FamilyDeviceCMYK, graphics.FamilyICCBased, graphics.FamilyCalGray:
+	default:
+		// A tinted or indexed image maps each sample through a function or
+		// a palette, which its native samples do not apply.
+		return nil
+	}
+	if _, ok := r.nativeColor(s, graphics.Color{Space: space, Components: make([]float64, space.Components)}, sp); !ok {
+		return nil
+	}
+	if r.preblended(stream) {
+		return nil
+	}
+	native, ok, err := pdfimage.DecodeStreamNative(r.ctx, r.doc, &document.Page{Dict: r.page.Dict, Resources: s.resources}, name, stream)
+	if err != nil {
+		r.doc.Logger.Debug("render: reading an image's own components", slog.String("image", string(name)), slog.Any("err", err))
+		return nil
+	}
+	n := sp.Kind().Channels()
+	if !ok || native.Width != width || native.Height != height || (native.Components != n && (native.Components != 1 || n != 4)) {
+		return nil
+	}
+	px := width * height
+	if len(native.Data) < px*native.Components {
+		return nil
+	}
+	comps := func(i int) (c blend.Components) {
+		d := native.Data[i*native.Components:]
+		if native.Components == 1 && n == 4 {
+			// ISO 32000-1, 10.3: a DeviceGray colour enters CMYK as black
+			// alone.
+			return blend.Components{0, 0, 0, float32(255-d[0]) / 255}
+		}
+		for k := range n {
+			c[k] = float32(d[k]) / 255
+		}
+		return c
+	}
+	if n == 1 {
+		return []image.Image{&image.Gray{Pix: native.Data[:px], Stride: width, Rect: image.Rect(0, 0, width, height)}}
+	}
+	inks := image.NewNRGBA(image.Rect(0, 0, width, height))
+	black := image.NewGray(image.Rect(0, 0, width, height))
+	for i := range px {
+		c := comps(i)
+		inks.Pix[4*i], inks.Pix[4*i+1], inks.Pix[4*i+2], inks.Pix[4*i+3] = to8(c[0]), to8(c[1]), to8(c[2]), 0xff
+		black.Pix[i] = to8(c[3])
+	}
+	return []image.Image{inks, black}
+}
+
+// preblended reports whether the soft mask of an image dictionary names a
+// /Matte, whose samples hold the colour preblended with it (ISO 32000-1,
+// 11.6.5.3).
+func (r *renderer) preblended(stream ast.PdfStream) bool {
+	obj, ok := stream.Dict["SMask"]
+	if !ok {
+		return false
+	}
+	sm, err := document.ResolveStream(r.ctx, r.doc, obj)
+	if err != nil || sm.Dict == nil {
+		return false
+	}
+	_, matte := sm.Dict["Matte"]
+	return matte
+}
+
 // componentsOf clips the first n of comps to [0, 1], a missing one 0.
 func componentsOf(comps []float64, n int) blend.Components {
 	var out blend.Components

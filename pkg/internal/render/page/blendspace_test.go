@@ -2,6 +2,7 @@ package page
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
@@ -177,4 +178,47 @@ func TestNormalGroupKeepsParentSpace(t *testing.T) {
 	})
 	plain, _ := draw(t, fixture{content: "0 0 1 rg 0 0 100 100 re f"})
 	expect(t, grouped, 0, map[[2]int]rgb{{50, 50}: at(t, plain, 50, 50)})
+}
+
+// TestCMYKPageGroupKeepsImageInk checks ISO 32000-1, 11.3.4 for an image: a
+// DeviceCMYK image painted into a DeviceCMYK page group composites its own
+// inks, as a DeviceCMYK fill of the same colour does, and a DeviceGray image
+// enters it as black ink alone (10.3). Read through sRGB, process cyan came
+// back as other inks, which drew 4 167 221 where the fill draws 0 174 239.
+func TestCMYKPageGroupKeepsImageInk(t *testing.T) {
+	t.Parallel()
+	f := fixture{
+		page: "/Group << /S /Transparency /CS /DeviceCMYK >> /Resources << /XObject << /C 5 0 R /G 6 0 R >> >>",
+		content: "q 50 0 0 50 0 50 cm /C Do Q 1 0 0 0 k 50 50 50 50 re f " +
+			"q 50 0 0 50 0 0 cm /G Do Q 0 0 0 0.75 k 50 0 50 50 re f",
+		objs: []string{
+			stream("/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceCMYK /BitsPerComponent 8", "\xff\x00\x00\x00"),
+			stream("/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", "\x40"),
+		},
+	}
+	doc, pg := open(t, f.bytes(), limits.Limits{})
+	res, _, err := RenderGroup(context.Background(), doc, pg, Options{DPI: 72, Background: white, GroupSpace: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Group.Space() == nil || res.Group.Space().Kind() != blend.CMYK {
+		t.Fatalf("page group space %v, want DeviceCMYK", res.Space)
+	}
+	for _, tc := range []struct {
+		name        string
+		image, fill [2]int
+		want        blend.Components
+	}{
+		{"cyan image", [2]int{25, 25}, [2]int{75, 25}, blend.Components{1, 0, 0, 0}},
+		{"grey image", [2]int{25, 75}, [2]int{75, 75}, blend.Components{0, 0, 0, 0.75}},
+	} {
+		got, a := res.Group.Components(tc.image[0], tc.image[1])
+		fill, _ := res.Group.Components(tc.fill[0], tc.fill[1])
+		for k := range 4 {
+			if a != 1 || math.Abs(float64(got[k]-tc.want[k])) > 0.01 || math.Abs(float64(got[k]-fill[k])) > 0.01 {
+				t.Errorf("%s = %v at alpha %g, want %v as the fill paints %v", tc.name, got, a, tc.want, fill)
+				break
+			}
+		}
+	}
 }

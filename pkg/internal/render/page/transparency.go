@@ -184,6 +184,50 @@ func (r *renderer) paintAs(bounds image.Rectangle, fx effects, native *blend.Com
 	return nil
 }
 
+// paintPlanes is [renderer.paint] for an element whose colour is in the
+// blending colour space of the group being painted, which is not sRGB, as
+// planes images of three components each ([blend.Group.PaintPlanes]): draw
+// paints plane k of the element into a view, each plane with the same
+// coverage, and the layers are composited in their components, with no trip
+// through sRGB.
+func (r *renderer) paintPlanes(bounds image.Rectangle, fx effects, planes int, draw func(v view, op surface.Opacity, plane int) error) error {
+	if fx.opacity.Transparent() {
+		return nil
+	}
+	// An image under overprint paints process colour alone, and leaves the
+	// spot colorant planes (8.6.7).
+	fx.keep |= r.spotKeep(r.m.Current().FillOverprint)
+	top := r.top()
+	area := bounds.Intersect(top.group.Bounds()).Intersect(r.clipRect()).Intersect(r.clipMaskBounds())
+	if area.Empty() {
+		return nil
+	}
+	mask, err := r.softMask(fx.mask)
+	if err != nil {
+		return err
+	}
+	release, err := r.reserve(int64(planes) * int64(area.Dx()) * int64(area.Dy()))
+	if err != nil {
+		return err
+	}
+	defer release()
+	layers := make([]*surface.Canvas, planes)
+	for k := range layers {
+		layer, err := surface.NewCanvas(area.Dx(), area.Dy(), r.budget)
+		if err != nil {
+			return fmt.Errorf("%w: element layer: %w", ErrTooLarge, err)
+		}
+		if err := draw(view{canvas: layer, x: area.Min.X, y: area.Min.Y}, surface.Opaque, k); err != nil {
+			return err
+		}
+		layers[k] = layer
+	}
+	if err := top.group.PaintPlanes(r.ctx, layers, area.Min, fx.params(mask)); err != nil {
+		return fmt.Errorf("compositing: %w", err)
+	}
+	return nil
+}
+
 // paintSolid paints coverage cov in the colour c, as [renderer.paint] does,
 // without a layer: a solid colour's coverage is its shape and alpha.
 func (r *renderer) paintSolid(cov *raster.Coverage, c solid, fx effects) error {
