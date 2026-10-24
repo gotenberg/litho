@@ -49,6 +49,32 @@ const redactRenderMargin = 2
 // from the page under it by far more.
 const redactRenderSelfTolerance = 16
 
+// redactRenderFallbackTolerance is the largest difference, in 8-bit levels,
+// a channel may show on litho's half of a fallback scenario's outside check
+// where the after page's images paint over a flat part of the source page
+// ([flatAround]), in place of [renderChannelTolerance]. The raster fallback
+// promises its images hold what litho's renderer draws of the source
+// ([pdf.WithRedactionRasterFallback]), and resampling them keeps a flat
+// area's colour, so there litho's renderings before and after differ by the
+// rounding [redactRenderSelfTolerance] bounds. The render tolerance holds
+// two rasterizers' anti-aliasing apart, which litho against itself does not
+// need: under it, an image drawn faded by an alpha of 0.8 over white moves
+// no channel past 51 levels and passes. At an edge the render tolerance
+// stays (see [redactPixelSets.countOutside]), and poppler's half keeps it
+// everywhere, since poppler draws the source with its own rasterizer.
+//
+// # Corpus evidence
+//
+//   - litho transparency_2b with the opaque state of the fallback's images
+//     removed (the fault b291dd6b fixed): the band and quarter scenarios
+//     fail on litho's half with 3,120 and 528 faded pixels over flat areas,
+//     where the render tolerance read 0.
+//   - pdfjs issue12752, govdocs thread_200_200163, pdfcpu
+//     FOSDEM14_HPC_devroom_14_GoCUDA page 2: 2 to 1,497 pixels per scenario
+//     move past 16 levels at the edges of hairlines and glyphs the image
+//     samples at a point, none over a flat area.
+const redactRenderFallbackTolerance = redactRenderSelfTolerance
+
 // redactRenderDarkLevel is the largest 8-bit channel value a pixel of litho's
 // images-only rendering over black may take inside a region. A redaction
 // blanks a picture's covered samples to opaque black (package mutations,
@@ -129,6 +155,13 @@ const (
 	metricFallbackPopplerNoOracle = "fallback_poppler_no_oracle"
 	metricFallbackLithoReading    = "fallback_litho_reading"
 	metricFallbackResampled       = "fallback_resampled"
+	// metricFallbackStrictChanged counts the fallback scenarios whose litho
+	// half found a pixel changed where the images paint over a flat area
+	// that the render tolerance alone would have passed
+	// ([redactRenderFallbackTolerance]):
+	// an image that does not show litho's rendering of the source, as one
+	// drawn faded does. Each also counts in fallback_outside_changed.
+	metricFallbackStrictChanged = "fallback_strict_changed"
 )
 
 // redactScenario is one redaction the feature applies: one region on one
@@ -251,10 +284,15 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 // option promises they show what litho's renderer draws, at their
 // resolution: a pixel that shows litho's rendering of the source, and one
 // whose value lies between those the source shows around it
-// ([redactPixelSets.countOutside]). image_spill does not apply: the images
-// change the images-only rendering wherever they paint. Their outcomes
-// count in the fallback_* metrics and rasterised_units, and a failure fails
-// the PDF as any scenario's does.
+// ([redactPixelSets.countOutside]). Where the images paint over a flat part
+// of the source, litho's half reads the pixels under
+// [redactRenderFallbackTolerance], not the render tolerance: litho compares
+// its own rendering of the source with the images' copy of it, so an image
+// that shows it otherwise, as one drawn faded, fails
+// (fallback_strict_changed). image_spill does not apply: the
+// images change the images-only rendering wherever they paint. Their
+// outcomes count in the fallback_* metrics and rasterised_units, and a
+// failure fails the PDF as any scenario's does.
 //
 // The inside check does not see a shape the alpha of a blanked image keeps:
 // the black of the blank paints where the soft mask lets it, as a picture
@@ -319,6 +357,21 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     under those states, so their colours faded: 17 pixels by poppler,
 //     663 by PDFium, none past the render tolerance by litho. They are now
 //     drawn under an opaque state.
+//   - litho blendspace_2b band: litho's half sees 1,755 pixels over a flat
+//     area 18 levels apart, a cyan the source draws (0 174 239) and the
+//     fallback's image (4 167 221). The page group's /CS is
+//     DeviceCMYK, and the image, which holds litho's sRGB rendering, is
+//     composited in it again; poppler and PDFium 4.30.0, which do not
+//     composite the page in its group's space, draw every one of those
+//     pixels unchanged. A mismatch until the fallback writes its images in
+//     a CMYK page group's space, as flattening does.
+//   - pdfcpu VectorApple quarter: litho's half sees 5 pixels over flat areas
+//     drawn 20 to 27 levels lighter. The fallback's image, drawn where the
+//     first rasterised form was, holds the forms drawn later in the Hard
+//     Light and Multiply blend modes, and the forms it kept in between,
+//     drawn after it, cover their effect. poppler draws 3 of the 5 changed
+//     past 16 levels; PDFium, which draws the source apart from both, draws
+//     them unchanged. A mismatch until the fallback keeps the paint order.
 //   - pdfcpu FOSDEM14_HPC_devroom_14_GoCUDA page 2, VectorApple,
 //     text_annotations, litho iccgroupalt_2b, formimgname_2b, pdfjs
 //     issue2642, issue12752: up to 988 pixels per scenario that change
@@ -491,6 +544,11 @@ type redactRenderCheck struct {
 	// resampled to the page's, blend the colours on either side of an edge
 	// (see [redactPixelSets.countOutside]).
 	Resampled int `json:"resampled,omitempty"`
+	// StrictChanged counts, on a fallback scenario's litho half, the changed
+	// pixels where the images paint that the render tolerance alone would
+	// have passed (see [redactRenderFallbackTolerance]). They count in
+	// Outside too.
+	StrictChanged int `json:"strict_changed,omitempty"`
 	// OutsideNoOracle says why the outside check did not run.
 	OutsideNoOracle string `json:"outside_no_oracle,omitempty"`
 	// Error says why the renderer's half did not run.
@@ -884,18 +942,26 @@ func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *red
 	// tell blanking apart from what the images took over. The images are
 	// opaque: where an image paints, the after page's images drawn over
 	// white and over black agree, and those pixels are the ones the
-	// fallback may have resampled.
+	// fallback may have resampled. Litho's half reads the pixels any image
+	// paints, opaque or not: an image drawn translucent, which shows the
+	// source otherwise than litho draws it, is one its stricter tolerance
+	// exists to catch, and the opaque set leaves it out.
 	if fallback {
 		sets.imaged = sets.grown(func(i int) bool {
 			return channelDelta(images[3*i:3*i+3], onBlack[3*i:3*i+3]) <= redactRenderSelfTolerance
+		})
+		white, black := []uint8{0xff, 0xff, 0xff}, []uint8{0, 0, 0}
+		sets.painted = sets.grown(func(i int) bool {
+			return channelDelta(images[3*i:3*i+3], white) > 0 || channelDelta(onBlack[3*i:3*i+3], black) > 0
 		})
 	} else {
 		sets.spill = sets.grown(func(i int) bool {
 			return channelDelta(orig.images[3*i:3*i+3], images[3*i:3*i+3]) > redactRenderSelfTolerance
 		})
 	}
-	out := sets.countOutside(orig.full, full, sets.w, nil)
+	out := sets.countOutside(orig.full, full, sets.w, nil, sets.painted, redactRenderFallbackTolerance)
 	check.OutsidePixels, check.Outside, check.OutsideBox, check.ImageSpill, check.Resampled = out.read, out.changed, out.box, out.spill, out.resampled
+	check.StrictChanged = out.strict
 	var leaks pixelBox
 	for y := range sets.h {
 		for x := range sets.w {
@@ -977,7 +1043,7 @@ func popplerCheck(staging string, st redactRenderStaged) (*redactRenderCheck, st
 		if st.outcome.Fallback {
 			reading = cropRGB(flattenOnWhite(lithoBefore, sets.w, sets.h), sets.w, w, h)
 		}
-		out := o.countOutside(cropRGB(orig, bw, w, h), cropRGB(full, aw, w, h), w, reading)
+		out := o.countOutside(cropRGB(orig, bw, w, h), cropRGB(full, aw, w, h), w, reading, o.imaged, renderChannelTolerance)
 		check.OutsidePixels, check.Outside, check.OutsideBox, check.ImageSpill = out.read, out.changed, out.box, out.spill
 		check.LithoReading, check.Resampled = out.reading, out.resampled
 	}
@@ -995,7 +1061,7 @@ func popplerCheck(staging string, st redactRenderStaged) (*redactRenderCheck, st
 			// litho's images-only rendering, checked clean above, has no
 			// trace of. Where litho draws more than poppler, litho's own
 			// half has already judged it.
-			if !withinRange(full[i:i+3], images, w, h, x, y) {
+			if !withinRange(full[i:i+3], images, w, h, x, y, renderChannelTolerance) {
 				leaks.add(x, y)
 			}
 		}
@@ -1004,13 +1070,14 @@ func popplerCheck(staging string, st redactRenderStaged) (*redactRenderCheck, st
 	return check, ""
 }
 
-// withinRange reports whether each channel of px lies within
-// [renderChannelTolerance] of the range that channel spans over the pixels
-// within [renderNeighbourhood] of (x, y) in img. Two rasterizers put an edge
-// a pixel apart and anti-alias it with their own coverage, so an edge pixel
-// of one takes any value between the two sides the other shows nearby; a
-// mark the other has no trace of near that place lies outside that range.
-func withinRange(px, img []uint8, w, h, x, y int) bool {
+// withinRange reports whether each channel of px lies within tol of the
+// range that channel spans over the pixels within [renderNeighbourhood] of
+// (x, y) in img. Two rasterizers put an edge a pixel apart and anti-alias it
+// with their own coverage, so an edge pixel of one takes any value between
+// the two sides the other shows nearby; a mark the other has no trace of
+// near that place lies outside that range. Between two rasterizers tol is
+// [renderChannelTolerance].
+func withinRange(px, img []uint8, w, h, x, y, tol int) bool {
 	for c := range 3 {
 		lo, hi := 255, 0
 		for ny := max(0, y-renderNeighbourhood); ny <= min(h-1, y+renderNeighbourhood); ny++ {
@@ -1019,7 +1086,7 @@ func withinRange(px, img []uint8, w, h, x, y int) bool {
 				lo, hi = min(lo, v), max(hi, v)
 			}
 		}
-		if v := int(px[c]); v < lo-renderChannelTolerance || v > hi+renderChannelTolerance {
+		if v := int(px[c]); v < lo-tol || v > hi+tol {
 			return false
 		}
 	}
@@ -1079,7 +1146,7 @@ func (f *redactRenderFeature) Compare(fixtureID string, output []byte) Verdict {
 		metricRenderFailed: 0, metricImageSpill: 0,
 		metricFallbackScenarios: 0, metricRasterisedUnits: 0, metricFallbackRefused: 0, metricFallbackIncomplete: 0,
 		metricFallbackOutsideChanged: 0, metricFallbackInsideLeaked: 0, metricFallbackPopplerNoOracle: 0, metricFallbackLithoReading: 0,
-		metricFallbackResampled: 0,
+		metricFallbackResampled: 0, metricFallbackStrictChanged: 0,
 	}
 	checked, passed := 0, 0
 	var mismatches []json.RawMessage
@@ -1113,6 +1180,9 @@ func (f *redactRenderFeature) Compare(fixtureID string, output []byte) Verdict {
 			inside := sc.Litho.Inside > 0
 			spill := sc.Litho.ImageSpill > 0
 			resampled := sc.Litho.Resampled > 0
+			if sc.Litho.StrictChanged > 0 {
+				m[metricFallbackStrictChanged]++
+			}
 			// The per-renderer halves count the default mode alone; a
 			// fallback failure names its renderer in the mismatch.
 			if outside && !sc.Fallback {
@@ -1300,6 +1370,12 @@ type redactPixelSets struct {
 	// after page paints, grown by [renderNeighbourhood]: those the outside
 	// check lets show litho's reading of the source or its resampling.
 	imaged []bool
+	// painted marks, on a fallback scenario, the pixels any image of the
+	// after page paints, opaque or translucent, grown by
+	// [renderNeighbourhood]: those litho's half of the outside check reads
+	// under [redactRenderFallbackTolerance], with the allowances imaged
+	// grants poppler's.
+	painted []bool
 }
 
 // grown returns, w pixels a row, the pixels marked holds, the index of a
@@ -1410,8 +1486,10 @@ type outsideCount struct {
 	box           [4]int
 	// spill counts the differing pixels image blanking changed, reading
 	// those whose after pixel shows the other reading of the source, and
-	// resampled those a fallback's image blends.
-	spill, reading, resampled int
+	// resampled those a fallback's image blends. strict counts the changed
+	// pixels where a fallback's images paint that the render tolerance
+	// alone would have passed.
+	spill, reading, resampled, strict int
 }
 
 // countOutside compares before and after, RGB rasters w pixels wide, on the
@@ -1421,24 +1499,49 @@ type outsideCount struct {
 // of it. A differing pixel image blanking changed counts as spill, not as
 // changed.
 //
-// Where a fallback scenario's images paint ([redactPixelSets.imaged]), two
-// more readings stand. The images hold litho's rendering of the source, so a
-// differing pixel that reading, when not nil, litho's rendering of the
-// source, accounts for under the same rule counts as reading, not as
-// changed. And they hold it at their own resolution, which a renderer
+// Where a fallback scenario's images paint, the pixels paints marks
+// ([redactPixelSets.imaged] for poppler's half, [redactPixelSets.painted]
+// for litho's), two more readings stand. The images hold litho's rendering
+// of the source, so a differing pixel that reading, when not nil, litho's
+// rendering of the source, accounts for under the same rule counts as
+// reading, not as changed. And they hold it at their own resolution, which a renderer
 // resamples to the page's: a sample straddling an edge holds a blend of both
 // sides, an edge pixel no vector rendering has, of a value between them. A
 // differing pixel whose value lies within the range the source spans around
 // it ([withinRange]), in before or in reading, counts as resampled, not as
 // changed. Elsewhere on the page nothing may change: a mark the redaction
 // lost there, a hairline among them, is no image's.
-func (s *redactPixelSets) countOutside(before, after []uint8, w int, reading []uint8) outsideCount {
+//
+// imagedTol is the channel tolerance where the images paint over a flat
+// part of before ([flatAround]), both readings included:
+// [renderChannelTolerance] when before is another rasterizer's rendering,
+// [redactRenderFallbackTolerance] when before and after are both litho's.
+// Resampling keeps a flat area's colour, so there an image that shows
+// litho's rendering differs from it by rounding alone. At an edge the
+// render tolerance stands: a renderer samples the image at a point, which
+// can fall on a stroke thinner than the page's pixel that the vector
+// rendering of the pixel spreads over its area, a value outside the range
+// around it by up to the stroke's contrast. A changed pixel the render
+// tolerance would have passed counts in strict as well.
+func (s *redactPixelSets) countOutside(before, after []uint8, w int, reading []uint8, paints []bool, imagedTol int) outsideCount {
 	var out outsideCount
 	var diff pixelBox
-	tol, radius := renderChannelTolerance, renderNeighbourhood
-	same := func(a, b []uint8, x, y, i int) bool {
+	radius := renderNeighbourhood
+	same := func(a, b []uint8, x, y, i, tol int) bool {
 		return channelDelta(a[i:i+3], b[i:i+3]) <= tol ||
 			nearWithin(a[i:i+3], b, w, s.h, x, y, tol, radius) && nearWithin(b[i:i+3], a, w, s.h, x, y, tol, radius)
+	}
+	// accounted reports whether an imaged pixel shows a reading of the
+	// source, or its resampling, under tol, and which one.
+	accounted := func(x, y, i, tol int) (isReading, ok bool) {
+		switch {
+		case same(before, after, x, y, i, tol):
+			return false, true
+		case reading != nil && same(reading, after, x, y, i, tol):
+			return true, true
+		}
+		return false, withinRange(after[i:i+3], before, w, s.h, x, y, tol) ||
+			reading != nil && withinRange(after[i:i+3], reading, w, s.h, x, y, tol)
 	}
 	for y := range s.h {
 		for x := range s.w {
@@ -1447,23 +1550,56 @@ func (s *redactPixelSets) countOutside(before, after []uint8, w int, reading []u
 			}
 			out.read++
 			i := 3 * (y*w + x)
+			imaged := paints != nil && paints[y*s.w+x]
 			switch {
-			case same(before, after, x, y, i):
+			case !imaged && same(before, after, x, y, i, renderChannelTolerance):
 			case s.spill != nil && s.spill[y*s.w+x]:
 				out.spill++
-			case s.imaged == nil || !s.imaged[y*s.w+x]:
+			case !imaged:
 				diff.add(x, y)
-			case reading != nil && same(reading, after, x, y, i):
-				out.reading++
-			case withinRange(after[i:i+3], before, w, s.h, x, y) || reading != nil && withinRange(after[i:i+3], reading, w, s.h, x, y):
-				out.resampled++
 			default:
-				diff.add(x, y)
+				tol := renderChannelTolerance
+				if flatAround(before, w, s.h, x, y) {
+					tol = imagedTol
+				}
+				isReading, ok := accounted(x, y, i, tol)
+				switch {
+				case ok && isReading:
+					out.reading++
+				case ok:
+					if !same(before, after, x, y, i, tol) {
+						out.resampled++
+					}
+				default:
+					diff.add(x, y)
+					if _, loose := accounted(x, y, i, renderChannelTolerance); loose {
+						out.strict++
+					}
+				}
 			}
 		}
 	}
 	out.changed, out.box = diff.n, diff.rect()
 	return out
+}
+
+// flatAround reports whether every channel of img spans no more than
+// [redactRenderSelfTolerance] over the pixels within [renderNeighbourhood]
+// of (x, y): a part of the page no edge crosses.
+func flatAround(img []uint8, w, h, x, y int) bool {
+	for c := range 3 {
+		lo, hi := 255, 0
+		for ny := max(0, y-renderNeighbourhood); ny <= min(h-1, y+renderNeighbourhood); ny++ {
+			for nx := max(0, x-renderNeighbourhood); nx <= min(w-1, x+renderNeighbourhood); nx++ {
+				v := int(img[3*(ny*w+nx)+c])
+				lo, hi = min(lo, v), max(hi, v)
+			}
+		}
+		if hi-lo > redactRenderSelfTolerance {
+			return false
+		}
+	}
+	return true
 }
 
 // nearWithin reports whether a pixel within radius of (x, y) in img lies

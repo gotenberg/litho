@@ -170,7 +170,10 @@ var uncomparedMetrics = map[string]bool{
 	// fallback_litho_reading and fallback_resampled count scenarios where
 	// pixels changed outside show litho's own rendering of the source, which
 	// the rasterised image holds, or the image's resampling of it, both by
-	// design.
+	// design. fallback_strict_changed names, among the scenarios
+	// fallback_outside_changed gates, those litho's stricter tolerance
+	// failed where the images paint.
+	metricFallbackStrictChanged:   true,
 	metricFallbackRefused:         true,
 	metricFallbackIncomplete:      true,
 	metricFallbackPopplerNoOracle: true,

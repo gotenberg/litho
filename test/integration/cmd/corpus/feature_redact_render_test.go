@@ -252,3 +252,59 @@ func TestRedactRenderCatchesAFallbackLeak(t *testing.T) {
 		t.Errorf("a fallback that left the shading inside the region passed: %+v, metrics %v", sc.Litho, v.Metrics)
 	}
 }
+
+// TestRedactRenderCatchesAFadedFallbackImage requires litho's half of a
+// fallback scenario's outside check to fail on an image that paints the
+// source faded, as one drawn under a constant alpha of 0.8 does, and to keep
+// passing one whose samples resample an edge of the source. The render
+// tolerance poppler's half keeps passes the faded image.
+func TestRedactRenderCatchesAFadedFallbackImage(t *testing.T) {
+	t.Parallel()
+	const w, h = 6, 4
+	fill := func(px [3]uint8) []uint8 {
+		out := make([]uint8, 0, 3*w*h)
+		for range w * h {
+			out = append(out, px[:]...)
+		}
+		return out
+	}
+	sets := &redactPixelSets{w: w, h: h, region: [4]float64{100, 100, 101, 101}}
+	paints := make([]bool, w*h)
+	for i := range paints {
+		paints[i] = true
+	}
+	navy := [3]uint8{40, 40, 200}
+	faded := [3]uint8{83, 83, 211} // navy at alpha 0.8 over white
+	before := fill(navy)
+	out := sets.countOutside(before, fill(faded), w, nil, paints, redactRenderFallbackTolerance)
+	if out.changed != w*h || out.strict != w*h {
+		t.Errorf("faded image under litho's tolerance: %d changed, %d strict, want %d of each", out.changed, out.strict, w*h)
+	}
+	if out := sets.countOutside(before, fill(faded), w, nil, paints, renderChannelTolerance); out.changed != 0 {
+		t.Errorf("faded image under the render tolerance: %d changed, want 0", out.changed)
+	}
+
+	// The left half navy, the right half white; the image's resampling
+	// blends the column at the edge.
+	edge := fill([3]uint8{255, 255, 255})
+	resampled := fill([3]uint8{255, 255, 255})
+	for y := range h {
+		for x := range w / 2 {
+			copy(edge[3*(y*w+x):], navy[:])
+			copy(resampled[3*(y*w+x):], navy[:])
+		}
+		copy(resampled[3*(y*w+w/2-1):], []uint8{150, 150, 228})
+	}
+	if out := sets.countOutside(edge, resampled, w, nil, paints, redactRenderFallbackTolerance); out.changed != 0 || out.resampled == 0 {
+		t.Errorf("resampled edge under litho's tolerance: %d changed, %d resampled, want 0 and some", out.changed, out.resampled)
+	}
+
+	// A point sample on a stroke thinner than the pixel: darker than any
+	// pixel around it, within the render tolerance. At an edge it stands.
+	for y := range h {
+		copy(resampled[3*(y*w+w/2-1):], []uint8{20, 20, 180})
+	}
+	if out := sets.countOutside(edge, resampled, w, nil, paints, redactRenderFallbackTolerance); out.changed != 0 {
+		t.Errorf("point-sampled edge under litho's tolerance: %d changed, want 0", out.changed)
+	}
+}
