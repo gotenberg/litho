@@ -74,7 +74,9 @@ var (
 // With private set, the result goes to a new object rather than over the
 // image, which stays as it was for the placements that still paint it; see
 // [blankPrivateCopies], which repoints the covered Do at it. It returns the
-// number of the object written.
+// number of the object written and, for a picture the source held as JPEG or
+// JPEG 2000, what [EncodeBlankedPhotographs] needs to re-encode it as one,
+// nil for any other image.
 func blankImage(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -83,14 +85,14 @@ func blankImage(
 	box graphics.ImageBox,
 	zones []heuristics.Zone,
 	private bool,
-) (int, error) {
+) (int, *BlankedPhotograph, error) {
 	if box.Name == graphics.InlineImageName {
-		return 0, ErrInlineImageInRegion
+		return 0, nil, ErrInlineImageInRegion
 	}
 
 	ref, ok := imageXObjectRef(ctx, doc, page, box)
 	if !ok {
-		return 0, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
+		return 0, nil, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
 	dest := ref.ObjectNum
 	if private {
@@ -105,7 +107,7 @@ func blankImage(
 	// placements of one image kept only the second.
 	stream, err := latestImageStream(ctx, alloc, doc, ref)
 	if err != nil {
-		return 0, fmt.Errorf("resolving image %q: %w", box.Name, err)
+		return 0, nil, fmt.Errorf("resolving image %q: %w", box.Name, err)
 	}
 
 	// The error is discarded deliberately: an /ImageMask that cannot be resolved
@@ -122,12 +124,12 @@ func blankImage(
 	// keeps its /SMask, which is the case the entry is defined for.
 	if isStencil {
 		if _, present := stream.Dict["SMask"]; present {
-			return 0, fmt.Errorf("%w: %q", ErrImageIsStencilMask, box.Name)
+			return 0, nil, fmt.Errorf("%w: %q", ErrImageIsStencilMask, box.Name)
 		}
 	}
 	for _, key := range maskEntries {
 		if _, present := stream.Dict[key]; present {
-			return 0, fmt.Errorf("%w: %q carries %s", ErrImageCarriesSampleEntries, box.Name, key)
+			return 0, nil, fmt.Errorf("%w: %q carries %s", ErrImageCarriesSampleEntries, box.Name, key)
 		}
 	}
 	// /Decode is only a problem when the decode did not already fold it into
@@ -137,7 +139,7 @@ func blankImage(
 	// would change the picture outside the region as well as inside.
 	if _, present := stream.Dict["Decode"]; present &&
 		!pdfimage.AppliesDecodeArray(ctx, doc, stream.Dict) {
-		return 0, fmt.Errorf("%w: %q carries a /Decode the decode does not apply",
+		return 0, nil, fmt.Errorf("%w: %q carries a /Decode the decode does not apply",
 			ErrImageCarriesSampleEntries, box.Name)
 	}
 
@@ -148,11 +150,11 @@ func blankImage(
 	if !isStencil {
 		smask, err := blankSoftMask(ctx, alloc, doc, page, box, zones, stream.Dict)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if smask == nil {
 			if smask, dataMask, err = blankDataSoftMask(ctx, alloc, doc, box, zones, stream); err != nil {
-				return 0, err
+				return 0, nil, err
 			}
 		}
 		if smask != nil {
@@ -162,14 +164,17 @@ func blankImage(
 		}
 		native, ok, err := pdfimage.DecodeStreamNative(ctx, doc, page, ast.PdfName(box.Name), source)
 		if err != nil {
-			return 0, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
+			return 0, nil, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 		}
 		if ok {
 			if dataMask != nil && dataMask.Premultiplied {
 				// The explicit /SMask composites straight colour (11.6.5.3).
 				pdfimage.Unpremultiply(native.Data, dataMask.Alpha, native.Width*native.Height, native.Components)
 			}
-			return dest, blankNative(ctx, alloc, doc, page, dest, stream, box, zones, native)
+			if err := blankNative(ctx, alloc, doc, page, dest, stream, box, zones, native); err != nil {
+				return 0, nil, err
+			}
+			return dest, blankedPhotograph(source.Dict, box, zones, native.Width, native.Height), nil
 		}
 	}
 
@@ -184,13 +189,13 @@ func blankImage(
 		img, err = pdfimage.DecodeStreamSamples(ctx, doc, page, ast.PdfName(box.Name), source)
 	}
 	if err != nil {
-		return 0, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
+		return 0, nil, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 	}
 
 	bounds := img.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
 	if w <= 0 || h <= 0 {
-		return 0, fmt.Errorf("%w: %q has no samples", ErrImageNotDecodable, box.Name)
+		return 0, nil, fmt.Errorf("%w: %q has no samples", ErrImageNotDecodable, box.Name)
 	}
 
 	// Work on NRGBA for a predictable byte order, matching buildPNGXObject.
@@ -207,7 +212,7 @@ func blankImage(
 	// the colorant None decodes fully transparent (ISO 32000-1, 8.6.6.4), and
 	// rewritten as RGB it would cover its whole placement in black.
 	if !isStencil && !canvas.Opaque() {
-		return 0, fmt.Errorf("%w: %q does not paint every sample it holds", ErrImageNotDecodable, box.Name)
+		return 0, nil, fmt.Errorf("%w: %q does not paint every sample it holds", ErrImageNotDecodable, box.Name)
 	}
 
 	fill := blankedPicture
@@ -217,7 +222,7 @@ func blankImage(
 
 	blanked, err := blankCoveredSamples(canvas, box, zones, fill)
 	if err != nil {
-		return 0, fmt.Errorf("%q: %w", box.Name, err)
+		return 0, nil, fmt.Errorf("%q: %w", box.Name, err)
 	}
 	if blanked == 0 {
 		// The region met the image and cleared none of it. That is not "nothing
@@ -225,7 +230,7 @@ func blankImage(
 		// inside that area covers picture the caller asked to clear while no
 		// sample centre falls in it. Returning nil here would report success
 		// over content still in the file.
-		return 0, fmt.Errorf("%w: %q", ErrImageRegionCoversNoSample, box.Name)
+		return 0, nil, fmt.Errorf("%w: %q", ErrImageRegionCoversNoSample, box.Name)
 	}
 
 	var (
@@ -236,7 +241,7 @@ func blankImage(
 	if isStencil {
 		compressed, parms, err = encodeBlankedSamples(ctx, packStencilBits(canvas, w, h), w, 1, 1, false)
 		if err != nil {
-			return 0, fmt.Errorf("compressing blanked image mask %q: %w", box.Name, err)
+			return 0, nil, fmt.Errorf("compressing blanked image mask %q: %w", box.Name, err)
 		}
 		// No /ColorSpace: ISO 32000-1, Table 89 does not allow the entry on a
 		// mask, which paints with the fill colour in force rather than one of
@@ -260,11 +265,11 @@ func blankImage(
 		}
 		compressed, parms, err = encodeBlankedSamples(ctx, rgb, w, 3, 8, photographicSource(stream.Dict))
 		if err != nil {
-			return 0, fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
+			return 0, nil, fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
 		}
 		cs, err := srgbColorSpace(alloc)
 		if err != nil {
-			return 0, fmt.Errorf("blanked image %q: %w", box.Name, err)
+			return 0, nil, fmt.Errorf("blanked image %q: %w", box.Name, err)
 		}
 		dict = ast.PdfDict{
 			"Type":             ast.PdfName("XObject"),
@@ -285,9 +290,12 @@ func blankImage(
 	}
 
 	if !alloc.AllocAt(dest, ast.NewStream(dict, compressed)) {
-		return 0, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
+		return 0, nil, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
-	return dest, nil
+	if isStencil {
+		return dest, nil, nil
+	}
+	return dest, blankedPhotograph(source.Dict, box, zones, w, h), nil
 }
 
 // blankSoftMask returns a replacement for the /SMask of the picture dict

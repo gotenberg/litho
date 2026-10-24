@@ -182,6 +182,13 @@ type RedactReport struct {
 	// which counts each as a placement covering every sample, as the removed
 	// one did.
 	RemovedImageObjects []int
+	// BlankedPhotographs maps the object number each blanked picture was
+	// written at, in place or in a copy, to the samples the regions could
+	// reach and how deep in forms it was drawn, for every picture the source
+	// held as JPEG or JPEG 2000: what [EncodeBlankedPhotographs] needs to
+	// re-encode it lossily outside the regions. A caller merges the pages'
+	// maps with [MergeBlankedPhotographs].
+	BlankedPhotographs map[int]BlankedPhotograph
 	// ImagesBlankedInCopy names, by the resource name the page drew them
 	// with, the images blanked in a copy (see [RedactOptions.PrivateCopies]),
 	// once each. The image itself keeps its samples wherever else it is
@@ -419,11 +426,12 @@ func redactPageRegions(
 			}
 			continue
 		}
-		objNum, err := blankImage(ctx, alloc, doc, page, box, zones, copied)
+		objNum, photo, err := blankImage(ctx, alloc, doc, page, box, zones, copied)
 		if err != nil {
 			return RedactReport{}, err
 		}
 		report.BlankedImages = append(report.BlankedImages, box.Name)
+		report.BlankedPhotographs = addBlankedPhotograph(report.BlankedPhotographs, objNum, photo)
 		if copied {
 			if box.FormDepth > 0 {
 				// The copy has to be named in the form's resources and drawn

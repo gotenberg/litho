@@ -114,28 +114,42 @@ func WithRedactionRasterFallback() RedactOption {
 	return func(o *redactOpts) { o.raster = true }
 }
 
-// WithRedactionJPEGQuality encodes the photographic parts of the images
-// [WithRedactionRasterFallback] draws as baseline JPEG (ITU-T T.81) at
-// quality q, 1 to 100, on the scale of the Independent JPEG Group's libjpeg,
-// as [WithFlattenJPEGQuality] picks a flattening's JPEG tiles: each image is
-// cut on a grid of its pixels, and a tile only images and shadings reach
-// whose pixels hold 256 colours is encoded as JPEG unless Flate holds it in
-// no more bytes. The JPEG tiles are drawn over one lossless image of the
-// whole area, placed as the lossless image would be, so the page outside the
-// JPEG tiles draws as it does without this option.
-// A tile a region reaches, widened by a pixel, always stays lossless, so the
-// image's samples inside the regions are the paper's colour exactly, in the
-// file as on the page: a JPEG spreads each 8 by 8 block's error over the
-// whole block, and would decode traces of the ink beside a region into it.
+// WithRedactionJPEGQuality encodes as baseline JPEG (ITU-T T.81) at quality
+// q, 1 to 100, on the scale of the Independent JPEG Group's libjpeg, the
+// photographic parts of two kinds of image a redaction writes: the
+// photographs it blanks, and the images [WithRedactionRasterFallback] draws.
+// Either is cut on a grid of its pixels as [WithFlattenJPEGQuality] cuts a
+// flattening's composite: a run of cells whose pixels hold 256 colours and
+// that no region reaches is encoded as a JPEG tile unless Flate holds it in
+// no more bytes, and the JPEG tiles are drawn over one lossless image of the
+// whole, so the image outside the JPEG tiles draws as it does without this
+// option. A cell a region reaches, widened by a pixel of a fallback image
+// and by two samples of a photograph, always stays lossless, so the samples
+// inside the regions are the blank or the paper's
+// colour exactly, in the file as on the page: a JPEG spreads each 8 by 8
+// block's error over the whole block, and would decode traces of the ink
+// beside a region into it.
 //
-// By default every image the fallback draws is lossless under FlateDecode,
-// at the cost of size: a page of photographs drawn by a form weighs several
-// times its JPEG source. Without [WithRedactionRasterFallback] it has no
-// effect. A q outside 1 to 100 makes [Writer.Redact] fail with
+// A blanked photograph is re-encoded only when the source held it as JPEG
+// or JPEG 2000, so blanking never turns a lossless picture lossy, and only
+// when that saves bytes; [RedactReport.LossyBlankedImages] counts them. The
+// picture becomes a form XObject at the image's own object number, so every
+// placement and reference finds it there, drawing the lossless image of the
+// whole and the JPEG tiles in the picture's colour space. A picture with a
+// soft mask, in a colour space JPEG does not code, or drawn so deep in forms
+// that the two forms its tiles add would pass the form depth budget, stays
+// one lossless image. A later redaction that reaches a JPEG tile blanks it
+// in a copy, as it blanks any image a form nested in another form draws (see
+// [RedactReport.ImagesBlankedInCopy]), and [WithStrictRedaction] refuses it.
+//
+// By default every image a redaction writes is lossless under FlateDecode,
+// at the cost of size: a blanked JPEG 2000 photograph weighs several times
+// its source, and a page of photographs the fallback draws several times its
+// JPEG source. A q outside 1 to 100 makes [Writer.Redact] fail with
 // [ErrInvalidRedactOptions].
 //
-// Opt-in, because outside the regions a JPEG tile shows the page with JPEG's
-// loss, which a lossless image does not.
+// Opt-in, because outside the regions a JPEG tile shows the picture with
+// JPEG's loss, which a lossless image does not.
 //
 // # Corpus evidence
 //
@@ -143,11 +157,36 @@ func WithRedactionRasterFallback() RedactOption {
 //     issue17289), the four redact-render scenarios with the fallback: 106
 //     rasterise, 3 of them reach a photographic tile at q 90, and the
 //     outputs weigh 47.7 MB against 55.5 MB lossless (46.2 MB at q 75).
-//   - pdfjs issue17289, the band: 28.8 MB lossless, 21.0 MB at q 90; most
-//     of the rest is a JPX image the band blanks, which blanking writes
-//     under Flate.
-//   - litho, pdfcpu, pdfjs, govdocs, redact-render at q 90 against
-//     lossless: no inside leak by either renderer that lossless lacks, and
+//   - pdfjs issue17289, the band with the fallback, before blanked
+//     photographs were re-encoded: 28.8 MB lossless, 21.0 MB at q 90; most
+//     of the rest was a JPX image the band blanks. Re-encoded too: 27.0 MB
+//     lossless, 11.5 MB at q 90, against a 7.8 MB source.
+//   - litho (5 PDFs), pdfcpu (21), pdfjs (190) and govdocs (386), every PDF
+//     holding JPEG or JPEG 2000 data, the four redact-render scenarios
+//     without the fallback, at q 90: 247 redactions blank 565 photographs
+//     that are re-encoded (pdfcpu 8, pdfjs 84, govdocs 155, litho none),
+//     and their outputs weigh 491.0 MB against 685.1 MB lossless, from
+//     404.2 MB of sources (pdfjs 259.2 against 404.1 from 196.6, govdocs
+//     222.6 against 269.4 from 202.4). pdfjs issue17289, the band: 9.0 MB
+//     against 16.7 MB.
+//   - pdfcpu, pdfjs, govdocs, the 148 PDFs those redactions reach, the
+//     redact-render cell, both halves, with and without the fallback, at
+//     q 90 against lossless: no outcome changes, no inside leak by either
+//     renderer that lossless lacks. Poppler's outside check counts more
+//     changed pixels on 156 scenarios, and litho's, which reads every pixel
+//     an image paints on a fallback scenario, on 5 of pdfjs issue12752 and
+//     govdocs thread_000_000372 and thread_400_400358 (1 to 24 pixels).
+//     Of 27 of them, those 5, the 12 poppler counts most on and 10 at
+//     random, poppler 26.09.0, PDFium 4.30.0 and litho draw every pixel
+//     changed at 72 and 300 dpi inside a JPEG tile or within 2 pixels of
+//     its edge. Under the pixel check every redaction that succeeds
+//     lossless succeeds at q 90.
+//   - pdfjs issue16395 (PDF/A-2b) and issue19494 (PDF/A-3a), the three of
+//     their redactions that re-encode a photograph: veraPDF 1.30.2 reports
+//     the same rules lossy as lossless.
+//   - litho, pdfcpu, pdfjs, govdocs, redact-render with the fallback, before
+//     blanked photographs were re-encoded, at q 90 against lossless: no
+//     inside leak by either renderer that lossless lacks, and
 //     litho's outside check unchanged. Poppler's outside check fails on 2
 //     more scenarios, of pdfjs bug1140761 (158 and 177 pixels), and counts
 //     more changed pixels on 6 that fail lossless already, of issue12752,
@@ -264,10 +303,20 @@ type RedactReport struct {
 	// fail the redaction as surely as a hit does.
 	UnreadableObjects []int
 
+	// LossyBlankedImages counts the images of BlankedImages that
+	// [WithRedactionJPEGQuality] redrew with JPEG tiles outside the regions:
+	// each is now a form XObject drawing a lossless image of the whole
+	// picture with JPEG tiles over it.
+	LossyBlankedImages int
+
 	// removedGlyphOrigins maps a 1-based page number to the origin, in user
 	// space, of each glyph removed from the page's own content stream, which
 	// the pixel check of [Writer.Redact] finds the drawn glyph by.
 	removedGlyphOrigins map[int][][2]float64
+	// blankedPhotographs maps the object number of each blanked picture the
+	// source held as JPEG or JPEG 2000 to what [WithRedactionJPEGQuality]
+	// re-encodes it with.
+	blankedPhotographs map[int]mutations.BlankedPhotograph
 }
 
 // Redact removes what the given regions cover and then clears the copies of
@@ -563,6 +612,16 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	if useErr := mutations.CheckRemovedAnnotationUses(ctx, alloc, doc, pages, report.RemovedAnnotations); useErr != nil {
 		restoreTrailer()
 		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
+	}
+	// Once every placement is blanked: a picture blanked in place on two
+	// pages is one object, whose tiles must avoid what either region reaches.
+	if o.jpegQuality > 0 && len(report.blankedPhotographs) > 0 {
+		lossy, encErr := mutations.EncodeBlankedPhotographs(ctx, alloc, doc, report.blankedPhotographs, o.jpegQuality)
+		if encErr != nil {
+			restoreTrailer()
+			return nil, fmt.Errorf("re-encoding blanked photographs: %w", encErr)
+		}
+		report.LossyBlankedImages = lossy
 	}
 
 	// Nothing was selected, so there is nothing to sanitize and nothing to
@@ -1147,6 +1206,7 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 		out.removedGlyphOrigins[pageNum] = append(out.removedGlyphOrigins[pageNum], in.RemovedGlyphOrigins...)
 	}
 	out.BlankedImages = append(out.BlankedImages, in.BlankedImages...)
+	out.blankedPhotographs = mutations.MergeBlankedPhotographs(out.blankedPhotographs, in.BlankedPhotographs)
 	if len(in.ImagesBlankedInCopy) > 0 {
 		if out.ImagesBlankedInCopy == nil {
 			out.ImagesBlankedInCopy = make(map[int][]string)

@@ -41,6 +41,7 @@ type redactResult struct {
 	ClippedPaths            int              `json:"clippedPaths,omitempty"`
 	RemovedImages           int              `json:"removedImages,omitempty"`
 	RasterisedUnits         int              `json:"rasterisedUnits,omitempty"`
+	LossyBlankedImages      int              `json:"lossyBlankedImages,omitempty"`
 	RemovedAnnotations      []int            `json:"removedAnnotations,omitempty"`
 	DroppedPageEntries      []string         `json:"droppedPageEntries,omitempty"`
 	FontsFullyRemovedOnPage map[int][]int    `json:"fontsFullyRemovedOnPage,omitempty"`
@@ -128,7 +129,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	// The check runs by default now; the flag stays so scripts that pass it
 	// keep working.
 	fs.Bool("pixel-check", true, "Deprecated: the pixel check runs by default (see --no-pixel-check)")
-	jpegQuality := fs.Int("jpeg-quality", 0, "With --raster-fallback, encode the tiles of its images that only images and shadings reach and no region touches as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every image lossless)")
+	jpegQuality := fs.Int("jpeg-quality", 0, "Encode the photographic tiles no region touches, of the JPEG and JPEG 2000 photographs the redaction blanks and of the --raster-fallback images, as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every image lossless)")
 
 	var regionSpecs regionFlags
 	fs.Var(&regionSpecs, "region", "Region to clear, page:x,y,width,height (repeatable, required)")
@@ -138,7 +139,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback [--jpeg-quality Q]] [--no-pixel-check] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--jpeg-quality Q] [--no-pixel-check] -o out.pdf")
 		return exitError
 	}
 
@@ -242,6 +243,7 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		ClippedPaths:            report.ClippedPaths,
 		RemovedImages:           report.RemovedImages,
 		RasterisedUnits:         report.RasterisedUnits,
+		LossyBlankedImages:      report.LossyBlankedImages,
 		RemovedAnnotations:      report.RemovedAnnotations,
 		DroppedPageEntries:      report.DroppedPageEntries,
 		FontsFullyRemovedOnPage: report.FontsFullyRemovedOnPage,
@@ -302,6 +304,9 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		}
 		if n := result.RasterisedUnits; n > 0 {
 			fmt.Fprintf(stdout, "Rasterised %d painting element(s) outside the regions\n", n)
+		}
+		if n := result.LossyBlankedImages; n > 0 {
+			fmt.Fprintf(stdout, "Re-encoded %d blanked photograph(s) as JPEG outside the regions\n", n)
 		}
 		for _, page := range slices.Sorted(maps.Keys(result.FormsCopied)) {
 			fmt.Fprintf(stdout, "Page %d draws %d copied form(s) holding images blanked in a copy\n",
