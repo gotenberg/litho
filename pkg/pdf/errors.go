@@ -324,6 +324,11 @@ var (
 	// [Writer] is left exactly as it was.
 	ErrRedactionPixelCheck = errors.New("redaction refused: a rendering of the redacted page does not show what the regions promise")
 
+	// ErrInvalidRedactOptions is returned by [Writer.Redact] when a
+	// [RedactOption] is out of range: a [WithRedactionJPEGQuality] outside 1
+	// to 100. The [Writer] is left as it was.
+	ErrInvalidRedactOptions = errors.New("invalid redaction options")
+
 	// ErrPageDeletionIncomplete is returned by [Writer.WriteTo] when
 	// [Writer.DeletePages] could not walk one of the document's reference
 	// structures to the bottom, because it nests deeper than that prune's depth

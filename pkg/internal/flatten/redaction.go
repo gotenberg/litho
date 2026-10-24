@@ -73,6 +73,27 @@ import (
 //     outside the region changed, a picture resampled twice and the fringe
 //     of text a shading drawn after it had hidden.
 func Redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pg *document.Page, seeds []int, regions [][4]float64) (mutations.RasterResult, error) {
+	return redaction(ctx, alloc, doc, pg, seeds, regions, 0)
+}
+
+// RedactionJPEG returns [Redaction] encoding its images as [Document] does
+// under [Options.JPEGQuality] q: a region's composite is cut into tiles, a
+// tile only images and shadings reach whose pixels are photographic is
+// encoded as a baseline JPEG at quality q, and the others stay lossless
+// ([flattener.encodeTiles]). A tile a redaction region reaches, widened by a
+// pixel, stays lossless ([flattener.regionImage]): the region's pixels hold
+// the paper's colour exactly, in the file as on the page, and a JPEG block
+// holding them and ink beside them would decode a trace of that ink into
+// them. q 0 is [Redaction].
+func RedactionJPEG(q int) mutations.RasterFunc {
+	return func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pg *document.Page, seeds []int, regions [][4]float64) (mutations.RasterResult, error) {
+		return redaction(ctx, alloc, doc, pg, seeds, regions, q)
+	}
+}
+
+// redaction is [Redaction] encoding photographic tiles as JPEG at quality,
+// lossless throughout at 0.
+func redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pg *document.Page, seeds []int, regions [][4]float64, quality int) (mutations.RasterResult, error) {
 	var out mutations.RasterResult
 	if pg.Ref.ObjectNum == 0 {
 		return out, mutations.ErrPageNotAddressable
@@ -84,6 +105,7 @@ func Redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 		doc:       doc,
 		alloc:     alloc,
 		dpi:       DefaultDPI,
+		quality:   quality,
 		states:    make(map[int]ast.PdfObject),
 		forms:     make(map[copyKey]ast.PdfIndirectRef),
 		ungrouped: make(map[int]ast.PdfObject),
@@ -165,7 +187,11 @@ func Redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 			// The image's samples reach a pixel past the region on each side,
 			// where the clip hides them, so every zone is painted out of
 			// them whole, not only the part inside the region.
-			img, ok, err := f.regionImage(ctx, cover.result, cover.g, a.crop, r.Box, xobjects, nil, zones)
+			var vector []Rect
+			if f.quality > 0 {
+				vector = f.vectorBoxes(ctx, a, ops, r)
+			}
+			img, ok, err := f.regionImage(ctx, cover.result, cover.g, a.crop, r.Box, xobjects, vector, zones)
 			if err != nil {
 				return out, err
 			}
@@ -327,20 +353,48 @@ func paintOut(samples []byte, px image.Rectangle, comps int, m geom.Matrix, boxe
 		}
 	}
 	for _, b := range boxes {
-		d := transformRect(m, b)
-		if math.IsNaN(d.MinX) || math.IsNaN(d.MinY) || math.IsNaN(d.MaxX) || math.IsNaN(d.MaxY) {
+		hole, ok := holeRect(m, b, px)
+		if !ok {
 			continue
 		}
-		x0 := int(max(float64(px.Min.X), math.Floor(d.MinX)))
-		y0 := int(max(float64(px.Min.Y), math.Floor(d.MinY)))
-		x1 := int(min(float64(px.Max.X), math.Ceil(d.MaxX)))
-		y1 := int(min(float64(px.Max.Y), math.Ceil(d.MaxY)))
-		for y := y0; y < y1; y++ {
+		for y := hole.Min.Y; y < hole.Max.Y; y++ {
 			row := (y - px.Min.Y) * px.Dx()
-			for x := x0; x < x1; x++ {
+			for x := hole.Min.X; x < hole.Max.X; x++ {
 				i := (row + x - px.Min.X) * comps
 				copy(samples[i:i+comps], paper)
 			}
 		}
 	}
+}
+
+// holeRect returns the device pixels of px that b, a box in default user
+// space, reaches through m: every pixel it covers even in part, the pixels
+// [paintOut] paints out. A box with a coordinate that is not a number reaches
+// none.
+func holeRect(m geom.Matrix, b Rect, px image.Rectangle) (image.Rectangle, bool) {
+	d := transformRect(m, b)
+	if math.IsNaN(d.MinX) || math.IsNaN(d.MinY) || math.IsNaN(d.MaxX) || math.IsNaN(d.MaxY) {
+		return image.Rectangle{}, false
+	}
+	x0 := int(max(float64(px.Min.X), math.Floor(d.MinX)))
+	y0 := int(max(float64(px.Min.Y), math.Floor(d.MinY)))
+	x1 := int(min(float64(px.Max.X), math.Ceil(d.MaxX)))
+	y1 := int(min(float64(px.Max.Y), math.Ceil(d.MaxY)))
+	if x0 >= x1 || y0 >= y1 {
+		return image.Rectangle{}, false
+	}
+	return image.Rect(x0, y0, x1, y1), true
+}
+
+// holePixels returns the device pixels of px each box of holes paints out
+// ([holeRect]), widened by [pixelMargin] on each side: the pixels a JPEG tile
+// of the composite of px must not reach (see [flattener.regionImage]).
+func holePixels(m geom.Matrix, holes []Rect, px image.Rectangle) []image.Rectangle {
+	var out []image.Rectangle
+	for _, b := range holes {
+		if hole, ok := holeRect(m, b, px); ok {
+			out = append(out, image.Rect(hole.Min.X-pixelMargin, hole.Min.Y-pixelMargin, hole.Max.X+pixelMargin, hole.Max.Y+pixelMargin))
+		}
+	}
+	return out
 }

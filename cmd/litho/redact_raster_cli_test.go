@@ -51,3 +51,29 @@ func TestRedact_RasterFallbackLiftsAShadingRefusal(t *testing.T) {
 		t.Error("the redacted word is still in the written file")
 	}
 }
+
+// TestRedact_JPEGQualityReachesTheOption pins --jpeg-quality: a quality out
+// of range is refused before any output is written, and one in range runs.
+func TestRedact_JPEGQualityReachesTheOption(t *testing.T) {
+	path := writeTempPDF(t, redactableCLIBodyPDF("q 0 0 612 792 re W n /Sh0 sh Q BT /F1 12 Tf 100 700 Td (SECRET) Tj ET"))
+	out := filepath.Join(t.TempDir(), "redacted.pdf")
+
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(),
+		[]string{"redact", "-region", "1:90,690,210,40", "--raster-fallback", "--jpeg-quality", "101", "-o", out, path}, &stdout, &stderr); rc == exitOK {
+		t.Fatal("--jpeg-quality 101 was accepted")
+	}
+	if !strings.Contains(stderr.String(), "JPEG quality 101") {
+		t.Errorf("stderr = %q, want the quality named", stderr.String())
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("an output was written for a refused quality: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if rc := run(context.Background(),
+		[]string{"redact", "-region", "1:90,690,210,40", "--raster-fallback", "--jpeg-quality", "80", "-o", out, path}, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("exit %d, stderr: %s", rc, stderr.String())
+	}
+}

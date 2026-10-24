@@ -20,10 +20,16 @@ import (
 // fallback and returns the updated file and the report.
 func redactWithFallback(t *testing.T, data []byte, regions [][4]float64) ([]byte, mutations.RedactReport) {
 	t.Helper()
+	return redactWith(t, data, regions, Redaction)
+}
+
+// redactWith is [redactWithFallback] with the fallback raster.
+func redactWith(t *testing.T, data []byte, regions [][4]float64, raster mutations.RasterFunc) ([]byte, mutations.RedactReport) {
+	t.Helper()
 	ctx := context.Background()
 	doc, pg := open(t, data)
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
-	report, err := mutations.RedactPageRegionsWith(ctx, alloc, doc, pg, regions, mutations.RedactOptions{Rasterise: Redaction})
+	report, err := mutations.RedactPageRegionsWith(ctx, alloc, doc, pg, regions, mutations.RedactOptions{Rasterise: raster})
 	if err != nil {
 		t.Fatalf("RedactPageRegionsWith: %v", err)
 	}

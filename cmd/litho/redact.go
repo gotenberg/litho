@@ -116,6 +116,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	// The check runs by default now; the flag stays so scripts that pass it
 	// keep working.
 	fs.Bool("pixel-check", true, "Deprecated: the pixel check runs by default (see --no-pixel-check)")
+	jpegQuality := fs.Int("jpeg-quality", 0, "With --raster-fallback, encode the tiles of its images that only images and shadings reach and no region touches as JPEG at this quality, 1 to 100, unless Flate is no larger (default: every image lossless)")
 
 	var regionSpecs regionFlags
 	fs.Var(&regionSpecs, "region", "Region to clear, page:x,y,width,height (repeatable, required)")
@@ -125,7 +126,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--no-pixel-check] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback [--jpeg-quality Q]] [--no-pixel-check] -o out.pdf")
 		return exitError
 	}
 
@@ -173,6 +174,9 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 	if *rasterFallback {
 		redactOpts = append(redactOpts, pdf.WithRedactionRasterFallback())
+	}
+	if *jpegQuality != 0 {
+		redactOpts = append(redactOpts, pdf.WithRedactionJPEGQuality(*jpegQuality))
 	}
 	if *noPixelCheck {
 		redactOpts = append(redactOpts, pdf.WithoutRedactionPixelCheck())

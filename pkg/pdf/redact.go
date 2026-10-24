@@ -57,6 +57,10 @@ type redactOpts struct {
 	raster bool
 	// noPixelCheck skips the pixel check ([WithoutRedactionPixelCheck]).
 	noPixelCheck bool
+	// jpegQuality is [WithRedactionJPEGQuality]'s, 0 for lossless, and
+	// jpegQualitySet whether it was given.
+	jpegQuality    int
+	jpegQualitySet bool
 }
 
 // WithStrictRedaction makes [Writer.Redact] refuse with
@@ -99,6 +103,46 @@ func WithStrictRedaction() RedactOption {
 // read.
 func WithRedactionRasterFallback() RedactOption {
 	return func(o *redactOpts) { o.raster = true }
+}
+
+// WithRedactionJPEGQuality encodes the photographic parts of the images
+// [WithRedactionRasterFallback] draws as baseline JPEG (ITU-T T.81) at
+// quality q, 1 to 100, on the scale of the Independent JPEG Group's libjpeg,
+// as [WithFlattenJPEGQuality] encodes a flattening's composites: each image
+// is cut into tiles on a grid of its pixels, which abut without seams, a tile
+// only images and shadings reach whose pixels hold 256 colours is encoded as
+// JPEG unless Flate holds it in no more bytes, and the others stay lossless.
+// A tile a region reaches, widened by a pixel, always stays lossless, so the
+// image's samples inside the regions are the paper's colour exactly, in the
+// file as on the page: a JPEG spreads each 8 by 8 block's error over the
+// whole block, and would decode traces of the ink beside a region into it.
+//
+// By default every image the fallback draws is lossless under FlateDecode,
+// at the cost of size: a page of photographs drawn by a form weighs several
+// times its JPEG source. Without [WithRedactionRasterFallback] it has no
+// effect. A q outside 1 to 100 makes [Writer.Redact] fail with
+// [ErrInvalidRedactOptions].
+//
+// Opt-in, because outside the regions a JPEG tile shows the page with JPEG's
+// loss, which a lossless image does not.
+//
+// # Corpus evidence
+//
+//   - litho (all), pdfcpu (all), govdocs (1 in 8) and pdfjs (1 in 16, and
+//     issue17289), the four redact-render scenarios with the fallback: 106
+//     rasterise, 4 of them reach a photographic tile at q 90, and the
+//     outputs weigh 47.5 MB against 55.5 MB lossless (45.9 MB at q 75).
+//   - pdfjs issue17289, the band: 28.8 MB lossless, 20.8 MB at q 90, its
+//     composite 10.3 MB down to 2.3 MB; most of the rest is a JPX image the
+//     band blanks, which blanking writes under Flate.
+//   - litho, pdfcpu, pdfjs, govdocs, redact-render at q 90 against
+//     lossless: no inside leak by either renderer that lossless lacks, and
+//     litho's outside check unchanged. Poppler's outside check fails on 2
+//     more scenarios, of pdfjs bug1140761, and counts more changed pixels on
+//     6 that fail lossless already, of issue12752, issue17289 and issue2642:
+//     JPEG's loss at the sharp edges of scanned pages.
+func WithRedactionJPEGQuality(q int) RedactOption {
+	return func(o *redactOpts) { o.jpegQuality, o.jpegQualitySet = q, true }
 }
 
 // RedactReport describes what a redaction removed, per vector.
@@ -352,6 +396,9 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...Red
 	for _, opt := range opts {
 		opt(&o)
 	}
+	if o.jpegQualitySet && (o.jpegQuality < 1 || o.jpegQuality > 100) {
+		return nil, fmt.Errorf("%w: JPEG quality %d, outside 1 to 100", ErrInvalidRedactOptions, o.jpegQuality)
+	}
 
 	if !o.raster {
 		return w.redact(ctx, regions, o)
@@ -438,6 +485,9 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	var pageOpts mutations.RedactOptions
 	if o.raster {
 		pageOpts.Rasterise = flatten.Redaction
+		if o.jpegQuality > 0 {
+			pageOpts.Rasterise = flatten.RedactionJPEG(o.jpegQuality)
+		}
 	}
 	report, copied, err := redactPages(ctx, alloc, doc, pages, byPage, order, o.strict, pageOpts)
 	if err != nil {

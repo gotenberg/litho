@@ -542,7 +542,14 @@ type tileImg struct {
 // at.
 //
 // holes lists boxes in default user space painted out of the image: every
-// pixel a box reaches is set to the paper's colour (see [paintOut]).
+// pixel a box reaches is set to the paper's colour (see [paintOut]). They
+// stay that colour exactly in the file: a JPEG spreads a block's error over
+// the whole block (ITU-T T.81, A.3.3), so a painted-out pixel sharing a block
+// with ink would decode as a trace of that ink, and every hole reaching the
+// image, widened by [pixelMargin], is kept out of the JPEG tiles as an edge
+// is, its pixels left in a lossless tile. The margin is at least the
+// [tileOverlap] a JPEG tile reaches into its neighbours, so no JPEG tile
+// holds a painted-out pixel.
 func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict, vector, holes []Rect) (regionImg, bool, error) {
 	size := res.Group.Bounds().Size()
 	dev := transformRect(g.Matrix, box)
@@ -563,6 +570,9 @@ func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Ge
 		// paints, as the region's image does.
 		d := transformRect(g.Matrix, v)
 		devVector = append(devVector, image.Rect(int(math.Floor(d.MinX))-pixelMargin, int(math.Floor(d.MinY))-pixelMargin, int(math.Ceil(d.MaxX))+pixelMargin, int(math.Ceil(d.MaxY))+pixelMargin))
+	}
+	if f.quality > 0 {
+		devVector = append(devVector, holePixels(g.Matrix, holes, px)...)
 	}
 	inner := image.Rect(int(math.Floor(dev.MinX)), int(math.Floor(dev.MinY)), int(math.Ceil(dev.MaxX)), int(math.Ceil(dev.MaxY))).Intersect(px)
 	tiles, err := f.encodeTiles(ctx, samples, px, inner, len(samples)/(px.Dx()*px.Dy()), devVector)
