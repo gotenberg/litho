@@ -339,7 +339,9 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //   - govdocs thread_000_000372 p1-quarter: poppler's 1 changed pixel outside
 //     the region is a decoder difference on a CMYK ICCBased JPEG blanked in a
 //     copy, which stores litho's decode while poppler decodes the original.
-//     litho's half sees 0. Accepted as a mismatch.
+//     litho's half sees 0. Accepted as a mismatch. The PDF has no render
+//     golden, so it lies outside the cell's sample and the gate never runs
+//     it: the pixel shows with every govdocs PDF in scope.
 //   - litho, pdfcpu, pdfjs, govdocs: 70, 20, 20 and 6 fallback scenarios
 //     checked, rasterising 112, 55, 20 and 17 units; the cell's wall time
 //     went from about 51, 20, 46 and 65 seconds to 45, 24, 85 and 121
