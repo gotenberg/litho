@@ -1,8 +1,12 @@
 package flatten
 
 import (
+	"context"
+	"fmt"
 	"slices"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 func TestAnalyzeOpaquePageHasNoRegion(t *testing.T) {
@@ -207,5 +211,86 @@ func TestAnalyzeTransparentText(t *testing.T) {
 	})
 	if !slices.Equal(a.TransparentText, []int{0}) || len(a.TextEdits) != 0 {
 		t.Errorf("transparent text %v edits %v, want [0] and none", a.TransparentText, a.TextEdits)
+	}
+}
+
+// analyzeSeeds runs [analyzeSeeded] over the fixture's content, the units
+// that begin at the operations seeds the region seeds.
+func analyzeSeeds(t *testing.T, f fixture, seeds ...int) *Analysis {
+	t.Helper()
+	doc, pg := open(t, f.bytes())
+	ops, _, err := content.ParseStreamDataWithOffsets(context.Background(), []byte(f.content), content.SplitGluedOperators())
+	if err != nil {
+		t.Fatalf("parsing content: %v", err)
+	}
+	set := make(map[int]bool, len(seeds))
+	for _, s := range seeds {
+		set[s] = true
+	}
+	a, err := analyzeSeeded(context.Background(), doc, pg, ops, set)
+	if err != nil {
+		t.Fatalf("analyzeSeeded: %v", err)
+	}
+	return a
+}
+
+// seededForms are two opaque forms, objects 7 and 8: /A over the box 0 0 50
+// 50, /B over bx 0 100 50.
+func seededForms(bx float64) fixture {
+	return fixture{
+		resources: "/XObject << /A 7 0 R /B 8 0 R >>",
+		objs: []string{
+			stream("/Type /XObject /Subtype /Form /BBox [0 0 50 50]", "0 0 1 rg 0 0 50 50 re f"),
+			stream(fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [%g 0 100 50]", bx), fmt.Sprintf("0 1 0 rg %g 0 %g 50 re f", bx, 100-bx)),
+		},
+	}
+}
+
+func TestAnalyzeSeededClipsATranslucentUnitBetweenSeeds(t *testing.T) {
+	t.Parallel()
+	// The half-transparent square drawn between the two seeds is no seed,
+	// and the seed after it does not overlap it. The image holds it
+	// composited: drawn again over the image, it would composite twice, so
+	// it is clipped out of the region.
+	f := seededForms(45)
+	f.content = "/A Do q /GS1 gs 1 0 0 rg 20 20 20 20 re f Q /B Do"
+	a := analyzeSeeds(t, f, 0, 7)
+	if got := kinds(a); got != "form* path form*" {
+		t.Fatalf("units %q", got)
+	}
+	if len(a.Regions) != 1 {
+		t.Fatalf("%d regions, want 1", len(a.Regions))
+	}
+	if r := a.Regions[0]; !slices.Equal(r.Removed, []int{0, 2}) || !slices.Equal(r.Clipped, []int{1}) {
+		t.Errorf("removed %v clipped %v, want [0 2] [1]", r.Removed, r.Clipped)
+	}
+	// Drawn after the last seed, it extends the region's units the same way.
+	f.content = "/A Do /B Do q /GS1 gs 1 0 0 rg 20 20 20 20 re f Q"
+	a = analyzeSeeds(t, f, 0, 1)
+	if r := a.Regions[0]; !slices.Equal(r.Clipped, []int{2}) || r.Last != 2 {
+		t.Errorf("clipped %v last %d, want [2] 2", r.Clipped, r.Last)
+	}
+}
+
+func TestAnalyzeSeededKeepsThePaintingOrder(t *testing.T) {
+	t.Parallel()
+	// The second square is clipped out of the region, since the seed drawn
+	// after it covers it. The first square, which it overlaps, cannot stay
+	// either: drawn again over the image, it would paint over what the image
+	// holds of the second where they overlap (ISO 32000-2, 8.1).
+	f := seededForms(35)
+	f.content = "/A Do 0 g 10 10 20 20 re f 1 0 0 rg 20 20 20 20 re f /B Do"
+	a := analyzeSeeds(t, f, 0, 7)
+	if got := kinds(a); got != "form* path path form*" {
+		t.Fatalf("units %q", got)
+	}
+	if r := a.Regions[0]; !slices.Equal(r.Removed, []int{0, 3}) || !slices.Equal(r.Clipped, []int{1, 2}) {
+		t.Errorf("removed %v clipped %v, want [0 3] [1 2]", r.Removed, r.Clipped)
+	}
+	// A square nothing taken over overlaps stays where it is.
+	f.content = "/A Do 0 g 2 2 5 5 re f 1 0 0 rg 20 20 20 20 re f /B Do"
+	a = analyzeSeeds(t, f, 0, 7)
+	if r := a.Regions[0]; !slices.Equal(r.Clipped, []int{2}) {
+		t.Errorf("clipped %v, want [2]", r.Clipped)
 	}
 }

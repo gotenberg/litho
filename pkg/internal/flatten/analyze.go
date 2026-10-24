@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -75,6 +76,10 @@ type Unit struct {
 	// Overprint reports a unit that paints under overprint (ISO 32000-1,
 	// 8.6.7), or a form whose content does.
 	Overprint bool
+	// translucent reports, in a seeded analysis, a unit that paints with
+	// transparency but is no seed: it starts no region, but an image that
+	// holds it cannot have it drawn again over it.
+	translucent bool
 }
 
 // Region is a part of the page composited into one image.
@@ -228,7 +233,9 @@ func analyzeSeeded(ctx context.Context, doc *document.Document, page *document.P
 	if seeds != nil {
 		for i := range a.Units {
 			u := &a.Units[i]
-			u.Transparent = seeds[u.First] && (u.Kind == KindForm || u.Kind == KindShading)
+			seed := seeds[u.First] && (u.Kind == KindForm || u.Kind == KindShading)
+			u.translucent = u.Transparent && !seed && u.Kind != KindText
+			u.Transparent = seed
 			if u.Transparent && u.Box.Empty() {
 				a.Hidden = append(a.Hidden, i)
 			}
@@ -553,10 +560,12 @@ func (w *walker) textBoxes(page *document.Page, ops []content.Operation, units [
 //     a text object, with no path under construction, under an invertible
 //     CTM and a clip that holds the region;
 //   - every unit other than a text object from there to its last
-//     transparent unit that overlaps it either stays, clipped to paint
-//     outside the region only, or, when it cannot be clipped so, is removed
-//     whole, its painting taken over by the image, and the region grows to
-//     hold it.
+//     transparent unit that overlaps it either stays where it is, when it
+//     is opaque and nothing drawn after it that the image takes over
+//     overlaps it inside the region ([growing.stays]), or is clipped to
+//     paint outside the region only, or, when it cannot be clipped so, is
+//     removed whole, its painting taken over by the image, and the region
+//     grows to hold it.
 //
 // Inside the region the image shows what everything drawn up to its last
 // transparent unit composites to, text left out. The units drawn before the
@@ -564,6 +573,11 @@ func (w *walker) textBoxes(page *document.Page, ops []content.Operation, units [
 // what it painted there. The units drawn after its last transparent unit
 // stay, above it, and are opaque: the image holds what they paint too, and
 // they paint it again. Text stays wherever it is, above the image.
+//
+// A seeded analysis keeps that order with units that paint with
+// transparency but are no seed ([Unit.translucent]): they start no region,
+// but one that overlaps a region counts towards its last unit, so none is
+// drawn again over an image that holds it, which would composite it twice.
 func (a *Analysis) regions() error {
 	var regs []*growing
 	for _, u := range a.Units {
@@ -581,8 +595,11 @@ func (a *Analysis) regions() error {
 		var changed bool
 		regs, changed = mergeRegions(regs)
 		for _, r := range regs {
-			first, last := -1, -1
+			first, last, translucent := -1, -1, -1
 			for i, u := range a.Units {
+				if u.translucent && u.Box.Overlaps(r.box) {
+					translucent = i
+				}
 				if u.Transparent && u.Kind != KindText && u.Box.Overlaps(r.box) {
 					if first < 0 {
 						first = i
@@ -596,6 +613,7 @@ func (a *Analysis) regions() error {
 			if first < 0 {
 				continue
 			}
+			last = max(last, translucent)
 			start := first
 			for i := range first {
 				if a.Units[i].HasText && a.Units[i].Box.Overlaps(r.box) {
@@ -605,15 +623,10 @@ func (a *Analysis) regions() error {
 			}
 			r.insert = a.insertion(a.Units[start].First, r.box)
 			r.last = last
-			r.transparent = r.transparent[:0]
-			for i := range last + 1 {
-				if u := a.Units[i]; u.Transparent && u.Kind != KindText && u.Box.Overlaps(r.box) {
-					r.transparent = append(r.transparent, i)
-				}
-			}
+			stays := r.stays(a)
 			for i := range last + 1 {
 				u := a.Units[i]
-				if u.First < r.insert || u.Kind == KindText || !u.Box.Overlaps(r.box) || !a.removed(u) || (!u.Transparent && !r.coveredLater(a, i)) {
+				if u.First < r.insert || u.Kind == KindText || !u.Box.Overlaps(r.box) || !a.removed(u) || stays[i] {
 					continue
 				}
 				grown := r.box.Union(u.Box)
@@ -628,6 +641,7 @@ func (a *Analysis) regions() error {
 	sort.Slice(regs, func(i, j int) bool { return regs[i].insert < regs[j].insert })
 	for _, r := range regs {
 		out := Region{Box: r.box, Insert: r.insert, Last: r.last}
+		stays := r.stays(a)
 		for i, u := range a.Units {
 			if u.First < r.insert || !u.Box.Overlaps(r.box) {
 				continue
@@ -635,9 +649,9 @@ func (a *Analysis) regions() error {
 			switch {
 			case u.Kind == KindText:
 				out.Text = append(out.Text, i)
-			case i <= r.last && !u.Transparent && !r.coveredLater(a, i):
-				// No transparency is drawn over it: it paints what the image
-				// holds where it stands, so it stays as it is.
+			case i <= r.last && stays[i]:
+				// Nothing the image takes over is drawn over it: it paints
+				// what the image holds where it stands, so it stays as it is.
 			case i <= r.last && a.removed(u):
 				out.Removed = append(out.Removed, i)
 			case i <= r.last:
@@ -677,16 +691,59 @@ func (a *Analysis) drawnUnder(i int) bool {
 	return false
 }
 
-// coveredLater reports whether a transparent unit of the region drawn after
-// unit i overlaps it: the image composites that unit over what i paints, so
-// i, drawn again where it stands, would paint over the composite.
-func (r *growing) coveredLater(a *Analysis, i int) bool {
-	for _, j := range r.transparent {
-		if j > i && a.Units[j].Box.Overlaps(a.Units[i].Box) {
-			return true
+// maxTakenBoxes bounds the boxes [growing.stays] keeps apart for the units
+// of one region the image takes over. Anti-DoS guard, not spec-mandated: each
+// unit is tested against every box kept, so a region of a million units
+// taken over would cost a million squared tests; past the bound the boxes
+// are merged into one, which only clips more units out of the region than
+// need be, the image holding what they paint there. 256 boxes is far past
+// what real regions hold.
+const maxTakenBoxes = 256
+
+// stays reports, for each unit of the region from its image to its last
+// transparent unit, other than text, whether it stays where it is: it paints
+// opaque, and no unit drawn after it up to the region's last transparent
+// unit overlaps it inside the region unless that unit stays too. The image
+// holds what everything up to there composites to, and each unit that does
+// not stay paints there no more: a unit drawn again over it would paint over
+// what the image holds of those drawn later, against the painting order of
+// ISO 32000-1, 11.1, where each element is painted over the ones before it,
+// and a unit that paints with transparency, drawn again, would be
+// composited twice over its backdrop (11.3.3).
+//
+// # Corpus evidence
+//
+//   - pdfcpu VectorApple, the raster fallback of the p1-quarter redaction:
+//     two knockout forms of a glow drawn at constant alphas stayed after
+//     the image that held them, and 5 pixels over flat areas drew 20 to 27
+//     levels lighter by litho's rendering.
+//   - govdocs, pdfjs: flattening writes other content for 8 files where an
+//     opaque unit overlapped one the image took over. Of the 11 pages, 9
+//     differ less from the source by litho's rendering; the flatten cell
+//     scores as before.
+func (r *growing) stays(a *Analysis) map[int]bool {
+	stays := make(map[int]bool)
+	var taken []Rect
+	for i := min(r.last, len(a.Units)-1); i >= 0; i-- {
+		u := a.Units[i]
+		if u.First < r.insert {
+			break
+		}
+		part := u.Box.Intersect(r.box)
+		if u.Kind == KindText || part.Empty() {
+			continue
+		}
+		if !u.Transparent && !u.translucent && !slices.ContainsFunc(taken, part.Overlaps) {
+			stays[i] = true
+			continue
+		}
+		if len(taken) < maxTakenBoxes {
+			taken = append(taken, part)
+		} else {
+			taken[len(taken)-1] = taken[len(taken)-1].Union(part)
 		}
 	}
-	return false
+	return stays
 }
 
 // insertion returns the latest position at or before op where an image of
@@ -715,8 +772,6 @@ type growing struct {
 	// insert is the index of the operation the image is drawn before, and
 	// last the index of the region's last transparent unit.
 	insert, last int
-	// transparent lists, in order, the region's transparent units.
-	transparent []int
 }
 
 // mergeRegions joins regions whose boxes overlap, reporting whether any did.
