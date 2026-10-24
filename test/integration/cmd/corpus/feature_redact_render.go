@@ -247,6 +247,17 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //   - pdfjs bitmap-halftone-skip-grid-template2, bitmap-refine-tpgron,
 //     issue17871_top_right: JBIG2 regions poppler garbles, which change in
 //     poppler once redaction re-encodes them from litho's decode.
+//   - govdocs thread_000_000372 p1-quarter: poppler's 1 changed pixel outside
+//     the region is a decoder difference on a CMYK ICCBased JPEG blanked in a
+//     copy, which stores litho's decode while poppler decodes the original.
+//     litho's half sees 0. Accepted as a mismatch.
+//   - pdfjs issue269_2 p1-quarter and p1-band: litho's half sees 716 and 357
+//     changed pixels outside the region, one-pixel anti-aliasing seams at the
+//     edges of the paths the redaction removed or clipped (312 and 536 on the
+//     quarter). poppler and PDFium see 0. Restoring the original forms and
+//     images in the output leaves the same 716 pixels, so the form copies do
+//     not cause them. Accepted as a mismatch until litho's seam rendering is
+//     fixed.
 type redactRenderFeature struct {
 	// workers bounds the PDFs prepared at once.
 	workers int
