@@ -39,6 +39,7 @@ type redactResult struct {
 	FormsCopied             map[int]int      `json:"formsCopied,omitempty"`
 	RemovedPaths            int              `json:"removedPaths"`
 	ClippedPaths            int              `json:"clippedPaths,omitempty"`
+	RemovedImages           int              `json:"removedImages,omitempty"`
 	RasterisedUnits         int              `json:"rasterisedUnits,omitempty"`
 	RemovedAnnotations      []int            `json:"removedAnnotations,omitempty"`
 	DroppedPageEntries      []string         `json:"droppedPageEntries,omitempty"`
@@ -239,6 +240,7 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		FormsCopied:             report.FormsCopied,
 		RemovedPaths:            report.RemovedPaths,
 		ClippedPaths:            report.ClippedPaths,
+		RemovedImages:           report.RemovedImages,
 		RasterisedUnits:         report.RasterisedUnits,
 		RemovedAnnotations:      report.RemovedAnnotations,
 		DroppedPageEntries:      report.DroppedPageEntries,
@@ -294,6 +296,9 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 			len(result.RemovedText), result.RemovedPaths, len(result.BlankedImages))
 		if n := result.ClippedPaths; n > 0 {
 			fmt.Fprintf(stdout, "Clipped %d path(s) at the region edges\n", n)
+		}
+		if n := result.RemovedImages; n > 0 {
+			fmt.Fprintf(stdout, "Removed %d image placement(s) inside the regions\n", n)
 		}
 		if n := result.RasterisedUnits; n > 0 {
 			fmt.Fprintf(stdout, "Rasterised %d painting element(s) outside the regions\n", n)

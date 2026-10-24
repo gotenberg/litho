@@ -25,14 +25,17 @@ func TestRedact_BlanksImagesToTheirBlack(t *testing.T) {
 	cases := map[string]struct {
 		region [4]float64
 		images []int
-		x0, x1 int
-		y0, y1 int
+		// removed says the region covers every image whole, so each is
+		// removed rather than painted black.
+		removed bool
+		x0, x1  int
+		y0, y1  int
 	}{
-		"whole":   {[4]float64{-1e6, -1e6, 1e6, 1e6}, []int{0, 1, 2, 3, 4}, 0, 612, 43, 331},
-		"quarter": {[4]float64{153, 98, 459, 294}, []int{1, 2, 3}, 153, 459, 98, 294},
+		"whole":   {[4]float64{-1e6, -1e6, 1e6, 1e6}, []int{0, 1, 2, 3, 4}, true, 0, 612, 43, 331},
+		"quarter": {[4]float64{153, 98, 459, 294}, []int{1, 2, 3}, false, 153, 459, 98, 294},
 		// The redact-render cell's band, 5% of the page high through its
 		// middle, holds the centres of the images' ninth sample row.
-		"band": {[4]float64{-1e6, 187, 1e6, 205}, []int{0, 1, 2, 3, 4}, 0, 612, 187, 205},
+		"band": {[4]float64{-1e6, 187, 1e6, 205}, []int{0, 1, 2, 3, 4}, false, 0, 612, 187, 205},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -50,6 +53,9 @@ func TestRedact_BlanksImagesToTheirBlack(t *testing.T) {
 			}
 			if len(report.BlankedImages) != len(tc.images) {
 				t.Fatalf("blanked %d images, want %d", len(report.BlankedImages), len(tc.images))
+			}
+			if removed := report.RemovedImages == len(tc.images); removed != tc.removed {
+				t.Fatalf("removed %d images, want them removed: %v", report.RemovedImages, tc.removed)
 			}
 			var out bytes.Buffer
 			if err := w.WriteTo(ctx, &out); err != nil {
@@ -69,7 +75,11 @@ func TestRedact_BlanksImagesToTheirBlack(t *testing.T) {
 				// clear of the anti-aliased boundary.
 				x0, x1 := max(16+120*i, tc.x0)+2, min(128+120*i, tc.x1)-2
 				y0, y1 := 392-min(331, tc.y1)+2, 392-max(43, tc.y0)-2
-				if bright, at := brightPixels(img, x0, y0, x1, y1); bright > 0 {
+				bright, at := brightPixels(img, x0, y0, x1, y1)
+				switch {
+				case tc.removed && bright != (x1-x0)*(y1-y0):
+					t.Errorf("image %d: %d of %d pixels show the paper where the removed image was", i, bright, (x1-x0)*(y1-y0))
+				case !tc.removed && bright > 0:
 					t.Errorf("image %d: %d covered pixels brighter than black, one at %v", i, bright, at)
 				}
 			}

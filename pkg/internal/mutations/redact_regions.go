@@ -117,7 +117,10 @@ import (
 // document on its own. An image the regions
 // cover is blanked rather than removed: one Do carries the whole picture, so
 // dropping it would take the parts the caller never selected, while overwriting
-// the covered samples clears exactly what was asked. A blanked image comes back
+// the covered samples clears exactly what was asked. A placement the page's
+// own content draws wholly inside a region is removed too, since it holds no
+// part the caller did not select, and its blanked samples would keep its
+// outline on the page (see [RedactReport.RemovedImages]). A blanked image comes back
 // as 8-bit DeviceRGB under /FlateDecode whatever it arrived as, which is what
 // lets an image in a filter litho cannot write be cleared at all.
 func RedactPageRegions(
@@ -171,10 +174,20 @@ type RedactReport struct {
 	// past the regions. An image blanked in a copy is not listed: the copy is
 	// painted by the covered placement alone.
 	BlankedImageObjects []int
+	// RemovedImageObjects holds the object number of the image of each
+	// placement the redaction removed (see [RemovedImages]) whose image it
+	// blanked in place, once per placement. The removed placement no longer
+	// paints, so a check run on the page as edited cannot measure it; a
+	// caller hands these to [CheckBlankedImageUses] with BlankedImageObjects,
+	// which counts each as a placement covering every sample, as the removed
+	// one did.
+	RemovedImageObjects []int
 	// ImagesBlankedInCopy names, by the resource name the page drew them
 	// with, the images blanked in a copy (see [RedactOptions.PrivateCopies]),
 	// once each. The image itself keeps its samples wherever else it is
-	// painted, and is still in the file.
+	// painted, and is still in the file. An image whose covered placement
+	// was removed (see RemovedImages) rather than repointed is listed too,
+	// for the same reason.
 	ImagesBlankedInCopy []string
 	// FormsCopied counts the form XObjects copied so that a placement of
 	// an image blanked in a copy could be repointed inside them: the form
@@ -190,6 +203,12 @@ type RedactReport struct {
 	// and were rewritten: their geometry inside the regions removed, the rest
 	// painted under a clip excluding the regions.
 	ClippedPaths int
+	// RemovedImages counts the image placements the page's own content drew
+	// wholly inside a region, which were removed rather than left painting
+	// their blanked samples (see [removablePlacement]). An image XObject
+	// among them is also in BlankedImages, since its samples were overwritten
+	// in the file; an inline image went with its operator, and is not.
+	RemovedImages int
 	// RemovedMCIDs lists the marked-content identifiers whose content was
 	// removed, ascending. They are what reaches the structure tree: a tagged
 	// page keeps a parallel copy of its text there, keyed by these.
@@ -338,6 +357,7 @@ func redactPageRegions(
 		inlineEnds  *content.InlineImageEnds
 		copies      []privateCopy
 		forms       = make(formCopies)
+		removals    []int
 	)
 	for _, box := range machine.ShadingBoxes() {
 		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
@@ -362,19 +382,43 @@ func redactPageRegions(
 		if opts.formImages && box.FormDepth > 0 {
 			return RedactReport{}, fmt.Errorf("%w: image %q", ErrRegionInFormXObject, box.Name)
 		}
+		// A placement the regions cover whole is removed: its blanked
+		// samples would paint its outline in black (see
+		// [removablePlacement]). An image XObject only this redaction's
+		// placements paint is still blanked, since its resource entry keeps
+		// it in the file.
+		copied := box.ObjNum != 0 && opts.private[box.ObjNum]
+		remove := removablePlacement(box, ops, zones)
+		if remove {
+			removals = append(removals, box.Op)
+		}
+		if remove && copied {
+			// Painted elsewhere too, where it keeps its samples: with this
+			// placement gone there is nothing to blank, and no copy to
+			// repoint. It is reported with the images blanked in a copy,
+			// which share that: the image itself stays in the file.
+			if !slices.Contains(report.ImagesBlankedInCopy, box.Name) {
+				report.ImagesBlankedInCopy = append(report.ImagesBlankedInCopy, box.Name)
+			}
+			continue
+		}
 		if box.Name == graphics.InlineImageName {
 			if inlineEnds == nil {
 				inlineEnds = content.NewInlineImageEnds(data)
 			}
+			// Run for its refusals even when the image goes whole: an image
+			// whose end the readers disagree on cannot be cut out exactly
+			// either.
 			edit, err := blankInlineImage(ctx, alloc, doc, page, data, ops, ranges, inlineEnds, box, zones)
 			if err != nil {
 				return RedactReport{}, err
 			}
-			inlineEdits = append(inlineEdits, edit)
-			report.BlankedImages = append(report.BlankedImages, box.Name)
+			if !remove {
+				inlineEdits = append(inlineEdits, edit)
+				report.BlankedImages = append(report.BlankedImages, box.Name)
+			}
 			continue
 		}
-		copied := box.ObjNum != 0 && opts.private[box.ObjNum]
 		objNum, err := blankImage(ctx, alloc, doc, page, box, zones, copied)
 		if err != nil {
 			return RedactReport{}, err
@@ -400,6 +444,9 @@ func redactPageRegions(
 		if !slices.Contains(report.BlankedImageObjects, objNum) {
 			report.BlankedImageObjects = append(report.BlankedImageObjects, objNum)
 		}
+		if remove {
+			report.RemovedImageObjects = append(report.RemovedImageObjects, objNum)
+		}
 	}
 
 	formCopyOps, formsCopied, err := forms.write(ctx, alloc, doc, page, ops)
@@ -412,6 +459,11 @@ func redactPageRegions(
 	if err != nil {
 		return RedactReport{}, err
 	}
+	removalEdits := make([]SpanEdit, 0, len(removals))
+	for _, op := range removals {
+		removalEdits = append(removalEdits, SpanEdit{Span: placementSpan(ops, ranges, op)})
+	}
+	report.RemovedImages = len(removals)
 
 	// Before any content is excised, so a refusal here happens while the page is
 	// otherwise untouched. An annotation is not drawn by the content stream, so
@@ -452,7 +504,7 @@ func redactPageRegions(
 		return RedactReport{}, err
 	}
 
-	if len(text.selected) == 0 && len(inlineEdits) == 0 && len(copyEdits) == 0 && len(paths.edits) == 0 {
+	if len(text.selected) == 0 && len(inlineEdits) == 0 && len(copyEdits) == 0 && len(paths.edits) == 0 && len(removalEdits) == 0 {
 		// An image may still have been blanked, so the report stands even when
 		// no operator was removed, and the page's own copies still have to go.
 		if len(report.BlankedImages) > 0 {
@@ -468,11 +520,12 @@ func redactPageRegions(
 	if err != nil {
 		return RedactReport{}, err
 	}
-	edits := make([]SpanEdit, 0, len(textEdits)+len(inlineEdits)+len(copyEdits)+len(paths.edits))
+	edits := make([]SpanEdit, 0, len(textEdits)+len(inlineEdits)+len(copyEdits)+len(paths.edits)+len(removalEdits))
 	edits = append(edits, inlineEdits...)
 	edits = append(edits, copyEdits...)
 	edits = append(edits, textEdits...)
 	edits = append(edits, paths.edits...)
+	edits = append(edits, removalEdits...)
 	if err := EditPageSpans(ctx, alloc, doc, page, edits); err != nil {
 		return RedactReport{}, err
 	}

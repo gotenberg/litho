@@ -186,8 +186,10 @@ type RedactReport struct {
 	// them with. Each is also painted, or named, where the regions do not
 	// cover the same samples, so the covered placement was repointed at a
 	// blanked copy of its own and the image itself kept its samples for the
-	// others: it is still in the file. [WithStrictRedaction] refuses such an
-	// image instead.
+	// others: it is still in the file. A covered placement that lay wholly
+	// inside a region was removed instead of repointed (see RemovedImages),
+	// and its image is listed here all the same, since it too stays in the
+	// file. [WithStrictRedaction] refuses such an image instead.
 	ImagesBlankedInCopy map[int][]string
 	// FormsCopied maps a 1-based page number to the form XObjects it now
 	// draws a copy of, because an image of ImagesBlankedInCopy was painted
@@ -202,6 +204,13 @@ type RedactReport struct {
 	// their geometry inside the regions was removed and the rest is painted
 	// under a clip that excludes the regions.
 	ClippedPaths int
+	// RemovedImages counts the image placements a page's own content drew
+	// wholly inside a region. They are removed, not only blanked: the blanked
+	// samples of a picture drawn as many small images, a logo one run of
+	// pixels at a time, would keep its outline on the page in black. An image
+	// XObject among them is also in BlankedImages, its samples overwritten in
+	// the file; an inline image goes with its operator, and is not.
+	RemovedImages int
 	// RemovedAnnotations lists the object numbers of annotations dropped
 	// because their rectangle sat inside a region, ascending.
 	RemovedAnnotations []int
@@ -399,7 +408,13 @@ type RedactReport struct {
 // elsewhere is blanked in a copy too: the form, and each form nested between
 // it and the image, is copied for the covered placement, the copy names the
 // blanked image, and the page draws the copy, while every other placement
-// draws the form as it was (see [RedactReport.FormsCopied]).
+// draws the form as it was (see [RedactReport.FormsCopied]). A placement the
+// page's own content draws wholly inside a region is removed, with the
+// q ... Q group that placed it when that group paints nothing else, so the
+// paper shows where it was (see [RedactReport.RemovedImages]): blanked, it
+// would paint its outline in black, and a picture drawn as many small
+// images would keep its shape. Its image is still blanked in place when no
+// placement the regions do not cover paints it, since the file keeps it.
 //
 // The redaction holds whatever else the Writer does before or after it:
 // another Redact, auto-tagging, and a remediation, which comes after it since a
@@ -733,7 +748,7 @@ func redactPages(
 	var copied map[int]bool
 	for {
 		report := &RedactReport{}
-		var blanked []int
+		var blanked, removed []int
 		for _, pageNum := range order {
 			opts := pageOpts
 			opts.PrivateCopies = copied
@@ -745,19 +760,20 @@ func redactPages(
 			}
 			mergePageRedaction(report, pageNum, pageReport)
 			blanked = appendNewObjects(blanked, pageReport.BlankedImageObjects)
+			removed = append(removed, pageReport.RemovedImageObjects...)
 		}
 
 		// A second pass blanks in place only the images the first found
 		// exclusive, on the same pages and regions, so a failure there is one
 		// a copy cannot lift and refuses as before.
 		if strict || copied != nil {
-			if useErr := mutations.CheckBlankedImageUses(ctx, alloc, doc, pages, byPage, blanked); useErr != nil {
+			if useErr := mutations.CheckBlankedImageUses(ctx, alloc, doc, pages, byPage, blanked, removed); useErr != nil {
 				alloc.Restore(snap)
 				return nil, nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
 			}
 			return report, copied, nil
 		}
-		shared, useErr := mutations.SharedBlankedImages(ctx, alloc, doc, pages, byPage, blanked)
+		shared, useErr := mutations.SharedBlankedImages(ctx, alloc, doc, pages, byPage, blanked, removed)
 		if useErr != nil {
 			alloc.Restore(snap)
 			return nil, nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
@@ -1145,6 +1161,7 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 	}
 	out.RemovedPaths += in.RemovedPaths
 	out.ClippedPaths += in.ClippedPaths
+	out.RemovedImages += in.RemovedImages
 	out.RasterisedUnits += in.RasterisedUnits
 	out.RemovedAnnotations = append(out.RemovedAnnotations, in.RemovedAnnotations...)
 	out.DroppedPageEntries = append(out.DroppedPageEntries, in.DroppedPageEntries...)

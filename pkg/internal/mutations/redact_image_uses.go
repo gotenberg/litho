@@ -85,8 +85,9 @@ func CheckBlankedImageUses(
 	pages []*document.Page,
 	byPage map[int][][4]float64,
 	blanked []int,
+	removed []int,
 ) error {
-	conflicts, err := blankedImageConflicts(ctx, alloc, doc, pages, byPage, blanked)
+	conflicts, err := blankedImageConflicts(ctx, alloc, doc, pages, byPage, blanked, removed)
 	if err != nil {
 		return err
 	}
@@ -115,8 +116,9 @@ func SharedBlankedImages(
 	pages []*document.Page,
 	byPage map[int][][4]float64,
 	blanked []int,
+	removed []int,
 ) ([]int, error) {
-	conflicts, err := blankedImageConflicts(ctx, alloc, doc, pages, byPage, blanked)
+	conflicts, err := blankedImageConflicts(ctx, alloc, doc, pages, byPage, blanked, removed)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, ctxErr
@@ -133,6 +135,11 @@ func SharedBlankedImages(
 // blankedImageConflicts returns, for each image of blanked that cannot be
 // blanked in place, the [ErrImageShared] saying why. An error is a failure
 // that names no single image.
+//
+// removed names, once per placement, the images of placements the redaction
+// removed (see [RedactReport.RemovedImageObjects]). Each counts as a
+// placement whose every sample the regions cover: it lay wholly inside them,
+// and the edited page no longer paints it for the check to measure.
 func blankedImageConflicts(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -140,6 +147,7 @@ func blankedImageConflicts(
 	pages []*document.Page,
 	byPage map[int][][4]float64,
 	blanked []int,
+	removed []int,
 ) (map[int]error, error) {
 	if len(blanked) == 0 {
 		return nil, nil
@@ -167,6 +175,16 @@ func blankedImageConflicts(
 		for objNum, sets := range pageCovers {
 			covers[objNum] = append(covers[objNum], sets...)
 		}
+	}
+	for _, objNum := range removed {
+		if !targets[objNum] {
+			continue
+		}
+		w, h, err := imageSize(ctx, alloc, doc, objNum)
+		if err != nil {
+			return nil, err
+		}
+		covers[objNum] = append(covers[objNum], fullCover(w, h))
 	}
 
 	for _, objNum := range blanked {
@@ -527,6 +545,20 @@ func resourcesNameTarget(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		}
 	}
 	return false
+}
+
+// fullCover returns the covered-sample set of a placement whose every sample
+// a region covers, in [placementCovers]' layout: a bitset over w x h.
+func fullCover(w, h int) []uint64 {
+	n := w * h
+	set := make([]uint64, (n+63)/64)
+	for i := range set {
+		set[i] = ^uint64(0)
+	}
+	if rem := n % 64; rem != 0 {
+		set[len(set)-1] = 1<<rem - 1
+	}
+	return set
 }
 
 // imageSize returns the /Width and /Height of the image at objNum.

@@ -31,7 +31,7 @@ func TestWriter_Redact_ImageCopySurvivesEveryWriterStage(t *testing.T) {
 
 	redact := func(t *testing.T, w *Writer) {
 		t.Helper()
-		if _, err := w.Redact(context.Background(), []RedactRegion{{Page: 1, Rect: wholeLeft}}); err != nil {
+		if _, err := w.Redact(context.Background(), []RedactRegion{{Page: 1, Rect: topLeft}}); err != nil {
 			t.Fatalf("Redact: %v", err)
 		}
 	}
@@ -107,7 +107,7 @@ func TestWriter_WriteTo_ReappliesARedactionWhoseImageCopyWasUndone(t *testing.T)
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: wholeLeft}}); err != nil {
+	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: topLeft}}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	pages, err := w.reader.resolvePages(ctx)
@@ -178,7 +178,7 @@ func TestWriter_Redact_ImageCopyKeepsTheSoftMask(t *testing.T) {
 		[]byte("/Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceGray /BitsPerComponent 8 /SMask 30 0 R /Length 16 >>\nstream\n"+
 			string(bytes.Repeat([]byte{0x80}, 16))), 1)
 
-	out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeLeft}})
+	out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: topLeft}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -303,7 +303,9 @@ func TestWriter_Redact_ImageCopyWithTheOtherOptions(t *testing.T) {
 		" >>\nstream\n" + fill + "\nendstream\nendobj\n"
 	withForm := imageDoc([]string{placeLeft + " " + placeRight + " q 1 0 0 1 150 420 cm /Fm9 Do Q", placeLeft}, "", "", form)
 	withForm = bytes.Replace(withForm, []byte("/XObject << /Im1 7 0 R >>"), []byte("/XObject << /Im1 7 0 R /Fm9 30 0 R >>"), 1)
-	region := RedactRegion{Page: 1, Rect: [4]float64{90, 410, 210, 610}}
+	// The bottom half of the left placement and the form's square: a
+	// placement the region covers whole is removed, not blanked in a copy.
+	region := RedactRegion{Page: 1, Rect: [4]float64{90, 410, 210, 545}}
 
 	for _, tc := range []struct {
 		name   string
@@ -326,7 +328,7 @@ func TestWriter_Redact_ImageCopyWithTheOtherOptions(t *testing.T) {
 			if tc.raster && report.RasterisedUnits == 0 {
 				t.Error("RasterisedUnits = 0, want the form rasterised")
 			}
-			if got := renderedGray(t, out, 1, copyLeftTop); !nearGray(got, 0) {
+			if got := renderedGray(t, out, 1, copyLeftBottom); !nearGray(got, 0) {
 				t.Errorf("covered placement = %d, want 0", got)
 			}
 			if got := renderedGray(t, out, 1, copyRight); !nearGray(got, 0x80) {

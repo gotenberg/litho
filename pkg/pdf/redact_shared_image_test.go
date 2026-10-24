@@ -157,7 +157,9 @@ func TestWriter_Redact_NeverBlanksBeyondTheRegions(t *testing.T) {
 	// top and bottom rows of the left placement, and the right one.
 	leftTop, leftBottom, right := [2]float64{112.5, 587.5}, [2]float64{112.5, 512.5}, [2]float64{312.5, 587.5}
 	annot := [2]float64{425, 125}
-	const blank, kept = 0, 0x80
+	// A placement a region covers whole is removed, and the paper shows
+	// where it was.
+	const blank, kept, gone = 0, 0x80, 0xff
 
 	type probe struct {
 		page int
@@ -178,40 +180,40 @@ func TestWriter_Redact_NeverBlanksBeyondTheRegions(t *testing.T) {
 			src:     imageDoc([]string{placeLeft + " " + placeRight}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
 			shared:  true,
-			probes:  []probe{{1, leftTop, blank}, {1, leftBottom, blank}, {1, right, kept}},
+			probes:  []probe{{1, leftTop, gone}, {1, leftBottom, gone}, {1, right, kept}},
 		},
 		{
 			name:    "both placements on a page",
 			src:     imageDoc([]string{placeLeft + " " + placeRight}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 1, Rect: wholeRight}},
-			probes:  []probe{{1, leftTop, blank}, {1, right, blank}},
+			probes:  []probe{{1, leftTop, gone}, {1, right, gone}},
 		},
 		{
 			name:    "different parts of two placements",
 			src:     imageDoc([]string{placeLeft + " " + placeRight}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: topLeft}, {Page: 1, Rect: wholeRight}},
 			shared:  true,
-			probes:  []probe{{1, leftTop, blank}, {1, leftBottom, kept}, {1, right, blank}},
+			probes:  []probe{{1, leftTop, blank}, {1, leftBottom, kept}, {1, right, gone}},
 		},
 		{
 			name:    "one of two pages",
 			src:     imageDoc([]string{placeLeft, placeLeft}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
 			shared:  true,
-			probes:  []probe{{1, leftTop, blank}, {2, leftTop, kept}},
+			probes:  []probe{{1, leftTop, gone}, {2, leftTop, kept}},
 		},
 		{
 			name:    "every page",
 			src:     imageDoc([]string{placeLeft, placeLeft}, "", "", ""),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 2, Rect: wholeLeft}},
-			probes:  []probe{{1, leftTop, blank}, {2, leftTop, blank}},
+			probes:  []probe{{1, leftTop, gone}, {2, leftTop, gone}},
 		},
 		{
 			name:    "also painted by an annotation appearance",
 			src:     imageDoc([]string{placeLeft}, "", "/Annots [9 0 R] ", annotAppearance),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
 			shared:  true,
-			probes:  []probe{{1, leftTop, blank}, {1, annot, kept}},
+			probes:  []probe{{1, leftTop, gone}, {1, annot, kept}},
 		},
 		{
 			// An outline pointing at the page is not a use of the image: the
@@ -219,7 +221,7 @@ func TestWriter_Redact_NeverBlanksBeyondTheRegions(t *testing.T) {
 			name:    "page named by an outline",
 			src:     imageDoc([]string{placeLeft}, "/Outlines 20 0 R ", "", outline),
 			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
-			probes:  []probe{{1, leftTop, blank}},
+			probes:  []probe{{1, leftTop, gone}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
