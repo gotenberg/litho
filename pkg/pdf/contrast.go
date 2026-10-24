@@ -81,12 +81,11 @@ func WithEnhancedContrast() ContrastOption {
 // drawn at 72 dpi without the run differs there from the page drawn whole.
 // The background is what the page shows there without the run, averaged:
 // over the pixels the run's ink marks outside every other run's glyph boxes,
-// or, when it marks none, over all it marks with the page drawn without the
-// run alone, the page's other text under it included, so white text over a
-// dark offset shadow is judged against the shadow. A run whose own ink marks
-// no pixel is not seen and not judged, nor is one past the bound of 16 runs
-// a page whose ink lies wholly under other runs' glyph boxes, each drawn
-// apart. A run whose colour the content stream does not settle, painted with
+// or, when it marks none, over all it marks with the page drawn without it
+// and no run it shares a pixel with, the page's other text under it
+// included, so white text over a dark offset shadow is judged against the
+// shadow. A run whose own ink marks no pixel is not seen and not judged, nor
+// is one past the bound of 16 such drawings a page. A run whose colour the content stream does not settle, painted with
 // a pattern, transparency, a blend mode or a soft mask, or by a Type 3 glyph
 // that may set its own colour, is counted in
 // [models.ContrastReport.Undetermined] and not judged.

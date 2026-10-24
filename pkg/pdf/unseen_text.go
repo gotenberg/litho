@@ -50,9 +50,9 @@ func invisibleMode(mode int) bool {
 // content group shown as text extraction reads them, its annotations drawn
 // as a viewer shows them, and again with its text alone for the runs that do
 // not show; a run whose ink lies wholly under other runs' glyph boxes is
-// drawn without it alone, up to 16 such runs. A run past that bound
-// is not reported, nor is one set vertically or turned that text extraction
-// cannot place.
+// drawn again without it, beside other such runs that share no pixel with
+// it, in up to 16 drawings. A run past that bound is not reported, nor is
+// one set vertically or turned that text extraction cannot place.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
 // [ErrFontMissing] when the page's text cannot be read, and

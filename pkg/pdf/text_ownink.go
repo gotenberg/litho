@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"math/bits"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -14,14 +15,23 @@ import (
 )
 
 // maxSceneOwnDrawings bounds the drawings [textScene.judgeOwnInk] makes of a
-// page beyond its first two, one for each run whose glyph boxes overlap
-// another judged run's wherever its removal changes the page. Anti-DoS guard,
-// not spec-mandated: a crafted page can set many judged runs over one
-// another, each costing a drawing of the page. Real pages judge a few runs at
-// a time, white headings over a bar or the copies of a removed word, and
-// seldom set two of them over one another, so 16 leaves room for every such
-// page, and a run past it is left unjudged.
+// page beyond its first two, each without a group of the runs whose glyph
+// boxes overlap another judged run's wherever their removal changes the
+// page, no two runs of a group holding one pixel. Anti-DoS guard, not
+// spec-mandated: a crafted page can pile many judged runs on one another,
+// each group costing a drawing of the page. Runs set apart share a drawing,
+// so a page needs as many as the runs piled on one pixel: a few where a
+// heading crosses a large initial or copies of a word lie over one another,
+// so 16 leaves room for every real page, and a run past it is left
+// unjudged. One bit of [runGroups] stands for each drawing.
 const maxSceneOwnDrawings = 16
+
+// runGroups marks, at one pixel, the drawings of [maxSceneOwnDrawings] whose
+// runs hold it, one bit each.
+type runGroups uint16
+
+// allRunGroups holds the bit of every drawing [maxSceneOwnDrawings] allows.
+const allRunGroups runGroups = 1<<maxSceneOwnDrawings - 1
 
 // sceneOriginSlack is how far apart, in device pixels, the origin the
 // renderer shows a glyph at and the one text extraction reads for it may lie
@@ -151,8 +161,9 @@ func (s *textScene) showsOwnInk(ctx context.Context, r *Reader, pg *document.Pag
 // over the runs' glyph boxes alone ([page.Options.Within]) and both leaving
 // out what o omits; a run whose removal changes a pixel no other judged
 // run's box holds shows. A run whose changed pixels all lie under another
-// judged run's box is drawn on its own, without it alone, up to
-// [maxSceneOwnDrawings] of them; one past the bound, and one none of whose
+// judged run's box is drawn without it and the runs that share no pixel
+// with it alone, in up to [maxSceneOwnDrawings] such drawings
+// ([textScene.groupRuns]); one past the bound, and one none of whose
 // glyphs the renderer shows where text extraction places them, is left
 // unjudged. region frames the drawing as [textScene.frame] frames it. It
 // fails when the page cannot be drawn, or when the runs' glyph boxes pass
@@ -208,33 +219,30 @@ func (s *textScene) judgeOwnInk(ctx context.Context, r *Reader, pg *document.Pag
 	if without.Bounds() != s.with.Bounds() {
 		return nil, fmt.Errorf("drawings of %v and %v", s.with.Bounds(), without.Bounds())
 	}
-	drawings := 0
+	var pending []int
 	for k, run := range runs {
 		if !slices.ContainsFunc(run, func(i int) bool { return hits[i] }) {
 			verdicts[k] = inkUnjudged
 			continue
 		}
-		var under func(px []byte)
-		if o.under != nil {
-			under = func(px []byte) { o.under(k, px) }
-		}
-		alone, shared2 := s.ownChange(run, without, under)
+		alone, shared2 := s.ownChange(run, without, o.underRun(k))
 		switch {
 		case alone:
 			verdicts[k] = inkSeen
-		case !shared2:
-			verdicts[k] = inkUnseen
-		case drawings >= maxSceneOwnDrawings:
-			verdicts[k] = inkUnjudged
-		default:
-			drawings++
-			seen, err := s.ownDrawing(ctx, r, pg, box, run, o, shared, budget, under)
-			if err != nil {
-				return nil, err
-			}
-			if seen {
-				verdicts[k] = inkSeen
-			}
+		case shared2:
+			pending = append(pending, k)
+		}
+	}
+	groups, left, err := s.groupRuns(ctx, runs, pending)
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range left {
+		verdicts[k] = inkUnjudged
+	}
+	for _, group := range groups {
+		if err := s.groupDrawing(ctx, r, pg, box, runs, group, o, shared, budget, verdicts); err != nil {
+			return nil, err
 		}
 	}
 	return verdicts, nil
@@ -297,26 +305,100 @@ func (s *textScene) ownChange(run []int, without *image.NRGBA, under func(px []b
 	return alone, shared
 }
 
-// ownDrawing draws the page without run alone over run's glyph boxes, as o
-// sets, and reports whether it differs from the page drawn whole at one of
-// their pixels. under, when not nil, is told the colour the drawing shows at
-// each pixel that differs, and the comparison then visits them all.
-func (s *textScene) ownDrawing(ctx context.Context, r *Reader, pg *document.Page, box page.Box, run []int, o ownInkOptions, shared *page.Shared, budget int64, under func(px []byte)) (bool, error) {
-	within, err := s.inkMask(run, budget)
-	if err != nil {
-		return false, err
+// underRun returns [ownInkOptions.under] for run k, nil when o sets none.
+func (o ownInkOptions) underRun(k int) func(px []byte) {
+	if o.under == nil {
+		return nil
 	}
-	origins := s.origins(run)
+	return func(px []byte) { o.under(k, px) }
+}
+
+// groupRuns parts the runs pending names into groups no two runs of which
+// hold one pixel, each judged by a drawing of its own
+// ([textScene.groupDrawing]), at most [maxSceneOwnDrawings] of them; left
+// holds the runs that join none.
+func (s *textScene) groupRuns(ctx context.Context, runs [][]int, pending []int) (groups [][]int, left []int, err error) {
+	if len(pending) == 0 {
+		return nil, nil, nil
+	}
+	w := s.geo.Width
+	held := make([]runGroups, w*s.geo.Height)
+	for n, k := range pending {
+		if n%100 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+		}
+		var taken runGroups
+		for _, i := range runs[k] {
+			r := s.rects[i]
+			for y := r.Min.Y; y < r.Max.Y; y++ {
+				for _, g := range held[y*w+r.Min.X : y*w+r.Max.X] {
+					taken |= g
+				}
+			}
+		}
+		free := allRunGroups &^ taken
+		if free == 0 {
+			left = append(left, k)
+			continue
+		}
+		// Groups fill lowest first, so the lowest free one exists or is next.
+		g := bits.TrailingZeros16(uint16(free))
+		if g == len(groups) {
+			groups = append(groups, nil)
+		}
+		groups[g] = append(groups[g], k)
+		for _, i := range runs[k] {
+			r := s.rects[i]
+			for y := r.Min.Y; y < r.Max.Y; y++ {
+				row := held[y*w+r.Min.X : y*w+r.Max.X]
+				for x := range row {
+					row[x] |= 1 << g
+				}
+			}
+		}
+	}
+	return groups, left, nil
+}
+
+// groupDrawing draws the page without the runs group names over their glyph
+// boxes, as o sets, and marks seen in verdicts each of them the drawing
+// differs from the page drawn whole at one of its pixels. No two runs of the
+// group hold one pixel, so what differs inside one run's boxes is its own
+// ink alone.
+func (s *textScene) groupDrawing(ctx context.Context, r *Reader, pg *document.Page, box page.Box, runs [][]int, group []int, o ownInkOptions, shared *page.Shared, budget int64, verdicts []inkVerdict) error {
+	var idx []int
+	for _, k := range group {
+		idx = append(idx, runs[k]...)
+	}
+	within, err := s.inkMask(idx, budget)
+	if err != nil {
+		return err
+	}
+	origins := s.origins(idx)
 	without, err := s.render(ctx, r, pg, box, page.Options{
 		Omit: o.omit, Within: within, Shared: shared, OmitGlyphClip: o.omitClip,
 		OmitGlyph: func(p geom.Point) bool { return origins.match(p, nil) },
 	})
 	if err != nil {
-		return false, fmt.Errorf("drawing the page without a judged run: %w", err)
+		return fmt.Errorf("drawing the page without judged runs: %w", err)
 	}
 	if without.Bounds() != s.with.Bounds() {
-		return false, fmt.Errorf("drawings of %v and %v", s.with.Bounds(), without.Bounds())
+		return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), without.Bounds())
 	}
+	for _, k := range group {
+		if s.ownDiffers(runs[k], without, o.underRun(k)) {
+			verdicts[k] = inkSeen
+		}
+	}
+	return nil
+}
+
+// ownDiffers reports whether without differs from the page drawn whole at a
+// pixel of run's glyph boxes. under, when not nil, is told the colour without
+// shows at each pixel that differs, and the comparison then visits them all.
+func (s *textScene) ownDiffers(run []int, without *image.NRGBA, under func(px []byte)) bool {
 	rect, own := s.ownBox(run)
 	seen := false
 	for y := rect.Min.Y; y < rect.Max.Y; y++ {
@@ -329,13 +411,13 @@ func (s *textScene) ownDrawing(ctx context.Context, r *Reader, pg *document.Page
 				continue
 			}
 			if under == nil {
-				return true, nil
+				return true
 			}
 			seen = true
 			under(without.Pix[off : off+3 : off+3])
 		}
 	}
-	return seen, nil
+	return seen
 }
 
 // inkMask marks the pixels of the glyph boxes of the glyphs idx names, for

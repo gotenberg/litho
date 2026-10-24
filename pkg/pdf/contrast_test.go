@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"testing"
 
@@ -130,6 +131,37 @@ func TestCheckTextContrastInsideNeighbourBox(t *testing.T) {
 	}
 	if grey.BackgroundColor != [3]uint8{255, 255, 255} || math.Abs(grey.Ratio-2.85) > 0.05 {
 		t.Errorf("Grey = %+v, want about 2.85 against white", grey)
+	}
+}
+
+// TestCheckTextContrastManyApart judges more runs set inside other glyphs'
+// boxes than [maxSceneOwnDrawings] allows drawings: twenty grey words, each
+// inside the box of its own large "L" and apart from the others, share one
+// drawing, and each is judged and reported short of 4.5:1.
+func TestCheckTextContrastManyApart(t *testing.T) {
+	t.Parallel()
+	var content strings.Builder
+	const words = 20
+	for n := range words {
+		x, y := 10+70*(n%5), 10+90*(n/5)
+		fmt.Fprintf(&content, "BT 0 g /F1 60 Tf %d %d Td (L) Tj ET\n", x, y)
+		fmt.Fprintf(&content, "BT 0.6 g /F1 6 Tf %d %d Td (w%c) Tj ET\n", x+3, y+48, 'a'+n)
+	}
+	data := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", content.Len(), content.String()),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+	r := openLimited(t, data, Limits{})
+
+	rep, err := r.CheckTextContrast(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Judged != 2*words || len(rep.Failures) != words {
+		t.Errorf("judged %d, %d failures; want %d and %d", rep.Judged, len(rep.Failures), 2*words, words)
 	}
 }
 
