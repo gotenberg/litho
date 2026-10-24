@@ -295,6 +295,7 @@ one deliberately rather than diffing it against a fresh build.
 | `strokedtext_2b.pdf`   | PDF/A-2b     | Stroked text whose pen paints past the box of its outline        |
 | `t3pen_2b.pdf`         | PDF/A-2b     | Type 3 glyphs stroking with the pen of the state showing them    |
 | `usebpc_4.pdf`         | PDF/A-4      | ICC colours under /UseBlackPtComp /Default, /ON and /OFF         |
+| `blankkeys_ua1.pdf`    | PDF/UA-1     | Hidden, smoothed and tagged images, blanked by a redaction       |
 
 ### Must-not-fire controls
 
@@ -598,6 +599,7 @@ are covered under [Known divergences](#known-divergences).
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
 | `baretree_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `blankblack_2b.pdf`    | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
+| `blankkeys_ua1.pdf`    | 6    | 6    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `blendcs_4.pdf`        | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 6    | 6    |
 | `blendspace_2b.pdf`    | 9    | 6    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `boxorigin_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
@@ -9700,6 +9702,45 @@ the compensated reading.
 The file conforms at PDF/A-4. The other cells are the identification, header,
 metadata and tagging rules of their parts.
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+
+### `blankkeys_ua1.pdf`
+
+A redaction rewrites each image a region covers. The rewrite wrote a fresh
+dictionary, so a blanked image lost every entry blanking did not set: an image
+in a hidden optional content group (ISO 32000-1, 8.11) showed, its blank and its
+kept samples alike, and an interpolated one (8.9.5.3) was drawn unsmoothed
+outside the region. Blanking now keeps `/OC`, `/Interpolate`, `/Intent`,
+`/Name`, `/Measure` and, in place, `/StructParent`, and drops what describes
+the old picture (`/Alternates`, `/OPI`, `/ID`, `/Metadata`, `/AF`,
+`/PtData`). No corpus image carries `/StructParent`, and two pdfjs files carry
+`/OC` on an image. Page 1, 400 by 400, draws four 16 x 16 RGB ramps, each sample
+edge on the cell's region edges; page 2 draws `ImE` again:
+
+| Image | At                 | Carries                                     | Tagged as                     |
+| ----- | ------------------ | ------------------------------------------- | ----------------------------- |
+| `ImA` | 40 150, 160 x 160  | `/Interpolate true`, `/Intent`, `/Name`     | marked content of a `Figure`  |
+| `ImB` | 210 150, 160 x 160 | `/OC`, a group the default config turns off | an artifact                   |
+| `ImC` | 60 60, 80 x 80     | `/StructParent 1`                           | a `Figure`'s object reference |
+| `ImE` | 260 60, 80 x 80    | `/StructParent 2`, drawn on both pages      | a `Figure`'s object reference |
+
+Before, poppler 26.09.0 drew 11,845 pixels outside the centred quarter and
+21,667 outside the band that the source does not draw, all in `ImB`'s box: the
+hidden ramp. Now 910 and 568, all within 7 pixels of a region's edge in `ImA`'s
+box, where the smoothing blends the blank into the next samples (the cell's
+`image_spill`). An object reference (14.7.4.3) is no place an image paints:
+it once sent every image a structure element names to a blanked copy, leaving
+its samples in the file under the element. `ImC` is now blanked in place,
+keeping the key its element and the parent tree name it by (14.7.4.4); `ImE`,
+which page 2 draws too, is blanked in a copy carrying no `/StructParent`,
+since its element names the original. veraPDF 1.30.2 reads a `Do` outside
+marked content as untagged whatever names the image (ISO 14289-1, 7.1 test 3),
+and so does litho, so the UA cells fire that rule here and on every redacted
+output, whose rule sets are otherwise those of the source less the metadata
+redaction removes.
+
+The other cells are the identification, metadata, output intent, optional
+content and `/Interpolate` rules of their parts. veraPDF 1.30.2 and litho report
+the same rule set in all thirteen cells.
 
 ## Scope
 
