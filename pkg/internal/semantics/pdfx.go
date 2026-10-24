@@ -13,16 +13,16 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// maxPDFXPacketBytes bounds the XMP packet read while looking for the PDF/X
-// identifier. Anti-DoS guard, not a spec limit: the packet length is taken from
-// the file, so a crafted document could otherwise make this read without end.
-// A real identification packet is a few kilobytes; a megabyte is far past any
-// legitimate one.
+// maxIdentificationPacketBytes bounds the catalog XMP packet read while
+// looking for a PDF/X or PDF/A identifier. Anti-DoS guard, not a spec limit:
+// the packet length is taken from the file, so a crafted document could
+// otherwise make this read without end. A real identification packet is a few
+// kilobytes; a megabyte is far past any legitimate one.
 //
 // # Corpus evidence
 //
 //   - All corpora: a megabyte still reads the whole packet of every fixture.
-const maxPDFXPacketBytes = 1 << 20
+const maxIdentificationPacketBytes = 1 << 20
 
 // pdfxIDNamespace is the namespace URI the PDF/X identification schema binds
 // to the pdfxid prefix, under which PDF/X-4 and later declare conformance.
@@ -69,26 +69,7 @@ func DeclaredPDFX(ctx context.Context, doc *document.Document) models.PDFXProfil
 //   - pdfjs issue14297.pdf: has no catalog /Metadata at all while two
 //     resource-level packets declare PDF/X-4.
 func pdfxFromXMP(ctx context.Context, doc *document.Document) models.PDFXProfile {
-	open, err := XMPOpen(ctx, doc)
-	if err != nil || open == nil {
-		if err != nil {
-			doc.Logger.Debug("opening XMP for the PDF/X identifier", slog.Any("err", err))
-		}
-		return ""
-	}
-	rc, err := open(ctx)
-	if err != nil || rc == nil {
-		doc.Logger.Debug("reading XMP for the PDF/X identifier", slog.Any("err", err))
-		return ""
-	}
-	defer rc.Close() //nolint:errcheck // read-only stream; a close failure cannot affect the value already parsed
-
-	data, err := io.ReadAll(io.LimitReader(rc, maxPDFXPacketBytes))
-	if err != nil {
-		doc.Logger.Debug("reading XMP packet for the PDF/X identifier", slog.Any("err", err))
-		return ""
-	}
-	for _, value := range pdfxXMPIdentifiers(ctx, data) {
+	for _, value := range xmpSimpleValues(ctx, catalogPacket(ctx, doc, "the PDF/X identifier"), pdfxIDNamespace, "GTS_PDFXVersion") {
 		if level := pdfxLevel(value); level != "" {
 			return level
 		}
@@ -96,10 +77,36 @@ func pdfxFromXMP(ctx context.Context, doc *document.Document) models.PDFXProfile
 	return ""
 }
 
-// pdfxXMPIdentifiers returns the values of the GTS_PDFXVersion properties of
-// the PDF/X identification namespace in an XMP packet, in document order. XMP
-// allows a simple value in both forms (ISO 16684-1): an attribute on
-// rdf:Description and a child element.
+// catalogPacket returns the bytes of the document's catalog XMP packet, at
+// most [maxIdentificationPacketBytes] of them, and nil when it has none or it
+// does not read. what names the value read from it, for the log.
+func catalogPacket(ctx context.Context, doc *document.Document, what string) []byte {
+	open, err := XMPOpen(ctx, doc)
+	if err != nil || open == nil {
+		if err != nil {
+			doc.Logger.Debug("opening XMP for "+what, slog.Any("err", err))
+		}
+		return nil
+	}
+	rc, err := open(ctx)
+	if err != nil || rc == nil {
+		doc.Logger.Debug("reading XMP for "+what, slog.Any("err", err))
+		return nil
+	}
+	defer rc.Close() //nolint:errcheck // read-only stream; a close failure cannot affect the value already parsed
+
+	data, err := io.ReadAll(io.LimitReader(rc, maxIdentificationPacketBytes))
+	if err != nil {
+		doc.Logger.Debug("reading XMP packet for "+what, slog.Any("err", err))
+		return nil
+	}
+	return data
+}
+
+// xmpSimpleValues returns the values of the simple property local of the
+// namespace ns in an XMP packet, in document order. XMP allows a simple value
+// in both forms (ISO 16684-1): an attribute on rdf:Description and a child
+// element.
 //
 // The property is found by namespace URI and local name, with the namespace
 // declarations in scope where it is written: on rdf:Description, or on the
@@ -115,9 +122,10 @@ func pdfxFromXMP(ctx context.Context, doc *document.Document) models.PDFXProfile
 //
 // # Corpus evidence
 //
-//   - All corpora: only the element form appears, every pdfxid prefix is
-//     bound to this namespace, and none is declared on the property element.
-func pdfxXMPIdentifiers(ctx context.Context, data []byte) []string {
+//   - All corpora: only the element form of the PDF/X identifier appears,
+//     every pdfxid prefix is bound to its namespace, and none is declared on
+//     the property element.
+func xmpSimpleValues(ctx context.Context, data []byte, ns, local string) []string {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	dec.Strict = false
 	// The packet is read as the bytes it is: an encoding its header names
@@ -137,11 +145,11 @@ func pdfxXMPIdentifiers(ctx context.Context, data []byte) []string {
 			continue
 		}
 		for _, a := range start.Attr {
-			if a.Name.Space == pdfxIDNamespace && a.Name.Local == "GTS_PDFXVersion" {
+			if a.Name.Space == ns && a.Name.Local == local {
 				out = append(out, strings.TrimSpace(a.Value))
 			}
 		}
-		if start.Name.Space != pdfxIDNamespace || start.Name.Local != "GTS_PDFXVersion" {
+		if start.Name.Space != ns || start.Name.Local != local {
 			continue
 		}
 		var text strings.Builder

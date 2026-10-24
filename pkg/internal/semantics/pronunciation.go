@@ -17,7 +17,7 @@ import (
 // anything a document could legitimately pronounce. Measured on an array of 20
 // compressed streams, 328 KB of input decoded to 160 MB.
 //
-// Unlike maxPDFXPacketBytes this value rests on no measured maximum: there is
+// Unlike maxIdentificationPacketBytes this value rests on no measured maximum: there is
 // nothing to size it against. A real lexicon is kilobytes of XML. It matches
 // maxRawInfoScanBytes so this package keeps one generous scale rather than a
 // third arbitrary number, and even at 10 MB the growth is bounded rather than
