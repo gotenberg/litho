@@ -144,7 +144,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 				Resources:   machine.Resources,
 				Bold:        font.Bold,
 				Type3:       font.Subtype == "Type3",
-				WhiteFill:   state.Text.Tmode != 3 && fillIsWhite(state),
+				WhiteFill:   paintsOnlyWhite(state),
 				PaintsBefore: [3]int{
 					len(machine.PathBoxes()), len(machine.ImageBoxes()), len(machine.ShadingBoxes()),
 				},
@@ -587,30 +587,79 @@ func type0TableRune(font *Font, data []byte) (rune, bool) {
 	return r, ok
 }
 
-// textIsInvisible combines the two rendering-mode-3 and white-on-white
-// invisibility heuristics into a single predicate. Pattern color spaces
-// are exempt because they paint with a tiled or gradient fill.
+// textIsInvisible combines the rendering-mode-3 and white-on-white
+// invisibility heuristics into a single predicate: mode 3 neither fills nor
+// strokes the glyphs (ISO 32000-1, 9.3.6, Table 106), and a glyph whose every
+// paint is white shows nowhere on white ([paintsOnlyWhite]).
 //
-// White is read only in a device space the content stream named directly
-// (ISO 32000-1, 8.6.8, Table 74): a /ColorSpace resource holding a device
-// family is left visible, as is any other space, whose white depends on a
-// conversion this predicate does not run.
+// Mode 7 also paints nothing of its own, yet it is not judged invisible: it
+// adds the glyphs to the clipping path, through which what the page paints
+// next shows in the glyphs' shape (Table 106), the way producers set text in
+// a gradient or a photograph. A rendering cannot tell that text apart either:
+// a renderer leaving the glyph out keeps its clipping.
+//
+// # Corpus evidence
+//
+//   - pdfjs text_clip_cff_cid.pdf, bug1749563.pdf, issue3584.pdf, govdocs
+//     thread_000_000208.pdf, thread_000_000149.pdf: every mode-7 run fills a
+//     colour or an image through its glyphs and shows, as poppler draws it.
 func textIsInvisible(state *graphics.State) bool {
-	return state.Text.Tmode == 3 || fillIsWhite(state)
+	return state.Text.Tmode == 3 || paintsOnlyWhite(state)
 }
 
-// fillIsWhite reports the white-on-white half of [textIsInvisible]: a fill of
-// white in a device space the content stream named directly. It judges the
-// colour alone. What lies under the glyph is a renderer's to tell, and a
-// caller holding one overturns the judgement where the glyph shows (see
-// [graphics.TextPaint.WhiteFill]).
-func fillIsWhite(state *graphics.State) bool {
-	fill := state.Fill
-	if fill.Space.Resource != "" {
+// paintsOnlyWhite reports the white-on-white half of [textIsInvisible]: every
+// paint the glyph's text rendering mode applies is white in a device space
+// the content stream named directly. It judges the colours alone. What lies
+// under the glyph is a renderer's to tell, and a caller holding one overturns
+// the judgement where the glyph shows (see [graphics.TextPaint.WhiteFill]).
+//
+// Per ISO 32000-1, 9.3.6, Table 106, modes 0 and 4 fill the glyphs, modes 1
+// and 5 stroke them and modes 2 and 6 do both, so a glyph filled white and
+// stroked black shows its outline. A mode outside the table fills alone, as
+// [strokesText] reads it. Modes 3 and 7 apply no paint, so no colour makes
+// them white. The stroke counts whatever the line width: a width of 0
+// strokes the thinnest line the device can render (8.4.3.2). In modes 2 and
+// 6, a paint whose constant alpha is 0 (CA for the stroke, ca for the fill,
+// 11.6.4.4) leaves no mark, so the other paint alone decides.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200152.pdf page 1: keycap frames stroked black in
+//     mode 1 with a white fill, judged white by the fill, now read beside
+//     their digits as on the rest of the page ("■2", "■#"), as pdftotext
+//     reads them. No other default reading of the seven corpora changes.
+//   - pdfjs issue16759.pdf, issue20513.pdf: white text outlined in colour,
+//     which the rendering already showed, is now visible without it.
+func paintsOnlyWhite(state *graphics.State) bool {
+	switch state.Text.Tmode {
+	case 3, 7:
+		return false
+	case 1, 5:
+		return colourIsWhite(state.Stroke)
+	case 2, 6:
+		fills, strokes := state.FillAlpha > 0, state.StrokeAlpha > 0
+		switch {
+		case fills && !strokes:
+			return colourIsWhite(state.Fill)
+		case strokes && !fills:
+			return colourIsWhite(state.Stroke)
+		}
+		return colourIsWhite(state.Fill) && colourIsWhite(state.Stroke)
+	}
+	return colourIsWhite(state.Fill)
+}
+
+// colourIsWhite reports a colour of white in a device space the content
+// stream named directly (ISO 32000-1, 8.6.8, Table 74): a /ColorSpace
+// resource holding a device family is left visible, as is any other space,
+// whose white depends on a conversion this predicate does not run. A pattern
+// is never white: it paints with a tiled or gradient fill.
+func colourIsWhite(colour graphics.Color) bool {
+	if colour.Space.Resource != "" {
 		return false
 	}
-	c := fill.Components
-	switch fill.Space.Family {
+	c := colour.Components
+	switch colour.Space.Family {
 	case graphics.FamilyDeviceRGB:
 		return len(c) == 3 && c[0] == 1 && c[1] == 1 && c[2] == 1
 	case graphics.FamilyDeviceCMYK:

@@ -62,11 +62,11 @@ func (m *Machine) TextPaints() []TextPaint {
 }
 
 // WhiteFills returns, parallel to the text elements the extractor emitted,
-// whether it judged each invisible by its white fill alone, its rendering
-// mode painting the glyph: the judgement a renderer can overturn, where mode
-// 3 paints nothing whatever lies under the glyph (ISO 32000-1, 9.3.6, Table
-// 106). It is empty unless [Machine.RecordWhiteFills] was set before
-// extraction.
+// whether it judged each invisible by its white paint alone: every paint its
+// rendering mode applies, the fill, the stroke or both, is white (ISO
+// 32000-1, 9.3.6, Table 106). That is the judgement a renderer can overturn,
+// where mode 3 paints nothing whatever lies under the glyph. It is empty
+// unless [Machine.RecordWhiteFills] was set before extraction.
 func (m *Machine) WhiteFills() []bool {
 	return m.whiteFills
 }

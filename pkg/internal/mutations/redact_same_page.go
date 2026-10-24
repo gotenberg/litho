@@ -54,7 +54,8 @@ type SamePageCopy struct {
 //
 //   - paints with a text rendering mode that fills or strokes (ISO 32000-1,
 //     9.3.6, Table 106: not 3, invisible, nor 7, clip only);
-//   - is not white in a device colour space ([models.TextElement.Invisible]);
+//   - does not paint only in white in a device colour space, its fill, its
+//     stroke or both as its mode applies them ([models.TextElement.Invisible]);
 //   - falls inside the clipping path and the crop box
 //     ([models.TextElement.Hidden], [models.TextElement.IsClipped]), and is
 //     not in optional content that is off, a group or a membership

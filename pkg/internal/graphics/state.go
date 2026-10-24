@@ -213,7 +213,7 @@ type Machine struct {
 	RecordTextPaints bool
 	textPaints       []TextPaint
 	// RecordWhiteFills makes the text extractor remember, element by element,
-	// only whether it judged the element invisible by its white fill alone:
+	// only whether it judged the element invisible by its white paint alone:
 	// the one part of [TextPaint] text extraction reads, recorded without the
 	// colours. See [Machine.WhiteFills].
 	RecordWhiteFills bool

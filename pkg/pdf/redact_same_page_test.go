@@ -13,6 +13,8 @@ import (
 // samePageCopyPDF builds a one-page document drawing "SECRET" at y=700, which
 // [coversSecret] removes, and a second "SECRET" at y=500, drawn as copy says:
 // "visible" in black, "invisible" in text rendering mode 3, "white" in white,
+// "whitestroke" stroked in white alone (mode 1, its black fill unused),
+// "outlined" filled white and stroked black (mode 2),
 // "offpage" past the media box, "clipped" outside a clipping path,
 // "hiddenlayer" in an optional-content group that is off, "underfill" under
 // an opaque rectangle painted after it, "underimage" under an image painted
@@ -28,6 +30,8 @@ func samePageCopyPDF(copy string) []byte {
 		"visible":     "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET",
 		"invisible":   "BT /F1 12 Tf 3 Tr 100 500 Td (SECRET) Tj ET",
 		"white":       "1 g BT /F1 12 Tf 100 500 Td (SECRET) Tj ET",
+		"whitestroke": "1 G BT /F1 12 Tf 1 Tr 100 500 Td (SECRET) Tj ET",
+		"outlined":    "1 g BT /F1 12 Tf 2 Tr 100 500 Td (SECRET) Tj ET",
 		"offpage":     "BT /F1 12 Tf 100 1500 Td (SECRET) Tj ET",
 		"clipped":     "q 0 0 50 50 re W n BT /F1 12 Tf 100 500 Td (SECRET) Tj ET Q",
 		"hiddenlayer": "/OC /L1 BDC BT /F1 12 Tf 100 500 Td (SECRET) Tj ET EMC",
@@ -103,6 +107,21 @@ func TestWriter_Redact_JudgesASamePageCopyByItsOwnInk(t *testing.T) {
 	}
 }
 
+// TestWriter_Redact_ToleratesAnOutlinedWhiteCopy pins a copy filled white and
+// stroked black in mode 2 (ISO 32000-1, 9.3.6, Table 106): its outline shows,
+// so it is visible text outside the region, reported and kept.
+func TestWriter_Redact_ToleratesAnOutlinedWhiteCopy(t *testing.T) {
+	for _, opts := range [][]RedactOption{nil, {WithoutRedactionPixelCheck()}} {
+		report, _, err := redactOtherPageCopy(t, samePageCopyPDF("outlined"), opts...)
+		if err != nil {
+			t.Fatalf("options %d: Redact: %v", len(opts), err)
+		}
+		if !slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool { return h.Token == "SECRET" }) {
+			t.Errorf("options %d: CopiesOnRedactedPages = %+v, want SECRET", len(opts), report.CopiesOnRedactedPages)
+		}
+	}
+}
+
 func TestWriter_Redact_StrictRefusesVisibleCopiesOnTheRedactedPage(t *testing.T) {
 	report, _, err := redactOtherPageCopy(t, samePageCopyPDF("visible"), WithStrictRedaction())
 	if !errors.Is(err, ErrRedactionIncomplete) {
@@ -118,7 +137,7 @@ func TestWriter_Redact_StrictRefusesVisibleCopiesOnTheRedactedPage(t *testing.T)
 // refuse. "underfill", "underimage" and "undertext" are told by drawing the
 // page, which runs without the pixel check too.
 func TestWriter_Redact_RefusesHiddenCopiesOnTheRedactedPage(t *testing.T) {
-	for _, copy := range []string{"invisible", "white", "offpage", "clipped", "hiddenlayer", "underfill", "underimage", "undertext"} {
+	for _, copy := range []string{"invisible", "white", "whitestroke", "offpage", "clipped", "hiddenlayer", "underfill", "underimage", "undertext"} {
 		t.Run(copy, func(t *testing.T) {
 			for _, opts := range [][]RedactOption{nil, {WithoutRedactionPixelCheck()}} {
 				report, _, err := redactOtherPageCopy(t, samePageCopyPDF(copy), opts...)

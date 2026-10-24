@@ -73,7 +73,9 @@ func WithEnhancedContrast() ContrastOption {
 // changes how the page looks.
 //
 // The text's colour is the one the content stream paints it in, converted to
-// sRGB as [Reader.RenderPage] converts it. The background is the page drawn
+// sRGB as [Reader.RenderPage] converts it; text both filled and stroked is
+// judged by whichever of its two colours contrasts more, so a white letter
+// outlined in black is judged by its outline. The background is the page drawn
 // without its text at 72 dpi, averaged over the pixels the run's glyph boxes
 // cover and no other glyph's does; a run whose text marks none of them is
 // not seen and not judged (see [Reader.ExtractUnseenText]). A run whose colour
@@ -117,11 +119,12 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 		if st.area == 0 || st.changed == 0 {
 			continue
 		}
-		ink, ok := r.textColour(ctx, s.paints[run[0]], pg.Dict, cache)
+		inks, ok := r.textColours(ctx, s.paints[run[0]], pg.Dict, cache)
 		if !ok {
 			rep.Undetermined++
 			continue
 		}
+		ink := strongestInk(inks, st.background)
 		rep.Judged++
 		if f, short := contrastFinding(s, run, st, ink, o.enhanced); short {
 			rep.Failures = append(rep.Failures, f)
@@ -172,18 +175,77 @@ func sameColour(a, b graphics.Color) bool {
 	return true
 }
 
-// textColour returns the sRGB colour, each channel in [0, 1], a glyph painted
-// with p shows, or false when the content stream does not settle it: a
-// pattern, a constant alpha below 1, a blend mode other than Normal (ISO
-// 32000-1, 11.3.5), a soft mask, a Type 3 glyph, which may set its own colour
-// (9.6.5), or a space that does not convert. Modes 1 and 5 stroke the glyphs
-// without filling them, so their colour is the stroke's; every other mode
-// that paints fills them (9.3.6, Table 106).
-func (r *Reader) textColour(ctx context.Context, p graphics.TextPaint, pageDict ast.PdfDict, cache *colorconv.Cache) ([3]float64, bool) {
-	c, alpha := p.Fill, p.FillAlpha
-	if p.Mode == 1 || p.Mode == 5 {
-		c, alpha = p.Stroke, p.StrokeAlpha
+// textColours returns the sRGB colours, each channel in [0, 1], a glyph
+// painted with p shows, one for each paint its rendering mode applies, or
+// false when the content stream does not settle one of them. Modes 1 and 5
+// stroke the glyphs without filling them, so their colour is the stroke's;
+// modes 2 and 6 fill and stroke them, and show both colours; every other
+// mode that paints fills them (ISO 32000-1, 9.3.6, Table 106). In modes 2
+// and 6 a paint whose constant alpha is 0 leaves no mark (11.6.4.4) and gives
+// no colour, unless both do.
+func (r *Reader) textColours(ctx context.Context, p graphics.TextPaint, pageDict ast.PdfDict, cache *colorconv.Cache) ([][3]float64, bool) {
+	type side struct {
+		c     graphics.Color
+		alpha float64
 	}
+	var sides []side
+	switch p.Mode {
+	case 1, 5:
+		sides = []side{{p.Stroke, p.StrokeAlpha}}
+	case 2, 6:
+		if p.FillAlpha > 0 || p.StrokeAlpha <= 0 {
+			sides = append(sides, side{p.Fill, p.FillAlpha})
+		}
+		if p.StrokeAlpha > 0 {
+			sides = append(sides, side{p.Stroke, p.StrokeAlpha})
+		}
+	default:
+		sides = []side{{p.Fill, p.FillAlpha}}
+	}
+	inks := make([][3]float64, 0, len(sides))
+	for _, sd := range sides {
+		ink, ok := r.textColour(ctx, p, sd.c, sd.alpha, pageDict, cache)
+		if !ok {
+			return nil, false
+		}
+		inks = append(inks, ink)
+	}
+	return inks, true
+}
+
+// strongestInk returns the colour of inks that contrasts most with
+// background. A glyph filled in one colour and outlined in another shows
+// both, and WCAG 2.x counts the outline toward the contrast: "When there is
+// a border around the letter, the border can add contrast and would be used
+// in calculating the contrast between the letter and its background"
+// (Understanding Success Criterion 1.4.3, Contrast (Minimum)), so a white
+// letter outlined in black is judged by its black outline.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-4__veraPDF_test_suite_6-2-4-3-t04-fail-l.pdf: orange
+//     "HELLO WORLD" outlined in black on white, a failure at 1.7:1 by its
+//     fill, now passes by its outline.
+//   - pdfjs issue16759.pdf page 11: white text outlined in orange on a pale
+//     band is judged by the orange, 1.9:1, rather than white, 1.3:1.
+func strongestInk(inks [][3]float64, background [3]float64) [3]float64 {
+	bg := relativeLuminance(background[0], background[1], background[2])
+	best, bestRatio := inks[0], -1.0
+	for _, ink := range inks {
+		if ratio := contrastRatio(relativeLuminance(ink[0], ink[1], ink[2]), bg); ratio > bestRatio {
+			best, bestRatio = ink, ratio
+		}
+	}
+	return best
+}
+
+// textColour returns the sRGB colour, each channel in [0, 1], one paint of a
+// glyph painted with p shows, the colour c at the constant alpha alpha, or
+// false when the content stream does not settle it: a pattern, a constant
+// alpha below 1, a blend mode other than Normal (ISO 32000-1, 11.3.5), a soft
+// mask, a Type 3 glyph, which may set its own colour (9.6.5), or a space that
+// does not convert.
+func (r *Reader) textColour(ctx context.Context, p graphics.TextPaint, c graphics.Color, alpha float64, pageDict ast.PdfDict, cache *colorconv.Cache) ([3]float64, bool) {
 	if p.Type3 || p.SoftMask || alpha < 1 || (p.BlendMode != "" && p.BlendMode != "Normal" && p.BlendMode != "Compatible") ||
 		c.Space.Family == graphics.FamilyPattern || c.Pattern != "" {
 		return [3]float64{}, false

@@ -747,7 +747,7 @@ type ExtractionConfig struct {
 	StripArtifacts bool // If true, discards text inside /Artifact marked content (headers, footers, page numbers)
 	// Reveal, when not nil and StripInvisible is set, is handed the elements
 	// before the filter runs, with [graphics.Machine.WhiteFills] parallel to
-	// them, whenever one of them is invisible by its white fill alone. It
+	// them, whenever one of them is invisible by its white paint alone. It
 	// clears Invisible on those a rendering of the page shows. The caller
 	// sets RecordWhiteFills on the machine. It returns an error only when ctx
 	// ends.
@@ -759,7 +759,7 @@ type ExtractionConfig struct {
 	DropOverdrawn bool
 }
 
-// HasWhiteFillInvisible reports an element invisible by its white fill
+// HasWhiteFillInvisible reports an element invisible by its white paint
 // alone that reads as more than white space, the judgement a rendering can
 // overturn and that changes what a reader is given: whiteFills is
 // [graphics.Machine.WhiteFills], parallel to elements. A white space glyph

@@ -30,7 +30,7 @@ func keyOf(el models.TextElement) glyphKey {
 }
 
 // whiteVerdicts holds, for the glyphs of a page that text extraction judges
-// invisible by their white fill alone, whether a rendering shows them. A
+// invisible by their white paint alone, whether a rendering shows them. A
 // glyph it holds no verdict for keeps the extraction's judgement.
 type whiteVerdicts map[glyphKey]bool
 
@@ -40,7 +40,7 @@ type whiteVerdicts map[glyphKey]bool
 const whiteVerdictBytes = 48
 
 // revealWhiteText clears Invisible on each glyph of pg that text extraction
-// judged invisible by its white fill alone and that a rendering of the page
+// judged invisible by its white paint alone and that a rendering of the page
 // shows. whiteFills is parallel to elements ([graphics.Machine.WhiteFills]).
 //
 // White on white is the only judgement it overturns: a glyph in rendering mode
@@ -114,7 +114,7 @@ func (r *Reader) whiteVerdicts(ctx context.Context, pg *document.Page) (whiteVer
 	return verdicts, nil
 }
 
-// judgeWhiteText judges each run of pg's glyphs invisible by their white fill
+// judgeWhiteText judges each run of pg's glyphs invisible by their white paint
 // alone. A run nothing else paints under stays invisible without a drawing;
 // otherwise a run shows when its own ink marks the page: the page drawn
 // without it differs from the page drawn whole inside its glyph boxes

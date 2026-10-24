@@ -875,12 +875,14 @@ func WithArtifacts() ExtractTextOption {
 // footers, page numbers) are silently dropped. Pass [WithHiddenText] to
 // include all text regardless of visibility.
 //
-// Text filled in device white is invisible only where it lies on white: a
-// page holding such text is drawn, the part of it the text lies in, with and
-// without its text, and the white text that changes what the page shows is
-// kept, a white heading on a coloured bar among it. Text in rendering mode 3
-// paints nothing (ISO 32000-1, 9.3.6, Table 106) and is dropped without a
-// drawing. A page that cannot be drawn, past [Limits.MaxRenderPixels] for
+// Text whose every paint is device white, the fill, the stroke or both as its
+// rendering mode applies them (ISO 32000-1, 9.3.6, Table 106), is invisible
+// only where it lies on white; a white glyph outlined in black is not white.
+// A page holding such text is drawn, the part of it the text lies in, with
+// and without its text, and the white text that changes what the page shows
+// is kept, a white heading on a coloured bar among it. Text in rendering mode
+// 3 paints nothing and is dropped without a drawing. Text in mode 7 is read:
+// what the page paints next shows through it. A page that cannot be drawn, past [Limits.MaxRenderPixels] for
 // one, drops its white text as white on white. The judgement is cached per
 // page, so [Reader.ExtractTextElements], [Reader.ExtractTables] and
 // [Reader.GenerateBookmarks], which read it too, draw a page once.
@@ -1773,7 +1775,7 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err erro
 
 // ExtractTextElements extracts spatially positioned text elements from
 // the given 1-based page number. An element's Invisible reports rendering
-// mode 3 or a white fill on white, judged as [Reader.ExtractText] judges it.
+// mode 3 or white paint on white, judged as [Reader.ExtractText] judges it.
 func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []models.TextElement, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractTextElements", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)

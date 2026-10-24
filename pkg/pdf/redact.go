@@ -392,7 +392,7 @@ type RedactReport struct {
 // 9.10.1 reads text from the strings of show-text operators alone. It counts
 // only when the page's own content stream holds the string in nothing but
 // show-text operators whose every glyph paints (no text rendering mode 3 or
-// 7, no white fill in a device space), lies inside the clipping path and the
+// 7, no paint only in device white), lies inside the clipping path and the
 // crop box, sits in no optional-content group that is off, and meets no
 // region: a copy no viewer shows, or one behind a region, is what a failed
 // redaction leaves, and still refuses, as does a copy a form XObject or an
