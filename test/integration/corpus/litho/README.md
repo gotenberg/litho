@@ -9474,12 +9474,12 @@ parts. veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-231 x 13 = 3003 cells, the whole hand-measured matrix. litho and veraPDF return
+236 x 13 = 3068 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 2979 of the 3003 cells. The 24
+fixtures exist to protect, and it holds in 3044 of the 3068 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
