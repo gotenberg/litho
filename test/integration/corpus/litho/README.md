@@ -284,6 +284,7 @@ one deliberately rather than diffing it against a fresh build.
 | `greyintent_2b.pdf`    | PDF/A-2b     | Transparency in pages whose group names no space, grey intent    |
 | `formimgname_2b.pdf`   | PDF/A-2b     | A page image and a form's image under one resource name          |
 | `sharedimage_2b.pdf`   | PDF/A-2b     | Images page 1 paints beside page 2, which a redaction copies     |
+| `t3overprint_2b.pdf`   | PDF/A-2b     | Type 3 glyphs with colours of their own, shown under overprint   |
 
 ### Must-not-fire controls
 
@@ -769,6 +770,7 @@ are covered under [Known divergences](#known-divergences).
 | `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 30   |
 | `symbolname_2u.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
+| `t3overprint_2b.pdf`   | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `tableregular_ua2.pdf` | 4    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 2    | 5    |
 | `tablespan_ua2.pdf`    | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 4    | 4    |
@@ -9297,6 +9299,34 @@ The soft mask fails `6.4/2` at PDF/A-1b; the other cells are the identification
 and tagging rules of their parts. veraPDF 1.30.2 and litho report the same rule
 set in all thirteen cells, on the source and on the output of the whole-page
 redaction, whose added rules are the metadata ones a redaction clears by design.
+
+### `t3overprint_2b.pdf`
+
+A Type 3 glyph description runs under the graphics state of the text that
+shows it (ISO 32000-1, 9.6.5), its overprint parameters included (8.6.7).
+Converting colour judges what each painting under overprint prints, and litho
+once judged a Type 3 show in the text's colour alone, never the colours a
+glyph that opens with `d0` sets itself. No corpus file shows a Type 3 glyph
+under overprint, so no cell reached the judgement. The page shows three glyphs
+of one font under a graphics state with `/OP true` and `/OPM 1`, in the text
+colour `0 0 0 1 k`:
+
+| Code | Opens with | Paints                                     |
+| ---- | ---------- | ------------------------------------------ |
+| `A`  | `d0`       | `0.5 g`                                    |
+| `B`  | `d0`       | `0 1 1 0 k`, leaving cyan and black        |
+| `C`  | `d1`       | the text's colour, its own colours ignored |
+
+Converted to RGB, B and C paint every ink where they left two or three, and
+`convert-colors` reports both; converted to litho's CMYK printer profile, both
+move their zero components and are reported too. Before, litho judged the show
+once, in the text's black, and reported one painting.
+
+The CMYK output intent covers DeviceGray and DeviceCMYK, and overprint mode 1
+over DeviceCMYK is allowed (ISO 19005-2, 6.2.4.2 restricts it over ICCBased
+CMYK alone), so the file is conforming at PDF/A-2b. The other cells are the
+identification, metadata and tagging rules of their parts. veraPDF 1.30.2 and
+litho report the same rule set in all thirteen cells.
 
 ## Scope
 
