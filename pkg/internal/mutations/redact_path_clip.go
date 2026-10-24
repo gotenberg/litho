@@ -65,20 +65,6 @@ const strokeReachSlack = 1.0
 // inside the region to a sliver no shape can be read from.
 const fillCutInset = 0.5
 
-// splitSeamReach is the thickest, in page units, a piece of a split rectangle
-// across the cut may be for the pieces to be painted apart (see
-// [splitRectangle]): the seam between two pieces is then at most this long,
-// and lies at a corner of the region, the cut's inset included. Not
-// spec-mandated: two units are two pixels at 72 dpi, the band along a region's
-// edge that the corpus redact-render cell leaves unread.
-//
-// # Corpus evidence
-//
-//   - govdocs thread_400_400756.pdf page 2: a table rule 1 unit thick along a
-//     region's top edge, split on both axes and painted as one path, lost
-//     its snapping and drew grey across the table outside the region.
-const splitSeamReach = 2.0
-
 // clipOuterMargin pads the rectangle each clip pairs with its region, in page
 // units, beyond what the path can paint. Not spec-mandated: it only has to
 // keep the clip's outer edge clear of every mark, which the path's reach
@@ -1179,7 +1165,26 @@ func emitBroken(segs []pathSeg, pieces []piece, loop bool) string {
 // A rectangle stays a rectangle because renderers draw one differently from
 // the same outline as a polygon: poppler snaps a hairline rule drawn with re
 // to whole pixels and anti-aliases the polygon, so the rule left outside the
-// region would come back fainter than it was.
+// region would come back fainter than it was. For the same reason the pieces
+// of a run of one subpath are painted apart: poppler's Splash snaps the fill
+// of a path of one rectangular subpath only, as it judges Acrobat does, and
+// PDFium and litho's renderer do too, so pieces painted as one path lose the
+// snapping, and an edge of the original that fell inside a pixel row comes
+// back anti-aliased. Deliberate trade-off: a renderer that snaps no fill
+// (pdf.js draws through a canvas) anti-aliases the edge two pieces share
+// outside the cut in both, a seam one path would not show.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400756.pdf page 2: a table rule 1 unit thick along a
+//     region's top edge, split on both axes and painted as one path, lost
+//     its snapping and drew grey across the table outside the region.
+//   - pdfcpu FOSDEM14_HPC_devroom_14_GoCUDA page 1: a pattern fill 137 units
+//     high under a region, split on both axes and painted as one path, drew
+//     its top edge, 0.34 pixel into a row, as a grey row poppler and litho
+//     read changed outside the region (7 and 3 pixels at the redact-render
+//     cell's tolerance), which PDFium 4.30.0 draws lighter too; painted
+//     apart, the row is as before in all three.
 func splitRectangle(r [4]float64, f cutFrame) (string, bool, bool) {
 	ctm := f.ctm
 	if !(ctm[1] == 0 && ctm[2] == 0) && !(ctm[0] == 0 && ctm[3] == 0) {
@@ -1208,9 +1213,9 @@ func splitRectangle(r [4]float64, f cutFrame) (string, bool, bool) {
 	}
 
 	var parts []string
-	part := func(px0, py0, px1, py1 float64) bool {
+	part := func(px0, py0, px1, py1 float64) {
 		if px1 <= px0 || py1 <= py0 {
-			return false
+			return
 		}
 		ox, ow := px0, px1-px0
 		if w < 0 {
@@ -1223,35 +1228,21 @@ func splitRectangle(r [4]float64, f cutFrame) (string, bool, bool) {
 		var e pathEmitter
 		e.nums("re", bezPt{ox, oy}, bezPt{ow, oh})
 		parts = append(parts, e.b.String())
-		return true
 	}
-	beside := part(ax0, ay0, math.Min(ax1, cx0), ay1)
-	beside = part(math.Max(ax0, cx1), ay0, ax1, ay1) || beside
+	part(ax0, ay0, math.Min(ax1, cx0), ay1)
+	part(math.Max(ax0, cx1), ay0, ax1, ay1)
 	mx0, mx1 := math.Max(ax0, cx0), math.Min(ax1, cx1)
-	below := part(mx0, ay0, mx1, math.Min(ay1, cy0))
-	above := part(mx0, math.Max(ay0, cy1), mx1, ay1)
-	across := below || above
+	part(mx0, ay0, mx1, math.Min(ay1, cy0))
+	part(mx0, math.Max(ay0, cy1), mx1, ay1)
 
-	// Pieces on one axis only, a rule the cut crosses, never touch, so each
-	// can be painted on its own: one path holding two rectangles is no
-	// rectangle to poppler either. Pieces on both axes share edges outside the
-	// cut, where painting them apart would leave an anti-aliased seam, so they
-	// stay one path, unless every piece across the cut is no thicker than
-	// splitSeamReach: then the seams are that short, at the region's corners,
-	// while one path would cost the whole rule its snapping to whole pixels
-	// and draw it fainter along its length outside the region.
-	thin := true
-	for _, piece := range [][4]float64{{mx0, ay0, mx1, math.Min(ay1, cy0)}, {mx0, math.Max(ay0, cy1), mx1, ay1}} {
-		if piece[2] <= piece[0] || piece[3] <= piece[1] {
-			continue
-		}
-		p, q := apply(ctm, bezPt{piece[0], piece[1]}), apply(ctm, bezPt{piece[2], piece[3]})
-		if math.Min(math.Abs(q.x-p.x), math.Abs(q.y-p.y)) > splitSeamReach {
-			thin = false
-		}
-	}
+	// Each piece takes its own paint operator, so each stays one rectangle,
+	// which poppler's Splash, PDFium and litho's renderer snap to whole
+	// pixels as they snapped the original (see the doc comment). Two pieces
+	// meeting outside the cut share one edge value, which poppler and litho
+	// round to one pixel boundary in both and PDFium rounds outward in both,
+	// so they meet with no gap.
 	sep := ""
-	if f.lone && (!beside || !across || thin) {
+	if f.lone {
 		sep = f.paint + " "
 	}
 	return strings.Join(parts, sep), true, true

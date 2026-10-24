@@ -341,6 +341,23 @@ func TestRedactWithoutPixelCheckSkipsIt(t *testing.T) {
 	}
 }
 
+// TestRedactKeepsTheSnapOfASplitRectangle cuts the top of a filled rectangle
+// whose top edge falls a third of the way into a pixel row, so it splits on
+// both axes: painted as one path the pieces lose the snapping renderers give
+// one rectangle and that row turns grey outside the region (pdfcpu
+// FOSDEM14_HPC_devroom_14_GoCUDA). The pixel check holds the redaction to
+// drawing the rectangle outside the region as before.
+func TestRedactKeepsTheSnapOfASplitRectangle(t *testing.T) {
+	ctx := context.Background()
+	body := "0 g 81.871 204.344 454.406 -137.238 re f"
+	r := openPixelCheck(t, plantedPDF(body, plant{}))
+	w := NewWriter(r)
+	defer w.Close()
+	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{153, 198, 459, 594}}}); err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+}
+
 // TestRedactKeepsACutStrokeUnadjusted cuts a 1.5-point rule whose path turns
 // down a slanted segment inside the region: what is left outside is one
 // horizontal line, which stroke adjustment would snap from three anti-aliased
