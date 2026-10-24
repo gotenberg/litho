@@ -268,6 +268,79 @@ func TestRedactionDrawsItsImageOpaque(t *testing.T) {
 	}
 }
 
+// TestRedactionKeepsTheSnapOfARectangleClip rasterises a shading clipped to
+// a rectangle whose top edge falls 0.17 pixel into a row at 72 dpi, which a
+// renderer snaps up to the row's top, so the row paints whole. The image is
+// clipped to the same rectangle, and the region's hole cut out by a clip of
+// its own: one clip holding both is no rectangle, its top edge anti-aliased,
+// and the row came out lighter (govdocs thread_200_200427).
+func TestRedactionKeepsTheSnapOfARectangleClip(t *testing.T) {
+	t.Parallel()
+	shading := "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 100 0] " +
+		"/Function << /FunctionType 2 /Domain [0 1] /C0 [0 0 1] /C1 [0 0 1] /N 1 >> >>"
+	data := fixture{
+		resources: "/Shading << /Sh0 7 0 R >>",
+		content:   "q 10 10 80 70.83 re W n /Sh0 sh Q",
+		objs:      []string{shading},
+	}.bytes()
+	out, report := redactWithFallback(t, data, [][4]float64{{25, 25, 75, 60}})
+	if report.RasterisedUnits != 1 {
+		t.Fatalf("RasterisedUnits = %d, want 1", report.RasterisedUnits)
+	}
+	before, after := renderAt(t, data, 72), renderAt(t, out, 72)
+	for _, p := range []image.Point{{15, 19}, {50, 19}, {85, 19}, {50, 85}} {
+		b, a := before.NRGBAAt(p.X, p.Y), after.NRGBAAt(p.X, p.Y)
+		if absDiff(b.R, a.R) > 8 || absDiff(b.G, a.G) > 8 || absDiff(b.B, a.B) > 8 {
+			t.Errorf("outside at %v: %v before, %v after", p, b, a)
+		}
+	}
+}
+
+// TestDrawImageCutsHolesThroughTheBoxEdge draws an image clipped to a box
+// with a hole inside it and one reaching its top edge: the box is a clip of
+// one rectangle, and the hole reaching its edge reaches past it in the clip
+// that cuts the holes, so the box clip's snapping to whole pixels uncovers
+// no partial row of the hole (govdocs thread_000_000372, whose image's rows
+// there drew inside the region).
+func TestDrawImageCutsHolesThroughTheBoxEdge(t *testing.T) {
+	t.Parallel()
+	box := Rect{10, 10, 90, 80.83}
+	inner, edge := Rect{25, 25, 75, 40}, Rect{25, 50, 75, 80.83}
+	out := string((&flattener{}).drawImage(position{ctm: geom.Identity, marked: 1}, box, []Rect{inner, edge}, nil))
+	first, rest, ok := strings.Cut(out, "W n\n")
+	if !ok || strings.Count(first, " re") != 1 || !strings.Contains(first, "10 10 80 70.83 re") {
+		t.Fatalf("want the box alone as the first clip:\n%s", out)
+	}
+	ops, err := content.ParseStreamData(context.Background(), []byte(rest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rects []Rect
+	for _, op := range ops {
+		if op.Operator != "re" {
+			continue
+		}
+		v := make([]float64, 4)
+		for i := range v {
+			v[i] = document.Float(op.Operands[i])
+		}
+		rects = append(rects, Rect{v[0], v[1], v[0] + v[2], v[1] + v[3]})
+	}
+	if len(rects) != 3 {
+		t.Fatalf("want an outer rectangle and two holes, got %v:\n%s", rects, out)
+	}
+	outer := rects[0]
+	if outer.MinX >= box.MinX || outer.MinY >= box.MinY || outer.MaxX <= box.MaxX || outer.MaxY <= box.MaxY {
+		t.Errorf("outer %v does not enclose box %v", outer, box)
+	}
+	if rects[1] != inner {
+		t.Errorf("the inner hole moved: %v, want %v", rects[1], inner)
+	}
+	if got := rects[2]; got.MinX != edge.MinX || got.MinY != edge.MinY || got.MaxX != edge.MaxX || got.MaxY <= box.MaxY || got.MaxY >= outer.MaxY {
+		t.Errorf("the hole at the edge is %v, want %v reaching past the box's top", got, edge)
+	}
+}
+
 // TestRedactionUndoesTheTransferFunction rasterises a shading drawn under a
 // transfer function that inverts every component (ISO 32000-1, 10.5): the
 // image holds the inverted colours, so drawn under the same function it

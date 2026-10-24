@@ -791,6 +791,13 @@ func (f *flattener) newName(dict ast.PdfDict, prefix string) ast.PdfName {
 	}
 }
 
+// holeClipMargin is how far, in default user space units, the rectangle of
+// the clip that cuts the holes out reaches past box (see
+// [flattener.drawImage]). Not spec-mandated: it keeps that rectangle's edges
+// clear of where a renderer snaps box's, half a pixel either way, at any
+// resolution of at least 1 dpi.
+const holeClipMargin = 72.0
+
 // drawImage returns the operators that draw the images of tiles, in order,
 // each with its matrix in default user space, at pos, clipped to box: the CTM
 // in force there is undone first. The images reach past box by their pixel
@@ -800,8 +807,21 @@ func (f *flattener) newName(dict ast.PdfDict, prefix string) ast.PdfName {
 // shows is content the page already tags, or the page's own background, and
 // ISO 14289-1, 7.1 wants untagged content marked so.
 //
-// holes are boxes inside box the images do not paint: the clip is box with
-// them cut out by the even-odd rule (8.5.3.3.3).
+// holes are boxes inside box the images do not paint: they are cut out by a
+// second clip, a rectangle around box with the holes inside it under the
+// even-odd rule (8.5.3.3.3). box stays a clip of its own: renderers snap the
+// edges of a clip that is one rectangle to whole pixels, as they snapped
+// those of the content the images stand in for, and a path holding the holes
+// too is no rectangle, so its edges would come back anti-aliased, a row of
+// partial pixels along each side of box outside the region.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200427 page 1, quarter with the raster fallback: a
+//     band whose shading was clipped to a rectangle 0.17 pixel into a row
+//     drew that row lighter by 43 levels over 78 pixels in litho, and in
+//     PDFium 4.30.0, once the image stood in for it under one clip holding
+//     the region's hole.
 func (f *flattener) drawImage(pos position, box Rect, holes []Rect, tiles []tileImg) []byte {
 	var b strings.Builder
 	b.WriteString("\n")
@@ -816,16 +836,36 @@ func (f *flattener) drawImage(pos position, box Rect, holes []Rect, tiles []tile
 		b.WriteString(matrixOperands(inv) + " cm\n")
 	}
 	f.setOpaque(&b)
-	for _, r := range append([]Rect{box}, holes...) {
+	rect := func(r Rect) {
 		for _, v := range []float64{r.MinX, r.MinY, r.MaxX - r.MinX, r.MaxY - r.MinY} {
 			b.WriteString(number(v) + " ")
 		}
 		b.WriteString("re\n")
 	}
+	rect(box)
+	b.WriteString("W n\n")
 	if len(holes) > 0 {
+		outer := box.Outset(holeClipMargin)
+		rect(outer)
+		for _, h := range holes {
+			// A hole reaching box's edge reaches the outer rectangle's, so
+			// the box clip's snapping, which can move that edge half a pixel
+			// outward, uncovers no partial row of the hole.
+			if h.MinX <= box.MinX {
+				h.MinX = outer.MinX + holeClipMargin/2
+			}
+			if h.MinY <= box.MinY {
+				h.MinY = outer.MinY + holeClipMargin/2
+			}
+			if h.MaxX >= box.MaxX {
+				h.MaxX = outer.MaxX - holeClipMargin/2
+			}
+			if h.MaxY >= box.MaxY {
+				h.MaxY = outer.MaxY - holeClipMargin/2
+			}
+			rect(h)
+		}
 		b.WriteString("W* n\n")
-	} else {
-		b.WriteString("W n\n")
 	}
 	b.WriteString(drawTiles(tiles) + "Q\n")
 	if artifact {
