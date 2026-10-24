@@ -47,6 +47,7 @@ type redactResult struct {
 	ScrubbedFormFields      []int            `json:"scrubbedFormFields,omitempty"`
 	ScrubbedOutlineItems    []int            `json:"scrubbedOutlineItems,omitempty"`
 	CopiesOnOtherPages      []otherCopy      `json:"copiesOnOtherPages,omitempty"`
+	CopiesOnRedactedPages   []samePageCopy   `json:"copiesOnRedactedPages,omitempty"`
 }
 
 // otherCopy is a removed string a page outside the regions still draws. It is
@@ -56,6 +57,16 @@ type otherCopy struct {
 	ObjectNum int    `json:"object"`
 	Where     string `json:"where"`
 	Pages     []int  `json:"pages"`
+}
+
+// samePageCopy is a removed string a redacted page still draws as visible
+// text outside every region, with the boxes of the runs that spell it. It is
+// a warning: the redaction succeeded, and the output keeps the copy.
+type samePageCopy struct {
+	Token     string       `json:"token"`
+	ObjectNum int          `json:"object"`
+	Page      int          `json:"page"`
+	Boxes     [][4]float64 `json:"boxes,omitempty"`
 }
 
 // parseRedactRegion reads one "page:x,y,width,height" argument.
@@ -245,6 +256,23 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 	for _, c := range result.CopiesOnOtherPages {
 		fmt.Fprintf(stderr, "warning: a copy of %q remains on page(s) %v, object %d (%s); --strict refuses it\n",
 			c.Token, c.Pages, c.ObjectNum, c.Where)
+	}
+	for _, hit := range report.CopiesOnRedactedPages {
+		page := 0
+		if len(hit.Pages) > 0 {
+			page = hit.Pages[0]
+		}
+		result.CopiesOnRedactedPages = append(result.CopiesOnRedactedPages,
+			samePageCopy{Token: hit.Token, ObjectNum: hit.ObjectNum, Page: page, Boxes: hit.Boxes})
+	}
+	for _, c := range result.CopiesOnRedactedPages {
+		if len(c.Boxes) == 0 {
+			fmt.Fprintf(stderr, "warning: page %d content still holds %q, in operator numbers only, object %d; --strict refuses it\n",
+				c.Page, c.Token, c.ObjectNum)
+			continue
+		}
+		fmt.Fprintf(stderr, "warning: page %d still shows %q outside the regions at %v, object %d; --strict refuses it\n",
+			c.Page, c.Token, c.Boxes, c.ObjectNum)
 	}
 	// So is an image blanked in a copy: the image keeps its samples, in the
 	// file and wherever else it is painted.

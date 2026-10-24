@@ -44,8 +44,16 @@ type RedactionHit struct {
 	// as stored, or "name" for a destination name.
 	Where string
 	// Pages lists the 1-based pages whose content draws the object, ascending.
-	// It is set only on [RedactReport.CopiesOnOtherPages].
+	// It is set only on [RedactReport.CopiesOnOtherPages] and
+	// [RedactReport.CopiesOnRedactedPages], which names the one redacted page
+	// whose content stream holds the copy.
 	Pages []int
+	// Boxes are the ink boxes [llx lly urx ury], in default user space, of the
+	// text runs that spell the copy on the page. It is set only on
+	// [RedactReport.CopiesOnRedactedPages], and empty there when the page's
+	// content spells the string only in the numbers of operators that draw no
+	// text, a coordinate matching a removed date.
+	Boxes [][4]float64
 }
 
 // RedactOption configures [Writer.Redact].
@@ -65,8 +73,9 @@ type redactOpts struct {
 
 // WithStrictRedaction makes [Writer.Redact] refuse with
 // [ErrRedactionIncomplete] when a removed string is still drawn by a page the
-// regions do not cover, instead of reporting it in
-// [RedactReport.CopiesOnOtherPages]. Use it when the regions select every
+// regions do not cover, or as visible text outside the regions of a page they
+// do, instead of reporting it in [RedactReport.CopiesOnOtherPages] or
+// [RedactReport.CopiesOnRedactedPages]. Use it when the regions select every
 // occurrence of what must go, so a copy elsewhere means the selection missed
 // one.
 func WithStrictRedaction() RedactOption {
@@ -235,6 +244,12 @@ type RedactReport struct {
 	// are warnings: the redaction succeeded, and the output keeps them. Empty
 	// under [WithStrictRedaction], which refuses them instead.
 	CopiesOnOtherPages []RedactionHit
+	// CopiesOnRedactedPages names the removed strings a redacted page still
+	// draws as visible text outside every region, each with the page and the
+	// boxes of the runs that spell it. These are warnings: the redaction
+	// succeeded, and the output keeps them. Empty under
+	// [WithStrictRedaction], which refuses them instead.
+	CopiesOnRedactedPages []RedactionHit
 	// UnreadableObjects lists objects the verification scan could not decode.
 	// A stream it could not read is one it has not proved clean, so these
 	// fail the redaction as surely as a hit does.
@@ -281,8 +296,8 @@ type RedactReport struct {
 //     [WithRedactionRasterFallback] rasterises the form XObjects and shading
 //     paints instead of refusing them.
 //   - [ErrRedactionIncomplete] when the passes succeed but the verification
-//     scan still finds a copy outside the content of other pages (see below),
-//     or could not read an object. The report names
+//     scan still finds a copy it does not tolerate (see below), or could not
+//     read an object. The report names
 //     every survivor in [RedactReport.SurvivingCopies] so the caller can act on
 //     it. The scan looks for each removed run holding at least three letters
 //     or digits, and for each such word drawn across shorter runs, as a
@@ -307,6 +322,24 @@ type RedactReport struct {
 // the redacted page's own resources and annotations, the structure tree, the
 // metadata or any other object, still refuses. [WithStrictRedaction] refuses
 // copies on other pages too.
+//
+// Nor does a copy the redacted page draws as visible text outside every
+// region. The region is the content the redaction removes (ISO 32000-2,
+// 12.5.6.23), and the same characters shown again elsewhere on the page, a
+// running head or a repeated word, are text the caller did not select. Such a
+// copy is reported in [RedactReport.CopiesOnRedactedPages] with the page and
+// the boxes of the runs that spell it, and the output keeps it. So is a
+// removed run of digits the page's content spells only in the numbers of
+// operators that draw no text (a path, a matrix, a colour): ISO 32000-1,
+// 9.10.1 reads text from the strings of show-text operators alone. It counts
+// only when the page's own content stream holds the string in nothing but
+// show-text operators whose every glyph paints (no text rendering mode 3 or
+// 7, no white fill in a device space), lies inside the clipping path and the
+// crop box, sits in no optional-content group that is off, and meets no
+// region: a copy no viewer shows, or one behind a region, is what a failed
+// redaction leaves, and still refuses, as does a copy a form XObject or an
+// annotation of the redacted page draws. [WithStrictRedaction] refuses these
+// copies too.
 //
 // The verification compares text, not pixels, so a pixel check follows it.
 // Redact renders each redacted page before and after at [RedactionCheckDPI],
@@ -566,14 +599,15 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	report.UnreadableObjects = sanitized.Scan.Unreadable
 
 	if sanErr != nil && !o.strict && errors.Is(sanErr, mutations.ErrSanitizationIncomplete) {
-		copies, onlyOtherPages, splitErr := w.otherPageCopies(ctx, alloc, pages, byPage, sanitized.Scan)
+		others, samePage, tolerable, splitErr := w.tolerableCopies(ctx, alloc, pages, byPage, sanitized.Scan)
 		if splitErr != nil {
 			restoreTrailer()
 			return nil, fmt.Errorf("telling copies on other pages apart: %w", splitErr)
 		}
-		if onlyOtherPages {
+		if tolerable {
 			report.SurvivingCopies = nil
-			report.CopiesOnOtherPages = copies
+			report.CopiesOnOtherPages = others
+			report.CopiesOnRedactedPages = samePage
 			sanErr = nil
 		}
 	}
@@ -702,18 +736,21 @@ func redactPages(
 	}
 }
 
-// otherPageCopies reports whether every hit of scan is a copy only pages
-// outside byPage draw, and names those copies when it is. An object the scan
-// could not read is not proved to be one, so any makes it false.
-func (w *Writer) otherPageCopies(
+// tolerableCopies reports whether every hit of scan is a copy the redaction
+// tolerates, and names those copies when it is: a copy only pages outside
+// byPage draw (see mutations.SplitOtherPageCopies), and a copy a redacted page
+// draws as visible text outside every region (see
+// mutations.SplitSamePageCopies). An object the scan could not read is not
+// proved to be either, so any makes it false.
+func (w *Writer) tolerableCopies(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	pages []*document.Page,
 	byPage map[int][][4]float64,
 	scan mutations.ScanResult,
-) ([]RedactionHit, bool, error) {
+) (others, samePage []RedactionHit, ok bool, err error) {
 	if len(scan.Unreadable) > 0 || len(scan.Hits) == 0 {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	redacted := make(map[int]bool, len(byPage))
 	for pageNum := range byPage {
@@ -721,16 +758,22 @@ func (w *Writer) otherPageCopies(
 	}
 	copies, rest, err := mutations.SplitOtherPageCopies(ctx, alloc, w.reader.doc, pages, redacted, scan.Hits)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
+	}
+	same, rest, err := mutations.SplitSamePageCopies(ctx, alloc, w.reader.doc, pages, byPage, rest)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("telling copies on the redacted pages apart: %w", err)
 	}
 	if len(rest) > 0 {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
-	out := make([]RedactionHit, 0, len(copies))
 	for _, c := range copies {
-		out = append(out, RedactionHit{ObjectNum: c.Hit.ObjectNum, Token: c.Hit.Token, Where: c.Hit.Where, Pages: c.Pages})
+		others = append(others, RedactionHit{ObjectNum: c.Hit.ObjectNum, Token: c.Hit.Token, Where: c.Hit.Where, Pages: c.Pages})
 	}
-	return out, true, nil
+	for _, c := range same {
+		samePage = append(samePage, RedactionHit{ObjectNum: c.Hit.ObjectNum, Token: c.Hit.Token, Where: c.Hit.Where, Pages: []int{c.Page}, Boxes: c.Boxes})
+	}
+	return others, samePage, true, nil
 }
 
 // seedAllocator queues every override at its own object number, so a stage
@@ -759,9 +802,14 @@ func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, stric
 	if strict {
 		return
 	}
-	tolerance := redactionTolerance{pages: make(map[int]bool, len(regions)), tokens: make(map[string]bool, len(needles))}
+	tolerance := redactionTolerance{
+		pages:   make(map[int]bool, len(regions)),
+		regions: make(map[int][][4]float64, len(regions)),
+		tokens:  make(map[string]bool, len(needles)),
+	}
 	for _, region := range regions {
 		tolerance.pages[region.Page] = true
+		tolerance.regions[region.Page] = append(tolerance.regions[region.Page], region.Rect)
 	}
 	for _, tok := range needles {
 		tolerance.tokens[tok] = true
@@ -770,10 +818,12 @@ func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, stric
 }
 
 // redactionTolerance is what one non-strict [Writer.Redact] call lets survive:
-// a copy of one of its tokens that only pages outside its pages draw.
+// a copy of one of its tokens that only pages outside its pages draw, and one
+// its pages draw as visible text outside its regions.
 type redactionTolerance struct {
-	pages  map[int]bool
-	tokens map[string]bool
+	pages   map[int]bool
+	regions map[int][][4]float64
+	tokens  map[string]bool
 }
 
 // untolerated drops from scan the hits some recorded redaction tolerates (see
@@ -798,6 +848,10 @@ func (w *Writer) untolerated(
 			continue
 		}
 		_, kept, err := mutations.SplitOtherPageCopies(ctx, alloc, w.reader.doc, pages, tolerance.pages, mine)
+		if err != nil {
+			return mutations.ScanResult{}, err
+		}
+		_, kept, err = mutations.SplitSamePageCopies(ctx, alloc, w.reader.doc, pages, tolerance.regions, kept)
 		if err != nil {
 			return mutations.ScanResult{}, err
 		}

@@ -1,0 +1,170 @@
+package pdf
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+// samePageCopyPDF builds a one-page document drawing "SECRET" at y=700, which
+// [coversSecret] removes, and a second "SECRET" at y=500, drawn as copy says:
+// "visible" in black, "invisible" in text rendering mode 3, "white" in white,
+// "offpage" past the media box, "clipped" outside a clipping path, and
+// "hiddenlayer" in an optional-content group that is off.
+func samePageCopyPDF(copy string) []byte {
+	stream := func(num int, dict, data string) string {
+		return strconv.Itoa(num) + " 0 obj\n<< " + dict + " /Length " + strconv.Itoa(len(data)) +
+			" >>\nstream\n" + data + "\nendstream\nendobj\n"
+	}
+	other := map[string]string{
+		"visible":     "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET",
+		"invisible":   "BT /F1 12 Tf 3 Tr 100 500 Td (SECRET) Tj ET",
+		"white":       "1 g BT /F1 12 Tf 100 500 Td (SECRET) Tj ET",
+		"offpage":     "BT /F1 12 Tf 100 1500 Td (SECRET) Tj ET",
+		"clipped":     "q 0 0 50 50 re W n BT /F1 12 Tf 100 500 Td (SECRET) Tj ET Q",
+		"hiddenlayer": "/OC /L1 BDC BT /F1 12 Tf 100 500 Td (SECRET) Tj ET EMC",
+	}[copy]
+	return []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+		"/Resources << /Font << /F1 4 0 R >> /Properties << /L1 5 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+		"5 0 obj\n<< /Type /OCG /Name (L1) >>\nendobj\n" +
+		stream(6, "", "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET "+other) +
+		"trailer\n<< /Size 7 /Root 1 0 R >>\n%%EOF\n")
+}
+
+func TestWriter_Redact_WarnsAboutVisibleCopiesOnTheRedactedPage(t *testing.T) {
+	report, out, err := redactOtherPageCopy(t, samePageCopyPDF("visible"))
+	if err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+	if len(report.SurvivingCopies) != 0 {
+		t.Errorf("SurvivingCopies = %+v, want none on a redaction that succeeded", report.SurvivingCopies)
+	}
+	found := slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool {
+		if h.Token != "SECRET" || !slices.Equal(h.Pages, []int{1}) || len(h.Boxes) != 1 {
+			return false
+		}
+		b := h.Boxes[0]
+		return b[0] >= 99 && b[1] < 500 && b[3] > 500 && b[3] < 690
+	})
+	if !found {
+		t.Errorf("CopiesOnRedactedPages = %+v, want SECRET on page 1 boxed at y=500", report.CopiesOnRedactedPages)
+	}
+
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatalf("reopening the output: %v", err)
+	}
+	elements, err := r.ExtractTextElements(ctx, 1)
+	if err != nil {
+		t.Fatalf("ExtractTextElements: %v", err)
+	}
+	for _, el := range elements {
+		if strings.Contains(el.Text, "SECRET") && el.Y > 600 {
+			t.Errorf("SECRET still drawn at y=%v, inside the region", el.Y)
+		}
+	}
+}
+
+func TestWriter_Redact_StrictRefusesVisibleCopiesOnTheRedactedPage(t *testing.T) {
+	report, _, err := redactOtherPageCopy(t, samePageCopyPDF("visible"), WithStrictRedaction())
+	if !errors.Is(err, ErrRedactionIncomplete) {
+		t.Fatalf("err = %v, want ErrRedactionIncomplete", err)
+	}
+	if report != nil && len(report.CopiesOnRedactedPages) != 0 {
+		t.Errorf("CopiesOnRedactedPages = %+v, want none under strict", report.CopiesOnRedactedPages)
+	}
+}
+
+// TestWriter_Redact_RefusesHiddenCopiesOnTheRedactedPage pins the copies no
+// viewer shows: they are what a failed redaction leaves behind, so they still
+// refuse.
+func TestWriter_Redact_RefusesHiddenCopiesOnTheRedactedPage(t *testing.T) {
+	for _, copy := range []string{"invisible", "white", "offpage", "clipped", "hiddenlayer"} {
+		t.Run(copy, func(t *testing.T) {
+			report, _, err := redactOtherPageCopy(t, samePageCopyPDF(copy))
+			if !errors.Is(err, ErrRedactionIncomplete) {
+				t.Fatalf("err = %v, want ErrRedactionIncomplete", err)
+			}
+			if report == nil || len(report.SurvivingCopies) == 0 || len(report.CopiesOnRedactedPages) != 0 {
+				t.Errorf("report = %+v, want the copy among SurvivingCopies", report)
+			}
+		})
+	}
+}
+
+// numberCopyPDF builds a one-page document drawing "2004" at y=700, which
+// [coversSecret] removes, and holding 2004 again in tail, after it.
+func numberCopyPDF(tail string) []byte {
+	data := "BT /F1 12 Tf 100 700 Td (2004) Tj ET " + tail
+	return []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+		"/Resources << /Font << /F1 4 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+		"6 0 obj\n<< /Length " + strconv.Itoa(len(data)) + " >>\nstream\n" + data + "\nendstream\nendobj\n" +
+		"trailer\n<< /Size 7 /Root 1 0 R >>\n%%EOF\n")
+}
+
+// TestWriter_Redact_NumbersAreNoCopy pins that a removed run of digits a
+// coordinate happens to spell is no copy, while the same digits in a marked
+// content property list still refuse: /ActualText is text a reader extracts.
+func TestWriter_Redact_NumbersAreNoCopy(t *testing.T) {
+	if _, _, err := redactOtherPageCopy(t, numberCopyPDF("q 1 0 0 1 2004 0 cm Q")); err != nil {
+		t.Fatalf("Redact with 2004 in a cm: %v", err)
+	}
+	_, _, err := redactOtherPageCopy(t, numberCopyPDF("/Span << /ActualText (2004) >> BDC EMC"))
+	if !errors.Is(err, ErrRedactionIncomplete) {
+		t.Fatalf("Redact with 2004 in /ActualText: err = %v, want ErrRedactionIncomplete", err)
+	}
+}
+
+// TestWriter_Redact_VisibleSamePageCopyHoldsThroughAutoTag drives WriteTo's
+// re-application: auto-tagging rebuilds the page from the source, so WriteTo
+// redacts it again, and the visible copy must stay tolerated there.
+func TestWriter_Redact_VisibleSamePageCopyHoldsThroughAutoTag(t *testing.T) {
+	ctx := context.Background()
+	src := samePageCopyPDF("visible")
+	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+	w.AutoTag()
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopening the output: %v", err)
+	}
+	elements, err := r2.ExtractTextElements(ctx, 1)
+	if err != nil {
+		t.Fatalf("ExtractTextElements: %v", err)
+	}
+	kept := 0
+	for _, el := range elements {
+		if strings.Contains(el.Text, "SECRET") {
+			if el.Y > 600 {
+				t.Errorf("SECRET drawn at y=%v after auto-tagging, inside the region", el.Y)
+			}
+			kept++
+		}
+	}
+	if kept == 0 {
+		t.Error("the copy at y=500 is gone, want it kept")
+	}
+}

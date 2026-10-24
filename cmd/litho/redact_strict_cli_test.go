@@ -74,3 +74,50 @@ func TestRedact_StrictRefusesACopyOnAnotherPage(t *testing.T) {
 		t.Errorf("a refused redaction left %s behind (stat err %v)", out, err)
 	}
 }
+
+// samePageSecretCLIPDF builds a one-page document drawing "SECRET" at y=700
+// and again, visibly, at y=500, so a region over the first leaves the second.
+func samePageSecretCLIPDF() []byte {
+	one := "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F1 12 Tf 100 500 Td (SECRET) Tj ET"
+	return []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+		"/Resources << /Font << /F1 4 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
+		"6 0 obj\n<< /Length " + strconv.Itoa(len(one)) + " >>\nstream\n" + one + "\nendstream\nendobj\n" +
+		"trailer\n<< /Size 7 /Root 1 0 R >>\n%%EOF\n")
+}
+
+func TestRedact_WarnsAboutAVisibleCopyOnTheRedactedPage(t *testing.T) {
+	path := writeTempPDF(t, samePageSecretCLIPDF())
+	out := filepath.Join(t.TempDir(), "redacted.pdf")
+
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(),
+		[]string{"redact", "-region", "1:90,690,210,40", "-f", "json", "-o", out, path}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Fatalf("exit %d, stderr: %s", rc, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), `warning: page 1 still shows "SECRET" outside the regions`) {
+		t.Errorf("stderr = %q, want a warning naming page 1", stderr.String())
+	}
+	var result redactResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("decoding the report: %v", err)
+	}
+	if len(result.CopiesOnRedactedPages) != 1 || result.CopiesOnRedactedPages[0].Token != "SECRET" ||
+		result.CopiesOnRedactedPages[0].Page != 1 || len(result.CopiesOnRedactedPages[0].Boxes) != 1 {
+		t.Errorf("copiesOnRedactedPages = %+v, want SECRET on page 1 with one box", result.CopiesOnRedactedPages)
+	}
+
+	strictOut := filepath.Join(t.TempDir(), "strict.pdf")
+	rc = run(context.Background(),
+		[]string{"redact", "-region", "1:90,690,210,40", "--strict", "-o", strictOut, path}, &stdout, &stderr)
+	if rc != exitError {
+		t.Fatalf("--strict exit %d, want %d", rc, exitError)
+	}
+	if _, err := os.Stat(strictOut); !os.IsNotExist(err) {
+		t.Errorf("a refused redaction left %s behind (stat err %v)", strictOut, err)
+	}
+}
