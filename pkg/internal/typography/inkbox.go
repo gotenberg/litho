@@ -34,6 +34,23 @@ const maxFontBBoxEm = 4.0
 // turned or mirrored matrix gives the box of the parallelogram it draws.
 // fontSize is the Tfs the glyph is shown at.
 //
+// A glyph a stroking text rendering mode draws (ISO 32000-1, 9.3.6, Table
+// 106) paints its pen past its outline: its box grows on every side by the
+// pen's reach ([strokeReach]), the line parameters of the graphics state
+// through the CTM. A Type 3 glyph has no outline for the mode to stroke: a
+// painting mode runs its description (9.6.5), as litho's renderer does, so
+// its box stays what the description paints.
+//
+// The box grows by half the line width, not by the tip a miter join may
+// reach at a sharp corner of the outline (8.4.3.5): the box is the glyph's
+// advance and its font's ascent and descent, not its outline, so it knows no
+// corner, and the bound that holds every corner, the miter limit times half
+// the width, grows fake bold text (mode 2, a pen under a point wide) by up
+// to five times its pen, over its neighbours. Redaction then takes glyphs a
+// region does not meet, and the text scene, which judges a glyph by the
+// pixels its box alone covers, loses them. A tip past the box is ink the
+// redaction pixel check finds.
+//
 // A Type 3 glyph whose description paints what no box in glyph space bounds
 // ([type3InkBounds]), a shading over a clip it never set among them, paints
 // as far as the clipping path in force where it is shown lets it (ISO
@@ -41,6 +58,22 @@ const maxFontBBoxEm = 4.0
 // holds in user space, seeded with the page's box. A glyph of a font stating
 // no /Resources is first bounded again against the resources of the stream
 // machine shows it from ([Font.type3ScopedInk]).
+//
+// # Corpus evidence
+//
+//   - govdocs, pdfjs, pdfcpu, verapdf: 113 files stroke text in their first
+//     30 pages, and their boxes grow. Bounded by the miter limit, govdocs
+//     thread_200_200151.pdf reports its keycaps, black outlines filled white,
+//     as text that paints nothing, and five redaction scenarios remove one
+//     to five glyphs more than by half the width, which moves no redaction
+//     scenario's outcome against the base.
+//   - govdocs thread_300_300508.pdf, thread_100_100870.pdf: map labels set
+//     twice, a white halo stroked under the black fill, whose boxes the
+//     fill's no longer hide: ExtractUnseenText reports the halos as text in
+//     white, as it reports any white text.
+//   - pdfjs issue20513.pdf: a white copy of "One-Stop" stroked in colour
+//     gains pixels its twin's box did not cover, and the default reading
+//     takes it, three copies where PDF.js reads four.
 func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fontSize float64, cid int, originX, originY float64) [4]float64 {
 	state := machine.Current()
 	corners, bounded := [4][2]float64{}, false
@@ -79,7 +112,72 @@ func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fon
 			box[3] = py
 		}
 	}
+	if font.Subtype != "Type3" && strokesText(state.Text.Tmode) {
+		r := strokeReach(state.LineWidth, state.LineJoin, state.LineCap, state.MiterLimit, state.CTM, false)
+		box = [4]float64{box[0] - r, box[1] - r, box[2] + r, box[3] + r}
+	}
 	return box
+}
+
+// initialMiterLimit is the miter limit of the initial graphics state (ISO
+// 32000-1, 8.4.1, Table 52).
+const initialMiterLimit = 10.0
+
+// strokesText reports whether the text rendering mode strokes the glyph
+// outlines: modes 1, 2, 5 and 6 of ISO 32000-1, 9.3.6, Table 106. A mode
+// outside the table fills alone, as poppler and PDF.js paint it, and litho's
+// renderer with them.
+func strokesText(mode int) bool {
+	return mode == 1 || mode == 2 || mode == 5 || mode == 6
+}
+
+// strokeReach returns how far past the path it strokes, in the space m maps
+// user space to, a pen of line width lw reaches with the line join join, the
+// line cap lineCap and the miter limit miterLimit of the graphics state
+// (ISO 32000-1, 8.4.3.2 to 8.4.3.5). The pen is lw wide in user space,
+// whatever the text matrix (9.3.6: the stroking modes stroke the glyph
+// outline with the graphics state's line parameters, as S strokes a path),
+// so only m stretches it.
+//
+// Half the line width bounds a round or bevel join and a butt or round cap.
+// A miter join reaches up to miterLimit times that from its vertex, the
+// ratio of the miter length to the line width that 8.4.3.5 lets stand
+// before the join is bevelled; miters asks for that bound, which a box of
+// the path, holding none of the angles that would tell how far each join
+// reaches, needs to hold every tip. A projecting square cap, at the ends of
+// an open or a dashed path (8.4.3.6), reaches √2 times half the width at its
+// corners (Table 54). A join or cap outside Tables 54 and 55 strokes
+// as the initial miter join and butt cap (Table 52), and a miter limit that
+// is not a number as the initial 10, as litho's renderer strokes them.
+//
+// A zero width strokes the thinnest line a device can draw (8.4.3.2), whose
+// reach is a fraction of a device pixel no user-space box can state; it and
+// a width or limit that is not finite, which no renderer strokes, reach
+// nothing here.
+func strokeReach(lw float64, join, lineCap int, miterLimit float64, m [6]float64, miters bool) float64 {
+	const (
+		miterJoin = 0
+		bevelJoin = 2
+		squareCap = 2
+	)
+	factor := 1.0
+	if join < miterJoin || join > bevelJoin {
+		join = miterJoin
+	}
+	if math.IsNaN(miterLimit) {
+		miterLimit = initialMiterLimit
+	}
+	if miters && join == miterJoin && miterLimit > factor {
+		factor = miterLimit
+	}
+	if lineCap == squareCap {
+		factor = max(factor, math.Sqrt2)
+	}
+	r := math.Abs(lw) / 2 * factor * maxStretch(m)
+	if math.IsNaN(r) || math.IsInf(r, 0) {
+		return 0
+	}
+	return r
 }
 
 // clippedInkBox returns the bounds of the clipping path in force in state,

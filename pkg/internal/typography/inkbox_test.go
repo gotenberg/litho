@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -31,6 +32,9 @@ func paintTestResources() ast.PdfDict {
 			"Sh1": ast.PdfDict{"ShadingType": ast.PdfInt(2)},
 			"Sh2": ast.PdfDict{"ShadingType": ast.PdfInt(2), "BBox": nums(0, 0, 50, 60)},
 		},
+		"ExtGState": ast.PdfDict{
+			"GS1": ast.PdfDict{"LW": ast.PdfInt(6), "LJ": ast.PdfInt(2)},
+		},
 	}
 }
 
@@ -38,9 +42,11 @@ func paintTestResources() ast.PdfDict {
 // glyph space: through the CTM its cm operators set (ISO 32000-1, 8.4.4), an
 // image as the unit square through that CTM (8.9.5), a form inside its box
 // (8.10.1), a shading inside its box (8.7.4.3) or the clip (8.7.4.2), a
-// stroke widened by half its line width, every mark cut to the clip the
-// description set (8.5.4), and nothing for a path that is only clipped or
-// ended. A mark the walk cannot place over no clip reports it unbounded.
+// stroke widened by the reach of its pen (half its line width, the miter
+// limit times that at a miter join, √2 times it at a square cap, 8.4.3.3 to
+// 8.4.3.5), its line parameters set by operators or a gs, every mark cut to
+// the clip the description set (8.5.4), and nothing for a path that is only
+// clipped or ended. A mark the walk cannot place over no clip reports it unbounded.
 func TestType3PaintBounds(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -57,6 +63,11 @@ func TestType3PaintBounds(t *testing.T) {
 		{"path under a scaling cm", "q 10 0 0 10 0 0 cm 0 0 m 1 2 l f Q 0 0 m 1 1 l f", false, &[4]float64{0, 0, 10, 20}, false},
 		{"rotated curve", "q 0 1 -1 0 0 0 cm 0 0 m 0 10 10 10 10 0 c f Q", false, &[4]float64{-7.5, 0, 0, 10}, false},
 		{"stroke widened by half its width", "4 w 0 0 m 10 0 l S", false, &[4]float64{-2, -2, 12, 2}, false},
+		{"miter join reaches its limit", "4 w 3 M 0 0 m 10 0 l 10 10 l S", false, &[4]float64{-6, -6, 16, 16}, false},
+		{"closed path joins", "4 w 3 M 0 0 m 10 0 l h S", false, &[4]float64{-6, -6, 16, 6}, false},
+		{"round join reaches half its width", "4 w 1 j 0 0 m 10 0 l 10 10 l S", false, &[4]float64{-2, -2, 12, 12}, false},
+		{"square cap", "4 w 2 J 0 0 m 10 0 l S", false, &[4]float64{-2 * math.Sqrt2, -2 * math.Sqrt2, 10 + 2*math.Sqrt2, 2 * math.Sqrt2}, false},
+		{"line width set by gs", "/GS1 gs 0 0 m 10 0 l S", false, &[4]float64{-3, -3, 13, 3}, false},
 		{"clip only", "0 0 10 10 re W n", false, nil, false},
 		{"fill cut to the clip", "0 0 10 10 re W n 5 5 100 100 re f", false, &[4]float64{5, 5, 10, 10}, false},
 		{"fill outside the clip", "0 0 10 10 re W n 50 50 1 1 re f", false, nil, false},
@@ -130,5 +141,67 @@ func TestType3GlyphInkBounds(t *testing.T) {
 				t.Errorf("got %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestStrokeReach pins how far past its path a pen reaches (ISO 32000-1,
+// 8.4.3.2 to 8.4.3.5): half the line width through the CTM's largest
+// stretch, the miter limit times that at a miter join when asked for,
+// √2 times it at a square cap, and nothing for a zero or non-finite width.
+func TestStrokeReach(t *testing.T) {
+	t.Parallel()
+	identity := [6]float64{1, 0, 0, 1, 0, 0}
+	for _, tc := range []struct {
+		name   string
+		lw     float64
+		join   int
+		cap    int
+		ml     float64
+		m      [6]float64
+		miters bool
+		want   float64
+	}{
+		{"round join", 4, 1, 0, 10, identity, true, 2},
+		{"bevel join", 4, 2, 0, 10, identity, true, 2},
+		{"miter join", 4, 0, 0, 10, identity, true, 20},
+		{"miter join, its tips not asked for", 4, 0, 0, 10, identity, false, 2},
+		{"miter limit below one", 4, 0, 0, 0.5, identity, true, 2},
+		{"miter limit not a number", 4, 0, 0, math.NaN(), identity, true, 20},
+		{"join outside Table 55", 4, 7, 0, 3, identity, true, 6},
+		{"square cap", 4, 1, 2, 10, identity, true, 2 * math.Sqrt2},
+		{"negative width", -4, 1, 0, 10, identity, true, 2},
+		{"CTM stretch", 4, 1, 0, 10, [6]float64{3, 0, 0, 0.5, 9, 9}, true, 6},
+		{"zero width", 0, 0, 0, 10, identity, true, 0},
+		{"infinite width", math.Inf(1), 1, 0, 10, identity, true, 0},
+	} {
+		if got := strokeReach(tc.lw, tc.join, tc.cap, tc.ml, tc.m, tc.miters); math.Abs(got-tc.want) > 1e-9 {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestGlyphInkBoxHoldsTheStroke checks a glyph a stroking text rendering
+// mode draws (ISO 32000-1, 9.3.6, Table 106) is bounded by half its pen
+// under a round or a miter join alike, and one a filling or invisible mode
+// draws is not.
+func TestGlyphInkBoxHoldsTheStroke(t *testing.T) {
+	t.Parallel()
+	font := &Font{Subtype: "Type1", FirstChar: 65, LastChar: 65, Widths: []float64{500}}
+	for _, join := range []int{0, 1} {
+		for mode, grows := range map[int]bool{0: false, 1: true, 2: true, 3: false, 4: false, 5: true, 6: true, 7: false, 9: false} {
+			machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
+			state := machine.Current()
+			state.Text.Tmode = mode
+			state.LineWidth = 2
+			state.LineJoin = join
+			got := glyphInkBox(context.Background(), machine, font, 10, 65, 0, 0)
+			want := [4]float64{0, -2, 5, 10}
+			if grows {
+				want = [4]float64{-1, -3, 6, 11}
+			}
+			if got != want {
+				t.Errorf("join %d, mode %d: got %v, want %v", join, mode, got, want)
+			}
+		}
 	}
 }

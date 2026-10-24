@@ -240,6 +240,12 @@ func type3ShadingPDF() []byte {
 // spans ten units, its description glyph run against the font resources
 // resources.
 func type3GlyphPDF(glyph, resources string) []byte {
+	return type3GlyphShownPDF(glyph, resources, "")
+}
+
+// type3GlyphShownPDF is [type3GlyphPDF] with the operators before set before
+// the glyph is shown.
+func type3GlyphShownPDF(glyph, resources, before string) []byte {
 	return []byte("%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
@@ -248,7 +254,7 @@ func type3GlyphPDF(glyph, resources string) []byte {
 		"/Encoding << /Type /Encoding /Differences [97 /a] >> /FirstChar 97 /LastChar 97 /Widths [1000] " +
 		"/Resources << " + resources + " >> >>\nendobj\n" +
 		plantStream(5, "", glyph) +
-		plantStream(6, "", "BT /T3 100 Tf 100 400 Td (a) Tj ET") +
+		plantStream(6, "", before+"BT /T3 100 Tf 100 400 Td (a) Tj ET") +
 		"trailer\n<< /Size 7 /Root 1 0 R >>\n%%EOF\n")
 }
 
@@ -328,14 +334,83 @@ func TestRedactBoundsAResourcelessType3GlyphWhereShown(t *testing.T) {
 	}
 }
 
-// strokedTextPDF strokes a glyph with a pen 40 points wide, which reaches
-// past the box the glyph's outline is bounded by.
-func strokedTextPDF() []byte {
-	return plantedPDF("BT /F1 24 Tf 1 Tr 40 w 100 400 Td (W) Tj ET", plant{})
+// strokedTextPDF strokes a glyph with a pen 40 points wide and joins
+// joins, which reaches past the outline the glyph's box holds.
+func strokedTextPDF(joins string) []byte {
+	return plantedPDF("BT /F1 24 Tf 1 Tr 40 w "+joins+" 100 400 Td (W) Tj ET", plant{})
 }
 
-// strokedTextRegion lies over the stroke above the glyph's box.
+// strokedTextRegion lies over the stroke above the outline's box.
 var strokedTextRegion = RedactRegion{Page: 1, Rect: [4]float64{100, 432, 130, 442}}
+
+// TestRedactRemovesStrokedTextByItsStroke redacts, with the pixel check off,
+// a region over the stroke of a glyph and clear of its outline: the glyph is
+// bounded by what its pen paints (ISO 32000-1, 9.3.6, Table 106), so the
+// region selects it and no ink is left, under a round join and a miter join
+// (8.4.3.5) alike.
+func TestRedactRemovesStrokedTextByItsStroke(t *testing.T) {
+	ctx := context.Background()
+	for name, joins := range map[string]string{
+		"miter join": "",
+		"round join": "1 j",
+	} {
+		t.Run(name, func(t *testing.T) {
+			src := strokedTextPDF(joins)
+			w := NewWriter(openPixelCheck(t, src))
+			defer w.Close()
+			report, err := w.Redact(ctx, []RedactRegion{strokedTextRegion}, WithoutRedactionPixelCheck())
+			if err != nil {
+				t.Fatalf("Redact: %v", err)
+			}
+			if len(report.RemovedText) != 1 || report.RemovedText[0] != "W" {
+				t.Fatalf("removed %q, want the stroked glyph", report.RemovedText)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			before := openPixelCheck(t, src)
+			after := openPixelCheck(t, out.Bytes())
+			if err := checkRedactionPixels(ctx, before, after, []RedactRegion{strokedTextRegion}, []int{1},
+				redactedGlyphs{boxes: report.RemovedGlyphBoxes}); err != nil {
+				t.Fatalf("the stroke is left in the region: %v", err)
+			}
+		})
+	}
+}
+
+// TestRedactBoundsAStrokeByHalfItsPen checks a stroked glyph is bounded by
+// half its pen past its box under either join: a region past that keeps
+// the glyph, and the pixel check finds nothing of it there.
+func TestRedactBoundsAStrokeByHalfItsPen(t *testing.T) {
+	ctx := context.Background()
+	// The outline's box tops out at 400 + 24, an em above the baseline; half
+	// the pen reaches 20 above that.
+	region := RedactRegion{Page: 1, Rect: [4]float64{100, 450, 130, 460}}
+	for _, joins := range []string{"", "1 j"} {
+		w := NewWriter(openPixelCheck(t, strokedTextPDF(joins)))
+		report, err := w.Redact(ctx, []RedactRegion{region})
+		w.Close()
+		if err != nil {
+			t.Fatalf("%q: Redact: %v", joins, err)
+		}
+		if len(report.RemovedText) != 0 {
+			t.Fatalf("%q: removed %q, want the glyph kept", joins, report.RemovedText)
+		}
+	}
+}
+
+// inheritedPenPDF shows a Type 3 glyph whose description strokes a line
+// with the line width it inherits from where it is shown (ISO 32000-1,
+// 9.6.5), set there 4000 units wide in glyph space: 400 points under the
+// font matrix and size. The glyph's box is read from the description once
+// per font, with the initial line width, and misses the pen.
+func inheritedPenPDF() []byte {
+	return type3GlyphShownPDF("1000 0 d0 0 500 m 1000 500 l S", "", "4000 w ")
+}
+
+// inheritedPenRegion lies over the pen, above the line it strokes.
+var inheritedPenRegion = RedactRegion{Page: 1, Rect: [4]float64{120, 520, 180, 560}}
 
 func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 	ctx := context.Background()
@@ -345,10 +420,10 @@ func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 		"WithRedactionPixelCheck": {WithRedactionPixelCheck()},
 	} {
 		t.Run(name, func(t *testing.T) {
-			src := strokedTextPDF()
+			src := inheritedPenPDF()
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			_, err := w.Redact(ctx, []RedactRegion{strokedTextRegion}, opts...)
+			_, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion}, opts...)
 			var pe *RedactionPixelError
 			if !errors.As(err, &pe) || pe.Inside == 0 || !errors.Is(err, ErrRedactionRefused) {
 				t.Fatalf("got %v, want the stroke found inside the region", err)
@@ -366,9 +441,9 @@ func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 
 func TestRedactWithoutPixelCheckSkipsIt(t *testing.T) {
 	ctx := context.Background()
-	w := NewWriter(openPixelCheck(t, strokedTextPDF()))
+	w := NewWriter(openPixelCheck(t, inheritedPenPDF()))
 	defer w.Close()
-	if _, err := w.Redact(ctx, []RedactRegion{strokedTextRegion}, WithoutRedactionPixelCheck()); err != nil {
+	if _, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion}, WithoutRedactionPixelCheck()); err != nil {
 		t.Fatalf("Redact without the pixel check: %v", err)
 	}
 

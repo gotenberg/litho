@@ -137,7 +137,11 @@ type TextElement struct {
 	// of its own, is bounded by the clipping path it is shown under.
 	// Any other glyph is bounded by its advance along the baseline and by
 	// the font's /FontBBox across it, never less than an ascender of one em
-	// and a descender of a fifth of one. A run's box is the union of its
+	// and a descender of a fifth of one, grown by the reach of the pen when
+	// the text rendering mode strokes it (9.3.6, Table 106): half the line
+	// width through the CTM, √2 times that under a projecting square cap
+	// (8.4.3.3). A miter join's tip at a sharp corner may reach past it
+	// (8.4.3.5). A run's box is the union of its
 	// glyphs'. Redaction tests it against a region. It is all zeros on an
 	// element that does not come from extraction.
 	InkBox        [4]float64 `json:"inkBox,omitzero"`

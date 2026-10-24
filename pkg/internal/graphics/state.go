@@ -71,8 +71,8 @@ type State struct {
 	ClipApplied bool
 
 	// The parameters below complete the device-independent graphics state of
-	// ISO 32000-1, 8.4.1, Tables 52 and 53. Text extraction reads none of
-	// them. Slices and pointers among them are never edited in place, so the
+	// ISO 32000-1, 8.4.1, Tables 52 and 53. Text extraction reads the line
+	// parameters among them to bound stroked text. Slices and pointers among them are never edited in place, so the
 	// shallow copy q makes keeps each frame's values apart.
 
 	// LineCap, LineJoin and MiterLimit are set by J, j and M or the LC, LJ

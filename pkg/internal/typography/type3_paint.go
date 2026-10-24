@@ -158,6 +158,33 @@ func (p type3Painter) setsFont(ctx context.Context, name ast.PdfObject) bool {
 	return ok
 }
 
+// lineParams returns the line width, line cap, line join and miter limit
+// that the graphics state parameter dictionary name sets (ISO 32000-1, 8.4.5,
+// Table 58, /LW, /LC, /LJ and /ML), each one it leaves out or that is not a
+// number as given in w, lineCap, join and miterLimit. A dictionary the
+// font's resources do not name sets none.
+func (p type3Painter) lineParams(ctx context.Context, name ast.PdfObject, w float64, lineCap, join int, miterLimit float64) (float64, int, int, float64) {
+	dict, err := document.ResolveDict(ctx, p.doc, p.named(ctx, "ExtGState", name))
+	if err != nil || dict == nil {
+		return w, lineCap, join, miterLimit
+	}
+	number := func(key ast.PdfName, v float64) float64 {
+		obj, err := document.ResolveObject(ctx, p.doc, dict[key])
+		if err != nil {
+			return v
+		}
+		if f, ok := document.Number(obj); ok {
+			return f
+		}
+		return v
+	}
+	w = number("LW", w)
+	miterLimit = number("ML", miterLimit)
+	lineCap = int(number("LC", float64(lineCap)))
+	join = int(number("LJ", float64(join)))
+	return w, lineCap, join, miterLimit
+}
+
 // cachedFont resolves the font name selects into the document's font cache
 // and reports whether it is there, so that bounding text shown in it costs a
 // cache hit however many glyphs show it. A font named directly rather than
@@ -198,12 +225,13 @@ func (p type3Painter) cachedFont(ctx context.Context, chain type3Chain, name ast
 // It follows the current transformation matrix through q, Q and cm (ISO
 // 32000-1, 8.4.4), so a bitmap glyph drawn as an image (8.9.5: the unit
 // square through the CTM) and a path drawn in pixels under a scaling both
-// land where they paint. A stroke widens its path by half the line width (w,
-// 8.4.3.2). A path that is only clipped or ended by n paints nothing, and a
-// clip it sets bounds every mark after it until Q restores the clip before
-// it (8.5.4), the clip held as the box of its path. A form XObject paints
-// inside its /BBox (8.10.1), and a shading inside its /BBox (8.7.4.3) or
-// else the whole clip (8.7.4.2). Text the description shows is bounded by
+// land where they paint. A stroke widens its path by the reach of its pen
+// ([strokeReach]): the line width, cap, join and miter limit that w, J, j
+// and M or a gs set (8.4.3.2 to 8.4.3.5, 8.4.5). A path that is only
+// clipped or ended by n paints nothing, and a clip it sets bounds every mark
+// after it until Q restores the clip before it (8.5.4), the clip held as the
+// box of its path. A form XObject paints inside its /BBox (8.10.1), and a
+// shading inside its /BBox (8.7.4.3) or else the whole clip (8.7.4.2). Text the description shows is bounded by
 // running the description through the text extractor in glyph space, each
 // glyph by its own ink, which a Type 3 font's glyphs reach through this walk
 // in turn.
@@ -222,19 +250,43 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 		tfUnknown
 	)
 	type gstate struct {
-		m  [6]float64
-		lw float64
+		m [6]float64
+		// lw, lc, lj and ml are the line width, cap, join and miter limit
+		// a stroke is widened by ([strokeReach]).
+		lw     float64
+		lc, lj int
+		ml     float64
 		// clip is the box of the clip the description set, nil for none.
 		// A box is never changed in place, so a saved state keeps its own.
 		clip *[4]float64
 		tf   int
 	}
-	cur := gstate{m: [6]float64{1, 0, 0, 1, 0, 0}, lw: 1}
+	// TODO: a description runs under the graphics state of the text that
+	// shows it (9.6.5), so a stroke before any w, J, j, M or gs uses the line
+	// parameters in force there, which this walk, run once per font, reads as
+	// the initial ones; the redaction pixel check catches the pen it misses.
+	cur := gstate{m: [6]float64{1, 0, 0, 1, 0, 0}, lw: 1, ml: initialMiterLimit}
 	// The stack is bounded by the operator count of an already parsed
 	// stream, so an unbalanced q costs no more than the stream itself.
 	var stack []gstate
 	var painted, path *[4]float64
 	unbounded, clipping := false, false
+	// segs counts the segments of the current subpath, and joined says the
+	// path joins two segments somewhere: a subpath of two segments or more,
+	// or a closed one (ISO 32000-1, 8.5.2.1). A path that joins none has no
+	// join a miter could reach past its pen from.
+	segs, joined := 0, false
+	segment := func() {
+		segs++
+		if segs >= 2 {
+			joined = true
+		}
+	}
+	closePath := func() {
+		if segs > 0 {
+			joined = true
+		}
+	}
 	chain := type3ChainFrom(ctx)
 	transform := func(x, y float64) [2]float64 {
 		m := cur.m
@@ -278,12 +330,13 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 		}
 		clipping = false
 		path = nil
+		segs, joined = 0, false
 	}
 	paint := func(stroke bool) {
 		if path != nil {
 			box := *path
 			if stroke {
-				pad := math.Abs(cur.lw) / 2 * maxStretch(cur.m)
+				pad := strokeReach(cur.lw, cur.lj, cur.lc, cur.ml, cur.m, joined)
 				box = [4]float64{box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad}
 			}
 			mark(box)
@@ -329,12 +382,29 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 			if len(op.Operands) >= 1 {
 				cur.lw = document.Float(op.Operands[0])
 			}
+		case "J":
+			if len(op.Operands) >= 1 {
+				cur.lc = int(document.Float(op.Operands[0]))
+			}
+		case "j":
+			if len(op.Operands) >= 1 {
+				cur.lj = int(document.Float(op.Operands[0]))
+			}
+		case "M":
+			if len(op.Operands) >= 1 {
+				cur.ml = document.Float(op.Operands[0])
+			}
 		case "W", "W*":
 			clipping = true
 		case "f", "F", "f*":
 			paint(false)
-		case "S", "s", "B", "B*", "b", "b*":
+		case "S", "B", "B*":
 			paint(true)
+		case "s", "b", "b*":
+			closePath()
+			paint(true)
+		case "h":
+			closePath()
 		case "n":
 			endPath()
 		case "BI":
@@ -365,7 +435,11 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 				textOK = false
 			}
 		case "gs":
-			if len(op.Operands) >= 1 && p.setsFont(ctx, op.Operands[0]) {
+			if len(op.Operands) < 1 {
+				continue
+			}
+			cur.lw, cur.lc, cur.lj, cur.ml = p.lineParams(ctx, op.Operands[0], cur.lw, cur.lc, cur.lj, cur.ml)
+			if p.setsFont(ctx, op.Operands[0]) {
 				cur.tf = tfUnknown
 				textOK = false
 			}
@@ -384,22 +458,32 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 			}
 			switch op.Operator {
 			case "m", "l":
+				if op.Operator == "m" {
+					segs = 0
+				} else {
+					segment()
+				}
 				cx, cy = v[0], v[1]
 				q := transform(cx, cy)
 				addPath(q[0], q[1])
 			case "re":
+				// A rectangle is a closed subpath of four segments (8.5.2.1).
+				segs, joined = 0, true
 				cx, cy = v[0], v[1]
 				for _, p := range rectCorners(v[0], v[1], v[0]+v[2], v[1]+v[3]) {
 					q := transform(p[0], p[1])
 					addPath(q[0], q[1])
 				}
 			case "c":
+				segment()
 				curve([4][2]float64{{cx, cy}, {v[0], v[1]}, {v[2], v[3]}, {v[4], v[5]}})
 				cx, cy = v[4], v[5]
 			case "v":
+				segment()
 				curve([4][2]float64{{cx, cy}, {cx, cy}, {v[0], v[1]}, {v[2], v[3]}})
 				cx, cy = v[2], v[3]
 			case "y":
+				segment()
 				curve([4][2]float64{{cx, cy}, {v[0], v[1]}, {v[2], v[3]}, {v[2], v[3]}})
 				cx, cy = v[2], v[3]
 			}
