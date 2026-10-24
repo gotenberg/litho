@@ -108,10 +108,12 @@ func WithRedactionRasterFallback() RedactOption {
 // WithRedactionJPEGQuality encodes the photographic parts of the images
 // [WithRedactionRasterFallback] draws as baseline JPEG (ITU-T T.81) at
 // quality q, 1 to 100, on the scale of the Independent JPEG Group's libjpeg,
-// as [WithFlattenJPEGQuality] encodes a flattening's composites: each image
-// is cut into tiles on a grid of its pixels, which abut without seams, a tile
-// only images and shadings reach whose pixels hold 256 colours is encoded as
-// JPEG unless Flate holds it in no more bytes, and the others stay lossless.
+// as [WithFlattenJPEGQuality] picks a flattening's JPEG tiles: each image is
+// cut on a grid of its pixels, and a tile only images and shadings reach
+// whose pixels hold 256 colours is encoded as JPEG unless Flate holds it in
+// no more bytes. The JPEG tiles are drawn over one lossless image of the
+// whole area, placed as the lossless image would be, so the page outside the
+// JPEG tiles draws as it does without this option.
 // A tile a region reaches, widened by a pixel, always stays lossless, so the
 // image's samples inside the regions are the paper's colour exactly, in the
 // file as on the page: a JPEG spreads each 8 by 8 block's error over the
@@ -130,17 +132,22 @@ func WithRedactionRasterFallback() RedactOption {
 //
 //   - litho (all), pdfcpu (all), govdocs (1 in 8) and pdfjs (1 in 16, and
 //     issue17289), the four redact-render scenarios with the fallback: 106
-//     rasterise, 4 of them reach a photographic tile at q 90, and the
-//     outputs weigh 47.5 MB against 55.5 MB lossless (45.9 MB at q 75).
-//   - pdfjs issue17289, the band: 28.8 MB lossless, 20.8 MB at q 90, its
-//     composite 10.3 MB down to 2.3 MB; most of the rest is a JPX image the
-//     band blanks, which blanking writes under Flate.
+//     rasterise, 3 of them reach a photographic tile at q 90, and the
+//     outputs weigh 47.7 MB against 55.5 MB lossless (46.2 MB at q 75).
+//   - pdfjs issue17289, the band: 28.8 MB lossless, 21.0 MB at q 90; most
+//     of the rest is a JPX image the band blanks, which blanking writes
+//     under Flate.
 //   - litho, pdfcpu, pdfjs, govdocs, redact-render at q 90 against
 //     lossless: no inside leak by either renderer that lossless lacks, and
 //     litho's outside check unchanged. Poppler's outside check fails on 2
-//     more scenarios, of pdfjs bug1140761, and counts more changed pixels on
-//     6 that fail lossless already, of issue12752, issue17289 and issue2642:
-//     JPEG's loss at the sharp edges of scanned pages.
+//     more scenarios, of pdfjs bug1140761 (158 and 177 pixels), and counts
+//     more changed pixels on 6 that fail lossless already, of issue12752,
+//     issue17289 and issue2642.
+//   - pdfjs bug1140761, the quarter and band at q 90 against lossless:
+//     PDFium 4.30.0 and poppler 26.09.0 both draw every changed pixel
+//     inside a JPEG tile or within 2 pixels of its edge, 140 to 213 at 72
+//     dpi, JPEG's loss at the sharp edges of a scanned page, and none in the
+//     lossless parts.
 func WithRedactionJPEGQuality(q int) RedactOption {
 	return func(o *redactOpts) { o.jpegQuality, o.jpegQualitySet = q, true }
 }

@@ -1,10 +1,13 @@
 package flatten
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
+	"image"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -162,6 +165,74 @@ func TestRedactionJPEGKeepsRegionsPaper(t *testing.T) {
 	}
 	if text := pageText(t, out); strings.TrimSpace(text) != "" {
 		t.Errorf("page text = %q, want none", text)
+	}
+}
+
+// TestRedactionJPEGUnderlay pins the layout of [flattener.encodeUnderlay]:
+// the page draws one lossless image first, placed as the lossless fallback
+// places its one image, then JPEG tiles, and the underlay holds the lossless
+// image's samples exactly wherever no JPEG tile lies, and along the band
+// inside each tile's edges, so a renderer that draws a tile a pixel off shows
+// the page's own pixels there.
+func TestRedactionJPEGUnderlay(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := photoFormPDF()
+	regions := [][4]float64{{40, 40, 60, 60}}
+	lossless, _ := redactWith(t, data, regions, Redaction)
+	out, _ := redactWith(t, data, regions, RedactionJPEG(75))
+
+	want := placedImages(t, lossless)
+	if len(want) != 1 {
+		t.Fatalf("the lossless fallback draws %d images, want 1", len(want))
+	}
+	got := placedImages(t, out)
+	if len(got) < 2 || got[0].stream.Dict["Filter"] == ast.PdfName("DCTDecode") {
+		t.Fatalf("the JPEG fallback draws %d images, the first %v; want a lossless underlay then JPEG tiles", len(got), got[0].stream.Dict["Filter"])
+	}
+	if got[0].ctm != want[0].ctm {
+		t.Errorf("the underlay is placed at %v, the lossless image at %v", got[0].ctm, want[0].ctm)
+	}
+	ldoc, _ := open(t, lossless)
+	wantSamples, err := ldoc.DecodeStream(ctx, want[0].stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := open(t, out)
+	under, err := doc.DecodeStream(ctx, got[0].stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(under) != len(wantSamples) {
+		t.Fatalf("the underlay holds %d samples, the lossless image %d", len(under), len(wantSamples))
+	}
+	w := int(document.Float(got[0].stream.Dict["Width"]))
+	h := len(under) / (3 * w)
+	inv, ok := got[0].ctm.Invert()
+	if !ok {
+		t.Fatal("the underlay's matrix does not invert")
+	}
+	// Each JPEG tile's pixels in the underlay's grid, less the band.
+	var filled []image.Rectangle
+	for _, p := range got[1:] {
+		if p.stream.Dict["Filter"] != ast.PdfName("DCTDecode") {
+			t.Fatalf("image %v after the underlay is not JPEG", p.stream.Dict["Filter"])
+		}
+		box := transformRect(p.ctm.Mul(inv), Rect{MaxX: 1, MaxY: 1})
+		px := image.Rect(int(math.Round(box.MinX*float64(w))), int(math.Round((1-box.MaxY)*float64(h))),
+			int(math.Round(box.MaxX*float64(w))), int(math.Round((1-box.MinY)*float64(h))))
+		filled = append(filled, px.Inset(underlayBand))
+	}
+	for y := range h {
+		for x := range w {
+			if slices.ContainsFunc(filled, func(r image.Rectangle) bool { return image.Pt(x, y).In(r) }) {
+				continue
+			}
+			i := 3 * (y*w + x)
+			if !bytes.Equal(under[i:i+3], wantSamples[i:i+3]) {
+				t.Fatalf("underlay sample (%d, %d) is %v, the lossless image's %v", x, y, under[i:i+3], wantSamples[i:i+3])
+			}
+		}
 	}
 }
 
