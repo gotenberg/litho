@@ -52,6 +52,9 @@ var errSceneOutsidePage = errors.New("region outside the page")
 type textScene struct {
 	geo           page.Geometry
 	with, without *image.NRGBA
+	// alone is the page drawn with its text only, nil unless [textScene.draw]
+	// was asked for it.
+	alone *image.NRGBA
 	// elements are the page's glyphs as [typography.ExtractElements] reads
 	// them, every optional content group and artifact included, and
 	// whiteFills is parallel to them.
@@ -159,15 +162,15 @@ func boxesMeet(a, b [4]float64) bool {
 	return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
 }
 
-// draw draws pg, whose scene s read, with and without its text. It fails
-// when the page cannot be drawn, or when its glyph boxes pass
-// [maxSceneCoverWork].
+// draw draws pg, whose scene s read, with and without its text, and with its
+// text alone when textOnly is set. It fails when the page cannot be drawn, or
+// when its glyph boxes pass [maxSceneCoverWork].
 //
 // region, when not the zero box, is the part of the page in default user space
 // to draw, reduced to the page's crop box: a caller judging a few glyphs
 // draws only where they lie, so a page of dense art costs the rasterisation
 // of that part alone.
-func (s *textScene) draw(ctx context.Context, r *Reader, pg *document.Page, region [4]float64) error {
+func (s *textScene) draw(ctx context.Context, r *Reader, pg *document.Page, region [4]float64, textOnly bool) error {
 	box := page.CropBox
 	if region != [4]float64{} {
 		crop := boxToRect(pg.ViewedBox())
@@ -215,6 +218,17 @@ func (s *textScene) draw(ctx context.Context, r *Reader, pg *document.Page, regi
 	}
 	if s.with.Bounds() != s.without.Bounds() {
 		return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), s.without.Bounds())
+	}
+	if textOnly {
+		// Clips stay in force with what they clip left out (the renderer
+		// keeps a path's or a text object's clip, 8.5.4 and 9.3.6), so text
+		// a clip removes paints nothing alone either.
+		if s.alone, err = draw(page.Paths | page.Images | page.Shadings | page.Annotations); err != nil {
+			return fmt.Errorf("drawing the page's text alone: %w", err)
+		}
+		if s.alone.Bounds() != s.with.Bounds() {
+			return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), s.alone.Bounds())
+		}
 	}
 	return s.countCover(ctx)
 }
@@ -279,9 +293,10 @@ func (s *textScene) pixelRect(box [4]float64) image.Rectangle {
 
 // runStats is what the pixels a run of glyphs alone covers say about it:
 // area counts the pixels the run's glyph boxes cover and no other glyph's box
-// does, changed those of them the run's text marks.
+// does, changed those of them the run's text marks, and alone those it marks
+// drawn with nothing else, counted only when the scene drew that.
 type runStats struct {
-	area, changed int
+	area, changed, alone int
 }
 
 // stats measures the run of glyphs whose indices run holds over the pixels
@@ -306,6 +321,8 @@ func (s *textScene) stats(run []int) runStats {
 		}
 	}
 	w := s.with.Bounds().Dx()
+	// paper is the colour of the page a scene draws on.
+	paper := [3]byte{255, 255, 255}
 	for y := box.Min.Y; y < box.Max.Y; y++ {
 		for x := box.Min.X; x < box.Max.X; x++ {
 			n := own[(y-box.Min.Y)*box.Dx()+x-box.Min.X]
@@ -316,6 +333,9 @@ func (s *textScene) stats(run []int) runStats {
 			o := s.with.PixOffset(x, y)
 			if inkChanged(s.with.Pix[o:o+3:o+3], s.without.Pix[o:o+3:o+3]) {
 				st.changed++
+			}
+			if s.alone != nil && inkChanged(s.alone.Pix[o:o+3:o+3], paper[:]) {
+				st.alone++
 			}
 		}
 	}

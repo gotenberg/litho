@@ -7,12 +7,14 @@ import (
 	"io"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 type textPageResult struct {
-	Page int    `json:"page"`
-	Text string `json:"text"`
+	Page   int                 `json:"page"`
+	Text   string              `json:"text"`
+	Unseen []models.UnseenText `json:"unseen,omitempty"`
 }
 
 type textResult struct {
@@ -41,6 +43,9 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	clipped := fs.Bool("clipped", false, "Include text outside the visible CropBox")
 	artifacts := fs.Bool("artifacts", false, "Include text marked as an /Artifact (headers, footers, watermarks)")
 	hidden := fs.Bool("hidden", false, "Include all of the above")
+	// What a page shows and what its content says are two readings; -unseen
+	// lists the text of the second that the first lacks, by drawing the page.
+	unseen := fs.Bool("unseen", false, "List the text each page draws that shows nowhere on it, and why (rendering mode, outside the page, paints nothing, covered), instead of the text")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -83,6 +88,14 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 		res := textResult{File: path}
 		for _, p := range pageNums {
+			if *unseen {
+				runs, err := r.ExtractUnseenText(ctx, p)
+				if err != nil {
+					fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				}
+				res.Pages = append(res.Pages, textPageResult{Page: p, Unseen: runs})
+				continue
+			}
 			text, err := r.ExtractText(ctx, p, textOptions(*hidden, *invisible, *clipPath, *clipped, *artifacts)...)
 			if err != nil {
 				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
@@ -106,6 +119,9 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stdout, "--- %s ---\n", res.File)
 			}
 			for _, p := range res.Pages {
+				for _, u := range p.Unseen {
+					fmt.Fprintf(stdout, "page %d: %s: %s\n", p.Page, u.Reason, strings.TrimSpace(u.Text))
+				}
 				text := strings.TrimSpace(p.Text)
 				if text != "" {
 					fmt.Fprintln(stdout, text)

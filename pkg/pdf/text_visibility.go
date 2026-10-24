@@ -131,7 +131,7 @@ func (r *Reader) judgeWhiteText(ctx context.Context, pg *document.Page) (whiteVe
 	if len(runs) == 0 {
 		return verdicts, nil
 	}
-	if err := s.draw(ctx, r, pg, region); err != nil {
+	if err := s.draw(ctx, r, pg, region, false); err != nil {
 		if errors.Is(err, errSceneOutsidePage) {
 			return verdicts, nil
 		}

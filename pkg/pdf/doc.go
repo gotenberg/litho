@@ -17,6 +17,10 @@
 // [Reader.ExtractPronunciationLexicons], [Reader.ExtractFormulas],
 // [Reader.ExtractRedactedText], and [Reader.ExtractColorSpaces].
 //
+// Readers that draw the page to judge its text sit beside them:
+// [Reader.ExtractUnseenText] lists the text a page draws that shows nowhere
+// on it.
+//
 // # Quick start
 //
 //	package main
