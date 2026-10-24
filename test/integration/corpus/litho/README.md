@@ -9576,10 +9576,12 @@ The construct is what ISO 19005-2, 6.2.2 forbids: each Type 3 glyph resolves
 `F1` and `Bar` only through the resources of the stream showing it, so `6.2.2/2`
 fires at the PDF/A-2, -3 and -4 levels; the other cells are the identification,
 metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
-same rule set in all thirteen cells. Remediation gives the font its own
-`/Resources` and veraPDF passes the output at PDF/A-2b, but it copies the page's
-binding of `Bar`, so the glyphs `Fm` shows draw the page's short bar, not
-`Fm`'s tall one.
+same rule set in all thirteen cells. Remediation gives the font a copy per
+scope, each with `/Resources` of its own: the page's copy binds `Bar` to the
+short bar and `Fm`'s to the tall one, so the output draws as its source (no
+pixel differs) and veraPDF passes it at PDF/A-2b. Copying the page's binding
+into the one font passed veraPDF too, but drew the page's short bar where `Fm`
+shows the glyphs.
 
 ## Scope
 
