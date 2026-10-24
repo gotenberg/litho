@@ -887,8 +887,9 @@ func WithArtifacts() ExtractTextOption {
 //
 // By default, text the page draws again over itself for an effect, a drop
 // shadow or a fake bold drawn a few hundredths of an em apart, is read once,
-// from the copy drawn last. [WithInvisibleText] and [WithHiddenText] read
-// every copy, as [Reader.ExtractTextElements] returns every glyph.
+// where the content stream first draws it. [WithInvisibleText] and
+// [WithHiddenText] read every copy, as [Reader.ExtractTextElements] returns
+// every glyph.
 func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTextOption) (_ string, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractText", &err)
 	var o extractTextOpts
