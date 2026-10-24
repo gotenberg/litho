@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
+	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
@@ -159,6 +160,22 @@ type Options struct {
 	// ([renderer.spotPaint]). Unset, every painting
 	// knocks out what lies under it, as viewers draw a page on screen.
 	Overprint bool
+	// NoTransfer draws every painting as if its graphics state set the
+	// identity transfer function (ISO 32000-1, 10.5), which a caller asking
+	// what colour content takes before the device's adjustment sets: the
+	// redaction pixel check reads a blanked image's colour so, since a
+	// transfer function may map the darkest colour to any other.
+	NoTransfer bool
+	// Glyph, when not nil, is called with each glyph the page paints from an
+	// outline, a placeholder's among them: its text origin, the text position
+	// it was shown at under the text rendering matrix (9.4.4), and the bounds
+	// of what it paints, its outline filled or stroked, before any clip, both
+	// in device space. A Type 3 glyph, whose description paints instead
+	// (9.6.5), and a glyph that only adds to the clip are not reported, nor
+	// are the glyphs of a soft mask's group or a tiling pattern's cells,
+	// which are not drawn on the page's raster. The render calls it on its
+	// own goroutine, in painting order.
+	Glyph func(origin geom.Point, bounds geom.Rect)
 }
 
 // Content is a set of kinds of content, told apart by the operator that
@@ -352,6 +369,8 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		type3:       make(map[glyphKey][]content.Operation),
 		omit:        opts.Omit,
 		overprint:   opts.Overprint,
+		noTransfer:  opts.NoTransfer,
+		glyphShown:  opts.Glyph,
 		within:      opts.Within,
 		shared:      opts.Shared,
 		forms:       newFormCache(),

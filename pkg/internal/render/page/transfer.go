@@ -50,11 +50,12 @@ func level(v float32) int {
 // currentTransfer returns the transfer tables of the current graphics state,
 // nil when the transfer is the identity (ISO 32000-1, 10.5): no /TR or /TR2
 // set, /Identity, or /Default, which for litho's output, an sRGB raster with
-// no transfer of its own, is the identity too. A function the file damages
-// is skipped and applies the identity, as poppler applies it.
+// no transfer of its own, is the identity too. [Options.NoTransfer] makes
+// every transfer the identity. A function the file damages is skipped and
+// applies the identity, as poppler applies it.
 func (r *renderer) currentTransfer() *transfer {
 	obj := r.m.Current().Transfer
-	if obj == nil {
+	if obj == nil || r.noTransfer {
 		return nil
 	}
 	key := fmt.Sprintf("%v", obj)

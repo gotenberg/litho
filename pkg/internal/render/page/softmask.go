@@ -386,5 +386,7 @@ func (r *renderer) sub(width, height int, device geom.Matrix, root *blend.Group)
 	s.omit = 0
 	// [Options.Within] marks pixels of the page, not of this raster.
 	s.within, s.shared = nil, nil
+	// Nor are the glyphs it paints on the page's raster.
+	s.glyphShown = nil
 	return &s
 }

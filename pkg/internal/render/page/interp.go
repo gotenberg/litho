@@ -116,6 +116,11 @@ type renderer struct {
 	// group, and spotTables gives its process inks ([renderer.spotPaint]).
 	spots      []ast.PdfName
 	spotTables []blend.SpotTable
+	// noTransfer leaves every transfer function out ([Options.NoTransfer]).
+	noTransfer bool
+	// glyphShown is [Options.Glyph], nil in the renderers of pattern cells
+	// and soft masks.
+	glyphShown func(origin geom.Point, bounds geom.Rect)
 	// unadjusted turns stroke adjustment off ([renderer.adjusts]): set in
 	// the renderer a tiling pattern's cells run in.
 	unadjusted bool

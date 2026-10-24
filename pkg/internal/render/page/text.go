@@ -213,7 +213,7 @@ func (r *renderer) showString(s *scope, font *glyph.Font, size float64, data []b
 		trm := geom.Matrix{size * th, 0, 0, size, 0, ts.Ts}.Mul(geom.Matrix(ts.Tm))
 		glyphToUser := g.Matrix.Mul(geom.Matrix{1, 0, 0, 1, -g.V.X, -g.V.Y}).Mul(trm)
 		if !st.SkipExtraction {
-			if err := r.paintGlyph(s, st, key, g, glyphToUser); err != nil {
+			if err := r.paintGlyph(s, st, key, g, glyphToUser, trm.Apply(geom.Point{})); err != nil {
 				return err
 			}
 			// A Type 3 glyph pushes graphics states, which may move the
@@ -259,8 +259,9 @@ func (r *renderer) glyph(key glyphKey, code glyph.Code) (glyph.Glyph, error) {
 // stroked in the stroke colour with the line width in user space, both, or
 // neither, and in modes 4 to 7 added to the text object's clip. A Type 3
 // glyph runs its description instead (9.6.5); having no outline, it adds
-// nothing to a clip.
-func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyph.Glyph, glyphToUser geom.Matrix) error {
+// nothing to a clip. origin is the text origin in user space, which
+// [Options.Glyph] is told in device space with what the glyph paints.
+func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyph.Glyph, glyphToUser geom.Matrix, origin geom.Point) error {
 	mode := st.Text.Tmode
 	if mode < 0 || mode > modeMax {
 		// Table 106 defines modes 0 to 7 alone; poppler and PDF.js fill
@@ -292,7 +293,12 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 	}
 	toDevice := r.toDevice()
 	device := g.Outline.Transform(glyphToUser.Mul(toDevice))
+	var ink geom.Rect
+	inked := false
 	if fill {
+		if r.glyphShown != nil {
+			ink, inked = device.Bounds()
+		}
 		// A glyph filled alone is cut at whole pixels by the clipping
 		// rectangle, as poppler draws its bitmap; filled and stroked, it is a
 		// path that Splash fills and strokes as any other (SplashOutputDev::
@@ -305,9 +311,16 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 		}
 	}
 	if strokes {
-		if err := r.strokeGlyph(s, st, g.Outline.Transform(glyphToUser), toDevice); err != nil {
+		stroked, ok, err := r.strokeGlyph(s, st, g.Outline.Transform(glyphToUser), toDevice)
+		if err != nil {
 			return err
 		}
+		if ok {
+			ink, inked = unionRect(ink, inked, stroked), true
+		}
+	}
+	if inked && r.glyphShown != nil {
+		r.glyphShown(toDevice.Apply(origin), ink)
 	}
 	if mode&modeClipBit != 0 {
 		s.text.clip.Ops = append(s.text.clip.Ops, device.Ops...)
@@ -320,7 +333,10 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 // strokeGlyph strokes a glyph outline given in user space with the graphics
 // state's line parameters, as S strokes a path (ISO 32000-1, 9.3.6: the
 // stroking modes stroke the glyph outline with the stroke parameters).
-func (r *renderer) strokeGlyph(s *scope, st *graphics.State, user geom.Path, toDevice geom.Matrix) error {
+//
+// It returns the bounds of the stroke's outline in device space for
+// [Options.Glyph], and false when it painted none or no caller asks.
+func (r *renderer) strokeGlyph(s *scope, st *graphics.State, user geom.Path, toDevice geom.Matrix) (geom.Rect, bool, error) {
 	style := stroke.Style{
 		Width:      st.LineWidth,
 		Cap:        stroke.Cap(st.LineCap),
@@ -332,14 +348,32 @@ func (r *renderer) strokeGlyph(s *scope, st *graphics.State, user geom.Path, toD
 	outline, err := stroke.Outline(user, style, toDevice, 0)
 	if err != nil {
 		r.skip("glyph stroke", err)
-		return nil
+		return geom.Rect{}, false, nil
 	}
 	cov, err := r.coverage(outline, raster.NonZero)
 	if err != nil {
 		r.skip("glyph stroke", err)
-		return nil
+		return geom.Rect{}, false, nil
 	}
-	return r.glyphCoverage(s, st, cov, st.Stroke, st.StrokeAlpha, true)
+	if err := r.glyphCoverage(s, st, cov, st.Stroke, st.StrokeAlpha, true); err != nil {
+		return geom.Rect{}, false, err
+	}
+	if r.glyphShown == nil {
+		return geom.Rect{}, false, nil
+	}
+	bounds, ok := outline.Bounds()
+	return bounds, ok, nil
+}
+
+// unionRect returns the rectangle holding a and b, b alone when a is not set.
+func unionRect(a geom.Rect, aSet bool, b geom.Rect) geom.Rect {
+	if !aSet {
+		return b
+	}
+	return geom.Rect{
+		Min: geom.Point{X: min(a.Min.X, b.Min.X), Y: min(a.Min.Y, b.Min.Y)},
+		Max: geom.Point{X: max(a.Max.X, b.Max.X), Y: max(a.Max.Y, b.Max.Y)},
+	}
 }
 
 // type3Glyph runs a Type 3 glyph description (ISO 32000-1, 9.6.5): in a saved
