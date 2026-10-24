@@ -293,6 +293,7 @@ one deliberately rather than diffing it against a fresh build.
 | `t3extent_2b.pdf`      | PDF/A-2b     | Type 3 glyphs painting a shading, a form, a bar past their box   |
 | `t3scope_2b.pdf`       | PDF/A-2b     | Type 3 glyphs painting through the showing stream's resources    |
 | `strokedtext_2b.pdf`   | PDF/A-2b     | Stroked text whose pen paints past the box of its outline        |
+| `t3pen_2b.pdf`         | PDF/A-2b     | Type 3 glyphs stroking with the pen of the state showing them    |
 
 ### Must-not-fire controls
 
@@ -786,6 +787,7 @@ are covered under [Known divergences](#known-divergences).
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
 | `t3extent_2b.pdf`      | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `t3overprint_2b.pdf`   | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
+| `t3pen_2b.pdf`         | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `t3scope_2b.pdf`       | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `tableregular_ua2.pdf` | 4    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 2    | 5    |
@@ -9620,6 +9622,42 @@ The RGB output intent covers DeviceGray, and the font is embedded, so the file
 is conforming at PDF/A-2b. The other cells are the identification, metadata and
 tagging rules of their parts. veraPDF 1.30.2 and litho report the same rule set
 in all thirteen cells.
+
+### `t3pen_2b.pdf`
+
+A Type 3 glyph description runs under the graphics state of the text that shows
+it (ISO 32000-1, 9.6.5), so a stroke it paints before setting its own line
+width, cap, join or miter limit strokes with those in force where the glyph is
+shown (8.4.3.2 to 8.4.3.5). Redaction bounded each glyph once, when its font
+loaded, with the initial pen, so a glyph shown under a wide pen was bounded by
+its line alone. Now the walk records each stroke that inherits a line
+parameter, and the glyph's box grows where it is shown by the showing state's
+pen. Six corpus files hold such glyphs, 523 over 27 fonts (pdfjs `issue19624`,
+`Type3WordSpacing` and the two `ContentStream*Type3insideType3`, two veraPDF
+6-2-9 and 6-2-10 test files), but none shows them under a pen past the initial
+one: over the first ten pages of the 135 files holding a Type 3 font, no text
+and no ink box moves, and the quarter and band of the six redact as before. The
+page, 400 by 400, shows glyphs of font T3 at Tf 40, 0.04 point per glyph unit:
+
+| Glyph | Description                        | Shown at | Under    | Pen reaches        |
+| ----- | ---------------------------------- | -------- | -------- | ------------------ |
+| `L`   | strokes a line at y 500            | 130 60   | `2000 w` | y 40 to 120        |
+| `K`   | sets `40 w`, strokes the same line | 230 60   | `2000 w` | y 79.2 to 80.8     |
+| `L`   | the same glyph                     | 130 320  | `1 w`    | y 339.98 to 340.02 |
+
+The `redact-render` cell's centred quarter `[100 100 300 300]` meets 20 points
+of the first `L`'s pen, and neither its line nor the box the line gave it.
+Before, the quarter left 720 pixels of the pen inside the region on litho's half
+(the pixel check refused it, with and without the raster fallback), and the
+band, which removed the first `L` and `K`, changed 2200 pixels of the pen
+outside that box; now both scenarios pass, poppler 26.09.0 finding no ink inside
+either region. `K` sets its own pen and stays clear of the quarter, and so does
+the second `L`, under the initial pen. litho renders the page as poppler does.
+
+The font states `/Resources` of its own, and the RGB output intent covers
+DeviceGray, so the file is conforming at PDF/A-2b. The other cells are the
+identification, metadata and tagging rules of their parts. veraPDF 1.30.2 and
+litho report the same rule set in all thirteen cells.
 
 ## Scope
 
