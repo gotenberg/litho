@@ -107,6 +107,29 @@ func TestDerivedBounds_FollowTheStreamBudget(t *testing.T) {
 	}
 }
 
+// TestMaxTextVisibilityCacheBytes_FollowsTheStreamBudget pins the text
+// visibility cache bound to a sixty-fourth of the stream budget, 4 MiB at the
+// default, never below 1.
+func TestMaxTextVisibilityCacheBytes_FollowsTheStreamBudget(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		l    limits.Limits
+		want int64
+	}{
+		{"default", limits.Default(), 4 << 20},
+		{"zero reads as the default", limits.Limits{}, 4 << 20},
+		{"raised", limits.Limits{MaxStreamBytes: 1 << 30}, 16 << 20},
+		{"lowered", limits.Limits{MaxStreamBytes: 64 << 10}, 1 << 10},
+		{"below sixty-four bytes", limits.Limits{MaxStreamBytes: 3}, 1},
+	} {
+		if got := tc.l.MaxTextVisibilityCacheBytes(); got != tc.want {
+			t.Errorf("%s: MaxTextVisibilityCacheBytes() = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
 // TestValidate_RefusesNegativeAndPastCeiling pins [limits.ErrInvalid] for each
 // budget below zero or above its ceiling, and accepts zero and the ceilings.
 func TestValidate_RefusesNegativeAndPastCeiling(t *testing.T) {

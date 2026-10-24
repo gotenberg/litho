@@ -131,6 +131,24 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Language:      mcLang,
 			ExpansionText: mcExpansion,
 		})
+		if machine.RecordTextPaints || machine.RecordWhiteFills {
+			machine.RecordTextPaint(graphics.TextPaint{
+				Mode:        state.Text.Tmode,
+				Fill:        state.Fill,
+				Stroke:      state.Stroke,
+				FillAlpha:   state.FillAlpha,
+				StrokeAlpha: state.StrokeAlpha,
+				BlendMode:   state.BlendMode,
+				SoftMask:    state.SoftMask != nil,
+				Intent:      state.RenderingIntent,
+				Resources:   machine.Resources,
+				Bold:        font.Bold,
+				WhiteFill:   state.Text.Tmode != 3 && fillIsWhite(state),
+				PaintsBefore: [3]int{
+					len(machine.PathBoxes()), len(machine.ImageBoxes()), len(machine.ShadingBoxes()),
+				},
+			})
+		}
 		if runs != nil && pageWidth == 0 && font.WMode != 1 {
 			if w, ok := font.programGapWidth(cid); ok {
 				runs.recordGapWidth(len(*elements)-1, glyphPageAdvance(state, w, fontSize))
@@ -577,9 +595,15 @@ func type0TableRune(font *Font, data []byte) (rune, bool) {
 // family is left visible, as is any other space, whose white depends on a
 // conversion this predicate does not run.
 func textIsInvisible(state *graphics.State) bool {
-	if state.Text.Tmode == 3 {
-		return true
-	}
+	return state.Text.Tmode == 3 || fillIsWhite(state)
+}
+
+// fillIsWhite reports the white-on-white half of [textIsInvisible]: a fill of
+// white in a device space the content stream named directly. It judges the
+// colour alone. What lies under the glyph is a renderer's to tell, and a
+// caller holding one overturns the judgement where the glyph shows (see
+// [graphics.TextPaint.WhiteFill]).
+func fillIsWhite(state *graphics.State) bool {
 	fill := state.Fill
 	if fill.Space.Resource != "" {
 		return false

@@ -205,6 +205,19 @@ type Machine struct {
 	// [Machine.GlyphAdvances].
 	RecordGlyphAdvances bool
 	glyphAdvances       map[int][]GlyphAdvance
+	// RecordTextPaints makes the text extractor remember how it painted each
+	// text element it emits: the rendering mode, colours and transparency in
+	// force. Off by default for the same reason as [Machine.RecordImageBoxes].
+	// A caller judging whether text can be seen, or against what, needs it.
+	// See [Machine.TextPaints].
+	RecordTextPaints bool
+	textPaints       []TextPaint
+	// RecordWhiteFills makes the text extractor remember, element by element,
+	// only whether it judged the element invisible by its white fill alone:
+	// the one part of [TextPaint] text extraction reads, recorded without the
+	// colours. See [Machine.WhiteFills].
+	RecordWhiteFills bool
+	whiteFills       []bool
 	// MarkUnvaluedText makes the text extractor read as U+FFFD every code of
 	// a Type 0 font that no mapping gives a character, which ISO 32000-1,
 	// 9.10.2 gives no Unicode value. The default extraction reads such a code

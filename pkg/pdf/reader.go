@@ -874,6 +874,16 @@ func WithArtifacts() ExtractTextOption {
 // text outside the clipping path and CropBox, and artifact text (headers,
 // footers, page numbers) are silently dropped. Pass [WithHiddenText] to
 // include all text regardless of visibility.
+//
+// Text filled in device white is invisible only where it lies on white: a
+// page holding such text is drawn, the part of it the text lies in, with and
+// without its text, and the white text that changes what the page shows is
+// kept, a white heading on a coloured bar among it. Text in rendering mode 3
+// paints nothing (ISO 32000-1, 9.3.6, Table 106) and is dropped without a
+// drawing. A page that cannot be drawn, past [Limits.MaxRenderPixels] for
+// one, drops its white text as white on white. The judgement is cached per
+// page, so [Reader.ExtractTextElements], [Reader.ExtractTables] and
+// [Reader.GenerateBookmarks], which read it too, draw a page once.
 func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTextOption) (_ string, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractText", &err)
 	var o extractTextOpts
@@ -907,6 +917,12 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 		StripHidden:    !o.includeHidden && !o.includeClipPath,
 		StripClipped:   !o.includeHidden && !o.includeClipped,
 		StripArtifacts: !o.includeHidden && !o.includeArtifacts,
+	}
+	if config.StripInvisible {
+		machine.RecordWhiteFills = true
+		config.Reveal = func(ctx context.Context, elements []models.TextElement, whiteFills []bool) error {
+			return r.revealWhiteText(ctx, targetPage, elements, whiteFills)
+		}
 	}
 
 	text, err := typography.ExtractText(ctx, r.doc, machine, targetPage, ops, config)
@@ -1317,11 +1333,15 @@ func (r *Reader) ExtractTables(ctx context.Context, pageNum int) (_ []models.Tab
 	// Extract text elements via the graphics state machine.
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
 	machine.IgnoreOCVisibility = true
+	machine.RecordWhiteFills = true
 	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
 			return nil, fmt.Errorf("page %d table extraction halted: %w", pageNum, ErrFontMissing)
 		}
+		return nil, err
+	}
+	if err := r.revealWhiteText(ctx, targetPage, elements, machine.WhiteFills()); err != nil {
 		return nil, err
 	}
 
@@ -1742,7 +1762,8 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err erro
 }
 
 // ExtractTextElements extracts spatially positioned text elements from
-// the given 1-based page number.
+// the given 1-based page number. An element's Invisible reports rendering
+// mode 3 or a white fill on white, judged as [Reader.ExtractText] judges it.
 func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []models.TextElement, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractTextElements", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
@@ -1757,11 +1778,15 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []mode
 
 	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
 	machine.IgnoreOCVisibility = true
+	machine.RecordWhiteFills = true
 	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
 			return nil, fmt.Errorf("page %d text element extraction halted: %w", pageNum, ErrFontMissing)
 		}
+		return nil, err
+	}
+	if err := r.revealWhiteText(ctx, targetPage, elements, machine.WhiteFills()); err != nil {
 		return nil, err
 	}
 

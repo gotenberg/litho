@@ -418,3 +418,25 @@ const formCacheShare = 4
 func (l Limits) MaxFormCacheBytes() int64 {
 	return max(l.WithDefaults().MaxStreamBytes/formCacheShare, 1)
 }
+
+// textVisibilityCacheShare divides the stream budget into the text visibility
+// cache bound: [Limits.MaxTextVisibilityCacheBytes] is MaxStreamBytes over it.
+// That method says why the cache gets a sixty-fourth.
+const textVisibilityCacheShare = 64
+
+// MaxTextVisibilityCacheBytes returns the bound on the text visibility
+// verdicts a document keeps cached, page by page, counted in the bytes the
+// verdicts retain: a sixty-fourth of MaxStreamBytes and never below 1, so 4
+// MiB under the default budget. It is an anti-DoS guard, not spec-mandated: a
+// crafted file can set many pages of white text, each verdict costing a
+// rendering, so the cache empties rather than grows without bound. A verdict
+// larger than the bound is not cached and is worked out again at each read,
+// which costs time, never a wrong answer.
+//
+// It moves with MaxStreamBytes, which bounds the content each page's glyphs
+// come from: a verdict holds a few dozen bytes a glyph, far fewer than the
+// content bytes that drew it, so a sixty-fourth holds the verdicts of about a
+// hundred thousand glyphs, many documents' worth of white text.
+func (l Limits) MaxTextVisibilityCacheBytes() int64 {
+	return max(l.WithDefaults().MaxStreamBytes/textVisibilityCacheShare, 1)
+}

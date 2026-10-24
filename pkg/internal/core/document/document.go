@@ -29,7 +29,7 @@ import (
 // Concurrent use. Document is safe for concurrent use by multiple
 // goroutines after construction completes. All mutable caches
 // (objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache,
-// formCache),
+// formCache, textVisCache),
 // the cross-reference entries, which a resolution that misses them rewrites
 // (see [Document.XRefEntries]), and the compliance scratch state
 // (ComplianceMode, formatViolations) are protected by internal locks. The format-violation record is keyed by object number
@@ -64,7 +64,9 @@ type Document struct {
 	colorCacheBytes  int                 // bytes held in colorCache, bounded by limits.Limits.MaxColorCacheBytes
 	formCache        map[[2]int]any      // parsed form XObject content by form object number and parse variant
 	formCacheBytes   int64               // bytes retained by formCache, bounded by limits.Limits.MaxFormCacheBytes
-	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, formCache, formatViolations and xrefEntries once construction completes
+	textVisCache     map[int]any         // text visibility verdicts by page object number
+	textVisBytes     int64               // bytes retained by textVisCache, bounded by limits.Limits.MaxTextVisibilityCacheBytes
+	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, formCache, textVisCache, formatViolations and xrefEntries once construction completes
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      xrefAugmentation    // runs the raw-bytes augmentation of xrefEntries to completion at most once
 	xrefAugmented    bool                // the augmentation added or overrode an entry; protected by mu
@@ -1380,6 +1382,8 @@ func (d *Document) ClearCaches() {
 	d.colorCacheBytes = 0
 	d.formCache = nil
 	d.formCacheBytes = 0
+	d.textVisCache = nil
+	d.textVisBytes = 0
 	d.formatViolations = nil
 	d.integerOverflows = nil
 	d.mu.Unlock()
@@ -1501,6 +1505,44 @@ func (d *Document) SetCachedFormContent(objNum, variant int, c any, size int64) 
 	}
 	d.formCache[key] = c
 	d.formCacheBytes += size
+}
+
+// CachedTextVisibility returns the text visibility verdict cached for the
+// page with the given object number.
+//
+// The value is shared by every caller, so callers must treat it as read-only.
+func (d *Document) CachedTextVisibility(pageObjNum int) (any, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	v, ok := d.textVisCache[pageObjNum]
+	return v, ok
+}
+
+// SetCachedTextVisibility stores the text visibility verdict of the page with
+// the given object number, retaining size bytes, bounding the total at
+// [limits.Limits.MaxTextVisibilityCacheBytes] of the document's budgets with an
+// evict-all policy. A verdict larger than the bound is not cached, so it cannot
+// force repeated evictions.
+//
+// A verdict costs a rendering of the page, and a caller reading a page's text
+// in several ways (text, elements, tables, bookmarks) reads the same page
+// again, which is what makes the cache pay.
+func (d *Document) SetCachedTextVisibility(pageObjNum int, v any, size int64) {
+	limit := d.Limits().MaxTextVisibilityCacheBytes()
+	if size > limit {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if _, ok := d.textVisCache[pageObjNum]; ok {
+		return
+	}
+	if d.textVisCache == nil || d.textVisBytes+size > limit {
+		d.textVisCache = make(map[int]any)
+		d.textVisBytes = 0
+	}
+	d.textVisCache[pageObjNum] = v
+	d.textVisBytes += size
 }
 
 // CachedCMap returns a previously cached parsed CMap for the given stream

@@ -59,6 +59,7 @@ type Font struct {
 	WMode              int                // 0 = horizontal (default), 1 = vertical
 	DW2                [2]float64         // Default vertical metrics [vY w1] (default: [880 -1000])
 	CIDVerticalMetrics map[int][3]float64 // CID → [w1Y vX vY] from /W2 array
+	Bold               bool               // Bold by /FontWeight, the ForceBold flag or the /BaseFont name; see [fontIsBold]
 
 	// encodingCIDs maps a Type 0 font's character codes to the CIDs its /W
 	// and /W2 arrays are indexed by, when its /Encoding is an embedded or a
@@ -1583,6 +1584,7 @@ func resolveSimpleFontMetrics(ctx context.Context, doc *document.Document, fontD
 // arrays (/Widths, /W) are missing or incomplete.
 func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	font.Bold = fontIsBold(ctx, doc, fontDict, fdDict)
 	if fdDict == nil {
 		return
 	}
@@ -4172,4 +4174,44 @@ func isDingbatsGlyphName(name string) bool {
 		}
 	}
 	return true
+}
+
+// boldFontWeight is the /FontWeight a font descriptor states for a bold face:
+// ISO 32000-1, 9.8.1, Table 122 reads 700 as bold.
+const boldFontWeight = 700
+
+// forceBoldFlag is bit 19 of a font descriptor's /Flags, ForceBold (ISO
+// 32000-1, 9.8.2, Table 123).
+const forceBoldFlag = 1 << 18
+
+// fontIsBold reports a bold face: a descriptor stating a /FontWeight of 700 or
+// more or setting ForceBold (ISO 32000-1, 9.8.1 and 9.8.2, Tables 122 and
+// 123), or a /BaseFont whose style names bold, black or heavy, the style a
+// producer writes into the name of a font it describes no further (9.6.2.1).
+// A semibold or demibold face weighs 600 (Table 122) and is not bold.
+func fontIsBold(ctx context.Context, doc *document.Document, fontDict, fdDict ast.PdfDict) bool {
+	if fdDict != nil {
+		w, err := document.ResolveObject(ctx, doc, fdDict["FontWeight"])
+		if err != nil {
+			doc.Logger.Debug("resolving FontWeight", slog.Any("err", err))
+		} else if v, ok := document.Number(w); ok && v >= boldFontWeight {
+			return true
+		}
+		f, err := document.ResolveInt(ctx, doc, fdDict["Flags"])
+		if err != nil {
+			doc.Logger.Debug("resolving font descriptor Flags", slog.Any("err", err))
+		} else if int64(f)&forceBoldFlag != 0 {
+			return true
+		}
+	}
+	name, err := document.ResolveName(ctx, doc, fontDict["BaseFont"])
+	if err != nil {
+		doc.Logger.Debug("resolving BaseFont for weight", slog.Any("err", err))
+		return false
+	}
+	lower := strings.ToLower(string(name))
+	if strings.Contains(lower, "semibold") || strings.Contains(lower, "demibold") {
+		return false
+	}
+	return strings.Contains(lower, "bold") || strings.Contains(lower, "black") || strings.Contains(lower, "heavy")
 }

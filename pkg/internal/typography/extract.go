@@ -767,6 +767,31 @@ type ExtractionConfig struct {
 	StripHidden    bool // If true, completely omits text outside the graphics state clipping path (W/W*)
 	StripClipped   bool // If true, completely omits text outside the page CropBox
 	StripArtifacts bool // If true, discards text inside /Artifact marked content (headers, footers, page numbers)
+	// Reveal, when not nil and StripInvisible is set, is handed the elements
+	// before the filter runs, with [graphics.Machine.WhiteFills] parallel to
+	// them, whenever one of them is invisible by its white fill alone. It
+	// clears Invisible on those a rendering of the page shows. The caller
+	// sets RecordWhiteFills on the machine. It returns an error only when ctx
+	// ends.
+	Reveal func(ctx context.Context, elements []models.TextElement, whiteFills []bool) error
+}
+
+// HasWhiteFillInvisible reports an element invisible by its white fill
+// alone that reads as more than white space, the judgement a rendering can
+// overturn and that changes what a reader is given: whiteFills is
+// [graphics.Machine.WhiteFills], parallel to elements. A white space glyph
+// paints nothing wherever it sits, so a page whose only white text is spaces
+// needs no rendering.
+func HasWhiteFillInvisible(elements []models.TextElement, whiteFills []bool) bool {
+	if len(whiteFills) != len(elements) {
+		return false
+	}
+	for i := range elements {
+		if elements[i].Invisible && whiteFills[i] && strings.TrimSpace(elements[i].Text) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // extractElements does the work behind [ExtractElements],
@@ -1173,6 +1198,11 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 		return "", err
 	}
 	elements, runFonts := ex.elements, ex.runFonts
+	if config.StripInvisible && config.Reveal != nil && HasWhiteFillInvisible(elements, machine.WhiteFills()) {
+		if err := config.Reveal(ctx, elements, machine.WhiteFills()); err != nil {
+			return "", err
+		}
+	}
 
 	// Filter elements based on config, keeping each element's run font
 	// beside it. Fonts that do not pair one to one with the elements are
