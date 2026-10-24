@@ -285,6 +285,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formimgname_2b.pdf`   | PDF/A-2b     | A page image and a form's image under one resource name          |
 | `sharedimage_2b.pdf`   | PDF/A-2b     | Images page 1 paints beside page 2, which a redaction copies     |
 | `t3overprint_2b.pdf`   | PDF/A-2b     | Type 3 glyphs with colours of their own, shown under overprint   |
+| `whitetext_2b.pdf`     | PDF/A-2b     | White text on a bar, an image and the bare page, read by drawing |
 
 ### Must-not-fire controls
 
@@ -756,6 +757,7 @@ are covered under [Known divergences](#known-divergences).
 | `sharednested_2b.pdf`  | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `sharedicc_2b.pdf`     | 4\*  | 2\*  | 4\*  | 2\*  | 2\*  | 4\*  | 2\*  | 2\*  | 3\* | 3\*  | 4\*  | 5    | 6    |
 | `sharedimage_2b.pdf`   | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
+| `whitetext_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sharedtag_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 6    | 7    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
@@ -9327,6 +9329,37 @@ over DeviceCMYK is allowed (ISO 19005-2, 6.2.4.2 restricts it over ICCBased
 CMYK alone), so the file is conforming at PDF/A-2b. The other cells are the
 identification, metadata and tagging rules of their parts. veraPDF 1.30.2 and
 litho report the same rule set in all thirteen cells.
+
+### `whitetext_2b.pdf`
+
+Text extraction judged text filled in device white invisible, as white on a
+white page, whatever lay under it, so the default reading dropped a white
+heading on a coloured bar along with the text that really is invisible. It now
+draws the page, the part of it the white glyphs lie in, with and without its
+text, and reads the glyphs that change pixels no other glyph covers. No fixture
+here set white text over anything, so no cell exercised the drawing. One page,
+400 x 400, every glyph a Type 3 glyph painting a block in the text's colour,
+with a `/ToUnicode` map:
+
+| Run      | Drawn                                        | Default reading |
+| -------- | -------------------------------------------- | --------------- |
+| `HEAD`   | white, on a navy bar drawn before it         | read            |
+| `PHOTO`  | white, on a dark image drawn before it       | read            |
+| `BLANK`  | white, on the bare page                      | dropped         |
+| `OCR`    | white in rendering mode 3, on the navy bar   | dropped         |
+| `BODY`   | black, on the bare page                      | read            |
+| `HIDDEN` | white, on the bare page, a navy bar after it | dropped         |
+
+Before the change the default reading was `BODY` alone. poppler 26.09.0 draws
+`HEAD`, `PHOTO` and `BODY` and nothing of the other three, and `pdftotext`
+reads all six, as the text cell's options do. Rendering mode 3 paints nothing
+(ISO 32000-1, 9.3.6, Table 106), so `OCR` stays out without a drawing, and what
+the page paints after a glyph can only hide it, so `HIDDEN` does too.
+
+The RGB output intent covers the DeviceRGB colours, so the file is conforming
+at PDF/A-2b. The other cells are the identification and tagging rules of their
+parts. veraPDF 1.30.2 and litho report the same rule set in all thirteen
+cells.
 
 ## Scope
 
