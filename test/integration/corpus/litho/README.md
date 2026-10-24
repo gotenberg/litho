@@ -288,6 +288,7 @@ one deliberately rather than diffing it against a fresh build.
 | `whitetext_2b.pdf`     | PDF/A-2b     | White text on a bar, an image and the bare page, read by drawing |
 | `annotdrawn_2b.pdf`    | PDF/A-2b     | Annotations with no `/AP` drawn where their `/Rect` does not sit |
 | `sharedformimg_2b.pdf` | PDF/A-2b     | An image forms draw on both pages, which a redaction copies      |
+| `transferfb_2b.pdf`    | PDF/A-2b     | A shading under an inverting /TR, which a redaction rasterises   |
 
 ### Must-not-fire controls
 
@@ -762,6 +763,7 @@ are covered under [Known divergences](#known-divergences).
 | `sharedimage_2b.pdf`   | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `whitetext_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `sharedformimg_2b.pdf` | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
+| `transferfb_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sharedtag_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 6    | 7    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
@@ -9432,6 +9434,36 @@ the other cells are the identification and tagging rules of their parts.
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells, on the
 source and on the outputs of both redactions, whose added rules are the
 metadata ones a redaction clears by design.
+
+### `transferfb_2b.pdf`
+
+The raster fallback of a redaction (`pdf.WithRedactionRasterFallback`) draws a
+shading paint the regions cut as an image of the page, which litho's renderer
+composites with the graphics state in force applied, its transfer function
+among them (ISO 32000-1, 10.5). The image is drawn where the shading was, under
+the transfer function the content set there, so an inverting one was applied a
+second time and turned the image into its negative outside the regions (pdfjs
+`issue20722`, whose `/TR` inverts the whole page, 213,685 pixels). The image is
+now drawn under a graphics state of its own whose `/TR2 /Default` resets the
+function. `issue20722` lies outside the pdfjs render sample, so no
+`redact-render` scenario reached the construct. One 400 x 400 page draws, in one
+graphics state whose `/TR` is f(x) = 1 - x (a Type 2 function):
+
+| Paint                                      | Source colour | Shown as |
+| ------------------------------------------ | ------------- | -------- |
+| `rg` fill of the page                      | white         | black    |
+| `rg` fill, `[50 50 350 350]`               | 0 0.5 1       | orange   |
+| axial shading `sh`, clipped to the quarter | red to blue   | inverted |
+
+The centred quarter, `[100 100 300 300]`, is the shading's clip, so the
+`redact-render` cell's quarter and band regions cut it: the default mode
+refuses the shading and the fallback rasterises it. Before the fix, litho and
+poppler 26.09.0 drew the shading outside the band inverted (litho 25,255,236
+before, 230,0,19 after); after it, both draw it as before.
+
+`/TR` fails `6.2.5/1` at the PDF/A-2 and -3 levels and its counterparts at the
+other parts; the other cells are the identification and tagging rules of their
+parts. veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
 
 ## Scope
 
