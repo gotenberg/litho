@@ -1,12 +1,14 @@
 package page
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"maps"
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
@@ -166,6 +168,28 @@ func TestSubstituteWithoutUnicodeDrawsPlaceholder(t *testing.T) {
 	}
 	img, report := draw(t, f)
 	expect(t, img, 0, map[[2]int]rgb{{5, 25}: black, {11, 25}: paper, {23, 25}: paper})
+	if n := report.Unsupported[PlaceholderGlyph]; n != 2 {
+		t.Errorf("%d placeholders, want 2", n)
+	}
+}
+
+func TestSolidPlaceholdersFillTheBox(t *testing.T) {
+	t.Parallel()
+	// The same two hollow boxes, x 5..17 and 17..29: SolidPlaceholders fills
+	// their inside, which the hollow frame leaves paper.
+	objs := unembeddedType0("Identity-H", "Identity", "[2 [600] 65 [600]]", "")
+	for i := range objs {
+		objs[i] = strings.ReplaceAll(objs[i], "/Calibri", "/Melior")
+	}
+	f := fixture{page: textPage, content: "0 g BT /F 20 Tf 5 70 Td <00410002> Tj ET", objs: objs}
+	doc, pg := open(t, f.bytes(), limits.Limits{})
+	opts := f.options()
+	opts.SolidPlaceholders = true
+	c, report, err := Render(context.Background(), doc, pg, opts)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	expect(t, c.Image(), 0, map[[2]int]rgb{{5, 25}: black, {11, 25}: black, {23, 25}: black, {40, 25}: paper})
 	if n := report.Unsupported[PlaceholderGlyph]; n != 2 {
 		t.Errorf("%d placeholders, want 2", n)
 	}

@@ -176,6 +176,11 @@ type Options struct {
 	// which are not drawn on the page's raster. The render calls it on its
 	// own goroutine, in painting order.
 	Glyph func(origin geom.Point, bounds geom.Rect)
+	// SolidPlaceholders fills the whole box of each glyph drawn as a
+	// placeholder ([PlaceholderGlyph]) rather than its hollow frame: the
+	// area a reader holding the font's program may ink, which a caller
+	// reading where text paints needs whole.
+	SolidPlaceholders bool
 }
 
 // Content is a set of kinds of content, told apart by the operator that
@@ -371,6 +376,7 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		overprint:   opts.Overprint,
 		noTransfer:  opts.NoTransfer,
 		glyphShown:  opts.Glyph,
+		solid:       opts.SolidPlaceholders,
 		within:      opts.Within,
 		shared:      opts.Shared,
 		forms:       newFormCache(),

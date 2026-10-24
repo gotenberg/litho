@@ -273,6 +273,15 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 	strokes := (mode&3 == 1 || mode&3 == 2) && !r.omits(Text)
 	if g.Source == glyph.SourcePlaceholder {
 		r.report.count(PlaceholderGlyph)
+		if b, ok := g.Outline.Bounds(); ok && r.solid {
+			var p geom.Path
+			p.MoveTo(b.Min)
+			p.LineTo(geom.Point{X: b.Max.X, Y: b.Min.Y})
+			p.LineTo(b.Max)
+			p.LineTo(geom.Point{X: b.Min.X, Y: b.Max.Y})
+			p.Close()
+			g.Outline = p
+		}
 	}
 	if g.CharProc != nil {
 		if fill || strokes {

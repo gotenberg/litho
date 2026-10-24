@@ -121,6 +121,8 @@ type renderer struct {
 	// glyphShown is [Options.Glyph], nil in the renderers of pattern cells
 	// and soft masks.
 	glyphShown func(origin geom.Point, bounds geom.Rect)
+	// solid fills placeholder glyphs whole ([Options.SolidPlaceholders]).
+	solid bool
 	// unadjusted turns stroke adjustment off ([renderer.adjusts]): set in
 	// the renderer a tiling pattern's cells run in.
 	unadjusted bool

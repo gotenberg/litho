@@ -46,7 +46,11 @@ const maxCoverRects = 4096
 // show in the source, the image is drawn again after it, clipped to the
 // glyph pixels it covered, so they stay hidden as they were. Which pixels
 // those are is read from three renderings at the composite's resolution:
-// the composite, the page drawn whole, and its text drawn alone.
+// the composite, the page drawn whole, and its text drawn alone. Both draw a
+// glyph of a font the document does not embed as its whole box
+// ([page.Options.SolidPlaceholders]): a reader holding the font inks
+// anywhere inside it, where litho's hollow frame would keep only the frame
+// hidden.
 //
 // # Corpus evidence
 //
@@ -94,7 +98,7 @@ func (c *coverage) renders(ctx context.Context, a *Analysis) error {
 	}
 	budget := c.f.doc.Limits().WithDefaults().MaxRenderPixels
 	shared := c.shared
-	text, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: page.Paths | page.Images | page.Shadings | page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint})
+	text, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: page.Paths | page.Images | page.Shadings | page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint, SolidPlaceholders: true})
 	if err != nil {
 		return fmt.Errorf("rendering the page's text at %v dpi: %w", c.dpi, err)
 	}
@@ -131,7 +135,7 @@ func (c *coverage) renders(ctx context.Context, a *Analysis) error {
 			}
 		}
 	}
-	whole, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Within: within, Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint})
+	whole, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Within: within, Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint, SolidPlaceholders: true})
 	if err != nil {
 		return fmt.Errorf("rendering the page whole at %v dpi: %w", c.dpi, err)
 	}

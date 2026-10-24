@@ -2,6 +2,7 @@ package flatten
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 )
 
@@ -63,6 +64,42 @@ func TestFlattenKeepsCoveredTextHidden(t *testing.T) {
 				t.Error("the covered text left the content")
 			}
 		})
+	}
+}
+
+func TestFlattenKeepsUnembeddedGlyphsHiddenWhole(t *testing.T) {
+	t.Parallel()
+	// Helvetica is not embedded, so litho draws its glyphs as hollow boxes,
+	// while a reader holding the font inks anywhere inside them. The image
+	// drawn again over the H the blue rectangle hides has to cover its box
+	// whole: the centre of the H, inside its frame, lies within the
+	// overpaint's clip.
+	// The red square tints the rest of the word, which stays above the
+	// image untinted: flattened without the pixel comparison.
+	out, _ := flattenBytes(t, fixture{
+		content: "BT /F1 12 Tf 10 20 Td (Hidden) Tj ET 0 0 1 rg 0 0 30 50 re f q /GS1 gs 1 0 0 rg 5 5 90 40 re f Q",
+	}.bytes(), Options{})
+	// The update appends the page's new content after the original's.
+	i := bytes.LastIndex(out, []byte("(Hidden) Tj ET"))
+	if i < 0 {
+		t.Fatal("the covered text left the content")
+	}
+	after := out[i:]
+	clip, _, ok := bytes.Cut(after, []byte("W n"))
+	if !ok {
+		t.Fatal("no overpaint clip after the text")
+	}
+	// The H is 0.722 em wide (Helvetica's AFM), from x 10 at the baseline y
+	// 20: its centre is about (14.3, 24).
+	covered := false
+	for line := range bytes.Lines(clip) {
+		var x, y, w, h float64
+		if n, err := fmt.Sscanf(string(line), "%g %g %g %g re", &x, &y, &w, &h); err == nil && n == 4 {
+			covered = covered || x <= 14.3 && 14.3 <= x+w && y <= 24 && 24 <= y+h
+		}
+	}
+	if !covered {
+		t.Errorf("the overpaint clip leaves the inside of the H's box out:\n%s", clip)
 	}
 }
 
