@@ -294,6 +294,7 @@ one deliberately rather than diffing it against a fresh build.
 | `t3scope_2b.pdf`       | PDF/A-2b     | Type 3 glyphs painting through the showing stream's resources    |
 | `strokedtext_2b.pdf`   | PDF/A-2b     | Stroked text whose pen paints past the box of its outline        |
 | `t3pen_2b.pdf`         | PDF/A-2b     | Type 3 glyphs stroking with the pen of the state showing them    |
+| `usebpc_4.pdf`         | PDF/A-4      | ICC colours under /UseBlackPtComp /Default, /ON and /OFF         |
 
 ### Must-not-fire controls
 
@@ -812,6 +813,7 @@ are covered under [Known divergences](#known-divergences).
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `unclosedmc_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
+| `usebpc_4.pdf`         | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 0   | 1    | 2    | 7    | 6    |
 | `usecmap_2u.pdf`       | 5    | 2    | 8    | 3    | 5    | 8    | 3    | 5    | 5   | 5    | 6    | 9    | 10   |
 | `unembednames_2u.pdf`  | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 11   | 11   |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
@@ -2029,6 +2031,7 @@ those differences is adjudicated, and none is a litho defect left open:
 | `kidsarray_2b`, `kidsrepair_1b`                | 2 and 3, 3 | 1 by 1 golden        | poppler draws no page written in `/Kids`  |
 | `patternglyph_2b`                              | 3          | 2500                 | poppler paints sub-pixel cells solid      |
 | `smaskindata_2b`                               | 1          | 15768                | JPX opacity from the data (poppler)       |
+| `usebpc_4`                                     | 3          | 8641                 | /UseBlackPtComp /OFF ignored (poppler)    |
 
 - **Interpolation.** Each fixture enlarges a 2 by 2 or 4 by 1 image with
   `/Interpolate true` fifty times or more. poppler's bilinear filter places a
@@ -9658,6 +9661,45 @@ The font states `/Resources` of its own, and the RGB output intent covers
 DeviceGray, so the file is conforming at PDF/A-2b. The other cells are the
 identification, metadata and tagging rules of their parts. veraPDF 1.30.2 and
 litho report the same rule set in all thirteen cells.
+
+### `usebpc_4.pdf`
+
+PDF 2.0 adds the ExtGState entry `/UseBlackPtComp` (ISO 32000-2, Table 57):
+`/ON` and `/OFF` make a colour conversion use black point compensation or not,
+and `/Default`, its initial value, leaves it to the reader. litho compensates
+(ISO 18619) by default, as poppler's and PDFium's Little CMS transforms do, and
+now honours the entry: under `/OFF` the renderer converts fills, strokes,
+shadings and images without compensation. The two corpus files that carry the
+entry never reach an ICC profile under `/OFF` (pdf20 `PDF_2.0_image_with_BPC`
+is CalRGB under `/ON`, pdfjs `issue17794` states `/Default`), so this fixture
+does. Three 100 by 200 pages, `/Default`, `/ON` and `/OFF` in that order, each
+draw an 8 by 8 grey ramp (`Gy`), an 8 by 8 RGB ramp on red from black (`Rg`),
+and a fill of `0 sc`, all in version 2.1 display profiles whose tone curves
+start at a luminance of 1/8, so their black reads L\* 42.
+
+| Page | State      | Black of `Gy`, `Rg` and the fill | Sample 1 of `Gy` | Sample 4 of `Rg` |
+| ---- | ---------- | -------------------------------- | ---------------- | ---------------- |
+| 1    | `/Default` | 0, 0, 0                          | 99               | 188, 0, 0        |
+| 2    | `/ON`      | 0, 0, 0                          | 99               | 188, 0, 0        |
+| 3    | `/OFF`     | 99, 99, 99                       | 133              | 198, 99, 99      |
+
+MuPDF 1.26.10 (PyMuPDF 1.26.5) honours the entry and draws all three pages as
+litho does, pixel for pixel. poppler 26.09.0 and PDFium (pypdfium2 4.30.0)
+ignore it: they draw page 3 as pages 1 and 2, compensated, so the `render`
+cell mismatches page 3 (8641 of 20000 pixels, the black samples and the
+fill) and matches pages 1 and 2, which guard the compensated reading.
+`/OFF` sits on page 3 because the `redact-render` scenarios redact pages 1
+and 2, and judge a blanked image by its darkness over litho's images-only
+rendering: a blank under `/OFF` draws the profile's black, L\* 42, and no
+blank can go darker. The library's pixel check reads that rendering
+compensated (`page.Options.DefaultBlackPoint`), so the redaction of page 3
+succeeds; `TestRedact_BlanksUnderUseBlackPtCompOff` covers it. Image decoding
+(`Reader.DecodeImage`, `ImageMeta.Decode`) knows no graphics state and keeps
+the compensated reading.
+
+The file conforms at PDF/A-4. The other cells are the identification, header,
+metadata and tagging rules of their parts.
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
 
 ## Scope
 
