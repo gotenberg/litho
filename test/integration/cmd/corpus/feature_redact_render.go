@@ -302,13 +302,6 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     the region is a decoder difference on a CMYK ICCBased JPEG blanked in a
 //     copy, which stores litho's decode while poppler decodes the original.
 //     litho's half sees 0. Accepted as a mismatch.
-//   - pdfjs issue269_2 p1-quarter and p1-band: litho's half sees 716 and 357
-//     changed pixels outside the region, one-pixel anti-aliasing seams at the
-//     edges of the paths the redaction removed or clipped (312 and 536 on the
-//     quarter). poppler and PDFium see 0. Restoring the original forms and
-//     images in the output leaves the same 716 pixels, so the form copies do
-//     not cause them. Accepted as a mismatch until litho's seam rendering is
-//     fixed.
 //   - litho, pdfcpu, pdfjs, govdocs: 70, 20, 20 and 6 fallback scenarios
 //     checked, rasterising 112, 55, 20 and 17 units; the cell's wall time
 //     went from about 51, 20, 46 and 65 seconds to 45, 24, 85 and 121
