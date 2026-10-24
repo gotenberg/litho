@@ -132,7 +132,9 @@ type TextElement struct {
 	// mirrored matrix gives the box of the parallelogram it draws. A Type 3
 	// glyph is bounded by what its description paints and the box its d1
 	// states (9.6.5), mapped by /FontMatrix, so a glyph drawn in pixels and
-	// shown at Tf 1 is bounded where it inks, however small its font size.
+	// shown at Tf 1 is bounded where it inks, however small its font size;
+	// one whose description paints what no box holds, a shading over no clip
+	// of its own, is bounded by the clipping path it is shown under.
 	// Any other glyph is bounded by its advance along the baseline and by
 	// the font's /FontBBox across it, never less than an ascender of one em
 	// and a descender of a fifth of one. A run's box is the union of its

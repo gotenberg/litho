@@ -228,20 +228,25 @@ func TestRedactPixelCheckFindsAnImageLeftUnderATransfer(t *testing.T) {
 
 // type3ShadingPDF shows one Type 3 glyph whose description paints a shading
 // over a 300-point square while its font states a box of a hundredth of
-// that: the redaction bounds the glyph by the stated box, so a region over
-// the far side of the square selects nothing, and the square still shows
-// through it.
+// that.
 func type3ShadingPDF() []byte {
-	glyph := "1000 0 d0 q 0 0 3000 3000 re W n /Sh sh Q"
 	shading := "<< /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 1 0] " +
 		"/Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [0] /N 1 >> /Extend [true true] >>"
+	return type3GlyphPDF("1000 0 d0 q 0 0 3000 3000 re W n /Sh sh Q", "/Shading << /Sh "+shading+" >>")
+}
+
+// type3GlyphPDF shows, at 100 400 and Tf 100, the one glyph of a Type 3 font
+// whose /FontMatrix scales glyph space by a thousandth and whose /FontBBox
+// spans ten units, its description glyph run against the font resources
+// resources.
+func type3GlyphPDF(glyph, resources string) []byte {
 	return []byte("%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /T3 4 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
 		"4 0 obj\n<< /Type /Font /Subtype /Type3 /FontBBox [0 0 10 10] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /a 5 0 R >> " +
 		"/Encoding << /Type /Encoding /Differences [97 /a] >> /FirstChar 97 /LastChar 97 /Widths [1000] " +
-		"/Resources << /Shading << /Sh " + shading + " >> >> >>\nendobj\n" +
+		"/Resources << " + resources + " >> >>\nendobj\n" +
 		plantStream(5, "", glyph) +
 		plantStream(6, "", "BT /T3 100 Tf 100 400 Td (a) Tj ET") +
 		"trailer\n<< /Size 7 /Root 1 0 R >>\n%%EOF\n")
@@ -249,6 +254,47 @@ func type3ShadingPDF() []byte {
 
 // type3ShadingRegion lies over the shading, clear of the glyph's stated box.
 var type3ShadingRegion = RedactRegion{Page: 1, Rect: [4]float64{250, 550, 350, 650}}
+
+// TestRedactRemovesAType3GlyphByWhatItPaints redacts a region over the far
+// side of the shading a Type 3 glyph paints, clear of the box its font
+// states: the glyph is bounded by its painted extent, so the region selects
+// it, and the pixel check finds nothing left.
+//
+// A glyph declaring a d1 box it paints far past is bounded the same way:
+// ISO 32000-1, 9.6.5 does not clip it, and litho's renderer draws it whole.
+func TestRedactRemovesAType3GlyphByWhatItPaints(t *testing.T) {
+	ctx := context.Background()
+	for name, src := range map[string][]byte{
+		"shading over its own clip": type3ShadingPDF(),
+		"fill past its d1 box":      type3GlyphPDF("1000 0 0 0 10 10 d1 0 0 3000 3000 re f", ""),
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := NewWriter(openPixelCheck(t, src))
+			defer w.Close()
+			report, err := w.Redact(ctx, []RedactRegion{type3ShadingRegion})
+			if err != nil {
+				t.Fatalf("Redact: %v", err)
+			}
+			boxes := report.RemovedGlyphBoxes[1]
+			if len(boxes) != 1 {
+				t.Fatalf("removed glyph boxes %v, want the one glyph", boxes)
+			}
+			// The glyph paints [100 400 400 700].
+			if b := boxes[0]; b[0] > 100.5 || b[1] > 400.5 || b[2] < 399.5 || b[3] < 699.5 {
+				t.Fatalf("removed glyph box %v does not hold what the glyph paints", b)
+			}
+		})
+	}
+}
+
+// strokedTextPDF strokes a glyph with a pen 40 points wide, which reaches
+// past the box the glyph's outline is bounded by.
+func strokedTextPDF() []byte {
+	return plantedPDF("BT /F1 24 Tf 1 Tr 40 w 100 400 Td (W) Tj ET", plant{})
+}
+
+// strokedTextRegion lies over the stroke above the glyph's box.
+var strokedTextRegion = RedactRegion{Page: 1, Rect: [4]float64{100, 432, 130, 442}}
 
 func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 	ctx := context.Background()
@@ -258,13 +304,13 @@ func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 		"WithRedactionPixelCheck": {WithRedactionPixelCheck()},
 	} {
 		t.Run(name, func(t *testing.T) {
-			src := type3ShadingPDF()
+			src := strokedTextPDF()
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			_, err := w.Redact(ctx, []RedactRegion{type3ShadingRegion}, opts...)
+			_, err := w.Redact(ctx, []RedactRegion{strokedTextRegion}, opts...)
 			var pe *RedactionPixelError
 			if !errors.As(err, &pe) || pe.Inside == 0 || !errors.Is(err, ErrRedactionRefused) {
-				t.Fatalf("got %v, want the shading found inside the region", err)
+				t.Fatalf("got %v, want the stroke found inside the region", err)
 			}
 			var out bytes.Buffer
 			if err := w.WriteTo(ctx, &out); err != nil {
@@ -279,9 +325,9 @@ func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 
 func TestRedactWithoutPixelCheckSkipsIt(t *testing.T) {
 	ctx := context.Background()
-	w := NewWriter(openPixelCheck(t, type3ShadingPDF()))
+	w := NewWriter(openPixelCheck(t, strokedTextPDF()))
 	defer w.Close()
-	if _, err := w.Redact(ctx, []RedactRegion{type3ShadingRegion}, WithoutRedactionPixelCheck()); err != nil {
+	if _, err := w.Redact(ctx, []RedactRegion{strokedTextRegion}, WithoutRedactionPixelCheck()); err != nil {
 		t.Fatalf("Redact without the pixel check: %v", err)
 	}
 

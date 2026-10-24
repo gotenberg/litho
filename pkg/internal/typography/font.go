@@ -108,12 +108,15 @@ type Font struct {
 	// than assumed above the baseline as the ascender of every other font
 	// puts it. See [glyphsInkRight].
 	type3InkBelow bool
-	// type3GlyphInk maps the name of each Type 3 glyph whose ink is bounded
-	// to those bounds in glyph space, and type3FontInk is their union with
-	// /FontBBox, nil when neither bounds anything. A glyph that paints
-	// nothing maps to a box at its origin. See [Font.type3Ink].
-	type3GlyphInk map[string][4]float64
-	type3FontInk  *[4]float64
+	// type3GlyphInk maps the name of each Type 3 glyph whose description
+	// litho read to its ink in glyph space, and type3FontInk is the union of
+	// the bounded ones with /FontBBox, nil when neither bounds anything. A
+	// glyph that paints nothing maps to a box at its origin.
+	// type3FontUnbounded reports that some glyph paints past every box, so
+	// a code that names no glyph does too. See [Font.type3Ink].
+	type3GlyphInk      map[string]type3InkBounds
+	type3FontInk       *[4]float64
+	type3FontUnbounded bool
 
 	// SuppressExtraction marks a reference-only Type0 font that ISO
 	// 32000-1, 9.10.2 gives no route to Unicode: a CMap name outside
@@ -1319,9 +1322,22 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 		}
 	}
 
-	// The box a Type 3 glyph widens to when its own marks are not all
-	// bounded ([type3GlyphInkBounds]), its corners ordered.
+	// The box a code that names no glyph is bounded by, with the glyphs',
+	// its corners ordered.
 	fontBox := [4]float64{min(bbox[0], bbox[2]), min(bbox[1], bbox[3]), max(bbox[0], bbox[2]), max(bbox[1], bbox[3])}
+
+	// A glyph description's named resources come from the font's /Resources
+	// (ISO 32000-1, 9.6.5, Table 112). A font with none takes those of the
+	// stream that shows it, which differ from page to page, so its glyphs
+	// are bounded without them ([type3PaintBounds]).
+	painter := type3Painter{doc: doc}
+	if resObj, ok := fontDict["Resources"]; ok {
+		res, err := document.ResolveDict(ctx, doc, resObj)
+		if err != nil {
+			doc.Logger.Debug("resolving Type3 Resources", slog.Any("err", err))
+		}
+		painter.resources = res
+	}
 
 	// /CharProcs maps glyph names → streams containing d0/d1 width operators.
 	var guessed, ink *[4]float64
@@ -1332,7 +1348,7 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 		}
 		if cpDict != nil {
 			font.Type3Widths = make(map[string]float64, len(cpDict))
-			font.type3GlyphInk = make(map[string][4]float64, len(cpDict))
+			font.type3GlyphInk = make(map[string]type3InkBounds, len(cpDict))
 			for name, streamObj := range cpDict {
 				if err := ctx.Err(); err != nil {
 					return
@@ -1344,16 +1360,19 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 				if stream.Dict == nil {
 					continue
 				}
-				g, err := extractType3Glyph(ctx, doc, stream)
+				g, err := extractType3Glyph(ctx, doc, stream, painter)
 				if err != nil {
 					continue
 				}
 				font.Type3Widths[string(name)] = g.width
 				guessed = unionBox(guessed, g.pathBox)
 				ink = unionBox(ink, g.inkBox)
-				if box, ok := type3GlyphInkBounds(g, &fontBox); ok {
-					font.type3GlyphInk[string(name)] = box
-					font.type3FontInk = unionBox(font.type3FontInk, &box)
+				glyphInk := type3GlyphInkBounds(g)
+				font.type3GlyphInk[string(name)] = glyphInk
+				if glyphInk.unbounded {
+					font.type3FontUnbounded = true
+				} else {
+					font.type3FontInk = unionBox(font.type3FontInk, &glyphInk.box)
 				}
 			}
 		}
@@ -3856,10 +3875,10 @@ type type3Glyph struct {
 	// d1Box is the bounding box d1 states, its corners ordered, nil after d0.
 	d1Box *[4]float64
 	// paintBox is the bounds of what the description paints after d0 or
-	// d1, and paintComplete whether they account for every operator that
-	// can paint ([type3PaintBounds]).
-	paintBox      *[4]float64
-	paintComplete bool
+	// d1, and paintUnbounded whether it paints past every box in glyph
+	// space ([type3PaintBounds]).
+	paintBox       *[4]float64
+	paintUnbounded bool
 }
 
 // extractType3Glyph parses a Type 3 CharProc stream and returns the glyph
@@ -3869,7 +3888,8 @@ type type3Glyph struct {
 // d1 (setcachedevice): wx wy llx lly urx ury d1 sets width and cache bbox.
 //
 // The first operand (wx) is the horizontal advance width in glyph space units.
-func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.PdfStream) (type3Glyph, error) {
+// painter resolves what the description names ([type3PaintBounds]).
+func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.PdfStream, painter type3Painter) (type3Glyph, error) {
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		return type3Glyph{}, err
@@ -3889,7 +3909,7 @@ func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.P
 				if i == 0 {
 					g.pathBox = g.inkBox
 				}
-				g.paintBox, g.paintComplete = type3PaintBounds(ops[i+1:])
+				g.paintBox, g.paintUnbounded = type3PaintBounds(ctx, painter, ops[i+1:])
 				return g, nil
 			}
 		case "d1":
@@ -3901,7 +3921,7 @@ func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.P
 					g.inkBox = &[4]float64{llx, lly, urx, ury}
 					g.d1Box = &[4]float64{min(llx, urx), min(lly, ury), max(llx, urx), max(lly, ury)}
 				}
-				g.paintBox, g.paintComplete = type3PaintBounds(ops[i+1:])
+				g.paintBox, g.paintUnbounded = type3PaintBounds(ctx, painter, ops[i+1:])
 				return g, nil
 			}
 		}
@@ -3910,30 +3930,51 @@ func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.P
 	return type3Glyph{}, fmt.Errorf("no d0/d1 operator found in CharProc stream")
 }
 
-// type3GlyphInkBounds returns the bounds, in glyph space, of the ink of the
-// Type 3 glyph g of a font stating fontBBox: what its description paints,
-// grown to the box its d1 states, since ISO 32000-1, 9.6.5, Table 113 leaves
-// painting outside that box undefined rather than clipped. A description
-// whose marks are not all bounded grows to /FontBBox too, and is unbounded,
-// false, when neither box has area. A description that paints nothing has no
-// ink: its box is its origin.
-func type3GlyphInkBounds(g type3Glyph, fontBBox *[4]float64) ([4]float64, bool) {
+// type3InkBounds is the ink of a Type 3 glyph in glyph space: the box that
+// holds what its description paints, or unbounded when it paints what no
+// box in glyph space holds, a shading over a clip it never set or a form the
+// font's resources do not name ([type3PaintBounds]). Such a glyph is bounded
+// where it is shown, by the clip in force ([glyphInkBox]).
+type type3InkBounds struct {
+	box       [4]float64
+	unbounded bool
+}
+
+// type3GlyphInkBounds returns the ink of the Type 3 glyph g: what its
+// description paints, grown to the box its d1 states. ISO 32000-1, 9.6.5,
+// Table 113 makes painting outside that box an error rather than clipping
+// it, and litho's renderer draws such a glyph's marks unclipped
+// (render/page, renderer.type3Glyph), so the box holds every mark the
+// renderer draws. A description that paints nothing has no ink: its box is
+// its origin.
+//
+// The font's /FontBBox bounds no glyph: it is a producer's statement, and
+// the description paints where it paints. A glyph whose shading paints past
+// a box of a hundredth of its reach was redacted by that box alone, and left
+// standing under a region over its shading.
+//
+// # Corpus evidence
+//
+//   - All corpora: 133 files hold a Type 3 font; the glyphs of 18 paint a
+//     shading, a form or text, which the font's box once stood in for. Over
+//     their first ten pages, 112 of 622,716 text elements change their ink
+//     box, on 10 files; no other moves.
+//   - litho t3extent_2b.pdf: a shading and a form painting past /FontBBox;
+//     the centred quarter over them left 2204 pixels, and now removes both.
+//   - pdfjs pr4922.pdf: d1 glyphs that show text in fonts the page names, the
+//     font stating no /Resources, so each is bounded by the page.
+func type3GlyphInkBounds(g type3Glyph) type3InkBounds {
+	if g.paintUnbounded {
+		return type3InkBounds{unbounded: true}
+	}
 	ink := unionBox(nil, g.paintBox)
 	if nonDegenerate(g.d1Box) {
 		ink = unionBox(ink, g.d1Box)
 	}
-	if !g.paintComplete {
-		if nonDegenerate(fontBBox) {
-			ink = unionBox(ink, fontBBox)
-		}
-		if !nonDegenerate(ink) {
-			return [4]float64{}, false
-		}
-	}
 	if ink == nil {
-		return [4]float64{}, true
+		return type3InkBounds{}
 	}
-	return *ink, true
+	return type3InkBounds{box: *ink}
 }
 
 // unionBox returns the smallest box holding acc and box, either of which may
