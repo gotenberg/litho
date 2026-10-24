@@ -1989,23 +1989,28 @@ converts colour as the image decoder does: an uncalibrated DeviceCMYK colour
 goes through the destination profile of the page's or the document's output
 intent (ISO 32000-2, 14.11.5), else litho's built-in CMYK printer profile.
 poppler 26.09.0 converts DeviceCMYK with its own fixed formula whatever the
-intents say, so the `render` cell mismatches `pdfxonly_2b.pdf` and
-`iccbadcmyk_2b.pdf`: their intents' profiles map every CMYK colour to a
-neutral grey (the fixtures' `A2B0` tables keep a and b at 128), which litho
-paints (144 and 184 grey) and poppler does not (244 114 22 and 97 155 205 for
-the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`). `iccbadcmyk_1b.pdf`'s profile
+intents say, so the `render` cell mismatches `pdfxonly_2b.pdf`,
+`iccbadcmyk_2b.pdf` and `t3overprint_2b.pdf`: their intents' profiles map
+every CMYK colour to a neutral grey (the fixtures' `A2B0` tables keep a and b
+at 128), which litho paints (144 and 184 grey) and poppler does not (244 114 22
+and 97 155 205 for the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`).
+`t3overprint_2b.pdf`'s glyphs B and C, `0 1 1 0 k` and the text's `0 0 0 1 k`,
+are both 118 grey in litho and 237 28 36 and 35 31 32 in poppler; PDFium
+(pypdfium2 4.30.0) paints them as poppler does, and all three paint glyph A's
+DeviceGray 128 grey. `iccbadcmyk_1b.pdf`'s profile
 states version 5.0, an ICC.2 profile ISO 32000-1, 8.6.5.5, Table 67 and ISO
 32000-2 do not list, so litho reads no colour through it and paints
 DeviceCMYK through its built-in profile, and the page matches poppler.
 
-**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 31 pages
-of 27 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
-tolerance. 16 pages of 13 fixtures differ by more than 1% of the page. Each of
+**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 32 pages
+of 28 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
+tolerance. 17 pages of 14 fixtures differ by more than 1% of the page. Each of
 those differences is adjudicated, and none is a litho defect left open:
 
 | File                                           | Page       | Differing pixels     | Why                                       |
 | ---------------------------------------------- | ---------- | -------------------- | ----------------------------------------- |
 | `pdfxonly_2b`, `iccbadcmyk_2b`                 | 1          | 3600, 3933           | DeviceCMYK through the output intent      |
+| `t3overprint_2b`                               | 1          | 4608                 | DeviceCMYK through the output intent      |
 | `inlineinterp_2b`, `complex_2b`, `megafont_2b` | 1          | 148178, 14873, 14874 | interpolation half a sample off (poppler) |
 | `multipage_2b`                                 | 2          | 14873                | interpolation half a sample off (poppler) |
 | `inlinejpx_2b`                                 | 1          | 5600                 | poppler stops after an inline JPX image   |
