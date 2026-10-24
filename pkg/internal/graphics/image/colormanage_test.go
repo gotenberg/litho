@@ -15,8 +15,13 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
-// flatTable builds a lut16Type table over n inputs whose two-point grid holds
-// the grey L* at every point.
+// flatTable builds a lut16Type table over n inputs that reads every colour as
+// the grey L*, except the space's darkest colour, all components 0 or, for
+// CMYK (n = 4), all 1, which reads L* 0. Its input tables step: a component
+// at the darkest value lands on the grid's dark end and any other value on
+// its far end, and the two-point grid holds L* 0 only at the dark corner. The
+// black point a transform compensates (ISO 18619) is that darkest colour's,
+// so keeping it at L* 0 leaves every other colour on the grey.
 func flatTable(n int, lStar float64) []byte {
 	b := []byte("mft2\x00\x00\x00\x00")
 	b = append(b, byte(n), 3, 2, 0)
@@ -27,15 +32,34 @@ func flatTable(n int, lStar float64) []byte {
 		}
 		b = binary.BigEndian.AppendUint32(b, v)
 	}
-	b = binary.BigEndian.AppendUint16(b, 2)
+	b = binary.BigEndian.AppendUint16(b, 256)
 	b = binary.BigEndian.AppendUint16(b, 2)
 	for range n {
-		b = binary.BigEndian.AppendUint16(b, 0)
-		b = binary.BigEndian.AppendUint16(b, 65535)
+		for v := range 256 {
+			// A CMYK colour darkens toward 1, so its dark end is the grid's
+			// 1 and every other value steps to 0.
+			step := v > 0
+			if n == 4 {
+				step = v == 255
+			}
+			if step {
+				b = binary.BigEndian.AppendUint16(b, 65535)
+			} else {
+				b = binary.BigEndian.AppendUint16(b, 0)
+			}
+		}
 	}
-	for range 1 << n {
+	dark := 0
+	if n == 4 {
+		dark = 1<<n - 1
+	}
+	for i := range 1 << n {
+		l := lStar
+		if i == dark {
+			l = 0
+		}
 		// Legacy 16-bit Lab: L* 100 is 0xFF00, a* and b* 0 is 0x8000.
-		b = binary.BigEndian.AppendUint16(b, uint16(math.Round(lStar/100*65280)))
+		b = binary.BigEndian.AppendUint16(b, uint16(math.Round(l/100*65280)))
 		b = binary.BigEndian.AppendUint16(b, 0x8000)
 		b = binary.BigEndian.AppendUint16(b, 0x8000)
 	}
@@ -174,7 +198,7 @@ func TestDecodeImage_ICCBasedReadsItsProfile(t *testing.T) {
 		samples []byte
 		want    [][3]int
 	}{
-		{"grey", 1, flatProfile("GRAY", 25), []byte{0, 255}, [][3]int{grey25, grey25}},
+		{"grey", 1, flatProfile("GRAY", 25), []byte{128, 255}, [][3]int{grey25, grey25}},
 		{"RGB", 3, flatProfile("RGB ", 25), []byte{255, 0, 0, 0, 0, 255}, [][3]int{grey25, grey25}},
 		{"CMYK", 4, flatProfile("CMYK", 25), []byte{255, 0, 0, 0, 0, 0, 0, 255}, [][3]int{grey25, grey25}},
 		{

@@ -3,7 +3,9 @@
 //
 // A [Transform] converts colours of a profile's grey, RGB or CMYK data colour
 // space to sRGB, through the profile's lookup tables or its matrix and tone
-// curves: the reading image decoding and rendering use.
+// curves, with the profile's black point mapped onto sRGB's under every
+// intent but absolute colorimetric: the reading image decoding and rendering
+// use.
 //
 // A [Link] converts colours from one profile's data colour space to another's
 // through the profile connection space, or through a DeviceLink profile: the

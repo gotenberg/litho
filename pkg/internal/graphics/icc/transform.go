@@ -63,6 +63,10 @@ type Transform struct {
 	colorant [9]float64
 	labGrey  bool
 	srgb     *srgbTable
+	// bpcScale and bpcOffset map the profile's black point onto sRGB's in
+	// XYZ (see [Profile.NewTransform]); nil leaves XYZ as the profile reads
+	// it.
+	bpcScale, bpcOffset *[3]float64
 	// identity caches what [Transform.Identity] finds, computed on first use.
 	identity func() bool
 }
@@ -71,7 +75,48 @@ type Transform struct {
 // sRGB for the rendering intent: through the profile's AToB table for the
 // intent, else its AToB0 table, else its matrix and tone curves (ICC.1:2010,
 // 8.4 to 8.6). An absolute colorimetric intent is rendered relative.
+//
+// Under every intent but absolute colorimetric, the transform compensates
+// black points (ISO 18619:2015): it scales XYZ so that the profile's black
+// point lands on sRGB's black, XYZ 0, and the PCS white stays. ISO 32000-1,
+// 8.6.5.8 leaves how a rendering intent is honoured to the conforming
+// reader, and the viewers litho is measured against compensate: poppler
+// builds every Little CMS transform with cmsFLAGS_BLACKPOINTCOMPENSATION,
+// and PDFium reads into a version 4 sRGB profile under the perceptual intent,
+// where Little CMS compensates whatever the flags say (ICC.1:2010, 6.2: a
+// version 4 perceptual table assumes the perceptual reference medium).
+// Without it a profile whose darkest colour is lighter than sRGB black, such
+// as a YCC scanner profile whose black reads L* 10.9, draws its black as a
+// dark grey where both viewers draw black. Absolute colorimetric keeps the
+// medium's own black, as Little CMS does under that intent.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2856: its YCC image blanked by a redaction, samples 0, 128,
+//     128, drew (29, 29, 29) uncompensated; poppler and PDFium draw (0, 0, 0),
+//     as litho now does.
+//   - All corpora: of the render cell's pages, 2 move toward poppler and none
+//     away; litho matches Little CMS 2.17 with compensation to within 1 level
+//     on every ICC profile behind an image the change moves.
 func (p *Profile) NewTransform(intent Intent) (*Transform, error) {
+	t, err := p.newTransform(intent)
+	if err != nil {
+		return nil, err
+	}
+	if intent&3 != AbsoluteColorimetric {
+		// sRGB is an ideal display medium: the darkest colorant of its
+		// matrix and tone curves is XYZ 0, the destination black point of
+		// the Adobe paper's estimate, so only the source side is estimated.
+		if bs := p.sourceBlackPoint(intent & 3); bs != ([3]float64{}) {
+			t.bpcScale, t.bpcOffset = blackPointScale(bs, [3]float64{})
+		}
+	}
+	return t, nil
+}
+
+// newTransform builds the transform [Profile.NewTransform] describes,
+// without black point compensation.
+func (p *Profile) newTransform(intent Intent) (*Transform, error) {
 	n := p.Components()
 	if n == 0 {
 		return nil, fmt.Errorf("%w: data colour space %q", ErrUnsupported, p.Space)
@@ -253,6 +298,9 @@ func (t *Transform) Size() int {
 // Convert converts one colour, t.Components() bytes, to sRGB.
 func (t *Transform) Convert(in []byte) (uint8, uint8, uint8) {
 	xyz := t.xyz(in)
+	if sc, off := t.bpcScale, t.bpcOffset; sc != nil {
+		xyz = [3]float64{sc[0]*xyz[0] + off[0], sc[1]*xyz[1] + off[1], sc[2]*xyz[2] + off[2]}
+	}
 	m, s := &xyzToSRGB, t.srgb
 	return s.encode(m[0]*xyz[0] + m[1]*xyz[1] + m[2]*xyz[2]),
 		s.encode(m[3]*xyz[0] + m[4]*xyz[1] + m[5]*xyz[2]),

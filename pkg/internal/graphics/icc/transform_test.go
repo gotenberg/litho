@@ -10,7 +10,10 @@ import (
 
 // TestConvert converts colours through profiles built to exercise each kind
 // of transform, and matches LittleCMS 2.17 (relative colorimetric into its
-// built-in sRGB, unoptimised) to within one level.
+// built-in sRGB, unoptimised, with black point compensation) to within one
+// level. The grey profile's black, L* 13, lands on sRGB's black, where it
+// reads (34, 34, 34) uncompensated; the CMYK table has no perceptual table,
+// so its colorimetric black point estimate is zero and nothing moves.
 func TestConvert(t *testing.T) {
 	t.Parallel()
 
@@ -24,7 +27,7 @@ func TestConvert(t *testing.T) {
 			{{128, 64, 200}, {129, 70, 200}}, {{10, 240, 30}, {3, 244, 30}},
 		}},
 		{"grey tone curve", greyProfile(), [][2][]byte{
-			{{0}, {34, 34, 34}}, {{64}, {102, 102, 102}}, {{128}, {158, 158, 158}}, {{255}, {255, 255, 255}},
+			{{0}, {0, 0, 0}}, {{64}, {97, 97, 97}}, {{128}, {156, 156, 156}}, {{255}, {255, 255, 255}},
 		}},
 		{"lut16 into Lab", cmykProfile(), [][2][]byte{
 			{{0, 0, 0, 0}, {255, 255, 255}}, {{255, 0, 0, 0}, {0, 202, 255}},
@@ -54,6 +57,34 @@ func TestConvert(t *testing.T) {
 					break
 				}
 			}
+		}
+	}
+}
+
+// TestNewTransform_BlackPointCompensation pins that a profile whose black is
+// lighter than sRGB's draws it as black under the perceptual, relative
+// colorimetric and saturation intents, and as the medium's own dark grey
+// under absolute colorimetric, which compensates nothing.
+func TestNewTransform_BlackPointCompensation(t *testing.T) {
+	t.Parallel()
+
+	p, err := Parse(greyProfile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		intent Intent
+		want   byte
+	}{{Perceptual, 0}, {RelativeColorimetric, 0}, {Saturation, 0}, {AbsoluteColorimetric, 34}} {
+		tr, err := p.NewTransform(tc.intent)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.intent, err)
+		}
+		if r, g, b := tr.Convert([]byte{0}); r != tc.want || g != tc.want || b != tc.want {
+			t.Errorf("%s: black reads %d,%d,%d, want %d", tc.intent, r, g, b, tc.want)
+		}
+		if r, _, _ := tr.Convert([]byte{255}); r != 255 {
+			t.Errorf("%s: white reads %d, want 255", tc.intent, r)
 		}
 	}
 }

@@ -81,7 +81,7 @@ type caseDiff struct {
 	mean float64
 }
 
-func goldenDiffs(t *testing.T) map[string]caseDiff {
+func loadTransformGolden(t *testing.T) transformGolden {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", "transform_golden.json"))
 	if err != nil {
@@ -94,6 +94,12 @@ func goldenDiffs(t *testing.T) map[string]caseDiff {
 	if len(g.Cases) < 100 {
 		t.Fatalf("golden holds %d cases, so it was not read", len(g.Cases))
 	}
+	return g
+}
+
+func goldenDiffs(t *testing.T) map[string]caseDiff {
+	t.Helper()
+	g := loadTransformGolden(t)
 	channels := map[string]int{"L": 1, "RGB": 3, "LAB": 3, "CMYK": 4}
 	diffs := make(map[string]caseDiff)
 	for _, c := range g.Cases {
@@ -186,5 +192,55 @@ func TestLinkMatchesLittleCMS(t *testing.T) {
 		if d.max > goldenMaxLevels || d.mean > goldenMeanLevels {
 			t.Errorf("%s: %d levels off at most, %.3f on average", k, d.max, d.mean)
 		}
+	}
+}
+
+// TestTransformMatchesLittleCMS converts the golden's grids into sRGB through
+// [Profile.NewTransform] and compares each colour with littleCMS's reading
+// under black point compensation, which the transform applies under every
+// intent but absolute colorimetric: the grey, RGB and CMYK sources of the
+// golden, under the perceptual, relative colorimetric and saturation intents.
+func TestTransformMatchesLittleCMS(t *testing.T) {
+	t.Parallel()
+
+	g := loadTransformGolden(t)
+	channels := map[string]int{"L": 1, "RGB": 3, "CMYK": 4}
+	checked := 0
+	for _, c := range g.Cases {
+		mode := goldenProfiles[c.Src].mode
+		if c.Dst != "srgb" || !c.BPC || Intent(c.Intent) == AbsoluteColorimetric || channels[mode] == 0 {
+			continue
+		}
+		key := fmt.Sprintf("%s/%s", c.Src, Intent(c.Intent))
+		tr, err := loadGoldenProfile(t, c.Src).NewTransform(Intent(c.Intent))
+		if err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		inputs := goldenGrid(g.Levels[mode], channels[mode])
+		if len(inputs) != len(c.Outputs) {
+			t.Fatalf("%s: %d inputs for %d outputs", key, len(inputs), len(c.Outputs))
+		}
+		var d caseDiff
+		var sum float64
+		in := make([]byte, channels[mode])
+		for i, px := range inputs {
+			for k, v := range px {
+				in[k] = byte(v)
+			}
+			r, gr, b := tr.Convert(in)
+			for k, got := range []byte{r, gr, b} {
+				e := abs(int(got) - c.Outputs[i][k])
+				d.max = max(d.max, e)
+				sum += float64(e)
+			}
+		}
+		d.mean = sum / float64(3*len(inputs))
+		if d.max > goldenMaxLevels || d.mean > goldenMeanLevels {
+			t.Errorf("%s: %d levels off at most, %.3f on average", key, d.max, d.mean)
+		}
+		checked++
+	}
+	if checked < 10 {
+		t.Fatalf("checked %d cases, so the golden lost its sRGB destinations", checked)
 	}
 }
