@@ -125,6 +125,22 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 // elements, naming the index in ops of the operation that drew it. pageOps is
 // the same, except that an element a form XObject drew is named by the Do
 // that drew the form.
+//
+// # Corpus evidence
+//
+//   - All corpora, the 168 PDFs with /OCProperties, pages 1 to 20: reading
+//     optional content as the renderer reads it changes the text of two
+//     pages when the machine honours visibility, pdfjs issue269_2 page 1
+//     (the board labels and player names its membership dictionaries hide)
+//     and visibility_expressions page 1 (the dark "not B" and "not (B or
+//     C)" its /VE expressions hide; their grey copies outside optional
+//     content stay), both as poppler 26.09.0 draws them. pdf.Reader.ExtractText
+//     reads every layer and is unchanged on all 168.
+//   - All corpora, the same 168: redaction of a page-1 quarter and band,
+//     auto-tagging and PDF/A-2b and PDF/UA-1 remediation write the same
+//     bytes. Transparency flattening changes pdfjs issue269_2 only, and its
+//     output drawn by poppler moves closer to the source (342 pixels apart
+//     at 72 dpi, from 491).
 func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins, fontRefs, pageOps *[]int, runs *runRecorder) error {
 	if depth > doc.Limits().MaxFormDepth {
 		if doc != nil {
@@ -145,7 +161,12 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 	machine.Resources = resources
 	machine.FormDepth = depth
 
-	populateOCsFromResources(ctx, doc, machine, resources)
+	// The names /Properties gives optional content are the stream's own:
+	// a form names them through its /Resources (ISO 32000-1, 8.11.3.2), and
+	// handleDoOp puts the parent's back. Groups and membership dictionaries
+	// are read as the renderer reads them ([document.PropertiesOCs]), so
+	// extraction skips the text the renderer hides.
+	machine.ActiveOCs = document.PropertiesOCs(ctx, doc, resources)
 
 	// This stream starts a text item of its own, and so does every Do in it:
 	// see [runFont] stream and segment. Its marked-content operators end
@@ -352,64 +373,6 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		}
 	}
 	return nil
-}
-
-// populateOCsFromResources reads /Properties from the given resource
-// dictionary and populates machine.ActiveOCs with the visibility state of
-// each OCG referenced there. Called at the top of every content-stream
-// recursion level so nested Form XObjects inherit the correct optional-
-// content visibility.
-func populateOCsFromResources(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict) {
-	propsObj, ok := resources["Properties"]
-	if !ok {
-		return
-	}
-	propsDict, err := document.ResolveDict(ctx, doc, propsObj)
-	if err != nil {
-		doc.Logger.Debug("resolving Properties dict", slog.Any("err", err))
-	}
-	for k, v := range propsDict {
-		dict, err := document.ResolveDict(ctx, doc, v)
-		if err != nil {
-			doc.Logger.Debug("resolving Properties entry", slog.String("key", string(k)), slog.Any("err", err))
-		}
-		if dict == nil {
-			continue
-		}
-		subtypeObj, ok := dict["Type"]
-		if !ok {
-			continue
-		}
-		subtypeName, err := document.ResolveName(ctx, doc, subtypeObj)
-		if err != nil {
-			doc.Logger.Debug("resolving OCG type name", slog.Any("err", err))
-		}
-		if subtypeName != "OCG" {
-			continue
-		}
-		machine.ActiveOCs[string(k)] = ocgVisible(v, doc.OCConfig)
-	}
-}
-
-// ocgVisible returns the effective visibility of an optional-content group
-// given its indirect reference and the document's OC configuration. The
-// precedence is /Off → /On → /BaseState, matching PDF 32000 §8.11.
-func ocgVisible(v ast.PdfObject, cfg *document.OCConfig) bool {
-	if cfg == nil {
-		return true
-	}
-	ref, ok := v.(ast.PdfIndirectRef)
-	if !ok {
-		return true
-	}
-	switch {
-	case cfg.Off[ref.ObjectNum]:
-		return false
-	case cfg.On[ref.ObjectNum]:
-		return true
-	default:
-		return cfg.BaseState != "OFF"
-	}
 }
 
 // handleTfOp resolves the font named by a Tf operator through the current
@@ -687,6 +650,13 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	if subtypeName != "Form" {
 		return nil
 	}
+	// A form in optional content that is off draws nothing (ISO 32000-1,
+	// 8.11.3.3): the renderer skips it, and extraction skips its text as it
+	// skips text a hidden BDC /OC span marks, unless the caller reads hidden
+	// layers too.
+	if !machine.IgnoreOCVisibility && !document.OCVisible(ctx, doc, stream.Dict["OC"]) {
+		return nil
+	}
 
 	formOps, err := parseFormOps(ctx, doc, machine, targetObj, stream)
 	if err != nil {
@@ -737,6 +707,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// every later lookup on this page resolves against the form's resources,
 	// and every later mark is attributed to the form rather than the page.
 	prevResources := machine.Resources
+	prevOCs := machine.ActiveOCs
 	prevDepth := machine.FormDepth
 	prevOpIndex := machine.OpIndex
 	prevCalls := machine.FormCalls
@@ -752,6 +723,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// a caller could act on.
 	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil, nil, nil, runs)
 	machine.Resources = prevResources
+	machine.ActiveOCs = prevOCs
 	machine.FormDepth = prevDepth
 	machine.OpIndex = prevOpIndex
 	machine.FormCalls = prevCalls

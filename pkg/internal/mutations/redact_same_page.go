@@ -57,8 +57,9 @@ type SamePageCopy struct {
 //   - is not white in a device colour space ([models.TextElement.Invisible]);
 //   - falls inside the clipping path and the crop box
 //     ([models.TextElement.Hidden], [models.TextElement.IsClipped]), and is
-//     not in an optional-content group that is off (the extraction skips
-//     those, so the operator has codes with no glyph);
+//     not in optional content that is off, a group or a membership
+//     dictionary read as the renderer reads it ([document.OCVisible]; the
+//     extraction skips those, so the operator has codes with no glyph);
 //   - has an ink box that meets no region of the page.
 //
 // So a copy that is invisible, clipped, off the page, in a hidden layer, or
