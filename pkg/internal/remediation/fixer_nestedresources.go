@@ -140,6 +140,11 @@ func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	}
 	forms += sharedForms
 	patterns += sharedPatterns
+	resourceless, err := fixResourcelessType3Fonts(ctx, alloc, doc, pages)
+	if err != nil {
+		return nil, err
+	}
+	type3 += resourceless
 
 	var fixes []string
 	if forms > 0 {
@@ -271,9 +276,11 @@ func fixTilingPatternResources(ctx context.Context, alloc *writer.ObjAllocator, 
 	return fixed
 }
 
-// fixType3FontResources repairs every Type 3 font the page declares. The
-// target is the FONT dictionary's /Resources, which ISO 32000-1, 9.6.5 scopes
-// to the font's CharProcs.
+// fixType3FontResources repairs every Type 3 font with /Resources of its own
+// the page declares. The target is the FONT dictionary's /Resources, which ISO
+// 32000-1, 9.6.5 scopes to the font's CharProcs. A font stating none draws
+// with the resources of whatever shows it, so [fixResourcelessType3Fonts]
+// repairs it against every scope that does.
 func fixType3FontResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageRes ast.PdfDict) int {
 	fontDict, err := document.ResolveDict(ctx, doc, pageRes["Font"])
 	if err != nil || fontDict == nil {
@@ -307,6 +314,9 @@ func fixType3FontResources(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		// intent reaches a Type 3 font's /Resources through
 		// patchType3FontColorSpace.
 		own := liveDictValue(ctx, alloc, doc, fd["Resources"])
+		if own == nil {
+			continue
+		}
 		newRes := own
 		added := 0
 		for _, cpObj := range charProcs {
