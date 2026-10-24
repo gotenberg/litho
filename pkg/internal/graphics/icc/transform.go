@@ -252,6 +252,22 @@ func (t *Transform) Size() int {
 
 // Convert converts one colour, t.Components() bytes, to sRGB.
 func (t *Transform) Convert(in []byte) (uint8, uint8, uint8) {
+	xyz := t.xyz(in)
+	m, s := &xyzToSRGB, t.srgb
+	return s.encode(m[0]*xyz[0] + m[1]*xyz[1] + m[2]*xyz[2]),
+		s.encode(m[3]*xyz[0] + m[4]*xyz[1] + m[5]*xyz[2]),
+		s.encode(m[6]*xyz[0] + m[7]*xyz[1] + m[8]*xyz[2])
+}
+
+// Lab converts one colour, t.Components() bytes, to CIELAB relative to D50,
+// the profile connection space reading before any clipping to sRGB, so two
+// colours sRGB shows alike, out of its gamut, still differ.
+func (t *Transform) Lab(in []byte) (l, a, b float64) {
+	return xyzToLab(t.xyz(in))
+}
+
+// xyz converts one colour, t.Components() bytes, to XYZ relative to D50.
+func (t *Transform) xyz(in []byte) [3]float64 {
 	var xyz [3]float64
 	switch {
 	case t.lut != nil:
@@ -275,10 +291,7 @@ func (t *Transform) Convert(in []byte) (uint8, uint8, uint8) {
 		m := &t.colorant
 		xyz = [3]float64{m[0]*r + m[1]*g + m[2]*b, m[3]*r + m[4]*g + m[5]*b, m[6]*r + m[7]*g + m[8]*b}
 	}
-	m, s := &xyzToSRGB, t.srgb
-	return s.encode(m[0]*xyz[0] + m[1]*xyz[1] + m[2]*xyz[2]),
-		s.encode(m[3]*xyz[0] + m[4]*xyz[1] + m[5]*xyz[2]),
-		s.encode(m[6]*xyz[0] + m[7]*xyz[1] + m[8]*xyz[2])
+	return xyz
 }
 
 // pcs reads the pipeline's normalized outputs in its PCS encoding and returns

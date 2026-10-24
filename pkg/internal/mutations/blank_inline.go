@@ -237,7 +237,7 @@ func blankInlineSamples(
 	// An indexed image's /Decode remaps its indices, which the expansion
 	// applies itself.
 	if !isStencil && isIndexedSpace(stream.Dict["ColorSpace"]) {
-		return blankInlineIndexed(ctx, doc, inline, stream, box, zones)
+		return blankInlineIndexed(ctx, doc, page, inline, stream, box, zones)
 	}
 	if _, present := stream.Dict["Decode"]; present && !pdfimage.AppliesDecodeArray(ctx, doc, stream.Dict) {
 		return nil, fmt.Errorf("%w: it carries a /Decode the decode does not apply", ErrImageCarriesSampleEntries)
@@ -256,7 +256,11 @@ func blankInlineSamples(
 			return nil, fmt.Errorf("%w: its colour space cannot be written back inline", ErrInlineImageInRegion)
 		}
 		n := native.Components
-		if err := clearNativeSamples(box, zones, native.Data, native.Width, native.Height, n); err != nil {
+		black, err := pdfimage.NativeBlack(ctx, doc, page, stream.Dict, n)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrImageNotDecodable, err)
+		}
+		if err := clearNativeSamples(box, zones, native.Data, native.Width, native.Height, black); err != nil {
 			return nil, err
 		}
 		return inlinePictureText(ctx, inline, stream.Dict, native.Width, native.Height, inlineColorSpace(inline), native.Data)
@@ -289,14 +293,11 @@ func blankInlineSamples(
 	}, inline, stream.Dict, packStencilBits(canvas, w, h))
 }
 
-// clearNativeSamples sets every sample of a w x h image of n components per
-// pixel that the zones cover to black in its space, as [blankNative] does: 0
-// on every component, or full black ink with no colour ink for four.
-func clearNativeSamples(box graphics.ImageBox, zones []heuristics.Zone, samples []byte, w, h, n int) error {
-	black := make([]byte, n)
-	if n == 4 {
-		black[3] = 255
-	}
+// clearNativeSamples sets every sample of a w x h image that the zones cover
+// to black, the space's black [pdfimage.NativeBlack] gives, as [blankNative]
+// does; the image has one component per byte of black.
+func clearNativeSamples(box graphics.ImageBox, zones []heuristics.Zone, samples []byte, w, h int, black []byte) error {
+	n := len(black)
 	blanked, err := forCoveredSamples(box, zones, w, h, func(px, py int) {
 		i := (py*w + px) * n
 		copy(samples[i:i+n], black)
@@ -323,6 +324,7 @@ func clearNativeSamples(box graphics.ImageBox, zones []heuristics.Zone, samples 
 func blankInlineIndexed(
 	ctx context.Context,
 	doc *document.Document,
+	page *document.Page,
 	inline ast.PdfDict,
 	stream ast.PdfStream,
 	box graphics.ImageBox,
@@ -386,9 +388,12 @@ func blankInlineIndexed(
 		return nil, fmt.Errorf("%w: %w", ErrImageNotDecodable, err)
 	}
 
-	black := make([]byte, n)
-	if n == 4 {
-		black[3] = 255
+	// The base is written back as the device space it names, which a
+	// default colour space of the page stands in for (ISO 32000-1, 8.6.5.6),
+	// so its black is read as the replacement paints.
+	black, err := pdfimage.NativeBlack(ctx, doc, page, ast.PdfDict{"ColorSpace": base}, n)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrImageNotDecodable, err)
 	}
 	samples := make([]byte, width*height*n)
 	maxVal := byte(1<<depth - 1)
@@ -406,7 +411,7 @@ func blankInlineIndexed(
 			}
 		}
 	}
-	if err := clearNativeSamples(box, zones, samples, width, height, n); err != nil {
+	if err := clearNativeSamples(box, zones, samples, width, height, black); err != nil {
 		return nil, err
 	}
 	return inlinePictureText(ctx, inline, stream.Dict, width, height, base, samples)

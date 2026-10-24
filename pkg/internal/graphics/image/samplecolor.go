@@ -41,6 +41,9 @@ type SampleColor struct {
 	// which paints nothing (8.6.6.4, 8.6.6.5).
 	none    bool
 	convert func(samples []byte) (color.RGBA, error)
+	// lab reads a sample in CIELAB, before sRGB clips it, for a space an
+	// ICC transform converts; nil for every other space.
+	lab func(samples []byte) (l, a, b float64)
 }
 
 // NewSampleColor returns the converter of the colour space csObj, a family
@@ -138,6 +141,9 @@ func NewSampleColor(ctx context.Context, doc *document.Document, csObj ast.PdfOb
 			copy(pal.lookup, s[:n])
 			return pal.rgb(0), nil
 		}
+	}
+	if conv != nil {
+		sc.lab = conv.t.Lab
 	}
 	return sc, nil
 }

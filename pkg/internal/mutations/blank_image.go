@@ -168,7 +168,7 @@ func blankImage(
 				// The explicit /SMask composites straight colour (11.6.5.3).
 				pdfimage.Unpremultiply(native.Data, dataMask.Alpha, native.Width*native.Height, native.Components)
 			}
-			return dest, blankNative(alloc, dest, stream, box, zones, native)
+			return dest, blankNative(ctx, alloc, doc, page, dest, stream, box, zones, native)
 		}
 	}
 
@@ -482,10 +482,23 @@ func srgbColorSpace(alloc *writer.ObjAllocator) (ast.PdfArray, error) {
 // does not cover keeps its exact value. Going through RGB instead converted
 // every CMYK, ICC-based and CIE-based picture, and baked that reading of its
 // colour into the file: a redacted CMYK photograph changed colour outside the
-// region as well as inside it. A cleared sample is black in the space: 0 on
-// every component, or full black ink with no colour ink for four components.
+// region as well as inside it. A cleared sample is the space's black
+// ([pdfimage.NativeBlack]): 0 on every component, or full black ink with no
+// colour ink for four components, unless the space shows that sample as a
+// colour, as a YCC or Lab-like ICC profile does, where it is the sample whose
+// colour lies nearest black. Zero samples in such a space painted the blank a
+// saturated green.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2856: an image in a version 4 YCC ICC space, redacted
+//     whole, painted 26,226 green pixels where the blank stood; the inside
+//     check read them as content and the pixel check refused the redaction.
 func blankNative(
+	ctx context.Context,
 	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	page *document.Page,
 	dest int,
 	stream ast.PdfStream,
 	box graphics.ImageBox,
@@ -493,9 +506,9 @@ func blankNative(
 	native pdfimage.NativeSamples,
 ) error {
 	n := native.Components
-	black := make([]byte, n)
-	if n == 4 {
-		black[3] = 255
+	black, err := pdfimage.NativeBlack(ctx, doc, page, stream.Dict, n)
+	if err != nil {
+		return fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 	}
 	blanked, err := forCoveredSamples(box, zones, native.Width, native.Height, func(px, py int) {
 		i := (py*native.Width + px) * n
