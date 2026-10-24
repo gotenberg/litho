@@ -105,6 +105,11 @@ var costMetrics = map[string]bool{
 	metricInsideLeakedPoppler:   true,
 	metricRedactFailed:          true,
 	metricPopplerUnavailable:    true,
+	// Its raster-fallback scenarios count the same failures;
+	// fallback_scenarios_run and rasterised_units, their coverage, stay
+	// gated as good-when-higher.
+	metricFallbackOutsideChanged: true,
+	metricFallbackInsideLeaked:   true,
 
 	// The recolor cell counts the conversions that failed and the pages a
 	// check failed on. See recolorFeature.
@@ -161,6 +166,16 @@ var uncomparedMetrics = map[string]bool{
 	metricRedactIncomplete: true,
 	metricPopplerNoOracle:  true,
 	metricImageSpill:       true,
+	// The fallback scenarios' inventory, read the same way:
+	// fallback_litho_reading and fallback_resampled count scenarios where
+	// pixels changed outside show litho's own rendering of the source, which
+	// the rasterised image holds, or the image's resampling of it, both by
+	// design.
+	metricFallbackRefused:         true,
+	metricFallbackIncomplete:      true,
+	metricFallbackPopplerNoOracle: true,
+	metricFallbackLithoReading:    true,
+	metricFallbackResampled:       true,
 
 	// The recolor inventory: a refusal is the documented answer for a colour
 	// the conversion cannot convert, and a group blending space is no colour

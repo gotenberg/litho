@@ -58,6 +58,14 @@ const redactRenderSelfTolerance = 16
 // does not map to sRGB 0: the CMYK black of a printer profile is a dark grey.
 const redactRenderDarkLevel = 80
 
+// redactFallbackSuffix names a fallback scenario after the scenario it
+// re-runs: "p1-quarter+raster".
+const redactFallbackSuffix = "+raster"
+
+// redactAsDefault is what scenario returns for a fallback scenario that
+// rasterised nothing after a default run that succeeded.
+const redactAsDefault = "as-default"
+
 // redactRenderBandShare is the height of the band scenario as a share of the
 // crop box's height: about a line and a half of 10-point text on a Letter
 // page, so the band crosses one line and cuts the glyphs of the lines on
@@ -98,6 +106,29 @@ const (
 	// [redactPixelSets.spill]): blanking is exact to the sample, not to the
 	// region, so these are by design and do not fail the outside check.
 	metricImageSpill = "image_spill"
+
+	// The fallback scenarios' metrics (see [redactRenderFeature]):
+	// fallback_scenarios_run counts those the checks ran on and
+	// rasterised_units the units their reports rasterised, both coverage;
+	// fallback_refused and fallback_incomplete count those the fallback
+	// refused as well; fallback_outside_changed and fallback_inside_leaked
+	// count those a check failed on, by either renderer; and
+	// fallback_poppler_no_oracle counts those whose poppler half stands
+	// aside, as poppler_no_oracle does. fallback_litho_reading counts those
+	// where poppler drew a pixel outside the region changed that shows
+	// litho's rendering of the source, which the rasterised image holds,
+	// and fallback_resampled those where a renderer drew a pixel outside
+	// changed to a blend of the source around it, which the image's
+	// resampling makes.
+	metricFallbackScenarios       = "fallback_scenarios_run"
+	metricRasterisedUnits         = "rasterised_units"
+	metricFallbackRefused         = "fallback_refused"
+	metricFallbackIncomplete      = "fallback_incomplete"
+	metricFallbackOutsideChanged  = "fallback_outside_changed"
+	metricFallbackInsideLeaked    = "fallback_inside_leaked"
+	metricFallbackPopplerNoOracle = "fallback_poppler_no_oracle"
+	metricFallbackLithoReading    = "fallback_litho_reading"
+	metricFallbackResampled       = "fallback_resampled"
 )
 
 // redactScenario is one redaction the feature applies: one region on one
@@ -208,6 +239,23 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 // page apart from litho, counts in poppler_no_oracle and stands on litho's
 // half. A PDF matches when every scenario it ran passes.
 //
+// Each scenario runs again with [pdf.WithRedactionRasterFallback], its name
+// suffixed with [redactFallbackSuffix], unless the default mode found it
+// incomplete. The fallback draws as images at 300 dpi the form XObjects and
+// shading paints the default mode refuses, and the forms whose images it
+// would blank in place. A fallback scenario that rasterised nothing after a
+// default that succeeded wrote what the default wrote, and is not checked
+// again; one that refuses counts in fallback_refused or
+// fallback_incomplete. The others run both checks, the
+// outside check with two allowances where the images paint, since the
+// option promises they show what litho's renderer draws, at their
+// resolution: a pixel that shows litho's rendering of the source, and one
+// whose value lies between those the source shows around it
+// ([redactPixelSets.countOutside]). image_spill does not apply: the images
+// change the images-only rendering wherever they paint. Their outcomes
+// count in the fallback_* metrics and rasterised_units, and a failure fails
+// the PDF as any scenario's does.
+//
 // The inside check does not see a shape the alpha of a blanked image keeps:
 // the black of the blank paints where the soft mask lets it, as a picture
 // would. Package mutations' tests hold redaction to making the covered mask
@@ -215,15 +263,18 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //
 // Cost: two renders of each affected page before, four after per scenario
 // (litho's full, images-only over white and over black, poppler's), all at
-// 72 dpi, on pages 1 and 2 only, and one container per corpus run. The run
-// prints its wall time per corpus on stderr.
+// 72 dpi, on pages 1 and 2 only, and one container per corpus run; and for
+// each fallback scenario a second redaction, which renders the units it
+// rasterises at 300 dpi, and, when it rasterised any, the same renders
+// again. The run prints its wall time per corpus on stderr.
 //
 // The PDFs are those the render goldens cover, the same one-in-sixteen
 // sample on pdfjs and govdocs, and every PDF of a corpus whose golden
 // directory holds no render index (pdfcpu). The goldens' fonts serve
 // litho's renderings, so both renderers draw an unembedded font alike; a
 // corpus without them draws such text as placeholder boxes, which changes
-// nothing a before-and-after comparison sees.
+// nothing a before-and-after comparison sees, unless a removed glyph's box
+// reaches past the glyph box the report gives.
 //
 // # Corpus evidence
 //
@@ -258,6 +309,46 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     images in the output leaves the same 716 pixels, so the form copies do
 //     not cause them. Accepted as a mismatch until litho's seam rendering is
 //     fixed.
+//   - litho, pdfcpu, pdfjs, govdocs: 70, 20, 20 and 6 fallback scenarios
+//     checked, rasterising 112, 55, 20 and 17 units; the cell's wall time
+//     went from about 51, 20, 46 and 65 seconds to 45, 24, 85 and 121
+//     (4 workers, timed back to back on a machine at load 25 to 60).
+//   - litho, pdfcpu, pdfjs, govdocs: 114 scenarios the default mode found
+//     incomplete stayed incomplete with the fallback, every one of them.
+//   - litho usedcs_2b: a shading painted over the whole page hid the
+//     heading drawn before it, and the fallback drew its image again over
+//     the hollow frames litho draws for the unembedded Helvetica only: the
+//     glyphs poppler and the goldens' fonts draw showed through, 146
+//     pixels outside the region by litho's rendering. The flattening now
+//     reads such glyphs as their whole boxes.
+//   - litho transparency_2b band: the images stood in for forms drawn at a
+//     constant alpha of 0.8 and with the Screen blend mode, and were drawn
+//     under those states, so their colours faded: 17 pixels by poppler,
+//     663 by PDFium, none past the render tolerance by litho. They are now
+//     drawn under an opaque state.
+//   - pdfcpu FOSDEM14_HPC_devroom_14_GoCUDA page 2, VectorApple,
+//     text_annotations, litho iccgroupalt_2b, formimgname_2b, pdfjs
+//     issue2642, issue12752: up to 988 pixels per scenario that change
+//     where the images paint show litho's rendering of the source, or a
+//     blend of the source around them (formimgname_2b's checkerboard, whose
+//     cell edges fall inside the image's samples, changes 566 pixels in
+//     poppler and 1,408 in PDFium, 0 in litho).
+//   - pdfjs issue12752 (three scenarios), issue17289 band, issue2642 page
+//     2: 7, 7, 3, 2 and 1 pixels poppler draws changed that neither reading
+//     accounts for, hairlines poppler draws fainter in the source than the
+//     image holds them. PDFium 4.30.0 draws every one of those pixels the
+//     same before and after, and changes no pixel outside the region of
+//     issue12752: poppler-side, they stay mismatches.
+//   - govdocs thread_200_200427 whole page: 2 pixels inside the region at
+//     the hairline tip of the clip a blanked image is drawn through, which
+//     poppler draws at 46 to 68 where litho draws 148 to 175 and PDFium 153
+//     to 178: poppler-side, a mismatch.
+//   - pdfcpu bookletTestA6L band: 60 pixels litho draws changed below a
+//     watermark "1" in unembedded Helvetica at 112 points, whose
+//     placeholder box reaches past the glyph box the report gives. The
+//     glyph goes whole, so the change is the redaction's by design; the
+//     exclusion box is the harness's shortfall, a mismatch until removed
+//     glyphs are sized by what the renderer draws.
 type redactRenderFeature struct {
 	// workers bounds the PDFs prepared at once.
 	workers int
@@ -268,7 +359,7 @@ type redactRenderFeature struct {
 	pin func() string
 	// redact applies a scenario's region and returns its report, nil when it
 	// has none; tests replace it to plant a leak.
-	redact func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) (*pdf.RedactReport, error)
+	redact func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, opts ...pdf.RedactOption) (*pdf.RedactReport, error)
 
 	mu sync.RWMutex
 	// sampled names the PDFs in scope, nil for every PDF.
@@ -287,8 +378,8 @@ func newRedactRenderFeature() *redactRenderFeature {
 		// to find would come back as a refusal, which the cell counts but
 		// does not gate. The cell is the independent judge of the engine,
 		// with poppler as the second reading.
-		redact: func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) (*pdf.RedactReport, error) {
-			return w.Redact(ctx, []pdf.RedactRegion{region}, pdf.WithoutRedactionPixelCheck())
+		redact: func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, opts ...pdf.RedactOption) (*pdf.RedactReport, error) {
+			return w.Redact(ctx, []pdf.RedactRegion{region}, append(opts, pdf.WithoutRedactionPixelCheck())...)
 		},
 		outputs: make(map[string][]byte),
 	}
@@ -376,6 +467,11 @@ type redactRenderOutcome struct {
 	// scenario stands on litho's half.
 	PopplerSkipped string `json:"poppler_skipped,omitempty"`
 	NoOracle       bool   `json:"no_oracle,omitempty"`
+	// Fallback marks a scenario run with [pdf.WithRedactionRasterFallback]
+	// after the default mode refused it; RasterisedUnits is what its report
+	// counted ([pdf.RedactReport.RasterisedUnits]).
+	Fallback        bool `json:"fallback,omitempty"`
+	RasterisedUnits int  `json:"rasterised_units,omitempty"`
 }
 
 // redactRenderCheck is one renderer's two checks on one scenario: how many
@@ -391,6 +487,17 @@ type redactRenderCheck struct {
 	// ImageSpill counts the pixels outside the dilated region that changed
 	// because image blanking changed them (see [redactPixelSets.spill]).
 	ImageSpill int `json:"image_spill,omitempty"`
+	// LithoReading counts, on a fallback scenario's poppler half, the pixels
+	// outside the region poppler draws changed that show what litho drew of
+	// the source page: the rasterised image holds litho's rendering, so
+	// they are no change the redaction made (see [popplerCheck]).
+	LithoReading int `json:"litho_reading,omitempty"`
+	// Resampled counts, on a fallback scenario, the pixels outside the
+	// region that changed to a value between those the source shows around
+	// them: the rasterised image's samples, taken at its resolution and
+	// resampled to the page's, blend the colours on either side of an edge
+	// (see [redactPixelSets.countOutside]).
+	Resampled int `json:"resampled,omitempty"`
 	// OutsideNoOracle says why the outside check did not run.
 	OutsideNoOracle string `json:"outside_no_oracle,omitempty"`
 	// Error says why the renderer's half did not run.
@@ -577,11 +684,10 @@ func (f *redactRenderFeature) prepareOne(ctx context.Context, staging string, id
 		opts = append(opts, fonts)
 	}
 
-	before := make(map[int]*redactSource)
-	staged := make(map[int]bool)
-	// Room for every scenario up front: the staged outcomes point into the
-	// slice, which must not move.
-	res.out.Scenarios = make([]redactRenderOutcome, 0, len(redactScenarios))
+	run := &redactRun{src: src, staging: staging, in: in, idx: idx, opts: opts, before: make(map[int]*redactSource), staged: make(map[int]bool), res: res}
+	// Room for every scenario and its fallback up front: the staged outcomes
+	// point into the slice, which must not move.
+	res.out.Scenarios = make([]redactRenderOutcome, 0, 2*len(redactScenarios))
 	for si, sc := range redactScenarios {
 		if sc.page > min(pages, redactRenderMaxPages) {
 			continue
@@ -601,74 +707,128 @@ func (f *redactRenderFeature) prepareOne(ctx context.Context, staging string, id
 			continue
 		}
 		res.out.Scenarios = append(res.out.Scenarios, redactRenderOutcome{Name: sc.name, Page: sc.page, Rect: rect})
-		outcome := &res.out.Scenarios[len(res.out.Scenarios)-1]
-
-		output, report, err := f.redactOnce(ctx, src, pdf.RedactRegion{Page: sc.page, Rect: rect})
-		if err != nil {
-			outcome.Cause = err.Error()
-			switch {
-			case errors.Is(err, pdf.ErrRedactionRefused):
-				outcome.Refused = "refused"
-			case errors.Is(err, pdf.ErrRedactionIncomplete):
-				outcome.Refused = "incomplete"
-			default:
-				outcome.Failed = true
-			}
+		page := redactRunPage{pg: pg, text: text, si: si}
+		def := &res.out.Scenarios[len(res.out.Scenarios)-1]
+		// A scenario runs again with the raster fallback, which takes over
+		// the form XObjects and shading paints a default refusal names, and
+		// the forms whose images the default blanks in place. A fallback
+		// that rasterised nothing after a default that succeeded wrote what
+		// the default wrote, and is not checked twice. One the default
+		// finds incomplete is not run again: the copy its scan found lies
+		// outside what the fallback rasterises.
+		if f.scenario(ctx, run, page, def, false) == "incomplete" {
 			continue
 		}
-		after, err := pdf.Open(ctx, bytes.NewReader(output), int64(len(output)))
-		if err != nil {
-			outcome.Failed, outcome.Cause = true, fmt.Sprintf("output does not open: %v", err)
-			continue
+		res.out.Scenarios = append(res.out.Scenarios, redactRenderOutcome{Name: sc.name + redactFallbackSuffix, Page: sc.page, Rect: rect, Fallback: true})
+		if f.scenario(ctx, run, page, &res.out.Scenarios[len(res.out.Scenarios)-1], def.Refused == "" && !def.Failed) == redactAsDefault {
+			res.out.Scenarios = res.out.Scenarios[:len(res.out.Scenarios)-1]
 		}
-		geom := redactPageGeometry(pg)
-		var removed [][4]float64
-		if report != nil {
-			removed = report.RemovedGlyphBoxes[sc.page]
-		}
-		sets := newRedactPixelSets(geom, rect, text, removed)
-		check, images := lithoCheck(ctx, src, after, sc.page, sets, before, opts)
-		after.Close()
-		outcome.Litho = check
-		if check.Error != "" {
-			continue
-		}
-
-		root := fmt.Sprintf("%d.p%d", idx, sc.page)
-		lithoBefore := filepath.Join(staging, root+".litho.png")
-		if !staged[sc.page] {
-			if err := writePNG(lithoBefore, before[sc.page].full, sets.w, sets.h); err != nil {
-				outcome.PopplerSkipped = fmt.Sprintf("stage: %v", err)
-				continue
-			}
-			staged[sc.page] = true
-			res.jobs = append(res.jobs, popplerJob{PDF: in, Page: sc.page, PNG: root})
-		}
-		out := fmt.Sprintf("%d.s%d.pdf", idx, si)
-		imagesPath := filepath.Join(staging, fmt.Sprintf("%d.s%d.images.png", idx, si))
-		if err := os.WriteFile(filepath.Join(staging, out), output, 0o600); err != nil { //nolint:gosec // staging is our temp dir, out a name built from indices
-			outcome.PopplerSkipped = fmt.Sprintf("stage: %v", err)
-			continue
-		}
-		if err := writePNG(imagesPath, images, sets.w, sets.h); err != nil {
-			outcome.PopplerSkipped = fmt.Sprintf("stage: %v", err)
-			continue
-		}
-		afterRoot := fmt.Sprintf("%d.s%d", idx, si)
-		res.jobs = append(res.jobs, popplerJob{PDF: out, Page: sc.page, PNG: afterRoot})
-		res.staged = append(res.staged, redactRenderStaged{
-			outcome: outcome, sets: sets, before: root, after: afterRoot, images: imagesPath, lithoBefore: lithoBefore,
-		})
 	}
 	return res
 }
 
+// redactRun is what the scenarios of one PDF share: the source, where its
+// copy and the outputs are staged, the options litho renders with, and the
+// source pages already rendered and staged.
+type redactRun struct {
+	src     *pdf.Reader
+	staging string
+	in      string
+	idx     int
+	opts    []pdf.RenderOption
+	before  map[int]*redactSource
+	staged  map[int]bool
+	res     *redactRenderPDF
+}
+
+// redactRunPage is the source page a scenario redacts: the page, its text,
+// and the scenario's index in [redactScenarios].
+type redactRunPage struct {
+	pg   models.Page
+	text []models.TextElement
+	si   int
+}
+
+// scenario applies outcome's region, with the raster fallback when outcome
+// is a fallback scenario, runs litho's half of the checks on the output and
+// stages what poppler renders. It returns the refusal class, "" when the
+// redaction did not refuse. With onlyRasterised, a redaction that rasterised
+// nothing is not checked and returns [redactAsDefault].
+func (f *redactRenderFeature) scenario(ctx context.Context, run *redactRun, page redactRunPage, outcome *redactRenderOutcome, onlyRasterised bool) string {
+	var redactOpts []pdf.RedactOption
+	tag := ""
+	if outcome.Fallback {
+		redactOpts = append(redactOpts, pdf.WithRedactionRasterFallback())
+		tag = "r"
+	}
+	output, report, err := f.redactOnce(ctx, run.src, pdf.RedactRegion{Page: outcome.Page, Rect: outcome.Rect}, redactOpts...)
+	if err != nil {
+		outcome.Cause = err.Error()
+		switch {
+		case errors.Is(err, pdf.ErrRedactionRefused):
+			outcome.Refused = "refused"
+		case errors.Is(err, pdf.ErrRedactionIncomplete):
+			outcome.Refused = "incomplete"
+		default:
+			outcome.Failed = true
+		}
+		return outcome.Refused
+	}
+	var removed [][4]float64
+	if report != nil {
+		removed = report.RemovedGlyphBoxes[outcome.Page]
+		outcome.RasterisedUnits = report.RasterisedUnits
+	}
+	if onlyRasterised && outcome.RasterisedUnits == 0 {
+		return redactAsDefault
+	}
+	after, err := pdf.Open(ctx, bytes.NewReader(output), int64(len(output)))
+	if err != nil {
+		outcome.Failed, outcome.Cause = true, fmt.Sprintf("output does not open: %v", err)
+		return ""
+	}
+	geom := redactPageGeometry(page.pg)
+	sets := newRedactPixelSets(geom, outcome.Rect, page.text, removed)
+	check, images := lithoCheck(ctx, run.src, after, outcome.Page, sets, run.before, run.opts, outcome.Fallback)
+	after.Close()
+	outcome.Litho = check
+	if check.Error != "" {
+		return ""
+	}
+
+	root := fmt.Sprintf("%d.p%d", run.idx, outcome.Page)
+	lithoBefore := filepath.Join(run.staging, root+".litho.png")
+	if !run.staged[outcome.Page] {
+		if err := writePNG(lithoBefore, run.before[outcome.Page].full, sets.w, sets.h); err != nil {
+			outcome.PopplerSkipped = fmt.Sprintf("stage: %v", err)
+			return ""
+		}
+		run.staged[outcome.Page] = true
+		run.res.jobs = append(run.res.jobs, popplerJob{PDF: run.in, Page: outcome.Page, PNG: root})
+	}
+	afterRoot := fmt.Sprintf("%d.s%d%s", run.idx, page.si, tag)
+	imagesPath := filepath.Join(run.staging, afterRoot+".images.png")
+	if err := os.WriteFile(filepath.Join(run.staging, afterRoot+".pdf"), output, 0o600); err != nil { //nolint:gosec // staging is our temp dir, the name built from indices
+		outcome.PopplerSkipped = fmt.Sprintf("stage: %v", err)
+		return ""
+	}
+	if err := writePNG(imagesPath, images, sets.w, sets.h); err != nil {
+		outcome.PopplerSkipped = fmt.Sprintf("stage: %v", err)
+		return ""
+	}
+	run.res.jobs = append(run.res.jobs, popplerJob{PDF: afterRoot + ".pdf", Page: outcome.Page, PNG: afterRoot})
+	run.res.staged = append(run.res.staged, redactRenderStaged{
+		outcome: outcome, sets: sets, before: root, after: afterRoot, images: imagesPath, lithoBefore: lithoBefore,
+	})
+	return ""
+}
+
 // redactOnce applies one region to a Writer over src and writes the result,
 // with the redaction's report.
-func (f *redactRenderFeature) redactOnce(ctx context.Context, src *pdf.Reader, region pdf.RedactRegion) ([]byte, *pdf.RedactReport, error) {
+func (f *redactRenderFeature) redactOnce(ctx context.Context, src *pdf.Reader, region pdf.RedactRegion, opts ...pdf.RedactOption) ([]byte, *pdf.RedactReport, error) {
 	w := pdf.NewWriter(src)
 	defer w.Close()
-	report, err := f.redact(ctx, w, region)
+	report, err := f.redact(ctx, w, region, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -684,7 +844,7 @@ func (f *redactRenderFeature) redactOnce(ctx context.Context, src *pdf.Reader, r
 // the poppler half compares with. before caches the source's renderings by
 // page. It records in sets the pixels the redaction's image blanking changed
 // ([redactPixelSets.spill]).
-func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *redactPixelSets, before map[int]*redactSource, opts []pdf.RenderOption) (*redactRenderCheck, []uint8) {
+func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *redactPixelSets, before map[int]*redactSource, opts []pdf.RenderOption, fallback bool) (*redactRenderCheck, []uint8) {
 	check := &redactRenderCheck{}
 	render := func(r *pdf.Reader, extra ...pdf.RenderOption) ([]uint8, error) {
 		img, err := r.RenderPage(ctx, page, append(append([]pdf.RenderOption{pdf.WithRenderDPI(renderDPI)}, opts...), extra...)...)
@@ -726,8 +886,23 @@ func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *red
 		check.Error = fmt.Sprintf("render after, images only over black: %v", err)
 		return check, nil
 	}
-	sets.markSpill(orig.images, images)
-	check.OutsidePixels, check.Outside, check.OutsideBox, check.ImageSpill = sets.countOutside(orig.full, full, sets.w, renderChannelTolerance, renderNeighbourhood)
+	// The raster fallback's images change the images-only rendering
+	// wherever they paint, so on a fallback scenario that rendering cannot
+	// tell blanking apart from what the images took over. The images are
+	// opaque: where an image paints, the after page's images drawn over
+	// white and over black agree, and those pixels are the ones the
+	// fallback may have resampled.
+	if fallback {
+		sets.imaged = sets.grown(func(i int) bool {
+			return channelDelta(images[3*i:3*i+3], onBlack[3*i:3*i+3]) <= redactRenderSelfTolerance
+		})
+	} else {
+		sets.spill = sets.grown(func(i int) bool {
+			return channelDelta(orig.images[3*i:3*i+3], images[3*i:3*i+3]) > redactRenderSelfTolerance
+		})
+	}
+	out := sets.countOutside(orig.full, full, sets.w, nil)
+	check.OutsidePixels, check.Outside, check.OutsideBox, check.ImageSpill, check.Resampled = out.read, out.changed, out.box, out.spill, out.resampled
 	var leaks pixelBox
 	for y := range sets.h {
 		for x := range sets.w {
@@ -805,7 +980,13 @@ func popplerCheck(staging string, st redactRenderStaged) (*redactRenderCheck, st
 	if cmp := comparePage(lithoBefore, decodedRGB(orig, bw, bh)); !cmp.withinPageShare() {
 		check.OutsideNoOracle = fmt.Sprintf("poppler draws the source page apart from litho: %d of %d pixels differ", cmp.DiffPixels, cmp.Pixels)
 	} else {
-		check.OutsidePixels, check.Outside, check.OutsideBox, check.ImageSpill = o.countOutside(cropRGB(orig, bw, w, h), cropRGB(full, aw, w, h), w, renderChannelTolerance, renderNeighbourhood)
+		var reading []uint8
+		if st.outcome.Fallback {
+			reading = cropRGB(flattenOnWhite(lithoBefore, sets.w, sets.h), sets.w, w, h)
+		}
+		out := o.countOutside(cropRGB(orig, bw, w, h), cropRGB(full, aw, w, h), w, reading)
+		check.OutsidePixels, check.Outside, check.OutsideBox, check.ImageSpill = out.read, out.changed, out.box, out.spill
+		check.LithoReading, check.Resampled = out.reading, out.resampled
 	}
 	images := cropRGB(flattenOnWhite(imagesImg, sets.w, sets.h), sets.w, w, h)
 	full = cropRGB(full, aw, w, h)
@@ -887,7 +1068,9 @@ func writePNG(path string, rgb []uint8, w, h int) error {
 	return nil
 }
 
-// Compare sums the scenarios' outcomes.
+// Compare sums the scenarios' outcomes. A fallback scenario counts in the
+// fallback_* metrics, and in render_failed, redaction_failed and
+// poppler_unavailable with the rest: a failure is one whatever the mode.
 func (f *redactRenderFeature) Compare(fixtureID string, output []byte) Verdict {
 	var out redactRenderOutput
 	if err := json.Unmarshal(output, &out); err != nil {
@@ -901,16 +1084,27 @@ func (f *redactRenderFeature) Compare(fixtureID string, output []byte) Verdict {
 		metricOutsideChanged: 0, metricInsideLeaked: 0, metricOutsideChangedLitho: 0, metricOutsideChangedPoppler: 0,
 		metricInsideLeakedLitho: 0, metricInsideLeakedPoppler: 0, metricPopplerUnavailable: 0, metricPopplerNoOracle: 0,
 		metricRenderFailed: 0, metricImageSpill: 0,
+		metricFallbackScenarios: 0, metricRasterisedUnits: 0, metricFallbackRefused: 0, metricFallbackIncomplete: 0,
+		metricFallbackOutsideChanged: 0, metricFallbackInsideLeaked: 0, metricFallbackPopplerNoOracle: 0, metricFallbackLithoReading: 0,
+		metricFallbackResampled: 0,
 	}
 	checked, passed := 0, 0
 	var mismatches []json.RawMessage
 	for _, sc := range out.Scenarios {
+		// key names a metric for sc's mode: the fallback's own key when
+		// sc is a fallback scenario and the metric has one.
+		key := func(name, fallback string) string {
+			if sc.Fallback {
+				return fallback
+			}
+			return name
+		}
 		switch {
 		case sc.Refused == "refused":
-			m[metricRedactRefused]++
+			m[key(metricRedactRefused, metricFallbackRefused)]++
 			continue
 		case sc.Refused == "incomplete":
-			m[metricRedactIncomplete]++
+			m[key(metricRedactIncomplete, metricFallbackIncomplete)]++
 			continue
 		case sc.Failed:
 			m[metricRedactFailed]++
@@ -919,48 +1113,65 @@ func (f *redactRenderFeature) Compare(fixtureID string, output []byte) Verdict {
 		case sc.Litho.Error != "":
 			m[metricRenderFailed]++
 		default:
-			m[metricRedactScenarios]++
+			m[key(metricRedactScenarios, metricFallbackScenarios)]++
+			m[metricRasterisedUnits] += sc.RasterisedUnits
 			checked++
 			outside := sc.Litho.Outside > 0
 			inside := sc.Litho.Inside > 0
 			spill := sc.Litho.ImageSpill > 0
-			if outside {
+			resampled := sc.Litho.Resampled > 0
+			// The per-renderer halves count the default mode alone; a
+			// fallback failure names its renderer in the mismatch.
+			if outside && !sc.Fallback {
 				m[metricOutsideChangedLitho]++
 			}
-			if inside {
+			if inside && !sc.Fallback {
 				m[metricInsideLeakedLitho]++
 			}
 			switch {
 			case sc.Poppler == nil && sc.NoOracle:
-				m[metricPopplerNoOracle]++
+				m[key(metricPopplerNoOracle, metricFallbackPopplerNoOracle)]++
 			case sc.Poppler == nil:
 				m[metricPopplerUnavailable]++
 			case sc.Poppler.Error != "":
 				m[metricRenderFailed]++
 			default:
 				if sc.Poppler.OutsideNoOracle != "" {
-					m[metricPopplerNoOracle]++
+					m[key(metricPopplerNoOracle, metricFallbackPopplerNoOracle)]++
+				}
+				if sc.Poppler.LithoReading > 0 {
+					m[metricFallbackLithoReading]++
+				}
+				if sc.Poppler.Resampled > 0 {
+					resampled = true
 				}
 				if sc.Poppler.ImageSpill > 0 {
 					spill = true
 				}
 				if sc.Poppler.Outside > 0 {
-					m[metricOutsideChangedPoppler]++
+					if !sc.Fallback {
+						m[metricOutsideChangedPoppler]++
+					}
 					outside = true
 				}
 				if sc.Poppler.Inside > 0 {
-					m[metricInsideLeakedPoppler]++
+					if !sc.Fallback {
+						m[metricInsideLeakedPoppler]++
+					}
 					inside = true
 				}
 			}
 			if outside {
-				m[metricOutsideChanged]++
+				m[key(metricOutsideChanged, metricFallbackOutsideChanged)]++
 			}
 			if inside {
-				m[metricInsideLeaked]++
+				m[key(metricInsideLeaked, metricFallbackInsideLeaked)]++
 			}
 			if spill {
 				m[metricImageSpill]++
+			}
+			if resampled {
+				m[metricFallbackResampled]++
 			}
 			if sc.Litho.passed() && (sc.Poppler.passed() || sc.Poppler == nil && sc.NoOracle) {
 				passed++
@@ -1092,16 +1303,20 @@ type redactPixelSets struct {
 	// [renderNeighbourhood]: what the redaction changed by blanking image
 	// samples.
 	spill []bool
+	// imaged marks, on a fallback scenario, the pixels an image of the
+	// after page paints, grown by [renderNeighbourhood]: those the outside
+	// check lets show litho's reading of the source or its resampling.
+	imaged []bool
 }
 
-// markSpill records the pixels image blanking changed, from litho's
-// images-only renderings of the page before and after.
-func (s *redactPixelSets) markSpill(before, after []uint8) {
+// grown returns, w pixels a row, the pixels marked holds, the index of a
+// pixel in a raster w pixels wide, grown by [renderNeighbourhood].
+func (s *redactPixelSets) grown(marked func(i int) bool) []bool {
 	changed := make([]bool, s.w*s.h)
 	for i := range changed {
-		changed[i] = channelDelta(before[3*i:3*i+3], after[3*i:3*i+3]) > redactRenderSelfTolerance
+		changed[i] = marked(i)
 	}
-	s.spill = make([]bool, s.w*s.h)
+	mask := make([]bool, s.w*s.h)
 	for y := range s.h {
 		for x := range s.w {
 			if !changed[y*s.w+x] {
@@ -1109,11 +1324,12 @@ func (s *redactPixelSets) markSpill(before, after []uint8) {
 			}
 			for ny := max(0, y-renderNeighbourhood); ny <= min(s.h-1, y+renderNeighbourhood); ny++ {
 				for nx := max(0, x-renderNeighbourhood); nx <= min(s.w-1, x+renderNeighbourhood); nx++ {
-					s.spill[ny*s.w+nx] = true
+					mask[ny*s.w+nx] = true
 				}
 			}
 		}
 	}
+	return mask
 }
 
 // newRedactPixelSets returns the pixel sets of a scenario whose region is rect
@@ -1152,12 +1368,17 @@ func newRedactPixelSets(g redactGeometry, rect [4]float64, text []models.TextEle
 func (s *redactPixelSets) cropped(w, h int) *redactPixelSets {
 	c := *s
 	c.w, c.h = w, h
-	if s.spill != nil && w != s.w {
-		c.spill = make([]bool, w*h)
-		for y := range h {
-			copy(c.spill[y*w:(y+1)*w], s.spill[y*s.w:y*s.w+w])
+	crop := func(mask []bool) []bool {
+		if mask == nil || w == s.w {
+			return mask
 		}
+		out := make([]bool, w*h)
+		for y := range h {
+			copy(out[y*w:(y+1)*w], mask[y*s.w:y*s.w+w])
+		}
+		return out
 	}
+	c.spill, c.imaged = crop(s.spill), crop(s.imaged)
 	return &c
 }
 
@@ -1190,33 +1411,66 @@ func (s *redactPixelSets) outside(x, y int) bool {
 	return true
 }
 
+// outsideCount is what the outside check found on one rendering.
+type outsideCount struct {
+	read, changed int
+	box           [4]int
+	// spill counts the differing pixels image blanking changed, reading
+	// those whose after pixel shows the other reading of the source, and
+	// resampled those a fallback's image blends.
+	spill, reading, resampled int
+}
+
 // countOutside compares before and after, RGB rasters w pixels wide, on the
-// outside pixels: a pixel differs when a channel moves by more than tol and
-// no pixel within radius of it in the other raster lies within tol of it. A
-// differing pixel image blanking changed counts as spill, not as changed.
-func (s *redactPixelSets) countOutside(before, after []uint8, w, tol, radius int) (read, changed int, box [4]int, spill int) {
+// outside pixels under the render cell's pixel rule: a pixel differs when a
+// channel moves by more than [renderChannelTolerance] and no pixel within
+// [renderNeighbourhood] of it in the other raster lies within the tolerance
+// of it. A differing pixel image blanking changed counts as spill, not as
+// changed.
+//
+// Where a fallback scenario's images paint ([redactPixelSets.imaged]), two
+// more readings stand. The images hold litho's rendering of the source, so a
+// differing pixel that reading, when not nil, litho's rendering of the
+// source, accounts for under the same rule counts as reading, not as
+// changed. And they hold it at their own resolution, which a renderer
+// resamples to the page's: a sample straddling an edge holds a blend of both
+// sides, an edge pixel no vector rendering has, of a value between them. A
+// differing pixel whose value lies within the range the source spans around
+// it ([withinRange]), in before or in reading, counts as resampled, not as
+// changed. Elsewhere on the page nothing may change: a mark the redaction
+// lost there, a hairline among them, is no image's.
+func (s *redactPixelSets) countOutside(before, after []uint8, w int, reading []uint8) outsideCount {
+	var out outsideCount
 	var diff pixelBox
+	tol, radius := renderChannelTolerance, renderNeighbourhood
+	same := func(a, b []uint8, x, y, i int) bool {
+		return channelDelta(a[i:i+3], b[i:i+3]) <= tol ||
+			nearWithin(a[i:i+3], b, w, s.h, x, y, tol, radius) && nearWithin(b[i:i+3], a, w, s.h, x, y, tol, radius)
+	}
 	for y := range s.h {
 		for x := range s.w {
 			if !s.outside(x, y) {
 				continue
 			}
-			read++
+			out.read++
 			i := 3 * (y*w + x)
-			if channelDelta(before[i:i+3], after[i:i+3]) <= tol {
-				continue
+			switch {
+			case same(before, after, x, y, i):
+			case s.spill != nil && s.spill[y*s.w+x]:
+				out.spill++
+			case s.imaged == nil || !s.imaged[y*s.w+x]:
+				diff.add(x, y)
+			case reading != nil && same(reading, after, x, y, i):
+				out.reading++
+			case withinRange(after[i:i+3], before, w, s.h, x, y) || reading != nil && withinRange(after[i:i+3], reading, w, s.h, x, y):
+				out.resampled++
+			default:
+				diff.add(x, y)
 			}
-			if nearWithin(before[i:i+3], after, w, s.h, x, y, tol, radius) && nearWithin(after[i:i+3], before, w, s.h, x, y, tol, radius) {
-				continue
-			}
-			if s.spill != nil && s.spill[y*s.w+x] {
-				spill++
-				continue
-			}
-			diff.add(x, y)
 		}
 	}
-	return read, diff.n, diff.rect(), spill
+	out.changed, out.box = diff.n, diff.rect()
+	return out
 }
 
 // nearWithin reports whether a pixel within radius of (x, y) in img lies

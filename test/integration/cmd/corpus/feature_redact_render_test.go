@@ -120,7 +120,9 @@ func TestRedactRenderCatchesPlantedLeaks(t *testing.T) {
 		data := redactKindPDF(kind.body)
 
 		broken := newTestRedactRender()
-		broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion) (*pdf.RedactReport, error) { return nil, nil }
+		broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error) {
+			return nil, nil
+		}
 		v, sc := runRedactRender(t, broken, data, "p1-quarter")
 		if sc.Litho == nil || sc.Litho.Inside == 0 || v.Metrics[metricInsideLeaked] == 0 {
 			t.Errorf("%s: a redaction that left the content passed the inside check: %+v", kind.name, sc.Litho)
@@ -144,7 +146,7 @@ func TestRedactRenderCatchesPlantedLeaks(t *testing.T) {
 func TestRedactRenderCatchesChangesOutside(t *testing.T) {
 	t.Parallel()
 	f := newTestRedactRender()
-	f.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) (*pdf.RedactReport, error) {
+	f.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, _ ...pdf.RedactOption) (*pdf.RedactReport, error) {
 		region.Rect = [4]float64{-1000, -1000, 1000, 1000}
 		return w.Redact(ctx, []pdf.RedactRegion{region})
 	}
@@ -194,5 +196,59 @@ func TestRedactRenderIsDeterministic(t *testing.T) {
 	}
 	if a, b := run(), run(); !bytes.Equal(a, b) {
 		t.Errorf("two runs differ:\n%s\n%s", a, b)
+	}
+}
+
+// redactShadingBody is the shading kind of [redactKinds], which the default
+// mode refuses.
+const redactShadingBody = "q 80 80 40 40 re W n /Sh0 sh Q"
+
+// TestRedactRenderChecksTheRasterFallback requires a page the default mode
+// refuses, a shading the region cuts, to run again with the raster fallback
+// and pass litho's checks, and a page the default mode clears to run no
+// fallback scenario.
+func TestRedactRenderChecksTheRasterFallback(t *testing.T) {
+	t.Parallel()
+	v, sc := runRedactRender(t, newTestRedactRender(), redactKindPDF(redactShadingBody), "p1-quarter"+redactFallbackSuffix)
+	if !sc.Fallback || sc.RasterisedUnits == 0 || sc.Refused != "" || !sc.Litho.passed() {
+		t.Errorf("fallback scenario %+v (%s), want the shading rasterised and litho's checks passed", sc, sc.Cause)
+	}
+	if v.Metrics[metricFallbackScenarios] == 0 || v.Metrics[metricRasterisedUnits] == 0 || v.Metrics[metricRedactRefused] == 0 {
+		t.Errorf("metrics %v, want fallback scenarios after refusals", v.Metrics)
+	}
+
+	f := newTestRedactRender()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kind.pdf")
+	if err := os.WriteFile(path, redactKindPDF("BT /F1 24 Tf 80 95 Td (AB) Tj ET"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Prepare(context.Background(), []Fixture{{ID: "kind", PDFPath: path}}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := f.Run(context.Background(), path, "kind")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(out, []byte(redactFallbackSuffix)) {
+		t.Errorf("a page the default mode clears ran a fallback scenario: %s", out)
+	}
+}
+
+// TestRedactRenderCatchesAFallbackLeak plants a fallback that cuts only a
+// sliver of the region out of the shading it rasterises, and requires the
+// inside check to fail on the fallback scenario.
+func TestRedactRenderCatchesAFallbackLeak(t *testing.T) {
+	t.Parallel()
+	f := newTestRedactRender()
+	f.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, opts ...pdf.RedactOption) (*pdf.RedactReport, error) {
+		if len(opts) > 0 {
+			region.Rect = [4]float64{81, 81, 82, 82}
+		}
+		return w.Redact(ctx, []pdf.RedactRegion{region}, opts...)
+	}
+	v, sc := runRedactRender(t, f, redactKindPDF(redactShadingBody), "p1-quarter"+redactFallbackSuffix)
+	if sc.Litho == nil || sc.Litho.Inside == 0 || v.Metrics[metricFallbackInsideLeaked] == 0 || v.Match {
+		t.Errorf("a fallback that left the shading inside the region passed: %+v, metrics %v", sc.Litho, v.Metrics)
 	}
 }

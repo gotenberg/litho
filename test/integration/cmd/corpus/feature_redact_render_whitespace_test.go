@@ -52,7 +52,9 @@ func TestRedactRenderCatchesAWhitespaceGlyphLeftInside(t *testing.T) {
 	data := whitespaceGlyphPDF("BT /T3 24 Tf 88 88 Td ( ) Tj ET")
 
 	broken := newTestRedactRender()
-	broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion) (*pdf.RedactReport, error) { return nil, nil }
+	broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error) {
+		return nil, nil
+	}
 	v, sc := runRedactRender(t, broken, data, "p1-quarter")
 	if sc.Litho == nil || sc.Litho.Inside == 0 || v.Metrics[metricInsideLeaked] == 0 {
 		t.Errorf("a redaction that left the glyph passed the inside check: %+v", sc.Litho)
@@ -81,7 +83,7 @@ func TestRedactRenderExcludesRemovedWhitespaceGlyphs(t *testing.T) {
 	// The report is what excludes the glyph: without it, its ink above the
 	// region reads as changed outside.
 	blind := newTestRedactRender()
-	blind.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) (*pdf.RedactReport, error) {
+	blind.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, _ ...pdf.RedactOption) (*pdf.RedactReport, error) {
 		_, err := w.Redact(ctx, []pdf.RedactRegion{region})
 		return nil, err
 	}
