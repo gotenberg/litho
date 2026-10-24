@@ -140,6 +140,41 @@ func TestExtractText_WhiteTextJudgedByItsOwnInk(t *testing.T) {
 	}
 }
 
+// TestExtractText_ShadowReadOnce draws "Purpose" in black and again in white
+// a point away over a navy bar, a drop shadow: both copies show, the page
+// shows the word once, and the default reading reads it once. Reading
+// invisible text reads every copy the content stream draws.
+func TestExtractText_ShadowReadOnce(t *testing.T) {
+	t.Parallel()
+	const content = "0 0 0.5 rg 50 480 500 60 re f\n" +
+		"BT 0 g /F1 24 Tf 101.5 498.5 Td (Purpose) Tj ET\n" +
+		"BT 1 1 1 rg /F1 24 Tf 100 500 Td (Purpose) Tj ET\n" +
+		"BT 0 g /F1 12 Tf 100 300 Td (Purpose) Tj ET\n"
+	r := openLimited(t, buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	}), Limits{})
+	ctx := context.Background()
+	got, err := r.ExtractText(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The shadowed heading once, the body word set elsewhere once.
+	if n := strings.Count(got, "Purpose"); n != 2 {
+		t.Errorf("ExtractText = %q, want Purpose twice", got)
+	}
+	all, err := r.ExtractText(ctx, 1, WithInvisibleText())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(all, "Purpose"); n != 3 {
+		t.Errorf("ExtractText(WithInvisibleText) = %q, want Purpose three times", all)
+	}
+}
+
 // TestExtractText_WhiteTextUnrenderableKeepsJudgement lowers the render budget
 // below the page, so the page cannot be drawn: white text keeps the judgement
 // of its colour alone and HEADING stays out, as it did before rendering judged

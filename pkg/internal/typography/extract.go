@@ -752,6 +752,11 @@ type ExtractionConfig struct {
 	// sets RecordWhiteFills on the machine. It returns an error only when ctx
 	// ends.
 	Reveal func(ctx context.Context, elements []models.TextElement, whiteFills []bool) error
+	// DropOverdrawn reads once a run of text the page draws again over
+	// itself for an effect, a shadow or a fake bold ([dropOverdrawn]): the
+	// reading of what a page shows, which [ExtractionConfig.StripInvisible]
+	// asks for. Unset, every copy the content stream draws is read.
+	DropOverdrawn bool
 }
 
 // HasWhiteFillInvisible reports an element invisible by its white fill
@@ -1215,6 +1220,13 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 			slog.Bool("strip_clipped", config.StripClipped),
 			slog.Bool("strip_artifacts", config.StripArtifacts),
 		)
+	}
+
+	if config.DropOverdrawn {
+		filtered, filteredFonts, err = dropOverdrawn(ctx, filtered, filteredFonts)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	var pageBeads []semantics.Bead

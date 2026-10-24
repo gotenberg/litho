@@ -884,6 +884,11 @@ func WithArtifacts() ExtractTextOption {
 // one, drops its white text as white on white. The judgement is cached per
 // page, so [Reader.ExtractTextElements], [Reader.ExtractTables] and
 // [Reader.GenerateBookmarks], which read it too, draw a page once.
+//
+// By default, text the page draws again over itself for an effect, a drop
+// shadow or a fake bold drawn a few hundredths of an em apart, is read once,
+// from the copy drawn last. [WithInvisibleText] and [WithHiddenText] read
+// every copy, as [Reader.ExtractTextElements] returns every glyph.
 func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTextOption) (_ string, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractText", &err)
 	var o extractTextOpts
@@ -918,6 +923,10 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 		StripClipped:   !o.includeHidden && !o.includeClipped,
 		StripArtifacts: !o.includeHidden && !o.includeArtifacts,
 	}
+	// The reading of what the page shows reads text drawn again over
+	// itself, a shadow or a fake bold, once; one asking for invisible text
+	// asks for every glyph the content stream draws, and keeps every copy.
+	config.DropOverdrawn = config.StripInvisible
 	if config.StripInvisible {
 		machine.RecordWhiteFills = true
 		config.Reveal = func(ctx context.Context, elements []models.TextElement, whiteFills []bool) error {
