@@ -3896,9 +3896,11 @@ type type3Glyph struct {
 	d1Box *[4]float64
 	// paintBox is the bounds of what the description paints after d0 or
 	// d1, and paintUnbounded whether it paints past every box in glyph
-	// space ([type3PaintBounds]).
+	// space ([type3PaintBounds]). paintPen is the strokes it paints with
+	// the pen of the state the glyph is shown in, nil for none.
 	paintBox       *[4]float64
 	paintUnbounded bool
+	paintPen       *type3Pen
 }
 
 // extractType3Glyph parses a Type 3 CharProc stream and returns the glyph
@@ -3929,7 +3931,7 @@ func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.P
 				if i == 0 {
 					g.pathBox = g.inkBox
 				}
-				g.paintBox, g.paintUnbounded = type3PaintBounds(ctx, painter, ops[i+1:])
+				g.paintBox, g.paintUnbounded, g.paintPen = type3PaintBounds(ctx, painter, ops[i+1:])
 				return g, nil
 			}
 		case "d1":
@@ -3941,7 +3943,7 @@ func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.P
 					g.inkBox = &[4]float64{llx, lly, urx, ury}
 					g.d1Box = &[4]float64{min(llx, urx), min(lly, ury), max(llx, urx), max(lly, ury)}
 				}
-				g.paintBox, g.paintUnbounded = type3PaintBounds(ctx, painter, ops[i+1:])
+				g.paintBox, g.paintUnbounded, g.paintPen = type3PaintBounds(ctx, painter, ops[i+1:])
 				return g, nil
 			}
 		}
@@ -3954,10 +3956,14 @@ func extractType3Glyph(ctx context.Context, doc *document.Document, stream ast.P
 // holds what its description paints, or unbounded when it paints what no
 // box in glyph space holds, a shading over a clip it never set or a form the
 // font's resources do not name ([type3PaintBounds]). Such a glyph is bounded
-// where it is shown, by the clip in force ([glyphInkBox]).
+// where it is shown, by the clip in force ([glyphInkBox]). pen is the
+// strokes that box holds with the initial line parameters in place of those
+// of the state the glyph is shown in, which [type3InkBounds.penBox] grows it
+// by there; nil when it has none.
 type type3InkBounds struct {
 	box       [4]float64
 	unbounded bool
+	pen       *type3Pen
 }
 
 // type3GlyphInkBounds returns the ink of the Type 3 glyph g: what its
@@ -3995,7 +4001,7 @@ func type3GlyphInkBounds(g type3Glyph) type3InkBounds {
 	if ink == nil {
 		return type3InkBounds{}
 	}
-	return type3InkBounds{box: *ink}
+	return type3InkBounds{box: *ink, pen: g.paintPen}
 }
 
 // unionBox returns the smallest box holding acc and box, either of which may

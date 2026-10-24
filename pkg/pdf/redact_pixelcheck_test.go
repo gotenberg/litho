@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -401,16 +402,81 @@ func TestRedactBoundsAStrokeByHalfItsPen(t *testing.T) {
 }
 
 // inheritedPenPDF shows a Type 3 glyph whose description strokes a line
-// with the line width it inherits from where it is shown (ISO 32000-1,
-// 9.6.5), set there 4000 units wide in glyph space: 400 points under the
-// font matrix and size. The glyph's box is read from the description once
-// per font, with the initial line width, and misses the pen.
-func inheritedPenPDF() []byte {
-	return type3GlyphShownPDF("1000 0 d0 0 500 m 1000 500 l S", "", "4000 w ")
+// with the pen it inherits from where it is shown (ISO 32000-1, 9.6.5),
+// before set there: the line runs from 100 450 to 200 450.
+func inheritedPenPDF(before string) []byte {
+	return type3GlyphShownPDF("1000 0 d0 0 500 m 1000 500 l S", "", before)
 }
 
-// inheritedPenRegion lies over the pen, above the line it strokes.
+// inheritedPenRegion lies over the pen of a line width of 4000 units in
+// glyph space, 400 points under the font matrix and size, above the line it
+// strokes.
 var inheritedPenRegion = RedactRegion{Page: 1, Rect: [4]float64{120, 520, 180, 560}}
+
+// TestRedactBoundsAType3StrokeByTheShowingPen redacts, with the pixel check
+// off, a region over the pen a Type 3 glyph's stroke inherits from where the
+// glyph is shown, clear of its line: the glyph's box, read from its
+// description once per font, grows there by that pen, so the region selects
+// it and no ink is left, whether w or a gs (8.4.5, Table 58, /LW) sets the
+// width there.
+func TestRedactBoundsAType3StrokeByTheShowingPen(t *testing.T) {
+	ctx := context.Background()
+	for name, src := range map[string][]byte{
+		"inherited width": inheritedPenPDF("4000 w "),
+		"width set by gs": []byte(strings.Replace(string(type3GlyphShownPDF("1000 0 d0 0 500 m 1000 500 l S", "", "/GS1 gs ")),
+			"/Resources << /Font << /T3 4 0 R >> >>", "/Resources << /Font << /T3 4 0 R >> /ExtGState << /GS1 << /LW 4000 >> >> >>", 1)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := NewWriter(openPixelCheck(t, src))
+			defer w.Close()
+			report, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion}, WithoutRedactionPixelCheck())
+			if err != nil {
+				t.Fatalf("Redact: %v", err)
+			}
+			if len(report.RemovedText) != 1 {
+				t.Fatalf("removed %q, want the stroked glyph", report.RemovedText)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			if err := checkRedactionPixels(ctx, openPixelCheck(t, src), openPixelCheck(t, out.Bytes()),
+				[]RedactRegion{inheritedPenRegion}, []int{1}, redactedGlyphs{boxes: report.RemovedGlyphBoxes}); err != nil {
+				t.Fatalf("the pen is left in the region: %v", err)
+			}
+		})
+	}
+}
+
+// TestRedactKeepsAType3StrokeUnderAThinShowingPen redacts the same region
+// over a glyph shown under the initial pen, and under a wide pen the
+// description replaces with its own: the line paints nowhere near it, so the
+// glyph stays.
+func TestRedactKeepsAType3StrokeUnderAThinShowingPen(t *testing.T) {
+	ctx := context.Background()
+	for name, src := range map[string][]byte{
+		"initial pen":                  inheritedPenPDF(""),
+		"description sets its own pen": type3GlyphShownPDF("1000 0 d0 10 w 0 500 m 1000 500 l S", "", "4000 w "),
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := NewWriter(openPixelCheck(t, src))
+			defer w.Close()
+			report, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion})
+			if err != nil {
+				t.Fatalf("Redact: %v", err)
+			}
+			if len(report.RemovedText) != 0 {
+				t.Fatalf("removed %q, want the glyph kept", report.RemovedText)
+			}
+		})
+	}
+}
+
+// placeholderLeakRegion lies under the placeholder box the renderer draws
+// for [placeholderBody]'s glyph, a quarter em below its baseline, and clear
+// of the glyph's box, a fifth of an em below it: the redaction selects no
+// glyph and leaves the frame's bottom edge inside the region.
+var placeholderLeakRegion = RedactRegion{Page: 1, Rect: [4]float64{120, 348, 180, 356}}
 
 func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 	ctx := context.Background()
@@ -420,13 +486,13 @@ func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 		"WithRedactionPixelCheck": {WithRedactionPixelCheck()},
 	} {
 		t.Run(name, func(t *testing.T) {
-			src := inheritedPenPDF()
+			src := plantedPDF(placeholderBody, plant{})
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			_, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion}, opts...)
+			_, err := w.Redact(ctx, []RedactRegion{placeholderLeakRegion}, opts...)
 			var pe *RedactionPixelError
 			if !errors.As(err, &pe) || pe.Inside == 0 || !errors.Is(err, ErrRedactionRefused) {
-				t.Fatalf("got %v, want the stroke found inside the region", err)
+				t.Fatalf("got %v, want the placeholder frame found inside the region", err)
 			}
 			var out bytes.Buffer
 			if err := w.WriteTo(ctx, &out); err != nil {
@@ -441,9 +507,9 @@ func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 
 func TestRedactWithoutPixelCheckSkipsIt(t *testing.T) {
 	ctx := context.Background()
-	w := NewWriter(openPixelCheck(t, inheritedPenPDF()))
+	w := NewWriter(openPixelCheck(t, plantedPDF(placeholderBody, plant{})))
 	defer w.Close()
-	if _, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion}, WithoutRedactionPixelCheck()); err != nil {
+	if _, err := w.Redact(ctx, []RedactRegion{placeholderLeakRegion}, WithoutRedactionPixelCheck()); err != nil {
 		t.Fatalf("Redact without the pixel check: %v", err)
 	}
 

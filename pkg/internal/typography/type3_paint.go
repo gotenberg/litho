@@ -158,31 +158,32 @@ func (p type3Painter) setsFont(ctx context.Context, name ast.PdfObject) bool {
 	return ok
 }
 
-// lineParams returns the line width, line cap, line join and miter limit
-// that the graphics state parameter dictionary name sets (ISO 32000-1, 8.4.5,
-// Table 58, /LW, /LC, /LJ and /ML), each one it leaves out or that is not a
-// number as given in w, lineCap, join and miterLimit. A dictionary the
+// lineParams returns pen with the line width, line cap, line join and miter
+// limit that the graphics state parameter dictionary name sets (ISO 32000-1,
+// 8.4.5, Table 58, /LW, /LC, /LJ and /ML) in place, each marked set, and each
+// one it leaves out or that is not a number as pen holds it. A dictionary the
 // font's resources do not name sets none.
-func (p type3Painter) lineParams(ctx context.Context, name ast.PdfObject, w float64, lineCap, join int, miterLimit float64) (float64, int, int, float64) {
+func (p type3Painter) lineParams(ctx context.Context, name ast.PdfObject, pen type3PenState) type3PenState {
 	dict, err := document.ResolveDict(ctx, p.doc, p.named(ctx, "ExtGState", name))
 	if err != nil || dict == nil {
-		return w, lineCap, join, miterLimit
+		return pen
 	}
-	number := func(key ast.PdfName, v float64) float64 {
+	number := func(key ast.PdfName, param int, v float64) float64 {
 		obj, err := document.ResolveObject(ctx, p.doc, dict[key])
 		if err != nil {
 			return v
 		}
 		if f, ok := document.Number(obj); ok {
+			pen.set |= param
 			return f
 		}
 		return v
 	}
-	w = number("LW", w)
-	miterLimit = number("ML", miterLimit)
-	lineCap = int(number("LC", float64(lineCap)))
-	join = int(number("LJ", float64(join)))
-	return w, lineCap, join, miterLimit
+	pen.lw = number("LW", penWidth, pen.lw)
+	pen.ml = number("ML", penMiter, pen.ml)
+	pen.lc = int(number("LC", penCap, float64(pen.lc)))
+	pen.lj = int(number("LJ", penJoin, float64(pen.lj)))
+	return pen
 }
 
 // cachedFont resolves the font name selects into the document's font cache
@@ -240,7 +241,16 @@ func (p type3Painter) cachedFont(ctx context.Context, chain type3Chain, name ast
 // never set, an XObject or a font its resources do not name, a font on the
 // [type3Chain], paints anywhere the clip lets it: within the clip the
 // description set, or past every box when it set none.
-func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operation) (*[4]float64, bool) {
+//
+// A description runs under the graphics state of the text that shows it
+// (9.6.5), so a stroke before the w, J, j, M or gs that would set one of
+// its line parameters strokes with the one in force where the glyph is
+// shown, which this walk, run once per font, cannot know. It bounds such a
+// stroke with the initial parameters (8.4.1, Table 52), and returns it in
+// the [type3Pen], which [type3InkBounds.penBox] grows by the showing state's
+// pen where the glyph is shown. The pen is nil when every stroke sets its
+// own.
+func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operation) (*[4]float64, bool, *type3Pen) {
 	// tf says what the font of the text state is: the description's own
 	// Tf set none, so the font is the one showing the glyph; a Tf set one
 	// the walk can bound text in; or one it cannot.
@@ -251,21 +261,16 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 	)
 	type gstate struct {
 		m [6]float64
-		// lw, lc, lj and ml are the line width, cap, join and miter limit
-		// a stroke is widened by ([strokeReach]).
-		lw     float64
-		lc, lj int
-		ml     float64
+		// pen is the line width, cap, join and miter limit a stroke is
+		// widened by ([strokeReach]), and which of them the description set.
+		pen type3PenState
 		// clip is the box of the clip the description set, nil for none.
 		// A box is never changed in place, so a saved state keeps its own.
 		clip *[4]float64
 		tf   int
 	}
-	// TODO: a description runs under the graphics state of the text that
-	// shows it (9.6.5), so a stroke before any w, J, j, M or gs uses the line
-	// parameters in force there, which this walk, run once per font, reads as
-	// the initial ones; the redaction pixel check catches the pen it misses.
-	cur := gstate{m: [6]float64{1, 0, 0, 1, 0, 0}, lw: 1, ml: initialMiterLimit}
+	cur := gstate{m: [6]float64{1, 0, 0, 1, 0, 0}, pen: type3PenState{lw: 1, ml: initialMiterLimit}}
+	var pen *type3Pen
 	// The stack is bounded by the operator count of an already parsed
 	// stream, so an unbalanced q costs no more than the stream itself.
 	var stack []gstate
@@ -336,7 +341,11 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 		if path != nil {
 			box := *path
 			if stroke {
-				pad := strokeReach(cur.lw, cur.lj, cur.lc, cur.ml, cur.m, joined)
+				pc := cur.pen
+				pad := strokeReach(pc.lw, pc.lj, pc.lc, pc.ml, cur.m, joined)
+				if pc.set != penAll {
+					pen = pen.add(newType3PenStroke(box, cur.clip, pc, cur.m, joined))
+				}
 				box = [4]float64{box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad}
 			}
 			mark(box)
@@ -361,7 +370,7 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 		// A cancelled walk bounds nothing it has not seen, so the glyph
 		// paints anywhere.
 		if i%100 == 0 && i > 0 && ctx.Err() != nil { //nolint:mnd // amortized cancellation check
-			return painted, true
+			return painted, true, pen
 		}
 		switch op.Operator {
 		case "q":
@@ -380,19 +389,23 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 			}
 		case "w":
 			if len(op.Operands) >= 1 {
-				cur.lw = document.Float(op.Operands[0])
+				cur.pen.lw = document.Float(op.Operands[0])
+				cur.pen.set |= penWidth
 			}
 		case "J":
 			if len(op.Operands) >= 1 {
-				cur.lc = int(document.Float(op.Operands[0]))
+				cur.pen.lc = int(document.Float(op.Operands[0]))
+				cur.pen.set |= penCap
 			}
 		case "j":
 			if len(op.Operands) >= 1 {
-				cur.lj = int(document.Float(op.Operands[0]))
+				cur.pen.lj = int(document.Float(op.Operands[0]))
+				cur.pen.set |= penJoin
 			}
 		case "M":
 			if len(op.Operands) >= 1 {
-				cur.ml = document.Float(op.Operands[0])
+				cur.pen.ml = document.Float(op.Operands[0])
+				cur.pen.set |= penMiter
 			}
 		case "W", "W*":
 			clipping = true
@@ -438,7 +451,7 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 			if len(op.Operands) < 1 {
 				continue
 			}
-			cur.lw, cur.lc, cur.lj, cur.ml = p.lineParams(ctx, op.Operands[0], cur.lw, cur.lc, cur.lj, cur.ml)
+			cur.pen = p.lineParams(ctx, op.Operands[0], cur.pen)
 			if p.setsFont(ctx, op.Operands[0]) {
 				cur.tf = tfUnknown
 				textOK = false
@@ -490,7 +503,7 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 		}
 	}
 	if len(shown) == 0 || unbounded {
-		return painted, unbounded
+		return painted, unbounded, pen
 	}
 	var boxes map[int][][4]float64
 	if textOK {
@@ -513,7 +526,7 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 			mark(b)
 		}
 	}
-	return painted, unbounded
+	return painted, unbounded, pen
 }
 
 // type3TextBoxes runs the Type 3 glyph description ops through the text

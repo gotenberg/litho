@@ -97,7 +97,7 @@ func TestType3PaintBounds(t *testing.T) {
 			if tc.noRes {
 				painter.resources = nil
 			}
-			got, unbounded := type3PaintBounds(ctx, painter, ops)
+			got, unbounded, _ := type3PaintBounds(ctx, painter, ops)
 			if unbounded != tc.unbounded {
 				t.Errorf("unbounded = %v, want %v", unbounded, tc.unbounded)
 			}

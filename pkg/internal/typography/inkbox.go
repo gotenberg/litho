@@ -39,7 +39,11 @@ const maxFontBBoxEm = 4.0
 // pen's reach ([strokeReach]), the line parameters of the graphics state
 // through the CTM. A Type 3 glyph has no outline for the mode to stroke: a
 // painting mode runs its description (9.6.5), as litho's renderer does, so
-// its box stays what the description paints.
+// its box stays what the description paints. A description runs under the
+// graphics state it is shown in (9.6.5), so a stroke it paints without
+// setting its own line width, cap, join or miter limit strokes with those of
+// state, and its box grows by that pen ([type3InkBounds.penBox]), as litho's
+// renderer strokes it.
 //
 // The box grows by half the line width, not by the tip a miter join may
 // reach at a sharp corner of the outline (8.4.3.5): the box is the glyph's
@@ -78,12 +82,15 @@ func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fon
 	state := machine.Current()
 	corners, bounded := [4][2]float64{}, false
 	if font.Subtype == "Type3" {
-		if ink, ok := font.type3Ink(cid); ok && ink.unbounded {
-			scoped, ok := font.type3ScopedInk(ctx, machine.Doc, machine.Resources, cid)
-			if !ok || scoped.unbounded {
-				return clippedInkBox(state, originX, originY)
+		if ink, ok := font.type3Ink(cid); ok {
+			if ink.unbounded {
+				scoped, ok := font.type3ScopedInk(ctx, machine.Doc, machine.Resources, cid)
+				if !ok || scoped.unbounded {
+					return clippedInkBox(state, originX, originY)
+				}
+				ink = scoped
 			}
-			corners, bounded = type3TextCorners(font, scoped.box), true
+			corners, bounded = type3TextCorners(font, ink.penBox(state)), true
 		}
 	}
 	if !bounded {
