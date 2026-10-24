@@ -332,10 +332,14 @@ type IntentFallback struct {
 // The device colours an annotation dictionary states, its /C and /IC and the
 // /BC and /BG of its /MK (ISO 32000-1, Tables 164 and 189), are converted
 // too: a viewer draws an annotation with no appearance stream from them
-// (12.5.6), and so does [Writer.FlattenTransparency]. A transparency group
-// takes the target as its blending space (11.4.7, Table 147). A page group
-// that names none, or names a /ColorSpace resource, which outside a content
-// stream names no space (8.6.3), takes a grey or CMYK target. A page with no
+// (12.5.6), and so does [Writer.FlattenTransparency]. So is the text colour of
+// each default appearance string, the /DA of an annotation, of a form field
+// and of the interactive form (12.7.3.3), whose other operators stay: a viewer
+// regenerating a field's appearance, as [Writer.FlattenForm] does, paints its
+// text with it. A transparency group takes the target as its blending space
+// (11.4.7, Table 147). A page group that names none, or names a /ColorSpace
+// resource, which outside a content stream names no space (8.6.3), takes a
+// grey or CMYK target. A page with no
 // group gets one blending in a grey or CMYK target when the document's first
 // output intent, after the conversion, characterises no device of the
 // target's family, as under [WithoutOutputIntent]: the reader's device would

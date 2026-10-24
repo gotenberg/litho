@@ -74,7 +74,9 @@ type Skip struct {
 // converted: its colour computes an opacity, which a conversion would change.
 // The device colours an annotation dictionary states, which a viewer draws an
 // annotation with no appearance stream from, are converted with them
-// ([session.annotationColours]).
+// ([session.annotationColours]), and so is the text colour of the default
+// appearance strings of the document's interactive form and its fields
+// ([session.rewriteAcroForm]).
 //
 // It returns an error only for an invalid target or a cancelled context. An
 // object it cannot convert is left and listed in the report.
@@ -112,6 +114,9 @@ func Content(ctx context.Context, doc *document.Document, alloc *writer.ObjAlloc
 	}
 	if err := s.Pages(ctx, pages); err != nil {
 		return nil, err
+	}
+	if err := s.s.rewriteAcroForm(ctx); err != nil {
+		return nil, fmt.Errorf("recolouring the interactive form: %w", err)
 	}
 	return s.Report(), nil
 }
@@ -501,7 +506,11 @@ func (s *session) rewriteAnnotations(ctx context.Context, obj ast.PdfObject) (as
 // DeviceGray, DeviceRGB or DeviceCMYK. A viewer draws an annotation with no
 // appearance stream from them, as litho's renderer and a flattening do
 // (12.5.6), so a colour left in another space would paint outside the target.
-// A /MK written as an object of its own is rewritten in place.
+// The colour operators of its /DA, the default appearance a widget's or a free
+// text annotation's text is drawn with (12.7.3.3, 12.5.6.6), convert too
+// ([session.daColour]), since a viewer regenerating the appearance, as a form
+// flattening does, paints with them. A /MK or /DA written as an object of its
+// own is rewritten in place.
 //
 // The target's values are written with its component count, which these
 // arrays read as the device family of that count: an ICCBased target's
@@ -525,6 +534,11 @@ func (s *session) annotationColours(ctx context.Context, annot ast.PdfDict) (ast
 		if v, ok := s.deviceColour(ctx, annot[key]); ok {
 			set(key, v)
 		}
+	}
+	// edit returns an error only for a cancelled context, which the
+	// caller's next check returns.
+	if v, changed, _ := s.defaultAppearance(ctx, annot["DA"]); changed {
+		set("DA", v)
 	}
 	if annot["MK"] != nil {
 		// edit returns an error only for a cancelled context, which the
