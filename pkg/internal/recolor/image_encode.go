@@ -1,12 +1,9 @@
 package recolor
 
 import (
-	"bytes"
-	"compress/zlib"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -15,52 +12,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 )
 
-// errOverLimit stops a compression whose output has passed its limit.
-var errOverLimit = errors.New("recolor: compressed output past its limit")
-
-// limitedBuffer collects bytes until more than limit have been written, a
-// negative limit for none.
-type limitedBuffer struct {
-	buf   bytes.Buffer
-	limit int
-}
-
-func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if b.limit >= 0 && b.buf.Len()+len(p) > b.limit {
-		return 0, errOverLimit
-	}
-	return b.buf.Write(p)
-}
-
-// flateCompress returns data compressed as /FlateDecode reads it (ISO
-// 32000-1, 7.4.4), and false, with no data, as soon as the compressed bytes
-// pass limit, a negative limit for none.
+// flateCompress is [filter.CompressFlate].
 func flateCompress(data []byte, limit int) ([]byte, bool, error) {
-	return flateCompressFrom(func(w io.Writer) error {
-		_, err := w.Write(data)
-		return err
-	}, limit)
-}
-
-// flateCompressFrom is [flateCompress] over the bytes write writes, which
-// stops writing at the first error it is handed, so the bytes past the
-// limit are never produced. The compressed bytes depend on the bytes alone,
-// not on how write splits them: the compressor buffers its input into
-// blocks of its own.
-func flateCompressFrom(write func(io.Writer) error, limit int) ([]byte, bool, error) {
-	out := &limitedBuffer{limit: limit}
-	w := zlib.NewWriter(out)
-	err := write(w)
-	if err == nil {
-		err = w.Close()
-	}
-	switch {
-	case errors.Is(err, errOverLimit):
-		return nil, false, nil
-	case err != nil:
-		return nil, false, err
-	}
-	return out.buf.Bytes(), true, nil
+	return filter.CompressFlate(data, limit)
 }
 
 // encodeImage encodes converted samples, rows of width x height pixels of
@@ -207,96 +161,13 @@ func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height,
 	return data, true, nil
 }
 
-// encodeSamples compresses image samples losslessly: rows of width pixels of
-// comps components at bpc bits. It returns the encoded bytes and the
-// /DecodeParms they need, nil when none, or false when every encoding passes
-// limit bytes, a negative limit for none.
-//
-// The samples are compressed both as they are and through the PNG predictors
-// (ISO 32000-1, 7.4.4.4, /Predictor 15, each row's filter chosen on its own),
-// and the smaller result is kept: prediction shrinks a photograph's smooth
-// gradients, and adds a byte a row to flat art that compresses well anyway.
-// Equal sizes keep the unpredicted data, so the output depends on the
-// samples alone.
-//
-// The second encoding stops as soon as it passes the first one's size, past
-// which it loses the comparison, so the one tried first is compressed in
-// full and the other mostly not. predictFirst tries the prediction first,
-// for samples decoded from a JPEG or JPEG 2000 photograph, which the
-// prediction holds in fewer bytes; the result is the same in either order.
+// encodeSamples is [filter.EncodeFlateSamples]: the samples compressed
+// plain and through the PNG predictors, the smaller kept.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue17289.pdf: its six JPEG 2000 photographs converted to CMYK
 //     compress to fewer bytes predicted than plain.
 func encodeSamples(samples []byte, width, comps, bpc, limit int, predictFirst bool) ([]byte, ast.PdfDict, bool, error) {
-	plainOf := func(limit int) ([]byte, bool, error) {
-		plain, fits, err := flateCompress(samples, limit)
-		if err != nil {
-			return nil, false, fmt.Errorf("compressing the samples: %w", err)
-		}
-		return plain, fits, nil
-	}
-	// The rows are predicted as the compressor takes them, so a compression
-	// that stops at its limit stops the prediction with it.
-	packedOf := func(limit int) ([]byte, bool, error) {
-		packed, fits, err := flateCompressFrom(func(w io.Writer) error {
-			return filter.WritePNGPredictor(w, samples, comps, bpc, width)
-		}, limit)
-		if err != nil {
-			return nil, false, fmt.Errorf("compressing the predicted samples: %w", err)
-		}
-		return packed, fits, nil
-	}
-	// below returns the limit of the second encoding, the first one's size
-	// when it fits below the limit.
-	below := func(first []byte, fits bool) int {
-		if fits && (limit < 0 || len(first) < limit) {
-			return len(first)
-		}
-		return limit
-	}
-	var plain, packed []byte
-	var plainFits, packedFits bool
-	var err error
-	if predictFirst {
-		if packed, packedFits, err = packedOf(limit); err != nil {
-			return nil, nil, false, err
-		}
-		// A plain encoding of the predicted one's size wins the tie.
-		if plain, plainFits, err = plainOf(below(packed, packedFits)); err != nil {
-			return nil, nil, false, err
-		}
-		if plainFits {
-			packedFits = false
-		}
-	} else {
-		if plain, plainFits, err = plainOf(limit); err != nil {
-			return nil, nil, false, err
-		}
-		// A predicted encoding of the plain one's size loses the tie, so it
-		// stops one byte short of it.
-		packedLimit := below(plain, plainFits)
-		if plainFits && packedLimit == len(plain) {
-			packedLimit--
-		}
-		if packed, packedFits, err = packedOf(packedLimit); err != nil {
-			return nil, nil, false, err
-		}
-	}
-	switch {
-	case !plainFits && !packedFits:
-		return nil, nil, false, nil
-	case !packedFits:
-		return plain, nil, true, nil
-	}
-	parms := ast.PdfDict{"Predictor": ast.PdfInt(15), "Columns": ast.PdfInt(width)}
-	// Table 8 defaults /Colors to 1 and /BitsPerComponent to 8.
-	if comps != 1 {
-		parms["Colors"] = ast.PdfInt(comps)
-	}
-	if bpc != 8 {
-		parms["BitsPerComponent"] = ast.PdfInt(bpc)
-	}
-	return packed, parms, true, nil
+	return filter.EncodeFlateSamples(samples, width, comps, bpc, limit, predictFirst)
 }
