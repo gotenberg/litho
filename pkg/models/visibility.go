@@ -4,9 +4,10 @@ package models
 type UnseenReason string
 
 const (
-	// UnseenRenderMode is text in rendering mode 3 or 7, which neither fills
-	// nor strokes its glyphs (ISO 32000-1, 9.3.6, Table 106): the mode an OCR
-	// layer over a scan uses.
+	// UnseenRenderMode is text in rendering mode 3, which neither fills nor
+	// strokes its glyphs (ISO 32000-1, 9.3.6, Table 106), the mode an OCR
+	// layer over a scan uses, or in mode 7, which only adds them to the clip,
+	// when nothing the page paints through that clip shows inside them.
 	UnseenRenderMode UnseenReason = "render-mode"
 	// UnseenOutsidePage is text whose glyphs start outside the page's crop
 	// box, the region a viewer shows (14.11.2).

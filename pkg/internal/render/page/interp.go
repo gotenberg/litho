@@ -128,6 +128,9 @@ type renderer struct {
 	// cells and soft masks, in a Type 3 glyph description and in the
 	// annotations.
 	omitGlyph func(origin geom.Point) bool
+	// omitClip leaves the glyphs omitGlyph omits out of the text clip
+	// ([Options.OmitGlyphClip]).
+	omitClip bool
 	// solid fills placeholder glyphs whole ([Options.SolidPlaceholders]).
 	solid bool
 	// unadjusted turns stroke adjustment off ([renderer.adjusts]): set in

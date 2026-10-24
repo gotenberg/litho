@@ -269,7 +269,13 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 		mode = 0
 	}
 	// Text left out keeps its clipping (9.3.6) and paints nothing.
-	omitted := r.omits(Text) || (r.omitGlyph != nil && r.omitGlyph(r.toDevice().Apply(origin)))
+	glyphOmitted := r.omitGlyph != nil && r.omitGlyph(r.toDevice().Apply(origin))
+	omitted := r.omits(Text) || glyphOmitted
+	// A glyph left out of the clip as well ([Options.OmitGlyphClip]) is
+	// drawn as if in a mode that adds nothing to it.
+	if glyphOmitted && r.omitClip {
+		mode &^= modeClipBit
+	}
 	fill := (mode&3 == 0 || mode&3 == 2) && !omitted
 	strokes := (mode&3 == 1 || mode&3 == 2) && !omitted
 	if g.Source == glyph.SourcePlaceholder {

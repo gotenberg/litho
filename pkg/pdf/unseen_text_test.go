@@ -120,6 +120,37 @@ func TestExtractUnseenTextInsideNeighbourBox(t *testing.T) {
 	}
 }
 
+// TestExtractUnseenTextClipMode judges text in rendering mode 7 by what the
+// page paints through its clip (ISO 32000-1, 9.3.6, Table 106): SHOWS clips
+// a black rectangle drawn after it, and is seen as a viewer shows it; BARE
+// clips nothing drawn after it, and is reported for its mode.
+func TestExtractUnseenTextClipMode(t *testing.T) {
+	t.Parallel()
+	const content = "q BT 7 Tr /F1 24 Tf 20 300 Td (SHOWS) Tj ET 0 g 10 290 200 40 re f Q\n" +
+		"q BT 7 Tr /F1 24 Tf 20 200 Td (BARE) Tj ET Q\n" +
+		"0 g 10 100 200 40 re f\n"
+	data := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+	r := openLimited(t, data, Limits{})
+
+	got, err := r.ExtractUnseenText(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := map[string]models.UnseenReason{}
+	for _, u := range got {
+		reasons[u.Text] = u.Reason
+	}
+	if want := map[string]models.UnseenReason{"BARE": models.UnseenRenderMode}; !maps.Equal(reasons, want) {
+		t.Errorf("reported %v, want %v", reasons, want)
+	}
+}
+
 func TestExtractUnseenTextErrors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

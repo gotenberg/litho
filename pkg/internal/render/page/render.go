@@ -194,6 +194,12 @@ type Options struct {
 	// pixels they change draws the page with and without them. The render
 	// calls it on its own goroutine.
 	OmitGlyph func(origin geom.Point) bool
+	// OmitGlyphClip also leaves out of the text clipping path each glyph
+	// [Options.OmitGlyph] leaves out, in the modes that add to it (4 to 7,
+	// ISO 32000-1, 9.3.6, Table 106), so a text object whose glyphs are all
+	// left out clips nothing. A caller judging whether a clipping glyph shows,
+	// by what its clip lets through, draws the page with and without it.
+	OmitGlyphClip bool
 	// SolidPlaceholders fills the whole box of each glyph drawn as a
 	// placeholder ([PlaceholderGlyph]) rather than its hollow frame: the
 	// area a reader holding the font's program may ink, which a caller
@@ -396,6 +402,7 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		defaultBPC:  opts.DefaultBlackPoint,
 		glyphShown:  opts.Glyph,
 		omitGlyph:   opts.OmitGlyph,
+		omitClip:    opts.OmitGlyphClip,
 		solid:       opts.SolidPlaceholders,
 		within:      opts.Within,
 		shared:      opts.Shared,

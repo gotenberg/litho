@@ -58,6 +58,11 @@ type ownInkOptions struct {
 	// without the run: what lies under the run's glyphs, the page's other
 	// text included.
 	under func(k int, px []byte)
+	// omitClip leaves the runs judged out of the text clip too
+	// ([page.Options.OmitGlyphClip]), so a glyph in a clipping mode, 4 to 7
+	// (ISO 32000-1, 9.3.6, Table 106), shows by what its clip lets through
+	// as well as by what it paints.
+	omitClip bool
 }
 
 // sceneOrigin is the device-space origin of one glyph of a scene, beside its
@@ -194,7 +199,7 @@ func (s *textScene) judgeOwnInk(ctx context.Context, r *Reader, pg *document.Pag
 	hits := make([]bool, len(s.elements))
 	origins := s.origins(all)
 	without, err := s.render(ctx, r, pg, box, page.Options{
-		Omit: o.omit, Within: within, Shared: shared,
+		Omit: o.omit, Within: within, Shared: shared, OmitGlyphClip: o.omitClip,
 		OmitGlyph: func(p geom.Point) bool { return origins.match(p, hits) },
 	})
 	if err != nil {
@@ -223,7 +228,7 @@ func (s *textScene) judgeOwnInk(ctx context.Context, r *Reader, pg *document.Pag
 			verdicts[k] = inkUnjudged
 		default:
 			drawings++
-			seen, err := s.ownDrawing(ctx, r, pg, box, run, o.omit, shared, budget, under)
+			seen, err := s.ownDrawing(ctx, r, pg, box, run, o, shared, budget, under)
 			if err != nil {
 				return nil, err
 			}
@@ -292,18 +297,18 @@ func (s *textScene) ownChange(run []int, without *image.NRGBA, under func(px []b
 	return alone, shared
 }
 
-// ownDrawing draws the page without run alone over run's glyph boxes,
-// leaving out omit, and reports whether it differs from the page drawn whole
-// at one of their pixels. under, when not nil, is told the colour the drawing
-// shows at each pixel that differs, and the comparison then visits them all.
-func (s *textScene) ownDrawing(ctx context.Context, r *Reader, pg *document.Page, box page.Box, run []int, omit page.Content, shared *page.Shared, budget int64, under func(px []byte)) (bool, error) {
+// ownDrawing draws the page without run alone over run's glyph boxes, as o
+// sets, and reports whether it differs from the page drawn whole at one of
+// their pixels. under, when not nil, is told the colour the drawing shows at
+// each pixel that differs, and the comparison then visits them all.
+func (s *textScene) ownDrawing(ctx context.Context, r *Reader, pg *document.Page, box page.Box, run []int, o ownInkOptions, shared *page.Shared, budget int64, under func(px []byte)) (bool, error) {
 	within, err := s.inkMask(run, budget)
 	if err != nil {
 		return false, err
 	}
 	origins := s.origins(run)
 	without, err := s.render(ctx, r, pg, box, page.Options{
-		Omit: omit, Within: within, Shared: shared,
+		Omit: o.omit, Within: within, Shared: shared, OmitGlyphClip: o.omitClip,
 		OmitGlyph: func(p geom.Point) bool { return origins.match(p, nil) },
 	})
 	if err != nil {
@@ -319,15 +324,15 @@ func (s *textScene) ownDrawing(ctx context.Context, r *Reader, pg *document.Page
 			if own[(y-rect.Min.Y)*rect.Dx()+x-rect.Min.X] == 0 {
 				continue
 			}
-			o := s.with.PixOffset(x, y)
-			if !inkChanged(s.with.Pix[o:o+3:o+3], without.Pix[o:o+3:o+3]) {
+			off := s.with.PixOffset(x, y)
+			if !inkChanged(s.with.Pix[off:off+3:off+3], without.Pix[off:off+3:off+3]) {
 				continue
 			}
 			if under == nil {
 				return true, nil
 			}
 			seen = true
-			under(without.Pix[o : o+3 : o+3])
+			under(without.Pix[off : off+3 : off+3])
 		}
 	}
 	return seen, nil

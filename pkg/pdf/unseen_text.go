@@ -23,8 +23,10 @@ func invisibleMode(mode int) bool {
 // ExtractUnseenText returns the runs of text the given 1-based page draws
 // that show nowhere on it, each with a [models.UnseenReason]:
 //
-//   - [models.UnseenRenderMode], text in rendering mode 3 or 7, which paints no
-//     glyph (ISO 32000-1, 9.3.6, Table 106), as an OCR layer does;
+//   - [models.UnseenRenderMode], text in rendering mode 3, which paints no
+//     glyph (ISO 32000-1, 9.3.6, Table 106), as an OCR layer does, and text
+//     in mode 7, which only adds its glyphs to the clip, when what the page
+//     paints through that clip shows nothing inside them;
 //   - [models.UnseenOutsidePage], text set outside the crop box;
 //   - [models.UnseenPaintsNothing], text that marks no pixel even drawn alone
 //     on a white page: glyphs describing no shape, text a clipping path
@@ -75,7 +77,7 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 	var drawn []int
 	for k, run := range runs {
 		switch {
-		case invisibleMode(s.paints[run[0]].Mode):
+		case s.paints[run[0]].Mode == 3:
 			reasons[k] = models.UnseenRenderMode
 		case s.elements[run[0]].IsClipped:
 			reasons[k] = models.UnseenOutsidePage
@@ -101,6 +103,12 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 // viewer shows it ([textScene.judgeOwnInk]); a run that does not is drawn
 // again with the page's text alone, and is covered when its own ink marks
 // that drawing, painting nothing otherwise.
+//
+// A glyph in a clipping mode, 4 to 7, also shows by what the page paints
+// through its clip after it (ISO 32000-1, 9.3.6, Table 106), so the first
+// drawing leaves the runs out of the clip too ([ownInkOptions.omitClip]): a
+// run in mode 7 a later fill or image shows through is seen, as a viewer
+// shows it, and one that lets nothing through is reported for its mode.
 func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Page, runs [][]int, drawn []int, reasons []models.UnseenReason) error {
 	pick := func(idx []int) [][]int {
 		out := make([][]int, len(idx))
@@ -112,13 +120,17 @@ func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Pag
 	if len(drawn) == 0 {
 		return nil
 	}
-	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, pick(drawn), ownInkOptions{})
+	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, pick(drawn), ownInkOptions{omitClip: true})
 	if err != nil {
 		return err
 	}
 	var unseen []int
 	for j, k := range drawn {
-		if verdicts[j] == inkUnseen {
+		switch {
+		case verdicts[j] != inkUnseen:
+		case s.paints[runs[k][0]].Mode == 7:
+			reasons[k] = models.UnseenRenderMode
+		default:
 			unseen = append(unseen, k)
 		}
 	}
@@ -160,12 +172,12 @@ func sceneError(pageNum int, err error) error {
 }
 
 // unseenRuns groups a scene's glyphs into runs judged as one: consecutive
-// glyphs on one line drawn the same way, in a mode that paints or not, inside
+// glyphs on one line drawn the same way, in mode 3, mode 7 or another, inside
 // the crop box or not, the white space between words included and runs of
 // white space alone left out.
 func unseenRuns(s *textScene) [][]int {
-	class := func(i int) [2]bool {
-		return [2]bool{invisibleMode(s.paints[i].Mode), s.elements[i].IsClipped}
+	class := func(i int) [3]bool {
+		return [3]bool{s.paints[i].Mode == 3, s.paints[i].Mode == 7, s.elements[i].IsClipped}
 	}
 	var runs [][]int
 	for _, run := range sceneRuns(s.elements, func(int) bool { return true }) {
