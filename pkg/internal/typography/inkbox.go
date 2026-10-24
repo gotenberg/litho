@@ -1,6 +1,7 @@
 package typography
 
 import (
+	"context"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/graphics"
@@ -37,14 +38,24 @@ const maxFontBBoxEm = 4.0
 // ([type3InkBounds]), a shading over a clip it never set among them, paints
 // as far as the clipping path in force where it is shown lets it (ISO
 // 32000-1, 8.5.4): its box is the bounds of that path, which the machine
-// holds in user space, seeded with the page's box.
-func glyphInkBox(state *graphics.State, font *Font, fontSize float64, cid int, originX, originY float64) [4]float64 {
+// holds in user space, seeded with the page's box. A glyph of a font stating
+// no /Resources is first bounded again against the resources of the stream
+// machine shows it from ([Font.type3ScopedInk]).
+func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fontSize float64, cid int, originX, originY float64) [4]float64 {
+	state := machine.Current()
+	corners, bounded := [4][2]float64{}, false
 	if font.Subtype == "Type3" {
 		if ink, ok := font.type3Ink(cid); ok && ink.unbounded {
-			return clippedInkBox(state, originX, originY)
+			scoped, ok := font.type3ScopedInk(ctx, machine.Doc, machine.Resources, cid)
+			if !ok || scoped.unbounded {
+				return clippedInkBox(state, originX, originY)
+			}
+			corners, bounded = type3TextCorners(font, scoped.box), true
 		}
 	}
-	corners := glyphTextCorners(font, cid)
+	if !bounded {
+		corners = glyphTextCorners(font, cid)
+	}
 	th := state.Text.Tz / 100
 	rise := state.Text.Ts
 	tm, ctm := state.Text.Tm, state.CTM
@@ -119,12 +130,7 @@ func clippedInkBox(state *graphics.State, originX, originY float64) [4]float64 {
 func glyphTextCorners(font *Font, cid int) [4][2]float64 {
 	if font.Subtype == "Type3" {
 		if ink, ok := font.type3Ink(cid); ok && !ink.unbounded {
-			fm, g := font.FontMatrix, ink.box
-			var out [4][2]float64
-			for i, p := range rectCorners(g[0], g[1], g[2], g[3]) {
-				out[i] = [2]float64{fm[0]*p[0] + fm[2]*p[1] + fm[4], fm[1]*p[0] + fm[3]*p[1] + fm[5]}
-			}
-			return out
+			return type3TextCorners(font, ink.box)
 		}
 	}
 	if font.WMode == 1 {
@@ -141,6 +147,18 @@ func glyphTextCorners(font *Font, cid int) [4][2]float64 {
 		}
 	}
 	return rectCorners(x0, y0, x1, y1)
+}
+
+// type3TextCorners returns the corners, in text space per unit of font
+// size, of the box g a Type 3 glyph inks in glyph space, carried through the
+// font's /FontMatrix (ISO 32000-1, 9.6.5).
+func type3TextCorners(font *Font, g [4]float64) [4][2]float64 {
+	fm := font.FontMatrix
+	var out [4][2]float64
+	for i, p := range rectCorners(g[0], g[1], g[2], g[3]) {
+		out[i] = [2]float64{fm[0]*p[0] + fm[2]*p[1] + fm[4], fm[1]*p[0] + fm[3]*p[1] + fm[5]}
+	}
+	return out
 }
 
 // rectCorners returns the corners of the rectangle from (x0, y0) to (x1, y1).

@@ -26,12 +26,15 @@ type type3ChainKey struct{}
 
 // type3Chain is the Type 3 fonts whose glyphs are being bounded below the
 // font now resolved: the object numbers of the fonts their descriptions show
-// text in, and how many such descents are in progress. A font already on the
-// chain is one a glyph shows itself through, a cycle the renderer stops only
-// at its nesting bound, so the glyph is bounded by its clip instead.
+// text in, the fonts whose glyphs are being bounded against the resources of
+// the stream showing them ([Font.type3ScopedInk]), and how many such
+// descents are in progress. A font already on the chain is one a glyph shows
+// itself through, a cycle the renderer stops only at its nesting bound, so
+// the glyph is bounded by its clip instead.
 type type3Chain struct {
-	fonts map[int]bool
-	depth int
+	fonts  map[int]bool
+	scoped map[*Font]bool
+	depth  int
 }
 
 // type3ChainFrom returns the chain ctx carries, the empty one when none.
@@ -49,7 +52,18 @@ func (c type3Chain) descend(objNum int) type3Chain {
 		fonts[n] = true
 	}
 	fonts[objNum] = true
-	return type3Chain{fonts: fonts, depth: c.depth + 1}
+	return type3Chain{fonts: fonts, scoped: c.scoped, depth: c.depth + 1}
+}
+
+// descendScoped returns the chain one descent below c into the glyphs of
+// font, bounded against the resources of the stream showing them.
+func (c type3Chain) descendScoped(font *Font) type3Chain {
+	scoped := make(map[*Font]bool, len(c.scoped)+1)
+	for f := range c.scoped {
+		scoped[f] = true
+	}
+	scoped[font] = true
+	return type3Chain{fonts: c.fonts, scoped: scoped, depth: c.depth + 1}
 }
 
 // type3Painter resolves what a Type 3 glyph description names: resources is

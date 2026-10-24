@@ -287,6 +287,47 @@ func TestRedactRemovesAType3GlyphByWhatItPaints(t *testing.T) {
 	}
 }
 
+// resourcelessType3PDF shows "BBB" at 20 200 and Tf 40 in a Type 3 font
+// stating no /Resources, whose glyph B paints the form /Bar the page names: a
+// bar 32 by 28, 4 points right of each glyph's origin.
+func resourcelessType3PDF() []byte {
+	return []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] " +
+		"/Resources << /Font << /T3 4 0 R >> /XObject << /Bar 7 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /B 5 0 R >> " +
+		"/Encoding << /Type /Encoding /Differences [66 /B] >> /FirstChar 66 /LastChar 66 /Widths [1000] >>\nendobj\n" +
+		plantStream(5, "", "1000 0 d0 /Bar Do") +
+		plantStream(6, "", "BT /T3 40 Tf 20 200 Td (BBB) Tj ET") +
+		plantStream(7, "/Type /XObject /Subtype /Form /BBox [100 0 900 700]", "100 0 800 700 re f") +
+		"trailer\n<< /Size 8 /Root 1 0 R >>\n%%EOF\n")
+}
+
+// TestRedactBoundsAResourcelessType3GlyphWhereShown redacts a region over the
+// third glyph of a Type 3 font stating no /Resources. Its glyphs paint a form
+// the page names, which ISO 32000-1, 9.6.5, Table 112 lets a description
+// without resources take from the stream showing it: each glyph is bounded by
+// the bar it paints there, not by the page, so the region removes the one
+// glyph under it and keeps the two beside it, and the pixel check passes.
+func TestRedactBoundsAResourcelessType3GlyphWhereShown(t *testing.T) {
+	ctx := context.Background()
+	w := NewWriter(openPixelCheck(t, resourcelessType3PDF()))
+	defer w.Close()
+	report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{110, 190, 130, 240}}})
+	if err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+	boxes := report.RemovedGlyphBoxes[1]
+	if len(boxes) != 1 {
+		t.Fatalf("removed glyph boxes %v, want the third glyph alone", boxes)
+	}
+	// The third glyph's origin is 100 200, its bar [104 200 136 228].
+	if b := boxes[0]; b[0] < 99.5 || b[2] > 136.5 || b[1] < 199.5 || b[3] > 228.5 || b[2] < 135.5 || b[3] < 227.5 {
+		t.Fatalf("removed glyph box %v, want the bar the glyph paints", b)
+	}
+}
+
 // strokedTextPDF strokes a glyph with a pen 40 points wide, which reaches
 // past the box the glyph's outline is bounded by.
 func strokedTextPDF() []byte {

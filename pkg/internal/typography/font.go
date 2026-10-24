@@ -36,9 +36,11 @@ import (
 // one per font object number and hands the same pointer to every caller, so a
 // write to a field, or to one of the maps a field holds, is visible to every
 // other holder and to the concurrent readers the document's contract permits.
-// Resolve a new Font rather than editing a resolved one. [cmap.CMap] and the
-// buffer [document.Document.CachedFontProgram] returns carry the same
-// contract for the same reason.
+// Resolve a new Font rather than editing a resolved one. The one exception is
+// the cache of Type 3 glyph bounds [Font.type3ScopedInk] fills, which locks
+// its own mutex. [cmap.CMap] and the buffer
+// [document.Document.CachedFontProgram] returns carry the same contract for
+// the same reason.
 type Font struct {
 	Subtype            string
 	Encoding           map[byte]rune
@@ -117,6 +119,15 @@ type Font struct {
 	type3GlyphInk      map[string]type3InkBounds
 	type3FontInk       *[4]float64
 	type3FontUnbounded bool
+	// type3Scoped maps the name of each glyph of a Type 3 font stating no
+	// /Resources whose description paints past every box without the
+	// resources of the stream showing it to that description, which
+	// [Font.type3ScopedInk] bounds where the glyph is shown.
+	type3Scoped map[string]ast.PdfStream
+	// type3ScopeInk caches what [Font.type3ScopedInk] finds, nil when
+	// type3Scoped is empty. It is the one mutable part of a Font, safe for
+	// concurrent use.
+	type3ScopeInk *type3ScopeCache
 
 	// SuppressExtraction marks a reference-only Type0 font that ISO
 	// 32000-1, 9.10.2 gives no route to Unicode: a CMap name outside
@@ -1329,7 +1340,9 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 	// A glyph description's named resources come from the font's /Resources
 	// (ISO 32000-1, 9.6.5, Table 112). A font with none takes those of the
 	// stream that shows it, which differ from page to page, so its glyphs
-	// are bounded without them ([type3PaintBounds]).
+	// are bounded without them ([type3PaintBounds]), and a glyph that paints
+	// past every box without them again where it is shown, against that
+	// stream's resources ([Font.type3ScopedInk]).
 	painter := type3Painter{doc: doc}
 	if resObj, ok := fontDict["Resources"]; ok {
 		res, err := document.ResolveDict(ctx, doc, resObj)
@@ -1369,6 +1382,13 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 				ink = unionBox(ink, g.inkBox)
 				glyphInk := type3GlyphInkBounds(g)
 				font.type3GlyphInk[string(name)] = glyphInk
+				if glyphInk.unbounded && painter.resources == nil {
+					if font.type3Scoped == nil {
+						font.type3Scoped = make(map[string]ast.PdfStream)
+						font.type3ScopeInk = &type3ScopeCache{}
+					}
+					font.type3Scoped[string(name)] = stream
+				}
 				if glyphInk.unbounded {
 					font.type3FontUnbounded = true
 				} else {
@@ -3962,7 +3982,8 @@ type type3InkBounds struct {
 //   - litho t3extent_2b.pdf: a shading and a form painting past /FontBBox;
 //     the centred quarter over them left 2204 pixels, and now removes both.
 //   - pdfjs pr4922.pdf: d1 glyphs that show text in fonts the page names, the
-//     font stating no /Resources, so each is bounded by the page.
+//     font stating no /Resources, so each is bounded here by the page, and
+//     where it is shown by the text it shows ([Font.type3ScopedInk]).
 func type3GlyphInkBounds(g type3Glyph) type3InkBounds {
 	if g.paintUnbounded {
 		return type3InkBounds{unbounded: true}
