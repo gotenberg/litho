@@ -234,6 +234,33 @@ func TestRedactionDrawsItsImageOpaque(t *testing.T) {
 	}
 }
 
+// TestRedactionUndoesTheTransferFunction rasterises a shading drawn under a
+// transfer function that inverts every component (ISO 32000-1, 10.5): the
+// image holds the inverted colours, so drawn under the same function it
+// would show them inverted back (pdfjs issue20722, litho transferfb_2b).
+func TestRedactionUndoesTheTransferFunction(t *testing.T) {
+	t.Parallel()
+	shading := "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 100 0] " +
+		"/Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >>"
+	data := fixture{
+		resources: "/Shading << /Sh0 7 0 R >> /ExtGState << /Inv 8 0 R >>",
+		bare:      true,
+		content:   "/Inv gs 1 1 1 rg 0 0 100 100 re f q 10 10 80 80 re W n /Sh0 sh Q",
+		objs:      []string{shading, "<< /Type /ExtGState /TR << /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >> >>"},
+	}.bytes()
+	out, report := redactWithFallback(t, data, [][4]float64{{40, 40, 60, 60}})
+	if report.RasterisedUnits != 1 {
+		t.Fatalf("RasterisedUnits = %d, want 1", report.RasterisedUnits)
+	}
+	before, after := renderAt(t, data, 72), renderAt(t, out, 72)
+	for _, p := range []image.Point{{5, 5}, {20, 50}, {80, 50}, {50, 20}} {
+		b, a := before.NRGBAAt(p.X, p.Y), after.NRGBAAt(p.X, p.Y)
+		if absDiff(b.R, a.R) > 8 || absDiff(b.G, a.G) > 8 || absDiff(b.B, a.B) > 8 {
+			t.Errorf("outside at %v: %v before, %v after", p, b, a)
+		}
+	}
+}
+
 func absDiff(a, b uint8) uint8 {
 	if a > b {
 		return a - b

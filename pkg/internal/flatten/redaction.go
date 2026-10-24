@@ -79,6 +79,10 @@ import (
 //     alpha and Screen blend mode the page had set, which they already
 //     held: PDFium drew 663 pixels faded outside the region, until they
 //     were drawn under an opaque state.
+//   - pdfjs issue20722 band: the page's /TR inverts every component, and the
+//     image of the page drawn under it showed the negative of the page,
+//     213,685 pixels outside the region, until the opaque state reset the
+//     transfer function (/TR2 /Default). litho transferfb_2b plants it.
 func Redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pg *document.Page, seeds []int, regions [][4]float64) (mutations.RasterResult, error) {
 	return redaction(ctx, alloc, doc, pg, seeds, regions, 0)
 }
