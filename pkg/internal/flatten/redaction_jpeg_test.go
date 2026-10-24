@@ -176,19 +176,28 @@ func TestRedactionJPEGKeepsRegionsPaper(t *testing.T) {
 // the page's own pixels there.
 func TestRedactionJPEGUnderlay(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	data := photoFormPDF()
 	regions := [][4]float64{{40, 40, 60, 60}}
 	lossless, _ := redactWith(t, data, regions, Redaction)
 	out, _ := redactWith(t, data, regions, RedactionJPEG(75))
+	assertUnderlay(t, lossless, out)
+}
 
+// assertUnderlay checks that out, the page of lossless with its composite
+// encoded in JPEG tiles, draws the layout of [flattener.encodeUnderlay]: one
+// lossless image first, placed as lossless places its one image, holding its
+// samples exactly but inside each JPEG tile less [underlayBand], then the
+// JPEG tiles.
+func assertUnderlay(t *testing.T, lossless, out []byte) {
+	t.Helper()
+	ctx := context.Background()
 	want := placedImages(t, lossless)
 	if len(want) != 1 {
-		t.Fatalf("the lossless fallback draws %d images, want 1", len(want))
+		t.Fatalf("the lossless output draws %d images, want 1", len(want))
 	}
 	got := placedImages(t, out)
 	if len(got) < 2 || got[0].stream.Dict["Filter"] == ast.PdfName("DCTDecode") {
-		t.Fatalf("the JPEG fallback draws %d images, the first %v; want a lossless underlay then JPEG tiles", len(got), got[0].stream.Dict["Filter"])
+		t.Fatalf("the JPEG output draws %d images; want a lossless underlay then JPEG tiles", len(got))
 	}
 	if got[0].ctm != want[0].ctm {
 		t.Errorf("the underlay is placed at %v, the lossless image at %v", got[0].ctm, want[0].ctm)

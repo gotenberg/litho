@@ -38,6 +38,10 @@ const FlattenFixer = "transparency-flatten"
 //     or in poppler 26.09.0.
 //   - verapdf: 23 of 522 files hold a JPEG composite, and no output draws
 //     apart from its source that did not before.
+//   - govdocs (34 files): with the JPEG tiles drawn over one lossless
+//     underlay rather than beside lossless tiles (flatten's encodeUnderlay),
+//     the outputs weigh 135.5 MB, 6 of them change (thread_000_000737 20.3
+//     -> 21.1 MB), and veraPDF 1.30.2 reports the same rule set on each.
 const remediationJPEGQuality = 90
 
 // flattenedPrefix starts the report line of a run that flattened a page.

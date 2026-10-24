@@ -194,11 +194,6 @@ type flattener struct {
 	// as artifacts: [Redaction] in a document with no structure tree that
 	// claims no accessibility conformance.
 	unmarked bool
-	// underlay draws a tiled composite as one lossless image of the whole
-	// region with its JPEG tiles over it ([flattener.encodeUnderlay]) rather
-	// than as abutting tiles: [Redaction], whose fallback changes the page
-	// outside the regions only where JPEG's loss does.
-	underlay bool
 }
 
 // prefix returns the prefix of the resource names the run adds: flatten's,

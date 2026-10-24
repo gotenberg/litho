@@ -113,7 +113,6 @@ func redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 		images:    make(map[int]ast.PdfObject),
 		pool:      &surface.Pool{},
 		private:   true,
-		underlay:  true,
 		// An image drawn outside marked content is marked as an artifact
 		// under the rule the annotation bakes follow
 		// ([mutations.RasterArtifacts]): in a tagged document, or an

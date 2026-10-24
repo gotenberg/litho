@@ -50,11 +50,13 @@ func WithFlattenPrintedAnnotations() FlattenOption {
 // when its region paints only images and shadings, no filled or stroked path
 // and no text, whose sharp edges JPEG would blur, and its pixels hold at least
 // 256 colours. A composite Flate holds in no more bytes stays lossless. A
-// region mixing photographs with vector art, a whole page often, is cut into
-// tiles on a grid of the composite's pixels, which abut without seams: a
-// tile only images and shadings reach whose pixels hold 256 colours is
-// encoded as JPEG, the others stay lossless, and the region stays one
-// lossless image when the tiles would not take fewer bytes. By default every
+// region mixing photographs with vector art, a whole page often, is cut on a
+// grid of the composite's pixels: a tile only images and shadings reach
+// whose pixels hold 256 colours is encoded as JPEG and drawn over one
+// lossless image of the whole region, placed as the lossless composite
+// would be, so the region outside the JPEG tiles draws as it does without
+// this option; the region stays one lossless image when the images would
+// not take fewer bytes. By default every
 // composite is encoded losslessly under FlateDecode, one image per region. A q outside 1 to 100
 // makes [Writer.FlattenTransparency] fail with [ErrInvalidFlattenOptions].
 func WithFlattenJPEGQuality(q int) FlattenOption {

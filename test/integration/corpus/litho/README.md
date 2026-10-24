@@ -9065,16 +9065,17 @@ megabytes. This page holds one such region:
 | a stroked chart beside it: a frame, a polyline and filled triangle marks |
 | a red band at ca 0.5 across both, which joins them into one region       |
 
-The band's composite at 300 dpi is cut into a JPEG tile over the photograph, a
-lossless tile over the chart, whose frame, line and marks reach it, and a
-lossless strip along the band's bottom, too short to hold 256 colours. The
-PDF/A-1b remediation, default and aggressive, writes 105,289 bytes, where one
-lossless composite took 111,451, and `litho flatten-transparency
---jpeg-quality 90` 73,044 bytes, where the lossless default takes 79,206.
-litho and poppler 26.09.0 draw each output like its source; drawn at 72, 150
-and 300 dpi by litho, poppler and PDFium, the tiled output shows no seam: no
-row or column where it departs from the lossless one, and no paper between the
-tiles. veraPDF 1.30.2 and litho report nothing on the PDF/A-1b remediation.
+The band's composite at 300 dpi gets a JPEG tile over the photograph, drawn
+over one lossless image of the whole band; the chart, whose frame, line and
+marks reach their cells, and the strip along the band's bottom, too short to
+hold 256 colours, show from that lossless image. The PDF/A-1b remediation,
+default and aggressive, writes 108,396 bytes, where one lossless composite
+took 111,451, and `litho flatten-transparency --jpeg-quality 90` 76,151
+bytes, where the lossless default takes 79,206. litho and poppler 26.09.0 draw
+each output like its source; drawn at 72 and 300 dpi by poppler and PDFium,
+the tiled output departs from the lossless one only inside the JPEG tile and
+within 2 pixels of its edges, and shows no paper between the images. veraPDF
+1.30.2 and litho report nothing on the PDF/A-1b remediation.
 
 The file declares no OutputIntent, so DeviceRGB fails `6.2.3.3/1` and
 DeviceGray `6.2.3.3/3` at PDF/A-1b and `6.2.4.3/2` and `6.2.4.3/4` at the later

@@ -267,8 +267,8 @@ const tileSize = 128
 // device on its own, and a rounding that leaves a pixel centre on neither
 // side of the shared edge, or an antialiased image edge, would draw a seam.
 // A tile reaching past the edge covers it. The overlapped pixels are the same
-// composite pixels in both tiles, and the tile drawn later, the lossless one
-// where the two differ in encoding, paints them.
+// composite pixels in the JPEG tile and in the underlay under it
+// ([flattener.encodeUnderlay]), which the JPEG tile, drawn later, paints.
 const tileOverlap = 1
 
 // compositeTile is one image of a composite: the device pixels it draws, its
@@ -284,14 +284,13 @@ type compositeTile struct {
 // device pixels the region's non-photographic units paint ([vectorBoxes]),
 // is empty, it returns one image, as [flattener.encodeComposite] encodes it.
 // Otherwise it cuts the composite along a [tileSize] grid, encodes each run
-// of cells vector does not reach and whose pixels are [photographic] as JPEG
-// (unless Flate holds the run in no more bytes) and the other runs under
-// Flate, and returns those tiles, the JPEG ones first, when some is JPEG and
-// together they take fewer bytes than the composite under Flate as one
-// image, which it returns otherwise. Each tile reaches [tileOverlap] pixels
-// into the tiles right of and below it. Under [flattener.underlay] the
-// tiles are laid out as [flattener.encodeUnderlay] lays them. inner holds the
-// pixels of px the region's box reaches: the others are its margin.
+// of cells vector does not reach and whose pixels are [photographic] as a
+// JPEG tile (unless Flate holds the run in no more bytes), and returns the
+// composite as one lossless underlay with those tiles over it
+// ([flattener.encodeUnderlay]) when some run is JPEG and the images take
+// fewer bytes than the composite under Flate as one image, which it returns
+// otherwise. inner holds the pixels of px the region's box reaches: the
+// others are its margin.
 func (f *flattener) encodeTiles(ctx context.Context, samples []byte, px, inner image.Rectangle, comps int, vector []image.Rectangle) ([]compositeTile, error) {
 	w, h := px.Dx(), px.Dy()
 	if f.quality == 0 {
@@ -335,43 +334,7 @@ func (f *flattener) encodeTiles(ctx context.Context, samples []byte, px, inner i
 	if !found {
 		return single, nil
 	}
-	if f.underlay {
-		return f.encodeUnderlay(ctx, samples, px, inner, comps, cellRuns(photo, cols, rows), photo, cols, cell, single)
-	}
-	var jpegTiles, flateTiles []compositeTile
-	total := 0
-	for _, run := range cellRuns(photo, cols, rows) {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		t := cell(run.Min.X, run.Min.Y).Union(cell(run.Max.X-1, run.Max.Y-1))
-		if t.Max.X < px.Max.X {
-			t.Max.X += tileOverlap
-		}
-		if t.Max.Y < px.Max.Y {
-			t.Max.Y += tileOverlap
-		}
-		part := cropSamples(samples, px, comps, t)
-		tile := compositeTile{px: t, filter: "FlateDecode"}
-		if photo[run.Min.Y*cols+run.Min.X] {
-			tile.data, tile.filter, err = f.encodeComposite(ctx, part, padOutside(samples, px, inner, comps, t), t.Dx(), t.Dy(), comps, true)
-		} else {
-			tile.data, err = deflate(part)
-		}
-		if err != nil {
-			return nil, err
-		}
-		total += len(tile.data)
-		if tile.filter == "DCTDecode" {
-			jpegTiles = append(jpegTiles, tile)
-		} else {
-			flateTiles = append(flateTiles, tile)
-		}
-	}
-	if len(jpegTiles) == 0 || total >= len(whole) {
-		return single, nil
-	}
-	return append(jpegTiles, flateTiles...), nil
+	return f.encodeUnderlay(ctx, samples, px, inner, comps, cellRuns(photo, cols, rows), photo, cols, cell, single)
 }
 
 // underlayBand is how many device pixels along the inside of each JPEG tile's
@@ -383,8 +346,8 @@ func (f *flattener) encodeTiles(ctx context.Context, samples []byte, px, inner i
 // what shows there the page's own.
 const underlayBand = 2
 
-// encodeUnderlay is [flattener.encodeTiles] for [flattener.underlay]: the
-// runs of photographic cells are encoded as JPEG tiles, each reaching
+// encodeUnderlay lays out the images of a composite [flattener.encodeTiles]
+// cuts into tiles: the runs of photographic cells are encoded as JPEG tiles, each reaching
 // [tileOverlap] pixels into the cells right of and below it as the tiles of
 // [flattener.encodeTiles] do (poppler draws them closer to the lossless
 // composite so), and the composite as one lossless image under them, drawn first, in
@@ -413,6 +376,15 @@ const underlayBand = 2
 //   - pdfjs, redact-render with the fallback at q 90: poppler's outside
 //     check counts 158 to 1063 changed pixels on the 8 scenarios that differ
 //     from lossless, against 239 to 1261 as abutting tiles.
+//   - litho, govdocs and pdfjs flattened at q 90 against lossless, the 69
+//     pages of the first 3 of the 66 files that hold JPEG tiles, by the
+//     render cell's pixel rule: as abutting tiles, PDFium drew 3886 and
+//     22286 pixels changed where no JPEG tile lies on 11 and 8 pages at 72
+//     and 300 dpi, poppler 4975 and 25754 on 11 and 10 (govdocs
+//     thread_400_400019 13569 at 300 dpi on page 2); with the underlay, 6,
+//     133, 54 and 132, all on page 3 of govdocs thread_200_200414, as many
+//     at 300 dpi as before. The flatten cell at q 90 matches as lossless
+//     does (litho 32/0, govdocs 34/0, pdfjs 267/9).
 func (f *flattener) encodeUnderlay(ctx context.Context, samples []byte, px, inner image.Rectangle, comps int, runs []image.Rectangle, photo []bool, cols int, cell func(c, r int) image.Rectangle, single []compositeTile) ([]compositeTile, error) {
 	var jpegTiles []compositeTile
 	total := 0

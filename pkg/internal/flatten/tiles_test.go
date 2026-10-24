@@ -86,6 +86,18 @@ func TestFlattenSplitsAMixedCompositeIntoTiles(t *testing.T) {
 	}
 }
 
+// TestFlattenDrawsJPEGTilesOverALosslessUnderlay pins that a tiled composite
+// draws as [flattener.encodeUnderlay] lays it out: abutting lossless tiles,
+// each placed on device pixels on its own, drew a column or row a pixel off
+// in poppler and PDFium where the lossless composite drew none.
+func TestFlattenDrawsJPEGTilesOverALosslessUnderlay(t *testing.T) {
+	t.Parallel()
+	in := tilesFixture().bytes()
+	lossless, _ := flattenBytes(t, in, Options{})
+	tiled, _ := flattenBytes(t, in, Options{JPEGQuality: 90})
+	assertUnderlay(t, lossless, tiled)
+}
+
 func TestFlattenKeepsAPhotographicCompositeWhole(t *testing.T) {
 	t.Parallel()
 	// Without the square every cell is photographic: one JPEG image.
