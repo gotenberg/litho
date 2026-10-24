@@ -292,6 +292,7 @@ one deliberately rather than diffing it against a fresh build.
 | `blankblack_2b.pdf`    | PDF/A-2b     | Images whose zero samples are not black, blanked by a redaction  |
 | `t3extent_2b.pdf`      | PDF/A-2b     | Type 3 glyphs painting a shading, a form, a bar past their box   |
 | `t3scope_2b.pdf`       | PDF/A-2b     | Type 3 glyphs painting through the showing stream's resources    |
+| `strokedtext_2b.pdf`   | PDF/A-2b     | Stroked text whose pen paints past the box of its outline        |
 
 ### Must-not-fire controls
 
@@ -778,6 +779,7 @@ are covered under [Known divergences](#known-divergences).
 | `smaskindata_2b.pdf`   | 5    | 2    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 6    | 6    |
 | `stdremap_ua2.pdf`     | 4    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `structcopy_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 0    |
+| `strokedtext_2b.pdf`   | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
 | `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 30   |
 | `symbolname_2u.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
@@ -9583,6 +9585,42 @@ pixel differs) and veraPDF passes it at PDF/A-2b. Copying the page's binding
 into the one font passed veraPDF too, but drew the page's short bar where `Fm`
 shows the glyphs.
 
+### `strokedtext_2b.pdf`
+
+A stroking text rendering mode (ISO 32000-1, 9.3.6, Table 106: modes 1, 2, 5
+and 6) strokes each glyph's outline with the graphics state's line width, join
+and miter limit (8.4.3.2 to 8.4.3.5), so a wide pen paints past the box the
+glyph's outline is bounded by. Redaction once bounded a glyph by that box alone:
+a region over the stroke and clear of the outline selected nothing, and the
+stroke stayed under it. Stroked text reaches 113 corpus files (62 govdocs, 33
+pdfjs, 16 verapdf, 2 pdfcpu) and no litho fixture, so no `redact-render`
+scenario of the litho corpus reached it. The page, 400 by 400, shows one
+embedded CFF font (`_cff.py`: `A` and `B` are rectangles 400 units wide, 400
+and 500 high, advancing 600):
+
+| Run    | At      | Tf  | Mode | Pen                         | Reaches past its outline  |
+| ------ | ------- | --- | ---- | --------------------------- | ------------------------- |
+| `A`    | 55 170  | 50  | 1    | 60 wide, round joins        | 30 points                 |
+| `B`    | 318 170 | 50  | 2    | 4 wide, miter joins, `10 M` | 2.8 points at its corners |
+| `ABAB` | 130 195 | 20  | 2    | 0.5 wide, a fake bold       | 0.35 at its corners       |
+
+The `redact-render` cell's centred quarter `[100 100 300 300]` meets 7.5 points
+of `A`'s stroke and neither its outline nor its box without the stroke. Before,
+the quarter left 262 pixels of that stroke inside the region on litho's half
+(the pixel check refused the redaction), and the band, which removed `A`, changed
+2647 pixels outside it, since `A`'s box did not meet the band; now every
+scenario passes both halves, litho's and poppler 26.09.0's. A glyph's box grows
+by half its pen through the CTM, so `B`'s grows by 2 points, to 16 points clear
+of the quarter, which keeps it: its square corners reach 2.8 points past its
+outline, inside the 2.5 points of side bearing its box holds. A miter tip
+reaching past a box is what the pixel check finds. `ABAB` lies inside the
+quarter and under the band.
+
+The RGB output intent covers DeviceGray, and the font is embedded, so the file
+is conforming at PDF/A-2b. The other cells are the identification, metadata and
+tagging rules of their parts. veraPDF 1.30.2 and litho report the same rule set
+in all thirteen cells.
+
 ## Scope
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
@@ -9602,7 +9640,7 @@ The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
 twenty-six is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `blankblack_2b`, `boxorigin_2b`,
-`formplacement_2b`, `greyintent_2b`, `iccalternate_2b`, `pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `sharedformimg_2b`, `sharedimage_2b`, `siglock_2b`, `sizetie_2b`, `t3extent_2b`, `t3overprint_2b`, `type3cycle_2u`, `viewerboxes_2b` and `whitetext_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
+`formplacement_2b`, `greyintent_2b`, `iccalternate_2b`, `pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `sharedformimg_2b`, `sharedimage_2b`, `siglock_2b`, `sizetie_2b`, `strokedtext_2b`, `t3extent_2b`, `t3overprint_2b`, `type3cycle_2u`, `viewerboxes_2b` and `whitetext_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
 rule class leaves `matched` at 3094 and moves only `ruleset_mismatch`, and on
