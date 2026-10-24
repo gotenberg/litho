@@ -207,6 +207,33 @@ func TestRedactionRasterisesAShading(t *testing.T) {
 	}
 }
 
+// TestRedactionDrawsItsImageOpaque rasterises a shading painted at half
+// opacity with the Screen blend mode, over a yellow fill: the image holds
+// the composite, so it has to be drawn opaque and Normal, whatever state
+// the content left in force where it is drawn.
+func TestRedactionDrawsItsImageOpaque(t *testing.T) {
+	t.Parallel()
+	shading := "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 100 0] " +
+		"/Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >>"
+	data := fixture{
+		resources: "/Shading << /Sh0 7 0 R >> /ExtGState << /GS1 6 0 R /Scr 8 0 R >>",
+		bare:      true,
+		content:   "1 1 0 rg 0 0 100 100 re f /GS1 gs /Scr gs /Sh0 sh",
+		objs:      []string{shading, "<< /Type /ExtGState /BM /Screen >>"},
+	}.bytes()
+	out, report := redactWithFallback(t, data, [][4]float64{{25, 25, 75, 75}})
+	if report.RasterisedUnits != 1 {
+		t.Fatalf("RasterisedUnits = %d, want 1", report.RasterisedUnits)
+	}
+	before, after := renderAt(t, data, 72), renderAt(t, out, 72)
+	for _, p := range []image.Point{{5, 5}, {50, 10}, {95, 50}, {50, 95}} {
+		b, a := before.NRGBAAt(p.X, p.Y), after.NRGBAAt(p.X, p.Y)
+		if absDiff(b.R, a.R) > 8 || absDiff(b.G, a.G) > 8 || absDiff(b.B, a.B) > 8 {
+			t.Errorf("outside at %v: %v before, %v after", p, b, a)
+		}
+	}
+}
+
 func absDiff(a, b uint8) uint8 {
 	if a > b {
 		return a - b

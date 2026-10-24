@@ -39,7 +39,9 @@ import (
 // Where a seed drawn after a text object hid its glyphs, the image is drawn
 // again over them, as the flattening keeps such text hidden; where it only
 // tinted them, they show untinted. Nothing else of the flattening runs: the
-// page's transparency, its graphics states and its group stay as they are.
+// page's transparency, its graphics states and its group stay as they are,
+// and each image, which holds what those states composited, is drawn under
+// one of its own that undoes them ([opaqueState]).
 //
 // Inside the redaction's regions an image paints nothing: its clip cuts them
 // out by the even-odd rule (ISO 32000-2, 8.5.3.3.3), so what the page shows
@@ -63,15 +65,20 @@ import (
 //   - litho (228), pdfjs (79), pdfcpu, govdocs, the four redact-render
 //     scenarios: 117 scenarios refused without the fallback succeed with it,
 //     none leaving ink inside a region by litho's or poppler's rendering.
-//   - pdfjs issue2642, issue12752, issue17289, govdocs thread_400_400032,
-//     pdfcpu text_annotations, litho usedcs_2b: poppler draws 8 to 1051
-//     pixels outside the region changed, at the edges of what the image now
-//     holds; at most of them the page shows what litho drew of the source,
-//     which the image holds, where poppler drew the source otherwise.
-//   - pdfcpu FOSDEM14_HPC_devroom_14_GoCUDA page 2, VectorApple, govdocs
-//     thread_100_100519, litho usedcs_2b: litho draws 11 to 493 pixels
-//     outside the region changed, a picture resampled twice and the fringe
-//     of text a shading drawn after it had hidden.
+//   - pdfjs issue2642, issue12752, issue17289, pdfcpu text_annotations:
+//     poppler draws pixels outside the region changed where the images
+//     paint; all but 1 to 7 a scenario show litho's rendering of the
+//     source or a blend of it, and PDFium draws those few unchanged (the
+//     redact-render cell adjudicates them).
+//   - litho usedcs_2b: the image drawn again over a heading a shading hid
+//     covered only the hollow frames litho draws for its unembedded
+//     Helvetica, and the glyphs showed through for a reader with the font,
+//     146 pixels by litho's rendering with the goldens' fonts, until the
+//     coverage read them whole.
+//   - litho transparency_2b: the images were drawn under the constant
+//     alpha and Screen blend mode the page had set, which they already
+//     held: PDFium drew 663 pixels faded outside the region, until they
+//     were drawn under an opaque state.
 func Redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pg *document.Page, seeds []int, regions [][4]float64) (mutations.RasterResult, error) {
 	return redaction(ctx, alloc, doc, pg, seeds, regions, 0)
 }
@@ -146,6 +153,16 @@ func redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 	if err != nil {
 		return out, err
 	}
+	states, err := f.extGStates(ctx, resources)
+	if err != nil {
+		return out, err
+	}
+	// The page's graphics states stay as they are, so an image is drawn
+	// where a constant alpha, a blend mode, a soft mask or a transfer
+	// function the content set may be in force. The image already holds
+	// their effect: it is drawn under a state that undoes them.
+	f.opaque = f.newName(states, "Rs")
+	states[f.opaque] = opaqueState()
 	zones := make([]Rect, 0, len(regions))
 	for _, r := range regions {
 		zones = append(zones, rectOf(r[0], r[1], r[2], r[3]))
@@ -251,6 +268,9 @@ func redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 	dict := maps.Clone(mutations.LatestPageDict(alloc, pg))
 	if len(xobjects) > 0 {
 		resources["XObject"] = xobjects
+	}
+	if f.opaqueUsed {
+		resources["ExtGState"] = states
 	}
 	dict["Resources"] = resources
 	alloc.AllocAt(pg.Ref.ObjectNum, dict)

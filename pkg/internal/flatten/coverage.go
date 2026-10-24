@@ -404,6 +404,7 @@ func (c *coverage) overpaint(pos position, rects []image.Rectangle, img regionIm
 			b.WriteString(matrixOperands(back) + " cm\n")
 		}
 	}
+	c.f.setOpaque(&b)
 	var reach image.Rectangle
 	for _, r := range rects {
 		reach = reach.Union(r)

@@ -194,6 +194,41 @@ type flattener struct {
 	// as artifacts: [Redaction] in a document with no structure tree that
 	// claims no accessibility conformance.
 	unmarked bool
+	// opaque, when not empty, names the graphics state [opaqueState] in the
+	// page's resources, which each image is drawn under: [Redaction], which
+	// leaves the page's graphics states as they are. opaqueUsed records
+	// that an image was.
+	opaque     ast.PdfName
+	opaqueUsed bool
+}
+
+// opaqueState returns a graphics state that paints as an opaque image
+// composites: constant alpha 1, the Normal blend mode, no soft mask (ISO
+// 32000-2, 11.6.4.4 and 11.6.5.2), overprinting off (8.6.7) and the
+// device's own transfer function (10.5, Table 57: /TR2 /Default, the value
+// ISO 19005-2, 6.2.5 allows).
+func opaqueState() ast.PdfDict {
+	return ast.PdfDict{
+		"Type":  ast.PdfName("ExtGState"),
+		"CA":    ast.PdfInt(1),
+		"ca":    ast.PdfInt(1),
+		"BM":    ast.PdfName("Normal"),
+		"SMask": ast.PdfName("None"),
+		"AIS":   ast.PdfBool(false),
+		"OP":    ast.PdfBool(false),
+		"op":    ast.PdfBool(false),
+		"TR2":   ast.PdfName("Default"),
+	}
+}
+
+// setOpaque writes, when the run draws under [flattener.opaque], the gs
+// operator that sets it.
+func (f *flattener) setOpaque(b *strings.Builder) {
+	if f == nil || f.opaque == "" {
+		return
+	}
+	f.opaqueUsed = true
+	b.WriteString("/" + string(f.opaque) + " gs\n")
 }
 
 // prefix returns the prefix of the resource names the run adds: flatten's,
@@ -446,7 +481,19 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 // xobjects returns a copy of the /XObject subdictionary of resources, so the
 // run can add to it.
 func (f *flattener) xobjects(ctx context.Context, resources ast.PdfDict) (ast.PdfDict, error) {
-	d, err := document.ResolveDict(ctx, f.doc, resources["XObject"])
+	return f.subdict(ctx, resources, "XObject")
+}
+
+// extGStates returns a copy of the /ExtGState subdictionary of resources,
+// as [flattener.xobjects] returns the /XObject one.
+func (f *flattener) extGStates(ctx context.Context, resources ast.PdfDict) (ast.PdfDict, error) {
+	return f.subdict(ctx, resources, "ExtGState")
+}
+
+// subdict returns a copy of the key subdictionary of resources, empty when
+// it does not resolve.
+func (f *flattener) subdict(ctx context.Context, resources ast.PdfDict, key ast.PdfName) (ast.PdfDict, error) {
+	d, err := document.ResolveDict(ctx, f.doc, resources[key])
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, ctxErr
@@ -768,6 +815,7 @@ func (f *flattener) drawImage(pos position, box Rect, holes []Rect, tiles []tile
 		inv, _ := pos.ctm.Invert()
 		b.WriteString(matrixOperands(inv) + " cm\n")
 	}
+	f.setOpaque(&b)
 	for _, r := range append([]Rect{box}, holes...) {
 		for _, v := range []float64{r.MinX, r.MinY, r.MaxX - r.MinX, r.MaxY - r.MinY} {
 			b.WriteString(number(v) + " ")
