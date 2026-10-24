@@ -207,6 +207,40 @@ func TestRedactionRasterisesAShading(t *testing.T) {
 	}
 }
 
+// TestRedactionDrawsNoImageInHiddenContent redacts the middle of a page that
+// paints a shading in a layer optional content hides, then the same shading
+// shown. The two make one region, and its image was drawn before its first
+// unit, inside the hidden layer: the shading shown was removed, and the page
+// went blank outside the region. pdfjs issue269_2 draws its board so.
+func TestRedactionDrawsNoImageInHiddenContent(t *testing.T) {
+	t.Parallel()
+	shading := "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 100 0] " +
+		"/Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >>"
+	data := fixture{
+		resources: "/Shading << /Sh0 7 0 R >> /Properties << /Hide 8 0 R >>",
+		content:   "/OC /Hide BDC /Sh0 sh EMC /Sh0 sh",
+		objs: []string{
+			shading,
+			"<< /Type /OCMD /VE [/Not 9 0 R] >>",
+			"<< /Type /OCG /Name (shown) >>",
+		},
+	}.bytes()
+	out, report := redactWithFallback(t, data, [][4]float64{{25, 25, 75, 75}})
+	if report.RasterisedUnits != 2 {
+		t.Errorf("RasterisedUnits = %d, want both shadings", report.RasterisedUnits)
+	}
+	before, after := renderAt(t, data, 72), renderAt(t, out, 72)
+	for _, p := range []image.Point{{5, 5}, {95, 50}, {50, 95}} {
+		b, a := before.NRGBAAt(p.X, p.Y), after.NRGBAAt(p.X, p.Y)
+		if absDiff(b.R, a.R) > 8 || absDiff(b.G, a.G) > 8 || absDiff(b.B, a.B) > 8 {
+			t.Errorf("outside at %v: %v before, %v after", p, b, a)
+		}
+	}
+	if c := after.NRGBAAt(50, 50); c.R < 250 || c.G < 250 || c.B < 250 {
+		t.Errorf("inside reads %v, want paper", c)
+	}
+}
+
 // TestRedactionDrawsItsImageOpaque rasterises a shading painted at half
 // opacity with the Screen blend mode, over a yellow fill: the image holds
 // the composite, so it has to be drawn opaque and Normal, whatever state

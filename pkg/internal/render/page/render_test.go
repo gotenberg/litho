@@ -274,6 +274,29 @@ func TestOptionalContent(t *testing.T) {
 	expect(t, img, 0, map[[2]int]rgb{{25, 75}: paper, {75, 25}: red, {25, 25}: paper})
 }
 
+// TestOptionalContentMembership pins that content a membership dictionary
+// hides paints nothing (ISO 32000-1, 8.11.2.2, Table 99), whether marked
+// content names it through /Properties or an XObject's /OC holds it. pdfjs
+// issue269_2 names every layer through one, and litho painted all of them.
+func TestOptionalContentMembership(t *testing.T) {
+	t.Parallel()
+	img, _ := draw(t, fixture{
+		catalog: "/OCProperties << /OCGs [6 0 R 7 0 R] /D << /OFF [6 0 R] >> >>",
+		page:    "/Resources << /Properties << /Hide 8 0 R /Show 9 0 R >> /XObject << /Fm 5 0 R >> >>",
+		content: "/OC /Hide BDC 0 g 0 0 50 50 re f EMC " +
+			"/OC /Show BDC 1 0 0 rg 50 50 50 50 re f EMC /Fm Do",
+		objs: []string{
+			stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /OC 10 0 R", "0 0 1 rg 0 50 50 50 re f"),
+			"<< /Type /OCG /Name (off) >>",
+			"<< /Type /OCG /Name (on) >>",
+			"<< /Type /OCMD /OCGs [6 0 R 7 0 R] /P /AllOn >>",
+			"<< /Type /OCMD /OCGs 7 0 R >>",
+			"<< /Type /OCMD /VE [/Not 7 0 R] >>",
+		},
+	})
+	expect(t, img, 0, map[[2]int]rgb{{25, 75}: paper, {75, 25}: red, {25, 25}: paper})
+}
+
 func TestPageGeometry(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

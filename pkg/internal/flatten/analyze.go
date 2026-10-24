@@ -206,6 +206,7 @@ func analyzeSeeded(ctx context.Context, doc *document.Document, page *document.P
 		textPatterns: make(map[string]bool),
 	}
 	w.m.Doc, w.m.Resources = doc, page.DrawResources
+	w.m.ActiveOCs = document.PropertiesOCs(ctx, doc, page.DrawResources)
 	w.m.RecordPathBoxes = true
 
 	a := &Analysis{positions: make([]position, len(ops)+1), crop: crop}
@@ -268,9 +269,25 @@ func (w *walker) position() position {
 	}
 }
 
-// visible returns r cut to the clipping region's box and the crop box.
+// visible returns r cut to the clipping region's box and the crop box, and
+// no box inside marked content optional content hides (ISO 32000-1,
+// 8.11.3.2), which paints nothing a viewer shows. Such a unit joins no
+// region: the image a region gets is drawn before its first unit, and drawn
+// inside hidden content it would hide what it took over from the units
+// shown.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue269_2: the raster fallback of the p1-quarter redaction drew
+//     the image of the board's middle at the place of a form in a hidden
+//     layer, and removed the forms the layer shown drew there: 57,957
+//     pixels outside the region went white on litho's rendering, once the
+//     renderer hid the layers the file's membership dictionaries hide.
 func (w *walker) visible(r Rect) Rect {
 	st := w.m.Current()
+	if st.SkipExtraction {
+		return Rect{}
+	}
 	clip := rectOf(st.ClippingPath.MinX, st.ClippingPath.MinY, st.ClippingPath.MaxX, st.ClippingPath.MaxY)
 	return r.Intersect(clip).Intersect(w.crop)
 }
@@ -399,6 +416,14 @@ func (w *walker) do(i int, op content.Operation, st *graphics.State, ctm geom.Ma
 	if !ok {
 		return
 	}
+	// An XObject its own /OC hides paints nothing (ISO 32000-1, 8.11.3.3),
+	// as content marked hidden paints nothing ([walker.visible]).
+	hidden := !document.OCVisible(w.ctx, w.doc, stream.Dict["OC"])
+	defer func() {
+		if hidden && len(w.units) > 0 && w.units[len(w.units)-1].First == i {
+			w.units[len(w.units)-1].Box = Rect{}
+		}
+	}()
 	switch subtype {
 	case "Image":
 		w.units = append(w.units, Unit{

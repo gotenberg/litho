@@ -161,7 +161,7 @@ type scope struct {
 func (r *renderer) run(ops []content.Operation, resources ast.PdfDict, base geom.Matrix, depth int) error {
 	prevRes, prevOC := r.m.Resources, r.m.ActiveOCs
 	r.m.Resources = resources
-	r.m.ActiveOCs = activeOCs(r.ctx, r.doc, resources)
+	r.m.ActiveOCs = document.PropertiesOCs(r.ctx, r.doc, resources)
 	defer func() { r.m.Resources, r.m.ActiveOCs = prevRes, prevOC }()
 
 	prevDepth := r.depth

@@ -1,7 +1,6 @@
 package page
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -502,63 +501,8 @@ func (r *renderer) colorKey(stream ast.PdfStream, ranges ast.PdfArray, width, he
 }
 
 // visible reports whether optional content oc, an /OC entry, is shown (ISO
-// 32000-1, 8.11.3.3): an optional content group the document's default
-// configuration turns off is hidden. A membership dictionary is taken as
-// shown for now.
+// 32000-1, 8.11.3.3): an optional content group by its state, a membership
+// dictionary by its visibility expression or policy ([document.OCVisible]).
 func (r *renderer) visible(oc ast.PdfObject) bool {
-	if oc == nil {
-		return true
-	}
-	ref, isRef := oc.(ast.PdfIndirectRef)
-	if !isRef {
-		return true
-	}
-	dict, err := document.ResolveDict(r.ctx, r.doc, ref)
-	if err != nil || dict == nil {
-		return true
-	}
-	if t, _ := document.ResolveName(r.ctx, r.doc, dict["Type"]); t != "OCG" {
-		return true
-	}
-	return ocgVisible(ref, r.doc.OCConfig)
-}
-
-// ocgVisible reads the visibility of the group ref under the document's
-// default configuration (ISO 32000-1, 8.11.4.3): /OFF, then /ON, then
-// /BaseState.
-func ocgVisible(ref ast.PdfIndirectRef, cfg *document.OCConfig) bool {
-	switch {
-	case cfg == nil:
-		return true
-	case cfg.Off[ref.ObjectNum]:
-		return false
-	case cfg.On[ref.ObjectNum]:
-		return true
-	}
-	return cfg.BaseState != "OFF"
-}
-
-// activeOCs maps the optional content groups the /Properties of resources
-// names to their visibility, which the machine reads when BDC marks content
-// /OC (8.11.3.2).
-func activeOCs(ctx context.Context, doc *document.Document, resources ast.PdfDict) map[string]bool {
-	out := make(map[string]bool)
-	props, err := document.ResolveDict(ctx, doc, resources["Properties"])
-	if err != nil || props == nil {
-		return out
-	}
-	for k, v := range props {
-		ref, isRef := v.(ast.PdfIndirectRef)
-		if !isRef {
-			continue
-		}
-		dict, err := document.ResolveDict(ctx, doc, ref)
-		if err != nil || dict == nil {
-			continue
-		}
-		if t, _ := document.ResolveName(ctx, doc, dict["Type"]); t == "OCG" {
-			out[string(k)] = ocgVisible(ref, doc.OCConfig)
-		}
-	}
-	return out
+	return document.OCVisible(r.ctx, r.doc, oc)
 }
