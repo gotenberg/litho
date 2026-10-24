@@ -357,21 +357,6 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     under those states, so their colours faded: 17 pixels by poppler,
 //     663 by PDFium, none past the render tolerance by litho. They are now
 //     drawn under an opaque state.
-//   - litho blendspace_2b band: litho's half sees 1,755 pixels over a flat
-//     area 18 levels apart, a cyan the source draws (0 174 239) and the
-//     fallback's image (4 167 221). The page group's /CS is
-//     DeviceCMYK, and the image, which holds litho's sRGB rendering, is
-//     composited in it again; poppler and PDFium 4.30.0, which do not
-//     composite the page in its group's space, draw every one of those
-//     pixels unchanged. A mismatch until the fallback writes its images in
-//     a CMYK page group's space, as flattening does.
-//   - pdfcpu VectorApple quarter: litho's half sees 5 pixels over flat areas
-//     drawn 20 to 27 levels lighter. The fallback's image, drawn where the
-//     first rasterised form was, holds the forms drawn later in the Hard
-//     Light and Multiply blend modes, and the forms it kept in between,
-//     drawn after it, cover their effect. poppler draws 3 of the 5 changed
-//     past 16 levels; PDFium, which draws the source apart from both, draws
-//     them unchanged. A mismatch until the fallback keeps the paint order.
 //   - pdfcpu FOSDEM14_HPC_devroom_14_GoCUDA page 2, VectorApple,
 //     text_annotations, litho iccgroupalt_2b, formimgname_2b, pdfjs
 //     issue2642, issue12752: up to 988 pixels per scenario that change
