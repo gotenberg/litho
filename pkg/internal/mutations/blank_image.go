@@ -50,7 +50,8 @@ var (
 // A picture's samples come back at 8 bits under /FlateDecode whatever filter
 // they were in, which is what lets a JPX or DCT image be cleared at all: there
 // is no encoder for those filters, so the blanked image has to be written in a
-// filter litho can produce. A picture in DeviceGray, DeviceRGB, DeviceCMYK, an
+// filter litho can produce. The samples are written losslessly, through the
+// PNG predictors where that is smaller (see [encodeBlankedSamples]). A picture in DeviceGray, DeviceRGB, DeviceCMYK, an
 // ICCBased, CalGray or CalRGB space keeps that space (see [blankNative]), and
 // so does one in a Separation or DeviceN space naming only the colorant None,
 // which paints nothing (ISO 32000-1, 8.6.6.4). Any other picture, indexed,
@@ -230,9 +231,10 @@ func blankImage(
 	var (
 		dict       ast.PdfDict
 		compressed []byte
+		parms      ast.PdfDict
 	)
 	if isStencil {
-		compressed, err = flateCompress(packStencilBits(canvas, w, h))
+		compressed, parms, err = encodeBlankedSamples(ctx, packStencilBits(canvas, w, h), w, 1, 1, false)
 		if err != nil {
 			return 0, fmt.Errorf("compressing blanked image mask %q: %w", box.Name, err)
 		}
@@ -256,7 +258,7 @@ func blankImage(
 				rgb = append(rgb, canvas.Pix[i], canvas.Pix[i+1], canvas.Pix[i+2])
 			}
 		}
-		compressed, err = flateCompress(rgb)
+		compressed, parms, err = encodeBlankedSamples(ctx, rgb, w, 3, 8, photographicSource(stream.Dict))
 		if err != nil {
 			return 0, fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
 		}
@@ -277,6 +279,9 @@ func blankImage(
 		if smask, present := stream.Dict["SMask"]; present {
 			dict["SMask"] = smask
 		}
+	}
+	if parms != nil {
+		dict["DecodeParms"] = parms
 	}
 
 	if !alloc.AllocAt(dest, ast.NewStream(dict, compressed)) {
@@ -334,13 +339,13 @@ func blankSoftMask(
 	}
 	gray := image.NewGray(image.Rect(0, 0, w, h))
 	draw.Draw(gray, gray.Bounds(), img, bounds.Min, draw.Src)
-	return blankedMaskStream(alloc, box, zones, gray, mask.Dict["Matte"])
+	return blankedMaskStream(ctx, alloc, box, zones, gray, mask.Dict["Matte"])
 }
 
 // blankedMaskStream allocates the soft mask gray, whose origin is (0, 0),
 // with the samples the zones cover made opaque (see [blankSoftMask]), and
 // returns its reference. matte, when not nil, is the /Matte it keeps.
-func blankedMaskStream(alloc *writer.ObjAllocator, box graphics.ImageBox, zones []heuristics.Zone, gray *image.Gray, matte ast.PdfObject) (ast.PdfObject, error) {
+func blankedMaskStream(ctx context.Context, alloc *writer.ObjAllocator, box graphics.ImageBox, zones []heuristics.Zone, gray *image.Gray, matte ast.PdfObject) (ast.PdfObject, error) {
 	w, h := gray.Bounds().Dx(), gray.Bounds().Dy()
 	// The mask maps onto the unit square as the picture does, whatever its
 	// own resolution (11.6.5.3), so the same sample test applies.
@@ -354,7 +359,7 @@ func blankedMaskStream(alloc *writer.ObjAllocator, box graphics.ImageBox, zones 
 		i := gray.PixOffset(0, y)
 		samples = append(samples, gray.Pix[i:i+w]...)
 	}
-	compressed, err := flateCompress(samples)
+	compressed, parms, err := encodeBlankedSamples(ctx, samples, w, 1, 8, false)
 	if err != nil {
 		return nil, fmt.Errorf("compressing the blanked soft mask of %q: %w", box.Name, err)
 	}
@@ -366,6 +371,9 @@ func blankedMaskStream(alloc *writer.ObjAllocator, box graphics.ImageBox, zones 
 		"ColorSpace":       ast.PdfName("DeviceGray"),
 		"BitsPerComponent": ast.PdfInt(8),
 		"Filter":           ast.PdfName("FlateDecode"),
+	}
+	if parms != nil {
+		out["DecodeParms"] = parms
 	}
 	if matte != nil {
 		out["Matte"] = matte
@@ -438,7 +446,7 @@ func blankDataSoftMask(
 		// source, whose /SMaskInData that clause does not name, lacks.
 		return nil, m, nil
 	}
-	ref, err := blankedMaskStream(alloc, box, zones, gray, nil)
+	ref, err := blankedMaskStream(ctx, alloc, box, zones, gray, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -520,7 +528,7 @@ func blankNative(
 	if blanked == 0 {
 		return fmt.Errorf("%w: %q", ErrImageRegionCoversNoSample, box.Name)
 	}
-	compressed, err := flateCompress(native.Data)
+	compressed, parms, err := encodeBlankedSamples(ctx, native.Data, native.Width, n, 8, photographicSource(stream.Dict))
 	if err != nil {
 		return fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
 	}
@@ -533,6 +541,9 @@ func blankNative(
 		"ColorSpace":       stream.Dict["ColorSpace"],
 		"BitsPerComponent": ast.PdfInt(8),
 		"Filter":           ast.PdfName("FlateDecode"),
+	}
+	if parms != nil {
+		dict["DecodeParms"] = parms
 	}
 	if smask, present := stream.Dict["SMask"]; present {
 		dict["SMask"] = smask

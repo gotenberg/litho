@@ -2,7 +2,6 @@ package mutations
 
 import (
 	"bytes"
-	"compress/zlib"
 	"context"
 	"io"
 	"os"
@@ -12,17 +11,16 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
-// inflatePending returns the decompressed data of a FlateDecode stream the
+// inflatePending returns the decoded data of a FlateDecode stream the
 // allocator holds.
 func inflatePending(t *testing.T, s ast.PdfStream) []byte {
 	t.Helper()
-	raw, err := s.Bytes(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zlib.NewReader(bytes.NewReader(raw))
+	// Decoded through its filters and /DecodeParms: blanking writes the
+	// samples predicted where that is smaller.
+	zr, err := filter.NewStreamReader(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
 	}

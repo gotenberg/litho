@@ -169,5 +169,5 @@ func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height,
 //   - pdfjs issue17289.pdf: its six JPEG 2000 photographs converted to CMYK
 //     compress to fewer bytes predicted than plain.
 func encodeSamples(samples []byte, width, comps, bpc, limit int, predictFirst bool) ([]byte, ast.PdfDict, bool, error) {
-	return filter.EncodeFlateSamples(samples, width, comps, bpc, limit, predictFirst)
+	return filter.EncodeFlateSamples(samples, width, comps, bpc, limit, 0, predictFirst)
 }

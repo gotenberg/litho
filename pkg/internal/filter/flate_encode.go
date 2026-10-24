@@ -67,15 +67,18 @@ func CompressFlateFrom(write func(io.Writer) error, limit int) ([]byte, bool, er
 // (ISO 32000-1, 7.4.4.4, /Predictor 15, each row's filter chosen on its own),
 // and the smaller result is kept: prediction shrinks a photograph's smooth
 // gradients, and adds a byte a row to flat art that compresses well anyway.
-// Equal sizes keep the unpredicted data, so the output depends on the
-// samples alone. Either way the bytes decode to the samples exactly.
+// parmsCost is what the /DecodeParms entry of [PredictorParms] adds to the
+// image dictionary, which the predicted data has to save on top to win; 0
+// compares the data alone. Equal sizes keep the unpredicted data, so the
+// output depends on the samples alone. Either way the bytes decode to the
+// samples exactly.
 //
-// The second encoding stops as soon as it passes the first one's size, past
-// which it loses the comparison, so the one tried first is compressed in
-// full and the other mostly not. predictFirst tries the prediction first,
-// for samples decoded from a JPEG or JPEG 2000 photograph, which the
-// prediction holds in fewer bytes; the result is the same in either order.
-func EncodeFlateSamples(samples []byte, width, comps, bpc, limit int, predictFirst bool) ([]byte, ast.PdfDict, bool, error) {
+// The second encoding stops as soon as it passes the size past which it
+// loses the comparison, so the one tried first is compressed in full and
+// the other mostly not. predictFirst tries the prediction first, for samples
+// decoded from a JPEG or JPEG 2000 photograph, which the prediction holds in
+// fewer bytes; the result is the same in either order.
+func EncodeFlateSamples(samples []byte, width, comps, bpc, limit, parmsCost int, predictFirst bool) ([]byte, ast.PdfDict, bool, error) {
 	plainOf := func(limit int) ([]byte, bool, error) {
 		plain, fits, err := CompressFlate(samples, limit)
 		if err != nil {
@@ -94,14 +97,6 @@ func EncodeFlateSamples(samples []byte, width, comps, bpc, limit int, predictFir
 		}
 		return packed, fits, nil
 	}
-	// below returns the limit of the second encoding, the first one's size
-	// when it fits below the limit.
-	below := func(first []byte, fits bool) int {
-		if fits && (limit < 0 || len(first) < limit) {
-			return len(first)
-		}
-		return limit
-	}
 	var plain, packed []byte
 	var plainFits, packedFits bool
 	var err error
@@ -109,8 +104,13 @@ func EncodeFlateSamples(samples []byte, width, comps, bpc, limit int, predictFir
 		if packed, packedFits, err = packedOf(limit); err != nil {
 			return nil, nil, false, err
 		}
-		// A plain encoding of the predicted one's size wins the tie.
-		if plain, plainFits, err = plainOf(below(packed, packedFits)); err != nil {
+		// A plain encoding no larger than the predicted one and its
+		// /DecodeParms wins.
+		plainLimit := limit
+		if packedFits && (limit < 0 || len(packed)+parmsCost < limit) {
+			plainLimit = len(packed) + parmsCost
+		}
+		if plain, plainFits, err = plainOf(plainLimit); err != nil {
 			return nil, nil, false, err
 		}
 		if plainFits {
@@ -120,14 +120,17 @@ func EncodeFlateSamples(samples []byte, width, comps, bpc, limit int, predictFir
 		if plain, plainFits, err = plainOf(limit); err != nil {
 			return nil, nil, false, err
 		}
-		// A predicted encoding of the plain one's size loses the tie, so it
-		// stops one byte short of it.
-		packedLimit := below(plain, plainFits)
-		if plainFits && packedLimit == len(plain) {
-			packedLimit--
+		// A predicted encoding wins only below the plain one's size less its
+		// /DecodeParms, so it stops one byte short of that, and is not tried
+		// when nothing is left to win.
+		packedLimit := limit
+		if plainFits {
+			packedLimit = len(plain) - parmsCost - 1
 		}
-		if packed, packedFits, err = packedOf(packedLimit); err != nil {
-			return nil, nil, false, err
+		if !plainFits || packedLimit >= 0 {
+			if packed, packedFits, err = packedOf(packedLimit); err != nil {
+				return nil, nil, false, err
+			}
 		}
 	}
 	switch {
@@ -136,6 +139,14 @@ func EncodeFlateSamples(samples []byte, width, comps, bpc, limit int, predictFir
 	case !packedFits:
 		return plain, nil, true, nil
 	}
+	return packed, PredictorParms(width, comps, bpc), true, nil
+}
+
+// PredictorParms returns the /DecodeParms of the samples [EncodeFlateSamples]
+// predicts, rows of width pixels of comps components at bpc bits under
+// /Predictor 15 (ISO 32000-1, Table 8), the entries at their defaults left
+// out.
+func PredictorParms(width, comps, bpc int) ast.PdfDict {
 	parms := ast.PdfDict{"Predictor": ast.PdfInt(15), "Columns": ast.PdfInt(width)}
 	// Table 8 defaults /Colors to 1 and /BitsPerComponent to 8.
 	if comps != 1 {
@@ -144,5 +155,5 @@ func EncodeFlateSamples(samples []byte, width, comps, bpc, limit int, predictFir
 	if bpc != 8 {
 		parms["BitsPerComponent"] = ast.PdfInt(bpc)
 	}
-	return packed, parms, true, nil
+	return parms
 }
