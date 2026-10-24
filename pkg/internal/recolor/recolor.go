@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -70,6 +72,9 @@ type Skip struct {
 // colour space the source gives it (ISO 32000-1, 8.6.5.6) before the content
 // pass removes the target family's. A soft mask (ISO 32000-1, 11.6.5) is not
 // converted: its colour computes an opacity, which a conversion would change.
+// The device colours an annotation dictionary states, which a viewer draws an
+// annotation with no appearance stream from, are converted with them
+// ([session.annotationColours]).
 //
 // It returns an error only for an invalid target or a cancelled context. An
 // object it cannot convert is left and listed in the report.
@@ -261,9 +266,16 @@ func (s *session) rewritePage(ctx context.Context, page *document.Page) error {
 	if ch {
 		out["Group"], changed = v, true
 	}
+	if g := s.pageGroup(ctx, dict); g != nil {
+		out["Group"], changed = g, true
+	}
 
-	if err := s.rewriteAnnotations(ctx, dict["Annots"]); err != nil {
+	v, ch, err = s.rewriteAnnotations(ctx, dict["Annots"])
+	if err != nil {
 		return err
+	}
+	if ch {
+		out["Annots"], changed = v, true
 	}
 	if changed {
 		s.replace(page.Ref.ObjectNum, dict, out)
@@ -423,34 +435,173 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 	return len(writes) > 0, nil, nil
 }
 
-// rewriteAnnotations converts the appearance streams of a page's
-// annotations (ISO 32000-1, 12.5.5): each normal, rollover and down
-// appearance, or each state of one. An annotation that cannot be read shows
-// nothing to convert.
-func (s *session) rewriteAnnotations(ctx context.Context, obj ast.PdfObject) error {
+// rewriteAnnotations converts a page's annotations: the appearance streams
+// (ISO 32000-1, 12.5.5), each normal, rollover and down appearance or each
+// state of one, and the device colours the dictionary states
+// ([session.annotationColours]). An annotation that cannot be read shows
+// nothing to convert. It returns the page's new /Annots when the array is
+// written in the page dictionary and holds an annotation written in it that
+// changed; an array of its own is rewritten in place.
+func (s *session) rewriteAnnotations(ctx context.Context, obj ast.PdfObject) (ast.PdfObject, bool, error) {
 	if obj == nil || document.VisitedBefore(obj, s.seen) {
-		return nil
+		return nil, false, nil
 	}
 	annots, _ := s.resolve(ctx, obj)
 	list, _ := annots.(ast.PdfArray)
-	for _, a := range list {
+	// rewritten is list with the direct annotations that changed, made on
+	// the first one.
+	var rewritten ast.PdfArray
+	for i, a := range list {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
 		if document.VisitedBefore(a, s.seen) {
 			continue
 		}
 		resolved, _ := s.resolve(ctx, a)
 		annot, _ := resolved.(ast.PdfDict)
-		if annot == nil || document.VisitedBefore(annot["AP"], s.seen) {
+		if annot == nil {
+			continue
+		}
+		if converted, ok := s.annotationColours(ctx, annot); ok {
+			if ref, isRef := a.(ast.PdfIndirectRef); isRef {
+				s.replace(ref.ObjectNum, annot, converted)
+			} else {
+				if rewritten == nil {
+					rewritten = slices.Clone(list)
+				}
+				rewritten[i] = converted
+			}
+		}
+		if document.VisitedBefore(annot["AP"], s.seen) {
 			continue
 		}
 		resolved, _ = s.resolve(ctx, annot["AP"])
 		ap, _ := resolved.(ast.PdfDict)
 		for _, key := range []ast.PdfName{"N", "R", "D"} {
 			if err := s.rewriteAppearance(ctx, ap[key]); err != nil {
-				return err
+				return nil, false, err
 			}
 		}
 	}
-	return nil
+	if rewritten == nil {
+		return nil, false, nil
+	}
+	if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+		s.replace(ref.ObjectNum, list, rewritten)
+		return nil, false, nil
+	}
+	return rewritten, true, nil
+}
+
+// annotationColours returns annot with the device colours its dictionary
+// states converted to the target, and true, or false when none converts: the
+// /C and /IC arrays (ISO 32000-1, Table 164 and 12.5.6) and the /BC and /BG
+// arrays of its /MK dictionary (Table 189), whose component count selects
+// DeviceGray, DeviceRGB or DeviceCMYK. A viewer draws an annotation with no
+// appearance stream from them, as litho's renderer and a flattening do
+// (12.5.6), so a colour left in another space would paint outside the target.
+// A /MK written as an object of its own is rewritten in place.
+//
+// The target's values are written with its component count, which these
+// arrays read as the device family of that count: an ICCBased target's
+// values then mean the device space its output intent characterises
+// (14.11.5), which is the target when the conversion makes it the intent.
+//
+// # Corpus evidence
+//
+//   - litho annotsynth_2b.pdf: its Polygon, Underline and Squiggly
+//     annotations have no appearance stream and RGB /C and /IC, which a
+//     flattening after a CMYK conversion drew in DeviceRGB.
+func (s *session) annotationColours(ctx context.Context, annot ast.PdfDict) (ast.PdfDict, bool) {
+	var out ast.PdfDict
+	set := func(key ast.PdfName, v ast.PdfObject) {
+		if out == nil {
+			out = maps.Clone(annot)
+		}
+		out[key] = v
+	}
+	for _, key := range []ast.PdfName{"C", "IC"} {
+		if v, ok := s.deviceColour(ctx, annot[key]); ok {
+			set(key, v)
+		}
+	}
+	if annot["MK"] != nil {
+		// edit returns an error only for a cancelled context, which the
+		// caller's next check returns.
+		v, changed, _ := s.edit(ctx, annot["MK"], "appearance characteristics", func(resolved ast.PdfObject) (ast.PdfObject, bool, error) {
+			mk, ok := resolved.(ast.PdfDict)
+			if !ok {
+				return nil, false, nil
+			}
+			var o ast.PdfDict
+			for _, key := range []ast.PdfName{"BC", "BG"} {
+				if v, ok := s.deviceColour(ctx, mk[key]); ok {
+					if o == nil {
+						o = maps.Clone(mk)
+					}
+					o[key] = v
+				}
+			}
+			return o, o != nil, nil
+		})
+		if changed {
+			set("MK", v)
+		}
+	}
+	return out, out != nil
+}
+
+// deviceColour converts obj, a colour array outside a content stream whose
+// component count, 1, 3 or 4, selects DeviceGray, DeviceRGB or DeviceCMYK
+// (ISO 32000-1, Table 164), to the target, read as the source's device space
+// with no default space standing in (8.6.5.6 applies to content streams). It
+// returns false for an array of another length, no colour at all for 0, one
+// that holds a non-number, and one already in the target.
+func (s *session) deviceColour(ctx context.Context, obj ast.PdfObject) (ast.PdfArray, bool) {
+	if obj == nil {
+		return nil, false
+	}
+	resolved, err := s.resolve(ctx, obj)
+	arr, ok := resolved.(ast.PdfArray)
+	if err != nil || !ok {
+		return nil, false
+	}
+	var family string
+	switch len(arr) {
+	case 1:
+		family = graphics.FamilyDeviceGray
+	case 3:
+		family = graphics.FamilyDeviceRGB
+	case 4:
+		family = graphics.FamilyDeviceCMYK
+	default:
+		return nil, false
+	}
+	in := make([]float64, len(arr))
+	for i, e := range arr {
+		v, err := s.resolve(ctx, e)
+		if err != nil {
+			return nil, false
+		}
+		n, ok := document.Number(v)
+		if !ok {
+			return nil, false
+		}
+		// Table 164 gives the components on [0, 1], as viewers clip them.
+		in[i] = clamp01(n)
+	}
+	p := s.planDefinition(ctx, ast.PdfName(family), nil)
+	if p.kind != planConvert {
+		return nil, false
+	}
+	conv := make([]float64, s.t.n)
+	p.conv.Convert(in, conv)
+	out := make(ast.PdfArray, len(conv))
+	for i, v := range conv {
+		out[i] = ast.PdfReal(roundComponent(v))
+	}
+	return out, true
 }
 
 // rewriteAppearance converts one appearance entry: a stream, or a

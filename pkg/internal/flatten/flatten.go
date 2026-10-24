@@ -623,10 +623,14 @@ func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Ge
 //     source in litho and poppler 26.09.0. PDF/A-1b and 1a remediation of
 //     litho and veraPDF's PDF/A-1 files, which flattens, is unchanged.
 //   - litho: converted to CMYK and then flattened, 16 outputs held sRGB
-//     composites, 58 of them; 2 still paint outside the target, through
-//     constructs other than a page group with no /CS (a /CS naming a
-//     /ColorSpace resource in pagegroup_2b.pdf, an annotation appearance
-//     synthesised from its RGB /C in annotsynth_2b.pdf).
+//     composites, 58 of them. The conversion now names the target for a
+//     page group whose /CS names a /ColorSpace resource (pagegroup_2b.pdf)
+//     and converts the /C and /IC an appearance is synthesised from
+//     (annotsynth_2b.pdf), so no output paints outside the target. Converted
+//     under pdf.WithoutOutputIntent, the conversion gives each page with no
+//     group one in the target (pdf.Writer.ConvertColors), and 2 outputs
+//     still hold sRGB composites, flattentiles_1b.pdf and gstateform_1b.pdf,
+//     whose PDF/A-1 claim forbids the group (ISO 19005-1, 6.4).
 func (f *flattener) deviceSpace(ctx context.Context, pg *document.Page) ast.PdfObject {
 	// ISO 32000-2, 14.11.5: a page's own output intents override the
 	// document's.

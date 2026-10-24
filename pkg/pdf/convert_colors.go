@@ -14,7 +14,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/internal/semantics"
 )
 
 // colorTargetKind tells the targets of [ColorTarget] apart.
@@ -155,7 +157,10 @@ func WithSpotConversion() ColorOption {
 
 // WithoutOutputIntent leaves the document's output intents as they are. By
 // default [Writer.ConvertColors] makes a target whose profile is an output or
-// display device profile the document's output intent.
+// display device profile the document's output intent. A grey or CMYK
+// conversion then names the target as the blending space of each page with no
+// group, unless the kept intent already characterises a device of its family
+// or the document claims PDF/A-1 (see [Writer.ConvertColors]).
 func WithoutOutputIntent() ColorOption {
 	return func(o *colorOpts) { o.keepIntents = true }
 }
@@ -324,6 +329,20 @@ type IntentFallback struct {
 // otherwise refuses them. [WithoutOutputIntent] leaves the GTS_PDFA1 intents
 // alone. The [OutputIntentColorTarget] changes no intent.
 //
+// The device colours an annotation dictionary states, its /C and /IC and the
+// /BC and /BG of its /MK (ISO 32000-1, Tables 164 and 189), are converted
+// too: a viewer draws an annotation with no appearance stream from them
+// (12.5.6), and so does [Writer.FlattenTransparency]. A transparency group
+// takes the target as its blending space (11.4.7, Table 147). A page group
+// that names none, or names a /ColorSpace resource, which outside a content
+// stream names no space (8.6.3), takes a grey or CMYK target. A page with no
+// group gets one blending in a grey or CMYK target when the document's first
+// output intent, after the conversion, characterises no device of the
+// target's family, as under [WithoutOutputIntent]: the reader's device would
+// otherwise choose the space, and a flattening would composite in sRGB. A
+// document claiming PDF/A-1 gets no such group, since ISO 19005-1, 6.4
+// forbids one.
+//
 // It runs eagerly rather than queueing, because the caller must learn whether
 // the document converts before writing it, and it forces a full rewrite.
 // Three ways it refuses, each leaving the [Writer] exactly as it was:
@@ -412,6 +431,8 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		}
 	}
 
+	setIntent := !o.keepIntents && resolved.setsIntent
+
 	engine := w.recolor
 	if engine == nil {
 		engine = recolorDocument
@@ -424,6 +445,7 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		blackPointCompensation: o.bpc,
 		convertSpots:           o.convertSpots,
 		jpegQuality:            o.jpegQuality,
+		groupPages:             groupConvertedPages(ctx, alloc, doc, resolved.components, setIntent),
 	})
 	if err != nil {
 		restoreTrailer()
@@ -461,7 +483,6 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		Registry:   resolved.registry,
 		Info:       resolved.info,
 	}
-	setIntent := !o.keepIntents && resolved.setsIntent
 	if setIntent || len(conflicts) > 0 {
 		// One profile object for every intent the conversion writes, as ISO
 		// 19005-2, 6.2.3 asks of the intents of a PDF/A file.
@@ -583,6 +604,73 @@ func resolveColorTarget(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	// already is the document's intent.
 	t.setsIntent = target.kind != targetOutputIntent && deviceProfileClass(t.profile)
 	return t, nil
+}
+
+// groupConvertedPages reports whether a conversion to a target of components
+// gives each page with no /Group a page group blending in the target
+// ([recolor.Options.GroupPages]): a grey or CMYK target the document's output
+// intent will not characterise after the conversion, which setIntent says
+// makes the target its GTS_PDFA1 intent, in a document that claims no
+// conformance to ISO 19005-1.
+//
+// ISO 32000-1, 11.4.7 and Table 147 leave the blending space of a page with
+// no group to the reader's device, which 14.11.5 has the output intent name,
+// and a flattening composites such a page in the device of the first output
+// intent of the document whose profile reads, or in sRGB when it names no
+// grey or CMYK device ([Writer.FlattenTransparency]). A conversion that makes
+// the target that intent needs no group; one that leaves another intent, as
+// [WithoutOutputIntent] does, or none, would composite a converted page in
+// another space. ISO 19005-1, 6.4 forbids a transparency group on a page, so
+// a PDF/A-1 document gets none (ISO 19005-1, 6.7.11 makes pdfaid:part its
+// claim).
+func groupConvertedPages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, components int, setIntent bool) bool {
+	if components == 3 || semantics.DeclaredPDFAPart(ctx, doc) == 1 {
+		return false
+	}
+	family := graphics.FamilyDeviceCMYK
+	if components == 1 {
+		family = graphics.FamilyDeviceGray
+	}
+	return intendedFamily(ctx, alloc, doc, family, setIntent) != family
+}
+
+// intendedFamily returns the device family the first output intent of the
+// document with a readable profile characterises once the conversion has set
+// its intents ([pdfimage.OutputIntentsFamily]), "" for none. With setIntent
+// the GTS_PDFA1 intents take the target, of family target, in place
+// ([mutations.SetOutputIntent]), and one is added at the end when there is
+// none. A replaced intent of another subtype keeps its family.
+func intendedFamily(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, target string, setIntent bool) string {
+	var intents ast.PdfArray
+	if ref, ok := mutations.CatalogRef(ctx, doc); ok {
+		catalog, err := mutations.LiveCatalogDict(ctx, alloc, doc, ref)
+		if err != nil {
+			doc.Logger.Debug("convert colors: reading the catalog for its output intents", slog.Any("err", err))
+		} else if catalog["OutputIntents"] != nil {
+			intents, err = document.ResolveArray(ctx, doc, catalog["OutputIntents"])
+			if err != nil {
+				doc.Logger.Debug("convert colors: reading the output intents", slog.Any("err", err))
+			}
+		}
+	}
+	for _, entry := range intents {
+		if setIntent {
+			// ISO 32000-2, Table 401: GTS_PDFA1 is the subtype
+			// [mutations.SetOutputIntent] writes the target under.
+			if d, err := document.ResolveDict(ctx, doc, entry); err == nil && d != nil {
+				if s, _ := document.ResolveName(ctx, doc, d["S"]); s == "GTS_PDFA1" {
+					return target
+				}
+			}
+		}
+		if f := pdfimage.OutputIntentsFamily(ctx, doc, ast.PdfArray{entry}); f != "" {
+			return f
+		}
+	}
+	if setIntent {
+		return target
+	}
+	return ""
 }
 
 // deviceProfileClass reports whether profile's device class (ICC.1:2010,

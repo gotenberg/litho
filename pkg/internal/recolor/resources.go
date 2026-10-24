@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
+	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 )
 
 // rewriteResources converts what a resource dictionary defines: its colour
@@ -196,13 +197,23 @@ func (s *session) rewriteDefinition(ctx context.Context, def ast.PdfObject) (ast
 // none: recolouring does not tell whether its content composites, and a group
 // on a page of a PDF/A-1 file that composites nothing would add the
 // transparency group ISO 19005-1, 6.4 forbids. Such a page composites in the
-// device of the output intent the conversion makes the target (14.11.5).
+// device of the output intent the conversion makes the target (14.11.5), or
+// gets a group of its own when the caller asks ([Options.GroupPages]).
+//
+// A /CS that is a name but no family's names no space: outside a content
+// stream a colour space is a family name or an array (ISO 32000-1, 8.6.3), and
+// a name a /ColorSpace resource defines selects a space only through the cs
+// and CS operators. The renderer blends such a group in sRGB, as one naming
+// no space, and veraPDF reads it as no blending space; so it is treated as
+// one naming none, and a page group's is replaced by the target.
 //
 // # Corpus evidence
 //
 //   - litho kidsrepair_1b.pdf, pagegroup_2b.pdf: the only files of the recolor
 //     cell's sample (386) whose page group names no space, so the only
 //     outputs a CMYK conversion changes; both still draw as their sources.
+//   - litho pagegroup_2b.pdf: pages 6 and 7 name /CS0, the ICCBased space of
+//     their /ColorSpace resources, which a flattening then composited in sRGB.
 func (s *session) rewriteGroup(ctx context.Context, obj ast.PdfObject, page bool) (ast.PdfObject, bool, error) {
 	if obj == nil {
 		return nil, false, nil
@@ -212,7 +223,7 @@ func (s *session) rewriteGroup(ctx context.Context, obj ast.PdfObject, page bool
 		if !ok {
 			return nil, false, nil
 		}
-		if d["CS"] == nil {
+		if d["CS"] == nil || s.undefinedSpaceName(ctx, d["CS"]) {
 			if !page || s.t.n == 3 || !s.transparencyGroup(ctx, d) {
 				return nil, false, nil
 			}
@@ -234,6 +245,53 @@ func (s *session) rewriteGroup(ctx context.Context, obj ast.PdfObject, page bool
 		out["CS"] = cs
 		return out, true, nil
 	})
+}
+
+// undefinedSpaceName reports whether cs, a colour space entry outside a
+// content stream, is a name that names no colour space: only the families
+// that take no parameters, DeviceGray, DeviceRGB, DeviceCMYK and Pattern, are
+// written as a bare name there (ISO 32000-1, 8.6.3, Table 62).
+func (s *session) undefinedSpaceName(ctx context.Context, cs ast.PdfObject) bool {
+	v, err := s.resolve(ctx, cs)
+	name, ok := v.(ast.PdfName)
+	if err != nil || !ok {
+		return false
+	}
+	switch name {
+	case graphics.FamilyDeviceGray, graphics.FamilyDeviceRGB, graphics.FamilyDeviceCMYK, graphics.FamilyPattern:
+		return false
+	}
+	return true
+}
+
+// pageGroup returns the page group a page whose dictionary is dict is given
+// under [Options.GroupPages], nil when it gets none: one that names no group
+// of its own, under a grey or CMYK target, whose own output intents do not
+// characterise a device of the target's family.
+//
+// ISO 32000-1, 11.4.7 and Table 147 leave the blending space of a page with
+// no group to the reader, which composites in its device's space, and
+// 14.11.5 has the output intent name that device: a page the conversion
+// leaves with no intent of the target's family would composite outside the
+// target, in sRGB on screen and in a flattening. A page group that names the
+// target fixes the space. A page with no /Group composites as a page group
+// with the default attributes (11.4.7), isolated and non-knockout, so naming
+// the space is all the group changes, and a page that composites nothing
+// draws as before.
+func (s *session) pageGroup(ctx context.Context, dict ast.PdfDict) ast.PdfObject {
+	if !s.opts.GroupPages || s.t.n == 3 || dict["Group"] != nil {
+		return nil
+	}
+	// ISO 32000-2, 14.11.5: a page's own output intents override the
+	// document's.
+	if pdfimage.OutputIntentsFamily(ctx, s.doc, dict["OutputIntents"]) == s.t.deviceFamily() {
+		return nil
+	}
+	return ast.PdfDict{
+		"Type": ast.PdfName("Group"),
+		"S":    ast.PdfName("Transparency"),
+		"CS":   s.t.spaceObject(),
+	}
 }
 
 // transparencyGroup reports whether the group attributes dictionary d is a

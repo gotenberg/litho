@@ -112,6 +112,12 @@ type Options struct {
 	// are, and litho's built-in profile for the others. A profile the engine
 	// builds no transform from gives way to the built-in one.
 	DeviceGray, DeviceRGB, DeviceCMYK []byte
+	// GroupPages gives each page with no /Group, under a grey or CMYK
+	// target, a page group blending in the target, unless the page's own
+	// output intents characterise a device of the target's family (see
+	// [session.pageGroup]). The caller sets it when the document's output
+	// intent will not name that family and nothing forbids the group.
+	GroupPages bool
 	// Engine converts between endpoints. nil selects the package's engine.
 	Engine Engine
 }
@@ -174,6 +180,20 @@ func (t targetInfo) device() bool {
 // ICCBased space of four components (see [contentRewriter.judgeColor]).
 func (t targetInfo) cmyk() bool {
 	return t.Family == graphics.FamilyDeviceCMYK || (t.Family == graphics.FamilyICCBased && t.n == 4)
+}
+
+// deviceFamily returns the device family the target's values are written in
+// where only a device colour can be (an annotation's /C, ISO 32000-1, Table
+// 164), and which an output intent of its component count characterises
+// (14.11.5): DeviceGray, DeviceRGB or DeviceCMYK, by its component count.
+func (t targetInfo) deviceFamily() string {
+	switch t.n {
+	case 1:
+		return graphics.FamilyDeviceGray
+	case 4:
+		return graphics.FamilyDeviceCMYK
+	}
+	return graphics.FamilyDeviceRGB
 }
 
 // spaceObject returns the colour space object the target is written as in a

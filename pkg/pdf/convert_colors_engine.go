@@ -34,6 +34,9 @@ type recolorRequest struct {
 	convertSpots           bool
 	// jpegQuality is the quality of [WithJPEGQuality], 0 for lossless.
 	jpegQuality int
+	// groupPages gives each page with no /Group a page group blending in
+	// the target ([recolor.Options.GroupPages]).
+	groupPages bool
 }
 
 // recolorResult counts what the engine converted.
@@ -95,6 +98,7 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		DeviceGray:             gray,
 		DeviceRGB:              rgb,
 		DeviceCMYK:             cmyk,
+		GroupPages:             req.groupPages,
 	})
 	if err != nil {
 		return recolorResult{}, err

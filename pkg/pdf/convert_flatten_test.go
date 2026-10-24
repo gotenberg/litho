@@ -152,3 +152,87 @@ func TestFlattenCompositesInTheOutputIntentSpace(t *testing.T) {
 		}
 	}
 }
+
+// requireInCMYK fails unless every page of data paints in DeviceCMYK alone.
+func requireInCMYK(t *testing.T, data []byte) {
+	t.Helper()
+	ctx := context.Background()
+	r := openColorPDF(t, data)
+	n, err := r.PageCount(ctx)
+	if err != nil {
+		t.Fatalf("PageCount: %v", err)
+	}
+	for p := 1; p <= n; p++ {
+		uses, err := r.ExtractColorSpaces(ctx, p)
+		if err != nil {
+			t.Fatalf("ExtractColorSpaces: %v", err)
+		}
+		for _, u := range uses {
+			if u.Family != "DeviceCMYK" {
+				t.Errorf("page %d: %s outside the CMYK target", p, describeUse(u))
+			}
+		}
+	}
+}
+
+// TestConvertColorsWithoutIntentThenFlattenStaysCMYK checks that a CMYK
+// conversion that sets no output intent gives a page with no group a page
+// group in the target, so a flattening composites it in CMYK rather than in
+// sRGB (ISO 32000-1, 11.4.7, Table 147).
+func TestConvertColorsWithoutIntentThenFlattenStaysCMYK(t *testing.T) {
+	t.Parallel()
+	converted := convertCMYK(t, transparentRGBPDF(""), WithoutOutputIntent())
+	_, out := flattenPDF(t, converted)
+	requireCMYKOnly(t, out)
+}
+
+// TestConvertColorsLeavesAPDFA1PageUngrouped checks that a conversion
+// setting no output intent gives no page group to a page of a document
+// claiming PDF/A-1, whose ISO 19005-1, 6.4 forbids a transparency group.
+func TestConvertColorsLeavesAPDFA1PageUngrouped(t *testing.T) {
+	t.Parallel()
+	xmp := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/">` +
+		`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" ` +
+		`xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" pdfaid:part="1" pdfaid:conformance="B"/></rdf:RDF></x:xmpmeta><?xpacket end="w"?>`
+	for _, tc := range []struct {
+		name    string
+		catalog string
+		group   bool
+	}{
+		{"PDF/A-1", "<< /Type /Catalog /Pages 2 0 R /Metadata 5 0 R >>", false},
+		{"no claim", "<< /Type /Catalog /Pages 2 0 R >>", true},
+	} {
+		src := colorFixturePDF([]string{
+			tc.catalog,
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R >>",
+			colorStream("", "1 0 0 rg 0 0 200 100 re f"),
+			colorStream("/Type /Metadata /Subtype /XML", xmp),
+		})
+		converted := convertCMYK(t, src, WithoutOutputIntent())
+		if got := bytes.Contains(converted, []byte("/Transparency")); got != tc.group {
+			t.Errorf("%s: page group %v, want %v", tc.name, got, tc.group)
+		}
+	}
+}
+
+// TestConvertColorsThenFlattenSynthesisedAnnotation checks that an
+// annotation with no appearance stream, which a flattening draws from its
+// /C and /IC (ISO 32000-1, 12.5.6) as vector content, is drawn in the target
+// once converted.
+func TestConvertColorsThenFlattenSynthesisedAnnotation(t *testing.T) {
+	t.Parallel()
+	src := colorFixturePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R /Annots [5 0 R] >>",
+		colorStream("", "0 0 1 rg 0 0 200 100 re f"),
+		"<< /Type /Annot /Subtype /Square /Rect [20 20 120 120] /C [1 0 0] /IC [0 1 0] /F 4 >>",
+	})
+	converted := convertCMYK(t, src)
+	report, out := flattenPDF(t, converted, WithFlattenPrintedAnnotations())
+	if len(report.Pages) != 1 || report.Pages[0].Annotations != 1 {
+		t.Fatalf("the annotation was not drawn into the page: %+v", report)
+	}
+	requireInCMYK(t, out)
+}
