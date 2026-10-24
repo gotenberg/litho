@@ -358,8 +358,21 @@ func childFormDepth(kind useKind, formDepth int) int {
 }
 
 // walkDictUses visits each value of dict under the kind its key leads to.
+//
+// The /Obj of an object reference is not visited: it names the XObject or
+// annotation a structure element holds as a whole (ISO 32000-1, 14.7.4.3),
+// which paints nothing from there. An image the page draws is reached
+// through the page's resources, where its placements are measured, and one
+// blanked in place stays the object the reference names, its parent tree key
+// kept ([carryImageEntries]). Counting the reference as a use blanked every
+// image a structure element names in a copy, and left the original samples
+// in the file under that element.
 func walkDictUses(dict ast.PdfDict, kind useKind, visit func(ast.PdfObject, useKind) error) error {
+	objRef := dict["Type"] == ast.PdfName("OBJR")
 	for _, key := range slices.Sorted(maps.Keys(dict)) {
+		if objRef && key == "Obj" {
+			continue
+		}
 		childKind := useOther
 		switch kind {
 		case useCatalog:
