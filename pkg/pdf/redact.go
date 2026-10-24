@@ -417,9 +417,14 @@ type RedactReport struct {
 //     /Info is emptied and the catalog's XMP removed.
 //   - The redacted page's /Thumb, /PieceInfo and /Metadata go: a thumbnail, an
 //     application's copy of the page, and an XMP packet that can carry a page
-//     thumbnail as base64 (ISO 32000-1, 12.3.4, 14.5 and 14.3.2). An image
-//     blanked in place is rewritten without its /Alternates, /Metadata and
-//     other entries, which picture or describe the samples it had.
+//     thumbnail as base64 (ISO 32000-1, 12.3.4, 14.5 and 14.3.2). A blanked
+//     image is rewritten without its /Alternates, /OPI, /ID, /Metadata, /AF
+//     and /PtData, which picture or describe the samples it had, and keeps
+//     its /OC, /Interpolate, /Intent, /Name and /Measure, which say where
+//     and how it paints, so a hidden image stays hidden. A blanked image
+//     keeps its /StructParent where it is blanked in place, and a copy
+//     blanked for one placement carries none: its structure element names
+//     the original (14.7.4.4).
 //   - JavaScript goes, wherever an action entry or the /Names/JavaScript tree
 //     holds it (ISO 32000-1, 12.6.4.16): a script builds a word at run time
 //     from pieces no comparison of bytes finds. Form calculations and custom

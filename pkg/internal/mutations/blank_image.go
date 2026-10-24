@@ -25,6 +25,57 @@ import (
 // (ISO 32000-1, Table 89).
 var maskEntries = []ast.PdfName{"Mask", "ColorKeyMask"}
 
+// keptImageEntries are the entries of an image dictionary (ISO 32000-1,
+// Table 89; ISO 32000-2, Table 87) that stay true of the image once
+// [blankImage] has cleared some of its samples, and that its replacement
+// therefore carries over. They describe where and how the image paints, not
+// what its samples show:
+//
+//   - /OC puts the image in an optional content group or membership (8.11.2):
+//     dropping it made a hidden image visible, its blank included.
+//   - /Interpolate (8.9.5.3) and /Intent (8.6.5.8) say how the samples
+//     render, and the samples the region did not reach render as before only
+//     under the same smoothing and the same rendering intent.
+//   - /Name (Table 89, PDF 1.0) is the resource name the image was known by.
+//   - /Measure (ISO 32000-2, 12.10) is the coordinate system of the image's
+//     placement, which blanking leaves where it was.
+//
+// /StructParent (14.7.4.4) is carried apart, see [carryImageEntries]. Every
+// other entry describes the picture as it was, and blanking drops it
+// deliberately: /Alternates are other versions of the same picture (8.9.5.4),
+// /OPI names its high-resolution original (14.11.7), /ID is the digital
+// identifier of the resource it was captured from (14.10.6), /Metadata may
+// describe or carry a thumbnail of it (14.3.2), /AF associates files with it
+// (ISO 32000-2, 14.13), and /PtData holds point data read off it (ISO
+// 32000-2, 12.10.4). Each would keep in the file what the region removed.
+// /SMask, /Decode, /Mask and /SMaskInData are handled where the samples are.
+var keptImageEntries = []ast.PdfName{"OC", "Interpolate", "Intent", "Name", "Measure"}
+
+// carryImageEntries copies onto dst, the dictionary of a blanked image's
+// replacement, the entries of src, the dictionary it replaces, that
+// [keptImageEntries] lists, and /StructParent unless private is set.
+//
+// /StructParent is the image's key in the structure parent tree, whose value
+// is the one structure element the image belongs to, and that element's
+// object reference names the image by its object number (ISO 32000-1,
+// 14.7.4.3 and 14.7.4.4). A replacement written over the image keeps the
+// object number, so the key and the reference still name it. A private copy
+// (see [blankPrivateCopies]) is a new object no object reference names, and a
+// parent tree key maps one object to its parent: carrying the key would make
+// two objects claim an entry whose element names only the original, which
+// still paints at the placements the regions did not cover. The copy carries
+// no key.
+func carryImageEntries(dst, src ast.PdfDict, private bool) {
+	for _, key := range keptImageEntries {
+		if v, present := src[key]; present {
+			dst[key] = v
+		}
+	}
+	if v, present := src["StructParent"]; present && !private {
+		dst["StructParent"] = v
+	}
+}
+
 // blankedPicture and blankedStencil are the sample values a cleared pixel takes.
 //
 // A picture is cleared to opaque black, which replaces the samples that were
@@ -70,6 +121,10 @@ var (
 // samples are stored. The replacement keeps /ImageMask at one bit a sample and
 // carries no /Decode, because the decode already folded that array into the
 // pixels; see [packStencilBits].
+//
+// Every replacement keeps the entries that stay true of the blanked image,
+// its optional content membership, rendering keys and structure parent key
+// among them ([carryImageEntries]).
 //
 // With private set, the result goes to a new object rather than over the
 // image, which stays as it was for the placements that still paint it; see
@@ -171,7 +226,7 @@ func blankImage(
 				// The explicit /SMask composites straight colour (11.6.5.3).
 				pdfimage.Unpremultiply(native.Data, dataMask.Alpha, native.Width*native.Height, native.Components)
 			}
-			if err := blankNative(ctx, alloc, doc, page, dest, stream, box, zones, native); err != nil {
+			if err := blankNative(ctx, alloc, doc, page, dest, stream, box, zones, native, private); err != nil {
 				return 0, nil, err
 			}
 			return dest, blankedPhotograph(source.Dict, box, zones, native.Width, native.Height), nil
@@ -288,6 +343,7 @@ func blankImage(
 	if parms != nil {
 		dict["DecodeParms"] = parms
 	}
+	carryImageEntries(dict, stream.Dict, private)
 
 	if !alloc.AllocAt(dest, ast.NewStream(dict, compressed)) {
 		return 0, nil, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
@@ -503,7 +559,8 @@ func srgbColorSpace(alloc *writer.ObjAllocator) (ast.PdfArray, error) {
 // colour ink for four components, unless the space shows that sample as a
 // colour, as a YCC or Lab-like ICC profile does, where it is the sample whose
 // colour lies nearest black. Zero samples in such a space painted the blank a
-// saturated green.
+// saturated green. The replacement keeps the entries [carryImageEntries]
+// names; private says it is a copy, as for [blankImage].
 //
 // # Corpus evidence
 //
@@ -520,6 +577,7 @@ func blankNative(
 	box graphics.ImageBox,
 	zones []heuristics.Zone,
 	native pdfimage.NativeSamples,
+	private bool,
 ) error {
 	n := native.Components
 	black, err := pdfimage.NativeBlack(ctx, doc, page, stream.Dict, n)
@@ -556,6 +614,7 @@ func blankNative(
 	if smask, present := stream.Dict["SMask"]; present {
 		dict["SMask"] = smask
 	}
+	carryImageEntries(dict, stream.Dict, private)
 	if !alloc.AllocAt(dest, ast.NewStream(dict, compressed)) {
 		return fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}

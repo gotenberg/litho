@@ -30,6 +30,24 @@ const lossyFormLevels = 2
 // save less than that per object stays one lossless image.
 const lossyTileOverhead = 400
 
+// lossyFormEntries and lossyTileEntries split the [keptImageEntries] a
+// blanked picture carries between the form [EncodeBlankedPhotographs] puts at
+// its object number and the images that form draws.
+//
+// The form takes the entries that say where the picture belongs, which ISO
+// 32000-1, Table 95 gives a form XObject as Table 89 gives an image: /OC
+// (8.11.3.3, so a hidden picture stays hidden whole), /StructParent (the
+// parent tree key whose element names the object number the form now holds,
+// 14.7.4.4), /Name, and /Measure (ISO 32000-2, Table 93). Each tile takes the
+// entries only an image has, /Interpolate (8.9.5.3) and /Intent (8.6.5.8),
+// which say how its samples render. A form carrying /StructParent is a
+// structural content item as a whole, as the image was, and its tiles carry
+// none: they belong to no structure element of their own.
+var (
+	lossyFormEntries = []ast.PdfName{"OC", "StructParent", "Name", "Measure"}
+	lossyTileEntries = []ast.PdfName{"Interpolate", "Intent"}
+)
+
 // BlankedPhotograph is what [EncodeBlankedPhotographs] needs of one blanked
 // picture the source held as JPEG or JPEG 2000: the rectangles of its
 // samples, in its own pixel grid with the top row first, that a region could
@@ -232,6 +250,11 @@ func encodeBlankedPhotograph(ctx context.Context, alloc *writer.ObjAllocator, do
 		if t.Parms != nil {
 			tileDict["DecodeParms"] = t.Parms
 		}
+		for _, key := range lossyTileEntries {
+			if v, present := dict[key]; present {
+				tileDict[key] = v
+			}
+		}
 		ref := alloc.Alloc(ast.NewStream(tileDict, t.Data))
 		name := lossyTileName(i)
 		if i > 0 {
@@ -261,6 +284,11 @@ func encodeBlankedPhotograph(ctx context.Context, alloc *writer.ObjAllocator, do
 		"Subtype":   ast.PdfName("Form"),
 		"BBox":      clipFreeBox(),
 		"Resources": ast.PdfDict{"XObject": resources},
+	}
+	for _, key := range lossyFormEntries {
+		if v, present := dict[key]; present {
+			form[key] = v
+		}
 	}
 	if !alloc.AllocAt(objNum, ast.NewStream(form, drawn.Bytes())) {
 		return false, fmt.Errorf("%w: object %d", ErrImageNotAddressable, objNum)
