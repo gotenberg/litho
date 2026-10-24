@@ -287,6 +287,7 @@ one deliberately rather than diffing it against a fresh build.
 | `t3overprint_2b.pdf`   | PDF/A-2b     | Type 3 glyphs with colours of their own, shown under overprint   |
 | `whitetext_2b.pdf`     | PDF/A-2b     | White text on a bar, an image and the bare page, read by drawing |
 | `annotdrawn_2b.pdf`    | PDF/A-2b     | Annotations with no `/AP` drawn where their `/Rect` does not sit |
+| `sharedformimg_2b.pdf` | PDF/A-2b     | An image forms draw on both pages, which a redaction copies      |
 
 ### Must-not-fire controls
 
@@ -760,6 +761,7 @@ are covered under [Known divergences](#known-divergences).
 | `sharedicc_2b.pdf`     | 4\*  | 2\*  | 4\*  | 2\*  | 2\*  | 4\*  | 2\*  | 2\*  | 3\* | 3\*  | 4\*  | 5    | 6    |
 | `sharedimage_2b.pdf`   | 5    | 2    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `whitetext_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
+| `sharedformimg_2b.pdf` | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sharedtag_ua1.pdf`    | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 6    | 7    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
@@ -9396,6 +9398,39 @@ the PolyLine, a PDF 1.5 type, fails `6.5.2/1`, the `/C` arrays `6.5.3/3`,
 DeviceRGB `6.2.3.3/1`, and the part-2 claim `6.7.11/2`. veraPDF 1.30.2 and litho report the same rule set in
 all thirteen cells, on the source and on the output of the whole-page
 redaction.
+
+### `sharedformimg_2b.pdf`
+
+`sharedimage_2b.pdf` covers an image the page draws itself. One a form XObject
+draws has no `Do` on the page to repoint: the form's stream holds it, and every
+placement of the form draws that stream. Where the regions do not cover the
+same samples at every placement, litho now copies the form, and each form
+between the page and the image, for the covered placement: the copy names a
+blanked copy of the image, and the page draws the copy. Before, the redaction
+refused with `ErrImageShared`. No fixture here drew one image through a form in
+two places, so neither `mutate-redact` nor `redact-render` reached a form copy
+on this corpus. Both pages share one `/Resources` dictionary naming two forms
+over a 100-point square, and the forms draw one 4 x 4 DeviceGray image, `Logo`,
+all 0x80, on a 400 x 400 page:
+
+| Form    | Draws                  | Page 1                     | Page 2        |
+| ------- | ---------------------- | -------------------------- | ------------- |
+| `Card`  | `Logo` over its square | at (50, 250) and (150, 50) | at (50, 250)  |
+| `Frame` | `Card` at its origin   | at (250, 250)              | at (250, 250) |
+
+Redacting all of page 1 blanks its three placements in copies: a `Card` copy
+for each direct placement and a `Frame` copy drawing a `Card` copy for the
+nested one, four forms in all (`RedactReport.FormsCopied`). Page 2, both forms
+and the image stay as they were. The centred quarter of page 1 covers a
+different corner of each placement, and copies the same four forms. poppler
+26.09.0 paints both outputs as litho does: the covered samples black, every
+other sample 0x80, page 2 untouched.
+
+The RGB output intent covers DeviceGray, so the file is conforming at PDF/A-2b;
+the other cells are the identification and tagging rules of their parts.
+veraPDF 1.30.2 and litho report the same rule set in all thirteen cells, on the
+source and on the outputs of both redactions, whose added rules are the
+metadata ones a redaction clears by design.
 
 ## Scope
 
