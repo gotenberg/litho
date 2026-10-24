@@ -9727,7 +9727,13 @@ Before, poppler 26.09.0 drew 11,845 pixels outside the centred quarter and
 21,667 outside the band that the source does not draw, all in `ImB`'s box: the
 hidden ramp. Now 910 and 568, all within 7 pixels of a region's edge in `ImA`'s
 box, where the smoothing blends the blank into the next samples (the cell's
-`image_spill`). An object reference (14.7.4.3) is no place an image paints:
+`image_spill`). poppler draws that blend half a sample toward the image's
+origin from litho and PDFium 4.30.0, which agree to a level: up to 4 pixels
+further out on the quarter's left and top edges and the band's top edge, past
+the pixels litho's images-only renderings show changed (138 and 79 pixels the
+cell once failed as `outside_changed`), and 88 pixels of the kept row's colour
+fading into the blank inside the band's bottom edge, which the cell counts in
+`interpolation_spill`. An object reference (14.7.4.3) is no place an image paints:
 it once sent every image a structure element names to a blanked copy, leaving
 its samples in the file under the element. `ImC` is now blanked in place,
 keeping the key its element and the parent tree name it by (14.7.4.4); `ImE`,
