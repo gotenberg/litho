@@ -176,6 +176,17 @@ type Options struct {
 	// which are not drawn on the page's raster. The render calls it on its
 	// own goroutine, in painting order.
 	Glyph func(origin geom.Point, bounds geom.Rect)
+	// OmitGlyph, when not nil, is called with the text origin, in device
+	// space as [Options.Glyph] reports it, of each glyph the page shows, a
+	// Type 3 glyph's among them, and leaves out each glyph it returns true
+	// for as [Options.Omit] leaves out [Text]: the glyph paints nothing and
+	// keeps its clipping (ISO 32000-1, 9.3.6). It is not called for the
+	// glyphs a Type 3 glyph description, an annotation appearance, a soft
+	// mask's group or a tiling pattern's cells show, which are drawn whole
+	// as [Options.Omit] draws them. A caller judging some glyphs by the
+	// pixels they change draws the page with and without them. The render
+	// calls it on its own goroutine.
+	OmitGlyph func(origin geom.Point) bool
 	// SolidPlaceholders fills the whole box of each glyph drawn as a
 	// placeholder ([PlaceholderGlyph]) rather than its hollow frame: the
 	// area a reader holding the font's program may ink, which a caller
@@ -376,6 +387,7 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 		overprint:   opts.Overprint,
 		noTransfer:  opts.NoTransfer,
 		glyphShown:  opts.Glyph,
+		omitGlyph:   opts.OmitGlyph,
 		solid:       opts.SolidPlaceholders,
 		within:      opts.Within,
 		shared:      opts.Shared,
@@ -429,7 +441,7 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 	}
 	if opts.Omit&Annotations == 0 {
 		// An appearance stream is the annotation (12.5.5): drawn whole.
-		r.omit = 0
+		r.omit, r.omitGlyph = 0, nil
 		if err := r.annotations(g, opts.Annotations); err != nil {
 			return nil, report, err
 		}

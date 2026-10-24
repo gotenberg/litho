@@ -269,8 +269,9 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 		mode = 0
 	}
 	// Text left out keeps its clipping (9.3.6) and paints nothing.
-	fill := (mode&3 == 0 || mode&3 == 2) && !r.omits(Text)
-	strokes := (mode&3 == 1 || mode&3 == 2) && !r.omits(Text)
+	omitted := r.omits(Text) || (r.omitGlyph != nil && r.omitGlyph(r.toDevice().Apply(origin)))
+	fill := (mode&3 == 0 || mode&3 == 2) && !omitted
+	strokes := (mode&3 == 1 || mode&3 == 2) && !omitted
 	if g.Source == glyph.SourcePlaceholder {
 		r.report.count(PlaceholderGlyph)
 		if b, ok := g.Outline.Bounds(); ok && r.solid {
@@ -431,9 +432,9 @@ func (r *renderer) type3Glyph(s *scope, key glyphKey, g glyph.Glyph, glyphToUser
 		r.syncClips()
 	}()
 	// The description is the glyph: what it paints is text, drawn whole.
-	savedOmit := r.omit
-	r.omit = 0
-	defer func() { r.omit = savedOmit }()
+	savedOmit, savedOmitGlyph := r.omit, r.omitGlyph
+	r.omit, r.omitGlyph = 0, nil
+	defer func() { r.omit, r.omitGlyph = savedOmit, savedOmitGlyph }()
 	st := r.m.Current()
 	st.CTM = [6]float64(glyphToUser.Mul(geom.Matrix(st.CTM)))
 	return r.run(ops, resources, r.toDevice(), s.depth+1)

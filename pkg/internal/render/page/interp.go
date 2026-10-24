@@ -121,6 +121,10 @@ type renderer struct {
 	// glyphShown is [Options.Glyph], nil in the renderers of pattern cells
 	// and soft masks.
 	glyphShown func(origin geom.Point, bounds geom.Rect)
+	// omitGlyph is [Options.OmitGlyph], nil in the renderers of pattern
+	// cells and soft masks, in a Type 3 glyph description and in the
+	// annotations.
+	omitGlyph func(origin geom.Point) bool
 	// solid fills placeholder glyphs whole ([Options.SolidPlaceholders]).
 	solid bool
 	// unadjusted turns stroke adjustment off ([renderer.adjusts]): set in

@@ -117,6 +117,28 @@ func TestSharedRendersAlike(t *testing.T) {
 	}
 }
 
+// TestOmitGlyphLeavesOutTheGlyphsItNames renders the clipped page leaving out
+// every glyph by [Options.OmitGlyph], and none: the first matches the page
+// drawn without its text, the second the page drawn whole, bit for bit, and
+// the origins OmitGlyph is asked about are those [Options.Glyph] reports.
+func TestOmitGlyphLeavesOutTheGlyphsItNames(t *testing.T) {
+	t.Parallel()
+	all := func(int, int) bool { return true }
+	var asked, shown []geom.Point
+	every := renderClipped(t, "", Options{OmitGlyph: func(p geom.Point) bool { asked = append(asked, p); return true }})
+	sameBits(t, renderClipped(t, "", Options{Omit: Text}), every, all)
+	none := renderClipped(t, "", Options{OmitGlyph: func(geom.Point) bool { return false }})
+	sameBits(t, renderClipped(t, "", Options{Glyph: func(p geom.Point, _ geom.Rect) { shown = append(shown, p) }}), none, all)
+	if len(asked) == 0 || len(asked) != len(shown) {
+		t.Fatalf("OmitGlyph asked about %d glyphs, Glyph reported %d", len(asked), len(shown))
+	}
+	for i := range asked {
+		if asked[i] != shown[i] {
+			t.Errorf("glyph %d: OmitGlyph asked about %v, Glyph reported %v", i, asked[i], shown[i])
+		}
+	}
+}
+
 // TestClipNodeMatchesItsMask reads a chain of clipping paths over parts of
 // the page before rasterising it whole: the values agree bit for bit with
 // the mask the chain makes.
