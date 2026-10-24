@@ -9546,12 +9546,12 @@ thirteen cells.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-236 x 13 = 3068 cells, the whole hand-measured matrix. litho and veraPDF return
+238 x 13 = 3094 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 3044 of the 3068 cells. The 24
+fixtures exist to protect, and it holds in 3070 of the 3094 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
@@ -9560,12 +9560,12 @@ each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-seventeen is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `boxorigin_2b`,
-`pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `siglock_2b`, `sizetie_2b`, `type3cycle_2u` and `viewerboxes_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
+twenty-six is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `blankblack_2b`, `boxorigin_2b`,
+`formplacement_2b`, `greyintent_2b`, `iccalternate_2b`, `pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `sharedformimg_2b`, `sharedimage_2b`, `siglock_2b`, `sizetie_2b`, `t3extent_2b`, `t3overprint_2b`, `type3cycle_2u`, `viewerboxes_2b` and `whitetext_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; and `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 2834 and moves only `ruleset_mismatch`, and on
-those seventeen cells it moves both. Every exception sits in the manifest's
+rule class leaves `matched` at 3094 and moves only `ruleset_mismatch`, and on
+those twenty-six cells it moves both. Every exception sits in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
 fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
 the text scoreboard names the rules only one side reports. A 25th cell in the
