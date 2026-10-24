@@ -68,7 +68,7 @@ type Options struct {
 	// JPEG at that quality (ITU-T T.81): one whose region paints only
 	// images and shadings, no filled or stroked path and no text, and whose
 	// pixels hold many colours, unless Flate holds it in no more bytes (see
-	// [flattener.encodeComposite]). A composite mixing photographs with
+	// [imagetiles.Encoder.Composite]). A composite mixing photographs with
 	// vector art is cut into tiles, its photographic ones JPEG and the
 	// others lossless (see [flattener.encodeTiles]). 0 keeps every
 	// composite lossless under Flate, one image per region.
@@ -595,7 +595,7 @@ type tileImg struct {
 // with ink would decode as a trace of that ink, and every hole reaching the
 // image, widened by [pixelMargin], is kept out of the JPEG tiles as an edge
 // is, its pixels left in a lossless tile. The margin is at least the
-// [tileOverlap] a JPEG tile reaches into its neighbours, so no JPEG tile
+// [imagetiles.Overlap] a JPEG tile reaches into its neighbours, so no JPEG tile
 // holds a painted-out pixel.
 func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict, vector, holes []Rect) (regionImg, bool, error) {
 	size := res.Group.Bounds().Size()
@@ -635,13 +635,13 @@ func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Ge
 		ref := f.alloc.Alloc(ast.NewStream(ast.PdfDict{
 			"Type":             ast.PdfName("XObject"),
 			"Subtype":          ast.PdfName("Image"),
-			"Width":            ast.PdfInt(t.px.Dx()),
-			"Height":           ast.PdfInt(t.px.Dy()),
+			"Width":            ast.PdfInt(t.Px.Dx()),
+			"Height":           ast.PdfInt(t.Px.Dy()),
 			"ColorSpace":       space,
 			"BitsPerComponent": ast.PdfInt(8),
-			"Filter":           ast.PdfName(t.filter),
-			"Length":           ast.PdfInt(len(t.data)),
-		}, t.data))
+			"Filter":           ast.PdfName(t.Filter),
+			"Length":           ast.PdfInt(len(t.Data)),
+		}, t.Data))
 		name := f.newName(xobjects, f.prefix("FlatIm", "Ri"))
 		xobjects[name] = ref
 		// The unit square's bottom edge is the image's last row (ISO
@@ -649,8 +649,8 @@ func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Ge
 		// y grows down. Each tile maps onto its own device pixels of the
 		// composite's grid, so the tiles draw the composite's pixels where
 		// one image would.
-		unit := geom.Matrix{float64(t.px.Dx()), 0, 0, -float64(t.px.Dy()), float64(t.px.Min.X), float64(t.px.Max.Y)}
-		img.tiles = append(img.tiles, tileImg{name: name, matrix: unit.Mul(inv), px: t.px, jpeg: t.filter == "DCTDecode"})
+		unit := geom.Matrix{float64(t.Px.Dx()), 0, 0, -float64(t.Px.Dy()), float64(t.Px.Min.X), float64(t.Px.Max.Y)}
+		img.tiles = append(img.tiles, tileImg{name: name, matrix: unit.Mul(inv), px: t.Px, jpeg: t.Filter == "DCTDecode"})
 	}
 	return img, true, nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/imagetiles"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -168,7 +169,7 @@ func TestRedactionJPEGKeepsRegionsPaper(t *testing.T) {
 	}
 }
 
-// TestRedactionJPEGUnderlay pins the layout of [flattener.encodeUnderlay]:
+// TestRedactionJPEGUnderlay pins the layout of [imagetiles.Encoder.Tiles]:
 // the page draws one lossless image first, placed as the lossless fallback
 // places its one image, then JPEG tiles, and the underlay holds the lossless
 // image's samples exactly wherever no JPEG tile lies, and along the band
@@ -184,9 +185,9 @@ func TestRedactionJPEGUnderlay(t *testing.T) {
 }
 
 // assertUnderlay checks that out, the page of lossless with its composite
-// encoded in JPEG tiles, draws the layout of [flattener.encodeUnderlay]: one
+// encoded in JPEG tiles, draws the layout of [imagetiles.Encoder.Tiles]: one
 // lossless image first, placed as lossless places its one image, holding its
-// samples exactly but inside each JPEG tile less [underlayBand], then the
+// samples exactly but inside each JPEG tile less [imagetiles.UnderlayBand], then the
 // JPEG tiles.
 func assertUnderlay(t *testing.T, lossless, out []byte) {
 	t.Helper()
@@ -230,7 +231,7 @@ func assertUnderlay(t *testing.T, lossless, out []byte) {
 		box := transformRect(p.ctm.Mul(inv), Rect{MaxX: 1, MaxY: 1})
 		px := image.Rect(int(math.Round(box.MinX*float64(w))), int(math.Round((1-box.MaxY)*float64(h))),
 			int(math.Round(box.MaxX*float64(w))), int(math.Round((1-box.MinY)*float64(h))))
-		filled = append(filled, px.Inset(underlayBand))
+		filled = append(filled, px.Inset(imagetiles.UnderlayBand))
 	}
 	for y := range h {
 		for x := range w {
@@ -250,7 +251,7 @@ func assertUnderlay(t *testing.T, lossless, out []byte) {
 // tile holds a painted-out pixel.
 func TestHolePixelsCoverTheOverlap(t *testing.T) {
 	t.Parallel()
-	if pixelMargin < tileOverlap {
-		t.Fatalf("pixelMargin %d is under tileOverlap %d", pixelMargin, tileOverlap)
+	if pixelMargin < imagetiles.Overlap {
+		t.Fatalf("pixelMargin %d is under imagetiles.Overlap %d", pixelMargin, imagetiles.Overlap)
 	}
 }
