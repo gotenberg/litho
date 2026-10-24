@@ -16,7 +16,7 @@ import (
 )
 
 // RedactionCheckDPI is the resolution, in pixels per inch, the pixel check of
-// [WithRedactionPixelCheck] renders a redacted page at: the resolution of the
+// [Writer.Redact] renders a redacted page at: the resolution of the
 // corpus gate's redact-render cell, whose thresholds the check shares.
 const RedactionCheckDPI = 72
 
@@ -64,9 +64,9 @@ const (
 	redactCheckNeighbourhood    = 1
 )
 
-// RedactionPixelError says where the pixel check of [WithRedactionPixelCheck]
-// failed. It matches [ErrRedactionPixelCheck] and [ErrRedactionRefused]
-// under [errors.Is], and the cause in Err when the check could not run.
+// RedactionPixelError says where the pixel check of [Writer.Redact] failed.
+// It matches [ErrRedactionPixelCheck] and [ErrRedactionRefused] under
+// [errors.Is], and the cause in Err when the check could not run.
 // Use [errors.As] to read it.
 // Values must not be shared across goroutines without synchronization.
 type RedactionPixelError struct {
@@ -114,9 +114,11 @@ func (e *RedactionPixelError) Unwrap() []error {
 	return errs
 }
 
-// WithRedactionPixelCheck makes [Writer.Redact] render each redacted page
-// before and after the redaction, at [RedactionCheckDPI], and refuse with a
-// [*RedactionPixelError] unless the rendering proves two things:
+// WithoutRedactionPixelCheck makes [Writer.Redact] skip its pixel check.
+//
+// By default Redact renders each redacted page before and after the
+// redaction, at [RedactionCheckDPI], and refuses with a [*RedactionPixelError]
+// unless the rendering proves two things:
 //
 //   - Inside each region, eroded by two pixels, the page paints nothing but
 //     paper and blanked images: its rendering equals its rendering with images
@@ -145,7 +147,9 @@ func (e *RedactionPixelError) Unwrap() []error {
 // placeholder boxes, on both renderings alike.
 //
 // It costs a full write of the document, its reopening, and three to five
-// renders of each redacted page at 72 dpi, so it is off by default.
+// renders of each redacted page at 72 dpi. Skip it only where that cost
+// matters more than what it proves, or where a caller checks the pixels
+// itself.
 //
 // # Corpus evidence
 //
@@ -163,8 +167,18 @@ func (e *RedactionPixelError) Unwrap() []error {
 //   - pdfjs, govdocs, pdfcpu: one worker, a median of 37 ms more per
 //     redacted page (11, 106 and 69 ms; 112 ms per million pixels at 72
 //     dpi), 3.7 times the redaction alone, and 8.1 s at most.
+func WithoutRedactionPixelCheck() RedactOption {
+	return func(o *redactOpts) { o.noPixelCheck = true }
+}
+
+// WithRedactionPixelCheck asks for the pixel check [Writer.Redact] runs by
+// default, and changes nothing. It is kept so callers written when the check
+// was opt-in still compile.
+//
+// Deprecated: the pixel check is the default; [WithoutRedactionPixelCheck]
+// skips it.
 func WithRedactionPixelCheck() RedactOption {
-	return func(o *redactOpts) { o.pixelCheck = true }
+	return func(*redactOpts) {}
 }
 
 // redactedGlyphs is what a redaction reports of the glyphs it removed, by
@@ -175,7 +189,7 @@ type redactedGlyphs struct {
 	origins map[int][][2]float64
 }
 
-// checkRedactionPixels runs the pixel check of [WithRedactionPixelCheck] on
+// checkRedactionPixels runs the pixel check of [Writer.Redact] on
 // each page of order, after rendering it from before, the document as it was
 // staged before the redaction, and after, the redacted output. regions are
 // the caller's, removed what the redaction reports of the glyphs it removed.

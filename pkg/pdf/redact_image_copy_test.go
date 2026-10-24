@@ -278,8 +278,10 @@ func TestWriter_Redact_ImageCopyIsDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
+	// The pixel check writes nothing, and the first run passed it: the
+	// repeats skip it, so the test costs one check rather than five.
 	for range 4 {
-		again, _, err := redactWith(t, src, regions)
+		again, _, err := redactWith(t, src, regions, WithoutRedactionPixelCheck())
 		if err != nil {
 			t.Fatalf("Redact: %v", err)
 		}

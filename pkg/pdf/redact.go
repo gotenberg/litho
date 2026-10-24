@@ -53,9 +53,10 @@ type RedactOption func(*redactOpts)
 
 // redactOpts holds what [Writer.Redact] and its [RedactOption] values set.
 type redactOpts struct {
-	strict     bool
-	raster     bool
-	pixelCheck bool
+	strict bool
+	raster bool
+	// noPixelCheck skips the pixel check ([WithoutRedactionPixelCheck]).
+	noPixelCheck bool
 }
 
 // WithStrictRedaction makes [Writer.Redact] refuse with
@@ -190,7 +191,7 @@ type RedactReport struct {
 
 	// removedGlyphOrigins maps a 1-based page number to the origin, in user
 	// space, of each glyph removed from the page's own content stream, which
-	// the pixel check of [WithRedactionPixelCheck] finds the drawn glyph by.
+	// the pixel check of [Writer.Redact] finds the drawn glyph by.
 	removedGlyphOrigins map[int][][2]float64
 }
 
@@ -211,7 +212,7 @@ type RedactReport struct {
 // an incremental update would append the edits while leaving every superseded
 // object, the original content stream among them, in the file.
 //
-// Two ways it refuses, both leaving the [Writer] exactly as it was:
+// Three ways it refuses, all leaving the [Writer] exactly as it was:
 //
 //   - [ErrRedactionRefused] when something cannot be removed exactly: a region
 //     covering only some of a text run that cannot be split at its glyphs
@@ -237,6 +238,8 @@ type RedactReport struct {
 //     producer that positions every glyph draws one. A run too short to
 //     identify anything, a lone space, letter or digit, is not looked for: it
 //     survives in nearly every document whatever was removed.
+//   - [ErrRedactionPixelCheck] when a rendering of a redacted page does not
+//     show what the regions promise (see below).
 //
 // A copy that only pages outside the regions draw does not fail the redaction.
 // A region redaction removes what the region covers on its own page, as a
@@ -250,10 +253,11 @@ type RedactReport struct {
 // metadata or any other object, still refuses. [WithStrictRedaction] refuses
 // copies on other pages too.
 //
-// The verification compares text, not pixels. [WithRedactionPixelCheck] adds
-// a third refusal, [ErrRedactionPixelCheck]: it renders each redacted page
-// before and after, and refuses unless the regions show only paper and
-// blanked images and nothing outside them changed.
+// The verification compares text, not pixels, so a pixel check follows it.
+// Redact renders each redacted page before and after at [RedactionCheckDPI],
+// and refuses with a [*RedactionPixelError] unless the regions show only
+// paper and blanked images and nothing outside them changed; see
+// [WithoutRedactionPixelCheck], which skips it, for what it proves and costs.
 //
 // The document holds copies outside its pages too. Each home is cleared,
 // kept for the scan to judge, or left to the rewrite, as follows:
@@ -372,7 +376,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	// before the redaction, which must be rendered from a document the
 	// redaction's passes have not started on.
 	var before *Reader
-	if o.pixelCheck {
+	if !o.noPixelCheck {
 		staged, release, stagedErr := w.stagedReader(ctx)
 		if stagedErr != nil {
 			if ctx.Err() != nil {
@@ -459,6 +463,16 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	// 19005-2, 6.6.2.1 requires.
 	if len(report.RemovedText) == 0 && alloc.Writes() == staged {
 		restoreTrailer()
+		// Removing nothing is no proof the regions show nothing: content the
+		// passes do not see, a Type 3 glyph painting a shading far past the
+		// box its font states among it, still paints there. The page as
+		// staged is the page the caller writes, so it is checked against
+		// itself.
+		if !o.noPixelCheck {
+			if checkErr := checkRedactionPixels(ctx, before, before, regions, order, redactedGlyphs{}); checkErr != nil {
+				return nil, checkErr
+			}
+		}
 		return report, nil
 	}
 
@@ -522,7 +536,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
 	w.recordRedaction(regions, needles, o.strict, copied)
-	if o.pixelCheck {
+	if !o.noPixelCheck {
 		removed := redactedGlyphs{boxes: report.RemovedGlyphBoxes, origins: report.removedGlyphOrigins}
 		if checkErr := w.checkRedactedOutput(ctx, before, regions, order, removed); checkErr != nil {
 			w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
@@ -538,7 +552,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 }
 
 // checkRedactedOutput writes the Writer as [Writer.WriteTo] would, reopens
-// it, and runs the pixel check of [WithRedactionPixelCheck] on the pages of
+// it, and runs the pixel check of [Writer.Redact] on the pages of
 // order against before.
 func (w *Writer) checkRedactedOutput(
 	ctx context.Context,

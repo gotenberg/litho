@@ -282,8 +282,13 @@ func newRedactRenderFeature() *redactRenderFeature {
 		workers: runtime.NumCPU(),
 		poppler: renderWithPoppler,
 		pin:     popplerPin,
+		// The redaction skips its own pixel check, which renders with litho
+		// as this cell's litho half does: under it, a leak this cell exists
+		// to find would come back as a refusal, which the cell counts but
+		// does not gate. The cell is the independent judge of the engine,
+		// with poppler as the second reading.
 		redact: func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion) (*pdf.RedactReport, error) {
-			return w.Redact(ctx, []pdf.RedactRegion{region})
+			return w.Redact(ctx, []pdf.RedactRegion{region}, pdf.WithoutRedactionPixelCheck())
 		},
 		outputs: make(map[string][]byte),
 	}

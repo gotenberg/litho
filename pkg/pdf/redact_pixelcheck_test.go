@@ -31,7 +31,7 @@ func TestRedactPixelCheckPassesAnExactRedaction(t *testing.T) {
 	r := openPixelCheck(t, plantedPDF(pixelCheckBody, plant{}))
 	w := NewWriter(r)
 	defer w.Close()
-	report, err := w.Redact(ctx, []RedactRegion{pixelCheckRegion}, WithRedactionPixelCheck())
+	report, err := w.Redact(ctx, []RedactRegion{pixelCheckRegion})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestRedactPixelCheckRefusesAPageItCannotRenderAndLeavesTheWriter(t *testing
 	r := openPixelCheck(t, src, WithLimits(Limits{MaxRenderPixels: 1000}))
 	w := NewWriter(r)
 	defer w.Close()
-	_, err := w.Redact(ctx, []RedactRegion{pixelCheckRegion}, WithRedactionPixelCheck())
+	_, err := w.Redact(ctx, []RedactRegion{pixelCheckRegion})
 	var pe *RedactionPixelError
 	if !errors.As(err, &pe) || pe.Err == nil || !errors.Is(err, ErrRedactionPixelCheck) {
 		t.Fatalf("got %v, want a pixel check that could not render", err)
@@ -153,7 +153,7 @@ func TestRedactPixelCheckClearsWhatAPlaceholderDrewForARemovedGlyph(t *testing.T
 	r := openPixelCheck(t, plantedPDF(placeholderBody, plant{}))
 	w := NewWriter(r)
 	defer w.Close()
-	if _, err := w.Redact(ctx, regions, WithRedactionPixelCheck()); err != nil {
+	if _, err := w.Redact(ctx, regions); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 }
@@ -223,5 +223,74 @@ func TestRedactPixelCheckFindsAnImageLeftUnderATransfer(t *testing.T) {
 	var pe *RedactionPixelError
 	if !errors.As(err, &pe) || pe.Inside == 0 {
 		t.Fatalf("got %v, want the picture found inside the region", err)
+	}
+}
+
+// type3ShadingPDF shows one Type 3 glyph whose description paints a shading
+// over a 300-point square while its font states a box of a hundredth of
+// that: the redaction bounds the glyph by the stated box, so a region over
+// the far side of the square selects nothing, and the square still shows
+// through it.
+func type3ShadingPDF() []byte {
+	glyph := "1000 0 d0 q 0 0 3000 3000 re W n /Sh sh Q"
+	shading := "<< /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 1 0] " +
+		"/Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [0] /N 1 >> /Extend [true true] >>"
+	return []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /T3 4 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type3 /FontBBox [0 0 10 10] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /a 5 0 R >> " +
+		"/Encoding << /Type /Encoding /Differences [97 /a] >> /FirstChar 97 /LastChar 97 /Widths [1000] " +
+		"/Resources << /Shading << /Sh " + shading + " >> >> >>\nendobj\n" +
+		plantStream(5, "", glyph) +
+		plantStream(6, "", "BT /T3 100 Tf 100 400 Td (a) Tj ET") +
+		"trailer\n<< /Size 7 /Root 1 0 R >>\n%%EOF\n")
+}
+
+// type3ShadingRegion lies over the shading, clear of the glyph's stated box.
+var type3ShadingRegion = RedactRegion{Page: 1, Rect: [4]float64{250, 550, 350, 650}}
+
+func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
+	ctx := context.Background()
+	for name, opts := range map[string][]RedactOption{
+		"default": nil,
+		// Deprecated, and still accepted: it asks for the default.
+		"WithRedactionPixelCheck": {WithRedactionPixelCheck()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			src := type3ShadingPDF()
+			w := NewWriter(openPixelCheck(t, src))
+			defer w.Close()
+			_, err := w.Redact(ctx, []RedactRegion{type3ShadingRegion}, opts...)
+			var pe *RedactionPixelError
+			if !errors.As(err, &pe) || pe.Inside == 0 || !errors.Is(err, ErrRedactionRefused) {
+				t.Fatalf("got %v, want the shading found inside the region", err)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			if !bytes.Equal(out.Bytes(), src) {
+				t.Fatal("the refused redaction changed what the Writer writes")
+			}
+		})
+	}
+}
+
+func TestRedactWithoutPixelCheckSkipsIt(t *testing.T) {
+	ctx := context.Background()
+	w := NewWriter(openPixelCheck(t, type3ShadingPDF()))
+	defer w.Close()
+	if _, err := w.Redact(ctx, []RedactRegion{type3ShadingRegion}, WithoutRedactionPixelCheck()); err != nil {
+		t.Fatalf("Redact without the pixel check: %v", err)
+	}
+
+	// A page the check cannot render refuses under the default, and the
+	// opt-out never renders it.
+	r := openPixelCheck(t, plantedPDF(pixelCheckBody, plant{}), WithLimits(Limits{MaxRenderPixels: 1000}))
+	w2 := NewWriter(r)
+	defer w2.Close()
+	if _, err := w2.Redact(ctx, []RedactRegion{pixelCheckRegion}, WithoutRedactionPixelCheck()); err != nil {
+		t.Fatalf("Redact without the pixel check rendered the page: %v", err)
 	}
 }

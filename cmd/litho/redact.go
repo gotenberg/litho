@@ -112,7 +112,10 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	cmykProfile := fs.String("cmyk-profile", "", "ICC profile DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
 	strict := fs.Bool("strict", false, "Refuse when a place outside the regions still draws removed text or a blanked image, instead of warning")
 	rasterFallback := fs.Bool("raster-fallback", false, "Rasterise the form XObjects and shadings the regions reach, refused otherwise, as images cut out of the regions")
-	pixelCheck := fs.Bool("pixel-check", false, "Render each redacted page before and after, and refuse unless the regions show only paper or blanked images and nothing else changed")
+	noPixelCheck := fs.Bool("no-pixel-check", false, "Skip the pixel check, which renders each redacted page before and after and refuses unless the regions show only paper or blanked images and nothing else changed")
+	// The check runs by default now; the flag stays so scripts that pass it
+	// keep working.
+	fs.Bool("pixel-check", true, "Deprecated: the pixel check runs by default (see --no-pixel-check)")
 
 	var regionSpecs regionFlags
 	fs.Var(&regionSpecs, "region", "Region to clear, page:x,y,width,height (repeatable, required)")
@@ -122,7 +125,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--pixel-check] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--no-pixel-check] -o out.pdf")
 		return exitError
 	}
 
@@ -171,8 +174,8 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if *rasterFallback {
 		redactOpts = append(redactOpts, pdf.WithRedactionRasterFallback())
 	}
-	if *pixelCheck {
-		redactOpts = append(redactOpts, pdf.WithRedactionPixelCheck())
+	if *noPixelCheck {
+		redactOpts = append(redactOpts, pdf.WithoutRedactionPixelCheck())
 	}
 	report, err := w.Redact(ctx, regions, redactOpts...)
 	if err != nil {
