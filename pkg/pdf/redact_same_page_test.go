@@ -16,7 +16,9 @@ import (
 // "offpage" past the media box, "clipped" outside a clipping path,
 // "hiddenlayer" in an optional-content group that is off, "underfill" under
 // an opaque rectangle painted after it, "underimage" under an image painted
-// after it, and "undertext" under larger text drawn after it.
+// after it, "undertext" under a larger Type 3 glyph drawn after it that fills
+// a square over it, and "besidebig" in black inside the box of a large "9"
+// drawn after it, whose ink leaves it uncovered.
 func samePageCopyPDF(copy string) []byte {
 	stream := func(num int, dict, data string) string {
 		return strconv.Itoa(num) + " 0 obj\n<< " + dict + " /Length " + strconv.Itoa(len(data)) +
@@ -31,18 +33,22 @@ func samePageCopyPDF(copy string) []byte {
 		"hiddenlayer": "/OC /L1 BDC BT /F1 12 Tf 100 500 Td (SECRET) Tj ET EMC",
 		"underfill":   "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET 0.2 0.4 0.8 rg 90 490 100 30 re f",
 		"underimage":  "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET q 100 0 0 30 90 490 cm /Im1 Do Q",
-		"undertext":   "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET BT /F1 40 Tf 95 495 Td (WWWW) Tj ET",
+		"undertext":   "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET BT /F2 60 Tf 95 485 Td (A) Tj ET",
+		"besidebig":   "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET BT /F1 200 Tf 70 420 Td (9) Tj ET",
 	}[copy]
 	return []byte("%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
-		"/Resources << /Font << /F1 4 0 R >> /Properties << /L1 5 0 R >> /XObject << /Im1 7 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
+		"/Resources << /Font << /F1 4 0 R /F2 8 0 R >> /Properties << /L1 5 0 R >> /XObject << /Im1 7 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
 		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
 		"5 0 obj\n<< /Type /OCG /Name (L1) >>\nendobj\n" +
 		stream(6, "", "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET "+other) +
 		stream(7, "/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8", "\x40\x80\xc0") +
-		"trailer\n<< /Size 8 /Root 1 0 R >>\n%%EOF\n")
+		"8 0 obj\n<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0] " +
+		"/CharProcs << /sq 9 0 R >> /Encoding << /Type /Encoding /Differences [65 /sq] >> /FirstChar 65 /LastChar 65 /Widths [1000] >>\nendobj\n" +
+		stream(9, "", "1000 0 0 0 1000 1000 d1 0 0 1000 1000 re f") +
+		"trailer\n<< /Size 10 /Root 1 0 R >>\n%%EOF\n")
 }
 
 func TestWriter_Redact_WarnsAboutVisibleCopiesOnTheRedactedPage(t *testing.T) {
@@ -76,6 +82,23 @@ func TestWriter_Redact_WarnsAboutVisibleCopiesOnTheRedactedPage(t *testing.T) {
 	for _, el := range elements {
 		if strings.Contains(el.Text, "SECRET") && el.Y > 600 {
 			t.Errorf("SECRET still drawn at y=%v, inside the region", el.Y)
+		}
+	}
+}
+
+// TestWriter_Redact_JudgesASamePageCopyByItsOwnInk pins a copy that shows
+// inside the box of larger text drawn after it, as pdfjs issue13971.pdf
+// shows "Stück" beside a large "99": the large glyph's box holds every pixel
+// of the copy, its ink none of them, so the copy shows and the redaction
+// succeeds, reporting it, with and without the pixel check.
+func TestWriter_Redact_JudgesASamePageCopyByItsOwnInk(t *testing.T) {
+	for _, opts := range [][]RedactOption{nil, {WithoutRedactionPixelCheck()}} {
+		report, _, err := redactOtherPageCopy(t, samePageCopyPDF("besidebig"), opts...)
+		if err != nil {
+			t.Fatalf("options %d: Redact: %v", len(opts), err)
+		}
+		if !slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool { return h.Token == "SECRET" }) {
+			t.Errorf("options %d: CopiesOnRedactedPages = %+v, want SECRET", len(opts), report.CopiesOnRedactedPages)
 		}
 	}
 }

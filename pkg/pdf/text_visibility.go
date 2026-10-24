@@ -46,9 +46,8 @@ const whiteVerdictBytes = 48
 // White on white is the only judgement it overturns: a glyph in rendering mode
 // 3 paints nothing (ISO 32000-1, 9.3.6, Table 106), so an OCR layer stays
 // invisible without a rendering, and so does a glyph the page renders nothing
-// for. A glyph it cannot judge, the page failing to render or the glyph
-// sharing every pixel with another, keeps its judgement. It returns an error
-// only when ctx ends.
+// for. A glyph it cannot judge, the page failing to render, keeps its
+// judgement. It returns an error only when ctx ends.
 //
 // # Corpus evidence
 //
@@ -61,6 +60,14 @@ const whiteVerdictBytes = 48
 //   - govdocs thread_000_000325.pdf, thread_300_300113.pdf and three more: nine
 //     pages whose only text is white on a scan no longer report
 //     [ErrRequiresOCR].
+//   - govdocs, pdfjs, pdfcpu: judging a run by its own ink rather than by
+//     the pixels no other glyph's box holds changes the default reading of
+//     86 pages of 22 files, 7074 characters gained and 614 lost. Most gains
+//     are white text over a dark offset shadow, both now read (govdocs
+//     thread_200_200433.pdf, thread_200_200835.pdf), and white headers over a
+//     patterned band (pdfjs issue19319.pdf). pdfcpu
+//     pkg_testdata__itu-t81.pdf loses the white figures that pad a table's
+//     columns, the "1" of "199" and a second "A =", which show nowhere.
 //   - pdfjs issue9462.pdf: "KEY ATTRIBUTES", white over a band litho draws
 //     and poppler leaves out of a damaged stream, stays out, nothing the
 //     extraction reads being painted under it.
@@ -109,8 +116,9 @@ func (r *Reader) whiteVerdicts(ctx context.Context, pg *document.Page) (whiteVer
 
 // judgeWhiteText judges each run of pg's glyphs invisible by their white fill
 // alone. A run nothing else paints under stays invisible without a drawing;
-// otherwise pg is drawn with and without its text, and a run shows when its
-// text marks a pixel no other glyph's box covers.
+// otherwise a run shows when its own ink marks the page: the page drawn
+// without it differs from the page drawn whole inside its glyph boxes
+// ([textScene.showsOwnInk]).
 func (r *Reader) judgeWhiteText(ctx context.Context, pg *document.Page) (whiteVerdicts, error) {
 	s, err := r.readScene(ctx, pg)
 	if err != nil {
@@ -131,19 +139,16 @@ func (r *Reader) judgeWhiteText(ctx context.Context, pg *document.Page) (whiteVe
 	if len(runs) == 0 {
 		return verdicts, nil
 	}
-	if err := s.draw(ctx, r, pg, region, false); err != nil {
+	seen, err := s.showsOwnInk(ctx, r, pg, region, runs)
+	if err != nil {
 		if errors.Is(err, errSceneOutsidePage) {
 			return verdicts, nil
 		}
 		return nil, err
 	}
-	for _, run := range runs {
-		st := s.stats(run)
-		if st.area == 0 {
-			continue
-		}
+	for k, run := range runs {
 		for _, i := range run {
-			verdicts[keyOf(s.elements[i])] = st.changed > 0
+			verdicts[keyOf(s.elements[i])] = seen[k]
 		}
 	}
 	return verdicts, nil

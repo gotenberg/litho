@@ -98,6 +98,48 @@ func TestExtractTextElements_WhiteTextJudgedByRendering(t *testing.T) {
 	}
 }
 
+// whiteOwnInkPDF is a letter page holding two white runs on navy bars:
+//
+//   - COVERED, under a white rectangle painted after it: removing it changes
+//     no pixel, so it stays invisible;
+//   - UNDERBIG, inside the box of a large black "9" drawn after it, whose ink
+//     leaves the run uncovered: the box holds every pixel of the run, and the
+//     run shows by its own ink.
+func whiteOwnInkPDF() []byte {
+	const content = "0 0 0.5 rg 50 680 500 60 re f\n" +
+		"BT 1 1 1 rg /F1 14 Tf 60 700 Td (COVERED) Tj ET\n" +
+		"1 g 55 690 300 30 re f\n" +
+		"0 0 0.5 rg 50 380 500 60 re f\n" +
+		"BT 1 1 1 rg /F1 12 Tf 100 400 Td (UNDERBIG) Tj ET\n" +
+		"BT 0 g /F1 200 Tf 70 330 Td (9) Tj ET\n"
+	return buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+}
+
+// TestExtractText_WhiteTextJudgedByItsOwnInk pins that a white run is judged
+// by the pixels removing it changes, not by the pixels no other glyph's box
+// holds: UNDERBIG reads, COVERED does not.
+func TestExtractText_WhiteTextJudgedByItsOwnInk(t *testing.T) {
+	t.Parallel()
+	r := openLimited(t, whiteOwnInkPDF(), Limits{})
+
+	got, err := r.ExtractText(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "UNDERBIG") {
+		t.Errorf("ExtractText = %q, want UNDERBIG", got)
+	}
+	if strings.Contains(got, "COVERED") {
+		t.Errorf("ExtractText = %q, want no COVERED", got)
+	}
+}
+
 // TestExtractText_WhiteTextUnrenderableKeepsJudgement lowers the render budget
 // below the page, so the page cannot be drawn: white text keeps the judgement
 // of its colour alone and HEADING stays out, as it did before rendering judged

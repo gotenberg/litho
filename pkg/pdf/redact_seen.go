@@ -23,20 +23,28 @@ const seenCopyBoxSlack = 0.5
 
 // unseenSamePageCopies returns the copies of copies, each a
 // [RedactReport.CopiesOnRedactedPages] entry, that no rendering of after
-// shows: a run a later opaque fill, an image or anything else paints over,
-// or one drawn where other text covers every pixel of it. Such a copy is a
-// hidden duplicate of the removed text, not the page's other text, so
+// shows: a run a later opaque fill, an image, other text or anything else
+// paints over, or one drawn in the colour of what lies under it. Such a copy
+// is a hidden duplicate of the removed text, not the page's other text, so
 // [Writer.Redact] refuses over it.
 //
-// Each redacted page that holds a copy with boxes is drawn at [sceneDPI] with
-// and without its text, as text extraction judges white text (see
-// [Reader.judgeWhiteText]), over the union of the copies' boxes alone. A
-// copy is seen when its glyphs change a pixel no other glyph's box covers,
-// the drawing marking it there (ISO 32000-1, 8.2: later marks paint over
+// Each redacted page that holds a copy with boxes is judged as text
+// extraction judges white text (see [Reader.judgeWhiteText]), by
+// [textScene.showsOwnInk] over the union of the copies' boxes alone: a copy
+// is seen when the page drawn without its glyphs differs from the page drawn
+// whole inside their boxes, its own ink marking the page there whatever other
+// glyph's box also lies there (ISO 32000-1, 8.2: later marks paint over
 // earlier ones, so a copy painted over changes nothing). A copy with no boxes
 // is spelt only by numbers no text is drawn with and needs no drawing. A page
-// that cannot be drawn, or a copy whose glyphs cannot be found or told from
-// other text, counts as unseen: refusing is the answer that leaks nothing.
+// that cannot be drawn, or a copy whose glyphs cannot be found, counts as
+// unseen: refusing is the answer that leaks nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue13971.pdf, the centred quarter: the copy of the removed
+//     "tück" drawn plainly below the region, in "Stück", was refused as unseen
+//     while the boxes of the large "99" beside it held every pixel it marks;
+//     judged by its own ink it shows, and the redaction succeeds reporting it.
 func unseenSamePageCopies(ctx context.Context, after *Reader, copies []RedactionHit) ([]RedactionHit, error) {
 	byPage := make(map[int][]int)
 	for i, c := range copies {
@@ -104,18 +112,7 @@ func seenOnPage(ctx context.Context, after *Reader, pages []*document.Page, page
 			}
 		}
 	}
-	if err := s.draw(ctx, after, pg, region, false); err != nil {
-		return nil, err
-	}
-	seen := make([]bool, len(idx))
-	for k, run := range runs {
-		if len(run) == 0 {
-			continue
-		}
-		st := s.stats(run)
-		seen[k] = st.area > 0 && st.changed > 0
-	}
-	return seen, nil
+	return s.showsOwnInk(ctx, after, pg, region, runs)
 }
 
 // boxWithin reports inner lying inside outer grown by slack on every side,

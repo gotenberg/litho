@@ -67,9 +67,10 @@ type textScene struct {
 	// shadings, those form XObjects draw included.
 	paints  []graphics.TextPaint
 	painted [3][][4]float64
-	// rects is each element's ink box in pixels, empty when it has none, and
-	// cover counts, per pixel, the rects covering it, saturating. Both are
-	// nil until [textScene.draw].
+	// rects is each element's ink box in pixels, empty when it has none or
+	// is not counted, and cover counts, per pixel, the rects covering it,
+	// saturating. Both are nil until [textScene.draw] or
+	// [textScene.showsOwnInk].
 	rects []image.Rectangle
 	cover []uint16
 }
@@ -172,6 +173,40 @@ func boxesMeet(a, b [4]float64) bool {
 // draws only where they lie, so a page of dense art costs the rasterisation
 // of that part alone.
 func (s *textScene) draw(ctx context.Context, r *Reader, pg *document.Page, region [4]float64, textOnly bool) error {
+	pg, box, err := s.frame(pg, region)
+	if err != nil {
+		return err
+	}
+	if s.with, err = s.render(ctx, r, pg, box, page.Options{}); err != nil {
+		return fmt.Errorf("drawing the page: %w", err)
+	}
+	if s.without, err = s.render(ctx, r, pg, box, page.Options{Omit: page.Text}); err != nil {
+		return fmt.Errorf("drawing the page without text: %w", err)
+	}
+	if s.with.Bounds() != s.without.Bounds() {
+		return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), s.without.Bounds())
+	}
+	if b := s.with.Bounds(); b.Dx() != s.geo.Width || b.Dy() != s.geo.Height {
+		return fmt.Errorf("page drawn as %v, its geometry %dx%d", b, s.geo.Width, s.geo.Height)
+	}
+	if textOnly {
+		// Clips stay in force with what they clip left out (the renderer
+		// keeps a path's or a text object's clip, 8.5.4 and 9.3.6), so text
+		// a clip removes paints nothing alone either.
+		if s.alone, err = s.render(ctx, r, pg, box, page.Options{Omit: page.Paths | page.Images | page.Shadings | page.Annotations}); err != nil {
+			return fmt.Errorf("drawing the page's text alone: %w", err)
+		}
+		if s.alone.Bounds() != s.with.Bounds() {
+			return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), s.alone.Bounds())
+		}
+	}
+	return s.countCover(ctx, func(int) bool { return true })
+}
+
+// frame sets the geometry s draws pg at and returns the page to draw and the
+// boundary drawn: the crop box, or region, when not the zero box, reduced to
+// the crop box (see [textScene.draw]).
+func (s *textScene) frame(pg *document.Page, region [4]float64) (*document.Page, page.Box, error) {
 	box := page.CropBox
 	if region != [4]float64{} {
 		crop := boxToRect(pg.ViewedBox())
@@ -180,7 +215,7 @@ func (s *textScene) draw(ctx context.Context, r *Reader, pg *document.Page, regi
 			math.Min(region[2], math.Max(crop[0], crop[2])), math.Min(region[3], math.Max(crop[1], crop[3])),
 		}
 		if !(region[0] < region[2] && region[1] < region[3]) {
-			return errSceneOutsidePage
+			return nil, 0, errSceneOutsidePage
 		}
 		// The renderer draws a named page boundary, so the region stands in
 		// for the art box of a copy of the page; the copy is drawn, never
@@ -192,52 +227,33 @@ func (s *textScene) draw(ctx context.Context, r *Reader, pg *document.Page, regi
 	var err error
 	s.geo, err = page.BoxGeometry(pg, box, sceneDPI)
 	if err != nil {
-		return fmt.Errorf("page geometry: %w", err)
+		return nil, 0, fmt.Errorf("page geometry: %w", err)
 	}
-	draw := func(omit page.Content) (*image.NRGBA, error) {
-		img, _, err := renderImage(ctx, r.doc, pg, RenderRGB, page.Options{
-			DPI:         sceneDPI,
-			Background:  [4]float32{1, 1, 1, 1},
-			Annotations: annot.View,
-			Omit:        omit,
-			Box:         box,
-		})
-		if err != nil {
-			return nil, err
-		}
-		nrgba, ok := img.(*image.NRGBA)
-		if !ok {
-			return nil, fmt.Errorf("page drawn as %T", img)
-		}
-		return nrgba, nil
-	}
-	if s.with, err = draw(0); err != nil {
-		return fmt.Errorf("drawing the page: %w", err)
-	}
-	if s.without, err = draw(page.Text); err != nil {
-		return fmt.Errorf("drawing the page without text: %w", err)
-	}
-	if s.with.Bounds() != s.without.Bounds() {
-		return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), s.without.Bounds())
-	}
-	if textOnly {
-		// Clips stay in force with what they clip left out (the renderer
-		// keeps a path's or a text object's clip, 8.5.4 and 9.3.6), so text
-		// a clip removes paints nothing alone either.
-		if s.alone, err = draw(page.Paths | page.Images | page.Shadings | page.Annotations); err != nil {
-			return fmt.Errorf("drawing the page's text alone: %w", err)
-		}
-		if s.alone.Bounds() != s.with.Bounds() {
-			return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), s.alone.Bounds())
-		}
-	}
-	return s.countCover(ctx)
+	return pg, box, nil
 }
 
-// countCover fills rects and cover.
-func (s *textScene) countCover(ctx context.Context) error {
-	b := s.with.Bounds()
-	w, h := b.Dx(), b.Dy()
+// render draws pg, framed by [textScene.frame], at [sceneDPI] over white with
+// its annotations as a viewer shows them, and what opts sets besides.
+func (s *textScene) render(ctx context.Context, r *Reader, pg *document.Page, box page.Box, opts page.Options) (*image.NRGBA, error) {
+	opts.DPI = sceneDPI
+	opts.Background = [4]float32{1, 1, 1, 1}
+	opts.Annotations = annot.View
+	opts.Box = box
+	img, _, err := renderImage(ctx, r.doc, pg, RenderRGB, opts)
+	if err != nil {
+		return nil, err
+	}
+	nrgba, ok := img.(*image.NRGBA)
+	if !ok {
+		return nil, fmt.Errorf("page drawn as %T", img)
+	}
+	return nrgba, nil
+}
+
+// countCover fills rects and cover with the glyphs counted selects, the
+// others keeping an empty rectangle.
+func (s *textScene) countCover(ctx context.Context, counted func(i int) bool) error {
+	w, h := s.geo.Width, s.geo.Height
 	budget := int64(w) * int64(h) * maxSceneCoverWork
 	s.rects = make([]image.Rectangle, len(s.elements))
 	s.cover = make([]uint16, w*h)
@@ -246,6 +262,9 @@ func (s *textScene) countCover(ctx context.Context) error {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+		}
+		if !counted(i) {
+			continue
 		}
 		r := s.pixelRect(s.elements[i].InkBox)
 		budget -= int64(r.Dx()) * int64(r.Dy())
@@ -281,11 +300,11 @@ func (s *textScene) pixelRect(box [4]float64) image.Rectangle {
 	if math.IsNaN(minX) || math.IsNaN(minY) || math.IsNaN(maxX) || math.IsNaN(maxY) {
 		return image.Rectangle{}
 	}
-	b := s.with.Bounds()
+	w, h := s.geo.Width, s.geo.Height
 	clampTo := func(v float64, hi int) int {
 		return int(math.Max(0, math.Min(float64(hi), v)))
 	}
-	r := image.Rect(clampTo(math.Floor(minX), b.Dx()), clampTo(math.Floor(minY), b.Dy()), clampTo(math.Ceil(maxX), b.Dx()), clampTo(math.Ceil(maxY), b.Dy()))
+	r := image.Rect(clampTo(math.Floor(minX), w), clampTo(math.Floor(minY), h), clampTo(math.Ceil(maxX), w), clampTo(math.Ceil(maxY), h))
 	if r.Empty() {
 		return image.Rectangle{}
 	}
