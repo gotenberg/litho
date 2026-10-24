@@ -122,6 +122,7 @@ type colorOpts struct {
 	intent       RenderingIntent
 	bpc          bool
 	convertSpots bool
+	kOnlyBlack   bool
 	keepIntents  bool
 	// replaceIntents is [WithReplacedOutputIntents].
 	replaceIntents bool
@@ -153,6 +154,29 @@ func WithBlackPointCompensation() ColorOption {
 // space is converted, which is what a device without the colorant paints.
 func WithSpotConversion() ColorOption {
 	return func(o *colorOpts) { o.convertSpots = true }
+}
+
+// WithKOnlyBlack prints grey and black solid colours on the black ink
+// alone under a CMYK target: a colour set in DeviceGray converts to k = 1 -
+// gray with no cyan, magenta or yellow, the conversion ISO 32000-1, 10.3.3
+// defines between the two device spaces, and black set in DeviceRGB, 0 0 0,
+// to 100% K. By default they convert through their profiles like every other
+// colour, and black becomes a four-colour black of about 0.4 0.4 0.8 1 under
+// the built-in profile, which print practice avoids for text and line art:
+// four inks misregister at a glyph's edges and add to the total ink. It
+// applies to the colours colour operators set, in text, paths and stencil
+// masks alike, and to the annotation and default appearance colours
+// [Writer.ConvertColors] converts. Images, shadings, Indexed palettes, spot
+// alternates, a Default colour space's colours (8.6.5.6), ICCBased colours and
+// RGB greys still convert through their profiles. 100% K reads lighter than
+// a four-colour black, so the converted page draws a dark grey on screen
+// where the source drew black. Under overprint, a converted colour keeps
+// what it painted: the conversion writes /OPM 0 where overprint mode 1 would
+// leave the cyan, magenta and yellow under a K-only colour unpainted
+// ([ColorReport.OverprintPreserved]). It has no effect under a target of
+// another component count. Off by default.
+func WithKOnlyBlack() ColorOption {
+	return func(o *colorOpts) { o.kOnlyBlack = true }
 }
 
 // WithoutOutputIntent leaves the document's output intents as they are. By
@@ -207,6 +231,10 @@ type ColorReport struct {
 	// re-encoded in the target, and ConvertedShadings the shadings.
 	ConvertedImages   int
 	ConvertedShadings int
+	// KOnlyBlackColors counts the colours [WithKOnlyBlack] wrote on the
+	// black ink alone, of ConvertedOperators and of the annotation and
+	// default appearance colours.
+	KOnlyBlackColors int
 	// KeptSpotColorants names, sorted, the colorants of the spot colours
 	// kept with their alternate space converted. Empty under
 	// [WithSpotConversion].
@@ -448,6 +476,7 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		intent:                 intent,
 		blackPointCompensation: o.bpc,
 		convertSpots:           o.convertSpots,
+		kOnlyBlack:             o.kOnlyBlack,
 		jpegQuality:            o.jpegQuality,
 		groupPages:             groupConvertedPages(ctx, alloc, doc, resolved.components, setIntent),
 	})
@@ -465,6 +494,7 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		ConvertedColorSpaces: result.colorSpaces,
 		ConvertedImages:      result.images,
 		ConvertedShadings:    result.shadings,
+		KOnlyBlackColors:     result.kOnlyBlack,
 		TargetProfile:        resolved.source,
 		SourceProfiles:       result.sourceProfiles,
 		IntentFallbacks:      result.intentFallbacks,

@@ -74,6 +74,12 @@ type spacePlan struct {
 	// process colour, and cmyk a space overprint mode 1 governs, DeviceCMYK
 	// or a four-component ICCBased space (see [contentRewriter.judgeColor]).
 	spotConverted, cmyk bool
+	// deviceGray and deviceRGB mark the plans of DeviceGray and DeviceRGB
+	// read as the device space, no default space standing in (ISO 32000-1,
+	// 8.6.5.6), whose solid colours [Options.KOnlyBlack] converts to the
+	// black colorant alone ([session.solidPlan]), and kOnly the plans it
+	// converts them with.
+	deviceGray, deviceRGB, kOnly bool
 	// err is why a planUnknown space could not be read.
 	err error
 }
@@ -261,7 +267,13 @@ func (s *session) planDevice(ctx context.Context, space, defaultName string, def
 		p = s.planEndpoint(Endpoint{Space: space, Profile: defaultProfile(space, nil)}, nil, initial)
 		provenance = ProfileBuiltinFallback
 	}
-	return s.notingPlan(p, space, provenance)
+	p = s.notingPlan(p, space, provenance)
+	if space == SpaceGray || space == SpaceRGB {
+		q := *p
+		q.deviceGray, q.deviceRGB = space == SpaceGray, space == SpaceRGB
+		return &q
+	}
+	return p
 }
 
 // planEndpoint plans a space whose colour, mapped by pre to the endpoint
@@ -439,6 +451,9 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int, role
 		// component (8.6.8, Table 74), whatever its fallback's is.
 		q := *p
 		q.initial = make([]float64, n)
+		// An ICCBased space read through its device family is no device
+		// space: [Options.KOnlyBlack] leaves it to the profile.
+		q.deviceGray, q.deviceRGB = false, false
 		return &q
 	}
 	if !pdfimage.ICCBasedUsable(ctx, s.doc, arr[1], n, s.opts.Intent) {

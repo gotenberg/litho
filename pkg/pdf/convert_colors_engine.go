@@ -32,6 +32,8 @@ type recolorRequest struct {
 	// [WithBlackPointCompensation] and [WithSpotConversion].
 	blackPointCompensation bool
 	convertSpots           bool
+	// kOnlyBlack is [WithKOnlyBlack].
+	kOnlyBlack bool
 	// jpegQuality is the quality of [WithJPEGQuality], 0 for lossless.
 	jpegQuality int
 	// groupPages gives each page with no /Group a page group blending in
@@ -42,6 +44,8 @@ type recolorRequest struct {
 // recolorResult counts what the engine converted.
 type recolorResult struct {
 	operators, colorSpaces, images, shadings int
+	// kOnlyBlack is [ColorReport.KOnlyBlackColors].
+	kOnlyBlack int
 	// keptSpots names the colorants of the Separation and DeviceN spaces
 	// the engine kept, their alternate space converted.
 	keptSpots []string
@@ -94,6 +98,7 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		Intent:                 req.intent,
 		BlackPointCompensation: req.blackPointCompensation,
 		ConvertSpots:           req.convertSpots,
+		KOnlyBlack:             req.kOnlyBlack,
 		JPEGQuality:            req.jpegQuality,
 		DeviceGray:             gray,
 		DeviceRGB:              rgb,
@@ -116,6 +121,7 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		colorSpaces: report.Spaces,
 		images:      report.Images.Converted + report.Images.Palettes,
 		shadings:    report.Shadings,
+		kOnlyBlack:  report.KOnlyBlack,
 		keptSpots:   report.KeptColorants,
 
 		sourceProfiles:     sourceProfiles(report.DeviceProfiles, cmykFromCaller),

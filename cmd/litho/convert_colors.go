@@ -17,15 +17,18 @@ import (
 
 // convertColorsResult is the JSON report of convert-colors.
 type convertColorsResult struct {
-	File                 string   `json:"file"`
-	Target               string   `json:"target"`
-	ConvertedOperators   int      `json:"convertedOperators"`
-	ConvertedColorSpaces int      `json:"convertedColorSpaces"`
-	ConvertedImages      int      `json:"convertedImages"`
-	ConvertedShadings    int      `json:"convertedShadings"`
-	KeptSpotColorants    []string `json:"keptSpotColorants,omitempty"`
-	OutputIntent         string   `json:"outputIntent,omitempty"`
-	KeptOutputIntents    []string `json:"keptOutputIntents,omitempty"`
+	File                 string `json:"file"`
+	Target               string `json:"target"`
+	ConvertedOperators   int    `json:"convertedOperators"`
+	ConvertedColorSpaces int    `json:"convertedColorSpaces"`
+	ConvertedImages      int    `json:"convertedImages"`
+	ConvertedShadings    int    `json:"convertedShadings"`
+	// KOnlyBlackColors counts the colours --k-only-black wrote on the black
+	// ink alone ([pdf.ColorReport.KOnlyBlackColors]).
+	KOnlyBlackColors  int      `json:"kOnlyBlackColors,omitempty"`
+	KeptSpotColorants []string `json:"keptSpotColorants,omitempty"`
+	OutputIntent      string   `json:"outputIntent,omitempty"`
+	KeptOutputIntents []string `json:"keptOutputIntents,omitempty"`
 	// ReplacedOutputIntents names the intents --replace-output-intents
 	// pointed at the target profile, by /OutputConditionIdentifier.
 	ReplacedOutputIntents []string `json:"replacedOutputIntents,omitempty"`
@@ -65,6 +68,7 @@ var renderingIntents = map[string]pdf.RenderingIntent{
 type convertColorsFlags struct {
 	target, profile, intent string
 	bpc, convertSpots       bool
+	kOnlyBlack              bool
 	noOutputIntent          bool
 	replaceOutputIntents    bool
 	// jpegQuality is --jpeg-quality, 0 to keep every image lossless.
@@ -85,6 +89,7 @@ func registerConvertColorsFlags(fs *flag.FlagSet) *convertColorsFlags {
 	fs.StringVar(&f.intent, "intent", "RelativeColorimetric", "Rendering intent: RelativeColorimetric, Perceptual, Saturation or AbsoluteColorimetric")
 	fs.BoolVar(&f.bpc, "bpc", false, "Apply black point compensation")
 	fs.BoolVar(&f.convertSpots, "convert-spots", false, "Convert spot colours (Separation, DeviceN) to process colour instead of keeping them")
+	fs.BoolVar(&f.kOnlyBlack, "k-only-black", false, "Under a CMYK target, convert DeviceGray colours and DeviceRGB black to the black ink alone instead of a four-colour black (images and shadings excepted)")
 	fs.BoolVar(&f.noOutputIntent, "no-output-intent", false, "Leave the output intents as they are instead of making the target the output intent")
 	fs.BoolVar(&f.replaceOutputIntents, "replace-output-intents", false, "Point a PDF/X or other non-PDF/A output intent over another CMYK profile at the target profile instead of refusing")
 	fs.IntVar(&f.jpegQuality, "jpeg-quality", 0, "Re-encode converted JPEG and 8-bit JPEG 2000 images as JPEG at this quality, 1 to 100, instead of losslessly (0: lossless)")
@@ -130,6 +135,9 @@ func (f convertColorsFlags) colorTarget() (pdf.ColorTarget, []pdf.ColorOption, e
 	}
 	if f.convertSpots {
 		opts = append(opts, pdf.WithSpotConversion())
+	}
+	if f.kOnlyBlack {
+		opts = append(opts, pdf.WithKOnlyBlack())
 	}
 	if f.noOutputIntent {
 		opts = append(opts, pdf.WithoutOutputIntent())
@@ -227,6 +235,7 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 		ConvertedColorSpaces:  report.ConvertedColorSpaces,
 		ConvertedImages:       report.ConvertedImages,
 		ConvertedShadings:     report.ConvertedShadings,
+		KOnlyBlackColors:      report.KOnlyBlackColors,
 		KeptSpotColorants:     report.KeptSpotColorants,
 		OutputIntent:          report.OutputIntent,
 		KeptOutputIntents:     report.KeptOutputIntents,
@@ -251,6 +260,9 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 	}
 	fmt.Fprintf(stdout, "Converted %d colour operator(s), %d colour space(s), %d image(s) and %d shading(s) to %s\n",
 		result.ConvertedOperators, result.ConvertedColorSpaces, result.ConvertedImages, result.ConvertedShadings, result.Target)
+	if result.KOnlyBlackColors > 0 {
+		fmt.Fprintf(stdout, "Wrote %d colour(s) on the black ink alone\n", result.KOnlyBlackColors)
+	}
 	if len(result.KeptSpotColorants) > 0 {
 		fmt.Fprintf(stdout, "Kept spot colorant(s): %s\n", strings.Join(result.KeptSpotColorants, ", "))
 	}

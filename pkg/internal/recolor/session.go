@@ -46,6 +46,9 @@ type session struct {
 	overprint *overprintLedger
 	// anonymous numbers the direct streams judged for overprint.
 	anonymous int
+	// kOnlyGray and kOnlyRGB are the plans [session.solidPlan] converts
+	// DeviceGray and DeviceRGB solid colours with, built on first use.
+	kOnlyGray, kOnlyRGB *spacePlan
 }
 
 func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo, opts Options, report *Report) (*session, error) {

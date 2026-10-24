@@ -25,6 +25,7 @@ func (s *session) rewriteStreamContent(ctx context.Context, stream ast.PdfStream
 		return ast.PdfStream{}, false, err
 	}
 	s.report.Operators += cr.operators
+	s.report.KOnlyBlack += cr.kOnly
 	s.report.Streams++
 	ns, err := newStream(stream.Dict, out)
 	if err != nil {

@@ -200,8 +200,12 @@ func (s *session) daColour(ctx context.Context, da []byte) ([]byte, bool, error)
 	}
 	var edits []edit
 	var want []content.Operation
+	kOnly := 0
 	for i, op := range ops {
-		repl, ok := s.daOperator(ctx, op)
+		repl, ok, k := s.daOperator(ctx, op)
+		if k {
+			kOnly++
+		}
 		if !ok {
 			want = append(want, op)
 			continue
@@ -238,14 +242,16 @@ func (s *session) daColour(ctx context.Context, da []byte) ([]byte, bool, error)
 		return nil, false, fmt.Errorf("%w: the rewritten /DA reads as other operations", ErrUnsupportedSpace)
 	}
 	s.report.Operators += len(edits)
+	s.report.KOnlyBlack += kOnly
 	return out.Bytes(), true, nil
 }
 
 // daOperator returns the text that replaces op, a device colour operator of
 // a /DA, in the target, and false for any other operator, one whose
 // operands are not its space's component count of numbers, and one already
-// in the target.
-func (s *session) daOperator(ctx context.Context, op content.Operation) ([]byte, bool) {
+// in the target. The third result reports a colour written as the black
+// colorant alone ([session.solidPlan]).
+func (s *session) daOperator(ctx context.Context, op content.Operation) ([]byte, bool, bool) {
 	var family string
 	switch op.Operator {
 	case "g", "G":
@@ -255,15 +261,15 @@ func (s *session) daOperator(ctx context.Context, op content.Operation) ([]byte,
 	case "k", "K":
 		family = graphics.FamilyDeviceCMYK
 	default:
-		return nil, false
+		return nil, false, false
 	}
-	p := s.planDefinition(ctx, ast.PdfName(family), nil)
+	p := s.solidPlan(s.planDefinition(ctx, ast.PdfName(family), nil))
 	if p.kind != planConvert {
-		return nil, false
+		return nil, false, false
 	}
 	comps, ok := operandsOf(op.Operands, p.n)
 	if !ok {
-		return nil, false
+		return nil, false, false
 	}
 	for i, v := range comps {
 		// Table 74 gives the components on [0, 1], as viewers clip them.
@@ -285,5 +291,5 @@ func (s *session) daOperator(ctx context.Context, op content.Operation) ([]byte,
 		name = string(bytes.ToUpper([]byte(name)))
 	}
 	b.WriteString(name)
-	return b.Bytes(), true
+	return b.Bytes(), true, p.kOnlyWritten(comps)
 }

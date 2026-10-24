@@ -55,6 +55,10 @@ type contentRewriter struct {
 	// pendingImages counts the inline images of the stream being rewritten,
 	// which count once the rewrite stands.
 	pendingImages int
+	// kOnly counts the colours written as the black colorant alone
+	// ([session.solidPlan]), and pendingKOnly those of the stream being
+	// rewritten, which count once the rewrite stands.
+	kOnly, pendingKOnly int
 	// dry marks a read for the colour state alone ([contentRewriter.advance]),
 	// which converts no inline image.
 	dry bool
@@ -121,7 +125,7 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 	if err != nil {
 		return nil, false, err
 	}
-	cr.pendingImages = 0
+	cr.pendingImages, cr.pendingKOnly = 0, 0
 	var edits []edit
 	var want []content.Operation
 	for i, op := range ops {
@@ -172,7 +176,8 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 	}
 	cr.operators += len(edits) - cr.pendingImages
 	cr.images += cr.pendingImages
-	cr.pendingImages = 0
+	cr.kOnly += cr.pendingKOnly
+	cr.pendingImages, cr.pendingKOnly = 0, 0
 	return out.Bytes(), true, nil
 }
 
@@ -262,7 +267,7 @@ func (cr *contentRewriter) operation(ctx context.Context, index int, op content.
 			family = graphics.FamilyDeviceCMYK
 		}
 		stroke := op.Operator[0] < 'a'
-		p := s.planDefinition(ctx, ast.PdfName(family), cr.res)
+		p := s.solidPlan(s.planDefinition(ctx, ast.PdfName(family), cr.res))
 		cr.set(stroke, p)
 		cr.setComps(stroke, p, op.Operands)
 		return cr.convert(stroke, p, op.Operands)
@@ -275,7 +280,7 @@ func (cr *contentRewriter) operation(ctx context.Context, index int, op content.
 		if !ok {
 			return nil, false, nil
 		}
-		p := s.planName(ctx, name, cr.res)
+		p := s.solidPlan(s.planName(ctx, name, cr.res))
 		cr.set(stroke, p)
 		cr.setComps(stroke, p, nil)
 		if !p.convertible() {
@@ -298,7 +303,7 @@ func (cr *contentRewriter) operation(ctx context.Context, index int, op content.
 			if !ok {
 				return nil, false, nil
 			}
-			return cr.convertPattern(stroke, p.base, op.Operands[:len(op.Operands)-1], name)
+			return cr.convertPattern(stroke, s.solidPlan(p.base), op.Operands[:len(op.Operands)-1], name)
 		}
 		cr.setComps(stroke, p, op.Operands)
 		return cr.convert(stroke, p, op.Operands)
@@ -414,6 +419,9 @@ func (cr *contentRewriter) write(stroke bool, p *spacePlan, comps []float64, pat
 	t := cr.s.t
 	out := make([]float64, t.n)
 	p.conv.Convert(comps, out)
+	if p.kOnlyWritten(comps) && !cr.dry {
+		cr.pendingKOnly++
+	}
 	var b bytes.Buffer
 	if pattern == "" && !t.device() {
 		if _, err := writer.SerializeName(&b, cr.name); err != nil {

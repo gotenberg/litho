@@ -100,6 +100,12 @@ type Options struct {
 	// through its tint transform. By default spot colour keeps its colorants,
 	// and only its alternate space converts.
 	ConvertSpots bool
+	// KOnlyBlack converts, under a CMYK target, the solid colours set in
+	// DeviceGray to the black colorant alone, k = 1 - gray (ISO 32000-1,
+	// 10.3.3), and those set in DeviceRGB to 100% K where they are black,
+	// 0 0 0, rather than through their profile to a four-colour black (see
+	// [session.solidPlan]). It has no effect under another target.
+	KOnlyBlack bool
 	// JPEGQuality re-encodes the converted images whose source was
 	// DCTDecode as baseline JPEG at this quality, 1 to 100, where 0 keeps
 	// every image lossless (see [ImageConfig.JPEGQuality]).

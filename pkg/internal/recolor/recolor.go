@@ -26,6 +26,10 @@ type Report struct {
 	Spaces int
 	// Shadings counts the shadings converted.
 	Shadings int
+	// KOnlyBlack counts the solid colours, of the Operators and the
+	// annotation and default appearance colours, written as the black
+	// colorant alone under [Options.KOnlyBlack].
+	KOnlyBlack int
 	// SpotsKept counts the spot colour spaces kept with their colorants,
 	// and KeptColorants names their colorants, once each, in the order
 	// the walk met them.
@@ -397,6 +401,7 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 			}
 		}
 		s.report.Operators += cr.operators
+		s.report.KOnlyBlack += cr.kOnly
 		s.report.Streams++
 		return true, s.alloc.Alloc(ns), nil
 	}
@@ -436,6 +441,7 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 		s.replace(w.ref.ObjectNum, w.st, w.out)
 	}
 	s.report.Operators += cr.operators
+	s.report.KOnlyBlack += cr.kOnly
 	s.report.Streams += len(writes)
 	return len(writes) > 0, nil, nil
 }
@@ -605,12 +611,15 @@ func (s *session) deviceColour(ctx context.Context, obj ast.PdfObject) (ast.PdfA
 		// Table 164 gives the components on [0, 1], as viewers clip them.
 		in[i] = clamp01(n)
 	}
-	p := s.planDefinition(ctx, ast.PdfName(family), nil)
+	p := s.solidPlan(s.planDefinition(ctx, ast.PdfName(family), nil))
 	if p.kind != planConvert {
 		return nil, false
 	}
 	conv := make([]float64, s.t.n)
 	p.conv.Convert(in, conv)
+	if p.kOnlyWritten(in) {
+		s.report.KOnlyBlack++
+	}
 	out := make(ast.PdfArray, len(conv))
 	for i, v := range conv {
 		out[i] = ast.PdfReal(roundComponent(v))
