@@ -118,7 +118,8 @@ func (r ScanResult) Clean() bool {
 // also reaches through any other reference is compared as usual. Nor is the
 // data of an image XObject, which is samples (see
 // [scanWalk.imageDataSkipped]), unless a slot that reads a stream as bytes
-// names it too.
+// names it too, nor the samples of an inline image in a content stream (see
+// [scanWalk.matchContentBytes]).
 //
 // It is a check, not a proof. A token absent from every object may still be
 // recoverable from glyph advances left behind by a split text run
@@ -236,6 +237,9 @@ type scanWalk struct {
 	// says (see [scanWalk.imageDataSkipped]).
 	images     map[int]ast.PdfStream
 	readAsData map[int]bool
+	// inlineSkipped holds the content streams whose inline image samples
+	// the scan skipped (see [scanWalk.matchContentBytes]).
+	inlineSkipped map[int]ast.PdfStream
 
 	// wide holds each token spelled in UTF-16, big-endian then little-endian,
 	// built on first use (see [scanWalk.matchBytes]).
@@ -260,6 +264,8 @@ func newScanWalk(doc *document.Document, alloc *writer.ObjAllocator, tokens []st
 		deferred:   make(map[int]ast.PdfStream),
 		images:     make(map[int]ast.PdfStream),
 		readAsData: make(map[int]bool),
+
+		inlineSkipped: make(map[int]ast.PdfStream),
 	}
 }
 
@@ -630,9 +636,11 @@ func (w *scanWalk) scanStreamData(ctx context.Context, objNum int, stream ast.Pd
 		return
 	}
 
-	w.scanBlob(ctx, objNum, stream.Dict, data)
 	if w.contents[objNum] || isContentStreamDict(stream.Dict) {
+		w.matchContentBytes(ctx, objNum, stream, data)
 		w.scanContentStrings(ctx, objNum, data)
+	} else {
+		w.scanBlob(ctx, objNum, stream.Dict, data)
 	}
 	w.scanStoredTail(ctx, objNum, stream, limit)
 }

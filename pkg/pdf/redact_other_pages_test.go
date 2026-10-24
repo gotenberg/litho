@@ -25,6 +25,10 @@ import (
 //   - "images": no other copy of the text, but page 2 paints a JPEG whose
 //     bytes spell it in a comment segment, and page 1 paints, outside the
 //     region, an uncompressed image whose samples spell it.
+//   - "inline": no other copy of the text, but both pages paint an inline
+//     image whose samples spell it, page 1 outside the region.
+//   - "inlinetext": as "inline", and page 1 draws the text again outside the
+//     region, next to its inline image.
 func otherPageCopyPDF(kind string) []byte {
 	stream := func(num int, dict, data string) string {
 		return strconv.Itoa(num) + " 0 obj\n<< " + dict + " /Length " + strconv.Itoa(len(data)) +
@@ -61,6 +65,14 @@ func otherPageCopyPDF(kind string) []byte {
 		image := "/Type /XObject /Subtype /Image /Width 8 /Height 8 /ColorSpace /DeviceGray /BitsPerComponent 8"
 		extra = stream(9, image+" /Filter /DCTDecode", string(jpegWithComment("SECRET"))) +
 			stream(10, "/Type /XObject /Subtype /Image /Width 6 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", "SECRET")
+	case "inline", "inlinetext":
+		inline := " q 60 0 0 10 100 100 cm BI /W 6 /H 1 /CS /G /BPC 8 ID SECRET EI Q"
+		page1Body += inline
+		if kind == "inlinetext" {
+			page1Body += " BT /F1 12 Tf 100 300 Td (SECRET) Tj ET"
+		}
+		page2Res = "<< >>"
+		page2Body = inline
 	case "xmp":
 		page2Extra = " /Metadata 11 0 R"
 		extra = stream(11, "/Type /Metadata /Subtype /XML",
@@ -257,5 +269,36 @@ func TestWriter_Redact_IgnoresImageBytesSpellingTheText(t *testing.T) {
 	}
 	if strings.Contains(first, "SECRET") || !strings.Contains(first, "KEEP") {
 		t.Errorf("page 1 reads %q, want KEEP without SECRET", first)
+	}
+}
+
+// TestWriter_Redact_IgnoresInlineImageSamplesSpellingTheText pins that the
+// samples of an inline image, the bytes between ID and EI (ISO 32000-1,
+// 8.9.7), are not searched for removed text, on the redacted page or another,
+// while the text drawn again next to one still refuses the redaction.
+func TestWriter_Redact_IgnoresInlineImageSamplesSpellingTheText(t *testing.T) {
+	report, out, err := redactOtherPageCopy(t, otherPageCopyPDF("inline"))
+	if err != nil {
+		t.Fatalf("Redact: %v (surviving %+v)", err, report)
+	}
+	if len(report.SurvivingCopies) != 0 || len(report.CopiesOnOtherPages) != 0 {
+		t.Errorf("report names inline image samples as copies: surviving %+v, other pages %+v",
+			report.SurvivingCopies, report.CopiesOnOtherPages)
+	}
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatalf("reopening the output: %v", err)
+	}
+	first, err := r.ExtractText(ctx, 1, WithHiddenText())
+	if err != nil {
+		t.Fatalf("ExtractText page 1: %v", err)
+	}
+	if strings.Contains(first, "SECRET") || !strings.Contains(first, "KEEP") {
+		t.Errorf("page 1 reads %q, want KEEP without SECRET", first)
+	}
+
+	if _, _, err := redactOtherPageCopy(t, otherPageCopyPDF("inlinetext")); !errors.Is(err, ErrRedactionIncomplete) {
+		t.Errorf("Redact with the text drawn again next to an inline image: %v, want ErrRedactionIncomplete", err)
 	}
 }

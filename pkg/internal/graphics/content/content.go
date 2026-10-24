@@ -109,6 +109,9 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 					break
 				}
 				placer.take(0)
+				if o.samples != nil && images.samples.End > images.samples.Start {
+					*o.samples = append(*o.samples, images.samples)
+				}
 				biOperands := []ast.PdfObject{dict}
 				if o.inlineData {
 					biOperands = append(biOperands, ast.PdfString(inlineImageData(data, idEnd, int(p.Position()))))
@@ -246,8 +249,15 @@ func readInlineImage(ctx context.Context, p *parser.Parser, o readOptions, image
 // that follows ID and the white space before EI (ISO 32000-1, 8.9.7). A
 // reading that ends before an EI keeps every byte it read.
 func inlineImageData(data []byte, idEnd, end int) []byte {
+	span := inlineDataSpan(data, idEnd, end)
+	return data[span.Start:span.End]
+}
+
+// inlineDataSpan returns the span of data [inlineImageData] returns, an empty
+// one at 0 when idEnd and end bound no span of data.
+func inlineDataSpan(data []byte, idEnd, end int) ByteRange {
 	if idEnd < 0 || end > len(data) || idEnd > end {
-		return nil
+		return ByteRange{}
 	}
 	start := idEnd
 	if start < end && isContentWhiteSpace(data[start]) {
@@ -263,7 +273,7 @@ func inlineImageData(data []byte, idEnd, end int) []byte {
 			stop--
 		}
 	}
-	return data[start:stop]
+	return ByteRange{Start: start, End: stop}
 }
 
 // isContentWhiteSpace reports whether c is white space (ISO 32000-1, 7.2.2,
@@ -322,6 +332,9 @@ type readOptions struct {
 	// viewerChains reads no stream whose filter chain decodes past a filter
 	// it skipped. See [ViewerFilterChains].
 	viewerChains bool
+	// samples collects the span of the data of each inline image a repair's
+	// reading reads. See [InlineImageSamples].
+	samples *[]ByteRange
 }
 
 // readsAsVeraPDF reports whether a parse under o reads the stream as veraPDF

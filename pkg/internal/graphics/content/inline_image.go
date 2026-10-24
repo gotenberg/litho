@@ -129,6 +129,9 @@ type inlineImages struct {
 	// pdfjs reads the data of the images as PDF.js does, or is nil before
 	// the first image read that way ([inlineImages.pdfjsEnd]).
 	pdfjs *pdfjsImages
+	// samples is the span of the data of the last image a repair's reading
+	// read that both readers take for its data ([inlineImages.repairEnd]).
+	samples ByteRange
 }
 
 // dataLength is the length the /L or /Length entry of an inline image
@@ -264,7 +267,19 @@ func (r *inlineImages) resume(ctx context.Context, idEnd int, dict ast.PdfDict) 
 func (r *inlineImages) repairEnd(ctx context.Context, idEnd int, dict ast.PdfDict) int {
 	vera, _ := r.scan(ctx, r.dataStart(idEnd), inlineDataLength(dict))
 	pdfjs, _ := r.pdfjsEnd(ctx, idEnd, dict)
+	r.samples = samplesSpan(r.data, idEnd, min(vera, pdfjs))
 	return max(vera, pdfjs)
+}
+
+// samplesSpan returns the span of the data of the inline image whose ID
+// keyword ends at idEnd that both veraPDF and PDF.js read as its data, with
+// end the earlier of the offsets their readings resume at: the bytes past
+// the byte after ID, which PDF.js skips whatever it is, up to the white
+// space and EI before end ([inlineDataSpan]).
+func samplesSpan(data []byte, idEnd, end int) ByteRange {
+	span := inlineDataSpan(data, idEnd, end)
+	span.Start = max(span.Start, min(idEnd+1, span.End))
+	return span
 }
 
 // pdfjsEnd returns where a parse reading the stream as PDF.js does resumes

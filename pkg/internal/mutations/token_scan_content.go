@@ -1,6 +1,7 @@
 package mutations
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"strings"
@@ -163,6 +164,68 @@ func (w *scanWalk) scanOperand(objNum int, operand ast.PdfObject, depth int) {
 			w.scanOperand(objNum, item, depth+1)
 		}
 	}
+}
+
+// matchContentBytes looks for the tokens in the decoded bytes of a content
+// stream, save the samples of its inline images.
+//
+// The bytes between an inline image's ID and EI are its samples (ISO 32000-1,
+// 8.9.7), read as colour values as an image XObject's are (8.9.5), and text
+// extraction reads character codes from the operands of text-showing
+// operators (9.10.2), never from them: a removed word they spell is pixels
+// that happen to match, a copy no reader finds, as [scanWalk.imageDataSkipped]
+// says of an image XObject. The image's dictionary, between BI and ID, is
+// still compared, as bytes here and as operands by
+// [scanWalk.scanContentStrings]: its values are names, numbers, arrays and,
+// for an /Indexed colour space, a lookup string (Tables 92 and 93), none of
+// which a reader extracts as text, but they are not samples, few bytes, and
+// a producer may write any key there, so they are not trusted. Each run of
+// bytes between two images is compared on its own: no operator draws a word
+// spelled across an image's data.
+//
+// The spans skipped are the ones both veraPDF and PDF.js take for data
+// ([content.InlineImageSamples]): a byte either reads as an operator is
+// compared. A stream the parse cannot read is compared whole, and so is one a
+// slot that reads a stream as bytes names (see [scanWalk.markReadAsData]),
+// which is why a stream whose samples were skipped is recorded: a later such
+// reference compares it whole.
+//
+// # Corpus evidence
+//
+//   - govdocs, pdfjs, pdfcpu, litho, verapdf: 144 files hold an inline image
+//     in a stream other than an image XObject (63, 40, 1, 8, 32). Redacting
+//     page 1 whole, its centred quarter and a band, default and under the
+//     raster fallback (864 redactions), moves no outcome and no byte of any
+//     output. Two scenarios lose surviving copies the samples spelled
+//     ("600600" in pdfjs bug1077808.pdf, "asa" and "ofa" in
+//     issue10614.pdf) and still refuse over copies a text operator draws.
+func (w *scanWalk) matchContentBytes(ctx context.Context, objNum int, stream ast.PdfStream, data []byte) {
+	if w.readAsData[objNum] || !bytes.Contains(data, []byte("BI")) || !bytes.Contains(data, []byte("ID")) {
+		w.matchBytes(objNum, data, "stream")
+		return
+	}
+	spans, err := content.InlineImageSamples(ctx, data)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			w.err = ctxErr
+			return
+		}
+		w.doc.Logger.Debug("token scan: inline images could not be read",
+			slog.Int("object", objNum), slog.Any("err", err))
+		spans = nil
+	}
+	if len(spans) > 0 {
+		w.inlineSkipped[objNum] = stream
+	}
+	from := 0
+	for _, span := range spans {
+		if span.Start < from || span.End > len(data) {
+			continue
+		}
+		w.matchBytes(objNum, data[from:span.Start], "stream")
+		from = span.End
+	}
+	w.matchBytes(objNum, data[from:], "stream")
 }
 
 // matchText records a hit in objNum's stream for each token text contains.

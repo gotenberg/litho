@@ -118,6 +118,10 @@ func (w *scanWalk) markStreamReadAsData(ctx context.Context, obj ast.PdfObject) 
 	}
 	w.readAsData[ref.ObjectNum] = true
 	w.rescanSkippedImage(ctx, ref.ObjectNum)
+	if stream, skipped := w.inlineSkipped[ref.ObjectNum]; skipped {
+		delete(w.inlineSkipped, ref.ObjectNum)
+		w.scanStreamData(ctx, ref.ObjectNum, stream)
+	}
 }
 
 // rescanSkippedImage scans the data of an image XObject whose data the walk
