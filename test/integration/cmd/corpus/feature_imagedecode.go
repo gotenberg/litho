@@ -32,6 +32,15 @@ import (
 //     D65 and the sRGB curve (ISO 32000-1, 8.6.5.4) and matches the pinned
 //     poppler within one level; PDF.js skips the adaptation and approximates the
 //     curve with a square root, 7 to 10 levels away.
+//   - pdfjs issue2856 Im5 and Im6, issue11052 (4 of its 6 images), govdocs
+//     thread_000_000372 (2 of 22): ICCBased images whose profile's black is
+//     lighter than sRGB's (L* 3.1 to 16.5), which litho converts with black
+//     point compensation (package graphics/icc), as poppler's Little CMS
+//     transforms do. litho matches Little CMS 2.17 with
+//     compensation to within 1 level on a 5-level grid of each profile, and
+//     the page renderings move toward poppler's; PDF.js's images lie 3.1 to
+//     24.4 levels away. The same change brings govdocs thread_000_000208
+//     from 110 to 314 matching images.
 type imageDecodeFeature struct {
 	mu      sync.RWMutex
 	goldens map[string]*imageGolden
