@@ -289,6 +289,7 @@ one deliberately rather than diffing it against a fresh build.
 | `annotdrawn_2b.pdf`    | PDF/A-2b     | Annotations with no `/AP` drawn where their `/Rect` does not sit |
 | `sharedformimg_2b.pdf` | PDF/A-2b     | An image forms draw on both pages, which a redaction copies      |
 | `transferfb_2b.pdf`    | PDF/A-2b     | A shading under an inverting /TR, which a redaction rasterises   |
+| `blankblack_2b.pdf`    | PDF/A-2b     | Images whose zero samples are not black, blanked by a redaction  |
 
 ### Must-not-fire controls
 
@@ -591,6 +592,7 @@ are covered under [Known divergences](#known-divergences).
 | `annotsynth_2b.pdf`    | 8    | 5    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
 | `baretree_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
+| `blankblack_2b.pdf`    | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `blendcs_4.pdf`        | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 6    | 6    |
 | `blendspace_2b.pdf`    | 9    | 6    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `boxorigin_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
@@ -9469,6 +9471,44 @@ before, 230,0,19 after); after it, both draw it as before.
 `/TR` fails `6.2.5/1` at the PDF/A-2 and -3 levels and its counterparts at the
 other parts; the other cells are the identification and tagging rules of their
 parts. veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+
+### `blankblack_2b.pdf`
+
+A redaction blanks the samples an image paints inside a region to the image's
+black. An image it keeps in its own colour space was blanked to zero on every
+component, which is black in the device and CIE-based spaces but not in every
+ICC-based one: ISO 32000-1, 8.6.5.5 lets a profile give a sample any meaning,
+and in a YCC profile zero is a saturated colour. pdfjs `issue2856` holds a
+version 4 YCC-RGB image; redacted, its blank showed green (litho, poppler and
+PDFium alike, 26,226 pixels on the whole page), and the pixel check refused the
+redaction. Blanking now writes the space's black: the conventional one where it
+converts to a dark colour, else the sample nearest black in CIELAB
+(`pdfimage.NativeBlack`). `issue2856` lies outside the pdfjs render sample, so
+no `redact-render` scenario reached the construct. One 612 x 392 page draws
+five 16 x 16 images side by side, each 112 x 288 points from y = 43, the
+sample rows on whole points and centred on the cell's region edges:
+
+| Image | Space                                                      | Blanking writes                         |
+| ----- | ---------------------------------------------------------- | --------------------------------------- |
+| `Im0` | CalGray with `/Decode [1 0]`                               | 0, the array folded in and dropped      |
+| `Im1` | Indexed over CalRGB, entry 0 white                         | sRGB black, in litho's sRGB profile     |
+| `Im2` | ICCBased, a YCC-like v2.1 input profile (lut8 A2B0 to Lab) | the profile's black, Y 0 and Cb, Cr 128 |
+| `Im3` | Lab                                                        | sRGB black, in litho's sRGB profile     |
+| `Im4` | Separation `/Spot`, CalGray alternate, tint 0 white        | sRGB black, in litho's sRGB profile     |
+
+`Im2`'s zero samples are L\* 0, a\* and b\* -128, which litho, poppler 26.09.0
+and PDFium 4.30.0 all draw as (0, 59, 195). Before the fix, every
+`redact-render` scenario failed litho's inside check on it (whole page 32,256
+pixels, quarter 21,504, band 1,568) and the pixel check refused all three; after
+it, all three engines draw every blank (0, 0, 0) and both halves of the cell pass.
+The other four images were black before and after: they guard the spaces
+blanking rewrites in sRGB or whose inverted `/Decode` it folds into the samples.
+The poppler half passed before the fix as well, since it reads blanked images
+against litho's images-only rendering.
+
+The cells are the identification and tagging rules of their parts; the file
+conforms at PDF/A-2b. veraPDF 1.30.2 and litho report the same rule set in all
+thirteen cells.
 
 ## Scope
 
