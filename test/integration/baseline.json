@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-22T19:30:10Z",
+  "captured_at": "2026-10-24T11:10:02Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -146,10 +146,18 @@
           }
         },
         "redact-render": {
-          "matched": 79,
-          "mismatched": 0,
+          "matched": 78,
+          "mismatched": 1,
           "skipped": 0,
           "metrics": {
+            "fallback_incomplete": 6,
+            "fallback_inside_leaked": 1,
+            "fallback_litho_reading": 0,
+            "fallback_outside_changed": 0,
+            "fallback_poppler_no_oracle": 0,
+            "fallback_refused": 58,
+            "fallback_resampled": 0,
+            "fallback_scenarios_run": 6,
             "image_spill": 0,
             "inside_leaked": 0,
             "inside_leaked_litho": 0,
@@ -159,11 +167,12 @@
             "outside_changed_poppler": 0,
             "poppler_no_oracle": 7,
             "poppler_unavailable": 0,
+            "rasterised_units": 17,
             "redaction_failed": 0,
             "redaction_incomplete": 63,
-            "redaction_refused": 69,
+            "redaction_refused": 67,
             "render_failed": 0,
-            "scenarios_run": 175
+            "scenarios_run": 177
           }
         },
         "render": {
@@ -190,7 +199,7 @@
     "litho": {
       "features": {
         "compliance": {
-          "matched": 3003,
+          "matched": 3068,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -198,19 +207,19 @@
           }
         },
         "determinism": {
-          "matched": 2541,
+          "matched": 2596,
           "mismatched": 0,
-          "skipped": 462,
+          "skipped": 472,
           "metrics": {
             "nondeterministic": 0,
-            "render_pages_checked": 351,
+            "render_pages_checked": 357,
             "render_pages_nondeterministic": 0
           }
         },
         "flatten": {
           "matched": 32,
           "mismatched": 0,
-          "skipped": 199,
+          "skipped": 204,
           "metrics": {
             "annotations_left": 1,
             "flatten_failed": 0,
@@ -229,7 +238,7 @@
           }
         },
         "mutate-autotag": {
-          "matched": 2999,
+          "matched": 3064,
           "mismatched": 4,
           "skipped": 0,
           "metrics": {
@@ -243,7 +252,7 @@
           }
         },
         "mutate-encrypt": {
-          "matched": 3003,
+          "matched": 3068,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -257,7 +266,7 @@
           }
         },
         "mutate-flatten": {
-          "matched": 3003,
+          "matched": 3068,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -271,7 +280,7 @@
           }
         },
         "mutate-pages": {
-          "matched": 3003,
+          "matched": 3068,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -285,9 +294,9 @@
           }
         },
         "mutate-redact": {
-          "matched": 2327,
+          "matched": 2379,
           "mismatched": 0,
-          "skipped": 676,
+          "skipped": 689,
           "metrics": {
             "pages_wrong": 0,
             "qpdf_failed": 0,
@@ -298,7 +307,7 @@
           }
         },
         "mutate-sign": {
-          "matched": 2977,
+          "matched": 3042,
           "mismatched": 0,
           "skipped": 26,
           "metrics": {
@@ -315,7 +324,7 @@
           }
         },
         "mutate-stamp": {
-          "matched": 3003,
+          "matched": 3068,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -329,7 +338,7 @@
           }
         },
         "recolor": {
-          "matched": 215,
+          "matched": 220,
           "mismatched": 2,
           "skipped": 14,
           "metrics": {
@@ -345,7 +354,7 @@
             "jpeg_pages_checked": 1,
             "jpeg_saved_kib": 1,
             "out_of_target": 0,
-            "pages_checked": 325,
+            "pages_checked": 331,
             "qpdf_failed": 0,
             "recolor_failed": 0,
             "recolor_refused": 0,
@@ -354,10 +363,18 @@
           }
         },
         "redact-render": {
-          "matched": 231,
+          "matched": 236,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
+            "fallback_incomplete": 2,
+            "fallback_inside_leaked": 0,
+            "fallback_litho_reading": 7,
+            "fallback_outside_changed": 0,
+            "fallback_poppler_no_oracle": 4,
+            "fallback_refused": 48,
+            "fallback_resampled": 6,
+            "fallback_scenarios_run": 76,
             "image_spill": 5,
             "inside_leaked": 0,
             "inside_leaked_litho": 0,
@@ -365,68 +382,69 @@
             "outside_changed": 0,
             "outside_changed_litho": 0,
             "outside_changed_poppler": 0,
-            "poppler_no_oracle": 26,
+            "poppler_no_oracle": 29,
             "poppler_unavailable": 0,
+            "rasterised_units": 123,
             "redaction_failed": 0,
             "redaction_incomplete": 2,
-            "redaction_refused": 115,
+            "redaction_refused": 120,
             "render_failed": 0,
-            "scenarios_run": 648
+            "scenarios_run": 659
           }
         },
         "remediation": {
-          "matched": 1271,
-          "mismatched": 1732,
+          "matched": 1328,
+          "mismatched": 1740,
           "skipped": 0,
           "metrics": {
             "disagreement": 11,
-            "fully_fixed": 1271,
-            "litho_fixed": 14815,
-            "litho_post": 3437,
-            "litho_pre": 18252,
+            "fully_fixed": 1328,
+            "litho_fixed": 15054,
+            "litho_post": 3445,
+            "litho_pre": 18499,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 14794,
-            "verapdf_post": 3426,
-            "verapdf_pre": 18220,
+            "verapdf_fixed": 15033,
+            "verapdf_post": 3434,
+            "verapdf_pre": 18467,
             "verapdf_regressed": 0
           }
         },
         "remediation-aggressive": {
-          "matched": 1360,
-          "mismatched": 1643,
+          "matched": 1419,
+          "mismatched": 1649,
           "skipped": 0,
           "metrics": {
             "disagreement": 11,
-            "fully_fixed": 1360,
-            "litho_fixed": 15286,
-            "litho_post": 2966,
-            "litho_pre": 18252,
+            "fully_fixed": 1419,
+            "litho_fixed": 15527,
+            "litho_post": 2972,
+            "litho_pre": 18499,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 15265,
-            "verapdf_post": 2955,
-            "verapdf_pre": 18220,
+            "verapdf_fixed": 15506,
+            "verapdf_post": 2961,
+            "verapdf_pre": 18467,
             "verapdf_regressed": 0
           }
         },
         "render": {
-          "matched": 203,
-          "mismatched": 27,
+          "matched": 207,
+          "mismatched": 28,
           "skipped": 1,
           "metrics": {
-            "pages_match": 317,
+            "pages_match": 322,
             "render_failed": 0,
             "render_size_mismatch": 6
           }
         },
         "text": {
-          "matched": 223,
+          "matched": 228,
           "mismatched": 0,
           "skipped": 8,
           "metrics": {
-            "chars_match": 223,
-            "words_match": 223
+            "chars_match": 228,
+            "words_match": 228
           }
         }
       }
@@ -480,10 +498,18 @@
           "skipped": 0
         },
         "redact-render": {
-          "matched": 51,
-          "mismatched": 0,
+          "matched": 50,
+          "mismatched": 1,
           "skipped": 0,
           "metrics": {
+            "fallback_incomplete": 0,
+            "fallback_inside_leaked": 0,
+            "fallback_litho_reading": 4,
+            "fallback_outside_changed": 1,
+            "fallback_poppler_no_oracle": 10,
+            "fallback_refused": 39,
+            "fallback_resampled": 6,
+            "fallback_scenarios_run": 20,
             "image_spill": 0,
             "inside_leaked": 0,
             "inside_leaked_litho": 0,
@@ -493,6 +519,7 @@
             "outside_changed_poppler": 0,
             "poppler_no_oracle": 13,
             "poppler_unavailable": 0,
+            "rasterised_units": 55,
             "redaction_failed": 0,
             "redaction_incomplete": 27,
             "redaction_refused": 57,
@@ -610,10 +637,18 @@
           }
         },
         "redact-render": {
-          "matched": 78,
-          "mismatched": 0,
+          "matched": 75,
+          "mismatched": 3,
           "skipped": 2,
           "metrics": {
+            "fallback_incomplete": 2,
+            "fallback_inside_leaked": 0,
+            "fallback_litho_reading": 7,
+            "fallback_outside_changed": 5,
+            "fallback_poppler_no_oracle": 0,
+            "fallback_refused": 27,
+            "fallback_resampled": 7,
+            "fallback_scenarios_run": 20,
             "image_spill": 0,
             "inside_leaked": 0,
             "inside_leaked_litho": 0,
@@ -623,6 +658,7 @@
             "outside_changed_poppler": 0,
             "poppler_no_oracle": 27,
             "poppler_unavailable": 0,
+            "rasterised_units": 20,
             "redaction_failed": 0,
             "redaction_incomplete": 22,
             "redaction_refused": 36,
