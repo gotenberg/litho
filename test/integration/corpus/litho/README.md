@@ -291,6 +291,7 @@ one deliberately rather than diffing it against a fresh build.
 | `transferfb_2b.pdf`    | PDF/A-2b     | A shading under an inverting /TR, which a redaction rasterises   |
 | `blankblack_2b.pdf`    | PDF/A-2b     | Images whose zero samples are not black, blanked by a redaction  |
 | `t3extent_2b.pdf`      | PDF/A-2b     | Type 3 glyphs painting a shading, a form, a bar past their box   |
+| `t3scope_2b.pdf`       | PDF/A-2b     | Type 3 glyphs painting through the showing stream's resources    |
 
 ### Must-not-fire controls
 
@@ -783,6 +784,7 @@ are covered under [Known divergences](#known-divergences).
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
 | `t3extent_2b.pdf`      | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `t3overprint_2b.pdf`   | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
+| `t3scope_2b.pdf`       | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
 | `tableregular_ua2.pdf` | 4    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 8    | 7    |
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 2    | 5    |
 | `tablespan_ua2.pdf`    | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 4    | 4    |
@@ -9541,6 +9543,43 @@ against litho's images-only rendering.
 The cells are the identification and tagging rules of their parts; the file
 conforms at PDF/A-2b. veraPDF 1.30.2 and litho report the same rule set in all
 thirteen cells.
+
+### `t3scope_2b.pdf`
+
+A Type 3 font's `/Resources` is optional (ISO 32000-1, 9.6.5, Table 112): a
+glyph description without them takes the resources of the stream that shows the
+glyph, a PDF 1.1 practice viewers follow, and litho's renderer draws such a
+glyph against them. Redaction bounded a glyph once, when its font loaded,
+without those resources, so a glyph that shows text or paints a form named only
+by the page was bounded by the whole page, and any region on the page removed
+every glyph of the font. Now such a glyph is bounded again where it is shown,
+against that stream's resources. pdfjs `pr4922` is the one corpus file that
+reaches the construct. The page, 400 by 400, shows nine glyphs of font T3, which
+states no `/Resources`, at Tf 40 from 20 200, and again from 20 20 inside form
+`Fm`:
+
+| Glyph  | Description           | Through the page               | Through form `Fm`                |
+| ------ | --------------------- | ------------------------------ | -------------------------------- |
+| T3 `A` | shows `A` in font F1  | an embedded TrueType rectangle | the same font                    |
+| T3 `B` | paints the form `Bar` | a bar 32 by 28                 | a bar 32 by 60, `Fm`'s own `Bar` |
+
+The `redact-render` cell's centred quarter `[100 100 300 300]` meets six of the
+page's glyphs; the page's glyphs at 20, 60 and 340 and every glyph `Fm` shows
+lie clear of it. Before, every glyph was bounded by the page, and the quarter
+and the band refused, since they selected the glyphs `Fm` draws. Now the
+quarter removes the six glyphs and the band the page's line, both halves of the
+cell pass, and the whole page still refuses by default over `Fm`, its raster
+fallback passing. litho renders the page as poppler 26.09.0 does (no pixel
+differs).
+
+The construct is what ISO 19005-2, 6.2.2 forbids: each Type 3 glyph resolves
+`F1` and `Bar` only through the resources of the stream showing it, so `6.2.2/2`
+fires at the PDF/A-2, -3 and -4 levels; the other cells are the identification,
+metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
+same rule set in all thirteen cells. Remediation gives the font its own
+`/Resources` and veraPDF passes the output at PDF/A-2b, but it copies the page's
+binding of `Bar`, so the glyphs `Fm` shows draw the page's short bar, not
+`Fm`'s tall one.
 
 ## Scope
 
