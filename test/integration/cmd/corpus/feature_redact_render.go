@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -84,6 +85,22 @@ const redactRenderFallbackTolerance = redactRenderSelfTolerance
 // does not map to sRGB 0: the CMYK black of a printer profile is a dark grey.
 const redactRenderDarkLevel = 80
 
+// redactRenderSpillSpread is how far, in device pixels at [renderDPI],
+// poppler's half lets image spill reach past the pixels litho's images-only
+// renderings show changed ([redactPixelSets.spreadSpill]). poppler
+// interpolates an enlarged image half a sample off litho's centred reading,
+// so its blend of a blank into the kept samples sits up to half a sample's
+// width further out on one side: 8 pixels covers a sample 16 pixels wide,
+// 16 points at 72 dpi, and stops short of a whole image drawn otherwise.
+//
+// # Corpus evidence
+//
+//   - litho blankkeys_ua1 p1-quarter and p1-band: poppler's blend of the
+//     blank into ImA, a 16 by 16 image drawn 160 points wide, reaches 3 to 4
+//     pixels past litho's (138 and 79 pixels); litho and PDFium 4.30.0
+//     (pdfium 126.0.6462.0) draw the blend alike, to a level.
+const redactRenderSpillSpread = 8
+
 // redactFallbackSuffix names a fallback scenario after the scenario it
 // re-runs: "p1-quarter+raster".
 const redactFallbackSuffix = "+raster"
@@ -132,6 +149,14 @@ const (
 	// [redactPixelSets.spill]): blanking is exact to the sample, not to the
 	// region, so these are by design and do not fail the outside check.
 	metricImageSpill = "image_spill"
+	// metricInterpolationSpill counts the scenarios where pixels inside the
+	// eroded region showed a blanked image's blank blended with the samples
+	// it kept outside the region, by either renderer (see
+	// [redactPixelSets.blankBlend]): an interpolated image (ISO 32000-1,
+	// 8.9.5.3) smooths the samples on either side of the region's edge into
+	// each other, so these are by design and do not fail the inside check.
+	// The redaction's own pixel check, which the cell skips, refuses them.
+	metricInterpolationSpill = "interpolation_spill"
 
 	// The fallback scenarios' metrics (see [redactRenderFeature]):
 	// fallback_scenarios_run counts those the checks ran on and
@@ -263,7 +288,13 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     channel of the after page must lie within the range litho's
 //     images-only rendering spans around the pixel ([withinRange]), which
 //     two rasterizers' edges meet and a mark litho has no trace of does not:
-//     poppler sees the content litho's parser may miss.
+//     poppler sees the content litho's parser may miss. A pixel only an
+//     image paints that shows the blank blended with the samples the image
+//     kept outside the region ([redactPixelSets.blankBlend]) is an
+//     interpolated image's smoothing, by design, and counts in
+//     interpolation_spill, not as a leak: redaction keeps /Interpolate
+//     (ISO 32000-1, 8.9.5.3), and the redaction's own pixel check, which
+//     the cell skips, refuses such a page.
 //
 // A scenario passes when both checks pass for both renderers. A scenario
 // whose poppler half could not run counts in poppler_unavailable and does
@@ -333,6 +364,15 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //   - litho iccv4space_1b, megafont_2b, multipage_2b: image_spill, a
 //     2 by 2 image's samples, one of them interpolated, reaching past the
 //     region.
+//   - litho megafont_2b p1-quarter, multipage_2b p2-quarter: once blanking
+//     kept /Interpolate, the 2 by 2 image drawn 200 points wide blends its
+//     kept red and blue samples into the blank up to 15 pixels inside the
+//     region by litho's rendering (876 pixels) and 21 by poppler's (1,399):
+//     no green, the channel of the samples blanked, in either, and PDFium
+//     4.30.0 draws litho's blend to a level. interpolation_spill.
+//   - litho blankkeys_ua1 p1-band: poppler draws ImA's blend half a sample
+//     lower than litho and PDFium, 88 pixels of a kept row's colour fading
+//     into the blank inside the band: interpolation_spill.
 //   - pdfjs bitmap-halftone-skip-grid-template2, bitmap-refine-tpgron,
 //     issue17871_top_right: JBIG2 regions poppler garbles, which change in
 //     poppler once redaction re-encodes them from litho's decode.
@@ -520,6 +560,10 @@ type redactRenderCheck struct {
 	// ImageSpill counts the pixels outside the dilated region that changed
 	// because image blanking changed them (see [redactPixelSets.spill]).
 	ImageSpill int `json:"image_spill,omitempty"`
+	// InterpolationSpill counts the pixels inside the eroded region that
+	// show a blanked image's blank blended with its kept samples (see
+	// [redactPixelSets.blankBlend]). They do not count in Inside.
+	InterpolationSpill int `json:"interpolation_spill,omitempty"`
 	// LithoReading counts, on a fallback scenario's poppler half, the pixels
 	// outside the region poppler draws changed that show what litho drew of
 	// the source page: the rasterised image holds litho's rendering, so
@@ -945,6 +989,7 @@ func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *red
 		sets.spill = sets.grown(func(i int) bool {
 			return channelDelta(orig.images[3*i:3*i+3], images[3*i:3*i+3]) > redactRenderSelfTolerance
 		})
+		sets.onBlack, sets.onBlackW, sets.onBlackH = onBlack, sets.w, sets.h
 	}
 	out := sets.countOutside(orig.full, full, sets.w, nil, sets.painted, redactRenderFallbackTolerance)
 	check.OutsidePixels, check.Outside, check.OutsideBox, check.ImageSpill, check.Resampled = out.read, out.changed, out.box, out.spill, out.resampled
@@ -957,10 +1002,17 @@ func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *red
 			}
 			check.InsidePixels++
 			i := 3 * (y*sets.w + x)
-			if channelDelta(full[i:i+3], images[i:i+3]) > redactRenderSelfTolerance ||
-				max(onBlack[i], onBlack[i+1], onBlack[i+2]) > redactRenderDarkLevel {
-				leaks.add(x, y)
+			painted := channelDelta(full[i:i+3], images[i:i+3]) > redactRenderSelfTolerance
+			if !painted && max(onBlack[i], onBlack[i+1], onBlack[i+2]) <= redactRenderDarkLevel {
+				continue
 			}
+			// Only an image may show a blend: a glyph, fill or annotation
+			// left in the region is a leak whatever it looks like.
+			if !painted && sets.blankBlend(orig.images, images, sets.w, x, y, redactRenderSelfTolerance) {
+				check.InterpolationSpill++
+				continue
+			}
+			leaks.add(x, y)
 		}
 	}
 	check.Inside, check.InsideBox = leaks.n, leaks.rect()
@@ -1030,12 +1082,17 @@ func popplerCheck(staging string, st redactRenderStaged) (*redactRenderCheck, st
 		if st.outcome.Fallback {
 			reading = cropRGB(flattenOnWhite(lithoBefore, sets.w, sets.h), sets.w, w, h)
 		}
-		out := o.countOutside(cropRGB(orig, bw, w, h), cropRGB(full, aw, w, h), w, reading, o.imaged, renderChannelTolerance)
+		before, after := cropRGB(orig, bw, w, h), cropRGB(full, aw, w, h)
+		if o.spill != nil {
+			o.spill = o.spreadSpill(before, after)
+		}
+		out := o.countOutside(before, after, w, reading, o.imaged, renderChannelTolerance)
 		check.OutsidePixels, check.Outside, check.OutsideBox, check.ImageSpill = out.read, out.changed, out.box, out.spill
 		check.LithoReading, check.Resampled = out.reading, out.resampled
 	}
 	images := cropRGB(flattenOnWhite(imagesImg, sets.w, sets.h), sets.w, w, h)
 	full = cropRGB(full, aw, w, h)
+	orig = cropRGB(orig, bw, w, h)
 	var leaks pixelBox
 	for y := range h {
 		for x := range w {
@@ -1048,9 +1105,18 @@ func popplerCheck(staging string, st redactRenderStaged) (*redactRenderCheck, st
 			// litho's images-only rendering, checked clean above, has no
 			// trace of. Where litho draws more than poppler, litho's own
 			// half has already judged it.
-			if !withinRange(full[i:i+3], images, w, h, x, y, renderChannelTolerance) {
-				leaks.add(x, y)
+			if withinRange(full[i:i+3], images, w, h, x, y, renderChannelTolerance) {
+				continue
 			}
+			// poppler interpolates half a sample off litho's centred
+			// reading (package imgpaint), so its blend of the blank and the
+			// kept samples falls where litho's images-only rendering is
+			// black, or the other way round.
+			if o.blankBlend(orig, full, w, x, y, renderChannelTolerance) {
+				check.InterpolationSpill++
+				continue
+			}
+			leaks.add(x, y)
 		}
 	}
 	check.Inside, check.InsideBox = leaks.n, leaks.rect()
@@ -1130,7 +1196,7 @@ func (f *redactRenderFeature) Compare(fixtureID string, output []byte) Verdict {
 		metricRedactScenarios: 0, metricRedactRefused: 0, metricRedactIncomplete: 0, metricRedactFailed: 0,
 		metricOutsideChanged: 0, metricInsideLeaked: 0, metricOutsideChangedLitho: 0, metricOutsideChangedPoppler: 0,
 		metricInsideLeakedLitho: 0, metricInsideLeakedPoppler: 0, metricPopplerUnavailable: 0, metricPopplerNoOracle: 0,
-		metricRenderFailed: 0, metricImageSpill: 0,
+		metricRenderFailed: 0, metricImageSpill: 0, metricInterpolationSpill: 0,
 		metricFallbackScenarios: 0, metricRasterisedUnits: 0, metricFallbackRefused: 0, metricFallbackIncomplete: 0,
 		metricFallbackOutsideChanged: 0, metricFallbackInsideLeaked: 0, metricFallbackPopplerNoOracle: 0, metricFallbackLithoReading: 0,
 		metricFallbackResampled: 0, metricFallbackStrictChanged: 0,
@@ -1166,6 +1232,7 @@ func (f *redactRenderFeature) Compare(fixtureID string, output []byte) Verdict {
 			outside := sc.Litho.Outside > 0
 			inside := sc.Litho.Inside > 0
 			spill := sc.Litho.ImageSpill > 0
+			blend := sc.Litho.InterpolationSpill > 0
 			resampled := sc.Litho.Resampled > 0
 			if sc.Litho.StrictChanged > 0 {
 				m[metricFallbackStrictChanged]++
@@ -1198,6 +1265,9 @@ func (f *redactRenderFeature) Compare(fixtureID string, output []byte) Verdict {
 				if sc.Poppler.ImageSpill > 0 {
 					spill = true
 				}
+				if sc.Poppler.InterpolationSpill > 0 {
+					blend = true
+				}
 				if sc.Poppler.Outside > 0 {
 					if !sc.Fallback {
 						m[metricOutsideChangedPoppler]++
@@ -1219,6 +1289,9 @@ func (f *redactRenderFeature) Compare(fixtureID string, output []byte) Verdict {
 			}
 			if spill {
 				m[metricImageSpill]++
+			}
+			if blend {
+				m[metricInterpolationSpill]++
 			}
 			if resampled {
 				m[metricFallbackResampled]++
@@ -1363,6 +1436,148 @@ type redactPixelSets struct {
 	// under [redactRenderFallbackTolerance], with the allowances imaged
 	// grants poppler's.
 	painted []bool
+	// onBlack is, on a default scenario, litho's rendering of the after page
+	// with its images alone over black, onBlackW by onBlackH pixels: what
+	// the images paint, and nothing where they paint nothing. blankBlend
+	// reads the colours the kept samples paint just outside the region from
+	// it.
+	onBlack            []uint8
+	onBlackW, onBlackH int
+}
+
+// blankBlend reports whether the pixel at (x, y) inside the region, in one
+// renderer's renderings before and after of the page, stride pixels a row,
+// shows a blanked image's blank blended with the samples it kept outside the
+// region. A redaction blanks the samples whose centres the region covers
+// (package mutations, blankedPicture) and keeps /Interpolate (ISO 32000-1,
+// 8.9.5.3, Table 89), and a renderer interpolating an enlarged image blends
+// each sample into its neighbours up to a sample away: the kept samples
+// beside the region's edge reach into it, fading into the blank. Such a pixel
+// holds nothing the redaction removed. It is told by three things a sample
+// left unblanked does not show together:
+//
+//   - The blank reached it: some channel is darker after than before by more
+//     than [redactRenderSelfTolerance], since the blank is the darkest value
+//     of the image's colour space, and an unblanked sample draws as before.
+//   - Nothing lightened it: no channel is lighter after than before by more
+//     than [redactRenderSelfTolerance]. A blend of the source's samples with
+//     a darker blank is darker than the source wherever it differs.
+//   - Its colour comes from outside the region: no channel exceeds, by more
+//     than tol, what litho's images-only rendering over black ([onBlack])
+//     shows at the nearest pixels clear of the dilated region in the four
+//     directions of the pixel's row and column, where the kept samples paint.
+//     The blend fades from them toward the blank as it goes in.
+//
+// tol is [redactRenderSelfTolerance] for litho's own renderings and
+// [renderChannelTolerance] for poppler's, which draws the blend half a
+// sample off litho's (package imgpaint).
+//
+// A blank lighter than the darkest value that still darkens the picture
+// would pass for a blend; package mutations' tests hold blanking to the
+// darkest value, as they hold it to making the covered mask samples opaque.
+func (s *redactPixelSets) blankBlend(before, after []uint8, stride, x, y, tol int) bool {
+	if s.onBlack == nil {
+		return false
+	}
+	i := 3 * (y*stride + x)
+	darker := false
+	for c := range 3 {
+		b, a := int(before[i+c]), int(after[i+c])
+		if a > b+redactRenderSelfTolerance {
+			return false
+		}
+		if b-a > redactRenderSelfTolerance {
+			darker = true
+		}
+	}
+	if !darker {
+		return false
+	}
+	bound, ok := s.keptColours(x, y)
+	if !ok {
+		return false
+	}
+	for c := range 3 {
+		if int(after[i+c]) > bound[c]+tol {
+			return false
+		}
+	}
+	return true
+}
+
+// keptColours returns, channel by channel, the most [onBlack] shows at the
+// nearest pixels clear of the dilated region left of, right of, above and
+// below (x, y), false when none of them lies on the page.
+func (s *redactPixelSets) keptColours(x, y int) ([3]int, bool) {
+	d := grow(s.region, redactRenderMargin)
+	// A pixel is clear of d when x+1 <= d[0] or x >= d[2] (see [meets]).
+	left, right := math.Floor(d[0]-1), math.Ceil(d[2])
+	top, bottom := math.Floor(d[1]-1), math.Ceil(d[3])
+	var bound [3]int
+	found := false
+	for _, p := range [4][2]float64{{left, float64(y)}, {right, float64(y)}, {float64(x), top}, {float64(x), bottom}} {
+		if p[0] < 0 || p[1] < 0 || p[0] >= float64(s.onBlackW) || p[1] >= float64(s.onBlackH) {
+			continue
+		}
+		j := 3 * (int(p[1])*s.onBlackW + int(p[0]))
+		for c := range 3 {
+			bound[c] = max(bound[c], int(s.onBlack[j+c]))
+		}
+		found = true
+	}
+	return bound, found
+}
+
+// spreadSpill returns the spill mask grown into the pixels, connected to it
+// through each other, that another renderer draws darker after than before
+// in some channel by more than [redactRenderSelfTolerance] and lighter in
+// none: the blank of a blanked image, which that renderer blends into the
+// kept samples elsewhere than litho does. poppler interpolates an enlarged
+// image half a sample toward the origin of its sample grid (package
+// imgpaint), so its blend reaches past the region by up to half a sample
+// more than litho's on one side. The growth stops [redactRenderSpillSpread]
+// pixels from the mask, so a page the other renderer draws darker all over
+// after the redaction, as its own decode of an image the redaction
+// re-encoded can, still fails the outside check.
+func (s *redactPixelSets) spreadSpill(before, after []uint8) []bool {
+	out := slices.Clone(s.spill)
+	dist := make([]int, len(out))
+	darker := func(i int) bool {
+		dark := false
+		for c := range 3 {
+			b, a := int(before[3*i+c]), int(after[3*i+c])
+			if a > b+redactRenderSelfTolerance {
+				return false
+			}
+			if b-a > redactRenderSelfTolerance {
+				dark = true
+			}
+		}
+		return dark
+	}
+	var queue []int
+	for i, v := range out {
+		if v {
+			queue = append(queue, i)
+		}
+	}
+	for head := 0; head < len(queue); head++ {
+		i := queue[head]
+		if dist[i] == redactRenderSpillSpread {
+			continue
+		}
+		x, y := i%s.w, i/s.w
+		for ny := max(0, y-1); ny <= min(s.h-1, y+1); ny++ {
+			for nx := max(0, x-1); nx <= min(s.w-1, x+1); nx++ {
+				j := ny*s.w + nx
+				if !out[j] && darker(j) {
+					out[j], dist[j] = true, dist[i]+1
+					queue = append(queue, j)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // grown returns, w pixels a row, the pixels marked holds, the index of a

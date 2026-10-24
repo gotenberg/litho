@@ -16,6 +16,12 @@ import (
 // /F1, a 2 by 2 picture as /Im0 and an axial shading as /Sh0. The centred
 // quarter of the page, the p1-quarter region, is [50 50 150 150].
 func redactKindPDF(body string) []byte {
+	return redactImagePDF(body, "/Width 2 /Height 2", "\xff\x00\x00\x00\xff\x00\x00\x00\xff\xff\xff\xff")
+}
+
+// redactImagePDF returns the page of [redactKindPDF] with /Im0 an 8-bit
+// DeviceRGB image of the entries and samples given.
+func redactImagePDF(body, entries, samples string) []byte {
 	stream := func(dict, data string) string {
 		return fmt.Sprintf("<< %s /Length %d >>\nstream\n%s\nendstream", dict, len(data), data)
 	}
@@ -26,8 +32,7 @@ func redactKindPDF(body string) []byte {
 			" /Resources << /Font << /F1 5 0 R >> /XObject << /Im0 6 0 R >> /Shading << /Sh0 7 0 R >> >> >>",
 		stream("", body),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-		stream("/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8",
-			"\xff\x00\x00\x00\xff\x00\x00\x00\xff\xff\xff\xff"),
+		stream("/Type /XObject /Subtype /Image "+entries+" /ColorSpace /DeviceRGB /BitsPerComponent 8", samples),
 		"<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [80 0 120 0]" +
 			" /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >>",
 	}
@@ -306,5 +311,78 @@ func TestRedactRenderCatchesAFadedFallbackImage(t *testing.T) {
 	}
 	if out := sets.countOutside(edge, resampled, w, nil, paints, redactRenderFallbackTolerance); out.changed != 0 {
 		t.Errorf("point-sampled edge under litho's tolerance: %d changed, want 0", out.changed)
+	}
+}
+
+// TestRedactRenderInterpolationSpill redacts the centred quarter over an
+// interpolated 4 by 4 image whose upper right samples it covers, and requires
+// the kept samples the interpolation blends into the blank to count as
+// interpolation_spill, not as a leak. Two planted leaks over the same image
+// still fail the inside check: a redaction that removes nothing, and one that
+// leaves unblanked the samples whose centres lie just inside the region.
+func TestRedactRenderInterpolationSpill(t *testing.T) {
+	t.Parallel()
+	var samples []byte
+	for y := range 4 {
+		for x := range 4 {
+			samples = append(samples, byte(120+40*x), byte(120+40*y), 220)
+		}
+	}
+	const body = "q 100 0 0 100 0 0 cm /Im0 Do Q"
+	smooth := redactImagePDF(body, "/Width 4 /Height 4 /Interpolate true", string(samples))
+
+	v, sc := runRedactRender(t, newTestRedactRender(), smooth, "p1-quarter")
+	if sc.Litho == nil || !sc.Litho.passed() || sc.Litho.InterpolationSpill == 0 || v.Metrics[metricInterpolationSpill] == 0 {
+		t.Errorf("interpolated image: %+v, metrics %v, want a pass with interpolation spill", sc.Litho, v.Metrics)
+	}
+
+	_, sc = runRedactRender(t, newTestRedactRender(), redactImagePDF(body, "/Width 4 /Height 4", string(samples)), "p1-quarter")
+	if sc.Litho == nil || !sc.Litho.passed() || sc.Litho.InterpolationSpill != 0 {
+		t.Errorf("image drawn without interpolation: %+v, want a pass without interpolation spill", sc.Litho)
+	}
+
+	for name, redact := range map[string]func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error){
+		"removes nothing": func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error) {
+			return nil, nil
+		},
+		// The samples centred at 62.5 lie in the region [50 50 150 150] and
+		// out of [70 70 150 150].
+		"keeps samples inside": func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, opts ...pdf.RedactOption) (*pdf.RedactReport, error) {
+			region.Rect = [4]float64{70, 70, 150, 150}
+			return w.Redact(ctx, []pdf.RedactRegion{region}, append(opts, pdf.WithoutRedactionPixelCheck())...)
+		},
+	} {
+		f := newTestRedactRender()
+		f.redact = redact
+		v, sc := runRedactRender(t, f, smooth, "p1-quarter")
+		if sc.Litho == nil || sc.Litho.Inside == 0 || v.Metrics[metricInsideLeaked] == 0 || v.Match {
+			t.Errorf("%s: a leak over an interpolated image passed: %+v", name, sc.Litho)
+		}
+	}
+}
+
+// TestRedactRenderSpillSpreadStops requires poppler's spill to grow from the
+// pixels litho shows blanking changed into the pixels poppler draws darker
+// next to them, and to stop [redactRenderSpillSpread] pixels out, so a page
+// drawn darker all over still fails.
+func TestRedactRenderSpillSpreadStops(t *testing.T) {
+	t.Parallel()
+	const w = 3 * redactRenderSpillSpread
+	sets := &redactPixelSets{w: w, h: 1, spill: make([]bool, w)}
+	sets.spill[0] = true
+	before, after := make([]uint8, 3*w), make([]uint8, 3*w)
+	for i := range before {
+		before[i], after[i] = 200, 100
+	}
+	spread := sets.spreadSpill(before, after)
+	for x, v := range spread {
+		if want := x <= redactRenderSpillSpread; v != want {
+			t.Errorf("pixel %d: spill %v, want %v", x, v, want)
+		}
+	}
+	// A pixel drawn lighter after is no blank's.
+	after[3*1] = 250
+	if sets.spreadSpill(before, after)[1] {
+		t.Error("a lighter pixel joined the spill")
 	}
 }

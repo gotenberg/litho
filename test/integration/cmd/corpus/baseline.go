@@ -158,14 +158,17 @@ var uncomparedMetrics = map[string]bool{
 
 	// The redact-render inventory: refusals are the documented outcome for
 	// content a redaction cannot remove exactly, poppler_no_oracle counts
-	// source pages poppler draws apart from litho, and image_spill the
-	// by-design reach of sample-exact blanking. A defect in what they count
-	// fails outside_changed or inside_leaked instead; scenarios_run, the
-	// coverage, stays gated as good-when-higher.
-	metricRedactRefused:    true,
-	metricRedactIncomplete: true,
-	metricPopplerNoOracle:  true,
-	metricImageSpill:       true,
+	// source pages poppler draws apart from litho, image_spill the
+	// by-design reach of sample-exact blanking, and interpolation_spill the
+	// kept samples an interpolated image blends into its blank inside the
+	// region. A defect in what they count fails outside_changed or
+	// inside_leaked instead; scenarios_run, the coverage, stays gated as
+	// good-when-higher.
+	metricRedactRefused:      true,
+	metricRedactIncomplete:   true,
+	metricPopplerNoOracle:    true,
+	metricImageSpill:         true,
+	metricInterpolationSpill: true,
 	// The fallback scenarios' inventory, read the same way:
 	// fallback_litho_reading and fallback_resampled count scenarios where
 	// pixels changed outside show litho's own rendering of the source, which
