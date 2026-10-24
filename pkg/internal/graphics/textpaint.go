@@ -29,6 +29,10 @@ type TextPaint struct {
 	Resources ast.PdfDict
 	// Bold reports that the font is bold by its descriptor or its name.
 	Bold bool
+	// Type3 reports a Type 3 font, whose glyph descriptions may set colours
+	// of their own (ISO 32000-1, 9.6.5, d0), so the colours in force need
+	// not be what the glyph paints.
+	Type3 bool
 	// WhiteFill is what [Machine.WhiteFills] records for the element.
 	WhiteFill bool
 	// PaintsBefore counts what the machine had recorded when the glyph was

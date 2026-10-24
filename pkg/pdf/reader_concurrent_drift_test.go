@@ -81,6 +81,8 @@ var racedOptionReaders = []string{
 	// TestRenderPageConcurrent, over a page that paints.
 	"RenderPage",
 	"RenderPageReport",
+	// TestCheckTextContrastConcurrent, over a page of grey and black text.
+	"CheckTextContrast",
 }
 
 // readerMethodsByShape parses the package and groups exported *Reader methods

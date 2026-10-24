@@ -108,24 +108,42 @@ func sceneError(pageNum int, err error) error {
 	return fmt.Errorf("drawing page %d: %w", pageNum, err)
 }
 
-// unseenRuns groups a scene's glyphs that read as more than white space into
-// runs judged as one: consecutive glyphs on one line drawn the same way, in a
-// mode that paints or not, inside the crop box or not.
+// unseenRuns groups a scene's glyphs into runs judged as one: consecutive
+// glyphs on one line drawn the same way, in a mode that paints or not, inside
+// the crop box or not, the white space between words included and runs of
+// white space alone left out.
 func unseenRuns(s *textScene) [][]int {
 	class := func(i int) [2]bool {
 		return [2]bool{invisibleMode(s.paints[i].Mode), s.elements[i].IsClipped}
 	}
 	var runs [][]int
-	for _, run := range sceneRuns(s.elements, func(i int) bool { return strings.TrimSpace(s.elements[i].Text) != "" }) {
+	for _, run := range sceneRuns(s.elements, func(int) bool { return true }) {
 		start := 0
 		for k := 1; k <= len(run); k++ {
 			if k == len(run) || class(run[k]) != class(run[start]) {
-				runs = append(runs, run[start:k])
+				runs = appendTrimmed(runs, s, run[start:k])
 				start = k
 			}
 		}
 	}
 	return runs
+}
+
+// appendTrimmed appends run to runs without the white space glyphs at its
+// ends, and not at all when it holds nothing else: white space shows nothing
+// wherever it is set.
+func appendTrimmed(runs [][]int, s *textScene, run []int) [][]int {
+	blank := func(i int) bool { return strings.TrimSpace(s.elements[i].Text) == "" }
+	for len(run) > 0 && blank(run[0]) {
+		run = run[1:]
+	}
+	for len(run) > 0 && blank(run[len(run)-1]) {
+		run = run[:len(run)-1]
+	}
+	if len(run) == 0 {
+		return runs
+	}
+	return append(runs, run)
 }
 
 // unseenOf builds the report of one run.

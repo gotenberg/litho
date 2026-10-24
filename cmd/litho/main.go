@@ -317,6 +317,8 @@ func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, st
 		return runRemediate(ctx, globalArgs, stdout, stderr)
 	case "render":
 		return runRender(ctx, globalArgs, stdout, stderr)
+	case "contrast":
+		return runContrast(ctx, globalArgs, stdout, stderr)
 	case "pipe":
 		return runPipe(ctx, globalArgs, stdout, stderr)
 	default:
@@ -342,6 +344,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  signatures    List or verify digital signatures")
 	fmt.Fprintln(w, "  attachments   List embedded file attachments")
 	fmt.Fprintln(w, "  render        Draw pages to PNG images, or to CMYK TIFF images")
+	fmt.Fprintln(w, "  contrast      List text short of WCAG 2.x contrast against what lies under it (advisory)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Extraction:")
 	fmt.Fprintln(w, "  tables        Extract detected tables per page")

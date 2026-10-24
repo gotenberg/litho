@@ -188,6 +188,11 @@ litho images -f json document.pdf
 # Draw pages 1 to 3 at 150 dpi to page-1.png, page-2.png and page-3.png.
 litho render --pages 1-3 --dpi 150 -o page document.pdf
 
+# List the text a page draws and never shows, then the text short of WCAG 2.x
+# contrast against what lies under it (advisory: PDF/UA sets no contrast rule).
+litho text --unseen document.pdf
+litho contrast document.pdf
+
 # Validate compliance.
 litho validate --profile PDF/A-2b document.pdf
 litho validate --profile WTPDF-1.0-Accessibility document.pdf

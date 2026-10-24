@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -295,9 +296,25 @@ func (s *textScene) pixelRect(box [4]float64) image.Rectangle {
 // area counts the pixels the run's glyph boxes cover and no other glyph's box
 // does, changed those of them the run's text marks, and alone those it marks
 // drawn with nothing else, counted only when the scene drew that.
+//
+// background is the mean colour, each channel in [0, 1], the page shows over
+// the area without its text, and lumLow and lumHigh are the
+// [sceneLuminanceLow] and [sceneLuminanceHigh] percentiles of its relative
+// luminance.
 type runStats struct {
 	area, changed, alone int
+	background           [3]float64
+	lumLow, lumHigh      float64
 }
+
+// sceneLuminanceLow and sceneLuminanceHigh are the percentiles of a run's
+// background luminance [runStats] reports: its spread without the tenth of
+// its pixels at either end, where a shape's edge or an anti-aliased boundary
+// lies. Not spec-mandated.
+const (
+	sceneLuminanceLow  = 0.1
+	sceneLuminanceHigh = 0.9
+)
 
 // stats measures the run of glyphs whose indices run holds over the pixels
 // its glyph boxes alone cover: a glyph is judged where it can be told from
@@ -323,6 +340,7 @@ func (s *textScene) stats(run []int) runStats {
 	w := s.with.Bounds().Dx()
 	// paper is the colour of the page a scene draws on.
 	paper := [3]byte{255, 255, 255}
+	var lums []float64
 	for y := box.Min.Y; y < box.Max.Y; y++ {
 		for x := box.Min.X; x < box.Max.X; x++ {
 			n := own[(y-box.Min.Y)*box.Dx()+x-box.Min.X]
@@ -337,9 +355,36 @@ func (s *textScene) stats(run []int) runStats {
 			if s.alone != nil && inkChanged(s.alone.Pix[o:o+3:o+3], paper[:]) {
 				st.alone++
 			}
+			bg := s.without.Pix[o : o+3 : o+3]
+			r, g, b := float64(bg[0])/255, float64(bg[1])/255, float64(bg[2])/255
+			st.background[0] += r
+			st.background[1] += g
+			st.background[2] += b
+			lums = append(lums, relativeLuminance(r, g, b))
 		}
 	}
+	if st.area > 0 {
+		for c := range st.background {
+			st.background[c] /= float64(st.area)
+		}
+		slices.Sort(lums)
+		st.lumLow = lums[int(sceneLuminanceLow*float64(len(lums)-1))]
+		st.lumHigh = lums[int(sceneLuminanceHigh*float64(len(lums)-1))]
+	}
 	return st
+}
+
+// relativeLuminance is the relative luminance of an sRGB colour, each channel
+// in [0, 1], as WCAG 2.x defines it from the sRGB transfer function (IEC
+// 61966-2-1).
+func relativeLuminance(r, g, b float64) float64 {
+	lin := func(c float64) float64 {
+		if c <= 0.04045 {
+			return c / 12.92
+		}
+		return math.Pow((c+0.055)/1.055, 2.4)
+	}
+	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
 }
 
 // inkChanged reports two RGB pixels apart by more than

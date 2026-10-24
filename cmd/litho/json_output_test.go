@@ -61,6 +61,7 @@ func TestEveryJSONCapableCommandEmitsJSON(t *testing.T) {
 		"formulas":     func(s, _ string) []string { return []string{"formulas", "-f", "json", s} },
 		"lexicons":     func(s, _ string) []string { return []string{"lexicons", "-f", "json", s} },
 		"redactions":   func(s, _ string) []string { return []string{"redactions", "-f", "json", s} },
+		"contrast":     func(s, _ string) []string { return []string{"contrast", "-f", "json", s} },
 		"validate": func(s, _ string) []string {
 			return []string{"validate", "--profile", "PDF/A-2b", "-f", "json", s}
 		},

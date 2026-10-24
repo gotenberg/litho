@@ -19,7 +19,8 @@
 //
 // Readers that draw the page to judge its text sit beside them:
 // [Reader.ExtractUnseenText] lists the text a page draws that shows nowhere
-// on it.
+// on it, and [Reader.CheckTextContrast] the text short of the contrast WCAG
+// 2.x asks of it, an advisory check no PDF/UA validation depends on.
 //
 // # Quick start
 //
@@ -136,6 +137,8 @@
 //     [WithRenderSystemFonts], [WithRenderTarget], [WithRenderContent],
 //     [WithRenderBox], [WithRenderColorModel], [WithRenderCMYKProfile],
 //     [WithOverprintSimulation].
+//   - [Reader.CheckTextContrast] takes [ContrastOption]:
+//     [WithEnhancedContrast].
 //   - [Writer.WriteTo], [Split], [Merge], [Pipeline.WriteTo],
 //     [Pipeline.Split] and [Pipeline.Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],

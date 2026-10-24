@@ -143,6 +143,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 				Intent:      state.RenderingIntent,
 				Resources:   machine.Resources,
 				Bold:        font.Bold,
+				Type3:       font.Subtype == "Type3",
 				WhiteFill:   state.Text.Tmode != 3 && fillIsWhite(state),
 				PaintsBefore: [3]int{
 					len(machine.PathBoxes()), len(machine.ImageBoxes()), len(machine.ShadingBoxes()),
