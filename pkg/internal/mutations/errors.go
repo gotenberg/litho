@@ -305,14 +305,15 @@ var ErrImageCarriesSampleEntries = errors.New("image carries decode or mask entr
 // the judgement [ErrImageCarriesSampleEntries] records for /Mask.
 var ErrImageIsStencilMask = errors.New("region covers an image mask carrying a soft mask")
 
-// ErrStructElementPartlyRemoved reports a structure element that describes both
-// marked content a redaction removed and marked content it kept.
+// ErrStructElementPartlyRemoved reports a structure element whose /ActualText,
+// /Alt or /E describes both content a redaction removed and content it kept.
 //
-// One element can cover several marked-content sequences, and its /ActualText,
-// /Alt and /E describe all of them together. Clearing those for the sequence
-// that went would take the description of the ones that stayed, and leaving
-// them keeps a copy of the removed text in the structure tree. Splitting the
-// element is the operation this needs, and it does not exist yet.
+// One element can cover several marked-content sequences, and its descendants'
+// too, and those entries describe all of it together (ISO 32000-1, 14.9.3 to
+// 14.9.5). Clearing them would take the description of what stayed, and
+// leaving them keeps a copy of the removed text in the structure tree. An
+// element holding none of them is no reason to refuse: its marked content
+// stays in the page, holding what survived.
 var ErrStructElementPartlyRemoved = errors.New("structure element describes both removed and surviving content")
 
 // ErrStructElementNotAddressable reports a structure element the mutation

@@ -97,10 +97,13 @@ import (
 //     widget written directly into /Annots, so there is nothing to rewrite) or
 //     [ErrFormNotAddressable] (the AcroForm, or the catalog carrying it inline,
 //     has no object number for the replacement to take).
-//   - A structure element describing both removed and surviving content reports
-//     [ErrStructElementPartlyRemoved], and one with no object number of its own
+//   - A structure element holding /ActualText, /Alt or /E for both removed and
+//     surviving content reports [ErrStructElementPartlyRemoved], and one
+//     holding them for removed content with no object number of its own
 //     reports [ErrStructElementNotAddressable]. The tree holds a second copy of
-//     the page's text, so neither may be walked past.
+//     the page's text, so neither may be walked past. An element holding none
+//     of them is cut with its content: its marked-content sequences stay,
+//     holding what survived (see [scrubStructTreeText]).
 //   - A byte span outside the content reports [ErrSpanOutOfRange], and two
 //     spans covering the same bytes report [ErrSpansOverlap]. Either means the
 //     parse and the bytes being rewritten have diverged, so the excision would

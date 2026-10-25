@@ -133,11 +133,15 @@ func TestScrubStructText_TreeFallbackReadsThePageOfEachItem(t *testing.T) {
 	inherited := "<< /Type /StructElem /S /Div /P 12 0 R /Pg 3 0 R /K << /Type /StructElem /S /P /K 0 >> /ActualText (SECRET) >>"
 	doc, page = kTreeFixture(t, dangling, inherited, keepElem)
 	alloc = writer.NewObjAllocator(40)
-	_, err := RedactPageRegions(context.Background(), alloc, doc, page, coversSecret)
-	if !errors.Is(err, ErrStructElementNotAddressable) {
-		// The child takes the page of its parent, and being direct it cannot be
-		// rewritten: reaching that refusal is what shows the page was read.
-		t.Errorf("err = %v, want ErrStructElementNotAddressable for the direct child", err)
+	if _, err := RedactPageRegions(context.Background(), alloc, doc, page, coversSecret); err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+	// The direct child holds no text of its own and needs no rewrite. It takes
+	// the page of its parent, so MCID 0 is this page's removed content, and
+	// the parent's /ActualText, which spells it, goes: clearing it is what
+	// shows the page was read.
+	if !clearedActualText(alloc, 10) {
+		t.Errorf("the parent of a child on its page kept /ActualText: %v", alloc.Pending()[10])
 	}
 
 	mcr := "<< /Type /StructElem /S /P /P 12 0 R /K << /Type /MCR /Pg 3 0 R /MCID 0 >> /ActualText (SECRET) >>"

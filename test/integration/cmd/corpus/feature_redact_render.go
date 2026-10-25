@@ -410,6 +410,17 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     litho's half sees 0. Accepted as a mismatch. The PDF has no render
 //     golden, so it lies outside the cell's sample and the gate never runs
 //     it: the pixel shows with every govdocs PDF in scope.
+//   - govdocs thread_200_200172 p1-band: poppler's 157 changed pixels outside
+//     the band are one row, the bottom sample row of Im1, which the band
+//     crosses and redaction blanks in place. Its Flate data, predicted at the
+//     /BitsPerComponent 1 its /DecodeParms states under an 8-bit image, ends
+//     44 bytes before the last row does: litho, as PDF.js, paints a row the
+//     data does not complete black, where poppler, PDFium 4.30.0 and MuPDF
+//     1.26.4 paint it from the bytes there are, and the blanked image stores
+//     litho's reading.
+//     litho's half sees 0. Accepted as a mismatch: a decoder difference, as
+//     on thread_000_000372. The band refused before the structure elements it
+//     cuts were split.
 //   - litho, pdfcpu, pdfjs, govdocs: 70, 20, 20 and 6 fallback scenarios
 //     checked, rasterising 112, 55, 20 and 17 units; the cell's wall time
 //     went from about 51, 20, 46 and 65 seconds to 45, 24, 85 and 121

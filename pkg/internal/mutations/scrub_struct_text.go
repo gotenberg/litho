@@ -34,14 +34,27 @@ var structTextKeys = []ast.PdfName{"ActualText", "Alt", "E"}
 // entries of the tree itself (see [pageStructElements]). The element is still in
 // the tree whatever its /ParentTree entry says, and a viewer reaches it there.
 //
-// It refuses rather than guess:
+// An element whose content went in part needs no rewrite of its own. A
+// redaction removes show-text operators and keeps the BDC and EMC around them
+// (14.6.2), so each marked-content sequence stays in the stream holding what
+// survived of it, under the identifier its element's /K and the /ParentTree
+// already name (14.7.4.2, 14.7.4.4): the kept text stays tagged, in its reading
+// order, as ISO 14289-1, 7.1 asks, and the removed text, which the tree reads
+// from the content, is gone from it. What the content does not give back is
+// the text an element holds itself, /ActualText, /Alt and /E (14.9.3 to
+// 14.9.5), and those describe the element's whole content, its descendants'
+// included. So every element above removed content is read, the one the
+// identifier names and each element of the tree above it:
 //
-//   - An element describing both removed and surviving content reports
-//     [ErrStructElementPartlyRemoved], whether because one MCID covers operators
-//     on both sides or because two MCIDs name the same element.
-//   - An element written directly into the array, or into its parent's /K,
-//     reports [ErrStructElementNotAddressable], having no object number to
-//     replace.
+//   - One whose whole content went loses those entries.
+//   - One that also describes content that stays, on this page or another,
+//     in a form XObject or an annotation, reports
+//     [ErrStructElementPartlyRemoved]: clearing the entries would take the
+//     description of what stayed, keeping them keeps the removed text, and no
+//     part of a description can be told to be the removed part's. Entries
+//     that are empty strings spell nothing, and stay (see [spellsStructText]).
+//   - One written directly into the array, or into its parent's /K, reports
+//     [ErrStructElementNotAddressable], having no object number to replace.
 //
 // An element that does not resolve is passed over: the rewrite writes null in
 // its place (see [FullRewrite]), so nothing of it reaches the output.
@@ -66,54 +79,293 @@ func scrubStructTreeText(
 		return nil
 	}
 
-	// Sorted, so a refusal names the same MCID every run.
-	mcids := make([]int, 0, len(removed))
-	for mcid := range removed {
-		mcids = append(mcids, mcid)
+	scrub := &structTextScrub{
+		alloc: alloc, doc: doc, pageNum: page.Ref.ObjectNum,
+		removed: removed, surviving: surviving,
+		uses:    make(map[int]*contentSides),
+		memo:    make(map[structWalkKey]contentSides),
+		walking: make(map[int]bool),
 	}
-	sort.Ints(mcids)
 
-	for _, mcid := range mcids {
-		named := elements.of(ctx, mcid)
-		if len(named) == 0 {
-			// The tree does not describe this marked content, so it holds no
-			// copy of it either.
-			continue
-		}
-		// The same MCID can cover operators that went and operators that
-		// stayed: the element describes both, so neither clearing nor keeping
-		// it is right.
-		if surviving[mcid] {
-			return fmt.Errorf("%w: MCID %d", ErrStructElementPartlyRemoved, mcid)
-		}
-
-		for _, elemObj := range named {
+	// The elements the /ParentTree names, which a reader that starts from the
+	// content reaches whether or not the tree's /K agrees.
+	for _, mcid := range sortedMCIDs(removed) {
+		for _, elemObj := range elements.of(ctx, mcid) {
 			ref, isRef := elemObj.(ast.PdfIndirectRef)
 			if !isRef {
-				return fmt.Errorf("%w: MCID %d", ErrStructElementNotAddressable, mcid)
+				if dict, ok := elemObj.(ast.PdfDict); ok && hasStructText(dict) {
+					return fmt.Errorf("%w: MCID %d", ErrStructElementNotAddressable, mcid)
+				}
+				continue
 			}
-			if other, shared := elements.sharedWithSurvivor(ctx, ref, mcid, surviving); shared {
-				return fmt.Errorf("%w: MCID %d and MCID %d name element %d",
-					ErrStructElementPartlyRemoved, mcid, other, ref.ObjectNum)
+			use := scrub.use(ref.ObjectNum)
+			use.removed = true
+			use.kept = use.kept || surviving[mcid]
+		}
+	}
+	for _, mcid := range sortedMCIDs(surviving) {
+		for _, elemObj := range elements.of(ctx, mcid) {
+			if ref, isRef := elemObj.(ast.PdfIndirectRef); isRef {
+				// Recorded whether or not removed content names it yet: the
+				// tree's /K may assign it some below.
+				scrub.use(ref.ObjectNum).kept = true
 			}
+		}
+	}
 
-			elem, resolveErr := resolveDictAllocFirst(ctx, alloc, doc, ref)
-			if resolveErr != nil || elem == nil {
-				// Written as null by the rewrite, which is what makes passing
-				// over it safe; the output scan still reads every element
-				// the output does hold.
+	// The tree read from its root, as a viewer reads it: each element's
+	// content is the content of its subtree, so an ancestor holding
+	// /ActualText for a paragraph a span of which went is found here.
+	scrub.kids(ctx, elements.root["K"], 0, 0)
+	if scrub.err != nil {
+		return scrub.err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// Ascending, so a refusal names the same element every run.
+	nums := make([]int, 0, len(scrub.uses))
+	for num := range scrub.uses {
+		nums = append(nums, num)
+	}
+	sort.Ints(nums)
+	for _, num := range nums {
+		use := scrub.uses[num]
+		if !use.removed {
+			continue
+		}
+		ref := ast.PdfIndirectRef{ObjectNum: num}
+		elem, resolveErr := resolveDictAllocFirst(ctx, alloc, doc, ref)
+		if resolveErr != nil || elem == nil {
+			// Written as null by the rewrite, which is what makes passing
+			// over it safe; the output scan still reads every element the
+			// output does hold.
+			continue
+		}
+		if !hasStructText(elem) {
+			continue
+		}
+		if use.kept {
+			if !spellsStructText(elem) {
+				// Empty entries spell nothing removed, and nothing kept
+				// needs them taken away.
 				continue
 			}
-			scrubbed, changed := withoutStructText(elem)
-			if !changed {
-				continue
-			}
-			if !alloc.AllocAt(ref.ObjectNum, scrubbed) {
-				return fmt.Errorf("%w: MCID %d", ErrStructElementNotAddressable, mcid)
-			}
+			return fmt.Errorf("%w: element %d holds /ActualText, /Alt or /E for content that stays",
+				ErrStructElementPartlyRemoved, num)
+		}
+		scrubbed, _ := withoutStructText(elem)
+		if !alloc.AllocAt(num, scrubbed) {
+			return fmt.Errorf("%w: element %d", ErrStructElementNotAddressable, num)
 		}
 	}
 	return ctx.Err()
+}
+
+// sortedMCIDs returns the identifiers of set, ascending.
+func sortedMCIDs(set map[int]bool) []int {
+	out := make([]int, 0, len(set))
+	for mcid := range set {
+		out = append(out, mcid)
+	}
+	sort.Ints(out)
+	return out
+}
+
+// contentSides says what became of the content under a structure element:
+// some of it removed, some of it kept, or both.
+type contentSides struct {
+	removed, kept bool
+}
+
+func (c *contentSides) add(o contentSides) {
+	c.removed = c.removed || o.removed
+	c.kept = c.kept || o.kept
+}
+
+// structWalkKey memoises the content of one object of the tree under the page
+// it inherits: an element that states no /Pg takes its parent's.
+type structWalkKey struct {
+	num, page int
+}
+
+// structTextScrub reads the structure tree for [scrubStructTreeText].
+type structTextScrub struct {
+	alloc   *writer.ObjAllocator
+	doc     *document.Document
+	pageNum int
+
+	removed, surviving map[int]bool
+
+	// uses holds, by object number, what became of the content of each
+	// element above removed content.
+	uses map[int]*contentSides
+	// memo holds the content of each /K array and element written as an
+	// object of its own, so one reached twice is read once; walking marks
+	// those on the way down, so a /K cycle reads as content kept.
+	memo    map[structWalkKey]contentSides
+	walking map[int]bool
+
+	// err is the first refusal the walk met, in tree order.
+	err error
+}
+
+func (s *structTextScrub) use(num int) *contentSides {
+	use, ok := s.uses[num]
+	if !ok {
+		use = &contentSides{}
+		s.uses[num] = use
+	}
+	return use
+}
+
+// mcid returns what became of the content an identifier marks, on the page pg
+// an element's items inherit, 0 when nothing above states one. Content on
+// another page is kept, and so is an identifier the removal took nothing of.
+// An identifier whose page nothing states is taken to be this page's, as
+// [structElementsByMCID] takes it.
+func (s *structTextScrub) mcid(mcid, pg int) contentSides {
+	if pg != 0 && pg != s.pageNum {
+		return contentSides{kept: true}
+	}
+	return contentSides{removed: s.removed[mcid], kept: s.surviving[mcid] || !s.removed[mcid]}
+}
+
+// kids returns what became of the content a /K entry names, kObj, on the page
+// pg its items inherit, at depth in the tree.
+//
+// The walk stops at [maxStructTreeDepth], and what lies past it reads as kept:
+// an element above content the walk cannot see refuses rather than lose a
+// description of it. A kid that does not resolve is null, and names nothing.
+func (s *structTextScrub) kids(ctx context.Context, kObj ast.PdfObject, pg, depth int) contentSides {
+	if kObj == nil {
+		return contentSides{}
+	}
+	if depth > maxStructTreeDepth || ctx.Err() != nil {
+		return contentSides{kept: true}
+	}
+	arr, err := resolveArrayAllocFirst(ctx, s.alloc, s.doc, kObj)
+	if err != nil {
+		return s.kid(ctx, kObj, pg, depth)
+	}
+	return s.once(kObj, pg, func() contentSides {
+		var sides contentSides
+		for _, kid := range arr {
+			sides.add(s.kid(ctx, kid, pg, depth))
+		}
+		return sides
+	})
+}
+
+// kid returns what became of the content one item of a /K array names (ISO
+// 32000-1, 14.7.4.2): a marked-content identifier, a marked-content
+// reference, an object reference, or an element.
+func (s *structTextScrub) kid(ctx context.Context, kid ast.PdfObject, pg, depth int) contentSides {
+	if mcid, isInt := kid.(ast.PdfInt); isInt {
+		return s.mcid(int(mcid), pg)
+	}
+	return s.once(kid, pg, func() contentSides {
+		dict, err := resolveDictAllocFirst(ctx, s.alloc, s.doc, kid)
+		if err != nil || dict == nil {
+			return contentSides{}
+		}
+		switch kind, _ := dict["Type"].(ast.PdfName); kind {
+		case "MCR":
+			// Content in a form XObject is not this page's content stream,
+			// which is all a page redaction removes from.
+			if _, inForm := dict["Stm"]; inForm {
+				return contentSides{kept: true}
+			}
+			mcid, ok := intEntry(ctx, s.doc, dict["MCID"])
+			if !ok {
+				return contentSides{kept: true}
+			}
+			return s.mcid(mcid, structItemPage(dict, pg))
+		case "OBJR":
+			// An annotation or XObject the element describes: it stays as
+			// far as the tree can tell.
+			return contentSides{kept: true}
+		}
+		sides := s.kids(ctx, dict["K"], structItemPage(dict, pg), depth+1)
+		if !sides.removed {
+			return sides
+		}
+		if ref, isRef := kid.(ast.PdfIndirectRef); isRef {
+			s.use(ref.ObjectNum).add(sides)
+			return sides
+		}
+		if s.err == nil && (sides.kept && spellsStructText(dict) || !sides.kept && hasStructText(dict)) {
+			if sides.kept {
+				s.err = fmt.Errorf("%w: an element written in its parent's /K holds /ActualText, /Alt or /E for content that stays",
+					ErrStructElementPartlyRemoved)
+			} else {
+				s.err = fmt.Errorf("%w: an element written in its parent's /K holds /ActualText, /Alt or /E for removed content",
+					ErrStructElementNotAddressable)
+			}
+		}
+		return sides
+	})
+}
+
+// once reads the content obj names through read, once per object written on
+// its own and the page it inherits. One reached again while it is being read
+// is a /K cycle, which reads as content kept.
+func (s *structTextScrub) once(obj ast.PdfObject, pg int, read func() contentSides) contentSides {
+	ref, isRef := obj.(ast.PdfIndirectRef)
+	if !isRef {
+		return read()
+	}
+	key := structWalkKey{num: ref.ObjectNum, page: pg}
+	if sides, done := s.memo[key]; done {
+		return sides
+	}
+	if s.walking[ref.ObjectNum] {
+		return contentSides{kept: true}
+	}
+	s.walking[ref.ObjectNum] = true
+	sides := read()
+	delete(s.walking, ref.ObjectNum)
+	s.memo[key] = sides
+	return sides
+}
+
+// structItemPage returns the page an element or marked-content reference
+// states in /Pg, or inherited when it states none by reference.
+func structItemPage(dict ast.PdfDict, inherited int) int {
+	if ref, isRef := dict["Pg"].(ast.PdfIndirectRef); isRef {
+		return ref.ObjectNum
+	}
+	return inherited
+}
+
+// hasStructText reports whether elem holds one of [structTextKeys].
+func hasStructText(elem ast.PdfDict) bool {
+	for _, key := range structTextKeys {
+		if _, present := elem[key]; present {
+			return true
+		}
+	}
+	return false
+}
+
+// spellsStructText reports whether one of the [structTextKeys] elem holds may
+// spell text: any value but a string that decodes to none. An empty /Alt
+// describes nothing, so it holds no copy of what a redaction removed, and an
+// element whose content went in part keeps it. A value that is not a direct
+// string, a reference among them, is taken to spell text.
+func spellsStructText(elem ast.PdfDict) bool {
+	for _, key := range structTextKeys {
+		v, present := elem[key]
+		if !present {
+			continue
+		}
+		s, isString := v.(ast.PdfString)
+		if !isString || document.DecodePdfString(s) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // structElements answers which structure elements describe a marked-content
@@ -144,29 +396,6 @@ func (s *structElements) of(ctx context.Context, mcid int) []ast.PdfObject {
 		s.byTree = structElementsByMCID(ctx, s.alloc, s.doc, s.root, s.page)
 	}
 	return s.byTree[mcid]
-}
-
-// sharedWithSurvivor reports whether any surviving marked content names the
-// same element, and which. One element commonly spans a whole paragraph, so
-// this is the ordinary case rather than a corner one.
-func (s *structElements) sharedWithSurvivor(ctx context.Context, ref ast.PdfIndirectRef, mcid int, surviving map[int]bool) (int, bool) {
-	others := make([]int, 0, len(surviving))
-	for other := range surviving {
-		if other != mcid {
-			others = append(others, other)
-		}
-	}
-	// Sorted, so the refusal names the same MCID every run.
-	sort.Ints(others)
-	for _, other := range others {
-		for _, elemObj := range s.of(ctx, other) {
-			otherRef, ok := elemObj.(ast.PdfIndirectRef)
-			if ok && otherRef.ObjectNum == ref.ObjectNum {
-				return other, true
-			}
-		}
-	}
-	return 0, false
 }
 
 // pageStructElements returns what finds the structure elements of the page's
