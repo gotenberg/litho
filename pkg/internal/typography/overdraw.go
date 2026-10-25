@@ -33,18 +33,75 @@ const overdrawMaxAdvanceShare = 0.5
 // rounding of a producer's matrices.
 const overdrawSizeSlack = 0.01
 
-// overdrawAngleSlack is the largest difference, in radians, between the
-// baselines of two glyphs that are one glyph drawn twice. Not
-// spec-mandated: it admits the rounding of a producer's matrices.
+// overdrawAngleSlack is the least difference, in radians, between the
+// baselines of two glyphs that are one glyph drawn twice that
+// [overdrawTurnBound] admits, however wide the glyph. Not spec-mandated: it
+// admits the rounding of a producer's matrices.
 const overdrawAngleSlack = 0.01
+
+// overdrawMaxTurn bounds, in radians, how far the baseline of a glyph drawn
+// again may turn from the earlier glyph's, scaled by the glyph's size: a turn
+// of t about the glyph's origin moves the far end of its box, an advance or
+// an em away, by about t times that length, and the turn is admitted while
+// that move stays under [overdrawMaxOffset] ems, the same bound the origin's
+// offset meets ([overdrawTurnBound]). Not spec-mandated. Text set glyph by
+// glyph along a curve and drawn again for a shadow is set along a second curve
+// a little apart, so each glyph turns from its earlier copy while it still
+// lies over it. Two glyphs a reader tells apart lie an advance apart, which
+// the offset bounds already keep apart, or a quarter turn apart, the labels
+// of two axes.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400902.pdf: curved labels of a flow chart ("Calcine
+//     storage in bin sets", "SBW storage in Tank Farm") drawn twice a third
+//     of a point apart, each glyph turned from its copy by 0.02 to 0.22
+//     radian, read "rage in bin sets" and "a r m" a second time under a bound
+//     of 0.01 radian.
+//   - All corpora: the turn bound changes the default reading of that file
+//     alone, 5 pages, 99 characters of the second copy no longer read, and no
+//     word read once is lost.
+const overdrawMaxTurn = overdrawMaxOffset
+
+// overdrawMaxBend bounds, in radians, how far the baselines of two glyphs
+// drawn one after the other may turn from each other and still be one line of
+// one piece of text ([overdrawSameLine]). Not spec-mandated: text set along a
+// curve turns each glyph from the one before it by the glyph's advance over
+// the curve's radius, under an eighth of a turn on a curve no tighter than
+// about an advance and a third, while a label turned a quarter turn from its
+// neighbour, an axis label beside a tick, starts another line.
+const overdrawMaxBend = math.Pi / 4
+
+// overdrawAngleGap returns the angle between two baselines of angles a and b,
+// in radians, in [0, π]: angles read on each side of a half turn, -π+ε and
+// π-ε, lie 2ε apart.
+func overdrawAngleGap(a, b float64) float64 {
+	d := math.Mod(math.Abs(a-b), 2*math.Pi)
+	if d > math.Pi {
+		d = 2*math.Pi - d
+	}
+	return d
+}
+
+// overdrawTurnBound returns how far, in radians, the baseline of a glyph of
+// font size em and advance w may turn from an earlier copy of it (see
+// [overdrawMaxTurn]): the turn that moves the farther of its advance's end and
+// its em's top by [overdrawMaxOffset] ems, never under [overdrawAngleSlack].
+func overdrawTurnBound(em, w float64) float64 {
+	reach := math.Max(em, w)
+	if !(reach > 0) {
+		return overdrawAngleSlack
+	}
+	return math.Max(overdrawAngleSlack, overdrawMaxTurn*em/reach)
+}
 
 // maxOverdrawCell bounds the glyphs [dropOverdrawn] indexes in one cell.
 // Anti-DoS guard, not spec-mandated: a crafted page can set thousands of one
-// character in one cell that match none of one another, a different angle
-// each, and comparing each with all costs their square. A real page sets a
-// character in one cell of a quarter em a handful of times, once per copy, so
-// 64 holds every copy of it, and a glyph past the bound is compared but not
-// indexed.
+// character in one cell that match none of one another, advancing nothing
+// or turned apart, and comparing each with all costs their square. A real
+// page sets a character in one cell of a quarter em a handful of times, once
+// per copy, so 64 holds every copy of it, and a glyph past the bound is
+// compared but not indexed.
 const maxOverdrawCell = 64
 
 // overdrawCell keys the index of glyphs [dropOverdrawn] reads: the glyph's
@@ -58,7 +115,8 @@ type overdrawCell struct {
 
 // dropOverdrawn returns elements, and fonts parallel to them when not nil,
 // without the glyphs that draw an earlier glyph again over itself: the same
-// character at the same size, along the same direction, under
+// character at the same size, along a direction turned so little that its
+// box's far end moves under [overdrawMaxOffset] ems ([overdrawMaxTurn]), under
 // [overdrawMaxOffset] ems away on each axis ([overdraws]), the earlier glyph
 // or one of its copies, with its neighbours copied alike ([copiedInContext]).
 //
@@ -136,7 +194,7 @@ func dropOverdrawn(ctx context.Context, elements []models.TextElement, fonts []r
 // OverdrawCopies returns, parallel to elements, the index of the earlier
 // glyph each one draws again over itself, -1 for a glyph that copies none,
 // by the rule default text extraction drops repeated glyphs by: the same
-// character at the same size, along the same direction, under
+// character at the same size, along nearly the same direction, under
 // a quarter em away, its neighbours copied alike (see dropOverdrawn). The
 // index names the earlier copy matched, which may itself copy an earlier
 // one. White space dropped between two copies names none.
@@ -306,10 +364,11 @@ func overdrawPieceOf(elements []models.TextElement) []int {
 }
 
 // overdrawSameLine reports b, drawn right after a, on a's line and within
-// [overdrawReach] ems of it along it.
+// [overdrawReach] ems of it along it, the line straight or bending along a
+// curve by under [overdrawMaxBend] from one glyph to the next.
 func overdrawSameLine(a, b models.TextElement) bool {
 	em := math.Max(math.Abs(a.FontSize), math.Abs(b.FontSize))
-	if a.Vertical != b.Vertical || math.Abs(a.Angle-b.Angle) > overdrawAngleSlack || !(em > 0) {
+	if a.Vertical != b.Vertical || overdrawAngleGap(a.Angle, b.Angle) > overdrawMaxBend || !(em > 0) {
 		return false
 	}
 	dx, dy := b.X-a.X, b.Y-a.Y
@@ -420,7 +479,7 @@ func copiedInContext(elements []models.TextElement, piece []int, i, j int) bool 
 // itself (see [dropOverdrawn]), piece giving the piece of text of each glyph.
 func overdraws(elements []models.TextElement, piece []int, i, j int) bool {
 	earlier, later := elements[i], elements[j]
-	if earlier.Text != later.Text || earlier.Vertical != later.Vertical || math.Abs(earlier.Angle-later.Angle) > overdrawAngleSlack {
+	if earlier.Text != later.Text || earlier.Vertical != later.Vertical {
 		return false
 	}
 	a, b := math.Abs(earlier.FontSize), math.Abs(later.FontSize)
@@ -428,6 +487,9 @@ func overdraws(elements []models.TextElement, piece []int, i, j int) bool {
 		return false
 	}
 	em := b
+	if overdrawAngleGap(earlier.Angle, later.Angle) > overdrawTurnBound(em, math.Max(math.Abs(earlier.Width), math.Abs(later.Width))) {
+		return false
+	}
 	dx, dy := later.X-earlier.X, later.Y-earlier.Y
 	if math.Abs(dx) >= overdrawMaxOffset*em || math.Abs(dy) >= overdrawMaxOffset*em {
 		return false
