@@ -109,6 +109,59 @@ func dropOverdrawn(ctx context.Context, elements []models.TextElement, fonts []r
 	if len(elements) < 2 {
 		return elements, fonts, nil
 	}
+	dropped, _, err := overdrawCopies(ctx, elements)
+	if err != nil {
+		return nil, nil, err
+	}
+	if dropped == nil {
+		return elements, fonts, nil
+	}
+	outEl := make([]models.TextElement, 0, len(elements))
+	var outFonts []runFont
+	if fonts != nil {
+		outFonts = make([]runFont, 0, len(fonts))
+	}
+	for i := range elements {
+		if dropped[i] {
+			continue
+		}
+		outEl = append(outEl, elements[i])
+		if fonts != nil {
+			outFonts = append(outFonts, fonts[i])
+		}
+	}
+	return outEl, outFonts, nil
+}
+
+// OverdrawCopies returns, parallel to elements, the index of the earlier
+// glyph each one draws again over itself, -1 for a glyph that copies none,
+// by the rule default text extraction drops repeated glyphs by: the same
+// character at the same size, along the same direction, under
+// a quarter em away, its neighbours copied alike (see dropOverdrawn). The
+// index names the earlier copy matched, which may itself copy an earlier
+// one. White space dropped between two copies names none.
+func OverdrawCopies(ctx context.Context, elements []models.TextElement) ([]int, error) {
+	copyOf := make([]int, len(elements))
+	for j := range copyOf {
+		copyOf[j] = -1
+	}
+	if len(elements) < 2 {
+		return copyOf, nil
+	}
+	_, found, err := overdrawCopies(ctx, elements)
+	if err != nil {
+		return nil, err
+	}
+	if found != nil {
+		copyOf = found
+	}
+	return copyOf, nil
+}
+
+// overdrawCopies decides which glyphs [dropOverdrawn] drops, and the earlier
+// glyph each dropped glyph copies, -1 for white space dropped between
+// copies. Both are nil when no glyph copies another.
+func overdrawCopies(ctx context.Context, elements []models.TextElement) (dropped []bool, copyOf []int, err error) {
 	piece := overdrawPieceOf(elements)
 	// original[j] is the glyph j draws again, -1 when it draws none.
 	original := make([]int, len(elements))
@@ -146,12 +199,12 @@ func dropOverdrawn(ctx context.Context, elements []models.TextElement, fonts []r
 		}
 	}
 	if !found {
-		return elements, fonts, nil
+		return nil, nil, nil
 	}
-	lies := func(k int, from map[int]bool) bool {
+	lies := func(k int, from map[int]bool) int {
 		key, ok := overdrawKey(elements[k])
 		if !ok {
-			return false
+			return -1
 		}
 		for dx := int64(-1); dx <= 1; dx++ {
 			for dy := int64(-1); dy <= 1; dy++ {
@@ -159,29 +212,15 @@ func dropOverdrawn(ctx context.Context, elements []models.TextElement, fonts []r
 				c.x, c.y = c.x+dx, c.y+dy
 				for _, i := range seen[c] {
 					if i < k && from[piece[i]] && overdraws(elements, piece, i, k) {
-						return true
+						return i
 					}
 				}
 			}
 		}
-		return false
+		return -1
 	}
-	dropped := overdrawPieces(elements, piece, original, lies)
-	outEl := make([]models.TextElement, 0, len(elements))
-	var outFonts []runFont
-	if fonts != nil {
-		outFonts = make([]runFont, 0, len(fonts))
-	}
-	for i := range elements {
-		if dropped[i] {
-			continue
-		}
-		outEl = append(outEl, elements[i])
-		if fonts != nil {
-			outFonts = append(outFonts, fonts[i])
-		}
-	}
-	return outEl, outFonts, nil
+	dropped = overdrawPieces(elements, piece, original, lies)
+	return dropped, original, nil
 }
 
 // overdrawAcross is how far apart across their baseline, in ems, two glyphs
@@ -201,8 +240,9 @@ const overdrawAcross = 0.5
 // or more copying glyphs of other pieces, every other glyph lying on the same
 // character of one of those pieces, by [overdraws] alone, goes too, as does
 // the white space between two glyphs that go. lies reports such a character
-// for glyph k among the pieces from holds.
-func overdrawPieces(elements []models.TextElement, piece, original []int, lies func(k int, from map[int]bool) bool) []bool {
+// for glyph k among the pieces from holds, -1 for none, and the glyph it
+// lies on is recorded in original.
+func overdrawPieces(elements []models.TextElement, piece, original []int, lies func(k int, from map[int]bool) int) []bool {
 	dropped := make([]bool, len(elements))
 	blank := func(k int) bool { return strings.TrimSpace(elements[k].Text) == "" }
 	for start := 0; start < len(elements); {
@@ -224,8 +264,11 @@ func overdrawPieces(elements []models.TextElement, piece, original []int, lies f
 		}
 		if copies >= overdrawChain {
 			for k := start; k < end; k++ {
-				if !dropped[k] && !blank(k) && lies(k, from) {
-					dropped[k] = true
+				if dropped[k] || blank(k) {
+					continue
+				}
+				if i := lies(k, from); i >= 0 {
+					dropped[k], original[k] = true, i
 				}
 			}
 			for k := start; k < end; k++ {

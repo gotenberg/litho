@@ -76,18 +76,24 @@ func WithEnhancedContrast() ContrastOption {
 // The text's colour is the one the content stream paints it in, converted to
 // sRGB as [Reader.RenderPage] converts it; text both filled and stroked is
 // judged by whichever of its two colours contrasts more, so a white letter
-// outlined in black is judged by its outline. A run is judged where its own ink
-// marks the page, as [Reader.ExtractUnseenText] judges it seen: the page
-// drawn at 72 dpi without the run differs there from the page drawn whole.
-// The background is what the page shows there without the run, averaged:
-// over the pixels the run's ink marks outside every other run's glyph boxes,
-// or, when it marks none, over all it marks with the page drawn without it
-// and no run it shares a pixel with, the page's other text under it
-// included, so white text over a dark offset shadow is judged against the
-// shadow. A run whose own ink marks no pixel is not seen and not judged, nor
-// is one past the bound of 16 such drawings a page. A run whose colour the content stream does not settle, painted with
-// a pattern, transparency, a blend mode or a soft mask, or by a Type 3 glyph
-// that may set its own colour, is counted in
+// outlined in black is judged by its outline. A run is judged where its own
+// ink marks the page, as [Reader.ExtractUnseenText] judges it seen: the page
+// drawn at 72 dpi without the run differs there from the page drawn whole. The
+// background is what the page shows there without the run, averaged: over the
+// pixels the run's ink marks outside every other run's glyph boxes, or, when
+// it marks none, over all it marks with the page drawn without it and no run
+// it shares a pixel with, the page's other text under it included, so white
+// text set over other, dark text is judged against it. A piece of text drawn
+// several times over itself, a fake bold, a drop shadow or an outline pass,
+// each copy the same characters at the same size under a quarter em from the
+// others as default text extraction matches them, is judged once: against what
+// the page shows under the whole stack drawn without every copy, by whichever
+// colour of its copies contrasts most, as an outline counts, and reported by
+// its first copy. A run whose own ink marks no pixel is not seen and not
+// judged, nor is one past the bound of 16 such drawings a page. A run whose
+// colour the content stream does not settle, or a stack one of whose copies'
+// colour it does not, painted with a pattern, transparency, a blend mode or a
+// soft mask, or by a Type 3 glyph that may set its own colour, is counted in
 // [models.ContrastReport.Undetermined] and not judged.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
@@ -117,29 +123,55 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 	if len(runs) == 0 {
 		return rep, nil
 	}
-	under := make([]contrastSamples, len(runs))
-	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, runs, ownInkOptions{under: func(k int, px []byte) { under[k].add(px) }})
+	stacks, err := s.stackRuns(ctx, runs, nil)
+	if err != nil {
+		return models.ContrastReport{}, fmt.Errorf("page %d: %w", pageNum, err)
+	}
+	under := make([]contrastSamples, len(stacks))
+	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, stackGlyphs(stacks), ownInkOptions{under: func(k int, px []byte) { under[k].add(px) }})
 	if err != nil {
 		return models.ContrastReport{}, sceneError(pageNum, err)
 	}
 	cache := &colorconv.Cache{}
-	for k, run := range runs {
-		if verdicts[k] != inkSeen || len(under[k].lums) == 0 {
+	for n, stack := range stacks {
+		if verdicts[n] != inkSeen || len(under[n].lums) == 0 {
 			continue
 		}
-		inks, ok := r.textColours(ctx, s.paints[run[0]], pg.Dict, cache)
+		inks, ok := r.stackColours(ctx, s, runs, stack, pg.Dict, cache)
 		if !ok {
 			rep.Undetermined++
 			continue
 		}
-		st := under[k].stats()
+		st := under[n].stats()
 		ink := strongestInk(inks, st.background)
 		rep.Judged++
-		if f, short := contrastFinding(s, run, st, ink, o.enhanced); short {
+		if f, short := contrastFinding(s, runs[stack.members[0]], stack.glyphs, st, ink, o.enhanced); short {
 			rep.Failures = append(rep.Failures, f)
 		}
 	}
 	return rep, nil
+}
+
+// stackColours returns the colours every copy of stack shows
+// ([Reader.textColours]), or false when the content stream does not settle
+// one of them. A copy drawn under another shows round its edges, a border
+// round the letters, and WCAG 2.x counts a border toward the contrast ("the
+// border can add contrast and would be used in calculating the contrast
+// between the letter and its background", Understanding Success Criterion
+// 1.4.3, Contrast (Minimum)), so a stack is judged by whichever colour of
+// its copies contrasts most with what lies under the whole stack
+// ([strongestInk]), not by the copy drawn last alone: a light letter over its
+// dark shadow reads by the shadow's edge.
+func (r *Reader) stackColours(ctx context.Context, s *textScene, runs [][]int, stack runStack, pageDict ast.PdfDict, cache *colorconv.Cache) ([][3]float64, bool) {
+	var inks [][3]float64
+	for _, k := range stack.members {
+		c, ok := r.textColours(ctx, s.paints[runs[k][0]], pageDict, cache)
+		if !ok {
+			return nil, false
+		}
+		inks = append(inks, c...)
+	}
+	return inks, true
 }
 
 // contrastRuns groups a scene's glyphs into runs judged as one: consecutive
@@ -313,8 +345,10 @@ func (c *contrastSamples) stats() runStats {
 }
 
 // contrastFinding measures one run painted in ink against its background and
-// reports it when it falls short of its required ratio.
-func contrastFinding(s *textScene, run []int, st runStats, ink [3]float64, enhanced bool) (models.TextContrast, bool) {
+// reports it when it falls short of its required ratio. run is the first copy
+// of the text, which names it and gives its size, and glyphs every glyph of
+// its stack ([runStack]), whose boxes the report holds.
+func contrastFinding(s *textScene, run, glyphs []int, st runStats, ink [3]float64, enhanced bool) (models.TextContrast, bool) {
 	first := s.elements[run[0]]
 	size := math.Abs(first.FontSize)
 	bold := s.paints[run[0]].Bold
@@ -333,7 +367,7 @@ func contrastFinding(s *textScene, run []int, st runStats, ink [3]float64, enhan
 	if ratio >= required {
 		return models.TextContrast{}, false
 	}
-	u := unseenOf(s, run, "")
+	u := unseenOf(s, run, glyphs, "")
 	return models.TextContrast{
 		Text:             u.Text,
 		BBox:             u.BBox,

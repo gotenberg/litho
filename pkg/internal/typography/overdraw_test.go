@@ -144,3 +144,31 @@ func TestDropOverdrawnBoundsACell(t *testing.T) {
 		t.Errorf("kept %d of %d glyphs set at distinct angles", len(got), n)
 	}
 }
+
+// TestOverdrawCopies names, for each glyph a copy draws again, the glyph of
+// the earlier copy it lies on, and none for the first copy and for text
+// drawn once.
+func TestOverdrawCopies(t *testing.T) {
+	t.Parallel()
+	var els []models.TextElement
+	els = append(els, overdrawText(1, "Bold", 100, 500)...)
+	els = append(els, overdrawText(2, "Once", 100, 400)...)
+	els = append(els, overdrawText(3, "Bold", 100.3, 500)...)
+	got, err := OverdrawCopies(context.Background(), els)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []int{-1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+	single, err := OverdrawCopies(context.Background(), overdrawText(1, "A", 0, 0))
+	if err != nil || len(single) != 1 || single[0] != -1 {
+		t.Errorf("one glyph: %v, %v; want [-1]", single, err)
+	}
+}

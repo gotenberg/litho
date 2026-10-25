@@ -69,6 +69,10 @@ type textScene struct {
 	// saturating. Both are nil until [textScene.judgeOwnInk].
 	rects []image.Rectangle
 	cover []uint16
+	// copies is, parallel to elements, the earlier glyph each draws again
+	// over itself ([typography.OverdrawCopies]), nil until
+	// [textScene.stackRuns].
+	copies []int
 }
 
 // readScene reads the glyphs of pg and the boxes of what else it paints,

@@ -52,7 +52,13 @@ func invisibleMode(mode int) bool {
 // not show; a run whose ink lies wholly under other runs' glyph boxes is
 // drawn again without it, beside other such runs that share no pixel with
 // it, in up to 16 drawings. A run past that bound is not reported, nor is
-// one set vertically or turned that text extraction cannot place.
+// one set vertically or turned that text extraction cannot place. A piece
+// of text drawn several times over itself, a fake bold, a drop shadow or an
+// outline pass, each copy the same characters at the same size under a
+// quarter em from the others as default text extraction matches them, is
+// judged once, as a viewer sees it: it shows when the page drawn without
+// every copy differs, and a copy under another is not reported for lying
+// under its own copy.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
 // [ErrFontMissing] when the page's text cannot be read, and
@@ -73,25 +79,37 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 		return nil, fmt.Errorf("page %d: %w", pageNum, err)
 	}
 	runs := unseenRuns(s)
-	reasons := make([]models.UnseenReason, len(runs))
+	isDrawn := func(k int) bool {
+		return s.paints[runs[k][0]].Mode != 3 && !s.elements[runs[k][0]].IsClipped
+	}
+	// Copies drawn in mode 7 show through what the page paints after them,
+	// the others by what they paint, so the two never join one stack.
+	stacks, err := s.stackRuns(ctx, runs, func(a, b int) bool {
+		return isDrawn(a) && isDrawn(b) && (s.paints[runs[a][0]].Mode == 7) == (s.paints[runs[b][0]].Mode == 7)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("page %d: %w", pageNum, err)
+	}
+	units := stackGlyphs(stacks)
+	reasons := make([]models.UnseenReason, len(units))
 	var drawn []int
-	for k, run := range runs {
+	for n, unit := range units {
 		switch {
-		case s.paints[run[0]].Mode == 3:
-			reasons[k] = models.UnseenRenderMode
-		case s.elements[run[0]].IsClipped:
-			reasons[k] = models.UnseenOutsidePage
+		case s.paints[unit[0]].Mode == 3:
+			reasons[n] = models.UnseenRenderMode
+		case s.elements[unit[0]].IsClipped:
+			reasons[n] = models.UnseenOutsidePage
 		default:
-			drawn = append(drawn, k)
+			drawn = append(drawn, n)
 		}
 	}
-	if err := s.judgeUnseen(ctx, r, pg, runs, drawn, reasons); err != nil {
+	if err := s.judgeUnseen(ctx, r, pg, units, drawn, reasons); err != nil {
 		return nil, sceneError(pageNum, err)
 	}
 	var out []models.UnseenText
-	for k, run := range runs {
-		if reasons[k] != "" {
-			out = append(out, unseenOf(s, run, reasons[k]))
+	for n, stack := range stacks {
+		if reasons[n] != "" {
+			out = append(out, unseenOf(s, runs[stack.members[0]], stack.glyphs, reasons[n]))
 		}
 	}
 	return out, nil
@@ -209,13 +227,24 @@ func appendTrimmed(runs [][]int, s *textScene, run []int) [][]int {
 	return append(runs, run)
 }
 
-// unseenOf builds the report of one run.
-func unseenOf(s *textScene, run []int, reason models.UnseenReason) models.UnseenText {
+// unseenOf builds the report of one run, named by its first copy run and
+// boxed by every glyph of its stack, glyphs ([runStack]). A glyph of run that
+// draws a glyph of the stack again ([textScene.copies]) is left out of its
+// text, so a word drawn twice in a row for a fake bold is named once, as
+// default text extraction reads it.
+func unseenOf(s *textScene, run, glyphs []int, reason models.UnseenReason) models.UnseenText {
 	var text strings.Builder
 	var box [4]float64
-	for _, i := range run {
-		text.WriteString(s.elements[i].Text)
+	inStack := make(map[int]bool, len(glyphs))
+	for _, i := range glyphs {
+		inStack[i] = true
 		box = unionBox(box, s.elements[i].InkBox)
+	}
+	for _, i := range run {
+		if s.copies != nil && s.copies[i] >= 0 && inStack[s.copies[i]] {
+			continue
+		}
+		text.WriteString(s.elements[i].Text)
 	}
 	return models.UnseenText{
 		Text:     text.String(),
