@@ -201,9 +201,12 @@ type Options struct {
 	OmitGlyph func(origin geom.Point) bool
 	// OmitGlyphClip also leaves out of the text clipping path each glyph
 	// [Options.OmitGlyph] leaves out, in the modes that add to it (4 to 7,
-	// ISO 32000-1, 9.3.6, Table 106), so a text object whose glyphs are all
-	// left out clips nothing. A caller judging whether a clipping glyph shows,
-	// by what its clip lets through, draws the page with and without it.
+	// ISO 32000-1, 9.3.6, Table 106): the text object still clips, to the
+	// glyphs left in it, and one whose glyphs are all left out lets nothing
+	// through, so leaving a glyph out takes away what shows through it alone
+	// and never lets through what the text object's other glyphs, or its
+	// clip, kept out. A caller judging whether a clipping glyph shows, by
+	// what its clip lets through, draws the page with and without it.
 	OmitGlyphClip bool
 	// SolidPlaceholders fills the whole box of each glyph drawn as a
 	// placeholder ([PlaceholderGlyph]) rather than its hollow frame: the

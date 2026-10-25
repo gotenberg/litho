@@ -58,7 +58,10 @@ func invisibleMode(mode int) bool {
 // quarter em from the others as default text extraction matches them, is
 // judged once, as a viewer sees it: it shows when the page drawn without
 // every copy differs, and a copy under another is not reported for lying
-// under its own copy.
+// under its own copy. A run covered or painting nothing that is drawn again
+// later at its place in mode 7, by a copy that shows through its clip, is
+// seen in that copy, as a heading clipping an image to its letters shows, and
+// is not reported.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
 // [ErrFontMissing] when the page's text cannot be read, and
@@ -103,9 +106,11 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 			drawn = append(drawn, n)
 		}
 	}
-	if err := s.judgeUnseen(ctx, r, pg, units, drawn, reasons); err != nil {
+	seen, err := s.judgeUnseen(ctx, r, pg, units, drawn, reasons)
+	if err != nil {
 		return nil, sceneError(pageNum, err)
 	}
+	s.seenThroughClipCopies(units, seen, reasons)
 	var out []models.UnseenText
 	for n, stack := range stacks {
 		if reasons[n] != "" {
@@ -126,8 +131,22 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 // through its clip after it (ISO 32000-1, 9.3.6, Table 106), so the first
 // drawing leaves the runs out of the clip too ([ownInkOptions.omitClip]): a
 // run in mode 7 a later fill or image shows through is seen, as a viewer
-// shows it, and one that lets nothing through is reported for its mode.
-func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Page, runs [][]int, drawn []int, reasons []models.UnseenReason) error {
+// shows it, and one that lets nothing through is reported for its mode. A
+// text object whose clipping glyphs are all left out still clips, to nothing
+// ([page.Options.OmitGlyphClip]), so leaving a run out never lets through
+// paint its clip kept from other runs' glyph boxes.
+//
+// It returns, parallel to runs, the runs judged seen by their own ink.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000149.pdf pages 9 and 10: mode 7 copies clip a
+//     0.37-point sliver, and were judged seen while leaving them out of the
+//     clip let the sliver paint their whole boxes; now reported for their
+//     mode.
+//   - pdfjs recursiveCompositGlyf.pdf: mode 7 glyphs with no outline clip a
+//     red page to nothing in litho's drawing; now reported for their mode.
+func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Page, runs [][]int, drawn []int, reasons []models.UnseenReason) ([]bool, error) {
 	pick := func(idx []int) [][]int {
 		out := make([][]int, len(idx))
 		for j, k := range idx {
@@ -135,16 +154,19 @@ func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Pag
 		}
 		return out
 	}
+	seen := make([]bool, len(runs))
 	if len(drawn) == 0 {
-		return nil
+		return seen, nil
 	}
 	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, pick(drawn), ownInkOptions{omitClip: true})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var unseen []int
 	for j, k := range drawn {
 		switch {
+		case verdicts[j] == inkSeen:
+			seen[k] = true
 		case verdicts[j] != inkUnseen:
 		case s.paints[runs[k][0]].Mode == 7:
 			reasons[k] = models.UnseenRenderMode
@@ -153,7 +175,7 @@ func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Pag
 		}
 	}
 	if len(unseen) == 0 {
-		return nil
+		return seen, nil
 	}
 	// Clips stay in force with what they clip left out (the renderer keeps a
 	// path's or a text object's clip, ISO 32000-1, 8.5.4 and 9.3.6), so text
@@ -161,7 +183,7 @@ func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Pag
 	alone, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, pick(unseen),
 		ownInkOptions{omit: page.Paths | page.Images | page.Shadings | page.Annotations})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for j, k := range unseen {
 		switch alone[j] {
@@ -174,7 +196,82 @@ func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Pag
 			// stands, and an advisory report claims none.
 		}
 	}
-	return nil
+	return seen, nil
+}
+
+// seenThroughClipCopies clears the reason of each unit that is covered or
+// paints nothing but is drawn again later at its place by units judged seen
+// in rendering mode 7 ([textScene.clipCopied]). A glyph in mode 7 adds its
+// outline to the clip (ISO 32000-1, 9.3.6, Table 106), so what the page
+// paints after it shows in the glyph's shape: a heading filled, painted over,
+// and drawn again to clip an image over it shows its words in the image, and
+// a reader sees the text there. The later copy is what shows, so the filled
+// copy is not reported for lying under paint its own copy lets through; a
+// run under paint that no copy of it clips stays reported.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000208.pdf: InDesign fills "Modified for the Web",
+//     paints an image over it, then draws it again in mode 7 to clip a second
+//     image to its letters, on 38 pages.
+func (s *textScene) seenThroughClipCopies(units [][]int, seen []bool, reasons []models.UnseenReason) {
+	var hidden, clips [][]int
+	var at []int
+	for n, unit := range units {
+		switch {
+		case seen[n] && s.paints[unit[0]].Mode == 7:
+			clips = append(clips, unit)
+		case reasons[n] == models.UnseenCovered || reasons[n] == models.UnseenPaintsNothing:
+			hidden = append(hidden, unit)
+			at = append(at, n)
+		}
+	}
+	for j, shown := range s.clipCopied(hidden, clips) {
+		if shown {
+			reasons[at[j]] = ""
+		}
+	}
+}
+
+// clipCopied reports, parallel to runs, whether each run is drawn again later
+// at its place by glyphs of clips: at least [stackMinShare] of its characters
+// other than white space are copied ([typography.OverdrawCopies], the rule
+// default text extraction matches copies by, read into [textScene.copies])
+// by a glyph of clips drawn after it. Two glyphs are copies of each other
+// when they copy one first glyph, so a run and its clipping copy match
+// though both copy an earlier one, an OCR layer under them.
+func (s *textScene) clipCopied(runs, clips [][]int) []bool {
+	out := make([]bool, len(runs))
+	if s.copies == nil || len(runs) == 0 || len(clips) == 0 {
+		return out
+	}
+	root := func(i int) int {
+		// A copy names an earlier glyph, which may copy one earlier still.
+		for s.copies[i] >= 0 {
+			i = s.copies[i]
+		}
+		return i
+	}
+	// last[r] is the last glyph of clips drawn as a copy of first glyph r.
+	last := make(map[int]int)
+	for _, clip := range clips {
+		for _, j := range clip {
+			if s.copies[j] >= 0 {
+				r := root(j)
+				last[r] = max(last[r], j)
+			}
+		}
+	}
+	for k, run := range runs {
+		shown := 0
+		for _, i := range run {
+			if j, ok := last[root(i)]; ok && j > i && strings.TrimSpace(s.elements[i].Text) != "" {
+				shown++
+			}
+		}
+		out[k] = shown > 0 && float64(shown) >= stackMinShare*float64(inked(s, run))
+	}
+	return out
 }
 
 // sceneError wraps the failure to draw a scene for a page in the public

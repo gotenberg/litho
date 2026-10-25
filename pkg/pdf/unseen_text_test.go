@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"sync"
 	"testing"
 
@@ -185,5 +186,62 @@ func TestExtractUnseenTextConcurrent(t *testing.T) {
 		if errs[i] != nil || counts[i] != 5 {
 			t.Errorf("goroutine %d: %d runs, err %v; want 5", i, counts[i], errs[i])
 		}
+	}
+}
+
+// TestExtractUnseenTextClipCopy judges a filled run painted over and drawn
+// again later at its place in rendering mode 7 by what that copy's clip lets
+// through (ISO 32000-1, 9.3.6, Table 106), as InDesign draws a heading over
+// an image clipped to its letters:
+//
+//   - HEADING, filled, painted over in white, then drawn again in mode 7 to
+//     clip a black rectangle: seen in its copy, not reported;
+//   - BURIED, filled, painted over in white, then drawn again in mode 7 over
+//     nothing: reported covered, and its copy for its mode;
+//   - EARLIER, drawn in mode 7 to clip a black rectangle, then filled and
+//     painted over in white: the copy comes first and shows nothing of the
+//     fill, so both are reported;
+//   - COVERED, filled and painted over in white, with OTHER at its place in
+//     mode 7 clipping a black rectangle: other text, so COVERED is reported;
+//     it shows only if the drawing that leaves OTHER out of the clip lets the
+//     whole rectangle through rather than nothing.
+func TestExtractUnseenTextClipCopy(t *testing.T) {
+	t.Parallel()
+	const content = "BT 0 g /F1 24 Tf 20 340 Td (HEADING) Tj ET\n" +
+		"1 g 10 330 200 40 re f\n" +
+		"q BT 7 Tr /F1 24 Tf 20 340 Td (HEADING) Tj ET 0 g 10 330 200 40 re f Q\n" +
+		"BT 0 g /F1 24 Tf 20 260 Td (BURIED) Tj ET\n" +
+		"1 g 10 250 200 40 re f\n" +
+		"q BT 7 Tr /F1 24 Tf 20 260 Td (BURIED) Tj ET Q\n" +
+		"q BT 7 Tr /F1 24 Tf 20 180 Td (EARLIER) Tj ET 0 g 10 170 200 40 re f Q\n" +
+		"BT 0 g /F1 24 Tf 20 180 Td (EARLIER) Tj ET\n" +
+		"1 g 10 170 200 40 re f\n" +
+		"BT 0 g /F1 24 Tf 20 100 Td (COVERED) Tj ET\n" +
+		"1 g 10 90 200 40 re f\n" +
+		"q BT 7 Tr /F1 24 Tf 20 100 Td (OTHER) Tj ET 0 g 10 90 200 40 re f Q\n"
+	data := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+	r := openLimited(t, data, Limits{})
+
+	got, err := r.ExtractUnseenText(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := map[string][]models.UnseenReason{}
+	for _, u := range got {
+		reasons[u.Text] = append(reasons[u.Text], u.Reason)
+	}
+	want := map[string][]models.UnseenReason{
+		"BURIED":  {models.UnseenCovered, models.UnseenRenderMode},
+		"EARLIER": {models.UnseenRenderMode, models.UnseenCovered},
+		"COVERED": {models.UnseenCovered},
+	}
+	if !maps.EqualFunc(reasons, want, slices.Equal) {
+		t.Errorf("reported %v, want %v", reasons, want)
 	}
 }

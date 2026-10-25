@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
@@ -99,7 +100,10 @@ func WithEnhancedContrast() ContrastOption {
 // [models.ContrastReport.Undetermined] and not judged, as is a run whose own
 // ink the page shows in colours no mix of its colours with what lies under it
 // makes: a blend mode, a soft mask or transparency painted over it recolours
-// it, so the content stream's colour is not the one shown.
+// it, so the content stream's colour is not the one shown. Text painted over
+// and drawn again later at its place in rendering mode 7, by a copy that
+// shows through its clip, shows in the colours of what the clip lets
+// through, and is counted there too.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
 // [ErrFontMissing] when the page's text cannot be read, and
@@ -137,8 +141,16 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 	if err != nil {
 		return models.ContrastReport{}, sceneError(pageNum, err)
 	}
+	throughClip, err := s.shownThroughClip(ctx, r, pg, stacks, verdicts)
+	if err != nil {
+		return models.ContrastReport{}, sceneError(pageNum, err)
+	}
 	conv := &inkConverter{cache: &colorconv.Cache{}}
 	for n, stack := range stacks {
+		if throughClip[n] {
+			rep.Undetermined++
+			continue
+		}
 		if verdicts[n] != inkSeen || len(under[n].lums) == 0 {
 			continue
 		}
@@ -155,6 +167,54 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 		}
 	}
 	return rep, nil
+}
+
+// shownThroughClip reports, parallel to stacks, the stacks whose own ink
+// marks nothing (verdicts) but that are drawn again later at their place in
+// rendering mode 7 by text that shows through its clip, judged as
+// [Reader.ExtractUnseenText] judges it ([textScene.clipCopied]): a heading
+// painted over and drawn again to clip an image to its letters. What shows
+// there is the paint the clip lets through, in the image's colours, not the
+// text's, and WCAG 2.x judges the colours shown (Success Criterion 1.4.3,
+// Contrast (Minimum)), so such text is counted undetermined, as text painted
+// with a pattern is. The clipping copies are drawn only on a page where one
+// copies such a stack.
+func (s *textScene) shownThroughClip(ctx context.Context, r *Reader, pg *document.Page, stacks []runStack, verdicts []inkVerdict) ([]bool, error) {
+	out := make([]bool, len(stacks))
+	var hidden [][]int
+	var at []int
+	for n, st := range stacks {
+		if verdicts[n] == inkUnseen {
+			hidden = append(hidden, st.glyphs)
+			at = append(at, n)
+		}
+	}
+	if len(hidden) == 0 {
+		return out, nil
+	}
+	var clips [][]int
+	for _, run := range unseenRuns(s) {
+		if s.paints[run[0]].Mode == 7 && !s.elements[run[0]].IsClipped {
+			clips = append(clips, run)
+		}
+	}
+	if !slices.Contains(s.clipCopied(hidden, clips), true) {
+		return out, nil
+	}
+	seen, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, clips, ownInkOptions{omitClip: true})
+	if err != nil {
+		return nil, err
+	}
+	var shown [][]int
+	for k, v := range seen {
+		if v == inkSeen {
+			shown = append(shown, clips[k])
+		}
+	}
+	for j, ok := range s.clipCopied(hidden, shown) {
+		out[at[j]] = ok
+	}
+	return out, nil
 }
 
 // stackColours returns the colours every copy of stack shows

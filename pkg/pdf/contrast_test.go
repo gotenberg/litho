@@ -202,3 +202,35 @@ func TestCheckTextContrastConcurrent(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckTextContrastClipCopy counts undetermined a heading painted over
+// and drawn again later at its place in rendering mode 7 to clip a grey
+// rectangle: what shows there is the rectangle's grey in the heading's
+// letters, not the text's colour. BURIED, painted over with no clipping copy
+// showing, is not seen and not counted; SHOWN, black on white, is judged.
+func TestCheckTextContrastClipCopy(t *testing.T) {
+	t.Parallel()
+	const content = "BT 0 g /F1 24 Tf 20 340 Td (HEADING) Tj ET\n" +
+		"1 g 10 330 200 40 re f\n" +
+		"q BT 7 Tr /F1 24 Tf 20 340 Td (HEADING) Tj ET 0.9 g 10 330 200 40 re f Q\n" +
+		"BT 0 g /F1 24 Tf 20 260 Td (BURIED) Tj ET\n" +
+		"1 g 10 250 200 40 re f\n" +
+		"q BT 7 Tr /F1 24 Tf 20 260 Td (BURIED) Tj ET Q\n" +
+		"BT 0 g /F1 24 Tf 20 180 Td (SHOWN) Tj ET\n"
+	data := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+	r := openLimited(t, data, Limits{})
+
+	rep, err := r.CheckTextContrast(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Judged != 1 || rep.Undetermined != 1 || len(rep.Failures) != 0 {
+		t.Errorf("judged %d, undetermined %d, failures %v; want 1, 1, none", rep.Judged, rep.Undetermined, rep.Failures)
+	}
+}
