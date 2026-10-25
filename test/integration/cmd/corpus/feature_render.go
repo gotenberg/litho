@@ -245,7 +245,11 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //   - pdfjs, govdocs: the 10 pdfjs and 2 govdocs files above are every
 //     render mismatch of the two corpora under the ink bar, re-read with
 //     PDFium (pypdfium2 4.30.0) as a third renderer at 72 dpi: none is a
-//     litho defect.
+//     litho defect. MuPDF (PyMuPDF 1.26.4), a fourth, draws
+//     bitmap-halftone-skip-grid-template2, issue17871_top_right and
+//     issue12705 as litho does (0 pixels differ), and sits closer to litho
+//     than to poppler on bug886717, issue7200 and the govdocs pages (205 to
+//     1863 pixels against 6055 to 16867 from poppler).
 type renderFeature struct {
 	render pageRenderer
 

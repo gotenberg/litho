@@ -2028,12 +2028,17 @@ poppler 26.09.0 converts DeviceCMYK with its own fixed formula whatever the
 intents say, so the `render` cell mismatches `pdfxonly_2b.pdf`,
 `iccbadcmyk_2b.pdf` and `t3overprint_2b.pdf`: their intents' profiles map
 every CMYK colour to a neutral grey (the fixtures' `A2B0` tables keep a and b
-at 128), which litho paints (144 and 184 grey) and poppler does not (244 114 22
-and 97 155 205 for the squares' `0 0.6 1 0` and `0.6 0.2 0 0.1`).
+at 128), which litho paints (97 and 184 grey, its black point compensated)
+and poppler does not (244 114 22 and 97 155 205 for the squares' `0 0.6 1 0`
+and `0.6 0.2 0 0.1`). MuPDF (PyMuPDF 1.26.4) reads both squares through the
+intents as litho does (96 and 184 grey).
 `t3overprint_2b.pdf`'s glyphs B and C, `0 1 1 0 k` and the text's `0 0 0 1 k`,
-are both 118 grey in litho and 237 28 36 and 35 31 32 in poppler; PDFium
+are both black in litho, the darkest grey the profile holds, and 237 28 36 and
+35 31 32 in poppler; C stays within the cell's tolerance and B differs. PDFium
 (pypdfium2 4.30.0) paints them as poppler does, and all three paint glyph A's
-DeviceGray 128 grey. `iccbadcmyk_1b.pdf`'s profile
+DeviceGray 128 grey. MuPDF paints C black through the intent and B red: it
+skips the intent inside the `d0` glyph alone, since it paints the same
+`0 1 1 0 k` black in a plain fill on the same page. `iccbadcmyk_1b.pdf`'s profile
 states version 5.0, an ICC.2 profile ISO 32000-1, 8.6.5.5, Table 67 and ISO
 32000-2 do not list, so litho reads no colour through it and paints
 DeviceCMYK through its built-in profile, and the page matches poppler.
@@ -2046,7 +2051,7 @@ those differences is adjudicated, and none is a litho defect left open:
 | File                                           | Page       | Differing pixels     | Why                                       |
 | ---------------------------------------------- | ---------- | -------------------- | ----------------------------------------- |
 | `pdfxonly_2b`, `iccbadcmyk_2b`                 | 1          | 3600, 3933           | DeviceCMYK through the output intent      |
-| `t3overprint_2b`                               | 1          | 4608                 | DeviceCMYK through the output intent      |
+| `t3overprint_2b`                               | 1          | 2304                 | DeviceCMYK through the output intent      |
 | `inlineinterp_2b`, `complex_2b`, `megafont_2b` | 1          | 148178, 14873, 14874 | interpolation half a sample off (poppler) |
 | `multipage_2b`                                 | 2          | 14873                | interpolation half a sample off (poppler) |
 | `inlinejpx_2b`                                 | 1          | 5600                 | poppler stops after an inline JPX image   |
@@ -2116,6 +2121,18 @@ those differences is adjudicated, and none is a litho defect left open:
     40 under its stated ranges and D50 illuminant, as a by-hand ISO/IEC
     15444-2, M.11.7.4 conversion gives, and the e-sRGB fallback matches
     poppler.
+- **MuPDF, a fourth reading.** PyMuPDF 1.26.4 at 72 dpi, scored by the cell's
+  comparison, paints 13 of the 21 pages as litho does, 0 pixels apart:
+  `pdfxonly_2b`, `iccbadcmyk_2b`, `smaskindata_2b`, `usebpc_4` (its
+  `/UseBlackPtComp /OFF` honoured), `groupspace_2b` pages 1 and 2, the four
+  interpolation pages (at most 2 pixels), and `pageboxes_2b`, `kidsarray_2b`
+  and `kidsrepair_1b`, whose pages it draws as litho and PDFium do.
+  `groupspace_2b` page 3 differs by the grey weighing above (1000 pixels).
+  It reads `imagecolour_2b` as poppler does, 0 pixels apart: the None images
+  as grey ramps and the JPX images in their raw samples, where 8.6.6.4 and
+  8.6.6.5 say the colorant None produces no visible output. It garbles the
+  first inline JPX image of `inlinejpx_2b` and paints nothing after it.
+  `t3overprint_2b` is its own case, above.
 - **`pageboxes_2b`.** litho renders the crop box as pdf.js reads it, 612 by
   792, and poppler 500 by 700 (see the section on this file).
 - **`patternglyph_2b` page 3.** A Type 3 glyph fills its 10 by 10 pixel box
@@ -2148,24 +2165,24 @@ those differences is adjudicated, and none is a litho defect left open:
 The other 15 pages differ by at most 1% of the page and by more than half of
 the pixels either renderer inks: on each, one renderer draws a glyph, a fill or
 an annotation the other does not. PDFium (pypdfium2 4.30.0, at 72 dpi) is the
-third reading. The pages where litho differs from both are litho divergences
-and stay open:
+third reading and MuPDF (PyMuPDF 1.26.4) the fourth. The pages where litho
+differs from the others are litho divergences and stay open:
 
-| File                    | Page | Differing / inked   | Who differs | Why                                                                                    |
-| ----------------------- | ---- | ------------------- | ----------- | -------------------------------------------------------------------------------------- |
-| `filestruct_1b`         | 1    | 1200 / 1422         | litho       | draws a widget's `/AP` under `/NeedAppearances true`, which the others rebuild empty   |
-| `afref_3b`              | 1    | 80 / 80             | poppler     | strokes a Link's `/Border` over an empty appearance stream (12.5.5)                    |
-| `linkfont_ua2`          | 1    | 720 / 1345          | poppler     | the same `/Border` stroke over six links                                               |
-| `annotshare_ua1`        | 1, 2 | 202, 202 / 358, 202 | poppler     | draws its own icon for a Text annotation with no `/AP`                                 |
-| `formmedia_ua1`         | 1    | 2400 / 4495         | poppler     | draws no Screen annotation; litho and PDFium paint their appearance                    |
-| `sigcms_2b`             | 1    | 677 / 964           | poppler     | builds a text field's appearance from `/V` with no `/NeedAppearances`                  |
-| `cmapusecmap_2b`        | 1    | 176 / 176           | poppler     | litho maps codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing |
-| `undecodable_2b`        | 3    | 60 / 60             | poppler     | draws nothing for `[/FlateDecode /Foo]`, which litho and PDFium read                   |
-| `offlimits_1b`          | 3    | 100 / 100           | poppler     | paints no image while no colour space is selected; litho and PDFium paint it grey      |
-| `fontclaims_2b`         | 1    | 35 / 65             | poppler     | draws no glyph for the last show, which litho and PDFium draw as A                     |
-| `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156 | undefined   | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box    |
-| `type0nodesc_2b`        | 1    | 176 / 237           | undefined   | Type 0 fonts with no descendant: litho boxes, poppler nothing, PDFium a substitute     |
-| `parentreach_2b`        | 2    | 25 / 25             | undefined   | a one-input tint transform under nine colorants: litho black, poppler orange           |
+| File                    | Page | Differing / inked   | Who differs    | Why                                                                                                    |
+| ----------------------- | ---- | ------------------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| `filestruct_1b`         | 1    | 1200 / 1422         | litho, MuPDF   | draw a widget's `/AP` under `/NeedAppearances true`, which poppler and PDFium rebuild empty            |
+| `afref_3b`              | 1    | 80 / 80             | poppler        | strokes a Link's `/Border` over an empty appearance stream (12.5.5)                                    |
+| `linkfont_ua2`          | 1    | 720 / 1345          | poppler        | the same `/Border` stroke over six links; MuPDF draws no Link                                          |
+| `annotshare_ua1`        | 1, 2 | 202, 202 / 358, 202 | litho          | draws no icon for a Text annotation with no `/AP`; poppler, PDFium and MuPDF each draw their own       |
+| `formmedia_ua1`         | 1    | 2400 / 4495         | poppler        | draws no Screen annotation; litho, PDFium and MuPDF paint their appearance                             |
+| `sigcms_2b`             | 1    | 677 / 964           | poppler        | builds a text field's appearance from `/V` with no `/NeedAppearances`                                  |
+| `cmapusecmap_2b`        | 1    | 176 / 176           | poppler        | litho and MuPDF map codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing        |
+| `undecodable_2b`        | 3    | 60 / 60             | poppler        | draws nothing for `[/FlateDecode /Foo]`, which litho, PDFium and MuPDF read                            |
+| `offlimits_1b`          | 3    | 100 / 100           | poppler        | paints no image while no colour space is selected; litho, PDFium and MuPDF paint it grey               |
+| `fontclaims_2b`         | 1    | 35 / 65             | poppler, MuPDF | draw no glyph for an unnamed code `/ToUnicode` maps to A, which litho and PDFium draw as A             |
+| `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156 | undefined      | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box                    |
+| `type0nodesc_2b`        | 1    | 176 / 237           | undefined      | Type 0 fonts with no descendant: litho boxes, poppler and MuPDF nothing, PDFium a substitute           |
+| `parentreach_2b`        | 2    | 25 / 25             | undefined      | a one-input tint transform under nine colorants: litho black, poppler orange, PDFium and MuPDF nothing |
 
 The cell's ink bar counts them; the 1% page bar alone passed every one.
 
