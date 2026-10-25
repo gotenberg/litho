@@ -303,6 +303,7 @@ one deliberately rather than diffing it against a fresh build.
 | `greytint_2b.pdf`      | PDF/A-2b     | A grey ICC profile whose table tints its greys, in four paints   |
 | `groupspace_2b.pdf`    | PDF/A-2b     | RGB colour on pages whose group blends in CMYK or grey           |
 | `cmykintent_2b.pdf`    | PDF/A-2b     | Colours under a rendering intent in their own CMYK page group    |
+| `jpxintent_2b.pdf`     | PDF/A-2b     | A JPX image in the colour of its data under the state's intent   |
 
 ### Must-not-fire controls
 
@@ -719,6 +720,7 @@ are covered under [Known divergences](#known-divergences).
 | `inlinekids_ua2.pdf`   | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 3    | 1    |
 | `inlinelzw_2b.pdf`     | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 9    | 7    |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
+| `jpxintent_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `kidsarray_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 12   | 8    |
 | `kidsrepair_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 5    | 5    |
 | `langpua_ua2.pdf`      | 7    | 5    | 8    | 7    | 7    | 8    | 7    | 7    | 4   | 4    | 5    | 4    | 3    |
@@ -10056,6 +10058,40 @@ group made the page draw its green in colour (`colour_drift`, 1728 pixels,
 The file declares no OutputIntent, so DeviceRGB fails `6.2.4.3/2`, DeviceCMYK
 `6.2.4.3/3` and DeviceGray `6.2.4.3/4` at PDF/A-2b. veraPDF 1.30.2 and litho
 report the same rule set in all thirteen cells.
+
+### `jpxintent_2b.pdf`
+
+A JPXDecode image without `/ColorSpace` takes its colour from the JPEG 2000
+data (ISO 32000-1, 7.4.9), and an image that states no `/Intent` converts
+under the graphics state's (8.6.5.8). The renderer decoded such an image under
+the state's intent, but `Writer.ConvertColors` decoded it under relative
+colorimetric wherever it was painted, so a copy written for a painting under
+`/Perceptual ri` drew the colorimetric reading. Now the copy decodes under the
+intent and the `/UseBlackPtComp` of the state it is painted under. Of the 16
+corpus files holding such images (litho 3, pdfjs 7, veraPDF 6), only pdfjs
+`issue15220.pdf` paints one under another intent, and its profile is a
+matrix one whose intents agree, so every output converts and flattens byte
+for byte as before. So this fixture paints one 8 by 8 image of samples 128,
+in a JP2 container whose METH 3 colour specification carries `rsplit`, a
+version 2.1 grey profile over Lab whose colorimetric table reads the samples
+at L\* 50 and whose perceptual table at L\* 13, on a 100 by 200 page:
+
+| Where                | Painted                | litho    |
+| -------------------- | ---------------------- | -------- |
+| 80 x 50 at (10, 140) | with no `ri`           | mid, 119 |
+| 8 x 8 at (10, 80)    | after `/Perceptual ri` | dark, 33 |
+| 8 x 8 at (30, 80)    | after `/P gs` (`/RI`)  | dark, 33 |
+
+Converted to CMYK or to sRGB, and that flattened, the two small images drew
+mid before and draw dark now, as the source does. poppler 26.09.0, PDFium
+(pypdfium2 4.30.0) and MuPDF 1.26.10 read the JPEG 2000 data's profile not at
+all and draw the samples as DeviceGray 128 everywhere: the large image stays
+within the `render` cell's channel tolerance, and the two small ones, 128
+pixels, 0.64% of the page, differ, so the page matches all three.
+
+The file conforms at PDF/A-2b. The other cells are the identification,
+metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
+same rule set in all thirteen cells.
 
 ## Scope
 
