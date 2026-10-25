@@ -294,6 +294,7 @@ one deliberately rather than diffing it against a fresh build.
 | `t3scope_2b.pdf`       | PDF/A-2b     | Type 3 glyphs painting through the showing stream's resources    |
 | `strokedtext_2b.pdf`   | PDF/A-2b     | Stroked text whose pen paints past the box of its outline        |
 | `t3pen_2b.pdf`         | PDF/A-2b     | Type 3 glyphs stroking with the pen of the state showing them    |
+| `t3nestpen_2b.pdf`     | PDF/A-2b     | Nested Type 3 glyphs stroking with the pen of the page           |
 | `usebpc_4.pdf`         | PDF/A-4      | ICC colours under /UseBlackPtComp /Default, /ON and /OFF         |
 | `blankkeys_ua1.pdf`    | PDF/UA-1     | Hidden, smoothed and tagged images, blanked by a redaction       |
 | `imageintent_2b.pdf`   | PDF/A-2b     | ICC images under the rendering intent `ri` and `/RI` set         |
@@ -791,6 +792,7 @@ are covered under [Known divergences](#known-divergences).
 | `symbolname_2u.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
 | `t3extent_2b.pdf`      | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
+| `t3nestpen_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `t3overprint_2b.pdf`   | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `t3pen_2b.pdf`         | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `t3scope_2b.pdf`       | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 7    | 6    |
@@ -9666,6 +9668,49 @@ DeviceGray, so the file is conforming at PDF/A-2b. The other cells are the
 identification, metadata and tagging rules of their parts. veraPDF 1.30.2 and
 litho report the same rule set in all thirteen cells.
 
+### `t3nestpen_2b.pdf`
+
+A Type 3 glyph a description shows runs under the description's graphics state
+(ISO 32000-1, 9.6.5), which is the page's for every line parameter the
+description leaves unset, so a nested stroke that sets no width of its own
+strokes with the page's. Redaction bounded the nested glyph through the
+extractor's state, which starts at the initial pen, so the outer glyph was
+bounded by the nested line alone however wide the page's pen. Now each nested
+stroke that inherits a parameter the description does not set becomes a stroke
+of the outer glyph's pen, which grows its box where it is shown. No corpus file
+shows a nested Type 3 glyph stroking with an inherited pen: of the 135 files
+holding a Type 3 font, eight show text from a glyph description, and the nested
+Type 3 glyphs among them fill (litho `realglyphs_ua1`) or set their own `10 w`
+(the two pdfjs `ContentStream*Type3insideType3`). Over the first ten pages of
+the 135, no ink box moves, and the quarter and band of the five that may nest a
+Type 3 glyph redact as before. The page, 400 by 400,
+shows glyphs of font O at Tf 40, each showing glyph `L` of font I at Tf 1000,
+one unit of I's glyph space to one of O's, 0.04 point per unit. `L` strokes a
+line at y 500 without setting its pen:
+
+| Glyph | Description                 | Shown at | Under    | Pen reaches        |
+| ----- | --------------------------- | -------- | -------- | ------------------ |
+| `A`   | shows `L`                   | 130 60   | `2000 w` | y 40 to 120        |
+| `B`   | sets `40 w`, then shows `L` | 230 60   | `2000 w` | y 79.2 to 80.8     |
+| `A`   | the same glyph              | 130 320  | `1 w`    | y 339.98 to 340.02 |
+
+The `redact-render` cell's centred quarter `[100 100 300 300]` meets 20 points
+of the first `A`'s pen, and neither its line nor the box the line gave it.
+Before, the quarter removed nothing and left 760 pixels of the pen inside the
+region on poppler's half (the pixel check refused it, with and without the
+raster fallback), and the band, which removed the first `A` and `B`, changed
+2320 pixels of the pen outside the box it reported; now the quarter removes
+the first `A`, both scenarios pass with and without the pixel check and the
+raster fallback, and poppler 26.09.0 finds no ink inside either region. The
+band moves with the box, to y 70 to 90. `B` sets the pen its nested glyph
+inherits and stays clear of the quarter, and so does the second `A`, under the
+initial pen. litho renders the page as poppler does.
+
+Both fonts state `/Resources` of their own, and the RGB output intent covers
+DeviceGray, so the file is conforming at PDF/A-2b. The other cells are the
+identification, metadata and tagging rules of their parts. veraPDF 1.30.2 and
+litho report the same rule set in all thirteen cells.
+
 ### `usebpc_4.pdf`
 
 PDF 2.0 adds the ExtGState entry `/UseBlackPtComp` (ISO 32000-2, Table 57):
@@ -9803,7 +9848,7 @@ The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
 twenty-nine is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretree_2b`, `blankblack_2b`, `boxorigin_2b`,
-`formplacement_2b`, `greyintent_2b`, `iccalternate_2b`, `pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `sharedformimg_2b`, `sharedimage_2b`, `siglock_2b`, `sizetie_2b`, `strokedtext_2b`, `t3extent_2b`, `t3overprint_2b`, `t3pen_2b`, `type3cycle_2u`, `viewerboxes_2b` and `whitetext_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
+`formplacement_2b`, `greyintent_2b`, `iccalternate_2b`, `pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `sharedformimg_2b`, `sharedimage_2b`, `siglock_2b`, `sizetie_2b`, `strokedtext_2b`, `t3extent_2b`, `t3nestpen_2b`, `t3overprint_2b`, `t3pen_2b`, `type3cycle_2u`, `viewerboxes_2b` and `whitetext_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2; and `usebpc_4` at PDF/A-4 are the corpus's conforming cells), so a change that drops or invents a
 rule class leaves `matched` at 3159 and moves only `ruleset_mismatch`, and on
