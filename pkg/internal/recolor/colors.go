@@ -60,6 +60,42 @@ func (c sessionColors) variantKey() string {
 	return c.s.variantKey()
 }
 
+// paintingIntent returns what the image decoder converts a JPEG 2000 image's
+// own colour with ([Images.convertJPXColour]) under the session's current
+// variant, and false under the option's, which decodes as before: under the
+// image's own /Intent, else relative colorimetric, the graphics state's
+// initial intent (ISO 32000-1, 8.6.5.8), with the decoder's own
+// compensation. Only what a graphics state changes reaches the decoder: its
+// intent, set by ri or an ExtGState /RI, and its /UseBlackPtComp /ON or /OFF
+// (ISO 32000-2, Table 57), each where it differs from the option's.
+//
+// # Corpus evidence
+//
+//   - All corpora: 16 files hold a JPXDecode image XObject without
+//     /ColorSpace (litho 3, pdfjs 7, veraPDF 6), and 4 more name JPXDecode in
+//     a content stream (facturx 3, litho inlinejpx_2b). Converted to the
+//     built-in CMYK and to sRGB, and the CMYK output flattened, all 20 convert
+//     byte for byte as before. Only pdfjs issue15220.pdf paints such an image
+//     under another intent, /Perceptual ri, and its profile is a matrix one
+//     whose intents agree.
+//   - litho jpxintent_2b.pdf: the two images painted under /Perceptual ri
+//     and an /RI drew L* 50 converted, where the source draws L* 13, and now
+//     draw L* 13.
+func (c sessionColors) paintingIntent() (icc.Intent, bool) {
+	bpc, intent := c.s.differs(variant{bpc: c.s.bpc, intent: c.s.intent})
+	if !bpc && !intent {
+		return 0, false
+	}
+	decodeIntent, choice := icc.RelativeColorimetric, icc.BPCDefault
+	if intent {
+		decodeIntent = c.s.intent
+	}
+	if bpc {
+		choice = map[bool]icc.BPC{false: icc.BPCOff, true: icc.BPCOn}[c.s.bpc]
+	}
+	return decodeIntent.WithBPC(choice), true
+}
+
 // SpotSpace returns the Separation or DeviceN space it is given as the
 // session keeps it: its colorants and tints as they are, its alternate the
 // target and its tint transform a sampled function into it (ISO 32000-1,

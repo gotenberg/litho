@@ -554,13 +554,12 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 	}
 	// The decoder applies the data's soft mask as it reads it, with the
 	// colour straight: premultiplication is undone on the data's values,
-	// before the data's colour is read.
-	//
-	// TODO: [recolour] decode under the rendering intent and the black point
-	// compensation of the graphics state the image is painted under
-	// ([pdfimage.DecodePaintedUnder]), as the renderer does: the data's
-	// colour reaches sRGB under the image's own /Intent or the initial one.
-	img, err := pdfimage.DecodePainted(ctx, im.doc, label, stream, resources, page)
+	// before the data's colour is read. The data's colour reaches sRGB under
+	// the rendering intent and black point compensation of the graphics
+	// state the image is painted under, as the renderer decodes it (ISO
+	// 32000-1, 8.6.5.8 and 8.9.5, Table 89 /Intent): a copy painted under a
+	// state of its own ([session.variantCopy]) is decoded under that state.
+	img, err := im.decodePainted(ctx, label, stream, resources, page)
 	if err != nil {
 		return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
 	}
