@@ -16,6 +16,13 @@ func matchFileStructure(v compliance.Violation) bool {
 	if v.Rule == compliance.Rule_14289_1_6_1_t01 {
 		return true
 	}
+	// PDF/UA-2 version rule (ISO 14289-2 §6.1 t1), on a header later than 2.0:
+	// no catalog /Version lowers it (ISO 32000-2, 7.5.2), so the full rewrite
+	// re-emits the header at 2.0. An earlier header needs no rewrite: the
+	// catalog /Version declareOutputVersion writes raises it.
+	if v.Rule == compliance.Rule_14289_2_6_1_t01 {
+		return contextContains(v, compliance.UA2LaterHeaderContext)
+	}
 
 	// Two rules sit inside the clause ranges below that the full rewrite
 	// cannot reach, and no other fixer claims either. fixFileStructure
