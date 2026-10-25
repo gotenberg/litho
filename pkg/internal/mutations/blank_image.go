@@ -661,8 +661,9 @@ func packStencilBits(canvas *image.NRGBA, w, h int) []byte {
 	return out
 }
 
-// blankCoveredSamples paints every sample whose centre falls inside a zone with
-// fill, and reports how many it painted.
+// blankCoveredSamples paints with fill every sample [forCoveredSamples]
+// clears, and reports how many it painted: 0 when the zones hold no sample
+// centre.
 //
 // fill is the caller's because what clears a sample depends on what the image
 // is: opaque black replaces a picture's colour, while a stencil is cleared by
@@ -681,42 +682,171 @@ func blankCoveredSamples(canvas *image.NRGBA, box graphics.ImageBox, zones []heu
 	})
 }
 
-// forCoveredSamples calls clear for every sample of a w x h image whose centre
-// falls inside a zone, and reports how many it found.
+// forCoveredSamples calls clear, when the zones hold the centre of a sample
+// of a w x h image, for every sample whose centre a zone holds or whose
+// cell's interior a zone meets, and reports how many it cleared: 0 when the
+// zones hold no centre.
+//
+// A sample paints the whole cell of the unit square it maps onto (ISO
+// 32000-1, 8.9.3 and 8.9.4), and a viewer that does not interpolate fills
+// every device pixel whose centre the cell covers with its colour (package
+// imgpaint; MuPDF's redaction rounds the region outward to whole samples
+// for the same reason). A sample whose centre lies just outside a region
+// but whose cell reaches into it therefore still paints its picture inside
+// the region, up to half a sample deep. Clearing such a sample clears up to
+// a sample's width outside the region, which is what keeps the region
+// showing nothing but the blank.
+//
+// A region holding no sample centre clears nothing, and its caller refuses
+// ([ErrImageRegionCoversNoSample]) unless the samples it meets hold the
+// blank already ([touchedSamplesAlreadyBlank]): no sample it meets is
+// centred in it, and clearing one could take a stretched sample's whole
+// picture over an area the caller never named.
+//
+// # Corpus evidence
+//
+//   - litho cutcell_2b p1-quarter: a 12 by 10 image drawn 30 by 36 points a
+//     sample kept 6,016 pixels of picture inside the region, 9 to 11 points
+//     deep, and the pixel check refused; clearing the cut samples changes
+//     18,864 pixels outside it, all image blanking.
+//   - litho blankblack_2b, imagecolour_2b and jpx_2b p1-band,
+//     iccalternate_2b p1-quarter, imageintent_2b p2-quarter: the cells the
+//     region's edges cut reach less than two pixels into it at 72 dpi, and
+//     are now cleared, 80 to 15,724 pixels outside the region; no scenario
+//     on pdfcpu, pdfjs or govdocs moves.
 func forCoveredSamples(box graphics.ImageBox, zones []heuristics.Zone, w, h int, clear func(px, py int)) (int, error) {
 	minPx, minPy, maxPx, maxPy, ok := candidateSamples(box, zones, w, h)
 	if !ok {
 		return 0, ErrImagePlacementDegenerate
 	}
 
-	blanked := 0
-	for py := minPy; py <= maxPy; py++ {
+	holdsCentre := false
+	for py := minPy; py <= maxPy && !holdsCentre; py++ {
 		for px := minPx; px <= maxPx; px++ {
-			// The image's top row is the top of the unit square, so v runs the
-			// other way from the row index (ISO 32000-1, 8.9.5.2).
-			u := (float64(px) + 0.5) / float64(w)
-			v := 1 - (float64(py)+0.5)/float64(h)
-
-			x := box.CTM[0]*u + box.CTM[2]*v + box.CTM[4]
-			y := box.CTM[1]*u + box.CTM[3]*v + box.CTM[5]
-
-			point := heuristics.ZoneFromRect([4]float64{x, y, x, y})
-			covered := false
-			for _, z := range zones {
-				if heuristics.ZonesOverlap(point, z) {
-					covered = true
-					break
-				}
+			if sampleCentreInZones(box, zones, w, h, px, py) {
+				holdsCentre = true
+				break
 			}
-			if !covered {
-				continue
-			}
-
-			clear(px, py)
-			blanked++
 		}
 	}
-	return blanked, nil
+	if !holdsCentre {
+		return 0, nil
+	}
+
+	cells, ok := zonesInSampleSpace(box, zones, w, h)
+	if !ok {
+		return 0, ErrImagePlacementDegenerate
+	}
+	cleared := 0
+	for py := minPy; py <= maxPy; py++ {
+		for px := minPx; px <= maxPx; px++ {
+			if sampleCentreInZones(box, zones, w, h, px, py) || sampleCellInteriorMeets(cells, px, py) {
+				clear(px, py)
+				cleared++
+			}
+		}
+	}
+	return cleared, nil
+}
+
+// sampleCentreInZones reports whether a zone holds the centre of sample
+// (px, py) of a w x h image, edges included.
+func sampleCentreInZones(box graphics.ImageBox, zones []heuristics.Zone, w, h, px, py int) bool {
+	// The image's top row is the top of the unit square, so v runs the other
+	// way from the row index (ISO 32000-1, 8.9.5.2).
+	u := (float64(px) + 0.5) / float64(w)
+	v := 1 - (float64(py)+0.5)/float64(h)
+
+	x := box.CTM[0]*u + box.CTM[2]*v + box.CTM[4]
+	y := box.CTM[1]*u + box.CTM[3]*v + box.CTM[5]
+
+	point := heuristics.ZoneFromRect([4]float64{x, y, x, y})
+	for _, z := range zones {
+		if heuristics.ZonesOverlap(point, z) {
+			return true
+		}
+	}
+	return false
+}
+
+// sampleCellSlack is how far, in samples, a zone must reach into a sample's
+// cell before [sampleCellInteriorMeets] counts the cell as met. Carrying a
+// zone's corners into sample space rounds, so an edge the producer drew on
+// a sample boundary lands a few ulps either side of it; the slack keeps the
+// sample beyond that boundary, which the zone does not reach, as it was. A
+// zone reaching a billionth of a sample into a cell covers no device pixel
+// of it at any resolution a page renders at.
+const sampleCellSlack = 1e-9
+
+// zonesInSampleSpace returns each zone's corners carried into the sample
+// space of a w x h image, where sample (px, py) fills [px, px+1] x
+// [py, py+1] and rows run down from the top of the unit square, in the
+// order the zone's rectangle runs round them. It reports false when the
+// placement cannot be inverted.
+func zonesInSampleSpace(box graphics.ImageBox, zones []heuristics.Zone, w, h int) ([][4][2]float64, bool) {
+	out := make([][4][2]float64, 0, len(zones))
+	for _, z := range zones {
+		x0, y0, x1, y1 := heuristics.ZoneBounds(z)
+		var quad [4][2]float64
+		for i, c := range [4][2]float64{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}} {
+			u, v, ok := box.ImageSpace(c[0], c[1])
+			if !ok {
+				return nil, false
+			}
+			quad[i] = [2]float64{u * float64(w), (1 - v) * float64(h)}
+		}
+		out = append(out, quad)
+	}
+	return out, true
+}
+
+// sampleCellInteriorMeets reports whether one of quads, zones carried into
+// sample space by [zonesInSampleSpace], reaches more than [sampleCellSlack]
+// into the cell of sample (px, py). A placement maps the zone's rectangle
+// to a parallelogram there, and two convex shapes share area exactly when no
+// axis among their edge normals separates them, so the test is exact under
+// rotation and skew.
+func sampleCellInteriorMeets(quads [][4][2]float64, px, py int) bool {
+	cell := [4][2]float64{
+		{float64(px), float64(py)},
+		{float64(px + 1), float64(py)},
+		{float64(px + 1), float64(py + 1)},
+		{float64(px), float64(py + 1)},
+	}
+	for _, q := range quads {
+		axes := [][2]float64{{1, 0}, {0, 1}}
+		for _, e := range [2][2]float64{{q[1][0] - q[0][0], q[1][1] - q[0][1]}, {q[3][0] - q[0][0], q[3][1] - q[0][1]}} {
+			// A zone of no width has no edge along that side; the other
+			// normal still places it.
+			if n := math.Hypot(e[0], e[1]); n > 0 {
+				axes = append(axes, [2]float64{-e[1] / n, e[0] / n})
+			}
+		}
+		meets := true
+		for _, a := range axes {
+			qLo, qHi := projectQuad(q, a)
+			cLo, cHi := projectQuad(cell, a)
+			if qHi <= cLo+sampleCellSlack || cHi <= qLo+sampleCellSlack {
+				meets = false
+				break
+			}
+		}
+		if meets {
+			return true
+		}
+	}
+	return false
+}
+
+// projectQuad returns the interval the corners of q span along the unit
+// axis a.
+func projectQuad(q [4][2]float64, a [2]float64) (lo, hi float64) {
+	lo, hi = math.Inf(1), math.Inf(-1)
+	for _, p := range q {
+		d := p[0]*a[0] + p[1]*a[1]
+		lo, hi = math.Min(lo, d), math.Max(hi, d)
+	}
+	return lo, hi
 }
 
 // touchedSamplesAlreadyBlank reports whether the zones meet the image between

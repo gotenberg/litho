@@ -345,10 +345,11 @@ func TestRedactRenderInterpolationSpill(t *testing.T) {
 		"removes nothing": func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error) {
 			return nil, nil
 		},
-		// The samples centred at 62.5 lie in the region [50 50 150 150] and
-		// out of [70 70 150 150].
+		// The samples centred at 62.5, whose cells end at 75, lie in the
+		// region [50 50 150 150] and out of [76 76 150 150], whose edge cuts
+		// no cell of theirs.
 		"keeps samples inside": func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, opts ...pdf.RedactOption) (*pdf.RedactReport, error) {
-			region.Rect = [4]float64{70, 70, 150, 150}
+			region.Rect = [4]float64{76, 76, 150, 150}
 			return w.Redact(ctx, []pdf.RedactRegion{region}, append(opts, pdf.WithoutRedactionPixelCheck())...)
 		},
 	} {

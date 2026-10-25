@@ -270,11 +270,11 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     meets the region whole, including the part of it that reaches outside.
 //     A pixel litho's images-only renderings ([pdf.WithRenderContent]) show
 //     changed is image blanking, which is exact to the sample: a sample whose
-//     centre lies in the region is blanked whole, and an interpolated image
-//     blends it into its neighbours. It counts in image_spill, not as a
-//     change. Nothing else may change: a path's geometry outside the region
-//     is kept under a clip that excludes the region, and the text after a
-//     removed glyph keeps its place.
+//     centre lies in the region, or whose cell its edge cuts, is blanked
+//     whole, and an interpolated image blends it into its neighbours. It
+//     counts in image_spill, not as a change. Nothing else may change: a
+//     path's geometry outside the region is kept under a clip that excludes
+//     the region, and the text after a removed glyph keeps its place.
 //   - inside: inside the region eroded by [redactRenderMargin], nothing the
 //     redaction removed still paints. A successful redaction leaves only
 //     images there, their covered samples blanked: text, paths and
@@ -1448,12 +1448,13 @@ type redactPixelSets struct {
 // blankBlend reports whether the pixel at (x, y) inside the region, in one
 // renderer's renderings before and after of the page, stride pixels a row,
 // shows a blanked image's blank blended with the samples it kept outside the
-// region. A redaction blanks the samples whose centres the region covers
-// (package mutations, blankedPicture) and keeps /Interpolate (ISO 32000-1,
-// 8.9.5.3, Table 89), and a renderer interpolating an enlarged image blends
-// each sample into its neighbours up to a sample away: the kept samples
-// beside the region's edge reach into it, fading into the blank. Such a pixel
-// holds nothing the redaction removed. It is told by three things a sample
+// region. A redaction blanks the samples whose centres the region covers and
+// those whose cells its edge cuts (package mutations, forCoveredSamples,
+// blankedPicture) and keeps /Interpolate (ISO 32000-1, 8.9.5.3, Table 89),
+// and a renderer interpolating an enlarged image blends each sample into its
+// neighbours up to a sample away: the kept samples beside the region's edge
+// reach into it, fading into the blank. Such a pixel holds nothing the
+// redaction removed. It is told by three things a sample
 // left unblanked does not show together:
 //
 //   - The blank reached it: some channel is darker after than before by more

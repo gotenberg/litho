@@ -639,3 +639,57 @@ func TestRedactKeepsACutStrokeUnadjusted(t *testing.T) {
 		t.Fatalf("Redact: %v", err)
 	}
 }
+
+// cutCellPDF draws a 4 by 1 DeviceGray image 50 points a sample over x 100
+// to 300, y 300 to 400: black samples but for sample 1, of value grey, which
+// fills x 150 to 200, its centre at 175.
+func cutCellPDF(grey byte, interpolate bool) []byte {
+	const body = "q 200 0 0 100 100 300 cm /Im1 Do Q"
+	dict := "/Type /XObject /Subtype /Image /Width 4 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8"
+	if interpolate {
+		dict += " /Interpolate true"
+	}
+	return plantedPDF(body, plant{
+		page:    "/Resources << /XObject << /Im1 7 0 R >> >>",
+		objects: plantStream(7, dict, string([]byte{0, grey, 0, 0})),
+	})
+}
+
+// TestRedactClearsTheSampleWhoseCellTheRegionEdgeCuts redacts from a left
+// edge that cuts sample 1's cell right of its centre. The sample painted its
+// grey or white inside the region, up to 24 points deep, and the pixel check
+// refused ("pixels inside the region still paint removed content"); it is
+// now cleared with the samples whose centres the region holds, so the region
+// shows the blank alone, interpolated or not.
+func TestRedactClearsTheSampleWhoseCellTheRegionEdgeCuts(t *testing.T) {
+	ctx := context.Background()
+	for _, grey := range []byte{0xff, 0x80} {
+		for _, interpolate := range []bool{false, true} {
+			for _, edge := range []float64{176, 180, 195} {
+				w := NewWriter(openPixelCheck(t, cutCellPDF(grey, interpolate)))
+				if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{edge, 250, 400, 450}}}); err != nil {
+					t.Errorf("grey %#x, interpolate %v, edge %v: Redact: %v", grey, interpolate, edge, err)
+				}
+				if err := w.Close(); err != nil {
+					t.Errorf("Close: %v", err)
+				}
+			}
+		}
+	}
+}
+
+// TestRedactPixelCheckFindsTheCutCellLeftPainting checks the page blanking
+// by sample centres alone wrote for a region cutting sample 1's cell right
+// of its centre: samples 2 and 3 cleared, black as they were, and sample 1's
+// grey kept. The check sees the grey inside the region.
+func TestRedactPixelCheckFindsTheCutCellLeftPainting(t *testing.T) {
+	ctx := context.Background()
+	region := RedactRegion{Page: 1, Rect: [4]float64{180, 250, 400, 450}}
+	before := openPixelCheck(t, cutCellPDF(0x80, false))
+	after := openPixelCheck(t, cutCellPDF(0x80, false))
+	err := checkRedactionPixels(ctx, before, after, []RedactRegion{region}, []int{1}, redactedGlyphs{})
+	var pe *RedactionPixelError
+	if !errors.As(err, &pe) || pe.Inside == 0 {
+		t.Fatalf("got %v, want the kept grey found inside the region", err)
+	}
+}
