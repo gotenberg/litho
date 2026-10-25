@@ -128,6 +128,8 @@ type Transform struct {
 	bpcScale, bpcOffset *[3]float64
 	// identity caches what [Transform.Identity] finds, computed on first use.
 	identity func() bool
+	// neutral caches what [Transform.Neutral] finds, computed on first use.
+	neutral func() bool
 }
 
 // NewTransform builds the transform from the profile's data colour space to
@@ -192,6 +194,7 @@ func (p *Profile) newTransform(intent Intent) (*Transform, error) {
 	}
 	t := &Transform{n: n, srgb: srgb()}
 	t.identity = sync.OnceValue(t.readsAsIdentity)
+	t.neutral = sync.OnceValue(t.readsAsNeutral)
 	tag := [4]string{"A2B0", "A2B1", "A2B2", "A2B1"}[intent&3]
 	b, ok := p.tags[tag]
 	if !ok {
@@ -334,6 +337,49 @@ func (t *Transform) readsAsIdentity() bool {
 					return false
 				}
 			}
+		}
+	}
+	return true
+}
+
+// neutralTolerance is how many levels the three sRGB channels of a grey may
+// differ by for [Transform.Neutral] to count the grey as neutral: the
+// rounding of the PCS illuminant's s15Fixed16 coordinates (ICC.1:2010, 4.6)
+// and of the sRGB matrix already sets a tone curve's greys a level apart.
+const neutralTolerance = 1
+
+// Neutral reports whether the transform is a grey profile's that draws every
+// sample as a grey: its three sRGB channels within neutralTolerance of each
+// other at each of the 256 sample values. A grey profile's tone curve
+// characterises an achromatic device (ICC.1:2010, F.2: the PCS value is the
+// illuminant scaled by the curve's Y, or L* with a* and b* 0), but an AToB
+// table maps a grey sample to any PCS colour (8.3.3, 8.4.2), so a profile
+// whose table tints its greys draws them coloured, as Little CMS reads it.
+// A neutral transform's colours are read off one channel; any other
+// transform's, a grey one included, through all three. The check runs once
+// per transform; a transform of more than one component is not neutral.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 348 grey ICC profile streams (23 distinct), none
+//     draws a sample more than a level off the neutral axis under any
+//     intent, so every grey ICC colour they hold keeps its one-channel
+//     reading.
+//   - litho greytint_2b.pdf: its profile's table tints the middle greys,
+//     which poppler 26.09.0, PDFium and MuPDF draw brown and litho drew grey.
+func (t *Transform) Neutral() bool {
+	return t.neutral()
+}
+
+// readsAsNeutral computes what [Transform.Neutral] reports.
+func (t *Transform) readsAsNeutral() bool {
+	if t.n != 1 {
+		return false
+	}
+	for v := range 256 {
+		r, g, b := t.Convert([]byte{byte(v)})
+		if int(max(r, g, b))-int(min(r, g, b)) > neutralTolerance {
+			return false
 		}
 	}
 	return true

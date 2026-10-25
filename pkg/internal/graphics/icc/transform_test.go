@@ -295,6 +295,66 @@ func TestTransform_Identity(t *testing.T) {
 	}
 }
 
+// greyLutProfile is a grey profile whose lut16Type AToB0 table reads its
+// samples through a three-point grid into Lab: black, the middle grey at
+// L* 50 with a* aMid, then white.
+func greyLutProfile(aMid float64) []byte {
+	b := []byte("mft2\x00\x00\x00\x00")
+	b = append(b, 1, 3, 3, 0)
+	b = append(b, s15Bytes(1, 0, 0, 0, 1, 0, 0, 0, 1)...)
+	b = binary.BigEndian.AppendUint16(b, 2)
+	b = binary.BigEndian.AppendUint16(b, 2)
+	b = binary.BigEndian.AppendUint16(b, 0)
+	b = binary.BigEndian.AppendUint16(b, 65535)
+	for _, lab := range [][3]float64{{0, 0, 0}, {50, aMid, 0}, {100, 0, 0}} {
+		// Legacy 16-bit Lab: L* 100 is 0xFF00, a* and b* 0 is 0x8000.
+		b = binary.BigEndian.AppendUint16(b, uint16(math.Round(lab[0]/100*65280)))
+		b = binary.BigEndian.AppendUint16(b, uint16(math.Round((lab[1]+128)*256)))
+		b = binary.BigEndian.AppendUint16(b, uint16(math.Round((lab[2]+128)*256)))
+	}
+	for range 3 {
+		b = binary.BigEndian.AppendUint16(b, 0)
+		b = binary.BigEndian.AppendUint16(b, 65535)
+	}
+	return buildProfile("GRAY", "Lab ", 2, map[string][]byte{
+		"A2B0": b,
+		"wtpt": xyzType(0.9642, 1, 0.8249),
+	})
+}
+
+// TestTransform_Neutral pins which transforms draw every grey sample as a
+// grey: a grey tone curve (ICC.1:2010, F.2) and a table on the neutral axis
+// do, a table that tints its middle greys and a profile of more than one
+// component do not.
+func TestTransform_Neutral(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		profile []byte
+		want    bool
+	}{
+		{"a grey tone curve", greyProfile(), true},
+		{"a neutral grey table", greyLutProfile(0), true},
+		{"a grey table that tints", greyLutProfile(30), false},
+		{"sRGB", SRGBProfile(), false},
+	} {
+		p, err := Parse(tc.profile)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		for _, intent := range []Intent{RelativeColorimetric, Perceptual.WithBPC(BPCOff)} {
+			tr, err := p.NewTransform(intent)
+			if err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if got := tr.Neutral(); got != tc.want {
+				t.Errorf("%s, %v: Neutral() = %t, want %t", tc.name, intent, got, tc.want)
+			}
+		}
+	}
+}
+
 // TestBuiltinCMYK converts through the built-in CMYK profile under every
 // intent and matches LittleCMS 2.17 to within one level: the process inks
 // land on the familiar SWOP cyan, magenta, yellow and rich black.

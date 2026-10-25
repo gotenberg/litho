@@ -114,9 +114,10 @@ func NewSampleColor(ctx context.Context, doc *document.Document, csObj ast.PdfOb
 	cal, isCal := resolveCalSpace(ctx, doc, dict["ColorSpace"])
 	isCal = isCal && calComponents(cal) == n
 	switch {
-	case conv != nil && n == 1:
-		// A grey profile maps onto the neutral axis, where the decoder keeps
-		// the green channel for all three.
+	case conv != nil && n == 1 && conv.t.Neutral():
+		// A neutral grey profile keeps the green channel for all three, as
+		// the decoder does; one that tints its greys converts as any other
+		// profile (see [icc.Transform.Neutral]).
 		sc.convert = func(s []byte) (color.RGBA, error) {
 			_, g, _ := conv.convert(s[:1])
 			return color.RGBA{R: g, G: g, B: g, A: 255}, nil

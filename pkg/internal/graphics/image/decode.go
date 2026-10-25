@@ -219,6 +219,25 @@ func indexDecode(ctx context.Context, doc *document.Document, dict ast.PdfDict, 
 	}
 }
 
+// tintedGrey builds the sRGB image of one-component samples, each mapped
+// through grey, the /Decode table, then converted by conv, whose grey profile
+// draws its samples off the neutral axis (see [icc.Transform.Neutral]). The
+// 256 sample values are converted once, then the samples look their colours
+// up.
+func tintedGrey(samples []byte, grey [256]byte, conv *converter, width, height, validRows int) image.Image {
+	var table [256][3]byte
+	for s, v := range grey {
+		r, g, b := conv.convert([]byte{v})
+		table[s] = [3]byte{r, g, b}
+	}
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for i, s := range samples {
+		c, px := table[s], img.Pix[4*i:4*i+4]
+		px[0], px[1], px[2], px[3] = c[0], c[1], c[2], 255
+	}
+	return finishRows(img, validRows)
+}
+
 // finishRows paints the rows of img from row on black, and returns img.
 func finishRows(img image.Image, row int) image.Image {
 	b := img.Bounds()
@@ -1865,9 +1884,13 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		}
 		grey := dec[0]
 		switch {
+		case conv != nil && !conv.t.Neutral():
+			// ISO 32000-1, 8.6.5.5: the samples read through the profile,
+			// whose table may map a grey to a coloured PCS value.
+			return tintedGrey(decodedData[:expectedLen], grey, conv, width, height, validRows), nil
 		case conv != nil:
-			// A grey profile maps onto the neutral axis, where the three sRGB
-			// channels agree to within a level.
+			// A neutral grey profile keeps the green channel for all three,
+			// which agree with it to within a level.
 			for s, v := range grey {
 				px[0] = v
 				_, grey[s], _ = conv.convert(px[:1])
