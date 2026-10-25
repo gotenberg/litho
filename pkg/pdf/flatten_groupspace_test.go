@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"context"
+	"encoding/binary"
 	"image"
 	"testing"
 )
@@ -175,5 +176,62 @@ func TestFlattenOverprintConvertsNoGroupSpace(t *testing.T) {
 		if p.GroupSpaceConverted || p.GroupSpaceUnconverted {
 			t.Errorf("page %d: report %+v, want no group space conversion", p.Page, p)
 		}
+	}
+}
+
+// linearGreyICC builds a version 2.1 grey display profile over XYZ whose tone
+// curve is the identity (ICC.1:2001-04, 6.5.3), so a grey component is the
+// luminance Y.
+func linearGreyICC() []byte {
+	be32 := binary.BigEndian.AppendUint32
+	s15 := func(b []byte, v float64) []byte { return be32(b, uint32(int32(v*65536+0.5))) }
+	d50 := func(b []byte) []byte { return s15(s15(s15(b, 0.9642), 1), 0.8249) }
+	tags := [][2][]byte{
+		{[]byte("wtpt"), d50([]byte("XYZ \x00\x00\x00\x00"))},
+		{[]byte("kTRC"), []byte("curv\x00\x00\x00\x00\x00\x00\x00\x00")},
+	}
+	table := be32(nil, uint32(len(tags)))
+	var body []byte
+	for _, tag := range tags {
+		table = append(table, tag[0]...)
+		table = be32(be32(table, uint32(128+4+12*len(tags)+len(body))), uint32(len(tag[1])))
+		body = append(body, tag[1]...)
+	}
+	header := make([]byte, 128)
+	binary.BigEndian.PutUint32(header[0:], uint32(128+len(table)+len(body)))
+	binary.BigEndian.PutUint32(header[8:], 0x02100000)
+	copy(header[12:], "mntrGRAYXYZ ")
+	copy(header[36:], "acsp")
+	copy(header[68:], d50(nil))
+	return append(append(header, table...), body...)
+}
+
+// TestFlattenConvertsIntoAGreyICCGroup checks that a page whose group blends
+// in a grey ICCBased space reads an RGB grey through the space's profile, as
+// it reads outside the group (ISO 32000-1, 11.3.4 and 8.6.5.5), and that
+// flattening converts what the composites leave through the same profile, so
+// the grey reads the same once the group is gone: the device formula's
+// luminance would keep 0.66, which the profile reads as sRGB 212.
+func TestFlattenConvertsIntoAGreyICCGroup(t *testing.T) {
+	t.Parallel()
+	in := colorFixturePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R /Group << /S /Transparency /CS [/ICCBased 6 0 R] >>" +
+			" /Resources << /ExtGState << /Half 5 0 R >> >> >>",
+		colorStream("", "0.66 0.66 0.66 rg 0 0 200 100 re f q /Half gs 1 0 0 rg 150 150 40 40 re f Q"),
+		"<< /Type /ExtGState /ca 0.5 >>",
+		colorStream("/N 1", string(linearGreyICC())),
+	})
+	want := [3]int{168, 168, 168}
+	if got := groupSpacePixel(t, in, 1, 50, 50); !nearRGB(got, want, 2) {
+		t.Fatalf("the source reads its grey as %v in the group, want %v as outside it", got, want)
+	}
+	report, out := flattenPDF(t, in)
+	if len(report.Pages) != 1 || !report.Pages[0].GroupSpaceConverted {
+		t.Fatalf("report %+v, want page 1 converted", report.Pages)
+	}
+	if got := groupSpacePixel(t, out, 1, 50, 50); !nearRGB(got, want, 3) {
+		t.Errorf("the flattened grey reads %v, the source %v", got, want)
 	}
 }

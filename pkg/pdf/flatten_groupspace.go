@@ -142,7 +142,7 @@ func convertGroupSpaces(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 				JPEGQuality:            jpegQuality,
 				DeviceGray:             gray,
 				DeviceCMYK:             cmyk,
-				Engine:                 groupEngine{},
+				Engine:                 groupEngine{profiled: t.Family == graphics.FamilyICCBased},
 			},
 		}
 		converted, err := c.convert(ctx, byTarget[key])
@@ -335,16 +335,31 @@ func groupTarget(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 }
 
 // groupEngine converts colour as litho's renderer blends it into a page
-// group: into a CMYK group through the ICC engine, as the renderer does from
-// the colour's sRGB, and into a grey group by the luminance ISO 32000-1, 10.3
-// weighs DeviceRGB's components with, 0.3 red, 0.59 green and 0.11 blue, of
-// the colour's sRGB, which is how the renderer blends any colour into a grey
-// space. A grey colour stays grey.
-type groupEngine struct{}
+// group: into a CMYK group, and into a grey ICCBased group (profiled),
+// through the ICC engine, as the renderer does from the colour's sRGB
+// ([page.Render]); and into a DeviceGray group by the luminance ISO 32000-1,
+// 10.3 weighs DeviceRGB's components with, 0.3 red, 0.59 green and 0.11
+// blue, of the colour's sRGB, which is how the renderer blends any colour
+// into DeviceGray. A grey colour stays grey.
+//
+// The engine converts under the colour's own intent, end to end: the page
+// no longer composites in the group once flattened, so the converted colour
+// is read under that intent, where the renderer's composite was read under
+// relative colorimetric.
+//
+// # Corpus evidence
+//
+//   - litho greygroup_2b.pdf: converted to CMYK, then flattened, page 3's
+//     perceptual fill in its L* grey group drew up to 36 levels from its
+//     source over half the page by the luminance, and now draws within 11
+//     levels but on 0.02% of it; flattened alone, its pages draw as before.
+type groupEngine struct {
+	profiled bool
+}
 
-func (groupEngine) Transform(src, dst recolor.Endpoint, opts recolor.Options) (recolor.Converter, error) {
+func (e groupEngine) Transform(src, dst recolor.Endpoint, opts recolor.Options) (recolor.Converter, error) {
 	base := recolor.ICCEngine()
-	if dst.Space != recolor.SpaceGray || src.Space == recolor.SpaceGray {
+	if dst.Space != recolor.SpaceGray || src.Space == recolor.SpaceGray || e.profiled {
 		conv, err := base.Transform(src, dst, opts)
 		if err != nil {
 			return nil, fmt.Errorf("converting to the page group's space: %w", err)
