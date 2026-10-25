@@ -1,6 +1,7 @@
 package typography
 
 import (
+	"context"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/graphics"
@@ -40,6 +41,16 @@ const (
 // wider. A real glyph strokes a few paths, so the cap is far above what it
 // meets.
 const maxType3PenStrokes = 64
+
+// maxType3LiftedStrokes caps the strokes with an inherited pen that the
+// nested Type 3 glyphs one description shows hand up to it
+// ([type3Lift]). Anti-DoS guard, not spec-mandated: each nested glyph hands
+// up to [maxType3PenStrokes], once per show, so a description showing
+// thousands of such glyphs would hold thousands of strokes before they
+// merge. Past the cap, the description's text is not bounded at all
+// ([type3TextBoxes]), and paints anywhere its clip lets it. A real glyph
+// shows a few nested glyphs, so the cap is far above what it meets.
+const maxType3LiftedStrokes = 16 * maxType3PenStrokes
 
 // type3PenState is the line width, cap, join and miter limit a Type 3 glyph
 // description strokes with, and the [penWidth] bits of those it set itself.
@@ -106,6 +117,13 @@ func newType3PenStroke(box [4]float64, clip *[4]float64, pen type3PenState, m [6
 //   - litho t3pen_2b.pdf: a line stroked under the showing state's 2000 w.
 //     The centred quarter over its pen left 720 pixels inside the region, and
 //     now removes the glyph.
+//   - All corpora: 8 of the 135 files show text from a Type 3 glyph
+//     description, and no nested Type 3 glyph among them strokes with an
+//     inherited pen (pdfjs ContentStream*Type3insideType3 set 10 w): over
+//     their first ten pages no ink box moves.
+//   - litho t3nestpen_2b.pdf: a nested line stroked under the page's 2000 w.
+//     The centred quarter over its pen left 760 pixels inside the region, and
+//     now removes the outer glyph.
 type type3Pen struct {
 	strokes []type3PenStroke
 }
@@ -219,4 +237,139 @@ func (ink type3InkBounds) penBox(state *graphics.State) [4]float64 {
 		box = [4]float64{min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3])}
 	}
 	return box
+}
+
+// resolve returns the stroke s as shown in a description whose pen is pen:
+// each parameter s inherits that pen sets is pen's, or the one s holds where
+// merged strokes set one reaching farther, as [type3PenStroke.reach] reads
+// a showing state's, and is no longer inherited. It reports whether s still
+// inherits a parameter, from the state the description is itself shown in.
+func (s type3PenStroke) resolve(pen type3PenState) (type3PenStroke, bool) {
+	set := s.inherit & pen.set
+	if set&penWidth != 0 {
+		s.lw = max(math.Abs(pen.lw), math.Abs(s.lw))
+	}
+	if set&penCap != 0 {
+		s.lc = widerCap(pen.lc, s.lc)
+	}
+	if set&penJoin != 0 {
+		s.lj = widerJoin(pen.lj, s.lj)
+	}
+	if set&penMiter != 0 {
+		s.ml = max(miterOrInitial(pen.ml), miterOrInitial(s.ml))
+	}
+	s.inherit &^= set
+	return s, s.inherit != 0
+}
+
+// through returns the stroke s of a glyph whose glyph space m maps to the
+// space of the description showing it: its path box and clip box the boxes
+// of their corners through m, and its pen stretched by m as well
+// ([maxStretch]), since the width a stroke inherits is in the user space it
+// strokes in (ISO 32000-1, 8.4.3.2). It returns false for a box m does not
+// carry to finite numbers.
+func (s type3PenStroke) through(m [6]float64) (type3PenStroke, bool) {
+	boxThrough := func(b [4]float64) ([4]float64, bool) {
+		var out *[4]float64
+		for _, c := range rectCorners(b[0], b[1], b[2], b[3]) {
+			x, y := m[0]*c[0]+m[2]*c[1]+m[4], m[1]*c[0]+m[3]*c[1]+m[5]
+			out = unionBox(out, &[4]float64{x, y, x, y})
+		}
+		return *out, finiteBox(*out)
+	}
+	box, ok := boxThrough(s.box)
+	if !ok {
+		return type3PenStroke{}, false
+	}
+	s.box = box
+	if s.clip != nil {
+		clip, ok := boxThrough(*s.clip)
+		if !ok {
+			return type3PenStroke{}, false
+		}
+		s.clip = &clip
+	}
+	s.stretch *= maxStretch(m)
+	if math.IsNaN(s.stretch) || math.IsInf(s.stretch, 0) {
+		return type3PenStroke{}, false
+	}
+	return s, true
+}
+
+// within returns s cut to clip as well as to its own clip, nil for none: a
+// stroke of a nested glyph paints under the clip its shower set too (ISO
+// 32000-1, 8.5.4).
+func (s type3PenStroke) within(clip *[4]float64) type3PenStroke {
+	switch {
+	case clip == nil:
+	case s.clip == nil:
+		c := *clip
+		s.clip = &c
+	default:
+		c := [4]float64{max(s.clip[0], clip[0]), max(s.clip[1], clip[1]), min(s.clip[2], clip[2]), min(s.clip[3], clip[3])}
+		s.clip = &c
+	}
+	return s
+}
+
+// type3LiftKey is the context key of the [type3Lift] in force.
+type type3LiftKey struct{}
+
+// type3Lift collects, while [type3TextBoxes] runs a Type 3 glyph
+// description through the text extractor, the strokes with an inherited pen
+// of each Type 3 glyph the description shows, in the description's glyph
+// space, by the index of the element that glyph is. A nested glyph runs in
+// the graphics state at its show (ISO 32000-1, 9.6.5), which is the
+// description's own, itself the state the outer glyph is shown in for every
+// parameter the description did not set: a nested stroke inherits that one
+// from where the outer glyph is shown, and becomes a stroke of the outer
+// glyph's [type3Pen]. Only the goroutine running the extraction touches it.
+type type3Lift struct {
+	strokes  []type3LiftedStroke
+	overflow bool
+}
+
+// type3LiftedStroke is a stroke a nested Type 3 glyph hands up, and where
+// the glyph is: the index of its element while [type3Lift] collects it, the
+// index of the operator showing it once [type3TextBoxes] returns it.
+type type3LiftedStroke struct {
+	at     int
+	stroke type3PenStroke
+}
+
+// type3LiftFrom returns the collector ctx carries, nil when none.
+func type3LiftFrom(ctx context.Context) *type3Lift {
+	l, _ := ctx.Value(type3LiftKey{}).(*type3Lift)
+	return l
+}
+
+// record hands up the strokes with an inherited pen of the Type 3 glyph cid
+// of font, shown at fontSize from machine as element: each through the
+// matrix that maps its glyph space to the space machine shows it in, the
+// font matrix and the text rendering matrix of ISO 32000-1, 9.4.4 and
+// 9.2.4. A glyph bounded by the clip in force has no pen to hand up: its box
+// is the clip's.
+func (l *type3Lift) record(ctx context.Context, machine *graphics.Machine, font *Font, fontSize float64, cid, element int) {
+	if l.overflow {
+		return
+	}
+	ink, ok, clipped := type3ShownInk(ctx, machine, font, cid)
+	if !ok || clipped || ink.pen == nil {
+		return
+	}
+	state := machine.Current()
+	th := state.Text.Tz / 100
+	m := concatMatrix(font.FontMatrix, [6]float64{fontSize * th, 0, 0, fontSize, 0, state.Text.Ts})
+	m = concatMatrix(concatMatrix(m, state.Text.Tm), state.CTM)
+	for _, s := range ink.pen.strokes {
+		t, ok := s.through(m)
+		if !ok {
+			continue
+		}
+		if len(l.strokes) >= maxType3LiftedStrokes {
+			l.overflow = true
+			return
+		}
+		l.strokes = append(l.strokes, type3LiftedStroke{at: element, stroke: t})
+	}
 }

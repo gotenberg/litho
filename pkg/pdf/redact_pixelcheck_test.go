@@ -472,6 +472,90 @@ func TestRedactKeepsAType3StrokeUnderAThinShowingPen(t *testing.T) {
 	}
 }
 
+// nestedPenPDF shows a Type 3 glyph whose description, after outer, shows
+// a glyph of a second Type 3 font, one glyph-space unit to one: the nested
+// description strokes a line with the pen it inherits from where it is
+// shown (ISO 32000-1, 9.6.5), the outer description's state, itself the
+// page's for every parameter outer leaves unset. before sets the page's
+// state, and the line runs from 100 450 to 200 450 as [inheritedPenPDF]'s.
+func nestedPenPDF(outer, before string) []byte {
+	return []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /T3 4 0 R >> >> /Contents 6 0 R >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type3 /FontBBox [0 0 10 10] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /a 5 0 R >> " +
+		"/Encoding << /Type /Encoding /Differences [97 /a] >> /FirstChar 97 /LastChar 97 /Widths [1000] " +
+		"/Resources << /Font << /In 7 0 R >> >> >>\nendobj\n" +
+		plantStream(5, "", "1000 0 d0 "+outer+"BT /In 1000 Tf (b) Tj ET") +
+		plantStream(6, "", before+"BT /T3 100 Tf 100 400 Td (a) Tj ET") +
+		"7 0 obj\n<< /Type /Font /Subtype /Type3 /FontBBox [0 0 10 10] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /b 8 0 R >> " +
+		"/Encoding << /Type /Encoding /Differences [98 /b] >> /FirstChar 98 /LastChar 98 /Widths [1000] /Resources << >> >>\nendobj\n" +
+		plantStream(8, "", "1000 0 d0 0 500 m 1000 500 l S") +
+		"trailer\n<< /Size 9 /Root 1 0 R >>\n%%EOF\n")
+}
+
+// TestRedactBoundsANestedType3StrokeByTheShowingPen redacts, with the pixel
+// check off, the region over the pen a nested Type 3 glyph's stroke
+// inherits through the outer glyph's description from the page: the outer
+// glyph's box grows there by the page's pen, so the region selects it and
+// no ink is left, whether the outer description leaves the width unset or
+// sets only another parameter.
+func TestRedactBoundsANestedType3StrokeByTheShowingPen(t *testing.T) {
+	ctx := context.Background()
+	for name, src := range map[string][]byte{
+		"outer sets nothing":      nestedPenPDF("", "4000 w "),
+		"outer sets the cap":      nestedPenPDF("0 J ", "4000 w "),
+		"outer clips past it":     nestedPenPDF("-5000 -5000 10000 10000 re W n ", "4000 w "),
+		"outer cm scales the pen": nestedPenPDF("2 0 0 2 0 -500 cm ", "2000 w "),
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := NewWriter(openPixelCheck(t, src))
+			defer w.Close()
+			report, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion}, WithoutRedactionPixelCheck())
+			if err != nil {
+				t.Fatalf("Redact: %v", err)
+			}
+			if len(report.RemovedText) != 1 {
+				t.Fatalf("removed %q, want the glyph showing the nested stroke", report.RemovedText)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			if err := checkRedactionPixels(ctx, openPixelCheck(t, src), openPixelCheck(t, out.Bytes()),
+				[]RedactRegion{inheritedPenRegion}, []int{1}, redactedGlyphs{boxes: report.RemovedGlyphBoxes}); err != nil {
+				t.Fatalf("the nested pen is left in the region: %v", err)
+			}
+		})
+	}
+}
+
+// TestRedactKeepsANestedType3StrokeUnderTheOuterPen redacts the same region
+// over a nested glyph whose outer description sets a thin width of its own
+// before showing it, and over one shown under the initial pen: the nested
+// stroke inherits the outer description's width, not the page's (ISO
+// 32000-1, 9.6.5), and paints nowhere near the region, so the glyph stays.
+func TestRedactKeepsANestedType3StrokeUnderTheOuterPen(t *testing.T) {
+	ctx := context.Background()
+	for name, src := range map[string][]byte{
+		"outer sets its own width": nestedPenPDF("10 w ", "4000 w "),
+		"outer width set by gs":    []byte(strings.Replace(string(nestedPenPDF("/GS1 gs ", "4000 w ")), "/Resources << /Font << /In 7 0 R >> >>", "/Resources << /Font << /In 7 0 R >> /ExtGState << /GS1 << /LW 10 >> >> >>", 1)),
+		"initial pen":              nestedPenPDF("", ""),
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := NewWriter(openPixelCheck(t, src))
+			defer w.Close()
+			report, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion})
+			if err != nil {
+				t.Fatalf("Redact: %v", err)
+			}
+			if len(report.RemovedText) != 0 {
+				t.Fatalf("removed %q, want the glyph kept", report.RemovedText)
+			}
+		})
+	}
+}
+
 // placeholderLeakRegion lies under the placeholder box the renderer draws
 // for [placeholderBody]'s glyph, a quarter em below its baseline, and clear
 // of the glyph's box, a fifth of an em below it: the redaction selects no

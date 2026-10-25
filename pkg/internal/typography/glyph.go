@@ -131,6 +131,11 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Language:      mcLang,
 			ExpansionText: mcExpansion,
 		})
+		if font.Subtype == "Type3" {
+			if lift := type3LiftFrom(ctx); lift != nil {
+				lift.record(ctx, machine, font, fontSize, cid, len(*elements)-1)
+			}
+		}
 		if machine.RecordTextPaints || machine.RecordWhiteFills {
 			machine.RecordTextPaint(graphics.TextPaint{
 				Mode:        state.Text.Tmode,

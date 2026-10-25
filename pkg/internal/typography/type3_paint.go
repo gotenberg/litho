@@ -248,8 +248,11 @@ func (p type3Painter) cachedFont(ctx context.Context, chain type3Chain, name ast
 // shown, which this walk, run once per font, cannot know. It bounds such a
 // stroke with the initial parameters (8.4.1, Table 52), and returns it in
 // the [type3Pen], which [type3InkBounds.penBox] grows by the showing state's
-// pen where the glyph is shown. The pen is nil when every stroke sets its
-// own.
+// pen where the glyph is shown. A Type 3 glyph the description shows runs
+// under the description's state in turn, so its strokes that inherit a
+// parameter the description has not set at the show inherit it from where
+// this glyph is shown, and join the pen as well ([type3Lift]). The pen is
+// nil when every stroke sets its own.
 func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operation) (*[4]float64, bool, *type3Pen) {
 	// tf says what the font of the text state is: the description's own
 	// Tf set none, so the font is the one showing the glyph; a Tf set one
@@ -360,10 +363,12 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 		}
 		bezierBounds(p, addPath)
 	}
-	// shown holds the clip of each show operator in the font a Tf set, for
-	// the text pass after the walk; textOK whether every font the
-	// description selects is one that pass can resolve from the cache.
+	// shown holds the clip of each show operator in the font a Tf set, and
+	// shownPen the pen in force there, for the text pass after the walk;
+	// textOK whether every font the description selects is one that pass
+	// can resolve from the cache.
 	shown := make(map[int]*[4]float64)
+	shownPen := make(map[int]type3PenState)
 	textOK := true
 	var cx, cy float64
 	for i, op := range ops {
@@ -464,6 +469,7 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 				textOK = false
 			}
 			shown[i] = cur.clip
+			shownPen[i] = cur.pen
 		default:
 			v, ok := pathOperands(op)
 			if !ok {
@@ -506,8 +512,18 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 		return painted, unbounded, pen
 	}
 	var boxes map[int][][4]float64
+	var lifted []type3LiftedStroke
 	if textOK {
-		boxes, textOK = type3TextBoxes(ctx, p, ops)
+		boxes, lifted, textOK = type3TextBoxes(ctx, p, ops)
+	}
+	if textOK {
+		// A nested glyph's stroke takes what the description set at the
+		// show, and what it did not from where this glyph is shown (9.6.5).
+		for _, l := range lifted {
+			if s, ok := l.stroke.resolve(shownPen[l.at]); ok {
+				pen = pen.add(s.within(shown[l.at]))
+			}
+		}
 	}
 	for i, clip := range shown {
 		cur.clip = clip
@@ -538,13 +554,27 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 //
 // The machine's clip starts unbounded, so a nested Type 3 glyph that paints
 // past every box reports a box that is not finite ([clippedInkBox]).
-func type3TextBoxes(ctx context.Context, p type3Painter, ops []content.Operation) (map[int][][4]float64, bool) {
+//
+// The machine starts in the initial graphics state, so a nested glyph's
+// stroke that inherits a line parameter the description does not set is
+// bounded with the initial one. It also returns each such stroke, in glyph
+// space, by the index in ops of the operator that showed its glyph
+// ([type3Lift]), in the order the glyphs are shown, for the caller to add
+// to the description's own [type3Pen]. A glyph a form XObject shows hands up
+// none: the form's box bounds it. It returns false as well when the strokes
+// pass [maxType3LiftedStrokes].
+func type3TextBoxes(ctx context.Context, p type3Painter, ops []content.Operation) (map[int][][4]float64, []type3LiftedStroke, bool) {
 	machine := graphics.NewMachine([4]float64{math.Inf(-1), math.Inf(-1), math.Inf(1), math.Inf(1)})
 	machine.IgnoreOCVisibility = true
 	var elements []models.TextElement
 	var origins []int
-	if err := extractTextRecursive(ctx, p.doc, machine, p.resources, ops, &elements, make(map[int]bool), 0, nil, &origins, nil, nil, nil); err != nil {
-		return nil, false
+	lift := &type3Lift{}
+	inner := context.WithValue(ctx, type3LiftKey{}, lift)
+	if err := extractTextRecursive(inner, p.doc, machine, p.resources, ops, &elements, make(map[int]bool), 0, nil, &origins, nil, nil, nil); err != nil {
+		return nil, nil, false
+	}
+	if lift.overflow {
+		return nil, nil, false
 	}
 	boxes := make(map[int][][4]float64)
 	for k, el := range elements {
@@ -553,7 +583,14 @@ func type3TextBoxes(ctx context.Context, p type3Painter, ops []content.Operation
 		}
 		boxes[origins[k]] = append(boxes[origins[k]], el.InkBox)
 	}
-	return boxes, true
+	var lifted []type3LiftedStroke
+	for _, l := range lift.strokes {
+		if l.at >= len(origins) || origins[l.at] < 0 {
+			continue
+		}
+		lifted = append(lifted, type3LiftedStroke{at: origins[l.at], stroke: l.stroke})
+	}
+	return boxes, lifted, true
 }
 
 // finiteBox reports whether every coordinate of box is a finite number.

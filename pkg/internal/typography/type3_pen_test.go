@@ -94,3 +94,46 @@ func TestType3PenStrokeMergeBoundsBoth(t *testing.T) {
 		}
 	}
 }
+
+// TestType3PenStrokeResolve checks a nested glyph's stroke takes each
+// parameter it inherits that the showing description sets, at least as far
+// as its own merged value reaches, and keeps inheriting the others from
+// where the outer glyph is shown (ISO 32000-1, 9.6.5).
+func TestType3PenStrokeResolve(t *testing.T) {
+	t.Parallel()
+	s := newType3PenStroke([4]float64{0, 0, 10, 0}, nil, type3PenState{lc: 2, set: penCap}, [6]float64{1, 0, 0, 1, 0, 0}, false)
+	if _, ok := s.resolve(type3PenState{lw: 3, lj: 1, ml: 4, set: penAll}); ok {
+		t.Fatal("a stroke whose every inherited parameter the description sets still inherits")
+	}
+	got, ok := s.resolve(type3PenState{lw: 6, set: penWidth})
+	if !ok || got.inherit != penJoin|penMiter || got.lw != 6 || got.lc != 2 {
+		t.Fatalf("got %+v, %v: want the width 6 set, the cap kept, join and miter limit inherited", got, ok)
+	}
+	page := graphics.State{LineWidth: 4000, LineJoin: 1, MiterLimit: initialMiterLimit}
+	if r := got.reach(&page); math.Abs(r-3*math.Sqrt2) > 1e-9 {
+		t.Fatalf("reach %v, want the description's half width 3 at the square cap", r)
+	}
+}
+
+// TestType3PenStrokeThrough checks a stroke carried into the space of the
+// description showing its glyph keeps its path, clip and pen in that space:
+// its boxes through the matrix, its pen stretched by it, and a matrix of
+// non-numbers carries nothing.
+func TestType3PenStrokeThrough(t *testing.T) {
+	t.Parallel()
+	s := newType3PenStroke([4]float64{0, 500, 1000, 500}, &[4]float64{0, 0, 1000, 1000}, type3PenState{}, [6]float64{1, 0, 0, 1, 0, 0}, false)
+	got, ok := s.through([6]float64{0, 2, -2, 0, 100, 0})
+	if !ok || got.box != [4]float64{-900, 0, -900, 2000} || *got.clip != [4]float64{-1900, 0, 100, 2000} || got.stretch != 2 {
+		t.Fatalf("got %+v (clip %v), %v", got, got.clip, ok)
+	}
+	if *s.clip != [4]float64{0, 0, 1000, 1000} {
+		t.Fatal("carrying the stroke changed the clip box it was carried from")
+	}
+	if _, ok := s.through([6]float64{math.NaN(), 0, 0, 1, 0, 0}); ok {
+		t.Fatal("a matrix of non-numbers carried the stroke")
+	}
+	cut := got.within(&[4]float64{0, 0, 50, 50})
+	if *cut.clip != [4]float64{0, 0, 50, 50} || *got.clip != [4]float64{-1900, 0, 100, 2000} {
+		t.Fatalf("cut clip %v, own clip %v", cut.clip, got.clip)
+	}
+}

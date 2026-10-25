@@ -82,14 +82,9 @@ func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fon
 	state := machine.Current()
 	corners, bounded := [4][2]float64{}, false
 	if font.Subtype == "Type3" {
-		if ink, ok := font.type3Ink(cid); ok {
-			if ink.unbounded {
-				scoped, ok := font.type3ScopedInk(ctx, machine.Doc, machine.Resources, cid)
-				if !ok || scoped.unbounded {
-					return clippedInkBox(state, originX, originY)
-				}
-				ink = scoped
-			}
+		if ink, ok, clipped := type3ShownInk(ctx, machine, font, cid); clipped {
+			return clippedInkBox(state, originX, originY)
+		} else if ok {
 			corners, bounded = type3TextCorners(font, ink.penBox(state)), true
 		}
 	}
@@ -124,6 +119,24 @@ func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fon
 		box = [4]float64{box[0] - r, box[1] - r, box[2] + r, box[3] + r}
 	}
 	return box
+}
+
+// type3ShownInk returns the ink, in glyph space, that bounds the Type 3 glyph
+// cid of font shown from machine: the glyph's own ([Font.type3Ink]), or,
+// when that paints past every box, its ink against the resources of the
+// stream machine shows it from ([Font.type3ScopedInk]). ok is false when the
+// font bounds no ink for the glyph, and clipped is true when no box in glyph
+// space bounds it, so it paints as far as the clip in force lets it.
+func type3ShownInk(ctx context.Context, machine *graphics.Machine, font *Font, cid int) (ink type3InkBounds, ok, clipped bool) {
+	ink, ok = font.type3Ink(cid)
+	if !ok || !ink.unbounded {
+		return ink, ok, false
+	}
+	scoped, ok := font.type3ScopedInk(ctx, machine.Doc, machine.Resources, cid)
+	if !ok || scoped.unbounded {
+		return type3InkBounds{}, false, true
+	}
+	return scoped, true, false
 }
 
 // initialMiterLimit is the miter limit of the initial graphics state (ISO
