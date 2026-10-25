@@ -300,6 +300,7 @@ one deliberately rather than diffing it against a fresh build.
 | `imageintent_2b.pdf`   | PDF/A-2b     | ICC images under the rendering intent `ri` and `/RI` set         |
 | `usebpcgroup_4.pdf`    | PDF/A-4      | Colours under /UseBlackPtComp /OFF composited in a CMYK group    |
 | `unparsedform_2b.pdf`  | PDF/A-2b     | An image a form litho cannot parse draws too, then redacted      |
+| `greytint_2b.pdf`      | PDF/A-2b     | A grey ICC profile whose table tints its greys, in four paints   |
 
 ### Must-not-fire controls
 
@@ -683,6 +684,7 @@ are covered under [Known divergences](#known-divergences).
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `gotochain_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 1    |
 | `greyintent_2b.pdf`    | 7    | 4    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
+| `greytint_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
 | `gstate_2b.pdf`        | 9    | 7    | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
@@ -9917,6 +9919,44 @@ no language, while veraPDF reads through the string and finds none. The file
 conforms at PDF/A-2b; the other cells are the identification, metadata and
 tagging rules of their parts. veraPDF 1.30.2 and litho report the same rule set
 in all thirteen cells.
+
+### `greytint_2b.pdf`
+
+An ICCBased space reads its colours through its profile (ISO 32000-1,
+8.6.5.5), and a grey profile's AToB table maps a grey sample to any PCS
+colour, not only to the neutral axis a grey tone curve keeps to (ICC.1:2010,
+F.2). litho read every grey profile along that axis: it converted a sample
+and kept the green channel for all three, in images and in colours alike, so
+a profile whose table tints its greys drew them grey where poppler draws them
+coloured. Now a grey transform that draws any sample off the axis, by more
+than a level between its channels, converts through all three channels; one
+that stays on it keeps the one-channel reading. Of the 348 grey ICC profile
+streams across all seven corpora (23 distinct), none draws a sample off the
+axis under any intent, and no image of the first 50 pages of any corpus file
+meets such a transform, so no cell moved. So this fixture paints `tint`, a
+version 2.1 grey profile over Lab whose lut8 table reads sample 0 as black,
+255 as white and the middle sample as L\* 50, a\* 30, b\* 20, on one 100 by
+200 page:
+
+| y       | x                                                                     |
+| ------- | --------------------------------------------------------------------- |
+| 110-190 | 0-100: `Im`, 4 x 4 samples, each row 0, 85, 170 and 255               |
+| 60-100  | 10-90: a fill of colour 0.5                                           |
+| 10-45   | 10-50: an axial shading from 0 to 1; 50-90: an inline image like `Im` |
+
+Samples 85 and 170 draw 112 66 59 and 203 149 140 and the fill 173 99 88 on
+poppler 26.09.0 and litho; PDFium (pypdfium2 4.30.0) and MuPDF 1.26.10
+(PyMuPDF 1.26.5) draw them within a level, the shading within four. litho drew
+them 66, 149 and 99 grey before, 3,200 pixels apart from poppler, and the
+`render` cell mismatched the page. The centred quarter's edges fall between
+`Im`'s samples and miss the shading, which a redaction refuses to cross; its
+redaction passes the pixel check, with and without the raster fallback, and
+the output renders on litho as on poppler. `convert-colors` read the profile
+through its whole table before and writes the same bytes.
+
+The file conforms at PDF/A-2b. The other cells are the identification,
+metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
+same rule set in all thirteen cells.
 
 ## Scope
 
