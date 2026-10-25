@@ -306,6 +306,7 @@ one deliberately rather than diffing it against a fresh build.
 | `jpxintent_2b.pdf`     | PDF/A-2b     | A JPX image in the colour of its data under the state's intent   |
 | `greygroup_2b.pdf`     | PDF/A-2b     | Colours entering grey ICC groups through the group's profile     |
 | `tintwhite_2b.pdf`     | PDF/A-2b     | An RGB ICC profile whose white reads tinted, painted three ways  |
+| `cutcell_2b.pdf`       | PDF/A-2b     | Enlarged image samples whose cells a region's edges cut          |
 
 ### Must-not-fire controls
 
@@ -635,6 +636,7 @@ are covered under [Known divergences](#known-divergences).
 | `complex_ua2.pdf`      | 11   | 8    | 16   | 12   | 12   | 16   | 12   | 12   | 8   | 8    | 9    | 18\* | 18\* |
 | `contentstream_4.pdf`  | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 6   | 6    | 7    | 8    | 7    |
 | `csnames_2b.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 5    | 6    |
+| `cutcell_2b.pdf`       | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `danglingstr_ua1.pdf`  | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 3   | 3    | 4    | 3    | 5    |
 | `defaultbox_2b.pdf`    | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 4   | 4    | 5    | 7    | 6    |
 | `defaultcs_4.pdf`      | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 10   | 7    |
@@ -10205,6 +10207,40 @@ bytes as before.
 
 The file conforms at PDF/A-2b: the space is ICCBased throughout. veraPDF
 1.30.2 and litho report the same rule set in all thirteen cells.
+
+### `cutcell_2b.pdf`
+
+An image's sample paints the whole cell of the unit square it maps onto (ISO
+32000-1, 8.9.4), and a viewer that does not interpolate fills each device
+pixel whose centre the cell covers with its colour. Redaction blanked only the
+samples whose centres a region holds, so a sample whose centre lay just
+outside kept painting the part of its cell inside the region, up to half a
+sample deep: the pixel check refused ("pixels inside the region still paint
+removed content"), and with the check off the picture stayed in the region.
+Now a region that holds a sample centre also clears every sample whose cell it
+cuts, as MuPDF's redaction rounds a region out to whole samples, and one that
+holds none still refuses. The corpora's images are fine enough that the part
+stays inside the check's two-pixel band: of the redact-render scenarios, five
+on this corpus clear more samples now (the band of `blankblack_2b`,
+`imagecolour_2b` and `jpx_2b`, the quarter of `iccalternate_2b` and page 2 of
+`imageintent_2b`), each counted in `image_spill`, and no scenario elsewhere moves. So this fixture
+draws one 12 x 10 DeviceGray image, not interpolated, a checker of white and
+light grey, 360 points square at (19, 2.8) on a 400 by 400 page: 30 points a
+sample across and 36 down. The centred quarter's edges cut the cells of
+columns 2 and 9 and rows 1 and 7 from the top between 4 and 8.8 points from
+their centres, on their outer side, each leaving a strip 9 to 11 points deep
+inside the region.
+
+Before, the quarter's redaction left 6,016 pixels of picture inside the region
+on litho's half of the `redact-render` cell, which failed the file, and the
+pixel check refused it, with and without the raster fallback. Now it clears
+the cut samples, 18,864 pixels outside the region by both renderers, all
+`image_spill`, and passes; the band, which lies inside the cells of row 4,
+blanks that row as before. The page renders on litho as on poppler 26.09.0.
+
+The RGB output intent covers DeviceGray, so the file is conforming at PDF/A-2b.
+The other cells are the identification, metadata and tagging rules of their
+parts. veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
 
 ## Scope
 
