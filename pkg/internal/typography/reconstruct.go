@@ -194,13 +194,14 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		// Compute adaptive space threshold from the gap histogram.
 		spaceThreshold := computeSpaceThreshold(ln.elems, indices)
 		hasMarks := lineHasNonspacingMark(ln.elems)
+		rise := curveRise(ln.elems)
 
 		// Bidi reorder: a line that shows right-to-left text in visual
 		// order is read back in logical order, with the word gaps read in
 		// visual order beside it ([reorderBidiIndices]).
 		indices, reordered := reorderBidiIndices(ln.elems, indices, func(left, right int) bool {
 			prev, el := ln.elems[left], ln.elems[right]
-			return shouldInsertSpace(prev, computeLineGap(prev, el), wordSpaceThreshold(ln.elems, lineFonts, left, right, spaceThreshold), prev.Chunk == el.Chunk && el.Chunk != 0)
+			return shouldInsertSpace(prev, wordGap(prev, el, rise), wordSpaceThreshold(ln.elems, lineFonts, left, right, spaceThreshold), prev.Chunk == el.Chunk && el.Chunk != 0)
 		})
 		if reordered {
 			writeReorderedLine(&sb, ln.elems, indices)
@@ -268,7 +269,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 				// the next character rather than let the glyph swallow it.
 				if pendingSpace == "" && prevIdx >= 0 {
 					if prev := ln.elems[prevIdx]; !isSpaceGlyph(prev.Text) &&
-						shouldInsertSpace(prev, computeLineGap(prev, el), wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), prev.Chunk == el.Chunk && el.Chunk != 0) {
+						shouldInsertSpace(prev, wordGap(prev, el, rise), wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), prev.Chunk == el.Chunk && el.Chunk != 0) {
 						pendingSpace = " "
 					}
 				}
@@ -341,10 +342,10 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					}
 				case !advances(prev) && advAt >= 0 && advAt != base+prevIdx:
 					adv := elements[advAt]
-					if shouldInsertSpace(adv, computeLineGap(adv, el)-marks.drift(advAt, base+idx), wordSpaceThreshold(elements, fonts, advAt, base+idx, spaceThreshold), adv.Chunk == el.Chunk && el.Chunk != 0) {
+					if shouldInsertSpace(adv, wordGap(adv, el, rise)-marks.drift(advAt, base+idx), wordSpaceThreshold(elements, fonts, advAt, base+idx, spaceThreshold), adv.Chunk == el.Chunk && el.Chunk != 0) {
 						sb.WriteString(" ")
 					}
-				case shouldInsertSpace(prev, gap-marks.drift(base+prevIdx, base+idx), wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
+				case shouldInsertSpace(prev, gap-curveClosing(prev, el, rise)-marks.drift(base+prevIdx, base+idx), wordSpaceThreshold(ln.elems, lineFonts, prevIdx, idx, spaceThreshold), sameChunk):
 					sb.WriteString(" ")
 				}
 			}
@@ -1668,6 +1669,144 @@ func computeLineGap(prev, curr models.TextElement) float64 {
 		return delta - prev.Width
 	}
 	return delta - 0.5*curr.FontSize
+}
+
+// glyphBodyRatio is the highest a line's [curveRise] is read, as a fraction
+// of the font size: about the x-height of a Latin face, where lowercase
+// letters, the bulk of a word, end. A path above it would run over the
+// glyphs, not along them. ISO 32000-1, 14.8.2.5 leaves word breaks to the
+// consumer, so the value is a heuristic, not a spec value.
+const glyphBodyRatio = 0.5
+
+// maxCurveTurn is the largest turn, in radians, from one glyph's baseline to
+// the next one's that [curveTurn] reads as text following a curve. A glyph
+// turned further from the one before it is not set along the same path.
+const maxCurveTurn = math.Pi / 2
+
+// curveTurn returns the turn, in radians, from the baseline of prev to that
+// of curr toward the side the glyphs rise to, read the short way round, and
+// whether the two can be set along one curve at all. Glyphs rise to the left
+// of their advance as the rendering matrix of ISO 32000-1, 9.4.4 sets them
+// upright, or to its right when they ink that side ([models.TextElement]
+// InkRight), so a turn to the right is negative there and a turn to the left
+// positive. Vertical writing advances down a column, not along a curve, and
+// two glyphs inked on opposite sides of their advance are not set along one
+// path.
+func curveTurn(prev, curr models.TextElement) (float64, bool) {
+	if prev.Vertical || curr.Vertical || prev.InkRight != curr.InkRight {
+		return 0, false
+	}
+	turn := math.Remainder(curr.Angle-prev.Angle, 2*math.Pi)
+	if prev.InkRight {
+		turn = -turn
+	}
+	return turn, true
+}
+
+// curveRise returns how far above the baseline, as a fraction of the font
+// size, lies the path the glyphs of a line follow when they are set one by
+// one along a curve, each by a text matrix of its own turned to the curve
+// (ISO 32000-1, 9.4.2), and 0 for any other line. A producer spaces such
+// glyphs along that path: when the path turns toward the glyphs' tops, the
+// gap between the end of one glyph's advance and the origin of the next
+// opens like a wedge, wide at the baseline and closed up at the path, so the
+// baseline gap reads a space inside a word ("Fa r m"). Raised by h along
+// each glyph's own upward normal, two glyphs whose baselines turn by δ close
+// in by 2h·sin(δ/2) along the mean direction of the pair. Each pair of
+// glyphs that turns toward their tops, by more than [curveTurnFloor] and at
+// most [maxCurveTurn], and keeps a gap at the baseline (a kerned pair keeps
+// none and tells nothing) therefore meets at the height that closes its gap.
+// The path lies no higher than the lowest such height: a pair of letters set
+// with no tracking reaches it, a word space, far wider, does not. It is read
+// from [minCurvePairs] such pairs at least and at most at [glyphBodyRatio].
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400902.pdf pages 2, 3 and 6 to 8: chart labels set
+//     along a path about 0.43 em above their baseline read "SB W storage in
+//     Tank Fa r m", "M i xed transuranic w a ste/" and "Vitrificatio n"; the
+//     baseline gaps inside those words reach 2.9 points at 9 points over a
+//     turn of 55°.
+//   - govdocs thread_200_200196.pdf page 6: "Verkin Creek" follows a river
+//     along a path on its baseline, its letters 0.1 point apart whatever the
+//     turn, and the 31.8° turn at its word space still reads a space. Read
+//     at a fixed height of half an em, that space vanished.
+//   - pdfjs issue20513.pdf: "One-Stop" is set 3.1° off the line of "YOUR"
+//     before it, a turn of one word, not a curve; it reads no path, so the
+//     word space between them stays.
+//   - All corpora: default ExtractText changes on 16 pages of 8 govdocs
+//     files (thread_000_000029, thread_000_000152, thread_100_100113,
+//     thread_300_300345, thread_400_400036, thread_400_400230,
+//     thread_400_400730, thread_400_400902), and the reading with every
+//     glyph also on pdfjs issue11451.pdf ("w w w.tra c k er-s oft w are.c o
+//     m" to "www.tracker-software.com"); every change removes a space inside
+//     a curved map or chart label ("Biloxi", "Pascagoula", "Escatawpa River",
+//     "Renton Issaquah Rd"). poppler 26.09 reads 36 of the 51 changed
+//     stretches word for word as litho now does and 4 in part; it splits or
+//     drops the other 11 labels too. No other character moves, and no page
+//     of the text cells changes its verdict; facturx, litho, pdf20, pdfcpu
+//     and verapdf do not move.
+func curveRise(elems []models.TextElement) float64 {
+	rise := math.Inf(1)
+	pairs := 0
+	prev := -1
+	for i, el := range elems {
+		if el.Text == "" || carriesNoPosition(el.Text) || !advances(el) {
+			continue
+		}
+		if prev >= 0 {
+			p := elems[prev]
+			turn, ok := curveTurn(p, el)
+			size := math.Abs(p.FontSize)
+			if gap := computeLineGap(p, el); ok && turn > curveTurnFloor() && turn <= maxCurveTurn && gap > 0 && size > 0 {
+				rise = min(rise, gap/(2*size*math.Sin(turn/2)))
+				pairs++
+			}
+		}
+		prev = i
+	}
+	if pairs < minCurvePairs {
+		return 0
+	}
+	return min(rise, glyphBodyRatio)
+}
+
+// minCurvePairs is how many turning pairs of glyphs [curveRise] reads a
+// path's height from: one pair cannot tell a letter pair from a word gap.
+const minCurvePairs = 2
+
+// curveTurnFloor returns the smallest turn, in radians, from which
+// [curveRise] reads a path's height: the turn whose closing over the whole
+// of [glyphBodyRatio] is half the [trackingSpaceFactor] bound. A pair turned
+// by less closes its gap by too little to measure the height against the
+// rounding of the glyph positions a content stream sets.
+func curveTurnFloor() float64 {
+	return 2 * math.Asin(trackingSpaceFactor/(4*glyphBodyRatio))
+}
+
+// curveClosing returns how much nearer each other prev and curr come at rise,
+// the height of the path their line follows ([curveRise]) as a fraction of
+// the size, than at the baseline: the amount a word gap between the two is
+// read narrower. Glyphs set in one direction, any straight line of text,
+// close in by nothing, and so do two whose baselines differ by no more than
+// the rounding of a rotation matrix ([sameDirectionTolerance]) or that turn
+// toward their feet, where the baseline gap is the narrowest.
+func curveClosing(prev, curr models.TextElement, rise float64) float64 {
+	if rise <= 0 {
+		return 0
+	}
+	turn, ok := curveTurn(prev, curr)
+	if !ok || turn <= sameDirectionTolerance || turn > maxCurveTurn {
+		return 0
+	}
+	return 2 * rise * math.Abs(prev.FontSize) * math.Sin(turn/2)
+}
+
+// wordGap returns the gap [computeLineGap] measures from prev to curr, less
+// how far the two close in along the path their line follows
+// ([curveClosing]): the gap a word space is read from.
+func wordGap(prev, curr models.TextElement, rise float64) float64 {
+	return computeLineGap(prev, curr) - curveClosing(prev, curr, rise)
 }
 
 // computeSpaceThreshold returns the inter-glyph gap above which a real
