@@ -10,28 +10,34 @@ import (
 
 // rewriteStreamContent converts the content of a form, pattern or glyph
 // stream painted with the resources res and returns the stream to write in
-// its place. It returns false when nothing in it converts. id names the
-// stream in overprint judgements, "" for one not judged on its own
-// ([contentRewriter.id]).
-func (s *session) rewriteStreamContent(ctx context.Context, stream ast.PdfStream, res ast.PdfDict, id string) (ast.PdfStream, bool, error) {
+// its place, with the copies it paints that res lacks
+// ([contentRewriter.paintVariant]) when ownResources says the stream's
+// resources are its own, to which they can be added. It returns false when
+// nothing in it converts. id names the stream in overprint judgements, "" for
+// one not judged on its own ([contentRewriter.id]).
+func (s *session) rewriteStreamContent(ctx context.Context, stream ast.PdfStream, res ast.PdfDict, id string, ownResources bool) (ast.PdfStream, resourceAdds, bool, error) {
 	data, err := s.doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return ast.PdfStream{}, false, fmt.Errorf("decoding content: %w", err)
+		return ast.PdfStream{}, nil, false, fmt.Errorf("decoding content: %w", err)
 	}
 	cr := s.newContentRewriter(ctx, res)
 	cr.id = id
+	if ownResources && res != nil {
+		cr.adds = resourceAdds{}
+	}
 	out, changed, err := cr.rewrite(ctx, data)
 	if err != nil || !changed {
-		return ast.PdfStream{}, false, err
+		return ast.PdfStream{}, nil, false, err
 	}
 	s.report.Operators += cr.operators
 	s.report.KOnlyBlack += cr.kOnly
 	s.report.Streams++
+	s.countBlackPoint(cr)
 	ns, err := newStream(stream.Dict, out)
 	if err != nil {
-		return ast.PdfStream{}, false, err
+		return ast.PdfStream{}, nil, false, err
 	}
-	return ns, true, nil
+	return ns, cr.adds, true, nil
 }
 
 // checkDepth refuses a form nesting past the document's budget
@@ -80,7 +86,7 @@ func (s *session) rewritePainting(ctx context.Context, stream ast.PdfStream, par
 		}
 		res = r
 	}
-	out, changed, err := s.rewriteStreamContent(ctx, stream, res, id)
+	out, adds, changed, err := s.rewriteStreamContent(ctx, stream, res, id, resObj != nil)
 	if err != nil {
 		return nil, false, err
 	}
@@ -100,6 +106,17 @@ func (s *session) rewritePainting(ctx context.Context, stream ast.PdfStream, par
 		}
 	} else if changed && !s.t.device() {
 		newDict["Resources"], dictChanged = ast.PdfDict{"ColorSpace": ast.PdfDict{s.targetName(nil): s.t.ColorSpace}}, true
+	}
+	if len(adds) > 0 {
+		base := resObj
+		if dictChanged {
+			base = newDict["Resources"]
+		}
+		merged, err := s.withVariants(ctx, base, adds)
+		if err != nil {
+			return nil, false, fmt.Errorf("adding the copies the stream paints to its resources: %w", err)
+		}
+		newDict["Resources"], dictChanged = merged, true
 	}
 	if group {
 		v, ch, err := s.rewriteGroup(ctx, dict["Group"], false)
@@ -181,7 +198,9 @@ func (s *session) rewriteType3(ctx context.Context, obj ast.PdfObject, parent as
 				// A glyph's overprinting is judged where the text shows it,
 				// under the state it inherits there
 				// ([contentRewriter.judgeShow]).
-				out, changed, err := s.rewriteStreamContent(ctx, stream, res, "")
+				// A glyph has no resources of its own (9.6.5): the font's
+				// serve every glyph, so no copy is named in one.
+				out, _, changed, err := s.rewriteStreamContent(ctx, stream, res, "", false)
 				if err != nil || !changed {
 					return nil, false, err
 				}

@@ -56,6 +56,9 @@ type recolorResult struct {
 	// overprintPreserved, overprintStates and overprintChanged are what
 	// [ColorReport] says of overprinting paintings.
 	overprintPreserved, overprintStates, overprintChanged int
+	// blackPoint is what [ColorReport] says of the graphics states'
+	// /UseBlackPtComp.
+	blackPoint recolor.BlackPointReport
 }
 
 // recolorEngine rewrites the colours of every page of doc, and of everything
@@ -129,6 +132,7 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		overprintPreserved: report.Overprint.Preserved,
 		overprintStates:    report.Overprint.States,
 		overprintChanged:   report.Overprint.Changed + report.Overprint.FormsUnread,
+		blackPoint:         report.BlackPoint,
 	}, nil
 }
 

@@ -52,6 +52,8 @@ type Report struct {
 	// another table than the one for the rendering intent, in the order the
 	// walk built their transforms.
 	IntentFallbacks []IntentFallback
+	// BlackPoint says what the graphics states' /UseBlackPtComp changed.
+	BlackPoint BlackPointReport
 }
 
 // Skip is an object recolouring left as it was.
@@ -246,7 +248,7 @@ func (s *session) rewritePage(ctx context.Context, page *document.Page) error {
 		res, resObj = nil, nil
 	}
 
-	contentsChanged, newContents, err := s.rewritePageContents(ctx, dict["Contents"], res)
+	contentsChanged, newContents, adds, err := s.rewritePageContents(ctx, dict["Contents"], res)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -266,6 +268,24 @@ func (s *session) rewritePage(ctx context.Context, page *document.Page) error {
 		out["Resources"], changed = v, true
 	case resObj == nil && contentsChanged && !s.t.device():
 		out["Resources"], changed = ast.PdfDict{"ColorSpace": ast.PdfDict{s.targetName(nil): s.t.ColorSpace}}, true
+	}
+	if len(adds) > 0 {
+		// The page paints copies its resources lack: it gets resources of
+		// its own, which a page states in place of those it would inherit
+		// (ISO 32000-1, 7.7.3.4), and every other user of the shared ones
+		// keeps them as they are.
+		base := resObj
+		if ch {
+			base = v
+		}
+		merged, err := s.withVariants(ctx, base, adds)
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			return fmt.Errorf("adding the copies the page paints to its resources: %w", err)
+		}
+		out["Resources"], changed = merged, true
 	}
 
 	v, ch, err = s.rewriteGroup(ctx, dict["Group"], true)
@@ -300,20 +320,31 @@ func (s *session) rewritePage(ctx context.Context, page *document.Page) error {
 // shares, which that page converted, is read for the colour state it leaves
 // and not converted again. It reports whether the content
 // changed, and the new /Contents when the page dictionary must name another.
-func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, res ast.PdfDict) (bool, ast.PdfObject, error) {
+func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, res ast.PdfDict) (bool, ast.PdfObject, resourceAdds, error) {
+	changed, contents, cr, err := s.rewriteContentsWith(ctx, obj, res)
+	if err != nil || cr == nil {
+		return changed, contents, nil, err
+	}
+	s.countBlackPoint(cr)
+	return changed, contents, cr.adds, nil
+}
+
+// rewriteContentsWith is [session.rewritePageContents], returning the
+// rewriter that converted the content, nil when nothing was read.
+func (s *session) rewriteContentsWith(ctx context.Context, obj ast.PdfObject, res ast.PdfDict) (bool, ast.PdfObject, *contentRewriter, error) {
 	if obj == nil {
-		return false, nil, nil
+		return false, nil, nil, nil
 	}
 	var list []ast.PdfObject
 	resolved, err := s.resolve(ctx, obj)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return false, nil, ctxErr
+			return false, nil, nil, ctxErr
 		}
 		// A /Contents naming an object the file lacks is null (ISO
 		// 32000-1, 7.3.10): the page paints nothing of its own.
 		s.doc.Logger.Debug("recolor: /Contents reads as null", slog.Any("err", err))
-		return false, nil, nil
+		return false, nil, nil, nil
 	}
 	switch v := resolved.(type) {
 	case ast.PdfArray:
@@ -321,7 +352,7 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 	case ast.PdfStream:
 		list = []ast.PdfObject{obj}
 	default:
-		return false, nil, nil
+		return false, nil, nil, nil
 	}
 	var streams []pageStream
 	var joined bytes.Buffer
@@ -339,7 +370,7 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 		el, err := s.resolve(ctx, o)
 		if _, isNull := el.(ast.PdfNull); err != nil || el == nil || isNull {
 			if ctxErr := ctx.Err(); ctxErr != nil {
-				return false, nil, ctxErr
+				return false, nil, nil, ctxErr
 			}
 			// A reference to an object the file lacks is null (ISO
 			// 32000-1, 7.3.10): the element paints nothing, as the
@@ -349,23 +380,23 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 		}
 		st, ok := el.(ast.PdfStream)
 		if !ok {
-			return false, nil, fmt.Errorf("%w: a /Contents element that is a %T", ErrUnsupportedSpace, el)
+			return false, nil, nil, fmt.Errorf("%w: a /Contents element that is a %T", ErrUnsupportedSpace, el)
 		}
 		data, err := s.doc.DecodeStream(ctx, st)
 		if err != nil {
-			return false, nil, fmt.Errorf("decoding content: %w", err)
+			return false, nil, nil, fmt.Errorf("decoding content: %w", err)
 		}
 		streams = append(streams, pageStream{obj: o, stream: st, data: data})
 		joined.Write(data)
 		joined.WriteByte('\n')
 	}
 	if len(streams) == 0 {
-		return false, nil, nil
+		return false, nil, nil, nil
 	}
 	perStream := true
 	whole, _, err := parseContent(ctx, joined.Bytes())
 	if err != nil {
-		return false, nil, err
+		return false, nil, nil, err
 	}
 	var parts []content.Operation
 	for _, st := range streams {
@@ -379,21 +410,24 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 	perStream = perStream && sameOperations(parts, whole)
 
 	cr := s.newContentRewriter(ctx, res)
+	if res != nil {
+		cr.adds = resourceAdds{}
+	}
 	if shared && (!perStream || direct) {
 		// A stream another page already showed was converted with that
 		// page's resources and state, and is not converted twice; the
 		// rest can be converted beside it only stream by stream.
-		return false, nil, fmt.Errorf("%w: a content stream another page shows, in a /Contents that reads only as one stream", ErrUnsupportedSpace)
+		return false, nil, nil, fmt.Errorf("%w: a content stream another page shows, in a /Contents that reads only as one stream", ErrUnsupportedSpace)
 	}
 	if !perStream || direct {
 		cr.id = s.streamID("contents", streams[0].obj)
 		out, changed, err := cr.rewrite(ctx, joined.Bytes())
 		if err != nil || !changed {
-			return false, nil, err
+			return false, nil, nil, err
 		}
 		ns, err := newStream(streams[0].stream.Dict, out)
 		if err != nil {
-			return false, nil, err
+			return false, nil, nil, err
 		}
 		for _, st := range streams {
 			if ref, ok := st.obj.(ast.PdfIndirectRef); ok {
@@ -403,7 +437,7 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 		s.report.Operators += cr.operators
 		s.report.KOnlyBlack += cr.kOnly
 		s.report.Streams++
-		return true, s.alloc.Alloc(ns), nil
+		return true, s.alloc.Alloc(ns), cr, nil
 	}
 	type pending struct {
 		ref ast.PdfIndirectRef
@@ -417,22 +451,30 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 			// Converted with another page; read for the colour state it
 			// leaves the next stream in.
 			if err := cr.advance(ctx, st.data); err != nil {
-				return false, nil, err
+				return false, nil, nil, err
+			}
+			if cr.adds != nil {
+				// The stream paints the copies it named for the page that
+				// converted it, which this page's resources define too.
+				cr.adds.merge(s.streamVariants[st.obj.(ast.PdfIndirectRef).ObjectNum])
 			}
 			continue
 		}
 		out, changed, err := cr.rewrite(ctx, st.data)
 		if err != nil {
-			return false, nil, err
+			return false, nil, nil, err
 		}
 		if !changed {
 			continue
 		}
 		ns, err := newStream(st.stream.Dict, out)
 		if err != nil {
-			return false, nil, err
+			return false, nil, nil, err
 		}
 		writes = append(writes, pending{ref: st.obj.(ast.PdfIndirectRef), st: st.stream, out: ns})
+		if len(cr.streamAdds) > 0 {
+			s.streamVariants[st.obj.(ast.PdfIndirectRef).ObjectNum] = cr.streamAdds
+		}
 	}
 	for _, st := range streams {
 		s.seen[st.obj.(ast.PdfIndirectRef).ObjectNum] = true
@@ -443,7 +485,7 @@ func (s *session) rewritePageContents(ctx context.Context, obj ast.PdfObject, re
 	s.report.Operators += cr.operators
 	s.report.KOnlyBlack += cr.kOnly
 	s.report.Streams += len(writes)
-	return len(writes) > 0, nil, nil
+	return len(writes) > 0, nil, cr, nil
 }
 
 // rewriteAnnotations converts a page's annotations: the appearance streams

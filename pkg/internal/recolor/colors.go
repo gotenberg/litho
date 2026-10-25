@@ -45,6 +45,12 @@ func (c sessionColors) Converter(ctx context.Context, space ast.PdfObject, resou
 	return nil, fmt.Errorf("%w: a space whose colour values stay has no conversion to the target", ErrUnsupportedSpace)
 }
 
+// variantKey spells the session's current black point compensation, which
+// an image's converted colour table depends on ([Images.convertIndexed]).
+func (c sessionColors) variantKey() string {
+	return c.s.bpcKey()
+}
+
 // SpotSpace returns the Separation or DeviceN space it is given as the
 // session keeps it: its colorants and tints as they are, its alternate the
 // target and its tint transform a sampled function into it (ISO 32000-1,
@@ -53,7 +59,11 @@ func (c sessionColors) Converter(ctx context.Context, space ast.PdfObject, resou
 // array the plan holds, the same array each time. A spot colour whose
 // alternate already is the target comes back as it is.
 func (c sessionColors) SpotSpace(ctx context.Context, space ast.PdfObject, _, _ ast.PdfDict) (ast.PdfObject, error) {
-	p := c.s.planDefinition(ctx, space, nil)
+	// A kept spot colour is one space for every painting naming it,
+	// written under the option's black point compensation
+	// ([session.rewriteDefinition]).
+	var p *spacePlan
+	c.s.underBPC(c.s.opts.BlackPointCompensation, func() { p = c.s.planDefinition(ctx, space, nil) })
 	switch {
 	case p.kind == planUnknown:
 		return nil, p.err

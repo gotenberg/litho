@@ -17,6 +17,13 @@
 // connection space by the formulas of ISO 32000-1, 8.6.5. A [Converter]
 // converts one source space's colours to the target's components.
 //
+// A graphics state's /UseBlackPtComp (ISO 32000-2, Table 57) chooses the
+// black point compensation of the content colours, inline images, image
+// XObjects and shadings painted under it, where /Default leaves it to
+// [Options.BlackPointCompensation]; an image or shading painted under another
+// choice than its own conversion's is painted through a copy
+// ([BlackPointReport]).
+//
 // [Content] walks a document's pages, writing every object it changes to a
 // [writer.ObjAllocator] in place of the original, so an object several pages
 // share is converted once. The images the walk reaches convert in the same

@@ -47,22 +47,42 @@ type session struct {
 	// anonymous numbers the direct streams judged for overprint.
 	anonymous int
 	// kOnlyGray and kOnlyRGB are the plans [session.solidPlan] converts
-	// DeviceGray and DeviceRGB solid colours with, built on first use.
-	kOnlyGray, kOnlyRGB *spacePlan
+	// DeviceGray and DeviceRGB solid colours with, built on first use, the
+	// RGB one per black point compensation, since it converts through the
+	// space's profile.
+	kOnlyGray *spacePlan
+	kOnlyRGB  map[bool]*spacePlan
+	// bpc is the black point compensation the plans and transforms being
+	// built convert with: [Options.BlackPointCompensation], or what the
+	// /UseBlackPtComp of the graphics state a colour is painted under asks
+	// ([session.underBPC]).
+	bpc bool
+	// bpcCopies holds the copies of images and shadings converted under a
+	// black point compensation other than the option's
+	// ([session.blackPointCopy]), by object and compensation.
+	bpcCopies map[string]bpcCopy
+	// streamVariants holds the resources each content stream of a page's
+	// /Contents names that only a copy defines ([contentRewriter.paintVariant]),
+	// so another page showing the stream defines them too.
+	streamVariants map[int]resourceAdds
 }
 
 func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo, opts Options, report *Report) (*session, error) {
 	s := &session{
-		doc:        doc,
-		alloc:      alloc,
-		t:          t,
-		opts:       opts,
-		report:     report,
-		orig:       make(map[int]ast.PdfObject),
-		seen:       make(map[int]bool),
-		plans:      make(map[string]*spacePlan),
-		transforms: make(map[string]transformEntry),
-		overprint:  newOverprintLedger(),
+		doc:            doc,
+		alloc:          alloc,
+		t:              t,
+		opts:           opts,
+		report:         report,
+		orig:           make(map[int]ast.PdfObject),
+		seen:           make(map[int]bool),
+		plans:          make(map[string]*spacePlan),
+		transforms:     make(map[string]transformEntry),
+		overprint:      newOverprintLedger(),
+		kOnlyRGB:       make(map[bool]*spacePlan),
+		bpc:            opts.BlackPointCompensation,
+		bpcCopies:      make(map[string]bpcCopy),
+		streamVariants: make(map[int]resourceAdds),
 	}
 	cfg := ImageConfig{
 		Colors:       sessionColors{s: s},

@@ -30,13 +30,25 @@ const maxTargetNames = 1000
 // 8.6.8), as their plans, with what judging overprint reads: the colours set
 // in them, the overprint parameters (8.6.7), the text rendering mode (9.3.6)
 // and the font resource Tf selects (9.3.1), all of which q and Q save and
-// restore (8.4.2).
+// restore (8.4.2). bpc is the /UseBlackPtComp in force (ISO 32000-2, Table
+// 57), "" for /Default, and fillSet and strokeSet the operators that set the
+// colours, which a change of it writes again ([contentRewriter.applyBlackPoint]).
 type colorState struct {
 	fill, stroke           *spacePlan
 	fillComps, strokeComps []float64
 	overprint              overprintState
 	tr                     int
 	font                   ast.PdfName
+	bpc                    string
+	fillSet, strokeSet     colourSet
+}
+
+// colourSet is the operators that set a colour in force: the one selecting
+// its space, g, rg, k or cs and their stroking forms, and the sc, scn, SC or
+// SCN after it, nil when the space's initial colour is in force or the
+// space operator set the colour too.
+type colourSet struct {
+	space, colour *content.Operation
 }
 
 // contentRewriter rewrites the colour operators of the content streams that
@@ -67,11 +79,26 @@ type contentRewriter struct {
 	// Type 3 glyph's. depth is the form nesting a judgement reads.
 	id    string
 	depth int
+	// adds gathers the copies the rewrite paints that the resources lack
+	// ([contentRewriter.paintVariant]), nil for a stream whose resources no
+	// name can be added to; streamAdds those of the stream being rewritten,
+	// and aliases the names given to them.
+	adds, streamAdds resourceAdds
+	aliases          map[string]ast.PdfName
+	// bpcOps counts the colour operators converted under a black point
+	// compensation other than the option's ([BlackPointReport]), and
+	// pendingBPC those of the stream being rewritten, which count once the
+	// rewrite stands; pendingCopies counts the stream's operators that paint
+	// a copy, which are no colour operators.
+	bpcOps, pendingBPC, pendingCopies int
+	// inlineBPC counts the inline images converted under such a
+	// compensation, and pendingInlineBPC those of the stream being rewritten.
+	inlineBPC, pendingInlineBPC int
 }
 
 func (s *session) newContentRewriter(ctx context.Context, res ast.PdfDict) *contentRewriter {
 	gray := s.planDefinition(ctx, ast.PdfName(graphics.FamilyDeviceGray), res)
-	cr := &contentRewriter{s: s, res: res, state: colorState{fill: gray, stroke: gray}}
+	cr := &contentRewriter{s: s, res: res, state: colorState{fill: gray, stroke: gray}, aliases: make(map[string]ast.PdfName)}
 	if !s.t.device() {
 		spaces, _ := s.resolveDict(ctx, res["ColorSpace"])
 		cr.name = s.targetName(spaces)
@@ -126,6 +153,8 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 		return nil, false, err
 	}
 	cr.pendingImages, cr.pendingKOnly = 0, 0
+	cr.pendingBPC, cr.pendingCopies, cr.pendingInlineBPC = 0, 0, 0
+	cr.streamAdds = resourceAdds{}
 	var edits []edit
 	var want []content.Operation
 	for i, op := range ops {
@@ -174,10 +203,13 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 	if !sameOperations(got, want) {
 		return nil, false, fmt.Errorf("%w: the rewritten content reads as other operations", ErrUnsupportedSpace)
 	}
-	cr.operators += len(edits) - cr.pendingImages
+	cr.operators += len(edits) - cr.pendingImages - cr.pendingCopies
 	cr.images += cr.pendingImages
 	cr.kOnly += cr.pendingKOnly
+	cr.bpcOps += cr.pendingBPC
+	cr.inlineBPC += cr.pendingInlineBPC
 	cr.pendingImages, cr.pendingKOnly = 0, 0
+	cr.pendingBPC, cr.pendingCopies, cr.pendingInlineBPC = 0, 0, 0
 	return out.Bytes(), true, nil
 }
 
@@ -258,42 +290,50 @@ func (cr *contentRewriter) operation(ctx context.Context, index int, op content.
 			cr.state, cr.stack = cr.stack[n-1], cr.stack[:n-1]
 		}
 		return nil, false, nil
+	case "gs":
+		return cr.applyBlackPoint(ctx, op)
 	case "g", "G", "rg", "RG", "k", "K":
-		family := graphics.FamilyDeviceGray
-		switch op.Operator {
-		case "rg", "RG":
-			family = graphics.FamilyDeviceRGB
-		case "k", "K":
-			family = graphics.FamilyDeviceCMYK
-		}
 		stroke := op.Operator[0] < 'a'
-		p := s.solidPlan(s.planDefinition(ctx, ast.PdfName(family), cr.res))
+		p := cr.spacePlan(ctx, op)
 		cr.set(stroke, p)
 		cr.setComps(stroke, p, op.Operands)
-		return cr.convert(stroke, p, op.Operands)
+		cr.setOperators(stroke, colourSet{space: &op})
+		return cr.counted(cr.convert(stroke, p, op.Operands))
 	case "cs", "CS":
 		stroke := op.Operator == "CS"
 		if len(op.Operands) != 1 {
 			return nil, false, nil
 		}
-		name, ok := op.Operands[0].(ast.PdfName)
-		if !ok {
+		if _, ok := op.Operands[0].(ast.PdfName); !ok {
 			return nil, false, nil
 		}
-		p := s.solidPlan(s.planName(ctx, name, cr.res))
+		p := cr.spacePlan(ctx, op)
 		cr.set(stroke, p)
 		cr.setComps(stroke, p, nil)
+		cr.setOperators(stroke, colourSet{space: &op})
 		if !p.convertible() {
 			return nil, false, nil
 		}
-		return cr.write(stroke, p, p.initial, "")
+		return cr.counted(cr.write(stroke, p, p.initial, ""))
 	case "BI":
 		return cr.inlineImage(ctx, op)
+	case "Do":
+		return cr.paintVariant(ctx, "XObject", op)
+	case "sh":
+		return cr.paintVariant(ctx, "Shading", op)
+	case "Tj", "TJ", "'", "\"":
+		cr.showUnder(ctx)
+		return nil, false, nil
 	case "sc", "scn", "SC", "SCN":
 		stroke := op.Operator[0] == 'S'
 		p := cr.state.fill
+		set := &cr.state.fillSet
 		if stroke {
 			p = cr.state.stroke
+			set = &cr.state.strokeSet
+		}
+		if set.space != nil {
+			set.colour = &op
 		}
 		if p.kind == planPattern {
 			if p.base == nil || !p.base.convertible() || len(op.Operands) == 0 {
@@ -303,12 +343,56 @@ func (cr *contentRewriter) operation(ctx context.Context, index int, op content.
 			if !ok {
 				return nil, false, nil
 			}
-			return cr.convertPattern(stroke, s.solidPlan(p.base), op.Operands[:len(op.Operands)-1], name)
+			return cr.counted(cr.convertPattern(stroke, s.solidPlan(p.base), op.Operands[:len(op.Operands)-1], name))
 		}
 		cr.setComps(stroke, p, op.Operands)
-		return cr.convert(stroke, p, op.Operands)
+		return cr.counted(cr.convert(stroke, p, op.Operands))
 	}
 	return nil, false, nil
+}
+
+// spacePlan returns the plan of the colour space the operator op selects, g,
+// rg, k, cs or their stroking forms, as a solid colour set in it converts
+// ([session.solidPlan]), under the black point compensation in force.
+func (cr *contentRewriter) spacePlan(ctx context.Context, op content.Operation) *spacePlan {
+	s := cr.s
+	return cr.planUnder(func() *spacePlan {
+		switch op.Operator {
+		case "cs", "CS":
+			name, _ := op.Operands[0].(ast.PdfName)
+			return s.solidPlan(s.planName(ctx, name, cr.res))
+		case "rg", "RG":
+			return s.solidPlan(s.planDefinition(ctx, ast.PdfName(graphics.FamilyDeviceRGB), cr.res))
+		case "k", "K":
+			return s.solidPlan(s.planDefinition(ctx, ast.PdfName(graphics.FamilyDeviceCMYK), cr.res))
+		}
+		return s.solidPlan(s.planDefinition(ctx, ast.PdfName(graphics.FamilyDeviceGray), cr.res))
+	})
+}
+
+// setOperators records the operators that set the fill or stroke colour.
+func (cr *contentRewriter) setOperators(stroke bool, set colourSet) {
+	if stroke {
+		cr.state.strokeSet = set
+	} else {
+		cr.state.fillSet = set
+	}
+}
+
+// showUnder counts a text showing operator showing a Type 3 font under a
+// black point compensation other than the option's: its glyph descriptions
+// inherit the state (ISO 32000-1, 9.6.5) but convert once, under the
+// option's.
+func (cr *contentRewriter) showUnder(ctx context.Context) {
+	if _, over := cr.overridden(); !over || cr.dry {
+		return
+	}
+	s := cr.s
+	fonts, _ := s.resolveDict(ctx, cr.res["Font"])
+	font, _ := s.resolveDict(ctx, fonts[cr.state.font])
+	if sub, _ := s.resolveName(ctx, font["Subtype"]); sub == "Type3" {
+		s.report.BlackPoint.Unhonoured++
+	}
 }
 
 // inlineImage converts an inline image (ISO 32000-1, 8.9.7) through the
@@ -330,7 +414,14 @@ func (cr *contentRewriter) inlineImage(ctx context.Context, op content.Operation
 	if s.t.device() {
 		space = s.t.spaceObject()
 	}
-	out, outData, outcome, err := s.images.ConvertInlineIn(ctx, dict, []byte(data), cr.res, nil, space)
+	var out ast.PdfDict
+	var outData []byte
+	var outcome ImageOutcome
+	var err error
+	on, over := cr.overridden()
+	s.underBPC(on, func() {
+		out, outData, outcome, err = s.images.ConvertInlineIn(ctx, dict, []byte(data), cr.res, nil, space)
+	})
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, false, ctxErr
@@ -344,9 +435,12 @@ func (cr *contentRewriter) inlineImage(ctx context.Context, op content.Operation
 	text, err := InlineImageOperator(ctx, out, outData)
 	if err != nil {
 		s.skip(0, "inline image", err)
-		return nil, false, nil
+		return nil, false, nil //nolint:nilerr // reported in Skipped: the image is left as it was.
 	}
 	cr.pendingImages++
+	if over {
+		cr.pendingInlineBPC++
+	}
 	return text, true, nil
 }
 

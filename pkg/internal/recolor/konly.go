@@ -63,12 +63,14 @@ func (s *session) solidPlan(p *spacePlan) *spacePlan {
 		}
 		return s.kOnlyGray
 	case p.deviceRGB:
-		if s.kOnlyRGB == nil {
-			q := *p
-			q.conv, q.kOnly = kOnlyRGBBlack{next: p.conv}, true
-			s.kOnlyRGB = &q
+		q, ok := s.kOnlyRGB[s.bpc]
+		if !ok {
+			c := *p
+			c.conv, c.kOnly = kOnlyRGBBlack{next: p.conv}, true
+			q = &c
+			s.kOnlyRGB[s.bpc] = q
 		}
-		return s.kOnlyRGB
+		return q
 	}
 	return p
 }

@@ -43,6 +43,13 @@ type convertColorsResult struct {
 	OverprintPreserved int `json:"overprintPreserved,omitempty"`
 	OverprintStates    int `json:"overprintStates,omitempty"`
 	OverprintChanged   int `json:"overprintChanged,omitempty"`
+	// BlackPointOperators, BlackPointInlineImages, BlackPointCopies and
+	// BlackPointUnhonoured are [pdf.ColorReport]'s counts of what the
+	// graphics states' /UseBlackPtComp changed.
+	BlackPointOperators    int `json:"blackPointOperators,omitempty"`
+	BlackPointInlineImages int `json:"blackPointInlineImages,omitempty"`
+	BlackPointCopies       int `json:"blackPointCopies,omitempty"`
+	BlackPointUnhonoured   int `json:"blackPointUnhonoured,omitempty"`
 }
 
 // intentFallback is one [pdf.IntentFallback] in the JSON report.
@@ -87,7 +94,7 @@ func registerConvertColorsFlags(fs *flag.FlagSet) *convertColorsFlags {
 	fs.StringVar(&f.profile, "profile", "", "ICC profile of --target icc")
 	fs.StringVar(&f.cmykProfile, "cmyk-profile", "", "ICC profile of --target cmyk, and the one DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
 	fs.StringVar(&f.intent, "intent", "RelativeColorimetric", "Rendering intent: RelativeColorimetric, Perceptual, Saturation or AbsoluteColorimetric")
-	fs.BoolVar(&f.bpc, "bpc", false, "Apply black point compensation")
+	fs.BoolVar(&f.bpc, "bpc", false, "Apply black point compensation where no graphics state's /UseBlackPtComp chooses")
 	fs.BoolVar(&f.convertSpots, "convert-spots", false, "Convert spot colours (Separation, DeviceN) to process colour instead of keeping them")
 	fs.BoolVar(&f.kOnlyBlack, "k-only-black", false, "Under a CMYK target, convert DeviceGray colours and DeviceRGB black to the black ink alone instead of a four-colour black (images and shadings excepted)")
 	fs.BoolVar(&f.noOutputIntent, "no-output-intent", false, "Leave the output intents as they are instead of making the target the output intent")
@@ -245,6 +252,11 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 		OverprintPreserved:    report.OverprintPreserved,
 		OverprintStates:       report.OverprintStates,
 		OverprintChanged:      report.OverprintChanged,
+
+		BlackPointOperators:    report.BlackPointOperators,
+		BlackPointInlineImages: report.BlackPointInlineImages,
+		BlackPointCopies:       report.BlackPointCopies,
+		BlackPointUnhonoured:   report.BlackPointUnhonoured,
 	}
 	for _, fb := range report.IntentFallbacks {
 		result.IntentFallbacks = append(result.IntentFallbacks, intentFallback(fb))
@@ -292,6 +304,13 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 	}
 	if result.OverprintChanged > 0 {
 		fmt.Fprintf(stdout, "Warning: %d overprinting painting(s) print otherwise on a device that overprints\n", result.OverprintChanged)
+	}
+	if n := result.BlackPointOperators + result.BlackPointInlineImages + result.BlackPointCopies; n > 0 {
+		fmt.Fprintf(stdout, "Followed /UseBlackPtComp: %d colour operator(s), %d inline image(s) and %d image or shading copy(ies) converted under the graphics state's black point compensation\n",
+			result.BlackPointOperators, result.BlackPointInlineImages, result.BlackPointCopies)
+	}
+	if result.BlackPointUnhonoured > 0 {
+		fmt.Fprintf(stdout, "Warning: %d painting(s) under a /UseBlackPtComp converted with the --bpc choice instead\n", result.BlackPointUnhonoured)
 	}
 	return exitOK
 }

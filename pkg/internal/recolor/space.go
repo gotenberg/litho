@@ -127,8 +127,9 @@ func (s *session) planDefinition(ctx context.Context, def ast.PdfObject, res ast
 	return p
 }
 
-// planKey spells what a plan depends on: the definition and the default
-// spaces that may stand in for it.
+// planKey spells what a plan depends on: the definition, the default spaces
+// that may stand in for it, and a black point compensation other than the
+// option's.
 func (s *session) planKey(ctx context.Context, def ast.PdfObject, defaults ast.PdfDict) (string, bool) {
 	var sb strings.Builder
 	resolved, _ := s.resolve(ctx, def)
@@ -140,6 +141,7 @@ func (s *session) planKey(ctx context.Context, def ast.PdfObject, defaults ast.P
 			fmt.Fprintf(&sb, "|%s=%v", name, d)
 		}
 	}
+	sb.WriteString(s.bpcKey())
 	return sb.String(), sb.Len() <= maxPlanKeyBytes
 }
 
@@ -295,14 +297,14 @@ func (s *session) planEndpoint(end Endpoint, pre func(in, out []float64), initia
 }
 
 // transform returns the engine's transform from end to the target, built once
-// per endpoint.
+// per endpoint and black point compensation.
 func (s *session) transform(end Endpoint) (Converter, error) {
 	sum := sha256.Sum256(end.Profile)
-	key := end.Space + string(sum[:])
+	key := end.Space + string(sum[:]) + s.bpcKey()
 	if c, ok := s.transforms[key]; ok {
 		return c.conv, c.err
 	}
-	conv, err := s.opts.engine().Transform(end, s.t.end, s.opts)
+	conv, err := s.opts.engine().Transform(end, s.t.end, s.convOptions())
 	if err != nil {
 		err = fmt.Errorf("building the %q transform: %w", end.Space, err)
 	} else {

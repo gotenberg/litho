@@ -26,90 +26,105 @@ func (s *session) rewriteShading(ctx context.Context, obj ast.PdfObject) (ast.Pd
 		return nil, false, nil
 	}
 	return s.edit(ctx, obj, "shading", func(resolved ast.PdfObject) (ast.PdfObject, bool, error) {
-		var dict ast.PdfDict
-		stream, isStream := resolved.(ast.PdfStream)
-		if isStream {
-			dict = stream.Dict
-		} else if d, ok := resolved.(ast.PdfDict); ok {
-			dict = d
-		} else {
-			return nil, false, fmt.Errorf("%w: shading is %T", ErrUnsupportedSpace, resolved)
-		}
-		p := s.planDefinition(ctx, dict["ColorSpace"], nil)
-		out := maps.Clone(dict)
-		switch p.kind {
-		case planIdentity:
-			return nil, false, nil
-		case planKeep:
-			cs, ch, err := s.rewriteDefinition(ctx, dict["ColorSpace"])
-			if err != nil || !ch {
-				return nil, false, err
-			}
-			out["ColorSpace"] = cs
-			return shadingOut(out, stream, isStream), true, nil
-		case planConvert:
-		case planPattern, planUnknown:
-			// 8.7.4.5, Table 78: a shading's space is no Pattern space.
-			return nil, false, fmt.Errorf("%w: shading colour space: %v", ErrUnsupportedSpace, p.err)
-		}
-		out["ColorSpace"] = s.t.spaceObject()
-		if bg, ok := s.numbers(ctx, dict["Background"]); ok && len(bg) == p.n {
-			conv := make([]float64, s.t.n)
-			p.conv.Convert(bg, conv)
-			out["Background"] = componentArray(conv)
-		}
-		kind, err := document.ResolveInt(ctx, s.doc, dict["ShadingType"])
+		out, converted, err := s.convertShading(ctx, resolved)
 		if err != nil {
-			return nil, false, fmt.Errorf("%w: /ShadingType: %w", ErrUnsupportedSpace, err)
+			return nil, false, err
 		}
-		var data []byte
-		switch {
-		case dict["Function"] != nil:
-			domain := []float64{0, 1}
-			switch {
-			case kind == 1:
-				domain = []float64{0, 1, 0, 1}
-				if v, ok := s.numbers(ctx, dict["Domain"]); ok && len(v) == 4 {
-					domain = v
-				}
-			case kind <= 3:
-				if v, ok := s.numbers(ctx, dict["Domain"]); ok && len(v) == 2 {
-					domain = v
-				}
-			default:
-				// 8.7.4.5.5: under a /Function a vertex carries the
-				// parametric value t, decoded through the fifth and sixth
-				// /Decode numbers.
-				if v, ok := s.numbers(ctx, dict["Decode"]); ok && len(v) >= 6 {
-					domain = []float64{min(v[4], v[5]), max(v[4], v[5])}
-				}
-			}
-			fn, err := s.resampleFunction(ctx, dict["Function"], domain, p, 0)
-			if err != nil {
-				return nil, false, err
-			}
-			out["Function"] = fn
-		case kind >= 4 && kind <= 7 && isStream:
-			converted, decode, err := s.convertMesh(ctx, int(kind), dict, stream, p)
-			if err != nil {
-				return nil, false, err
-			}
-			data = converted
-			out["BitsPerComponent"] = ast.PdfInt(meshComponentBits)
-			out["Decode"] = decode
-		default:
-			return nil, false, fmt.Errorf("%w: shading type %d without the data its colour comes from", ErrUnsupportedSpace, kind)
+		if converted {
+			s.report.Shadings++
+			return out, true, nil
 		}
-		s.report.Shadings++
-		if data != nil {
-			ns, err := newStream(out, data)
-			if err != nil {
-				return nil, false, err
-			}
-			return ns, true, nil
-		}
-		return shadingOut(out, stream, isStream), true, nil
+		return out, out != nil, nil
 	})
+}
+
+// convertShading returns the shading resolved converted as
+// [session.rewriteShading] describes, and true when its colour values
+// converted; a shading in a kept space comes back with its rewritten
+// definition and false, and nil for one that stays.
+func (s *session) convertShading(ctx context.Context, resolved ast.PdfObject) (ast.PdfObject, bool, error) {
+	var dict ast.PdfDict
+	stream, isStream := resolved.(ast.PdfStream)
+	if isStream {
+		dict = stream.Dict
+	} else if d, ok := resolved.(ast.PdfDict); ok {
+		dict = d
+	} else {
+		return nil, false, fmt.Errorf("%w: shading is %T", ErrUnsupportedSpace, resolved)
+	}
+	p := s.planDefinition(ctx, dict["ColorSpace"], nil)
+	out := maps.Clone(dict)
+	switch p.kind {
+	case planIdentity:
+		return nil, false, nil
+	case planKeep:
+		cs, ch, err := s.rewriteDefinition(ctx, dict["ColorSpace"])
+		if err != nil || !ch {
+			return nil, false, err
+		}
+		out["ColorSpace"] = cs
+		return shadingOut(out, stream, isStream), false, nil
+	case planConvert:
+	case planPattern, planUnknown:
+		// 8.7.4.5, Table 78: a shading's space is no Pattern space.
+		return nil, false, fmt.Errorf("%w: shading colour space: %v", ErrUnsupportedSpace, p.err)
+	}
+	out["ColorSpace"] = s.t.spaceObject()
+	if bg, ok := s.numbers(ctx, dict["Background"]); ok && len(bg) == p.n {
+		conv := make([]float64, s.t.n)
+		p.conv.Convert(bg, conv)
+		out["Background"] = componentArray(conv)
+	}
+	kind, err := document.ResolveInt(ctx, s.doc, dict["ShadingType"])
+	if err != nil {
+		return nil, false, fmt.Errorf("%w: /ShadingType: %w", ErrUnsupportedSpace, err)
+	}
+	var data []byte
+	switch {
+	case dict["Function"] != nil:
+		domain := []float64{0, 1}
+		switch {
+		case kind == 1:
+			domain = []float64{0, 1, 0, 1}
+			if v, ok := s.numbers(ctx, dict["Domain"]); ok && len(v) == 4 {
+				domain = v
+			}
+		case kind <= 3:
+			if v, ok := s.numbers(ctx, dict["Domain"]); ok && len(v) == 2 {
+				domain = v
+			}
+		default:
+			// 8.7.4.5.5: under a /Function a vertex carries the
+			// parametric value t, decoded through the fifth and sixth
+			// /Decode numbers.
+			if v, ok := s.numbers(ctx, dict["Decode"]); ok && len(v) >= 6 {
+				domain = []float64{min(v[4], v[5]), max(v[4], v[5])}
+			}
+		}
+		fn, err := s.resampleFunction(ctx, dict["Function"], domain, p, 0)
+		if err != nil {
+			return nil, false, err
+		}
+		out["Function"] = fn
+	case kind >= 4 && kind <= 7 && isStream:
+		converted, decode, err := s.convertMesh(ctx, int(kind), dict, stream, p)
+		if err != nil {
+			return nil, false, err
+		}
+		data = converted
+		out["BitsPerComponent"] = ast.PdfInt(meshComponentBits)
+		out["Decode"] = decode
+	default:
+		return nil, false, fmt.Errorf("%w: shading type %d without the data its colour comes from", ErrUnsupportedSpace, kind)
+	}
+	if data != nil {
+		ns, err := newStream(out, data)
+		if err != nil {
+			return nil, false, err
+		}
+		return ns, true, nil
+	}
+	return shadingOut(out, stream, isStream), true, nil
 }
 
 // shadingOut returns the shading with dictionary dict: a stream keeps its

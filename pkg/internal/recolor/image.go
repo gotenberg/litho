@@ -130,6 +130,54 @@ type Images struct {
 	done    map[int]imageResult
 	indexed map[string]ast.PdfObject
 	report  ImageReport
+	// sources holds the stream each converted image XObject was read from,
+	// which [Images.convertCopy] converts again.
+	sources map[int]ast.PdfStream
+}
+
+// variantKeyer is a [Colors] whose conversions vary within one recolouring,
+// as a session's do with a graphics state's black point compensation: its
+// key spells the current variant, which caches of converted colour carry.
+type variantKeyer interface {
+	variantKey() string
+}
+
+// variantKey returns the current variant of the configured colours, "" when
+// they have none.
+func (im *Images) variantKey() string {
+	if v, ok := im.cfg.Colors.(variantKeyer); ok {
+		return v.variantKey()
+	}
+	return ""
+}
+
+// convertCopy converts the image XObject ref names, drawn with resources,
+// as it was before the conversion, into a new object, and returns its
+// reference, or false when the conversion keeps the image as it is (a
+// stencil mask, an image in the target, a kept spot colour). The image's
+// own conversion is untouched; its /Alternates are those of the image's own
+// conversion. A copy counts in no [ImageReport] count but its encoded sizes.
+func (im *Images) convertCopy(ctx context.Context, ref ast.PdfIndirectRef, resources ast.PdfDict) (ast.PdfIndirectRef, bool, error) {
+	im.mu.Lock()
+	defer im.mu.Unlock()
+	stream, ok := im.sources[ref.ObjectNum]
+	if !ok {
+		var err error
+		if stream, err = im.latestStream(ctx, ref); err != nil {
+			return ast.PdfIndirectRef{}, false, fmt.Errorf("%w: image %v: %w", ErrImageNotConverted, ref, err)
+		}
+	}
+	label := ast.PdfName(fmt.Sprintf("%d %d R", ref.ObjectNum, ref.GenNum))
+	out, outcome, err := im.convertStream(ctx, label, stream, resources, nil, false)
+	if err != nil {
+		return ast.PdfIndirectRef{}, false, fmt.Errorf("image %v: %w", ref, err)
+	}
+	switch outcome {
+	case ImageConverted, ImagePalette:
+		return im.alloc.Alloc(out), true, nil
+	case ImageUnchanged, ImageSpotKept:
+	}
+	return ast.PdfIndirectRef{}, false, nil
 }
 
 type imageResult struct {
@@ -160,6 +208,7 @@ func NewImages(doc *document.Document, alloc *writer.ObjAllocator, cfg ImageConf
 		cfg:     cfg,
 		done:    make(map[int]imageResult),
 		indexed: make(map[string]ast.PdfObject),
+		sources: make(map[int]ast.PdfStream),
 		report:  ImageReport{Encoded: make(map[string]EncodedSize)},
 	}, nil
 }
@@ -211,6 +260,7 @@ func (im *Images) convertRefOnce(ctx context.Context, ref ast.PdfIndirectRef, re
 	if err != nil {
 		return ImageUnchanged, fmt.Errorf("%w: image %v: %w", ErrImageNotConverted, ref, err)
 	}
+	im.sources[ref.ObjectNum] = stream
 	label := ast.PdfName(fmt.Sprintf("%d %d R", ref.ObjectNum, ref.GenNum))
 	out, outcome, err := im.convertStream(ctx, label, stream, resources, page, false)
 	if err != nil {

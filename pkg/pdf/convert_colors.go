@@ -143,6 +143,11 @@ func WithColorIntent(i RenderingIntent) ColorOption {
 // WithBlackPointCompensation scales the source's black point to the
 // target's, so the darkest source colour maps to the darkest the target can
 // reproduce rather than clipping the shadows (ISO 18619). Off by default.
+//
+// It is the choice a graphics state leaves to the conversion: a PDF 2.0
+// /UseBlackPtComp of /ON or /OFF (ISO 32000-2, Table 57) overrides it for the
+// colours, images and shadings painted under that state, and /Default, its
+// initial value, follows it ([ColorReport.BlackPointOperators]).
 func WithBlackPointCompensation() ColorOption {
 	return func(o *colorOpts) { o.bpc = true }
 }
@@ -287,6 +292,21 @@ type ColorReport struct {
 	// leaving them. Viewers draw without overprinting by default, so the
 	// change shows only in print or in an overprint preview.
 	OverprintChanged int
+	// BlackPointOperators counts the colour operators converted under a
+	// graphics state whose /UseBlackPtComp (ISO 32000-2, Table 57) differs
+	// from [WithBlackPointCompensation]: /ON without the option, /OFF with
+	// it. BlackPointInlineImages counts the inline images so converted, and
+	// BlackPointCopies the image XObjects and shadings written a second
+	// time, converted under such a state, for the paintings under it.
+	BlackPointOperators    int
+	BlackPointInlineImages int
+	BlackPointCopies       int
+	// BlackPointUnhonoured counts the paintings under such a state whose
+	// colour converts as the option asks all the same: a form XObject or a
+	// Type 3 glyph, which inherits the state but converts once for every
+	// painting, and an image or a shading painted by a stream whose
+	// resources are not its own.
+	BlackPointUnhonoured int
 }
 
 // Where a profile [Writer.ConvertColors] read came from, as
@@ -501,6 +521,11 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		OverprintPreserved:   result.overprintPreserved,
 		OverprintStates:      result.overprintStates,
 		OverprintChanged:     result.overprintChanged,
+
+		BlackPointOperators:    result.blackPoint.Operators,
+		BlackPointInlineImages: result.blackPoint.InlineImages,
+		BlackPointCopies:       result.blackPoint.Copies,
+		BlackPointUnhonoured:   result.blackPoint.Unhonoured,
 	}
 	for i := range report.IntentFallbacks {
 		if report.IntentFallbacks[i].Target {

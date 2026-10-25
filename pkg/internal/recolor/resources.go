@@ -172,7 +172,11 @@ func (s *session) rewriteColorSpaces(ctx context.Context, obj ast.PdfObject) (as
 // selecting it are written in the target instead.
 func (s *session) rewriteDefinition(ctx context.Context, def ast.PdfObject) (ast.PdfObject, bool, error) {
 	return s.edit(ctx, def, "colour space", func(resolved ast.PdfObject) (ast.PdfObject, bool, error) {
-		p := s.planDefinition(ctx, resolved, nil)
+		// A definition is written once, where the resources define it, for
+		// every painting naming it: under the option's black point
+		// compensation, as the /Default state reads it.
+		var p *spacePlan
+		s.underBPC(s.opts.BlackPointCompensation, func() { p = s.planDefinition(ctx, resolved, nil) })
 		if p.kind == planUnknown {
 			return nil, false, p.err
 		}
