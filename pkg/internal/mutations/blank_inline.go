@@ -130,6 +130,10 @@ type inlineImageBytes struct {
 //   - [ErrImageNotDecodable], [ErrImageCarriesSampleEntries] and
 //     [ErrImageRegionCoversNoSample] as [blankImage] does.
 //
+// As [blankImage] does too, it returns [errSamplesAlreadyBlank] for a region
+// that reaches no sample centre over samples that already hold the blank, and
+// the caller leaves the image's bytes as they are (see [inlineCoverageError]).
+//
 // # Corpus evidence
 //
 //   - govdocs, pdfjs, pdfcpu: 544 pages of 73 files paint an inline image,
@@ -261,7 +265,7 @@ func blankInlineSamples(
 			return nil, fmt.Errorf("%w: %w", ErrImageNotDecodable, err)
 		}
 		if err := clearNativeSamples(box, zones, native.Data, native.Width, native.Height, black); err != nil {
-			return nil, err
+			return nil, inlineCoverageError(ctx, doc, page, stream, box, zones, false, err)
 		}
 		return inlinePictureText(ctx, inline, stream.Dict, native.Width, native.Height, inlineColorSpace(inline), native.Data)
 	}
@@ -282,7 +286,7 @@ func blankInlineSamples(
 		return nil, err
 	}
 	if blanked == 0 {
-		return nil, ErrImageRegionCoversNoSample
+		return nil, inlineCoverageError(ctx, doc, page, stream, box, zones, true, ErrImageRegionCoversNoSample)
 	}
 	// No /D, for the reason packStencilBits states.
 	return inlineImageText(ctx, ast.PdfDict{
@@ -412,9 +416,57 @@ func blankInlineIndexed(
 		}
 	}
 	if err := clearNativeSamples(box, zones, samples, width, height, black); err != nil {
-		return nil, err
+		return nil, inlineCoverageError(ctx, doc, page, stream, box, zones, false, err)
 	}
 	return inlinePictureText(ctx, inline, stream.Dict, width, height, base, samples)
+}
+
+// inlineCoverageError returns err, the error clearing an inline image's
+// covered samples gave, as the redaction answers it. A region that reaches no
+// sample centre ([ErrImageRegionCoversNoSample]) over samples that already
+// hold the blank is answered as [blankImage] answers it for an image XObject:
+// [errSamplesAlreadyBlank], the image left as it is, since it already paints
+// in the region what its blanked rewrite would (see
+// [touchedSamplesAlreadyBlank], which judges both, with the same widening of
+// each sample's cell). That is what a redaction meets on its own output: an
+// inline image an earlier region rewrote holds the blank in the samples that
+// region covered, stretched past it. Any other error is returned as it is.
+//
+// An inline image carries no /SMask or /SMaskInData (ISO 32000-1, 8.9.7,
+// Table 93), so the soft-mask exclusion the helper makes never applies here.
+//
+// # Corpus evidence
+//
+//   - litho, pdfcpu, pdfjs, govdocs: 10 inline images refused a region
+//     between their sample centres in the redact-render scenarios, run on
+//     the source and again on its p1-quarter output. One no longer does:
+//     govdocs thread_200_200184, the p1-band on the p1-quarter output, meets
+//     only the bottom row of a 65 by 13 stencil rule, a row that paints
+//     nothing.
+//     9 stand over samples that paint (govdocs thread_000_000344,
+//     thread_100_100582, thread_200_200745, thread_400_400245, pdfjs
+//     issue11124).
+func inlineCoverageError(
+	ctx context.Context,
+	doc *document.Document,
+	page *document.Page,
+	stream ast.PdfStream,
+	box graphics.ImageBox,
+	zones []heuristics.Zone,
+	isStencil bool,
+	err error,
+) error {
+	if !errors.Is(err, ErrImageRegionCoversNoSample) {
+		return err
+	}
+	alreadyBlank, checkErr := touchedSamplesAlreadyBlank(ctx, doc, page, box, zones, stream, isStencil)
+	if checkErr != nil {
+		return checkErr
+	}
+	if alreadyBlank {
+		return errSamplesAlreadyBlank
+	}
+	return err
 }
 
 // indexDecodeTable returns the index each sample value of an indexed image

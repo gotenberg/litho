@@ -41,6 +41,75 @@ func stretchedImageFixture(t *testing.T, dict, samples string) (*document.Docume
 	return doc, pages[0]
 }
 
+// stretchedInlineFixture returns a page painting one inline image, written
+// with dict entries and samples, stretched over (50,600)-(250,700) as
+// [stretchedImageFixture] stretches its image XObject.
+func stretchedInlineFixture(t *testing.T, dict, samples string) (*document.Document, *document.Page) {
+	t.Helper()
+	ctx := context.Background()
+	body := "q 200 0 0 100 50 600 cm BI " + dict + " ID " + samples + "\nEI Q"
+	data := []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Contents 4 0 R >>\nendobj\n" +
+		"4 0 obj\n<< /Length " + strconv.Itoa(len(body)) + " >>\nstream\n" + body + "\nendstream\nendobj\n" +
+		"trailer\n<< /Size 5 /Root 1 0 R >>\n%%EOF\n")
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
+	}
+	return doc, pages[0]
+}
+
+func TestRedactPageRegions_LeavesAnInlineSampleAlreadyBlank(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, dict, samples string
+		want                error
+	}{
+		// The native path, read in its own space against the space's black.
+		{"grey black", "/W 1 /H 1 /CS /G /BPC 8", "\x00", nil},
+		{"grey picture", "/W 1 /H 1 /CS /G /BPC 8", "\x80", ErrImageRegionCoversNoSample},
+		{"rgb black", "/W 1 /H 1 /CS /RGB /BPC 8", "\x00\x00\x00", nil},
+		{"rgb picture", "/W 1 /H 1 /CS /RGB /BPC 8", "\x00\x00\x01", ErrImageRegionCoversNoSample},
+		// The indexed path, read as sRGB pixels against the picture blank.
+		{"indexed black", "/W 1 /H 1 /CS [/I /RGB 1 <000000FFFFFF>] /BPC 8", "\x00", nil},
+		{"indexed white", "/W 1 /H 1 /CS [/I /RGB 1 <000000FFFFFF>] /BPC 8", "\x01", ErrImageRegionCoversNoSample},
+		// A stencil's blank is the unpainted sample: 1 under the default
+		// /Decode (ISO 32000-1, 8.9.6.2).
+		{"stencil unpainted", "/IM true /W 1 /H 1 /BPC 1", "\x80", nil},
+		{"stencil painted", "/IM true /W 1 /H 1 /BPC 1", "\x00", ErrImageRegionCoversNoSample},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, page := stretchedInlineFixture(t, tc.dict, tc.samples)
+			alloc := writer.NewObjAllocator(20)
+			// The lower-left corner, clear of the centre at (150,650).
+			report, err := RedactPageRegions(context.Background(), alloc, doc, page, [][4]float64{{55, 605, 100, 640}})
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v, want %v", err, tc.want)
+			}
+			if err != nil {
+				return
+			}
+			if len(report.BlankedImages) != 0 {
+				t.Errorf("BlankedImages = %v, want none: the sample held the blank", report.BlankedImages)
+			}
+			if n := len(alloc.Pending()); n != 0 {
+				t.Errorf("registered %d objects, want none: nothing changed", n)
+			}
+		})
+	}
+}
+
 func TestRedactPageRegions_LeavesASampleAlreadyBlank(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

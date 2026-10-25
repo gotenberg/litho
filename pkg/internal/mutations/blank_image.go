@@ -738,7 +738,8 @@ func forCoveredSamples(box graphics.ImageBox, zones []heuristics.Zone, w, h int,
 // takes in more samples than the zone touches under a rotated placement and so
 // errs towards refusing. An image with a soft mask is not judged here: the
 // mask, not the samples, says what such a picture shows, and blankImage's own
-// path rules on it.
+// path rules on it. An inline image is judged by the same rule, on the image
+// stream its dictionary describes ([inlineCoverageError]).
 //
 // # Corpus evidence
 //
@@ -752,7 +753,7 @@ func forCoveredSamples(box graphics.ImageBox, zones []heuristics.Zone, w, h int,
 //   - litho, pdfcpu, pdfjs, govdocs: of 27 such refusals, 21 in the
 //     redact-render scenarios and 6 in them run again after a lossy
 //     p1-quarter, those 3 pass this check and 24 stand, 10 of them inline
-//     images, which this does not judge.
+//     images, which [inlineCoverageError] brings to this check.
 func touchedSamplesAlreadyBlank(
 	ctx context.Context,
 	doc *document.Document,

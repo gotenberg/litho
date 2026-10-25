@@ -423,6 +423,11 @@ func redactPageRegions(
 			// whose end the readers disagree on cannot be cut out exactly
 			// either.
 			edit, err := blankInlineImage(ctx, alloc, doc, page, data, ops, ranges, inlineEnds, box, zones)
+			if errors.Is(err, errSamplesAlreadyBlank) {
+				// Nothing in the region to clear: the content keeps the
+				// image's bytes as they are.
+				continue
+			}
 			if err != nil {
 				return RedactReport{}, err
 			}
