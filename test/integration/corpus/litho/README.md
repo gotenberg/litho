@@ -305,6 +305,7 @@ one deliberately rather than diffing it against a fresh build.
 | `cmykintent_2b.pdf`    | PDF/A-2b     | Colours under a rendering intent in their own CMYK page group    |
 | `jpxintent_2b.pdf`     | PDF/A-2b     | A JPX image in the colour of its data under the state's intent   |
 | `greygroup_2b.pdf`     | PDF/A-2b     | Colours entering grey ICC groups through the group's profile     |
+| `tintwhite_2b.pdf`     | PDF/A-2b     | An RGB ICC profile whose white reads tinted, painted three ways  |
 
 ### Must-not-fire controls
 
@@ -814,6 +815,7 @@ are covered under [Known divergences](#known-divergences).
 | `texlig_2b.pdf`        | 6    | 2    | 5    | 1    | 3    | 6    | 2    | 4    | 5   | 5    | 6    | 9    | 8    |
 | `threed_4e.pdf`        | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 11   | 8    |
 | `threedcs_4.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 5    | 7    | 8    | 6    |
+| `tintwhite_2b.pdf`     | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `tounicodepair_2u.pdf` | 4    | 2    | 3    | 0    | 0    | 4    | 1    | 1    | 4   | 4    | 5    | 7    | 6    |
 | `trailer_2b.pdf`       | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `transparency_2b.pdf`  | 10   | 7    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 6    | 6    |
@@ -10148,6 +10150,61 @@ pixels, 0.64% of the page, differ, so the page matches all three.
 The file conforms at PDF/A-2b. The other cells are the identification,
 metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
 same rule set in all thirteen cells.
+
+### `tintwhite_2b.pdf`
+
+ICC.1:2010, 6.2 makes the colorimetric intents relative to the media white
+and the perceptual and saturation intents relative to the reference medium,
+so a conversion sends the source's white to the destination's; a profile's
+tables only approximate it, and Little CMS, when it optimizes a transform,
+replaces the result at the source white with the destination's white and
+lets the move fade over one cell of its grid (`cmsFLAGS_NOWHITEONWHITEFIXUP`
+turns that off, as does absolute colorimetric, which keeps the medium's tint).
+The viewers disagree: poppler 26.09.0 builds every transform with
+`cmsFLAGS_NOOPTIMIZE` and PDFium with a format that names no colour space, so
+neither fixes white up, while MuPDF and Ghostscript, which write converted
+colours, do. litho now draws a profile's white as the tables read it, as
+poppler and PDFium do, and fixes it up in the links that convert from one
+profile to another (`convert-colors`, the colours `FlattenTransparency`
+converts into a page group's space, and the renderer's trip into a CMYK
+group). Before, `convert-colors --target cmyk` wrote sRGB white as
+`0.0035 0.0025 0.0026 0 k`, a light tint of each ink on paper that should
+stay bare; it writes `0 0 0 0 k` now, and greys near white move as Little
+CMS 2.17 moves them, to within a level. Of the 3,936 ICC profile streams
+across all seven corpora, none reads its own white off sRGB white but two
+litho fixtures that tint it on purpose and pdfjs `issue2856.pdf`'s YCC
+profile, in which full components are no white; 21 of the 24 distinct CMYK
+profiles a link converts to send sRGB white to some ink. So this fixture
+paints `tw`, a version 2.1 RGB display profile of sRGB's tone curves and red
+and green colorants with its blue colorant at 90 per cent, whose white reads
+255 255 243, on one 100 by 200 page:
+
+| y       | x                                                                   |
+| ------- | ------------------------------------------------------------------- |
+| 110-190 | 0-100: `Im`, 4 x 4 samples, each row the greys 255, 250 and 240 and |
+|         | the colour 128 64 32                                                |
+| 60-100  | 10-90: a fill of white                                              |
+| 10-45   | 10-50: a fill of 0.97; 50-90: a fill of 0.5 0.6 0.7                 |
+
+litho, poppler and PDFium (pypdfium2 4.30.0) draw the white sample and the
+white fill 255 255 243 and the 0.97 fill 247 247 236; MuPDF 1.26.10 (PyMuPDF
+1.26.5) draws the fills 255 255 255 and 247 247 242, fixed up, and the image
+as the others do, since it converts 8-bit RGB images through Little CMS's
+matrix and tone curve path, which fixes nothing up. The `render` and
+`imagedecode` cells read the profile as before. Converted to CMYK, the white
+fill and sample are bare paper, which litho, poppler, PDFium and MuPDF all
+draw 255 255 255, where litho wrote `0.0179 0.0052 0.0634 0 k` before; the
+`recolor` cell still passes, the tint being 12 levels, far inside its bars.
+Across the `recolor` cell's PDFs, 102 conversions write other bytes, 115
+pages of 80 files draw differently, by 4 levels at most, and 114 of them
+nearer their source than before (62.3 to 81.2 per cent of their pixels
+equal to the source's); no page of the `render` or `flatten` cells moves.
+The centred quarter's edges fall on `Im`'s sample edges; its redaction passes
+the pixel check, with and without the raster fallback, and writes the same
+bytes as before.
+
+The file conforms at PDF/A-2b: the space is ICCBased throughout. veraPDF
+1.30.2 and litho report the same rule set in all thirteen cells.
 
 ## Scope
 
