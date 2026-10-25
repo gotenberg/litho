@@ -133,6 +133,11 @@ type Options struct {
 	Pool *surface.Pool
 	// Box is the page boundary drawn, the crop box by default.
 	Box Box
+	// WholePixels draws the boundary onto exactly the whole pixels of the
+	// raster ([WholePixelGeometry]) rather than at DPI on both axes, its
+	// last column and row partly off the page: a caller that draws the
+	// raster back into the page as an image covers the page to its edge.
+	WholePixels bool
 	// CMYK draws the page for a CMYK device, the page group blending in its
 	// CMYK space ([Result.CMYK] reads it): ISO 32000-1, 11.4.7 composites a
 	// page group without a /CS in the device's own space, and leaves a
@@ -374,7 +379,7 @@ func (res *Result) Release(pool *surface.Pool) {
 // space of the device the renderer draws for, otherwise.
 func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page, opts Options) (*Result, Report, error) {
 	var report Report
-	g, err := BoxGeometry(pg, opts.Box, opts.DPI)
+	g, err := boxGeometry(pg, opts.Box, opts.DPI, opts.WholePixels)
 	if err != nil {
 		return nil, report, err
 	}

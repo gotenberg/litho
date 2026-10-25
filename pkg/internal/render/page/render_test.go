@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
@@ -328,6 +329,46 @@ func TestPageGeometry(t *testing.T) {
 	for _, dpi := range []float64{0, -1, math.NaN(), math.Inf(1)} {
 		if _, err := PageGeometry(pg, dpi); !errors.Is(err, ErrInvalidOptions) {
 			t.Errorf("dpi %v: %v, want ErrInvalidOptions", dpi, err)
+		}
+	}
+}
+
+// TestWholePixelGeometry maps the box's corners onto the raster's corners
+// when a side is no whole number of pixels at the resolution, turned or not,
+// where [PageGeometry] leaves the raster's last column and row partly off
+// the page.
+func TestWholePixelGeometry(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		page          string
+		dpi           float64
+		width, height int
+	}{
+		{"/MediaBox [0 0 595 5021]", 89, 736, 6207},
+		{"/MediaBox [0 0 100.4 50]", 72, 101, 50},
+		{"/MediaBox [10 20 110.4 70.3] /Rotate 90", 300, 210, 419},
+		{"/MediaBox [0 0 100.4 50.2] /Rotate 270 /UserUnit 2", 72, 101, 201},
+	} {
+		_, pg := open(t, fixture{page: tc.page}.bytes(), limits.Limits{})
+		g, err := WholePixelGeometry(pg, CropBox, tc.dpi)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.page, err)
+		}
+		uniform, err := PageGeometry(pg, tc.dpi)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.page, err)
+		}
+		if g.Width != tc.width || g.Height != tc.height || g.Width != uniform.Width || g.Height != uniform.Height {
+			t.Errorf("%s: %dx%d, want %dx%d as PageGeometry", tc.page, g.Width, g.Height, tc.width, tc.height)
+		}
+		b := pg.ViewedBox()
+		x0, y0, x1, y1 := document.Float(b[0]), document.Float(b[1]), document.Float(b[2]), document.Float(b[3])
+		lo := g.Matrix.Apply(geom.Point{X: x0, Y: y0})
+		hi := g.Matrix.Apply(geom.Point{X: x1, Y: y1})
+		minX, maxX := min(lo.X, hi.X), max(lo.X, hi.X)
+		minY, maxY := min(lo.Y, hi.Y), max(lo.Y, hi.Y)
+		if math.Abs(minX) > 1e-9 || math.Abs(minY) > 1e-9 || math.Abs(maxX-float64(g.Width)) > 1e-9 || math.Abs(maxY-float64(g.Height)) > 1e-9 {
+			t.Errorf("%s: the box maps onto [%v %v %v %v], want [0 0 %d %d]", tc.page, minX, minY, maxX, maxY, g.Width, g.Height)
 		}
 	}
 }

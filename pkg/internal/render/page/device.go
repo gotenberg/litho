@@ -83,6 +83,20 @@ func PageGeometry(pg *document.Page, dpi float64) (Geometry, error) {
 // content between it and a smaller crop box is drawn, as a production tool
 // images the bleed. A /Rotate turns the boundary as it turns the crop box.
 func BoxGeometry(pg *document.Page, b Box, dpi float64) (Geometry, error) {
+	return boxGeometry(pg, b, dpi, false)
+}
+
+// WholePixelGeometry returns the device geometry of [BoxGeometry] with each
+// side of the boundary stretched to the whole pixels the raster rounds it up
+// to, so the raster holds the boundary exactly and no pixel lies partly off
+// it. Each axis scales by its own factor, at most one pixel's worth over the
+// side: a page 595 points wide at 89 dpi maps onto 736 pixels, not 735.5.
+// [Options.WholePixels] renders at it.
+func WholePixelGeometry(pg *document.Page, b Box, dpi float64) (Geometry, error) {
+	return boxGeometry(pg, b, dpi, true)
+}
+
+func boxGeometry(pg *document.Page, b Box, dpi float64, whole bool) (Geometry, error) {
 	if !(dpi > 0) || math.IsInf(dpi, 0) {
 		return Geometry{}, fmt.Errorf("%w: resolution %v dpi", ErrInvalidOptions, dpi)
 	}
@@ -102,9 +116,14 @@ func BoxGeometry(pg *document.Page, b Box, dpi float64) (Geometry, error) {
 	if math.IsNaN(w) || math.IsNaN(h) || math.IsInf(w, 0) || math.IsInf(h, 0) || w > math.MaxInt32 || h > math.MaxInt32 {
 		return Geometry{}, fmt.Errorf("%w: page of %v x %v pixels", ErrTooLarge, w, h)
 	}
-	base := geom.Matrix{s, 0, 0, -s, -x0 * s, y1 * s}
-
 	g := Geometry{Width: pixels(w), Height: pixels(h)}
+	sx, sy := s, s
+	if whole && x1 > x0 && y1 > y0 {
+		sx, sy = float64(g.Width)/(x1-x0), float64(g.Height)/(y1-y0)
+		w, h = float64(g.Width), float64(g.Height)
+	}
+	base := geom.Matrix{sx, 0, 0, -sy, -x0 * sx, y1 * sy}
+
 	// Table 30: /Rotate turns the page clockwise when displayed and shall be a
 	// multiple of 90, read modulo 360. Deliberate leniency: a value that is no
 	// multiple of 90 draws unturned, as poppler's GfxState draws it, where

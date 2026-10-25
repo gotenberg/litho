@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"image"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -203,13 +204,81 @@ func TestFlattenFormShowingText(t *testing.T) {
 	}
 }
 
+// edgeDiff returns how many of the whole pixels within band of the right and
+// bottom edges of the 100-point fixture page, drawn as a and b at dpi, differ
+// by more than tolerance levels. A pixel the page's edge cuts is left out:
+// litho's renderer draws what the content paints past the edge into it, which
+// the source holds and an image clipped to the page does not, where a viewer
+// clipping to the crop box (ISO 32000-1, 14.11.2.1) shows neither.
+func edgeDiff(a, b *image.NRGBA, dpi float64, band, tolerance int) int {
+	whole := int(math.Floor(100*dpi/72 + 1e-9))
+	n := 0
+	for y := range whole {
+		for x := range whole {
+			if x < whole-band && y < whole-band {
+				continue
+			}
+			ca, cb := a.NRGBAAt(x, y), b.NRGBAAt(x, y)
+			for _, d := range []int{int(ca.R) - int(cb.R), int(ca.G) - int(cb.G), int(ca.B) - int(cb.B)} {
+				if d > tolerance || d < -tolerance {
+					n++
+					break
+				}
+			}
+		}
+	}
+	return n
+}
+
+// edgeCase is a composite resolution and the resolution its page is drawn
+// at, where an image of the composite's whole pixels leaves the pixels along
+// the page's right and bottom edges to the paper: their centres, which an
+// image paints, lie past the last whole composite pixel.
+type edgeCase struct{ composite, view float64 }
+
+// edgeCases are [edgeCase] values: the 100-point page is 131.9 pixels at 95
+// dpi and 138.9 at 100, so the last 0.71 and 0.64 point stayed paper, past
+// the centre of a 72-dpi pixel; 416.7 at 300 left 0.16 point, which pixels
+// at 600 dpi show.
+//
+//nolint:gochecknoglobals // static test table
+var edgeCases = []edgeCase{{95, 72}, {100, 72}, {DefaultDPI, 600}}
+
+// TestFlattenCoversThePageEdgeAtAnyResolution composites a page whose side
+// is no whole number of pixels at the composite's resolution ([edgeCases]):
+// an image of the whole pixels stopped short of the right and bottom edges,
+// a line of paper along them. Content reaching past the edge and content
+// stopping on it both reach it: a partial pixel of the composite would hold
+// the second blended with the paper beyond the edge.
+func TestFlattenCoversThePageEdgeAtAnyResolution(t *testing.T) {
+	t.Parallel()
+	for _, rect := range []string{"-10 -10 120 120", "0 0 100 100"} {
+		in := fixture{content: "0 0 1 rg " + rect + " re f q /GS1 gs 1 0 0 rg " + rect + " re f Q"}.bytes()
+		for _, tc := range edgeCases {
+			out, report := flattenBytes(t, in, Options{DPI: tc.composite})
+			if pr := report.Pages[0]; pr.Regions != 1 || pr.DPI != tc.composite {
+				t.Fatalf("%s at %v dpi: report %+v, want one region", rect, tc.composite, pr)
+			}
+			assertOpaque(t, out)
+			if n := edgeDiff(renderAt(t, in, tc.view), renderAt(t, out, tc.view), tc.view, 3, 8); n > 0 {
+				t.Errorf("%s composited at %v dpi: %d pixels along the page's right and bottom edges differ at %v dpi", rect, tc.composite, n, tc.view)
+			}
+		}
+	}
+}
+
 func TestFlattenClipsWhatTheCompositeHolds(t *testing.T) {
 	t.Parallel()
 	// The long rule crosses the region of the two transparent squares drawn
 	// around it: it stays vector outside them, clipped out of the region,
-	// under a CTM the clip has to undo.
-	out, report := checkFlattened(t, fixture{content: "q /GS1 gs 1 0 0 rg 30 30 30 30 re f Q " +
-		"q 0.5 0 0 0.5 0 0 cm 0 g 0 90 200 4 re f Q q /GS1 gs 0 0 1 rg 40 40 10 10 re f Q"})
+	// under a CTM the clip has to undo. The squares' edges are snapped to
+	// the composite's pixels, whose grid fits the page to whole pixels
+	// ([page.WholePixelGeometry]) and so no longer falls on every other
+	// pixel at 150 dpi, where rows along the edges take a part of their
+	// colour: 1.02% of the pixels move past 8 levels, 0.70% past 24. The
+	// uniform grid read 0.61% at 150 dpi, and 1.09% past both at 96.
+	out, report := checkFlattenedWithin(t, fixture{content: "q /GS1 gs 1 0 0 rg 30 30 30 30 re f Q " +
+		"q 0.5 0 0 0.5 0 0 cm 0 g 0 90 200 4 re f Q q /GS1 gs 0 0 1 rg 40 40 10 10 re f Q"}, 24)
 	if pr := report.Pages[0]; pr.Removed != 2 {
 		t.Errorf("report %+v, want the squares alone removed", pr)
 	}

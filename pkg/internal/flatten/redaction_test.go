@@ -368,6 +368,25 @@ func TestRedactionUndoesTheTransferFunction(t *testing.T) {
 	}
 }
 
+// TestRedactionImageReachesThePageEdge rasterises a form filling the whole
+// page: at 300 dpi the 100-point page is 416.7 pixels, and an image of the
+// 416 whole ones stopped 0.16 point short of the page's right and bottom
+// edges, a line of paper at 600 dpi (pdfjs issue14724, where the render
+// budget lowered the resolution to 89 dpi, drew it down a whole page at 72).
+func TestRedactionImageReachesThePageEdge(t *testing.T) {
+	t.Parallel()
+	form := stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Resources << /Font << /F1 5 0 R >> >>",
+		"0 0 0.5 rg 0 0 100 100 re f BT 1 g /F1 10 Tf 10 60 Td (LEFT) Tj 50 0 Td (RIGHT) Tj ET")
+	data := fixture{resources: "/XObject << /Fm0 7 0 R >>", content: "/Fm0 Do", objs: []string{form}}.bytes()
+	out, report := redactWithFallback(t, data, [][4]float64{{55, 40, 90, 80}})
+	if report.RasterisedUnits != 1 {
+		t.Fatalf("RasterisedUnits = %d, want 1", report.RasterisedUnits)
+	}
+	if n := edgeDiff(renderAt(t, data, 600), renderAt(t, out, 600), 600, 3, 8); n > 0 {
+		t.Errorf("%d pixels along the page's right and bottom edges differ at 600 dpi", n)
+	}
+}
+
 func absDiff(a, b uint8) uint8 {
 	if a > b {
 		return a - b

@@ -535,7 +535,7 @@ func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.
 	dpi := f.dpi
 	budget := f.doc.Limits().WithDefaults().MaxRenderPixels
 	for {
-		g, err := page.PageGeometry(pg, dpi)
+		g, err := page.WholePixelGeometry(pg, page.CropBox, dpi)
 		if err != nil {
 			return nil, page.Geometry{}, 0, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
 		}
@@ -553,6 +553,7 @@ func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.
 			Shared:            shared,
 			Pool:              f.pool,
 			Overprint:         f.overprint,
+			WholePixels:       true,
 		})
 		if err != nil {
 			return nil, page.Geometry{}, 0, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
@@ -597,11 +598,12 @@ type tileImg struct {
 // sharp edges ([flattener.vectorBoxes]), leaves some of it photographic (see
 // [flattener.encodeTiles]). A box no pixel of the page holds gives no image.
 //
-// The image holds whole pixels of the page only: the raster rounds the page
-// up to whole pixels (see [page.PageGeometry]), and its last column and row
-// are what the page's edge leaves of a pixel. Drawn at another resolution, a
-// composite holding them reaches past the edge the page's own content stops
-// at.
+// The page is composited onto whole pixels ([page.WholePixelGeometry]), so
+// the crop box's edges lie on pixel boundaries and the image reaches each
+// edge the box reaches: a page whose side is no whole number of pixels at
+// the composite's resolution keeps no strip along its far edges that the
+// image leaves to the paper. The pixels are those the crop box touches,
+// rounded outward, which [flattener.drawImage]'s clip keeps to the box.
 //
 // holes lists boxes in default user space painted out of the image: every
 // pixel a box reaches is set to the paper's colour (see [paintOut]). They
@@ -612,14 +614,22 @@ type tileImg struct {
 // is, its pixels left in a lossless tile. The margin is at least the
 // [imagetiles.Overlap] a JPEG tile reaches into its neighbours, so no JPEG tile
 // holds a painted-out pixel.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14724 (595 x 5021 points), redacted with the raster
+//     fallback: the render budget lowers the composite to about 89 dpi, and
+//     an image of the whole pixels of the uniform grid stopped 0.81 point
+//     short of the right edge and 0.23 of the bottom, 3,799 paper pixels
+//     along them at 72 dpi; on whole pixels, 0.
 func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Geometry, crop, box Rect, xobjects ast.PdfDict, vector, holes []Rect) (regionImg, bool, error) {
 	size := res.Group.Bounds().Size()
 	dev := transformRect(g.Matrix, box)
 	paper := transformRect(g.Matrix, crop)
-	x0 := max(0, int(math.Floor(dev.MinX))-pixelMargin, int(math.Ceil(paper.MinX-pixelEpsilon)))
-	y0 := max(0, int(math.Floor(dev.MinY))-pixelMargin, int(math.Ceil(paper.MinY-pixelEpsilon)))
-	x1 := min(size.X, int(math.Ceil(dev.MaxX))+pixelMargin, int(math.Floor(paper.MaxX+pixelEpsilon)))
-	y1 := min(size.Y, int(math.Ceil(dev.MaxY))+pixelMargin, int(math.Floor(paper.MaxY+pixelEpsilon)))
+	x0 := max(0, int(math.Floor(dev.MinX))-pixelMargin, int(math.Floor(paper.MinX+pixelEpsilon)))
+	y0 := max(0, int(math.Floor(dev.MinY))-pixelMargin, int(math.Floor(paper.MinY+pixelEpsilon)))
+	x1 := min(size.X, int(math.Ceil(dev.MaxX))+pixelMargin, int(math.Ceil(paper.MaxX-pixelEpsilon)))
+	y1 := min(size.Y, int(math.Ceil(dev.MaxY))+pixelMargin, int(math.Ceil(paper.MaxY-pixelEpsilon)))
 	if x0 >= x1 || y0 >= y1 {
 		return regionImg{}, false, nil
 	}
@@ -816,8 +826,7 @@ const holeClipMargin = 72.0
 // drawImage returns the operators that draw the images of tiles, in order,
 // each with its matrix in default user space, at pos, clipped to box: the CTM
 // in force there is undone first. The images reach past box by their pixel
-// margin, and past the page edge by the part of a pixel the raster rounds the
-// page up to; the clip keeps them to the area they composite. Outside
+// margin; the clip keeps them to the area they composite. Outside
 // marked content the image is an artifact (ISO 32000-2, 14.8.2.2): what it
 // shows is content the page already tags, or the page's own background, and
 // ISO 14289-1, 7.1 wants untagged content marked so.
