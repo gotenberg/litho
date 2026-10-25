@@ -164,9 +164,10 @@
 //     [WithTimestampAuthority], [WithLTV], [WithValidationData].
 //   - [Writer.Timestamp] takes [TimestampOption]: [WithTimestampField].
 //   - [Writer.Redact] takes [RedactOption]: [WithStrictRedaction],
-//     [WithRedactionRasterFallback], [WithRedactionAnnotationClipping],
+//     [WithRedactionRasterFallback], [WithoutRedactionAnnotationClipping],
 //     [WithRedactionJPEGQuality], [WithoutRedactionPixelCheck], and the
-//     deprecated no-op [WithRedactionPixelCheck].
+//     deprecated no-ops [WithRedactionAnnotationClipping] and
+//     [WithRedactionPixelCheck].
 //   - [Writer.ConvertColors] takes [ColorOption]: [WithColorIntent],
 //     [WithoutBlackPointCompensation], [WithSpotConversion],
 //     [WithKOnlyBlack], [WithoutOutputIntent], [WithReplacedOutputIntents],

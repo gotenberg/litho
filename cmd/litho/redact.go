@@ -127,7 +127,10 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	cmykProfile := fs.String("cmyk-profile", "", "ICC profile DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
 	strict := fs.Bool("strict", false, "Refuse when a place outside the regions still draws removed text or a blanked image, instead of warning")
 	rasterFallback := fs.Bool("raster-fallback", false, "Rasterise the form XObjects and shadings the regions reach, refused otherwise, as images cut out of the regions")
-	clipAnnots := fs.Bool("clip-annotations", false, "Keep the links and closed pop-ups reaching outside a region that draw nothing, a link cut to the part outside, instead of refusing")
+	noClipAnnots := fs.Bool("no-clip-annotations", false, "Refuse every annotation reaching outside a region, instead of keeping the links and closed pop-ups that draw nothing, a link cut to the part outside")
+	// Clipping runs by default now; the flag stays so scripts that pass it
+	// keep working.
+	fs.Bool("clip-annotations", true, "Deprecated: annotations that draw nothing are clipped by default (see --no-clip-annotations)")
 	noPixelCheck := fs.Bool("no-pixel-check", false, "Skip the pixel check, which renders each redacted page before and after and refuses unless the regions show only paper or blanked images and nothing else changed")
 	// The check runs by default now; the flag stays so scripts that pass it
 	// keep working.
@@ -142,7 +145,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--clip-annotations] [--jpeg-quality Q] [--no-pixel-check] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--no-clip-annotations] [--jpeg-quality Q] [--no-pixel-check] -o out.pdf")
 		return exitError
 	}
 
@@ -191,8 +194,8 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if *rasterFallback {
 		redactOpts = append(redactOpts, pdf.WithRedactionRasterFallback())
 	}
-	if *clipAnnots {
-		redactOpts = append(redactOpts, pdf.WithRedactionAnnotationClipping())
+	if *noClipAnnots {
+		redactOpts = append(redactOpts, pdf.WithoutRedactionAnnotationClipping())
 	}
 	if *jpegQuality != 0 {
 		redactOpts = append(redactOpts, pdf.WithRedactionJPEGQuality(*jpegQuality))

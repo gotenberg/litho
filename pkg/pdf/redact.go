@@ -63,9 +63,9 @@ type RedactOption func(*redactOpts)
 type redactOpts struct {
 	strict bool
 	raster bool
-	// clipAnnots keeps annotations that paint nothing reaching outside the
-	// regions ([WithRedactionAnnotationClipping]).
-	clipAnnots bool
+	// noClipAnnots refuses the annotations that paint nothing reaching
+	// outside the regions ([WithoutRedactionAnnotationClipping]).
+	noClipAnnots bool
 	// noPixelCheck skips the pixel check ([WithoutRedactionPixelCheck]).
 	noPixelCheck bool
 	// jpegQuality is [WithRedactionJPEGQuality]'s, 0 for lossless, and
@@ -128,41 +128,53 @@ func WithRedactionRasterFallback() RedactOption {
 	return func(o *redactOpts) { o.raster = true }
 }
 
-// WithRedactionAnnotationClipping makes [Writer.Redact] keep an annotation
-// reaching outside the regions that a viewer draws nothing for, instead of
-// refusing the page. A Link with no appearance stream and a border of width 0
-// loses the part of its activation area the regions cover (ISO 32000-1,
-// 12.5.6.5, Table 173): left as one rectangle, it becomes the link's /Rect;
-// left as several, they become its /QuadPoints, one quadrilateral each, with
-// /Rect their bounding box, which a reader that ignores /QuadPoints activates
-// whole. A pop-up that is not open and has no appearance stream, whose /Rect
-// only places the window it opens over its parent (12.5.6.14), stays as it
-// is. [RedactReport.ClippedAnnotations] lists the links cut.
+// WithoutRedactionAnnotationClipping makes [Writer.Redact] refuse, with
+// [ErrRedactionRefused], every annotation reaching outside the regions,
+// instead of keeping those a viewer draws nothing for.
+//
+// By default a redaction keeps such an annotation. A Link with no appearance
+// stream and a border of width 0 loses the part of its activation area the
+// regions cover (ISO 32000-1, 12.5.6.5, Table 173): left as one rectangle, it
+// becomes the link's /Rect; left as several, they become its /QuadPoints, one
+// quadrilateral each, with /Rect their bounding box, which a reader that
+// ignores /QuadPoints activates whole. A pop-up that is not open and has no
+// appearance stream, whose /Rect only places the window it opens over its
+// parent (12.5.6.14), stays as it is. [RedactReport.ClippedAnnotations] lists
+// the links cut.
 //
 // Keeping such an annotation keeps no content of the regions: it paints
 // nothing there or anywhere, and a Redact annotation removes the content of
 // its area (ISO 32000-2, 12.5.6.23), not the links that lead out of it. The
 // text a link names in /A or /Contents is scrubbed of the removed strings as
-// every annotation's is. An annotation that draws anything, a widget, a
-// visible border, a markup appearance, still refuses, and so does a link cut
-// on one page that another page also lists, since every page listing it would
-// show the cut.
+// every annotation's is, an action written as an object of its own included.
+// An annotation that draws anything, a widget, a visible border, a markup
+// appearance, still refuses, and so does a link cut on one page that another
+// page also lists, since every page listing it would show the cut.
 //
-// Opt-in, because without it a redaction refuses any annotation reaching
-// outside its regions with [ErrRedactionRefused], so as not to change
-// behaviour the caller never selected.
+// Use it when a link must keep its whole area or go with the region: the
+// redaction then refuses rather than change what a link outside the regions
+// does.
 //
 // # Corpus evidence
 //
 //   - All corpora, the 409 scenarios of the F13 sweep that refused over an
-//     annotation reaching outside the region: 48 succeed with the option,
+//     annotation reaching outside the region: 48 succeed with the clipping,
 //     every one passing the pixel check and the redact-render cell's inside
 //     and outside checks by litho's and poppler 26.09.0's rendering; 85
 //     with the raster fallback too. 77 reach a later refusal, a structure
-//     element or a copy of the removed text, a cut link's own URI among
-//     them (govdocs thread_100_100166).
+//     element or a copy of the removed text.
+func WithoutRedactionAnnotationClipping() RedactOption {
+	return func(o *redactOpts) { o.noClipAnnots = true }
+}
+
+// WithRedactionAnnotationClipping asks for the annotation clipping
+// [Writer.Redact] does by default, and changes nothing. It is kept so callers
+// written when the clipping was opt-in still compile.
+//
+// Deprecated: the clipping is the default;
+// [WithoutRedactionAnnotationClipping] turns it off.
 func WithRedactionAnnotationClipping() RedactOption {
-	return func(o *redactOpts) { o.clipAnnots = true }
+	return func(*redactOpts) {}
 }
 
 // WithRedactionJPEGQuality encodes as baseline JPEG (ITU-T T.81) at quality
@@ -306,7 +318,7 @@ type RedactReport struct {
 	RemovedAnnotations []int
 	// ClippedAnnotations lists the object numbers of annotations kept with
 	// the part inside the regions cut away, ascending (see
-	// [WithRedactionAnnotationClipping]).
+	// [WithoutRedactionAnnotationClipping]).
 	ClippedAnnotations []int
 	// DroppedPageEntries names page entries dropped because they held a copy
 	// of what was removed, such as /Thumb.
@@ -413,8 +425,10 @@ type RedactReport struct {
 //     for some viewers and not others, a shading paint (sh)
 //     whose clip the region meets, a clipping path, a straddling path it
 //     cannot cut and clip at the region, a stroke whose width cannot be read,
-//     content drawn by a form XObject, or an image whose samples cannot be
-//     rewritten. Removing more than was asked, or reporting success over
+//     content drawn by a form XObject, an image whose samples cannot be
+//     rewritten, or an annotation reaching outside the regions that draws
+//     anything (one that draws nothing is cut to the part outside, see
+//     [WithoutRedactionAnnotationClipping]). Removing more than was asked, or reporting success over
 //     content still in the file, are both worse than refusing.
 //     [WithRedactionRasterFallback] rasterises the form XObjects and shading
 //     paints instead of refusing them.
@@ -735,7 +749,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	maps.Copy(preTrailer, doc.Index.Trailer)
 	restoreTrailer := func() { doc.Index.Trailer = preTrailer }
 
-	pageOpts := mutations.RedactOptions{ClipAnnotations: o.clipAnnots}
+	pageOpts := mutations.RedactOptions{ClipAnnotations: !o.noClipAnnots}
 	if o.raster {
 		pageOpts.Rasterise = flatten.Redaction
 		if o.jpegQuality > 0 {
@@ -1056,7 +1070,7 @@ func seedAllocator(alloc *writer.ObjAllocator, overrides map[int]ast.PdfObject) 
 func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, o redactOpts, copied map[int]bool, samePage []RedactionHit) {
 	w.redactions = append(w.redactions, slices.Clone(regions))
 	w.redactionCopies = append(w.redactionCopies, copied)
-	w.redactionClips = append(w.redactionClips, o.clipAnnots)
+	w.redactionClips = append(w.redactionClips, !o.noClipAnnots)
 	w.redactedTokens = appendNewTokens(w.redactedTokens, needles)
 	if o.strict {
 		return

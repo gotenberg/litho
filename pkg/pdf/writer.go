@@ -964,10 +964,10 @@ type Writer struct {
 	// [Writer.copiedImagesRestored]).
 	redactionCopies []map[int]bool
 	// redactionClips runs parallel to redactions: whether each call kept the
-	// annotations that paint nothing reaching outside its regions
-	// ([WithRedactionAnnotationClipping]), which applying its regions again
-	// at write time has to do too, or a link it cut, which meets the regions
-	// at their edge, refuses.
+	// annotations that paint nothing reaching outside its regions, as it does
+	// unless [WithoutRedactionAnnotationClipping]. Applying its regions again
+	// at write time has to do the same, or a link it cut, which meets the
+	// regions at their edge, refuses.
 	redactionClips []bool
 
 	// droppedSignatures lists the signatures the writes that produce the

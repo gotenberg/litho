@@ -109,10 +109,12 @@ func TestWriter_Redact_FallbackRefusesAnAnnotationAnotherPageShows(t *testing.T)
 	}
 }
 
-// TestWriter_Redact_CutsALinkWithTheOption pins [WithRedactionAnnotationClipping]
-// through the pixel check: the link that drew nothing keeps the part of its
-// area outside the region, and a link another page also lists still refuses.
-func TestWriter_Redact_CutsALinkWithTheOption(t *testing.T) {
+// TestWriter_Redact_CutsALinkByDefault pins the annotation clipping through
+// the pixel check: the link that drew nothing keeps the part of its area
+// outside the region, by default and with the deprecated
+// [WithRedactionAnnotationClipping]; [WithoutRedactionAnnotationClipping]
+// refuses it, and a link another page also lists still refuses.
+func TestWriter_Redact_CutsALinkByDefault(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	region := []RedactRegion{{Page: 1, Rect: [4]float64{90, 690, 150, 730}}}
@@ -134,13 +136,16 @@ func TestWriter_Redact_CutsALinkWithTheOption(t *testing.T) {
 		return buf.Bytes(), report, nil
 	}
 
-	if _, _, err := redact(clippedLinkDoc(false)); !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrAnnotationStraddlesRegion) {
-		t.Fatalf("default: err = %v, want ErrRedactionRefused wrapping ErrAnnotationStraddlesRegion", err)
+	if _, _, err := redact(clippedLinkDoc(false), WithoutRedactionAnnotationClipping()); !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrAnnotationStraddlesRegion) {
+		t.Fatalf("without clipping: err = %v, want ErrRedactionRefused wrapping ErrAnnotationStraddlesRegion", err)
+	}
+	if _, report, err := redact(clippedLinkDoc(false), WithRedactionAnnotationClipping()); err != nil || !slices.Equal(report.ClippedAnnotations, []int{8}) {
+		t.Fatalf("deprecated option: report %v, err %v, want object 8 cut", report, err)
 	}
 
-	out, report, err := redact(clippedLinkDoc(false), WithRedactionAnnotationClipping())
+	out, report, err := redact(clippedLinkDoc(false))
 	if err != nil {
-		t.Fatalf("with the option: %v", err)
+		t.Fatalf("default: %v", err)
 	}
 	if !slices.Equal(report.ClippedAnnotations, []int{8}) {
 		t.Errorf("ClippedAnnotations = %v, want [8]", report.ClippedAnnotations)
@@ -166,7 +171,7 @@ func TestWriter_Redact_CutsALinkWithTheOption(t *testing.T) {
 		t.Errorf("/Rect = %v, want [150 695 400 720]", rect)
 	}
 
-	if _, _, err := redact(clippedLinkDoc(true), WithRedactionAnnotationClipping()); !errors.Is(err, mutations.ErrAnnotationStraddlesRegion) {
+	if _, _, err := redact(clippedLinkDoc(true)); !errors.Is(err, mutations.ErrAnnotationStraddlesRegion) {
 		t.Errorf("shared link: err = %v, want ErrAnnotationStraddlesRegion", err)
 	}
 }
