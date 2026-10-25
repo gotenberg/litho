@@ -301,6 +301,7 @@ one deliberately rather than diffing it against a fresh build.
 | `usebpcgroup_4.pdf`    | PDF/A-4      | Colours under /UseBlackPtComp /OFF composited in a CMYK group    |
 | `unparsedform_2b.pdf`  | PDF/A-2b     | An image a form litho cannot parse draws too, then redacted      |
 | `greytint_2b.pdf`      | PDF/A-2b     | A grey ICC profile whose table tints its greys, in four paints   |
+| `groupspace_2b.pdf`    | PDF/A-2b     | RGB colour on pages whose group blends in CMYK or grey           |
 
 ### Must-not-fire controls
 
@@ -686,6 +687,7 @@ are covered under [Known divergences](#known-divergences).
 | `greyintent_2b.pdf`    | 7    | 4    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `greytint_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
+| `groupspace_2b.pdf`    | 10   | 7    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 6    | 6    |
 | `gstate_2b.pdf`        | 9    | 7    | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
 | `headingart_ua2.pdf`   | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
@@ -2026,9 +2028,9 @@ states version 5.0, an ICC.2 profile ISO 32000-1, 8.6.5.5, Table 67 and ISO
 32000-2 do not list, so litho reads no colour through it and paints
 DeviceCMYK through its built-in profile, and the page matches poppler.
 
-**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 33 pages
-of 29 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
-tolerance. 18 pages of 15 fixtures differ by more than 1% of the page. Each of
+**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 36 pages
+of 30 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
+tolerance. 21 pages of 16 fixtures differ by more than 1% of the page. Each of
 those differences is adjudicated, and none is a litho defect left open:
 
 | File                                           | Page       | Differing pixels     | Why                                       |
@@ -2044,7 +2046,16 @@ those differences is adjudicated, and none is a litho defect left open:
 | `patternglyph_2b`                              | 3          | 2500                 | poppler paints sub-pixel cells solid      |
 | `smaskindata_2b`                               | 1          | 15768                | JPX opacity from the data (poppler)       |
 | `usebpc_4`                                     | 3          | 8641                 | /UseBlackPtComp /OFF ignored (poppler)    |
+| `groupspace_2b`                                | 1, 2, 3    | 2020, 2020, 7121     | the page group's /CS ignored (poppler)    |
 
+- **The page group's colour space.** ISO 32000-1, 11.4.7 and Table 147
+  convert every colour painted into a page group into the space its `/CS`
+  names, and litho reads a page whose content paints with transparency so:
+  `groupspace_2b`'s RGB green reads as the CMYK green nearest it, 104 189 69,
+  on pages 1 and 2, and grey on page 3. poppler 26.09.0 and PDFium
+  (pypdfium2 4.30.0) blend every page in RGB and paint 0 255 0; MuPDF
+  (PyMuPDF) paints 106 189 69 on page 1 and grey on page 3, 220 where litho
+  weighs the components as ISO 32000-1, 10.3 does, 150.
 - **Interpolation.** Each fixture enlarges a 2 by 2 or 4 by 1 image with
   `/Interpolate true` fifty times or more. poppler's bilinear filter places a
   sample's value at the low corner of its cell, litho at its centre: ISO
@@ -9957,6 +9968,44 @@ through its whole table before and writes the same bytes.
 The file conforms at PDF/A-2b. The other cells are the identification,
 metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
 same rule set in all thirteen cells.
+
+### `groupspace_2b.pdf`
+
+ISO 32000-1, 11.4.7 and Table 147 convert every colour painted into a page
+group into the colour space its `/CS` names, and blend there: litho reads a
+page whose content paints with transparency in that space, an RGB colour
+outside the CMYK gamut as the CMYK colour nearest it and every colour as grey
+on a grey page. Flattening removes the group with the transparency, so what
+the composites leave of the page read in sRGB until
+`Writer.FlattenTransparency` converted it into the group's space
+(`FlattenedPage.GroupSpaceConverted`). The corpora held no such page whose
+colour moves past the `flatten` cell's bars: 46 files name a grey or CMYK page
+group, and the conversion reaches 68 pages of 30 of them, which draw on litho
+as before but for govdocs `thread_200_200620.pdf` page 3, 220 differing pixels
+at 72 dpi before and none after. Each 100 by 200 point page draws a row of
+eight DeviceRGB fills from green to red, a row of dark DeviceRGB greys, an 8
+by 1 DeviceRGB image of the first row, and a square at ca 0.5:
+
+| Page | Page group `/CS`                    | Draws                                 |
+| ---- | ----------------------------------- | ------------------------------------- |
+| 1    | DeviceCMYK                          | the rows                              |
+| 2    | ICCBased, the version 4 CMYK output | the rows                              |
+|      | profile `v4-cmyk-lut.icc`           |                                       |
+| 3    | DeviceGray                          | the rows                              |
+| 4    | DeviceCMYK                          | the rows through form `F`, and square |
+| 5    | none                                | form `F`, opaque                      |
+
+Flattened, pages 1 to 3 are converted and draw like their source on litho,
+within 2 levels at 300 dpi; before, they drew their RGB unconverted, up to
+104, 102 and 170 levels apart. Page 4 shares form `F` with page 5, which has no group:
+converting the form would change page 5, so page 4 keeps its colours
+(`GroupSpaceUnconverted`) and reads in sRGB, as it did before the change. The
+`render` cell mismatches pages 1 to 3 against poppler, which reads no page
+group's space (Known divergences).
+
+The file declares no OutputIntent, so DeviceRGB fails `6.2.4.3/2`, DeviceCMYK
+`6.2.4.3/3` and DeviceGray `6.2.4.3/4` at PDF/A-2b. veraPDF 1.30.2 and litho
+report the same rule set in all thirteen cells.
 
 ## Scope
 
