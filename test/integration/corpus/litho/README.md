@@ -304,6 +304,7 @@ one deliberately rather than diffing it against a fresh build.
 | `groupspace_2b.pdf`    | PDF/A-2b     | RGB colour on pages whose group blends in CMYK or grey           |
 | `cmykintent_2b.pdf`    | PDF/A-2b     | Colours under a rendering intent in their own CMYK page group    |
 | `jpxintent_2b.pdf`     | PDF/A-2b     | A JPX image in the colour of its data under the state's intent   |
+| `greygroup_2b.pdf`     | PDF/A-2b     | Colours entering grey ICC groups through the group's profile     |
 
 ### Must-not-fire controls
 
@@ -687,6 +688,7 @@ are covered under [Known divergences](#known-divergences).
 | `formuntagged_ua1.pdf` | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 2   | 2    | 3    | 4    | 5    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `gotochain_ua2.pdf`    | 5    | 5    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 2    | 1    |
+| `greygroup_2b.pdf`     | 7    | 4    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `greyintent_2b.pdf`    | 7    | 4    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `greytint_2b.pdf`      | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
@@ -10016,6 +10018,60 @@ The file conforms at PDF/A-2b. The other cells are the identification,
 metadata and tagging rules of their parts, and at PDF/A-4, 4e and 4f also
 6.2.4.2 test 3. veraPDF 1.30.2 and litho report the same rule set in all
 thirteen cells.
+
+### `greygroup_2b.pdf`
+
+A colour painted into a transparency group converts into the group's blending
+colour space (ISO 32000-1, 11.3.4), which for an ICCBased space is its
+profile's (8.6.5.5). litho took every colour into a grey group by DeviceGray's
+formula of 10.3.2, 0.3 red, 0.59 green and 0.11 blue of its sRGB, and read the
+composite back through the profile, so in a group whose profile's tone curve
+is not sRGB's a colour drew another grey than outside the group. Now a colour
+enters a grey ICCBased group through the inverse of that reading, the link
+from sRGB to the profile under relative colorimetric with black point
+compensation (without, under `/UseBlackPtComp /OFF`), as it enters a CMYK
+group; DeviceGray and CalGray groups keep the formula. A luminosity soft mask
+in such a group reads its luminosity as the colour looks, through sRGB, as for
+a CMYK group: the component itself is the colour's luminance under a linear
+curve. Of the corpus files, 6 name a grey ICCBased group (`blendcs_4`,
+`iccgroupalt_2b`, pdfjs `bug1721218_reduced`, veraPDF `6-2-4-3-t04-fail-n`,
+`-p` and `-u`); fail-u's page, 0.95% of which drew more than 8 levels from
+poppler, now draws within them, and 8 pixels of `bug1721218_reduced` move by
+at most 2 levels. So this fixture paints three 100 by 100 pages, each in
+spaces of its own:
+
+| Page | Group /CS                      | Draws                                                    |
+| ---- | ------------------------------ | -------------------------------------------------------- |
+| 1    | `linear`: XYZ, tone curve 1.0  | an RGB grey 0.66 over the page                           |
+| 2    | RGB (page), `linear` (mask)    | black through a luminosity soft mask of an RGB grey 0.5  |
+| 3    | `lstar`: Lab, AToB0/1, BToA0/1 | a fill of the group's own space at 0.5 under /Perceptual |
+
+Pages 1 and 3 also paint a 2 by 2 point square at `ca` 0.5 in a corner, which
+makes the page group composite in its space. `lstar`'s relative colorimetric
+tables give L\* = 100 x grey, its perceptual ones read 0.5 as L\* 70, so the
+perceptual fill cannot keep its components in the group and enters it
+through its sRGB.
+
+On poppler 26.09.0, PDFium (pypdfium2 4.30.0) and MuPDF 1.26.10 (PyMuPDF
+1.26.5), page 1's grey draws 170, where litho drew 213 and now draws 170. Page
+2's mask draws 126 to 127 on all three and on litho, before and after; the
+component would draw 199. Page 3's fill draws 171 on poppler and litho, 170 on
+PDFium, where litho drew 163; MuPDF keeps the fill's components in their own
+space whatever the intent and draws 118, as it draws `cmykintent_2b`. Only the
+corner squares differ from poppler and PDFium, which blend every group in RGB,
+by 4 pixels a page; MuPDF blends them in the group's space, as litho does.
+
+Flattened, the pages draw as their source, before and after. Converted to the
+built-in CMYK and then flattened, page 3's fill drew up to 36 levels from its
+source over half the page, as flattening converted it into the grey group by
+the formula's luminance; it now converts through the profile under the fill's
+own intent, the intent the page reads it under once the group is gone, and
+draws within 11 levels on 0.02% of the page. Redacting the centred quarter of
+each page passes the pixel check, with and without the raster fallback.
+
+The file conforms at PDF/A-2b. The other cells are the identification,
+metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
+same rule set in all thirteen cells.
 
 ### `groupspace_2b.pdf`
 
