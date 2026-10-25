@@ -136,7 +136,7 @@
 //     [WithRenderFontProvider], [WithRenderFontFiles],
 //     [WithRenderSystemFonts], [WithRenderTarget], [WithRenderContent],
 //     [WithRenderBox], [WithRenderColorModel], [WithRenderCMYKProfile],
-//     [WithOverprintSimulation].
+//     [WithOverprintSimulation], [WithRenderRedactionReading].
 //   - [Reader.CheckTextContrast] takes [ContrastOption]:
 //     [WithEnhancedContrast].
 //   - [Writer.WriteTo], [Split], [Merge], [Pipeline.WriteTo],

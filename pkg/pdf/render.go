@@ -48,6 +48,9 @@ type renderOpts struct {
 	cmykProfileErr error
 	// overprint simulates overprinting ([WithOverprintSimulation]).
 	overprint bool
+	// redactionReading reads colours as the redaction pixel check does
+	// ([WithRenderRedactionReading]).
+	redactionReading bool
 }
 
 // RenderBox selects the page boundary [Reader.RenderPage] draws, by the page
@@ -243,6 +246,30 @@ func WithRenderBackground(c color.Color) RenderOption {
 func WithOverprintSimulation() RenderOption {
 	return func(o *renderOpts) {
 		o.overprint = true
+	}
+}
+
+// WithRenderRedactionReading draws the colours as the pixel check of
+// [Writer.Redact] reads a blanked image, not as a viewer shows them: every
+// painting under the identity transfer function (ISO 32000-1, 10.5), every
+// colour under the /Default black point compensation whatever a graphics
+// state's /UseBlackPtComp asks (ISO 32000-2, Table 57), and an image with no
+// /Intent of its own under relative colorimetric, the graphics state's
+// initial intent (ISO 32000-1, 8.6.5.8), whatever the ri operator set.
+//
+// Redaction blanks an image's covered samples to the darkest colour of its
+// colour space. A transfer function maps that colour to any other, white
+// included; an uncompensated profile whose black is lighter than sRGB's, or an
+// ri operator selecting a table that lifts the black (an output profile's
+// perceptual A2B0 may read full black ink at L* 50), draws it as a grey. Under
+// this reading the blank of an image with no /Intent draws black or near it,
+// and every lighter sample stays lighter.
+// A caller that checks a redaction's pixels itself, under
+// [WithoutRedactionPixelCheck], draws the page's images with it over black to
+// tell a blanked sample from a kept one, as the check does.
+func WithRenderRedactionReading() RenderOption {
+	return func(o *renderOpts) {
+		o.redactionReading = true
 	}
 }
 
@@ -465,6 +492,9 @@ func (r *Reader) renderPage(ctx context.Context, pageNum int, opts []RenderOptio
 		CMYK:        o.model == RenderCMYK,
 		CMYKProfile: o.cmykProfile,
 		Overprint:   o.overprint,
+
+		NoTransfer:        o.redactionReading,
+		DefaultBlackPoint: o.redactionReading,
 	})
 	if err != nil {
 		switch {
