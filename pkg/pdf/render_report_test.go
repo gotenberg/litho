@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/render/page"
+	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
 // approximatedPDF is a 200 by 100 page drawn with every approximation a
@@ -92,6 +93,37 @@ func TestRenderPageReport(t *testing.T) {
 	}
 	if rep.SynthesizedAnnotations != 0 || rep.StaleAppearances != 0 {
 		t.Errorf("annotations left out are reported: %+v", rep)
+	}
+}
+
+// TestRenderPageReportUnreadableGlyphs pins [RenderReport.UnreadableGlyphs]:
+// the embedded TrueType program draws B, and A (GID 2) is a composite that
+// contains itself, which no program can draw, shown twice.
+func TestRenderPageReportUnreadableGlyphs(t *testing.T) {
+	t.Parallel()
+	program := fontbuild.TrueType{PostScriptName: "Rect", Family: "Rect", Subfamily: "Regular", Glyphs: []fontbuild.Glyph{
+		{Name: "space", Unicode: ' ', Advance: 250, Empty: true},
+		{Name: "A", Unicode: 'A', Advance: 600, Components: []uint16{2}},
+		{Name: "B", Unicode: 'B', Advance: 700},
+	}}.Build()
+	const content = "BT /F1 12 Tf 10 50 Td (AAB) Tj ET"
+	r := openLimited(t, buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /TrueType /BaseFont /Rect /FirstChar 65 /LastChar 66 /Widths [600 700] " +
+			"/Encoding /WinAnsiEncoding /FontDescriptor 6 0 R >>",
+		"<< /Type /FontDescriptor /FontName /Rect /Flags 32 /FontBBox [0 0 1000 500] /ItalicAngle 0 " +
+			"/Ascent 500 /Descent 0 /CapHeight 500 /StemV 80 /FontFile2 7 0 R >>",
+		fmt.Sprintf("<< /Length %d /Length1 %d >>\nstream\n%s\nendstream", len(program), len(program), program),
+	}), Limits{})
+	_, rep, err := r.RenderPageReport(context.Background(), 1, WithRenderDPI(72))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (RenderReport{UnreadableGlyphs: 2}); rep != want {
+		t.Errorf("report = %+v, want %+v", rep, want)
 	}
 }
 

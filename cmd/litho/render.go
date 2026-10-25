@@ -25,6 +25,7 @@ type renderPage struct {
 	Page                         int    `json:"page"`
 	Image                        string `json:"image"`
 	PlaceholderGlyphs            int    `json:"placeholderGlyphs"`
+	UnreadableGlyphs             int    `json:"unreadableGlyphs"`
 	SynthesizedAnnotations       int    `json:"synthesizedAnnotations"`
 	AnnotationsWithoutAppearance int    `json:"annotationsWithoutAppearance"`
 	StaleAppearances             int    `json:"staleAppearances"`
@@ -173,6 +174,7 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 			Page:                         p,
 			Image:                        name,
 			PlaceholderGlyphs:            rep.PlaceholderGlyphs,
+			UnreadableGlyphs:             rep.UnreadableGlyphs,
 			SynthesizedAnnotations:       rep.SynthesizedAnnotations,
 			AnnotationsWithoutAppearance: rep.AnnotationsWithoutAppearance,
 			StaleAppearances:             rep.StaleAppearances,

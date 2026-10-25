@@ -311,6 +311,9 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 		}
 		return nil
 	}
+	if g.Unreadable && (fill || strokes || mode&modeClipBit != 0) {
+		r.report.count(UnreadableGlyph)
+	}
 	if g.Outline.Empty() {
 		// A clipping glyph with no outline, a space or one its program
 		// cannot draw (glyph.Glyph.Unreadable), adds nothing to the clip,

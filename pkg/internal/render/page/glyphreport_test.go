@@ -2,11 +2,13 @@ package page
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
+	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
 func TestGlyphReportsOriginAndPlaceholderBounds(t *testing.T) {
@@ -50,6 +52,53 @@ func TestGlyphReportsOriginAndPlaceholderBounds(t *testing.T) {
 	}
 	if !near(got[0].origin.X, wantX[0]) || !near(got[1].origin.X, wantX[1]) {
 		t.Errorf("origins %v and %v, want x %v", got[0].origin, got[1].origin, wantX)
+	}
+}
+
+// TestUnreadableGlyphsAreReported pins the [UnreadableGlyph] count: A (GID 2)
+// is a composite of B and of itself, which the program refuses to draw, and B
+// draws. Every shown A that would paint or clip counts once; one that would do
+// neither, invisible or left out, does not.
+func TestUnreadableGlyphsAreReported(t *testing.T) {
+	t.Parallel()
+	program := fontbuild.TrueType{PostScriptName: "Rect", Family: "Rect", Subfamily: "Regular", Glyphs: []fontbuild.Glyph{
+		{Name: "space", Unicode: ' ', Advance: 250, Empty: true},
+		{Name: "A", Unicode: 'A', Advance: 600, Components: []uint16{3, 2}},
+		{Name: "B", Unicode: 'B', Advance: 700},
+	}}.Build()
+	objs := trueTypeObjs()
+	objs[2] = stream(fmt.Sprintf("/Length1 %d", len(program)), string(program))
+	for _, tt := range []struct {
+		name    string
+		content string
+		omit    Content
+		want    int
+	}{
+		{"filled", "BT /F 20 Tf 10 50 Td (AAB) Tj ET", 0, 2},
+		{"clipping", "BT 7 Tr /F 20 Tf 10 50 Td (AB) Tj ET 0 0 100 100 re f", 0, 1},
+		{"invisible", "BT 3 Tr /F 20 Tf 10 50 Td (AB) Tj ET", 0, 0},
+		{"text left out", "BT /F 20 Tf 10 50 Td (AB) Tj ET", Text, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := fixture{page: textPage, content: tt.content, objs: objs}
+			doc, pg := open(t, f.bytes(), limits.Limits{})
+			opts := f.options()
+			opts.Omit = tt.omit
+			c, report, err := Render(context.Background(), doc, pg, opts)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if got := report.Unsupported[UnreadableGlyph]; got != tt.want {
+				t.Errorf("unreadable glyphs = %d, want %d (report %v)", got, tt.want, report.Unsupported)
+			}
+			if tt.name != "filled" {
+				return
+			}
+			// The unreadable As paint nothing, B is drawn after their two
+			// advances of 12, from x 34 to 47.
+			expect(t, c.Image(), 1, map[[2]int]rgb{{15, 45}: paper, {27, 45}: paper, {40, 45}: black})
+		})
 	}
 }
 

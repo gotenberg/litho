@@ -50,6 +50,14 @@ const (
 	// neither the document nor [Options.Fonts] supplies a program for
 	// (ISO 32000-1, 9.6.2.2 leaves a substitute to the reader).
 	PlaceholderGlyph = "placeholder glyph"
+	// UnreadableGlyph counts glyphs of an embedded or substitute program the
+	// program could not draw ([glyph.Glyph.Unreadable]): a glyph description
+	// that is cut short, out of range or a composite that contains itself.
+	// The glyph paints nothing and adds nothing to a clip, as MuPDF and PDFium
+	// leave it out, so the page lacks whatever it would have shown. A glyph
+	// that would neither paint nor clip, in rendering mode 3 or left out by
+	// [Options.Omit], is not counted, since its outline changes nothing.
+	UnreadableGlyph = "unreadable glyph"
 	// TransparencyOverBudget counts transparency groups, soft masks and the
 	// knockout groups of text objects (ISO 32000-1, 11.4, 11.6.5.2, 9.3.8)
 	// whose rasters would pass the render pixel budget, drawn other than the

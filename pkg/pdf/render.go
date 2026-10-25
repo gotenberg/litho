@@ -320,6 +320,13 @@ type RenderReport struct {
 	// [WithRenderFontFiles] or [WithRenderSystemFonts] (ISO 32000-1, 9.6.2.2
 	// leaves a substitute to the reader).
 	PlaceholderGlyphs int
+	// UnreadableGlyphs counts the glyphs left out because their font program,
+	// embedded or supplied, could not draw them: a glyph description cut
+	// short, out of range, or a composite that contains itself. They paint
+	// nothing and clip nothing, as MuPDF and PDFium leave them out; another
+	// viewer may draw part of them. A glyph that would paint nothing anyway,
+	// invisible or left out by [WithRenderContent], is not counted.
+	UnreadableGlyphs int
 	// SynthesizedAnnotations counts the annotations drawn from an appearance
 	// litho built from the annotation dictionary, the file holding no
 	// appearance stream: the Square, Circle, Line, Polygon, PolyLine, Ink,
@@ -382,6 +389,8 @@ func renderReport(logger *slog.Logger, rep page.Report) RenderReport {
 		switch k {
 		case page.PlaceholderGlyph:
 			out.PlaceholderGlyphs += n
+		case page.UnreadableGlyph:
+			out.UnreadableGlyphs += n
 		case page.TransparencyOverBudget:
 			out.TransparencyOverBudget += n
 		case page.UnsupportedAnnotation:

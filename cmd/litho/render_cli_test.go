@@ -102,6 +102,9 @@ func TestRender_Report(t *testing.T) {
 	if pg.PlaceholderGlyphs == 0 {
 		t.Errorf("page entry %+v, want placeholder glyphs for the unembedded font", pg)
 	}
+	if !bytes.Contains(stdout.Bytes(), []byte(`"unreadableGlyphs": 0`)) {
+		t.Errorf("report %s, want an unreadableGlyphs count of 0", stdout.String())
+	}
 	if _, err := os.Stat(pg.Image); err != nil {
 		t.Errorf("the reported image: %v", err)
 	}
