@@ -180,7 +180,7 @@ func (cc colorContext) deviceDefault(ctx context.Context, doc *document.Document
 // intent, so the graphics state's intent applies only to an image that
 // states none, and an unrecognised name selects relative colorimetric.
 func (cc colorContext) renderingIntent(ctx context.Context, doc *document.Document, dict ast.PdfDict) icc.Intent {
-	intent, own := imageIntent(ctx, doc, dict)
+	intent, own := ImageIntent(ctx, doc, dict)
 	if !own && cc.painted {
 		intent = cc.stateIntent
 	}
@@ -192,17 +192,18 @@ func (cc colorContext) renderingIntent(ctx context.Context, doc *document.Docume
 // the graphics state's initial intent (ISO 32000-1, 8.6.5.8), for an image
 // that states none, as for a caller with no graphics state.
 func renderingIntent(ctx context.Context, doc *document.Document, dict ast.PdfDict) icc.Intent {
-	intent, _ := imageIntent(ctx, doc, dict) // an image with no /Intent reads as relative colorimetric
+	intent, _ := ImageIntent(ctx, doc, dict) // an image with no /Intent reads as relative colorimetric
 	return intent
 }
 
-// imageIntent returns the rendering intent an image dictionary's /Intent
+// ImageIntent returns the rendering intent an image dictionary's /Intent
 // names, and whether it names one. An entry whose value is null, or a
 // reference to no object, is absent (ISO 32000-1, 7.3.7 and 7.3.10). Any
 // other value that is not a name Table 70 defines selects relative
 // colorimetric, as 8.6.5.8 makes an unrecognised name do, and still counts as
-// the image's own.
-func imageIntent(ctx context.Context, doc *document.Document, dict ast.PdfDict) (icc.Intent, bool) {
+// the image's own. The renderer's blending and recolouring read an image's
+// intent through it, as the decoder does.
+func ImageIntent(ctx context.Context, doc *document.Document, dict ast.PdfDict) (icc.Intent, bool) {
 	obj, ok := dict["Intent"]
 	if !ok {
 		return icc.RelativeColorimetric, false

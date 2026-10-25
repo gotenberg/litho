@@ -6,6 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 )
 
@@ -59,6 +60,21 @@ func (r *renderer) imageIntent() (icc.Intent, bool) {
 		return 0, false
 	}
 	return icc.ParseIntent(r.m.Current().RenderingIntent).WithBPC(r.blackPointCompensation()), true
+}
+
+// paintedIntent returns the rendering intent the colours of the image whose
+// dictionary is dict convert under, painted under the current graphics
+// state: its own /Intent, else the state's ([renderer.imageIntent]), else
+// relative colorimetric (ISO 32000-1, 8.6.5.8). It carries no black point
+// compensation choice.
+func (r *renderer) paintedIntent(dict ast.PdfDict) icc.Intent {
+	if intent, own := pdfimage.ImageIntent(r.ctx, r.doc, dict); own {
+		return intent
+	}
+	if intent, ok := r.imageIntent(); ok {
+		return intent & 3
+	}
+	return icc.RelativeColorimetric
 }
 
 // colorFor returns the converter of the colour space a fill or stroke colour

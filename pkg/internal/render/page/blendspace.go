@@ -378,16 +378,17 @@ type solid struct {
 // solidOf returns the solid colour of c, whose sRGB conv gave as rgb, for the
 // group being painted. A colour in the group's own space, or in a device
 // space the group's converts from by ISO 32000-1, 10.3, keeps its
-// components ([renderer.nativeColor]); any other reaches the group through
-// its sRGB (11.3.4 converts it into the blending colour space), without
-// black point compensation under /UseBlackPtComp /OFF (ISO 32000-2,
-// Table 57), as it reached sRGB.
+// components ([renderer.nativeColor]) unless the graphics state's rendering
+// intent reads them otherwise ([renderer.nativeUnder]); any other reaches
+// the group through its sRGB (11.3.4 converts it into the blending colour
+// space), without black point compensation under /UseBlackPtComp /OFF (ISO
+// 32000-2, Table 57), as it reached sRGB.
 func (r *renderer) solidOf(s *scope, c graphics.Color, rgb [3]float32) solid {
 	sp := r.top().group.Space()
 	if sp == nil {
 		return solid{rgb: rgb, in: blend.Components{rgb[0], rgb[1], rgb[2]}}
 	}
-	if comps, ok := r.nativeColor(s, c, sp); ok {
+	if comps, ok := r.nativeColor(s, c, sp); ok && r.nativeUnder(s, c.Space, icc.ParseIntent(r.m.Current().RenderingIntent)) {
 		return solid{rgb: rgb, in: comps}
 	}
 	if r.blackPointCompensation() == icc.BPCOff {
@@ -437,14 +438,130 @@ func (r *renderer) nativeColor(s *scope, c graphics.Color, sp *blend.Space) (ble
 	return blend.Components{}, false
 }
 
+// nativeUnder reports whether a colour in space, painted against s's
+// resources and converted under the given rendering intent (ISO 32000-1,
+// 8.6.5.8), may keep the components [renderer.nativeColor] passes into a
+// blending colour space. A group's composite reads back to sRGB under
+// relative colorimetric, the initial intent ([renderer.groupSpace],
+// [cmykLinkOptions]), as no one graphics state painted it, so a colour
+// painted under another intent keeps its components only where its space
+// reads alike under both ([renderer.readsAlike]): DeviceGray, which ISO
+// 32000-1, 10.3 carries into grey and CMYK by formula, and a profile whose
+// tables for the two intents agree. Any other reaches the group through its
+// sRGB under its own intent, as a colour in another space does (11.3.4), and
+// reads as the same colour drawn outside the group: the native components
+// would read under the group's intent instead.
+//
+// A page drawn for a CMYK device ([Options.CMYK]) or composited in its
+// DeviceCMYK to preview overprinting ([Options.Overprint]) writes the
+// device's own inks, which no intent converts, and keeps them.
+//
+// # Corpus evidence
+//
+//   - All corpora: 7 files paint under a perceptual ri or state an image
+//     /Intent /Perceptual and hold a grey or CMYK transparency group (pdfjs
+//     bug1721218_reduced, issue14297, issue14562, issue18444, issue18956,
+//     issue19319; govdocs thread_200_200804). Every one of their pages draws
+//     as before, their profiles reading alike; without the comparison
+//     issue19319's pages 8, 9 and 19 drew farther from poppler 26.09.0, a
+//     saturated ink taken through sRGB.
+//   - litho cmykintent_2b.pdf: an image and a fill in a CMYK profile whose
+//     perceptual table reads K 0.5 lighter, after /Perceptual ri, in a page
+//     group of that profile, drew as relative colorimetric reads them (118);
+//     they now draw 184, as outside the group and on poppler. MuPDF 1.26.10
+//     draws 118.
+func (r *renderer) nativeUnder(s *scope, space graphics.ColorSpace, intent icc.Intent) bool {
+	if r.deviceInks || intent&3 == icc.RelativeColorimetric || space.Family == graphics.FamilyDeviceGray {
+		return true
+	}
+	return r.readsAlike(s, space, intent&3)
+}
+
+// alikeSteps is how many values per component [renderer.readsAlike] samples
+// a space at: 0, 1/4 ... 1, 625 colours of a CMYK space.
+const alikeSteps = 5
+
+// readsAlike reports whether the colours of space, against s's resources,
+// read in sRGB to within one 8-bit level alike under the given rendering
+// intent and under relative colorimetric, sampled at [alikeSteps] values per
+// component. A space it cannot read reports false. Answers are kept per
+// render by the space's definition and the intent, up to [maxBlendSpaces].
+func (r *renderer) readsAlike(s *scope, space graphics.ColorSpace, intent icc.Intent) bool {
+	key := fmt.Sprintf("%s|%v|%d", space.Family, space.Object, intent)
+	if v, ok := r.alike[key]; ok {
+		return v
+	}
+	alike := r.compareIntents(s, space, intent)
+	if r.alike == nil {
+		r.alike = make(map[string]bool)
+	}
+	if len(r.alike) < maxBlendSpaces {
+		r.alike[key] = alike
+	}
+	return alike
+}
+
+func (r *renderer) compareIntents(s *scope, space graphics.ColorSpace, intent icc.Intent) bool {
+	n := space.Components
+	if n < 1 || n > 4 {
+		return false
+	}
+	var res ast.PdfDict
+	if s != nil {
+		res = s.resources
+	}
+	opts := r.colorOptions()
+	opts.Intent = intent.String()
+	under, err := colorconv.For(r.ctx, r.doc, space, res, opts)
+	if err != nil {
+		return false
+	}
+	opts.Intent = icc.RelativeColorimetric.String()
+	relative, err := colorconv.For(r.ctx, r.doc, space, res, opts)
+	if err != nil {
+		return false
+	}
+	comps := make([]float64, n)
+	idx := make([]int, n)
+	for {
+		for i, v := range idx {
+			comps[i] = float64(v) / (alikeSteps - 1)
+		}
+		ur, ug, ub := under.RGB(comps)
+		rr, rg, rb := relative.RGB(comps)
+		if levelsApart(ur, rr) || levelsApart(ug, rg) || levelsApart(ub, rb) {
+			return false
+		}
+		i := 0
+		for ; i < n; i++ {
+			if idx[i]++; idx[i] < alikeSteps {
+				break
+			}
+			idx[i] = 0
+		}
+		if i == n {
+			return true
+		}
+	}
+}
+
+// levelsApart reports two sRGB components more than one 8-bit level apart.
+func levelsApart(a, b float32) bool {
+	d := a - b
+	return d > 1.0/255 || d < -1.0/255
+}
+
 // nativeImage returns the colour of an image of width by height samples in
 // sp, the blending colour space of the group being painted, as planes of
 // three components each in the red, green and blue channels
 // ([renderer.paintPlanes]), when it needs no trip through sRGB: the image's
 // /ColorSpace is one whose colours [renderer.nativeColor] passes through,
 // a device or ICC space, and its samples decode in it at that size. It
-// returns nil otherwise, and for samples a soft mask's /Matte preblends
-// (ISO 32000-1, 11.6.5.3), which the native reading leaves preblended.
+// returns nil otherwise, for samples a soft mask's /Matte preblends (ISO
+// 32000-1, 11.6.5.3), which the native reading leaves preblended, and for an
+// image converted under a rendering intent its native samples would not read
+// under ([renderer.nativeUnder]): its own /Intent, else the graphics
+// state's (8.6.5.8).
 //
 // ISO 32000-1, 11.3.4 converts a colour painted into a group into the
 // group's blending colour space, which a colour already in it needs none
@@ -480,6 +597,9 @@ func (r *renderer) nativeImage(s *scope, name ast.PdfName, stream ast.PdfStream,
 		return nil
 	}
 	if _, ok := r.nativeColor(s, graphics.Color{Space: space, Components: make([]float64, space.Components)}, sp); !ok {
+		return nil
+	}
+	if !r.nativeUnder(s, space, r.paintedIntent(stream.Dict)) {
 		return nil
 	}
 	if r.preblended(stream) {

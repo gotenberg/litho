@@ -80,6 +80,10 @@ type renderer struct {
 	// ([renderer.groupSpace], [renderer.tintIn]).
 	spaces map[string]*blend.Space
 	tints  map[string]*function.Function
+	// alike keeps whether a colour space reads alike under a rendering
+	// intent and relative colorimetric ([renderer.readsAlike]), built on
+	// first use.
+	alike map[string]bool
 	// mergedResources keeps, per form, its /Resources
 	// with the page's names it lacks ([renderer.withPageNames]).
 	mergedResources map[ast.PdfIndirectRef]ast.PdfDict
@@ -112,6 +116,10 @@ type renderer struct {
 	omit Content
 	// overprint simulates overprinting ([Options.Overprint]).
 	overprint bool
+	// deviceInks marks a page composited in a CMYK device's own inks,
+	// drawn for the device ([Options.CMYK]) or to preview overprinting
+	// ([renderer.nativeUnder]).
+	deviceInks bool
 	// spots names the colorant of each spot colorant plane of the page
 	// group, and spotTables gives its process inks ([renderer.spotPaint]).
 	spots      []ast.PdfName
