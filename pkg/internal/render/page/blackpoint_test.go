@@ -9,6 +9,19 @@ import (
 // curve starts at a luminance of 1/8, so its black reads L* 42 and black
 // point compensation (ISO 18619) moves it onto sRGB's black.
 func liftedGreyProfile() []byte {
+	return greyDisplayProfile(0x2000, 0xFFFF)
+}
+
+// linearGreyProfile builds a version 2.1 grey display profile whose tone
+// curve is the identity, so a grey component is the luminance Y.
+func linearGreyProfile() []byte {
+	return greyDisplayProfile()
+}
+
+// greyDisplayProfile builds a version 2.1 grey display profile over XYZ whose
+// tone curve holds the given 16-bit entries, none for the identity
+// (ICC.1:2001-04, 6.5.3).
+func greyDisplayProfile(curve ...uint16) []byte {
 	be32 := binary.BigEndian.AppendUint32
 	s15 := func(b []byte, v float64) []byte { return be32(b, uint32(int32(v*65536+0.5))) }
 	wtpt := []byte("XYZ \x00\x00\x00\x00")
@@ -16,9 +29,10 @@ func liftedGreyProfile() []byte {
 		wtpt = s15(wtpt, v)
 	}
 	trc := []byte("curv\x00\x00\x00\x00")
-	trc = be32(trc, 2)
-	trc = binary.BigEndian.AppendUint16(trc, 0x2000)
-	trc = binary.BigEndian.AppendUint16(trc, 0xFFFF)
+	trc = be32(trc, uint32(len(curve)))
+	for _, v := range curve {
+		trc = binary.BigEndian.AppendUint16(trc, v)
+	}
 	tags := []struct {
 		sig  string
 		data []byte

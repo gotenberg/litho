@@ -203,13 +203,39 @@ func convert(c Components, from, to *Space, uncompensated bool) Components {
 	return to.fromRGB(from.toRGB(c), uncompensated)
 }
 
+// ProfiledConverter is a [Converter] of a grey space that reads its colours
+// through an ICC profile rather than as DeviceGray's levels (ISO 32000-1,
+// 8.6.5.5), whose components then weigh light as the profile's tone curve
+// does, not as a device's grey.
+type ProfiledConverter interface {
+	Converter
+	// Profiled reports whether the space is read through a profile.
+	Profiled() bool
+}
+
 // luminosity returns the luminosity of the stored colour c, the value a
 // luminosity soft mask takes from it (ISO 32000-1, 11.5.3): a grey is its own
 // luminosity, an RGB colour weighs its components by the Lum function of
-// 11.3.5, and a CMYK colour is weighed as it looks, through sRGB.
+// 11.3.5, and a CMYK colour, or a grey read through a profile
+// ([ProfiledConverter]), is weighed as it looks, through sRGB.
+//
+// A grey profile's component is no device grey: under a tone curve of gamma
+// 1.0 the component of sRGB grey 0.5 is 0.21, its luminance, and a mask of
+// that value would hide more than the same mask drawn in an RGB group. Read
+// through sRGB, the two groups mask alike.
+//
+// # Corpus evidence
+//
+//   - litho greygroup_2b.pdf: black through a luminosity mask of sRGB grey
+//     0.5 drawn in a grey group of a linear tone curve draws 126 to 127 on
+//     poppler 26.09.0, PDFium and MuPDF 1.26.10, and 126 here; the component
+//     itself would draw 199.
 func (s *Space) luminosity(c Components) float32 {
 	switch s.Kind() {
 	case Gray:
+		if p, ok := s.conv.(ProfiledConverter); ok && p.Profiled() {
+			return lum(s.toRGB(c))
+		}
 		return c[0]
 	case CMYK:
 		return lum(s.toRGB(c))
