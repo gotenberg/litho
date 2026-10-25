@@ -298,6 +298,7 @@ one deliberately rather than diffing it against a fresh build.
 | `usebpc_4.pdf`         | PDF/A-4      | ICC colours under /UseBlackPtComp /Default, /ON and /OFF         |
 | `blankkeys_ua1.pdf`    | PDF/UA-1     | Hidden, smoothed and tagged images, blanked by a redaction       |
 | `imageintent_2b.pdf`   | PDF/A-2b     | ICC images under the rendering intent `ri` and `/RI` set         |
+| `usebpcgroup_4.pdf`    | PDF/A-4      | Colours under /UseBlackPtComp /OFF composited in a CMYK group    |
 
 ### Must-not-fire controls
 
@@ -820,6 +821,7 @@ are covered under [Known divergences](#known-divergences).
 | `unclosedmc_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
 | `usebpc_4.pdf`         | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 0   | 1    | 2    | 7    | 6    |
+| `usebpcgroup_4.pdf`    | 10   | 8    | 7    | 5    | 5    | 7    | 5    | 5    | 0   | 1    | 2    | 7    | 6    |
 | `usecmap_2u.pdf`       | 5    | 2    | 8    | 3    | 5    | 8    | 3    | 5    | 5   | 5    | 6    | 9    | 10   |
 | `unembednames_2u.pdf`  | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 11   | 11   |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
@@ -9828,6 +9830,44 @@ passes the pixel check, and its output renders on litho as on poppler.
 The file conforms at PDF/A-2b. The other cells are the identification,
 metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
 same rule set in all thirteen cells.
+
+### `usebpcgroup_4.pdf`
+
+`usebpc_4` reaches `/UseBlackPtComp` (ISO 32000-2, Table 57) in conversions to
+sRGB alone. Into a CMYK blending colour space a colour converts again, from
+sRGB into the group's CMYK profile, and litho built that link once per group,
+compensated, so a colour painted under `/OFF` entered the group compensated
+all the same. No corpus file paints under `/OFF` into a CMYK group (of 5345
+corpus files only `usebpc_4` states `/OFF`), so this fixture does. Its one 100
+by 200 page, whose group blends in an ICC RGB space, paints one isolated form
+group whose `/CS` is the version 4 CMYK profile of litho's ICC test data
+(`v4-cmyk-lut.icc`, black at the version 4 perceptual reference black, lighter
+than sRGB's). A Multiply square at ca 0.5 in its top right corner makes the
+group blend, so it is composited in its `/CS`. Each row is eight 10-point
+steps of grey, 0 to 0.28, in a gamma 2.2 display profile whose black is sRGB's:
+
+| Row       | Draws                                     | Grey levels, before   | Grey levels, now      |
+| --------- | ----------------------------------------- | --------------------- | --------------------- |
+| y 140-190 | fills under `/ON`                         | 0 2 13 26 37 49 60 69 | 0 2 13 26 37 49 60 69 |
+| y 80-130  | the same fills under `/OFF`               | 0 2 13 26 37 49 60 69 | 0 0 1 19 34 46 57 67  |
+| y 20-70   | `Rm`, an 8 by 1 image of the ramp, `/OFF` | 0 2 13 26 37 49 60 69 | 0 0 1 19 34 46 57 67  |
+
+Under `/OFF` a colour now enters the group without compensation, so the
+shadows below the profile's black crush to black when the composite is read
+back. Little CMS 2.19 predicts the same: sRGB 13, 26 and 37 converted to the
+profile without `cmsFLAGS_BLACKPOINTCOMPENSATION`, then back with it, read 2,
+21 and 34. MuPDF 1.26.10 (PyMuPDF 1.26.5) draws the `/OFF` rows 0 0 4 19 35 46
+57 68, as litho does; poppler 26.09.0 and PDFium (pypdfium2 4.30.0) blend
+every group in RGB and ignore the entry, drawing every row as the first. The
+gap stays within the `render` cell's 64-level tolerance, so the page matches.
+Flattening composites the whole group, and the raster fallback of a redaction
+rasterises it, both through litho's renderer, so their outputs keep the
+`/OFF` reading. A redaction without the fallback refuses: the regions select
+content a form draws.
+
+The file conforms at PDF/A-4. The other cells are the identification,
+metadata, ICC version and transparency rules of their parts. veraPDF 1.30.2
+and litho report the same rule set in all thirteen cells.
 
 ## Scope
 
