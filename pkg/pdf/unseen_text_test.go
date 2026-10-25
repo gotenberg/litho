@@ -245,3 +245,50 @@ func TestExtractUnseenTextClipCopy(t *testing.T) {
 		t.Errorf("reported %v, want %v", reasons, want)
 	}
 }
+
+// TestExtractUnseenTextPaintedTwin judges a run in rendering mode 7 whose
+// clip lets nothing through by the painted copy of it at its place (ISO
+// 32000-1, 9.3.6, Table 106: mode 7 paints nothing):
+//
+//   - AFTER, filled and shown, then drawn again in mode 7 clipping nothing:
+//     the reader sees it in the fill, nothing reported;
+//   - BEFORE, drawn in mode 7 clipping nothing, then filled and shown:
+//     nothing reported;
+//   - LONE, in mode 7 clipping nothing with no painted copy: reported for its
+//     mode;
+//   - SHOWN, filled, with ELSE at its place in mode 7 clipping nothing: other
+//     text, so ELSE is reported for its mode.
+func TestExtractUnseenTextPaintedTwin(t *testing.T) {
+	t.Parallel()
+	const content = "BT 0 g /F1 24 Tf 20 340 Td (AFTER) Tj ET\n" +
+		"q BT 7 Tr /F1 24 Tf 20 340 Td (AFTER) Tj ET Q\n" +
+		"q BT 7 Tr /F1 24 Tf 20 260 Td (BEFORE) Tj ET Q\n" +
+		"BT 0 g /F1 24 Tf 20 260 Td (BEFORE) Tj ET\n" +
+		"q BT 7 Tr /F1 24 Tf 20 180 Td (LONE) Tj ET Q\n" +
+		"BT 0 g /F1 24 Tf 20 100 Td (SHOWN) Tj ET\n" +
+		"q BT 7 Tr /F1 24 Tf 20 100 Td (ELSE) Tj ET Q\n"
+	data := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+	r := openLimited(t, data, Limits{})
+
+	got, err := r.ExtractUnseenText(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := map[string][]models.UnseenReason{}
+	for _, u := range got {
+		reasons[u.Text] = append(reasons[u.Text], u.Reason)
+	}
+	want := map[string][]models.UnseenReason{
+		"LONE": {models.UnseenRenderMode},
+		"ELSE": {models.UnseenRenderMode},
+	}
+	if !maps.EqualFunc(reasons, want, slices.Equal) {
+		t.Errorf("reported %v, want %v", reasons, want)
+	}
+}

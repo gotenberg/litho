@@ -234,3 +234,29 @@ func TestCheckTextContrastClipCopy(t *testing.T) {
 		t.Errorf("judged %d, undetermined %d, failures %v; want 1, 1, none", rep.Judged, rep.Undetermined, rep.Failures)
 	}
 }
+
+// TestCheckTextContrastPaintedTwin judges a filled heading by its own
+// colours when a copy of it at its place in rendering mode 7 clips nothing:
+// the copy paints nothing (ISO 32000-1, 9.3.6, Table 106), so the page shows
+// the fill's colours, and the copy is neither judged nor undetermined.
+func TestCheckTextContrastPaintedTwin(t *testing.T) {
+	t.Parallel()
+	const content = "BT 0.8 g /F1 24 Tf 20 340 Td (HEADING) Tj ET\n" +
+		"q BT 7 Tr /F1 24 Tf 20 340 Td (HEADING) Tj ET Q\n"
+	data := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+	r := openLimited(t, data, Limits{})
+
+	rep, err := r.CheckTextContrast(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Judged != 1 || rep.Undetermined != 0 || len(rep.Failures) != 1 {
+		t.Errorf("judged %d, undetermined %d, failures %v; want 1, 0, one", rep.Judged, rep.Undetermined, rep.Failures)
+	}
+}

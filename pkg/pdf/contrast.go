@@ -103,7 +103,10 @@ func WithEnhancedContrast() ContrastOption {
 // it, so the content stream's colour is not the one shown. Text painted over
 // and drawn again later at its place in rendering mode 7, by a copy that
 // shows through its clip, shows in the colours of what the clip lets
-// through, and is counted there too.
+// through, and is counted there too. A copy in mode 7 whose clip lets nothing
+// through paints nothing (ISO 32000-1, 9.3.6, Table 106) and shows no colour
+// to judge, so text drawn once filled and once in mode 7 is judged by its
+// filled copy alone, in the colours the page shows (Success Criterion 1.4.3).
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
 // [ErrFontMissing] when the page's text cannot be read, and
