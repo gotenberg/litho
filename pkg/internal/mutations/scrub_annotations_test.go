@@ -127,6 +127,49 @@ func TestScrubAnnotationText_ClearsAQuotingURI(t *testing.T) {
 	}
 }
 
+func TestScrubAnnotationText_DropsAQuotingURIAction(t *testing.T) {
+	// A link's target sits in its /A, a URI action (ISO 32000-1, 12.6.4.7),
+	// written into the annotation or as an object of its own. A link kept
+	// beside a redaction, cut to the part outside a region, still pointed at
+	// mailto:...the removed address, and the redaction was refused over it.
+	cases := map[string]string{
+		"direct": "13 0 obj\n<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /Border [0 0 0]" +
+			" /A << /S /URI /URI (mailto:SECRET@example.test) >> >>\nendobj\n",
+		"indirect": "13 0 obj\n<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /Border [0 0 0] /A 14 0 R >>\nendobj\n" +
+			"14 0 obj\n<< /S /URI /URI (mailto:SECRET@example.test) >>\nendobj\n",
+		"/PA": "13 0 obj\n<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /Border [0 0 0] /PA 14 0 R >>\nendobj\n" +
+			"14 0 obj\n<< /S /URI /URI (mailto:SECRET@example.test) >>\nendobj\n",
+	}
+	for name, objects := range cases {
+		t.Run(name, func(t *testing.T) {
+			doc, _ := annotFixture(t, "[13 0 R]", "[]", objects)
+			alloc := writer.NewObjAllocator(50)
+			scrubbed, err := ScrubAnnotationText(context.Background(), alloc, doc, []string{"SECRET"})
+			if err != nil {
+				t.Fatalf("ScrubAnnotationText: %v", err)
+			}
+			if !slices.Equal(scrubbed, []int{13}) {
+				t.Fatalf("scrubbed = %v, want [13]", scrubbed)
+			}
+			link, _ := alloc.Pending()[13].(ast.PdfDict)
+			if _, has := link["A"]; has {
+				t.Errorf("the link keeps its action: %v", link)
+			}
+			if _, has := link["PA"]; has {
+				t.Errorf("the link keeps its /PA: %v", link)
+			}
+		})
+	}
+
+	// An action naming another target is left alone.
+	doc, _ := annotFixture(t, "[13 0 R]", "[]", "13 0 obj\n<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A 14 0 R >>\nendobj\n"+
+		"14 0 obj\n<< /S /URI /URI (http://example.test/) >>\nendobj\n")
+	alloc := writer.NewObjAllocator(50)
+	if scrubbed, err := ScrubAnnotationText(context.Background(), alloc, doc, []string{"SECRET"}); err != nil || len(scrubbed) != 0 {
+		t.Errorf("unrelated action: scrubbed %v, err %v, want nothing", scrubbed, err)
+	}
+}
+
 func TestScrubAnnotationText_LeavesUnrelatedAnnotationsAlone(t *testing.T) {
 	doc, _ := annotFixture(t, "[13 0 R]", "[]", annotObj(13, "Contents", "an ordinary note"))
 	alloc := writer.NewObjAllocator(50)

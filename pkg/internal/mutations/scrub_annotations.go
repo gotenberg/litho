@@ -31,6 +31,16 @@ var annotTextKeys = []ast.PdfName{"Contents", "RC", "URI"}
 // on page one, so scrubbing only the redacted page's annotations would leave
 // the copy that matters. Pass [RedactReport.RemovedText] as tokens.
 //
+// A URI action in /A or /PA whose /URI quotes a token is dropped from the
+// annotation, whether written into it or as an object of its own
+// ([uriActionQuotes]).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100166: a link the centred quarter cut to the part
+//     outside the region named an action object whose /URI is the mailto:
+//     address the region removed, and the redaction was refused over it.
+//
 // It refuses rather than half-clean:
 //
 //   - An annotation whose appearance stream still paints text reports
@@ -138,15 +148,62 @@ func annotTextHits(ctx context.Context, doc *document.Document, annot ast.PdfDic
 		if !isStr {
 			continue
 		}
-		text := document.DecodePdfString(str)
-		for _, tok := range tokens {
-			if strings.Contains(text, tok) {
-				hits = append(hits, key)
-				break
-			}
+		if quotesToken(str, tokens) {
+			hits = append(hits, key)
+		}
+	}
+	for _, key := range annotURIActionKeys {
+		if uriActionQuotes(ctx, doc, annot[key], tokens) {
+			hits = append(hits, key)
 		}
 	}
 	return hits
+}
+
+// annotURIActionKeys are the annotation entries holding an action that may be
+// a URI action: a Link's /A and /PA (ISO 32000-1, Table 173), and any
+// annotation's /A (Table 164 lists it for Link and Widget, and producers set
+// it elsewhere).
+var annotURIActionKeys = []ast.PdfName{"A", "PA"}
+
+// uriActionQuotes reports whether obj, an action written into the annotation
+// or as an object of its own, is a URI action whose /URI quotes a token (ISO
+// 32000-1, 12.6.4.7, Table 206).
+//
+// The whole action goes when it does: /URI is required in a URI action, so
+// one without it is no action at all, and dropping the entry leaves a link
+// that names no target. Removing it from the annotation is the same edit
+// whether the action is direct or indirect: an indirect action no kept
+// annotation names any more leaves the file with the rewrite, and one some
+// other object still names is found there by the scan, which refuses.
+func uriActionQuotes(ctx context.Context, doc *document.Document, obj ast.PdfObject, tokens []string) bool {
+	if obj == nil {
+		return false
+	}
+	action, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || action == nil {
+		return false
+	}
+	if s, _ := document.ResolveName(ctx, doc, action["S"]); s != "URI" {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, action["URI"])
+	if err != nil {
+		return false
+	}
+	str, isStr := resolved.(ast.PdfString)
+	return isStr && quotesToken(str, tokens)
+}
+
+// quotesToken reports whether the decoded text of str contains a token.
+func quotesToken(str ast.PdfString, tokens []string) bool {
+	text := document.DecodePdfString(str)
+	for _, tok := range tokens {
+		if strings.Contains(text, tok) {
+			return true
+		}
+	}
+	return false
 }
 
 // appearancePaintsText reports whether the annotation's normal appearance draws
