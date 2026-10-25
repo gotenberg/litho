@@ -308,6 +308,7 @@ one deliberately rather than diffing it against a fresh build.
 | `tintwhite_2b.pdf`     | PDF/A-2b     | An RGB ICC profile whose white reads tinted, painted three ways  |
 | `cutcell_2b.pdf`       | PDF/A-2b     | Enlarged image samples whose cells a region's edges cut          |
 | `noteicons_2b.pdf`     | PDF/A-2b     | Text annotations with no `/AP`, one for each predefined icon     |
+| `structsplit_ua1.pdf`  | PDF/UA-1     | Structure elements whose marked content a redaction cuts         |
 
 ### Must-not-fire controls
 
@@ -806,6 +807,7 @@ are covered under [Known divergences](#known-divergences).
 | `strokedtext_2b.pdf`   | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
 | `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 30   |
+| `structsplit_ua1.pdf`  | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `symbolname_2u.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
 | `t3extent_2b.pdf`      | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
@@ -10313,6 +10315,44 @@ Each annotation sets `/F 4` and lacks the `/AP` ISO 19005-2, 6.3.3 requires,
 so `6.3.3/1` fires eleven times at PDF/A-2 and later; at PDF/A-1b the `/C`
 arrays with no output intent fail `6.5.3/3`. veraPDF 1.30.2 and litho report
 the same rule set and counts in all thirteen cells.
+
+### `structsplit_ua1.pdf`
+
+A region redaction removes the show-text operators it covers and keeps the BDC
+and EMC around them, so a structure element whose marked content a region
+crosses keeps tagging what survived, under the MCID its `/K` and the
+`/ParentTree` already name (ISO 32000-1, 14.7.4.2 and 14.7.4.4; ISO 14289-1,
+7.1). What a cut cannot divide is the text an element holds itself:
+`/ActualText`, `/Alt` and `/E` describe the element's whole content, its
+descendants' included (14.9.3 to 14.9.5). The corpus reached the cut only on
+real files with long trees, and no fixture held an element above removed
+content whose text spells it.
+
+| Page | Content the centred quarter crosses                                                       |
+| ---- | ----------------------------------------------------------------------------------------- |
+| 1    | a paragraph, MCID 1, one line whose middle the quarter takes                              |
+| 1    | a table row: the first cell, MCID 2, outside the quarter, the second, MCID 3, inside      |
+| 1    | a paragraph under a division, its first span, MCID 4, inside, its second, MCID 5, outside |
+| 1    | a division whose `/ActualText` spells its one span, MCID 6, wholly inside the quarter     |
+| 2    | a paragraph, MCID 0, holding its line in `/ActualText`, which the quarter cuts            |
+
+On page 1 the quarter now succeeds: the kept words of each element stay marked
+content of their MCID, in order, and the division loses its `/ActualText` with
+its span. Before, the redaction refused over the paragraph, whose MCID covered
+removed and kept glyphs, though no element held text of its own. The whole-page
+redaction of `mutate-redact` was incomplete before: the scrub cleared only the
+element an MCID names, so the division above the removed span kept its
+`/ActualText` and the output scan found `inner words` there. Page 2 stays the
+refusal, `ErrStructElementPartlyRemoved`: clearing the paragraph's
+`/ActualText` would take the description of the words that stay, and keeping
+it keeps the removed ones. The band redaction, which removes the table row's two
+cells whole, succeeded before and after.
+
+The text is unembedded Helvetica, so `7.21.4.1/1` fires at PDF/UA-1; the
+PDF/A cells are the unembedded font, the device colour with no output intent,
+and the identification and metadata rules of their parts. veraPDF
+1.30.2 and litho report the same rule set in all thirteen cells, on the source
+and on the whole-page redaction's output.
 
 ## Scope
 
