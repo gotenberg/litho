@@ -74,10 +74,11 @@ var renderingIntents = map[string]pdf.RenderingIntent{
 // convertColorsFlags holds the flags that choose the conversion.
 type convertColorsFlags struct {
 	target, profile, intent string
-	bpc, convertSpots       bool
-	kOnlyBlack              bool
-	noOutputIntent          bool
-	replaceOutputIntents    bool
+	// noBPC is --no-bpc, which converts without black point compensation.
+	noBPC, convertSpots  bool
+	kOnlyBlack           bool
+	noOutputIntent       bool
+	replaceOutputIntents bool
 	// jpegQuality is --jpeg-quality, 0 to keep every image lossless.
 	jpegQuality int
 	// cmykProfile is --cmyk-profile, the file the Reader is opened with as
@@ -94,7 +95,10 @@ func registerConvertColorsFlags(fs *flag.FlagSet) *convertColorsFlags {
 	fs.StringVar(&f.profile, "profile", "", "ICC profile of --target icc")
 	fs.StringVar(&f.cmykProfile, "cmyk-profile", "", "ICC profile of --target cmyk, and the one DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
 	fs.StringVar(&f.intent, "intent", "RelativeColorimetric", "Rendering intent: RelativeColorimetric, Perceptual, Saturation or AbsoluteColorimetric")
-	fs.BoolVar(&f.bpc, "bpc", false, "Apply black point compensation where no graphics state's /UseBlackPtComp chooses")
+	fs.BoolVar(&f.noBPC, "no-bpc", false, "Convert without black point compensation where no graphics state's /UseBlackPtComp chooses")
+	// Compensation is the default now; the flag stays so scripts that pass
+	// it keep working.
+	fs.Bool("bpc", true, "Deprecated: black point compensation is the default (see --no-bpc)")
 	fs.BoolVar(&f.convertSpots, "convert-spots", false, "Convert spot colours (Separation, DeviceN) to process colour instead of keeping them")
 	fs.BoolVar(&f.kOnlyBlack, "k-only-black", false, "Under a CMYK target, convert DeviceGray colours and DeviceRGB black to the black ink alone instead of a four-colour black (images and shadings excepted)")
 	fs.BoolVar(&f.noOutputIntent, "no-output-intent", false, "Leave the output intents as they are instead of making the target the output intent")
@@ -137,8 +141,8 @@ func (f convertColorsFlags) colorTarget() (pdf.ColorTarget, []pdf.ColorOption, e
 		return pdf.ColorTarget{}, nil, fmt.Errorf("unknown rendering intent %q. Valid: RelativeColorimetric, Perceptual, Saturation, AbsoluteColorimetric", f.intent)
 	}
 	opts := []pdf.ColorOption{pdf.WithColorIntent(intent)}
-	if f.bpc {
-		opts = append(opts, pdf.WithBlackPointCompensation())
+	if f.noBPC {
+		opts = append(opts, pdf.WithoutBlackPointCompensation())
 	}
 	if f.convertSpots {
 		opts = append(opts, pdf.WithSpotConversion())
@@ -173,7 +177,7 @@ func runConvertColors(ctx context.Context, args []string, stdout, stderr io.Writ
 		return code
 	}
 	if fs.NArg() < 1 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho convert-colors <file> [--target output-intent|cmyk|rgb|gray|icc] [--profile profile.icc] [--cmyk-profile profile.icc] [--intent NAME] [--bpc] [--convert-spots] [--no-output-intent] [--replace-output-intents] [--jpeg-quality 1-100] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho convert-colors <file> [--target output-intent|cmyk|rgb|gray|icc] [--profile profile.icc] [--cmyk-profile profile.icc] [--intent NAME] [--no-bpc] [--convert-spots] [--no-output-intent] [--replace-output-intents] [--jpeg-quality 1-100] -o out.pdf")
 		return exitError
 	}
 	if *format != "text" && *format != "json" {
@@ -310,7 +314,7 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 			result.BlackPointOperators, result.BlackPointInlineImages, result.BlackPointCopies)
 	}
 	if result.BlackPointUnhonoured > 0 {
-		fmt.Fprintf(stdout, "Warning: %d painting(s) under a /UseBlackPtComp converted with the --bpc choice instead\n", result.BlackPointUnhonoured)
+		fmt.Fprintf(stdout, "Warning: %d painting(s) under a /UseBlackPtComp converted with the conversion's own black point compensation instead\n", result.BlackPointUnhonoured)
 	}
 	return exitOK
 }

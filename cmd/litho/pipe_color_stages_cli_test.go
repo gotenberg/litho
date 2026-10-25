@@ -76,7 +76,9 @@ func TestPipeColorStages_WriteWhatTheCommandsWrite(t *testing.T) {
 		pdf   []byte
 		stage []string
 	}{
+		// --bpc is deprecated and changes nothing; both stages still take it.
 		{"convert to CMYK", translucentCyanPDF(), []string{"convert-colors", "--target", "cmyk", "--intent", "Perceptual", "--bpc"}},
+		{"convert to CMYK, no compensation", translucentCyanPDF(), []string{"convert-colors", "--target", "cmyk", "--no-bpc", "--convert-spots"}},
 		{"convert to RGB, nothing to convert", untaggedTextPDF(), []string{"convert-colors", "--target", "rgb"}},
 		{"flatten", translucentCyanPDF(), []string{"flatten-transparency", "--dpi", "72"}},
 		{"flatten, nothing to flatten", untaggedTextPDF(), []string{"flatten-transparency"}},

@@ -119,8 +119,10 @@ type ColorOption func(*colorOpts)
 
 // colorOpts holds what the [ColorOption] values set.
 type colorOpts struct {
-	intent       RenderingIntent
-	bpc          bool
+	intent RenderingIntent
+	// noBPC converts without black point compensation
+	// ([WithoutBlackPointCompensation]).
+	noBPC        bool
 	convertSpots bool
 	kOnlyBlack   bool
 	keepIntents  bool
@@ -140,16 +142,49 @@ func WithColorIntent(i RenderingIntent) ColorOption {
 	return func(o *colorOpts) { o.intent = i }
 }
 
-// WithBlackPointCompensation scales the source's black point to the
-// target's, so the darkest source colour maps to the darkest the target can
-// reproduce rather than clipping the shadows (ISO 18619). Off by default.
+// WithoutBlackPointCompensation converts without black point compensation.
+// By default [Writer.ConvertColors] compensates (ISO 18619): it scales the
+// source's black point to the target's, so the darkest source colour maps to
+// the darkest the target reproduces rather than clipping the shadows, as the
+// renderer reads a profile whose black is lighter than sRGB's, and as poppler
+// and PDFium draw it. Without compensation such a profile's black converts
+// to the grey it measures, and the converted page draws lighter than its
+// source.
 //
 // It is the choice a graphics state leaves to the conversion: a PDF 2.0
 // /UseBlackPtComp of /ON or /OFF (ISO 32000-2, Table 57) overrides it for the
 // colours, images and shadings painted under that state, and /Default, its
 // initial value, follows it ([ColorReport.BlackPointOperators]).
+//
+// # Corpus evidence
+//
+//   - All corpora (litho, pdf20, pdfcpu, pdfjs, govdocs; 2540 converted to
+//     the built-in CMYK): compensating by default changes the bytes of 54
+//     outputs (litho 3, pdfcpu 2, pdfjs 34, govdocs 15), every one
+//     deterministic, and no flattening of an output starts or stops
+//     failing. The recolor cell's checks give every one of its 401 files
+//     the verdict they gave without compensation.
+//   - All corpora: of the 111 pages those 54 outputs render at 72 dpi, 20
+//     draw closer to their source, 89 as close, and 2 further: pdfcpu
+//     pkg_testdata__testImage.pdf page 1, 1.1% of its pixels past 8 levels
+//     to 2.5% under poppler, and pdfjs issue2856.pdf page 1, 29.5% to 29.7%,
+//     where two compensated steps, through the CMYK target to the screen,
+//     read the darks otherwise than the one step a viewer takes.
+//   - litho usebpc_4.pdf: its /Default page, 100 levels from its source at
+//     worst without compensation, draws 46 apart, as its /ON page does;
+//     poppler reads it 94 apart without and 36 with.
+func WithoutBlackPointCompensation() ColorOption {
+	return func(o *colorOpts) { o.noBPC = true }
+}
+
+// WithBlackPointCompensation asks for the black point compensation
+// [Writer.ConvertColors] applies by default, and changes nothing. It is kept
+// so callers written when compensation was opt-in still compile.
+//
+// Deprecated: compensation is the default; [WithoutBlackPointCompensation]
+// turns it off.
 func WithBlackPointCompensation() ColorOption {
-	return func(o *colorOpts) { o.bpc = true }
+	return func(*colorOpts) {}
 }
 
 // WithSpotConversion converts spot colours, the Separation and DeviceN colour
@@ -294,15 +329,15 @@ type ColorReport struct {
 	OverprintChanged int
 	// BlackPointOperators counts the colour operators converted under a
 	// graphics state whose /UseBlackPtComp (ISO 32000-2, Table 57) differs
-	// from [WithBlackPointCompensation]: /ON without the option, /OFF with
-	// it. BlackPointInlineImages counts the inline images so converted, and
+	// from the conversion's own choice: /OFF by default, /ON under
+	// [WithoutBlackPointCompensation]. BlackPointInlineImages counts the inline images so converted, and
 	// BlackPointCopies the image XObjects and shadings written a second
 	// time, converted under such a state, for the paintings under it.
 	BlackPointOperators    int
 	BlackPointInlineImages int
 	BlackPointCopies       int
 	// BlackPointUnhonoured counts the paintings under such a state whose
-	// colour converts as the option asks all the same: a form XObject or a
+	// colour converts as the conversion's own choice asks all the same: a form XObject or a
 	// Type 3 glyph, which inherits the state but converts once for every
 	// painting, and an image or a shading painted by a stream whose
 	// resources are not its own.
@@ -494,7 +529,7 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		profile:                resolved.profile,
 		components:             resolved.components,
 		intent:                 intent,
-		blackPointCompensation: o.bpc,
+		blackPointCompensation: !o.noBPC,
 		convertSpots:           o.convertSpots,
 		kOnlyBlack:             o.kOnlyBlack,
 		jpegQuality:            o.jpegQuality,

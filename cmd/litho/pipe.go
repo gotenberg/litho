@@ -450,7 +450,7 @@ func splitStageGroups(args []string) [][]string {
 // these two entries cover -h, -help and --help.
 var boolStageFlags = map[string]bool{
 	"aggressive": true, "generate": true, "no-font-subset": true, "system-fonts": true, "pades": true, "ltv": true,
-	"bpc": true, "convert-spots": true, "k-only-black": true, "no-output-intent": true, "replace-output-intents": true, "printed-annotations": true, "overprint": true,
+	"bpc": true, "no-bpc": true, "convert-spots": true, "k-only-black": true, "no-output-intent": true, "replace-output-intents": true, "printed-annotations": true, "overprint": true,
 	"h": true, "help": true,
 }
 

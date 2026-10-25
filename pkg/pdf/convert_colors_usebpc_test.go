@@ -11,13 +11,13 @@ import (
 // TestConvertColors_FollowsUseBlackPtComp converts the litho fixture
 // usebpc_4, whose three pages paint one pair of ICC images and an ICC fill
 // under /UseBlackPtComp /Default, /ON and /OFF (ISO 32000-2, Table 57), in
-// profiles whose black reads L* 42. /ON and /OFF override
-// [WithBlackPointCompensation] for what they govern and /Default follows
-// it. The renderer reads the same rule, with litho's own choice, to
-// compensate, under /Default: so under either setting of the option the /ON
-// and /OFF pages convert to what their source draws, and under the option
-// the /Default page does too. Without it the /Default page converts
-// uncompensated, its black 99 levels lighter than the source draws it.
+// profiles whose black reads L* 42. /ON and /OFF override the conversion's
+// choice for what they govern and /Default follows it. The renderer reads
+// the same rule, with its own choice, to compensate, under /Default: so by
+// default every page converts to what its source draws, and under
+// [WithoutBlackPointCompensation] the /ON and /OFF pages still do, while the
+// /Default page converts uncompensated, its black 99 levels lighter than the
+// source draws it.
 func TestConvertColors_FollowsUseBlackPtComp(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -25,8 +25,8 @@ func TestConvertColors_FollowsUseBlackPtComp(t *testing.T) {
 	src := openColorPDF(t, data)
 	for _, bpc := range []bool{false, true} {
 		var opts []ColorOption
-		if bpc {
-			opts = append(opts, WithBlackPointCompensation())
+		if !bpc {
+			opts = append(opts, WithoutBlackPointCompensation())
 		}
 		w := NewWriter(openColorPDF(t, data))
 		report, err := w.ConvertColors(ctx, RGBColorTarget(), opts...)

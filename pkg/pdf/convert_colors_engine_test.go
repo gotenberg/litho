@@ -70,7 +70,8 @@ func operands(t *testing.T, ops []content.Operation, op string) []float64 {
 	return nil
 }
 
-// linked converts in from src to dst relative colorimetrically.
+// linked converts in from src to dst relative colorimetrically, with the
+// black point compensation [Writer.ConvertColors] applies by default.
 func linked(t *testing.T, src, dst []byte, in []float64) []float64 {
 	t.Helper()
 	sp, err := icc.Parse(src)
@@ -81,7 +82,7 @@ func linked(t *testing.T, src, dst []byte, in []float64) []float64 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, err := icc.NewLink(sp, dp, icc.TransformOptions{Intent: icc.RelativeColorimetric})
+	l, err := icc.NewLink(sp, dp, icc.TransformOptions{Intent: icc.RelativeColorimetric, BlackPointCompensation: true})
 	if err != nil {
 		t.Fatal(err)
 	}

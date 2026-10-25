@@ -26,11 +26,12 @@ import (
 //     pdf20 PDF_2.0_image_with_BPC.pdf (CalRGB images under /ON, 2 copies,
 //     1 operator). pdfjs issue17794.pdf states /Default and is refused for
 //     an inline image short of a row.
-//   - litho usebpc_4.pdf: converted to the built-in CMYK and rendered at 72
-//     dpi against its source, its /ON page moves from 100 levels apart at
-//     worst, 52.5% of its pixels past 8, to 46 and 15%, and its /OFF page
-//     stays 9 levels apart. Its /Default page stays 100 apart: the option
-//     is off by default and the renderer compensates under /Default.
+//   - litho usebpc_4.pdf: converted to the built-in CMYK without
+//     compensation and rendered at 72 dpi against its source, its /ON page
+//     moves from 100 levels apart at worst, 52.5% of its pixels past 8, to
+//     46 and 15%, and its /OFF page stays 9 levels apart. Its /Default page
+//     stays 100 apart, the renderer compensating under /Default, until the
+//     conversion compensates too.
 type BlackPointReport struct {
 	// Operators counts the colour operators converted under a state whose
 	// compensation differs from the option's, those written again after the

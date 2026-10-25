@@ -28,8 +28,8 @@ type recolorRequest struct {
 	profile    []byte
 	components int
 	intent     icc.Intent
-	// blackPointCompensation and convertSpots are the options of
-	// [WithBlackPointCompensation] and [WithSpotConversion].
+	// blackPointCompensation is true unless [WithoutBlackPointCompensation]
+	// is given, and convertSpots is [WithSpotConversion].
 	blackPointCompensation bool
 	convertSpots           bool
 	// kOnlyBlack is [WithKOnlyBlack].

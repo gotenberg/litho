@@ -35,7 +35,7 @@ func TestConvertColorsFlags_SelectTheTarget(t *testing.T) {
 	}{
 		{"default", func(*convertColorsFlags) {}, pdf.OutputIntentColorTarget(), 1, ""},
 		{"cmyk with every option", func(f *convertColorsFlags) {
-			f.target, f.intent, f.bpc, f.convertSpots, f.noOutputIntent = "cmyk", "Perceptual", true, true, true
+			f.target, f.intent, f.noBPC, f.convertSpots, f.noOutputIntent = "cmyk", "Perceptual", true, true, true
 			f.replaceOutputIntents, f.jpegQuality, f.kOnlyBlack = true, 85, true
 		}, pdf.CMYKColorTarget(), 7, ""},
 		{"rgb", func(f *convertColorsFlags) { f.target = "rgb" }, pdf.RGBColorTarget(), 1, ""},

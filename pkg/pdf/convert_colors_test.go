@@ -151,8 +151,8 @@ func TestConvertColors_CMYKTargetAddsTheIntent(t *testing.T) {
 	if !bytes.Equal(f.req.profile, icc.CMYKPrinterProfile()) {
 		t.Error("request profile is not the built-in printer profile")
 	}
-	if f.req.blackPointCompensation || f.req.convertSpots {
-		t.Errorf("request options = %+v, want both off", f.req)
+	if !f.req.blackPointCompensation || f.req.convertSpots {
+		t.Errorf("request options = %+v, want compensation on and spots kept", f.req)
 	}
 	if report.Target != "DeviceCMYK" || report.OutputIntent != "added" || report.ConvertedOperators != 1 {
 		t.Errorf("report = %+v", report)
@@ -261,6 +261,29 @@ func TestConvertColors_Options(t *testing.T) {
 	_, out = convertAndWrite(t, openColorPDF(t, recolorPDF(""), WithDefaultCMYKProfile(custom)), &fakeRecolor{}, CMYKColorTarget())
 	if got := outputIntents(t, out); len(got) != 1 || got[0].condition != customCondition || !bytes.Equal(got[0].profile, custom) {
 		t.Errorf("intents = %+v, want the caller's profile as a Custom condition", got)
+	}
+}
+
+// TestConvertColors_BlackPointCompensationByDefault pins that the conversion
+// compensates black points unless WithoutBlackPointCompensation is given, and
+// that the deprecated WithBlackPointCompensation changes nothing.
+func TestConvertColors_BlackPointCompensationByDefault(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		opts []ColorOption
+		want bool
+	}{
+		{"default", nil, true},
+		{"deprecated opt-in", []ColorOption{WithBlackPointCompensation()}, true},
+		{"opt-out", []ColorOption{WithoutBlackPointCompensation()}, false},
+		{"opt-out wins over the no-op", []ColorOption{WithoutBlackPointCompensation(), WithBlackPointCompensation()}, false},
+	} {
+		f := &fakeRecolor{}
+		convertAndWrite(t, openColorPDF(t, recolorPDF("")), f, CMYKColorTarget(), tc.opts...)
+		if f.req.blackPointCompensation != tc.want {
+			t.Errorf("%s: blackPointCompensation = %t, want %t", tc.name, f.req.blackPointCompensation, tc.want)
+		}
 	}
 }
 

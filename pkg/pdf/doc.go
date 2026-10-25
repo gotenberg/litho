@@ -168,8 +168,10 @@
 //     [WithoutRedactionPixelCheck], and the deprecated no-op
 //     [WithRedactionPixelCheck].
 //   - [Writer.ConvertColors] takes [ColorOption]: [WithColorIntent],
-//     [WithBlackPointCompensation], [WithSpotConversion], [WithKOnlyBlack],
-//     [WithoutOutputIntent], [WithReplacedOutputIntents], [WithJPEGQuality].
+//     [WithoutBlackPointCompensation], [WithSpotConversion],
+//     [WithKOnlyBlack], [WithoutOutputIntent], [WithReplacedOutputIntents],
+//     [WithJPEGQuality], and the deprecated no-op
+//     [WithBlackPointCompensation].
 //     Its [ColorTarget] is one of
 //     [OutputIntentColorTarget], [CMYKColorTarget], [RGBColorTarget],
 //     [GrayColorTarget] and [ICCColorTarget].
