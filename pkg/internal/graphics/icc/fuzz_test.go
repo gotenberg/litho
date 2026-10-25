@@ -61,9 +61,10 @@ func FuzzLink(f *testing.F) {
 }
 
 // FuzzProfile feeds arbitrary data to the profile reader and, when it reads
-// and builds a transform, converts colours through it. The contract is
-// crash-freedom: every input either converts or returns an error carrying a
-// sentinel.
+// and builds a transform, under every intent and black point compensation
+// choice, converts colours through it to sRGB and to CIELAB, and asks whether
+// it is neutral. The contract is crash-freedom: every input either converts
+// or returns an error carrying a sentinel.
 func FuzzProfile(f *testing.F) {
 	for _, p := range [][]byte{rgbProfile(), greyProfile(), cmykProfile(), extendedProfile()} {
 		f.Add(p)
@@ -80,18 +81,23 @@ func FuzzProfile(f *testing.F) {
 			sentinel(err)
 			return
 		}
-		for _, intent := range []Intent{Perceptual, RelativeColorimetric} {
-			tr, err := p.NewTransform(intent)
-			if err != nil {
-				sentinel(err)
-				continue
-			}
-			in := make([]byte, tr.Components())
-			for v := range 4 {
-				for i := range in {
-					in[i] = byte(v * 85)
+		for intent := range Intent(4) {
+			// BPCOn builds what BPCDefault builds.
+			for _, bpc := range []BPC{BPCDefault, BPCOff} {
+				tr, err := p.NewTransform(intent.WithBPC(bpc))
+				if err != nil {
+					sentinel(err)
+					continue
 				}
-				tr.Convert(in)
+				in := make([]byte, tr.Components())
+				for v := range 4 {
+					for i := range in {
+						in[i] = byte(v * 85)
+					}
+					tr.Convert(in)
+					tr.Lab(in)
+				}
+				tr.Neutral()
 			}
 		}
 	})

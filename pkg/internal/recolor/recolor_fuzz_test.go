@@ -9,10 +9,12 @@ import (
 )
 
 // fuzzSession is a session over a one-page document whose resources name an
-// RGB space, converting to CMYK with the naive engine.
+// RGB space and a graphics state that sets the black point compensation and
+// the rendering intent, converting to CMYK with the naive engine.
 func fuzzSession(t testing.TB) (*session, *contentRewriter) {
 	t.Helper()
-	doc, pages := open(t, onePage("/Resources << /ColorSpace << /CS0 /DeviceRGB /P [/Pattern /DeviceGray] >> >>", "").bytes())
+	doc, pages := open(t, onePage("/Resources << /ColorSpace << /CS0 /DeviceRGB /P [/Pattern /DeviceGray] >>"+
+		" /ExtGState << /GS0 << /UseBlackPtComp /OFF /RI /Perceptual >> >> >>", "").bytes())
 	ti, err := cmyk.info()
 	if err != nil {
 		t.Fatal(err)
@@ -27,6 +29,8 @@ func fuzzSession(t testing.TB) (*session, *contentRewriter) {
 func FuzzContentRewrite(f *testing.F) {
 	f.Add([]byte("1 0 0 rg /CS0 cs 0 1 0 sc q 0.5 G Q /P cs 1 /X scn BI /W 1 /H 1 /CS /G /BPC 8 ID \x80 EI 0 0 1 RG"))
 	f.Add([]byte("1 0 0 r"))
+	f.Add([]byte("1 0 0 rg 0 0 1 RG /GS0 gs 0 0 1 1 re f /Saturation ri 0 0 1 1 re B"))
+	f.Add([]byte("1 0 0 rg /GS0 g"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, cr := fuzzSession(t)
 		out, changed, err := cr.rewrite(context.Background(), data)
