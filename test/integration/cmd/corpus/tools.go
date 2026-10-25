@@ -64,7 +64,7 @@ type toolStatus struct {
 // localTools lists the tools live checks and fixture builders run on the
 // host. veraPDF is probed by validating a one-page PDF, since only a report
 // names the core version: `verapdf --version` prints the apps version, and a
-// Homebrew build reports apps 1.30.0 over core 1.30.2.
+// Homebrew build reports apps 1.30.0 over core 1.30.3.
 func localTools(veraPDFProbe string) []localTool {
 	exact := func(pin, local string) bool { return pin == local }
 	return []localTool{

@@ -117,7 +117,7 @@ docker build $(go run ./test/integration/cmd/corpus versions --build-args) \
 An environment variable of the same name overrides a pin for one invocation, and every command that reads the pins announces the override before anything else:
 
 ```bash
-VERAPDF_VERSION=1.30.3 make corpus-init CORPUS_NAME=litho
+VERAPDF_VERSION=1.30.2 make corpus-init CORPUS_NAME=litho
 ```
 
 Overriding `VERAPDF_VERSION` (or `NODE_VERSION`, `NODE_DEBIAN_RELEASE`) without its `*_IMAGE_DIGEST` drops the digest, and the image is pulled by tag: a reference carrying both resolves by the digest alone, which would install the pinned build under the new name. The build also fails when the veraPDF it installed reports another version than `VERAPDF_VERSION`.
@@ -136,7 +136,7 @@ To bump a pin:
 2. Re-provision what depends on it. `make corpus-init` names the stale directories and prints the command that removes and regenerates them; run that command.
 3. Recapture the baseline (`make corpus-baseline`) and commit it with the pin, so the gate measures litho against the new goldens rather than the tool change.
 
-The live `remediation` cells shell out to the `verapdf` on your PATH, and live checks use the local qpdf and pdfsig: `make corpus-tools` prints each one against its pin. It reads veraPDF's core version from a report, since `verapdf --version` prints the apps version, which a Homebrew build sets to 1.30.0 over a 1.30.2 core.
+The live `remediation` cells shell out to the `verapdf` on your PATH, and live checks use the local qpdf and pdfsig: `make corpus-tools` prints each one against its pin. It reads veraPDF's core version from a report, since `verapdf --version` prints the apps version, which a Homebrew build sets to 1.30.0 over a 1.30.3 core.
 
 ## Regression baseline
 
@@ -296,10 +296,6 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
   | `6.3.5-t02` | PDF/A-1a, 1b                 | 2 (1 file each)    | veraPDF only | `6-2-11-8-t01-fail-a` shows `.notdef`, which PDF Reference 1.4, Table 5.18 omits from `/CharSet`. veraPDF's part-1 test does not skip it.                                                                     | `checkCharSetRenderedGlyphs`, `pkg/internal/compliance/fonts_coverage.go` |
 
 - **Compliance: the rule-set cell the facturx corpus keeps on purpose.** `6.1.9-t01` at PDF/A-3b on `v2__correct_PHP_@gpFacturX_sample_inofficial_20190125_atgp_factur-x_v_1_0`, reported by litho only. Three of its objects hold one integer, a stream's `/Length`, and write `8746 endobj` on one line, where ISO 19005-3, 6.1.9 requires an EOL marker before the `endobj` keyword. veraPDF 1.30.2 does not test that for an object whose body is one or two integers: its parser reads the token after an integer to look for the `R` of a reference, so it has consumed `endobj` when it tests the byte before it, and tests the whitespace after the keyword instead. The decision site is `validateEndobjFormat`, `pkg/internal/core/document/xref.go`.
-
-- **Compliance: the verapdf goldens predate two veraPDF 1.30.2 profile changes.** The `verapdf` corpus goldens were captured with veraPDF 1.30.1, and litho follows 1.30.2, the version the `litho` goldens and the live `remediation` runs use. Two changes separate them, so these cells stay in `ruleset_mismatch` until the goldens are recaptured:
-  - PDF/UA-2 `8.9.2.3-t01` (markup annotation in `Annot`) and `8.2.5.20-t01` (Link annotation in `Link` or `Reference`): 1.30.2 exempts an annotation no structure element encloses, or an Artifact encloses, as its WTPDF profiles already did. The goldens report `8.9.2.3-t01` on 103 files and `8.2.5.20-t01` on 4, none of which has a structure tree.
-  - PDF/UA-1 `7.4.4-t02` and `7.4.4-t03` (H and H1-H6 mixed): 1.30.2 evaluates both tests deferred, over the whole tree, so a document mixing the two kinds fails both. The goldens report only the test each of the four `PDF_UA-1__7.4.4-t0{2,3}-fail-{a,b}` files is named for.
 
 - **Bookmarks: C1 control fold.** PDFDocEncoding (ISO 32000-1 Table D.2) maps bytes `0x80-0x9F` to typographic glyphs (en dash, em dash, smart quotes, etc.). litho applies this mapping when decoding outline titles, matching PDF.js's `PDFStringTranslateTable`. pdfcpu emits the raw byte as a C1 control rune (`U+0085`, `U+0090`, ...). The bookmarks feature folds C1 runes through the same table on both sides before diffing so an "Annex A – Foo" / "Annex A `` Foo" pair compares equal. The fold is a no-op on the litho side (no C1 runes remain after decode).
 

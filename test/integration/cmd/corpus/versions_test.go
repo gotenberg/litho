@@ -103,19 +103,20 @@ func TestVersionsFilePinsReleasesNotBranches(t *testing.T) {
 	}
 }
 
-// TestVersionsFilePinsVeraPDF1302 pins the veraPDF release the litho goldens
-// and every live check use. The verapdf and facturx goldens came from 1.30.1,
-// the build verapdf/cli:latest carried when they were captured, and that gap
-// is what the pin exists to close.
-func TestVersionsFilePinsVeraPDF1302(t *testing.T) {
+// TestVersionsFilePinsVeraPDF1303 pins the veraPDF release the compliance
+// goldens and every live check use. 1.30.3 adds ISO 14289-2 6.1 t1 to its
+// PDF/UA-2 and WTPDF profiles, and a host veraPDF that moved to it ahead of the
+// pin moved the remediation cells with no change to litho; the pin keeps the
+// goldens and the live checks on one build.
+func TestVersionsFilePinsVeraPDF1303(t *testing.T) {
 	t.Parallel()
 
 	pins, err := resolvePins(readPinsFile(t), noEnv)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if got := pins.Values["VERAPDF_VERSION"]; got != "1.30.2" {
-		t.Errorf("VERAPDF_VERSION = %q, want 1.30.2", got)
+	if got := pins.Values["VERAPDF_VERSION"]; got != "1.30.3" {
+		t.Errorf("VERAPDF_VERSION = %q, want 1.30.3", got)
 	}
 	if got := pins.Values["VERAPDF_IMAGE_DIGEST"]; got == "" {
 		t.Error("VERAPDF_IMAGE_DIGEST is empty, so the tag alone picks the build")

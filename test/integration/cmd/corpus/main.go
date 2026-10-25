@@ -100,5 +100,5 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --allow-version-drift         Score goldens made with other versions than versions.env pins")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Versions come from test/integration/corpus/versions.env; an environment variable")
-	fmt.Fprintln(w, "of the same name overrides one (VERAPDF_VERSION=1.30.3 corpus init).")
+	fmt.Fprintln(w, "of the same name overrides one (VERAPDF_VERSION=1.30.2 corpus init).")
 }
