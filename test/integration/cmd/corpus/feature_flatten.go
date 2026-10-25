@@ -79,11 +79,11 @@ const (
 //
 // # Corpus evidence
 //
-//   - litho (255 files, flattentext_2b, flattenannots_2b, blendspace_2b,
+//   - litho (257 files, flattentext_2b, flattenannots_2b, blendspace_2b,
 //     flattentiles_1b, smaskindata_2b, flatuntagged_ua1, iccgroupalt_2b,
 //     greyintent_2b and sharedimage_2b among them): 36 flattened, all but
 //     usebpcgroup_4 match; flattenrefuse_1b and smaskbudget_2b are refused, a group on
-//     their second page past the render pixel budget; 217 have no
+//     their second page past the render pixel budget; 219 have no
 //     transparency. Before annotations were drawn into the page, 20
 //     flattened and 5 left annotations painting with transparency; 1 does
 //     now, laterreads_2u.pdf, whose Screen annotation has no appearance

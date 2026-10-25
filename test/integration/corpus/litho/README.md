@@ -10401,12 +10401,12 @@ outputs of the fallback's quarter of page 1 and the default quarter of page 2.
 
 `manifest.json` expands every fixture across the thirteen profiles it lists,
 every PDF/A and PDF/UA conformance level veraPDF validates, so the runner scores
-255 x 13 = 3315 cells, the whole hand-measured matrix. litho and veraPDF return
+257 x 13 = 3341 cells, the whole hand-measured matrix. litho and veraPDF return
 the same verdict in all of them: in each cell either both report nothing or both
 report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 3291 of the 3315 cells. The 24
+fixtures exist to protect, and it holds in 3317 of the 3341 cells. The 24
 exceptions, two on `complex_ua2` and eleven each on `sharedicc_2b` and
 `imagereach_2b`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
@@ -10419,7 +10419,7 @@ thirty-nine is non-compliant on both sides (`drivetitle_1b` at PDF/A-1b; `baretr
 `cmykintent_2b`, `cutcell_2b`, `formplacement_2b`, `greygroup_2b`, `greyintent_2b`, `greytint_2b`, `iccalternate_2b`, `imageintent_2b`, `jpxintent_2b`, `pagelabels_2b`, `qshyphen_2b`, `recolorimg_2b`, `sharedformimg_2b`, `sharedimage_2b`, `siglock_2b`, `sizetie_2b`, `strokedtext_2b`, `t3extent_2b`, `t3nestpen_2b`, `t3overprint_2b`, `t3pen_2b`, `tintwhite_2b`, `type3cycle_2u`, `unparsedform_2b`, `viewerboxes_2b` and `whitetext_2b` at PDF/A-2b; `tounicodepair_2u` at PDF/A-2b and PDF/A-2u; `formhidden_ua1`
 and `sigtagged_ua1` at PDF/UA-1; `outlinedest_ua2`, `remapchain_ua2` and
 `structcopy_ua2` at PDF/UA-2; and `usebpc_4` and `usebpcgroup_4` at PDF/A-4 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 3315 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 3341 and moves only `ruleset_mismatch`, and on
 those thirty-nine cells it moves both. Every exception sits in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2 and the two shared-stream
 fixtures at the eleven PDF/A levels, so the metric reads 24 on this corpus, and
