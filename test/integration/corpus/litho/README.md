@@ -307,6 +307,7 @@ one deliberately rather than diffing it against a fresh build.
 | `greygroup_2b.pdf`     | PDF/A-2b     | Colours entering grey ICC groups through the group's profile     |
 | `tintwhite_2b.pdf`     | PDF/A-2b     | An RGB ICC profile whose white reads tinted, painted three ways  |
 | `cutcell_2b.pdf`       | PDF/A-2b     | Enlarged image samples whose cells a region's edges cut          |
+| `noteicons_2b.pdf`     | PDF/A-2b     | Text annotations with no `/AP`, one for each predefined icon     |
 
 ### Must-not-fire controls
 
@@ -743,6 +744,7 @@ are covered under [Known divergences](#known-divergences).
 | `namereads_1b.pdf`     | 10   | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 7   | 7    | 8    | 6    | 6    |
 | `nestedpattern_2b.pdf` | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 6    | 6    |
 | `noresources_4.pdf`    | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 2   | 3    | 4    | 10   | 7    |
+| `noteicons_2b.pdf`     | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 8    | 6    |
 | `ocgconfigs_2b.pdf`    | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 5    | 5    |
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
 | `oirgb_2b.pdf`         | 3    | 1    | 3    | 1    | 1    | 3    | 1    | 1    | 2   | 2    | 3    | 5    | 6    |
@@ -2043,9 +2045,9 @@ states version 5.0, an ICC.2 profile ISO 32000-1, 8.6.5.5, Table 67 and ISO
 32000-2 do not list, so litho reads no colour through it and paints
 DeviceCMYK through its built-in profile, and the page matches poppler.
 
-**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 36 pages
-of 30 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
-tolerance. 21 pages of 16 fixtures differ by more than 1% of the page. Each of
+**The pages the `render` cell leaves mismatched.** Rendered at 72 dpi, 38 pages
+of 31 fixtures differ from the poppler 26.09.0 goldens beyond the cell's
+tolerance. 22 pages of 17 fixtures differ by more than 1% of the page. Each of
 those differences is adjudicated, and none is a litho defect left open:
 
 | File                                           | Page       | Differing pixels     | Why                                       |
@@ -2062,6 +2064,7 @@ those differences is adjudicated, and none is a litho defect left open:
 | `smaskindata_2b`                               | 1          | 15768                | JPX opacity from the data (poppler)       |
 | `usebpc_4`                                     | 3          | 8641                 | /UseBlackPtComp /OFF ignored (poppler)    |
 | `groupspace_2b`                                | 1, 2, 3    | 2020, 2020, 7121     | the page group's /CS ignored (poppler)    |
+| `noteicons_2b`                                 | 1          | 3229                 | each viewer draws its own Text icon       |
 
 - **The page group's colour space.** ISO 32000-1, 11.4.7 and Table 147
   convert every colour painted into a page group into the space its `/CS`
@@ -2162,27 +2165,28 @@ those differences is adjudicated, and none is a litho defect left open:
   `/Kids` an array of references. poppler renders such a page as an empty 1 by
   1 image, and litho draws the page dictionary where the array holds it.
 
-The other 15 pages differ by at most 1% of the page and by more than half of
+The other 16 pages differ by at most 1% of the page and by more than half of
 the pixels either renderer inks: on each, one renderer draws a glyph, a fill or
 an annotation the other does not. PDFium (pypdfium2 4.30.0, at 72 dpi) is the
 third reading and MuPDF (PyMuPDF 1.26.4) the fourth. The pages where litho
 differs from the others are litho divergences and stay open:
 
-| File                    | Page | Differing / inked   | Who differs    | Why                                                                                                    |
-| ----------------------- | ---- | ------------------- | -------------- | ------------------------------------------------------------------------------------------------------ |
-| `filestruct_1b`         | 1    | 1200 / 1422         | litho, MuPDF   | draw a widget's `/AP` under `/NeedAppearances true`, which poppler and PDFium rebuild empty            |
-| `afref_3b`              | 1    | 80 / 80             | poppler        | strokes a Link's `/Border` over an empty appearance stream (12.5.5)                                    |
-| `linkfont_ua2`          | 1    | 720 / 1345          | poppler        | the same `/Border` stroke over six links; MuPDF draws no Link                                          |
-| `annotshare_ua1`        | 1, 2 | 202, 202 / 358, 202 | litho          | draws no icon for a Text annotation with no `/AP`; poppler, PDFium and MuPDF each draw their own       |
-| `formmedia_ua1`         | 1    | 2400 / 4495         | poppler        | draws no Screen annotation; litho, PDFium and MuPDF paint their appearance                             |
-| `sigcms_2b`             | 1    | 677 / 964           | poppler        | builds a text field's appearance from `/V` with no `/NeedAppearances`                                  |
-| `cmapusecmap_2b`        | 1    | 176 / 176           | poppler        | litho and MuPDF map codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing        |
-| `undecodable_2b`        | 3    | 60 / 60             | poppler        | draws nothing for `[/FlateDecode /Foo]`, which litho, PDFium and MuPDF read                            |
-| `offlimits_1b`          | 3    | 100 / 100           | poppler        | paints no image while no colour space is selected; litho, PDFium and MuPDF paint it grey               |
-| `fontclaims_2b`         | 1    | 35 / 65             | poppler, MuPDF | draw no glyph for an unnamed code `/ToUnicode` maps to A, which litho and PDFium draw as A             |
-| `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156 | undefined      | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box                    |
-| `type0nodesc_2b`        | 1    | 176 / 237           | undefined      | Type 0 fonts with no descendant: litho boxes, poppler and MuPDF nothing, PDFium a substitute           |
-| `parentreach_2b`        | 2    | 25 / 25             | undefined      | a one-input tint transform under nine colorants: litho black, poppler orange, PDFium and MuPDF nothing |
+| File                    | Page | Differing / inked   | Who differs    | Why                                                                                                                        |
+| ----------------------- | ---- | ------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `filestruct_1b`         | 1    | 1200 / 1422         | litho, MuPDF   | draw a widget's `/AP` under `/NeedAppearances true`, which poppler and PDFium rebuild empty                                |
+| `afref_3b`              | 1    | 80 / 80             | poppler        | strokes a Link's `/Border` over an empty appearance stream (12.5.5)                                                        |
+| `linkfont_ua2`          | 1    | 720 / 1345          | poppler        | the same `/Border` stroke over six links; MuPDF draws no Link                                                              |
+| `annotshare_ua1`        | 1, 2 | 365, 365 / 562, 406 | undefined      | each viewer draws its own icon for a Text annotation with no `/AP` (12.5.6.4); litho, poppler, PDFium and MuPDF all differ |
+| `noteicons_2b`          | 2    | 300 / 564           | undefined      | the same, upright on a turned page                                                                                         |
+| `formmedia_ua1`         | 1    | 2400 / 4495         | poppler        | draws no Screen annotation; litho, PDFium and MuPDF paint their appearance                                                 |
+| `sigcms_2b`             | 1    | 677 / 964           | poppler        | builds a text field's appearance from `/V` with no `/NeedAppearances`                                                      |
+| `cmapusecmap_2b`        | 1    | 176 / 176           | poppler        | litho and MuPDF map codes through the `usecmap` base (9.7.5.4); poppler and PDFium draw nothing                            |
+| `undecodable_2b`        | 3    | 60 / 60             | poppler        | draws nothing for `[/FlateDecode /Foo]`, which litho, PDFium and MuPDF read                                                |
+| `offlimits_1b`          | 3    | 100 / 100           | poppler        | paints no image while no colour space is selected; litho, PDFium and MuPDF paint it grey                                   |
+| `fontclaims_2b`         | 1    | 35 / 65             | poppler, MuPDF | draw no glyph for an unnamed code `/ToUnicode` maps to A, which litho and PDFium draw as A                                 |
+| `cmaps_2b`, `limits_1b` | 1    | 314, 110 / 350, 156 | undefined      | an unembedded Adobe-Identity CIDFont: poppler takes the CID as Unicode, litho a box                                        |
+| `type0nodesc_2b`        | 1    | 176 / 237           | undefined      | Type 0 fonts with no descendant: litho boxes, poppler and MuPDF nothing, PDFium a substitute                               |
+| `parentreach_2b`        | 2    | 25 / 25             | undefined      | a one-input tint transform under nine colorants: litho black, poppler orange, PDFium and MuPDF nothing                     |
 
 The cell's ink bar counts them; the 1% page bar alone passed every one.
 
@@ -10265,6 +10269,50 @@ blanks that row as before. The page renders on litho as on poppler 26.09.0.
 The RGB output intent covers DeviceGray, so the file is conforming at PDF/A-2b.
 The other cells are the identification, metadata and tagging rules of their
 parts. veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
+
+### `noteicons_2b.pdf`
+
+A closed Text annotation appears as an icon (ISO 32000-1, 12.5.6.4), and Table
+172 names the icons a viewer provides: Comment, Key, Note (the default), Help,
+NewParagraph, Paragraph and Insert. With no appearance stream, the renderer
+draws its own icon for the name, a symbol in a rounded frame 24 units square
+hanging from the upper-left corner of `/Rect`, whatever its size, on the
+background `/C` names (Table 164); an unknown name draws the Note. Text
+annotations neither scale nor rotate with the page (12.5.6.4, which makes them
+behave as if NoZoom and NoRotate were set). poppler 26.09.0 places its icons
+the same way, 24 units square from that corner and upright; PDFium draws a
+note 20 units square from the lower-left corner and turns it with the page,
+and MuPDF centres an 18-unit icon in `/Rect`. The render goldens held only Text
+annotations with no `/Name` and no `/C` on unturned pages
+(`annotshare_ua1`, `langpua_ua2`), so the `render` cell compared no named
+icon, no background and no upright icon on a turned page.
+
+| Page | Annotations                                                                      |
+| ---- | -------------------------------------------------------------------------------- |
+| 1    | the seven names, `/Star`, and a Note with no `/C`, each on its own `/C`          |
+| 1    | a Note whose `/Rect` is 4 units square at (60, 136): its icon reaches (84, 116)  |
+| 2    | `/Rotate 90`: a Comment, `/Rect` 4 units square at (60, 66), its icon y 70 to 94 |
+
+The icons of page 1 lie clear of the centred quarter and the band, but for the
+small Note, whose icon lies inside the quarter, which removes it. Redaction
+places an annotation with no appearance stream where the renderer draws it
+(`annot.SynthesizedBox`), so an icon meeting a region selects its annotation,
+and one reaching past the region refuses, as the pixel check would refuse the
+icon left inside it. On page 2 the upright icon lies inside the centred
+quarter, the icon turned with the page would reach y 46, across its edge: with
+the turn left out, the quarter refused.
+
+The icons are litho's own design, not any viewer's: the page draws apart from
+poppler's, 3229 of 4972 inked pixels on page 1 and 300 of 564 on page 2, and
+the viewers draw apart from one another (page 1: poppler and PDFium 4476 of
+4643, poppler and MuPDF 2878 of 4138). Flattening leaves the annotations as
+they are: the icon is each viewer's (12.5.6.4), and drawn into the page it
+would replace every viewer's with litho's.
+
+Each annotation sets `/F 4` and lacks the `/AP` ISO 19005-2, 6.3.3 requires,
+so `6.3.3/1` fires eleven times at PDF/A-2 and later; at PDF/A-1b the `/C`
+arrays with no output intent fail `6.5.3/3`. veraPDF 1.30.2 and litho report
+the same rule set and counts in all thirteen cells.
 
 ## Scope
 
