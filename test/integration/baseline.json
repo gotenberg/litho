@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-25T11:53:01Z",
+  "captured_at": "2026-10-25T15:37:22Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -201,7 +201,7 @@
     "litho": {
       "features": {
         "compliance": {
-          "matched": 3302,
+          "matched": 3315,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -209,19 +209,19 @@
           }
         },
         "determinism": {
-          "matched": 2794,
+          "matched": 2805,
           "mismatched": 0,
-          "skipped": 508,
+          "skipped": 510,
           "metrics": {
             "nondeterministic": 0,
-            "render_pages_checked": 384,
+            "render_pages_checked": 386,
             "render_pages_nondeterministic": 0
           }
         },
         "flatten": {
           "matched": 36,
           "mismatched": 0,
-          "skipped": 218,
+          "skipped": 219,
           "metrics": {
             "annotations_left": 1,
             "flatten_failed": 0,
@@ -240,7 +240,7 @@
           }
         },
         "mutate-autotag": {
-          "matched": 3298,
+          "matched": 3311,
           "mismatched": 4,
           "skipped": 0,
           "metrics": {
@@ -254,7 +254,7 @@
           }
         },
         "mutate-encrypt": {
-          "matched": 3302,
+          "matched": 3315,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -268,7 +268,7 @@
           }
         },
         "mutate-flatten": {
-          "matched": 3302,
+          "matched": 3315,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -282,7 +282,7 @@
           }
         },
         "mutate-pages": {
-          "matched": 3302,
+          "matched": 3315,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -296,7 +296,7 @@
           }
         },
         "mutate-redact": {
-          "matched": 2561,
+          "matched": 2574,
           "mismatched": 0,
           "skipped": 741,
           "metrics": {
@@ -309,7 +309,7 @@
           }
         },
         "mutate-sign": {
-          "matched": 3276,
+          "matched": 3289,
           "mismatched": 0,
           "skipped": 26,
           "metrics": {
@@ -326,7 +326,7 @@
           }
         },
         "mutate-stamp": {
-          "matched": 3302,
+          "matched": 3315,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -340,7 +340,7 @@
           }
         },
         "recolor": {
-          "matched": 237,
+          "matched": 238,
           "mismatched": 2,
           "skipped": 15,
           "metrics": {
@@ -356,7 +356,7 @@
             "jpeg_pages_checked": 1,
             "jpeg_saved_kib": 1,
             "out_of_target": 0,
-            "pages_checked": 357,
+            "pages_checked": 359,
             "qpdf_failed": 0,
             "recolor_failed": 0,
             "recolor_refused": 0,
@@ -365,7 +365,7 @@
           }
         },
         "redact-render": {
-          "matched": 254,
+          "matched": 255,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -386,55 +386,55 @@
             "outside_changed": 0,
             "outside_changed_litho": 0,
             "outside_changed_poppler": 0,
-            "poppler_no_oracle": 31,
+            "poppler_no_oracle": 34,
             "poppler_unavailable": 0,
             "rasterised_units": 131,
             "redaction_failed": 0,
             "redaction_incomplete": 2,
             "redaction_refused": 129,
             "render_failed": 0,
-            "scenarios_run": 710
+            "scenarios_run": 714
           }
         },
         "remediation": {
-          "matched": 1538,
-          "mismatched": 1764,
+          "matched": 1549,
+          "mismatched": 1766,
           "skipped": 0,
           "metrics": {
             "disagreement": 11,
-            "fully_fixed": 1538,
-            "litho_fixed": 15900,
-            "litho_post": 3469,
-            "litho_pre": 19369,
+            "fully_fixed": 1549,
+            "litho_fixed": 15952,
+            "litho_post": 3471,
+            "litho_pre": 19423,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 15879,
-            "verapdf_post": 3458,
-            "verapdf_pre": 19337,
+            "verapdf_fixed": 15931,
+            "verapdf_post": 3460,
+            "verapdf_pre": 19391,
             "verapdf_regressed": 0
           }
         },
         "remediation-aggressive": {
-          "matched": 1629,
-          "mismatched": 1673,
+          "matched": 1640,
+          "mismatched": 1675,
           "skipped": 0,
           "metrics": {
             "disagreement": 11,
-            "fully_fixed": 1629,
-            "litho_fixed": 16373,
-            "litho_post": 2996,
-            "litho_pre": 19369,
+            "fully_fixed": 1640,
+            "litho_fixed": 16425,
+            "litho_post": 2998,
+            "litho_pre": 19423,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 16352,
-            "verapdf_post": 2985,
-            "verapdf_pre": 19337,
+            "verapdf_fixed": 16404,
+            "verapdf_post": 2987,
+            "verapdf_pre": 19391,
             "verapdf_regressed": 0
           }
         },
         "render": {
           "matched": 223,
-          "mismatched": 30,
+          "mismatched": 31,
           "skipped": 1,
           "metrics": {
             "pages_match": 345,
@@ -443,12 +443,12 @@
           }
         },
         "text": {
-          "matched": 246,
+          "matched": 247,
           "mismatched": 0,
           "skipped": 8,
           "metrics": {
-            "chars_match": 246,
-            "words_match": 246
+            "chars_match": 247,
+            "words_match": 247
           }
         }
       }
@@ -511,7 +511,7 @@
             "fallback_litho_reading": 4,
             "fallback_outside_changed": 1,
             "fallback_poppler_no_oracle": 10,
-            "fallback_refused": 39,
+            "fallback_refused": 40,
             "fallback_resampled": 6,
             "fallback_scenarios_run": 20,
             "fallback_strict_changed": 0,
@@ -528,9 +528,9 @@
             "rasterised_units": 55,
             "redaction_failed": 0,
             "redaction_incomplete": 13,
-            "redaction_refused": 57,
+            "redaction_refused": 58,
             "render_failed": 0,
-            "scenarios_run": 123
+            "scenarios_run": 122
           }
         },
         "split": {
