@@ -1861,6 +1861,12 @@ func (r *Reader) imageDecoder(pageNum int, name string, decode func(context.Cont
 // as an *image.NRGBA holding that opacity as alpha beside straight colour,
 // premultiplied colour undone.
 //
+// The colours are converted under the image's own /Intent, or relative
+// colorimetric when it states none: decoding reads the image apart from the
+// graphics state that paints it, so the rendering intent ri or an ExtGState
+// /RI sets (ISO 32000-1, 8.6.5.8) does not reach it, as it does in
+// [Reader.RenderPage].
+//
 // It returns [ErrImageNotFound] when the page shows no image of that name and
 // [ErrImageNotDecodable] when litho cannot decode its samples.
 func (r *Reader) DecodeImage(ctx context.Context, pageNum int, name string) (_ image.Image, err error) {

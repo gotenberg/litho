@@ -93,7 +93,7 @@ func TestWithICCAlternates_Positions(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			out := withICCAlternates(ctx, doc, im.Dict)
+			out := withICCAlternates(ctx, doc, im.Dict, renderingIntent(ctx, doc, im.Dict))
 			if replaced := fmt.Sprint(out["ColorSpace"]) != fmt.Sprint(im.Dict["ColorSpace"]); replaced != tc.replaced {
 				t.Errorf("%s with alternate %s: replaced = %v, want %v (got %v)", tc.cs, tc.alternate, replaced, tc.replaced, out["ColorSpace"])
 			}

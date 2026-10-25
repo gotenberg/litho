@@ -51,6 +51,14 @@ type colorContext struct {
 	// under (ISO 32000-2, Table 57): every colour it converts carries it
 	// ([colorContext.renderingIntent]).
 	bpc icc.BPC
+	// stateIntent is the rendering intent of the graphics state the image
+	// is painted under, set by ri or an ExtGState /RI, when painted is true.
+	// An image that states no /Intent of its own is converted with it (ISO
+	// 32000-1, 8.6.5.8). A caller with no graphics state leaves painted
+	// false, and such an image takes relative colorimetric, the graphics
+	// state's initial intent.
+	stateIntent icc.Intent
+	painted     bool
 }
 
 // effectiveSpaces returns dict with its /ColorSpace replaced by the space its
@@ -59,7 +67,8 @@ type colorContext struct {
 // stands in for an ICCBased space whose profile litho cannot use
 // ([withICCAlternates]). dict is not modified.
 func (cc colorContext) effectiveSpaces(ctx context.Context, doc *document.Document, dict ast.PdfDict) ast.PdfDict {
-	return withICCAlternates(ctx, doc, cc.withDefaults(ctx, doc, dict))
+	dict = cc.withDefaults(ctx, doc, dict)
+	return withICCAlternates(ctx, doc, dict, cc.renderingIntent(ctx, doc, dict))
 }
 
 // withDefaults returns dict with its /ColorSpace replaced where a default
@@ -165,29 +174,52 @@ func (cc colorContext) deviceDefault(ctx context.Context, doc *document.Document
 	return nil, false
 }
 
-// renderingIntent returns the rendering intent of an image dictionary's
-// /Intent, carrying cc's black point compensation choice. Per ISO 32000-1,
-// 8.6.5.8 an unrecognised name selects relative colorimetric, which is also
-// the graphics state's initial intent, and so the reading of an image that
-// states none.
+// renderingIntent returns the rendering intent an image dictionary's colours
+// are converted with, carrying cc's black point compensation choice. Per ISO
+// 32000-1, 8.6.5.8 the image's /Intent overrides the current rendering
+// intent, so the graphics state's intent applies only to an image that
+// states none, and an unrecognised name selects relative colorimetric.
 func (cc colorContext) renderingIntent(ctx context.Context, doc *document.Document, dict ast.PdfDict) icc.Intent {
-	return renderingIntent(ctx, doc, dict).WithBPC(cc.bpc)
+	intent, own := imageIntent(ctx, doc, dict)
+	if !own && cc.painted {
+		intent = cc.stateIntent
+	}
+	return intent.WithBPC(cc.bpc)
 }
 
 // renderingIntent returns the rendering intent of an image dictionary's
-// /Intent, under [colorContext.renderingIntent]'s rules, with no black point
-// compensation choice.
+// /Intent, with no black point compensation choice: relative colorimetric,
+// the graphics state's initial intent (ISO 32000-1, 8.6.5.8), for an image
+// that states none, as for a caller with no graphics state.
 func renderingIntent(ctx context.Context, doc *document.Document, dict ast.PdfDict) icc.Intent {
+	intent, _ := imageIntent(ctx, doc, dict) // an image with no /Intent reads as relative colorimetric
+	return intent
+}
+
+// imageIntent returns the rendering intent an image dictionary's /Intent
+// names, and whether it names one. An entry whose value is null, or a
+// reference to no object, is absent (ISO 32000-1, 7.3.7 and 7.3.10). Any
+// other value that is not a name Table 70 defines selects relative
+// colorimetric, as 8.6.5.8 makes an unrecognised name do, and still counts as
+// the image's own.
+func imageIntent(ctx context.Context, doc *document.Document, dict ast.PdfDict) (icc.Intent, bool) {
 	obj, ok := dict["Intent"]
 	if !ok {
-		return icc.RelativeColorimetric
+		return icc.RelativeColorimetric, false
 	}
-	name, err := document.ResolveName(ctx, doc, obj)
+	resolved, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		doc.Logger.Debug("resolving image /Intent", slog.Any("err", err))
-		return icc.RelativeColorimetric
+		return icc.RelativeColorimetric, false
 	}
-	return icc.ParseIntent(string(name))
+	switch v := resolved.(type) {
+	case nil, ast.PdfNull:
+		return icc.RelativeColorimetric, false
+	case ast.PdfName:
+		return icc.ParseIntent(string(v)), true
+	}
+	doc.Logger.Debug("image /Intent is not a name", slog.String("type", fmt.Sprintf("%T", resolved)))
+	return icc.RelativeColorimetric, true
 }
 
 // colorTransform returns the transform that takes samples of a colour space

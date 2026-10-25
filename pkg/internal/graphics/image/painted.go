@@ -21,14 +21,24 @@ import (
 // stream may be an inline image whose dictionary has been written out in
 // full (8.9.7, Tables 93 and 94) over its data.
 func DecodePainted(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, resources, page ast.PdfDict) (image.Image, error) {
-	return DecodePaintedBPC(ctx, doc, name, stream, resources, page, icc.BPCDefault)
+	return decodeImageStream(ctx, doc, name, stream, colorContext{resources: resources, page: page})
 }
 
-// DecodePaintedBPC decodes as [DecodePainted] does, converting the image's
-// colours under bpc, the /UseBlackPtComp of the graphics state the image is
-// painted under (ISO 32000-2, Table 57).
-func DecodePaintedBPC(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, resources, page ast.PdfDict, bpc icc.BPC) (image.Image, error) {
-	return decodeImageStream(ctx, doc, name, stream, colorContext{resources: resources, page: page, bpc: bpc})
+// DecodePaintedUnder decodes as [DecodePainted] does, converting the image's
+// colours as the graphics state it is painted under asks: intent is that
+// state's rendering intent, set by ri or an ExtGState /RI, which an image
+// with no /Intent of its own takes (ISO 32000-1, 8.6.5.8: the image's
+// /Intent overrides the current one), and it carries the state's
+// /UseBlackPtComp ([icc.Intent.WithBPC], ISO 32000-2, Table 57), which
+// applies whatever intent the image converts with.
+func DecodePaintedUnder(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, resources, page ast.PdfDict, intent icc.Intent) (image.Image, error) {
+	return decodeImageStream(ctx, doc, name, stream, colorContext{
+		resources:   resources,
+		page:        page,
+		bpc:         intent.BPC(),
+		stateIntent: intent & 3,
+		painted:     true,
+	})
 }
 
 // DecodeMask decodes a mask stream: the /SMask of an image (ISO 32000-1,

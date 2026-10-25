@@ -113,8 +113,8 @@ func SubstituteICCAlternate(ctx context.Context, doc *document.Document, cs ast.
 // withICCAlternates returns dict with its /ColorSpace replaced where an
 // ICCBased space whose profile litho cannot use carries an /Alternate fit for
 // its position ([ICCAlternate]): the space itself, the base of an Indexed
-// space, or the alternate of a Separation or DeviceN space. dict is not
-// modified.
+// space, or the alternate of a Separation or DeviceN space, for the
+// rendering intent its colours are converted with. dict is not modified.
 //
 // ISO 32000-1, 8.6.5.5, Table 66 has a reader that cannot use the profile use
 // /Alternate, and the device space of /N components only when it is absent.
@@ -130,12 +130,12 @@ func SubstituteICCAlternate(ctx context.Context, doc *document.Document, cs ast.
 // a device space an /Alternate names is not replaced again: 8.6.5.6 remaps the
 // device spaces a content stream or an image selects, and Poppler parses an
 // alternate with no resources either.
-func withICCAlternates(ctx context.Context, doc *document.Document, dict ast.PdfDict) ast.PdfDict {
+func withICCAlternates(ctx context.Context, doc *document.Document, dict ast.PdfDict, intent icc.Intent) ast.PdfDict {
 	csObj, ok := dict["ColorSpace"]
 	if !ok {
 		return dict
 	}
-	sub, changed := substituteICCAlternate(ctx, doc, csObj, renderingIntent(ctx, doc, dict), RoleSpace, 0)
+	sub, changed := substituteICCAlternate(ctx, doc, csObj, intent, RoleSpace, 0)
 	if !changed {
 		return dict
 	}

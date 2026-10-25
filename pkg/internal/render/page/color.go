@@ -43,6 +43,19 @@ func (r *renderer) blackPointCompensation() icc.BPC {
 	return bpc
 }
 
+// imageIntent returns the rendering intent an image painted under the current
+// graphics state is decoded with when it states no /Intent of its own (ISO
+// 32000-1, 8.6.5.8: the current intent, set by ri or an ExtGState /RI), and
+// false under [Options.DefaultBlackPoint], whose images keep the initial
+// intent. The intent carries the state's black point compensation
+// ([renderer.blackPointCompensation]).
+func (r *renderer) imageIntent() (icc.Intent, bool) {
+	if r.defaultBPC {
+		return 0, false
+	}
+	return icc.ParseIntent(r.m.Current().RenderingIntent).WithBPC(r.blackPointCompensation()), true
+}
+
 // colorFor returns the converter of the colour space a fill or stroke colour
 // is in, against the resources of the stream being run, whose default spaces
 // stand in for the device spaces (8.6.5.6). A Pattern space converts through

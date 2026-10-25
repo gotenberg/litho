@@ -171,7 +171,10 @@ type Options struct {
 	// whatever a graphics state's /UseBlackPtComp asks: the redaction pixel
 	// check reads a blanked image's colour so, since under /OFF the darkest
 	// colour of a profile whose black is lighter than sRGB's draws as a grey
-	// no blank can go below.
+	// no blank can go below. For the same reason an image with no /Intent of
+	// its own is then read under relative colorimetric, the graphics state's
+	// initial intent, rather than the current one (ISO 32000-1, 8.6.5.8):
+	// absolute colorimetric never compensates.
 	DefaultBlackPoint bool
 	// Glyph, when not nil, is called with each glyph the page paints from an
 	// outline, a placeholder's among them: its text origin, the text position
