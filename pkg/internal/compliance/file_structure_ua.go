@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
 // ua1HeaderRe matches the PDF/UA-1 file header, per ISO 14289-1 §6.1. The
@@ -39,10 +41,24 @@ var ua1HeaderRe = regexp.MustCompile(`^%PDF-1\.[0-7]$`)
 //     a space or binary bytes before %PDF- on the same line, which veraPDF
 //     reports.
 func checkUAHeaderGroup(ctx context.Context, vctx *validationCtx) []Violation {
-	doc := vctx.doc
+	line, ok := readUAHeaderLine(ctx, vctx.doc)
+	if !ok {
+		return nil
+	}
+	if ua1HeaderRe.Match(line) {
+		return nil
+	}
+	return fail(Rule_14289_1_6_1_t01,
+		fmt.Sprintf("header %q does not match %%PDF-1.[0-7]", string(line)))
+}
+
+// readUAHeaderLine reads the leading bytes of the file and returns the line
+// veraPDF takes for the header ([ua1HeaderLine]). ok is false when the bytes
+// cannot be read, which judges nothing.
+func readUAHeaderLine(ctx context.Context, doc *document.Document) (line []byte, ok bool) {
 	if doc.RawReader() == nil {
 		doc.Logger.Debug("compliance.file_structure_ua: cannot read header: nil reader")
-		return nil
+		return nil, false
 	}
 	// HeaderOffset lies within the document's header scan window, so the read
 	// is bounded; the file size bounds it again for a file shorter than that.
@@ -50,14 +66,9 @@ func checkUAHeaderGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	buf, err := doc.ReadFileBytes(ctx, 0, n)
 	if err != nil {
 		doc.Logger.Debug("compliance.file_structure_ua: cannot read header", "error", err)
-		return nil
+		return nil, false
 	}
-	line := ua1HeaderLine(buf)
-	if ua1HeaderRe.Match(line) {
-		return nil
-	}
-	return fail(Rule_14289_1_6_1_t01,
-		fmt.Sprintf("header %q does not match %%PDF-1.[0-7]", string(line)))
+	return ua1HeaderLine(buf), true
 }
 
 // ua1HeaderLine returns the line of buf, the leading bytes of the file, that
