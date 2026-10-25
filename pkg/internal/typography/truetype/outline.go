@@ -38,7 +38,7 @@ const f2dot14Scale = 1 << 14
 
 // maxComponentDepth bounds the nesting of composite glyphs. Anti-DoS guard,
 // not spec-mandated: the maxp table states a font's own maxComponentDepth, and
-// real fonts nest one to three levels, so 16 leaves room for every one while a
+// real fonts nest a few levels, so 16 leaves room for every one while a
 // crafted chain cannot run the walk deep.
 const maxComponentDepth = 16
 
@@ -227,6 +227,9 @@ type glyphPoints struct {
 //   - pdfjs: PDFJS-7562-reduced.pdf holds a glyph with numberOfContours -70,
 //     which fontTools reads as simple and fails on, and this reader as the
 //     composite the table makes it.
+//   - All corpora: of 3973 distinct embedded TrueType programs, 756 hold
+//     composite glyphs, 128119 in all, nested at most 4 deep; one glyph
+//     contains itself, in pdfjs recursiveCompositGlyf.pdf.
 func (f *Font) GlyphOutline(ctx context.Context, gid int) (geom.Path, error) {
 	w := &glyphWalk{font: f, components: maxGlyphComponents}
 	g, err := w.points(ctx, gid, 0)
@@ -286,6 +289,13 @@ func (w *glyphWalk) points(ctx context.Context, gid, depth int) (glyphPoints, er
 	if depth >= maxComponentDepth {
 		return glyphPoints{}, fmt.Errorf("%w: composite glyphs nested past %d", ErrInvalidFont, maxComponentDepth)
 	}
+	// The glyf table builds a composite from other glyphs' descriptions
+	// (OpenType specification, glyf table, composite glyph description): one
+	// that contains itself describes no finite outline, so the whole glyph is
+	// refused, as FreeType refuses it (Invalid_Composite) for MuPDF and PDFium,
+	// rather than drawn from the components read before the cycle, as PDF.js
+	// draws it (font_renderer.js, compileGlyf). The cycle check, with
+	// [maxComponentDepth] and [maxGlyphComponents], keeps the walk bounded.
 	for _, ancestor := range w.stack {
 		if ancestor == gid {
 			return glyphPoints{}, fmt.Errorf("%w: %w (glyph %d)", ErrInvalidFont, errComponentCycle, gid)

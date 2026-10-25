@@ -143,6 +143,41 @@ func TestTextHiddenAdvances(t *testing.T) {
 	img.expect(map[[2]int]rgb{{15, 45}: paper, {25, 45}: black})
 }
 
+// TestTextClipRecursiveComposite pins how a clipping mode reads a TrueType
+// composite glyph that contains itself, the construct of pdfjs
+// recursiveCompositGlyf.pdf. The program cannot give that glyph an outline,
+// so it adds nothing to the clip, and the text object still clips (ISO
+// 32000-1, 9.3.6 and 8.5.4): a fill after it paints only where the other
+// glyphs are. MuPDF and PDFium, through FreeType, draw the same; poppler
+// leaves the clip alone once a glyph fails to load, and PDF.js draws the
+// components before the recursive one.
+func TestTextClipRecursiveComposite(t *testing.T) {
+	t.Parallel()
+	// GID 1 is A, a rectangle; GID 2 (C) draws A then itself; GID 3 (D)
+	// draws A alone.
+	program := fontbuild.TrueType{PostScriptName: "Rec", Family: "Rec", Subfamily: "Regular", Glyphs: []fontbuild.Glyph{
+		{Name: "A", Unicode: 'A', Advance: 600},
+		{Name: "C", Unicode: 'C', Advance: 600, Components: []uint16{1, 2}},
+		{Name: "D", Unicode: 'D', Advance: 600, Components: []uint16{1}},
+	}}.Build()
+	objs := []string{
+		"<< /Type /Font /Subtype /TrueType /BaseFont /Rec /FirstChar 65 /LastChar 68 /Widths [600 600 600 600] " +
+			"/Encoding /WinAnsiEncoding /FontDescriptor 6 0 R >>",
+		"<< /Type /FontDescriptor /FontName /Rec /Flags 32 /FontBBox [0 0 1000 500] /ItalicAngle 0 " +
+			"/Ascent 500 /Descent 0 /CapHeight 500 /StemV 80 /FontFile2 7 0 R >>",
+		stream(fmt.Sprintf("/Length1 %d", len(program)), string(program)),
+	}
+	clip := func(text string) *rgbImage {
+		t.Helper()
+		// At 20 points each glyph is 12 by 10: x 10..22, 22..34, rows 40..49.
+		img, _ := draw(t, fixture{page: textPage, content: "BT /F 20 Tf 7 Tr 10 50 Td (" + text + ") Tj ET 0 g 0 0 100 100 re f", objs: objs})
+		return &rgbImage{t: t, img: img}
+	}
+	clip("C").expect(map[[2]int]rgb{{15, 45}: paper, {5, 5}: paper, {50, 80}: paper})
+	clip("DC").expect(map[[2]int]rgb{{15, 45}: black, {28, 45}: paper, {5, 5}: paper})
+	clip("D").expect(map[[2]int]rgb{{15, 45}: black, {28, 45}: paper})
+}
+
 // type3Objs returns a Type 3 font (object 5) whose glyph a paints the square
 // [0 0 500 500] in glyph space with the given description prefix.
 func type3Objs(proc string) []string {

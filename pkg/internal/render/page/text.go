@@ -261,6 +261,13 @@ func (r *renderer) glyph(key glyphKey, code glyph.Code) (glyph.Glyph, error) {
 // glyph runs its description instead (9.6.5); having no outline, it adds
 // nothing to a clip. origin is the text origin in user space, which
 // [Options.Glyph] is told in device space with what the glyph paints.
+//
+// # Corpus evidence
+//
+//   - pdfjs recursiveCompositGlyf.pdf: every mode 7 glyph is a composite
+//     that contains itself; litho, MuPDF 1.26.10 and PDFium (pypdfium2 4.30.0) paint the
+//     red fill after it nowhere, poppler 26.09.0 over the whole page. With the
+//     self-reference removed all four paint the same glyph boxes.
 func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyph.Glyph, glyphToUser geom.Matrix, origin geom.Point) error {
 	mode := st.Text.Tmode
 	if mode < 0 || mode > modeMax {
@@ -305,6 +312,13 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 		return nil
 	}
 	if g.Outline.Empty() {
+		// A clipping glyph with no outline, a space or one its program
+		// cannot draw (glyph.Glyph.Unreadable), adds nothing to the clip,
+		// and the text object still clips at ET (ISO 32000-1, 9.3.6 and
+		// 8.5.4): what follows paints only through the other glyphs, as MuPDF
+		// and PDFium draw it. poppler clips a text object of empty glyphs to
+		// nothing too, but leaves the clip alone once a glyph fails to load,
+		// which shows paint the clip hides.
 		if mode&modeClipBit != 0 {
 			s.text.clipped = true
 		}
