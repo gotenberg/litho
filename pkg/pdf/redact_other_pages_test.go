@@ -29,6 +29,10 @@ import (
 //     image whose samples spell it, page 1 outside the region.
 //   - "inlinetext": as "inline", and page 1 draws the text again outside the
 //     region, next to its inline image.
+//   - "t3inline": no other copy of the text, but page 2 shows a Type 3 glyph
+//     whose description paints an inline image whose samples spell it.
+//   - "t3text": as "t3inline", and the glyph description draws the text too,
+//     with a font of its own.
 func otherPageCopyPDF(kind string) []byte {
 	stream := func(num int, dict, data string) string {
 		return strconv.Itoa(num) + " 0 obj\n<< " + dict + " /Length " + strconv.Itoa(len(data)) +
@@ -73,6 +77,18 @@ func otherPageCopyPDF(kind string) []byte {
 		}
 		page2Res = "<< >>"
 		page2Body = inline
+	case "t3inline", "t3text":
+		glyph := "1000 0 d0 q 600 0 0 100 0 0 cm BI /W 6 /H 1 /CS /G /BPC 8 ID SECRET EI Q"
+		if kind == "t3text" {
+			glyph += " BT /F1 120 Tf 0 200 Td (SECRET) Tj ET"
+		}
+		page2Res = "<< /Font << /T3 9 0 R >> >>"
+		page2Body = "BT /T3 12 Tf 100 400 Td (a) Tj ET"
+		extra = "9 0 obj\n<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] " +
+			"/FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /a 10 0 R >> " +
+			"/Encoding << /Type /Encoding /Differences [97 /a] >> /FirstChar 97 /LastChar 97 " +
+			"/Widths [1000] /Resources << /Font << /F1 4 0 R >> >> >>\nendobj\n" +
+			stream(10, "", glyph)
 	case "xmp":
 		page2Extra = " /Metadata 11 0 R"
 		extra = stream(11, "/Type /Metadata /Subtype /XML",
@@ -300,5 +316,35 @@ func TestWriter_Redact_IgnoresInlineImageSamplesSpellingTheText(t *testing.T) {
 
 	if _, _, err := redactOtherPageCopy(t, otherPageCopyPDF("inlinetext")); !errors.Is(err, ErrRedactionIncomplete) {
 		t.Errorf("Redact with the text drawn again next to an inline image: %v, want ErrRedactionIncomplete", err)
+	}
+}
+
+// TestWriter_Redact_IgnoresInlineImageSamplesInGlyphs pins that the samples
+// of an inline image a Type 3 glyph description paints (ISO 32000-1, 9.6.5
+// and 8.9.7) are not searched for removed text, as a page's are, while the
+// text the description draws is still a copy page 2 draws, which
+// [WithStrictRedaction] refuses.
+func TestWriter_Redact_IgnoresInlineImageSamplesInGlyphs(t *testing.T) {
+	for _, opts := range [][]RedactOption{nil, {WithStrictRedaction()}} {
+		report, _, err := redactOtherPageCopy(t, otherPageCopyPDF("t3inline"), opts...)
+		if err != nil {
+			t.Fatalf("Redact: %v (surviving %+v)", err, report)
+		}
+		if len(report.SurvivingCopies) != 0 || len(report.CopiesOnOtherPages) != 0 {
+			t.Errorf("report names a glyph's inline image samples as copies: surviving %+v, other pages %+v",
+				report.SurvivingCopies, report.CopiesOnOtherPages)
+		}
+	}
+
+	report, _, err := redactOtherPageCopy(t, otherPageCopyPDF("t3text"))
+	if err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+	if len(report.CopiesOnOtherPages) != 1 || report.CopiesOnOtherPages[0].ObjectNum != 10 ||
+		!slices.Equal(report.CopiesOnOtherPages[0].Pages, []int{2}) {
+		t.Errorf("CopiesOnOtherPages = %+v, want the glyph description, object 10, on page 2", report.CopiesOnOtherPages)
+	}
+	if _, _, err := redactOtherPageCopy(t, otherPageCopyPDF("t3text"), WithStrictRedaction()); !errors.Is(err, ErrRedactionIncomplete) {
+		t.Errorf("strict Redact with the text drawn in a glyph description: %v, want ErrRedactionIncomplete", err)
 	}
 }

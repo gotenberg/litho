@@ -221,8 +221,9 @@ type scanWalk struct {
 	// top once the roots are done (see [scanWalk.walkSetAside]).
 	setAside []ast.PdfIndirectRef
 
-	// contents holds the object numbers a page's /Contents names, so the scan
-	// knows which streams to read as content streams (see scanContentStrings).
+	// contents holds the object numbers a page's /Contents or a Type 3 font's
+	// /CharProcs names, so the scan knows which streams to read as content
+	// streams (see scanContentStrings).
 	contents map[int]bool
 
 	// plain holds every object some reference reaches outside a binary slot
@@ -307,6 +308,7 @@ func (w *scanWalk) walk(ctx context.Context, objNum int, obj ast.PdfObject, dept
 		}
 	case ast.PdfDict:
 		w.markPageContents(ctx, v)
+		w.markCharProcs(ctx, v)
 		w.markReadAsData(ctx, v)
 		// Keys are names, not text: a /Title key never carries a redacted word,
 		// its value does.

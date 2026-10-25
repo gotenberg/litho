@@ -97,3 +97,88 @@ func TestScanOutputForTokens_ReadsInlineSamplesAlsoReadAsBytes(t *testing.T) {
 		}
 	}
 }
+
+// type3Objects returns a one-page document whose page shows a glyph of a Type 3
+// font (object 8) whose description, object 9, is glyph. procsRef writes the
+// /CharProcs dictionary as an object of its own (object 10), and fontType is
+// the font's /Type.
+func type3Objects(glyph string, procsRef bool, fontType string) map[int]string {
+	objs := copiesObjects("")
+	objs[3] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R " +
+		"/Resources << /Font << /T3 8 0 R >> >> >>"
+	objs[4] = streamObject("", []byte("BT /T3 12 Tf 100 600 Td (a) Tj ET"))
+	procs := "<< /a 9 0 R >>"
+	if procsRef {
+		objs[10] = procs
+		procs = "10 0 R"
+	}
+	objs[8] = "<< /Type /" + fontType + " /Subtype /Type3 /FontBBox [0 0 1000 1000] " +
+		"/FontMatrix [0.001 0 0 0.001 0 0] /CharProcs " + procs + " /Encoding << /Differences [97 /a] >> " +
+		"/FirstChar 97 /LastChar 97 /Widths [1000] /Resources << /Font << /F1 << /Type /Font " +
+		"/Subtype /Type1 /BaseFont /Helvetica >> >> >> >>"
+	objs[9] = streamObject("", []byte("1000 0 d0 "+glyph))
+	return objs
+}
+
+// TestScanOutputForTokens_SkipsInlineImageSamplesInGlyphs pins that a Type 3
+// glyph description, a content stream reached through the font's /CharProcs
+// (ISO 32000-1, 9.6.5) whose dictionary carries no /Subtype, has its inline
+// image samples skipped as a page's and a form's are.
+func TestScanOutputForTokens_SkipsInlineImageSamplesInGlyphs(t *testing.T) {
+	t.Parallel()
+	cases := map[string]map[int]string{
+		"direct char procs":   type3Objects(secretInline, false, "Font"),
+		"indirect char procs": type3Objects(secretInline, true, "Font"),
+	}
+	for name, objs := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			doc := copiesDoc(t, objs, nil, "")
+			// The walk ranges dictionaries, so repeating the scan meets the
+			// glyph before and after the font's other entries.
+			for range 20 {
+				if res := scanFor(t, doc, "SECRET"); !res.Clean() {
+					t.Fatalf("inline image samples in a glyph were compared: %+v", res)
+				}
+			}
+		})
+	}
+}
+
+// TestScanOutputForTokens_ReadsTextInGlyphs pins what the glyph reading keeps:
+// a copy a glyph description draws as text, literal or hexadecimal, next to an
+// inline image, and the samples of a glyph whose font names itself something
+// other than a font, which is not trusted to be one.
+func TestScanOutputForTokens_ReadsTextInGlyphs(t *testing.T) {
+	t.Parallel()
+	cases := map[string]map[int]string{
+		"literal":       type3Objects(secretInline+" BT /F1 12 Tf (SECRET) Tj ET", false, "Font"),
+		"hexadecimal":   type3Objects(secretInline+" BT /F1 12 Tf <534543524554> Tj ET", true, "Font"),
+		"not a font":    type3Objects(secretInline, false, "XObject"),
+		"text no image": type3Objects("BT /F1 12 Tf (SECRET) Tj ET", false, "Font"),
+	}
+	for name, objs := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if res := scanFor(t, copiesDoc(t, objs, nil, ""), "SECRET"); !hasHit(res, 9, "stream") {
+				t.Errorf("the copy in the glyph description was not found: %+v", res)
+			}
+		})
+	}
+}
+
+// TestScanOutputForTokens_ReadsGlyphSamplesAlsoReadAsBytes pins that a glyph
+// description a slot that reads a stream as bytes also names is compared
+// whole, whichever reference the walk meets first.
+func TestScanOutputForTokens_ReadsGlyphSamplesAlsoReadAsBytes(t *testing.T) {
+	t.Parallel()
+	objs := type3Objects(secretInline, false, "Font")
+	objs[1] = "<< /Type /Catalog /Pages 2 0 R " +
+		"/AF [<< /Type /Filespec /F (a.txt) /UF (a.txt) /EF << /F 9 0 R >> >>] >>"
+	doc := copiesDoc(t, objs, nil, "")
+	for range 20 {
+		if res := scanFor(t, doc, "SECRET"); !hasHit(res, 9, "stream") {
+			t.Fatalf("a glyph also read as bytes was compared without its samples: %+v", res)
+		}
+	}
+}

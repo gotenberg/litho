@@ -36,6 +36,52 @@ func (w *scanWalk) markPageContents(ctx context.Context, dict ast.PdfDict) {
 	}
 }
 
+// markCharProcs records the glyph descriptions a Type 3 font dictionary's
+// /CharProcs names (ISO 32000-1, 9.6.5, Table 112), so
+// [scanWalk.scanStreamData] reads them as content streams: each is a content
+// stream drawing one glyph, and its dictionary carries no /Subtype that
+// [isContentStreamDict] could recognise. Read as content, an inline image's
+// samples in a glyph description are skipped (see
+// [scanWalk.matchContentBytes]) and its string operands compared as they read.
+//
+// The font is told by its /Subtype /Type3 and a /Type that, when present, is
+// /Font (Table 112): a dictionary that names itself something else is not
+// trusted to be one. Only a /CharProcs entry that is a reference to a stream is
+// recorded, so a malformed entry naming an array is never read as a
+// /Contents array.
+//
+// # Corpus evidence
+//
+//   - govdocs, pdfjs, pdfcpu, litho, verapdf: 136 files hold a Type 3 font,
+//     and in 35 of them (19, 13, 1, 2, 0) 4,860 glyph descriptions paint an
+//     inline image. Redacting page 1 whole, its centred quarter and a band,
+//     and page 2's centred quarter, default and under the raster fallback
+//     (1,088 redactions), moves no outcome and no byte of any output: no
+//     sample there spells a removed run.
+func (w *scanWalk) markCharProcs(ctx context.Context, dict ast.PdfDict) {
+	if subtype, _ := dict["Subtype"].(ast.PdfName); subtype != "Type3" {
+		return
+	}
+	if kind, hasType := dict["Type"].(ast.PdfName); hasType && kind != "Font" {
+		return
+	}
+	procs, hasProcs := dict["CharProcs"]
+	if !hasProcs {
+		return
+	}
+	for _, entry := range w.liveDict(ctx, procs) {
+		ref, isRef := entry.(ast.PdfIndirectRef)
+		if !isRef || w.contents[ref.ObjectNum] {
+			continue
+		}
+		if obj, ok := w.resolve(ctx, ref); ok {
+			if _, isStream := obj.(ast.PdfStream); isStream {
+				w.markContent(ctx, ref)
+			}
+		}
+	}
+}
+
 // markContents records each stream reference of a /Contents array.
 func (w *scanWalk) markContents(ctx context.Context, arr ast.PdfArray) {
 	for _, item := range arr {
@@ -81,6 +127,9 @@ func (w *scanWalk) markContent(ctx context.Context, ref ast.PdfIndirectRef) {
 // isContentStreamDict reports whether a stream dictionary marks its data as a
 // content stream: a form XObject (ISO 32000-1, Table 95), which every
 // annotation appearance stream is (12.5.5), or a tiling pattern (Table 75).
+// A Type 3 glyph description is a content stream whose dictionary says
+// nothing of it, so it is recognised from the font that names it instead
+// (see [scanWalk.markCharProcs]).
 func isContentStreamDict(dict ast.PdfDict) bool {
 	if subtype, _ := dict["Subtype"].(ast.PdfName); subtype == "Form" {
 		return true
