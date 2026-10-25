@@ -77,12 +77,37 @@ const redactRenderSelfTolerance = 16
 const redactRenderFallbackTolerance = redactRenderSelfTolerance
 
 // redactRenderDarkLevel is the largest 8-bit channel value a pixel of litho's
-// images-only rendering over black may take inside a region. A redaction
-// blanks a picture's covered samples to opaque black (package mutations,
-// blankedPicture: the darkest value of the image's own colour space) and a
-// stencil's to unpainted, so over a black background a blanked image paints
-// black or nothing. The level leaves room for a black that colour management
-// does not map to sRGB 0: the CMYK black of a printer profile is a dark grey.
+// images-only rendering over black, under [pdf.WithRenderRedactionReading],
+// may take inside a region. A redaction blanks a picture's covered samples to
+// opaque black (package mutations, blankedPicture: the darkest value of the
+// image's own colour space) and a stencil's to unpainted, so over a black
+// background a blanked image paints black or nothing. The reading draws that
+// darkest value as the redaction's own pixel check reads it, before any
+// transfer function (ISO 32000-1, 10.5) and, for an image with no /Intent,
+// under the initial relative colorimetric intent (8.6.5.8) with black point
+// compensation: a viewer's reading may draw it pale, the blank of an image
+// painted after /Perceptual ri through a perceptual table that lifts the
+// black. The level leaves room for a black that colour management does not
+// map to sRGB 0: the CMYK black of a printer profile is a dark grey.
+//
+// # Corpus evidence
+//
+//   - litho cmykintent_2b: under the viewer's reading the blank of `Im`,
+//     drawn after /Perceptual ri through the `split` profile's A2B0, renders
+//     at 0x76, so the band and the quarter redacted again over samples a
+//     first quarter redaction had blanked failed the inside check on 360 and
+//     2,300 pixels of samples holding the blank (poppler finds nothing on
+//     the band); single redactions scored the same pixels as
+//     interpolation_spill (480 on the band, 2,300 on each quarter). Under
+//     the redaction reading the blank renders black and every scenario
+//     passes with no interpolation spill.
+//   - litho, pdfcpu, pdfjs, govdocs: 1,911 scenarios in the cell's sample,
+//     fallback scenarios included; the reading changes litho's half of
+//     cmykintent_2b's three alone.
+//   - litho, pdfjs: the extra render took litho's half from 84 and 68
+//     seconds to 113 and 95, and left pdfjs's within the noise (117 and 173
+//     seconds before, 212 and 128 after), 4 workers, timed back to back on
+//     a machine at load 65 to 118.
 const redactRenderDarkLevel = 80
 
 // redactRenderSpillSpread is how far, in device pixels at [renderDPI],
@@ -282,7 +307,9 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     litho, the after page must equal litho's rendering of the after page
 //     with images alone, within [redactRenderSelfTolerance], which no glyph,
 //     fill, stroke, shading or annotation left in the region can pass; and
-//     that images-only rendering, drawn over black, must stay at or under
+//     that images-only rendering, drawn over black under
+//     [pdf.WithRenderRedactionReading], which reads a blanked sample as the
+//     darkest colour blanking wrote, must stay at or under
 //     [redactRenderDarkLevel], which an image whose samples were not blanked
 //     fails wherever its picture is lighter than black. For poppler, each
 //     channel of the after page must lie within the range litho's
@@ -330,8 +357,9 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 // would. Package mutations' tests hold redaction to making the covered mask
 // samples opaque.
 //
-// Cost: two renders of each affected page before, four after per scenario
-// (litho's full, images-only over white and over black, poppler's), all at
+// Cost: two renders of each affected page before, five after per scenario
+// (litho's full, images-only over white, over black and over black under the
+// redaction reading, poppler's), all at
 // 72 dpi, on pages 1 and 2 only, and one container per corpus run; and for
 // each fallback scenario a second redaction, which renders the units it
 // rasterises at 300 dpi, and, when it rasterised any, the same renders
@@ -968,6 +996,16 @@ func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *red
 		check.Error = fmt.Sprintf("render after, images only over black: %v", err)
 		return check, nil
 	}
+	// The inside check judges a blanked sample by what blanking wrote, the
+	// darkest colour of the image's space, read as the redaction's own pixel
+	// check reads it ([pdf.WithRenderRedactionReading]): before a transfer
+	// function and under the initial intent, either of which may draw that
+	// colour pale on screen.
+	blank, err := render(after, pdf.WithRenderContent(pdf.RenderImages), pdf.WithRenderBackground(color.Black), pdf.WithRenderRedactionReading())
+	if err != nil {
+		check.Error = fmt.Sprintf("render after, blanked images over black: %v", err)
+		return check, nil
+	}
 	// The raster fallback's images change the images-only rendering
 	// wherever they paint, so on a fallback scenario that rendering cannot
 	// tell blanking apart from what the images took over. The images are
@@ -1003,7 +1041,7 @@ func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *red
 			check.InsidePixels++
 			i := 3 * (y*sets.w + x)
 			painted := channelDelta(full[i:i+3], images[i:i+3]) > redactRenderSelfTolerance
-			if !painted && max(onBlack[i], onBlack[i+1], onBlack[i+2]) <= redactRenderDarkLevel {
+			if !painted && max(blank[i], blank[i+1], blank[i+2]) <= redactRenderDarkLevel {
 				continue
 			}
 			// Only an image may show a blend: a glyph, fill or annotation

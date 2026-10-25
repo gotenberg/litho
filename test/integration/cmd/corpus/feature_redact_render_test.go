@@ -13,8 +13,9 @@ import (
 )
 
 // redactKindPDF returns a 200 by 200 page drawing body, with Helvetica as
-// /F1, a 2 by 2 picture as /Im0 and an axial shading as /Sh0. The centred
-// quarter of the page, the p1-quarter region, is [50 50 150 150].
+// /F1, a 2 by 2 picture as /Im0, an axial shading as /Sh0 and, as /Pale, a
+// graphics state whose transfer function maps every level into [0.9, 1]. The
+// centred quarter of the page, the p1-quarter region, is [50 50 150 150].
 func redactKindPDF(body string) []byte {
 	return redactImagePDF(body, "/Width 2 /Height 2", "\xff\x00\x00\x00\xff\x00\x00\x00\xff\xff\xff\xff")
 }
@@ -29,12 +30,14 @@ func redactImagePDF(body, entries, samples string) []byte {
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R" +
-			" /Resources << /Font << /F1 5 0 R >> /XObject << /Im0 6 0 R >> /Shading << /Sh0 7 0 R >> >> >>",
+			" /Resources << /Font << /F1 5 0 R >> /XObject << /Im0 6 0 R >> /Shading << /Sh0 7 0 R >>" +
+			" /ExtGState << /Pale 8 0 R >> >> >>",
 		stream("", body),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 		stream("/Type /XObject /Subtype /Image "+entries+" /ColorSpace /DeviceRGB /BitsPerComponent 8", samples),
 		"<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [80 0 120 0]" +
 			" /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >>",
+		"<< /Type /ExtGState /TR << /FunctionType 2 /Domain [0 1] /C0 [0.9] /C1 [1] /N 1 >> >>",
 	}
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.7\n")
@@ -385,5 +388,31 @@ func TestRedactRenderSpillSpreadStops(t *testing.T) {
 	after[3*1] = 250
 	if sets.spreadSpill(before, after)[1] {
 		t.Error("a lighter pixel joined the spill")
+	}
+}
+
+// TestRedactRenderJudgesTheBlankAsWritten redacts the centred quarter over the
+// upper right sample of a 2 by 2 image drawn under a transfer function that
+// paints black near white (ISO 32000-1, 10.5), so the blank renders pale on
+// screen, and requires the inside check to read the blank as blanking wrote it
+// and pass with no interpolation spill: judged by darkness on screen, the pale
+// blank read as the kept samples' blend (2,304 pixels). A redaction that
+// removes nothing still leaks: the picture the transfer pales stays lighter
+// than black under that reading.
+func TestRedactRenderJudgesTheBlankAsWritten(t *testing.T) {
+	t.Parallel()
+	data := redactKindPDF("q /Pale gs 100 0 0 100 0 0 cm /Im0 Do Q")
+	v, sc := runRedactRender(t, newTestRedactRender(), data, "p1-quarter")
+	if sc.Litho == nil || !sc.Litho.passed() || sc.Litho.InterpolationSpill != 0 || v.Metrics[metricInsideLeaked] != 0 {
+		t.Errorf("a blank a transfer function pales: %+v (%s), want a pass", sc.Litho, sc.Cause)
+	}
+
+	broken := newTestRedactRender()
+	broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error) {
+		return nil, nil
+	}
+	v, sc = runRedactRender(t, broken, data, "p1-quarter")
+	if sc.Litho == nil || sc.Litho.Inside == 0 || v.Metrics[metricInsideLeaked] == 0 || v.Match {
+		t.Errorf("a picture left under a transfer function passed: %+v", sc.Litho)
 	}
 }
