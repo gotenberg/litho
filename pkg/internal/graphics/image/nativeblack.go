@@ -34,6 +34,20 @@ const nativeBlackGrid = 6
 // its samples.
 const maxNativeBlackSteps = 1024
 
+// maxNativeBlackComponents caps the components of a space searched for its
+// darkest sample. Anti-DoS guard, not spec-mandated: the grid holds
+// [nativeBlackGrid] to the power of the component count, 1,296 conversions
+// for four, and a DeviceN of 32 colorants (ISO 32000-1, Annex C, Table C.1)
+// would ask for 6^32. Every space that reaches the search today has at most
+// four, since [DecodeStreamNative] admits only device, CIE-based, ICC-based
+// and None-only DeviceN spaces; a wider one is refused, so blanking it fails
+// closed rather than hanging.
+const maxNativeBlackComponents = 4
+
+// nativeBlackCheckEvery is how many grid points the search converts between
+// checks of its context.
+const nativeBlackCheckEvery = 256
+
 // NativeBlack returns the darkest sample of the colour space an image
 // dictionary names, one byte per component as [NativeSamples] holds them
 // (/Decode applied), read against page's resources and dictionary exactly as
@@ -119,6 +133,9 @@ func sampleDarkness(sc *SampleColor, s []byte) (darkness, error) {
 // colour gets darker. Ties keep the first sample found, so the result is
 // deterministic.
 func darkestSample(ctx context.Context, sc *SampleColor, n int) ([]byte, error) {
+	if n < 1 || n > maxNativeBlackComponents {
+		return nil, fmt.Errorf("searching the darkest sample of a space of %d components, past the %d this search bounds", n, maxNativeBlackComponents)
+	}
 	best := make([]byte, n)
 	bestD, err := sampleDarkness(sc, best)
 	if err != nil {
@@ -130,6 +147,11 @@ func darkestSample(ctx context.Context, sc *SampleColor, n int) ([]byte, error) 
 		points *= nativeBlackGrid
 	}
 	for p := range points {
+		if p%nativeBlackCheckEvery == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		for i, q := 0, p; i < n; i++ {
 			cur[i] = byte(q % nativeBlackGrid * 255 / (nativeBlackGrid - 1))
 			q /= nativeBlackGrid

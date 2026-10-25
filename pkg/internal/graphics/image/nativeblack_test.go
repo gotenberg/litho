@@ -144,3 +144,15 @@ func TestNativeBlack_RefusesAComponentMismatch(t *testing.T) {
 		t.Fatalf("NativeBlack = %v, want an error for 4 components of an RGB space", got)
 	}
 }
+
+// TestDarkestSampleBoundsItsComponents checks the search for a darkest sample
+// refuses a space past maxNativeBlackComponents before converting anything,
+// rather than walking a grid of nativeBlackGrid to the power of its count.
+func TestDarkestSampleBoundsItsComponents(t *testing.T) {
+	t.Parallel()
+	for _, n := range []int{0, maxNativeBlackComponents + 1, 32} {
+		if _, err := darkestSample(t.Context(), nil, n); err == nil {
+			t.Errorf("darkestSample with %d components: want an error", n)
+		}
+	}
+}
