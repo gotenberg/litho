@@ -10047,7 +10047,11 @@ within 2 levels at 300 dpi; before, they drew their RGB unconverted, up to
 converting the form would change page 5, so page 4 keeps its colours
 (`GroupSpaceUnconverted`) and reads in sRGB, as it did before the change. The
 `render` cell mismatches pages 1 to 3 against poppler, which reads no page
-group's space (Known divergences).
+group's space (Known divergences). Converted to CMYK, page 3 keeps its
+DeviceGray group, which the `recolor` cell counts in `group_out_of_target`, an
+inventory, and draws grey as its source does; written in the target, the
+group made the page draw its green in colour (`colour_drift`, 1728 pixels,
+84.7 ΔE\*ab).
 
 The file declares no OutputIntent, so DeviceRGB fails `6.2.4.3/2`, DeviceCMYK
 `6.2.4.3/3` and DeviceGray `6.2.4.3/4` at PDF/A-2b. veraPDF 1.30.2 and litho
