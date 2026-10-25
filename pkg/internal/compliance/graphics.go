@@ -48,7 +48,6 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		hasContent := len(p.content) > 0 && !p.contentJudged
 
 		// §6.2.2 t2/t3: resource completeness; see [pageResourceScopes].
-		var resourceResults []Violation
 		if hasContent {
 			ops := p.parsedOps(ctx)
 			if ops != nil {
@@ -64,8 +63,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 					}
 					defaultUndefined = unreadableDefaultSelected(ctx, doc, ops, defaultRes, ownRes, inheritedRes, true, false)
 				}
-				resourceResults = checkContentStreamResourcesOps(ctx, doc, ops, built, false, ownRes, inheritedRes, part, i+1, false, defaultUndefined)
-				results = append(results, resourceResults...)
+				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, built, false, ownRes, inheritedRes, part, i+1, false, defaultUndefined)...)
 				// Check inline image /Intent values from parsed BI operations,
 				// which are the stream's bytes, judged on the first page that
 				// shares it whatever the resources.
@@ -76,15 +74,6 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 				// checkPageContent, over the same operations.
 			}
 		}
-		// §6.2.2 t3 once for a content stream with no resource dictionary at
-		// all, unless a name it uses stated it already; see
-		// [pageWithoutResources].
-		if rule := missingResourceRule(part); rule.Specification != "" && !p.contentJudged &&
-			!slices.ContainsFunc(resourceResults, func(v Violation) bool { return v.Rule == rule }) &&
-			pageWithoutResources(ctx, doc, p) {
-			results = append(results, failf(rule, "page %d: content stream has no explicitly associated Resources dictionary: neither the page nor an ancestor states /Resources", i+1)...)
-		}
-
 		// The graphics states the page's own content sets. A page whose
 		// content litho cannot read has every state its resources list judged
 		// once, rather than none (see [pageDrawnResources]).
@@ -116,90 +105,37 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 // PDF/A-2b and t3 at PDF/A-4 on a page whose /Resources hold no /ExtGState or
 // another ExtGState name.
 //
+// A page with no resource dictionary at all, its own or an ancestor's, fails t3
+// for the names its content uses alone. ISO 19005-4, 6.2.2 asks the dictionary
+// to enumerate the named resources the operators need, and content that names
+// none needs none: an empty stream, one painting in the initial DeviceGray, or
+// one selecting a device colour space, which ISO 32000-1, 8.6.8, Table 74 does
+// with no resource lookup, "/DeviceRGB cs" included. ISO 32000-2, Table 31
+// still requires a page's /Resources, which the Writer writes. Measured with
+// veraPDF 1.30.3 at PDF/A-4 on fixtures with no /Resources on the pages or the
+// page tree: content painting nothing or in a device space, an empty or
+// undecodable stream, an empty /Contents array, and a page or page tree
+// stating /Resources null fail nothing, while "BT /F1 12 Tf ET" fails t3 once
+// and "/GS0 gs" beside it once more for the same stream. veraPDF 1.30.2
+// failed t3 once for every such content stream, whatever it painted: it
+// resolved the initial DeviceGray through the missing dictionary, and 1.30.3
+// resolves a device space through an empty one instead (veraPDF-parser
+// PDResourcesHandler.getColorSpace).
+//
 // # Corpus evidence
 //
 //   - pdfjs issue5954.pdf: its page's /Resources lack the /F1 its content
 //     selects, which the page tree defines, and veraPDF fails no t2 at
 //     PDF/A-2b, where litho failed it once. It is the only file whose count
 //     moves.
+//   - litho noresources_4.pdf: veraPDF 1.30.2 failed t3 at PDF/A-4, 4e and 4f
+//     for its five content streams on pages with no resource dictionary, and
+//     1.30.3 fails it for none of them, since none names a resource.
 func pageResourceScopes(p *pageCtx) (own, inherited ast.PdfDict) {
 	if _, _, ancestor := p.inheritedHolder("Resources"); ancestor != nil {
 		return nil, p.resources
 	}
 	return p.resources, nil
-}
-
-// pageWithoutResources reports whether p has a content stream and no resource
-// dictionary at all: its /Contents is a stream or an array, and neither the
-// page nor any ancestor in the page tree states /Resources
-// ([pageObject.inheritedHolder]; an entry written null states none, ISO
-// 32000-1, 7.3.7).
-//
-// ISO 32000-1, 7.7.3.3, Table 30 (ISO 32000-2, Table 31) makes /Resources a
-// required, inheritable entry of a page, and a page that needs no resources
-// states an empty dictionary. ISO 19005-4, 6.2.2 requires every content stream
-// to have an explicitly associated resource dictionary enumerating the named
-// resources it uses, and a page with none leaves its content with no
-// dictionary to associate. veraPDF fails t3 once for that stream, whatever it
-// paints: it resolves the stream's initial DeviceGray (ISO 32000-1, 8.6.8)
-// through the resource dictionary when it starts the stream's graphics state,
-// and records the name as undefined when there is none (veraPDF-validation
-// 1.30, GraphicState and PDResourcesHandler.getColorSpace), so its finding
-// names DeviceGray. PDF/A-1, -2 and -3 have no such test.
-//
-// Measured with veraPDF 1.30.2 at PDF/A-4 on fixtures with no /Resources on
-// the pages or the page tree: content painting nothing, painting in
-// DeviceGray, DeviceRGB or DeviceCMYK, with or without an OutputIntent, an
-// empty stream, one holding a comment, one that does not decode, an empty
-// /Contents array and one holding null each fail t3 once, as do a page and a
-// page tree stating /Resources null; a stream that also names a font fails it
-// once, not twice; two pages sharing one stream fail it once, and two pages
-// with a stream each fail it twice. A page with no /Contents, or a /Contents
-// that is null or a dictionary, fails nothing, and so does a page stating an
-// empty dictionary, inheriting one, stating a number, or naming an undefined
-// object or a null one. An annotation appearance stream fails nothing through
-// it: veraPDF gives a form XObject resources even when it states none.
-//
-// The same missing dictionary leads veraPDF astray once more, where litho
-// keeps to the specification: "/DeviceRGB cs" selects DeviceRGB with no
-// resource lookup (ISO 32000-1, 8.6.8, Table 74), while veraPDF resolves the
-// name through the absent dictionary, leaves the colour space unset and judges
-// the paint that follows as the initial DeviceGray. With no OutputIntent,
-// "/DeviceRGB cs 1 0 0 sc" and a fill fail ISO 19005-2/3/4, 6.2.4.3 t2 twice
-// on litho and t4 twice on veraPDF 1.30.2, and ISO 19005-1, 6.2.3.3 t1 against
-// t3; rg, k and g fall back to their own family on veraPDF and agree.
-//
-// # Corpus evidence
-//
-//   - pdfcpu pkg_testdata__test.pdf, pkg_testdata__testRot.pdf and
-//     pkg_testdata__testWithText.pdf, pdfjs clippath.pdf, issue4260_reduced.pdf
-//     and issue4461.pdf: one page each has no resource dictionary, and
-//     veraPDF fails t3 once at PDF/A-4, where litho reported nothing.
-//   - pdfjs outline_goto_action.pdf and poppler-85140-0.pdf: two pages and one
-//     have none, and litho fails t3 twice and once. veraPDF cannot parse
-//     either file.
-//   - litho noresources_4.pdf: five content streams on pages with no resource
-//     dictionary fail t3, as veraPDF reports.
-//   - All corpora: no other page has content and no resource dictionary, none
-//     of these selects a device colour space with cs or CS, and no other count
-//     moves at PDF/A-4.
-func pageWithoutResources(ctx context.Context, doc *document.Document, p *pageCtx) bool {
-	if node, _, _ := p.inheritedHolder("Resources"); node != nil {
-		return false
-	}
-	contents, ok := p.dict["Contents"]
-	if !ok {
-		return false
-	}
-	resolved, err := document.ResolveObject(ctx, doc, contents)
-	if err != nil {
-		return false
-	}
-	switch resolved.(type) {
-	case ast.PdfStream, ast.PdfArray:
-		return true
-	}
-	return false
 }
 
 // checkDrawnStream states the content-stream rules for one stream

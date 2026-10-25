@@ -9,11 +9,11 @@ import (
 
 // TestPageWithoutResourcesFailsUndefinedResources pins ISO 19005-4, 6.2.2 t3
 // on a page whose content has no resource dictionary at all: the page states
-// no /Resources and no ancestor in the page tree lends one, which ISO 32000-2,
-// 7.7.3.3, Table 31 forbids (a page needing no resources states an empty
-// dictionary). Every count was measured against veraPDF 1.30.2 at PDF/A-4,
-// which fails the test once for such a content stream whatever it paints, and
-// reports DeviceGray, the initial colour space, as the undefined name.
+// no /Resources and no ancestor in the page tree lends one. The test fails for
+// the names the content uses alone, once per content stream: content that
+// names none needs no dictionary to enumerate them. Every count was measured
+// against veraPDF 1.30.3 at PDF/A-4; 1.30.2 failed the test once for every
+// such content stream, whatever it painted.
 func TestPageWithoutResourcesFailsUndefinedResources(t *testing.T) {
 	t.Parallel()
 	const catalog = "<< /Type /Catalog /Pages 2 0 R >>"
@@ -31,16 +31,18 @@ func TestPageWithoutResourcesFailsUndefinedResources(t *testing.T) {
 		profile models.PDFAProfile
 		want    int
 	}{
-		{"content painting nothing", onePage(" /Contents 4 0 R", "", qQ), models.PDFA4, 1},
-		{"content painting in DeviceGray", onePage(" /Contents 4 0 R", "", exponentStream("", "0 g 0 0 10 10 re f")), models.PDFA4, 1},
-		{"an empty content stream", onePage(" /Contents 4 0 R", "", exponentStream("", "")), models.PDFA4, 1},
-		{"a content stream holding a comment", onePage(" /Contents 4 0 R", "", exponentStream("", "% nothing")), models.PDFA4, 1},
-		{"a content stream that does not decode", onePage(" /Contents 4 0 R", "", exponentStream("/Filter /FlateDecode", "garbage")), models.PDFA4, 1},
-		{"an empty /Contents array", onePage(" /Contents []", ""), models.PDFA4, 1},
-		{"a /Contents array holding null", onePage(" /Contents [null]", ""), models.PDFA4, 1},
-		{"content naming a font as well", onePage(" /Contents 4 0 R", "", exponentStream("", "BT /F1 12 Tf ET")), models.PDFA4, 1},
-		{"a page stating /Resources null", onePage(" /Contents 4 0 R /Resources null", "", qQ), models.PDFA4, 1},
-		{"a page tree stating /Resources null", onePage(" /Contents 4 0 R", " /Resources null", qQ), models.PDFA4, 1},
+		{"content painting nothing", onePage(" /Contents 4 0 R", "", qQ), models.PDFA4, 0},
+		{"content painting in DeviceGray", onePage(" /Contents 4 0 R", "", exponentStream("", "0 g 0 0 10 10 re f")), models.PDFA4, 0},
+		{"an empty content stream", onePage(" /Contents 4 0 R", "", exponentStream("", "")), models.PDFA4, 0},
+		{"a content stream holding a comment", onePage(" /Contents 4 0 R", "", exponentStream("", "% nothing")), models.PDFA4, 0},
+		{"a content stream that does not decode", onePage(" /Contents 4 0 R", "", exponentStream("/Filter /FlateDecode", "garbage")), models.PDFA4, 0},
+		{"an empty /Contents array", onePage(" /Contents []", ""), models.PDFA4, 0},
+		{"a /Contents array holding null", onePage(" /Contents [null]", ""), models.PDFA4, 0},
+		{"content naming a font", onePage(" /Contents 4 0 R", "", exponentStream("", "BT /F1 12 Tf ET")), models.PDFA4, 1},
+		{"content naming a graphics state and a font", onePage(" /Contents 4 0 R", "", exponentStream("", "/GS0 gs BT /F1 12 Tf ET")), models.PDFA4, 1},
+		{"content selecting DeviceRGB by name", onePage(" /Contents 4 0 R", "", exponentStream("", "/DeviceRGB cs 1 0 0 sc 0 0 10 10 re f")), models.PDFA4, 0},
+		{"a page stating /Resources null", onePage(" /Contents 4 0 R /Resources null", "", qQ), models.PDFA4, 0},
+		{"a page tree stating /Resources null", onePage(" /Contents 4 0 R", " /Resources null", qQ), models.PDFA4, 0},
 		{"a page with an empty dictionary", onePage(" /Contents 4 0 R /Resources << >>", "", qQ), models.PDFA4, 0},
 		{"a page inheriting an empty dictionary", onePage(" /Contents 4 0 R", " /Resources << >>", qQ), models.PDFA4, 0},
 		{"a page stating a number", onePage(" /Contents 4 0 R /Resources 5", "", qQ), models.PDFA4, 0},
@@ -55,7 +57,7 @@ func TestPageWithoutResourcesFailsUndefinedResources(t *testing.T) {
 			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
 			qQ,
 			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
-		}, models.PDFA4, 1},
+		}, models.PDFA4, 0},
 		{"two pages with a content stream each", []string{
 			catalog,
 			"<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>",
@@ -63,7 +65,7 @@ func TestPageWithoutResourcesFailsUndefinedResources(t *testing.T) {
 			qQ,
 			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 6 0 R >>",
 			qQ,
-		}, models.PDFA4, 2},
+		}, models.PDFA4, 0},
 		{"PDF/A-2b, which has no test 3", onePage(" /Contents 4 0 R", "", qQ), models.PDFA2b, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

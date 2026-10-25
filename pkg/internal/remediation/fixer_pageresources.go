@@ -25,7 +25,6 @@ func matchPageResources(v compliance.Violation) bool {
 	// no /Resources of its own, which then hid every resource from the other
 	// fixers too.
 	return contextContains(v, "only through inherited Resources") ||
-		contextContains(v, "no explicitly associated Resources dictionary") ||
 		contextContains(v, "not in Resources")
 }
 
