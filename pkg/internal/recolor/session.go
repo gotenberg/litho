@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
 // session is one recolouring of a document: the target, the objects it
@@ -48,18 +49,23 @@ type session struct {
 	anonymous int
 	// kOnlyGray and kOnlyRGB are the plans [session.solidPlan] converts
 	// DeviceGray and DeviceRGB solid colours with, built on first use, the
-	// RGB one per black point compensation, since it converts through the
-	// space's profile.
+	// RGB one per black point compensation and rendering intent, since it
+	// converts through the space's profile.
 	kOnlyGray *spacePlan
-	kOnlyRGB  map[bool]*spacePlan
+	kOnlyRGB  map[variant]*spacePlan
 	// bpc is the black point compensation the plans and transforms being
 	// built convert with: [Options.BlackPointCompensation], or what the
 	// /UseBlackPtComp of the graphics state a colour is painted under asks
-	// ([session.underBPC]).
+	// ([session.under]).
 	bpc bool
+	// intent is the rendering intent the plans and transforms being built
+	// convert under: [Options.Intent], or the one the graphics state a
+	// colour is painted under, or an image's own /Intent, asks
+	// ([session.under]).
+	intent icc.Intent
 	// bpcCopies holds the copies of images and shadings converted under a
-	// black point compensation other than the option's
-	// ([session.blackPointCopy]), by object and compensation.
+	// black point compensation or a rendering intent other than the option's
+	// ([session.variantCopy]), by object, compensation and intent.
 	bpcCopies map[string]bpcCopy
 	// streamVariants holds the resources each content stream of a page's
 	// /Contents names that only a copy defines ([contentRewriter.paintVariant]),
@@ -79,8 +85,9 @@ func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo
 		plans:          make(map[string]*spacePlan),
 		transforms:     make(map[string]transformEntry),
 		overprint:      newOverprintLedger(),
-		kOnlyRGB:       make(map[bool]*spacePlan),
+		kOnlyRGB:       make(map[variant]*spacePlan),
 		bpc:            opts.BlackPointCompensation,
+		intent:         opts.Intent,
 		bpcCopies:      make(map[string]bpcCopy),
 		streamVariants: make(map[int]resourceAdds),
 	}

@@ -141,7 +141,7 @@ func (s *session) planKey(ctx context.Context, def ast.PdfObject, defaults ast.P
 			fmt.Fprintf(&sb, "|%s=%v", name, d)
 		}
 	}
-	sb.WriteString(s.bpcKey())
+	sb.WriteString(s.variantKey())
 	return sb.String(), sb.Len() <= maxPlanKeyBytes
 }
 
@@ -300,7 +300,7 @@ func (s *session) planEndpoint(end Endpoint, pre func(in, out []float64), initia
 // per endpoint and black point compensation.
 func (s *session) transform(end Endpoint) (Converter, error) {
 	sum := sha256.Sum256(end.Profile)
-	key := end.Space + string(sum[:]) + s.bpcKey()
+	key := end.Space + string(sum[:]) + s.variantKey()
 	if c, ok := s.transforms[key]; ok {
 		return c.conv, c.err
 	}
@@ -444,7 +444,7 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int, role
 	}
 	fallback := func() *spacePlan {
 		p := s.planDevice(ctx, [5]string{1: SpaceGray, 3: SpaceRGB, 4: SpaceCMYK}[n], "", nil)
-		if alt, ok := pdfimage.SubstituteICCAlternate(ctx, s.doc, arr, s.opts.Intent, role); ok {
+		if alt, ok := pdfimage.SubstituteICCAlternate(ctx, s.doc, arr, s.intent, role); ok {
 			if a := s.planICCAlternate(ctx, alt, depth+1, role); a.n == n && (a.kind == planConvert || a.kind == planIdentity) {
 				p = a
 			}
@@ -458,7 +458,7 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int, role
 		q.deviceGray, q.deviceRGB = false, false
 		return &q
 	}
-	if !pdfimage.ICCBasedUsable(ctx, s.doc, arr[1], n, s.opts.Intent) {
+	if !pdfimage.ICCBasedUsable(ctx, s.doc, arr[1], n, s.intent) {
 		if ctx.Err() != nil {
 			return &spacePlan{kind: planUnknown, err: ctx.Err()}
 		}

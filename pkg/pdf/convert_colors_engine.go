@@ -59,6 +59,8 @@ type recolorResult struct {
 	// blackPoint is what [ColorReport] says of the graphics states'
 	// /UseBlackPtComp.
 	blackPoint recolor.BlackPointReport
+	// intent is what it says of the rendering intents the content states.
+	intent recolor.IntentReport
 }
 
 // recolorEngine rewrites the colours of every page of doc, and of everything
@@ -133,6 +135,7 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		overprintStates:    report.Overprint.States,
 		overprintChanged:   report.Overprint.Changed + report.Overprint.FormsUnread,
 		blackPoint:         report.BlackPoint,
+		intent:             report.Intent,
 	}, nil
 }
 

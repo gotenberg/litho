@@ -15,9 +15,15 @@ import (
 // samples are indices, which keep their meaning, so they stay as encoded and
 // only the /ColorSpace changes (ISO 32000-1, 8.6.6.3). The conversion is
 // lossless beyond the table's own 8 bits a component, and the converted space
-// is built once per space, however many images name it.
+// is built once per space and rendering intent, the image's own /Intent or
+// else the configured one (ISO 32000-1, 8.6.5.8), however many images name
+// it.
 func (im *Images) convertIndexed(ctx context.Context, stream ast.PdfStream, sp imageSpace, resources, page ast.PdfDict, inline bool) (ast.PdfStream, ImageOutcome, error) {
+	intent := im.imageIntent(ctx, stream.Dict)
 	key := fmt.Sprintf("%t|%v%s%s", inline, sp.obj, defaultsKey(ctx, im.doc, resources), im.variantKey())
+	if intent != im.cfg.Intent {
+		key += "|Intent=" + string(intent)
+	}
 	if inline {
 		// An inline image's table names the target as its resources do.
 		key = fmt.Sprintf("%s|%v", key, im.cfg.InlineSpace)
@@ -25,7 +31,7 @@ func (im *Images) convertIndexed(ctx context.Context, stream ast.PdfStream, sp i
 	space, cached := im.indexed[key]
 	if !cached {
 		var err error
-		space, err = im.indexedSpace(ctx, sp, resources, page, inline)
+		space, err = im.indexedSpace(ctx, sp, resources, page, inline, intent)
 		if err != nil {
 			return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
 		}
@@ -38,12 +44,13 @@ func (im *Images) convertIndexed(ctx context.Context, stream ast.PdfStream, sp i
 }
 
 // indexedSpace returns the Indexed space sp with its base converted, or nil
-// when its base is already the target or paints nothing.
+// when its base is already the target or paints nothing. The table converts
+// under the image's rendering intent, the name intent gives.
 //
 // A base in a Separation or DeviceN space is kept as a spot colour, as an
 // image in that space is, unless spots are converted: the table then keeps
 // its tints and the base is the space [Colors.SpotSpace] returns.
-func (im *Images) indexedSpace(ctx context.Context, sp imageSpace, resources, page ast.PdfDict, inline bool) (ast.PdfObject, error) {
+func (im *Images) indexedSpace(ctx context.Context, sp imageSpace, resources, page ast.PdfDict, inline bool, intent ast.PdfName) (ast.PdfObject, error) {
 	if len(sp.arr) != 4 {
 		return nil, fmt.Errorf("an Indexed space of %d elements, not the 4 of ISO 32000-1, 8.6.6.3", len(sp.arr))
 	}
@@ -80,7 +87,7 @@ func (im *Images) indexedSpace(ctx context.Context, sp imageSpace, resources, pa
 	if err != nil {
 		return nil, err
 	}
-	conv, err := im.cfg.Colors.Converter(ctx, base.obj, resources, page, im.cfg.Intent)
+	conv, err := im.cfg.Colors.Converter(ctx, base.obj, resources, page, intent)
 	if err != nil {
 		return nil, err
 	}

@@ -63,12 +63,12 @@ func (s *session) solidPlan(p *spacePlan) *spacePlan {
 		}
 		return s.kOnlyGray
 	case p.deviceRGB:
-		q, ok := s.kOnlyRGB[s.bpc]
+		q, ok := s.kOnlyRGB[variant{bpc: s.bpc, intent: s.intent}]
 		if !ok {
 			c := *p
 			c.conv, c.kOnly = kOnlyRGBBlack{next: p.conv}, true
 			q = &c
-			s.kOnlyRGB[s.bpc] = q
+			s.kOnlyRGB[variant{bpc: s.bpc, intent: s.intent}] = q
 		}
 		return q
 	}

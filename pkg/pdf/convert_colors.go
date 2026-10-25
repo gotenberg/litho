@@ -135,9 +135,13 @@ type colorOpts struct {
 	jpegQualitySet bool
 }
 
-// WithColorIntent converts every colour with the rendering intent i. Default
-// [IntentRelativeColorimetric]. A value no constant names makes
-// [Writer.ConvertColors] fail with [ErrInvalidColorTarget].
+// WithColorIntent converts colours with the rendering intent i. Default
+// [IntentRelativeColorimetric], the graphics state's initial intent (ISO
+// 32000-1, 8.6.5.8). A rendering intent the content states overrides it for
+// the colours it governs, as a viewer reads them: the ri operator and an
+// ExtGState /RI for the colours painted after them, and an image's /Intent
+// for the image ([ColorReport.IntentOperators]). A value no constant names
+// makes [Writer.ConvertColors] fail with [ErrInvalidColorTarget].
 func WithColorIntent(i RenderingIntent) ColorOption {
 	return func(o *colorOpts) { o.intent = i }
 }
@@ -342,6 +346,16 @@ type ColorReport struct {
 	// painting, and an image or a shading painted by a stream whose
 	// resources are not its own.
 	BlackPointUnhonoured int
+	// IntentOperators, IntentInlineImages, IntentCopies and
+	// IntentUnhonoured count as the BlackPoint fields do, for a graphics
+	// state whose rendering intent, set by the ri operator or an ExtGState
+	// /RI (ISO 32000-1, 8.6.5.8), differs from [WithColorIntent]'s. An image
+	// stating its own /Intent converts under it and is never copied for a
+	// state's.
+	IntentOperators    int
+	IntentInlineImages int
+	IntentCopies       int
+	IntentUnhonoured   int
 }
 
 // Where a profile [Writer.ConvertColors] read came from, as
@@ -561,6 +575,11 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		BlackPointInlineImages: result.blackPoint.InlineImages,
 		BlackPointCopies:       result.blackPoint.Copies,
 		BlackPointUnhonoured:   result.blackPoint.Unhonoured,
+
+		IntentOperators:    result.intent.Operators,
+		IntentInlineImages: result.intent.InlineImages,
+		IntentCopies:       result.intent.Copies,
+		IntentUnhonoured:   result.intent.Unhonoured,
 	}
 	for i := range report.IntentFallbacks {
 		if report.IntentFallbacks[i].Target {

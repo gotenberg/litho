@@ -91,7 +91,10 @@ type Options struct {
 	// 8.6.5.8; ICC.1:2010, 6.2). Its zero value is perceptual; the initial
 	// intent of the graphics state, and the one the renderer reads a page
 	// with, is relative colorimetric (8.6.5.8), so a conversion meant to draw
-	// as the source draws passes [icc.RelativeColorimetric].
+	// as the source draws passes [icc.RelativeColorimetric]. The intents the
+	// content states override it where they apply, as for the renderer: an
+	// ri or a graphics state's /RI for what is painted after it, an image's
+	// /Intent for the image ([IntentReport]).
 	Intent icc.Intent
 	// BlackPointCompensation scales the source black point to the
 	// destination's.

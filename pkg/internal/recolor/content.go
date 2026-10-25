@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
 // contentCheckInterval is how many operations [contentRewriter.rewrite]
@@ -31,8 +32,9 @@ const maxTargetNames = 1000
 // in them, the overprint parameters (8.6.7), the text rendering mode (9.3.6)
 // and the font resource Tf selects (9.3.1), all of which q and Q save and
 // restore (8.4.2). bpc is the /UseBlackPtComp in force (ISO 32000-2, Table
-// 57), "" for /Default, and fillSet and strokeSet the operators that set the
-// colours, which a change of it writes again ([contentRewriter.applyBlackPoint]).
+// 57), "" for /Default, ri the rendering intent an ri operator or an /RI set
+// (8.6.5.8) when riSet, and fillSet and strokeSet the operators that set the
+// colours, which a change of either writes again ([contentRewriter.applyState]).
 type colorState struct {
 	fill, stroke           *spacePlan
 	fillComps, strokeComps []float64
@@ -40,6 +42,8 @@ type colorState struct {
 	tr                     int
 	font                   ast.PdfName
 	bpc                    string
+	ri                     icc.Intent
+	riSet                  bool
 	fillSet, strokeSet     colourSet
 }
 
@@ -94,6 +98,10 @@ type contentRewriter struct {
 	// inlineBPC counts the inline images converted under such a
 	// compensation, and pendingInlineBPC those of the stream being rewritten.
 	inlineBPC, pendingInlineBPC int
+	// riOps, pendingRI, inlineRI and pendingInlineRI count as bpcOps,
+	// pendingBPC, inlineBPC and pendingInlineBPC do, for a rendering intent
+	// other than the option's ([IntentReport]).
+	riOps, pendingRI, inlineRI, pendingInlineRI int
 }
 
 func (s *session) newContentRewriter(ctx context.Context, res ast.PdfDict) *contentRewriter {
@@ -154,6 +162,7 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 	}
 	cr.pendingImages, cr.pendingKOnly = 0, 0
 	cr.pendingBPC, cr.pendingCopies, cr.pendingInlineBPC = 0, 0, 0
+	cr.pendingRI, cr.pendingInlineRI = 0, 0
 	cr.streamAdds = resourceAdds{}
 	var edits []edit
 	var want []content.Operation
@@ -208,8 +217,11 @@ func (cr *contentRewriter) rewrite(ctx context.Context, data []byte) ([]byte, bo
 	cr.kOnly += cr.pendingKOnly
 	cr.bpcOps += cr.pendingBPC
 	cr.inlineBPC += cr.pendingInlineBPC
+	cr.riOps += cr.pendingRI
+	cr.inlineRI += cr.pendingInlineRI
 	cr.pendingImages, cr.pendingKOnly = 0, 0
 	cr.pendingBPC, cr.pendingCopies, cr.pendingInlineBPC = 0, 0, 0
+	cr.pendingRI, cr.pendingInlineRI = 0, 0
 	return out.Bytes(), true, nil
 }
 
@@ -290,8 +302,8 @@ func (cr *contentRewriter) operation(ctx context.Context, index int, op content.
 			cr.state, cr.stack = cr.stack[n-1], cr.stack[:n-1]
 		}
 		return nil, false, nil
-	case "gs":
-		return cr.applyBlackPoint(ctx, op)
+	case "gs", "ri":
+		return cr.applyState(ctx, op)
 	case "g", "G", "rg", "RG", "k", "K":
 		stroke := op.Operator[0] < 'a'
 		p := cr.spacePlan(ctx, op)
@@ -353,7 +365,8 @@ func (cr *contentRewriter) operation(ctx context.Context, index int, op content.
 
 // spacePlan returns the plan of the colour space the operator op selects, g,
 // rg, k, cs or their stroking forms, as a solid colour set in it converts
-// ([session.solidPlan]), under the black point compensation in force.
+// ([session.solidPlan]), under the black point compensation and the
+// rendering intent in force.
 func (cr *contentRewriter) spacePlan(ctx context.Context, op content.Operation) *spacePlan {
 	s := cr.s
 	return cr.planUnder(func() *spacePlan {
@@ -380,18 +393,19 @@ func (cr *contentRewriter) setOperators(stroke bool, set colourSet) {
 }
 
 // showUnder counts a text showing operator showing a Type 3 font under a
-// black point compensation other than the option's: its glyph descriptions
-// inherit the state (ISO 32000-1, 9.6.5) but convert once, under the
-// option's.
+// black point compensation or a rendering intent other than the option's:
+// its glyph descriptions inherit the state (ISO 32000-1, 9.6.5) but convert
+// once, under the option's.
 func (cr *contentRewriter) showUnder(ctx context.Context) {
-	if _, over := cr.overridden(); !over || cr.dry {
+	v, over := cr.overridden()
+	if !over || cr.dry {
 		return
 	}
 	s := cr.s
 	fonts, _ := s.resolveDict(ctx, cr.res["Font"])
 	font, _ := s.resolveDict(ctx, fonts[cr.state.font])
 	if sub, _ := s.resolveName(ctx, font["Subtype"]); sub == "Type3" {
-		s.report.BlackPoint.Unhonoured++
+		s.unhonoured(v)
 	}
 }
 
@@ -418,8 +432,8 @@ func (cr *contentRewriter) inlineImage(ctx context.Context, op content.Operation
 	var outData []byte
 	var outcome ImageOutcome
 	var err error
-	on, over := cr.overridden()
-	s.underBPC(on, func() {
+	v, over := cr.overridden()
+	s.under(v, func() {
 		out, outData, outcome, err = s.images.ConvertInlineIn(ctx, dict, []byte(data), cr.res, nil, space)
 	})
 	if err != nil {
@@ -439,7 +453,15 @@ func (cr *contentRewriter) inlineImage(ctx context.Context, op content.Operation
 	}
 	cr.pendingImages++
 	if over {
-		cr.pendingInlineBPC++
+		bpc, intent := s.differs(v)
+		if bpc {
+			cr.pendingInlineBPC++
+		}
+		// An inline image's own /Intent overrides the state's (ISO 32000-1,
+		// 8.9.7, Table 93; 8.6.5.8).
+		if intent && !ownIntent(ctx, s, dict) {
+			cr.pendingInlineRI++
+		}
 	}
 	return text, true, nil
 }

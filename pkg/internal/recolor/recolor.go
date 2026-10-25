@@ -54,6 +54,9 @@ type Report struct {
 	IntentFallbacks []IntentFallback
 	// BlackPoint says what the graphics states' /UseBlackPtComp changed.
 	BlackPoint BlackPointReport
+	// Intent says what the rendering intents the content states, ri, /RI
+	// and an image's /Intent, changed.
+	Intent IntentReport
 }
 
 // Skip is an object recolouring left as it was.

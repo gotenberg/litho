@@ -50,6 +50,13 @@ type convertColorsResult struct {
 	BlackPointInlineImages int `json:"blackPointInlineImages,omitempty"`
 	BlackPointCopies       int `json:"blackPointCopies,omitempty"`
 	BlackPointUnhonoured   int `json:"blackPointUnhonoured,omitempty"`
+	// IntentOperators, IntentInlineImages, IntentCopies and
+	// IntentUnhonoured are [pdf.ColorReport]'s counts of what the rendering
+	// intents the content states changed.
+	IntentOperators    int `json:"intentOperators,omitempty"`
+	IntentInlineImages int `json:"intentInlineImages,omitempty"`
+	IntentCopies       int `json:"intentCopies,omitempty"`
+	IntentUnhonoured   int `json:"intentUnhonoured,omitempty"`
 }
 
 // intentFallback is one [pdf.IntentFallback] in the JSON report.
@@ -94,7 +101,7 @@ func registerConvertColorsFlags(fs *flag.FlagSet) *convertColorsFlags {
 	fs.StringVar(&f.target, "target", "output-intent", "Colour space to convert to: output-intent, cmyk, rgb, gray or icc")
 	fs.StringVar(&f.profile, "profile", "", "ICC profile of --target icc")
 	fs.StringVar(&f.cmykProfile, "cmyk-profile", "", "ICC profile of --target cmyk, and the one DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
-	fs.StringVar(&f.intent, "intent", "RelativeColorimetric", "Rendering intent: RelativeColorimetric, Perceptual, Saturation or AbsoluteColorimetric")
+	fs.StringVar(&f.intent, "intent", "RelativeColorimetric", "Rendering intent where the content states none (an ri operator, an ExtGState /RI or an image /Intent wins): RelativeColorimetric, Perceptual, Saturation or AbsoluteColorimetric")
 	fs.BoolVar(&f.noBPC, "no-bpc", false, "Convert without black point compensation where no graphics state's /UseBlackPtComp chooses")
 	// Compensation is the default now; the flag stays so scripts that pass
 	// it keep working.
@@ -261,6 +268,11 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 		BlackPointInlineImages: report.BlackPointInlineImages,
 		BlackPointCopies:       report.BlackPointCopies,
 		BlackPointUnhonoured:   report.BlackPointUnhonoured,
+
+		IntentOperators:    report.IntentOperators,
+		IntentInlineImages: report.IntentInlineImages,
+		IntentCopies:       report.IntentCopies,
+		IntentUnhonoured:   report.IntentUnhonoured,
 	}
 	for _, fb := range report.IntentFallbacks {
 		result.IntentFallbacks = append(result.IntentFallbacks, intentFallback(fb))
@@ -315,6 +327,13 @@ func printConvertColorsReport(stdout, stderr io.Writer, format, file string, rep
 	}
 	if result.BlackPointUnhonoured > 0 {
 		fmt.Fprintf(stdout, "Warning: %d painting(s) under a /UseBlackPtComp converted with the conversion's own black point compensation instead\n", result.BlackPointUnhonoured)
+	}
+	if n := result.IntentOperators + result.IntentInlineImages + result.IntentCopies; n > 0 {
+		fmt.Fprintf(stdout, "Followed the content's rendering intents: %d colour operator(s), %d inline image(s) and %d image or shading copy(ies) converted under the graphics state's intent\n",
+			result.IntentOperators, result.IntentInlineImages, result.IntentCopies)
+	}
+	if result.IntentUnhonoured > 0 {
+		fmt.Fprintf(stdout, "Warning: %d painting(s) under a rendering intent of the content converted with --intent instead\n", result.IntentUnhonoured)
 	}
 	return exitOK
 }

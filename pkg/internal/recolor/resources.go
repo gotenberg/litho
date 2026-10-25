@@ -176,7 +176,7 @@ func (s *session) rewriteDefinition(ctx context.Context, def ast.PdfObject) (ast
 		// every painting naming it: under the option's black point
 		// compensation, as the /Default state reads it.
 		var p *spacePlan
-		s.underBPC(s.opts.BlackPointCompensation, func() { p = s.planDefinition(ctx, resolved, nil) })
+		s.under(s.optionVariant(), func() { p = s.planDefinition(ctx, resolved, nil) })
 		if p.kind == planUnknown {
 			return nil, false, p.err
 		}

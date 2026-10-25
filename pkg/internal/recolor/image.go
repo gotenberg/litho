@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 )
 
 // Colors supplies the colour conversion images are converted through, to the
@@ -494,10 +495,11 @@ func lastFilter(ctx context.Context, doc *document.Document, dict ast.PdfDict) a
 }
 
 // imageIntent returns the rendering intent an image is converted under: its
-// own /Intent (ISO 32000-1, 8.9.5, Table 89), else the configured one.
+// own /Intent (ISO 32000-1, 8.9.5, Table 89), read as the image decoder
+// reads it ([pdfimage.ImageIntent]), else the configured one.
 func (im *Images) imageIntent(ctx context.Context, dict ast.PdfDict) ast.PdfName {
-	if name, err := document.ResolveName(ctx, im.doc, dict["Intent"]); err == nil && name != "" {
-		return name
+	if intent, own := pdfimage.ImageIntent(ctx, im.doc, dict); own {
+		return ast.PdfName(intent.String())
 	}
 	return im.cfg.Intent
 }
