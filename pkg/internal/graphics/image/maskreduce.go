@@ -37,8 +37,9 @@ const maskReduceRowsPerCheck = 64
 //
 // The reduced reading takes the samples as DeviceGray with /Decode applied,
 // the reading [DecodeMask] gives a soft mask (11.6.5.3 requires DeviceGray)
-// and a stencil mask (8.9.6.2). Short data paints its missing rows black, as
-// [DecodeMask] does. A JPEG or JPEG 2000 mask past the budget is refused:
+// and a stencil mask (8.9.6.2). Short data is read as [DecodeMask] reads it
+// (see [padShortSamples]): a sample it lacks is zero, and a stencil mask's
+// missing rows paint nothing. A JPEG or JPEG 2000 mask past the budget is refused:
 // its codestream, not the dictionary, shapes its samples, and its codec
 // holds the whole image anyway.
 func DecodeMaskAt(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, cols, rows int) (image.Image, error) {
@@ -86,7 +87,8 @@ func reduceMask(ctx context.Context, doc *document.Document, name ast.PdfName, s
 	dict := stream.Dict
 	lim := doc.Limits()
 	bpc := statedBitsPerComponent(ctx, doc, dict)
-	if isMask, _ := document.ResolveBool(ctx, doc, dict["ImageMask"]); isMask {
+	isMask, _ := document.ResolveBool(ctx, doc, dict["ImageMask"])
+	if isMask {
 		bpc = 1
 	} else if n := imageComponents(resolveColorSpace(ctx, doc, dict)); n != 1 {
 		return nil, fmt.Errorf("%w: mask %q of %dx%d in %d components", ErrImageTooLarge, string(name), width, height, n)
@@ -130,8 +132,14 @@ func reduceMask(ctx context.Context, doc *document.Document, name ast.PdfName, s
 	out := image.NewGray(image.Rect(0, 0, rw, rh))
 	row := make([]byte, rowBytes)
 	sums := make([]uint64, rw)
-	// flush writes the band of reduced row ry from sums. A row the data does
-	// not hold adds nothing to them: it reads black, as finishRows paints it.
+	// missing is what one sample of a row the data does not hold adds: the
+	// unpainted 255 for a stencil mask, and a zero sample through /Decode
+	// otherwise (see [padShortSamples]).
+	missing := uint64(lut[0])
+	if isMask {
+		missing = 255
+	}
+	// flush writes the band of reduced row ry from sums.
 	flush := func(ry int) {
 		n := uint64(min(ky, height-ry*ky)) //nolint:gosec // ry < ceil(height/ky), so the rows left are 1 to ky
 		for rx := range rw {
@@ -147,28 +155,43 @@ func reduceMask(ctx context.Context, doc *document.Document, name ast.PdfName, s
 				return nil, err
 			}
 		}
-		if _, err := io.ReadFull(rc, row); err != nil {
-			if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
-				return nil, fmt.Errorf("reading mask %q: %w", string(name), err)
-			}
-			// The rows past the data stay black: the band under way is
-			// flushed over its full height, and those below it hold zero.
-			if read%ky != 0 {
-				flush(read / ky)
-			}
+		n, err := io.ReadFull(rc, row)
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+			return nil, fmt.Errorf("reading mask %q: %w", string(name), err)
+		}
+		if n == 0 && err != nil {
 			break
 		}
+		// A partial last row keeps the samples it holds, the others zero.
+		clear(row[n:])
 		accumulateMaskRow(sums, row, width, bpc, kx, &lut)
 		read++
 		if read%ky == 0 || read == height {
 			flush((read - 1) / ky)
 		}
+		if err != nil {
+			break
+		}
 	}
 	if read == 0 {
-		return nil, fmt.Errorf("decoded data too short for one row of the %dx%d mask %q", width, height, string(name))
+		return nil, fmt.Errorf("decoded data holds no sample of the %dx%d mask %q", width, height, string(name))
 	}
 	if read < height {
-		doc.Logger.Debug("painting the rows short mask data lacks black",
+		// The rows the data does not hold, the band under way first.
+		for y := read; y < height; y++ {
+			if y%maskReduceRowsPerCheck == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
+			for rx := range rw {
+				sums[rx] += missing * uint64(min(kx, width-rx*kx)) //nolint:gosec // rx < ceil(width/kx), so the columns left are 1 to kx
+			}
+			if (y+1)%ky == 0 || y+1 == height {
+				flush(y / ky)
+			}
+		}
+		doc.Logger.Debug("reading the samples short mask data lacks",
 			slog.String("image", string(name)), slog.Int("rows", read), slog.Int("height", height))
 	}
 	doc.Logger.Debug("mask past the image budget read reduced",

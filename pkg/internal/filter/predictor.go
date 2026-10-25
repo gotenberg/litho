@@ -85,6 +85,25 @@ func applyPredictor(data []byte, params *predictorParams) ([]byte, error) {
 // Each row is prefixed with a single filter-type byte, followed by the
 // filtered sample bytes. The row width (in bytes) is derived from Columns,
 // Colors, and BitsPerComponent.
+//
+// Data that ends inside a row keeps the bytes that row holds: its filter
+// byte and the samples after it are reversed as a whole row's would be, and
+// the output stops where the data does. ISO 32000-1, 7.4.4.4 says nothing of
+// a partial row, and poppler 26.09.0, PDFium 4.30.0 and MuPDF 1.26.4 all
+// reverse it; dropping it lost the last samples of an image whose data holds
+// them.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200172.pdf: Im1's Flate data holds 2,390 whole rows
+//     at the /BitsPerComponent 1 its /DecodeParms state and 45 bytes of the
+//     next, which hold the 44 samples that complete the 8-bit image. Dropped,
+//     they were read as short data, and the redaction that blanked the image
+//     wrote them back black.
+//   - All corpora: 20 single-Flate streams under a PNG predictor end inside a
+//     row, every one an image of govdocs thread_000_000146.pdf or
+//     thread_200_200172.pdf whose partial row holds what it lacked; no
+//     cross-reference or object stream does.
 func applyPNGPredictor(data []byte, params *predictorParams) ([]byte, error) {
 	bytesPerPixel := max((params.Colors*params.BitsPerComponent+7)/8, 1)
 	rowBytes := (params.Columns*params.Colors*params.BitsPerComponent + 7) / 8
@@ -95,6 +114,12 @@ func applyPNGPredictor(data []byte, params *predictorParams) ([]byte, error) {
 	}
 
 	numRows := len(data) / stride
+	// A partial row with at least one sample after its filter byte.
+	tail := 0
+	if rem := len(data) - numRows*stride; rem > 1 {
+		tail = rem - 1
+		numRows++
+	}
 	if numRows == 0 {
 		return data, nil
 	}
@@ -168,6 +193,11 @@ func applyPNGPredictor(data []byte, params *predictorParams) ([]byte, error) {
 		copy(prevRow, curRow)
 	}
 
+	if tail > 0 {
+		// The partial row was reversed over zero padding; only the samples
+		// the data holds are output.
+		result = result[:(numRows-1)*rowBytes+tail]
+	}
 	return result, nil
 }
 

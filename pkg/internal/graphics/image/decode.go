@@ -162,12 +162,34 @@ func unpackSamples(data []byte, width, height, samplesPerPixel, bpc int, scale b
 	return out, nil
 }
 
-// padShortSamples returns data padded with zeros to the packed rows of a
-// width x height image, and how many whole rows data held. An unsupported
-// depth leaves data as it is, for unpackSamples to refuse. Data short of one
-// whole row is returned as it is, with no rows, since the caller refuses it:
-// padding it first allocated the whole image for nothing, and the refusal then
-// reported the padded length instead of the stream's.
+// padShortSamples returns data padded with zero bytes to the packed rows of a
+// width x height image, and how many whole rows data held: height when it
+// needed no padding.
+//
+// ISO 32000-1, 8.9.2 and 8.9.5 say how many samples an image holds and how
+// each is read, and nothing of what an image whose data stops short shows.
+// litho reads it from the bytes there are: the samples the data holds, a
+// partial last row's among them, keep their values, and every sample it lacks
+// is zero in the stream's own sample space, read like any other through
+// /Decode (8.9.5.2), an indexed space's table and the colour space. PDFium
+// 4.30.0 and MuPDF 1.26.4 read missing samples so; poppler 26.09.0 reads them
+// as 0xFF bytes, its EOF value. A stencil mask's whole missing rows are the
+// one reading where PDFium and poppler agree against MuPDF, under either
+// /Decode: both leave them unpainted, and so does litho (see [unpaintRows]).
+//
+// An unsupported depth leaves data as it is, for unpackSamples to refuse, and
+// so does empty data, which holds no sample to read and which the callers
+// refuse. Padding is bounded by the image's dimensions, which the caller has
+// checked against the pixel budget.
+//
+// # Corpus evidence
+//
+//   - All corpora, every image of pages 1 to 50: 2 images read short once
+//     the PNG predictor keeps a partial last row, pdfjs issue11678.pdf
+//     Image31 (329 of 331 rows) and issue13783.pdf Im9 (59 of 153).
+//   - pdfjs issue13783.pdf page 7: painting Im9's 94 missing rows black, as
+//     PDF.js does, changed 9,720 pixels at 72 dpi; PDFium and MuPDF draw all
+//     of them as the zero samples read now, poppler 9,481 of them as before.
 func padShortSamples(data []byte, width, height, samplesPerPixel, bpc int) ([]byte, int) {
 	var rowBytes int
 	switch bpc {
@@ -181,16 +203,22 @@ func padShortSamples(data []byte, width, height, samplesPerPixel, bpc int) ([]by
 		return data, height
 	}
 	need := rowBytes * height
-	if rowBytes == 0 || len(data) >= need {
+	if rowBytes == 0 || len(data) == 0 || len(data) >= need {
 		return data, height
-	}
-	rows := len(data) / rowBytes
-	if rows == 0 {
-		return data, 0
 	}
 	padded := make([]byte, need)
 	copy(padded, data)
-	return padded, rows
+	return padded, len(data) / rowBytes
+}
+
+// unpaintRows sets the rows of a stencil mask's decoded image from row on to
+// the value that paints nothing, 255 once /Decode is applied, whatever the
+// mask's /Decode: the reading of whole rows the data lacks that PDFium and
+// poppler share (see [padShortSamples]).
+func unpaintRows(img *image.Gray, row int) {
+	for i := row * img.Stride; i < len(img.Pix); i++ {
+		img.Pix[i] = 255
+	}
 }
 
 // indexDecode maps the indices of an indexed image through its /Decode array
@@ -224,7 +252,7 @@ func indexDecode(ctx context.Context, doc *document.Document, dict ast.PdfDict, 
 // draws its samples off the neutral axis (see [icc.Transform.Neutral]). The
 // 256 sample values are converted once, then the samples look their colours
 // up.
-func tintedGrey(samples []byte, grey [256]byte, conv *converter, width, height, validRows int) image.Image {
+func tintedGrey(samples []byte, grey [256]byte, conv *converter, width, height int) image.Image {
 	var table [256][3]byte
 	for s, v := range grey {
 		r, g, b := conv.convert([]byte{v})
@@ -234,22 +262,6 @@ func tintedGrey(samples []byte, grey [256]byte, conv *converter, width, height, 
 	for i, s := range samples {
 		c, px := table[s], img.Pix[4*i:4*i+4]
 		px[0], px[1], px[2], px[3] = c[0], c[1], c[2], 255
-	}
-	return finishRows(img, validRows)
-}
-
-// finishRows paints the rows of img from row on black, and returns img.
-func finishRows(img image.Image, row int) image.Image {
-	b := img.Bounds()
-	for y := b.Min.Y + row; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			switch m := img.(type) {
-			case *image.Gray:
-				m.SetGray(x, y, color.Gray{})
-			case *image.RGBA:
-				m.SetRGBA(x, y, color.RGBA{A: 255})
-			}
-		}
 	}
 	return img
 }
@@ -593,16 +605,16 @@ func decodeNoneColorant(
 	if jpeg && len(data) != width*height*colorants {
 		return nil, errNotNative
 	}
-	data, validRows := padShortSamples(data, width, height, colorants, bitsPerComp)
-	if validRows == 0 {
-		return nil, fmt.Errorf("decoded data too short for one row of the %dx%d image: got %d bytes", width, height, len(data))
+	if len(data) == 0 {
+		return nil, fmt.Errorf("decoded data holds no sample of the %dx%d image", width, height)
 	}
+	data, _ = padShortSamples(data, width, height, colorants, bitsPerComp)
 	unpacked, err := unpackSamples(data, width, height, colorants, bitsPerComp, true)
 	if err != nil {
 		return nil, err
 	}
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, colorants), colorants)
-	return nil, captureNative(native, unpacked, dec, colorants, width, height, validRows)
+	return nil, captureNative(native, unpacked, dec, colorants, width, height)
 }
 
 // decodeSeparation builds the image of a Separation colour space by mapping
@@ -654,6 +666,11 @@ func decodeSeparation(
 			tint.Outputs(), alt.comps, alt.name)
 	}
 
+	if len(data) == 0 {
+		return nil, fmt.Errorf("decoded data holds no sample of the %dx%d image", width, height)
+	}
+	// A tint the data lacks is zero, as [padShortSamples] reads any sample.
+	data, _ = padShortSamples(data, width, height, 1, bitsPerComp)
 	unpacked, err := unpackSamples(data, width, height, 1, bitsPerComp, true)
 	if err != nil {
 		return nil, err
@@ -751,6 +768,11 @@ func decodeDeviceN(
 			tint.Outputs(), alt.comps, alt.name)
 	}
 
+	if len(data) == 0 {
+		return nil, fmt.Errorf("decoded data holds no sample of the %dx%d image", width, height)
+	}
+	// A tint the data lacks is zero, as [padShortSamples] reads any sample.
+	data, _ = padShortSamples(data, width, height, colorants, bitsPerComp)
 	unpacked, err := unpackSamples(data, width, height, colorants, bitsPerComp, true)
 	if err != nil {
 		return nil, err
@@ -1455,21 +1477,14 @@ func nativeComponents(ctx context.Context, doc *document.Document, dict ast.PdfD
 }
 
 // captureNative fills native with the samples of a device reading, /Decode
-// applied, and paints the rows short data lacked black in that space.
-func captureNative(native *NativeSamples, data []byte, dec [][256]byte, components, width, height, validRows int) error {
+// applied.
+func captureNative(native *NativeSamples, data []byte, dec [][256]byte, components, width, height int) error {
 	if components == 0 || len(data) < width*height*components {
 		return errNotNative
 	}
 	out := make([]byte, width*height*components)
 	for i := range out {
 		out[i] = dec[i%components][data[i]]
-	}
-	black := make([]byte, components)
-	if components == 4 {
-		black[3] = 255
-	}
-	for i := validRows * width * components; i < len(out); i += components {
-		copy(out[i:i+components], black)
 	}
 	*native = NativeSamples{Data: out, Components: components, Width: width, Height: height}
 	return nil
@@ -1776,22 +1791,19 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		}
 	}
 
-	// Data that stops short of the rows the dictionary states is not refused
-	// while it holds a whole row: the rows it holds are painted and the rest
-	// left black, which is what PDF.js paints. Nothing in ISO 32000-1, 8.9.5
-	// says what a short image shows, and refusing it lost the whole picture
-	// for a few missing bytes. With the filters keeping what a truncated
-	// stream holds, this recovers nearly every image litho failed to decode
-	// on a page PDF.js paints.
-	validRows := height
+	// Data that stops short of the samples the dictionary states is read
+	// from the bytes there are, every sample it lacks zero (see
+	// [padShortSamples]): refusing it lost the whole picture for a few
+	// missing bytes. Data that holds no byte at all is refused.
+	wholeRows := height
 	if filterName != "DCTDecode" {
-		decodedData, validRows = padShortSamples(decodedData, width, height, samplesPerPixel, bitsPerComp)
-		if validRows == 0 {
-			return nil, fmt.Errorf("decoded data too short for one row of the %dx%d image: got %d bytes", width, height, len(decodedData))
+		if len(decodedData) == 0 {
+			return nil, fmt.Errorf("decoded data holds no sample of the %dx%d image", width, height)
 		}
-		if validRows < height {
-			doc.Logger.Debug("painting the rows short image data lacks black",
-				slog.String("image", string(name)), slog.Int("rows", validRows), slog.Int("height", height))
+		decodedData, wholeRows = padShortSamples(decodedData, width, height, samplesPerPixel, bitsPerComp)
+		if wholeRows < height {
+			doc.Logger.Debug("reading the samples short image data lacks as zero",
+				slog.String("image", string(name)), slog.Int("rows", wholeRows), slog.Int("height", height))
 		}
 	}
 
@@ -1806,7 +1818,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		if err != nil {
 			return nil, err
 		}
-		return finishRows(img, validRows), nil
+		return img, nil
 	}
 	if isLab {
 		img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -1814,7 +1826,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 			r, g, b := labEntryToRGB([4]byte{decodedData[3*i], decodedData[3*i+1], decodedData[3*i+2]}, lab)
 			img.SetRGBA(i%width, i/width, color.RGBA{R: r, G: g, B: b, A: 255})
 		}
-		return finishRows(img, validRows), nil
+		return img, nil
 	}
 
 	// Apply the /Decode array (ISO 32000-1, 8.9.5.2) via per-component
@@ -1832,7 +1844,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	}
 
 	if native != nil {
-		return nil, captureNative(native, decodedData, dec, components, width, height, validRows)
+		return nil, captureNative(native, decodedData, dec, components, width, height)
 	}
 
 	// An ICCBased image is read through its profile, a JPEG 2000 image with
@@ -1874,7 +1886,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 				idx += 3
 			}
 		}
-		return finishRows(img, validRows), nil
+		return img, nil
 
 	case "DeviceGray":
 		img := image.NewGray(image.Rect(0, 0, width, height))
@@ -1887,7 +1899,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		case conv != nil && !conv.t.Neutral():
 			// ISO 32000-1, 8.6.5.5: the samples read through the profile,
 			// whose table may map a grey to a coloured PCS value.
-			return tintedGrey(decodedData[:expectedLen], grey, conv, width, height, validRows), nil
+			return tintedGrey(decodedData[:expectedLen], grey, conv, width, height), nil
 		case conv != nil:
 			// A neutral grey profile keeps the green channel for all three,
 			// which agree with it to within a level.
@@ -1905,7 +1917,10 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		for i, s := range decodedData[:expectedLen] {
 			img.Pix[i] = grey[s]
 		}
-		return finishRows(img, validRows), nil
+		if isMask && wholeRows < height {
+			unpaintRows(img, wholeRows)
+		}
+		return img, nil
 
 	case "DeviceCMYK":
 		img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -1932,7 +1947,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 				img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 			}
 		}
-		return finishRows(img, validRows), nil
+		return img, nil
 
 	default:
 		return nil, fmt.Errorf("unsupported color space %q for image decode", colorSpace)

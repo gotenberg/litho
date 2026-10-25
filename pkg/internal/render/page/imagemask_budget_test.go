@@ -100,10 +100,10 @@ func TestImageMaskUnreadableFailsClosed(t *testing.T) {
 	}{
 		{"soft mask of an unknown filter", "SMask",
 			stream("/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /VendorDecode", "\x00\x00\x00\x00")},
-		{"soft mask short of a row", "SMask",
-			stream("/Type /XObject /Subtype /Image /Width 64 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8", "\x00")},
-		{"stencil mask short of a row", "Mask",
-			stream("/Type /XObject /Subtype /Image /Width 64 /Height 2 /ImageMask true", "\x00")},
+		{"soft mask holding no sample", "SMask",
+			stream("/Type /XObject /Subtype /Image /Width 64 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8", "")},
+		{"stencil mask holding no sample", "Mask",
+			stream("/Type /XObject /Subtype /Image /Width 64 /Height 2 /ImageMask true", "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

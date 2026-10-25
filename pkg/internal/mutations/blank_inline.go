@@ -324,7 +324,7 @@ func clearNativeSamples(box graphics.ImageBox, zones []heuristics.Zone, samples 
 //
 // The indices are read as [pdfimage.DecodeStreamSamples] reads them: /Decode
 // remaps the index range (8.9.5.2), an index past the table reads as the
-// base's zero, and rows the data stops short of read as black.
+// base's zero, and an index the data stops short of is zero.
 func blankInlineIndexed(
 	ctx context.Context,
 	doc *document.Document,
@@ -399,16 +399,22 @@ func blankInlineIndexed(
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrImageNotDecodable, err)
 	}
+	if len(indices) == 0 {
+		return nil, fmt.Errorf("%w: its data holds no index", ErrImageNotDecodable)
+	}
+	if need := rowBytes * height; len(indices) < need {
+		// An index the data lacks is zero, as the image decoder reads any
+		// sample short data lacks (see pdfimage.DecodeImage).
+		padded := make([]byte, need)
+		copy(padded, indices)
+		indices = padded
+	}
 	samples := make([]byte, width*height*n)
 	maxVal := byte(1<<depth - 1)
 	for y := range height {
 		row := y * rowBytes
 		for x := range width {
 			out := samples[(y*width+x)*n:][:n]
-			if row+rowBytes > len(indices) {
-				copy(out, black)
-				continue
-			}
 			index := int(lut[filter.BitSample(indices[row:row+rowBytes], x, depth, maxVal)])
 			if entry := index * n; entry+n <= len(table) {
 				copy(out, table[entry:entry+n])

@@ -131,10 +131,11 @@ func TestDecodeMaskAt_GridStaysUnderBudget(t *testing.T) {
 	}
 }
 
-// TestDecodeMaskAt_ShortDataPaintsBlack pins that rows the data lacks read
-// black, as [DecodeMask] paints them, and that data short of one row is
-// refused.
-func TestDecodeMaskAt_ShortDataPaintsBlack(t *testing.T) {
+// TestDecodeMaskAt_ShortDataReadsZero pins that the samples a soft mask's data
+// lacks read as zero, transparent under the default /Decode, as [DecodeMask]
+// reads them (see [padShortSamples]); that data short of one row decodes; and
+// that the rows a stencil mask lacks paint nothing.
+func TestDecodeMaskAt_ShortDataReadsZero(t *testing.T) {
 	t.Parallel()
 
 	const dict = "/Type /XObject /Subtype /Image /Width 8 /Height 8 /ColorSpace /DeviceGray /BitsPerComponent 8"
@@ -150,8 +151,25 @@ func TestDecodeMaskAt_ShortDataPaintsBlack(t *testing.T) {
 	}
 
 	ctx, doc, stream = maskDoc(t, dict, []byte{1, 2, 3}, 32)
+	if _, err := DecodeMaskAt(ctx, doc, "M", stream, 1, 4); err != nil {
+		t.Errorf("a mask short of one row: %v", err)
+	}
+	ctx, doc, stream = maskDoc(t, dict, nil, 32)
 	if _, err := DecodeMaskAt(ctx, doc, "M", stream, 1, 4); err == nil {
-		t.Error("a mask short of one row decoded")
+		t.Error("a mask holding no sample decoded")
+	}
+
+	// A stencil of 8x8 whose data holds its first two rows, painting.
+	const stencil = "/Type /XObject /Subtype /Image /Width 8 /Height 8 /ImageMask true"
+	ctx, doc, stream = maskDoc(t, stencil, []byte{0, 0}, 32)
+	img, err = DecodeMaskAt(ctx, doc, "M", stream, 1, 4)
+	if err != nil {
+		t.Fatalf("DecodeMaskAt stencil: %v", err)
+	}
+	for y, want := range []uint8{0, 255, 255, 255} {
+		if v := grey(t, img, 0, y); v != want {
+			t.Errorf("stencil band %d = %d, want %d", y, v, want)
+		}
 	}
 }
 

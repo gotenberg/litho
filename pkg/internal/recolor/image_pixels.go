@@ -98,8 +98,10 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 			return stream, ImageUnchanged, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
 		}
 	}
+	// A sample the data lacks is zero (see [rawSamples.padded]).
+	raw = raw.padded()
 	if raw.rows == 0 {
-		return stream, ImageUnchanged, fmt.Errorf("%w: the samples hold no whole row of the %dx%d image", ErrImageNotConverted, width, height)
+		return stream, ImageUnchanged, fmt.Errorf("%w: the samples hold no byte of the %dx%d image", ErrImageNotConverted, width, height)
 	}
 	if dataMask != nil && dataMask.Premultiplied {
 		// The JPXDecode filter hands on 8 bits a component (7.4.9), the
@@ -126,7 +128,7 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 		px.matteTarget = make([]float64, px.tc)
 		conv.Convert(matte.color, px.matteTarget)
 	}
-	out, err := px.run(ctx, im.targetBlack(ctx))
+	out, err := px.run(ctx)
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
@@ -366,18 +368,6 @@ func packStencil(plane *imgpaint.Alpha) ([]byte, bool) {
 	return out, masked
 }
 
-// targetBlack returns the target's black, which rows short data lacks are
-// painted in, as the image decoder paints them.
-func (im *Images) targetBlack(ctx context.Context) []float64 {
-	black := make([]float64, im.cfg.Components)
-	conv, err := im.cfg.Colors.Converter(ctx, familyGray, nil, nil, "")
-	if err != nil {
-		return black
-	}
-	conv.Convert([]float64{0}, black)
-	return black
-}
-
 // recordSize adds a converted image's encoded sizes to the report.
 func (im *Images) recordSize(ctx context.Context, stream ast.PdfStream, filterName ast.PdfName, after int) {
 	before, err := stream.Bytes(ctx)
@@ -406,7 +396,7 @@ type pixelConverter struct {
 
 // run returns the converted samples, rows of width x tc components at
 // outBytes bytes each.
-func (p *pixelConverter) run(ctx context.Context, black []float64) ([]byte, error) {
+func (p *pixelConverter) run(ctx context.Context) ([]byte, error) {
 	r := p.raw
 	pixelBytes := p.tc * p.outBytes
 	out := make([]byte, r.width*r.height*pixelBytes)
@@ -429,21 +419,12 @@ func (p *pixelConverter) run(ctx context.Context, black []float64) ([]byte, erro
 		memoVals = make([]byte, (1<<slotBits)*pixelBytes)
 	}
 
-	blackBytes := make([]byte, pixelBytes)
-	p.quantize(black, blackBytes)
-
 	rowBytes := r.rowBytes()
 	for y := range r.height {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		dst := out[y*r.width*pixelBytes : (y+1)*r.width*pixelBytes]
-		if y >= r.rows {
-			for x := range r.width {
-				copy(dst[x*pixelBytes:], blackBytes)
-			}
-			continue
-		}
 		row := r.data[y*rowBytes : (y+1)*rowBytes]
 		for x := range r.width {
 			var key uint64
@@ -581,7 +562,7 @@ func (im *Images) convertJPXColour(ctx context.Context, label ast.PdfName, strea
 	raw := rawSamples{data: samples, width: width, height: height, comps: 3, bpc: 8, rows: height}
 	dec := unitRanges(3)
 	px := pixelConverter{conv: conv, raw: raw, dec: dec, maps: decodeMaps(dec, 3, 8), tc: im.cfg.Components, outBytes: 1}
-	out, err := px.run(ctx, im.targetBlack(ctx))
+	out, err := px.run(ctx)
 	if err != nil {
 		return stream, ImageUnchanged, err
 	}
@@ -640,9 +621,9 @@ func (im *Images) convertToIndexed(ctx context.Context, stream ast.PdfStream, sp
 	}
 	// The samples are kept, but only samples that decode are: what the
 	// pixel path refuses, this path refuses too.
-	if raw, err := readRawSamples(ctx, im.doc, stream, width, height, 1, bpc); err != nil || raw.rows == 0 {
+	if raw, err := readRawSamples(ctx, im.doc, stream, width, height, 1, bpc); err != nil || len(raw.data) == 0 {
 		if err == nil {
-			err = fmt.Errorf("the samples hold no whole row of the %dx%d image", width, height)
+			err = fmt.Errorf("the samples hold no byte of the %dx%d image", width, height)
 		}
 		return stream, false, fmt.Errorf("%w: %w", ErrImageNotConverted, err)
 	}

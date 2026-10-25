@@ -20,7 +20,7 @@ import (
 
 // approximatedPDF is a 200 by 100 page drawn with every approximation a
 // fixture can reach without a page past the render budget: three glyphs of a
-// font the file does not embed, an image whose data does not decode, a Square
+// font the file does not embed, an image whose stream holds no sample, a Square
 // annotation and a FreeText annotation with no appearance stream, and a widget
 // whose form asks for new appearances.
 func approximatedPDF() []byte {
@@ -33,7 +33,7 @@ func approximatedPDF() []byte {
 			"/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /LithoNoSuchFont >> >> /XObject << /Im1 5 0 R >> >> " +
 			"/Annots [6 0 R 7 0 R 9 0 R] >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
-		"<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length 4 >>\nstream\nzzzz\nendstream",
+		"<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 0 >>\nstream\n\nendstream",
 		"<< /Type /Annot /Subtype /Square /Rect [10 10 60 40] /C [1 0 0] /F 4 >>",
 		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (f) /Rect [100 10 130 20] /F 4 /P 3 0 R /AP << /N 8 0 R >> >>",
 		fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 30 10] /Length %d >>\nstream\n%s\nendstream", len(widgetAP), widgetAP),

@@ -116,8 +116,9 @@ func TestDecodeIndexedShortLookup(t *testing.T) {
 }
 
 // TestDecodeIndexedTruncatedSamples pins what a sample run shorter than the
-// declared size decodes to: the whole rows it holds, and black past them, as
-// PDF.js paints it. A run short of one whole row is refused.
+// declared size decodes to: the indices it holds, a partial row's among them,
+// and index 0 for every one it lacks, the table's first colour, as PDFium and
+// MuPDF read it (see [padShortSamples]). One index is enough to decode.
 func TestDecodeIndexedTruncatedSamples(t *testing.T) {
 	t.Parallel()
 
@@ -133,8 +134,8 @@ func TestDecodeIndexedTruncatedSamples(t *testing.T) {
 	}{
 		{0, 0, 255, 0, 0},
 		{1, 0, 0, 255, 0},
-		{0, 1, 0, 0, 0},
-		{1, 1, 0, 0, 0},
+		{0, 1, 0, 255, 0},
+		{1, 1, 255, 0, 0},
 	} {
 		r, g, b, _ := img.At(tc.x, tc.y).RGBA()
 		if r>>8 != tc.r || g>>8 != tc.g || b>>8 != tc.b {
@@ -142,8 +143,12 @@ func TestDecodeIndexedTruncatedSamples(t *testing.T) {
 		}
 	}
 
-	ctx, doc, page = imagePDF(t, indexedImagePDF("/DeviceRGB", "<FF0000 00FF00>", []byte{0}))
-	if _, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0")); err == nil {
-		t.Error("a 2x2 image with one sample decoded without error")
+	ctx, doc, page = imagePDF(t, indexedImagePDF("/DeviceRGB", "<FF0000 00FF00>", []byte{1}))
+	img, err = DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage of one index: %v", err)
+	}
+	if r, g, _, _ := img.At(1, 1).RGBA(); r>>8 != 255 || g != 0 {
+		t.Errorf("a missing index = (%d,%d), want red, index 0", r>>8, g>>8)
 	}
 }

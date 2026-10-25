@@ -27,6 +27,35 @@ func TestApplyPNGPredictor_None(t *testing.T) {
 	}
 }
 
+// TestApplyPNGPredictor_KeepsAPartialLastRow pins that data ending inside a
+// row keeps the samples that row holds, reversed under its filter byte, as
+// poppler, PDFium and MuPDF read it; a lone filter byte adds nothing. The
+// partial row was dropped, so an image whose last samples sit in it read
+// short.
+func TestApplyPNGPredictor_KeepsAPartialLastRow(t *testing.T) {
+	t.Parallel()
+	params := &predictorParams{Predictor: 12, Columns: 4, Colors: 1, BitsPerComponent: 8}
+	input := []byte{
+		0, 10, 20, 30, 40,
+		2, 1, 2, // Up, two of four samples
+	}
+	result, err := applyPredictor(input, params)
+	if err != nil {
+		t.Fatalf("applyPredictor: %v", err)
+	}
+	if want := []byte{10, 20, 30, 40, 11, 22}; !bytes.Equal(result, want) {
+		t.Errorf("got %v, want %v", result, want)
+	}
+
+	result, err = applyPredictor(input[:6], params)
+	if err != nil {
+		t.Fatalf("applyPredictor: %v", err)
+	}
+	if want := []byte{10, 20, 30, 40}; !bytes.Equal(result, want) {
+		t.Errorf("a lone filter byte: got %v, want %v", result, want)
+	}
+}
+
 func TestApplyPNGPredictor_Sub(t *testing.T) {
 	// Filter type 1 (Sub): each byte = raw + left.
 	// Row: [1, 10, 5, 3, 2] → Sub filter, bytesPerPixel=1.

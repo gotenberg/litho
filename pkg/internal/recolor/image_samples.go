@@ -70,6 +70,23 @@ func readRawSamples(ctx context.Context, doc *document.Document, stream ast.PdfS
 	return r, nil
 }
 
+// padded returns r with data padded with zero bytes to its height in whole
+// rows: the samples the data holds, a partial last row's among them, keep
+// their values, and every sample it lacks is zero, which /Decode and the
+// colour space then read as any sample, as the image decoder reads short data
+// (see pdfimage.DecodeImage). Empty data is left as it is, holding no sample
+// to convert.
+func (r rawSamples) padded() rawSamples {
+	need := r.rowBytes() * r.height
+	if len(r.data) == 0 || len(r.data) >= need {
+		return r
+	}
+	data := make([]byte, need)
+	copy(data, r.data)
+	r.data, r.rows = data, r.height
+	return r
+}
+
 // decodeMaps returns, per component, the value a raw sample stands for under
 // the /Decode array dec (ISO 32000-1, 8.9.5.2): Dmin + s x (Dmax - Dmin) /
 // (2^bpc - 1). For a depth of 8 bits or less it is a table indexed by the
