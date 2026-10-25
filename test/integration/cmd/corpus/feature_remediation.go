@@ -481,6 +481,9 @@ func batchValidate(ctx context.Context, dir, flavour string) (map[string]veraVer
 			return nil, fmt.Errorf("verapdf: %w", err)
 		}
 	}
+	if err := checkLiveVeraPDF(stdout.Bytes(), veraPDFPin()); err != nil {
+		return nil, err
+	}
 	var report verapdfReport
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		return nil, fmt.Errorf("parse verapdf output: %w", err)
@@ -500,6 +503,48 @@ func batchValidate(ctx context.Context, dir, flavour string) (map[string]veraVer
 		out[base] = jobVerdict(job.ValidationResult[0])
 	}
 	return out, nil
+}
+
+// errVeraPDFVersion reports a live veraPDF whose core is not the release
+// versions.env pins.
+var errVeraPDFVersion = errors.New("live veraPDF is not the pinned release")
+
+// veraPDFPin returns the veraPDF release versions.env pins, or "" when the
+// pins do not load, which accepts any.
+func veraPDFPin() string {
+	pins, err := loadPins()
+	if err != nil {
+		return ""
+	}
+	return pins.Values["VERAPDF_VERSION"]
+}
+
+// checkLiveVeraPDF refuses a report from the veraPDF on PATH when the core
+// its build header names is not want: the remediation cells score litho's
+// outputs against the live verdict, so a veraPDF upgraded on the host moves
+// them with no change to litho. The compliance goldens are held to the same
+// pin when they are read (see [checkVeraPDFReports]). want "" accepts any.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-4__veraPDF_test_suite_6-1-2-t01-pass-a, remediated at
+//     PDF/UA-2 and WTPDF 1.0 Accessibility: veraPDF 1.30.3 fails ISO 14289-2
+//     6.1 t1 on the output's %PDF-2.9 header, which 1.30.2 passes. The host
+//     veraPDF went from 1.30.2 to 1.30.3 between two gate runs, and
+//     disagreement rose from 2 to 4 in both remediation cells on outputs
+//     whose bytes had not changed.
+func checkLiveVeraPDF(report []byte, want string) error {
+	if want == "" {
+		return nil
+	}
+	m := veraPDFCorePattern.FindSubmatch(report[:min(len(report), veraPDFHeaderBytes)])
+	if m == nil {
+		return fmt.Errorf("%w: its report names no core version, versions.env pins VERAPDF_VERSION=%s", errVeraPDFVersion, want)
+	}
+	if got := string(m[1]); got != want {
+		return fmt.Errorf("%w: the verapdf on PATH runs core %s, versions.env pins VERAPDF_VERSION=%s", errVeraPDFVersion, got, want)
+	}
+	return nil
 }
 
 // jobVerdict converts one VeraPDF validation result into a verdict.
@@ -539,6 +584,9 @@ func singleValidate(ctx context.Context, path, flavour string) (veraVerdict, err
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil && stdout.Len() == 0 {
 		return veraVerdict{}, fmt.Errorf("verapdf single: %w", err)
+	}
+	if err := checkLiveVeraPDF(stdout.Bytes(), veraPDFPin()); err != nil {
+		return veraVerdict{}, err
 	}
 	var report verapdfReport
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
