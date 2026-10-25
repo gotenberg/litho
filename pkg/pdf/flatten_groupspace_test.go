@@ -69,6 +69,25 @@ func TestFlattenConvertsToTheGroupSpace(t *testing.T) {
 	}
 }
 
+// TestConvertColorsKeepsAGreyPageGrey checks that a page whose group blends
+// in DeviceGray, which reads its RGB green as grey, still reads grey once
+// converted to CMYK, and once converted and flattened: the conversion keeps
+// the grey group (ISO 32000-1, 11.4.7, Table 147) rather than writing it in
+// the target, where the green would read green.
+func TestConvertColorsKeepsAGreyPageGrey(t *testing.T) {
+	t.Parallel()
+	in := groupSpacePDF("/DeviceGray")
+	want := groupSpacePixel(t, in, 1, 50, 50)
+	converted := convertCMYK(t, in)
+	if got := groupSpacePixel(t, converted, 1, 50, 50); !nearRGB(got, want, 6) {
+		t.Errorf("converted: the green reads %v, the source %v", got, want)
+	}
+	_, flattened := flattenPDF(t, converted)
+	if got := groupSpacePixel(t, flattened, 1, 50, 50); !nearRGB(got, want, 6) {
+		t.Errorf("converted and flattened: the green reads %v, the source %v", got, want)
+	}
+}
+
 // TestFlattenLeavesASharedFormUnconverted checks that a page whose content
 // lies in a form another page paints, outside any group, keeps its colours:
 // converting the form would change the other page.

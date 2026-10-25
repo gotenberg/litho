@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 )
 
@@ -204,6 +205,18 @@ func (s *session) rewriteDefinition(ctx context.Context, def ast.PdfObject) (ast
 // device of the output intent the conversion makes the target (14.11.5), or
 // gets a group of its own when the caller asks ([Options.GroupPages]).
 //
+// A page group, or an isolated form group, whose space is grey, DeviceGray,
+// CalGray or a one-component ICCBased space ([session.greyBlendingSpace]),
+// keeps it under a CMYK or RGB target. Table 147 converts
+// every colour painted into the group into its space, and 11.3.4 composites
+// the group there, so the page reads in grey whatever its colours: written in
+// the target's wider gamut instead, the converted colours would read in
+// colour, a page that drew grey drawing green. The group's space is no colour
+// the page paints, and a grey composite prints on the black colorant of a
+// CMYK device (ISO 32000-1, 10.3.3: black = 1 - gray), so the converted page
+// paints in the target alone, and a reader of its groups finds grey ones
+// beside it.
+//
 // A /CS that is a name but no family's names no space: outside a content
 // stream a colour space is a family name or an array (ISO 32000-1, 8.6.3), and
 // a name a /ColorSpace resource defines selects a space only through the cs
@@ -236,6 +249,11 @@ func (s *session) rewriteGroup(ctx context.Context, obj ast.PdfObject, page bool
 			return out, true, nil
 		}
 		p := s.planDefinition(ctx, d["CS"], nil)
+		if s.t.n != 1 && (page || s.isolated(ctx, d)) && s.greyBlendingSpace(ctx, d["CS"], 0) {
+			// A grey group keeps its space under a colour target (see
+			// above): every colour painted into it reads as grey.
+			return nil, false, nil
+		}
 		var cs ast.PdfObject
 		switch {
 		case p.kind == planConvert:
@@ -249,6 +267,63 @@ func (s *session) rewriteGroup(ctx context.Context, obj ast.PdfObject, page bool
 		out["CS"] = cs
 		return out, true, nil
 	})
+}
+
+// maxGreySpaceDepth bounds the /Alternate chain [session.greyBlendingSpace]
+// follows. Anti-DoS guard, not spec-mandated: ISO 32000-1, 8.6.5.5 gives an
+// ICCBased space one alternate, and no real file chains unusable ICCBased
+// spaces through more than one or two of them.
+const maxGreySpaceDepth = 8
+
+// greyBlendingSpace reports whether a transparency group whose /CS is cs
+// blends in grey as litho's renderer reads it: DeviceGray, CalGray, or a
+// one-component ICCBased space, through its /Alternate when its profile is
+// unusable (ISO 32000-1, 8.6.5.5, Table 66; [pdfimage.SubstituteICCAlternate]).
+func (s *session) greyBlendingSpace(ctx context.Context, cs ast.PdfObject, depth int) bool {
+	if depth > maxGreySpaceDepth {
+		return false
+	}
+	v, err := s.resolve(ctx, cs)
+	if err != nil {
+		return false
+	}
+	switch v := v.(type) {
+	case ast.PdfName:
+		return v == graphics.FamilyDeviceGray
+	case ast.PdfArray:
+		if len(v) < 2 {
+			return false
+		}
+		family, err := s.resolve(ctx, v[0])
+		if err != nil {
+			return false
+		}
+		switch family {
+		case ast.PdfName(graphics.FamilyCalGray):
+			return true
+		case ast.PdfName(graphics.FamilyICCBased):
+			if alt, ok := pdfimage.SubstituteICCAlternate(ctx, s.doc, v, icc.RelativeColorimetric, pdfimage.RoleSpace); ok {
+				return s.greyBlendingSpace(ctx, alt, depth+1)
+			}
+			stream, err := s.resolve(ctx, v[1])
+			st, isStream := stream.(ast.PdfStream)
+			if err != nil || !isStream {
+				return false
+			}
+			n, err := s.resolve(ctx, st.Dict["N"])
+			return err == nil && n == ast.PdfInt(1)
+		}
+	}
+	return false
+}
+
+// isolated reports whether the group attributes dictionary d makes its group
+// isolated, /I true (ISO 32000-1, Table 147): a non-isolated group composites
+// in its parent's space (11.4.5), as litho's renderer reads it, whatever its
+// /CS names.
+func (s *session) isolated(ctx context.Context, d ast.PdfDict) bool {
+	v, err := s.resolve(ctx, d["I"])
+	return err == nil && v == ast.PdfBool(true)
 }
 
 // undefinedSpaceName reports whether cs, a colour space entry outside a

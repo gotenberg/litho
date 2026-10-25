@@ -68,6 +68,25 @@ func TestFormGroupBlendingSpace(t *testing.T) {
 	}
 }
 
+// TestGreyGroupKeepsItsSpace checks that a grey page group and a grey
+// isolated form group keep their space under a CMYK target, since every
+// colour painted into them reads as grey (ISO 32000-1, 11.4.7, Table 147),
+// while the content converts to the target.
+func TestGreyGroupKeepsItsSpace(t *testing.T) {
+	f := onePage("/Group << /S /Transparency /CS /DeviceGray >> /Resources << /XObject << /F 5 0 R >> >>", "0 1 0 rg 0 0 9 9 re f /F Do",
+		stream("/Subtype /Form /BBox [0 0 9 9] /Group << /S /Transparency /I true /CS [/CalGray << /WhitePoint [0.9505 1 1.089] >>] >>", "0 0 9 9 re f"))
+	r := recolor(t, f, cmyk, naive(Options{}))
+	if cs := r.dict(r.pages[0].Dict["Group"])["CS"]; cs != ast.PdfName("DeviceGray") {
+		t.Errorf("page group: %v, want DeviceGray", cs)
+	}
+	if cs, ok := r.dict(r.dict(ast.PdfIndirectRef{ObjectNum: 5})["Group"])["CS"].(ast.PdfArray); !ok || cs[0] != ast.PdfName("CalGray") {
+		t.Errorf("form group: %v, want its CalGray", cs)
+	}
+	if got := r.text(0); got == "0 1 0 rg 0 0 9 9 re f /F Do" {
+		t.Errorf("content not converted: %q", got)
+	}
+}
+
 func TestType3Glyphs(t *testing.T) {
 	f := onePage("/Resources << /Font << /T3 5 0 R >> >>", "BT /T3 1 Tf (ab) Tj ET",
 		"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1 1] /FontMatrix [1 0 0 1 0 0] /CharProcs << /a 6 0 R /b 7 0 R >> "+
