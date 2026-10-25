@@ -309,6 +309,7 @@ one deliberately rather than diffing it against a fresh build.
 | `cutcell_2b.pdf`       | PDF/A-2b     | Enlarged image samples whose cells a region's edges cut          |
 | `noteicons_2b.pdf`     | PDF/A-2b     | Text annotations with no `/AP`, one for each predefined icon     |
 | `structsplit_ua1.pdf`  | PDF/UA-1     | Structure elements whose marked content a redaction cuts         |
+| `annotstraddle_2b.pdf` | PDF/A-2b     | An annotation across the regions; a removed one's pop-up, reply  |
 
 ### Must-not-fire controls
 
@@ -607,6 +608,7 @@ are covered under [Known divergences](#known-divergences).
 | `annotlang_ua1.pdf`    | 6    | 5    | 6    | 5    | 5    | 6    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `annots_1b.pdf`        | 16   | 14   | 14   | 12   | 12   | 14   | 12   | 12   | 10  | 10   | 11   | 12   | 8    |
 | `annotshare_ua1.pdf`   | 6    | 4    | 5    | 4    | 5    | 6    | 5    | 6    | 7   | 7    | 8    | 6    | 4    |
+| `annotstraddle_2b.pdf` | 6    | 3    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 10   | 7    |
 | `annotstruct_ua2.pdf`  | 13   | 12   | 12   | 12   | 12   | 14   | 14   | 14   | 10  | 9    | 9    | 8    | 13   |
 | `annotsynth_2b.pdf`    | 8    | 5    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
@@ -10353,6 +10355,42 @@ PDF/A cells are the unembedded font, the device colour with no output intent,
 and the identification and metadata rules of their parts. veraPDF
 1.30.2 and litho report the same rule set in all thirteen cells, on the source
 and on the whole-page redaction's output.
+
+### `annotstraddle_2b.pdf`
+
+An annotation is one object (ISO 32000-1, 12.5.2), so redaction refuses one a
+region meets without containing it (`ErrAnnotationStraddlesRegion`). Under
+`WithRedactionRasterFallback`, an annotation whose appearance stream the file
+holds and that paints without transparency is now drawn into its page as a
+viewer draws it (12.5.5, Algorithm 8.1) and removed, so the fallback cuts its
+look at the region as it cuts any form XObject. A pop-up names its parent by
+`/Parent` (12.5.6.14) and a reply names the annotation it answers by `/IRT`
+(12.5.6.2): a redaction removed an annotation from `/Annots`, left both on the
+page, and the full rewrite wrote the removed annotation, its `/InkList` and its
+appearance stream through them. The pop-up of a removed annotation now goes
+with it and the reply loses `/IRT` and `/RT`. No corpus file reached the
+fallback drawing on a sampled page, nor a removed annotation's reply. Both
+pages are 200 x 200 and draw in DeviceGray:
+
+| Page | Annotation | `/Rect`             | Draws, and what names it                       |
+| ---- | ---------- | ------------------- | ---------------------------------------------- |
+| 1    | Square     | `[120 60 180 120]`  | a dark square, across the quarter and the band |
+| 1    | Popup      | `[150 160 195 195]` | nothing, closed; `/Parent` the Square          |
+| 2    | Ink        | `[70 70 130 130]`   | a stroke, inside the centred quarter           |
+| 2    | Popup      | `[155 155 195 195]` | nothing, closed; `/Parent` the Ink             |
+| 2    | Text       | `[10 10 34 34]`     | a small square; `/IRT` the Ink, `/RT /R`       |
+
+Page 1 also draws a grey bar across the middle and page 2 a light bar at its
+top. On page 1 the quarter and the band refuse in the default mode; with the
+fallback the Square is drawn into the page and removed with its pop-up, and
+its part outside the region stays. On page 2 the quarter removes the Ink with
+its pop-up, and the reply stays without `/IRT`. Every annotation but the
+pop-ups sets `/F 4` and has a normal appearance stream. The file declares no
+OutputIntent, so DeviceGray fails `6.2.4.3/4` at PDF/A-2 and later and
+`6.2.3.3/3` at PDF/A-1, where the pop-ups with no `/F` also fail `6.5.3/2`
+(ISO 19005-1 exempts no type) and the part-2 claim `6.7.11/2`. veraPDF 1.30.2 and litho
+report the same rule set in all thirteen cells, on the source and on the
+outputs of the fallback's quarter of page 1 and the default quarter of page 2.
 
 ## Scope
 
