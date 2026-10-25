@@ -299,6 +299,7 @@ one deliberately rather than diffing it against a fresh build.
 | `blankkeys_ua1.pdf`    | PDF/UA-1     | Hidden, smoothed and tagged images, blanked by a redaction       |
 | `imageintent_2b.pdf`   | PDF/A-2b     | ICC images under the rendering intent `ri` and `/RI` set         |
 | `usebpcgroup_4.pdf`    | PDF/A-4      | Colours under /UseBlackPtComp /OFF composited in a CMYK group    |
+| `unparsedform_2b.pdf`  | PDF/A-2b     | An image a form litho cannot parse draws too, then redacted      |
 
 ### Must-not-fire controls
 
@@ -820,6 +821,7 @@ are covered under [Known divergences](#known-divergences).
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `unclosedmc_ua1.pdf`   | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
+| `unparsedform_2b.pdf`  | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
 | `usebpc_4.pdf`         | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 0   | 1    | 2    | 7    | 6    |
 | `usebpcgroup_4.pdf`    | 10   | 8    | 7    | 5    | 5    | 7    | 5    | 5    | 0   | 1    | 2    | 7    | 6    |
 | `usecmap_2u.pdf`       | 5    | 2    | 8    | 3    | 5    | 8    | 3    | 5    | 5   | 5    | 6    | 9    | 10   |
@@ -9868,6 +9870,47 @@ content a form draws.
 The file conforms at PDF/A-4. The other cells are the identification,
 metadata, ICC version and transparency rules of their parts. veraPDF 1.30.2
 and litho report the same rule set in all thirteen cells.
+
+### `unparsedform_2b.pdf`
+
+A redaction blanks an image in place only when every placement of it had the
+same samples covered, and it measures the placements by running the page
+through the forms it draws. A form whose content does not parse read as
+painting nothing, so an image such a form also names was blanked in place:
+poppler 26.09.0, which reads the form, drew the blank where no region reached.
+The measurement now fails closed. Such a form, on any path to the image, is a
+placement whose samples the check cannot see: one whose `/BBox` lies inside a
+region shows only covered samples, one that meets no region only uncovered
+ones, and the image is blanked in a copy; one a region reaches only in part
+refuses. No corpus file draws a form litho cannot parse, under the default
+options or `WithStrictStreams`, so no cell reached the measurement. One 400 by
+400 page draws a 5 x 5 DeviceGray image, `Logo`, all 0x80, through two forms
+over a 100-point square:
+
+| Form     | Draws                                        | At                     |
+| -------- | -------------------------------------------- | ---------------------- |
+| `Card`   | `Logo` over its square                       | (150, 150), 100 points |
+| `Broken` | `Logo` over its square, then a 10 MiB string | (340, 340), 10 points  |
+
+`Broken`'s string literal is one byte past litho's 10 MiB lexer bound, so
+litho parses none of its content, while poppler draws the image before it.
+The centred quarter covers `Card` whole and misses `Broken`: before, `Logo` was
+blanked in place, and poppler drew `Broken`'s 10 x 10 points black (100 pixels
+at 72 dpi, every one outside the region); now `Logo` is blanked in a copy and
+poppler draws `Broken` at 0x80, as the source does. The band through the centre
+cuts `Card` and misses `Broken`, with the same before (20 of `Broken`'s pixels
+blanked) and after. The whole page covers both forms and blanks `Logo` in
+place before and after. The raster scenarios rasterise `Card` and leave `Logo`
+alone. litho's renderer draws no `Broken` either, and reports the form among
+the constructs it skipped: 100 pixels differ from poppler, under both render
+bars.
+
+The catalog's `/Lang` keeps the PDF/UA-1 language rule (ISO 14289-1, 7.2) off
+`Broken`: litho reads a stream it cannot parse as one that may show text with
+no language, while veraPDF reads through the string and finds none. The file
+conforms at PDF/A-2b; the other cells are the identification, metadata and
+tagging rules of their parts. veraPDF 1.30.2 and litho report the same rule set
+in all thirteen cells.
 
 ## Scope
 
