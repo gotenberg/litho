@@ -2,6 +2,7 @@ package icc
 
 import (
 	"fmt"
+	"math"
 )
 
 // TransformOptions selects how a [Link] connects two profiles.
@@ -39,7 +40,39 @@ type Link struct {
 	// scale and offset adjust XYZ between the two sides, for the absolute
 	// colorimetric intent or black point compensation; nil leaves it as is.
 	scale, offset *[3]float64
+	// white maps the source's device white onto the destination's (see
+	// [NewLink]); nil leaves the tables' reading of it.
+	white *whiteFixup
 }
+
+// whiteFixup moves a link's conversions near the source's device white so
+// that the white itself lands on the destination's device white.
+type whiteFixup struct {
+	// at is the source's device white, n components, and to the
+	// destination's.
+	at, to []float64
+	// delta is to less the tables' reading of at, per output.
+	delta [maxOutputs]float64
+	// span is how far from at, per component, the move fades out.
+	span float64
+}
+
+// The white fix-up's reach. Little CMS 2.16 resamples a transform it
+// optimizes into a grid of 33 nodes per input channel, 17 for a four-channel
+// input (cmspcs.c, the default precalculation), and replaces the node at the
+// source white, so the move fades over one grid cell: 1/32 of the range from
+// a grey or RGB white, 1/16 from a CMYK one.
+const (
+	whiteFixupSpan     = 1.0 / 32
+	whiteFixupSpanCMYK = 1.0 / 16
+)
+
+// whiteFixupLimit is how far, in a fraction of a component's range, the
+// tables may send the source white from the destination's for the fix-up to
+// apply. Farther, the profile means its white to be a colour, as a profile
+// that maps white to orange does, and the tables are kept. It is the bound
+// Little CMS 2.16 keeps, 0xf000 of 0xffff.
+const whiteFixupLimit = float64(0xf000) / 0xffff
 
 // NewLink builds the transform from src's data colour space to dst's for the
 // options. src and dst are each read through their table for the intent
@@ -51,6 +84,43 @@ type Link struct {
 // whatever the options say, since its tables assume the perceptual reference
 // medium. When src is a DeviceLink profile (7.2.5), its table is the whole
 // transform and dst must be nil.
+//
+// Under every intent but absolute colorimetric, a link between two device
+// spaces with a white, grey, RGB or CMYK, sends the source's white (1 per
+// component, no ink for CMYK) to the destination's exactly. ICC.1:2010, 6.2
+// defines the colorimetric intents as relative to the media white, which
+// the source's white is and maps onto the destination's medium, and the
+// perceptual and saturation intents to the reference medium, whose white
+// does the same; yet a profile's tables only approximate their white, so a
+// white sent to a CMYK printer profile comes out a fraction of a per cent
+// of each ink, a light tint on paper that should stay bare. The link moves
+// the result by what the tables miss, the whole of it at the white and
+// fading to nothing one grid cell away (whiteFixupSpan), and leaves a white
+// that lands farther than whiteFixupLimit as the profile states it.
+// Absolute colorimetric keeps the medium's tint, which is its purpose
+// (ICC.1:2010, 6.2). A DeviceLink's table is the whole transform its author
+// built (7.2.5), and Lab is no device white, so neither moves.
+//
+// This is what Little CMS does by default under these intents, and the
+// tools that write converted colours with it: Ghostscript builds its links
+// without cmsFLAGS_NOWHITEONWHITEFIXUP except for PostScript CIE spaces,
+// and MuPDF without it at all. poppler (cmsFLAGS_NOOPTIMIZE) and PDFium (a
+// format of no named colour space) build transforms Little CMS does not
+// fix up, so [Profile.NewTransform], which draws for display, keeps the
+// tables' reading of white as they do.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 24 distinct CMYK profiles among the 3,936 profile
+//     streams that a link can convert to, 21 send sRGB white to some ink
+//     under the relative colorimetric intent and 7 to half a level or more,
+//     up to 15.7 levels (verapdf PDF_A-1b 6-2-3-3-t02-pass-a's output
+//     intent). litho's stock CMYK printer profile sends it 0.9 levels, so
+//     a document converted to CMYK wrote its white as 0.0035 0.0025 0.0026 0 k.
+//   - All corpora: none of the 3,936 profile streams reads its own white off
+//     sRGB white through [Profile.NewTransform] but three: two litho
+//     fixtures that tint it on purpose and pdfjs issue2856's YCC profile, in
+//     which full components are no white.
 func NewLink(src, dst *Profile, opts TransformOptions) (*Link, error) {
 	if src == nil {
 		return nil, fmt.Errorf("%w: no source profile", ErrUnsupported)
@@ -96,7 +166,82 @@ func NewLink(src, dst *Profile, opts TransformOptions) (*Link, error) {
 			l.scale, l.offset = blackPointScale(bs, bd)
 		}
 	}
+	if intent != AbsoluteColorimetric {
+		l.white = l.fixWhite(src.Space, dst.Space)
+	}
 	return l, nil
+}
+
+// deviceWhite returns the white of a data colour space, normalized: full
+// value for grey and RGB, no colorant for CMYK. Other spaces have none.
+func deviceWhite(space string) ([]float64, bool) {
+	switch space {
+	case "GRAY":
+		return []float64{1}, true
+	case "RGB ":
+		return []float64{1, 1, 1}, true
+	case "CMYK":
+		return []float64{0, 0, 0, 0}, true
+	}
+	return nil, false
+}
+
+// fixWhite returns the fix-up [NewLink] describes for a link from the
+// srcSpace data colour space to dstSpace, or nil when the tables already
+// send the source white to the destination's, send it too far to move, or
+// either space has no white. It runs before l.white is set, so Convert reads
+// the tables alone.
+func (l *Link) fixWhite(srcSpace, dstSpace string) *whiteFixup {
+	at, ok := deviceWhite(srcSpace)
+	if !ok || len(at) != l.in {
+		return nil
+	}
+	to, ok := deviceWhite(dstSpace)
+	if !ok || len(to) != l.out {
+		return nil
+	}
+	got := make([]float64, l.out)
+	l.Convert(at, got)
+	f := &whiteFixup{at: at, to: to, span: whiteFixupSpan}
+	if l.in == 4 {
+		f.span = whiteFixupSpanCMYK
+	}
+	moved := false
+	for i := range to {
+		d := to[i] - got[i]
+		if math.Abs(d) > whiteFixupLimit {
+			return nil
+		}
+		f.delta[i] = d
+		moved = moved || d != 0
+	}
+	if !moved {
+		return nil
+	}
+	return f
+}
+
+// weight returns how much of the fix-up a colour of normalized components in
+// takes: 1 at the white, falling to 0 a span away along any component. It is
+// the weight the white node of a grid carries when Little CMS interpolates a
+// colour in the cell next to it: the least of the components' fractions,
+// tetrahedral over RGB and linear over grey, and for CMYK that of cyan,
+// magenta and yellow times the black's, as it interpolates linearly between
+// two tetrahedral readings along black.
+func (f *whiteFixup) weight(in []float64) float64 {
+	w := 1.0
+	for i, at := range f.at {
+		t := 1 - math.Abs(clamp01(in[i])-at)/f.span
+		if t <= 0 {
+			return 0
+		}
+		if i == 3 {
+			w *= t
+		} else {
+			w = min(w, t)
+		}
+	}
+	return w
 }
 
 // NewPCSLink builds the transform from the profile connection space, CIE XYZ
@@ -270,6 +415,16 @@ func (l *Link) Convert(in, out []float64) {
 			}
 		}
 		l.dst.eval(xyz, &v)
+	}
+	if f := l.white; f != nil {
+		switch w := f.weight(in); {
+		case w == 1:
+			copy(v[:l.out], f.to)
+		case w > 0:
+			for i := range l.out {
+				v[i] += w * f.delta[i]
+			}
+		}
 	}
 	for i := range l.out {
 		out[i] = clamp01(v[i])
