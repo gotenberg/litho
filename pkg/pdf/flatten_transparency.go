@@ -111,6 +111,20 @@ type FlattenedPage struct {
 	TransparentText int
 	// GroupRemoved reports that the page's transparency group was removed.
 	GroupRemoved bool
+	// GroupSpaceConverted reports that the page's transparency group blended
+	// in the grey or CMYK space its /CS names, which litho's renderer reads a
+	// page painting with transparency in, the composites included: what the
+	// composites leave of the page, and its annotations' appearances, were
+	// converted to that space, so the page reads as it did once the group
+	// is gone (see [Writer.FlattenTransparency]).
+	GroupSpaceConverted bool
+	// GroupSpaceUnconverted reports such a page whose content stayed in its
+	// own colour spaces: the conversion would have rewritten an object
+	// another page paints and does not convert to that space, or met content
+	// it cannot read whole, or a group space it cannot write. Its colours
+	// outside the composites read in the device's space, as viewers that
+	// blend every page in RGB, such as poppler, read the source.
+	GroupSpaceUnconverted bool
 	// Annotations counts the annotations whose appearance was drawn into
 	// the page's content, and EmptiedAnnotations those painting with
 	// transparency that a viewer does not display, whose appearance was
@@ -187,6 +201,17 @@ type FlattenReport struct {
 // [WithFlattenOverprintSimulation] composites every page in DeviceCMYK with
 // overprinting simulated.
 //
+// The page group's /CS converts every colour painted on a page that paints
+// with transparency into that space (11.4.7, Table 147), which the flattening
+// removes with the group: on such a page, whose group names a grey or CMYK
+// space, what the composites leave, and the page's annotation appearances,
+// are converted into that space as [Writer.ConvertColors] converts a page, so
+// the page reads as it did, an RGB colour outside the CMYK gamut included
+// ([FlattenedPage.GroupSpaceConverted]). A page whose conversion would
+// rewrite an object a page not converted to that space also paints keeps its
+// colours ([FlattenedPage.GroupSpaceUnconverted]). Overprint simulation
+// converts no page.
+//
 // An annotation that paints with transparency, or with
 // [WithFlattenPrintedAnnotations] any annotation a viewer prints, is drawn
 // into the page content first, after what the page draws, as a viewer draws
@@ -247,13 +272,18 @@ func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption)
 	if err != nil {
 		return nil, err
 	}
+	reads, err := w.groupSpaceReads(ctx)
+	if err != nil {
+		undo()
+		return nil, err
+	}
 	baked, undoBake, err := w.bakeAnnotations(ctx, o)
 	if err != nil {
 		undo()
 		return nil, err
 	}
 	saved, savedFolded, savedForce := w.rewriteOverrides, w.folded, w.forceRewrite
-	report, changed, err := w.flattenTransparency(ctx, o)
+	report, changed, err := w.flattenTransparency(ctx, o, reads)
 	if err == nil && changed && baked.signaturesPending() {
 		// The output is a rewrite, which draws the signed signatures into
 		// their pages: drawn before the flattening, the transparency they
@@ -267,7 +297,7 @@ func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption)
 				undoSignatures()
 				undoAnnotations()
 			}
-			report, changed, err = w.flattenTransparency(ctx, o)
+			report, changed, err = w.flattenTransparency(ctx, o, reads)
 		}
 	}
 	if err != nil {
@@ -317,6 +347,29 @@ func (b bakedAnnotations) addTo(report *FlattenReport) {
 	for i, n := range b.report.Emptied {
 		page(i).EmptiedAnnotations = n
 	}
+}
+
+// groupSpaceReads returns the 0-based indices of the pages litho's renderer
+// reads in their transparency group's grey or CMYK space, before anything is
+// drawn into them ([groupSpaceReads]). A page tree that does not read gives
+// none: the flattening refuses it.
+func (w *Writer) groupSpaceReads(ctx context.Context) (map[int]bool, error) {
+	if err := w.promotePageTree(ctx); err != nil {
+		return nil, err
+	}
+	pages, err := w.reader.resolvePages(ctx)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		// The flattening refuses a page tree that does not read.
+		return nil, nil
+	}
+	reads := groupSpaceReads(ctx, w.reader.doc, pages)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return reads, nil
 }
 
 // bakeAnnotations draws into the page content the annotations
@@ -396,7 +449,7 @@ func (w *Writer) rewriteSignatures(ctx context.Context) (func(), error) {
 
 // flattenTransparency flattens the document the Writer holds, reporting
 // whether it changed anything.
-func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*FlattenReport, bool, error) {
+func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts, reads map[int]bool) (*FlattenReport, bool, error) {
 	if err := w.promotePageTree(ctx); err != nil {
 		return nil, false, err
 	}
@@ -422,6 +475,13 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 		}
 		return nil, false, fmt.Errorf("%w: %w", ErrTransparencyFlatteningRefused, err)
 	}
+	var spaces groupSpaceOutcome
+	if !o.overprint {
+		spaces, err = convertGroupSpaces(ctx, alloc, doc, pages, result, reads, o.jpegQuality)
+		if err != nil {
+			return nil, false, err
+		}
+	}
 	report := &FlattenReport{TransparentAnnotations: result.TransparentAnnotations}
 	for _, i := range result.Skipped {
 		report.SkippedPages = append(report.SkippedPages, i+1)
@@ -437,6 +497,8 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts) (*Flatt
 			TextUnderTransparency: p.TextUnderTransparency,
 			TransparentText:       p.TransparentText,
 			GroupRemoved:          p.GroupRemoved,
+			GroupSpaceConverted:   spaces.converted[p.Page],
+			GroupSpaceUnconverted: spaces.unconverted[p.Page],
 			JPEGImages:            p.JPEG,
 			Overprinted:           p.Overprinted,
 		})

@@ -1,6 +1,7 @@
 package page
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"log/slog"
@@ -650,6 +651,30 @@ func (r *renderer) pageSpace(cs ast.PdfObject, resources ast.PdfDict, force bool
 		return nil
 	}
 	return r.groupSpace(cs, resources)
+}
+
+// PageBlendSpace returns the /CS object of pg's page group when [Render],
+// with no [Options.GroupSpace], [Options.CMYK] or [Options.Overprint], blends
+// the page group in the grey or CMYK space it names (ISO 32000-1, 11.4.7,
+// Table 147): when the page's content paints with transparency, as
+// [renderer.pageSpace] decides. It returns nil when the page group blends in
+// sRGB. Only the page's resources are scanned: the page group is not drawn.
+func PageBlendSpace(ctx context.Context, doc *document.Document, pg *document.Page) ast.PdfObject {
+	r := &renderer{
+		ctx:         ctx,
+		doc:         doc,
+		page:        pg,
+		report:      &Report{},
+		normalForms: make(map[int]bool),
+		opaqueForms: make(map[int]bool),
+		spaces:      make(map[string]*blend.Space),
+		colorCache:  &colorconv.Cache{},
+	}
+	_, cs, _ := r.groupAttrs(pg.Dict)
+	if r.pageSpace(cs, pg.DrawResources, false) == nil {
+		return nil
+	}
+	return cs
 }
 
 // maskBounds is the bounds of the pixels a clip lets through, kept for the

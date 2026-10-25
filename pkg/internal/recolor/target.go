@@ -131,6 +131,13 @@ type Options struct {
 // defaultEngine is the engine [Options] select when they name none.
 var defaultEngine Engine = iccEngine{}
 
+// ICCEngine returns the package's engine, which [Options] select when they
+// name none, for an engine that converts some endpoints its own way and
+// leaves the others to it.
+func ICCEngine() Engine {
+	return iccEngine{}
+}
+
 func (o Options) engine() Engine {
 	if o.Engine != nil {
 		return o.Engine

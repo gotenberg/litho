@@ -33,6 +33,8 @@ type flattenTransparencyPage struct {
 	TextUnderTransparency int     `json:"textUnderTransparency"`
 	TransparentText       int     `json:"transparentText"`
 	GroupRemoved          bool    `json:"groupRemoved,omitempty"`
+	GroupSpaceConverted   bool    `json:"groupSpaceConverted,omitempty"`
+	GroupSpaceUnconverted bool    `json:"groupSpaceUnconverted,omitempty"`
 	Annotations           int     `json:"annotations,omitempty"`
 	EmptiedAnnotations    int     `json:"emptiedAnnotations,omitempty"`
 	JPEGImages            int     `json:"jpegImages,omitempty"`
@@ -165,6 +167,8 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 			TextUnderTransparency: p.TextUnderTransparency,
 			TransparentText:       p.TransparentText,
 			GroupRemoved:          p.GroupRemoved,
+			GroupSpaceConverted:   p.GroupSpaceConverted,
+			GroupSpaceUnconverted: p.GroupSpaceUnconverted,
 			Annotations:           p.Annotations,
 			EmptiedAnnotations:    p.EmptiedAnnotations,
 			JPEGImages:            p.JPEGImages,
@@ -196,6 +200,12 @@ func printFlattenTransparencyReport(stdout, stderr io.Writer, format, file strin
 		}
 		if p.CoarseMasks > 0 {
 			fmt.Fprintf(stdout, "Page %d: %d soft mask(s) composited at a coarser resolution, past the render pixel budget\n", p.Page, p.CoarseMasks)
+		}
+		if p.GroupSpaceConverted {
+			fmt.Fprintf(stdout, "Page %d: content converted to the colour space its transparency group blended in\n", p.Page)
+		}
+		if p.GroupSpaceUnconverted {
+			fmt.Fprintf(stdout, "Page %d: content left in its own colour spaces, not converted to the one its transparency group blended in (shared with another page, unreadable, or no target)\n", p.Page)
 		}
 		if p.Overprinted > 0 {
 			fmt.Fprintf(stdout, "Page %d: %d object(s) painting under overprint composited into an image, overprinted only with --overprint\n", p.Page, p.Overprinted)

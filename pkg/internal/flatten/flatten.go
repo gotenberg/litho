@@ -108,6 +108,14 @@ type PageReport struct {
 	TransparentText int
 	// GroupRemoved reports that the page's transparency group was removed.
 	GroupRemoved bool
+	// GroupSpace is the /CS object of the page's transparency group when
+	// the page composited in the grey or CMYK space it names, its
+	// composites images in that space, and nil when it composited in sRGB,
+	// in the output intent's device ([flattener.deviceSpace]) or under
+	// [Options.Overprint]. The group's removal leaves the page's other
+	// content to be read in the device's space rather than converted into
+	// that one (ISO 32000-1, 11.4.7, Table 147).
+	GroupSpace ast.PdfObject
 	// Composites counts the images drawn for the regions, a region cut
 	// into tiles counting each, and JPEG those of them encoded as JPEG
 	// ([Options.JPEGQuality]).
@@ -363,6 +371,13 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 			return pr, false, err
 		}
 		pr.Regions, pr.DPI, pr.CoarseMasks = len(a.Regions), dpi, coarse
+		if !f.overprint && res.Space != nil {
+			// The render reads the space a transparency group's /CS
+			// names, else the default the output intent gives.
+			if g, err := document.ResolveDict(ctx, f.doc, pg.Dict["Group"]); err == nil && g["CS"] != nil && groupTransparency(ctx, f.doc, pg.Dict) {
+				pr.GroupSpace = res.Space
+			}
+		}
 		cover := &coverage{f: f, pg: pg, g: g, dpi: dpi, result: res, shared: shared}
 		// The renderings are read no further than this page.
 		defer cover.release()
