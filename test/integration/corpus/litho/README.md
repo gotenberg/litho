@@ -296,6 +296,7 @@ one deliberately rather than diffing it against a fresh build.
 | `t3pen_2b.pdf`         | PDF/A-2b     | Type 3 glyphs stroking with the pen of the state showing them    |
 | `usebpc_4.pdf`         | PDF/A-4      | ICC colours under /UseBlackPtComp /Default, /ON and /OFF         |
 | `blankkeys_ua1.pdf`    | PDF/UA-1     | Hidden, smoothed and tagged images, blanked by a redaction       |
+| `imageintent_2b.pdf`   | PDF/A-2b     | ICC images under the rendering intent `ri` and `/RI` set         |
 
 ### Must-not-fire controls
 
@@ -699,6 +700,7 @@ are covered under [Known divergences](#known-divergences).
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
 | `imagecolour_2b.pdf`   | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
 | `imagedraws_2b.pdf`    | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 10   | 7    |
+| `imageintent_2b.pdf`   | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 6    | 6    |
 | `imagereach_2b.pdf`    | 6\*  | 4\*  | 6\*  | 4\*  | 4\*  | 6\*  | 4\*  | 4\*  | 4\* | 4\*  | 5\*  | 5    | 6    |
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
 | `inlinefs_4.pdf`       | 7    | 5    | 9    | 7    | 7    | 11   | 9    | 9    | 4   | 4    | 5    | 10   | 6    |
@@ -9747,6 +9749,40 @@ redaction removes.
 The other cells are the identification, metadata, output intent, optional
 content and `/Interpolate` rules of their parts. veraPDF 1.30.2 and litho report
 the same rule set in all thirteen cells.
+
+### `imageintent_2b.pdf`
+
+An image's `/Intent` overrides the current rendering intent, which the `ri`
+operator and an ExtGState `/RI` set (ISO 32000-1, 8.6.5.8), so an image that
+states none is converted with the graphics state's. The renderer read every
+image under its own `/Intent` or relative colorimetric, whatever the state
+set. Now an image XObject and an inline image painted under a state take its
+intent, and its `/UseBlackPtComp` as before; image decoding
+(`Reader.DecodeImage`, `ImageMeta.Decode`) knows no graphics state and keeps
+the image's own `/Intent` or relative colorimetric, and so does the redaction
+pixel check's images-only rendering (`page.Options.DefaultBlackPoint`), which
+reads a blank compensated. Of the 74 corpus files that set an intent other
+than relative colorimetric beside an image with no `/Intent` (pdfjs 36,
+govdocs 26, litho 8, pdfcpu 3, pdf20 1), none draws a pixel differently on
+any of their 1228 pages: their images are device colour or ICC profiles whose
+intents agree. So this fixture paints 8 by 8 images of samples 128 in
+`split`, a version 2.1 grey profile over Lab whose perceptual table reads them
+at L\* 50 and whose colorimetric table at L\* 13, on two 100 by 200 pages:
+
+| Page | y 140-190               | y 80-130                                                             | y 20-70                                     |
+| ---- | ----------------------- | -------------------------------------------------------------------- | ------------------------------------------- |
+| 1    | `Im`, no `ri`: dark     | `Im` after `/Perceptual ri`: mid                                     | `Im` after `/AbsoluteColorimetric ri`: dark |
+| 2    | `Im` after `/P gs`: mid | `Own`, `/Intent /RelativeColorimetric`, after `/Perceptual ri`: dark | an inline image after `/Perceptual ri`: mid |
+
+Mid is 119 and dark 33, on poppler 26.09.0, MuPDF 1.26.10 (PyMuPDF 1.26.5)
+and litho, and the `render` cell matches both pages; litho drew all six dark
+before, mismatching both. PDFium (pypdfium2 4.30.0) converts every image
+perceptually and draws all six mid. A redaction of each page's centred quarter
+passes the pixel check, and its output renders on litho as on poppler.
+
+The file conforms at PDF/A-2b. The other cells are the identification,
+metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
+same rule set in all thirteen cells.
 
 ## Scope
 
