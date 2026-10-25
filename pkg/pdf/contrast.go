@@ -518,13 +518,12 @@ const maxHullInks = 3
 //
 // # Corpus evidence
 //
-//   - All corpora: 119 runs of 2,122,995 judged turn undetermined, in 9
-//     files; unseen text is unchanged.
-//   - pdfjs bug1146106.pdf, pdfcpu pkg_testdata__itu-t81.pdf, pdfjs
-//     issue9462.pdf: white glyphs over a dark glyph drawn at the same origin,
-//     judged white on white at 1:1, are left undetermined.
+//   - All corpora: 73 runs of 2,122,995 judged turn undetermined, in 7
+//     files.
+//   - govdocs thread_400_400902.pdf: 31 runs of curved text set glyph by
+//     glyph over a shadow copy in another colour.
 //   - govdocs thread_000_000152.pdf page 38, thread_400_400625.pdf page 26:
-//     map symbols built of glyphs layered at one origin, 63 runs.
+//     map symbols built of several glyphs, 32 runs.
 //   - govdocs thread_000_000162.pdf page 1: white text over a CMYK
 //     composite mixes off the straight line, within the luminance test.
 func (c *contrastSamples) offInk(inks [][3]float64) bool {

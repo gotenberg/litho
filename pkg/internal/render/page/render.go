@@ -195,7 +195,9 @@ type Options struct {
 	// mask's group or a tiling pattern's cells show, which are drawn whole
 	// as [Options.Omit] draws them. A caller judging some glyphs by the
 	// pixels they change draws the page with and without them. The render
-	// calls it on its own goroutine.
+	// calls it on its own goroutine, once for each glyph shown, in the order
+	// the content shows them, so a caller can tell apart glyphs shown at one
+	// origin by their rank there.
 	OmitGlyph func(origin geom.Point) bool
 	// OmitGlyphClip also leaves out of the text clipping path each glyph
 	// [Options.OmitGlyph] leaves out, in the modes that add to it (4 to 7,

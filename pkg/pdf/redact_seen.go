@@ -100,19 +100,64 @@ func seenOnPage(ctx context.Context, after *Reader, pages []*document.Page, page
 		for _, box := range copies[i].Boxes {
 			region = unionBox(region, box)
 		}
+		var within []int
 		for e, el := range s.elements {
 			if el.InkBox == [4]float64{} {
 				continue
 			}
 			for _, box := range copies[i].Boxes {
 				if boxWithin(el.InkBox, box, seenCopyBoxSlack) {
-					runs[k] = append(runs[k], e)
+					within = append(within, e)
 					break
 				}
 			}
 		}
+		runs[k] = spelling(s, within, copies[i].Token)
 	}
 	return s.showsOwnInk(ctx, after, pg, region, runs)
+}
+
+// spelling returns the glyphs of within, glyphs of s in the order the content
+// shows them, that spell token: each stretch of consecutive glyphs whose
+// characters, white space aside, are the token's. A glyph drawn inside the
+// copy's boxes that spells something else, another word set over the copy or
+// at the origin of one of its glyphs, is no part of it, and judging the copy
+// by its ink would let that glyph's ink show for the copy's. When no stretch
+// spells the token, a copy extraction reads differently from how the
+// content shows it, every glyph inside the boxes stands for the copy.
+func spelling(s *textScene, within []int, token string) []int {
+	want := strings.Join(strings.Fields(token), "")
+	if want == "" {
+		return within
+	}
+	var out []int
+	taken := make(map[int]bool)
+	for start := 0; start < len(within); start++ {
+		if strings.TrimSpace(s.elements[within[start]].Text) == "" {
+			continue
+		}
+		var got strings.Builder
+		for end := start; end < len(within); end++ {
+			got.WriteString(strings.Join(strings.Fields(s.elements[within[end]].Text), ""))
+			if !strings.HasPrefix(want, got.String()) {
+				break
+			}
+			if got.Len() == len(want) {
+				for _, e := range within[start : end+1] {
+					if !taken[e] {
+						taken[e] = true
+						out = append(out, e)
+					}
+				}
+				start = end
+				break
+			}
+		}
+	}
+	if len(out) == 0 {
+		return within
+	}
+	return out
 }
 
 // boxWithin reports inner lying inside outer grown by slack on every side,

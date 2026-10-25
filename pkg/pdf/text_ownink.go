@@ -92,41 +92,171 @@ func (o originSet) add(p geom.Point, i int) {
 	o[k] = append(o[k], sceneOrigin{p: p, i: i})
 }
 
-// match reports a point of the set within [sceneOriginSlack] of p and, when
-// hits is not nil, marks there each glyph whose origin it is.
-func (o originSet) match(p geom.Point, hits []bool) bool {
+// nearest returns the glyph of the set whose origin lies nearest p, within
+// [sceneOriginSlack], or false when none does.
+func (o originSet) nearest(p geom.Point) (int, bool) {
 	if math.IsNaN(p.X) || math.IsNaN(p.Y) || math.IsInf(p.X, 0) || math.IsInf(p.Y, 0) {
-		return false
+		return 0, false
 	}
-	found := false
+	best, bestD := 0, math.Inf(1)
 	cx, cy := int(math.Floor(p.X)), int(math.Floor(p.Y))
 	for dy := -1; dy <= 1; dy++ {
 		for dx := -1; dx <= 1; dx++ {
 			for _, q := range o[image.Pt(cx+dx, cy+dy)] {
-				if math.Abs(q.p.X-p.X) > sceneOriginSlack || math.Abs(q.p.Y-p.Y) > sceneOriginSlack {
+				ddx, ddy := math.Abs(q.p.X-p.X), math.Abs(q.p.Y-p.Y)
+				if ddx > sceneOriginSlack || ddy > sceneOriginSlack {
 					continue
 				}
-				if hits == nil {
-					return true
+				// Ties go to the glyph shown first, so the choice is the
+				// same whatever order the map yields its pixels in.
+				if d := ddx + ddy; d < bestD || (d == bestD && q.i < best) {
+					best, bestD = q.i, d
 				}
-				hits[q.i], found = true, true
+			}
+		}
+	}
+	return best, !math.IsInf(bestD, 1)
+}
+
+// glyphPlaces groups the glyphs of a scene by the place they are drawn at:
+// glyphs whose origins lie within [sceneOriginSlack] of one another share a
+// place, in the order the content shows them. A renderer's glyph is known by
+// its origin alone ([page.Options.OmitGlyph]), which names a place, and
+// several glyphs may be drawn at one, a symbol built of a dark shape and a
+// white sign over it, or a hidden copy of a word under another; the k-th
+// glyph the renderer shows at a place is the k-th glyph shown there, since
+// both read the content in its order.
+//
+// # Corpus evidence
+//
+//   - All corpora: 142,185 places hold a judged glyph among several, 54 of
+//     them with a count the renderer and extraction disagree on.
+//   - pdfjs bug1146106.pdf: white weather signs over blue squares, at one
+//     origin, read white on white; judged on their squares, all 14 pass.
+//   - pdfjs issue9186.pdf: zero-width spaces at the origin of the letters
+//     after them no longer show by the letters' ink.
+//   - govdocs thread_000_000208.pdf: a heading filled and drawn again in mode
+//     7 to clip an image; the fill copy, painted over by the image, is
+//     reported covered.
+type glyphPlaces struct {
+	at      originSet
+	of      []int
+	members [][]int
+}
+
+// places returns the places of every glyph of s, at the geometry s draws at.
+func (s *textScene) places() *glyphPlaces {
+	g := &glyphPlaces{at: make(originSet, len(s.elements)), of: make([]int, len(s.elements))}
+	for i, el := range s.elements {
+		p := s.geo.Matrix.Apply(geom.Point{X: el.X, Y: el.Y})
+		if e, ok := g.at.nearest(p); ok {
+			g.of[i] = g.of[e]
+			g.members[g.of[i]] = append(g.members[g.of[i]], i)
+		} else {
+			g.of[i] = len(g.members)
+			g.members = append(g.members, []int{i})
+		}
+		g.at.add(p, i)
+	}
+	return g
+}
+
+// place returns the place of the glyph a renderer shows at origin p, or
+// false when no glyph of the scene lies there.
+func (g *glyphPlaces) place(p geom.Point) (int, bool) {
+	e, ok := g.at.nearest(p)
+	if !ok {
+		return 0, false
+	}
+	return g.of[e], true
+}
+
+// counter returns a [page.Options.OmitGlyph] that leaves every glyph in and
+// counts, in drawn, the glyphs the renderer shows at each place.
+func (g *glyphPlaces) counter(drawn []int) func(geom.Point) bool {
+	return func(p geom.Point) bool {
+		if c, ok := g.place(p); ok {
+			drawn[c]++
+		}
+		return false
+	}
+}
+
+// glyphOmitter leaves out of a drawing the glyphs omit marks, each known by
+// its place and its rank there ([glyphPlaces]). drawn counts the glyphs the
+// renderer showed at each place in the drawing of the whole page: where it
+// is the count of the scene's glyphs there, the k-th glyph shown is the k-th
+// the scene holds, and only a glyph omit marks leaves; where the two counts
+// differ, a glyph the renderer leaves undrawn (in an optional content group
+// that is off, under a font that does not load) or shows that extraction
+// does not place, the ranks do not line up, and every glyph shown at a place
+// holding a marked glyph leaves. hits, when not nil, marks each glyph the
+// drawing left out.
+type glyphOmitter struct {
+	places *glyphPlaces
+	drawn  []int
+	omit   []bool
+	shown  []int
+	hits   []bool
+}
+
+// newGlyphOmitter returns the omitter that leaves out the glyphs idx names.
+func newGlyphOmitter(places *glyphPlaces, drawn []int, idx []int, hits []bool) *glyphOmitter {
+	o := &glyphOmitter{places: places, drawn: drawn, omit: make([]bool, len(places.of)), shown: make([]int, len(drawn)), hits: hits}
+	for _, i := range idx {
+		o.omit[i] = true
+	}
+	return o
+}
+
+// omitGlyph is the [page.Options.OmitGlyph] of the drawing. The renderer
+// calls it on one goroutine of its own, in content order.
+func (o *glyphOmitter) omitGlyph(p geom.Point) bool {
+	c, ok := o.places.place(p)
+	if !ok {
+		return false
+	}
+	k := o.shown[c]
+	o.shown[c]++
+	members := o.places.members[c]
+	if o.drawn[c] == len(members) && k < len(members) {
+		i := members[k]
+		if o.omit[i] && o.hits != nil {
+			o.hits[i] = true
+		}
+		return o.omit[i]
+	}
+	found := false
+	for _, i := range members {
+		if o.omit[i] {
+			found = true
+			if o.hits != nil {
+				o.hits[i] = true
 			}
 		}
 	}
 	return found
 }
 
-// origins returns the device-space origins of the glyphs of run that have an
-// ink box, at the geometry s draws at.
-func (s *textScene) origins(run []int) originSet {
-	o := make(originSet, len(run))
-	for _, i := range run {
-		if s.elements[i].InkBox == [4]float64{} {
-			continue
-		}
-		o.add(s.geo.Matrix.Apply(geom.Point{X: s.elements[i].X, Y: s.elements[i].Y}), i)
-	}
-	return o
+// misranked reports, once the drawing is done, that glyph i lies at a place
+// holding several glyphs whose ranks the drawing did not keep: the renderer
+// showed a different count of glyphs there than in the drawing of the whole
+// page, a form XObject a smaller [page.Options.Within] skips holding some of
+// them, so what it left out there need not be glyph i's own ink.
+func (o *glyphOmitter) misranked(i int) bool {
+	c := o.places.of[i]
+	n := len(o.places.members[c])
+	return n > 1 && o.drawn[c] == n && o.shown[c] != n
+}
+
+// glyphDrawing is what the drawings of one [textScene.judgeOwnInk] share: the
+// places of the scene's glyphs, the count of glyphs the drawing of the whole
+// page showed at each, the decoded resources, and the pixel budget.
+type glyphDrawing struct {
+	places *glyphPlaces
+	drawn  []int
+	shared *page.Shared
+	budget int64
 }
 
 // showsOwnInk reports, parallel to runs, whether each run of pg's glyphs
@@ -165,7 +295,10 @@ func (s *textScene) showsOwnInk(ctx context.Context, r *Reader, pg *document.Pag
 // with it alone, in up to [maxSceneOwnDrawings] such drawings
 // ([textScene.groupRuns]); one past the bound, and one none of whose
 // glyphs the renderer shows where text extraction places them, is left
-// unjudged. region frames the drawing as [textScene.frame] frames it. It
+// unjudged. A glyph leaves a drawing as itself, by its place and its rank
+// there ([glyphPlaces]), so another glyph drawn at its origin, the dark
+// shape under a white sign or a visible word over a hidden copy, stays in.
+// region frames the drawing as [textScene.frame] frames it. It
 // fails when the page cannot be drawn, or when the runs' glyph boxes pass
 // [maxSceneCoverWork].
 func (s *textScene) judgeOwnInk(ctx context.Context, r *Reader, pg *document.Page, region [4]float64, runs [][]int, o ownInkOptions) ([]inkVerdict, error) {
@@ -199,19 +332,21 @@ func (s *textScene) judgeOwnInk(ctx context.Context, r *Reader, pg *document.Pag
 		return nil, err
 	}
 	shared := page.NewShared(budget)
-	if s.with, err = s.render(ctx, r, pg, box, page.Options{Omit: o.omit, Within: within, Shared: shared}); err != nil {
+	places := s.places()
+	drawn := make([]int, len(places.members))
+	if s.with, err = s.render(ctx, r, pg, box, page.Options{Omit: o.omit, Within: within, Shared: shared, OmitGlyph: places.counter(drawn)}); err != nil {
 		return nil, fmt.Errorf("drawing the page: %w", err)
 	}
 	if b := s.with.Bounds(); b.Dx() != s.geo.Width || b.Dy() != s.geo.Height {
 		return nil, fmt.Errorf("page drawn as %v, its geometry %dx%d", b, s.geo.Width, s.geo.Height)
 	}
 	// The render calls OmitGlyph on one goroutine of its own and is done
-	// with it when it returns, so hits is read after it alone.
+	// with it when it returns, so drawn and hits are read after it alone.
 	hits := make([]bool, len(s.elements))
-	origins := s.origins(all)
+	omitter := newGlyphOmitter(places, drawn, all, hits)
 	without, err := s.render(ctx, r, pg, box, page.Options{
 		Omit: o.omit, Within: within, Shared: shared, OmitGlyphClip: o.omitClip,
-		OmitGlyph: func(p geom.Point) bool { return origins.match(p, hits) },
+		OmitGlyph: omitter.omitGlyph,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("drawing the page without the judged text: %w", err)
@@ -221,7 +356,7 @@ func (s *textScene) judgeOwnInk(ctx context.Context, r *Reader, pg *document.Pag
 	}
 	var pending []int
 	for k, run := range runs {
-		if !slices.ContainsFunc(run, func(i int) bool { return hits[i] }) {
+		if !slices.ContainsFunc(run, func(i int) bool { return hits[i] }) || slices.ContainsFunc(run, omitter.misranked) {
 			verdicts[k] = inkUnjudged
 			continue
 		}
@@ -241,7 +376,7 @@ func (s *textScene) judgeOwnInk(ctx context.Context, r *Reader, pg *document.Pag
 		verdicts[k] = inkUnjudged
 	}
 	for _, group := range groups {
-		if err := s.groupDrawing(ctx, r, pg, box, runs, group, o, shared, budget, verdicts); err != nil {
+		if err := s.groupDrawing(ctx, r, pg, box, runs, group, o, glyphDrawing{places, drawn, shared, budget}, verdicts); err != nil {
 			return nil, err
 		}
 	}
@@ -367,19 +502,25 @@ func (s *textScene) groupRuns(ctx context.Context, runs [][]int, pending []int) 
 // differs from the page drawn whole at one of its pixels. No two runs of the
 // group hold one pixel, so what differs inside one run's boxes is its own
 // ink alone.
-func (s *textScene) groupDrawing(ctx context.Context, r *Reader, pg *document.Page, box page.Box, runs [][]int, group []int, o ownInkOptions, shared *page.Shared, budget int64, verdicts []inkVerdict) error {
+func (s *textScene) groupDrawing(ctx context.Context, r *Reader, pg *document.Page, box page.Box, runs [][]int, group []int, o ownInkOptions, d glyphDrawing, verdicts []inkVerdict) error {
 	var idx []int
 	for _, k := range group {
 		idx = append(idx, runs[k]...)
 	}
-	within, err := s.inkMask(idx, budget)
+	within, err := s.inkMask(idx, d.budget)
 	if err != nil {
 		return err
 	}
-	origins := s.origins(idx)
+	var inked []int
+	for _, i := range idx {
+		if s.elements[i].InkBox != [4]float64{} {
+			inked = append(inked, i)
+		}
+	}
+	omitter := newGlyphOmitter(d.places, d.drawn, inked, nil)
 	without, err := s.render(ctx, r, pg, box, page.Options{
-		Omit: o.omit, Within: within, Shared: shared, OmitGlyphClip: o.omitClip,
-		OmitGlyph: func(p geom.Point) bool { return origins.match(p, nil) },
+		Omit: o.omit, Within: within, Shared: d.shared, OmitGlyphClip: o.omitClip,
+		OmitGlyph: omitter.omitGlyph,
 	})
 	if err != nil {
 		return fmt.Errorf("drawing the page without judged runs: %w", err)
@@ -388,6 +529,10 @@ func (s *textScene) groupDrawing(ctx context.Context, r *Reader, pg *document.Pa
 		return fmt.Errorf("drawings of %v and %v", s.with.Bounds(), without.Bounds())
 	}
 	for _, k := range group {
+		if slices.ContainsFunc(runs[k], omitter.misranked) {
+			verdicts[k] = inkUnjudged
+			continue
+		}
 		if s.ownDiffers(runs[k], without, o.underRun(k)) {
 			verdicts[k] = inkSeen
 		}

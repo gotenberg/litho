@@ -20,7 +20,9 @@ import (
 // an opaque rectangle painted after it, "underimage" under an image painted
 // after it, "undertext" under a larger Type 3 glyph drawn after it that fills
 // a square over it, and "besidebig" in black inside the box of a large "9"
-// drawn after it, whose ink leaves it uncovered.
+// drawn after it, whose ink leaves it uncovered, and "layered" under an
+// opaque rectangle painted after it, with a black "Z" drawn over the
+// rectangle at the origin of its "S".
 func samePageCopyPDF(copy string) []byte {
 	stream := func(num int, dict, data string) string {
 		return strconv.Itoa(num) + " 0 obj\n<< " + dict + " /Length " + strconv.Itoa(len(data)) +
@@ -39,6 +41,7 @@ func samePageCopyPDF(copy string) []byte {
 		"underimage":  "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET q 100 0 0 30 90 490 cm /Im1 Do Q",
 		"undertext":   "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET BT /F2 60 Tf 95 485 Td (A) Tj ET",
 		"besidebig":   "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET BT /F1 200 Tf 70 420 Td (9) Tj ET",
+		"layered":     "BT /F1 12 Tf 100 500 Td (SECRET) Tj ET 1 g 95 495 60 20 re f 0 g BT /F1 12 Tf 100 500 Td (Z) Tj ET",
 	}[copy]
 	return []byte("%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>\nendobj\n" +
@@ -137,7 +140,7 @@ func TestWriter_Redact_StrictRefusesVisibleCopiesOnTheRedactedPage(t *testing.T)
 // refuse. "underfill", "underimage" and "undertext" are told by drawing the
 // page, which runs without the pixel check too.
 func TestWriter_Redact_RefusesHiddenCopiesOnTheRedactedPage(t *testing.T) {
-	for _, copy := range []string{"invisible", "white", "whitestroke", "offpage", "clipped", "hiddenlayer", "underfill", "underimage", "undertext"} {
+	for _, copy := range []string{"invisible", "white", "whitestroke", "offpage", "clipped", "hiddenlayer", "underfill", "underimage", "undertext", "layered"} {
 		t.Run(copy, func(t *testing.T) {
 			for _, opts := range [][]RedactOption{nil, {WithoutRedactionPixelCheck()}} {
 				report, _, err := redactOtherPageCopy(t, samePageCopyPDF(copy), opts...)
