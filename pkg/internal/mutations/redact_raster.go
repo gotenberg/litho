@@ -81,6 +81,13 @@ type RedactOptions struct {
 	// copied for that placement and the copies repointed instead (see
 	// [formCopies.write]); a chain it cannot copy reports [ErrImageShared].
 	PrivateCopies map[int]bool
+	// ClipAnnotations keeps an annotation reaching outside the regions that a
+	// viewer draws nothing for, rather than refusing the page with
+	// [ErrAnnotationStraddlesRegion]: a Link loses the part of its activation
+	// area the regions cover, and a pop-up that is not open stays as it is
+	// (see [removeRegionAnnotations]). An annotation that draws anything
+	// still refuses.
+	ClipAnnotations bool
 }
 
 // RedactPageRegionsWith is [RedactPageRegions] with options; see
@@ -111,7 +118,7 @@ func RedactPageRegionsWith(
 	// place, which is the condition writer.ObjAllocator.Snapshot documents.
 	snap := alloc.Snapshot()
 	report, err := redactPageRegions(ctx, alloc, doc, page, regions,
-		pageRedaction{formImages: opts.Rasterise != nil, private: opts.PrivateCopies})
+		pageRedaction{formImages: opts.Rasterise != nil, private: opts.PrivateCopies, clipAnnots: opts.ClipAnnotations})
 	if err != nil && opts.Rasterise != nil && rasterable(err) {
 		alloc.Restore(snap)
 		report, err = rasterThenRedact(ctx, alloc, doc, page, regions, opts)
@@ -165,7 +172,7 @@ func rasterThenRedact(
 		composites[n] = true
 	}
 	report, err := redactPageRegions(ctx, alloc, doc, page, regions,
-		pageRedaction{composites: composites, formImages: true, private: opts.PrivateCopies})
+		pageRedaction{composites: composites, formImages: true, private: opts.PrivateCopies, clipAnnots: opts.ClipAnnotations})
 	if err != nil {
 		return RedactReport{}, err
 	}

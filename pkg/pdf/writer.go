@@ -963,6 +963,12 @@ type Writer struct {
 	// token scan sees it, so WriteTo checks for it (see
 	// [Writer.copiedImagesRestored]).
 	redactionCopies []map[int]bool
+	// redactionClips runs parallel to redactions: whether each call kept the
+	// annotations that paint nothing reaching outside its regions
+	// ([WithRedactionAnnotationClipping]), which applying its regions again
+	// at write time has to do too, or a link it cut, which meets the regions
+	// at their edge, refuses.
+	redactionClips []bool
 
 	// droppedSignatures lists the signatures the writes that produce the
 	// output left out, each a full rewrite (see [Writer.DroppedSignatures]). A

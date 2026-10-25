@@ -13,8 +13,16 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
 )
 
-// removeRegionAnnotations drops the annotations sitting inside the zones and
-// returns the object numbers it removed, ascending.
+// regionAnnotations is what [removeRegionAnnotations] did to a page's
+// annotations: the object numbers of those it removed and of those it cut to
+// the part outside the zones, each ascending.
+type regionAnnotations struct {
+	removed, clipped []int
+}
+
+// removeRegionAnnotations drops the annotations sitting inside the zones, and
+// with clip cuts the ones reaching outside that paint nothing to the part
+// outside.
 //
 // Clearing a page's content stream does not touch its annotations. An
 // annotation over cleared content keeps whatever it quotes in /Contents or
@@ -31,104 +39,264 @@ import (
 // whose /Rect cannot be read reports [ErrAnnotationNotPlaceable]: it cannot be
 // ruled outside the region either.
 //
-// The page dictionary is read alloc-first and written back through the
-// allocator, so the change rolls back with everything else when a later stage
-// refuses.
+// With clip, an annotation reaching outside that a viewer draws nothing for
+// ([annotPaintsNothing]) is kept rather than refused, since keeping it keeps
+// no content of the region: a Link loses the part of its activation area the
+// zones cover ([clipLinkArea]), as a Redact annotation removes the content of
+// its area and nothing else (ISO 32000-2, 12.5.6.23), and a pop-up that is not
+// open, whose /Rect only places the window it opens (ISO 32000-1, 12.5.6.14),
+// is kept as it is. A Link the zones cover whole, its /QuadPoints counted, is
+// removed.
+//
+// A removed annotation takes with it the pop-up that shows its text (ISO
+// 32000-1, 12.5.6.14), wherever the pop-up sits: the pop-up names its parent
+// by /Parent, so a pop-up left on the page keeps the removed annotation in the
+// file, its appearance streams and entries included. An annotation kept that
+// replies to a removed one or is grouped with it (/IRT, 12.5.6.2, Table 170)
+// loses /IRT and /RT for the same reason, and stays where it is.
+//
+// The page dictionary and its annotations are read alloc-first and written
+// back through the allocator, so the change rolls back with everything else
+// when a later stage refuses, and an annotation an earlier stage rewrote is
+// read as it now stands.
+//
+// # Corpus evidence
+//
+//   - litho annotstraddle_2b: the Ink the centred quarter of page 2 removed
+//     stayed in the output, its /InkList and appearance stream with it,
+//     written through its pop-up's /Parent and its reply's /IRT.
+//   - pdfjs annotation-highlight, annotation-squiggly, annotation-strikeout,
+//     issue12504, issue14046, issue17215 (the band), pr7352 (the quarter):
+//     the band refused over the pop-up of a markup annotation it removed,
+//     and now succeeds; 19 of the 409 refusals of the F13 sweep named a
+//     closed pop-up.
+//   - All corpora, the 409 scenarios of the F13 sweep that refused over an
+//     annotation reaching outside the region: the first such annotation was
+//     a link 145 times, 119 of them drawing nothing, and with clip 48
+//     scenarios succeed and 77 reach a later refusal; a widget (137), a link
+//     with a border (30) and a markup or stamp appearance still refuse.
 func removeRegionAnnotations(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	page *document.Page,
 	zones []heuristics.Zone,
-) ([]int, error) {
+	clip bool,
+) (regionAnnotations, error) {
 	baseDict := latestPageDict(alloc, page)
 	annotsObj, ok := baseDict["Annots"]
 	if !ok {
-		return nil, nil
+		return regionAnnotations{}, nil
 	}
-	annots, err := document.ResolveArray(ctx, doc, annotsObj)
+	annots, err := resolveArrayAllocFirst(ctx, alloc, doc, annotsObj)
 	if err != nil || annots == nil {
-		return nil, nil //nolint:nilerr // An unresolvable /Annots is null (ISO 32000-1, 7.3.10): the page has no annotation to remove.
+		return regionAnnotations{}, nil //nolint:nilerr // An unresolvable /Annots is null (ISO 32000-1, 7.3.10): the page has no annotation to remove.
 	}
 
-	kept := make(ast.PdfArray, 0, len(annots))
-	var removed, rootWidgets []int
-	var kidWidgets []kidWidget
-	var untag []RemovedAnnotation
+	drop := newAnnotDrop(annots)
+	var (
+		clipped []int
+		// straddling holds, by /Annots index, the pop-ups reaching outside
+		// that are kept only if their parent is.
+		straddling []int
+	)
 
-	for _, entry := range annots {
-		annot, err := document.ResolveDict(ctx, doc, entry)
+	for i, entry := range annots {
+		annot, err := resolveDictAllocFirst(ctx, alloc, doc, entry)
 		if err != nil || annot == nil {
 			// Not an annotation this can read, so not one it can place.
-			return nil, fmt.Errorf("%w: an entry of /Annots", ErrAnnotationNotPlaceable)
+			return regionAnnotations{}, fmt.Errorf("%w: an entry of /Annots", ErrAnnotationNotPlaceable)
 		}
+		drop.dicts[i] = annot
 
 		place, ok := annotZones(ctx, doc, annot, page.Rotate)
 		if !ok {
-			return nil, fmt.Errorf("%w: %s", ErrAnnotationNotPlaceable, annotLabel(entry))
+			return regionAnnotations{}, fmt.Errorf("%w: %s", ErrAnnotationNotPlaceable, annotLabel(entry))
 		}
-
-		selected := false
-		for _, reach := range place.reaches {
-			for _, z := range zones {
-				if heuristics.ZonesOverlap(reach, z) {
-					selected = true
-				}
-			}
-		}
-		contained := true
-		for _, sits := range place.sits {
-			inOne := false
-			for _, z := range zones {
-				if heuristics.ZoneContains(z, sits) {
-					inOne = true
-				}
-			}
-			contained = contained && inOne
-		}
+		selected, contained := place.selection(zones)
 		if !selected {
+			continue
+		}
+		subtype, _ := annot["Subtype"].(ast.PdfName)
+		if !contained {
+			switch {
+			case subtype == "Popup":
+				// Decided once the annotations removed are known: a pop-up
+				// goes with its parent whatever the regions cover.
+				straddling = append(straddling, i)
+				continue
+			case clip && subtype == "Link" && annotPaintsNothing(ctx, doc, annot, page.Rotate):
+				cut, left, err := clipLinkArea(ctx, doc, annot, place.sits[0], zones)
+				if err != nil {
+					return regionAnnotations{}, fmt.Errorf("%w (%s)", err, annotLabel(entry))
+				}
+				if left {
+					if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
+						alloc.AllocAt(ref.ObjectNum, cut)
+						clipped = append(clipped, ref.ObjectNum)
+					} else {
+						drop.replaced[i] = cut
+					}
+					continue
+				}
+				// Nothing of the link is left outside: it goes like one the
+				// zones contain.
+			default:
+				return regionAnnotations{}, fmt.Errorf("%w: %s", ErrAnnotationStraddlesRegion, annotLabel(entry))
+			}
+		}
+		if err := drop.mark(i); err != nil {
+			return regionAnnotations{}, err
+		}
+	}
+
+	// The pop-ups of the annotations removed go with them, then the pop-ups
+	// reaching outside whose parent stays are kept or refused.
+	drop.cascadePopups()
+	for _, i := range straddling {
+		if !drop.gone[i] && (!clip || !annotPaintsNothing(ctx, doc, drop.dicts[i], page.Rotate)) {
+			return regionAnnotations{}, fmt.Errorf("%w: %s", ErrAnnotationStraddlesRegion, annotLabel(annots[i]))
+		}
+	}
+
+	removed, err := drop.write(ctx, alloc, doc, page, baseDict)
+	if err != nil {
+		return regionAnnotations{}, err
+	}
+	sort.Ints(clipped)
+	return regionAnnotations{removed: removed, clipped: clipped}, nil
+}
+
+// RemoveAnnotations removes the annotations at the given indices of page's
+// /Annots, as staged in alloc, as a redaction removes those its regions
+// contain: each leaves the page and the structure tree, takes its pop-up
+// with it, and the replies naming it lose /IRT (see
+// [removeRegionAnnotations]). It returns their object numbers, ascending. A
+// widget among them reports [ErrAnnotationIsFormWidget] when its field
+// cannot be detached, and an index out of range [ErrInvalidAnnotation].
+func RemoveAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, indices []int) ([]int, error) {
+	if len(indices) == 0 {
+		return nil, nil
+	}
+	if page.Ref.ObjectNum == 0 {
+		return nil, ErrPageNotAddressable
+	}
+	baseDict := latestPageDict(alloc, page)
+	annots, err := resolveArrayAllocFirst(ctx, alloc, doc, baseDict["Annots"])
+	if err != nil {
+		return nil, fmt.Errorf("resolving page /Annots: %w", err)
+	}
+	drop := newAnnotDrop(annots)
+	for i, entry := range annots {
+		if drop.dicts[i], err = resolveDictAllocFirst(ctx, alloc, doc, entry); err != nil {
+			return nil, fmt.Errorf("resolving annotation %d: %w", i, err)
+		}
+	}
+	for _, i := range indices {
+		if i < 0 || i >= len(annots) || drop.dicts[i] == nil {
+			return nil, fmt.Errorf("annotation %d of %d: %w", i, len(annots), ErrInvalidAnnotation)
+		}
+		if err := drop.mark(i); err != nil {
+			return nil, err
+		}
+	}
+	drop.cascadePopups()
+	return drop.write(ctx, alloc, doc, page, baseDict)
+}
+
+// annotDrop is the annotations of one page's /Annots a removal takes out.
+type annotDrop struct {
+	annots ast.PdfArray
+	// dicts holds each annotation's dictionary, read alloc-first, by index.
+	dicts []ast.PdfDict
+	// gone marks, by index, the annotations removed.
+	gone []bool
+	// replaced holds, by index, the dictionary an annotation written directly
+	// into /Annots is kept as.
+	replaced    map[int]ast.PdfDict
+	kidWidgets  []kidWidget
+	rootWidgets []int
+}
+
+// newAnnotDrop returns an [annotDrop] over annots that removes nothing yet.
+func newAnnotDrop(annots ast.PdfArray) *annotDrop {
+	return &annotDrop{
+		annots:   annots,
+		dicts:    make([]ast.PdfDict, len(annots)),
+		gone:     make([]bool, len(annots)),
+		replaced: make(map[int]ast.PdfDict),
+	}
+}
+
+// mark removes the annotation at index i, and records the field a widget
+// leaves.
+func (d *annotDrop) mark(i int) error {
+	entry, annot := d.annots[i], d.dicts[i]
+	if subtype, _ := annot["Subtype"].(ast.PdfName); subtype == "Widget" {
+		// A widget carrying /Parent is a kid of a field that lives on above
+		// it. Detaching one means pruning that parent's /Kids and deciding
+		// what becomes of a field whose kids all went, so it still refuses.
+		//
+		// A parentless widget is the merged field-and-annotation of
+		// ISO 32000-1, 12.5.6.19: it IS its own root field, and AcroForm
+		// /Fields holds root fields only (12.7.2), so removing it is
+		// dropping one entry from that array and nothing else. Whether it
+		// also states /FT makes no difference to the detachment.
+		if parentObj, hasParent := annot["Parent"]; hasParent {
+			// The parent has to be an object this can rewrite, and the
+			// widget an entry that parent can name. Either missing leaves
+			// nothing to detach from, so it still refuses.
+			parentRef, parentIsRef := parentObj.(ast.PdfIndirectRef)
+			ref, widgetIsRef := entry.(ast.PdfIndirectRef)
+			if !parentIsRef || !widgetIsRef {
+				return fmt.Errorf("%w: %s", ErrAnnotationIsFormWidget, annotLabel(entry))
+			}
+			d.kidWidgets = append(d.kidWidgets, kidWidget{widget: ref.ObjectNum, parent: parentRef})
+		} else if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
+			// A widget written directly into /Annots cannot be named by
+			// /Fields, which holds references, so there is nothing to prune.
+			d.rootWidgets = append(d.rootWidgets, ref.ObjectNum)
+		}
+	}
+	d.gone[i] = true
+	return nil
+}
+
+// cascadePopups removes the pop-up of each annotation removed.
+func (d *annotDrop) cascadePopups() {
+	for i := range d.annots {
+		if !d.gone[i] && d.dicts[i] != nil && popupOfRemoved(d.annots, d.dicts, d.gone, i) {
+			d.gone[i] = true
+		}
+	}
+}
+
+// write rewrites the page without the annotations removed, detaches them
+// from the form, the structure tree and the replies naming them, and returns
+// the object numbers of those removed, ascending.
+func (d *annotDrop) write(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, baseDict ast.PdfDict) ([]int, error) {
+	var (
+		removed []int
+		untag   []RemovedAnnotation
+	)
+	kept := make(ast.PdfArray, 0, len(d.annots))
+	for i, entry := range d.annots {
+		if !d.gone[i] {
+			if r, ok := d.replaced[i]; ok {
+				entry = r
+			}
 			kept = append(kept, entry)
 			continue
 		}
-		if !contained {
-			return nil, fmt.Errorf("%w: %s", ErrAnnotationStraddlesRegion, annotLabel(entry))
-		}
-		if subtype, _ := annot["Subtype"].(ast.PdfName); subtype == "Widget" {
-			// A widget carrying /Parent is a kid of a field that lives on above
-			// it. Detaching one means pruning that parent's /Kids and deciding
-			// what becomes of a field whose kids all went, so it still refuses.
-			//
-			// A parentless widget is the merged field-and-annotation of
-			// ISO 32000-1, 12.5.6.19: it IS its own root field, and AcroForm
-			// /Fields holds root fields only (12.7.2), so removing it is
-			// dropping one entry from that array and nothing else. Whether it
-			// also states /FT makes no difference to the detachment.
-			if parentObj, hasParent := annot["Parent"]; hasParent {
-				// The parent has to be an object this can rewrite, and the
-				// widget an entry that parent can name. Either missing leaves
-				// nothing to detach from, so it still refuses.
-				parentRef, parentIsRef := parentObj.(ast.PdfIndirectRef)
-				ref, widgetIsRef := entry.(ast.PdfIndirectRef)
-				if !parentIsRef || !widgetIsRef {
-					return nil, fmt.Errorf("%w: %s", ErrAnnotationIsFormWidget, annotLabel(entry))
-				}
-				kidWidgets = append(kidWidgets, kidWidget{widget: ref.ObjectNum, parent: parentRef})
-			} else if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
-				// A widget written directly into /Annots cannot be named by
-				// /Fields, which holds references, so there is nothing to prune.
-				rootWidgets = append(rootWidgets, ref.ObjectNum)
-			}
-		}
-
 		if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
 			removed = append(removed, ref.ObjectNum)
 		}
-		untag = append(untag, RemovedAnnotation{Obj: entry, Dict: annot})
+		untag = append(untag, RemovedAnnotation{Obj: entry, Dict: d.dicts[i]})
 	}
-
-	if len(kept) == len(annots) {
+	if len(untag) == 0 && len(d.replaced) == 0 {
 		return nil, nil
 	}
+	detachReplies(d.annots, d.dicts, d.gone, kept)
 
 	// Written as a direct array on the page rather than back into whatever
 	// object /Annots named. An /Annots array shared with another page keeps its
@@ -140,19 +308,91 @@ func removeRegionAnnotations(
 	if !alloc.AllocAt(page.Ref.ObjectNum, newDict) {
 		return nil, ErrPageNotAddressable
 	}
+	for i, entry := range d.annots {
+		// A reply kept by reference is rewritten where it stands; one written
+		// directly into /Annots went into kept above.
+		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && !d.gone[i] && d.dicts[i] != nil {
+			if r, ok := detachedReply(d.annots, d.dicts, d.gone, i); ok {
+				alloc.AllocAt(ref.ObjectNum, r)
+			}
+		}
+	}
 
-	if err := pruneKidWidgets(ctx, alloc, doc, kidWidgets); err != nil {
+	if err := pruneKidWidgets(ctx, alloc, doc, d.kidWidgets); err != nil {
 		return nil, err
 	}
-	if err := pruneRootFields(ctx, alloc, doc, rootWidgets); err != nil {
+	if err := pruneRootFields(ctx, alloc, doc, d.rootWidgets); err != nil {
 		return nil, err
 	}
 	if err := untagRegionAnnotations(ctx, alloc, doc, untag); err != nil {
 		return nil, err
 	}
-
 	sort.Ints(removed)
 	return removed, nil
+}
+
+// popupOfRemoved reports whether the annotation at index i of annots is the
+// pop-up of one the redaction removes (gone): it names that annotation as its
+// /Parent, or that annotation names it as its /Popup (ISO 32000-1, 12.5.6.14,
+// Table 183, and 12.5.6.2, Table 170).
+func popupOfRemoved(annots ast.PdfArray, dicts []ast.PdfDict, gone []bool, i int) bool {
+	if subtype, _ := dicts[i]["Subtype"].(ast.PdfName); subtype != "Popup" {
+		return false
+	}
+	if parent, ok := dicts[i]["Parent"].(ast.PdfIndirectRef); ok && removedRef(annots, gone, parent) {
+		return true
+	}
+	self, isRef := annots[i].(ast.PdfIndirectRef)
+	for j := range annots {
+		if !gone[j] || dicts[j] == nil {
+			continue
+		}
+		if p, ok := dicts[j]["Popup"].(ast.PdfIndirectRef); ok && isRef && p.ObjectNum == self.ObjectNum {
+			return true
+		}
+	}
+	return false
+}
+
+// removedRef reports whether ref names an annotation of annots that gone
+// removes.
+func removedRef(annots ast.PdfArray, gone []bool, ref ast.PdfIndirectRef) bool {
+	for j, e := range annots {
+		if r, ok := e.(ast.PdfIndirectRef); ok && gone[j] && r.ObjectNum == ref.ObjectNum {
+			return true
+		}
+	}
+	return false
+}
+
+// detachedReply returns the annotation at index i without /IRT and /RT when
+// its /IRT names an annotation gone removes, and false otherwise.
+func detachedReply(annots ast.PdfArray, dicts []ast.PdfDict, gone []bool, i int) (ast.PdfDict, bool) {
+	irt, ok := dicts[i]["IRT"].(ast.PdfIndirectRef)
+	if !ok || !removedRef(annots, gone, irt) {
+		return nil, false
+	}
+	d := maps.Clone(dicts[i])
+	delete(d, "IRT")
+	delete(d, "RT")
+	return d, true
+}
+
+// detachReplies replaces in kept, in place, each annotation written directly
+// into /Annots that [detachedReply] detaches.
+func detachReplies(annots ast.PdfArray, dicts []ast.PdfDict, gone []bool, kept ast.PdfArray) {
+	k := 0
+	for i, entry := range annots {
+		if gone[i] {
+			continue
+		}
+		if _, isRef := entry.(ast.PdfIndirectRef); !isRef {
+			if d, ok := detachedReply(annots, dicts, gone, i); ok {
+				kept[k] = d
+			}
+		}
+		k++
+	}
 }
 
 // kidWidget is a removed widget and the field that named it through /Kids.
@@ -449,6 +689,44 @@ type annotPlace struct {
 	// refuse a link whose border runs along /Rect a few points inside a
 	// region's edge, its corners' miters taken at their full reach.
 	sits []heuristics.Zone
+}
+
+// selection reports whether the zones select the annotation, a zone meeting
+// one of its reaches, and whether they contain it, each of its sits inside
+// one zone.
+func (p annotPlace) selection(zones []heuristics.Zone) (selected, contained bool) {
+	for _, reach := range p.reaches {
+		for _, z := range zones {
+			if heuristics.ZonesOverlap(reach, z) {
+				selected = true
+			}
+		}
+	}
+	contained = true
+	for _, sits := range p.sits {
+		inOne := false
+		for _, z := range zones {
+			if heuristics.ZoneContains(z, sits) {
+				inOne = true
+			}
+		}
+		contained = contained && inOne
+	}
+	return selected, contained
+}
+
+// AnnotationStraddles reports whether a redaction of regions, [llx lly urx
+// ury] in page space, selects the annotation dict on a page turned by rotate
+// without containing it: what [RedactPageRegions] refuses with
+// [ErrAnnotationStraddlesRegion] unless the annotation paints nothing. An
+// annotation whose /Rect does not read is not placed, and reports false.
+func AnnotationStraddles(ctx context.Context, doc *document.Document, dict ast.PdfDict, rotate int, regions [][4]float64) bool {
+	place, ok := annotZones(ctx, doc, dict, rotate)
+	if !ok {
+		return false
+	}
+	selected, contained := place.selection(regionZones(regions))
+	return selected && !contained
 }
 
 // annotLabel names an annotation for a refusal, so the same file always names

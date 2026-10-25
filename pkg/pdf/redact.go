@@ -63,6 +63,9 @@ type RedactOption func(*redactOpts)
 type redactOpts struct {
 	strict bool
 	raster bool
+	// clipAnnots keeps annotations that paint nothing reaching outside the
+	// regions ([WithRedactionAnnotationClipping]).
+	clipAnnots bool
 	// noPixelCheck skips the pixel check ([WithoutRedactionPixelCheck]).
 	noPixelCheck bool
 	// jpegQuality is [WithRedactionJPEGQuality]'s, 0 for lossless, and
@@ -95,9 +98,20 @@ func WithStrictRedaction() RedactOption {
 // regions cover removed from it as from the page's own, and everything the
 // page draws outside those units stays as it was.
 //
+// An annotation reaching outside the regions, refused otherwise since an
+// annotation is atomic (ISO 32000-1, 12.5.2), is drawn into its page first
+// as a viewer draws it (12.5.5, Algorithm 8.1) and removed, with its pop-up
+// and the text and geometry it carries: its look is then page content the
+// regions cut, and nothing of it marks what lay inside them.
+// [RedactReport.BakedAnnotations] counts them. A widget is not, its look
+// being its field's value (12.7.3.3), nor a pop-up, an annotation under
+// optional content, a NoRotate one on a turned page or one a viewer does not
+// display: those still refuse.
+//
 // Opt-in, because the fallback changes the page outside the regions: the
 // rasterised units lose their vector form there, at the image's resolution,
-// and show as litho's renderer draws them. Without it such a page is refused
+// and show as litho's renderer draws them, and an annotation drawn into the
+// page loses its behaviour, its comment and its pop-up. Without it such a page is refused
 // with [ErrRedactionRefused], as a redaction that would change more than the
 // regions has to be asked for.
 //
@@ -112,6 +126,43 @@ func WithStrictRedaction() RedactOption {
 // read.
 func WithRedactionRasterFallback() RedactOption {
 	return func(o *redactOpts) { o.raster = true }
+}
+
+// WithRedactionAnnotationClipping makes [Writer.Redact] keep an annotation
+// reaching outside the regions that a viewer draws nothing for, instead of
+// refusing the page. A Link with no appearance stream and a border of width 0
+// loses the part of its activation area the regions cover (ISO 32000-1,
+// 12.5.6.5, Table 173): left as one rectangle, it becomes the link's /Rect;
+// left as several, they become its /QuadPoints, one quadrilateral each, with
+// /Rect their bounding box, which a reader that ignores /QuadPoints activates
+// whole. A pop-up that is not open and has no appearance stream, whose /Rect
+// only places the window it opens over its parent (12.5.6.14), stays as it
+// is. [RedactReport.ClippedAnnotations] lists the links cut.
+//
+// Keeping such an annotation keeps no content of the regions: it paints
+// nothing there or anywhere, and a Redact annotation removes the content of
+// its area (ISO 32000-2, 12.5.6.23), not the links that lead out of it. The
+// text a link names in /A or /Contents is scrubbed of the removed strings as
+// every annotation's is. An annotation that draws anything, a widget, a
+// visible border, a markup appearance, still refuses, and so does a link cut
+// on one page that another page also lists, since every page listing it would
+// show the cut.
+//
+// Opt-in, because without it a redaction refuses any annotation reaching
+// outside its regions with [ErrRedactionRefused], so as not to change
+// behaviour the caller never selected.
+//
+// # Corpus evidence
+//
+//   - All corpora, the 409 scenarios of the F13 sweep that refused over an
+//     annotation reaching outside the region: 48 succeed with the option,
+//     every one passing the pixel check and the redact-render cell's inside
+//     and outside checks by litho's and poppler 26.09.0's rendering; 85
+//     with the raster fallback too. 77 reach a later refusal, a structure
+//     element or a copy of the removed text, a cut link's own URI among
+//     them (govdocs thread_100_100166).
+func WithRedactionAnnotationClipping() RedactOption {
+	return func(o *redactOpts) { o.clipAnnots = true }
 }
 
 // WithRedactionJPEGQuality encodes as baseline JPEG (ITU-T T.81) at quality
@@ -253,6 +304,10 @@ type RedactReport struct {
 	// RemovedAnnotations lists the object numbers of annotations dropped
 	// because their rectangle sat inside a region, ascending.
 	RemovedAnnotations []int
+	// ClippedAnnotations lists the object numbers of annotations kept with
+	// the part inside the regions cut away, ascending (see
+	// [WithRedactionAnnotationClipping]).
+	ClippedAnnotations []int
 	// DroppedPageEntries names page entries dropped because they held a copy
 	// of what was removed, such as /Thumb.
 	DroppedPageEntries []string
@@ -262,6 +317,13 @@ type RedactReport struct {
 	// whose content the regions selected, and those drawn among them that the
 	// images took with them.
 	RasterisedUnits int
+	// BakedAnnotations counts the annotations reaching outside the regions
+	// that [WithRedactionRasterFallback] drew into their pages and removed:
+	// their look is page content the regions cut, and the annotations, with
+	// their pop-ups and the text they carry, are gone. They are counted, not
+	// named, since the document is written out and reopened, renumbered,
+	// once they are drawn.
+	BakedAnnotations int
 	// FontsFullyRemovedOnPage maps a 1-based page number to the object
 	// numbers of fonts whose every glyph on that page was removed.
 	//
@@ -309,6 +371,9 @@ type RedactReport struct {
 	// picture with JPEG tiles over it.
 	LossyBlankedImages int
 
+	// clippedByPage maps a 0-based page index to the annotations cut on that
+	// page, which [mutations.CheckRewrittenAnnotationUses] reads.
+	clippedByPage map[int][]int
 	// removedGlyphOrigins maps a 1-based page number to the origin, in user
 	// space, of each glyph removed from the page's own content stream, which
 	// the pixel check of [Writer.Redact] finds the drawn glyph by.
@@ -526,11 +591,82 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...Red
 	if err != nil {
 		return nil, err
 	}
-	report, err := w.redact(ctx, regions, o)
+	baked, undoBake, err := w.bakeRedactedAnnotations(ctx, regions)
 	if err != nil {
 		undo()
+		return nil, err
 	}
-	return report, err
+	report, err := w.redact(ctx, regions, o)
+	if err != nil {
+		undoBake()
+		undo()
+		return report, err
+	}
+	report.BakedAnnotations = baked
+	return report, nil
+}
+
+// bakeRedactedAnnotations draws into the pages the regions reach the
+// annotations reaching outside them that [flatten.RedactionAnnotations]
+// draws, removes those annotations, and, when it drew any, writes the
+// document out and reopens it, so the renderer the raster fallback composites
+// with reads the drawing. It returns how many it removed; undo restores the
+// Writer as it was before.
+func (w *Writer) bakeRedactedAnnotations(ctx context.Context, regions []RedactRegion) (int, func(), error) {
+	noop := func() {}
+	if err := w.promotePageTree(ctx); err != nil {
+		return 0, noop, err
+	}
+	doc := w.reader.doc
+	pages, err := w.reader.resolvePages(ctx)
+	if err != nil {
+		return 0, noop, fmt.Errorf("resolving pages: %w", err)
+	}
+	byPage, order, err := groupRedactRegions(regions, len(pages))
+	if err != nil {
+		return 0, noop, err
+	}
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	if err := ctx.Err(); err != nil {
+		return 0, noop, err
+	}
+	seedAllocator(alloc, w.rewriteOverrides)
+	baked := 0
+	rewritten := make(map[int][]int)
+	for _, pageNum := range order {
+		bake, bakeErr := flatten.RedactionAnnotations(ctx, alloc, doc, pages[pageNum-1], byPage[pageNum])
+		if bakeErr != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(bakeErr, ctxErr) {
+				return 0, noop, bakeErr
+			}
+			return 0, noop, fmt.Errorf("%w: page %d: %w", ErrRedactionRefused, pageNum, bakeErr)
+		}
+		baked += bake.Removed
+		if len(bake.Rewritten) > 0 {
+			rewritten[pageNum-1] = bake.Rewritten
+		}
+	}
+	if baked == 0 {
+		return 0, noop, nil
+	}
+	// An annotation drawn into one page is emptied or removed, which every
+	// other page listing it would show.
+	if useErr := mutations.CheckRewrittenAnnotationUses(ctx, alloc, doc, pages, rewritten); useErr != nil {
+		return 0, noop, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
+	}
+	prevOverrides, prevFolded, prevForce := w.rewriteOverrides, w.folded, w.forceRewrite
+	w.rewriteOverrides = alloc.Pending()
+	w.folded = len(w.mutations)
+	w.forceRewrite = true
+	undo, err := w.materializeNow(ctx)
+	if err != nil {
+		w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
+		return 0, noop, err
+	}
+	return baked, func() {
+		undo()
+		w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
+	}, nil
 }
 
 // redact applies regions as [Writer.Redact] describes, with the raster
@@ -599,7 +735,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	maps.Copy(preTrailer, doc.Index.Trailer)
 	restoreTrailer := func() { doc.Index.Trailer = preTrailer }
 
-	var pageOpts mutations.RedactOptions
+	pageOpts := mutations.RedactOptions{ClipAnnotations: o.clipAnnots}
 	if o.raster {
 		pageOpts.Rasterise = flatten.Redaction
 		if o.jpegQuality > 0 {
@@ -615,6 +751,10 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	// from one page is exact only when no other page still shows it. That
 	// also needs every page's regions applied first.
 	if useErr := mutations.CheckRemovedAnnotationUses(ctx, alloc, doc, pages, report.RemovedAnnotations); useErr != nil {
+		restoreTrailer()
+		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
+	}
+	if useErr := mutations.CheckRewrittenAnnotationUses(ctx, alloc, doc, pages, report.clippedByPage); useErr != nil {
 		restoreTrailer()
 		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
 	}
@@ -713,7 +853,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	w.rewriteOverrides = alloc.Pending()
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
-	w.recordRedaction(regions, needles, o.strict, copied, report.CopiesOnRedactedPages)
+	w.recordRedaction(regions, needles, o, copied, report.CopiesOnRedactedPages)
 	judgeCopies := slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool { return len(h.Boxes) > 0 })
 	if judgeCopies || !o.noPixelCheck {
 		var check *redactedOutputCheck
@@ -730,6 +870,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 			w.redactedTokens = w.redactedTokens[:prevTokens]
 			w.redactionTolerances = w.redactionTolerances[:prevTolerances]
 			w.redactionCopies = w.redactionCopies[:prevRedactions]
+			w.redactionClips = w.redactionClips[:prevRedactions]
 			restoreTrailer()
 			if len(unseen) > 0 {
 				report.SurvivingCopies = unseen
@@ -912,11 +1053,12 @@ func seedAllocator(alloc *writer.ObjAllocator, overrides map[int]ast.PdfObject) 
 //
 // copied holds the images the redaction blanked in a copy rather than in
 // place, which WriteTo checks the composed pages for.
-func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, strict bool, copied map[int]bool, samePage []RedactionHit) {
+func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, o redactOpts, copied map[int]bool, samePage []RedactionHit) {
 	w.redactions = append(w.redactions, slices.Clone(regions))
 	w.redactionCopies = append(w.redactionCopies, copied)
+	w.redactionClips = append(w.redactionClips, o.clipAnnots)
 	w.redactedTokens = appendNewTokens(w.redactedTokens, needles)
-	if strict {
+	if o.strict {
 		return
 	}
 	tolerance := redactionTolerance{
@@ -1101,7 +1243,7 @@ func (w *Writer) enforceRedactions(ctx context.Context, overrides map[int]ast.Pd
 		}
 		for _, pageNum := range order {
 			pageReport, redactErr := mutations.RedactPageRegionsWith(
-				ctx, alloc, doc, pages[pageNum-1], byPage[pageNum], mutations.RedactOptions{PrivateCopies: w.redactionCopies[i]})
+				ctx, alloc, doc, pages[pageNum-1], byPage[pageNum], mutations.RedactOptions{PrivateCopies: w.redactionCopies[i], ClipAnnotations: w.redactionClips[i]})
 			if redactErr != nil {
 				return nil, fmt.Errorf("%w: re-applying page %d at write time: %w", ErrRedactionRefused, pageNum, redactErr)
 			}
@@ -1229,6 +1371,13 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 	out.RemovedImages += in.RemovedImages
 	out.RasterisedUnits += in.RasterisedUnits
 	out.RemovedAnnotations = append(out.RemovedAnnotations, in.RemovedAnnotations...)
+	if len(in.ClippedAnnotations) > 0 {
+		out.ClippedAnnotations = append(out.ClippedAnnotations, in.ClippedAnnotations...)
+		if out.clippedByPage == nil {
+			out.clippedByPage = make(map[int][]int)
+		}
+		out.clippedByPage[pageNum-1] = append(out.clippedByPage[pageNum-1], in.ClippedAnnotations...)
+	}
 	out.DroppedPageEntries = append(out.DroppedPageEntries, in.DroppedPageEntries...)
 	if len(in.FontsFullyRemovedOnPage) > 0 {
 		if out.FontsFullyRemovedOnPage == nil {

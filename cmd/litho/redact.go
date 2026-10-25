@@ -41,8 +41,10 @@ type redactResult struct {
 	ClippedPaths            int              `json:"clippedPaths,omitempty"`
 	RemovedImages           int              `json:"removedImages,omitempty"`
 	RasterisedUnits         int              `json:"rasterisedUnits,omitempty"`
+	BakedAnnotations        int              `json:"bakedAnnotations,omitempty"`
 	LossyBlankedImages      int              `json:"lossyBlankedImages,omitempty"`
 	RemovedAnnotations      []int            `json:"removedAnnotations,omitempty"`
+	ClippedAnnotations      []int            `json:"clippedAnnotations,omitempty"`
 	DroppedPageEntries      []string         `json:"droppedPageEntries,omitempty"`
 	FontsFullyRemovedOnPage map[int][]int    `json:"fontsFullyRemovedOnPage,omitempty"`
 	ScrubbedAnnotations     []int            `json:"scrubbedAnnotations,omitempty"`
@@ -125,6 +127,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	cmykProfile := fs.String("cmyk-profile", "", "ICC profile DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
 	strict := fs.Bool("strict", false, "Refuse when a place outside the regions still draws removed text or a blanked image, instead of warning")
 	rasterFallback := fs.Bool("raster-fallback", false, "Rasterise the form XObjects and shadings the regions reach, refused otherwise, as images cut out of the regions")
+	clipAnnots := fs.Bool("clip-annotations", false, "Keep the links and closed pop-ups reaching outside a region that draw nothing, a link cut to the part outside, instead of refusing")
 	noPixelCheck := fs.Bool("no-pixel-check", false, "Skip the pixel check, which renders each redacted page before and after and refuses unless the regions show only paper or blanked images and nothing else changed")
 	// The check runs by default now; the flag stays so scripts that pass it
 	// keep working.
@@ -139,7 +142,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--jpeg-quality Q] [--no-pixel-check] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--clip-annotations] [--jpeg-quality Q] [--no-pixel-check] -o out.pdf")
 		return exitError
 	}
 
@@ -187,6 +190,9 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 	if *rasterFallback {
 		redactOpts = append(redactOpts, pdf.WithRedactionRasterFallback())
+	}
+	if *clipAnnots {
+		redactOpts = append(redactOpts, pdf.WithRedactionAnnotationClipping())
 	}
 	if *jpegQuality != 0 {
 		redactOpts = append(redactOpts, pdf.WithRedactionJPEGQuality(*jpegQuality))
@@ -243,8 +249,10 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		ClippedPaths:            report.ClippedPaths,
 		RemovedImages:           report.RemovedImages,
 		RasterisedUnits:         report.RasterisedUnits,
+		BakedAnnotations:        report.BakedAnnotations,
 		LossyBlankedImages:      report.LossyBlankedImages,
 		RemovedAnnotations:      report.RemovedAnnotations,
+		ClippedAnnotations:      report.ClippedAnnotations,
 		DroppedPageEntries:      report.DroppedPageEntries,
 		FontsFullyRemovedOnPage: report.FontsFullyRemovedOnPage,
 		ScrubbedAnnotations:     report.ScrubbedAnnotations,
@@ -305,6 +313,9 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		if n := result.RasterisedUnits; n > 0 {
 			fmt.Fprintf(stdout, "Rasterised %d painting element(s) outside the regions\n", n)
 		}
+		if n := result.BakedAnnotations; n > 0 {
+			fmt.Fprintf(stdout, "Drew %d annotation(s) reaching outside the regions into the page and removed them\n", n)
+		}
 		if n := result.LossyBlankedImages; n > 0 {
 			fmt.Fprintf(stdout, "Re-encoded %d blanked photograph(s) as JPEG outside the regions\n", n)
 		}
@@ -314,6 +325,9 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 		}
 		if n := len(result.RemovedAnnotations); n > 0 {
 			fmt.Fprintf(stdout, "Removed %d annotation(s) inside the regions\n", n)
+		}
+		if n := len(result.ClippedAnnotations); n > 0 {
+			fmt.Fprintf(stdout, "Cut %d link(s) to the part outside the regions\n", n)
 		}
 		if n := len(result.ScrubbedAnnotations) + len(result.ScrubbedFormFields) + len(result.ScrubbedOutlineItems); n > 0 {
 			fmt.Fprintf(stdout, "Scrubbed %d document-wide copy holder(s)\n", n)

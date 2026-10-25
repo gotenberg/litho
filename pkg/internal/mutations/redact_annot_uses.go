@@ -3,6 +3,8 @@ package mutations
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -49,6 +51,55 @@ func CheckRemovedAnnotationUses(
 			if ok && targets[ref.ObjectNum] {
 				return fmt.Errorf("%w: annotation (obj %d) is still shown on page %d",
 					ErrAnnotationStraddlesRegion, ref.ObjectNum, i+1)
+			}
+		}
+	}
+	return nil
+}
+
+// CheckRewrittenAnnotationUses refuses a redaction that rewrote an annotation
+// another page also lists: cut it to the part outside the regions, or drew it
+// into its page and emptied or removed it. The annotation is one object (ISO
+// 32000-1, 12.5.2), so every page listing it now shows the rewrite, which only
+// the page whose regions made it asked for. rewritten maps each 0-based page
+// index to the annotations the redaction rewrote for it, and pages are read
+// as the redaction left them. An annotation rewritten for one page and listed
+// on no other passes.
+func CheckRewrittenAnnotationUses(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	pages []*document.Page,
+	rewritten map[int][]int,
+) error {
+	if len(rewritten) == 0 {
+		return nil
+	}
+	owner := make(map[int]int)
+	for _, page := range slices.Sorted(maps.Keys(rewritten)) {
+		for _, objNum := range rewritten[page] {
+			if at, cut := owner[objNum]; cut {
+				return fmt.Errorf("%w: annotation (obj %d) is rewritten for pages %d and %d",
+					ErrAnnotationStraddlesRegion, objNum, at+1, page+1)
+			}
+			owner[objNum] = page
+		}
+	}
+	for i, page := range pages {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if page.Ref.ObjectNum == 0 {
+			continue
+		}
+		for _, entry := range latestAnnots(ctx, alloc, doc, latestPageDict(alloc, page)) {
+			ref, ok := entry.(ast.PdfIndirectRef)
+			if !ok {
+				continue
+			}
+			if at, cut := owner[ref.ObjectNum]; cut && at != i {
+				return fmt.Errorf("%w: annotation (obj %d), rewritten for the regions of page %d, is also shown on page %d",
+					ErrAnnotationStraddlesRegion, ref.ObjectNum, at+1, i+1)
 			}
 		}
 	}

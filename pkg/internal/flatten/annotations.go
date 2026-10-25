@@ -136,6 +136,23 @@ func Annotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 
 // annotationBakes returns the annotations of pg [Annotations] bakes.
 func (f *flattener) annotationBakes(ctx context.Context, pg *document.Page, opts AnnotationOptions, report *AnnotationReport) ([]mutations.AnnotationBake, error) {
+	selects := func(a annot.Appearance, dict ast.PdfDict) bool {
+		return f.annotationTransparent(ctx, dict) || opts.Printed && a.Flags&annot.FlagPrint != 0
+	}
+	return f.selectedBakes(ctx, pg, selects, report, true)
+}
+
+// selectedBakes returns the annotations of pg that selects picks and that can
+// be drawn into the page, with each earlier one a picked one covers (see
+// [Annotations]). With flattening, an annotation a viewer does not display
+// that paints with transparency is emptied too.
+func (f *flattener) selectedBakes(
+	ctx context.Context,
+	pg *document.Page,
+	selects func(a annot.Appearance, dict ast.PdfDict) bool,
+	report *AnnotationReport,
+	flattening bool,
+) ([]mutations.AnnotationBake, error) {
 	if pg.Ref.ObjectNum == 0 {
 		return nil, nil
 	}
@@ -198,7 +215,7 @@ func (f *flattener) annotationBakes(ctx context.Context, pg *document.Page, opts
 			continue
 		}
 		box := transformRect(a.Transform(), Rect{a.BBox.Min.X, a.BBox.Min.Y, a.BBox.Max.X, a.BBox.Max.Y})
-		selected := f.annotationTransparent(ctx, dict) || opts.Printed && a.Flags&annot.FlagPrint != 0
+		selected := selects(a, dict)
 		covered := slices.ContainsFunc(baked, box.Overlaps)
 		if !selected && !covered || !bakeable(a, selected) {
 			continue
@@ -212,7 +229,7 @@ func (f *flattener) annotationBakes(ctx context.Context, pg *document.Page, opts
 		})
 	}
 	for _, s := range skips {
-		if !undisplayed(s.Reason) {
+		if !flattening || !undisplayed(s.Reason) {
 			continue
 		}
 		dict, err := document.ResolveDict(ctx, f.doc, annots[s.Index])
@@ -228,6 +245,125 @@ func (f *flattener) annotationBakes(ctx context.Context, pg *document.Page, opts
 	// page after the bake.
 	slices.SortStableFunc(bakes, func(a, b mutations.AnnotationBake) int { return cmp.Compare(a.Index, b.Index) })
 	return bakes, nil
+}
+
+// RedactionAnnotations draws into pg's content, queuing the edits on alloc,
+// the appearance of each annotation a redaction of regions, [llx lly urx ury]
+// in page space, reaches outside of ([mutations.AnnotationStraddles]), and
+// removes those annotations from the page ([mutations.RemoveAnnotations]),
+// and reports what it did. The raster fallback of redaction then takes
+// the drawing as it takes any form XObject the regions reach: it is the Do of
+// the appearance stream, a form whose content has no bytes in the page's
+// stream (ISO 32000-2, 8.10.1).
+//
+// An annotation is atomic (ISO 32000-1, 12.5.2): a redaction cannot remove
+// the part of it inside the regions and keep the rest, so it refuses one
+// reaching outside them. Drawn into the page as a viewer draws it (12.5.5,
+// Algorithm 8.1), its look becomes content the regions cut, and the
+// annotation itself goes, as one the regions contain does, with its pop-up,
+// its /Contents and the geometry it marks: kept, its /QuadPoints or /InkList
+// would still trace what lay inside the regions. An earlier annotation a
+// drawn one covers is drawn into the page too and kept with an appearance
+// that paints nothing, so the page keeps the order a viewer drew them in.
+//
+// The annotations drawn are those [Annotations] can draw from an appearance
+// stream the file holds. A widget, whose look is its field's value (ISO
+// 32000-1, 12.7.3.3), a pop-up, an annotation under optional content or with
+// the NoRotate flag on a turned page, and one a viewer does not display are
+// not, and the redaction refuses them still. Nor is any annotation of a page
+// where one to draw has no appearance stream, or paints with transparency
+// (as [Report.TransparentAnnotations] counts it): drawn into the page, the
+// first would show the appearance litho synthesises in place of each
+// viewer's (12.5.5), and the second would lose its tint over the text the
+// raster fallback keeps above its images. It reads pg as doc holds it.
+//
+// # Corpus evidence
+//
+//   - All corpora, the 409 scenarios of the F13 sweep that refused over an
+//     annotation reaching outside the region, with the raster fallback: 40
+//     succeed, none leaving ink inside the region by litho's or poppler
+//     26.09.0's rendering; outside it, pdfjs red_stamp changes the page's
+//     partial last pixel row and column, and issue16464 2 pixels by poppler
+//     at a composite's edge, both of the fallback's known classes.
+//   - pdfjs issue13447, the band, before transparent appearances were left
+//     out: the text under a translucent Square showed untinted, 64 pixels
+//     by litho's rendering. pdfjs annotation-ink-without-appearance and
+//     issue13447's quarter, before synthesised ones were: poppler drew
+//     its own Ink and Line where the page then showed litho's, 5 and 116
+//     pixels. 69 more scenarios succeeded with both drawn.
+func RedactionAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pg *document.Page, regions [][4]float64) (RedactionBake, error) {
+	f := &flattener{doc: doc}
+	straddles := make(map[int]bool)
+	inexact := make(map[int]bool)
+	selects := func(a annot.Appearance, dict ast.PdfDict) bool {
+		inexact[a.Index] = a.Synthesized || f.annotationTransparent(ctx, dict)
+		if a.Subtype == "Widget" || !mutations.AnnotationStraddles(ctx, doc, dict, pg.Rotate, regions) {
+			return false
+		}
+		straddles[a.Index] = true
+		return true
+	}
+	bakes, err := f.selectedBakes(ctx, pg, selects, &AnnotationReport{}, false)
+	if err != nil {
+		return RedactionBake{}, err
+	}
+	var (
+		out    RedactionBake
+		remove []int
+	)
+	for _, b := range bakes {
+		if inexact[b.Index] {
+			// Drawn into the page, an appearance litho synthesised replaces
+			// the one each viewer builds (ISO 32000-1, 12.5.5), and one
+			// painting with transparency over text loses its tint on it,
+			// since the raster fallback keeps text above its images: either
+			// changes the page outside the regions, so none is drawn and the
+			// redaction refuses as before.
+			return RedactionBake{}, nil
+		}
+		if straddles[b.Index] {
+			remove = append(remove, b.Index)
+		}
+	}
+	if len(remove) == 0 {
+		return RedactionBake{}, nil
+	}
+	annots, err := document.ResolveArray(ctx, doc, pg.Dict["Annots"])
+	if err != nil {
+		return RedactionBake{}, fmt.Errorf("resolving page /Annots: %w", err)
+	}
+	for _, b := range bakes {
+		if ref, isRef := annots[b.Index].(ast.PdfIndirectRef); isRef {
+			out.Rewritten = append(out.Rewritten, ref.ObjectNum)
+		}
+	}
+	if err := mutations.BakeAnnotations(ctx, alloc, doc, pg, bakes); err != nil {
+		return RedactionBake{}, fmt.Errorf("drawing annotations into the page: %w", err)
+	}
+	removed, err := mutations.RemoveAnnotations(ctx, alloc, doc, pg, remove)
+	if err != nil {
+		return RedactionBake{}, fmt.Errorf("removing the annotations drawn into the page: %w", err)
+	}
+	out.Removed = len(remove)
+	for _, objNum := range removed {
+		if !slices.Contains(out.Rewritten, objNum) {
+			out.Rewritten = append(out.Rewritten, objNum)
+		}
+	}
+	slices.Sort(out.Rewritten)
+	return out, nil
+}
+
+// RedactionBake is what [RedactionAnnotations] did to a page.
+type RedactionBake struct {
+	// Removed counts the annotations reaching outside the regions it drew
+	// into the page and removed.
+	Removed int
+	// Rewritten holds, ascending, the object numbers of every annotation it
+	// drew into the page, emptied or removed, the pop-ups removed with them
+	// included: the page listing them is the only one whose drawing they
+	// may change.
+	Rewritten []int
 }
 
 // undisplayed reports whether [annot.Collect] leaves an annotation out

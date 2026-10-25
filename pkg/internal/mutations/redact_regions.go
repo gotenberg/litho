@@ -93,7 +93,8 @@ import (
 //     [ErrAnnotationNotPlaceable] (an unreadable /Rect cannot be ruled out of
 //     the region either), [ErrAnnotationStraddlesRegion] (an annotation is
 //     atomic, so removing one reaching outside takes behaviour the caller never
-//     selected), [ErrAnnotationIsFormWidget] (a /Parent written inline, or a
+//     selected; [RedactOptions.ClipAnnotations] keeps the ones that paint
+//     nothing), [ErrAnnotationIsFormWidget] (a /Parent written inline, or a
 //     widget written directly into /Annots, so there is nothing to rewrite) or
 //     [ErrFormNotAddressable] (the AcroForm, or the catalog carrying it inline,
 //     has no object number for the replacement to take).
@@ -248,6 +249,10 @@ type RedactReport struct {
 	// directly into /Annots is removed just the same, since removing an entry
 	// needs no object number, but it has none to report.
 	RemovedAnnotations []int
+	// ClippedAnnotations lists the object numbers of the annotations kept
+	// with the part inside the regions cut away (see
+	// [RedactOptions.ClipAnnotations]), ascending.
+	ClippedAnnotations []int
 	// RasterisedUnits counts the painting elements the raster fallback drew
 	// as images instead (see [RedactOptions.Rasterise]): the form XObjects
 	// and shading paints whose content the regions selected, and those drawn
@@ -268,6 +273,8 @@ type pageRedaction struct {
 	// private names the images blanked in a copy rather than in place (see
 	// [RedactOptions.PrivateCopies]).
 	private map[int]bool
+	// clipAnnots is [RedactOptions.ClipAnnotations].
+	clipAnnots bool
 }
 
 // redactPageRegions does the work of [RedactPageRegions], with opts.
@@ -303,11 +310,11 @@ func redactPageRegions(
 		// 32000-1, Table 30 lets /Contents be absent, and no content stream
 		// draws an annotation (12.5.1). Returning before this pass kept every
 		// annotation inside the region and reported a success.
-		removedAnnots, err := removeRegionAnnotations(ctx, alloc, doc, page, regionZones(regions))
+		annots, err := removeRegionAnnotations(ctx, alloc, doc, page, regionZones(regions), opts.clipAnnots)
 		if err != nil {
 			return RedactReport{}, err
 		}
-		return RedactReport{RemovedAnnotations: removedAnnots}, nil
+		return RedactReport{RemovedAnnotations: annots.removed, ClippedAnnotations: annots.clipped}, nil
 	}
 
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.SplitGluedOperators())
@@ -496,11 +503,12 @@ func redactPageRegions(
 	// otherwise untouched. An annotation is not drawn by the content stream, so
 	// clearing the stream leaves it whole: its /Contents and /A /URI survive,
 	// and its /Rect goes on marking exactly where the removed content sat.
-	removedAnnots, err := removeRegionAnnotations(ctx, alloc, doc, page, zones)
+	annots, err := removeRegionAnnotations(ctx, alloc, doc, page, zones, opts.clipAnnots)
 	if err != nil {
 		return RedactReport{}, err
 	}
-	report.RemovedAnnotations = removedAnnots
+	report.RemovedAnnotations = annots.removed
+	report.ClippedAnnotations = annots.clipped
 
 	paths, err := pathEdits(ctx, alloc, doc, page, data, machine.PathBoxes(), ops, ranges, zones)
 	if err != nil {
