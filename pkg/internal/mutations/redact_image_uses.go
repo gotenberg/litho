@@ -171,12 +171,17 @@ func blankedImageConflicts(
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		pageCovers, err := placementCovers(ctx, alloc, doc, page, byPage[i+1], targets)
+		pageCovers, unknown, err := placementCovers(ctx, alloc, doc, page, byPage[i+1], targets)
 		if err != nil {
 			return nil, fmt.Errorf("page %d: %w", i+1, err)
 		}
 		for objNum, sets := range pageCovers {
 			covers[objNum] = append(covers[objNum], sets...)
+		}
+		for objNum, reason := range unknown {
+			if conflicts[objNum] == nil {
+				conflicts[objNum] = fmt.Errorf("page %d: %w", i+1, reason)
+			}
 		}
 	}
 	for _, objNum := range removed {
@@ -428,6 +433,16 @@ func isPageTreeNode(obj ast.PdfObject) bool {
 // placementCovers runs the page's own content and returns, for each target it
 // paints, the set of samples the regions cover at each placement, as a bitset
 // over the image's width x height.
+//
+// A form the run could not parse may paint each target it names (see
+// [targetImageBoxes]), and which of the image's samples it shows where is not
+// known, only that the form's bounds clip them. One whose bounds lie inside a
+// region shows only covered samples: it counts as a placement the regions
+// cover whole. One whose bounds meet no region shows only uncovered samples:
+// it counts as a placement with no sample covered, the one blanking in place
+// would change. Any other covers a part of the image the check cannot tell,
+// and the second map names each target it may paint with the
+// [ErrImageShared] saying so.
 func placementCovers(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -435,26 +450,46 @@ func placementCovers(
 	page *document.Page,
 	regions [][4]float64,
 	targets map[int]bool,
-) (map[int][][]uint64, error) {
+) (map[int][][]uint64, map[int]error, error) {
 	page = latestPage(ctx, alloc, doc, page)
-	boxes, err := targetImageBoxes(ctx, alloc, doc, page, targets)
+	boxes, unmeasured, err := targetImageBoxes(ctx, alloc, doc, page, targets)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	zones := make([]heuristics.Zone, 0, len(regions))
-	for _, r := range regions {
-		zones = append(zones, heuristics.ZoneFromRect(r))
-	}
-
+	zones := regionZones(regions)
 	out := make(map[int][][]uint64)
+	var unknown map[int]error
+	for _, u := range unmeasured {
+		inside, outside := unmeasuredFormCover(u.form, zones)
+		for _, objNum := range u.targets {
+			if !inside && !outside {
+				if unknown == nil {
+					unknown = make(map[int]error)
+				}
+				unknown[objNum] = fmt.Errorf("%w: form %d, whose content does not parse, may paint object %d where a region reaches part of it",
+					ErrImageShared, u.form.ObjNum, objNum)
+				continue
+			}
+			w, h, err := imageSize(ctx, alloc, doc, objNum)
+			if err != nil {
+				return nil, nil, err
+			}
+			if inside {
+				out[objNum] = append(out[objNum], fullCover(w, h))
+				continue
+			}
+			out[objNum] = append(out[objNum], make([]uint64, (w*h+63)/64))
+		}
+	}
+
 	for _, box := range boxes {
 		if !targets[box.ObjNum] {
 			continue
 		}
 		w, h, err := imageSize(ctx, alloc, doc, box.ObjNum)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		set := make([]uint64, (w*h+63)/64)
 		if len(zones) > 0 {
@@ -462,34 +497,69 @@ func placementCovers(
 				i := py*w + px
 				set[i/64] |= 1 << (i % 64)
 			}); err != nil {
-				return nil, fmt.Errorf("%w: %w", ErrImageShared, err)
+				return nil, nil, fmt.Errorf("%w: %w", ErrImageShared, err)
 			}
 		}
 		out[box.ObjNum] = append(out[box.ObjNum], set)
 	}
-	return out, nil
+	return out, unknown, nil
+}
+
+// unmeasuredFormCover reports whether the bounds of a form the run could not
+// parse lie inside one of zones, and whether they meet none of them. A form
+// with no bounds is neither.
+func unmeasuredFormCover(form graphics.UnparsedForm, zones []heuristics.Zone) (inside, outside bool) {
+	if form.Unbounded {
+		return false, false
+	}
+	bounds := heuristics.ZoneFromRect([4]float64{form.MinX, form.MinY, form.MaxX, form.MaxY})
+	outside = true
+	for _, z := range zones {
+		if heuristics.ZoneContains(z, bounds) {
+			return true, false
+		}
+		if heuristics.ZonesOverlap(bounds, z) {
+			outside = false
+		}
+	}
+	return false, outside
+}
+
+// unmeasuredForm is a form the run of a page drew but could not parse, with
+// the targets its resources name, ascending: each one it may paint where
+// [targetImageBoxes] measured nothing.
+type unmeasuredForm struct {
+	form    graphics.UnparsedForm
+	targets []int
 }
 
 // targetImageBoxes runs the content of page, as staged, and returns where it
 // paints the images: nil when its resources name no target, so a page that
 // cannot paint one is not run at all.
+//
+// It also returns each form the run drew whose content does not parse and
+// whose resources name a target, directly or through the forms they name.
+// The run reads no placement from such a form, and a viewer that reads its
+// content more leniently than litho may still paint the target from it, so a
+// caller treats each as a placement it could not measure: the measurement
+// fails closed rather than reading the form as painting nothing.
 func targetImageBoxes(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	page *document.Page,
 	targets map[int]bool,
-) ([]graphics.ImageBox, error) {
+) ([]graphics.ImageBox, []unmeasuredForm, error) {
 	if !resourcesNameTarget(ctx, alloc, doc, page.Resources, targets) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	data, err := collectLatestPageContents(ctx, alloc, doc, page)
 	if err != nil {
-		return nil, fmt.Errorf("%w: assembling page content: %w", ErrImageShared, err)
+		return nil, nil, fmt.Errorf("%w: assembling page content: %w", ErrImageShared, err)
 	}
 	ops, err := content.ParseStreamData(ctx, data, content.SplitGluedOperators())
 	if err != nil {
-		return nil, fmt.Errorf("%w: parsing page content: %w", ErrImageShared, err)
+		return nil, nil, fmt.Errorf("%w: parsing page content: %w", ErrImageShared, err)
 	}
 	machine := graphics.NewMachine(pageBox(ctx, alloc, doc, page))
 	machine.Doc = doc
@@ -501,12 +571,101 @@ func targetImageBoxes(
 	// Run as the redaction runs it, through the forms the page draws, so a
 	// placement a form paints is measured where the redaction blanks it.
 	if _, _, err := typography.ExtractElementsAttributed(ctx, doc, machine, page, ops); err != nil {
-		return nil, fmt.Errorf("%w: running page content: %w", ErrImageShared, err)
+		return nil, nil, fmt.Errorf("%w: running page content: %w", ErrImageShared, err)
 	}
 	if n := machine.UnresolvedXObjects(); n > 0 {
-		return nil, fmt.Errorf("%w: %d Do operators on the page could not be followed", ErrImageShared, n)
+		return nil, nil, fmt.Errorf("%w: %d Do operators on the page could not be followed", ErrImageShared, n)
 	}
-	return machine.ImageBoxes(), nil
+	var unmeasured []unmeasuredForm
+	for _, form := range machine.UnparsedForms() {
+		named, err := formResourceTargets(ctx, alloc, doc, form.Resources, targets)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(named) == 0 {
+			continue
+		}
+		doc.Logger.Debug("image use check: a form whose content does not parse may paint a target",
+			slog.Int("form", form.ObjNum), slog.Any("targets", named))
+		unmeasured = append(unmeasured, unmeasuredForm{form: form, targets: named})
+	}
+	return machine.ImageBoxes(), unmeasured, nil
+}
+
+// formResourceTargets returns, ascending, the targets the /XObject
+// dictionary of resources names, directly or through the forms it names and
+// theirs, as deep as the document's form depth budget: every image a form
+// drawn with resources can paint. A nested form without /Resources draws
+// from those it inherits (ISO 32000-1, 7.8.3), which are already walked.
+//
+// Each form is walked once, so a form graph that names a form again, or fans
+// out, is walked a bounded number of times. An entry that cannot be read is
+// passed over: it names no target, since a target is known by its object
+// number before anything is read, and the run of the page refuses a Do it
+// cannot follow. Only a done ctx returns an error.
+func formResourceTargets(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, targets map[int]bool) ([]int, error) {
+	found := make(map[int]bool)
+	visited := make(map[int]bool)
+	maxFormDepth := doc.Limits().MaxFormDepth
+	var walk func(resources ast.PdfDict, depth int) error
+	walk = func(resources ast.PdfDict, depth int) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		obj, ok := resources["XObject"]
+		if !ok {
+			return nil
+		}
+		resolved, err := resolveAllocFirst(ctx, alloc, doc, obj)
+		if err != nil {
+			return nil //nolint:nilerr // An unreadable /XObject names no target (see the doc comment).
+		}
+		xobjects, ok := resolved.(ast.PdfDict)
+		if !ok {
+			return nil
+		}
+		for _, name := range slices.Sorted(maps.Keys(xobjects)) {
+			ref, isRef := xobjects[name].(ast.PdfIndirectRef)
+			if !isRef {
+				continue
+			}
+			if targets[ref.ObjectNum] {
+				found[ref.ObjectNum] = true
+				continue
+			}
+			if visited[ref.ObjectNum] || depth >= maxFormDepth {
+				continue
+			}
+			visited[ref.ObjectNum] = true
+			child, err := resolveAllocFirst(ctx, alloc, doc, ref)
+			if err != nil {
+				continue
+			}
+			stream, ok := child.(ast.PdfStream)
+			if !ok {
+				continue
+			}
+			if subtype, _ := stream.Dict["Subtype"].(ast.PdfName); subtype != "Form" {
+				continue
+			}
+			childRes := resources
+			if resObj, ok := stream.Dict["Resources"]; ok {
+				if r, err := resolveAllocFirst(ctx, alloc, doc, resObj); err == nil {
+					if dict, ok := r.(ast.PdfDict); ok {
+						childRes = dict
+					}
+				}
+			}
+			if err := walk(childRes, depth+1); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walk(resources, 1); err != nil {
+		return nil, err
+	}
+	return slices.Sorted(maps.Keys(found)), nil
 }
 
 // CopiedImagesPaintedInRegions reports whether page, as alloc stages it,
@@ -531,7 +690,7 @@ func CopiedImagesPaintedInRegions(
 		return false, nil
 	}
 	page = latestPage(ctx, alloc, doc, page)
-	boxes, err := targetImageBoxes(ctx, alloc, doc, page, copied)
+	boxes, unmeasured, err := targetImageBoxes(ctx, alloc, doc, page, copied)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return false, ctxErr
@@ -540,6 +699,14 @@ func CopiedImagesPaintedInRegions(
 		return true, nil
 	}
 	zones := regionZones(regions)
+	// A form the run could not parse paints the image, if at all, somewhere
+	// inside its bounds: one whose bounds meet a region has not shown the
+	// covered samples are gone.
+	for _, u := range unmeasured {
+		if _, outside := unmeasuredFormCover(u.form, zones); !outside {
+			return true, nil
+		}
+	}
 	for _, box := range boxes {
 		if !copied[box.ObjNum] {
 			continue

@@ -551,6 +551,81 @@ func (m *Machine) UnresolvedXObjects() int {
 	return m.unresolvedXObjects
 }
 
+// UnparsedForm names a form XObject a Do drew whose content the walker that
+// descends into forms could not parse, with the resources it would have
+// painted from: its own, or those it inherits.
+type UnparsedForm struct {
+	// ObjNum is the form's object number, 0 when its resource entry was not
+	// an indirect reference.
+	ObjNum    int
+	Resources ast.PdfDict
+	// MinX, MinY, MaxX and MaxY bound, in page space, where the form can
+	// paint: its /BBox through its /Matrix and the CTM at the Do, which clip
+	// everything it draws (ISO 32000-1, 8.10.1). Unbounded is set instead when
+	// the form states no usable /BBox, so where it paints is not known.
+	MinX, MinY, MaxX, MaxY float64
+	Unbounded              bool
+}
+
+// NoteUnparsedForm records that the form XObject at objNum, drawn with
+// resources under the current CTM, has content the caller's walk could not
+// parse, when [Machine.RecordImageBoxes] is set. bbox and matrix are the
+// form's /BBox and /Matrix as resolved, nil when absent. The machine never
+// descends into a form itself: the walker that does reports here what it
+// could not read, so that [Machine.ImageBoxes] is known to be missing what
+// such a form paints.
+func (m *Machine) NoteUnparsedForm(objNum int, resources ast.PdfDict, bbox, matrix ast.PdfArray) {
+	if !m.RecordImageBoxes {
+		return
+	}
+	form := UnparsedForm{ObjNum: objNum, Resources: resources}
+	if !document.UsableBox(bbox) {
+		form.Unbounded = true
+		m.unparsedForms = append(m.unparsedForms, form)
+		return
+	}
+	// The form's space maps to the page through /Matrix then the CTM
+	// (ISO 32000-1, 8.10.1), the identity when /Matrix is absent.
+	fm := [6]float64{1, 0, 0, 1, 0, 0}
+	if len(matrix) == len(fm) {
+		for i, v := range matrix {
+			fm[i] = document.Float(v)
+		}
+	}
+	ctm := m.Current().CTM
+	full := [6]float64{
+		fm[0]*ctm[0] + fm[1]*ctm[2],
+		fm[0]*ctm[1] + fm[1]*ctm[3],
+		fm[2]*ctm[0] + fm[3]*ctm[2],
+		fm[2]*ctm[1] + fm[3]*ctm[3],
+		fm[4]*ctm[0] + fm[5]*ctm[2] + ctm[4],
+		fm[4]*ctm[1] + fm[5]*ctm[3] + ctm[5],
+	}
+	x0, y0 := document.Float(bbox[0]), document.Float(bbox[1])
+	x1, y1 := document.Float(bbox[2]), document.Float(bbox[3])
+	first := true
+	for _, corner := range [4][2]float64{{x0, y0}, {x1, y0}, {x0, y1}, {x1, y1}} {
+		x := full[0]*corner[0] + full[2]*corner[1] + full[4]
+		y := full[1]*corner[0] + full[3]*corner[1] + full[5]
+		if first {
+			form.MinX, form.MaxX, form.MinY, form.MaxY = x, x, y, y
+			first = false
+			continue
+		}
+		form.MinX, form.MaxX = math.Min(form.MinX, x), math.Max(form.MaxX, x)
+		form.MinY, form.MaxY = math.Min(form.MinY, y), math.Max(form.MaxY, y)
+	}
+	m.unparsedForms = append(m.unparsedForms, form)
+}
+
+// UnparsedForms returns, in drawing order, the forms [Machine.NoteUnparsedForm]
+// recorded. A caller clearing a region must treat each as "an image its
+// resources name may be painted anywhere in its bounds": [Machine.ImageBoxes]
+// holds no placement from it.
+func (m *Machine) UnparsedForms() []UnparsedForm {
+	return m.unparsedForms
+}
+
 func handleSaveState(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	// A shallow copy keeps the frames apart: every slice and pointer the
 	// state holds is replaced, never edited in place (see [State]).

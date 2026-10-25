@@ -175,10 +175,12 @@ type Machine struct {
 	// paints. Off by default, because the common caller extracts text and would
 	// pay for geometry it never reads. A caller that removes content needs it:
 	// an image inside the region it is clearing is content it must account for.
-	// See [Machine.ImageBoxes] and [Machine.UnresolvedXObjects].
+	// See [Machine.ImageBoxes], [Machine.UnresolvedXObjects] and
+	// [Machine.UnparsedForms].
 	RecordImageBoxes   bool
 	imageBoxes         []ImageBox
 	unresolvedXObjects int
+	unparsedForms      []UnparsedForm
 	// RecordPathBoxes makes the machine remember where each painted path
 	// covers. Off by default for the same reason as [Machine.RecordImageBoxes]:
 	// the common caller extracts text and would pay for geometry it never

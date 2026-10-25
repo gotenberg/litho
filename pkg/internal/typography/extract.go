@@ -658,11 +658,6 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 		return nil
 	}
 
-	formOps, err := parseFormOps(ctx, doc, machine, targetObj, stream)
-	if err != nil {
-		return nil //nolint:nilerr // A form whose content does not parse contributes no text.
-	}
-
 	// Determine the Form's own /Resources; inherit the parent's on absence.
 	formRes := resources
 	if resObj, ok := stream.Dict["Resources"]; ok {
@@ -673,6 +668,32 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 		if resDict != nil {
 			formRes = resDict
 		}
+	}
+
+	formOps, err := parseFormOps(ctx, doc, machine, targetObj, stream)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		// A form whose content does not parse contributes no text: extraction
+		// stays best-effort. The machine is told, so a caller measuring where
+		// images land knows this form's placements are missing rather than
+		// absent.
+		doc.Logger.Debug("form XObject content does not parse; skipping it",
+			slog.Int("object", objNum), slog.Any("err", err))
+		var bbox, matrix ast.PdfArray
+		if obj, ok := stream.Dict["BBox"]; ok {
+			if bbox, err = document.ResolveArray(ctx, doc, machine.StagedObject(obj)); err != nil {
+				doc.Logger.Debug("resolving Form XObject bbox", slog.Int("object", objNum), slog.Any("err", err))
+			}
+		}
+		if obj, ok := stream.Dict["Matrix"]; ok {
+			if matrix, err = document.ResolveArray(ctx, doc, machine.StagedObject(obj)); err != nil {
+				doc.Logger.Debug("resolving Form XObject matrix", slog.Int("object", objNum), slog.Any("err", err))
+			}
+		}
+		machine.NoteUnparsedForm(objNum, formRes, bbox, matrix)
+		return nil
 	}
 
 	// q / cm / recurse / Q. These trivial state operators cannot fail in
