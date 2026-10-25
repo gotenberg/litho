@@ -9879,10 +9879,11 @@ through the forms it draws. A form whose content does not parse read as
 painting nothing, so an image such a form also names was blanked in place:
 poppler 26.09.0, which reads the form, drew the blank where no region reached.
 The measurement now fails closed. Such a form, on any path to the image, is a
-placement whose samples the check cannot see: one whose `/BBox` lies inside a
-region shows only covered samples, one that meets no region only uncovered
-ones, and the image is blanked in a copy; one a region reaches only in part
-refuses. No corpus file draws a form litho cannot parse, under the default
+placement whose samples the check cannot see: one whose `/BBox` meets no
+region shows only uncovered ones, and the image is blanked in a copy. A region
+that meets the form refuses, since litho cannot tell what the form draws
+under it, and so does the redaction pixel check where its renderer skipped
+such a form. No corpus file draws a form litho cannot parse, under the default
 options or `WithStrictStreams`, so no cell reached the measurement. One 400 by
 400 page draws a 5 x 5 DeviceGray image, `Logo`, all 0x80, through two forms
 over a 100-point square:
@@ -9899,10 +9900,15 @@ blanked in place, and poppler drew `Broken`'s 10 x 10 points black (100 pixels
 at 72 dpi, every one outside the region); now `Logo` is blanked in a copy and
 poppler draws `Broken` at 0x80, as the source does. The band through the centre
 cuts `Card` and misses `Broken`, with the same before (20 of `Broken`'s pixels
-blanked) and after. The whole page covers both forms and blanks `Logo` in
-place before and after. The raster scenarios rasterise `Card` and leave `Logo`
-alone. litho's renderer draws no `Broken` either, and reports the form among
-the constructs it skipped: 100 pixels differ from poppler, under both render
+blanked) and after. The raster scenarios of both rasterise `Card` and leave
+`Logo` alone. The whole page, the region `mutate-redact` uses too, reaches
+`Broken` itself, and litho cannot tell what `Broken` draws under it: the
+redaction refuses with `ErrXObjectUnresolved`, raster fallback or not, since
+litho's renderer cannot draw `Broken` for the fallback either. Before, it
+blanked `Logo` in place and left whatever else `Broken` paints. litho's
+renderer draws no `Broken` either, and reports the form among the constructs
+it skipped, with its bounds, which the redaction pixel check now refuses over
+where they meet a region: 100 pixels differ from poppler, under both render
 bars.
 
 The catalog's `/Lang` keeps the PDF/UA-1 language rule (ISO 14289-1, 7.2) off
