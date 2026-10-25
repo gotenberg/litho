@@ -63,6 +63,41 @@ const (
 // on an edge two triangles share is never missed by both through rounding.
 const insideTolerance = 1e-9
 
+// patchSeamReach is how far, in device pixels, past a patch cell's chords a
+// pixel centre no primitive covers still takes the cell's colour, on top of
+// how far the chords stray from the patch's curved edges ([chordReach]).
+// Patches a mesh means to abut leave seams between them: each is flattened
+// on its own grid, so the chords of an edge two patches share differ when
+// their grids do, and a patch of flag 0 (ISO 32000-1, 8.7.4.5.7) restates the
+// edge it shares in coordinates the producer rounded. A pixel centre in such a
+// seam, which the patches' surfaces cover, showed the backdrop: a pinhole. A
+// reach fills only a pixel the primitives cover on both sides of
+// ([meshBuffer.enclosed]), so the mesh's outer edge stays where its chords
+// put it. Not spec-mandated: 8.7.4.5.7 leaves the subdivision to the
+// renderer. A sixteenth of a pixel is the smallest power of two that closes
+// every seam measured.
+//
+// maxPatchReach caps the whole reach at half a pixel, where a centre past it
+// lies in another pixel's half: a patch whose edges bend so far within one
+// cell is drawn with the chords' own error.
+//
+// # Corpus evidence
+//
+//   - pdfcpu pkg_testdata__VectorApple: three type 7 meshes of 1,455, 788 and
+//     245 flag 0 patches left 12 pinholes at 72 dpi, 20 at 300 and 32 at 600,
+//     where poppler 26.09.0 and PDFium draw none, and the raster fallback's
+//     composite carried them into a redacted page. Patches sharing one grid
+//     still left 12 at 600. A reach of a thirty-second of a pixel left 1 at
+//     96, 450 and 600 dpi; a sixteenth leaves none from 72 to 1200 dpi.
+//   - pdfjs personwithdog.pdf: a reach that also moved the outer edge painted
+//     103 more pixels apart from poppler along a clipped head; filling only
+//     enclosed pixels changes 2, and 232 pixels differ from poppler where 234
+//     did. The other five pdfjs patch meshes change by 2 pixels or none.
+const (
+	patchSeamReach = 1.0 / 16
+	maxPatchReach  = 0.5
+)
+
 // Converter converts colour components in a shading's colour space to sRGB
 // channels in [0, 1]. The integrator implements it over the colour space
 // [Shading.ColorSpace] names; comps holds [Shading.Components] values and is
@@ -397,15 +432,37 @@ func (p *painter) rampAt(t float64) (r, g, b float32) {
 // covers its centre last and where: barycentric weights (a, b) of a
 // triangle's second and third vertices, or the (u, v) of a patch. Colours
 // are resolved once per pixel after every primitive is drawn, so a pixel
-// covered twice is converted and composited once.
+// covered twice is converted and composited once. exact marks the pixels a
+// primitive covers, not only reaches ([patchSeamReach]): a reach never
+// takes a pixel from the primitive covering it.
 type meshBuffer struct {
 	area    region
 	w       int
 	prim    []int32
 	a, b    []float32
+	exact   []bool
 	visited int
 	// work is what is left of the pixels the mesh may visit (meshOverdraw).
 	work int64
+}
+
+// enclosed reports whether the primitives cover, not only reach, the pixels
+// on both sides of (x, y) along a row, a column or a diagonal: a pixel in a
+// seam between patches, which a reach may fill, and not one along the
+// mesh's outer edge, which no reach moves.
+func (mb *meshBuffer) enclosed(x, y int) bool {
+	covered := func(x, y int) bool {
+		if x < mb.area.x0 || x >= mb.area.x1 || y < mb.area.y0 || y >= mb.area.y1 {
+			return false
+		}
+		return mb.exact[(y-mb.area.y0)*mb.w+(x-mb.area.x0)]
+	}
+	for _, d := range [4][2]int{{1, 0}, {0, 1}, {1, 1}, {1, -1}} {
+		if covered(x-d[0], y-d[1]) && covered(x+d[0], y+d[1]) {
+			return true
+		}
+	}
+	return false
 }
 
 // paintMesh rasterises a type 4 to 7 shading. Triangles are drawn in stream
@@ -428,7 +485,7 @@ func (p *painter) paintMesh(ctx context.Context) error {
 	}
 	w, h := area.x1-area.x0, area.y1-area.y0
 	buf := &meshBuffer{
-		area: area, w: w, prim: make([]int32, w*h), a: make([]float32, w*h), b: make([]float32, w*h),
+		area: area, w: w, prim: make([]int32, w*h), a: make([]float32, w*h), b: make([]float32, w*h), exact: make([]bool, w*h),
 		work: max(meshOverdraw*int64(w)*int64(h), minMeshWork),
 	}
 	for i := range buf.prim {
@@ -447,7 +504,7 @@ func (p *painter) paintMesh(ctx context.Context) error {
 				p.toDevice.Apply(p.s.points[tri[1]]),
 				p.toDevice.Apply(p.s.points[tri[2]]),
 			}
-			if err := buf.triangle(ctx, d, ident, int32(i)); err != nil { //nolint:gosec // len(tris) is bounded by maxMeshValues, which fits int32
+			if err := buf.triangle(ctx, d, ident, int32(i), 0); err != nil { //nolint:gosec // len(tris) is bounded by maxMeshValues, which fits int32
 				return err
 			}
 		}
@@ -493,9 +550,11 @@ func pixelSpan(r geom.Rect, within region) region {
 }
 
 // triangle records prim at every pixel centre inside the device triangle d,
-// with the attributes attr interpolated barycentrically. Cost: the pixels
-// of the triangle's bounding box inside the area.
-func (mb *meshBuffer) triangle(ctx context.Context, d [3]geom.Point, attr [3][2]float32, prim int32) error {
+// with the attributes attr interpolated barycentrically, and at every centre
+// within reach device pixels of it that no primitive covers, with the
+// attributes of a point of the triangle near it. Cost: the pixels of the
+// triangle's bounding box, grown by reach, inside the area.
+func (mb *meshBuffer) triangle(ctx context.Context, d [3]geom.Point, attr [3][2]float32, prim int32, reach float64) error {
 	area := (d[1].X-d[0].X)*(d[2].Y-d[0].Y) - (d[2].X-d[0].X)*(d[1].Y-d[0].Y)
 	if area == 0 || math.IsNaN(area) || math.IsInf(area, 0) {
 		return nil
@@ -503,6 +562,16 @@ func (mb *meshBuffer) triangle(ctx context.Context, d [3]geom.Point, attr [3][2]
 	var path geom.Path
 	path.Pts = d[:]
 	box, _ := path.Bounds()
+	box.Min.X, box.Min.Y = box.Min.X-reach, box.Min.Y-reach
+	box.Max.X, box.Max.Y = box.Max.X+reach, box.Max.Y+reach
+	// A barycentric weight is the distance to the edge opposite its vertex
+	// over the triangle's height there, so a centre reach past that edge
+	// weighs -reach times the edge's length over twice the triangle's area.
+	var near [3]float64
+	for k := range 3 {
+		e0, e1 := d[(k+1)%3], d[(k+2)%3]
+		near[k] = insideTolerance + reach*math.Hypot(e1.X-e0.X, e1.Y-e0.Y)/math.Abs(area)
+	}
 	span := pixelSpan(box, mb.area)
 	for y := span.y0; y < span.y1; y++ {
 		mb.work -= int64(span.x1 - span.x0)
@@ -522,10 +591,20 @@ func (mb *meshBuffer) triangle(ctx context.Context, d [3]geom.Point, attr [3][2]
 			w1 := ((px-d[0].X)*(d[2].Y-d[0].Y) - (d[2].X-d[0].X)*(py-d[0].Y)) / area
 			w2 := ((d[1].X-d[0].X)*(py-d[0].Y) - (px-d[0].X)*(d[1].Y-d[0].Y)) / area
 			w0 := 1 - w1 - w2
-			if w0 < -insideTolerance || w1 < -insideTolerance || w2 < -insideTolerance {
+			if w0 < -near[0] || w1 < -near[1] || w2 < -near[2] {
 				continue
 			}
 			i := (y-mb.area.y0)*mb.w + (x - mb.area.x0)
+			if w0 < -insideTolerance || w1 < -insideTolerance || w2 < -insideTolerance {
+				if mb.exact[i] {
+					continue
+				}
+				w0, w1, w2 = max(w0, 0), max(w1, 0), max(w2, 0)
+				sum := w0 + w1 + w2
+				w0, w1, w2 = w0/sum, w1/sum, w2/sum
+			} else {
+				mb.exact[i] = true
+			}
 			mb.prim[i] = prim
 			mb.a[i] = float32(w0)*attr[0][0] + float32(w1)*attr[1][0] + float32(w2)*attr[2][0]
 			mb.b[i] = float32(w0)*attr[0][1] + float32(w1)*attr[1][1] + float32(w2)*attr[2][1]
@@ -557,6 +636,7 @@ func (p *painter) drawPatches(ctx context.Context, mb *meshBuffer) error {
 		if cells := math.Ceil(extent / patchCellPixels); cells < float64(n) {
 			n = max(1, int(cells))
 		}
+		reach := min(maxPatchReach, chordReach(&dp, n)+patchSeamReach)
 		grid = grid[:0]
 		uv = uv[:0]
 		for jv := range n + 1 {
@@ -589,16 +669,35 @@ func (p *painter) drawPatches(ctx context.Context, mb *meshBuffer) error {
 				p11, a11 := at(iu+1, jv+1)
 				p01, a01 := at(iu, jv+1)
 				prim := int32(pi) //nolint:gosec // len(patches) is bounded by maxMeshValues, which fits int32
-				if err := mb.triangle(ctx, [3]geom.Point{p00, p10, p11}, [3][2]float32{a00, a10, a11}, prim); err != nil {
+				if err := mb.triangle(ctx, [3]geom.Point{p00, p10, p11}, [3][2]float32{a00, a10, a11}, prim, reach); err != nil {
 					return err
 				}
-				if err := mb.triangle(ctx, [3]geom.Point{p00, p11, p01}, [3][2]float32{a00, a11, a01}, prim); err != nil {
+				if err := mb.triangle(ctx, [3]geom.Point{p00, p11, p01}, [3][2]float32{a00, a11, a01}, prim, reach); err != nil {
 					return err
 				}
 			}
 		}
 	}
 	return nil
+}
+
+// chordReach bounds, in device pixels, how far the chords of the boundary
+// curves of the patch dp, each cut into n equal parameter steps, stray from
+// the curves: a cubic Bezier curve leaves the chord of a step h by at most
+// h*h/8 times its largest second derivative, which is at most six times the
+// largest second difference of its control points.
+func chordReach(dp *[16]geom.Point, n int) float64 {
+	d := 0.0
+	second := func(a, b, c geom.Point) {
+		d = max(d, math.Hypot(a.X-2*b.X+c.X, a.Y-2*b.Y+c.Y))
+	}
+	for _, k := range [2]int{0, 3} {
+		for m := range 2 {
+			second(dp[4*k+m], dp[4*k+m+1], dp[4*k+m+2])
+			second(dp[4*m+k], dp[4*(m+1)+k], dp[4*(m+2)+k])
+		}
+	}
+	return 0.75 * d / float64(n*n)
 }
 
 // bernstein returns the cubic Bernstein polynomials B0 to B3 at t.
@@ -625,6 +724,9 @@ func (p *painter) resolveMesh(ctx context.Context, mb *meshBuffer) error {
 			}
 			i := (y-mb.area.y0)*mb.w + (x - mb.area.x0)
 			prim := mb.prim[i]
+			if prim >= 0 && !mb.exact[i] && !mb.enclosed(x, y) {
+				prim = -1
+			}
 			if prim >= 0 && s.hasBBox && !p.inBBox(p.inv.Apply(geom.Point{X: float64(x) + 0.5, Y: float64(y) + 0.5})) {
 				prim = -1
 			}

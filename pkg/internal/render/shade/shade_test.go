@@ -139,6 +139,55 @@ func TestCoonsBilinear(t *testing.T) {
 	checkSamples(t, c, 1, samples)
 }
 
+// rectCoons returns the 16-bit coordinates, over /Decode [0 100 0 100], and
+// the corner colours of a flag 0 Coons patch over the rectangle x0..x1 by
+// y0..y1, its control points at the thirds of each side, in one colour.
+func rectCoons(x0, y0, x1, y1 float64, rgb [3]uint64) []uint64 {
+	q := func(v float64) uint64 { return uint64(math.Round(v * 65535 / 100)) }
+	third := func(a, b float64, k float64) float64 { return a + (b-a)*k/3 }
+	pts := [][2]float64{
+		{x0, y0}, {x0, third(y0, y1, 1)}, {x0, third(y0, y1, 2)}, {x0, y1}, // p00 p01 p02 p03
+		{third(x0, x1, 1), y1}, {third(x0, x1, 2), y1}, {x1, y1}, // p13 p23 p33
+		{x1, third(y0, y1, 2)}, {x1, third(y0, y1, 1)}, {x1, y0}, // p32 p31 p30
+		{third(x0, x1, 2), y0}, {third(x0, x1, 1), y0}, // p20 p10
+	}
+	fields := []uint64{0, 8}
+	for _, p := range pts {
+		fields = append(fields, q(p[0]), 16, q(p[1]), 16)
+	}
+	for range 4 {
+		fields = append(fields, rgb[0], 8, rgb[1], 8, rgb[2], 8)
+	}
+	return fields
+}
+
+// TestPatchSeam paints two flag 0 Coons patches meant to abut at x = 50.5,
+// the first stopping at 50.489 and the second starting at 50.510, as a
+// producer rounding the edge each restates leaves them (ISO 32000-1,
+// 8.7.4.5.7). The centres of column 50 lie in the seam between them, which
+// showed the backdrop, a line of pinholes, where poppler and PDFium paint
+// the patches' colour. The column takes it now. The second patch's edge at
+// x = 90.46 stops where it did: the centres of column 90 lie past it by less
+// than the seam reach, but the pixels beyond them lie in the gap before a
+// third patch, from x = 95, which no patch covers.
+func TestPatchSeam(t *testing.T) {
+	t.Parallel()
+	red := [3]uint64{255, 0, 0}
+	data := append(rectCoons(10, 10, 50.489, 90, red), rectCoons(50.510, 10, 90.46, 90, red)...)
+	data = append(data, rectCoons(95, 10, 99, 90, red)...)
+	f := fixture{
+		content: "/Sh sh",
+		shading: streamObj("/ShadingType 6 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8"+
+			" /BitsPerFlag 8 /Decode [0 100 0 100 0 1 0 1 0 1]", packBits(data...)),
+	}
+	c := renderFixture(t, f, nil)
+	samples := []sample{{9, 50, white}, {90, 50, white}, {92, 50, white}}
+	for y := 11; y < 89; y += 7 {
+		samples = append(samples, sample{50, y, [3]float64{255, 0, 0}}, sample{10, y, [3]float64{255, 0, 0}}, sample{89, y, [3]float64{255, 0, 0}})
+	}
+	checkSamples(t, c, 0, samples)
+}
+
 // TestPatternFill checks a shading pattern: the pattern matrix [2 0 0 2 30 0]
 // maps the axis 0..20 onto page x 30..70, and /Background fills the shape
 // where the unextended axis does not reach (Table 78).
