@@ -910,6 +910,14 @@ var (
 		Description:   "The value of \"pdfuaid:rev\" shall be \"2024\"",
 	}
 
+	Rule_14289_2_6_1_t01 = Rule{
+		Specification: "ISO_14289_2",
+		Clause:        "6.1",
+		TestNumber:    1,
+		Object:        "PDDocument",
+		Description:   "The file version shall be 2.0, specified either in the header or as the value of the Version entry in the document's catalog dictionary",
+	}
+
 	Rule_14289_2_6_2_t01 = Rule{
 		Specification: "ISO_14289_2",
 		Clause:        "6.2",
@@ -1107,7 +1115,7 @@ var (
 		Clause:        "8.2.5.20",
 		TestNumber:    1,
 		Object:        "PDLinkAnnot",
-		Description:   "A link annotation and its associated content shall be enclosed in either a Link or Reference structure element",
+		Description:   "When used as real content, a link annotation and its associated content shall be enclosed in either a Link or Reference structure element",
 	}
 
 	Rule_14289_2_8_2_5_20_t02 = Rule{
@@ -1467,7 +1475,7 @@ var (
 		Clause:        "8.9.2.3",
 		TestNumber:    1,
 		Object:        "PDMarkupAnnot",
-		Description:   "Markup annotations shall be enclosed within Annot structure elements",
+		Description:   "When used as real content, Markup annotations shall be enclosed within Annot structure elements",
 	}
 
 	Rule_14289_2_8_9_2_3_t02 = Rule{
@@ -7692,7 +7700,7 @@ func PDFUA1Rules() []Rule {
 	}
 }
 
-// PDFUA2Rules returns the rule set for PDF/UA-2 (91 rules).
+// PDFUA2Rules returns the rule set for PDF/UA-2 (92 rules).
 func PDFUA2Rules() []Rule {
 	return []Rule{
 		Rule_14289_2_5_t01,
@@ -7700,6 +7708,7 @@ func PDFUA2Rules() []Rule {
 		Rule_14289_2_5_t03,
 		Rule_14289_2_5_t04,
 		Rule_14289_2_5_t05,
+		Rule_14289_2_6_1_t01,
 		Rule_14289_2_6_2_t01,
 		Rule_14289_2_8_2_1_t01,
 		Rule_14289_2_8_2_1_t02,
