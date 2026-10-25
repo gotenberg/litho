@@ -100,43 +100,104 @@ func TestWriter_Redact_CopiesAnImageAnUnparsedFormNames(t *testing.T) {
 	}
 }
 
-// TestWriter_Redact_UnparsedFormUnderARegion pins what a region reaching a
-// form litho cannot parse does to an image the form names. The form's /BBox
-// clips what it paints, so a form inside a region shows only covered samples
-// and the image, covered whole elsewhere, is blanked in place. A region that
-// reaches only part of the form leaves which samples it shows unknown: the
-// image is blanked in a copy, the form still paints the original under the
-// region, and the redaction refuses. The redaction pixel check writes the
-// document, which is where that refusal surfaces.
-func TestWriter_Redact_UnparsedFormUnderARegion(t *testing.T) {
+// TestWriter_Redact_RefusesAnUnparsedFormUnderARegion pins that a region
+// meeting a form litho cannot parse refuses with ErrXObjectUnresolved, raster
+// fallback or not: litho cannot tell what the form draws under the region,
+// which a viewer reading the form still paints, and its renderer cannot draw
+// the form for the fallback either. So does such a form with no /BBox,
+// wherever it is drawn.
+func TestWriter_Redact_RefusesAnUnparsedFormUnderARegion(t *testing.T) {
 	t.Parallel()
 
 	whole := deflated(t, []byte(unparsedFormBody))
 	src := unparsedFormDoc("/Filter /FlateDecode", whole[:len(whole)/2])
+	unbounded := bytes.Replace(src, []byte("/BBox [0 0 100 100] /Resources << /XObject << /Im1 8 0 R >> >> /Filter"),
+		[]byte("/Resources << /XObject << /Im1 8 0 R >> >> /Filter"), 1)
+	if bytes.Equal(unbounded, src) {
+		t.Fatal("the second form's /BBox was not removed")
+	}
 	open := []OpenOption{WithStrictStreams()}
 
-	t.Run("inside a region", func(t *testing.T) {
-		t.Parallel()
-		regions := []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 1, Rect: [4]float64{290, 490, 410, 610}}}
-		out, report, err := redactOpened(t, src, open, regions, WithStrictRedaction())
-		if err != nil {
-			t.Fatalf("Redact: %v", err)
+	for _, tc := range []struct {
+		name    string
+		src     []byte
+		regions []RedactRegion
+	}{
+		{"inside a region", src, []RedactRegion{{Page: 1, Rect: [4]float64{290, 490, 410, 610}}}},
+		{"partly under a region", src, []RedactRegion{{Page: 1, Rect: [4]float64{350, 490, 410, 610}}}},
+		{"beside a covered image", src, []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 1, Rect: [4]float64{350, 490, 410, 610}}}},
+		{"no /BBox", unbounded, []RedactRegion{{Page: 1, Rect: wholeLeft}}},
+	} {
+		for _, mode := range []struct {
+			name string
+			opts []RedactOption
+		}{{"default", nil}, {"raster fallback", []RedactOption{WithRedactionRasterFallback()}}} {
+			t.Run(tc.name+"/"+mode.name, func(t *testing.T) {
+				t.Parallel()
+				_, _, err := redactOpened(t, tc.src, open, tc.regions, mode.opts...)
+				if !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrXObjectUnresolved) {
+					t.Errorf("Redact = %v, want ErrRedactionRefused wrapping ErrXObjectUnresolved", err)
+				}
+			})
 		}
-		if len(report.ImagesBlankedInCopy) != 0 || len(report.FormsCopied) != 0 {
-			t.Errorf("ImagesBlankedInCopy = %v, FormsCopied = %v, want none", report.ImagesBlankedInCopy, report.FormsCopied)
-		}
-		if keepsFormSamples(t, out) {
-			t.Error("an image keeps /Im1's samples, want it blanked in place")
-		}
-	})
+	}
+}
 
-	t.Run("partly under a region", func(t *testing.T) {
-		t.Parallel()
-		regions := []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 1, Rect: [4]float64{350, 490, 410, 610}}}
-		if _, _, err := redactOpened(t, src, open, regions); !errors.Is(err, ErrRedactionIncomplete) {
-			t.Errorf("Redact = %v, want ErrRedactionIncomplete", err)
-		}
-	})
+// TestCheckRedactedPage_UnreadFormInARegion pins that the redaction pixel
+// check fails a page whose render skipped a form it cannot parse where the
+// form meets a region: it cannot see what a viewer reading the form paints
+// there. The same form beside the region passes.
+func TestCheckRedactedPage_UnreadFormInARegion(t *testing.T) {
+	t.Parallel()
+
+	whole := deflated(t, []byte(unparsedFormBody))
+	src := unparsedFormDoc("/Filter /FlateDecode", whole[:len(whole)/2])
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)), WithStrictStreams())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	for _, tc := range []struct {
+		name   string
+		region [4]float64
+		fails  bool
+	}{
+		{"meets the form", [4]float64{350, 490, 410, 610}, true},
+		{"beside the form", [4]float64{450, 100, 550, 200}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := checkRedactedPage(ctx, r, r, 1, []RedactRegion{{Page: 1, Rect: tc.region}}, nil, nil)
+			var pixelErr *RedactionPixelError
+			switch {
+			case !tc.fails && err != nil:
+				t.Errorf("checkRedactedPage = %v, want nil", err)
+			case tc.fails && (!errors.As(err, &pixelErr) || pixelErr.Err == nil || !errors.Is(err, ErrRedactionRefused)):
+				t.Errorf("checkRedactedPage = %v, want a page that could not be checked", err)
+			}
+		})
+	}
+}
+
+// TestWriter_Redact_RasterisesBesideAnUnparsedForm pins that the raster
+// fallback still redacts a page whose form litho cannot parse lies outside
+// every region, and leaves that form as it is.
+func TestWriter_Redact_RasterisesBesideAnUnparsedForm(t *testing.T) {
+	t.Parallel()
+
+	whole := deflated(t, []byte(unparsedFormBody))
+	src := unparsedFormDoc("/Filter /FlateDecode", whole[:len(whole)/2])
+	out, _, err := redactOpened(t, src, []OpenOption{WithStrictStreams()}, []RedactRegion{{Page: 1, Rect: wholeLeft}},
+		WithRedactionRasterFallback())
+	if err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+	if got := renderedGray(t, out, 1, copyLeftTop); nearGray(got, 0x40) {
+		t.Errorf("covered placement = %d, want it redacted", got)
+	}
+	if !keepsFormSamples(t, out) {
+		t.Error("no image keeps /Im1's samples for the form litho cannot parse")
+	}
 }
 
 // TestWriter_Redact_BlanksInPlaceBesideAParsedForm is the control of

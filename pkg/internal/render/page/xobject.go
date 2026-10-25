@@ -169,6 +169,11 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 			return err
 		}
 		r.skip("form XObject", err)
+		// The form's /BBox clips everything it paints (8.10.1), so its
+		// bounds say where a viewer that reads the content still draws.
+		if b, ok := boxPath(matrix.Mul(r.toDevice()), box).Bounds(); ok {
+			r.report.UnreadForms = append(r.report.UnreadForms, [4]float64{b.Min.X, b.Min.Y, b.Max.X, b.Max.Y})
+		}
 		return nil
 	}
 

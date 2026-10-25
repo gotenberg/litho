@@ -261,6 +261,13 @@ type Report struct {
 	// leaves the look of such an annotation to the viewer, so another viewer
 	// may draw it otherwise).
 	Synthesized int
+	// UnreadForms holds, in device pixels [x0 y0 x1 y1], the bounds of each
+	// form XObject the render skipped because its content does not parse
+	// (counted in [Skipped]): its /BBox through its /Matrix and the CTM at
+	// the Do. A viewer that reads the content more leniently still paints
+	// there, so a caller that must see what the page paints cannot see it
+	// inside these bounds.
+	UnreadForms [][4]float64
 }
 
 func (r *Report) count(key string) {

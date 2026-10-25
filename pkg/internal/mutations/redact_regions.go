@@ -85,7 +85,9 @@ import (
 //     clear while clearing none of it, so returning success would leave that
 //     content in the file.
 //   - A Do the machine cannot follow reports [ErrXObjectUnresolved], because
-//     content it cannot place is content it cannot rule out of the region.
+//     content it cannot place is content it cannot rule out of the region. So
+//     does a form XObject whose content does not parse, where its bounds meet
+//     a region (see [unparsedFormsInRegions]), under the raster fallback too.
 //   - An annotation inside the region that cannot be detached reports
 //     [ErrAnnotationNotPlaceable] (an unreadable /Rect cannot be ruled out of
 //     the region either), [ErrAnnotationStraddlesRegion] (an annotation is
@@ -352,6 +354,9 @@ func redactPageRegions(
 	if n := machine.UnresolvedXObjects(); n > 0 {
 		return RedactReport{}, fmt.Errorf("%w: %d on this page", ErrXObjectUnresolved, n)
 	}
+	if err := unparsedFormsInRegions(machine, zones); err != nil {
+		return RedactReport{}, err
+	}
 
 	// An image cannot be cleared by removing operators: a single Do carries the
 	// whole picture, so dropping it would take the parts the region never
@@ -546,6 +551,34 @@ func redactPageRegions(
 
 // regionZones turns the regions, each [llx, lly, urx, ury], into the zones the
 // geometric tests compare against.
+// unparsedFormsInRegions reports [ErrXObjectUnresolved] for the first form
+// the machine drew whose content does not parse (see
+// [graphics.Machine.UnparsedForms]) and whose bounds meet a zone, or that has
+// no bounds.
+//
+// A redaction removes the content inside its regions (ISO 32000-1, 12.5.6.23),
+// and litho cannot tell what such a form draws there: a viewer that reads the
+// form more leniently still paints its text, paths and images. The form's
+// /BBox clips everything it paints (8.10.1), so a form whose bounds meet no
+// region draws nothing the redaction must remove and stays as it is. The
+// raster fallback does not lift the refusal: it draws the units it replaces
+// with litho's renderer, which cannot parse the form either, so the raster
+// would erase the form's content outside the regions as well.
+func unparsedFormsInRegions(machine *graphics.Machine, zones []heuristics.Zone) error {
+	for _, form := range machine.UnparsedForms() {
+		if form.Unbounded {
+			return fmt.Errorf("%w: form %d, whose content does not parse, has no usable /BBox", ErrXObjectUnresolved, form.ObjNum)
+		}
+		bounds := heuristics.ZoneFromRect([4]float64{form.MinX, form.MinY, form.MaxX, form.MaxY})
+		for _, z := range zones {
+			if heuristics.ZonesOverlap(bounds, z) {
+				return fmt.Errorf("%w: form %d, whose content does not parse, meets a region", ErrXObjectUnresolved, form.ObjNum)
+			}
+		}
+	}
+	return nil
+}
+
 func regionZones(regions [][4]float64) []heuristics.Zone {
 	zones := make([]heuristics.Zone, 0, len(regions))
 	for _, r := range regions {

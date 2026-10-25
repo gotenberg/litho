@@ -287,9 +287,21 @@ func checkRedactedPage(
 	for _, b := range drawn.excused() {
 		cp.exclude(growBox(b, redactCheckMargin))
 	}
-	afterFull, err := renderCheckRaster(ctx, after.doc, apg, page.Options{Background: white, Shared: afterShared})
+	afterFull, afterReport, err := renderCheckRasterReport(ctx, after.doc, apg, page.Options{Background: white, Shared: afterShared})
 	if err != nil {
 		return fail(fmt.Errorf("rendering the redacted page: %w", err))
+	}
+	// A form whose content litho's renderer cannot parse draws nothing in the
+	// renderings, while a viewer that reads it more leniently paints inside
+	// its /BBox (ISO 32000-1, 8.10.1): where that meets a region, the check
+	// cannot see whether the region shows only paper (12.5.6.23), so it has
+	// not shown the redaction holds.
+	for _, form := range afterReport.UnreadForms {
+		for i, r := range cp.regions {
+			if form[0] < r[2] && r[0] < form[2] && form[1] < r[3] && r[1] < form[3] {
+				return fail(fmt.Errorf("a form XObject whose content does not parse meets region %d, where the check cannot see what it paints", i))
+			}
+		}
 	}
 
 	if err := cp.checkInside(ctx, after.doc, apg, afterFull, afterShared, budget, pageNum, regions); err != nil {
@@ -530,10 +542,17 @@ func nearMatch(px, img []uint8, w, h, x, y int) bool {
 // annotations drawn as a viewer shows them on screen, and returns it as 8-bit
 // RGB triples.
 func renderCheckRaster(ctx context.Context, doc *document.Document, pg *document.Page, opts page.Options) ([]uint8, error) {
+	out, _, err := renderCheckRasterReport(ctx, doc, pg, opts)
+	return out, err
+}
+
+// renderCheckRasterReport is [renderCheckRaster] that also returns what the
+// render reports it left out.
+func renderCheckRasterReport(ctx context.Context, doc *document.Document, pg *document.Page, opts page.Options) ([]uint8, page.Report, error) {
 	opts.DPI, opts.Annotations = RedactionCheckDPI, annot.View
-	canvas, _, err := page.Render(ctx, doc, pg, opts)
+	canvas, report, err := page.Render(ctx, doc, pg, opts)
 	if err != nil {
-		return nil, err
+		return nil, page.Report{}, err
 	}
 	out := make([]uint8, 3*canvas.Width*canvas.Height)
 	for i := range canvas.Width * canvas.Height {
@@ -543,7 +562,7 @@ func renderCheckRaster(ctx context.Context, doc *document.Document, pg *document
 		}
 		out[3*i], out[3*i+1], out[3*i+2] = unitTo8(r), unitTo8(g), unitTo8(b)
 	}
-	return out, nil
+	return out, report, nil
 }
 
 // unitTo8 maps a channel in [0, 1] to 8 bits, clamping.
