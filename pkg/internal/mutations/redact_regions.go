@@ -83,7 +83,8 @@ import (
 //   - A region that meets an image but falls between its sample centres reports
 //     [ErrImageRegionCoversNoSample]: it covers picture the caller asked to
 //     clear while clearing none of it, so returning success would leave that
-//     content in the file.
+//     content in the file. One meeting only samples already holding the
+//     blank leaves the image as it is, since there is nothing to clear.
 //   - A Do the machine cannot follow reports [ErrXObjectUnresolved], because
 //     content it cannot place is content it cannot rule out of the region. So
 //     does a form XObject whose content does not parse, where its bounds meet
@@ -432,6 +433,11 @@ func redactPageRegions(
 			continue
 		}
 		objNum, photo, err := blankImage(ctx, alloc, doc, page, box, zones, copied)
+		if errors.Is(err, errSamplesAlreadyBlank) {
+			// Nothing in the region to clear: the placement keeps the image
+			// it paints, and no copy is made.
+			continue
+		}
 		if err != nil {
 			return RedactReport{}, err
 		}

@@ -149,13 +149,6 @@ func blankImage(
 	if !ok {
 		return 0, nil, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
-	dest := ref.ObjectNum
-	if private {
-		// Reserved now and written last: the soft mask and the colour space
-		// the replacement names are allocated in between.
-		dest = alloc.Alloc(ast.PdfNull{}).ObjectNum
-	}
-
 	// Alloc-first: an image an earlier placement or an earlier Redact already
 	// blanked is queued there, and blanking the source's copy instead would
 	// write the original samples back over that work. Two regions clearing two
@@ -196,6 +189,23 @@ func blankImage(
 		!pdfimage.AppliesDecodeArray(ctx, doc, stream.Dict) {
 		return 0, nil, fmt.Errorf("%w: %q carries a /Decode the decode does not apply",
 			ErrImageCarriesSampleEntries, box.Name)
+	}
+
+	// Before anything is allocated, so an image left as it is leaves nothing
+	// behind in the file.
+	alreadyBlank, err := touchedSamplesAlreadyBlank(ctx, doc, page, box, zones, stream, isStencil)
+	if err != nil {
+		return 0, nil, err
+	}
+	if alreadyBlank {
+		return 0, nil, errSamplesAlreadyBlank
+	}
+
+	dest := ref.ObjectNum
+	if private {
+		// Reserved now and written last: the soft mask and the colour space
+		// the replacement names are allocated in between.
+		dest = alloc.Alloc(ast.PdfNull{}).ObjectNum
 	}
 
 	// Decoding reads the image as the file holds it, its own soft mask
@@ -707,6 +717,160 @@ func forCoveredSamples(box graphics.ImageBox, zones []heuristics.Zone, w, h int,
 		}
 	}
 	return blanked, nil
+}
+
+// touchedSamplesAlreadyBlank reports whether the zones meet the image between
+// its sample centres only, over samples that already hold the blank: a region
+// with nothing left to clear.
+//
+// [ErrImageRegionCoversNoSample] refuses a region falling between sample
+// centres because the stretched samples it lies on still show picture. A
+// sample holding the blank shows none: it paints what blanking would write
+// there, so the region is clear as it stands, and succeeding over it leaves no
+// content the caller asked to remove. That is what a redaction meets on its
+// own output: the samples an earlier region blanked are stretched past it, so
+// a later region on them reaches no centre. It also meets one within a single
+// redaction, an image painted several times whose placement covering a centre
+// blanked it in place first. The image is then left as it is.
+//
+// Every sample whose cell can reach a zone is held to the blank, not only the
+// nearest: each cell is widened to the bounding box of its four corners, which
+// takes in more samples than the zone touches under a rotated placement and so
+// errs towards refusing. An image with a soft mask is not judged here: the
+// mask, not the samples, says what such a picture shows, and blankImage's own
+// path rules on it.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300873, thread_400_400390: a background 1 sample wide
+//     and 9004 high stretched over the page. A first redaction blanks the
+//     samples whose centres it covers, which paint the page's full height, and
+//     a second region on them below or above that centre line refused.
+//   - govdocs thread_300_300227, pdfjs bug857031: the p1-band blanks an image
+//     at one placement and meets another between its centres. Both now stop
+//     at a later refusal (a structure element, a surviving text copy).
+//   - litho, pdfcpu, pdfjs, govdocs: of 27 such refusals, 21 in the
+//     redact-render scenarios and 6 in them run again after a lossy
+//     p1-quarter, those 3 pass this check and 24 stand, 10 of them inline
+//     images, which this does not judge.
+func touchedSamplesAlreadyBlank(
+	ctx context.Context,
+	doc *document.Document,
+	page *document.Page,
+	box graphics.ImageBox,
+	zones []heuristics.Zone,
+	stream ast.PdfStream,
+	isStencil bool,
+) (bool, error) {
+	for _, key := range []ast.PdfName{"SMask", "SMaskInData"} {
+		if _, present := stream.Dict[key]; present {
+			return false, nil
+		}
+	}
+	w, errW := document.ResolveInt(ctx, doc, stream.Dict["Width"])
+	h, errH := document.ResolveInt(ctx, doc, stream.Dict["Height"])
+	sized := errW == nil && errH == nil && w > 0 && h > 0 && w <= math.MaxInt32 && h <= math.MaxInt32
+	if !sized {
+		// The decode in blankImage rules on an image with no size.
+		return false, nil
+	}
+	centres, err := forCoveredSamples(box, zones, int(w), int(h), func(int, int) {})
+	if err != nil {
+		return false, fmt.Errorf("%q: %w", box.Name, err)
+	}
+	if centres > 0 {
+		// A covered centre is blanked by blankImage.
+		return false, nil
+	}
+
+	var (
+		blank  func(px, py int) bool
+		sw, sh int
+		native pdfimage.NativeSamples
+		ok     bool
+	)
+	if !isStencil {
+		native, ok, err = pdfimage.DecodeStreamNative(ctx, doc, page, ast.PdfName(box.Name), stream)
+		if err != nil {
+			return false, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
+		}
+	}
+	if ok {
+		n := native.Components
+		black, err := pdfimage.NativeBlack(ctx, doc, page, stream.Dict, n)
+		if err != nil {
+			return false, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
+		}
+		sw, sh = native.Width, native.Height
+		blank = func(px, py int) bool {
+			i := (py*native.Width + px) * n
+			return slices.Equal(native.Data[i:i+n], black)
+		}
+	} else {
+		img, err := pdfimage.DecodeStreamSamples(ctx, doc, page, ast.PdfName(box.Name), stream)
+		if err != nil {
+			return false, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
+		}
+		bounds := img.Bounds()
+		canvas := image.NewNRGBA(bounds)
+		draw.Draw(canvas, bounds, img, bounds.Min, draw.Src)
+		fill := blankedPicture
+		if isStencil {
+			fill = blankedStencil
+		}
+		sw, sh = bounds.Dx(), bounds.Dy()
+		blank = func(px, py int) bool {
+			i := canvas.PixOffset(bounds.Min.X+px, bounds.Min.Y+py)
+			// A picture's sample must be opaque too: one the blank would
+			// make opaque still changes what the page shows.
+			return slices.Equal(canvas.Pix[i:i+3], fill) && (isStencil || canvas.Pix[i+3] == 0xff)
+		}
+	}
+	if sw <= 0 || sh <= 0 {
+		return false, nil
+	}
+
+	minPx, minPy, maxPx, maxPy, ok := candidateSamples(box, zones, sw, sh)
+	if !ok {
+		return false, nil
+	}
+	touched := 0
+	for py := minPy; py <= maxPy; py++ {
+		for px := minPx; px <= maxPx; px++ {
+			if !sampleCellMeetsZones(box, zones, sw, sh, px, py) {
+				continue
+			}
+			if !blank(px, py) {
+				return false, nil
+			}
+			touched++
+		}
+	}
+	return touched > 0, nil
+}
+
+// sampleCellMeetsZones reports whether the bounding box of the area sample
+// (px, py) of a w x h image paints meets a zone.
+func sampleCellMeetsZones(box graphics.ImageBox, zones []heuristics.Zone, w, h, px, py int) bool {
+	u0, u1 := float64(px)/float64(w), float64(px+1)/float64(w)
+	// The image's top row is the top of the unit square (ISO 32000-1,
+	// 8.9.5.2).
+	v0, v1 := 1-float64(py+1)/float64(h), 1-float64(py)/float64(h)
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	for _, c := range [4][2]float64{{u0, v0}, {u1, v0}, {u0, v1}, {u1, v1}} {
+		x := box.CTM[0]*c[0] + box.CTM[2]*c[1] + box.CTM[4]
+		y := box.CTM[1]*c[0] + box.CTM[3]*c[1] + box.CTM[5]
+		minX, maxX = math.Min(minX, x), math.Max(maxX, x)
+		minY, maxY = math.Min(minY, y), math.Max(maxY, y)
+	}
+	cell := heuristics.ZoneFromRect([4]float64{minX, minY, maxX, maxY})
+	for _, z := range zones {
+		if heuristics.ZonesOverlap(cell, z) {
+			return true
+		}
+	}
+	return false
 }
 
 // candidateSamples narrows the search to the samples the zones can reach, by

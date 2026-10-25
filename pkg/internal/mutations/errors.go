@@ -252,7 +252,16 @@ var ErrImagePlacementDegenerate = errors.New("image placement matrix cannot be i
 // the picture than was asked, and returning success would leave that content in
 // the file while telling the caller it was cleared. Reporting it is the only
 // honest answer, and a higher-resolution image does not hit this at all.
+//
+// A region meeting only samples that hold the blank already, as an earlier
+// redaction leaves them, shows no picture, so it is not refused: the image is
+// left as it is (see [touchedSamplesAlreadyBlank]).
 var ErrImageRegionCoversNoSample = errors.New("region covers an image but none of its samples")
+
+// errSamplesAlreadyBlank tells the redaction that a region meets an image only
+// over samples holding the blank already, so the image stays as it is. It
+// never leaves the package: see [touchedSamplesAlreadyBlank].
+var errSamplesAlreadyBlank = errors.New("region covers only samples already blank")
 
 // ErrImageCarriesSampleEntries reports an image whose dictionary holds entries
 // the blanked replacement cannot carry forward.
