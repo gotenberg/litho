@@ -76,6 +76,68 @@ func carryImageEntries(dst, src ast.PdfDict, private bool) {
 	}
 }
 
+// placementLeftAsIs runs the checks [blankImage] makes on the image stream a
+// placement paints before it writes anything, and reports whether the image
+// is a stencil mask. It returns [errSamplesAlreadyBlank] when the zones meet
+// the placement over samples that already hold the blank only
+// ([touchedSamplesAlreadyBlank]), and the refusal when the image cannot be
+// blanked.
+//
+// It is the one rule saying which placement a region meets the redaction
+// leaves painting the image as it was: [CopiedImagesPaintedInRegions] reads
+// a placement of an image blanked in a copy by it, so the check a writer runs
+// before writing agrees with the redaction it checks.
+func placementLeftAsIs(
+	ctx context.Context,
+	doc *document.Document,
+	page *document.Page,
+	box graphics.ImageBox,
+	zones []heuristics.Zone,
+	stream ast.PdfStream,
+) (bool, error) {
+	// The error is discarded deliberately: an /ImageMask that cannot be resolved
+	// is treated as absent, leaving the image on the picture path, which is the
+	// behaviour that held before stencils were handled at all.
+	maskFlag, _ := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"])
+	isStencil := bool(maskFlag)
+
+	// A soft mask on a stencil has no defined meaning: ISO 32000-1, Table 89
+	// gives /SMask a stream of alpha values describing a picture's samples, and
+	// a mask has none to describe. Carrying it onto the one-bit replacement
+	// would assert that meaning, and dropping it would change rendering for a
+	// viewer that honoured it, so this refuses rather than choose. A picture
+	// keeps its /SMask, which is the case the entry is defined for.
+	if isStencil {
+		if _, present := stream.Dict["SMask"]; present {
+			return false, fmt.Errorf("%w: %q", ErrImageIsStencilMask, box.Name)
+		}
+	}
+	for _, key := range maskEntries {
+		if _, present := stream.Dict[key]; present {
+			return false, fmt.Errorf("%w: %q carries %s", ErrImageCarriesSampleEntries, box.Name, key)
+		}
+	}
+	// /Decode is only a problem when the decode did not already fold it into
+	// the pixels. Where it did, the blanked samples carry the mapping and the
+	// replacement dictionary simply omits the entry, so the image renders as it
+	// did before. Where it did not, the pixels still need it and dropping it
+	// would change the picture outside the region as well as inside.
+	if _, present := stream.Dict["Decode"]; present &&
+		!pdfimage.AppliesDecodeArray(ctx, doc, stream.Dict) {
+		return false, fmt.Errorf("%w: %q carries a /Decode the decode does not apply",
+			ErrImageCarriesSampleEntries, box.Name)
+	}
+
+	alreadyBlank, err := touchedSamplesAlreadyBlank(ctx, doc, page, box, zones, stream, isStencil)
+	if err != nil {
+		return false, err
+	}
+	if alreadyBlank {
+		return false, errSamplesAlreadyBlank
+	}
+	return isStencil, nil
+}
+
 // blankedPicture and blankedStencil are the sample values a cleared pixel takes.
 //
 // A picture is cleared to opaque black, which replaces the samples that were
@@ -158,47 +220,11 @@ func blankImage(
 		return 0, nil, fmt.Errorf("resolving image %q: %w", box.Name, err)
 	}
 
-	// The error is discarded deliberately: an /ImageMask that cannot be resolved
-	// is treated as absent, leaving the image on the picture path, which is the
-	// behaviour that held before stencils were handled at all.
-	maskFlag, _ := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"])
-	isStencil := bool(maskFlag)
-
-	// A soft mask on a stencil has no defined meaning: ISO 32000-1, Table 89
-	// gives /SMask a stream of alpha values describing a picture's samples, and
-	// a mask has none to describe. Carrying it onto the one-bit replacement
-	// would assert that meaning, and dropping it would change rendering for a
-	// viewer that honoured it, so this refuses rather than choose. A picture
-	// keeps its /SMask, which is the case the entry is defined for.
-	if isStencil {
-		if _, present := stream.Dict["SMask"]; present {
-			return 0, nil, fmt.Errorf("%w: %q", ErrImageIsStencilMask, box.Name)
-		}
-	}
-	for _, key := range maskEntries {
-		if _, present := stream.Dict[key]; present {
-			return 0, nil, fmt.Errorf("%w: %q carries %s", ErrImageCarriesSampleEntries, box.Name, key)
-		}
-	}
-	// /Decode is only a problem when the decode did not already fold it into
-	// the pixels. Where it did, the blanked samples carry the mapping and the
-	// replacement dictionary simply omits the entry, so the image renders as it
-	// did before. Where it did not, the pixels still need it and dropping it
-	// would change the picture outside the region as well as inside.
-	if _, present := stream.Dict["Decode"]; present &&
-		!pdfimage.AppliesDecodeArray(ctx, doc, stream.Dict) {
-		return 0, nil, fmt.Errorf("%w: %q carries a /Decode the decode does not apply",
-			ErrImageCarriesSampleEntries, box.Name)
-	}
-
 	// Before anything is allocated, so an image left as it is leaves nothing
 	// behind in the file.
-	alreadyBlank, err := touchedSamplesAlreadyBlank(ctx, doc, page, box, zones, stream, isStencil)
+	isStencil, err := placementLeftAsIs(ctx, doc, page, box, zones, stream)
 	if err != nil {
 		return 0, nil, err
-	}
-	if alreadyBlank {
-		return 0, nil, errSamplesAlreadyBlank
 	}
 
 	dest := ref.ObjectNum
@@ -878,8 +904,10 @@ func projectQuad(q [4][2]float64, a [2]float64) (lo, hi float64) {
 //     samples whose centres it covers, which paint the page's full height, and
 //     a second region on them below or above that centre line refused.
 //   - govdocs thread_300_300227, pdfjs bug857031: the p1-band blanks an image
-//     at one placement and meets another between its centres. Both now stop
-//     at a later refusal (a structure element, a surviving text copy).
+//     at one placement and meets another between its centres. thread_300_300227
+//     stops at a later refusal (a structure element); bug857031 succeeds
+//     since the write-time check reads its placements by this rule too
+//     ([copiedPlacementLeftAsIs]).
 //   - litho, pdfcpu, pdfjs, govdocs: of 27 such refusals, 21 in the
 //     redact-render scenarios and 6 in them run again after a lossy
 //     p1-quarter, those 3 pass this check and 24 stand, 10 of them inline

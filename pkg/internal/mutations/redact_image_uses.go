@@ -678,6 +678,9 @@ func formResourceTargets(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // A writer asks this of each page such a redaction covered before it writes,
 // and applies the redaction again when it answers true. A page whose content
 // it cannot run answers true as well: it has not shown the samples are gone.
+// A placement the regions meet only over samples that already hold the blank
+// is one the redaction leaves as it is, and does not count
+// ([copiedPlacementLeftAsIs]).
 func CopiedImagesPaintedInRegions(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -712,11 +715,59 @@ func CopiedImagesPaintedInRegions(
 			continue
 		}
 		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
-		for _, z := range zones {
-			if heuristics.ZonesOverlap(painted, z) {
-				return true, nil
-			}
+		if !slices.ContainsFunc(zones, func(z heuristics.Zone) bool { return heuristics.ZonesOverlap(painted, z) }) {
+			continue
 		}
+		left, err := copiedPlacementLeftAsIs(ctx, alloc, doc, page, box, zones)
+		if err != nil {
+			return false, err
+		}
+		if !left {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// copiedPlacementLeftAsIs reports whether the redaction leaves box, a
+// placement of an image blanked in a copy that a region meets, painting the
+// image as it is: the region meets it over samples that already hold the
+// blank, away from every sample centre ([placementLeftAsIs]). The image a
+// copy was made from keeps its samples, so those are the samples it shows
+// there, and the region shows the blank as it stands.
+//
+// Any other answer of the rule, a covered centre or a refusal, is a placement
+// the redaction would have blanked or refused, so the image painted there is
+// back. A failure to read the image answers false for the same reason: it has
+// not shown the samples are blank. Only a done ctx returns an error.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug857031 p1-band: the band blanks Im162 (object 11) in a copy at
+//     one placement and meets two more 0.012 points deep over samples already
+//     black, which Redact left as they were; counting any placement a region
+//     meets refused at write time the redaction Redact had found exact.
+func copiedPlacementLeftAsIs(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	page *document.Page,
+	box graphics.ImageBox,
+	zones []heuristics.Zone,
+) (bool, error) {
+	stream, err := latestImageStream(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: box.ObjNum})
+	if err == nil {
+		_, err = placementLeftAsIs(ctx, doc, page, box, zones, stream)
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return false, ctxErr
+	}
+	if errors.Is(err, errSamplesAlreadyBlank) {
+		return true, nil
+	}
+	if err != nil {
+		doc.Logger.Debug("copied image check: a placement could not be judged",
+			slog.Int("object", box.ObjNum), slog.Any("err", err))
 	}
 	return false, nil
 }

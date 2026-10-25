@@ -123,3 +123,59 @@ func TestWriterRedactClearsARegionOverAnAlreadyBlankedSample(t *testing.T) {
 		t.Errorf("Redact over the grey placement's corner = %v, want ErrImageRegionCoversNoSample", err)
 	}
 }
+
+// halfBlankSamplePDF returns a page drawing a 1 by 2 grey image twice, each
+// placement 200 points square, at (0,0) and (300,0): its top sample black,
+// stretched over each placement's upper half, its bottom sample white over
+// the lower half.
+func halfBlankSamplePDF() []byte {
+	const page = "q 200 0 0 200 0 0 cm /Im Do Q q 200 0 0 200 300 0 cm /Im Do Q"
+	return buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 500 200] /Contents 4 0 R /Resources << /XObject << /Im 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(page), page),
+		"<< /Type /XObject /Subtype /Image /Width 1 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 2 >>\nstream\n\x00\xff\nendstream",
+	})
+}
+
+// TestWriterRedactLeavesAnAlreadyBlankPlacementOfAnImageBlankedInACopy pins
+// that the check [Writer.WriteTo] runs for an image blanked in a copy reads a
+// placement as Redact does. One region covers the first placement's white
+// sample, which is blanked in a copy since the second placement keeps it; a
+// second region meets the second placement over its black sample only, away
+// from its centre, which Redact leaves painting the image as it is. The write
+// check used to count that placement as the image painted again under a
+// region, and refused a redaction Redact had found exact.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug857031 p1-band: Im162 (object 11) is blanked in a copy at one
+//     placement, and the band meets two others 0.012 points deep over samples
+//     already black; Redact succeeded and its write refused.
+func TestWriterRedactLeavesAnAlreadyBlankPlacementOfAnImageBlankedInACopy(t *testing.T) {
+	t.Parallel()
+	src := halfBlankSamplePDF()
+	regions := []RedactRegion{
+		{Page: 1, Rect: [4]float64{90, 40, 110, 60}},
+		{Page: 1, Rect: [4]float64{310, 160, 340, 190}},
+	}
+	for _, opts := range [][]RedactOption{nil, {WithoutRedactionPixelCheck()}} {
+		out, report, err := redactWith(t, src, regions, opts...)
+		if err != nil {
+			t.Fatalf("Redact(%d options): %v", len(opts), err)
+		}
+		if !slices.Equal(report.ImagesBlankedInCopy[1], []string{"Im"}) {
+			t.Fatalf("ImagesBlankedInCopy = %v, want [Im]", report.ImagesBlankedInCopy)
+		}
+		if got := renderedGray(t, out, 1, [2]float64{100, 50}); got > 8 {
+			t.Errorf("first placement's covered point = %d, want the blank", got)
+		}
+		if got := renderedGray(t, out, 1, [2]float64{325, 175}); got > 8 {
+			t.Errorf("second placement's covered point = %d, want its black sample", got)
+		}
+		if got, want := renderedGray(t, out, 1, [2]float64{400, 50}), renderedGray(t, src, 1, [2]float64{400, 50}); got != want {
+			t.Errorf("second placement's white sample = %d, want %d: no region met it", got, want)
+		}
+	}
+}
