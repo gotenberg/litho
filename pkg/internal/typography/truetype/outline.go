@@ -210,8 +210,8 @@ type glyphPoints struct {
 // instruction and an unhinted outline ignores it. An empty glyph gives an
 // empty path.
 //
-// It fails on a glyph ID the program does not hold, on a glyph description
-// cut short or out of the glyf table, on composite glyphs that nest past
+// It fails on a glyph ID the program does not hold, a component's included,
+// on a glyph description cut short, on composite glyphs that nest past
 // [maxComponentDepth], that refer back to a glyph they are part of, or that
 // read more than [maxGlyphComponents] components or [maxGlyphPoints] points,
 // and on a point-matching component naming a point that does not exist.
@@ -230,6 +230,13 @@ type glyphPoints struct {
 //   - All corpora: of 3973 distinct embedded TrueType programs, 756 hold
 //     composite glyphs, 128119 in all, nested at most 4 deep; one glyph
 //     contains itself, in pdfjs recursiveCompositGlyf.pdf.
+//   - All corpora: over every glyph of the 3956 programs both read, this
+//     reader and FreeType 2.13.2 agree on which glyphs fail and which are
+//     empty but for 2 glyphs of pdfjs issue15813.pdf, failing here and empty
+//     to FreeType, which draws nothing for either.
+//   - pdfjs: issue14618.pdf holds 14 composites naming a component past the
+//     glyphs its loca holds; FreeType refuses each whole, as this reader
+//     does, and none is drawn on the page.
 func (f *Font) GlyphOutline(ctx context.Context, gid int) (geom.Path, error) {
 	w := &glyphWalk{font: f, components: maxGlyphComponents}
 	g, err := w.points(ctx, gid, 0)
@@ -241,20 +248,51 @@ func (f *Font) GlyphOutline(ctx context.Context, gid int) (geom.Path, error) {
 
 // glyphData returns the glyph description of gid, empty for a glyph without
 // an outline.
+//
+// The loca table gives a glyph's data as the bytes from its offset to the
+// next glyph's, so its offsets ascend and stay within the glyf table
+// (OpenType specification, loca table). Broken entries are read as FreeType
+// reads them (tt_face_get_location), the reading poppler, PDFium and MuPDF
+// draw: a glyph starting past the glyf table, or ending past it when it is not
+// the last glyph, is empty; the last glyph ending past the table ends with
+// it; a glyph whose next offset is lower runs to the end of the table, and
+// its description ends where its own data says. Refusing such a glyph would
+// drop a glyph all three viewers draw, a whole composite with it.
+//
+// # Corpus evidence
+//
+//   - pdfjs: bug1650302_reduced.pdf (a subset whose unused loca entries are
+//     0, so used glyphs end lower than they start), issue4398.pdf (the last
+//     glyph ends 2 bytes past the glyf table) and five other files hold 109
+//     glyphs FreeType draws and a refusal dropped, among them the "ř" and "í"
+//     of bug1650302_reduced and the "8" of issue4398, which poppler, PDFium
+//     and MuPDF all draw.
+//   - pdfjs: issue15813.pdf holds 19880 glyphs whose entries point past the
+//     glyf table, empty to FreeType.
 func (f *Font) glyphData(gid int) ([]byte, error) {
 	if gid < 0 || gid >= f.numGlyphs {
 		return nil, fmt.Errorf("%w: glyph %d of %d", ErrInvalidFont, gid, f.numGlyphs)
 	}
-	var start, end int
+	var start, end, entries int
 	if f.longLoca {
 		start = int(binary.BigEndian.Uint32(f.loca[4*gid:]))
 		end = int(binary.BigEndian.Uint32(f.loca[4*gid+4:]))
+		entries = len(f.loca) / 4
 	} else {
 		start = 2 * int(binary.BigEndian.Uint16(f.loca[2*gid:]))
 		end = 2 * int(binary.BigEndian.Uint16(f.loca[2*gid+2:]))
+		entries = len(f.loca) / 2
 	}
-	if start > end || end > len(f.glyf) {
-		return nil, fmt.Errorf("%w: loca entry of glyph %d out of order or past the glyf table", ErrInvalidFont, gid)
+	switch {
+	case start > len(f.glyf):
+		return nil, nil
+	case end > len(f.glyf):
+		if gid != entries-2 {
+			return nil, nil
+		}
+		end = len(f.glyf)
+	case end < start:
+		end = len(f.glyf)
 	}
 	return f.glyf[start:end], nil
 }
@@ -413,6 +451,11 @@ func (w *glyphWalk) compositePoints(ctx context.Context, g []byte, depth int) (g
 			return glyphPoints{}, err
 		}
 		pos = next
+		// A component names a glyph of the same font (OpenType specification,
+		// glyf table, composite glyph description), so one past numGlyphs
+		// leaves the composite undefined: the whole glyph is refused, as
+		// FreeType refuses it (Invalid_Composite) for poppler, PDFium and
+		// MuPDF, rather than drawn without that component, as PDF.js draws it.
 		child, err := w.points(ctx, c.gid, depth+1)
 		if err != nil {
 			return glyphPoints{}, fmt.Errorf("component glyph %d: %w", c.gid, err)

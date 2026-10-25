@@ -291,6 +291,72 @@ func TestGlyphOutlineMalformed(t *testing.T) {
 	}
 }
 
+// locaFont builds a program over glyf whose long loca holds offsets as given,
+// so tests can state broken entries; maxp counts one glyph per entry but the
+// last.
+func locaFont(glyf []byte, offsets ...uint32) []byte {
+	var loca []byte
+	for _, o := range offsets {
+		loca = binary.BigEndian.AppendUint32(loca, o)
+	}
+	head := make([]byte, 54)
+	binary.BigEndian.PutUint16(head[18:], 1000)
+	binary.BigEndian.PutUint16(head[50:], 1)
+	maxp := make([]byte, 6)
+	binary.BigEndian.PutUint16(maxp[4:], uint16(len(offsets)-1)) //nolint:gosec // G115: a small test font.
+	return buildTableDirectory(map[string][]byte{"head": head, "maxp": maxp, "loca": loca, "glyf": glyf})
+}
+
+// TestGlyphOutlineBrokenLoca pins FreeType's reading of loca entries that
+// break the table's order or reach past glyf (tt_face_get_location), which
+// poppler, PDFium and MuPDF draw: pdfjs bug1650302_reduced.pdf and
+// issue4398.pdf lost whole composites to a refusal.
+func TestGlyphOutlineBrokenLoca(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	tri := triangleGlyph()
+	n := uint32(len(tri)) //nolint:gosec // G115: a 21-byte glyph.
+	// The composite draws glyph 0 and glyph 2 at offset 0.
+	comp := componentGlyph(0, 2)
+	c := uint32(len(comp)) //nolint:gosec // G115: a small glyph.
+	glyf := append(append(append([]byte{}, tri...), comp...), tri...)
+	tests := []struct {
+		name    string
+		offsets []uint32
+		gid     int
+		points  int
+	}{
+		// Glyph 2's next offset is 0: it runs to the end of glyf.
+		{"next offset lower", []uint32{0, n, n + c, 0}, 2, 3},
+		{"composite over a lower next offset", []uint32{0, n, n + c, 0}, 1, 6},
+		// The last glyph ends 2 bytes past glyf: it ends with the table.
+		{"last glyph past glyf", []uint32{0, n, n + c, 2*n + c + 2}, 2, 3},
+		// Glyph 2 is not the last and ends past glyf: empty, and the
+		// composite draws glyph 0 alone.
+		{"end past glyf, not last", []uint32{0, n, n + c, 1000, 1000}, 2, 0},
+		{"composite over an end past glyf", []uint32{0, n, n + c, 1000, 1000}, 1, 3},
+		// Glyph 3 starts past glyf: empty.
+		{"start past glyf", []uint32{0, n, n + c, 1000, 1000}, 3, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f, err := ParseFont(locaFont(glyf, tt.offsets...))
+			if err != nil {
+				t.Fatal(err)
+			}
+			w := &glyphWalk{font: f, components: maxGlyphComponents}
+			g, err := w.points(ctx, tt.gid, 0)
+			if err != nil {
+				t.Fatalf("glyph %d: %v", tt.gid, err)
+			}
+			if len(g.pts) != tt.points {
+				t.Fatalf("glyph %d: %d points, want %d", tt.gid, len(g.pts), tt.points)
+			}
+		})
+	}
+}
+
 func TestGlyphOutlineSimpleDecoding(t *testing.T) {
 	t.Parallel()
 	f, err := ParseFont(compositeFont([][]byte{triangleGlyph()}))
