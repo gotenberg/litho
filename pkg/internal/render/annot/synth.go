@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -60,6 +61,9 @@ const (
 type shape struct {
 	path  geom.Path
 	paint paint
+	// fill, when set, is the colour this shape fills with in place of the
+	// drawing's.
+	fill []float64
 }
 
 // drawing is a synthesised appearance: paths in default user space and the
@@ -97,8 +101,16 @@ type border struct {
 // A line, a polygon, ink or a quadrilateral is drawn from /L, /Vertices,
 // /InkList or /QuadPoints (ISO 32000-1, 12.5.6.7, 12.5.6.9, 12.5.6.10,
 // 12.5.6.13), so its boxes may lie well apart from /Rect: viewers draw it
-// there whatever /Rect says.
-func SynthesizedBox(ctx context.Context, doc *document.Document, dict ast.PdfDict) (ink, path geom.Rect, ok bool) {
+// there whatever /Rect says. A Text annotation's icon hangs from the
+// upper-left corner of /Rect at its own size (12.5.6.4), so it may reach past
+// a small /Rect.
+//
+// rotate is the /Rotate of the page the annotation lies on, in degrees
+// clockwise. An appearance that does not rotate with the page, a Text
+// annotation's icon (12.5.6.4) or one with the NoRotate flag (Table 165),
+// stays upright on the turned page, turned about the upper-left corner of
+// /Rect as the renderer draws it, and its boxes turn with it.
+func SynthesizedBox(ctx context.Context, doc *document.Document, dict ast.PdfDict, rotate int) (ink, path geom.Rect, ok bool) {
 	if _, _, _, has := normalAppearance(ctx, doc, dict); has {
 		return geom.Rect{}, geom.Rect{}, false
 	}
@@ -114,15 +126,37 @@ func SynthesizedBox(ctx context.Context, doc *document.Document, dict ast.PdfDic
 	if !ok {
 		return geom.Rect{}, geom.Rect{}, false
 	}
-	ink = d.inkBounds()
-	if subtype == "Square" || subtype == "Circle" {
-		// [synthesize] clips a Square or a Circle to /Rect.
+	ink, path = d.inkBounds(), d.pathBounds()
+	if subtype == "Square" || subtype == "Circle" || subtype == "Text" {
+		// [synthesize] clips a Square or a Circle to /Rect, and a Text
+		// annotation's icon to its square.
 		ink = geom.Rect{
-			Min: geom.Point{X: max(ink.Min.X, rect.Min.X), Y: max(ink.Min.Y, rect.Min.Y)},
-			Max: geom.Point{X: min(ink.Max.X, rect.Max.X), Y: min(ink.Max.Y, rect.Max.Y)},
+			Min: geom.Point{X: max(ink.Min.X, d.clip.Min.X), Y: max(ink.Min.Y, d.clip.Min.Y)},
+			Max: geom.Point{X: min(ink.Max.X, d.clip.Max.X), Y: min(ink.Max.Y, d.clip.Max.Y)},
 		}
 	}
-	return ink, d.pathBounds(), true
+	if noRotate(ctx, doc, dict, subtype) {
+		pivot := geom.Point{X: rect.Min.X, Y: rect.Max.Y}
+		ink, path = noRotateBox(ink, pivot, rotate), noRotateBox(path, pivot, rotate)
+	}
+	return ink, path, true
+}
+
+// noRotate reports whether the synthesised appearance of the annotation dict
+// stays upright as its page turns: a Text annotation's icon, which behaves as
+// if the NoRotate flag were set (ISO 32000-1, 12.5.6.4), or an annotation
+// with the flag set (12.5.3, Table 165).
+func noRotate(ctx context.Context, doc *document.Document, dict ast.PdfDict, subtype ast.PdfName) bool {
+	if subtype == "Text" {
+		return true
+	}
+	f, err := document.ResolveObject(ctx, doc, dict["F"])
+	if err != nil {
+		doc.Logger.Debug("unreadable annotation /F, reading it as 0", slog.Any("err", err))
+		return false
+	}
+	flags, ok := f.(ast.PdfInt)
+	return ok && flags&FlagNoRotate != 0
 }
 
 // inkBounds returns the box the drawing's ink reaches, shape by shape. The
@@ -185,15 +219,17 @@ func joins(path geom.Path) bool {
 // appearance stream, for the subtypes whose appearance ISO 32000-1 defines by
 // the dictionary alone: Square and Circle (12.5.6.8), Line (12.5.6.7),
 // Polygon and PolyLine (12.5.6.9), Ink (12.5.6.13), the text markup types
-// (12.5.6.10) and a Link's border (12.5.6.5). It returns false for any other
-// subtype, which needs a viewer's icon or a font, and for a dictionary whose
-// geometry does not read.
+// (12.5.6.10) and a Link's border (12.5.6.5), and for a Text annotation, the
+// predefined icon its /Name names (12.5.6.4, Table 172), drawn as litho's own
+// where a viewer draws its own. It returns false for any other subtype, whose
+// look needs a font or an icon of no predefined name, and for a dictionary
+// whose geometry does not read.
 func synthesize(ctx context.Context, doc *document.Document, dict ast.PdfDict, subtype ast.PdfName, rect geom.Rect) (Appearance, bool) {
 	d, ok := synthDrawing(ctx, doc, dict, subtype, rect)
 	if !ok {
 		return Appearance{}, false
 	}
-	if subtype != "Square" && subtype != "Circle" {
+	if subtype != "Square" && subtype != "Circle" && subtype != "Text" {
 		// A line, a polygon, ink or a quadrilateral may reach past /Rect,
 		// which producers often leave stale: poppler 26.09.0 grows the
 		// box to cover the drawing, and so does this.
@@ -223,6 +259,8 @@ func synthDrawing(ctx context.Context, doc *document.Document, dict ast.PdfDict,
 		d, ok = synthMarkup(ctx, doc, dict, subtype)
 	case "Link":
 		d, ok = synthLink(ctx, doc, dict, rect)
+	case "Text":
+		d, ok = synthText(ctx, doc, dict, rect)
 	}
 	return d, ok && len(d.shapes) > 0
 }
@@ -571,6 +609,12 @@ func (d *drawing) add(path geom.Path, p paint) {
 	d.shapes = append(d.shapes, shape{path: path, paint: p})
 }
 
+// addInk appends a path filled with its own colour, whatever the drawing's
+// fill.
+func (d *drawing) addInk(path geom.Path, fill []float64) {
+	d.shapes = append(d.shapes, shape{path: path, paint: paintFill, fill: fill})
+}
+
 // strokes reports whether the drawing strokes: a border of width 0 is not
 // drawn (ISO 32000-1, 12.5.4, Table 166), nor one of no colour (Table 164).
 func (d *drawing) strokes() bool {
@@ -672,7 +716,16 @@ func (d *drawing) content() []byte {
 		c = appendNum(c, v)
 	}
 	c = append(c, "] 0 d\n"...)
+	fill := d.fill
 	for _, s := range d.shapes {
+		want := d.fill
+		if s.fill != nil {
+			want = s.fill
+		}
+		if want != nil && !slices.Equal(want, fill) {
+			c = appendColour(c, want, false)
+			fill = want
+		}
 		pts := s.path.Pts
 		for _, op := range s.path.Ops {
 			switch op {
@@ -745,6 +798,7 @@ func appendNum(c []byte, v float64) []byte {
 
 var (
 	black  = []float64{0}
+	white  = []float64{1}
 	yellow = []float64{1, 1, 0}
 )
 

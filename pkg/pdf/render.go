@@ -269,9 +269,12 @@ func WithOverprintSimulation() RenderOption {
 // overprinting unless [WithOverprintSimulation] asks for it. An annotation
 // with no appearance stream
 // draws as ISO 32000-1 defines it from its dictionary for the Square,
-// Circle, Line, Polygon, PolyLine, Ink, text markup and Link types, and not
-// at all for the icon and text types (Text, FreeText, Stamp and the like);
-// nothing is written into the document. Content a document's default
+// Circle, Line, Polygon, PolyLine, Ink, text markup and Link types, as
+// litho's own drawing of the predefined icon its /Name names for the Text
+// type (12.5.6.4, Table 172, an icon each viewer draws its own way, 24 units
+// square from the upper-left corner of /Rect, upright), and not at all for
+// the other icon and text types (FreeText, Stamp and the like); nothing is
+// written into the document. Content a document's default
 // optional content configuration hides is not drawn, nor are the kinds of
 // content [WithRenderContent] leaves out.
 //
@@ -320,12 +323,13 @@ type RenderReport struct {
 	// SynthesizedAnnotations counts the annotations drawn from an appearance
 	// litho built from the annotation dictionary, the file holding no
 	// appearance stream: the Square, Circle, Line, Polygon, PolyLine, Ink,
-	// text markup and Link types. ISO 32000-1, 12.5.5 leaves their look to
-	// the viewer, so another viewer may draw them otherwise.
+	// text markup, Link and Text types. ISO 32000-1, 12.5.5 leaves their look
+	// to the viewer, so another viewer may draw them otherwise; a Text
+	// annotation's icon (12.5.6.4) is each viewer's own.
 	SynthesizedAnnotations int
 	// AnnotationsWithoutAppearance counts the annotations not drawn at all:
 	// they hold no appearance stream and their look is a viewer's icon or
-	// text (Text, FreeText, Stamp and the like).
+	// text (FreeText, Stamp and the like).
 	AnnotationsWithoutAppearance int
 	// StaleAppearances counts the form field widgets drawn from the
 	// appearance stream the file holds although the form's

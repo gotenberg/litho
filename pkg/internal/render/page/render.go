@@ -61,9 +61,10 @@ const (
 	TransparencyOverBudget = "transparency over budget"
 	// UnsupportedAnnotation counts annotations with no appearance stream
 	// (ISO 32000-1, 12.5.5) litho cannot build one for, which draw nothing:
-	// Text, FreeText, Stamp and the other types whose look is a viewer's
-	// icon or text. The geometric, markup and Link types are drawn from
-	// their dictionaries (package render/annot).
+	// FreeText, Stamp and the other types whose look is a viewer's icon or
+	// text. The geometric, markup and Link types are drawn from their
+	// dictionaries, and a Text annotation as litho's own drawing of its
+	// predefined icon (package render/annot).
 	UnsupportedAnnotation = "annotation without appearance"
 	// StaleAppearance counts widget annotations drawn from the appearance
 	// stream the file holds although the form's /NeedAppearances asks the

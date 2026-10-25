@@ -157,8 +157,10 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //
 // Some mismatches are adjudicated and stay. Like poppler, litho draws an
 // annotation with no appearance stream from its dictionary where ISO
-// 32000-1, 12.5.6 defines how (package render/annot), and draws no Text,
-// FreeText, Stamp or other icon or text annotation without one. Poppler
+// 32000-1, 12.5.6 defines how (package render/annot), draws its own icon for
+// a Text annotation without one, where poppler draws its own (12.5.6.4,
+// Table 172 leave the icon's look to the viewer), and draws no FreeText,
+// Stamp or other icon or text annotation without one. Poppler
 // strokes a link's /Border over its appearance stream, an xpdf legacy: per
 // 12.5.5 the appearance stream is the annotation's appearance, and an empty
 // one draws nothing. Poppler stops at the /Count of a page tree whose

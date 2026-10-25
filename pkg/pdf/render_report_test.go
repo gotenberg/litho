@@ -20,7 +20,7 @@ import (
 // approximatedPDF is a 200 by 100 page drawn with every approximation a
 // fixture can reach without a page past the render budget: three glyphs of a
 // font the file does not embed, an image whose data does not decode, a Square
-// annotation and a Text annotation with no appearance stream, and a widget
+// annotation and a FreeText annotation with no appearance stream, and a widget
 // whose form asks for new appearances.
 func approximatedPDF() []byte {
 	const content = "BT /F1 12 Tf 10 80 Td (abc) Tj ET q 20 0 0 20 150 70 cm /Im1 Do Q"
@@ -36,7 +36,7 @@ func approximatedPDF() []byte {
 		"<< /Type /Annot /Subtype /Square /Rect [10 10 60 40] /C [1 0 0] /F 4 >>",
 		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (f) /Rect [100 10 130 20] /F 4 /P 3 0 R /AP << /N 8 0 R >> >>",
 		fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 30 10] /Length %d >>\nstream\n%s\nendstream", len(widgetAP), widgetAP),
-		"<< /Type /Annot /Subtype /Text /Rect [150 10 170 30] /Contents (note) /F 4 >>",
+		"<< /Type /Annot /Subtype /FreeText /Rect [150 10 170 30] /Contents (note) /DA (/Helv 12 Tf 0 g) /F 4 >>",
 	})
 }
 

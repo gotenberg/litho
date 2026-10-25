@@ -181,20 +181,61 @@ func TestAnnotationNoRotate(t *testing.T) {
 
 func TestAnnotationWithoutAppearance(t *testing.T) {
 	t.Parallel()
-	// A text annotation's icon is the viewer's (ISO 32000-1, 12.5.6.4):
-	// with no appearance stream nothing is drawn, and it is counted. The
-	// square beside it is drawn from its dictionary and is not.
+	// A Text annotation with no appearance stream draws litho's own icon for
+	// its /Name (ISO 32000-1, 12.5.6.4, Table 172), 24 units square from the
+	// upper-left corner of /Rect whatever its size, its background /C: the
+	// icon spans user x 60 to 84, y 56 to 80, past the /Rect. A FreeText
+	// needs a font: nothing is drawn, and it is counted. The square is drawn
+	// from its dictionary.
 	img, report := draw(t, fixture{
-		page: "/Annots [5 0 R 6 0 R]",
+		page: "/Annots [5 0 R 6 0 R 7 0 R]",
 		objs: []string{
 			"<< /Type /Annot /Subtype /Text /Rect [60 60 80 80] /F 4 /C [1 0 0] >>",
 			"<< /Type /Annot /Subtype /Square /Rect [10 10 30 30] /F 4 /IC [1 0 0] /Border [0 0 0] >>",
+			"<< /Type /Annot /Subtype /FreeText /Rect [10 60 40 90] /F 4 /C [0 0 1] /DA (/Helv 12 Tf 0 g) >>",
 		},
 	})
-	if report.Unsupported[UnsupportedAnnotation] != 1 {
-		t.Errorf("report %v, want one annotation without appearance", report.Unsupported)
+	if report.Unsupported[UnsupportedAnnotation] != 1 || report.Synthesized != 2 {
+		t.Errorf("report %v, %d synthesised, want the FreeText unsupported and two synthesised", report.Unsupported, report.Synthesized)
 	}
-	expect(t, img, 2, map[[2]int]rgb{{20, 80}: red, {70, 30}: paper})
+	expect(t, img, 2, map[[2]int]rgb{
+		{20, 80}: red,
+		{63, 32}: red, {78, 40}: red, {86, 30}: paper, {70, 46}: paper,
+		{25, 25}: paper,
+	})
+}
+
+func TestAnnotationTextIconUpright(t *testing.T) {
+	t.Parallel()
+	// /Rotate 90 maps user (x, y) to device (y, x) on an 80 by 120 raster.
+	// A Text icon does not rotate with the page (12.5.6.4): it hangs upright
+	// from the upper-left corner of /Rect, user (10, 70), device (70, 10),
+	// over device x 70 to 94, y 10 to 34. Turned with the page it would lie
+	// at device x 46 to 70.
+	img, _ := draw(t, fixture{
+		page: "/MediaBox [0 0 120 80] /Rotate 90 /Annots [5 0 R]",
+		objs: []string{"<< /Type /Annot /Subtype /Text /Rect [10 40 30 70] /C [1 0 0] /Name /Comment >>"},
+	})
+	expect(t, img, 2, map[[2]int]rgb{{73, 22}: red, {60, 20}: paper})
+}
+
+func TestAnnotationTextIconFlags(t *testing.T) {
+	t.Parallel()
+	// The flags hide an icon as they hide any annotation (Table 165): hidden,
+	// and not printed in print mode. /CA paints it half opaque.
+	f := fixture{
+		page: "/Annots [5 0 R 6 0 R]",
+		objs: []string{
+			"<< /Type /Annot /Subtype /Text /Rect [0 76 24 100] /F 2 /C [1 0 0] >>",
+			"<< /Type /Annot /Subtype /Text /Rect [50 76 74 100] /C [0 0 1] /CA 0.5 >>",
+		},
+	}
+	img, _ := draw(t, f)
+	expect(t, img, 2, map[[2]int]rgb{{3, 12}: paper, {53, 12}: {127, 127, 255}})
+	report, _ := drawMode(t, f, annot.Print)
+	if report.Synthesized != 0 {
+		t.Errorf("print mode drew %d icons, want none: neither prints", report.Synthesized)
+	}
 }
 
 // TestSynthesizedAnnotations checks, by hand, the readings of ISO 32000-1

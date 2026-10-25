@@ -289,8 +289,10 @@ func collectOne(ctx context.Context, doc *document.Document, elem ast.PdfObject,
 		app.Subtype = subtype
 		app.State = state
 		app.Flags = flags
-		app.NoRotate = flags&FlagNoRotate != 0
-		app.NoZoom = flags&FlagNoZoom != 0
+		// A Text annotation's icon behaves as if NoZoom and NoRotate were
+		// set (ISO 32000-1, 12.5.6.4).
+		app.NoRotate = flags&FlagNoRotate != 0 || subtype == "Text"
+		app.NoZoom = flags&FlagNoZoom != 0 || subtype == "Text"
 		app.OC = dict["OC"]
 		return app, subtype, 0
 	}

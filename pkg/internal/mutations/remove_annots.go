@@ -63,7 +63,7 @@ func removeRegionAnnotations(
 			return nil, fmt.Errorf("%w: an entry of /Annots", ErrAnnotationNotPlaceable)
 		}
 
-		place, ok := annotZones(ctx, doc, annot)
+		place, ok := annotZones(ctx, doc, annot, page.Rotate)
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", ErrAnnotationNotPlaceable, annotLabel(entry))
 		}
@@ -393,14 +393,17 @@ func untagRegionAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc
 // across a region with its /Rect elsewhere was kept, and the page went on
 // showing it inside the region after a redaction reported success. The two
 // stay separate zones rather than one box holding both: a stale /Rect far
-// from the drawing would make that box cover regions neither meets.
+// from the drawing would make that box cover regions neither meets. A Text
+// annotation's icon hangs from the upper-left corner of /Rect at its own size
+// and stays upright on a turned page (12.5.6.4), so rotate, the page's
+// /Rotate, places it.
 //
 // # Corpus evidence
 //
 //   - pdfjs annotation-line-without-appearance-empty-Rect: a Line with
 //     /Rect [0 0 0 0] and /L across the page, drawn by poppler 26.09.0 and
 //     litho's renderer through a centred-quarter region the redaction left.
-func annotZones(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) (annotPlace, bool) {
+func annotZones(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, rotate int) (annotPlace, bool) {
 	obj, ok := annotDict["Rect"]
 	if !ok {
 		return annotPlace{}, false
@@ -427,7 +430,7 @@ func annotZones(ctx context.Context, doc *document.Document, annotDict ast.PdfDi
 	}
 	rect := heuristics.ZoneFromRect(r)
 	place := annotPlace{reaches: []heuristics.Zone{rect}, sits: []heuristics.Zone{rect}}
-	if ink, path, drawn := annot.SynthesizedBox(ctx, doc, annotDict); drawn {
+	if ink, path, drawn := annot.SynthesizedBox(ctx, doc, annotDict, rotate); drawn {
 		place.reaches = append(place.reaches, heuristics.ZoneFromRect([4]float64{ink.Min.X, ink.Min.Y, ink.Max.X, ink.Max.Y}))
 		place.sits = append(place.sits, heuristics.ZoneFromRect([4]float64{path.Min.X, path.Min.Y, path.Max.X, path.Max.Y}))
 	}

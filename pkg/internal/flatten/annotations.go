@@ -84,7 +84,9 @@ type AnnotationReport struct {
 //   - An annotation with the NoRotate flag on a rotated page, which a viewer
 //     keeps upright as the page turns (Table 165).
 //   - An annotation with no appearance stream litho can draw, which a
-//     viewer draws by means of its own (12.5.5).
+//     viewer draws by means of its own (12.5.5), and a Text annotation with
+//     none: its icon is the one each viewer provides for its /Name
+//     (12.5.6.4, Table 172), which litho's renderer draws as its own.
 //
 // # Corpus evidence
 //
@@ -164,6 +166,14 @@ func (f *flattener) annotationBakes(ctx context.Context, pg *document.Page, opts
 			return false
 		case "Popup":
 			return false
+		case "Text":
+			// A Text annotation with no appearance stream shows the icon
+			// its viewer provides for /Name (ISO 32000-1, 12.5.6.4, Table
+			// 172): the renderer draws litho's own, which baked into the
+			// page would replace every viewer's.
+			if a.Synthesized {
+				return false
+			}
 		}
 		if a.OC != nil || a.FormOC != nil {
 			return false

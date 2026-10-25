@@ -66,7 +66,7 @@ func TestSynthesizeOnlyWhenAsked(t *testing.T) {
 
 func TestSynthesizeUndrawableTypes(t *testing.T) {
 	t.Parallel()
-	for _, subtype := range []string{"Text", "FreeText", "Stamp", "FileAttachment", "Sound", "Widget", "Caret", "Movie"} {
+	for _, subtype := range []string{"FreeText", "Stamp", "FileAttachment", "Sound", "Widget", "Caret", "Movie"} {
 		dict := fmt.Sprintf("<< /Type /Annot /Subtype /%s /Rect [10 10 90 90] /F 4 /C [1 0 0] >>", subtype)
 		if r := skipped(t, dict); r != ReasonNoAppearance {
 			t.Errorf("%s: reason %v, want no-appearance", subtype, r)
@@ -220,6 +220,59 @@ func TestSynthesizeLink(t *testing.T) {
 		if r := skipped(t, dict); r != ReasonNoAppearance {
 			t.Errorf("%s: reason %v, want nothing drawn", dict, r)
 		}
+	}
+}
+
+func TestSynthesizeTextIcon(t *testing.T) {
+	t.Parallel()
+	// The icon hangs 24 units square from the upper-left corner of /Rect
+	// (12.5.6.4, Table 165), whatever /Rect's size, and keeps upright and
+	// unzoomed (12.5.6.4).
+	a, c := synthOne(t, "<< /Type /Annot /Subtype /Text /Rect [10 50 15 60] /C [1 1 0] >>")
+	want := geom.Rect{Min: geom.Point{X: 10, Y: 36}, Max: geom.Point{X: 34, Y: 60}}
+	if a.BBox != want || a.Rect.Max.Y != 60 {
+		t.Errorf("BBox %v, want the icon square %v", a.BBox, want)
+	}
+	if !a.NoRotate || !a.NoZoom {
+		t.Errorf("NoRotate %v, NoZoom %v: a Text icon keeps both", a.NoRotate, a.NoZoom)
+	}
+	// /C fills the background; a light one takes a black symbol.
+	wantIn(t, c, "0 G", "1 1 0 rg", "1.5 w", " B\n")
+
+	// Every name of Table 172 draws its own symbol; an unknown name and no
+	// name draw the Note.
+	symbols := map[string]string{}
+	for _, name := range []string{"Comment", "Key", "Note", "Help", "NewParagraph", "Paragraph", "Insert"} {
+		_, c := synthOne(t, "<< /Type /Annot /Subtype /Text /Rect [0 0 24 24] /Name /"+name+" >>")
+		for other, oc := range symbols {
+			if oc == c {
+				t.Errorf("%s draws as %s", name, other)
+			}
+		}
+		symbols[name] = c
+	}
+	for _, dict := range []string{
+		"<< /Type /Annot /Subtype /Text /Rect [0 0 24 24] /Name /Bogus >>",
+		"<< /Type /Annot /Subtype /Text /Rect [0 0 24 24] >>",
+		"<< /Type /Annot /Subtype /Text /Rect [0 0 24 24] /Name (Key) >>",
+	} {
+		if _, c := synthOne(t, dict); c != symbols["Note"] {
+			t.Errorf("%s: content %q, want the Note icon", dict, c)
+		}
+	}
+	// No /C paints no background: nothing fills but the symbol's dot.
+	if strings.Contains(symbols["Note"], " B\n") || strings.Contains(symbols["Note"], " rg") {
+		t.Errorf("Note with no /C: content %q paints a background", symbols["Note"])
+	}
+
+	// A dark background takes a white symbol, the dot of Help included.
+	_, c = synthOne(t, "<< /Type /Annot /Subtype /Text /Rect [0 0 24 24] /Name /Help /C [0 0 0.5] >>")
+	wantIn(t, c, "1 G", "0 0 0.5 rg", "1 g ")
+
+	// /CA paints the icon through a group.
+	_, c = synthOne(t, "<< /Type /Annot /Subtype /Text /Rect [0 0 24 24] /CA 0.25 >>")
+	if c != "/GS0 gs /Fm0 Do" {
+		t.Errorf("content %q, want the group painted through GS0", c)
 	}
 }
 

@@ -125,6 +125,29 @@ func TestAnnotationsKeepsTheDrawingOrder(t *testing.T) {
 	}
 }
 
+// TestAnnotationsLeavesTextIcons pins that a Text annotation with no
+// appearance stream is left as it is, transparent, printed, or under a baked
+// annotation: its icon is the one each viewer provides (ISO 32000-1,
+// 12.5.6.4, Table 172), which the renderer draws as litho's own.
+func TestAnnotationsLeavesTextIcons(t *testing.T) {
+	t.Parallel()
+	in := fixture{
+		page: "/Annots [7 0 R 8 0 R 9 0 R]",
+		objs: []string{
+			"<< /Type /Annot /Subtype /Text /Rect [10 10 30 30] /F 4 /CA 0.5 /C [1 0 0] >>",
+			"<< /Type /Annot /Subtype /Text /Rect [60 60 80 80] /F 4 /Name /Key >>",
+			"<< /Type /Annot /Subtype /Square /Rect [50 30 90 90] /F 4 /CA 0.5 /AP << /N 10 0 R >> >>",
+			stream("/Type /XObject /Subtype /Form /BBox [0 0 10 10]", "1 0 0 rg 0 0 10 10 re f"),
+		},
+	}
+	for _, opts := range []AnnotationOptions{{}, {Printed: true}} {
+		report, rewritten := bakeAnnotations(t, in.bytes(), opts)
+		if report.Baked[0] != 1 || rewritten[7] || rewritten[8] || !rewritten[9] {
+			t.Errorf("printed %v: report %+v, rewritten %v, want the square alone baked", opts.Printed, report, rewritten)
+		}
+	}
+}
+
 // TestAnnotationsEmptiesOneWithNoRect pins that a transparent annotation
 // with no /Rect, which a viewer has nowhere to draw (ISO 32000-1, Table 164),
 // loses its appearance with nothing drawn.

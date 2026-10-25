@@ -19,7 +19,7 @@ func synthBox(t *testing.T, dict string, objs ...string) (geom.Rect, geom.Rect, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return SynthesizedBox(ctx, doc, d)
+	return SynthesizedBox(ctx, doc, d, 0)
 }
 
 func rectNear(a geom.Rect, b [4]float64) bool {
@@ -54,7 +54,51 @@ func TestSynthesizedBox(t *testing.T) {
 	}
 
 	// A subtype no appearance is synthesised for has none.
-	if _, _, ok := synthBox(t, "<< /Type /Annot /Subtype /Text /Rect [20 20 40 40] >>"); ok {
-		t.Error("a Text annotation reported a synthesised box")
+	if _, _, ok := synthBox(t, "<< /Type /Annot /Subtype /FreeText /Rect [20 20 40 40] >>"); ok {
+		t.Error("a FreeText annotation reported a synthesised box")
+	}
+
+	// A Text icon hangs 24 units square from the upper-left corner of a
+	// smaller /Rect, its ink clipped to the square.
+	ink, path, ok = synthBox(t, "<< /Type /Annot /Subtype /Text /Rect [20 20 30 40] >>")
+	if !ok || !rectNear(ink, [4]float64{20, 16, 44, 40}) || !rectNear(path, [4]float64{20.75, 16.75, 43.25, 39.25}) {
+		t.Errorf("text: ink %v path %v ok %v, want ink [20 16 44 40], path [20.75 16.75 43.25 39.25]", ink, path, ok)
+	}
+}
+
+func TestSynthesizedBoxNoRotate(t *testing.T) {
+	t.Parallel()
+	ctx, doc, page := firstPage(t, onePage("", "[5 0 R 6 0 R]",
+		"<< /Type /Annot /Subtype /Text /Rect [20 20 30 40] >>",
+		"<< /Type /Annot /Subtype /Link /Rect [20 20 30 40] /F 16 /Border [0 0 0.5] >>"))
+	annots, err := document.ResolveArray(ctx, doc, page.Dict["Annots"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	box := func(i, rotate int) geom.Rect {
+		d, err := document.ResolveDict(ctx, doc, annots[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		ink, _, ok := SynthesizedBox(ctx, doc, d, rotate)
+		if !ok {
+			t.Fatalf("annotation %d: no synthesised box", i)
+		}
+		return ink
+	}
+	// On a page turned a quarter clockwise the icon stays upright: in user
+	// space it turns a quarter counterclockwise about (20, 40).
+	if got := box(0, 90); !rectNear(got, [4]float64{20, 40, 44, 64}) {
+		t.Errorf("text at /Rotate 90: ink %v, want [20 40 44 64]", got)
+	}
+	if got := box(0, 180); !rectNear(got, [4]float64{-4, 40, 20, 64}) {
+		t.Errorf("text at /Rotate 180: ink %v, want [-4 40 20 64]", got)
+	}
+	if got := box(0, -90); !rectNear(got, [4]float64{-4, 16, 20, 40}) {
+		t.Errorf("text at /Rotate -90: ink %v, want [-4 16 20 40]", got)
+	}
+	// A NoRotate link turns the same way about its own corner.
+	if got := box(1, 90); !rectNear(got, [4]float64{17.5, 37.5, 42.5, 52.5}) {
+		t.Errorf("NoRotate link at /Rotate 90: ink %v, want [17.5 37.5 42.5 52.5]", got)
 	}
 }

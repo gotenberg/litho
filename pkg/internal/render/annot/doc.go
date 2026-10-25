@@ -13,9 +13,10 @@
 // [Options.Synthesize] asks for one: [Collect] then builds, for drawing only,
 // what ISO 32000-1 defines from the dictionary for Square, Circle, Line,
 // Polygon, PolyLine, Ink, the text markup types and a Link's border, as
-// viewers do (see [Appearance.Synthesized]). Text, FreeText, Stamp,
-// FileAttachment, Sound, Popup and Widget annotations need a viewer's icons
-// or fonts and stay skipped. Writing an appearance into the file from /DA,
+// viewers do (see [Appearance.Synthesized]), and litho's own drawing of the
+// predefined icon a Text annotation's /Name names (12.5.6.4, Table 172), where
+// each viewer draws its own. FreeText, Stamp, FileAttachment, Sound, Popup
+// and Widget annotations need a viewer's icons or fonts and stay skipped. Writing an appearance into the file from /DA,
 // /V or /C is a remediation matter (see the appearance fixers of package
 // remediation).
 //
