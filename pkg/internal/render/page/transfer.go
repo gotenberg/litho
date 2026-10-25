@@ -1,6 +1,7 @@
 package page
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -62,7 +63,7 @@ func (r *renderer) currentTransfer() *transfer {
 	if t, ok := r.transfers[key]; ok {
 		return t
 	}
-	t, err := r.compileTransfer(obj)
+	t, err := compileTransfer(r.ctx, r.doc, obj)
 	if err != nil {
 		r.skip("transfer function", err)
 		t = nil
@@ -80,8 +81,8 @@ func (r *renderer) currentTransfer() *transfer {
 // function of one input and one output applied to every component, or an
 // array of four applied to the red, green, blue and grey components (10.5).
 // The output is RGB, so the first three apply and the grey one does not.
-func (r *renderer) compileTransfer(obj ast.PdfObject) (*transfer, error) {
-	resolved, err := document.ResolveObject(r.ctx, r.doc, obj)
+func compileTransfer(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*transfer, error) {
+	resolved, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return nil, fmt.Errorf("resolving transfer function: %w", err)
 	}
@@ -103,7 +104,7 @@ func (r *renderer) compileTransfer(obj ast.PdfObject) (*transfer, error) {
 	t := &transfer{}
 	identity := true
 	for c, fobj := range fns {
-		if err := r.sampleTransfer(fobj, &t.lut[c]); err != nil {
+		if err := sampleTransfer(ctx, doc, fobj, &t.lut[c]); err != nil {
 			return nil, err
 		}
 		for i, v := range t.lut[c] {
@@ -120,14 +121,14 @@ func (r *renderer) compileTransfer(obj ast.PdfObject) (*transfer, error) {
 
 // sampleTransfer fills lut with the function fobj sampled over [0, 1]. Each
 // entry of a four-entry array may itself be /Identity.
-func (r *renderer) sampleTransfer(fobj ast.PdfObject, lut *[transferLevels]float32) error {
-	if name, err := document.ResolveName(r.ctx, r.doc, fobj); err == nil && name == "Identity" {
+func sampleTransfer(ctx context.Context, doc *document.Document, fobj ast.PdfObject, lut *[transferLevels]float32) error {
+	if name, err := document.ResolveName(ctx, doc, fobj); err == nil && name == "Identity" {
 		for i := range lut {
 			lut[i] = float32(i) / (transferLevels - 1)
 		}
 		return nil
 	}
-	fn, err := function.New(r.ctx, r.doc, fobj)
+	fn, err := function.New(ctx, doc, fobj)
 	if err != nil {
 		return fmt.Errorf("compiling transfer function: %w", err)
 	}
@@ -165,6 +166,25 @@ func (r *renderer) withTransfer(conv colorconv.Converter) colorconv.Converter {
 		return transferConverter{conv: conv, t: t}
 	}
 	return conv
+}
+
+// Transfer maps one sRGB colour, each channel in [0, 1], through a transfer
+// function as [Render] applies it to every painting under it.
+type Transfer func(r, g, b float32) (float32, float32, float32)
+
+// CompileTransfer returns the transfer obj applies, a /TR or /TR2 value as
+// the graphics state records it, sampled as [Render] samples it, or
+// nil when it is the identity (ISO 32000-1, 10.5). It fails on a function the
+// file damages, which [Render] skips and draws under the identity.
+func CompileTransfer(ctx context.Context, doc *document.Document, obj ast.PdfObject) (Transfer, error) {
+	if obj == nil {
+		return nil, nil
+	}
+	t, err := compileTransfer(ctx, doc, obj)
+	if err != nil || t == nil {
+		return nil, err
+	}
+	return t.apply, nil
 }
 
 // transferRowsPerContextCheck is how many image rows the transfer maps

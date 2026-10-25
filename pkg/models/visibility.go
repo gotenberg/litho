@@ -80,6 +80,7 @@ type ContrastReport struct {
 	// Undetermined counts the runs of visible text whose colour the content
 	// stream does not settle: painted with a pattern, with transparency, a
 	// blend mode or a soft mask, by a Type 3 glyph that may set its own
-	// colour, or in a colour space litho cannot convert.
+	// colour, in a colour space litho cannot convert, or recoloured by what
+	// the page paints over it.
 	Undetermined int `json:"undetermined"`
 }

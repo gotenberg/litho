@@ -23,6 +23,9 @@ type TextPaint struct {
 	SoftMask               bool
 	// Intent is the rendering intent in force (8.6.5.8).
 	Intent string
+	// Transfer is the transfer function in force, [State.Transfer], which
+	// adjusts the device colour the glyph is painted in (10.5).
+	Transfer ast.PdfObject
 	// Resources is the resource dictionary the content drawing the glyph
 	// paints with, whose default colour spaces stand in for the device
 	// spaces (8.6.5.6).

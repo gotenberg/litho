@@ -64,10 +64,10 @@ type ownInkOptions struct {
 	// drawn with nothing else.
 	omit page.Content
 	// under, when not nil, is told each pixel the own ink of seen run k
-	// marks, with the colour, RGB in its three bytes, the page shows there
-	// without the run: what lies under the run's glyphs, the page's other
-	// text included.
-	under func(k int, px []byte)
+	// marks, with the colours, RGB in their three bytes, the page shows there
+	// drawn whole, with, and without the run, without: what lies under the
+	// run's glyphs, the page's other text included.
+	under func(k int, with, without []byte)
 	// omitClip leaves the runs judged out of the text clip too
 	// ([page.Options.OmitGlyphClip]), so a glyph in a clipping mode, 4 to 7
 	// (ISO 32000-1, 9.3.6, Table 106), shows by what its clip lets through
@@ -273,9 +273,9 @@ func (s *textScene) ownBox(run []int) (image.Rectangle, []uint16) {
 // ownChange compares the page drawn whole with without over the pixels of
 // run's glyph boxes: alone reports a changed pixel no other glyph box counted
 // holds, shared one other boxes hold too. under, when not nil, is told the
-// colour without shows at each changed pixel of the first kind, and the
-// comparison then visits them all.
-func (s *textScene) ownChange(run []int, without *image.NRGBA, under func(px []byte)) (alone, shared bool) {
+// colours the page drawn whole and without show at each changed pixel of the
+// first kind, and the comparison then visits them all.
+func (s *textScene) ownChange(run []int, without *image.NRGBA, under func(with, without []byte)) (alone, shared bool) {
 	box, own := s.ownBox(run)
 	if box.Empty() {
 		return false, false
@@ -299,18 +299,18 @@ func (s *textScene) ownChange(run []int, without *image.NRGBA, under func(px []b
 				return true, true
 			}
 			alone, shared = true, true
-			under(without.Pix[o : o+3 : o+3])
+			under(s.with.Pix[o:o+3:o+3], without.Pix[o:o+3:o+3])
 		}
 	}
 	return alone, shared
 }
 
 // underRun returns [ownInkOptions.under] for run k, nil when o sets none.
-func (o ownInkOptions) underRun(k int) func(px []byte) {
+func (o ownInkOptions) underRun(k int) func(with, without []byte) {
 	if o.under == nil {
 		return nil
 	}
-	return func(px []byte) { o.under(k, px) }
+	return func(with, without []byte) { o.under(k, with, without) }
 }
 
 // groupRuns parts the runs pending names into groups no two runs of which
@@ -396,9 +396,10 @@ func (s *textScene) groupDrawing(ctx context.Context, r *Reader, pg *document.Pa
 }
 
 // ownDiffers reports whether without differs from the page drawn whole at a
-// pixel of run's glyph boxes. under, when not nil, is told the colour without
-// shows at each pixel that differs, and the comparison then visits them all.
-func (s *textScene) ownDiffers(run []int, without *image.NRGBA, under func(px []byte)) bool {
+// pixel of run's glyph boxes. under, when not nil, is told the colours the
+// page drawn whole and without show at each pixel that differs, and the
+// comparison then visits them all.
+func (s *textScene) ownDiffers(run []int, without *image.NRGBA, under func(with, without []byte)) bool {
 	rect, own := s.ownBox(run)
 	seen := false
 	for y := rect.Min.Y; y < rect.Max.Y; y++ {
@@ -414,7 +415,7 @@ func (s *textScene) ownDiffers(run []int, without *image.NRGBA, under func(px []
 				return true
 			}
 			seen = true
-			under(without.Pix[off : off+3 : off+3])
+			under(s.with.Pix[off:off+3:off+3], without.Pix[off:off+3:off+3])
 		}
 	}
 	return seen

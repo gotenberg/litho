@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
+	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -74,7 +75,8 @@ func WithEnhancedContrast() ContrastOption {
 // changes how the page looks.
 //
 // The text's colour is the one the content stream paints it in, converted to
-// sRGB as [Reader.RenderPage] converts it; text both filled and stroked is
+// sRGB and adjusted by the transfer function in force as [Reader.RenderPage]
+// converts and adjusts it; text both filled and stroked is
 // judged by whichever of its two colours contrasts more, so a white letter
 // outlined in black is judged by its outline. A run is judged where its own
 // ink marks the page, as [Reader.ExtractUnseenText] judges it seen: the page
@@ -94,7 +96,10 @@ func WithEnhancedContrast() ContrastOption {
 // colour the content stream does not settle, or a stack one of whose copies'
 // colour it does not, painted with a pattern, transparency, a blend mode or a
 // soft mask, or by a Type 3 glyph that may set its own colour, is counted in
-// [models.ContrastReport.Undetermined] and not judged.
+// [models.ContrastReport.Undetermined] and not judged, as is a run whose own
+// ink the page shows in colours no mix of its colours with what lies under it
+// makes: a blend mode, a soft mask or transparency painted over it recolours
+// it, so the content stream's colour is not the one shown.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
 // [ErrFontMissing] when the page's text cannot be read, and
@@ -128,17 +133,17 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 		return models.ContrastReport{}, fmt.Errorf("page %d: %w", pageNum, err)
 	}
 	under := make([]contrastSamples, len(stacks))
-	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, stackGlyphs(stacks), ownInkOptions{under: func(k int, px []byte) { under[k].add(px) }})
+	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, stackGlyphs(stacks), ownInkOptions{under: func(k int, with, without []byte) { under[k].add(with, without) }})
 	if err != nil {
 		return models.ContrastReport{}, sceneError(pageNum, err)
 	}
-	cache := &colorconv.Cache{}
+	conv := &inkConverter{cache: &colorconv.Cache{}}
 	for n, stack := range stacks {
 		if verdicts[n] != inkSeen || len(under[n].lums) == 0 {
 			continue
 		}
-		inks, ok := r.stackColours(ctx, s, runs, stack, pg.Dict, cache)
-		if !ok {
+		inks, ok := r.stackColours(ctx, s, runs, stack, pg.Dict, conv)
+		if !ok || under[n].offInk(inks) {
 			rep.Undetermined++
 			continue
 		}
@@ -162,10 +167,10 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 // its copies contrasts most with what lies under the whole stack
 // ([strongestInk]), not by the copy drawn last alone: a light letter over its
 // dark shadow reads by the shadow's edge.
-func (r *Reader) stackColours(ctx context.Context, s *textScene, runs [][]int, stack runStack, pageDict ast.PdfDict, cache *colorconv.Cache) ([][3]float64, bool) {
+func (r *Reader) stackColours(ctx context.Context, s *textScene, runs [][]int, stack runStack, pageDict ast.PdfDict, conv *inkConverter) ([][3]float64, bool) {
 	var inks [][3]float64
 	for _, k := range stack.members {
-		c, ok := r.textColours(ctx, s.paints[runs[k][0]], pageDict, cache)
+		c, ok := r.textColours(ctx, s.paints[runs[k][0]], pageDict, conv)
 		if !ok {
 			return nil, false
 		}
@@ -195,12 +200,21 @@ func contrastRuns(s *textScene) [][]int {
 	return runs
 }
 
-// samePaint reports two glyphs painted alike: the same mode, colours and
-// transparency.
+// samePaint reports two glyphs painted alike: the same mode, colours,
+// transparency and transfer function.
 func samePaint(a, b graphics.TextPaint) bool {
 	return a.Mode == b.Mode && sameColour(a.Fill, b.Fill) && sameColour(a.Stroke, b.Stroke) &&
 		a.FillAlpha == b.FillAlpha && a.StrokeAlpha == b.StrokeAlpha && a.BlendMode == b.BlendMode &&
-		a.SoftMask == b.SoftMask && a.Type3 == b.Type3
+		a.SoftMask == b.SoftMask && a.Type3 == b.Type3 && transferKey(a.Transfer) == transferKey(b.Transfer)
+}
+
+// transferKey names a transfer function as written, the empty string for
+// none.
+func transferKey(obj ast.PdfObject) string {
+	if obj == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", obj)
 }
 
 // sameColour reports two colours in one space with the same components.
@@ -224,7 +238,7 @@ func sameColour(a, b graphics.Color) bool {
 // mode that paints fills them (ISO 32000-1, 9.3.6, Table 106). In modes 2
 // and 6 a paint whose constant alpha is 0 leaves no mark (11.6.4.4) and gives
 // no colour, unless both do.
-func (r *Reader) textColours(ctx context.Context, p graphics.TextPaint, pageDict ast.PdfDict, cache *colorconv.Cache) ([][3]float64, bool) {
+func (r *Reader) textColours(ctx context.Context, p graphics.TextPaint, pageDict ast.PdfDict, conv *inkConverter) ([][3]float64, bool) {
 	type side struct {
 		c     graphics.Color
 		alpha float64
@@ -245,7 +259,7 @@ func (r *Reader) textColours(ctx context.Context, p graphics.TextPaint, pageDict
 	}
 	inks := make([][3]float64, 0, len(sides))
 	for _, sd := range sides {
-		ink, ok := r.textColour(ctx, p, sd.c, sd.alpha, pageDict, cache)
+		ink, ok := r.textColour(ctx, p, sd.c, sd.alpha, pageDict, conv)
 		if !ok {
 			return nil, false
 		}
@@ -285,35 +299,91 @@ func strongestInk(inks [][3]float64, background [3]float64) [3]float64 {
 // false when the content stream does not settle it: a pattern, a constant
 // alpha below 1, a blend mode other than Normal (ISO 32000-1, 11.3.5), a soft
 // mask, a Type 3 glyph, which may set its own colour (9.6.5), or a space that
-// does not convert.
-func (r *Reader) textColour(ctx context.Context, p graphics.TextPaint, c graphics.Color, alpha float64, pageDict ast.PdfDict, cache *colorconv.Cache) ([3]float64, bool) {
+// does not convert. The transfer function in force adjusts the colour as it
+// adjusts the page's drawing (10.5), so text a transfer inverts is judged in
+// the colour it shows over the background the drawing shows.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20722.pdf: every page draws under an inverting /TR, so
+//     white text reads black on the black the drawing shows; read through
+//     the transfer, its 10,128 failures fall to 56, each in colours poppler
+//     shows.
+func (r *Reader) textColour(ctx context.Context, p graphics.TextPaint, c graphics.Color, alpha float64, pageDict ast.PdfDict, ic *inkConverter) ([3]float64, bool) {
 	if p.Type3 || p.SoftMask || alpha < 1 || (p.BlendMode != "" && p.BlendMode != "Normal" && p.BlendMode != "Compatible") ||
 		c.Space.Family == graphics.FamilyPattern || c.Pattern != "" {
 		return [3]float64{}, false
 	}
-	conv, err := colorconv.For(ctx, r.doc, c.Space, p.Resources, colorconv.Options{Intent: p.Intent, Page: pageDict, Cache: cache})
+	conv, err := colorconv.For(ctx, r.doc, c.Space, p.Resources, colorconv.Options{Intent: p.Intent, Page: pageDict, Cache: ic.cache})
 	if err != nil {
 		r.logger().Debug("text contrast: colour left undetermined", slog.String("space", c.Space.Family), slog.Any("err", err))
 		return [3]float64{}, false
 	}
 	red, green, blue := conv.RGB(c.Components)
+	if t := r.transfer(ctx, ic, p.Transfer); t != nil {
+		red, green, blue = t(red, green, blue)
+	}
 	return [3]float64{float64(red), float64(green), float64(blue)}, true
 }
 
+// maxContrastTransfers bounds the transfer functions [inkConverter] keeps
+// compiled over one page. Anti-DoS guard, not spec-mandated: the same bound
+// the renderer keeps (maxTransferCache in pkg/internal/render/page), since a
+// real page sets a handful; past it a function is compiled again at each
+// colour.
+const maxContrastTransfers = 64
+
+// inkConverter converts the colours of one page's text to the sRGB the page
+// is drawn in, keeping the conversions and the transfer functions it built.
+type inkConverter struct {
+	cache     *colorconv.Cache
+	transfers map[string]page.Transfer
+}
+
+// transfer returns the transfer function obj applies, nil for the identity.
+// A function the renderer cannot apply it draws under the identity (see
+// [page.CompileTransfer]), and so is it read here.
+func (r *Reader) transfer(ctx context.Context, ic *inkConverter, obj ast.PdfObject) page.Transfer {
+	if obj == nil {
+		return nil
+	}
+	key := transferKey(obj)
+	if t, ok := ic.transfers[key]; ok {
+		return t
+	}
+	t, err := page.CompileTransfer(ctx, r.doc, obj)
+	if err != nil {
+		r.logger().Debug("text contrast: transfer function read as the identity", slog.Any("err", err))
+		t = nil
+	}
+	if ic.transfers == nil {
+		ic.transfers = make(map[string]page.Transfer)
+	}
+	if len(ic.transfers) < maxContrastTransfers {
+		ic.transfers[key] = t
+	}
+	return t
+}
+
 // contrastSamples collects the colours the page shows under the own ink of
-// one run ([ownInkOptions.under]).
+// one run, and those it shows there drawn whole ([ownInkOptions.under]).
 type contrastSamples struct {
 	sum  [3]float64
 	lums []float64
+	// pairs holds the pixels, six bytes each: the RGB of the page drawn
+	// whole, then that of the page drawn without the run.
+	pairs []byte
 }
 
-// add counts px, RGB in its three bytes.
-func (c *contrastSamples) add(px []byte) {
-	r, g, b := float64(px[0])/255, float64(px[1])/255, float64(px[2])/255
+// add counts one pixel, with the page drawn whole and without the page
+// drawn without the run, RGB in their three bytes.
+func (c *contrastSamples) add(with, without []byte) {
+	r, g, b := float64(without[0])/255, float64(without[1])/255, float64(without[2])/255
 	c.sum[0] += r
 	c.sum[1] += g
 	c.sum[2] += b
 	c.lums = append(c.lums, relativeLuminance(r, g, b))
+	c.pairs = append(c.pairs, with[0], with[1], with[2], without[0], without[1], without[2])
 }
 
 // runStats is the background of one run: background is its mean colour,
@@ -395,4 +465,171 @@ func rgb8(c [3]float64) [3]uint8 {
 		out[i] = uint8(math.Round(math.Max(0, math.Min(1, v)) * 255)) //nolint:gosec // G115: v is clamped to [0, 1], so the product fits in a byte.
 	}
 	return out
+}
+
+// inkSlack is how far, in the sRGB cube with each channel in [0, 1], a pixel
+// of a run's own ink may lie from every mix of the run's colours with what
+// the page shows under it and still read as such a mix. Not spec-mandated: it
+// absorbs the 8-bit rounding of the drawing and a colour a conversion reads a
+// few levels apart, while an inverting transfer or blend mode painted over
+// the run moves its pixels across the whole cube.
+const inkSlack = 0.06
+
+// inkLuminanceSlack is how far, in relative luminance, a pixel of a run's own
+// ink may lie outside the luminances of the run's colours and of what the
+// page shows under it and still read as a mix of them. Not spec-mandated, as
+// [inkSlack].
+const inkLuminanceSlack = 0.03
+
+// inkAlteredShare is the share of a run's own-ink pixels no mix explains
+// beyond which [contrastSamples.offInk] finds the run's colours altered by
+// what the page paints over them. Not spec-mandated: a stray pixel at a
+// glyph's edge, where another mark's anti-aliasing meets it, stays below it.
+const inkAlteredShare = 0.25
+
+// maxHullInks bounds the distinct colours of one run whose mixes
+// [contrastSamples.offInk] builds in the sRGB cube. Anti-DoS guard, not
+// spec-mandated: a glyph shows its fill and its stroke and a stack a few
+// copies, so three colours cover a fill and a stroke over a shadow; a run
+// past it is tested on luminance alone.
+const maxHullInks = 3
+
+// offInk reports that the page shows the run's own ink in colours no mix of
+// its colours with what lies under it makes: no pixel the run turns to one of
+// its colours, within [inkSlack], shows it, and more than [inkAlteredShare]
+// of its pixels lie both farther than [inkSlack] from every such mix in the
+// sRGB cube and past [inkLuminanceSlack] outside the range of their relative
+// luminances. A glyph's pixel is its colours over what lies under it, in
+// shares its coverage sets (ISO 32000-1, 11.3.6, the Normal blend mode),
+// unless something painted after it alters it: a later painting under a blend
+// mode other than Normal, a soft mask or a constant alpha below 1 (11.3.5),
+// or a transparency group holding such a painting, recolours the glyph and
+// the page under it alike, so the colour the content stream sets is not the
+// one the page shows. WCAG 2.x judges the colours shown (Success Criterion
+// 1.4.3, Contrast (Minimum)), so such a run is not judged by the content
+// stream's colour. Each test alone would find mixes where there are none: a
+// page composited in sRGB mixes along the straight line between two colours,
+// whose luminance dips below both when their hues differ, and a page
+// composited in CMYK mixes along a curve off that line, whose luminance stays
+// between theirs. A pixel showing the run's colour proves it shown: the edges
+// of a later opaque mark, a ring drawn round a dot of a map symbol, mix the
+// glyph with a colour neither it nor what lies under it holds, and leave its
+// inside as the content stream paints it.
+//
+// # Corpus evidence
+//
+//   - All corpora: 119 runs of 2,122,995 judged turn undetermined, in 9
+//     files; unseen text is unchanged.
+//   - pdfjs bug1146106.pdf, pdfcpu pkg_testdata__itu-t81.pdf, pdfjs
+//     issue9462.pdf: white glyphs over a dark glyph drawn at the same origin,
+//     judged white on white at 1:1, are left undetermined.
+//   - govdocs thread_000_000152.pdf page 38, thread_400_400625.pdf page 26:
+//     map symbols built of glyphs layered at one origin, 63 runs.
+//   - govdocs thread_000_000162.pdf page 1: white text over a CMYK
+//     composite mixes off the straight line, within the luminance test.
+func (c *contrastSamples) offInk(inks [][3]float64) bool {
+	n := len(c.pairs) / 6
+	if n == 0 {
+		return false
+	}
+	var distinct [][3]float64
+	low, high := math.Inf(1), math.Inf(-1)
+	for _, ink := range inks {
+		l := relativeLuminance(ink[0], ink[1], ink[2])
+		low, high = math.Min(low, l), math.Max(high, l)
+		if !slices.ContainsFunc(distinct, func(d [3]float64) bool { return colourDistance(d, ink) <= 1.0/512 }) {
+			distinct = append(distinct, ink)
+		}
+	}
+	if len(distinct) > maxHullInks {
+		distinct = nil
+	}
+	pts := make([][3]float64, 0, len(distinct)+1)
+	off := 0
+	for i := range n {
+		px := c.pairs[6*i : 6*i+6]
+		with := [3]float64{float64(px[0]) / 255, float64(px[1]) / 255, float64(px[2]) / 255}
+		under := [3]float64{float64(px[3]) / 255, float64(px[4]) / 255, float64(px[5]) / 255}
+		if slices.ContainsFunc(inks, func(ink [3]float64) bool {
+			return colourDistance(with, ink) <= inkSlack && colourDistance(under, ink) > inkSlack
+		}) {
+			return false
+		}
+		if distinct != nil {
+			pts = append(append(pts[:0], under), distinct...)
+			if hullDistance(with, pts) <= inkSlack {
+				continue
+			}
+		}
+		lw, lu := relativeLuminance(with[0], with[1], with[2]), relativeLuminance(under[0], under[1], under[2])
+		if lw < math.Min(low, lu)-inkLuminanceSlack || lw > math.Max(high, lu)+inkLuminanceSlack {
+			off++
+		}
+	}
+	return float64(off) > inkAlteredShare*float64(n)
+}
+
+// hullDistance returns how far p lies from the convex hull of pts, at most
+// four points: from the nearest of the triangles, segments and points they
+// make, which for three points or fewer is the hull itself, and for four
+// leaves out the inside of the tetrahedron they span, which then counts as
+// off the hull.
+func hullDistance(p [3]float64, pts [][3]float64) float64 {
+	best := math.Inf(1)
+	for i := range pts {
+		best = math.Min(best, colourDistance(p, pts[i]))
+		for j := i + 1; j < len(pts); j++ {
+			best = math.Min(best, segmentDistance(p, pts[i], pts[j]))
+			for k := j + 1; k < len(pts); k++ {
+				best = math.Min(best, triangleDistance(p, pts[i], pts[j], pts[k]))
+			}
+		}
+	}
+	return best
+}
+
+// colourDistance is the Euclidean distance of two colours.
+func colourDistance(a, b [3]float64) float64 {
+	d := sub3(a, b)
+	return math.Sqrt(dot3(d, d))
+}
+
+// segmentDistance is the distance of p from the segment ab.
+func segmentDistance(p, a, b [3]float64) float64 {
+	ab := sub3(b, a)
+	l := dot3(ab, ab)
+	if l == 0 {
+		return colourDistance(p, a)
+	}
+	t := math.Max(0, math.Min(1, dot3(sub3(p, a), ab)/l))
+	return colourDistance(p, [3]float64{a[0] + t*ab[0], a[1] + t*ab[1], a[2] + t*ab[2]})
+}
+
+// triangleDistance is the distance of p from the triangle abc, inside and
+// edges alike; a degenerate triangle is its edges.
+func triangleDistance(p, a, b, c [3]float64) float64 {
+	ab, ac, ap := sub3(b, a), sub3(c, a), sub3(p, a)
+	d00, d01, d11 := dot3(ab, ab), dot3(ab, ac), dot3(ac, ac)
+	den := d00*d11 - d01*d01
+	edges := math.Min(segmentDistance(p, a, b), math.Min(segmentDistance(p, b, c), segmentDistance(p, a, c)))
+	if den <= 1e-12 {
+		return edges
+	}
+	d20, d21 := dot3(ap, ab), dot3(ap, ac)
+	v := (d11*d20 - d01*d21) / den
+	w := (d00*d21 - d01*d20) / den
+	if v < 0 || w < 0 || v+w > 1 {
+		return edges
+	}
+	return colourDistance(p, [3]float64{a[0] + v*ab[0] + w*ac[0], a[1] + v*ab[1] + w*ac[1], a[2] + v*ab[2] + w*ac[2]})
+}
+
+// sub3 is a - b.
+func sub3(a, b [3]float64) [3]float64 {
+	return [3]float64{a[0] - b[0], a[1] - b[1], a[2] - b[2]}
+}
+
+// dot3 is the dot product of a and b.
+func dot3(a, b [3]float64) float64 {
+	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
 }

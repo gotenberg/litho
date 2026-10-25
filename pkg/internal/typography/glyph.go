@@ -146,6 +146,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 				BlendMode:   state.BlendMode,
 				SoftMask:    state.SoftMask != nil,
 				Intent:      state.RenderingIntent,
+				Transfer:    state.Transfer,
 				Resources:   machine.Resources,
 				Bold:        font.Bold,
 				Type3:       font.Subtype == "Type3",
