@@ -606,7 +606,7 @@ func (g *Group) Into(ctx context.Context, parent *Group, params Params) error {
 				continue
 			}
 			if !same {
-				c = convert(c, g.space, parent.space)
+				c = convert(c, g.space, parent.space, params.Uncompensated)
 			}
 			fs, as := params.Source(x, y, f, a)
 			parent.paint(x, y, params.Mode, c, fs, as, params.Keep&AllSpots, Components{})
@@ -638,6 +638,11 @@ type Params struct {
 	// Spots is the ink the element paints on each spot colorant plane of
 	// a group that keeps them, in [0, 1], as Keep leaves them.
 	Spots Components
+	// Uncompensated takes the element's sRGB colours into the group's
+	// blending colour space without black point compensation, as the
+	// graphics state's /UseBlackPtComp /OFF asks (ISO 32000-2, Table 57),
+	// where the space's converter can ([UncompensatedConverter]).
+	Uncompensated bool
 }
 
 // Source returns the source shape and source alpha at device pixel (x, y) of

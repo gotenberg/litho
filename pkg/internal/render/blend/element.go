@@ -40,8 +40,9 @@ func (g *Group) Direct() *surface.Canvas {
 // premultiplied, and its alpha the element's object shape and object alpha
 // both, as anti-aliased coverage, an image's masks and the clip leave them
 // (11.3.7.2). Its colour is sRGB, converted into the group's blending colour
-// space (11.3.4). params adds the graphics state's mode, constant alpha and
-// soft mask. An element that holds partial shape apart from partial alpha, which
+// space (11.3.4), without black point compensation under
+// [Params.Uncompensated]. params adds the graphics state's mode, constant
+// alpha and soft mask. An element that holds partial shape apart from partial alpha, which
 // matters only in a knockout group, is not represented: its shape is taken
 // as its alpha.
 func (g *Group) PaintCanvas(ctx context.Context, src *surface.Canvas, origin image.Point, params Params) error {
@@ -68,7 +69,7 @@ func (g *Group) PaintCanvas(ctx context.Context, src *surface.Canvas, origin ima
 			}
 			rgb := [3]float32{clamp01(p[0] / a), clamp01(p[1] / a), clamp01(p[2] / a)}
 			if !seen || rgb != last {
-				lastCS, last, seen = g.space.fromRGB(rgb), rgb, true
+				lastCS, last, seen = g.space.fromRGB(rgb, params.Uncompensated), rgb, true
 			}
 			fs, as := params.Source(x, y, a, a)
 			g.paint(x, y, params.Mode, lastCS, fs, as, params.Keep&AllSpots, Components{})

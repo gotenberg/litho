@@ -40,6 +40,18 @@ type Converter interface {
 	FromRGB(rgb [3]float32) Components
 }
 
+// UncompensatedConverter is a [Converter] that also takes sRGB colours into
+// its space without black point compensation (ISO 18619:2015), as an element
+// painted under /UseBlackPtComp /OFF asks (ISO 32000-2, Table 57).
+// A space whose converter is not one takes every element's colours through
+// [Converter.FromRGB].
+type UncompensatedConverter interface {
+	Converter
+	// FromRGBUncompensated is [Converter.FromRGB] without black point
+	// compensation.
+	FromRGBUncompensated(rgb [3]float32) Components
+}
+
 // Space is a blending colour space other than sRGB: the grey or CMYK space a
 // transparency group's /CS names (ISO 32000-1, 11.6.6, Table 147), in which
 // its elements composite (11.3.4). A nil *Space is sRGB.
@@ -93,7 +105,13 @@ func (s *Space) Key() string {
 func (s *Space) ToRGB(c Components) [3]float32 { return s.toRGB(s.store(c)) }
 
 // FromRGB returns the components of s nearest the sRGB colour rgb.
-func (s *Space) FromRGB(rgb [3]float32) Components { return s.load(s.fromRGB(rgb)) }
+func (s *Space) FromRGB(rgb [3]float32) Components { return s.load(s.fromRGB(rgb, false)) }
+
+// FromRGBUncompensated is [Space.FromRGB] for a colour painted without black
+// point compensation ([UncompensatedConverter]).
+func (s *Space) FromRGBUncompensated(rgb [3]float32) Components {
+	return s.load(s.fromRGB(rgb, true))
+}
 
 // channels returns how many colour channels a group in s holds.
 func (s *Space) channels() int { return s.Kind().Channels() }
@@ -137,14 +155,16 @@ func (s *Space) toRGB(c Components) [3]float32 {
 	return [3]float32{clamp01(c[0] + c[3] - 1), clamp01(c[1] + c[3] - 1), clamp01(c[2] + c[3] - 1)}
 }
 
-// fromRGB returns the stored colour of s nearest the sRGB colour rgb.
-func (s *Space) fromRGB(rgb [3]float32) Components {
+// fromRGB returns the stored colour of s nearest the sRGB colour rgb, without
+// black point compensation when uncompensated is set and s's converter can
+// leave it out.
+func (s *Space) fromRGB(rgb [3]float32, uncompensated bool) Components {
 	switch s.Kind() {
 	case RGB:
 		return Components{rgb[0], rgb[1], rgb[2]}
 	case Gray:
 		if s.conv != nil {
-			return s.conv.FromRGB(rgb)
+			return s.convFromRGB(rgb, uncompensated)
 		}
 		// ISO 32000-1, 10.3: DeviceRGB to DeviceGray weighs the
 		// components as the NTSC luminance does.
@@ -152,7 +172,7 @@ func (s *Space) fromRGB(rgb [3]float32) Components {
 	case CMYK:
 	}
 	if s.conv != nil {
-		return s.store(s.conv.FromRGB(rgb))
+		return s.store(s.convFromRGB(rgb, uncompensated))
 	}
 	// ISO 32000-1, 10.3: cyan = 1 - red and so on, black the smallest of
 	// the three, removed from them in full.
@@ -164,13 +184,23 @@ func (s *Space) fromRGB(rgb [3]float32) Components {
 	return s.store(Components{clamp01(c - k), clamp01(m - k), clamp01(y - k), clamp01(k)})
 }
 
+// convFromRGB converts rgb through s's converter, by its uncompensated
+// conversion when uncompensated is set and it has one.
+func (s *Space) convFromRGB(rgb [3]float32, uncompensated bool) Components {
+	if uc, ok := s.conv.(UncompensatedConverter); ok && uncompensated {
+		return uc.FromRGBUncompensated(rgb)
+	}
+	return s.conv.FromRGB(rgb)
+}
+
 // convert returns the stored colour c of space from as space to stores it,
-// through sRGB when they differ.
-func convert(c Components, from, to *Space) Components {
+// through sRGB when they differ, into to without black point compensation
+// when uncompensated is set ([Space.fromRGB]).
+func convert(c Components, from, to *Space, uncompensated bool) Components {
 	if from.Same(to) {
 		return c
 	}
-	return to.fromRGB(from.toRGB(c))
+	return to.fromRGB(from.toRGB(c), uncompensated)
 }
 
 // luminosity returns the luminosity of the stored colour c, the value a

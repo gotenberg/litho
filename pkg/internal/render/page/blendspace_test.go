@@ -303,3 +303,87 @@ func TestCMYKLinksCompensateBlackPoints(t *testing.T) {
 		}
 	})
 }
+
+// TestCMYKLinksHonourUseBlackPtCompOff checks ISO 32000-2, Table 57: a colour
+// painted under /UseBlackPtComp /OFF enters a CMYK blending space through the
+// link from sRGB without black point compensation, while /ON and the initial
+// /Default compensate, for a fill and for an image, in an ICCBased CMYK page
+// group and for a CMYK device. The CMYK values are Little CMS 2.19's (transicc
+// from its built-in sRGB to the profile, relative colorimetric, with and
+// without -b).
+func TestCMYKLinksHonourUseBlackPtCompOff(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join("..", "..", "graphics", "icc", "testdata", "v4-cmyk-lut.icc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := icc.Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	onBlack := blend.Components{0.349, 0.315, 0.534, 0.983}
+	offBlack := blend.Components{0.387, 0.391, 0.753, 1}
+	closeTo := func(got, want blend.Components) bool {
+		for i := range 4 {
+			if math.Abs(float64(got[i]-want[i])) > 0.005 {
+				return false
+			}
+		}
+		return true
+	}
+	// Columns of 20 pixels: a fill under /OFF, /ON and the initial state,
+	// then the same three as a black DeviceRGB image.
+	const content = "q /Off gs 0 0 0 rg 0 0 20 100 re f Q q /On gs 0 0 0 rg 20 0 20 100 re f Q 0 0 0 rg 40 0 20 100 re f " +
+		"q /Off gs 20 0 0 100 60 0 cm /Im Do Q q /On gs 20 0 0 100 80 0 cm /Im Do Q"
+	const resources = "/Resources << /ExtGState << /Off << /UseBlackPtComp /OFF >> /On << /UseBlackPtComp /ON >> >> /XObject << /Im 6 0 R >> >>"
+	image := stream("/Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceRGB", "\x00\x00\x00")
+	ctx := context.Background()
+	check := func(t *testing.T, res *Result) {
+		t.Helper()
+		for _, c := range []struct {
+			name string
+			x    int
+			want blend.Components
+		}{
+			{"OFF fill", 10, offBlack}, {"ON fill", 30, onBlack}, {"default fill", 50, onBlack},
+			{"OFF image", 70, offBlack}, {"ON image", 90, onBlack},
+		} {
+			if got, _ := res.Group.Components(c.x, 50); !closeTo(got, c.want) {
+				t.Errorf("%s = %v, want %v", c.name, got, c.want)
+			}
+		}
+	}
+
+	t.Run("device", func(t *testing.T) {
+		t.Parallel()
+		f := fixture{page: resources, content: content, objs: []string{stream("/N 4", "unused"), image}}
+		doc, pg := open(t, f.bytes(), limits.Limits{})
+		opts := f.options()
+		opts.CMYK, opts.CMYKProfile = true, profile
+		res, _, err := RenderGroup(ctx, doc, pg, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		check(t, res)
+	})
+
+	t.Run("group", func(t *testing.T) {
+		t.Parallel()
+		f := fixture{
+			page:    "/Group << /S /Transparency /CS [/ICCBased 5 0 R] >> " + resources,
+			content: content,
+			objs:    []string{stream("/N 4", string(data)), image},
+		}
+		doc, pg := open(t, f.bytes(), limits.Limits{})
+		opts := f.options()
+		opts.GroupSpace = true
+		res, _, err := RenderGroup(ctx, doc, pg, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sp := res.Group.Space(); sp == nil || sp.Kind() != blend.CMYK {
+			t.Fatalf("page group blends in %v, want CMYK", sp)
+		}
+		check(t, res)
+	})
+}

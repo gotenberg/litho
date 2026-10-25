@@ -36,10 +36,15 @@ func (r *renderer) colorOptions() colorconv.Options {
 // graphics state (ISO 32000-2, Table 57), which a colour or an image painted
 // under it is converted with, or /Default under [Options.DefaultBlackPoint].
 func (r *renderer) blackPointCompensation() icc.BPC {
+	return r.blackPointOf(r.m.Current())
+}
+
+// blackPointOf is [renderer.blackPointCompensation] for the graphics state st.
+func (r *renderer) blackPointOf(st *graphics.State) icc.BPC {
 	if r.defaultBPC {
 		return icc.BPCDefault
 	}
-	bpc, _ := icc.ParseBPC(r.m.Current().BlackPointCompensation) // the machine keeps only names Table 57 defines
+	bpc, _ := icc.ParseBPC(st.BlackPointCompensation) // the machine keeps only names Table 57 defines
 	return bpc
 }
 

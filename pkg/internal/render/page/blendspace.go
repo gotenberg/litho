@@ -36,7 +36,9 @@ const maxBlendSpaces = 1024
 // does. From sRGB it converts a CMYK space through an ICC link from sRGB to
 // the profile the space is read through ([cmykLinkOptions]), and a grey
 // space, or a CMYK space whose profile holds no tables back from the
-// connection space, by the device formulas of ISO 32000-1, 10.3.
+// connection space, by the device formulas of ISO 32000-1, 10.3. A colour
+// painted under /UseBlackPtComp /OFF converts through a second link, the
+// first without black point compensation ([blendConverter.FromRGBUncompensated]).
 //
 // It is safe for concurrent use.
 type blendConverter struct {
@@ -44,14 +46,25 @@ type blendConverter struct {
 	to   colorconv.Converter
 	// link converts sRGB to the CMYK space, nil for the device formula.
 	link *icc.Link
+	// src and dst are link's profiles, from which the uncompensated link is
+	// built on first use: most pages never turn compensation off.
+	src, dst *icc.Profile
 	// formula is the space converted by the device formulas.
 	formula *blend.Space
+
+	offOnce sync.Once
+	off     *icc.Link
 
 	mu   sync.Mutex
 	in   [4]float64
 	keys []uint32
 	memo []blend.Components
 }
+
+// uncompensatedKey is the bit a memo key of [blendConverter] sets for a
+// colour converted without black point compensation, which keeps the two
+// conversions of one colour in separate slots.
+const uncompensatedKey = uint32(1) << 25
 
 func (c *blendConverter) ToRGB(comps blend.Components) [3]float32 {
 	c.mu.Lock()
@@ -68,13 +81,41 @@ func (c *blendConverter) FromRGB(rgb [3]float32) blend.Components {
 	if c.link == nil {
 		return c.formula.FromRGB(rgb)
 	}
+	return c.convert(c.link, rgb, 0)
+}
+
+// FromRGBUncompensated converts rgb as [blendConverter.FromRGB] does, through
+// the link without black point compensation (ISO 32000-2, Table 57). The
+// device formula, which knows no black points, converts as before.
+func (c *blendConverter) FromRGBUncompensated(rgb [3]float32) blend.Components {
+	if c.link == nil {
+		return c.formula.FromRGB(rgb)
+	}
+	c.offOnce.Do(func() {
+		link, err := icc.NewLink(c.src, c.dst, cmykLinkOptions(false))
+		if err != nil || link.OutputChannels() != 4 {
+			// The compensated link of the same profiles was built, so this
+			// does not fail; should it, the colour keeps that link.
+			return
+		}
+		c.off = link
+	})
+	if c.off == nil {
+		return c.convert(c.link, rgb, 0)
+	}
+	return c.convert(c.off, rgb, uncompensatedKey)
+}
+
+// convert converts rgb through link, remembering the result under a key with
+// the bits of tag set.
+func (c *blendConverter) convert(link *icc.Link, rgb [3]float32, tag uint32) blend.Components {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// The renderer's rasters hold 8-bit colours at heart, so a colour is
 	// quantised to 8 bits a channel and converted as such, whatever was
 	// converted before; bit 24 keeps the empty slot unmatched.
 	q := [3]uint8{to8(rgb[0]), to8(rgb[1]), to8(rgb[2])}
-	key := uint32(1)<<24 | uint32(q[0])<<16 | uint32(q[1])<<8 | uint32(q[2])
+	key := tag | uint32(1)<<24 | uint32(q[0])<<16 | uint32(q[1])<<8 | uint32(q[2])
 	if c.keys == nil {
 		c.keys = make([]uint32, 1<<fromRGBMemoBits)
 		c.memo = make([]blend.Components, 1<<fromRGBMemoBits)
@@ -85,7 +126,7 @@ func (c *blendConverter) FromRGB(rgb [3]float32) blend.Components {
 	}
 	in := [3]float64{float64(q[0]) / 255, float64(q[1]) / 255, float64(q[2]) / 255}
 	var out [4]float64
-	c.link.Convert(in[:], out[:])
+	link.Convert(in[:], out[:])
 	comps := blend.Components{float32(out[0]), float32(out[1]), float32(out[2]), float32(out[3])}
 	c.keys[slot], c.memo[slot] = key, comps
 	return comps
@@ -144,7 +185,7 @@ func (r *renderer) groupSpace(cs ast.PdfObject, resources ast.PdfDict) *blend.Sp
 	}
 	conv := &blendConverter{kind: kind, to: to, formula: blend.NewSpace(kind, key, nil)}
 	if kind == blend.CMYK {
-		conv.link = r.linkFromRGB(read)
+		conv.link, conv.src, conv.dst = r.linkFromRGB(read)
 	}
 	sp := blend.NewSpace(kind, key, conv)
 	if len(r.spaces) < maxBlendSpaces {
@@ -217,8 +258,8 @@ func (r *renderer) blendKind(cs ast.PdfObject) (blend.Kind, string, bool) {
 // space cs is read through: its own for an ICCBased space, the page's
 // DeviceCMYK reading otherwise ([pdfimage.CMYKProfile]). It returns nil, and
 // the device formula then applies, when the profile holds no table back from
-// the connection space.
-func (r *renderer) linkFromRGB(cs ast.PdfObject) *icc.Link {
+// the connection space. It also returns the link's two profiles.
+func (r *renderer) linkFromRGB(cs ast.PdfObject) (*icc.Link, *icc.Profile, *icc.Profile) {
 	var dst *icc.Profile
 	if _, isArray := cs.(ast.PdfArray); isArray {
 		dst = pdfimage.ICCBasedProfile(r.ctx, r.doc, cs)
@@ -226,19 +267,19 @@ func (r *renderer) linkFromRGB(cs ast.PdfObject) *icc.Link {
 		dst = pdfimage.CMYKProfile(r.ctx, r.doc, r.page.Dict)
 	}
 	if dst == nil {
-		return nil
+		return nil, nil, nil
 	}
 	src, err := icc.Parse(icc.SRGBProfile())
 	if err != nil {
 		r.doc.Logger.Debug("render: reading the sRGB profile", slog.Any("err", err))
-		return nil
+		return nil, nil, nil
 	}
-	link, err := icc.NewLink(src, dst, cmykLinkOptions())
+	link, err := icc.NewLink(src, dst, cmykLinkOptions(true))
 	if err != nil || link.OutputChannels() != 4 {
 		r.doc.Logger.Debug("render: no link from sRGB to the group's CMYK profile; using the device formula", slog.Any("err", err))
-		return nil
+		return nil, nil, nil
 	}
-	return link
+	return link, src, dst
 }
 
 // deviceCMYK returns the blending colour space of a page drawn for a CMYK
@@ -264,14 +305,14 @@ func (r *renderer) deviceCMYK(profile *icc.Profile) (*blend.Space, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading the sRGB profile: %w", err)
 	}
-	toRGB, err := icc.NewLink(profile, srgb, cmykLinkOptions())
+	toRGB, err := icc.NewLink(profile, srgb, cmykLinkOptions(true))
 	if err != nil {
 		return nil, fmt.Errorf("%w: linking the CMYK device profile to sRGB: %w", ErrInvalidOptions, err)
 	}
 	conv := &blendConverter{kind: blend.CMYK, to: linkConverter{toRGB}, formula: blend.NewSpace(blend.CMYK, string(name), nil)}
-	link, err := icc.NewLink(srgb, profile, cmykLinkOptions())
+	link, err := icc.NewLink(srgb, profile, cmykLinkOptions(true))
 	if err == nil && link.OutputChannels() == 4 {
-		conv.link = link
+		conv.link, conv.src, conv.dst = link, srgb, profile
 	} else {
 		r.doc.Logger.Debug("render: no link from sRGB to the CMYK device profile; using the device formula", slog.Any("err", err))
 	}
@@ -281,8 +322,8 @@ func (r *renderer) deviceCMYK(profile *icc.Profile) (*blend.Space, error) {
 // cmykLinkOptions returns the options of the ICC links between sRGB and a
 // CMYK blending space, both ways: the relative colorimetric intent the page
 // is read under (ISO 32000-1, 8.6.5.8), with black point compensation (ISO
-// 18619:2015). ISO 32000-1, 8.6.5.8 leaves how an intent is honoured to the
-// conforming reader. Compensating keeps the links the inverse of litho's
+// 18619:2015) when compensate is set. ISO 32000-1, 8.6.5.8 leaves how an
+// intent is honoured to the conforming reader. Compensating keeps the links the inverse of litho's
 // reading of CMYK into sRGB, which compensates ([icc.Profile.NewTransform]),
 // so a colour painted in sRGB into a CMYK group reads back as itself, and a
 // CMYK device's inks read as the page's DeviceCMYK does in the same profile.
@@ -294,6 +335,13 @@ func (r *renderer) deviceCMYK(profile *icc.Profile) (*blend.Space, error) {
 // rather than its black point, and a profile whose black is lighter than
 // sRGB's read K alone lighter through the device than through the page.
 //
+// Every link compensates but one: a colour painted under /UseBlackPtComp
+// /OFF (ISO 32000-2, Table 57) enters a CMYK space through a second link
+// from sRGB without compensation ([blendConverter.FromRGBUncompensated]), as
+// it reached sRGB uncompensated, and as Little CMS converts without the flag.
+// /ON and /Default compensate. The links back to sRGB always compensate: they
+// read the composite, which no one graphics state painted.
+//
 // # Corpus evidence
 //
 //   - All corpora: of the 11 distinct CMYK output intent profiles of 110
@@ -304,8 +352,8 @@ func (r *renderer) deviceCMYK(profile *icc.Profile) (*blend.Space, error) {
 //     cells score as before. DeviceCMYK under litho's built-in profile, whose
 //     black point is XYZ 0, converts as before; only pdfjs issue8019 and
 //     issue19319 flatten to other composites, within the cell's bars.
-func cmykLinkOptions() icc.TransformOptions {
-	return icc.TransformOptions{Intent: icc.RelativeColorimetric, BlackPointCompensation: true}
+func cmykLinkOptions(compensate bool) icc.TransformOptions {
+	return icc.TransformOptions{Intent: icc.RelativeColorimetric, BlackPointCompensation: compensate}
 }
 
 // linkConverter reads colours through an ICC link to sRGB, a
@@ -330,7 +378,9 @@ type solid struct {
 // group being painted. A colour in the group's own space, or in a device
 // space the group's converts from by ISO 32000-1, 10.3, keeps its
 // components ([renderer.nativeColor]); any other reaches the group through
-// its sRGB (11.3.4 converts it into the blending colour space).
+// its sRGB (11.3.4 converts it into the blending colour space), without
+// black point compensation under /UseBlackPtComp /OFF (ISO 32000-2,
+// Table 57), as it reached sRGB.
 func (r *renderer) solidOf(s *scope, c graphics.Color, rgb [3]float32) solid {
 	sp := r.top().group.Space()
 	if sp == nil {
@@ -338,6 +388,9 @@ func (r *renderer) solidOf(s *scope, c graphics.Color, rgb [3]float32) solid {
 	}
 	if comps, ok := r.nativeColor(s, c, sp); ok {
 		return solid{rgb: rgb, in: comps}
+	}
+	if r.blackPointCompensation() == icc.BPCOff {
+		return solid{rgb: rgb, in: sp.FromRGBUncompensated(rgb)}
 	}
 	return solid{rgb: rgb, in: sp.FromRGB(rgb)}
 }

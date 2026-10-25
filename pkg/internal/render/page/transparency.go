@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
@@ -67,13 +68,20 @@ type effects struct {
 	// ([blend.Params.Spots]).
 	keep  uint8
 	spots blend.Components
+	// uncompensated takes the painting's sRGB colours into a grey or CMYK
+	// group's space without black point compensation
+	// ([blend.Params.Uncompensated]).
+	uncompensated bool
 }
 
 // effectsOf returns the effects of st on a painting at constant alpha alpha,
 // CA for a stroke and ca for everything else (11.6.4.4). The blend mode
 // follows the edition of ISO 32000 the document's version names, which part
 // on ColorDodge and ColorBurn ([blend.Mode.In]). A mode the machine does not
-// know is Normal, as 11.3.5 makes an unrecognised name.
+// know is Normal, as 11.3.5 makes an unrecognised name. Under
+// /UseBlackPtComp /OFF (ISO 32000-2, Table 57) the painting's
+// colours enter the group's space uncompensated, as they reach sRGB
+// ([renderer.colorOptions]).
 func (r *renderer) effectsOf(st *graphics.State, alpha float64) effects {
 	mode := blend.Normal
 	if st.BlendMode != "Normal" {
@@ -81,7 +89,13 @@ func (r *renderer) effectsOf(st *graphics.State, alpha float64) effects {
 			mode = m
 		}
 	}
-	return effects{mode: mode.In(r.edition), opacity: surface.NewOpacity(alpha), mask: st.SoftMask, ais: st.AlphaIsShape}
+	return effects{
+		mode:          mode.In(r.edition),
+		opacity:       surface.NewOpacity(alpha),
+		mask:          st.SoftMask,
+		ais:           st.AlphaIsShape,
+		uncompensated: r.blackPointOf(st) == icc.BPCOff,
+	}
 }
 
 // blends reports whether a painting needs its group's compositing: a blend
@@ -94,7 +108,7 @@ func (e effects) blends() bool {
 // params returns the compositing parameters of e with mask, the soft mask
 // e.mask stands for.
 func (e effects) params(mask *blend.Mask) blend.Params {
-	return blend.Params{Mode: e.mode, Opacity: e.opacity, SoftMask: mask, AlphaIsShape: e.ais, Keep: e.keep, Spots: e.spots}
+	return blend.Params{Mode: e.mode, Opacity: e.opacity, SoftMask: mask, AlphaIsShape: e.ais, Keep: e.keep, Spots: e.spots, Uncompensated: e.uncompensated}
 }
 
 // top returns the group being painted.
