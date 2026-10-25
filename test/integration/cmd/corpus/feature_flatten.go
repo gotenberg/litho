@@ -81,13 +81,22 @@ const (
 //
 //   - litho (255 files, flattentext_2b, flattenannots_2b, blendspace_2b,
 //     flattentiles_1b, smaskindata_2b, flatuntagged_ua1, iccgroupalt_2b,
-//     greyintent_2b and sharedimage_2b among them): 36 flattened, all
-//     match; flattenrefuse_1b and smaskbudget_2b are refused, a group on
+//     greyintent_2b and sharedimage_2b among them): 36 flattened, all but
+//     usebpcgroup_4 match; flattenrefuse_1b and smaskbudget_2b are refused, a group on
 //     their second page past the render pixel budget; 217 have no
 //     transparency. Before annotations were drawn into the page, 20
 //     flattened and 5 left annotations painting with transparency; 1 does
 //     now, laterreads_2u.pdf, whose Screen annotation has no appearance
 //     stream.
+//   - litho usebpcgroup_4.pdf: poppler_mismatch, 242 of 20,000 pixels where
+//     the bar is 200, all on rows where a fill stops on a whole point: poppler
+//     26.09.0 snaps a downscaled image to whole device pixels, so the 300 dpi
+//     composite's row edges fall on a 72 dpi pixel's middle and take half
+//     their colour. The composite is right: poppler at 288 dpi finds 321
+//     pixels apart where the composite on the uniform grid found 642, and
+//     both, averaged down to 72 dpi, find none; PDFium 4.30.0 finds 154 where
+//     the uniform grid found 257, and MuPDF 246 where it found 248. litho's
+//     half matches.
 //   - govdocs, all 1091 files (scope file): 34 flatten, all match, and
 //     1057 have no transparency.
 //   - pdfjs, all 1202 files but the 1 the manifest skips: 267 of 276
