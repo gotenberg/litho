@@ -155,6 +155,68 @@ func TestRenderingIntentJPXColourCopies(t *testing.T) {
 	}
 }
 
+// TestRenderingIntentJPXColourOption checks that the option's rendering
+// intent reaches the decoder of a JPEG 2000 image taking its colour from its
+// own data where the content sets none, as the graphics state's intent it
+// stands in for (ISO 32000-1, 8.6.5.8): painted under no state, the image
+// decodes under the option's /AbsoluteColorimetric; after an ri
+// /RelativeColorimetric, its copy decodes as with no graphics state; and an
+// image stating its own /Intent keeps it (8.9.5, Table 89).
+func TestRenderingIntentJPXColourOption(t *testing.T) {
+	data := iccJ10(t, dimLiftedGreyProfile())
+	img := func(extra string) string {
+		return fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width 1 /Height 9 /Filter /JPXDecode%s /Length %d >>\nstream\n%s\nendstream", extra, len(data), data)
+	}
+	f := onePage("/Resources << /XObject << /Im 5 0 R /Own 6 0 R >> >>",
+		"/Im Do /Own Do q /RelativeColorimetric ri /Im Do Q", img(""), img(" /Intent /RelativeColorimetric"))
+	src := f.bytes()
+	r := recolorBytes(t, src, rgbTarget, naive(Options{Intent: icc.AbsoluteColorimetric, BlackPointCompensation: true}))
+	if got, want := r.text(0), "/Im Do\n/Own Do\nq\n/RelativeColorimetric ri\n/Im_RelativeColorimetric Do\nQ"; got != want {
+		t.Fatalf("content:\n%s\nwant:\n%s", got, want)
+	}
+
+	ctx := context.Background()
+	doc, _ := open(t, src)
+	// expected decodes object num as the renderer does under a graphics
+	// state, or with none for a nil intent, as sRGB bytes.
+	expected := func(num int, intent *icc.Intent) []byte {
+		t.Helper()
+		source, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: num})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var im image.Image
+		if intent == nil {
+			im, err = pdfimage.DecodePainted(ctx, doc, "Im", source, nil, nil)
+		} else {
+			im, err = pdfimage.DecodePaintedUnder(ctx, doc, "Im", source, nil, nil, *intent)
+		}
+		if err != nil {
+			t.Fatalf("decoding the source: %v", err)
+		}
+		var out []byte
+		for y := range 9 {
+			c := color.NRGBAModel.Convert(im.At(0, y)).(color.NRGBA)
+			out = append(out, c.R, c.G, c.B)
+		}
+		return out
+	}
+	abs := icc.AbsoluteColorimetric
+	if slices.Equal(expected(5, &abs), expected(5, nil)) {
+		t.Fatal("the profile decodes alike under both intents: the test cannot discriminate")
+	}
+	xobjects := r.dict(r.dict(r.pages[0].Dict["Resources"])["XObject"])
+	for name, want := range map[ast.PdfName][]byte{
+		"Im":                      expected(5, &abs),
+		"Own":                     expected(6, nil),
+		"Im_RelativeColorimetric": expected(5, nil),
+	} {
+		if got := decode(t, r, xobjects[name]); !slices.Equal(got, want) {
+			t.Errorf("%s: samples %v, want %v", name, got, want)
+		}
+	}
+}
+
 // TestRenderingIntentJPXColourInline checks the same of an inline image
 // whose JPEG 2000 data gives its colour: painted after a gs setting
 // /RI /AbsoluteColorimetric, it converts otherwise than with no state.

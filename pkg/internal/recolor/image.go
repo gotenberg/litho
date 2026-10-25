@@ -158,15 +158,17 @@ func (im *Images) variantKey() string {
 // the rendering intent and black point compensation choice the image
 // decoder converts colour it manages itself with, a JPEG 2000 image's own
 // colour ([Images.convertJPXColour]), as [pdfimage.DecodePaintedUnder] takes
-// them, and false when the state asks nothing of the decoder.
+// them, and false when the decoder's own reading, with no graphics state,
+// is what the conversion asks.
 type paintingIntenter interface {
 	paintingIntent() (icc.Intent, bool)
 }
 
 // decodePainted decodes an image the image decoder colour-manages, as
-// [pdfimage.DecodePainted] does, or, when the configured colours follow a
-// graphics state that asks for another rendering intent or black point
-// compensation, as [pdfimage.DecodePaintedUnder] does under them: ISO
+// [pdfimage.DecodePainted] does, or, when the configured colours convert under
+// another rendering intent than relative colorimetric, a graphics state's or
+// the option's, or a graphics state's black point compensation, as
+// [pdfimage.DecodePaintedUnder] does under them: ISO
 // 32000-1, 8.6.5.8 has an image that states no /Intent converted under the
 // current intent, and the decoder keeps an image's own /Intent over it.
 func (im *Images) decodePainted(ctx context.Context, label ast.PdfName, stream ast.PdfStream, resources, page ast.PdfDict) (image.Image, error) {

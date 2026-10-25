@@ -10149,6 +10149,13 @@ all and draw the samples as DeviceGray 128 everywhere: the large image stays
 within the `render` cell's channel tolerance, and the two small ones, 128
 pixels, 0.64% of the page, differ, so the page matches all three.
 
+The `--intent` option (`WithColorIntent`) stands in for the state's intent
+where the content sets none, so it reaches the decoder too. Converted to sRGB
+under `--intent Perceptual`, all three images drew 119 before, the two under
+`/Perceptual ri` among them since their state then matched the option's, and
+draw 33 now, the perceptual reading. Under the default relative colorimetric
+intent every output is byte for byte as before.
+
 The file conforms at PDF/A-2b. The other cells are the identification,
 metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
 same rule set in all thirteen cells.

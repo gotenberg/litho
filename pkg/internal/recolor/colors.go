@@ -62,12 +62,15 @@ func (c sessionColors) variantKey() string {
 
 // paintingIntent returns what the image decoder converts a JPEG 2000 image's
 // own colour with ([Images.convertJPXColour]) under the session's current
-// variant, and false under the option's, which decodes as before: under the
+// variant, and false when that is what the decoder does on its own: under the
 // image's own /Intent, else relative colorimetric, the graphics state's
 // initial intent (ISO 32000-1, 8.6.5.8), with the decoder's own
-// compensation. Only what a graphics state changes reaches the decoder: its
-// intent, set by ri or an ExtGState /RI, and its /UseBlackPtComp /ON or /OFF
-// (ISO 32000-2, Table 57), each where it differs from the option's.
+// compensation. The current intent reaches the decoder whenever it is not
+// relative colorimetric: the one an ri or an ExtGState /RI sets, else the
+// option's, which stands in for the graphics state's intent where the
+// content sets none ([Options.Intent]). The /UseBlackPtComp /ON or /OFF of a
+// graphics state (ISO 32000-2, Table 57) reaches it where it differs from the
+// option's.
 //
 // # Corpus evidence
 //
@@ -81,19 +84,26 @@ func (c sessionColors) variantKey() string {
 //   - litho jpxintent_2b.pdf: the two images painted under /Perceptual ri
 //     and an /RI drew L* 50 converted, where the source draws L* 13, and now
 //     draw L* 13.
+//   - All corpora: of the 65 files naming JPX in their bytes, converted to
+//     the built-in CMYK and to sRGB under each of the four intents, and the
+//     CMYK output flattened, only litho jpxintent_2b.pdf converts otherwise
+//     than before the option's intent reached the decoder, under
+//     /Perceptual and /Saturation; under relative colorimetric, the default,
+//     every output is byte-identical.
+//   - litho jpxintent_2b.pdf: converted to sRGB under the /Perceptual option,
+//     all three images drew grey 119, the two under /Perceptual ri among
+//     them since their state then matched the option's, and now draw 33, the
+//     perceptual reading.
 func (c sessionColors) paintingIntent() (icc.Intent, bool) {
-	bpc, intent := c.s.differs(variant{bpc: c.s.bpc, intent: c.s.intent})
-	if !bpc && !intent {
+	bpc, _ := c.s.differs(variant{bpc: c.s.bpc, intent: c.s.intent})
+	if !bpc && c.s.intent == icc.RelativeColorimetric {
 		return 0, false
 	}
-	decodeIntent, choice := icc.RelativeColorimetric, icc.BPCDefault
-	if intent {
-		decodeIntent = c.s.intent
-	}
+	choice := icc.BPCDefault
 	if bpc {
 		choice = map[bool]icc.BPC{false: icc.BPCOff, true: icc.BPCOn}[c.s.bpc]
 	}
-	return decodeIntent.WithBPC(choice), true
+	return c.s.intent.WithBPC(choice), true
 }
 
 // SpotSpace returns the Separation or DeviceN space it is given as the
