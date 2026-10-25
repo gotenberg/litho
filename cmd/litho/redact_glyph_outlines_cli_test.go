@@ -46,34 +46,36 @@ func overhangCLIPDF(t *testing.T) []byte {
 	return b.Bytes()
 }
 
-// TestRedact_GlyphOutlinesRemoveAnOverhangingGlyph pins --glyph-outlines: a
-// region over a glyph's outline but not its advance box removes nothing by
-// default, which the pixel check refuses, and with the flag removes the
-// glyph.
+// TestRedact_GlyphOutlinesRemoveAnOverhangingGlyph pins outline selection,
+// the default: a region over a glyph's outline but not its advance box removes
+// the glyph, with or without the deprecated --glyph-outlines, and
+// --no-glyph-outlines selects nothing there, which the pixel check refuses.
 func TestRedact_GlyphOutlinesRemoveAnOverhangingGlyph(t *testing.T) {
 	path := writeTempPDF(t, overhangCLIPDF(t))
 	out := filepath.Join(t.TempDir(), "redacted.pdf")
 
 	var stdout, stderr bytes.Buffer
 	if rc := run(context.Background(),
-		[]string{"redact", "-region", "1:115,380,85,70", "-o", out, path}, &stdout, &stderr); rc == exitOK {
-		t.Fatal("a region over a kept glyph's outline passed the pixel check without --glyph-outlines")
+		[]string{"redact", "-region", "1:115,380,85,70", "--no-glyph-outlines", "-o", out, path}, &stdout, &stderr); rc == exitOK {
+		t.Fatal("a region over a kept glyph's outline passed the pixel check under --no-glyph-outlines")
 	}
 
-	stdout.Reset()
-	stderr.Reset()
-	rc := run(context.Background(),
-		[]string{"redact", "-region", "1:115,380,85,70", "--glyph-outlines", "-f", "json", "-o", out, path}, &stdout, &stderr)
-	if rc != exitOK {
-		t.Fatalf("exit %d, stderr: %s", rc, stderr.String())
-	}
-	var report struct {
-		RemovedText []string `json:"removedText"`
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
-		t.Fatalf("report: %v (%s)", err, stdout.String())
-	}
-	if len(report.RemovedText) != 1 || report.RemovedText[0] != "A" {
-		t.Errorf("removedText = %q, want [A]", report.RemovedText)
+	for _, extra := range [][]string{nil, {"--glyph-outlines"}} {
+		stdout.Reset()
+		stderr.Reset()
+		args := append([]string{"redact", "-region", "1:115,380,85,70"}, extra...)
+		args = append(args, "-f", "json", "-o", out, path)
+		if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
+			t.Fatalf("%v: exit %d, stderr: %s", extra, rc, stderr.String())
+		}
+		var report struct {
+			RemovedText []string `json:"removedText"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+			t.Fatalf("%v: report: %v (%s)", extra, err, stdout.String())
+		}
+		if len(report.RemovedText) != 1 || report.RemovedText[0] != "A" {
+			t.Errorf("%v: removedText = %q, want [A]", extra, report.RemovedText)
+		}
 	}
 }

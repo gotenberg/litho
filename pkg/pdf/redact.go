@@ -73,16 +73,17 @@ type redactOpts struct {
 	// jpegQualitySet whether it was given.
 	jpegQuality    int
 	jpegQualitySet bool
-	// outlines selects glyphs by their outlines too
-	// ([WithRedactionGlyphOutlines]), nil by their advance boxes alone.
-	outlines *redactGlyphOutlines
+	// noOutlines selects glyphs by their advance boxes alone
+	// ([WithoutRedactionGlyphOutlines]).
+	noOutlines bool
 	// outlineProviders are the substitute fonts [WithRedactionGlyphOutlines]
 	// was given.
 	outlineProviders []FontProvider
 }
 
-// redactGlyphOutlines is what [WithRedactionGlyphOutlines] sets: the
-// programs that draw the fonts a document does not embed, nil for none.
+// redactGlyphOutlines is how a redaction selects glyphs by their outlines
+// (see [WithoutRedactionGlyphOutlines]): the programs that draw the fonts a
+// document does not embed, nil for none.
 type redactGlyphOutlines struct {
 	fonts glyph.Provider
 }
@@ -199,35 +200,46 @@ func WithRedactionAnnotationClipping() RedactOption {
 	return func(*redactOpts) {}
 }
 
-// WithRedactionGlyphOutlines makes [Writer.Redact] select a glyph by its
-// outline as well as by its advance box. By default a glyph is selected when
-// the box of its advance and its font's ascent and descent meets a region
-// (see [models.TextElement.InkBox]), and an outline reaching past that box,
-// a script face's swash or descender, an italic overhang, a combining accent,
-// keeps painting inside a region when its glyph lies outside it: ISO 32000-1,
-// 9.2.4 lets a glyph's outline paint anywhere in glyph space, its advance
-// only moving the text position. With this option a glyph whose outline's
-// bounds meet a region is removed too, so nothing a kept glyph paints
-// reaches into a region.
+// WithoutRedactionGlyphOutlines makes [Writer.Redact] select a glyph by its
+// advance box alone: the box of its advance and its font's ascent and descent
+// (see [models.TextElement.InkBox]), as litho did before it bounded glyphs by
+// their outlines.
 //
-// The outline is the one litho's renderer draws for the code, through the
-// font matrix and the text rendering matrix (9.4.4), its bounds holding the
-// outline's control points: from the program the document embeds, or, for a
-// font it does not embed, from the substitute fonts supplies, given as
-// [WithRenderFontProvider], [WithRenderFontFiles] and [WithRenderSystemFonts]
-// give them to [Reader.RenderPage]; any other [RenderOption] among fonts
-// changes nothing. A font the document does not embed is drawn by each viewer
-// with a program of its own choosing (9.6.2.2), so its outline is the
-// substitute's, the one a caller renders with, and with no substitute the
-// glyph keeps its advance box. So does a glyph the program cannot draw. A
-// Type 3 glyph is bounded by what its description paints either way. The
-// removed glyphs' boxes in [RedactReport.RemovedGlyphBoxes] hold their
-// outlines, and [Writer.WriteTo], applying the regions again, selects the
-// same way.
+// By default a glyph is selected when that box or its outline's bounds meet
+// a region. ISO 32000-1, 9.2.4 lets a glyph's outline paint anywhere in glyph
+// space, its advance only moving the text position, so an outline reaching
+// past the box, a script face's swash or descender, an italic overhang, a
+// combining accent, would otherwise keep painting inside a region while its
+// glyph lies outside it. The outline is the one litho's renderer draws for
+// the code, through the font matrix and the text rendering matrix (9.4.4),
+// its bounds holding the outline's control points, from the program the
+// document embeds. A font the document does not embed is drawn by each
+// viewer with a program of its own choosing (9.6.2.2), so no reading of the
+// file states its outlines: such a glyph keeps its advance box, unless
+// [WithRedactionGlyphOutlines] supplies the substitutes to bound it with. So
+// does a glyph the program cannot draw. A Type 3 glyph is bounded by what its
+// description paints either way. The removed glyphs' boxes in
+// [RedactReport.RemovedGlyphBoxes] hold their outlines, and [Writer.WriteTo],
+// applying the regions again, selects the same way.
 //
-// Opt-in, because it removes more than the default does: a glyph whose
-// advance box lies outside a region, and whose text the caller may not have
-// meant to select, goes when its outline reaches in.
+// Use it to keep a glyph whose advance box lies outside every region and
+// whose outline reaches in, at the cost of that ink staying inside the
+// region, which the pixel check refuses.
+func WithoutRedactionGlyphOutlines() RedactOption {
+	return func(o *redactOpts) { o.noOutlines, o.outlineProviders = true, nil }
+}
+
+// WithRedactionGlyphOutlines supplies the substitutes [Writer.Redact] bounds
+// the glyphs of a font the document does not embed with when it selects
+// glyphs by their outlines, as it does by default (see
+// [WithoutRedactionGlyphOutlines]): the fonts [WithRenderFontProvider],
+// [WithRenderFontFiles] and [WithRenderSystemFonts] give [Reader.RenderPage],
+// so a redaction removes the glyphs whose outlines reach a region as the
+// caller's own renderings draw them. Any other [RenderOption] among fonts
+// changes nothing. Neither a [Reader] nor a [Writer] carries fonts of its
+// own to draw with, so without this option such a glyph keeps its advance
+// box. With no fonts it changes nothing but undoing an earlier
+// [WithoutRedactionGlyphOutlines]: the later of the two options wins.
 func WithRedactionGlyphOutlines(fonts ...RenderOption) RedactOption {
 	var ro renderOpts
 	for _, opt := range fonts {
@@ -241,8 +253,7 @@ func WithRedactionGlyphOutlines(fonts ...RenderOption) RedactOption {
 	}
 	return func(o *redactOpts) {
 		// The provider is built at Redact, against the Writer's logger.
-		o.outlines = &redactGlyphOutlines{}
-		o.outlineProviders = providers
+		o.noOutlines, o.outlineProviders = false, providers
 	}
 }
 
@@ -474,7 +485,9 @@ type RedactReport struct {
 // sanitization. Selection is geometric and VISIBILITY-INDEPENDENT: a glyph
 // counts when the box it paints meets a region, whatever its colour, its text
 // rendering mode, or the optional-content group it sits in, because invisible
-// text is exactly what a failed redaction leaves behind.
+// text is exactly what a failed redaction leaves behind. The box is the
+// glyph's advance and its font's ascent and descent, grown to hold its
+// outline (see [WithoutRedactionGlyphOutlines]).
 //
 // It runs eagerly rather than queueing, because the caller must learn whether
 // the document may be written at all before writing it. It forces a full
@@ -819,9 +832,10 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	restoreTrailer := func() { doc.Index.Trailer = preTrailer }
 
 	pageOpts := mutations.RedactOptions{ClipAnnotations: !o.noClipAnnots}
-	if o.outlines != nil {
-		o.outlines.fonts = renderFontProvider(w.logger(), o.outlineProviders)
-		pageOpts.GlyphOutlines = o.outlines.glyphOutlines(doc)
+	var outlines *redactGlyphOutlines
+	if !o.noOutlines {
+		outlines = &redactGlyphOutlines{fonts: renderFontProvider(w.logger(), o.outlineProviders)}
+		pageOpts.GlyphOutlines = outlines.glyphOutlines(doc)
 	}
 	if o.raster {
 		pageOpts.Rasterise = flatten.Redaction
@@ -942,7 +956,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
 	w.recordRedaction(regions, needles, o, copied, report.CopiesOnRedactedPages)
-	w.redactionOutlines = append(w.redactionOutlines, o.outlines)
+	w.redactionOutlines = append(w.redactionOutlines, outlines)
 	judgeCopies := slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool { return len(h.Boxes) > 0 })
 	if judgeCopies || !o.noPixelCheck {
 		var check *redactedOutputCheck

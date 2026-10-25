@@ -74,11 +74,12 @@ func redactOutlined(t *testing.T, src []byte, regions []RedactRegion, opts ...Re
 }
 
 // TestWriter_Redact_GlyphOutlinesRemoveAGlyphWhoseOutlineReachesIn pins
-// [WithRedactionGlyphOutlines]: a region over the outline of a glyph whose
-// advance box lies outside it selects nothing by default, so the glyph keeps
-// painting inside the region and the pixel check refuses, and with the option
-// the glyph is removed, its box in the report holding its outline, and the
-// pixel check passes.
+// outline selection, the default: a region over the outline of a glyph whose
+// advance box lies outside it removes the glyph, its box in the report
+// holding its outline, and the pixel check passes. Under
+// [WithoutRedactionGlyphOutlines] the region selects nothing, the glyph keeps
+// painting inside it and the pixel check refuses; a later
+// [WithRedactionGlyphOutlines] undoes it.
 func TestWriter_Redact_GlyphOutlinesRemoveAGlyphWhoseOutlineReachesIn(t *testing.T) {
 	t.Parallel()
 	src := glyphOverhangPDF(t)
@@ -86,38 +87,43 @@ func TestWriter_Redact_GlyphOutlinesRemoveAGlyphWhoseOutlineReachesIn(t *testing
 		t.Fatalf("source letters = %q, want AB", got)
 	}
 
-	if _, _, err := redactOutlined(t, src, glyphOverhangRegion); !errors.Is(err, ErrRedactionPixelCheck) {
-		t.Errorf("default selection: err = %v, want ErrRedactionPixelCheck (the kept A paints inside the region)", err)
-	}
-	out, _, err := redactOutlined(t, src, glyphOverhangRegion, WithoutRedactionPixelCheck())
-	if err != nil {
-		t.Fatalf("default selection without the pixel check: %v", err)
-	}
-	if got := pageLetters(t, out); got != "AB" {
-		t.Errorf("default selection letters = %q, want AB", got)
+	for name, opts := range map[string][]RedactOption{
+		"default":          nil,
+		"opted out and in": {WithoutRedactionGlyphOutlines(), WithRedactionGlyphOutlines()},
+	} {
+		out, report, err := redactOutlined(t, src, glyphOverhangRegion, opts...)
+		if err != nil {
+			t.Fatalf("%s: outline selection: %v", name, err)
+		}
+		if got := pageLetters(t, out); got != "B" {
+			t.Errorf("%s: outline selection letters = %q, want B", name, got)
+		}
+		boxes := report.RemovedGlyphBoxes[1]
+		if len(boxes) != 1 || boxes[0][2] < 139 {
+			t.Errorf("%s: removed glyph boxes = %v, want one reaching A's outline at x 140", name, boxes)
+		}
 	}
 
-	out, report, err := redactOutlined(t, src, glyphOverhangRegion, WithRedactionGlyphOutlines())
+	if _, _, err := redactOutlined(t, src, glyphOverhangRegion, WithoutRedactionGlyphOutlines()); !errors.Is(err, ErrRedactionPixelCheck) {
+		t.Errorf("advance-box selection: err = %v, want ErrRedactionPixelCheck (the kept A paints inside the region)", err)
+	}
+	out, _, err := redactOutlined(t, src, glyphOverhangRegion, WithoutRedactionGlyphOutlines(), WithoutRedactionPixelCheck())
 	if err != nil {
-		t.Fatalf("outline selection: %v", err)
+		t.Fatalf("advance-box selection without the pixel check: %v", err)
 	}
-	if got := pageLetters(t, out); got != "B" {
-		t.Errorf("outline selection letters = %q, want B", got)
-	}
-	boxes := report.RemovedGlyphBoxes[1]
-	if len(boxes) != 1 || boxes[0][2] < 139 {
-		t.Errorf("removed glyph boxes = %v, want one reaching A's outline at x 140", boxes)
+	if got := pageLetters(t, out); got != "AB" {
+		t.Errorf("advance-box selection letters = %q, want AB", got)
 	}
 }
 
-// TestWriter_Redact_GlyphOutlinesKeepWhatNoOutlineReaches pins that the
-// option removes nothing the regions' outlines do not reach: a region right
+// TestWriter_Redact_GlyphOutlinesKeepWhatNoOutlineReaches pins that outline
+// selection removes nothing the regions' outlines do not reach: a region right
 // of A's outline keeps both glyphs.
 func TestWriter_Redact_GlyphOutlinesKeepWhatNoOutlineReaches(t *testing.T) {
 	t.Parallel()
 	src := glyphOverhangPDF(t)
 	region := []RedactRegion{{Page: 1, Rect: [4]float64{150, 380, 200, 450}}}
-	out, report, err := redactOutlined(t, src, region, WithRedactionGlyphOutlines())
+	out, report, err := redactOutlined(t, src, region)
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}

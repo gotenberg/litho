@@ -167,8 +167,9 @@
 //   - [Writer.Redact] takes [RedactOption]: [WithStrictRedaction],
 //     [WithRedactionRasterFallback], [WithoutRedactionAnnotationClipping],
 //     [WithRedactionJPEGQuality], [WithRedactionGlyphOutlines],
-//     [WithoutRedactionPixelCheck], and the deprecated no-ops
-//     [WithRedactionAnnotationClipping] and [WithRedactionPixelCheck].
+//     [WithoutRedactionGlyphOutlines], [WithoutRedactionPixelCheck], and the
+//     deprecated no-ops [WithRedactionAnnotationClipping] and
+//     [WithRedactionPixelCheck].
 //   - [Writer.ConvertColors] takes [ColorOption]: [WithColorIntent],
 //     [WithoutBlackPointCompensation], [WithSpotConversion],
 //     [WithKOnlyBlack], [WithoutOutputIntent], [WithReplacedOutputIntents],
