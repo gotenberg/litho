@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strconv"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 )
 
@@ -173,5 +176,68 @@ func TestWriterRedactBlanksALossyTileInPlace(t *testing.T) {
 	}
 	if covered == 0 {
 		t.Fatal("the region covers no sample")
+	}
+}
+
+// TestWriterRedactCopiesASharedPhotographNextToALossyTile pins that a second
+// redaction over a lossily blanked placement still blanks the source's own
+// photograph in a copy when the photograph is painted elsewhere, uncovered.
+// The JPEG tiles the first redaction wrote are blanked in place; the
+// photograph is not one of them: the page still draws it twice past the
+// first region, and blanking it in place would blank the placement no region
+// covers.
+//
+// # Corpus evidence
+//
+//   - pdfjs: issue269_2 draws each of its four photographs 24 times through
+//     the forms of its layers. A second redaction meeting a tile of the
+//     first's lossy form and one of those placements blanks the tiles in
+//     place and copies the four photographs, as the same region does on the
+//     source.
+func TestWriterRedactCopiesASharedPhotographNextToALossyTile(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data, err := dct.Encode(ctx, photoSamples(lossyBlankSide), lossyBlankSide, lossyBlankSide, 3, dct.EncodeOptions{Quality: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const page = "q 200 0 0 200 0 0 cm /Im Do Q q 200 0 0 200 200 0 cm /Im Do Q q 200 0 0 200 400 0 cm /Im Do Q"
+	src := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 200] /Contents 4 0 R /Resources << /XObject << /Im 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(page), page),
+		fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length %d >>\nstream\n%s\nendstream",
+			lossyBlankSide, lossyBlankSide, len(data), data),
+	})
+
+	first, report := redactBytes(t, src, lossyBlankRegion, WithRedactionJPEGQuality(75))
+	if report.LossyBlankedImages == 0 {
+		t.Fatal("the first redaction drew no JPEG tile")
+	}
+	// Under the first placement's lower-left tile, and the second
+	// placement's lower-left corner.
+	region := [4]float64{10, 10, 230, 30}
+	second, report := redactBytes(t, first, region)
+	if got := report.ImagesBlankedInCopy[1]; !slices.Equal(got, []string{"Im"}) {
+		t.Errorf("ImagesBlankedInCopy[1] = %v, want [Im]", got)
+	}
+	if n := len(report.BlankedImages); n < 2 {
+		t.Errorf("BlankedImages = %v, want the tiles and the photograph", report.BlankedImages)
+	}
+
+	for _, at := range [][2]float64{{20, 20}, {220, 20}} {
+		if got := renderedGray(t, second, 1, at); got > 8 {
+			t.Errorf("covered point %v = %d, want the blank", at, got)
+		}
+	}
+	// The third placement, which no region meets, keeps the photograph.
+	at := [2]float64{420, 20}
+	if got, want := renderedGray(t, second, 1, at), renderedGray(t, src, 1, at); got != want {
+		t.Errorf("uncovered point %v = %d, want %d", at, got, want)
+	}
+
+	if _, _, err := redactWith(t, first, []RedactRegion{{Page: 1, Rect: region}}, WithStrictRedaction()); !errors.Is(err, mutations.ErrImageShared) {
+		t.Errorf("strict Redact = %v, want ErrImageShared", err)
 	}
 }
