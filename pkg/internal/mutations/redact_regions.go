@@ -275,6 +275,9 @@ type pageRedaction struct {
 	private map[int]bool
 	// clipAnnots is [RedactOptions.ClipAnnotations].
 	clipAnnots bool
+	// outlines selects glyphs by their outlines too (see
+	// [RedactOptions.GlyphOutlines]); nil selects by the advance box alone.
+	outlines *GlyphOutlines
 }
 
 // redactPageRegions does the work of [RedactPageRegions], with opts.
@@ -348,6 +351,8 @@ func redactPageRegions(
 	// alloc holds: resolved against the document alone it was unresolved, and
 	// the page was refused below.
 	machine.Staged = alloc.Pending()
+	// A glyph whose outline reaches past its advance box paints there too.
+	opts.outlines.install(machine)
 
 	elements, attr, err := typography.ExtractElementsAttributed(ctx, doc, machine, page, ops)
 	if err != nil {

@@ -126,7 +126,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Vertical:      font.WMode == 1,
 			Angle:         angle,
 			InkRight:      glyphsInkRight(state, font),
-			InkBox:        glyphInkBox(ctx, machine, font, fontSize, cid, x, y),
+			InkBox:        glyphInkBox(ctx, machine, font, fontSize, cid, data[:min(n, len(data))], x, y),
 			PatternType:   state.Fill.PatternType,
 			Language:      mcLang,
 			ExpansionText: mcExpansion,

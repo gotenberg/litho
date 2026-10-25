@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/flatten"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 )
 
 // RedactRegion names an area of one page whose content is to be removed.
@@ -72,6 +73,27 @@ type redactOpts struct {
 	// jpegQualitySet whether it was given.
 	jpegQuality    int
 	jpegQualitySet bool
+	// outlines selects glyphs by their outlines too
+	// ([WithRedactionGlyphOutlines]), nil by their advance boxes alone.
+	outlines *redactGlyphOutlines
+	// outlineProviders are the substitute fonts [WithRedactionGlyphOutlines]
+	// was given.
+	outlineProviders []FontProvider
+}
+
+// redactGlyphOutlines is what [WithRedactionGlyphOutlines] sets: the
+// programs that draw the fonts a document does not embed, nil for none.
+type redactGlyphOutlines struct {
+	fonts glyph.Provider
+}
+
+// glyphOutlines returns the bounder a redaction selects with under s, nil
+// when s is nil.
+func (s *redactGlyphOutlines) glyphOutlines(doc *document.Document) *mutations.GlyphOutlines {
+	if s == nil {
+		return nil
+	}
+	return mutations.NewGlyphOutlines(doc, s.fonts)
 }
 
 // WithStrictRedaction makes [Writer.Redact] refuse with
@@ -175,6 +197,53 @@ func WithoutRedactionAnnotationClipping() RedactOption {
 // [WithoutRedactionAnnotationClipping] turns it off.
 func WithRedactionAnnotationClipping() RedactOption {
 	return func(*redactOpts) {}
+}
+
+// WithRedactionGlyphOutlines makes [Writer.Redact] select a glyph by its
+// outline as well as by its advance box. By default a glyph is selected when
+// the box of its advance and its font's ascent and descent meets a region
+// (see [models.TextElement.InkBox]), and an outline reaching past that box,
+// a script face's swash or descender, an italic overhang, a combining accent,
+// keeps painting inside a region when its glyph lies outside it: ISO 32000-1,
+// 9.2.4 lets a glyph's outline paint anywhere in glyph space, its advance
+// only moving the text position. With this option a glyph whose outline's
+// bounds meet a region is removed too, so nothing a kept glyph paints
+// reaches into a region.
+//
+// The outline is the one litho's renderer draws for the code, through the
+// font matrix and the text rendering matrix (9.4.4), its bounds holding the
+// outline's control points: from the program the document embeds, or, for a
+// font it does not embed, from the substitute fonts supplies, given as
+// [WithRenderFontProvider], [WithRenderFontFiles] and [WithRenderSystemFonts]
+// give them to [Reader.RenderPage]; any other [RenderOption] among fonts
+// changes nothing. A font the document does not embed is drawn by each viewer
+// with a program of its own choosing (9.6.2.2), so its outline is the
+// substitute's, the one a caller renders with, and with no substitute the
+// glyph keeps its advance box. So does a glyph the program cannot draw. A
+// Type 3 glyph is bounded by what its description paints either way. The
+// removed glyphs' boxes in [RedactReport.RemovedGlyphBoxes] hold their
+// outlines, and [Writer.WriteTo], applying the regions again, selects the
+// same way.
+//
+// Opt-in, because it removes more than the default does: a glyph whose
+// advance box lies outside a region, and whose text the caller may not have
+// meant to select, goes when its outline reaches in.
+func WithRedactionGlyphOutlines(fonts ...RenderOption) RedactOption {
+	var ro renderOpts
+	for _, opt := range fonts {
+		if opt != nil {
+			opt(&ro)
+		}
+	}
+	providers := ro.fonts
+	if ro.systemFonts != nil {
+		providers = append(slices.Clip(providers), ro.systemFonts)
+	}
+	return func(o *redactOpts) {
+		// The provider is built at Redact, against the Writer's logger.
+		o.outlines = &redactGlyphOutlines{}
+		o.outlineProviders = providers
+	}
 }
 
 // WithRedactionJPEGQuality encodes as baseline JPEG (ITU-T T.81) at quality
@@ -750,6 +819,10 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	restoreTrailer := func() { doc.Index.Trailer = preTrailer }
 
 	pageOpts := mutations.RedactOptions{ClipAnnotations: !o.noClipAnnots}
+	if o.outlines != nil {
+		o.outlines.fonts = renderFontProvider(w.logger(), o.outlineProviders)
+		pageOpts.GlyphOutlines = o.outlines.glyphOutlines(doc)
+	}
 	if o.raster {
 		pageOpts.Rasterise = flatten.Redaction
 		if o.jpegQuality > 0 {
@@ -864,10 +937,12 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	// rewrite and produced files whose trailer pointed at the wrong object.
 	prevOverrides, prevFolded, prevForce := w.rewriteOverrides, w.folded, w.forceRewrite
 	prevRedactions, prevTokens, prevTolerances := len(w.redactions), len(w.redactedTokens), len(w.redactionTolerances)
+	prevOutlines := len(w.redactionOutlines)
 	w.rewriteOverrides = alloc.Pending()
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
 	w.recordRedaction(regions, needles, o, copied, report.CopiesOnRedactedPages)
+	w.redactionOutlines = append(w.redactionOutlines, o.outlines)
 	judgeCopies := slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool { return len(h.Boxes) > 0 })
 	if judgeCopies || !o.noPixelCheck {
 		var check *redactedOutputCheck
@@ -885,6 +960,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 			w.redactionTolerances = w.redactionTolerances[:prevTolerances]
 			w.redactionCopies = w.redactionCopies[:prevRedactions]
 			w.redactionClips = w.redactionClips[:prevRedactions]
+			w.redactionOutlines = w.redactionOutlines[:prevOutlines]
 			restoreTrailer()
 			if len(unseen) > 0 {
 				report.SurvivingCopies = unseen
@@ -1255,9 +1331,13 @@ func (w *Writer) enforceRedactions(ctx context.Context, overrides map[int]ast.Pd
 		if err != nil {
 			return nil, err
 		}
+		opts := mutations.RedactOptions{PrivateCopies: w.redactionCopies[i], ClipAnnotations: w.redactionClips[i]}
+		if i < len(w.redactionOutlines) {
+			opts.GlyphOutlines = w.redactionOutlines[i].glyphOutlines(doc)
+		}
 		for _, pageNum := range order {
 			pageReport, redactErr := mutations.RedactPageRegionsWith(
-				ctx, alloc, doc, pages[pageNum-1], byPage[pageNum], mutations.RedactOptions{PrivateCopies: w.redactionCopies[i], ClipAnnotations: w.redactionClips[i]})
+				ctx, alloc, doc, pages[pageNum-1], byPage[pageNum], opts)
 			if redactErr != nil {
 				return nil, fmt.Errorf("%w: re-applying page %d at write time: %w", ErrRedactionRefused, pageNum, redactErr)
 			}

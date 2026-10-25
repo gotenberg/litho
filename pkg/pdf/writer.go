@@ -969,6 +969,11 @@ type Writer struct {
 	// at write time has to do the same, or a link it cut, which meets the
 	// regions at their edge, refuses.
 	redactionClips []bool
+	// redactionOutlines runs parallel to redactions: how each call selected
+	// glyphs by their outlines ([WithRedactionGlyphOutlines]), nil for by
+	// their advance boxes, so WriteTo applies its regions again with the same
+	// selection.
+	redactionOutlines []*redactGlyphOutlines
 
 	// droppedSignatures lists the signatures the writes that produce the
 	// output left out, each a full rewrite (see [Writer.DroppedSignatures]). A

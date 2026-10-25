@@ -194,7 +194,7 @@ func TestGlyphInkBoxHoldsTheStroke(t *testing.T) {
 			state.Text.Tmode = mode
 			state.LineWidth = 2
 			state.LineJoin = join
-			got := glyphInkBox(context.Background(), machine, font, 10, 65, 0, 0)
+			got := glyphInkBox(context.Background(), machine, font, 10, 65, []byte{65}, 0, 0)
 			want := [4]float64{0, -2, 5, 10}
 			if grows {
 				want = [4]float64{-1, -3, 6, 11}
@@ -202,6 +202,41 @@ func TestGlyphInkBoxHoldsTheStroke(t *testing.T) {
 			if got != want {
 				t.Errorf("join %d, mode %d: got %v, want %v", join, mode, got, want)
 			}
+		}
+	}
+}
+
+// TestGlyphInkBoxHoldsTheOutline checks that a machine bounding glyphs by
+// their outlines ([graphics.Machine.GlyphOutlineBounds]) grows a glyph's box
+// to hold an outline reaching past its advance, keeps the advance box when
+// the outline lies inside it or is unknown, and asks for the glyph by its
+// font resource name and code bytes.
+func TestGlyphInkBoxHoldsTheOutline(t *testing.T) {
+	t.Parallel()
+	font := &Font{Subtype: "TrueType", FirstChar: 65, LastChar: 65, Widths: []float64{500}}
+	for _, tc := range []struct {
+		name    string
+		outline [4]float64
+		ok      bool
+		want    [4]float64
+	}{
+		{"swash left and below", [4]float64{-0.3, -0.5, 0.4, 0.7}, true, [4]float64{-3, -5, 5, 10}},
+		{"inside the advance box", [4]float64{0.1, 0, 0.4, 0.7}, true, [4]float64{0, -2, 5, 10}},
+		{"no outline", [4]float64{-9, -9, 9, 9}, false, [4]float64{0, -2, 5, 10}},
+		{"not a number", [4]float64{math.NaN(), 0, 9, 9}, true, [4]float64{0, -2, 5, 10}},
+	} {
+		machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
+		machine.Current().Text.Tf = "F1"
+		var asked string
+		machine.GlyphOutlineBounds = func(_ context.Context, _ ast.PdfDict, name string, code []byte) ([4]float64, bool) {
+			asked = name + ":" + string(code)
+			return tc.outline, tc.ok
+		}
+		if got := glyphInkBox(context.Background(), machine, font, 10, 65, []byte("A"), 0, 0); got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+		if asked != "F1:A" {
+			t.Errorf("%s: asked for %q, want F1:A", tc.name, asked)
 		}
 	}
 }

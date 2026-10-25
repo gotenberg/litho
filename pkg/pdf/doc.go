@@ -131,8 +131,9 @@
 //   - [Reader.ExtractText] and [Reader.ExtractAllText] take
 //     [ExtractTextOption]: [WithHiddenText], [WithInvisibleText],
 //     [WithClipPathText], [WithClippedText], [WithArtifacts].
-//   - [Reader.RenderPage] and [Reader.RenderPageReport] take
-//     [RenderOption]: [WithRenderDPI], [WithRenderBackground],
+//   - [Reader.RenderPage], [Reader.RenderPageReport] and
+//     [WithRedactionGlyphOutlines] take [RenderOption]: [WithRenderDPI],
+//     [WithRenderBackground],
 //     [WithRenderFontProvider], [WithRenderFontFiles],
 //     [WithRenderSystemFonts], [WithRenderTarget], [WithRenderContent],
 //     [WithRenderBox], [WithRenderColorModel], [WithRenderCMYKProfile],
@@ -165,9 +166,9 @@
 //   - [Writer.Timestamp] takes [TimestampOption]: [WithTimestampField].
 //   - [Writer.Redact] takes [RedactOption]: [WithStrictRedaction],
 //     [WithRedactionRasterFallback], [WithoutRedactionAnnotationClipping],
-//     [WithRedactionJPEGQuality], [WithoutRedactionPixelCheck], and the
-//     deprecated no-ops [WithRedactionAnnotationClipping] and
-//     [WithRedactionPixelCheck].
+//     [WithRedactionJPEGQuality], [WithRedactionGlyphOutlines],
+//     [WithoutRedactionPixelCheck], and the deprecated no-ops
+//     [WithRedactionAnnotationClipping] and [WithRedactionPixelCheck].
 //   - [Writer.ConvertColors] takes [ColorOption]: [WithColorIntent],
 //     [WithoutBlackPointCompensation], [WithSpotConversion],
 //     [WithKOnlyBlack], [WithoutOutputIntent], [WithReplacedOutputIntents],

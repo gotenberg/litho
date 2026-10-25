@@ -32,7 +32,15 @@ const maxFontBBoxEm = 4.0
 // carried through the text rendering matrix of ISO 32000-1, 9.4.4,
 // [Tfs×Th 0 0 Tfs 0 Trise] × Tm × CTM, corner by corner, so a skewed,
 // turned or mirrored matrix gives the box of the parallelogram it draws.
-// fontSize is the Tfs the glyph is shown at.
+// fontSize is the Tfs the glyph is shown at, and code the bytes of the
+// character code that selects it (9.4.3).
+//
+// A machine with [graphics.Machine.GlyphOutlineBounds] set also bounds a
+// glyph of any font other than Type 3 by its outline: the box grows to hold
+// the outline's bounds, so a glyph whose outline reaches past its advance,
+// a script face's swash or an italic overhang (9.2.4 lets an outline paint
+// anywhere in glyph space, its advance only moving the text position), is
+// bounded where it inks. The advance box stays the least the box holds.
 //
 // A glyph a stroking text rendering mode draws (ISO 32000-1, 9.3.6, Table
 // 106) paints its pen past its outline: its box grows on every side by the
@@ -78,7 +86,7 @@ const maxFontBBoxEm = 4.0
 //   - pdfjs issue20513.pdf: a white copy of "One-Stop" stroked in colour
 //     gains pixels its twin's box did not cover, and the default reading
 //     takes it, three copies where PDF.js reads four.
-func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fontSize float64, cid int, originX, originY float64) [4]float64 {
+func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fontSize float64, cid int, code []byte, originX, originY float64) [4]float64 {
 	state := machine.Current()
 	corners, bounded := [4][2]float64{}, false
 	if font.Subtype == "Type3" {
@@ -90,6 +98,11 @@ func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fon
 	}
 	if !bounded {
 		corners = glyphTextCorners(font, cid)
+		if machine.GlyphOutlineBounds != nil && font.Subtype != "Type3" {
+			if ob, ok := machine.GlyphOutlineBounds(ctx, machine.Resources, state.Text.Tf, code); ok {
+				corners = unionTextCorners(corners, ob)
+			}
+		}
 	}
 	th := state.Text.Tz / 100
 	rise := state.Text.Ts
@@ -277,6 +290,20 @@ func type3TextCorners(font *Font, g [4]float64) [4][2]float64 {
 		out[i] = [2]float64{fm[0]*p[0] + fm[2]*p[1] + fm[4], fm[1]*p[0] + fm[3]*p[1] + fm[5]}
 	}
 	return out
+}
+
+// unionTextCorners returns the corners of the smallest rectangle holding the
+// rectangle corners spans, as [rectCorners] lists them, and the box b
+// [minX minY maxX maxY]. A box holding a value that is not a number leaves
+// corners as they were.
+func unionTextCorners(corners [4][2]float64, b [4]float64) [4][2]float64 {
+	for _, v := range b {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return corners
+		}
+	}
+	lo, hi := corners[0], corners[2]
+	return rectCorners(min(lo[0], b[0]), min(lo[1], b[1]), max(hi[0], b[2]), max(hi[1], b[3]))
 }
 
 // rectCorners returns the corners of the rectangle from (x0, y0) to (x1, y1).

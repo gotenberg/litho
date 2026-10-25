@@ -131,6 +131,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	// Clipping runs by default now; the flag stays so scripts that pass it
 	// keep working.
 	fs.Bool("clip-annotations", true, "Deprecated: annotations that draw nothing are clipped by default (see --no-clip-annotations)")
+	glyphOutlines := fs.Bool("glyph-outlines", false, "Also remove a glyph whose outline, not only its advance box, reaches into a region, such as a script face's swash or an italic overhang")
 	noPixelCheck := fs.Bool("no-pixel-check", false, "Skip the pixel check, which renders each redacted page before and after and refuses unless the regions show only paper or blanked images and nothing else changed")
 	// The check runs by default now; the flag stays so scripts that pass it
 	// keep working.
@@ -145,7 +146,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--no-clip-annotations] [--jpeg-quality Q] [--no-pixel-check] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] [--strict] [--raster-fallback] [--no-clip-annotations] [--glyph-outlines] [--jpeg-quality Q] [--no-pixel-check] -o out.pdf")
 		return exitError
 	}
 
@@ -196,6 +197,9 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 	if *noClipAnnots {
 		redactOpts = append(redactOpts, pdf.WithoutRedactionAnnotationClipping())
+	}
+	if *glyphOutlines {
+		redactOpts = append(redactOpts, pdf.WithRedactionGlyphOutlines())
 	}
 	if *jpegQuality != 0 {
 		redactOpts = append(redactOpts, pdf.WithRedactionJPEGQuality(*jpegQuality))

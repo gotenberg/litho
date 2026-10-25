@@ -88,6 +88,12 @@ type RedactOptions struct {
 	// (see [removeRegionAnnotations]). An annotation that draws anything
 	// still refuses.
 	ClipAnnotations bool
+	// GlyphOutlines, when not nil, selects a glyph of any font other than
+	// Type 3 by its outline as well as by its advance box: a glyph whose
+	// outline reaches into a region is removed even when its advance box
+	// does not meet it (see [graphics.Machine.GlyphOutlineBounds]). Nil
+	// selects by the advance box alone.
+	GlyphOutlines *GlyphOutlines
 }
 
 // RedactPageRegionsWith is [RedactPageRegions] with options; see
@@ -118,7 +124,7 @@ func RedactPageRegionsWith(
 	// place, which is the condition writer.ObjAllocator.Snapshot documents.
 	snap := alloc.Snapshot()
 	report, err := redactPageRegions(ctx, alloc, doc, page, regions,
-		pageRedaction{formImages: opts.Rasterise != nil, private: opts.PrivateCopies, clipAnnots: opts.ClipAnnotations})
+		pageRedaction{formImages: opts.Rasterise != nil, private: opts.PrivateCopies, clipAnnots: opts.ClipAnnotations, outlines: opts.GlyphOutlines})
 	if err != nil && opts.Rasterise != nil && rasterable(err) {
 		alloc.Restore(snap)
 		report, err = rasterThenRedact(ctx, alloc, doc, page, regions, opts)
@@ -147,7 +153,7 @@ func rasterThenRedact(
 ) (RedactReport, error) {
 	page = latestPage(ctx, alloc, doc, page)
 	zones := regionZones(regions)
-	seeds, err := rasterSeeds(ctx, alloc, doc, page, zones)
+	seeds, err := rasterSeeds(ctx, alloc, doc, page, zones, opts.GlyphOutlines)
 	if err != nil {
 		return RedactReport{}, err
 	}
@@ -163,7 +169,7 @@ func rasterThenRedact(
 	var formText textRemoval
 	budget := maxRasterFormCopies
 	for _, placement := range raster.TextForms {
-		if err := redactFormText(ctx, alloc, doc, placement.Ref, placement.CTM, zones, 1, &budget, &formText); err != nil {
+		if err := redactFormText(ctx, alloc, doc, placement.Ref, placement.CTM, zones, 1, &budget, &formText, opts.GlyphOutlines); err != nil {
 			return RedactReport{}, err
 		}
 	}
@@ -172,7 +178,7 @@ func rasterThenRedact(
 		composites[n] = true
 	}
 	report, err := redactPageRegions(ctx, alloc, doc, page, regions,
-		pageRedaction{composites: composites, formImages: true, private: opts.PrivateCopies, clipAnnots: opts.ClipAnnotations})
+		pageRedaction{composites: composites, formImages: true, private: opts.PrivateCopies, clipAnnots: opts.ClipAnnotations, outlines: opts.GlyphOutlines})
 	if err != nil {
 		return RedactReport{}, err
 	}
@@ -194,8 +200,9 @@ func rasterThenRedact(
 // draws cannot be blanked for that placement alone), and each sh,
 // on the page or in a form, whose clip meets a zone (see
 // [ErrRegionCoversAShading]). Selection is the redaction's own: a glyph's
-// box, a path's geometry, an image's placement, a shading's clip bounds.
-func rasterSeeds(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, zones []heuristics.Zone) ([]int, error) {
+// box, a path's geometry, an image's placement, a shading's clip bounds; a
+// glyph's box holds its outline when outlines is not nil.
+func rasterSeeds(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, zones []heuristics.Zone, outlines *GlyphOutlines) ([]int, error) {
 	data, err := collectLatestPageContents(ctx, alloc, doc, page)
 	if err != nil {
 		return nil, fmt.Errorf("assembling page content: %w", err)
@@ -210,6 +217,7 @@ func rasterSeeds(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	machine.RecordPathBoxes = true
 	machine.RecordShadingBoxes = true
 	machine.Staged = alloc.Pending()
+	outlines.install(machine)
 	elements, attr, err := typography.ExtractElementsAttributed(ctx, doc, machine, page, ops)
 	if err != nil {
 		return nil, fmt.Errorf("extracting page text: %w", err)
@@ -267,7 +275,8 @@ type textRemoval struct {
 // removed (see [selectText]), and writes it back in place. A form it draws
 // whose glyphs the zones cover is copied first, so the edit reaches that
 // placement alone, and edited the same way; depth is how deep ref sits below
-// the page, and budget counts the copies left to make.
+// the page, and budget counts the copies left to make. outlines selects glyphs
+// by their outlines too, as [RedactOptions.GlyphOutlines] says.
 //
 // The marked content of a form belongs to the form's own /StructParents
 // entry, not to the page's identifiers, so its removed identifiers are not
@@ -283,6 +292,7 @@ func redactFormText(
 	depth int,
 	budget *int,
 	out *textRemoval,
+	outlines *GlyphOutlines,
 ) error {
 	if depth > doc.Limits().WithDefaults().MaxFormDepth {
 		return fmt.Errorf("%w: a form showing text nests past the form-depth budget", ErrRegionInFormXObject)
@@ -318,6 +328,7 @@ func redactFormText(
 	machine.RecordShowAdvances = true
 	machine.RecordGlyphAdvances = true
 	machine.Staged = alloc.Pending()
+	outlines.install(machine)
 	// The form is read as a page of its own: its operations are the ones
 	// the glyphs are attributed to, and its names resolve in its resources.
 	pseudo := &document.Page{Dict: ast.PdfDict{}, Resources: resources, DrawResources: resources}
@@ -381,7 +392,7 @@ func redactFormText(
 			fresh := newXObjectName(xobjects, "Rt")
 			xobjects[fresh] = copied
 			edits = append(edits, SpanEdit{Span: ranges[i], Replacement: []byte(" /" + string(fresh) + " Do ")})
-			if err := redactFormText(ctx, alloc, doc, copied, ctms[i], zones, depth+1, budget, out); err != nil {
+			if err := redactFormText(ctx, alloc, doc, copied, ctms[i], zones, depth+1, budget, out, outlines); err != nil {
 				return err
 			}
 		}

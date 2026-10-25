@@ -1,9 +1,21 @@
 package graphics
 
 import (
+	"context"
+
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
+
+// GlyphBoundsFunc returns the bounds [minX minY maxX maxY] of the outline of
+// the glyph that code, the bytes of one character code (ISO 32000-1, 9.4.3),
+// selects in the font resources names font (the operand of Tf, 9.3.1), in
+// text space at a font size of 1 with the glyph's origin at (0, 0): the
+// outline through the font matrix (9.2.4), before Tfs, Th, Trise and the text
+// matrix apply (9.4.4). ok is false when it bounds no outline: a font it
+// cannot read, one the document does not embed, whose outline is the
+// viewer's, and a glyph that paints nothing.
+type GlyphBoundsFunc func(ctx context.Context, resources ast.PdfDict, font string, code []byte) (box [4]float64, ok bool)
 
 // TextState represents the text-specific graphics state.
 type TextState struct {
@@ -234,6 +246,14 @@ type Machine struct {
 	// repair that moves such a code from one reading to the other shows the
 	// same glyph and loses no character a reader is given.
 	MarkUnvaluedText bool
+	// GlyphOutlineBounds, when set, makes the text extractor bound the ink of
+	// a glyph of any font other than Type 3 by its outline as well as by its
+	// advance and its font's ascent and descent (see [GlyphBoundsFunc]), so
+	// the ink box it records holds a glyph whose outline reaches past its
+	// advance, a script face's swash or an italic overhang. Nil by default,
+	// where the box is the advance box alone. A redaction selecting glyphs by
+	// the ink they paint needs it.
+	GlyphOutlineBounds GlyphBoundsFunc
 	// FormDepth is the nesting level of the content stream being executed: 0 for
 	// the page's own, one deeper per form XObject a caller recurses into. The
 	// machine cannot know this by itself, because a form's operators arrive
