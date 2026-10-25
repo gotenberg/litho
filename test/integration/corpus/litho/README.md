@@ -302,6 +302,7 @@ one deliberately rather than diffing it against a fresh build.
 | `unparsedform_2b.pdf`  | PDF/A-2b     | An image a form litho cannot parse draws too, then redacted      |
 | `greytint_2b.pdf`      | PDF/A-2b     | A grey ICC profile whose table tints its greys, in four paints   |
 | `groupspace_2b.pdf`    | PDF/A-2b     | RGB colour on pages whose group blends in CMYK or grey           |
+| `cmykintent_2b.pdf`    | PDF/A-2b     | Colours under a rendering intent in their own CMYK page group    |
 
 ### Must-not-fire controls
 
@@ -619,6 +620,7 @@ are covered under [Known divergences](#known-divergences).
 | `cmapusestream_2b.pdf` | 5    | 2    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 8    |
 | `cmapusevert_1b.pdf`   | 5    | 3    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `cmapverabase_2b.pdf`  | 8    | 5    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
+| `cmykintent_2b.pdf`    | 7    | 4    | 3    | 0    | 1    | 4    | 1    | 2    | 5   | 5    | 6    | 6    | 6    |
 | `colouroff_2b.pdf`     | 4    | 1    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `complex_1b.pdf`       | 26   | 23   | 22   | 19   | 20   | 24   | 21   | 22   | 19  | 18   | 18   | 14   | 11   |
 | `complex_2a.pdf`       | 18   | 15   | 21   | 17   | 17   | 22   | 18   | 18   | 17  | 17   | 18   | 12   | 11   |
@@ -9965,9 +9967,53 @@ redaction passes the pixel check, with and without the raster fallback, and
 the output renders on litho as on poppler. `convert-colors` read the profile
 through its whole table before and writes the same bytes.
 
+### `cmykintent_2b.pdf`
+
+A colour painted into a transparency group converts into the group's blending
+colour space (ISO 32000-1, 11.3.4), and one already in that space keeps its
+components, which litho reads back to sRGB under relative colorimetric, the
+initial intent. A colour painted under another rendering intent (8.6.5.8)
+then drew inside the group as relative colorimetric reads it, and outside it
+as its intent does. Now a colour in the group's own space keeps its
+components only where its space reads alike under both intents, and otherwise
+reaches the group through its sRGB under its own intent, as a colour in
+another space does. Of the 7 corpus files that paint under an intent other
+than relative colorimetric beside a grey or CMYK transparency group (pdfjs 6,
+govdocs 1), none draws a pixel differently: their profiles read alike. So
+this fixture paints in `split`, a version 2.1 CMYK output profile whose
+colorimetric table reads black ink K 0.5 at L\* 50 and whose perceptual table
+at L\* 75, on two 100 by 200 pages, the second with a page group in `split`
+and a Multiply square that makes it composite there:
+
+| Page        | y 140-190     | y 80-130                    | y 20-70                               |
+| ----------- | ------------- | --------------------------- | ------------------------------------- |
+| 1, no group | `Im`, no `ri` | `Im` after `/Perceptual ri` | a `split` fill after `/Perceptual ri` |
+| 2, `split`  | the same      | the same                    | the same                              |
+
+Both pages draw 118, 184 and 184 on poppler 26.09.0 and litho; litho drew page
+2's last two rows 118 before. MuPDF 1.26.10 (PyMuPDF 1.26.5) draws page 2 as
+litho did: it keeps a colour's components in its own group space whatever its
+intent. PDFium (pypdfium2 4.30.0) converts perceptually and draws all six 184.
+
+`convert-colors` follows the content's intents too: the `ri` operator and an
+ExtGState `/RI` for what is painted after them, an image's `/Intent` for the
+image. Converted to sRGB, both pages draw as their source, where every row drew
+118 before, and so do both pages of `imageintent_2b`, whose six rows all drew
+dark before; converted to the built-in CMYK and flattened, the same.
+
+Each page has its own `split` space and image over the one profile stream.
+ISO 19005-4, 6.2.4.2 test 3 forbids an ICCBased CMYK destination profile
+identical to the current transparency blending space's, which page 2 paints
+in, and veraPDF 1.30.2 judges an indirect ICCBased CMYK space once for the
+document, under the first page that reaches it, as litho does. While the two
+pages shared one space, it was judged under page 1, which has no group, and
+passed; `mutate-pages`, which moves page 1 after page 2, then added the test
+at PDF/A-4, 4e and 4f on both tools.
+
 The file conforms at PDF/A-2b. The other cells are the identification,
-metadata and tagging rules of their parts. veraPDF 1.30.2 and litho report the
-same rule set in all thirteen cells.
+metadata and tagging rules of their parts, and at PDF/A-4, 4e and 4f also
+6.2.4.2 test 3. veraPDF 1.30.2 and litho report the same rule set in all
+thirteen cells.
 
 ### `groupspace_2b.pdf`
 
