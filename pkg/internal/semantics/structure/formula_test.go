@@ -2,10 +2,12 @@ package structure
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 const sampleMathML = `<math xmlns="http://www.w3.org/1998/Math/MathML">
@@ -15,7 +17,7 @@ const sampleMathML = `<math xmlns="http://www.w3.org/1998/Math/MathML">
 // mockDoc creates a minimal Document with a structure tree in the trailer.
 // The structure tree is injected via inline dicts (no actual PDF byte parsing).
 func mockDoc(structTree ast.PdfDict) *document.Document {
-	doc := &document.Document{}
+	doc := &document.Document{Logger: document.NopLogger()}
 	doc.Index.Trailer = ast.PdfDict{
 		"Root": ast.PdfDict{
 			"Type":           ast.PdfName("Catalog"),
@@ -61,8 +63,8 @@ func TestExtractFormulas_WithMathML(t *testing.T) {
 	if f.MathML != sampleMathML {
 		t.Errorf("MathML mismatch:\ngot:  %q\nwant: %q", f.MathML, sampleMathML)
 	}
-	if len(f.MCIDs) != 1 || f.MCIDs[0] != 42 {
-		t.Errorf("MCIDs = %v, want [42]", f.MCIDs)
+	if len(f.Content) != 1 || f.Content[0].MCID != 42 {
+		t.Errorf("Content = %v, want MCID 42", f.Content)
 	}
 }
 
@@ -88,8 +90,8 @@ func TestExtractFormulas_NoAF(t *testing.T) {
 	if formulas[0].MathML != "" {
 		t.Errorf("expected empty MathML, got %q", formulas[0].MathML)
 	}
-	if len(formulas[0].MCIDs) != 1 || formulas[0].MCIDs[0] != 10 {
-		t.Errorf("MCIDs = %v, want [10]", formulas[0].MCIDs)
+	if len(formulas[0].Content) != 1 || formulas[0].Content[0].MCID != 10 {
+		t.Errorf("Content = %v, want MCID 10", formulas[0].Content)
 	}
 }
 
@@ -170,8 +172,8 @@ func TestExtractFormulas_NestedFormula(t *testing.T) {
 	if formulas[0].MathML != "<math><mi>x</mi></math>" {
 		t.Errorf("MathML = %q", formulas[0].MathML)
 	}
-	if len(formulas[0].MCIDs) != 2 {
-		t.Errorf("MCIDs = %v, want 2 entries", formulas[0].MCIDs)
+	if len(formulas[0].Content) != 2 {
+		t.Errorf("Content = %v, want 2 entries", formulas[0].Content)
 	}
 }
 
@@ -257,29 +259,30 @@ func TestExtractFormulas_MultipleFormulas(t *testing.T) {
 	}
 }
 
-func TestCollectMCIDs(t *testing.T) {
+func TestContentCollector(t *testing.T) {
+	pg := ast.PdfIndirectRef{ObjectNum: 3}
+	other := ast.PdfIndirectRef{ObjectNum: 7}
+	pageMap := map[ast.PdfIndirectRef]int{pg: 1, other: 2}
 	tests := []struct {
 		name string
 		obj  ast.PdfObject
-		want []int
+		want []models.MarkedContentRef
 	}{
-		{"direct int", ast.PdfInt(5), []int{5}},
-		{"MCR dict", ast.PdfDict{"MCID": ast.PdfInt(3)}, []int{3}},
-		{"array of ints", ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2)}, []int{1, 2}},
-		{"nested dict", ast.PdfDict{"K": ast.PdfArray{ast.PdfInt(10), ast.PdfDict{"MCID": ast.PdfInt(11)}}}, []int{10, 11}},
+		{"direct int", ast.PdfInt(5), []models.MarkedContentRef{{Page: 1, MCID: 5}}},
+		{"MCR dict", ast.PdfDict{"MCID": ast.PdfInt(3)}, []models.MarkedContentRef{{Page: 1, MCID: 3}}},
+		{"MCR with its own page", ast.PdfDict{"MCID": ast.PdfInt(3), "Pg": other}, []models.MarkedContentRef{{Page: 2, MCID: 3}}},
+		{"MCR into another stream", ast.PdfDict{"MCID": ast.PdfInt(3), "Stm": ast.PdfIndirectRef{ObjectNum: 9}}, nil},
+		{"array of ints", ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2)}, []models.MarkedContentRef{{Page: 1, MCID: 1}, {Page: 1, MCID: 2}}},
+		{"nested element with its own page", ast.PdfDict{"Pg": other, "K": ast.PdfArray{ast.PdfInt(10), ast.PdfDict{"MCID": ast.PdfInt(11)}}}, []models.MarkedContentRef{{Page: 2, MCID: 10}, {Page: 2, MCID: 11}}},
+		{"nested element with no page", ast.PdfDict{"K": ast.PdfInt(12)}, []models.MarkedContentRef{{Page: 0, MCID: 12}}},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var mcids []int
-			collectMCIDs(context.Background(), nil, tc.obj, make(map[int]bool), 0, &mcids)
-			if len(mcids) != len(tc.want) {
-				t.Fatalf("got %v, want %v", mcids, tc.want)
-			}
-			for i := range mcids {
-				if mcids[i] != tc.want[i] {
-					t.Errorf("mcids[%d] = %d, want %d", i, mcids[i], tc.want[i])
-				}
+			c := contentCollector{pageMap: pageMap, visited: make(map[int]bool)}
+			c.collect(context.Background(), tc.obj, pg, 0)
+			if !slices.Equal(c.refs, tc.want) {
+				t.Errorf("got %v, want %v", c.refs, tc.want)
 			}
 		})
 	}

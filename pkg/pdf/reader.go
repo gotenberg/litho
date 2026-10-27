@@ -1995,7 +1995,9 @@ func (r *Reader) ExtractPronunciationLexicons(ctx context.Context) (_ []models.P
 
 // ExtractFormulas walks the document structure tree and returns MathML
 // from /Formula elements that carry an /AF entry with /AFRelationship
-// /Supplement and MIME type application/mathml+xml (PDF 2.0).
+// /Supplement and MIME type application/mathml+xml (PDF 2.0). Each formula
+// lists the marked content that draws it with the page that holds it, so its
+// text is the [models.TextElement] values of that page with a matching MCID.
 func (r *Reader) ExtractFormulas(ctx context.Context) (_ []models.FormulaElement, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractFormulas", &err)
 	return structure.ExtractFormulas(ctx, r.doc)

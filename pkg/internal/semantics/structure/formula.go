@@ -2,6 +2,7 @@ package structure
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -39,8 +40,17 @@ func ExtractFormulas(ctx context.Context, doc *document.Document) ([]models.Form
 		return nil, nil
 	}
 
+	// A page tree litho cannot read leaves every marked-content reference on
+	// page 0, unresolved, rather than failing the extraction.
+	var pageMap map[ast.PdfIndirectRef]int
+	if pages, err := document.ResolvePages(ctx, doc, resolved); err != nil {
+		doc.Logger.Debug("formulas: page tree unreadable, marked content left without a page", slog.Any("error", err))
+	} else {
+		pageMap = document.BuildPageMap(pages)
+	}
+
 	var formulas []models.FormulaElement
-	findFormulas(ctx, doc, kObj, make(map[int]bool), 0, &formulas)
+	findFormulas(ctx, doc, pageMap, kObj, make(map[int]bool), 0, &formulas)
 
 	if len(formulas) == 0 {
 		return nil, nil
@@ -60,7 +70,7 @@ const maxFormulaTreeDepth = 200
 // strict tree (ISO 32000-1, 14.7.2), and without it an element naming itself
 // recursed until the goroutine stack was exhausted, and direct elements that
 // each name their own /K array again fanned out 2^depth.
-func findFormulas(ctx context.Context, doc *document.Document, obj ast.PdfObject, visited map[int]bool, depth int, formulas *[]models.FormulaElement) {
+func findFormulas(ctx context.Context, doc *document.Document, pageMap map[ast.PdfIndirectRef]int, obj ast.PdfObject, visited map[int]bool, depth int, formulas *[]models.FormulaElement) {
 	if depth > maxFormulaTreeDepth || ctx.Err() != nil || document.VisitedBefore(obj, visited) {
 		return
 	}
@@ -71,14 +81,14 @@ func findFormulas(ctx context.Context, doc *document.Document, obj ast.PdfObject
 	switch v := resolved.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			findFormulas(ctx, doc, kid, visited, depth+1, formulas)
+			findFormulas(ctx, doc, pageMap, kid, visited, depth+1, formulas)
 		}
 	case ast.PdfDict:
 		// Check if this is a /Formula structure element.
 		if sObj, ok := v["S"]; ok {
 			sRes, _ := resolve(ctx, doc, sObj) // Best-effort: an unreadable /S names no Formula.
 			if sName, ok := sRes.(ast.PdfName); ok && sName == "Formula" {
-				fe := extractFormulaElement(ctx, doc, obj, v)
+				fe := extractFormulaElement(ctx, doc, pageMap, obj, v)
 				if fe != nil {
 					*formulas = append(*formulas, *fe)
 				}
@@ -87,34 +97,36 @@ func findFormulas(ctx context.Context, doc *document.Document, obj ast.PdfObject
 
 		// Recurse into children.
 		if kObj, ok := v["K"]; ok {
-			findFormulas(ctx, doc, kObj, visited, depth+1, formulas)
+			findFormulas(ctx, doc, pageMap, kObj, visited, depth+1, formulas)
 		}
 	}
 }
 
-// extractFormulaElement extracts MathML and MCIDs from a /Formula struct elem,
-// dict, written as obj.
-func extractFormulaElement(ctx context.Context, doc *document.Document, obj ast.PdfObject, dict ast.PdfDict) *models.FormulaElement {
+// extractFormulaElement extracts the MathML and the marked content of a
+// /Formula struct elem, dict, written as obj.
+func extractFormulaElement(ctx context.Context, doc *document.Document, pageMap map[ast.PdfIndirectRef]int, obj ast.PdfObject, dict ast.PdfDict) *models.FormulaElement {
 	mathml := extractMathMLFromAF(ctx, doc, dict)
 
-	// Collect MCIDs from children. The element itself counts as walked, so a
-	// /K naming it back adds its content once.
-	var mcids []int
+	// The element itself counts as walked, so a /K naming it back adds its
+	// content once.
+	var content []models.MarkedContentRef
 	if kObj, ok := dict["K"]; ok {
 		visited := make(map[int]bool)
 		if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
 			visited[ref.ObjectNum] = true
 		}
-		collectMCIDs(ctx, doc, kObj, visited, 0, &mcids)
+		c := contentCollector{doc: doc, pageMap: pageMap, visited: visited}
+		c.collect(ctx, kObj, dict["Pg"], 0)
+		content = c.refs
 	}
 
-	if mathml == "" && len(mcids) == 0 {
+	if mathml == "" && len(content) == 0 {
 		return nil
 	}
 
 	return &models.FormulaElement{
-		MathML: mathml,
-		MCIDs:  mcids,
+		MathML:  mathml,
+		Content: content,
 	}
 }
 
@@ -218,33 +230,63 @@ func extractMathMLFromAF(ctx context.Context, doc *document.Document, dict ast.P
 	return ""
 }
 
-// collectMCIDs recursively collects all MCID values from the structure
-// subtree below obj, a /K value, walking each object once as [findFormulas]
-// does.
-func collectMCIDs(ctx context.Context, doc *document.Document, obj ast.PdfObject, visited map[int]bool, depth int, mcids *[]int) {
-	if depth > maxFormulaTreeDepth || ctx.Err() != nil || document.VisitedBefore(obj, visited) {
+// contentCollector gathers the marked content below a structure element,
+// each MCID with the page that holds it, walking each object once as
+// [findFormulas] does.
+type contentCollector struct {
+	doc     *document.Document
+	pageMap map[ast.PdfIndirectRef]int
+	visited map[int]bool
+	refs    []models.MarkedContentRef
+}
+
+// collect adds the marked content of obj, a /K value, whose structure element
+// names pg as its /Pg. Per ISO 32000-1, Table 323 an integer in /K is an MCID
+// on the element's /Pg page, and per Table 324 a marked-content reference
+// names its own /Pg or else takes the element's. A nested structure element
+// is read against its own /Pg alone: the spec gives an element without one no
+// page, so its integer MCIDs report page 0 rather than an ancestor's guess. A
+// reference into another stream than the page's content (/Stm, Table 324) is
+// left out, since its MCID does not number the page's marked content.
+func (c *contentCollector) collect(ctx context.Context, obj, pg ast.PdfObject, depth int) {
+	if depth > maxFormulaTreeDepth || ctx.Err() != nil || document.VisitedBefore(obj, c.visited) {
 		return
 	}
-	resolved, err := resolve(ctx, doc, obj)
+	resolved, err := resolve(ctx, c.doc, obj)
 	if err != nil {
 		return
 	}
 	switch v := resolved.(type) {
 	case ast.PdfInt:
-		*mcids = append(*mcids, int(v))
+		c.add(pg, int(v))
 	case ast.PdfArray:
 		for _, item := range v {
-			collectMCIDs(ctx, doc, item, visited, depth+1, mcids)
+			c.collect(ctx, item, pg, depth+1)
 		}
 	case ast.PdfDict:
 		if mcidObj, ok := v["MCID"]; ok {
-			mcidRes, _ := resolve(ctx, doc, mcidObj) // Best-effort: an unreadable /MCID names no content.
-			if mcidInt, ok := mcidRes.(ast.PdfInt); ok {
-				*mcids = append(*mcids, int(mcidInt))
+			if _, inStream := v["Stm"]; inStream {
+				return
 			}
+			mcidRes, _ := resolve(ctx, c.doc, mcidObj) // Best-effort: an unreadable /MCID names no content.
+			if mcid, ok := mcidRes.(ast.PdfInt); ok {
+				own := pg
+				if mcrPg, has := v["Pg"]; has {
+					own = mcrPg
+				}
+				c.add(own, int(mcid))
+			}
+			return
 		}
 		if kObj, ok := v["K"]; ok {
-			collectMCIDs(ctx, doc, kObj, visited, depth+1, mcids)
+			c.collect(ctx, kObj, v["Pg"], depth+1)
 		}
 	}
+}
+
+// add records mcid on the page pg names, page 0 when pg is absent or names
+// no page of the page tree.
+func (c *contentCollector) add(pg ast.PdfObject, mcid int) {
+	ref, _ := pg.(ast.PdfIndirectRef) // Tables 323 and 324 require /Pg to be indirect; a direct one names no page.
+	c.refs = append(c.refs, models.MarkedContentRef{Page: c.pageMap[ref], MCID: mcid})
 }

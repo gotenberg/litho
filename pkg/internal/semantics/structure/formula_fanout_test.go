@@ -68,7 +68,7 @@ func TestExtractFormulas_StructureCycles(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ExtractFormulas: %v", err)
 			}
-			if len(got) != 1 || len(got[0].MCIDs) != 1 || got[0].MCIDs[0] != 0 {
+			if len(got) != 1 || len(got[0].Content) != 1 || got[0].Content[0].MCID != 0 {
 				t.Errorf("got %+v, want the one Formula with marked content 0", got)
 			}
 		})

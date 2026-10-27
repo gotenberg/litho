@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -59,8 +60,12 @@ func runFormulas(ctx context.Context, args []string, stdout, stderr io.Writer) i
 				fmt.Fprintf(stdout, "--- %s ---\n", res.File)
 			}
 			for _, f := range res.Formulas {
-				if len(f.MCIDs) > 0 {
-					fmt.Fprintf(stdout, "mcids %v\n", f.MCIDs)
+				if len(f.Content) > 0 {
+					refs := make([]string, len(f.Content))
+					for i, c := range f.Content {
+						refs[i] = fmt.Sprintf("%d:%d", c.Page, c.MCID)
+					}
+					fmt.Fprintf(stdout, "content (page:mcid) %s\n", strings.Join(refs, " "))
 				}
 				fmt.Fprintln(stdout, f.MathML)
 			}
