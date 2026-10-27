@@ -23,7 +23,7 @@ type OCREngine interface {
 // consistent with all other coordinates in the API. They account for both
 // /Rotate (swapping width/height at 90°/270°) and /UserUnit (scaling factor;
 // default 1.0). A portrait MediaBox with /Rotate 90 reports landscape dimensions.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type Page struct {
 	// PageNumber is the 1-based position of the page in the document.
 	PageNumber int `json:"pageNumber"`
@@ -264,7 +264,10 @@ type Annotation struct {
 // image Im0. Decode is the way to decode this entry rather than another image
 // of the same name.
 //
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
+// Open and Decode may be called from several goroutines at once, and alongside
+// other reads of the Reader that returned the value, while that Reader stays
+// open.
 type ImageMeta struct {
 	// Filename is the name the image has in its resource dictionary, such as
 	// Im0. It is not a file name and can repeat on one page.
@@ -314,7 +317,10 @@ type Table struct {
 // Content is accessed lazily: call Open to obtain an [io.ReadCloser] that
 // decodes the stream through the PDF filter pipeline on read. The caller
 // must close the returned reader.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
+// Open may be called from several goroutines at once, and alongside
+// other reads of the Reader that returned the value, while that Reader stays
+// open.
 type EmbeddedFile struct {
 	// Name is the base name of the file, read from the file specification's
 	// /UF or /F entry. It is "embedded" when the specification has neither.
@@ -530,7 +536,10 @@ type Measurement struct {
 // Content is accessed lazily: call Open to obtain an [io.ReadCloser] that
 // decodes the stream through the PDF filter pipeline on read. The caller
 // must close the returned reader.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
+// Open may be called from several goroutines at once, and alongside
+// other reads of the Reader that returned the value, while that Reader stays
+// open.
 type Model3D struct {
 	// Name is the annotation's /NM, or model_N, N counting the page's models
 	// from 0, when it has none.
@@ -658,7 +667,7 @@ type StreamDiagnostic struct {
 // page's own content and for a direct object. Count is how many times the
 // page's content uses it so.
 //
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type ColorSpaceUse struct {
 	Family     string         `json:"family"`
 	Components int            `json:"components,omitempty"`

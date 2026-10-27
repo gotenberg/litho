@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -155,5 +156,67 @@ func TestConcurrentPageReadersSurface(t *testing.T) {
 
 	if want := int64(rounds * pages * len(readers)); calls.Load() != want {
 		t.Errorf("made %d page-reader calls, want %d", calls.Load(), want)
+	}
+}
+
+// TestConcurrentImageMetaFunctions races the Open and Decode functions
+// [Reader.ExtractImages] returns, against each other and against a page read,
+// to back the contract [models.ImageMeta] states. [models.EmbeddedFile] and
+// [models.Model3D] get their Open from the same document stream opener as
+// ImageMeta.Open, so this covers theirs too.
+func TestConcurrentImageMetaFunctions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	r := openImagePDF(t)
+	metas, err := r.ExtractImages(ctx, 1)
+	if err != nil {
+		t.Fatalf("ExtractImages: %v", err)
+	}
+
+	const rounds = 8
+	var decodable int
+	var wg sync.WaitGroup
+	for _, m := range metas {
+		// The fixture holds an image under an unknown filter on purpose; only
+		// the images that decode on their own are raced.
+		if _, err := m.Decode(ctx); err != nil {
+			continue
+		}
+		decodable++
+		for range rounds {
+			wg.Add(3)
+			go func() {
+				defer wg.Done()
+				rc, err := m.Open(ctx)
+				if err != nil {
+					t.Errorf("Open: %v", err)
+					return
+				}
+				if _, err := io.Copy(io.Discard, rc); err != nil {
+					t.Errorf("reading %s: %v", m.Filename, err)
+				}
+				if err := rc.Close(); err != nil {
+					t.Errorf("closing %s: %v", m.Filename, err)
+				}
+			}()
+			go func() {
+				defer wg.Done()
+				if _, err := m.Decode(ctx); err != nil {
+					t.Errorf("Decode: %v", err)
+				}
+			}()
+			go func() {
+				defer wg.Done()
+				_, _ = r.ExtractTextElements(ctx, 1)
+			}()
+		}
+	}
+	wg.Wait()
+
+	// Without a lower bound the test would pass vacuously if the fixture lost
+	// its images.
+	if decodable < 2 {
+		t.Fatalf("raced %d decodable images, want at least 2", decodable)
 	}
 }
