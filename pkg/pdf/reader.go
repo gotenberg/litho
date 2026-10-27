@@ -1109,6 +1109,19 @@ func (r *Reader) DeclaredPDFX(ctx context.Context) (_ models.PDFXProfile, err er
 	return semantics.DeclaredPDFX(ctx, r.doc), nil
 }
 
+// DeclaredPDFAPart reports the part of ISO 19005 the document DECLARES
+// through the pdfaid:part of its catalog XMP packet, 1 to 4, or 0 when it
+// declares none. Absence is not an error.
+//
+// This reads an identifier; it does not validate. Use [Reader.ValidatePDFA]
+// for a verdict. A caller that writes the document can read it to keep what
+// the declared part forbids out of the output: ISO 19005-1, 6.1.4 forbids
+// the cross-reference stream [WithObjectStreams] writes.
+func (r *Reader) DeclaredPDFAPart(ctx context.Context) (_ int, err error) {
+	defer recoverToError(r.logger(), "Reader.DeclaredPDFAPart", &err)
+	return semantics.DeclaredPDFAPart(ctx, r.doc), nil
+}
+
 // Bookmarks extracts the hierarchical outline (table of contents) from the document.
 func (r *Reader) Bookmarks(ctx context.Context) (_ []models.Bookmark, err error) {
 	defer recoverToError(r.logger(), "Reader.Bookmarks", &err)

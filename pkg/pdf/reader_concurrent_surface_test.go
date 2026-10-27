@@ -42,6 +42,7 @@ func TestConcurrentReaderSurface(t *testing.T) {
 		call func(context.Context)
 	}{
 		{"Bookmarks", func(c context.Context) { _, _ = r.Bookmarks(c) }},
+		{"DeclaredPDFAPart", func(c context.Context) { _, _ = r.DeclaredPDFAPart(c) }},
 		{"DeclaredPDFX", func(c context.Context) { _, _ = r.DeclaredPDFX(c) }},
 		{"DSSInfo", func(c context.Context) { _, _ = r.DSSInfo(c) }},
 		{"EmbeddedFiles", func(c context.Context) { _, _ = r.EmbeddedFiles(c) }},
