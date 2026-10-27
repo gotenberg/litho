@@ -333,63 +333,83 @@ func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, st
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: litho [--timeout DURATION] [--log-level LEVEL] [--max-LIMIT N] <command> [flags] [file...]")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Inspection:")
-	fmt.Fprintln(w, "  info          Quick document summary")
-	fmt.Fprintln(w, "  text          Extract text from pages")
-	fmt.Fprintln(w, "  metadata      Show document metadata")
-	fmt.Fprintln(w, "  pages         List page dimensions")
-	fmt.Fprintln(w, "  validate      Check PDF/A, PDF/UA, WTPDF or Factur-X compliance")
-	fmt.Fprintln(w, "  bookmarks     List or auto-generate outline bookmarks")
-	fmt.Fprintln(w, "  forms         List form fields and values")
-	fmt.Fprintln(w, "  annotations   List annotations per page")
-	fmt.Fprintln(w, "  images        List images per page")
-	fmt.Fprintln(w, "  signatures    List or verify digital signatures")
-	fmt.Fprintln(w, "  attachments   List embedded file attachments")
-	fmt.Fprintln(w, "  render        Draw pages to PNG images, or to CMYK TIFF images")
-	fmt.Fprintln(w, "  contrast      List text short of WCAG 2.x contrast against what lies under it (advisory)")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Extraction:")
-	fmt.Fprintln(w, "  tables        Extract detected tables per page")
-	fmt.Fprintln(w, "  geo           Extract geospatial data per page")
-	fmt.Fprintln(w, "  measurements  Extract measurement scales per page")
-	fmt.Fprintln(w, "  model3d       List embedded 3D models per page")
-	fmt.Fprintln(w, "  formulas      Extract MathML formulas")
-	fmt.Fprintln(w, "  lexicons      Extract pronunciation lexicons")
-	fmt.Fprintln(w, "  redactions    Recover text under redaction marks")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Mutation:")
-	fmt.Fprintln(w, "  rotate        Rotate pages")
-	fmt.Fprintln(w, "  delete        Delete pages")
-	fmt.Fprintln(w, "  split         Extract pages into a new PDF")
-	fmt.Fprintln(w, "  merge         Merge multiple PDFs into one")
-	fmt.Fprintln(w, "  insert        Insert pages from another PDF")
-	fmt.Fprintln(w, "  redact        Remove content under page regions")
-	fmt.Fprintln(w, "  convert-colors Convert every colour to one colour space")
-	fmt.Fprintln(w, "  flatten-transparency Composite transparency into opaque images, text kept")
-	fmt.Fprintln(w, "  encrypt       Encrypt a PDF with password")
-	fmt.Fprintln(w, "  decrypt       Remove encryption from a PDF")
-	fmt.Fprintln(w, "  optimize      Shrink a PDF: object streams, dedup, image recompression, font subsetting")
-	fmt.Fprintln(w, "  set-metadata  Set document metadata fields")
-	fmt.Fprintln(w, "  set-form      Set form field values")
-	fmt.Fprintln(w, "  flatten-form  Flatten form fields into content")
-	fmt.Fprintln(w, "  set-bookmarks Replace outline from JSON or auto-generate")
-	fmt.Fprintln(w, "  stamp-text    Stamp text on pages")
-	fmt.Fprintln(w, "  stamp-image   Stamp an image on pages")
-	fmt.Fprintln(w, "  stamp-pdf     Stamp a PDF page on pages")
-	fmt.Fprintln(w, "  sign          Sign a PDF with a certificate and private key")
-	fmt.Fprintln(w, "  timestamp     Add an RFC 3161 document timestamp")
-	fmt.Fprintln(w, "  attach        Embed a file attachment")
-	fmt.Fprintln(w, "  detach        Remove a file attachment")
-	fmt.Fprintln(w, "  autotag       Synthesize a PDF/UA structure tree")
-	fmt.Fprintln(w, "  remediate     Fix PDF/A, PDF/UA, WTPDF or Factur-X compliance issues")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Pipeline:")
-	fmt.Fprintln(w, "  pipe          Chain multiple operations on a PDF")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Global flags:")
-	fmt.Fprintln(w, "  --timeout D   Timeout duration (e.g., 30s, 5m)")
-	fmt.Fprintln(w, "  --log-level L Library diagnostics on stderr: off, error, warn, info, debug")
-	fmt.Fprintln(w, "  --help, -h    Show this help")
-	fmt.Fprintln(w)
+	sections := []struct {
+		title string
+		rows  [][2]string
+	}{
+		{"Inspection:", [][2]string{
+			{"info", "Quick document summary"},
+			{"text", "Extract text from pages"},
+			{"metadata", "Show document metadata"},
+			{"pages", "List page dimensions"},
+			{"validate", "Check PDF/A, PDF/UA, WTPDF or Factur-X compliance"},
+			{"bookmarks", "List or auto-generate outline bookmarks"},
+			{"forms", "List form fields and values"},
+			{"annotations", "List annotations per page"},
+			{"images", "List images per page"},
+			{"signatures", "List or verify digital signatures"},
+			{"attachments", "List embedded file attachments"},
+			{"render", "Draw pages to PNG images, or to CMYK TIFF images"},
+			{"contrast", "List text short of WCAG 2.x contrast against what lies under it (advisory)"},
+		}},
+		{"Extraction:", [][2]string{
+			{"tables", "Extract detected tables per page"},
+			{"geo", "Extract geospatial data per page"},
+			{"measurements", "Extract measurement scales per page"},
+			{"model3d", "List embedded 3D models per page"},
+			{"formulas", "Extract MathML formulas"},
+			{"lexicons", "Extract pronunciation lexicons"},
+			{"redactions", "Recover text under redaction marks"},
+		}},
+		{"Mutation:", [][2]string{
+			{"rotate", "Rotate pages"},
+			{"delete", "Delete pages"},
+			{"split", "Extract pages into a new PDF"},
+			{"merge", "Merge multiple PDFs into one"},
+			{"insert", "Insert pages from another PDF"},
+			{"redact", "Remove content under page regions"},
+			{"convert-colors", "Convert every colour to one colour space"},
+			{"flatten-transparency", "Composite transparency into opaque images, text kept"},
+			{"encrypt", "Encrypt a PDF with password"},
+			{"decrypt", "Remove encryption from a PDF"},
+			{"optimize", "Shrink a PDF: object streams, dedup, image recompression, font subsetting"},
+			{"set-metadata", "Set document metadata fields"},
+			{"set-form", "Set form field values"},
+			{"flatten-form", "Flatten form fields into content"},
+			{"set-bookmarks", "Replace outline from JSON or auto-generate"},
+			{"stamp-text", "Stamp text on pages"},
+			{"stamp-image", "Stamp an image on pages"},
+			{"stamp-pdf", "Stamp a PDF page on pages"},
+			{"sign", "Sign a PDF with a certificate and private key"},
+			{"timestamp", "Add an RFC 3161 document timestamp"},
+			{"attach", "Embed a file attachment"},
+			{"detach", "Remove a file attachment"},
+			{"autotag", "Synthesize a PDF/UA structure tree"},
+			{"remediate", "Fix PDF/A, PDF/UA, WTPDF or Factur-X compliance issues"},
+		}},
+		{"Pipeline:", [][2]string{
+			{"pipe", "Chain multiple operations on a PDF"},
+		}},
+		{"Global flags:", [][2]string{
+			{"--timeout D", "Timeout duration (e.g., 30s, 5m)"},
+			{"--log-level L", "Library diagnostics on stderr: off, error, warn, info, debug"},
+			{"--help, -h", "Show this help"},
+		}},
+	}
+	// Every description starts in one column, past the longest name, so a
+	// long command name cannot push its own row out of line.
+	width := 0
+	for _, sec := range sections {
+		for _, row := range sec.rows {
+			width = max(width, len(row[0]))
+		}
+	}
+	for _, sec := range sections {
+		fmt.Fprintln(w, sec.title)
+		for _, row := range sec.rows {
+			fmt.Fprintf(w, "  %-*s  %s\n", width, row[0], row[1])
+		}
+		fmt.Fprintln(w)
+	}
 	printLimitUsage(w)
 }
