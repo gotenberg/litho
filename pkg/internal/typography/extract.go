@@ -1104,8 +1104,7 @@ func canMergeTextElements(a, b models.TextElement) bool {
 		a.MCID != b.MCID ||
 		a.PatternType != b.PatternType ||
 		a.Language != b.Language ||
-		a.ExpansionText != b.ExpansionText ||
-		a.MathML != b.MathML {
+		a.ExpansionText != b.ExpansionText {
 		return false
 	}
 	if math.Abs(a.Angle-b.Angle) > 1e-6 {

@@ -200,7 +200,6 @@ type TextElement struct {
 	// abbreviation or acronym (ISO 32000-1, 14.9.5). It is empty when none
 	// does.
 	ExpansionText string `json:"expansionText,omitempty"`
-	MathML        string `json:"mathML,omitempty"`
 }
 
 // Bookmark represents an item in the document outline.

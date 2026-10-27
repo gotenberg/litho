@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/models"
 )
 
 const sampleMathML = `<math xmlns="http://www.w3.org/1998/Math/MathML">
@@ -300,44 +299,5 @@ func TestExtractMathMLFromAF_SingleFileSpec(t *testing.T) {
 	got := extractMathMLFromAF(context.Background(), doc, dict)
 	if got != "<math/>" {
 		t.Errorf("got %q, want '<math/>'", got)
-	}
-}
-
-func TestFormulaElement_ApplyToTextElements(t *testing.T) {
-	fe := models.FormulaElement{
-		MathML: "<math><mi>x</mi></math>",
-		MCIDs:  []int{5, 6},
-	}
-
-	elements := []models.TextElement{
-		{Text: "x", MCID: 5},
-		{Text: "=", MCID: 5},
-		{Text: "2", MCID: 6},
-		{Text: "y", MCID: 7}, // Not part of formula
-	}
-
-	// Build MCID set for the formula.
-	mcidSet := make(map[int]bool)
-	for _, id := range fe.MCIDs {
-		mcidSet[id] = true
-	}
-
-	// Apply MathML to matching elements.
-	for i := range elements {
-		if mcidSet[elements[i].MCID] {
-			elements[i].MathML = fe.MathML
-		}
-	}
-
-	for i, el := range elements {
-		if mcidSet[el.MCID] {
-			if el.MathML != fe.MathML {
-				t.Errorf("elements[%d].MathML = %q, want formula MathML", i, el.MathML)
-			}
-		} else {
-			if el.MathML != "" {
-				t.Errorf("elements[%d].MathML = %q, want empty", i, el.MathML)
-			}
-		}
 	}
 }

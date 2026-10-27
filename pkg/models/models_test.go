@@ -64,7 +64,6 @@ func TestTextElement_JSONRoundTrip(t *testing.T) {
 		PatternType:   "tiling",
 		Language:      "en",
 		ExpansionText: "hello world",
-		MathML:        "<mrow></mrow>",
 	})
 }
 
