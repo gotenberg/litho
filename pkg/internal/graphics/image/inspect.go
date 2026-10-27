@@ -114,6 +114,8 @@ func ExtractImages(ctx context.Context, doc *document.Document, page *document.P
 //   - pdfjs firefox_logo.pdf: shows a 512x543 image through an annotation
 //     appearance and nothing else, so the page listed no images at all while
 //     poppler drew one.
+//   - All corpora: reporting only the page's own resources missed the images
+//     nested in form XObjects on 583 pages of the pdfjs and govdocs corpora.
 func ExtractImagesRecursive(ctx context.Context, doc *document.Document, page *document.Page) []models.ImageMeta {
 	var images []models.ImageMeta
 	walkPageImages(ctx, doc, page, func(name string, stream ast.PdfStream, resources ast.PdfDict) bool {

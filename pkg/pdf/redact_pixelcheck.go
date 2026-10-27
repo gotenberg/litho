@@ -16,8 +16,7 @@ import (
 )
 
 // RedactionCheckDPI is the resolution, in pixels per inch, the pixel check of
-// [Writer.Redact] renders a redacted page at: the resolution of the
-// corpus gate's redact-render cell, whose thresholds the check shares.
+// [Writer.Redact] renders a redacted page at.
 const RedactionCheckDPI = 72
 
 // redactCheckMargin is the width, in device pixels at [RedactionCheckDPI], of
@@ -150,23 +149,6 @@ func (e *RedactionPixelError) Unwrap() []error {
 // renders of each redacted page at 72 dpi. Skip it only where that cost
 // matters more than what it proves, or where a caller checks the pixels
 // itself.
-//
-// # Corpus evidence
-//
-//   - govdocs thread_200_200806: removed glyphs of an unembedded Times-Bold
-//     drew as placeholders reaching a quarter em below their baseline, past
-//     the glyph boxes, and the check refused the quarter and band
-//     redactions until it cleared what the page drew for them.
-//   - govdocs thread_300_300662: a transfer function (/TR) paints a blanked
-//     image white, and the check refused the whole-page redaction until it
-//     left the transfer out of the rendering over black.
-//   - govdocs: over whole-page redactions of page 1 of all 1091 files, it
-//     refused two real leaks, a photograph a form XObject draws under the
-//     name of a page image (thread_000_000582, thread_400_400358), which
-//     Redact now refuses on its own.
-//   - pdfjs, govdocs, pdfcpu: one worker, a median of 37 ms more per
-//     redacted page (11, 106 and 69 ms; 112 ms per million pixels at 72
-//     dpi), 3.7 times the redaction alone, and 8.1 s at most.
 func WithoutRedactionPixelCheck() RedactOption {
 	return func(o *redactOpts) { o.noPixelCheck = true }
 }
@@ -193,6 +175,23 @@ type redactedGlyphs struct {
 // each page of order, after rendering it from before, the document as it was
 // staged before the redaction, and after, the redacted output. regions are
 // the caller's, removed what the redaction reports of the glyphs it removed.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200806: removed glyphs of an unembedded Times-Bold
+//     drew as placeholders reaching a quarter em below their baseline, past
+//     the glyph boxes, and the check refused the quarter and band
+//     redactions until it cleared what the page drew for them.
+//   - govdocs thread_300_300662: a transfer function (/TR) paints a blanked
+//     image white, and the check refused the whole-page redaction until it
+//     left the transfer out of the rendering over black.
+//   - govdocs: over whole-page redactions of page 1 of all 1091 files, it
+//     refused two real leaks, a photograph a form XObject draws under the
+//     name of a page image (thread_000_000582, thread_400_400358), which
+//     Redact now refuses on its own.
+//   - pdfjs, govdocs, pdfcpu: one worker, a median of 37 ms more per
+//     redacted page (11, 106 and 69 ms; 112 ms per million pixels at 72
+//     dpi), 3.7 times the redaction alone, and 8.1 s at most.
 func checkRedactionPixels(
 	ctx context.Context,
 	before, after *Reader,

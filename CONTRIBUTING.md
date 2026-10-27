@@ -128,6 +128,20 @@ Reference identifiers with `[Name]` brackets for pkg.go.dev linking:
 // is a [Violation] value. See [Rule] for the structured fields.
 ```
 
+A doc comment is a contract with the caller. Write down what the caller can rely on, and nothing they cannot act on.
+
+- **The first sentence stands alone.** go doc and pkg.go.dev show it in package indexes. Make it a complete summary: `// Page returns the geometry and metadata of one page.`, then the details.
+- **Document the contract, not the implementation.** Inputs and their valid ranges, the result, what the zero value or a nil argument means, which sentinel errors come back (`[ErrEncrypted]`), and what the call leaves unchanged. Algorithms, helper names and internal packages belong in code comments.
+- **State ownership and lifetime.** Who closes the `io.ReadCloser`, whether a returned slice aliases internal state, how long a value stays valid, whether the call mutates its argument.
+- **State the concurrency contract on the type**, once, then only where a method deviates from it.
+- **Options state their default and their range.** Every `With*` option says what happens without it, which values it accepts, and what an out-of-range value does.
+- **Name the cost of a trade-off.** When an option or method trades size, speed or memory against fidelity, say which way and roughly how much, so the caller can choose.
+- **Cite the clause at the decision.** `(ISO 32000-1, 7.4.4.4)` grounds the behavior. Name viewers (`pdf.js`, `poppler`) only when matching them is the documented behavior.
+- **One idea per paragraph.** Split a long comment into short paragraphs, `# Headings`, and `-` lists (Go doc comment syntax). A sentence that needs three colons and two semicolons is three sentences.
+- **Say what is not supported.** An explicit limit (`Only sequential JPEG qualifies.`) saves the caller an experiment.
+
+Public godoc speaks to callers. Never mention the corpus, corpus files, gate cells, measurement counts, commit hashes, or how a behavior was found in the godoc of an exported identifier in `pkg/pdf`, `pkg/models`, or `pkg/plugins`. Corpus evidence lives on the unexported declaration that makes the decision (see [Corpus evidence](#corpus-evidence)); if none exists, put it on the test that locks the behavior. `TestPublicGodocNeverMentionsCorpus` enforces this.
+
 ### Code comments
 
 - Explain _why_, not _what_.
@@ -138,7 +152,7 @@ Reference identifiers with `[Name]` brackets for pkg.go.dev linking:
 
 ### Corpus evidence
 
-Corpus measurements back a decision. They are not the decision. Keep them out of the prose and collect them in a `# Corpus evidence` section, the last block of the declaration's doc comment:
+Corpus measurements back a decision. They are not the decision. Keep them out of the prose and collect them in a `# Corpus evidence` section, the last block of the declaration's doc comment. Only unexported declarations, `pkg/internal` declarations and tests carry this section: the public surface never does (see [Godoc](#godoc)).
 
 ```go
 // maxPageTreeDepth caps recursion so a self-referential /Kids chain cannot
@@ -195,7 +209,7 @@ Plan non-trivial changes before coding. Present problem, approach, affected file
 - [ ] Safety: file-derived sizes bounded before allocation; defensive caps are named consts; new byte decoders have a fuzz target.
 - [ ] Spec-grounded: verdicts, accept/reject decisions, and hardcoded tables cite their clause; deliberate leniency names the clause it relaxes.
 - [ ] Linting: `make fmt && make lint && make lint-unparam` passes with zero warnings.
-- [ ] Documentation: Godoc on all exports; `doc.go` per package.
+- [ ] Documentation: Godoc on all exports; `doc.go` per package; no corpus mention in public godoc.
 - [ ] Tests: new behavior covered; no regressions; corpora unchanged.
 
 ### Commits

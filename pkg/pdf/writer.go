@@ -311,21 +311,6 @@ func WithDedup() WriteOption {
 // It costs time where the other compaction options cost almost none:
 // compressing at zlib's best level takes seconds on an image-heavy file that
 // [WithObjectStreams] and [WithDedup] rewrite in milliseconds.
-//
-// # Corpus evidence
-//
-//   - All corpora: 27,709 images re-encoded, each decoding to its original
-//     samples; govdocs saves 2.46%, pdfjs 1.90% and pdfcpu 6.46% of the
-//     rewritten bytes.
-//   - pdfcpu: writing all 51 files takes 17s with it and 1s without.
-//   - All corpora: re-coding JPEG data raises the saving to 4.33% on govdocs,
-//     3.05% on pdfjs and 7.31% on pdfcpu (19.3 MB more over 5,713 JPEGs), no
-//     output grows and none fails to write, and writing govdocs takes 178s
-//     against 123s without it.
-//   - All corpora: the Indexed form converts 205 images in 52 files and saves
-//     a further 0.08% on govdocs, 0.07% on pdfjs, 0.48% on pdfcpu and 5.4%
-//     on pdf20; every image decodes to the pixels it had, no output grows,
-//     and veraPDF reports the same rules at 2b and 4 on a sample of 8.
 func WithImageRecompression() WriteOption {
 	return func(o *writeOpts) {
 		o.recompressImages = true
@@ -362,16 +347,6 @@ func WithImageRecompression() WriteOption {
 // the document later in that font, by an editor or a form, finds no glyph to
 // draw. That is why the CLI keeps it behind its own --subset-fonts flag
 // rather than in --compact.
-//
-// # Corpus evidence
-//
-//   - All corpora: 3,766 programs subset in 1,278 files, each output
-//     extracting, validating and rendering as its plain rewrite does;
-//     facturx saves 52.5%, pdfjs 7.3%, pdfcpu 2.7% and govdocs 1.4% of the
-//     rewritten bytes, and facturx 58.3% beside WithObjectStreams and
-//     WithDedup.
-//   - All corpora: 293 Type 1 programs subset in 93 files, with the same
-//     evidence, saving 1.0 MB on govdocs and 595 KB on pdfjs.
 func WithFontSubsetting() WriteOption {
 	return func(o *writeOpts) {
 		o.subsetFonts = true

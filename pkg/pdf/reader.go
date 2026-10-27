@@ -1458,11 +1458,6 @@ func (r *Reader) HasXFAForm(ctx context.Context) (has bool) {
 // taken as final when it says yes. The page scan only adds the fields no
 // /AcroForm lists: a document can present widget fields on its pages with no
 // /AcroForm at all, and the narrower answer reads "no" for it.
-//
-// # Corpus evidence
-//
-//   - pdfjs issue12963.pdf: carries 27 widget fields and no /AcroForm, so
-//     [Reader.HasAcroForm] read "no" for a document whose fields litho lists.
 func (r *Reader) HasFormFields(ctx context.Context) (_ bool, err error) {
 	defer recoverToError(r.logger(), "Reader.HasFormFields", &err)
 	if r.HasAcroForm(ctx) {
@@ -1724,13 +1719,6 @@ func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
 // DeclaredBleedBox, DeclaredTrimBox and DeclaredArtBox report the entries
 // those four are derived from, as written, and nil when absent. See
 // [models.Page] for the exact rules.
-//
-// # Corpus evidence
-//
-//   - pdfjs boundingBox_invalid.pdf: the first page declares /MediaBox
-//     [0 0 0 0], and poppler reports 612 x 792 for it.
-//   - govdocs thread_400_400739.pdf: has no /MediaBox anywhere, and poppler
-//     reports 612 x 792 for it.
 func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err error) {
 	defer recoverToError(r.logger(), "Reader.Page", &err)
 	p, err := r.resolvePage(ctx, pageNum)
@@ -1829,11 +1817,6 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []mode
 // Each entry's Decode decodes that image's pixels as [Reader.DecodeImage]
 // does, with the same errors. Two form XObjects may each name an image Im0, so
 // a Filename can repeat on a page: Decode decodes the entry it belongs to.
-//
-// # Corpus evidence
-//
-//   - All corpora: reporting only the page's own resources missed the images
-//     nested in form XObjects on 583 pages of the pdfjs and govdocs corpora.
 func (r *Reader) ExtractImages(ctx context.Context, pageNum int) (_ []models.ImageMeta, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractImages", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)

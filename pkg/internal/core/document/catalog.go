@@ -132,6 +132,13 @@ func (p *Page) ViewedMediaBox() ast.PdfArray {
 // does not. A page the page tree walk builds has a crop box a viewer uses
 // unless its media box is none either (see [clampToMediaBox]), and a viewer
 // then shows US Letter.
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: the first page declares /MediaBox
+//     [0 0 0 0], and poppler reports 612 x 792 for it.
+//   - govdocs thread_400_400739.pdf: has no /MediaBox anywhere, and poppler
+//     reports 612 x 792 for it.
 func (p *Page) ViewedBox() ast.PdfArray {
 	if UsableBox(p.CropBox) {
 		return p.CropBox

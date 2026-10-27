@@ -48,6 +48,16 @@ type CompactOptions struct {
 // holds and the trailer, reading under doc's filter plugins, budgets and
 // logger. Every write path calls it after its last allocation and before
 // encryption, which replaces the stream data the pass reads.
+//
+// # Corpus evidence
+//
+//   - All corpora: 3,766 programs subset in 1,278 files, each output
+//     extracting, validating and rendering as its plain rewrite does;
+//     facturx saves 52.5%, pdfjs 7.3%, pdfcpu 2.7% and govdocs 1.4% of the
+//     rewritten bytes, and facturx 58.3% beside WithObjectStreams and
+//     WithDedup.
+//   - All corpora: 293 Type 1 programs subset in 93 files, with the same
+//     evidence, saving 1.0 MB on govdocs and 595 KB on pdfjs.
 func (c CompactOptions) subsetFonts(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, trailer ast.PdfDict) error {
 	if !c.SubsetFonts {
 		return nil
@@ -62,6 +72,21 @@ func (c CompactOptions) subsetFonts(ctx context.Context, doc *document.Document,
 
 // imageRecompression returns the recompression pass c selects, decoding under
 // doc's filter plugins and budgets, or nil when c selects none.
+//
+// # Corpus evidence
+//
+//   - All corpora: 27,709 images re-encoded, each decoding to its original
+//     samples; govdocs saves 2.46%, pdfjs 1.90% and pdfcpu 6.46% of the
+//     rewritten bytes.
+//   - pdfcpu: writing all 51 files takes 17s with it and 1s without.
+//   - All corpora: re-coding JPEG data raises the saving to 4.33% on govdocs,
+//     3.05% on pdfjs and 7.31% on pdfcpu (19.3 MB more over 5,713 JPEGs), no
+//     output grows and none fails to write, and writing govdocs takes 178s
+//     against 123s without it.
+//   - All corpora: the Indexed form converts 205 images in 52 files and saves
+//     a further 0.08% on govdocs, 0.07% on pdfjs, 0.48% on pdfcpu and 5.4%
+//     on pdf20; every image decodes to the pixels it had, no output grows,
+//     and veraPDF reports the same rules at 2b and 4 on a sample of 8.
 func (c CompactOptions) imageRecompression(doc *document.Document) *writer.ImageRecompression {
 	if !c.RecompressImages {
 		return nil
