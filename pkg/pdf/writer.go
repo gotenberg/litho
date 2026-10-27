@@ -1872,8 +1872,15 @@ func (w *Writer) askEncryption(cfg EncryptConfig, by string) {
 	w.forceRewrite = true
 }
 
-// RemoveEncryption removes encryption from the output document. The Reader
-// must have been opened with the correct password. Forces a full rewrite.
+// RemoveEncryption writes the output document without encryption. It forces a
+// full rewrite, and a full rewrite writes plaintext unless [Writer.Encrypt] or
+// [WithEncryption] asks for encryption. Either of those, given before or after
+// RemoveEncryption, overrides it. On an unencrypted document it is a full
+// rewrite and nothing more.
+//
+// An encrypted Reader must have been opened with the correct password:
+// otherwise [Writer.WriteTo] returns [ErrEncryptedNotAuthenticated] and writes
+// nothing.
 func (w *Writer) RemoveEncryption() {
 	if w.refuseAfterRemediation("RemoveEncryption") != nil {
 		return
