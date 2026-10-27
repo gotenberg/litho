@@ -666,8 +666,7 @@ type TextStamp struct {
 	X, Y float64
 	// FontSize is the text size in points; zero defaults to 12.
 	FontSize float64
-	// Opacity is 0.0-1.0 (1.0 = fully opaque). Zero is treated as fully
-	// opaque for back-compat with the original API.
+	// Opacity is 0.0-1.0 (1.0 = fully opaque). Zero means fully opaque.
 	Opacity float64
 	// Font selects the text font. The zero value uses [FontHelvetica].
 	// Construct with one of the [FontHelvetica], [FontTimesRoman], ...
@@ -1704,9 +1703,7 @@ const (
 	// ISO 32000-2 defines this handler, but the output declares PDF 1.7 plus
 	// an /Extensions entry naming Adobe extension level 3 rather than PDF
 	// 2.0. AES-256 is an extension to 1.7, not a feature of it, and declaring
-	// 2.0 would overstate a document whose body is unchanged. This matches
-	// what other producers write: qpdf emits the same 1.7-plus-extension
-	// pair.
+	// 2.0 would overstate a document whose body is unchanged.
 	EncryptAES256 EncryptAlgorithm = iota
 	// EncryptAES128 uses 128-bit AES-CBC (V=4, R=4) through the AESV2 crypt
 	// filter, which ISO 32000-1, Table 25 introduces in PDF 1.6. The output
@@ -1912,9 +1909,8 @@ func (w *Writer) FlattenForm() {
 // ISO 14289-1, 7.21.4.1 requires of every font used for rendering. A stamp
 // that has to survive PDF/UA validation needs a TTF supplied through
 // [TextStamp.Font]: litho embeds the whole font program with a matching
-// ToUnicode CMap. Measured on an autotagged page, stamping with the default
-// font adds a 7.21.4.1 violation naming the stamp font, and supplying a TTF
-// removes it.
+// ToUnicode CMap. With the default font, PDF/UA validation reports a
+// 7.21.4.1 violation naming the stamp font.
 func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	if err := w.refuseAfterRemediation("StampText"); err != nil {
 		return err

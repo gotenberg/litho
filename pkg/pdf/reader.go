@@ -1698,7 +1698,7 @@ func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
 // Width and Height are effective dimensions in PDF points, derived from the
 // CropBox (the visible area) and accounting for /Rotate and /UserUnit. They
 // are the size a viewer shows the page at: a box that is not four numbers
-// enclosing an area is no box to pdf.js or poppler, and a page whose crop box
+// enclosing an area is no box to a viewer, and a page whose crop box
 // and media box are missing or no box reports the US Letter size they
 // substitute, 612 x 792 before /UserUnit and /Rotate apply. Every rewrite
 // writes a page's boxes as Page reads them, so no rewrite changes the size

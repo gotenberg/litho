@@ -47,8 +47,8 @@ type Page struct {
 	MediaBox [4]float64 `json:"mediaBox"`
 	// CropBox is the effective crop box. CropBox, BleedBox, TrimBox and
 	// ArtBox are the effective page boundaries, not the entries as written,
-	// read as pdf.js and poppler read them. A box that is not four numbers
-	// enclosing an area is no box to them and reads as absent. An absent box
+	// read as viewers read them. A box that is not four numbers enclosing an
+	// area is no box to a viewer and reads as absent. An absent box
 	// takes its ISO 32000-1, Table 30 default: the media box for the crop box,
 	// the crop box for the bleed, trim and art boxes. A box that extends beyond
 	// the media box is reduced to its intersection with it, as ISO 32000-1,

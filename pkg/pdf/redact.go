@@ -238,8 +238,7 @@ func WithoutRedactionAnnotationClipping() RedactOption {
 }
 
 // WithRedactionAnnotationClipping asks for the annotation clipping
-// [Writer.Redact] does by default, and changes nothing. It is kept so callers
-// written when the clipping was opt-in still compile.
+// [Writer.Redact] does by default, and changes nothing.
 //
 // Deprecated: the clipping is the default;
 // [WithoutRedactionAnnotationClipping] turns it off.
@@ -249,8 +248,7 @@ func WithRedactionAnnotationClipping() RedactOption {
 
 // WithoutRedactionGlyphOutlines makes [Writer.Redact] select a glyph by its
 // advance box alone: the box of its advance and its font's ascent and descent
-// (see [models.TextElement.InkBox]), as litho did before it bounded glyphs by
-// their outlines.
+// (see [models.TextElement.InkBox]).
 //
 // By default a glyph is selected when that box or its outline's bounds meet
 // a region. ISO 32000-1, 9.2.4 lets a glyph's outline paint anywhere in glyph

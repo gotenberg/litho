@@ -47,9 +47,8 @@ func (s Severity) String() string {
 }
 
 // Violation is a structured compliance violation. It carries the spec
-// coordinates (Specification, Clause, TestNumber) the flat `[]error`
-// validation results stringify away, plus a [Severity]. It implements
-// error with the same text as the flat form, so it can be used
+// coordinates (Specification, Clause, TestNumber) and a [Severity]. It
+// implements error with the same text as the flat form, so it can be used
 // interchangeably.
 // Values must not be shared across goroutines without synchronization.
 //

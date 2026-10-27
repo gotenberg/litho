@@ -154,8 +154,7 @@ func WithoutRedactionPixelCheck() RedactOption {
 }
 
 // WithRedactionPixelCheck asks for the pixel check [Writer.Redact] runs by
-// default, and changes nothing. It is kept so callers written when the check
-// was opt-in still compile.
+// default, and changes nothing.
 //
 // Deprecated: the pixel check is the default; [WithoutRedactionPixelCheck]
 // skips it.

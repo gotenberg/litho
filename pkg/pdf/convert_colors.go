@@ -170,9 +170,9 @@ func WithColorIntent(i RenderingIntent) ColorOption {
 // WithoutBlackPointCompensation converts without black point compensation.
 // By default [Writer.ConvertColors] compensates (ISO 18619): it scales the
 // source's black point to the target's, so the darkest source colour maps to
-// the darkest the target reproduces rather than clipping the shadows, as the
-// renderer reads a profile whose black is lighter than sRGB's, and as poppler
-// and PDFium draw it. Without compensation such a profile's black converts
+// the darkest the target reproduces rather than clipping the shadows. It is
+// how [Reader.RenderPage] and common viewers draw a profile whose black is
+// lighter than sRGB's. Without compensation such a profile's black converts
 // to the grey it measures, and the converted page draws lighter than its
 // source.
 //
@@ -185,8 +185,7 @@ func WithoutBlackPointCompensation() ColorOption {
 }
 
 // WithBlackPointCompensation asks for the black point compensation
-// [Writer.ConvertColors] applies by default, and changes nothing. It is kept
-// so callers written when compensation was opt-in still compile.
+// [Writer.ConvertColors] applies by default, and changes nothing.
 //
 // Deprecated: compensation is the default; [WithoutBlackPointCompensation]
 // turns it off.
