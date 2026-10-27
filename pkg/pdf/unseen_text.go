@@ -20,57 +20,63 @@ func invisibleMode(mode int) bool {
 	return mode == 3 || mode == 7
 }
 
-// ExtractUnseenText returns the runs of text the given 1-based page draws
-// that show nowhere on it, each with a [models.UnseenReason]:
+// ExtractUnseenText returns the runs of text the given 1-based page draws that
+// show nowhere on it, each with a [models.UnseenReason]:
 //
 //   - [models.UnseenRenderMode], text in rendering mode 3, which paints no
-//     glyph (ISO 32000-1, 9.3.6, Table 106), as an OCR layer does, and text
-//     in mode 7, which only adds its glyphs to the clip, when what the page
-//     paints through that clip shows nothing inside them;
-//   - [models.UnseenOutsidePage], text set outside the crop box;
+//     glyph (ISO 32000-1, 9.3.6, Table 106), as an OCR layer does. It also
+//     covers text in mode 7, which only adds its glyphs to the clip, when what
+//     the page paints through that clip shows nothing inside them.
+//   - [models.UnseenOutsidePage], text set outside the crop box.
 //   - [models.UnseenPaintsNothing], text that marks no pixel even drawn alone
-//     on a white page: glyphs describing no shape, text a clipping path
-//     removes (8.5.4), fully transparent text, text in white;
+//     on a white page: glyphs describing no shape, text a clipping path removes
+//     (8.5.4), fully transparent text, text in white.
 //   - [models.UnseenCovered], text that marks pixels drawn alone and none on
-//     the page: what the page paints after it covers it (8.2), or it is drawn
+//     the page. What the page paints after it covers it (8.2), or it is drawn
 //     in the colour of what lies under it, white on white among them.
 //
-// Text extraction returns covered text and text that paints nothing: what a
-// page shows and what its content stream says are two readings, and this
-// method tells them apart, for an audit of text a reader is given and a
-// sighted reader never sees, a redaction drawn as a box over text among it.
-// [Reader.ExtractText] drops the first two kinds and white on white by
-// default; [WithHiddenText] keeps them.
+// Text extraction returns covered text and text that paints nothing. What a
+// page shows and what its content stream says are two readings, and this method
+// tells them apart. Use it to audit text a reader is given and a sighted reader
+// never sees, a redaction drawn as a box over text among it.
+// [Reader.ExtractText] drops the first two kinds and white on white by default.
+// [WithHiddenText] keeps them.
 //
 // A run of glyphs shows by its own ink, as [Reader.ExtractText] judges white
-// text and [Writer.Redact] the copies of removed text: the page drawn
-// without the run differs from the page drawn whole inside the run's glyph
-// boxes, whatever other glyph's box also lies there. The page is drawn at
-// 72 dpi over the glyph boxes, with and without its text, every optional
-// content group shown as text extraction reads them, its annotations drawn
-// as a viewer shows them, and again with its text alone for the runs that do
-// not show; a run whose ink lies wholly under other runs' glyph boxes is
-// drawn again without it, beside other such runs that share no pixel with
-// it, in up to 16 drawings. A run past that bound is not reported, nor is
-// one set vertically or turned that text extraction cannot place. A piece
-// of text drawn several times over itself, a fake bold, a drop shadow or an
-// outline pass, each copy the same characters at the same size under a
-// quarter em from the others as default text extraction matches them, is
-// judged once, as a viewer sees it: it shows when the page drawn without
-// every copy differs, and a copy under another is not reported for lying
-// under its own copy. A run covered or painting nothing that is drawn again
-// later at its place in mode 7, by a copy that shows through its clip, is
-// seen in that copy, as a heading clipping an image to its letters shows, and
-// is not reported. A run in mode 7 whose clip lets nothing through is not
-// reported either when a copy of it at its place, drawn before or after it in
-// a mode that paints, shows: a reader sees the text in that copy. A run in
-// mode 7 that clips nothing and has no such copy is reported for its mode.
+// text and [Writer.Redact] the copies of removed text. The page drawn without
+// the run differs from the page drawn whole inside the run's glyph boxes,
+// whatever other glyph's box also lies there.
+//
+// The page is drawn at 72 dpi over the glyph boxes, with and without its text.
+// Every optional content group is shown as text extraction reads them, and
+// annotations are drawn as a viewer shows them. The page is drawn again with
+// its text alone for the runs that do not show. A run whose ink lies wholly
+// under other runs' glyph boxes is drawn again without it, beside other such
+// runs that share no pixel with it, in up to 16 drawings. A run past that bound
+// is not reported. Neither is a run set vertically or turned that text
+// extraction cannot place.
+//
+// A piece of text drawn several times over itself is judged once, as a viewer
+// sees it. A fake bold, a drop shadow or an outline pass is such a piece: each
+// copy is the same characters at the same size, under a quarter em from the
+// others, as default text extraction matches them. The piece shows when the
+// page drawn without every copy differs. A copy under another is not reported
+// for lying under its own copy.
+//
+// A run covered or painting nothing that is drawn again later at its place in
+// mode 7, by a copy that shows through its clip, is seen in that copy and is
+// not reported. A heading clipping an image to its letters shows this way.
+//
+// A run in mode 7 whose clip lets nothing through is not reported either when a
+// copy of it at its place, drawn before or after it in a mode that paints,
+// shows: a reader sees the text in that copy. A run in mode 7 that clips
+// nothing and has no such copy is reported for its mode.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
-// [ErrFontMissing] when the page's text cannot be read, and
-// [ErrRenderTooLarge] when the page cannot be drawn within
-// [Limits.MaxRenderPixels] or its glyph boxes cover the page past 64 times.
-// It is safe for concurrent use with every other read of the [Reader].
+// [ErrFontMissing] when the page's text cannot be read, and [ErrRenderTooLarge]
+// when the page cannot be drawn within [Limits.MaxRenderPixels] or its glyph
+// boxes cover the page past 64 times. It is safe for concurrent use with every
+// other read of the [Reader].
 func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models.UnseenText, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractUnseenText", &err)
 	pg, err := r.resolvePage(ctx, pageNum)

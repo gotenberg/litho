@@ -290,12 +290,13 @@ func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile)
 	return compliance.ValidatePDFUA(ctx, r.doc, profile)
 }
 
-// ValidateWTPDF audits the document against a Well-Tagged PDF 1.0
-// conformance level, returning all compliance violations found. An
-// empty slice means the document passes. WTPDF adopts the ISO 14289-2
-// (PDF/UA-2) requirements, so the violations report those clauses,
-// minus the rules the level does not state, plus the PDF Declaration
-// WTPDF requires of its own.
+// ValidateWTPDF audits the document against a Well-Tagged PDF 1.0 conformance
+// level and returns all compliance violations found. An empty slice means the
+// document passes.
+//
+// WTPDF adopts the ISO 14289-2 (PDF/UA-2) requirements, so the violations
+// report those clauses. They leave out the rules the level does not state. They
+// add the PDF Declaration WTPDF requires of its own.
 func (r *Reader) ValidateWTPDF(ctx context.Context, profile models.WTPDFProfile) (_ []error, err error) {
 	defer recoverToError(r.logger(), "Reader.ValidateWTPDF", &err)
 	return compliance.ValidateWTPDF(ctx, r.doc, profile)
@@ -751,11 +752,11 @@ func OpenFile(ctx context.Context, path string, opts ...OpenOption) (*Reader, er
 // Version returns the PDF version the document declares, e.g. "1.4" or "2.0".
 //
 // This is the RESOLVED version, not the header. Per ISO 32000-1, 7.5.2 a
-// catalog /Version entry is used instead of the version in the header, and the
+// catalog /Version entry is used instead of the version in the header. The
 // reader applies that when it opens the file, so a document whose header reads
 // %PDF-1.4 and whose catalog says /2.0 reports "2.0" here.
 //
-// The distinction is not academic: an incremental update cannot rewrite the
+// The distinction is not academic. An incremental update cannot rewrite the
 // header, since that is byte zero of the bytes it preserves, so the catalog is
 // the only place a later version can be declared. Read this rather than the
 // leading bytes when you want what the document claims to be.
@@ -866,30 +867,34 @@ func WithArtifacts() ExtractTextOption {
 	}
 }
 
-// ExtractText cleanly extracts text from a given 1-based page number.
-// It orchestrates the content lexer, graphics state machine, unicode mapping,
+// ExtractText cleanly extracts text from a given 1-based page number. It
+// orchestrates the content lexer, graphics state machine, unicode mapping,
 // optional content layer rules, and spatial whitespace inference logic.
 //
-// By default, invisible text (rendering mode 3, white-on-white colors),
-// text outside the clipping path and CropBox, and artifact text (headers,
-// footers, page numbers) are silently dropped. Pass [WithHiddenText] to
-// include all text regardless of visibility.
+// By default, invisible text (rendering mode 3, white-on-white colors), text
+// outside the clipping path and CropBox, and artifact text (headers, footers,
+// page numbers) are silently dropped. Pass [WithHiddenText] to include all text
+// regardless of visibility.
 //
-// Text whose every paint is device white, the fill, the stroke or both as its
-// rendering mode applies them (ISO 32000-1, 9.3.6, Table 106), is invisible
-// only where it lies on white; a white glyph outlined in black is not white.
-// A page holding such text is drawn, the part of it the text lies in, with
-// and without its text, and the white text that changes what the page shows
-// is kept, a white heading on a coloured bar among it. Text in rendering mode
-// 3 paints nothing and is dropped without a drawing. Text in mode 7 is read:
-// what the page paints next shows through it. A page that cannot be drawn, past [Limits.MaxRenderPixels] for
-// one, drops its white text as white on white. The judgement is cached per
-// page, so [Reader.ExtractTextElements], [Reader.ExtractTables] and
-// [Reader.GenerateBookmarks], which read it too, draw a page once.
+// Text whose every paint is device white is invisible only where it lies on
+// white. The paints are the fill, the stroke or both, as the rendering mode
+// applies them (ISO 32000-1, 9.3.6, Table 106). A white glyph outlined in black
+// is not white.
 //
-// By default, text the page draws again over itself for an effect, a drop
-// shadow or a fake bold drawn a few hundredths of an em apart, is read once,
-// where the content stream first draws it. [WithInvisibleText] and
+// A page holding such text is drawn, the part of it the text lies in, with and
+// without its text. The white text that changes what the page shows is kept, a
+// white heading on a coloured bar among it. Text in rendering mode 3 paints
+// nothing and is dropped without a drawing. Text in mode 7 is read: what the
+// page paints next shows through it. A page that cannot be drawn, past
+// [Limits.MaxRenderPixels] for one, drops its white text as white on white.
+//
+// The judgement is cached per page. [Reader.ExtractTextElements],
+// [Reader.ExtractTables] and [Reader.GenerateBookmarks] read it too, so they
+// draw a page once.
+//
+// By default, text the page draws again over itself for an effect is read once,
+// where the content stream first draws it. A drop shadow or a fake bold drawn a
+// few hundredths of an em apart is such an effect. [WithInvisibleText] and
 // [WithHiddenText] read every copy, as [Reader.ExtractTextElements] returns
 // every glyph.
 func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTextOption) (_ string, err error) {
@@ -998,7 +1003,7 @@ func (r *Reader) ExtractAllText(ctx context.Context, opts ...ExtractTextOption) 
 
 // Permissions represents the document's permission flags as defined by
 // ISO 32000-2, Table 22. For unencrypted documents, all flags are true.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type Permissions struct {
 	Print             bool // Bit 3: Print the document.
 	ModifyContent     bool // Bit 4: Modify document contents.
@@ -1196,7 +1201,7 @@ const (
 // HeadingCandidate is the input passed to a [HeadingScorer]. It holds
 // the reconstructed line text plus structural features that distinguish
 // headings from body text.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type HeadingCandidate struct {
 	// Text is the reconstructed line text.
 	Text string
@@ -1697,29 +1702,35 @@ func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
 }
 
 // Page returns the geometry and metadata for the given 1-based page number.
+//
 // Width and Height are effective dimensions in PDF points, derived from the
-// CropBox (the visible area) and accounting for /Rotate and /UserUnit. They
-// are the size a viewer shows the page at: a box that is not four numbers
-// enclosing an area is no box to a viewer, and a page whose crop box
-// and media box are missing or no box reports the US Letter size they
-// substitute, 612 x 792 before /UserUnit and /Rotate apply. Every rewrite
-// writes a page's boxes as Page reads them, so no rewrite changes the size
-// Page reports, but for a page with no media box a viewer uses: Page reports
-// what a viewer shows for the source, while a write may give that page the
-// size of the document's other pages when it holds everything the page paints
-// (see [WithDefaultPageSize]), since ISO 32000-1, Table 30 gives the media box
-// no default and the other pages are the best evidence of the size the
-// producer meant. Page then reports that size on the output.
+// CropBox (the visible area) and accounting for /Rotate and /UserUnit. They are
+// the size a viewer shows the page at. A box that is not four numbers enclosing
+// an area is no box to a viewer. A page whose crop box and media box are
+// missing or no box reports the US Letter size they substitute, 612 x 792
+// before /UserUnit and /Rotate apply.
+//
+// Every rewrite writes a page's boxes as Page reads them, so no rewrite changes
+// the size Page reports. The exception is a page with no media box a viewer
+// uses. Page reports what a viewer shows for the source. A write may give that
+// page the size of the document's other pages when it holds everything the page
+// paints (see [WithDefaultPageSize]), since ISO 32000-1, Table 30 gives the
+// media box no default and the other pages are the best evidence of the size
+// the producer meant. Page then reports that size on the output.
 //
 // No box field reports that fallback as a box. MediaBox reports the media box
-// the file declares. CropBox, BleedBox, TrimBox and ArtBox report the
-// effective boundaries: a box that is no rectangle enclosing an area reads as
-// absent, an absent box takes its default from ISO 32000-1, Table 30, the
-// declared media box for the crop box, and a box extending beyond the page is
-// reduced to its intersection with it (ISO 32000-1, 14.11.2.1): with the media
-// box, or with US Letter where the media box is no box. DeclaredCropBox,
-// DeclaredBleedBox, DeclaredTrimBox and DeclaredArtBox report the entries
-// those four are derived from, as written, and nil when absent. See
+// the file declares. CropBox, BleedBox, TrimBox and ArtBox report the effective
+// boundaries:
+//
+//   - A box that is no rectangle enclosing an area reads as absent.
+//   - An absent box takes its default from ISO 32000-1, Table 30, the declared
+//     media box for the crop box.
+//   - A box extending beyond the page is reduced to its intersection with it
+//     (ISO 32000-1, 14.11.2.1): with the media box, or with US Letter where the
+//     media box is no box.
+//
+// DeclaredCropBox, DeclaredBleedBox, DeclaredTrimBox and DeclaredArtBox report
+// the entries those four are derived from, as written, and nil when absent. See
 // [models.Page] for the exact rules.
 func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err error) {
 	defer recoverToError(r.logger(), "Reader.Page", &err)

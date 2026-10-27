@@ -55,17 +55,20 @@ type Page struct {
 	// fallback reaches Width and Height, and the intersection that reduces
 	// the other boxes, but never this field.
 	MediaBox [4]float64 `json:"mediaBox"`
-	// CropBox is the effective crop box. CropBox, BleedBox, TrimBox and
-	// ArtBox are the effective page boundaries, not the entries as written,
-	// read as viewers read them. A box that is not four numbers enclosing an
-	// area is no box to a viewer and reads as absent. An absent box
-	// takes its ISO 32000-1, Table 30 default: the media box for the crop box,
-	// the crop box for the bleed, trim and art boxes. A box that extends beyond
-	// the media box is reduced to its intersection with it, as ISO 32000-1,
-	// 14.11.2.1 requires, or with US Letter where the media box is no box, and
-	// a box whose intersection encloses no area takes its default. None is
-	// clipped to the crop box, which has no defined relationship with the other
-	// boundaries.
+	// CropBox is the effective crop box. CropBox, BleedBox, TrimBox and ArtBox are
+	// the effective page boundaries, not the entries as written, read as viewers
+	// read them:
+	//
+	//   - A box that is not four numbers enclosing an area is no box to a viewer
+	//     and reads as absent.
+	//   - An absent box takes its ISO 32000-1, Table 30 default: the media box for
+	//     the crop box, the crop box for the bleed, trim and art boxes.
+	//   - A box that extends beyond the media box is reduced to its intersection
+	//     with it, as ISO 32000-1, 14.11.2.1 requires, or with US Letter where the
+	//     media box is no box.
+	//   - A box whose intersection encloses no area takes its default.
+	//   - None is clipped to the crop box, which has no defined relationship with
+	//     the other boundaries.
 	CropBox [4]float64 `json:"cropBox"`
 	// BleedBox is the effective bleed box. See CropBox for the rules.
 	BleedBox [4]float64 `json:"bleedBox"`
@@ -104,7 +107,7 @@ type Page struct {
 }
 
 // TextElement represents a spatially positioned piece of text on a page.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type TextElement struct {
 	// Text is the characters the glyph maps to.
 	Text string `json:"text"`
@@ -145,35 +148,38 @@ type TextElement struct {
 	// Angle is the direction the glyph advances along, in radians, measured
 	// from the positive X axis of default user space.
 	Angle float64 `json:"angle,omitempty"`
-	// InkRight reports that horizontal text inks the right of its advance,
-	// the side a quarter turn clockwise from it, rather than the left, where
-	// glyphs rise to their ascenders as the rendering matrix of ISO 32000-1,
-	// 9.4.4 sets them upright. A negative horizontal scaling, a mirrored text
-	// matrix and a mirrored CTM each reflect the glyphs onto the right, and
-	// any two of them cancel; so does a Type 3 font that draws its glyphs
-	// below its text-space baseline (9.6.5). A negative font size turns the
-	// glyphs a half turn without moving them across the advance, which Angle
-	// already carries.
+	// InkRight reports that horizontal text inks the right of its advance, the side
+	// a quarter turn clockwise from it, rather than the left. On the left, glyphs
+	// rise to their ascenders as the rendering matrix of ISO 32000-1, 9.4.4 sets
+	// them upright.
+	//
+	// A negative horizontal scaling, a mirrored text matrix and a mirrored CTM each
+	// reflect the glyphs onto the right, and any two of them cancel. So does a Type
+	// 3 font that draws its glyphs below its text-space baseline (9.6.5). A
+	// negative font size turns the glyphs a half turn without moving them across
+	// the advance, which Angle already carries.
 	InkRight bool `json:"inkRight,omitempty"`
-	// InkBox is the axis-aligned box [minX minY maxX maxY], in default user
-	// space, holding the ink the element paints and its origin: each glyph's
-	// bounds carried through the text rendering matrix of ISO 32000-1,
-	// 9.4.4, [Tfs×Th 0 0 Tfs 0 Trise] × Tm × CTM, so a skewed, turned or
-	// mirrored matrix gives the box of the parallelogram it draws. A Type 3
-	// glyph is bounded by what its description paints and the box its d1
-	// states (9.6.5), mapped by /FontMatrix, so a glyph drawn in pixels and
-	// shown at Tf 1 is bounded where it inks, however small its font size;
-	// one whose description paints what no box holds, a shading over no clip
-	// of its own, is bounded by the clipping path it is shown under.
-	// Any other glyph is bounded by its advance along the baseline and by
-	// the font's /FontBBox across it, never less than an ascender of one em
-	// and a descender of a fifth of one, grown by the reach of the pen when
-	// the text rendering mode strokes it (9.3.6, Table 106): half the line
-	// width through the CTM, √2 times that under a projecting square cap
-	// (8.4.3.3). A miter join's tip at a sharp corner may reach past it
-	// (8.4.3.5). A run's box is the union of its
-	// glyphs'. Redaction tests it against a region. It is all zeros on an
-	// element that does not come from extraction.
+	// InkBox is the axis-aligned box [minX minY maxX maxY], in default user space,
+	// holding the ink the element paints and its origin. Redaction tests it against
+	// a region. It is all zeros on an element that does not come from extraction.
+	//
+	// A run's box is the union of its glyphs'. Each glyph's bounds are carried
+	// through the text rendering matrix of ISO 32000-1, 9.4.4,
+	// [Tfs×Th 0 0 Tfs 0 Trise] × Tm × CTM, so a skewed, turned or mirrored matrix
+	// gives the box of the parallelogram it draws. The bounds depend on the glyph:
+	//
+	//   - A Type 3 glyph is bounded by what its description paints and the box its
+	//     d1 states (9.6.5), mapped by /FontMatrix. A glyph drawn in pixels and
+	//     shown at Tf 1 is bounded where it inks, however small its font size.
+	//   - A Type 3 glyph whose description paints what no box holds, a shading over
+	//     no clip of its own, is bounded by the clipping path it is shown under.
+	//   - Any other glyph is bounded by its advance along the baseline and by the
+	//     font's /FontBBox across it, never less than an ascender of one em and a
+	//     descender of a fifth of one.
+	//   - When the text rendering mode strokes the glyph (9.3.6, Table 106), the
+	//     box grows by the reach of the pen: half the line width through the CTM,
+	//     √2 times that under a projecting square cap (8.4.3.3). A miter join's tip
+	//     at a sharp corner may reach past it (8.4.3.5).
 	InkBox [4]float64 `json:"inkBox,omitzero"`
 	// Redacted reports an element whose ink overlaps an unapplied /Redact
 	// annotation. Only Reader.ExtractRedactedText sets it.
@@ -198,7 +204,7 @@ type TextElement struct {
 }
 
 // Bookmark represents an item in the document outline.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type Bookmark struct {
 	// Title is the text of the outline item.
 	Title string `json:"title"`
@@ -210,7 +216,7 @@ type Bookmark struct {
 }
 
 // FormField represents an interactive AcroForm field.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type FormField struct {
 	// Name is the fully qualified field name, the partial names of the field
 	// and its ancestors joined by periods (ISO 32000-1, 12.7.3.2).
@@ -221,7 +227,7 @@ type FormField struct {
 }
 
 // Annotation represents a PDF annotation (e.g., Link, Text, Highlight).
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type Annotation struct {
 	// Subtype is the annotation's /Subtype name, such as "Link" or "Text".
 	Subtype string `json:"subtype"`
@@ -243,15 +249,21 @@ type Annotation struct {
 }
 
 // ImageMeta represents metadata for an extracted Image XObject.
-// Open returns an [io.ReadCloser] over the image stream's data decoded
-// lazily through its filters on read: the samples, packed at BitsPerComponent
-// in ColorSpace, rather than the stored bytes or pixels. A filter litho cannot
-// decode is skipped, its input handed on still encoded. The caller must close
-// the returned reader. Decode turns this image's samples into pixels on
-// demand. Filename can repeat on one page, since two form XObjects may each
-// name an image Im0, so Decode is the way to decode this entry rather than
-// another image of the same name. It decodes as Reader.DecodeImage in
-// package pdf does, an opacity the JPEG 2000 data carries included.
+//
+// Open returns an [io.ReadCloser] over the image stream's data, decoded lazily
+// through its filters on read. It yields the samples, packed at
+// BitsPerComponent in ColorSpace, rather than the stored bytes or pixels. A
+// filter litho cannot decode is skipped, its input handed on still encoded. The
+// caller must close the returned reader.
+//
+// Decode turns this image's samples into pixels on demand. It decodes as
+// Reader.DecodeImage in package pdf does, an opacity the JPEG 2000 data carries
+// included.
+//
+// Filename can repeat on one page, since two form XObjects may each name an
+// image Im0. Decode is the way to decode this entry rather than another image
+// of the same name.
+//
 // Values must not be shared across goroutines without synchronization.
 type ImageMeta struct {
 	// Filename is the name the image has in its resource dictionary, such as
@@ -275,7 +287,7 @@ type ImageMeta struct {
 }
 
 // Line represents a stroked line segment on a page, in absolute page coordinates.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type Line struct {
 	// X1 is the x coordinate of the start point, in points.
 	X1 float64 `json:"x1"`
@@ -288,7 +300,7 @@ type Line struct {
 }
 
 // Table represents a table detected from spatial analysis of a PDF page.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type Table struct {
 	// Rows holds the cell text, top row first and left cell first in each
 	// row.
@@ -315,7 +327,7 @@ type EmbeddedFile struct {
 }
 
 // Signature represents a cryptographic signature found in the document.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type Signature struct {
 	// FieldName is the fully qualified name of the signature field.
 	FieldName string `json:"fieldName"`
@@ -344,7 +356,7 @@ type Signature struct {
 
 // SignatureValidation holds the result of validating a PDF signature's
 // X.509 certificate chain against a set of trusted root certificates.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type SignatureValidation struct {
 	// FieldName is the fully qualified name of the signature field.
 	FieldName string `json:"fieldName"`
@@ -415,7 +427,7 @@ type SignatureValidation struct {
 
 // GeoTiePoint represents a single tie point mapping PDF coordinates to
 // GPS coordinates (latitude/longitude).
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type GeoTiePoint struct {
 	// PDFX is the x coordinate of the point in the page's /LPTS array, or 0
 	// when the array has no entry for it.
@@ -431,7 +443,7 @@ type GeoTiePoint struct {
 
 // GeoData holds geospatial metadata extracted from a PDF page or image
 // that contains a /Measure dictionary with /Subtype /GEO.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type GeoData struct {
 	// CoordinateSystem is the /Type of the /GCS dictionary, such as GEOGCS or
 	// PROJCS.
@@ -477,7 +489,7 @@ func (g *GeoData) ToGeoJSON() string {
 
 // ScaleAxis describes the unit and conversion factor for one axis of a
 // rectilinear measurement scale extracted from a /Measure /RL dictionary.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type ScaleAxis struct {
 	// Unit is the unit label, the /U entry of the number format.
 	Unit string `json:"unit"`
@@ -493,7 +505,7 @@ type ScaleAxis struct {
 // (/VP) or a Line/PolyLine annotation that carries a /Measure dictionary with
 // /Subtype /RL (Rectilinear). Developers can use the scale axes to convert
 // raw PDF point coordinates into real-world physical measurements.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type Measurement struct {
 	// Source says where the scale comes from: "Viewport" for a page viewport,
 	// or the annotation subtype, "Line" or "PolyLine".
@@ -532,7 +544,7 @@ type Model3D struct {
 // DSSInfo represents the Document Security Store (/DSS) extracted from
 // the document catalog. It contains the embedded validation materials
 // needed for Long-Term Validation (LTV).
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type DSSInfo struct {
 	// CertCount is the number of certificates in the store.
 	CertCount int `json:"certCount"`
@@ -547,7 +559,7 @@ type DSSInfo struct {
 
 // PronunciationLexicon holds a W3C PLS (Pronunciation Lexicon Specification)
 // XML document extracted from the catalog's /PronunciationLexicon array.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type PronunciationLexicon struct {
 	// XML is the lexicon document text.
 	XML string `json:"xml"`
@@ -555,7 +567,7 @@ type PronunciationLexicon struct {
 
 // FormulaElement represents a mathematical formula extracted from the
 // structure tree. It carries the MathML markup from the /AF associated file.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type FormulaElement struct {
 	// MathML is the MathML markup of the formula.
 	MathML string `json:"mathML"`
@@ -565,7 +577,7 @@ type FormulaElement struct {
 
 // LinearizationParams holds the parameters extracted from a Linearization
 // Dictionary found in the first 1024 bytes of a linearized PDF.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type LinearizationParams struct {
 	// FileLength is the /L value: the length of the file in bytes.
 	FileLength int64 `json:"fileLength"`
@@ -592,7 +604,7 @@ type LinearizationParams struct {
 
 // PageOffsetEntry holds the per-page data decoded from the hint stream's
 // Page Offset Hint Table.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type PageOffsetEntry struct {
 	// ObjCount is the number of objects in the page's group.
 	ObjCount int `json:"objCount"`
@@ -610,34 +622,42 @@ type PageOffsetEntry struct {
 // the reported filter names in the stream's /Filter chain: for the first, a
 // filter name no decoder knows, or a filter whose built-in decoder refuses a
 // feature the stream uses; for the second, a filter whose data is damaged.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type StreamDiagnostic struct {
 	// ObjectNum is the object number of the stream.
 	ObjectNum int      `json:"objectNum"`
 	Filters   []string `json:"filters"`
 }
 
-// ColorSpaceUse records a colour space a page's content paints in, reported
-// by [github.com/gotenberg/litho/pkg/pdf.Reader.ExtractColorSpaces].
+// ColorSpaceUse records a colour space a page's content paints in, reported by
+// [github.com/gotenberg/litho/pkg/pdf.Reader.ExtractColorSpaces].
 //
 // Family is the family of ISO 32000-1, 8.6.3, Table 62, such as "DeviceRGB",
-// "ICCBased" or "Separation", and "" for an image that takes its colour space
+// "ICCBased" or "Separation". It is "" for an image that takes its colour space
 // from its JPXDecode data (8.9.5, Table 89) or a space litho cannot read.
-// Components is how many numbers a colour in it carries. Alternate is the
-// base of an Indexed space, the alternate of a Separation, DeviceN or
-// ICCBased space when it states one, and the underlying space of a Pattern
-// space, nil otherwise. Colorants names the colorants of a Separation or
+//
+// Components is how many numbers a colour in the space carries. Alternate is
+// nil except in three cases: the base of an Indexed space, the alternate of a
+// Separation, DeviceN or ICCBased space when it states one, and the underlying
+// space of a Pattern space. Colorants names the colorants of a Separation or
 // DeviceN space.
 //
-// Source is what paints in the space: "operator" for a colour operator
-// (Operator names it: cs, CS, g, G, rg, RG, k or K), "image" for an image
-// XObject (Do), "inline-image" (BI), "shading" for the sh operator or a
-// shading pattern (sh, scn or SCN), and "group" for the blending space of a
-// transparency group (Operator "Group"). Name is the resource the operator
-// named, "" for a family named directly. Object is the object number of the
-// image XObject, shading or group dictionary it reads, or else of the content
-// stream the operator sits in: 0 for the page's own content and for a direct
-// object. Count is how many times the page's content uses it so.
+// Source is what paints in the space:
+//
+//   - "operator" for a colour operator. Operator names it: cs, CS, g, G, rg,
+//     RG, k or K.
+//   - "image" for an image XObject (Do).
+//   - "inline-image" (BI).
+//   - "shading" for the sh operator or a shading pattern (sh, scn or SCN).
+//   - "group" for the blending space of a transparency group (Operator
+//     "Group").
+//
+// Name is the resource the operator named, "" for a family named directly.
+// Object is the object number of the image XObject, shading or group dictionary
+// it reads, or else of the content stream the operator sits in. It is 0 for the
+// page's own content and for a direct object. Count is how many times the
+// page's content uses it so.
+//
 // Values must not be shared across goroutines without synchronization.
 type ColorSpaceUse struct {
 	Family     string         `json:"family"`

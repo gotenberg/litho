@@ -154,84 +154,96 @@ func (s *redactGlyphOutlines) glyphOutlines(doc *document.Document) *mutations.G
 }
 
 // WithStrictRedaction makes [Writer.Redact] refuse with
-// [ErrRedactionIncomplete] when a removed string is still drawn by a page the
-// regions do not cover, or as visible text outside the regions of a page they
-// do, instead of reporting it in [RedactReport.CopiesOnOtherPages] or
-// [RedactReport.CopiesOnRedactedPages]. Use it when the regions select every
-// occurrence of what must go, so a copy elsewhere means the selection missed
-// one.
+// [ErrRedactionIncomplete] when a removed string is still drawn elsewhere.
+//
+// A copy counts when a page the regions do not cover draws it. It also counts
+// when a page they do cover draws it as visible text outside the regions.
+// Without this option, Redact reports such copies in
+// [RedactReport.CopiesOnOtherPages] or [RedactReport.CopiesOnRedactedPages]
+// instead.
+//
+// Use it when the regions select every occurrence of what must go, so a copy
+// elsewhere means the selection missed one.
 func WithStrictRedaction() RedactOption {
 	return func(o *redactOpts) { o.strict = true }
 }
 
 // WithRedactionRasterFallback makes [Writer.Redact] rasterise what it would
-// otherwise refuse because it cannot remove it exactly: content a form
-// XObject draws, an image among it, and a shading paint (sh) whose clip a
-// region meets. Those units, and the units drawn among them that an opaque
-// image over them must take with it, are drawn instead as opaque images of
-// the page at 300 dpi, clipped to the area they cover less the regions, and
-// removed from the content; [RedactReport.RasterisedUnits] counts them. The
-// images paint nothing inside the regions, and their samples there are the
-// paper's colour, so the file keeps nothing of what lay there. Text is never
-// rasterised: a form showing text keeps its text as text, the glyphs the
-// regions cover removed from it as from the page's own, and everything the
+// otherwise refuse because it cannot remove it exactly.
+//
+// The fallback covers content a form XObject draws, an image among it, and a
+// shading paint (sh) whose clip a region meets. Those units, and the units
+// drawn among them that an opaque image over them must take with it, are drawn
+// instead as opaque images of the page at 300 dpi. Each image is clipped to the
+// area it covers less the regions. The units are removed from the content.
+// [RedactReport.RasterisedUnits] counts them.
+//
+// The images paint nothing inside the regions, and their samples there are the
+// paper's colour, so the file keeps nothing of what lay there. Everything the
 // page draws outside those units stays as it was.
 //
-// An annotation reaching outside the regions, refused otherwise since an
-// annotation is atomic (ISO 32000-1, 12.5.2), is drawn into its page first
-// as a viewer draws it (12.5.5, Algorithm 8.1) and removed, with its pop-up
-// and the text and geometry it carries: its look is then page content the
-// regions cut, and nothing of it marks what lay inside them.
-// [RedactReport.BakedAnnotations] counts them. A widget is not, its look
-// being its field's value (12.7.3.3), nor a pop-up, an annotation under
-// optional content, a NoRotate one on a turned page or one a viewer does not
-// display: those still refuse.
+// Text is never rasterised. A form showing text keeps its text as text, with
+// the glyphs the regions cover removed from it as from the page's own.
 //
-// Opt-in, because the fallback changes the page outside the regions: the
-// rasterised units lose their vector form there, at the image's resolution,
-// and show as litho's renderer draws them, and an annotation drawn into the
-// page loses its behaviour, its comment and its pop-up. Without it such a page is refused
-// with [ErrRedactionRefused], as a redaction that would change more than the
-// regions has to be asked for.
+// An annotation reaching outside the regions is refused otherwise, since an
+// annotation is atomic (ISO 32000-1, 12.5.2). With the fallback, Redact first
+// draws it into its page as a viewer draws it (12.5.5, Algorithm 8.1). It then
+// removes the annotation with its pop-up and the text and geometry it carries.
+// Its look is then page content the regions cut, and nothing of it marks what
+// lay inside them. [RedactReport.BakedAnnotations] counts them.
 //
-// An image a form XObject draws inside a region rasterises its form too:
-// blanked, it would change every other placement of the form, which the
-// redaction refuses. The renderer reads the document, not the edits queued on
-// the Writer, so a redaction with the fallback first writes the edits queued
-// before it to a temporary file and reopens it, as
-// [Writer.FlattenTransparency] does. A later stage that brings back removed
-// text makes [Writer.WriteTo] apply the regions again without the fallback,
-// refusing such a page rather than compositing a document the renderer cannot
-// read.
+// These annotations still refuse: a widget, its look being its field's value
+// (12.7.3.3), a pop-up, an annotation under optional content, a NoRotate one on
+// a turned page, and one a viewer does not display.
+//
+// The fallback is opt-in because it changes the page outside the regions. The
+// rasterised units lose their vector form there, at the image's
+// resolution, and show as litho's renderer draws them. An annotation drawn into
+// the page loses its behaviour, its comment and its pop-up. Without the option,
+// such a page is refused with [ErrRedactionRefused], as a redaction that would
+// change more than the regions has to be asked for.
+//
+// An image a form XObject draws inside a region rasterises its form too.
+// Blanked, it would change every other placement of the form, which the
+// redaction refuses.
+//
+// The renderer reads the document, not the edits queued on the Writer. A
+// redaction with the fallback therefore first writes the edits queued before it
+// to a temporary file and reopens it, as [Writer.FlattenTransparency] does. A
+// later stage that brings back removed text makes [Writer.WriteTo] apply the
+// regions again without the fallback. WriteTo then refuses such a page rather
+// than composite a document the renderer cannot read.
 func WithRedactionRasterFallback() RedactOption {
 	return func(o *redactOpts) { o.raster = true }
 }
 
 // WithoutRedactionAnnotationClipping makes [Writer.Redact] refuse, with
-// [ErrRedactionRefused], every annotation reaching outside the regions,
-// instead of keeping those a viewer draws nothing for.
+// [ErrRedactionRefused], every annotation reaching outside the regions. By
+// default it keeps those a viewer draws nothing for.
 //
 // By default a redaction keeps such an annotation. A Link with no appearance
 // stream and a border of width 0 loses the part of its activation area the
-// regions cover (ISO 32000-1, 12.5.6.5, Table 173): left as one rectangle, it
-// becomes the link's /Rect; left as several, they become its /QuadPoints, one
-// quadrilateral each, with /Rect their bounding box, which a reader that
-// ignores /QuadPoints activates whole. A pop-up that is not open and has no
-// appearance stream, whose /Rect only places the window it opens over its
-// parent (12.5.6.14), stays as it is. [RedactReport.ClippedAnnotations] lists
-// the links cut.
+// regions cover (ISO 32000-1, 12.5.6.5, Table 173). Left as one rectangle, the
+// area becomes the link's /Rect. Left as several, the areas become its
+// /QuadPoints, one quadrilateral each, with /Rect their bounding box. A reader
+// that ignores /QuadPoints activates the whole box.
+// [RedactReport.ClippedAnnotations] lists the links cut.
 //
-// Keeping such an annotation keeps no content of the regions: it paints
-// nothing there or anywhere, and a Redact annotation removes the content of
-// its area (ISO 32000-2, 12.5.6.23), not the links that lead out of it. The
-// text a link names in /A or /Contents is scrubbed of the removed strings as
-// every annotation's is, an action written as an object of its own included.
-// An annotation that draws anything, a widget, a visible border, a markup
-// appearance, still refuses, and so does a link cut on one page that another
-// page also lists, since every page listing it would show the cut.
+// A pop-up that is not open and has no appearance stream stays as it is. Its
+// /Rect only places the window it opens over its parent (12.5.6.14).
 //
-// Use it when a link must keep its whole area or go with the region: the
-// redaction then refuses rather than change what a link outside the regions
+// Keeping such an annotation keeps no content of the regions. It paints nothing
+// there or anywhere. A Redact annotation removes the content of its area (ISO
+// 32000-2, 12.5.6.23), not the links that lead out of it. The text a link names
+// in /A or /Contents is scrubbed of the removed strings as every annotation's
+// is, an action written as an object of its own included.
+//
+// An annotation that draws anything still refuses: a widget, a visible border,
+// a markup appearance. So does a link cut on one page that another page also
+// lists, since every page listing it would show the cut.
+//
+// Use this option when a link must keep its whole area or go with the region.
+// The redaction then refuses rather than change what a link outside the regions
 // does.
 func WithoutRedactionAnnotationClipping() RedactOption {
 	return func(o *redactOpts) { o.noClipAnnots = true }
@@ -247,44 +259,54 @@ func WithRedactionAnnotationClipping() RedactOption {
 }
 
 // WithoutRedactionGlyphOutlines makes [Writer.Redact] select a glyph by its
-// advance box alone: the box of its advance and its font's ascent and descent
-// (see [models.TextElement.InkBox]).
+// advance box alone.
 //
-// By default a glyph is selected when that box or its outline's bounds meet
-// a region. ISO 32000-1, 9.2.4 lets a glyph's outline paint anywhere in glyph
-// space, its advance only moving the text position, so an outline reaching
-// past the box, a script face's swash or descender, an italic overhang, a
-// combining accent, would otherwise keep painting inside a region while its
-// glyph lies outside it. The outline is the one litho's renderer draws for
-// the code, through the font matrix and the text rendering matrix (9.4.4),
-// its bounds holding the outline's control points, from the program the
-// document embeds. A font the document does not embed is drawn by each
-// viewer with a program of its own choosing (9.6.2.2), so no reading of the
-// file states its outlines: such a glyph keeps its advance box, unless
-// [WithRedactionGlyphOutlines] supplies the substitutes to bound it with. So
-// does a glyph the program cannot draw. A Type 3 glyph is bounded by what its
-// description paints either way. The removed glyphs' boxes in
-// [RedactReport.RemovedGlyphBoxes] hold their outlines, and [Writer.WriteTo],
-// applying the regions again, selects the same way.
+// The advance box is the box of the glyph's advance and its font's ascent and
+// descent (see [models.TextElement.InkBox]).
 //
-// Use it to keep a glyph whose advance box lies outside every region and
-// whose outline reaches in, at the cost of that ink staying inside the
-// region, which the pixel check refuses.
+// By default a glyph is selected when that box or its outline's bounds meet a
+// region. ISO 32000-1, 9.2.4 lets a glyph's outline paint anywhere in glyph
+// space, its advance only moving the text position. An outline reaching past
+// the box would otherwise keep painting inside a region while its glyph lies
+// outside it. Examples are a script face's swash or descender, an italic
+// overhang and a combining accent.
+//
+// The outline is the one litho's renderer draws for the code, through the font
+// matrix and the text rendering matrix (9.4.4). Its bounds hold the outline's
+// control points. The program is the one the document embeds.
+//
+// A font the document does not embed is drawn by each viewer with a program of
+// its own choosing (9.6.2.2), so no reading of the file states its outlines.
+// Such a glyph keeps its advance box, unless [WithRedactionGlyphOutlines]
+// supplies the substitutes to bound it with. A glyph the program cannot draw
+// keeps its advance box too. A Type 3 glyph is bounded by what its description
+// paints either way.
+//
+// The removed glyphs' boxes in [RedactReport.RemovedGlyphBoxes] hold their
+// outlines. [Writer.WriteTo], applying the regions again, selects the same way.
+//
+// Use this option to keep a glyph whose advance box lies outside every region
+// and whose outline reaches in. The cost is that ink staying inside the region,
+// which the pixel check refuses.
 func WithoutRedactionGlyphOutlines() RedactOption {
 	return func(o *redactOpts) { o.noOutlines, o.outlineProviders = true, nil }
 }
 
 // WithRedactionGlyphOutlines supplies the substitutes [Writer.Redact] bounds
-// the glyphs of a font the document does not embed with when it selects
-// glyphs by their outlines, as it does by default (see
-// [WithoutRedactionGlyphOutlines]): the fonts [WithRenderFontProvider],
-// [WithRenderFontFiles] and [WithRenderSystemFonts] give [Reader.RenderPage],
-// so a redaction removes the glyphs whose outlines reach a region as the
-// caller's own renderings draw them. Any other [RenderOption] among fonts
-// changes nothing. Neither a [Reader] nor a [Writer] carries fonts of its
-// own to draw with, so without this option such a glyph keeps its advance
-// box. With no fonts it changes nothing but undoing an earlier
-// [WithoutRedactionGlyphOutlines]: the later of the two options wins.
+// the glyphs of a font the document does not embed with.
+//
+// Redact uses them when it selects glyphs by their outlines, as it does by
+// default (see [WithoutRedactionGlyphOutlines]). The substitutes are the fonts
+// [WithRenderFontProvider], [WithRenderFontFiles] and [WithRenderSystemFonts]
+// give [Reader.RenderPage], so a redaction removes the glyphs whose outlines
+// reach a region as the caller's own renderings draw them. Any other
+// [RenderOption] among fonts changes nothing.
+//
+// Neither a [Reader] nor a [Writer] carries fonts of its own to draw with, so
+// without this option such a glyph keeps its advance box.
+//
+// With no fonts, the option changes nothing but undoing an earlier
+// [WithoutRedactionGlyphOutlines]. The later of the two options wins.
 func WithRedactionGlyphOutlines(fonts ...RenderOption) RedactOption {
 	var ro renderOpts
 	for _, opt := range fonts {
@@ -302,42 +324,54 @@ func WithRedactionGlyphOutlines(fonts ...RenderOption) RedactOption {
 	}
 }
 
-// WithRedactionJPEGQuality encodes as baseline JPEG (ITU-T T.81) at quality
-// q, 1 to 100, on the scale of the Independent JPEG Group's libjpeg, the
-// photographic parts of two kinds of image a redaction writes: the
-// photographs it blanks, and the images [WithRedactionRasterFallback] draws.
-// Either is cut on a grid of its pixels as [WithFlattenJPEGQuality] cuts a
-// flattening's composite: a run of cells whose pixels hold 256 colours and
-// that no region reaches is encoded as a JPEG tile unless Flate holds it in
-// no more bytes, and the JPEG tiles are drawn over one lossless image of the
-// whole, so the image outside the JPEG tiles draws as it does without this
-// option. A cell a region reaches, widened by a pixel of a fallback image
-// and by two samples of a photograph, always stays lossless, so the samples
-// inside the regions are the blank or the paper's
-// colour exactly, in the file as on the page: a JPEG spreads each 8 by 8
-// block's error over the whole block, and would decode traces of the ink
-// beside a region into it.
+// WithRedactionJPEGQuality encodes as baseline JPEG (ITU-T T.81) at quality q
+// the photographic parts of the images a redaction writes.
 //
-// A blanked photograph is re-encoded only when the source held it as JPEG
-// or JPEG 2000, so blanking never turns a lossless picture lossy, and only
-// when that saves bytes; [RedactReport.LossyBlankedImages] counts them. The
-// picture becomes a form XObject at the image's own object number, so every
-// placement and reference finds it there, drawing the lossless image of the
-// whole and the JPEG tiles in the picture's colour space. A picture with a
-// soft mask, in a colour space JPEG does not code, or drawn so deep in forms
-// that the two forms its tiles add would pass the form depth budget, stays
-// one lossless image. A later redaction that reaches a JPEG tile blanks it
-// in a copy, as it blanks any image a form nested in another form draws (see
-// [RedactReport.ImagesBlankedInCopy]), and [WithStrictRedaction] refuses it.
+// q runs from 1 to 100, on the scale of the Independent JPEG Group's libjpeg.
+// Two kinds of image qualify: the photographs the redaction blanks, and the
+// images [WithRedactionRasterFallback] draws.
 //
-// By default every image a redaction writes is lossless under FlateDecode,
-// at the cost of size: a blanked JPEG 2000 photograph weighs several times
-// its source, and a page of photographs the fallback draws several times its
-// JPEG source. A q outside 1 to 100 makes [Writer.Redact] fail with
+// Either is cut on a grid of its pixels, as [WithFlattenJPEGQuality] cuts a
+// flattening's composite. A run of cells whose pixels hold 256 colours and that
+// no region reaches is encoded as a JPEG tile, unless Flate holds it in no more
+// bytes. The JPEG tiles are drawn over one lossless image of the whole, so the
+// image outside the JPEG tiles draws as it does without this option.
+//
+// A cell a region reaches always stays lossless. It is widened by a pixel for a
+// fallback image and by two samples for a photograph. The samples inside the
+// regions are then the blank or the paper's colour exactly, in the file as on
+// the page. A JPEG spreads each 8 by 8 block's error over the whole block, and
+// would decode traces of the ink beside a region into it.
+//
+// A blanked photograph is re-encoded only when the source held it as JPEG or
+// JPEG 2000, so blanking never turns a lossless picture lossy. It is re-encoded
+// only when that saves bytes. [RedactReport.LossyBlankedImages] counts them.
+//
+// The picture becomes a form XObject at the image's own object number, so every
+// placement and reference finds it there. The form draws the lossless image of
+// the whole and the JPEG tiles in the picture's colour space.
+//
+// A picture stays one lossless image in three cases:
+//
+//   - it has a soft mask;
+//   - it is in a colour space JPEG does not code;
+//   - it is drawn so deep in forms that the two forms its tiles add would pass
+//     the form depth budget.
+//
+// A later redaction that reaches a JPEG tile blanks it in a copy, as it blanks
+// any image a form nested in another form draws (see
+// [RedactReport.ImagesBlankedInCopy]). [WithStrictRedaction] refuses it.
+//
+// By default every image a redaction writes is lossless under FlateDecode, at
+// the cost of size. A blanked JPEG 2000 photograph weighs several times its
+// source, and a page of photographs the fallback draws several times its JPEG
+// source.
+//
+// A q outside 1 to 100 makes [Writer.Redact] fail with
 // [ErrInvalidRedactOptions].
 //
-// Opt-in, because outside the regions a JPEG tile shows the picture with
-// JPEG's loss, which a lossless image does not.
+// The option is opt-in because, outside the regions, a JPEG tile shows the
+// picture with JPEG's loss, which a lossless image does not.
 func WithRedactionJPEGQuality(q int) RedactOption {
 	return func(o *redactOpts) { o.jpegQuality, o.jpegQualitySet = q, true }
 }
@@ -347,37 +381,44 @@ func WithRedactionJPEGQuality(q int) RedactOption {
 // Removing content from a page does not remove the copies of it held elsewhere
 // in the file, so the report covers both halves: what the pages lost, and what
 // the document-wide passes cleared afterwards.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type RedactReport struct {
 	// RemovedText holds the text of each show-text operator removed, one
 	// string per operator, in the order the pages drew them. An operator split
 	// at its glyphs gives one string per run of removed glyphs.
 	RemovedText []string
 	// RemovedGlyphBoxes maps a 1-based page number to the box, in user space,
-	// each glyph removed from it paints, in the order the page drew them:
-	// every glyph, whatever its character, a space among them. A glyph is
-	// removed when this box meets a region, so its ink may reach past the
-	// region, and these boxes are where the page changed for it.
+	// each glyph removed from it paints, in the order the page drew them. It
+	// lists every glyph, whatever its character, a space among them.
+	//
+	// A glyph is removed when this box meets a region, so its ink may reach
+	// past the region. These boxes are where the page changed for it.
 	RemovedGlyphBoxes map[int][][4]float64
 	// BlankedImages names the images whose covered samples were overwritten:
 	// an image XObject by its resource name, an inline image as "(inline)".
 	BlankedImages []string
 	// ImagesBlankedInCopy maps a 1-based page number to the images of
 	// BlankedImages that page blanked in a copy, by the resource name it drew
-	// them with. Each is also painted, or named, where the regions do not
-	// cover the same samples, so the covered placement was repointed at a
-	// blanked copy of its own and the image itself kept its samples for the
-	// others: it is still in the file. A covered placement that lay wholly
-	// inside a region was removed instead of repointed (see RemovedImages),
-	// and its image is listed here all the same, since it too stays in the
-	// file. [WithStrictRedaction] refuses such an image instead.
+	// them with.
+	//
+	// Each is also painted, or named, where the regions do not cover the same
+	// samples. The covered placement was therefore repointed at a blanked copy
+	// of its own, and the image itself kept its samples for the others, so it
+	// is still in the file.
+	//
+	// A covered placement that lay wholly inside a region was removed instead
+	// of repointed (see RemovedImages). Its image is listed here all the same,
+	// since it too stays in the file.
+	//
+	// [WithStrictRedaction] refuses such an image instead.
 	ImagesBlankedInCopy map[int][]string
-	// FormsCopied maps a 1-based page number to the form XObjects it now
-	// draws a copy of, because an image of ImagesBlankedInCopy was painted
-	// inside them: the form the page draws, and each form between it and
-	// the image, once per covered placement. The copy names the blanked
-	// image where the form named the image; the form itself is unchanged,
-	// and every other placement still draws it.
+	// FormsCopied maps a 1-based page number to the form XObjects it now draws
+	// a copy of, because an image of ImagesBlankedInCopy was painted inside
+	// them. The count covers the form the page draws and each form between it
+	// and the image, once per covered placement.
+	//
+	// The copy names the blanked image where the form named the image. The form
+	// itself is unchanged, and every other placement still draws it.
 	FormsCopied map[int]int
 	// RemovedPaths counts the painted paths removed.
 	RemovedPaths int
@@ -386,11 +427,15 @@ type RedactReport struct {
 	// under a clip that excludes the regions.
 	ClippedPaths int
 	// RemovedImages counts the image placements a page's own content drew
-	// wholly inside a region. They are removed, not only blanked: the blanked
-	// samples of a picture drawn as many small images, a logo one run of
-	// pixels at a time, would keep its outline on the page in black. An image
-	// XObject among them is also in BlankedImages, its samples overwritten in
-	// the file; an inline image goes with its operator, and is not.
+	// wholly inside a region.
+	//
+	// They are removed, not only blanked. The blanked samples of a picture
+	// drawn as many small images, a logo one run of pixels at a time, would
+	// keep its outline on the page in black.
+	//
+	// An image XObject among them is also in BlankedImages, its samples
+	// overwritten in the file. An inline image goes with its operator, and is
+	// not.
 	RemovedImages int
 	// RemovedAnnotations lists the object numbers of annotations dropped
 	// because their rectangle sat inside a region, ascending.
@@ -408,21 +453,22 @@ type RedactReport struct {
 	// whose content the regions selected, and those drawn among them that the
 	// images took with them.
 	RasterisedUnits int
-	// BakedAnnotations counts the annotations reaching outside the regions
-	// that [WithRedactionRasterFallback] drew into their pages and removed:
-	// their look is page content the regions cut, and the annotations, with
-	// their pop-ups and the text they carry, are gone. They are counted, not
-	// named, since the document is written out and reopened, renumbered,
-	// once they are drawn.
-	BakedAnnotations int
-	// FontsFullyRemovedOnPage maps a 1-based page number to the object
-	// numbers of fonts whose every glyph on that page was removed.
+	// BakedAnnotations counts the annotations reaching outside the regions that
+	// [WithRedactionRasterFallback] drew into their pages and removed.
 	//
-	// Reported rather than refused, and page-scoped on purpose: the font may
-	// still be drawn elsewhere, and its embedded program carries the outlines
-	// either way. litho cannot yet re-subset across the three embedded font
-	// formats, so a caller that must also strip those outlines is told which
-	// programs to deal with.
+	// Their look is page content the regions cut. The annotations, with their
+	// pop-ups and the text they carry, are gone. They are counted, not named,
+	// since the document is written out and reopened, renumbered, once they are
+	// drawn.
+	BakedAnnotations int
+	// FontsFullyRemovedOnPage maps a 1-based page number to the object numbers
+	// of fonts whose every glyph on that page was removed.
+	//
+	// Redact reports these fonts rather than refusing, and the report is
+	// page-scoped on purpose. The font may still be drawn elsewhere, and its
+	// embedded program carries the outlines either way. litho cannot yet
+	// re-subset across the three embedded font formats, so a caller that must
+	// also strip those outlines is told which programs to deal with.
 	FontsFullyRemovedOnPage map[int][]int
 	// ScrubbedAnnotations, ScrubbedFormFields and ScrubbedOutlineItems list
 	// the object numbers the document-wide passes rewrote, ascending.
@@ -440,20 +486,25 @@ type RedactReport struct {
 	// the verification scan. Non-empty only alongside
 	// [ErrRedactionIncomplete].
 	SurvivingCopies []RedactionHit
-	// CopiesOnOtherPages names the removed strings the content of pages
-	// outside the regions still draws, each with the pages that draw it. These
-	// are warnings: the redaction succeeded, and the output keeps them. Empty
-	// under [WithStrictRedaction], which refuses them instead.
+	// CopiesOnOtherPages names the removed strings the content of pages outside
+	// the regions still draws, each with the pages that draw it.
+	//
+	// These are warnings: the redaction succeeded, and the output keeps them.
+	// The slice is empty under [WithStrictRedaction], which refuses them
+	// instead.
 	CopiesOnOtherPages []RedactionHit
 	// CopiesOnRedactedPages names the removed strings a redacted page still
 	// draws as visible text outside every region, each with the page and the
-	// boxes of the runs that spell it. These are warnings: the redaction
-	// succeeded, and the output keeps them. Empty under
-	// [WithStrictRedaction], which refuses them instead.
+	// boxes of the runs that spell it.
+	//
+	// These are warnings: the redaction succeeded, and the output keeps them.
+	// The slice is empty under [WithStrictRedaction], which refuses them
+	// instead.
 	CopiesOnRedactedPages []RedactionHit
 	// UnreadableObjects lists objects the verification scan could not decode.
-	// A stream it could not read is one it has not proved clean, so these
-	// fail the redaction as surely as a hit does.
+	//
+	// A stream it could not read is one it has not proved clean, so these fail
+	// the redaction as surely as a hit does.
 	UnreadableObjects []int
 
 	// LossyBlankedImages counts the images of BlankedImages that
@@ -475,184 +526,248 @@ type RedactReport struct {
 	blankedPhotographs map[int]mutations.BlankedPhotograph
 }
 
-// Redact removes what the given regions cover and then clears the copies of
-// that text held elsewhere in the document, refusing rather than half-redacting.
+// Redact removes what the given regions cover, then clears the copies of that
+// text held elsewhere in the document. It refuses rather than half-redacting.
 //
-// This is the cure for what [Reader.ExtractRedactedText] only diagnoses. Drawing
-// a black rectangle over text leaves the bytes in the file and any extractor
-// recovers them; true redaction is content removal plus document-wide
-// sanitization. Selection is geometric and VISIBILITY-INDEPENDENT: a glyph
-// counts when the box it paints meets a region, whatever its colour, its text
-// rendering mode, or the optional-content group it sits in, because invisible
-// text is exactly what a failed redaction leaves behind. The box is the
-// glyph's advance and its font's ascent and descent, grown to hold its
-// outline (see [WithoutRedactionGlyphOutlines]).
+// This is the cure for what [Reader.ExtractRedactedText] only diagnoses.
+// Drawing a black rectangle over text leaves the bytes in the file, and any
+// extractor recovers them. True redaction is content removal plus document-wide
+// sanitization.
 //
-// It runs eagerly rather than queueing, because the caller must learn whether
-// the document may be written at all before writing it. It forces a full
-// rewrite: verification answers for the file a full rewrite would produce, and
-// an incremental update would append the edits while leaving every superseded
-// object, the original content stream among them, in the file.
-//
-// Three ways it refuses, all leaving the [Writer] exactly as it was:
-//
-//   - [ErrRedactionRefused] when something cannot be removed exactly: a region
-//     covering only some of a text run that cannot be split at its glyphs
-//     (a run a region covers only partly is otherwise split, the covered
-//     glyphs removed and the rest kept where they were), text in a clipping
-//     text rendering mode, whose removal would widen the clip for what
-//     follows, text showing a code no glyph was read for anywhere on the page,
-//     whose glyph cannot be placed, text a Q inside its text object moves
-//     for some viewers and not others, a shading paint (sh)
-//     whose clip the region meets, a clipping path, a straddling path it
-//     cannot cut and clip at the region, a stroke whose width cannot be read,
-//     content drawn by a form XObject, an image whose samples cannot be
-//     rewritten, or an annotation reaching outside the regions that draws
-//     anything (one that draws nothing is cut to the part outside, see
-//     [WithoutRedactionAnnotationClipping]). Removing more than was asked, or reporting success over
-//     content still in the file, are both worse than refusing.
-//     [WithRedactionRasterFallback] rasterises the form XObjects and shading
-//     paints instead of refusing them.
-//   - [ErrRedactionIncomplete] when the passes succeed but the verification
-//     scan still finds a copy it does not tolerate (see below), or could not
-//     read an object. The report names
-//     every survivor in [RedactReport.SurvivingCopies] so the caller can act on
-//     it. The scan looks for each removed run holding at least three letters
-//     or digits, and for each such word drawn across shorter runs, as a
-//     producer that positions every glyph draws one. A run too short to
-//     identify anything, a lone space, letter or digit, is not looked for: it
-//     survives in nearly every document whatever was removed. Nor does it
-//     read the samples of images, inline ones included, embedded font
-//     programs, CMaps or ICC profiles: no reader extracts text from them,
-//     and their bytes spell a short word by chance. A stream a page's content, an attachment, a
-//     metadata stream, JavaScript or an XFA form also names is read.
-//   - [ErrRedactionPixelCheck] when a rendering of a redacted page does not
-//     show what the regions promise (see below).
-//
-// A copy that only pages outside the regions draw does not fail the redaction.
-// A region redaction removes what the region covers on its own page, as a
-// Redact annotation applies to the page it sits on (ISO 32000-2, 12.5.6.23),
-// and the same text drawn on another page is content the caller did not
-// select. Such a copy, in a content stream, a form XObject, a tiling pattern,
-// a Type 3 glyph or an annotation appearance that another page draws and no
-// redacted page draws or names, is reported in [RedactReport.CopiesOnOtherPages]
-// with the pages that draw it, and the output keeps it. A copy anywhere else,
-// the redacted page's own resources and annotations, the structure tree, the
-// metadata or any other object, still refuses. [WithStrictRedaction] refuses
-// copies on other pages too.
-//
-// Nor does a copy the redacted page draws as visible text outside every
-// region. The region is the content the redaction removes (ISO 32000-2,
-// 12.5.6.23), and the same characters shown again elsewhere on the page, a
-// running head or a repeated word, are text the caller did not select. Such a
-// copy is reported in [RedactReport.CopiesOnRedactedPages] with the page and
-// the boxes of the runs that spell it, and the output keeps it. So is a
-// removed run of digits the page's content spells only in the numbers of
-// operators that draw no text (a path, a matrix, a colour): ISO 32000-1,
-// 9.10.1 reads text from the strings of show-text operators alone. It counts
-// only when the page's own content stream holds the string in nothing but
-// show-text operators whose every glyph paints (no text rendering mode 3 or
-// 7, no paint only in device white), lies inside the clipping path and the
-// crop box, sits in no optional-content group that is off, and meets no
-// region: a copy no viewer shows, or one behind a region, is what a failed
-// redaction leaves, and still refuses, as does a copy a form XObject or an
-// annotation of the redacted page draws. The page is also drawn as written,
-// at 72 dpi with and without its text over the copies' boxes, and a copy
-// that changes no pixel of its own, one a later fill, image or text paints
-// over, refuses as well; so does every copy on a page that cannot be drawn.
-// That drawing runs under [WithoutRedactionPixelCheck] too.
-// [WithStrictRedaction] refuses these copies too.
-//
-// The verification compares text, not pixels, so a pixel check follows it.
-// Redact renders each redacted page before and after at [RedactionCheckDPI],
-// and refuses with a [*RedactionPixelError] unless the regions show only
-// paper and blanked images and nothing outside them changed; see
-// [WithoutRedactionPixelCheck], which skips it, for what it proves and costs.
-//
-// The document holds copies outside its pages too. Each home is cleared,
-// kept for the scan to judge, or left to the rewrite, as follows:
-//
-//   - Annotation values, form field values, outline titles and the structure
-//     tree's text are scrubbed of the removed strings. Document metadata goes:
-//     /Info is emptied and the catalog's XMP removed.
-//   - The redacted page's /Thumb, /PieceInfo and /Metadata go: a thumbnail, an
-//     application's copy of the page, and an XMP packet that can carry a page
-//     thumbnail as base64 (ISO 32000-1, 12.3.4, 14.5 and 14.3.2). A blanked
-//     image is rewritten without its /Alternates, /OPI, /ID, /Metadata, /AF
-//     and /PtData, which picture or describe the samples it had, and keeps
-//     its /OC, /Interpolate, /Intent, /Name and /Measure, which say where
-//     and how it paints, so a hidden image stays hidden. A blanked image
-//     keeps its /StructParent where it is blanked in place, and a copy
-//     blanked for one placement carries none: its structure element names
-//     the original (14.7.4.4).
-//   - JavaScript goes, wherever an action entry or the /Names/JavaScript tree
-//     holds it (ISO 32000-1, 12.6.4.16): a script builds a word at run time
-//     from pieces no comparison of bytes finds. Form calculations and custom
-//     navigation go with it; see [RedactReport.RemovedScripts].
-//   - The private data of the catalog's /PieceInfo goes, its dictionaries and
-//     their /LastModified staying (ISO 32000-1, 14.5): an application's own
-//     format, an embedded search index among them, that the scan cannot read.
-//     See [RedactReport.ScrubbedPrivateData].
-//   - Signatures leave the form, /Perms and the /DSS, their appearances drawn
-//     into the pages, as every full rewrite does (see
-//     [Writer.DroppedSignatures]), so a copy in a signature dictionary or a
-//     certificate never reaches the output.
-//   - Embedded files and their /Collection, named destinations, and every
-//     other object stay, and the scan compares them: a copy there refuses.
-//     Removing an attachment or renaming a destination would delete structure
-//     the caller can see, and an attachment holding no copy is kept. The scan
-//     reads text spelled in UTF-16 either way round, and into an attached PDF,
-//     zip or gzip; a container it cannot open, encrypted or nested past its
-//     bound, refuses as an unreadable object does.
+// Redact runs eagerly rather than queueing, because the caller must learn
+// whether the document may be written at all before writing it. It forces a
+// full rewrite. Verification answers for the file a full rewrite would produce,
+// and an incremental update would append the edits while leaving every
+// superseded object, the original content stream among them, in the file.
 //
 // Regions on several pages are applied together. Passing none is a no-op.
 //
-// Everything outside the regions stays where it was. Text after a removed run
-// on the same line keeps its position, because the run's advance is put back
-// in its place. A painted path reaching outside the regions loses its geometry
-// inside them, and the rest is painted under a clip that excludes them (see
-// [RedactReport.ClippedPaths]). An image is blanked by rewriting it, and an
-// image also painted somewhere the regions do not cover the same samples, on
-// another page, twice on one page, or by an annotation or a form, is blanked
-// in a copy instead: the covered placement paints the copy under a new
-// resource name, and every other placement keeps the image as it was (see
-// [RedactReport.ImagesBlankedInCopy]). [WithStrictRedaction] refuses such an
-// image. An image a form XObject draws on the page is blanked in place when
-// every placement of it had the same samples covered. One also painted
-// elsewhere is blanked in a copy too: the form, and each form nested between
-// it and the image, is copied for the covered placement, the copy names the
-// blanked image, and the page draws the copy, while every other placement
-// draws the form as it was (see [RedactReport.FormsCopied]). A placement the
-// page's own content draws wholly inside a region is removed, with the
-// q ... Q group that placed it when that group paints nothing else, so the
-// paper shows where it was (see [RedactReport.RemovedImages]): blanked, it
-// would paint its outline in black, and a picture drawn as many small
-// images would keep its shape. Its image is still blanked in place when no
-// placement the regions do not cover paints it, since the file keeps it.
+// # Selection
 //
-// The redaction holds whatever else the Writer does before or after it:
-// another Redact, auto-tagging, and a remediation, which comes after it since a
-// remediation is the last edit on a Writer (a Redact after one returns
-// [ErrEditAfterRemediation]). Each builds on the others' edits,
-// and [Writer.WriteTo] scans the output it is about to write for every removed
-// string. A stage can still rebuild a page from the source document
-// (auto-tagging marks up the original content stream), so when a removed
-// string, or an image blanked in a copy, is back, WriteTo applies the regions
-// again on top of everything else and scans once more. If a copy still survives, WriteTo refuses with
+// Selection is geometric and VISIBILITY-INDEPENDENT. A glyph counts when the
+// box it paints meets a region, whatever its colour, its text rendering mode,
+// or the optional-content group it sits in. Invisible text is exactly what a
+// failed redaction leaves behind.
+//
+// The box is the glyph's advance and its font's ascent and descent, grown to
+// hold its outline (see [WithoutRedactionGlyphOutlines]).
+//
+// # Refusals
+//
+// Redact returns one of three errors. Each leaves the [Writer] exactly as it
+// was.
+//
+//   - [ErrRedactionRefused] when something cannot be removed exactly (see
+//     Exact removal).
+//   - [ErrRedactionIncomplete] when the passes succeed but the verification
+//     scan still finds a copy it does not tolerate, or could not read an
+//     object.
+//   - [ErrRedactionPixelCheck] when a rendering of a redacted page does not
+//     show what the regions promise.
+//
+// # Exact removal
+//
+// [ErrRedactionRefused] covers these constructs:
+//
+//   - a region covering only some of a text run that cannot be split at its
+//     glyphs (a run a region covers only partly is otherwise split, the
+//     covered glyphs removed and the rest kept where they were)
+//   - text in a clipping text rendering mode, whose removal would widen the
+//     clip for what follows
+//   - text showing a code no glyph was read for anywhere on the page, whose
+//     glyph cannot be placed
+//   - text a Q inside its text object moves for some viewers and not others
+//   - a shading paint (sh) whose clip the region meets
+//   - a clipping path
+//   - a straddling path it cannot cut and clip at the region
+//   - a stroke whose width cannot be read
+//   - content drawn by a form XObject
+//   - an image whose samples cannot be rewritten
+//   - an annotation reaching outside the regions that draws anything (one that
+//     draws nothing is cut to the part outside, see
+//     [WithoutRedactionAnnotationClipping])
+//
+// Removing more than was asked, or reporting success over content still in the
+// file, are both worse than refusing. [WithRedactionRasterFallback] rasterises
+// the form XObjects and shading paints instead of refusing them.
+//
+// # Verification scan
+//
+// [ErrRedactionIncomplete] names every survivor in
+// [RedactReport.SurvivingCopies] so the caller can act on it.
+//
+// The scan looks for each removed run holding at least three letters or digits.
+// It also looks for each such word drawn across shorter runs, as a producer
+// that positions every glyph draws one. A run too short to identify anything, a
+// lone space, letter or digit, is not looked for. Such a run survives in nearly
+// every document whatever was removed.
+//
+// The scan does not read the samples of images, inline ones included, embedded
+// font programs, CMaps or ICC profiles. No reader extracts text from them, and
+// their bytes spell a short word by chance. A stream that a page's content, an
+// attachment, a metadata stream, JavaScript or an XFA form also names is read.
+//
+// # Copies on other pages
+//
+// A copy that only pages outside the regions draw does not fail the redaction.
+// A region redaction removes what the region covers on its own page, as a
+// Redact annotation applies to the page it sits on (ISO 32000-2, 12.5.6.23).
+// The same text drawn on another page is content the caller did not select.
+//
+// Such a copy is reported in [RedactReport.CopiesOnOtherPages] with the pages
+// that draw it, and the output keeps it. The copy may sit in a content stream,
+// a form XObject, a tiling pattern, a Type 3 glyph or an annotation appearance,
+// provided another page draws it and no redacted page draws or names it.
+//
+// A copy anywhere else still refuses: the redacted page's own resources and
+// annotations, the structure tree, the metadata or any other object.
+// [WithStrictRedaction] refuses copies on other pages too.
+//
+// # Copies on redacted pages
+//
+// Nor does a copy the redacted page draws as visible text outside every region
+// fail the redaction. The region is the content the redaction removes (ISO
+// 32000-2, 12.5.6.23). The same characters shown again elsewhere on the page, a
+// running head or a repeated word, are text the caller did not select.
+//
+// Such a copy is reported in [RedactReport.CopiesOnRedactedPages] with the page
+// and the boxes of the runs that spell it, and the output keeps it. So is a
+// removed run of digits that the page's content spells only in the numbers of
+// operators that draw no text (a path, a matrix, a colour). ISO 32000-1, 9.10.1
+// reads text from the strings of show-text operators alone.
+//
+// A copy counts only when all of these hold:
+//
+//   - the page's own content stream holds the string in nothing but show-text
+//     operators whose every glyph paints (no text rendering mode 3 or 7, no
+//     paint only in device white);
+//   - the string lies inside the clipping path and the crop box;
+//   - it sits in no optional-content group that is off;
+//   - it meets no region.
+//
+// A copy no viewer shows, or one behind a region, is what a failed redaction
+// leaves, and still refuses. So does a copy a form XObject or an annotation of
+// the redacted page draws.
+//
+// The page is also drawn as written, at 72 dpi with and without its text over
+// the copies' boxes. A copy that changes no pixel of its own, one a later fill,
+// image or text paints over, refuses as well. So does every copy on a page that
+// cannot be drawn. That drawing runs under [WithoutRedactionPixelCheck] too.
+//
+// [WithStrictRedaction] refuses these copies too.
+//
+// # Pixel check
+//
+// The verification compares text, not pixels, so a pixel check follows it.
+// Redact renders each redacted page before and after at [RedactionCheckDPI]. It
+// refuses with a [*RedactionPixelError] unless the regions show only paper and
+// blanked images and nothing outside them changed. See
+// [WithoutRedactionPixelCheck], which skips it, for what it proves and costs.
+//
+// # Scrubbing
+//
+// The document holds copies outside its pages too. Each home is cleared, kept
+// for the scan to judge, or left to the rewrite, as follows.
+//
+//   - Annotation values, form field values, outline titles and the structure
+//     tree's text are scrubbed of the removed strings.
+//   - Document metadata goes: /Info is emptied and the catalog's XMP removed.
+//   - The redacted page's /Thumb, /PieceInfo and /Metadata go: a thumbnail, an
+//     application's copy of the page, and an XMP packet that can carry a page
+//     thumbnail as base64 (ISO 32000-1, 12.3.4, 14.5 and 14.3.2).
+//   - A blanked image is rewritten without its /Alternates, /OPI, /ID,
+//     /Metadata, /AF and /PtData, which picture or describe the samples it
+//     had. It keeps its /OC, /Interpolate, /Intent, /Name and /Measure, which
+//     say where and how it paints, so a hidden image stays hidden.
+//   - A blanked image keeps its /StructParent where it is blanked in place. A
+//     copy blanked for one placement carries none, because its structure
+//     element names the original (14.7.4.4).
+//   - JavaScript goes, wherever an action entry or the /Names/JavaScript tree
+//     holds it (ISO 32000-1, 12.6.4.16). A script builds a word at run time
+//     from pieces no comparison of bytes finds. Form calculations and custom
+//     navigation go with it. See [RedactReport.RemovedScripts].
+//   - The private data of the catalog's /PieceInfo goes, its dictionaries and
+//     their /LastModified staying (ISO 32000-1, 14.5). It is an application's
+//     own format, an embedded search index among them, that the scan cannot
+//     read. See [RedactReport.ScrubbedPrivateData].
+//   - Signatures leave the form, /Perms and the /DSS, their appearances drawn
+//     into the pages, as every full rewrite does (see
+//     [Writer.DroppedSignatures]). A copy in a signature dictionary or a
+//     certificate therefore never reaches the output.
+//   - Embedded files and their /Collection, named destinations, and every
+//     other object stay, and the scan compares them. A copy there refuses.
+//     Removing an attachment or renaming a destination would delete structure
+//     the caller can see, and an attachment holding no copy is kept.
+//   - The scan reads text spelled in UTF-16 either way round, and into an
+//     attached PDF, zip or gzip. A container it cannot open, encrypted or
+//     nested past its bound, refuses as an unreadable object does.
+//
+// # What stays
+//
+// Everything outside the regions stays where it was.
+//
+// Text after a removed run on the same line keeps its position, because the
+// run's advance is put back in its place.
+//
+// A painted path reaching outside the regions loses its geometry inside them,
+// and the rest is painted under a clip that excludes them (see
+// [RedactReport.ClippedPaths]).
+//
+// An image is blanked by rewriting it. An image also painted somewhere the
+// regions do not cover the same samples is blanked in a copy instead. That
+// place may be another page, a second spot on one page, or an annotation or a
+// form. The covered placement paints the copy under a new resource name, and
+// every other placement keeps the image as it was (see
+// [RedactReport.ImagesBlankedInCopy]). [WithStrictRedaction] refuses such an
+// image.
+//
+// An image a form XObject draws on the page is blanked in place when every
+// placement of it had the same samples covered. One also painted elsewhere is
+// blanked in a copy too. The form, and each form nested between it and the
+// image, is copied for the covered placement, and the copy names the blanked
+// image. The page draws the copy, while every other placement draws the form as
+// it was (see [RedactReport.FormsCopied]).
+//
+// A placement the page's own content draws wholly inside a region is removed,
+// with the q ... Q group that placed it when that group paints nothing else, so
+// the paper shows where it was (see [RedactReport.RemovedImages]). Blanked, it
+// would paint its outline in black, and a picture drawn as many small images
+// would keep its shape. Its image is still blanked in place when no placement
+// the regions do not cover paints it, since the file keeps it.
+//
+// An inline image is blanked in place. A new inline image with the covered
+// samples overwritten replaces the bytes between BI and EI (ISO 32000-1,
+// 8.9.7), and [RedactReport.BlankedImages] names it "(inline)". Redact refuses
+// an inline image in any of these cases:
+//
+//   - readers end its data at different bytes;
+//   - its dictionary writes a key both abbreviated and in full;
+//   - its dictionary holds a key ISO 32000-1, Table 93 does not list;
+//   - its colour space is one only an image XObject could name.
+//
+// # Combining with other stages
+//
+// The redaction holds whatever else the Writer does before or after it: another
+// Redact, auto-tagging, and a remediation. A remediation comes after it, since
+// a remediation is the last edit on a Writer (a Redact after one returns
+// [ErrEditAfterRemediation]). Each builds on the others' edits, and
+// [Writer.WriteTo] scans the output it is about to write for every removed
+// string.
+//
+// A stage can still rebuild a page from the source document (auto-tagging marks
+// up the original content stream). When a removed string, or an image blanked
+// in a copy, is back, WriteTo applies the regions again on top of everything
+// else and scans once more. If a copy still survives, WriteTo refuses with
 // [ErrRedactionIncomplete] and writes nothing.
 //
-// An inline image is blanked in place: a new inline image with the covered
-// samples overwritten replaces the bytes between BI and EI (ISO 32000-1,
-// 8.9.7), and [RedactReport.BlankedImages] names it "(inline)". One whose
-// data readers end at different bytes, whose dictionary writes a key both
-// abbreviated and in full or holds one ISO 32000-1, Table 93 does not list,
-// or whose colour space only an image XObject could name is refused instead.
+// # Limits
 //
-// What this does NOT do: re-subset embedded fonts whose glyphs now describe
-// only removed text (see [RedactReport.FontsFullyRemovedOnPage]), and it
-// cannot remove content a form XObject draws, which it refuses instead. Nor
-// does it find a copy no comparison of text recognises: text an image or a
-// thumbnail inside an attachment draws, or an attachment in
+// Redact does not re-subset embedded fonts whose glyphs now describe only
+// removed text (see [RedactReport.FontsFullyRemovedOnPage]). It cannot remove
+// content a form XObject draws, which it refuses instead.
+//
+// It does not find a copy that no comparison of text recognises. Examples are
+// text an image or a thumbnail inside an attachment draws, and an attachment in
 // a format whose compression the scan does not know.
 func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...RedactOption) (_ *RedactReport, err error) {
 	defer recoverToError(w.logger(), "Writer.Redact", &err)

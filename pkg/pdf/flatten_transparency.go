@@ -44,21 +44,30 @@ func WithFlattenPrintedAnnotations() FlattenOption {
 }
 
 // WithFlattenJPEGQuality encodes a photographic composite as a baseline JPEG
-// (ITU-T T.81) at quality q, 1 to 100, on the scale of the Independent JPEG
-// Group's libjpeg, with chroma sampled at half resolution below 90, as
-// [WithJPEGQuality] encodes a converted image. A composite is photographic
-// when its region paints only images and shadings, no filled or stroked path
-// and no text, whose sharp edges JPEG would blur, and its pixels hold at least
-// 256 colours. A composite Flate holds in no more bytes stays lossless. A
-// region mixing photographs with vector art, a whole page often, is cut on a
-// grid of the composite's pixels: a tile only images and shadings reach
-// whose pixels hold 256 colours is encoded as JPEG and drawn over one
-// lossless image of the whole region, placed as the lossless composite
-// would be, so the region outside the JPEG tiles draws as it does without
-// this option; the region stays one lossless image when the images would
-// not take fewer bytes. By default every
-// composite is encoded losslessly under FlateDecode, one image per region. A q outside 1 to 100
-// makes [Writer.FlattenTransparency] fail with [ErrInvalidFlattenOptions].
+// (ITU-T T.81) at quality q, 1 to 100.
+//
+// q is on the scale of the Independent JPEG Group's libjpeg, with chroma
+// sampled at half resolution below 90, as [WithJPEGQuality] encodes a converted
+// image.
+//
+// A composite is photographic when both hold:
+//
+//   - Its region paints only images and shadings, no filled or stroked path and
+//     no text, whose sharp edges JPEG would blur.
+//   - Its pixels hold at least 256 colours.
+//
+// A composite Flate holds in no more bytes stays lossless.
+//
+// A region mixing photographs with vector art, a whole page often, is cut on a
+// grid of the composite's pixels. A tile only images and shadings reach whose
+// pixels hold 256 colours is encoded as JPEG and drawn over one lossless image
+// of the whole region, placed as the lossless composite would be. The region
+// outside the JPEG tiles draws as it does without this option. The region stays
+// one lossless image when the images would not take fewer bytes.
+//
+// By default every composite is encoded losslessly under FlateDecode, one image
+// per region. A q outside 1 to 100 makes [Writer.FlattenTransparency] fail with
+// [ErrInvalidFlattenOptions].
 func WithFlattenJPEGQuality(q int) FlattenOption {
 	return func(o *flattenOpts) { o.jpegQuality = q }
 }
@@ -77,7 +86,7 @@ func WithFlattenOverprintSimulation() FlattenOption {
 }
 
 // FlattenedPage describes what [Writer.FlattenTransparency] did to one page.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type FlattenedPage struct {
 	// Page is the 1-based page number.
 	Page int
@@ -111,19 +120,19 @@ type FlattenedPage struct {
 	TransparentText int
 	// GroupRemoved reports that the page's transparency group was removed.
 	GroupRemoved bool
-	// GroupSpaceConverted reports that the page's transparency group blended
-	// in the grey or CMYK space its /CS names, which litho's renderer reads a
-	// page painting with transparency in, the composites included: what the
-	// composites leave of the page, and its annotations' appearances, were
-	// converted to that space, so the page reads as it did once the group
-	// is gone (see [Writer.FlattenTransparency]).
+	// GroupSpaceConverted reports that the page's transparency group blended in
+	// the grey or CMYK space its /CS names, which litho's renderer reads a page
+	// painting with transparency in, the composites included. What the composites
+	// leave of the page, and its annotations' appearances, were converted to that
+	// space, so the page reads as it did once the group is gone (see
+	// [Writer.FlattenTransparency]).
 	GroupSpaceConverted bool
-	// GroupSpaceUnconverted reports such a page whose content stayed in its
-	// own colour spaces: the conversion would have rewritten an object
-	// another page paints and does not convert to that space, or met content
-	// it cannot read whole, or a group space it cannot write. Its colours
-	// outside the composites read in the device's space, as viewers that
-	// blend every page in RGB, such as poppler, read the source.
+	// GroupSpaceUnconverted reports such a page whose content stayed in its own
+	// colour spaces. The conversion would have rewritten an object another page
+	// paints and does not convert to that space, or met content it cannot read
+	// whole, or a group space it cannot write. Its colours outside the composites
+	// read in the device's space, as viewers that blend every page in RGB, such
+	// as poppler, read the source.
 	GroupSpaceUnconverted bool
 	// Annotations counts the annotations whose appearance was drawn into
 	// the page's content, and EmptiedAnnotations those painting with
@@ -144,7 +153,7 @@ type FlattenedPage struct {
 }
 
 // FlattenReport describes what [Writer.FlattenTransparency] did.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type FlattenReport struct {
 	// Pages lists the pages it changed, in order.
 	Pages []FlattenedPage
@@ -161,88 +170,121 @@ type FlattenReport struct {
 	SkippedPages []int
 }
 
-// FlattenTransparency removes the live transparency of every page (ISO
-// 32000-2, 11): constant alpha, blend modes, soft masks and transparency
-// groups. Each region where a transparent object paints, with whatever it
-// overlaps and must take along, is composited by litho's renderer into one
-// opaque image, drawn where the region's first object was, so what is drawn
-// after it keeps its order. Everything outside those regions stays vector
-// content, untouched. The images are in the space the page composites in,
-// below.
+// FlattenTransparency removes the live transparency of every page (ISO 32000-2,
+// 11): constant alpha, blend modes, soft masks and transparency groups.
 //
-// Text is never rasterised. The images are composited without the page's
-// text, and every text object stays in the content as it was, with its
-// marked content and structure, drawn above the image, so the page stays
-// searchable and its tags survive. Its own transparency is reproduced where
-// opaque text can: text under a constant alpha of 0, which paints nothing, is
-// drawn in rendering mode 3, which [Reader.ExtractText] leaves out unless
-// [WithInvisibleText] is given, as it leaves out any invisible text; text
-// under an alpha between 0 and 1 with the Normal, Multiply or Darken blend
-// mode is drawn in its colour composited over white, exact where it lies on
-// the paper (11.3.5, 11.3.7.2). Text that content drawn after it hid in the
-// source stays hidden (ISO 32000-1, 8.2 paints in content order): where it did
-// not show, the image is drawn again after it, clipped to those pixels, and
-// the text stays in the content. The report counts the text whose look this
-// approximates: text over other content composited over white, text under a
-// soft mask or another blend mode, drawn opaque in its own colour, and text
-// transparent content drawn over it left visible, now drawn above it untinted.
+// Each region where a transparent object paints, with whatever it overlaps and
+// must take along, is composited by litho's renderer into one opaque image. The
+// image is drawn where the region's first object was, so what is drawn after it
+// keeps its order. Everything outside those regions stays vector content,
+// untouched. The images are in the space the page composites in, below.
 //
-// A page whose transparency group names a grey or CMYK /CS is composited in
-// that space (ISO 32000-2, 11.4.7), and its composites are images in it, so a
-// CMYK page keeps its inks. A page whose group names no /CS, or that has no
-// group, is composited in the device space the first output intent of the
-// page, else of the document, characterises when that is DeviceCMYK or
-// DeviceGray (14.11.5), and its composites are DeviceCMYK or DeviceGray
-// images: so a document [Writer.ConvertColors] converted to CMYK, which makes
-// the target its output intent, stays CMYK, blended as its printer blends it.
-// Any other page is composited in sRGB, and its composites are sRGB images.
-// The order matters: flattening before a conversion composites in sRGB, and
-// the conversion then converts the composites.
-// [WithFlattenOverprintSimulation] composites every page in DeviceCMYK with
-// overprinting simulated.
+// # Text
 //
-// The page group's /CS converts every colour painted on a page that paints
-// with transparency into that space (11.4.7, Table 147), which the flattening
-// removes with the group: on such a page, whose group names a grey or CMYK
-// space, what the composites leave, and the page's annotation appearances,
-// are converted into that space as [Writer.ConvertColors] converts a page, so
-// the page reads as it did, an RGB colour outside the CMYK gamut included
-// ([FlattenedPage.GroupSpaceConverted]). A page whose conversion would
-// rewrite an object a page not converted to that space also paints keeps its
-// colours ([FlattenedPage.GroupSpaceUnconverted]). Overprint simulation
-// converts no page.
+// Text is never rasterised. The images are composited without the page's text.
+// Every text object stays in the content as it was, with its marked content and
+// structure, drawn above the image, so the page stays searchable and its tags
+// survive.
+//
+// Its own transparency is reproduced where opaque text can:
+//
+//   - Text under a constant alpha of 0, which paints nothing, is drawn in
+//     rendering mode 3. [Reader.ExtractText] leaves it out unless
+//     [WithInvisibleText] is given, as it leaves out any invisible text.
+//   - Text under an alpha between 0 and 1 with the Normal, Multiply or Darken
+//     blend mode is drawn in its colour composited over white, exact where it
+//     lies on the paper (11.3.5, 11.3.7.2).
+//
+// Text that content drawn after it hid in the source stays hidden (ISO 32000-1,
+// 8.2 paints in content order). Where it did not show, the image is drawn again
+// after it, clipped to those pixels, and the text stays in the content.
+//
+// The report counts the text whose look this approximates:
+//
+//   - Text over other content, composited over white.
+//   - Text under a soft mask or another blend mode, drawn opaque in its own
+//     colour.
+//   - Text transparent content drawn over it left visible, now drawn above it
+//     untinted.
+//
+// # Colour spaces
+//
+// A page composites in one of three spaces:
+//
+//   - A page whose transparency group names a grey or CMYK /CS is composited in
+//     that space (ISO 32000-2, 11.4.7). Its composites are images in it, so a
+//     CMYK page keeps its inks.
+//   - A page whose group names no /CS, or that has no group, is composited in
+//     the device space the first output intent of the page, else of the
+//     document, characterises when that is DeviceCMYK or DeviceGray (14.11.5).
+//     Its composites are DeviceCMYK or DeviceGray images. So a document
+//     [Writer.ConvertColors] converted to CMYK, which makes the target its
+//     output intent, stays CMYK, blended as its printer blends it.
+//   - Any other page is composited in sRGB, and its composites are sRGB images.
+//
+// The order matters: flattening before a conversion composites in sRGB, and the
+// conversion then converts the composites. [WithFlattenOverprintSimulation]
+// composites every page in DeviceCMYK with overprinting simulated.
+//
+// The page group's /CS converts every colour painted on a page that paints with
+// transparency into that space (11.4.7, Table 147). The flattening removes the
+// group. On a page whose group names a grey or CMYK space, what the composites
+// leave and the page's annotation appearances are therefore converted into that
+// space as [Writer.ConvertColors] converts a page. The page reads as it did, an
+// RGB colour outside the CMYK gamut included
+// ([FlattenedPage.GroupSpaceConverted]). A page whose conversion would rewrite
+// an object a page not converted to that space also paints keeps its colours
+// ([FlattenedPage.GroupSpaceUnconverted]). Overprint simulation converts no
+// page.
+//
+// # Annotations
 //
 // An annotation that paints with transparency, or with
-// [WithFlattenPrintedAnnotations] any annotation a viewer prints, is drawn
-// into the page content first, after what the page draws, as a viewer draws
-// it (ISO 32000-1, 12.5.5, Algorithm 8.1), and flattened with the page. The
-// annotation stays, with an appearance that paints nothing: a link keeps its
-// action, a comment its pop-up and text, and the structure tree its object
-// reference to it, while the drawing is marked as an artifact in a tagged
-// document (ISO 14289-1, 7.1). A document with no structure tree keeps the
-// drawing as plain page content, which default [Reader.ExtractText] returns,
-// unless its XMP metadata claims PDF/UA (pdfuaid:part) or WTPDF: the drawing
-// is then marked as an artifact, as [Writer.FlattenForm] marks a baked
-// widget. An annotation a viewer does not display (Hidden or NoView) loses
-// its transparent appearance with nothing drawn. Form field widgets stay as
-// they are: call [Writer.FlattenForm] first to bake them. A signed signature
-// field leaves the document with this rewrite, as with any other, its
-// appearance drawn into the page ([Writer.DroppedSignatures]); when it paints
-// with transparency it is drawn before flattening, so that transparency is
-// flattened too. Pop-ups, annotations under optional content, annotations a
-// viewer keeps upright on a rotated page, and annotations whose appearance
-// litho cannot draw stay as they are, and those painting with transparency
-// are counted in [FlattenReport.TransparentAnnotations]. A Type 3 glyph's
-// description is text too (9.6.5), so transparency a glyph paints with stays
-// in it.
+// [WithFlattenPrintedAnnotations] any annotation a viewer prints, is drawn into
+// the page content first, after what the page draws, as a viewer draws it (ISO
+// 32000-1, 12.5.5, Algorithm 8.1). It is then flattened with the page.
 //
-// It runs eagerly, like [Writer.ConvertColors], and works on the document as
-// the Writer holds it when it runs: edits queued before it are written to a
-// temporary file first and flattened with the rest. Like every edit, it comes
-// before a remediation, after which it returns [ErrEditAfterRemediation]. A
-// page it cannot flatten fails it with [ErrTransparencyFlatteningRefused],
-// leaving the Writer as it was. A page whose content does not read is left
-// as it is and listed in [FlattenReport.SkippedPages].
+// The annotation stays, with an appearance that paints nothing. A link keeps
+// its action, a comment its pop-up and text, and the structure tree its object
+// reference to it. In a tagged document the drawing is marked as an artifact
+// (ISO 14289-1, 7.1).
+//
+// A document with no structure tree keeps the drawing as plain page content,
+// which default [Reader.ExtractText] returns, unless its XMP metadata claims
+// PDF/UA (pdfuaid:part) or WTPDF. The drawing is then marked as an artifact, as
+// [Writer.FlattenForm] marks a baked widget.
+//
+// An annotation a viewer does not display (Hidden or NoView) loses its
+// transparent appearance with nothing drawn. Form field widgets stay as they
+// are: call [Writer.FlattenForm] first to bake them.
+//
+// A signed signature field leaves the document with this rewrite, as with any
+// other, its appearance drawn into the page ([Writer.DroppedSignatures]). When
+// it paints with transparency it is drawn before flattening, so that
+// transparency is flattened too.
+//
+// These annotations stay as they are:
+//
+//   - Pop-ups.
+//   - Annotations under optional content.
+//   - Annotations a viewer keeps upright on a rotated page.
+//   - Annotations whose appearance litho cannot draw.
+//
+// Those painting with transparency are counted in
+// [FlattenReport.TransparentAnnotations]. A Type 3 glyph's description is text
+// too (9.6.5), so transparency a glyph paints with stays in it.
+//
+// # Ordering and errors
+//
+// It runs eagerly, like [Writer.ConvertColors]. It works on the document as the
+// Writer holds it when it runs: edits queued before it are written to a
+// temporary file first and flattened with the rest.
+//
+// Like every edit, it comes before a remediation, after which it returns
+// [ErrEditAfterRemediation]. A page it cannot flatten fails it with
+// [ErrTransparencyFlatteningRefused], leaving the Writer as it was. A page
+// whose content does not read is left as it is and listed in
+// [FlattenReport.SkippedPages].
 func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption) (_ *FlattenReport, err error) {
 	defer recoverToError(w.logger(), "Writer.FlattenTransparency", &err)
 

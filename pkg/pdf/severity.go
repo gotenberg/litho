@@ -50,7 +50,7 @@ func (s Severity) String() string {
 // coordinates (Specification, Clause, TestNumber) and a [Severity]. It
 // implements error with the same text as the flat form, so it can be used
 // interchangeably.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 //
 //nolint:errname // Violation is the public domain name; "ViolationError" would be redundant and it mirrors compliance.Violation.
 type Violation struct {

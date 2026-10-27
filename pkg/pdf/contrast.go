@@ -60,59 +60,72 @@ func WithEnhancedContrast() ContrastOption {
 }
 
 // CheckTextContrast measures the contrast of the visible text of the given
-// 1-based page against what the page shows under it, and reports the runs
-// that fall short of WCAG 2.x Success Criterion 1.4.3, Contrast (Minimum):
-// 4.5:1, and 3:1 for large-scale text, at least 18 points or 14 points and
-// bold, the size read through the text matrix and the CTM. Pass
+// 1-based page against what the page shows under it. It reports the runs that
+// fall short of WCAG 2.x Success Criterion 1.4.3, Contrast (Minimum): 4.5:1,
+// and 3:1 for large-scale text. Large-scale text is at least 18 points, or 14
+// points and bold, with the size read through the text matrix and the CTM. Pass
 // [WithEnhancedContrast] for Success Criterion 1.4.6.
 //
 // The check is advisory. PDF/UA (ISO 14289-1 and -2) sets no contrast
 // requirement and the Matterhorn Protocol defines no machine check for it, so
-// no validation litho runs depends on it; the requirement reaches a PDF
-// through EN 301 549, 10.1.4.3, and Section 508, E205.4, which apply WCAG to
-// documents that are not web pages. WCAG exempts text that is part of a logo
-// or purely decorative, which a measurement cannot tell, so a failure is a
-// finding for a person to review. Remediation cannot repair one: a new colour
-// changes how the page looks.
+// no validation litho runs depends on it. The requirement reaches a PDF through
+// EN 301 549, 10.1.4.3, and Section 508, E205.4, which apply WCAG to documents
+// that are not web pages. WCAG exempts text that is part of a logo or purely
+// decorative, which a measurement cannot tell, so a failure is a finding for a
+// person to review. Remediation cannot repair one: a new colour changes how the
+// page looks.
 //
 // The text's colour is the one the content stream paints it in, converted to
 // sRGB and adjusted by the transfer function in force as [Reader.RenderPage]
-// converts and adjusts it; text both filled and stroked is
-// judged by whichever of its two colours contrasts more, so a white letter
-// outlined in black is judged by its outline. A run is judged where its own
-// ink marks the page, as [Reader.ExtractUnseenText] judges it seen: the page
-// drawn at 72 dpi without the run differs there from the page drawn whole. The
-// background is what the page shows there without the run, averaged: over the
-// pixels the run's ink marks outside every other run's glyph boxes, or, when
-// it marks none, over all it marks with the page drawn without it and no run
-// it shares a pixel with, the page's other text under it included, so white
-// text set over other, dark text is judged against it. A piece of text drawn
-// several times over itself, a fake bold, a drop shadow or an outline pass,
-// each copy the same characters at the same size under a quarter em from the
-// others as default text extraction matches them, is judged once: against what
-// the page shows under the whole stack drawn without every copy, by whichever
+// converts and adjusts it. Text both filled and stroked is judged by whichever
+// of its two colours contrasts more, so a white letter outlined in black is
+// judged by its outline.
+//
+// A run is judged where its own ink marks the page, as
+// [Reader.ExtractUnseenText] judges it seen: the page drawn at 72 dpi without
+// the run differs there from the page drawn whole. The background is what the
+// page shows there without the run, averaged. It is averaged over the pixels
+// the run's ink marks outside every other run's glyph boxes. When the run marks
+// none, it is averaged over all the run marks with the page drawn without it
+// and no run it shares a pixel with. The page's other text under the run is
+// included, so white text set over other, dark text is judged against it.
+//
+// A piece of text drawn several times over itself is judged once. A fake bold,
+// a drop shadow or an outline pass is such a piece: each copy is the same
+// characters at the same size, under a quarter em from the others, as default
+// text extraction matches them. The piece is judged against what the page shows
+// under the whole stack drawn without every copy. It is judged by whichever
 // colour of its copies contrasts most, as an outline counts, and reported by
-// its first copy. A run whose own ink marks no pixel is not seen and not
-// judged, nor is one past the bound of 16 such drawings a page. A run whose
-// colour the content stream does not settle, or a stack one of whose copies'
-// colour it does not, painted with a pattern, transparency, a blend mode or a
-// soft mask, or by a Type 3 glyph that may set its own colour, is counted in
-// [models.ContrastReport.Undetermined] and not judged, as is a run whose own
-// ink the page shows in colours no mix of its colours with what lies under it
-// makes: a blend mode, a soft mask or transparency painted over it recolours
-// it, so the content stream's colour is not the one shown. Text painted over
-// and drawn again later at its place in rendering mode 7, by a copy that
-// shows through its clip, shows in the colours of what the clip lets
-// through, and is counted there too. A copy in mode 7 whose clip lets nothing
-// through paints nothing (ISO 32000-1, 9.3.6, Table 106) and shows no colour
-// to judge, so text drawn once filled and once in mode 7 is judged by its
-// filled copy alone, in the colours the page shows (Success Criterion 1.4.3).
+// its first copy.
+//
+// A run whose own ink marks no pixel is not seen and not judged. Neither is a
+// run past the bound of 16 such drawings a page.
+//
+// [models.ContrastReport.Undetermined] counts a run or stack and does not judge
+// it in these cases:
+//
+//   - The content stream does not settle the run's colour, or the colour of one
+//     of a stack's copies. The colour is painted with a pattern, transparency,
+//     a blend mode or a soft mask, or by a Type 3 glyph that may set its own
+//     colour.
+//   - The page shows the run's own ink in colours no mix of its colours with
+//     what lies under it makes. A blend mode, a soft mask or transparency
+//     painted over it recolours it, so the content stream's colour is not the
+//     one shown.
+//   - The run is painted over and drawn again later at its place in rendering
+//     mode 7, by a copy that shows through its clip. It shows in the colours of
+//     what the clip lets through.
+//
+// A copy in mode 7 whose clip lets nothing through paints nothing (ISO 32000-1,
+// 9.3.6, Table 106) and shows no colour to judge. Text drawn once filled and
+// once in mode 7 is therefore judged by its filled copy alone, in the colours
+// the page shows (Success Criterion 1.4.3).
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
-// [ErrFontMissing] when the page's text cannot be read, and
-// [ErrRenderTooLarge] when the page cannot be drawn within
-// [Limits.MaxRenderPixels] or its glyph boxes cover the page past 64 times.
-// It is safe for concurrent use with every other read of the [Reader].
+// [ErrFontMissing] when the page's text cannot be read, and [ErrRenderTooLarge]
+// when the page cannot be drawn within [Limits.MaxRenderPixels] or its glyph
+// boxes cover the page past 64 times. It is safe for concurrent use with every
+// other read of the [Reader].
 func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...ContrastOption) (_ models.ContrastReport, err error) {
 	defer recoverToError(r.logger(), "Reader.CheckTextContrast", &err)
 	var o contrastOpts

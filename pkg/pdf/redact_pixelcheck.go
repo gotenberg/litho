@@ -67,7 +67,7 @@ const (
 // It matches [ErrRedactionPixelCheck] and [ErrRedactionRefused] under
 // [errors.Is], and the cause in Err when the check could not run.
 // Use [errors.As] to read it.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type RedactionPixelError struct {
 	// Page is the 1-based page whose check failed, 0 when the document
 	// could not be written or reopened to render it.
@@ -115,40 +115,40 @@ func (e *RedactionPixelError) Unwrap() []error {
 
 // WithoutRedactionPixelCheck makes [Writer.Redact] skip its pixel check.
 //
-// By default Redact renders each redacted page before and after the
-// redaction, at [RedactionCheckDPI], and refuses with a [*RedactionPixelError]
-// unless the rendering proves two things:
+// By default Redact renders each redacted page before and after the redaction,
+// at [RedactionCheckDPI]. It refuses with a [*RedactionPixelError] unless the
+// rendering proves two things.
 //
 //   - Inside each region, eroded by two pixels, the page paints nothing but
-//     paper and blanked images: its rendering equals its rendering with images
+//     paper and blanked images. Its rendering equals its rendering with images
 //     alone, and those images, drawn over black with every transfer function
 //     left out, stay black, as blanked samples are. A transfer function (ISO
 //     32000-1, 10.5) maps the darkest colour to any other, the same for every
 //     blanked sample, so it is left out of that rendering alone.
-//   - Outside the regions, dilated by two pixels, and the glyphs the
-//     redaction removed (a glyph goes whole when its box meets a region,
-//     [RedactReport.RemovedGlyphBoxes]), nothing changed but the samples image
-//     blanking rewrote, which it rewrites whole, past the region's edge. A
-//     removed glyph is cleared where its box lies and where the page drew
-//     it, found by its origin: a font the document does not embed draws as a
+//   - Outside the regions, dilated by two pixels, and the glyphs the redaction
+//     removed, nothing changed but the samples image blanking rewrote.
+//     Blanking rewrites them whole, past the region's edge. A glyph goes whole
+//     when its box meets a region ([RedactReport.RemovedGlyphBoxes]). A
+//     removed glyph is cleared where its box lies and where the page drew it,
+//     found by its origin. A font the document does not embed draws as a
 //     placeholder box, which can reach past the glyph's box.
 //
-// The token scan proves the removed text is gone from the file; this proves
-// the page shows what the regions promise, which no scan of strings sees: a
-// path, an image or an annotation still painting inside a region. A page the
-// check cannot render, past [Limits.MaxRenderPixels] or failing to reopen,
-// refuses too, its cause in [RedactionPixelError.Err]: a check that did not
-// run proved nothing.
+// The token scan proves the removed text is gone from the file. This check
+// proves the page shows what the regions promise, which no scan of strings
+// sees. A path, an image or an annotation may still paint inside a region.
+//
+// A page the check cannot render also refuses, with its cause in
+// [RedactionPixelError.Err]. That covers a page past [Limits.MaxRenderPixels]
+// and one that fails to reopen. A check that did not run proved nothing.
 //
 // The check renders the redacted document as [Writer.WriteTo] would write it,
-// through a temp file in the Writer's temp directory, and draws annotations
-// as a viewer shows them on screen. Fonts the document does not embed draw as
+// through a temp file in the Writer's temp directory. It draws annotations as a
+// viewer shows them on screen. Fonts the document does not embed draw as
 // placeholder boxes, on both renderings alike.
 //
-// It costs a full write of the document, its reopening, and three to five
-// renders of each redacted page at 72 dpi. Skip it only where that cost
-// matters more than what it proves, or where a caller checks the pixels
-// itself.
+// The check costs a full write of the document, its reopening, and three to
+// five renders of each redacted page at 72 dpi. Skip it only where that cost
+// matters more than what it proves, or where a caller checks the pixels itself.
 func WithoutRedactionPixelCheck() RedactOption {
 	return func(o *redactOpts) { o.noPixelCheck = true }
 }

@@ -27,27 +27,34 @@ type ValidationData struct {
 }
 
 // WithLTV adds the signature's long-term validation data to the document
-// security store (ISO 32000-2, 12.8.4.3), in an incremental update after the
-// signature: the certificates of the signer's chain and of the chain of the
-// timestamp authority that timestamped it, and for each certificate below a
-// root an OCSP response or a CRL saying it is not revoked, listed in the
-// signature's VRI dictionary too (12.8.4.4). With [WithPAdES] and
-// [WithTimestampAuthority] the signature is then a PAdES baseline B-LT one
-// (ETSI EN 319 142-1, 6.3), and a [Writer.Timestamp] on top of it makes it
-// B-LTA.
+// security store (ISO 32000-2, 12.8.4.3).
 //
-// Without [WithValidationData], [Writer.WriteTo] fetches the data: an issuer
-// the SignedData lacks from the certificate's authority information access,
-// an OCSP response from its OCSP responders, and failing that its CRL from
-// its CRL distribution points, over http or https, each exchange bounded by
-// ctx, a one-minute timeout and a size cap. An OCSP response counts only when
-// the certificate's issuer, or a responder it delegated to, signed it, and a
-// CRL only when the issuer signed it.
+// The data goes in an incremental update after the signature. It holds:
+//
+//   - the certificates of the signer's chain
+//   - the certificates of the chain of the timestamp authority that
+//     timestamped the signature
+//   - for each certificate below a root, an OCSP response or a CRL saying it
+//     is not revoked, also listed in the signature's VRI dictionary
+//     (12.8.4.4)
+//
+// With [WithPAdES] and [WithTimestampAuthority] the signature is then a PAdES
+// baseline B-LT one (ETSI EN 319 142-1, 6.3). A [Writer.Timestamp] on top of
+// it makes it B-LTA.
+//
+// Without [WithValidationData], [Writer.WriteTo] fetches the data. It takes
+// an issuer the SignedData lacks from the certificate's authority information
+// access. It takes an OCSP response from the certificate's OCSP responders,
+// and failing that its CRL from its CRL distribution points. It uses http or
+// https, and bounds each exchange by ctx, a one-minute timeout and a size
+// cap. An OCSP response counts only when the certificate's issuer, or a
+// responder it delegated to, signed it. A CRL counts only when the issuer
+// signed it.
 //
 // A certificate nothing vouches for, or whose issuer cannot be found, fails
-// the write with [ErrValidationData], and one reported revoked with
-// [ErrCertificateRevoked]. Nothing is written then. A store the document has
-// already keeps what it holds and gains only what it lacks. The responses
+// the write with [ErrValidationData]. A certificate reported revoked fails it
+// with [ErrCertificateRevoked]. Nothing is written then. A store the document
+// has already keeps what it holds and gains only what it lacks. The responses
 // carry their responders' times, so the output differs from one write to the
 // next.
 func WithLTV() SignOption {

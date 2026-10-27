@@ -18,25 +18,35 @@ import (
 const maxFontDirDepth = 32
 
 // WithSystemFonts embeds, for the fonts a document shows without embedding
-// them, programs read from the operating system's font directories: on macOS
-// ~/Library/Fonts, /Library/Fonts and /System/Library/Fonts; on Windows the
-// per-user fonts directory (%LOCALAPPDATA%\Microsoft\Windows\Fonts) and
-// %WINDIR%\Fonts; elsewhere $XDG_DATA_HOME/fonts (~/.local/share/fonts),
-// ~/.fonts, the fonts directory of each of $XDG_DATA_DIRS, /usr/local/share/fonts
-// and /usr/share/fonts. Each directory is searched recursively, a symbolic link
-// followed once to where it leads, and litho reads the files itself, in pure
-// Go, without fontconfig or any other system library.
+// them, programs read from the operating system's font directories.
 //
-// It is [WithFontFiles] over those directories: the same file formats, TrueType
-// and OpenType Collections included, the same matching by PostScript name,
-// family and style, and metric-compatible family, the same bounds, and every
-// check of [WithFontProvider] before a program is embedded, with each font
-// left unembedded listed in [RemediationReport.FontRefusals]. The directories
-// are indexed once, at the first font a remediation asks for, and the index is
-// kept for every remediation the option serves. A file the process cannot read
-// is skipped, and logged at Debug. [WithFontProvider] and [WithFontFiles] are
-// asked first: the system's fonts serve the fonts they supply no program for,
-// or none a remediation accepts.
+// The directories searched are:
+//
+//   - macOS: ~/Library/Fonts, /Library/Fonts and /System/Library/Fonts.
+//   - Windows: the per-user fonts directory
+//     (%LOCALAPPDATA%\Microsoft\Windows\Fonts) and %WINDIR%\Fonts.
+//   - Elsewhere: $XDG_DATA_HOME/fonts (~/.local/share/fonts), ~/.fonts, the
+//     fonts directory of each of $XDG_DATA_DIRS, /usr/local/share/fonts and
+//     /usr/share/fonts.
+//
+// Each directory is searched recursively, a symbolic link followed once to
+// where it leads. litho reads the files itself, in pure Go, without fontconfig
+// or any other system library.
+//
+// The option is [WithFontFiles] over those directories, with:
+//
+//   - The same file formats, TrueType and OpenType Collections included.
+//   - The same matching by PostScript name, family and style, and
+//     metric-compatible family.
+//   - The same bounds.
+//   - Every check of [WithFontProvider] before a program is embedded, each font
+//     left unembedded listed in [RemediationReport.FontRefusals].
+//
+// The directories are indexed once, at the first font a remediation asks for,
+// and the index is kept for every remediation the option serves. A file the
+// process cannot read is skipped, and logged at Debug. [WithFontProvider] and
+// [WithFontFiles] are asked first: the system's fonts serve the fonts they
+// supply no program for, or none a remediation accepts.
 //
 // The output then depends on the fonts installed where litho runs, which
 // another host, or an update of the same one, changes. The option is off by

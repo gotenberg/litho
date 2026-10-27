@@ -103,46 +103,53 @@ func (r FontRefusal) String() string {
 }
 
 // WithFontProvider embeds the programs p supplies for the fonts a document
-// shows without embedding them. A remediation asks p once per such font and
-// embeds the program it returns only where it serves the font as the document
-// shows it:
+// shows without embedding them.
 //
-//   - it holds a glyph for every code the document shows with the font;
-//   - each of those glyphs advances as far as the font declares, within the
-//     one unit the glyph width rules allow, so no text moves;
-//   - its OS/2 fsType permits embedding its outlines;
-//   - its outlines suit the font: a TrueType font takes TrueType (glyf)
-//     outlines; a Type 1 font takes a CFF program, or TrueType outlines,
-//     which make it a TrueType font; a composite font of
-//     an Adobe character collection (Japan1, GB1, CNS1, Korea1) takes
-//     TrueType outlines through a /CIDToGIDMap built from the collection's
-//     Unicode values;
-//   - the embedded font fails no rule of the profile the unembedded one
-//     passed.
+// A remediation asks p once per such font. It embeds the program p returns only
+// where it serves the font as the document shows it:
+//
+//   - It holds a glyph for every code the document shows with the font.
+//   - Each of those glyphs advances as far as the font declares, within the one
+//     unit the glyph width rules allow, so no text moves.
+//   - Its OS/2 fsType permits embedding its outlines.
+//   - Its outlines suit the font. A TrueType font takes TrueType (glyf)
+//     outlines. A Type 1 font takes a CFF program, or TrueType outlines, which
+//     make it a TrueType font. A composite font of an Adobe character
+//     collection (Japan1, GB1, CNS1, Korea1) takes TrueType outlines through a
+//     /CIDToGIDMap built from the collection's Unicode values.
+//   - The embedded font fails no rule of the profile the unembedded one passed.
 //
 // litho embeds a subset of the program, holding the glyphs the document shows
 // with the font and those they are drawn from, under a subset tag, with the
-// /CharSet or /CIDSet PDF/A-1 asks of a subset. The program stays whole when
-// [WithWholeFontPrograms] asks for it, when its OS/2 fsType forbids subsetting, when its font descriptor serves another
-// font the document shows, when the interactive form's default resources name
-// the font, and when validation rejects the subset where it accepts the whole
-// program; a whole program is written once and shared by every font given it.
+// /CharSet or /CIDSet PDF/A-1 asks of a subset. The program stays whole in
+// these cases:
+//
+//   - [WithWholeFontPrograms] asks for it.
+//   - Its OS/2 fsType forbids subsetting.
+//   - Its font descriptor serves another font the document shows.
+//   - The interactive form's default resources name the font.
+//   - Validation rejects the subset where it accepts the whole program.
+//
+// A whole program is written once and shared by every font given it.
 // [RemediationReport.Fixed] states which each font received.
 //
-// A TrueType program receives the cmap a PDF reader looks its glyphs up
-// through (ISO 32000-1, 9.6.6.4): a (3,1) subtable beside the Unicode one of a
-// program made for the Macintosh, for a font that is not symbolic, and for a
-// symbolic font a single subtable, which for a symbolic Type 1 font maps each
-// code to the glyph of the name its encoding gives the code. A font embedded
-// as a symbolic TrueType font, which a reader reads no text from but a
-// /ToUnicode CMap, receives one stating the text its glyph names gave its
-// codes, unless it carries its own.
+// A TrueType program receives the cmap a PDF reader looks its glyphs up through
+// (ISO 32000-1, 9.6.6.4):
+//
+//   - For a font that is not symbolic, a (3,1) subtable beside the Unicode one
+//     of a program made for the Macintosh.
+//   - For a symbolic font, a single subtable. For a symbolic Type 1 font it
+//     maps each code to the glyph of the name its encoding gives the code.
+//
+// A font embedded as a symbolic TrueType font, which a reader reads no text
+// from but a /ToUnicode CMap, receives one stating the text its glyph names
+// gave its codes, unless it carries its own.
 //
 // Every font it leaves unembedded is listed with the reason in
 // [RemediationReport.FontRefusals], and stays in the residual. Embedding
 // changes the glyphs that render, so a regression the integrity probe detects
-// rolls it back with the other content-modifying fixes. Without a provider,
-// no font is embedded and no refusal is listed.
+// rolls it back with the other content-modifying fixes. Without a provider, no
+// font is embedded and no refusal is listed.
 func WithFontProvider(p FontProvider) RemediateOption {
 	return func(o *remediateOpts) {
 		o.fonts = p
@@ -150,48 +157,61 @@ func WithFontProvider(p FontProvider) RemediateOption {
 }
 
 // WithFontFiles embeds font programs read from the font files of fsys
-// ([WithFontProvider]): every .ttf, .otf, .ttc, .otc and .cff file under its
-// root, each face of a TrueType or OpenType Collection (.ttc, .otc) standing
-// as a program of its own. The first font a remediation asks for indexes the
-// files once, reading only the header tables that name each face, and the
-// program a font takes is read when it is chosen. A font takes the program
-// whose PostScript name is its /BaseFont with any subset tag dropped, else one
-// of its family and style, read from the name's style suffix ("Arial,Bold",
-// "Arial-BoldItalicMT", "Helvetica-Narrow", "Futura-Light"): bold and italic,
-// italic also when the font descriptor's /Flags marks the font italic, the
-// weight a weight word states (Light, Medium, Semibold, Black), and the width
-// a width word states (Condensed, Narrow), the face of regular or bold weight
-// first. A face of another weight or width is another design, and does not
-// stand for the font. Failing both, it takes a program of a metric-compatible family:
+// ([WithFontProvider]).
+//
+// It reads every .ttf, .otf, .ttc, .otc and .cff file under the root of fsys.
+// Each face of a TrueType or OpenType Collection (.ttc, .otc) stands as a
+// program of its own. The first font a remediation asks for indexes the files
+// once, reading only the header tables that name each face. The program a font
+// takes is read when it is chosen.
+//
+// A font takes the first of these matches, in this order:
+//
+//   - The program whose PostScript name is its /BaseFont with any subset tag
+//     dropped.
+//   - A program of its family and style, read from the name's style suffix
+//     ("Arial,Bold", "Arial-BoldItalicMT", "Helvetica-Narrow", "Futura-Light").
+//     The style is bold and italic (italic also when the font descriptor's
+//     /Flags marks the font italic), the weight a weight word states (Light,
+//     Medium, Semibold, Black), and the width a width word states (Condensed,
+//     Narrow). The face of regular or bold weight comes first.
+//   - A program of a metric-compatible family.
+//
+// A face of another weight or width is another design, and does not stand for
+// the font.
+//
 // Helvetica, Arial, Arimo, Liberation Sans and Nimbus Sans stand for one
-// another, as do Times, Times New Roman, Tinos, Liberation Serif and Nimbus
-// Roman, and Courier, Courier New, Cousine, Liberation Mono and Nimbus Mono
-// PS; Symbol takes Standard Symbols PS and ZapfDingbats D050000L. The width
-// check keeps a family that is not metric-compatible after all from moving
-// text. A program refused for the font gives way to the next file that
-// matches it, in that order, up to eight programs, so Courier New serves a
-// Courier whose own face draws a glyph of another width.
-// [RemediationReport.Fixed] names the program each font received.
+// another. So do Times, Times New Roman, Tinos, Liberation Serif and Nimbus
+// Roman, and Courier, Courier New, Cousine, Liberation Mono and Nimbus Mono PS.
+// Symbol takes Standard Symbols PS and ZapfDingbats D050000L. The width check
+// keeps a family that is not metric-compatible after all from moving text.
+//
+// A program refused for the font gives way to the next file that matches it, in
+// that order, up to eight programs, so Courier New serves a Courier whose own
+// face draws a glyph of another width. [RemediationReport.Fixed] names the
+// program each font received.
 //
 // A program of more than 64 MiB, a collection of more than 256 MiB, or a file
 // no TrueType, OpenType or CFF reader accepts, is skipped. The index reads at
 // most 16384 files and 64 MiB of header tables, and ignores the files past
 // either bound. An error walking or reading fsys aborts the remediation that
-// asked first. The option may be shared by concurrent remediations, which
-// share its index.
+// asked first. The option may be shared by concurrent remediations, which share
+// its index.
 func WithFontFiles(fsys fs.FS) RemediateOption {
 	return WithFontProvider(newFontFiles(fsys))
 }
 
 // WithWholeFontPrograms embeds every program [WithFontProvider],
 // [WithFontFiles] or [WithSystemFonts] supplies whole, under the font's own
-// name, instead of the subset litho embeds by default. A subset holds only the
-// glyphs the document shows, so text a later edit adds in characters the document does not show
-// has no glyph to draw; a whole program keeps every glyph, at the cost of a
-// larger file. Each font is still embedded only where the whole program
-// serves it as the document shows it, and [RemediationReport.Fixed] states
-// that the caller asked for the whole program. Without a provider it does
-// nothing.
+// name, instead of the subset litho embeds by default.
+//
+// A subset holds only the glyphs the document shows. Text a later edit adds in
+// characters the document does not show has no glyph to draw. A whole program
+// keeps every glyph, at the cost of a larger file.
+//
+// Each font is still embedded only where the whole program serves it as the
+// document shows it, and [RemediationReport.Fixed] states that the caller asked
+// for the whole program. Without a provider it does nothing.
 func WithWholeFontPrograms() RemediateOption {
 	return func(o *remediateOpts) {
 		o.wholeFonts = true

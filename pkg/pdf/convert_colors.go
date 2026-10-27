@@ -202,25 +202,37 @@ func WithSpotConversion() ColorOption {
 	return func(o *colorOpts) { o.convertSpots = true }
 }
 
-// WithKOnlyBlack prints grey and black solid colours on the black ink
-// alone under a CMYK target: a colour set in DeviceGray converts to k = 1 -
-// gray with no cyan, magenta or yellow, the conversion ISO 32000-1, 10.3.3
-// defines between the two device spaces, and black set in DeviceRGB, 0 0 0,
-// to 100% K. By default they convert through their profiles like every other
-// colour, and black becomes a four-colour black of about 0.4 0.4 0.8 1 under
-// the built-in profile, which print practice avoids for text and line art:
-// four inks misregister at a glyph's edges and add to the total ink. It
-// applies to the colours colour operators set, in text, paths and stencil
-// masks alike, and to the annotation and default appearance colours
-// [Writer.ConvertColors] converts. Images, shadings, Indexed palettes, spot
-// alternates, a Default colour space's colours (8.6.5.6), ICCBased colours and
-// RGB greys still convert through their profiles. 100% K reads lighter than
-// a four-colour black, so the converted page draws a dark grey on screen
-// where the source drew black. Under overprint, a converted colour keeps
-// what it painted: the conversion writes /OPM 0 where overprint mode 1 would
-// leave the cyan, magenta and yellow under a K-only colour unpainted
-// ([ColorReport.OverprintPreserved]). It has no effect under a target of
-// another component count. Off by default.
+// WithKOnlyBlack prints grey and black solid colours on the black ink alone
+// under a CMYK target.
+//
+// A colour set in DeviceGray converts to k = 1 - gray with no cyan, magenta or
+// yellow, the conversion ISO 32000-1, 10.3.3 defines between the two device
+// spaces. Black set in DeviceRGB, 0 0 0, converts to 100% K.
+//
+// By default they convert through their profiles like every other colour. Black
+// becomes a four-colour black of about 0.4 0.4 0.8 1 under the built-in
+// profile, which print practice avoids for text and line art: four inks
+// misregister at a glyph's edges and add to the total ink.
+//
+// The option applies to the colours colour operators set, in text, paths and
+// stencil masks alike, and to the annotation and default appearance colours
+// [Writer.ConvertColors] converts. These still convert through their profiles:
+//
+//   - Images and shadings.
+//   - Indexed palettes.
+//   - Spot alternates.
+//   - A Default colour space's colours (8.6.5.6).
+//   - ICCBased colours.
+//   - RGB greys.
+//
+// 100% K reads lighter than a four-colour black, so the converted page draws a
+// dark grey on screen where the source drew black.
+//
+// Under overprint, a converted colour keeps what it painted. The conversion
+// writes /OPM 0 where overprint mode 1 would leave the cyan, magenta and yellow
+// under a K-only colour unpainted ([ColorReport.OverprintPreserved]).
+//
+// It has no effect under a target of another component count. Off by default.
 func WithKOnlyBlack() ColorOption {
 	return func(o *colorOpts) { o.kOnlyBlack = true }
 }
@@ -250,21 +262,29 @@ func WithReplacedOutputIntents() ColorOption {
 
 // WithJPEGQuality re-encodes each converted image whose source filter is
 // DCTDecode or JPXDecode as a baseline JPEG (ITU-T T.81) at quality q, 1 to
-// 100, on the scale of the Independent JPEG Group's libjpeg, which most
-// encoders share. By default every converted image is re-encoded losslessly
-// under FlateDecode, which keeps the converted samples exactly but makes a
-// JPEG or JPEG 2000 source several times larger: Flate compresses a codec's
-// samples poorly. A JPEG 2000 source with a component deeper than 8 bits
-// stays lossless, and an image's soft mask and mask are kept as the lossless
-// re-encoding keeps them. An image the lossless encoding holds in fewer bytes
-// stays lossless. A q outside 1 to 100 makes [Writer.ConvertColors] fail
-// with [ErrInvalidColorTarget].
+// 100.
+//
+// q is on the scale of the Independent JPEG Group's libjpeg, which most
+// encoders share.
+//
+// By default every converted image is re-encoded losslessly under FlateDecode.
+// That keeps the converted samples exactly but makes a JPEG or JPEG 2000 source
+// several times larger, because Flate compresses a codec's samples poorly.
+//
+// These images stay lossless:
+//
+//   - A JPEG 2000 source with a component deeper than 8 bits.
+//   - An image the lossless encoding holds in fewer bytes.
+//
+// An image's soft mask and mask are kept as the lossless re-encoding keeps
+// them. A q outside 1 to 100 makes [Writer.ConvertColors] fail with
+// [ErrInvalidColorTarget].
 func WithJPEGQuality(q int) ColorOption {
 	return func(o *colorOpts) { o.jpegQuality, o.jpegQualitySet = q, true }
 }
 
 // ColorReport describes what [Writer.ConvertColors] converted.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type ColorReport struct {
 	// Target is the family the converted colours are written in:
 	// "DeviceGray", "DeviceRGB", "DeviceCMYK" or "ICCBased".
@@ -302,14 +322,19 @@ type ColorReport struct {
 	// [ProfileSourceBuiltin] for litho's own profiles.
 	TargetProfile string
 	// SourceProfiles maps each device family the conversion read colours of
-	// ("DeviceGray", "DeviceRGB", "DeviceCMYK") to where the profiles it read
-	// the family through came from, sorted, once each: the output intent's
-	// (ISO 32000-1, 14.11.5), the caller's, the target's for the target's own
-	// family, litho's built-in one, the built-in one standing in for an
-	// output intent or caller profile litho cannot convert through
-	// ([ProfileSourceBuiltinFallback]), or a Default colour space of the
-	// resources (8.6.5.6). An ICCBased space litho cannot read through its
-	// own profile, read as its device family, is counted under that family.
+	// ("DeviceGray", "DeviceRGB", "DeviceCMYK") to where the profiles it read the
+	// family through came from, sorted, once each. A source is one of:
+	//
+	//   - The output intent's (ISO 32000-1, 14.11.5).
+	//   - The caller's.
+	//   - The target's, for the target's own family.
+	//   - litho's built-in one.
+	//   - The built-in one standing in for an output intent or caller profile
+	//     litho cannot convert through ([ProfileSourceBuiltinFallback]).
+	//   - A Default colour space of the resources (8.6.5.6).
+	//
+	// An ICCBased space litho cannot read through its own profile, read as its
+	// device family, is counted under that family.
 	SourceProfiles map[string][]string
 	// IntentFallbacks lists, once per profile, each profile a conversion read
 	// through another table than the one for the rendering intent: a profile
@@ -318,35 +343,41 @@ type ColorReport struct {
 	// table either. Empty when every profile held the intent's table or
 	// serves every intent alike.
 	IntentFallbacks []IntentFallback
-	// OverprintPreserved counts the paintings under overprint (ISO
-	// 32000-1, 8.6.7) that print as they did because the conversion wrote
-	// the graphics state dictionaries in force at them, OverprintStates of
-	// them, with /OPM 0: colour converted into CMYK under overprint mode 1
-	// would otherwise leave the inks of its zero components unpainted.
+	// OverprintPreserved counts the paintings under overprint (ISO 32000-1,
+	// 8.6.7) that print as they did because the conversion wrote the graphics
+	// state dictionaries in force at them, OverprintStates of them, with /OPM 0.
+	// Colour converted into CMYK under overprint mode 1 would otherwise leave the
+	// inks of its zero components unpainted.
 	OverprintPreserved int
 	OverprintStates    int
-	// OverprintChanged counts the paintings under overprint that print
-	// otherwise once converted, on a device that overprints: a spot colour
-	// converted to process colour paints every process ink where it
-	// painted its own alone, and a CMYK colour painted under overprint mode
-	// 1 paints the inks its zero components left unpainted, or stops
-	// leaving them. Viewers draw without overprinting by default, so the
-	// change shows only in print or in an overprint preview.
+	// OverprintChanged counts the paintings under overprint that print otherwise
+	// once converted, on a device that overprints:
+	//
+	//   - A spot colour converted to process colour paints every process ink
+	//     where it painted its own alone.
+	//   - A CMYK colour painted under overprint mode 1 paints the inks its zero
+	//     components left unpainted, or stops leaving them.
+	//
+	// Viewers draw without overprinting by default, so the change shows only in
+	// print or in an overprint preview.
 	OverprintChanged int
-	// BlackPointOperators counts the colour operators converted under a
-	// graphics state whose /UseBlackPtComp (ISO 32000-2, Table 57) differs
-	// from the conversion's own choice: /OFF by default, /ON under
-	// [WithoutBlackPointCompensation]. BlackPointInlineImages counts the inline images so converted, and
-	// BlackPointCopies the image XObjects and shadings written a second
-	// time, converted under such a state, for the paintings under it.
+	// BlackPointOperators counts the colour operators converted under a graphics
+	// state whose /UseBlackPtComp (ISO 32000-2, Table 57) differs from the
+	// conversion's own choice, which is /OFF by default and /ON under
+	// [WithoutBlackPointCompensation]. BlackPointInlineImages counts the inline
+	// images so converted. BlackPointCopies counts the image XObjects and
+	// shadings written a second time, converted under such a state, for the
+	// paintings under it.
 	BlackPointOperators    int
 	BlackPointInlineImages int
 	BlackPointCopies       int
-	// BlackPointUnhonoured counts the paintings under such a state whose
-	// colour converts as the conversion's own choice asks all the same: a form XObject or a
-	// Type 3 glyph, which inherits the state but converts once for every
-	// painting, and an image or a shading painted by a stream whose
-	// resources are not its own.
+	// BlackPointUnhonoured counts the paintings under such a state whose colour
+	// converts as the conversion's own choice asks all the same:
+	//
+	//   - A form XObject or a Type 3 glyph, which inherits the state but converts
+	//     once for every painting.
+	//   - An image or a shading painted by a stream whose resources are not its
+	//     own.
 	BlackPointUnhonoured int
 	// IntentOperators, IntentInlineImages, IntentCopies and
 	// IntentUnhonoured count as the BlackPoint fields do, for a graphics
@@ -403,69 +434,101 @@ type IntentFallback struct {
 	Table string
 }
 
-// ConvertColors converts every colour the document paints to target: the
-// colour operators of every page, form XObject, pattern, Type 3 glyph and
-// annotation appearance, their colour space resources, images and inline
-// images, and shadings. The conversion goes through ICC profiles: the
-// source's (an ICCBased space's own, the Default colour space of ISO 32000-1,
-// 8.6.5.6 the resources give a device family, or else litho's reading of the
-// device families) to the target's, with the rendering intent
-// [WithColorIntent] selects. It is lossy by nature: a colour outside the
-// target's gamut moves to one inside it, and a conversion back does not
-// restore it.
+// ConvertColors converts every colour the document paints to target.
 //
-// Spot colours, Separation and DeviceN, are kept by default: their colorants
-// stay named, so a device that has the ink still prints it, and their
-// alternate space is converted to the target. [WithSpotConversion] converts
-// them to process colour. A target whose profile is an output or display
-// device profile becomes the document's GTS_PDFA1 output intent: the existing
-// GTS_PDFA1 intents take its profile, or one is added. An intent of any other
-// subtype, a PDF/X intent among them, is kept as it was and named in
-// [ColorReport.KeptOutputIntents]: only the producer can restate the printing
-// condition a document was prepared for. [WithReplacedOutputIntents] points
-// those over another profile of the target's component count at the target's
-// profile, keeping their subtype and printing condition, where a CMYK target
-// otherwise refuses them. [WithoutOutputIntent] leaves the GTS_PDFA1 intents
-// alone. The [OutputIntentColorTarget] changes no intent.
+// It converts:
 //
-// The device colours an annotation dictionary states, its /C and /IC and the
-// /BC and /BG of its /MK (ISO 32000-1, Tables 164 and 189), are converted
-// too: a viewer draws an annotation with no appearance stream from them
-// (12.5.6), and so does [Writer.FlattenTransparency]. So is the text colour of
-// each default appearance string, the /DA of an annotation, of a form field
-// and of the interactive form (12.7.3.3), whose other operators stay: a viewer
-// regenerating a field's appearance, as [Writer.FlattenForm] does, paints its
-// text with it. A transparency group takes the target as its blending space
-// (11.4.7, Table 147). A page group that names none, or names a /ColorSpace
-// resource, which outside a content stream names no space (8.6.3), takes a
-// grey or CMYK target. A page with no
-// group gets one blending in a grey or CMYK target when the document's first
-// output intent, after the conversion, characterises no device of the
-// target's family, as under [WithoutOutputIntent]: the reader's device would
-// otherwise choose the space, and a flattening would composite in sRGB. A
-// document claiming PDF/A-1 gets no such group, since ISO 19005-1, 6.4
-// forbids one.
+//   - The colour operators of every page, form XObject, pattern, Type 3 glyph
+//     and annotation appearance.
+//   - Their colour space resources.
+//   - Images and inline images.
+//   - Shadings.
 //
-// It runs eagerly rather than queueing, because the caller must learn whether
-// the document converts before writing it, and it forces a full rewrite.
-// Three ways it refuses, each leaving the [Writer] exactly as it was:
-// [ErrInvalidColorTarget] or [ErrNoOutputIntent] when the target names no
-// profile litho converts to, [ErrOutputIntentConflict] when a CMYK target
-// meets a kept output intent over another CMYK profile, through which viewers
-// would read the converted DeviceCMYK ([WithReplacedOutputIntents] points such
-// intents at the target), and [ErrColorConversionRefused] when a colour the
-// document paints cannot be converted: converting part of a document leaves
-// colours in two spaces where the caller asked for one.
+// The conversion goes through ICC profiles, from the source's to the target's,
+// with the rendering intent [WithColorIntent] selects. The source profile is an
+// ICCBased space's own, the Default colour space of ISO 32000-1, 8.6.5.6 the
+// resources give a device family, or else litho's reading of the device
+// families. The conversion is lossy by nature: a colour outside the target's
+// gamut moves to one inside it, and a conversion back does not restore it.
+//
+// # Spot colours and output intents
+//
+// Spot colours, Separation and DeviceN, are kept by default. Their colorants
+// stay named, so a device that has the ink still prints it, and their alternate
+// space is converted to the target. [WithSpotConversion] converts them to
+// process colour.
+//
+// A target whose profile is an output or display device profile becomes the
+// document's GTS_PDFA1 output intent: the existing GTS_PDFA1 intents take its
+// profile, or one is added. An intent of any other subtype, a PDF/X intent
+// among them, is kept as it was and named in [ColorReport.KeptOutputIntents].
+// Only the producer can restate the printing condition a document was prepared
+// for.
+//
+// [WithReplacedOutputIntents] points those over another profile of the target's
+// component count at the target's profile, keeping their subtype and printing
+// condition, where a CMYK target otherwise refuses them. [WithoutOutputIntent]
+// leaves the GTS_PDFA1 intents alone. The [OutputIntentColorTarget] changes no
+// intent.
+//
+// # Annotations
+//
+// The device colours an annotation dictionary states are converted too: its /C
+// and /IC and the /BC and /BG of its /MK (ISO 32000-1, Tables 164 and 189). A
+// viewer draws an annotation with no appearance stream from them (12.5.6), and
+// so does [Writer.FlattenTransparency].
+//
+// The text colour of each default appearance string is converted too: the /DA
+// of an annotation, of a form field and of the interactive form (12.7.3.3). Its
+// other operators stay. A viewer regenerating a field's appearance, as
+// [Writer.FlattenForm] does, paints its text with it.
+//
+// # Transparency groups
+//
+// A transparency group takes the target as its blending space (11.4.7, Table
+// 147). For page groups:
+//
+//   - A page group that names none, or names a /ColorSpace resource, which
+//     outside a content stream names no space (8.6.3), takes a grey or CMYK
+//     target.
+//   - A page with no group gets one blending in a grey or CMYK target when the
+//     document's first output intent, after the conversion, characterises no
+//     device of the target's family, as under [WithoutOutputIntent]. The
+//     reader's device would otherwise choose the space, and a flattening would
+//     composite in sRGB.
+//   - A document claiming PDF/A-1 gets no such group, since ISO 19005-1, 6.4
+//     forbids one.
+//
+// # Errors
+//
+// ConvertColors runs eagerly rather than queueing, because the caller must
+// learn whether the document converts before writing it, and it forces a full
+// rewrite. It refuses in three ways, each leaving the [Writer] exactly as it
+// was:
+//
+//   - [ErrInvalidColorTarget] or [ErrNoOutputIntent] when the target names no
+//     profile litho converts to.
+//   - [ErrOutputIntentConflict] when a CMYK target meets a kept output intent
+//     over another CMYK profile, through which viewers would read the converted
+//     DeviceCMYK ([WithReplacedOutputIntents] points such intents at the
+//     target).
+//   - [ErrColorConversionRefused] when a colour the document paints cannot be
+//     converted. Converting part of a document leaves colours in two spaces
+//     where the caller asked for one.
+//
+// # Ordering
 //
 // It converts the document as the Writer holds it when it runs: every edit
 // queued before it, a [Writer.Redact] included, is converted with the rest.
-// Content an edit adds after it, a stamp, inserted pages, or the content
-// [Writer.AutoTag] rebuilds from the source, is not converted, so call it
-// after them. Like every edit, it comes before a remediation, which is the
-// last edit on a Writer (after one it returns [ErrEditAfterRemediation]); a
-// PDF/A remediation after it then reads the converted colours through the
-// output intent it set. A signature the source carries is dropped from the
-// rewrite, as for every full rewrite (see [Writer.DroppedSignatures]).
+// Content an edit adds after it is not converted, so call it after them. That
+// content is a stamp, inserted pages, or the content [Writer.AutoTag] rebuilds
+// from the source.
+//
+// Like every edit, it comes before a remediation, which is the last edit on a
+// Writer (after one it returns [ErrEditAfterRemediation]). A PDF/A remediation
+// after it then reads the converted colours through the output intent it set. A
+// signature the source carries is dropped from the rewrite, as for every full
+// rewrite (see [Writer.DroppedSignatures]).
 func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...ColorOption) (_ *ColorReport, err error) {
 	defer recoverToError(w.logger(), "Writer.ConvertColors", &err)
 

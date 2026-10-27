@@ -255,19 +255,22 @@ func WithSigningTime(t time.Time) SignOption {
 }
 
 // WithPAdES writes a PAdES baseline signature (ETSI EN 319 142-1, level B-B)
-// instead of the adbe.pkcs7.detached one of ISO 32000-1, 12.8.3.3: the
-// signature dictionary's /SubFilter is ETSI.CAdES.detached (ISO 32000-2,
-// 12.8.3.4), and its SignedData carries the content-type, message-digest and
-// ESS signing-certificate-v2 signed attributes and no signing-time, whose
+// instead of the adbe.pkcs7.detached one of ISO 32000-1, 12.8.3.3.
+//
+// The signature dictionary's /SubFilter is ETSI.CAdES.detached (ISO 32000-2,
+// 12.8.3.4). Its SignedData carries the content-type, message-digest and ESS
+// signing-certificate-v2 signed attributes. It carries no signing-time, whose
 // time ETSI EN 319 142-1, 6.3, Table 1 moves to the /M entry, always written.
+//
 // A document older than PDF 2.0 declares the ESIC extension of level 2 in its
-// catalog (ETSI EN 319 142-1, 5.6), unless it declares that level or a
-// higher one already. A lower level, such as the level 1 of a document
-// timestamp or a document security store, gives way to it: ISO 32000-1, 7.12
-// allows one ESIC entry, and a level includes the ones below it. The signer
-// of [NewSigner] builds that SignedData. The SignedData of another [Signer]
-// is checked, and [Writer.WriteTo] returns [ErrSignatureNotPAdES] when it
-// does not qualify.
+// catalog (ETSI EN 319 142-1, 5.6), unless it declares that level or a higher
+// one already. A lower level, such as the level 1 of a document timestamp or
+// a document security store, gives way to it. ISO 32000-1, 7.12 allows one
+// ESIC entry, and a level includes the ones below it.
+//
+// The signer of [NewSigner] builds that SignedData. The SignedData of another
+// [Signer] is checked, and [Writer.WriteTo] returns [ErrSignatureNotPAdES]
+// when it does not qualify.
 //
 // With [WithTimestampAuthority] the signature reaches level B-T, and with
 // [WithLTV] as well, B-LT.
@@ -294,31 +297,38 @@ func WithTimestampAuthority(url string) SignOption {
 	return func(o *signOpts) { o.info.TimestampURL = url }
 }
 
-// WithSignatureField names the signature field. An unsigned signature field
-// of that fully qualified name is signed in place, so its widget and the
-// appearance it has on the page stay. Otherwise a new root field takes the
-// name, with the invisible widget, on no page and of zero size, that signing
-// adds by default. Without it,
-// the signature goes in a new field named Signature1, Signature2 or the first
-// such name no field holds. [Writer.WriteTo] returns
-// [ErrSignatureFieldUnavailable] for a name the signature cannot take, and
-// [ErrSignatureFieldLocked] with it for a field, existing or new, that the
-// FieldMDP lock of a signature the document holds reaches.
+// WithSignatureField names the signature field.
+//
+// An unsigned signature field of that fully qualified name is signed in
+// place, so its widget and the appearance it has on the page stay. Otherwise
+// a new root field takes the name, with the invisible widget, on no page and
+// of zero size, that signing adds by default. Without this option, the
+// signature goes in a new field named Signature1, Signature2 or the first
+// such name no field holds.
+//
+// [Writer.WriteTo] returns [ErrSignatureFieldUnavailable] for a name the
+// signature cannot take. It returns [ErrSignatureFieldLocked] with it for a
+// field, existing or new, that the FieldMDP lock of a signature the document
+// holds reaches.
 //
 // A field signed in place is honoured as ISO 32000-1, 12.7.4.5 describes. Its
 // /Lock (Table 233) turns the fields it names read-only in the signed
 // revision and puts a FieldMDP transform naming them in the signature
-// dictionary (12.8.2.4). Its seed values (/SV, Tables 234 and 235) choose the
-// subfilter, the reason and the timestamp authority the caller left unset,
-// and a requirement the signature cannot meet fails the write with
-// [ErrSeedValueUnmet]. Their subfilters are in preference order, and the
-// first litho writes is the one the signature takes. When it is
-// ETSI.CAdES.detached and a [Signer] other than the one of [NewSigner]
-// returns a SignedData that is not a CAdES one (see [WithPAdES]), a list
-// that is a recommendation lets [Writer.WriteTo] call the Signer again, under
-// the next subfilter it names and then adbe.pkcs7.detached. A required list
-// binds its first subfilter (ISO 32000-1, Table 234), so the write fails with
-// [ErrSeedValueUnmet] and [ErrSignatureNotPAdES].
+// dictionary (12.8.2.4).
+//
+// Its seed values (/SV, Tables 234 and 235) choose the subfilter, the reason
+// and the timestamp authority the caller left unset. A requirement the
+// signature cannot meet fails the write with [ErrSeedValueUnmet].
+//
+// The seed value subfilters are in preference order, and the first litho
+// writes is the one the signature takes. The following case applies when the
+// subfilter is ETSI.CAdES.detached and a [Signer] other than the one of
+// [NewSigner] returns a SignedData that is not a CAdES one (see [WithPAdES]):
+//
+//   - A list that is a recommendation lets [Writer.WriteTo] call the Signer
+//     again, under the next subfilter it names and then adbe.pkcs7.detached.
+//   - A required list binds its first subfilter (ISO 32000-1, Table 234), so
+//     the write fails with [ErrSeedValueUnmet] and [ErrSignatureNotPAdES].
 func WithSignatureField(name string) SignOption {
 	return func(o *signOpts) { o.info.Field = name }
 }

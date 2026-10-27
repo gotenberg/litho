@@ -67,32 +67,39 @@ const (
 	maxPageSize = 14400.0
 )
 
-// WithDefaultPageSize sets the size, in points, a write tries for a page that
-// neither states nor inherits a media box a viewer uses, after the sizes of the
-// document's own pages. Without it, the write tries none.
+// WithDefaultPageSize sets the size, in points, a write tries for a page with
+// no usable media box, after the sizes of the document's own pages. Without it,
+// the write tries none.
 //
 // ISO 32000-1, 7.7.3.3, Table 30 makes /MediaBox required and gives it no
 // default. A viewer draws a page without one on US Letter, which is what
-// [Reader.Page] reports. A write that gives such a page a media box, as every
-// rewrite, split, merge, insertion and remediation does, tries the widths and
-// heights the document's pages have, the one most pages have first, a tie
-// going to the size the earliest page has, each in its own orientation then
-// turned a quarter, then this size, and gives the page the first that holds
-// everything it paints: its text, paths, images, forms and annotations, within
-// the region a viewer showed of it. When none holds it, or what it paints
-// cannot be measured, the page gets US Letter, what a viewer showed, so no
-// write shows less of a page than a viewer did. Every media box it gets
-// starts at 0 0. The output may show the page at a size a viewer did not show
-// for the source: the rest of the document is the best evidence of the size
-// the producer meant. A crop box the page states is kept, and a viewer clips
-// it against the new media box. [Split] takes the sizes from every page of its
-// source, [Merge] from every page of its sources, and a [Writer] from the
-// pages of its document and of the documents [Writer.InsertPages] takes pages
-// from.
+// [Reader.Page] reports. The option applies to a page that neither states nor
+// inherits a media box a viewer uses.
+//
+// Every rewrite, split, merge, insertion and remediation gives such a page a
+// media box. The write tries the widths and heights the document's pages have,
+// the one most pages have first and a tie going to the size the earliest page
+// has. It tries each in its own orientation, then turned a quarter. It tries
+// this size last.
+//
+// The page gets the first size that holds everything it paints: its text,
+// paths, images, forms and annotations, within the region a viewer showed of
+// it. When none holds it, or what it paints cannot be measured, the page gets
+// US Letter, what a viewer showed. No write shows less of a page than a viewer
+// did. Every media box it gets starts at 0 0.
+//
+// The output may show the page at a size a viewer did not show for the source.
+// The rest of the document is the best evidence of the size the producer meant.
+// A crop box the page states is kept, and a viewer clips it against the new
+// media box.
+//
+// [Split] takes the sizes from every page of its source, and [Merge] from every
+// page of its sources. A [Writer] takes them from the pages of its document and
+// of the documents [Writer.InsertPages] takes pages from.
 //
 // width and height must lie between 3 and 14,400, the page sizes ISO 32000-1,
-// Annex C.2, Table C.1 allows; the write otherwise fails with
-// [ErrInvalidPageSize]. Given to [NewWriter], it also sizes the pages a
+// Annex C.2, Table C.1 allows. Otherwise the write fails with
+// [ErrInvalidPageSize]. Given to [NewWriter], the option also sizes the pages a
 // remediation of the Writer repairs.
 func WithDefaultPageSize(width, height float64) WriteOption {
 	return func(o *writeOpts) {
@@ -194,12 +201,15 @@ func (o writeOpts) internalEncrypt() *crypto.EncryptConfig {
 }
 
 // WithVersion sets the PDF version in the output header (e.g., "2.0").
-// Only applies to full rewrites: an incremental update keeps the header of the
-// bytes it appends to. As with [WithObjectStreams], the document a Writer
-// edits after a remediation that kept a later round, or after a [Pipeline]
-// Split or Merge, is a file litho wrote for it, and [Writer.WriteTo] rewrites
-// that file in full when this option is given, unless the file still carries
-// a signature a rewrite would drop.
+//
+// It applies to full rewrites only. An incremental update keeps the header of
+// the bytes it appends to.
+//
+// As with [WithObjectStreams], the document a Writer edits after a remediation
+// that kept a later round, or after a [Pipeline] Split or Merge, is a file
+// litho wrote for it. [Writer.WriteTo] rewrites that file in full when this
+// option is given, unless the file still carries a signature a rewrite would
+// drop.
 func WithVersion(version string) WriteOption {
 	return func(o *writeOpts) {
 		o.version = version
@@ -228,7 +238,7 @@ func WithXRefStream() WriteOption {
 // the original bytes and leaves their packing untouched, so the option has no
 // effect there. The document a Writer edits after a remediation that kept a
 // later round, or after a [Pipeline] Split or Merge, is a file litho wrote for
-// it, not the caller's: [Writer.WriteTo] rewrites that file in full when this
+// it, not the caller's. [Writer.WriteTo] rewrites that file in full when this
 // option, [WithDedup], [WithImageRecompression] or [WithFontSubsetting] is
 // given, signed or not, unless the file still carries a signature a rewrite
 // would drop.
@@ -237,22 +247,22 @@ func WithXRefStream() WriteOption {
 // name a compressed object, and litho writes one whether or not
 // [WithXRefStream] was passed.
 //
-// Object streams and cross-reference streams are both PDF 1.5 constructs, so
-// a packed output declares at least PDF 1.5 even when the source declared
-// less, in the header and in the catalog /Version entry when the source
-// carried one. A document that must keep an earlier version must not be
-// packed: ISO 19005-1 is written against PDF 1.4 and its 6.1.4 forbids
-// cross-reference streams outright, so packing a PDF/A-1 file costs it
-// conformance. After [Writer.RemediatePDFA] at PDF/A-1a or PDF/A-1b,
-// [Writer.WriteTo] refuses this option with [ErrPDFA1ForbidsObjectStreams]
-// and writes nothing; [WithDedup] needs no cross-reference stream and is the
-// compaction such an output takes.
+// Object streams and cross-reference streams are both PDF 1.5 constructs. A
+// packed output declares at least PDF 1.5 even when the source declared less,
+// in the header and in the catalog /Version entry when the source carried one.
+//
+// A document that must keep an earlier version must not be packed. ISO 19005-1
+// is written against PDF 1.4 and its 6.1.4 forbids cross-reference streams
+// outright, so packing a PDF/A-1 file costs it conformance. After
+// [Writer.RemediatePDFA] at PDF/A-1a or PDF/A-1b, [Writer.WriteTo] refuses this
+// option with [ErrPDFA1ForbidsObjectStreams] and writes nothing. [WithDedup]
+// needs no cross-reference stream and is the compaction such an output takes.
 //
 // An encrypted output is never packed. Encryption runs over every object
 // before serialization, so packing afterwards would place ciphertext strings
-// inside a stream that is itself encrypted, and ISO 32000-1, 7.5.7 requires
-// that strings in an object stream are not encrypted separately. Combining
-// this option with [WithEncryption] writes an unpacked file rather than an
+// inside a stream that is itself encrypted. ISO 32000-1, 7.5.7 requires that
+// strings in an object stream are not encrypted separately. Combining this
+// option with [WithEncryption] writes an unpacked file rather than an
 // unreadable one.
 func WithObjectStreams() WriteOption {
 	return func(o *writeOpts) {
@@ -288,28 +298,32 @@ func WithDedup() WriteOption {
 // An image stored without compression or under FlateDecode, LZWDecode,
 // RunLengthDecode, ASCIIHexDecode or ASCII85Decode is re-encoded with
 // FlateDecode at its best compression and a PNG predictor where that helps
-// (ISO 32000-1, 7.4.4.4): only /Filter, /DecodeParms and the data change. Such
-// an image that is 8-bit DeviceRGB or ICCBased RGB and uses at most 256
+// (ISO 32000-1, 7.4.4.4). Only /Filter, /DecodeParms and the data change.
+//
+// Such an image that is 8-bit DeviceRGB or ICCBased RGB and uses at most 256
 // colours may instead become an Indexed image over its own colour space (ISO
-// 32000-1, 8.6.6.3), with 1, 2, 4 or 8 bits per pixel, when that is smaller:
-// every pixel keeps its colour, and a colour-key /Mask is renumbered to the
-// indices of the colours it masked. A JPEG image (DCTDecode alone) keeps its filter and its dictionary: its data
+// 32000-1, 8.6.6.3), with 1, 2, 4 or 8 bits per pixel, when that is smaller.
+// Every pixel keeps its colour, and a colour-key /Mask is renumbered to the
+// indices of the colours it masked.
+//
+// A JPEG image (DCTDecode alone) keeps its filter and its dictionary. Its data
 // is re-coded with Huffman tables fitted to its own statistics (ITU-T T.81,
 // Annex K.2) and without restart intervals, which codes the same quantized
 // coefficients in fewer bytes.
-// Only sequential JPEG qualifies; progressive JPEG, JPEG 2000, JBIG2 and
-// CCITT images are left alone, and nothing is downsampled or recompressed
-// lossily. An image is also left alone when its samples exceed the image
-// budget of [WithLimits], its data decodes only by salvage, or a filter
-// plugin ([WithFilterPlugin]) claims one of its filters.
 //
-// Like [WithObjectStreams] this applies to the full-rewrite path only, and an
-// encrypted output is never recompressed: encryption has replaced every
+// Only sequential JPEG qualifies. Progressive JPEG, JPEG 2000, JBIG2 and CCITT
+// images are left alone, and nothing is downsampled or recompressed lossily. An
+// image is also left alone when its samples exceed the image budget of
+// [WithLimits], its data decodes only by salvage, or a filter plugin
+// ([WithFilterPlugin]) claims one of its filters.
+//
+// Like [WithObjectStreams] this applies to the full-rewrite path only. An
+// encrypted output is never recompressed, because encryption has replaced every
 // stream's data with ciphertext before the pass would run. The output stays
 // deterministic: the same input and options give the same bytes.
 //
-// It costs time where the other compaction options cost almost none:
-// compressing at zlib's best level takes seconds on an image-heavy file that
+// It costs time where the other compaction options cost almost none.
+// Compressing at zlib's best level takes seconds on an image-heavy file that
 // [WithObjectStreams] and [WithDedup] rewrite in milliseconds.
 func WithImageRecompression() WriteOption {
 	return func(o *writeOpts) {
@@ -317,36 +331,42 @@ func WithImageRecompression() WriteOption {
 	}
 }
 
-// WithFontSubsetting subsets the TrueType (/FontFile2), CFF (/FontFile3
-// /Type1C and /CIDFontType0C) and Type 1 (/FontFile) font programs the
-// output embeds to the glyphs the document can show, losslessly: every glyph
-// a content stream, a form, a pattern, a Type 3 glyph procedure or an
-// annotation appearance can select through each font drawing from the
-// program is kept, with .notdef and the glyphs those draw. The others keep
-// their glyph IDs, or their Type 1 glyph names, and lose their outlines, so
-// no reference into the program changes: /Widths, /W, /ToUnicode,
-// /CIDToGIDMap, /CIDSet and /CharSet stay right, every page renders and
-// extracts as before, and the compliance verdicts do not move. The font's
+// WithFontSubsetting subsets the embedded font programs to the glyphs the
+// document can show, losslessly. It covers TrueType (/FontFile2), CFF
+// (/FontFile3 /Type1C and /CIDFontType0C) and Type 1 (/FontFile) programs.
+//
+// A program keeps every glyph that a content stream, a form, a pattern, a
+// Type 3 glyph procedure or an annotation appearance can select through each
+// font drawing from the program. It also keeps .notdef and the glyphs those
+// draw. The other glyphs keep their glyph IDs, or their Type 1 glyph names, and
+// lose their outlines. No reference into the program changes: /Widths, /W,
+// /ToUnicode, /CIDToGIDMap, /CIDSet and /CharSet stay right, every page renders
+// and extracts as before, and the compliance verdicts do not move. The font's
 // name gains no subset tag.
 //
 // A program is left whole when litho cannot prove it saw every use of it:
-// when something other than the fonts and resources ISO 32000-1 defines
-// holds it, a stream drawing with it does not decode, a default appearance
-// string names its font (a reader filling a field types with it), or a
-// widget appearance drawing with it may be regenerated (/NeedAppearances).
-// OpenType programs are left whole too, and so are Type 1 programs litho
-// cannot rewrite exactly (an ASCII-hex encrypted portion, a seac in a
-// subroutine), and nothing is subset in a document holding a signature or an
-// XFA form. A subset is kept only when it is smaller.
 //
-// It applies to the full-rewrite path only, as [WithObjectStreams] does, and
-// is the one compaction option that also applies to an encrypted output: it
-// runs before encryption. The output stays deterministic.
+//   - Something other than the fonts and resources ISO 32000-1 defines holds
+//     it.
+//   - A stream drawing with it does not decode.
+//   - A default appearance string names its font (a reader filling a field
+//     types with it).
+//   - A widget appearance drawing with it may be regenerated
+//     (/NeedAppearances).
 //
-// A subset font holds only the glyphs the document shows, so text added to
-// the document later in that font, by an editor or a form, finds no glyph to
-// draw. That is why the CLI keeps it behind its own --subset-fonts flag
-// rather than in --compact.
+// OpenType programs are left whole too. So are Type 1 programs litho cannot
+// rewrite exactly (an ASCII-hex encrypted portion, a seac in a subroutine).
+// Nothing is subset in a document holding a signature or an XFA form. A subset
+// is kept only when it is smaller.
+//
+// It applies to the full-rewrite path only, as [WithObjectStreams] does. It is
+// the one compaction option that also applies to an encrypted output, because
+// it runs before encryption. The output stays deterministic.
+//
+// A subset font holds only the glyphs the document shows. Text added to the
+// document later in that font, by an editor or a form, finds no glyph to draw.
+// That is why the CLI keeps it behind its own --subset-fonts flag rather than
+// in --compact.
 func WithFontSubsetting() WriteOption {
 	return func(o *writeOpts) {
 		o.subsetFonts = true
@@ -354,15 +374,17 @@ func WithFontSubsetting() WriteOption {
 }
 
 // WithCompactionSkipped stores in *dst, once the output is written, whether
-// the write was given [WithObjectStreams], [WithDedup],
-// [WithImageRecompression] or [WithFontSubsetting] and applied none of them
-// because its output is an incremental update of the document the Writer
-// edits. An update appends to that document's bytes and leaves them as they
-// are (ISO 32000-1, 7.5.6), and the four run on a full rewrite only, so the
-// output is the one the write
-// produces without them. It applies to [Writer.WriteTo], [Pipeline.WriteTo],
-// [Split] and [Merge], the last two always rewriting. A write that fails
-// leaves *dst as it was.
+// the write skipped compaction.
+//
+// The write skipped compaction when it was given [WithObjectStreams],
+// [WithDedup], [WithImageRecompression] or [WithFontSubsetting] and applied
+// none of them, because its output is an incremental update of the document
+// the Writer edits. An update appends to that document's bytes and leaves them
+// as they are (ISO 32000-1, 7.5.6). The four options run on a full rewrite
+// only, so the output is the one the write produces without them.
+//
+// It applies to [Writer.WriteTo], [Pipeline.WriteTo], [Split] and [Merge], the
+// last two always rewriting. A write that fails leaves *dst as it was.
 //
 // An encrypted output, never compacted either, is a full rewrite and is not
 // reported here: see [WithObjectStreams].
@@ -414,9 +436,11 @@ func WithTempDir(dir string) WriteOption {
 }
 
 // WithBookmarks configures how [Split] and [Merge] handle the document
-// outline. When omitted, the operation uses sensible defaults
-// ([BookmarkUpdate] with [OrphanDrop] and PromoteOrphanChildren=true for
-// [Split]; [BookmarkUpdate] with no wrapping for [Merge]).
+// outline.
+//
+// When omitted, the operation uses sensible defaults. [Split] uses
+// [BookmarkUpdate] with [OrphanDrop] and PromoteOrphanChildren=true. [Merge]
+// uses [BookmarkUpdate] with no wrapping.
 func WithBookmarks(opts BookmarkOptions) WriteOption {
 	return func(o *writeOpts) {
 		copy := opts
@@ -540,7 +564,7 @@ func WithRegressionTolerance(tol RegressionTolerance) RemediateOption {
 
 // RemediationReport describes what the remediation engine fixed and what it
 // could not fix automatically.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type RemediationReport struct {
 	// Fixed lists human-readable descriptions of applied fixes that were
 	// kept in the output.
@@ -622,7 +646,7 @@ const (
 
 // BookmarkOptions configures bookmark handling for [Split] and [Merge].
 // Pass to a write call via [WithBookmarks].
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type BookmarkOptions struct {
 	// Handling selects the high-level strategy. Defaults to BookmarkUpdate.
 	Handling BookmarkHandling
@@ -649,7 +673,7 @@ type BookmarkOptions struct {
 }
 
 // Metadata holds document information dictionary fields for [Writer.SetMetadata].
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 //
 // Each field is the entry of the same name in the Info dictionary (ISO
 // 32000-1, Table 317). An empty field leaves the existing entry alone. A
@@ -668,7 +692,7 @@ type Metadata struct {
 }
 
 // TextStamp defines a text overlay to stamp on pages.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type TextStamp struct {
 	// Text is the line to draw.
 	Text string
@@ -694,7 +718,7 @@ type TextStamp struct {
 // of the package-level [FontHelvetica], [FontTimesRoman], ... variables
 // for the 14 standard PDF fonts (always available, no embedding required),
 // or with [NewTTFFont] to embed a custom TrueType font.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type StampFont struct {
 	// name holds the /BaseFont name for standard fonts and the derived
 	// PostScript name for custom fonts.
@@ -754,7 +778,7 @@ func NewTTFFont(data []byte) (StampFont, error) {
 // is retained rather than copied: the stamp is drawn when
 // [Writer.WriteTo] drains the queue, so leave the slice untouched until
 // then.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type ImageStamp struct {
 	// Data is the raw image file contents.
 	Data []byte
@@ -1638,36 +1662,40 @@ type AutoTagReport struct {
 }
 
 // AutoTag synthesizes a logical structure tree (a tagged PDF) for an untagged
-// document: it classifies each page's content into headings, paragraphs,
-// lists, tables and figures in reading order, marks the content (tagging it,
-// and artifacting running headers, footers, page numbers and the rest), and
-// wires the catalog /StructTreeRoot and /MarkInfo. The change is applied when
-// [Writer.WriteTo] is called.
+// document. The change is applied when [Writer.WriteTo] is called.
 //
-// AutoTag produces the structure and marked content only; it does not set the
+// AutoTag classifies each page's content into headings, paragraphs, lists,
+// tables and figures in reading order. It marks the content, tagging it and
+// artifacting running headers, footers, page numbers and the rest. It wires
+// the catalog /StructTreeRoot and /MarkInfo.
+//
+// AutoTag produces the structure and marked content only. It does not set the
 // document language, title, or the PDF/UA identifier, which other operations
 // own. Pair it with [Writer.RemediatePDFUA], or set those explicitly, for full
 // PDF/UA conformance.
 //
 // It tags the document as the edits queued before it leave it, as every edit
-// does. Queue it before a remediation, which then judges the tagged document:
-// after one it is refused with [ErrEditAfterRemediation]. It tags the pages the
-// Writer holds when it is queued, a page inserted before it included and a
-// page deleted before it left out.
+// does. Queue it before a remediation, which then judges the tagged document.
+// After a remediation it is refused with [ErrEditAfterRemediation]. It tags the
+// pages the Writer holds when it is queued, a page inserted before it included
+// and a page deleted before it left out.
 //
-// It leaves some documents alone by design, and the returned [AutoTagReport]
-// says so in Skipped once the edit is applied: an already-tagged document
-// ([ErrAutoTagAlreadyTagged]), one whose content is already marked, since
-// marking it again would nest or cross the existing sequences
-// ([ErrAutoTagMarkedContent]), one whose content cannot be read
-// ([ErrAutoTagUnreadableContent]), and one with nothing to tag
-// ([ErrAutoTagNothingToTag]). Marked content includes the /Artifact sequence a
-// stamp wraps its content in: queue AutoTag before a stamp to tag the document.
+// It leaves some documents alone by design. The returned [AutoTagReport] says
+// so in Skipped once the edit is applied. The skipped documents are:
+//
+//   - An already-tagged document ([ErrAutoTagAlreadyTagged]).
+//   - One whose content is already marked, since marking it again would nest or
+//     cross the existing sequences ([ErrAutoTagMarkedContent]).
+//   - One whose content cannot be read ([ErrAutoTagUnreadableContent]).
+//   - One with nothing to tag ([ErrAutoTagNothingToTag]).
+//
+// Marked content includes the /Artifact sequence a stamp wraps its content in.
+// Queue AutoTag before a stamp to tag the document.
 //
 // The report is filled when the edit is applied rather than complete on
-// return, because whether AutoTag tags depends on the document the edits queued
-// before it produce, which only applying them decides. A caller that does not
-// need the report calls AutoTag as a statement and ignores it.
+// return. Whether AutoTag tags depends on the document the edits queued before
+// it produce, which only applying them decides. A caller that does not need the
+// report calls AutoTag as a statement and ignores it.
 func (w *Writer) AutoTag() *AutoTagReport {
 	report := &AutoTagReport{}
 	if w.refuseAfterRemediation("AutoTag") != nil {
@@ -1735,7 +1763,7 @@ const (
 // It is the public-API mirror of the internal encryption config: the
 // [pdf] package owns this type so callers never import an internal
 // path.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type EncryptConfig struct {
 	// UserPassword unlocks the document for reading. Empty string means
 	// the document can be opened without a password, but [Permissions]
@@ -2094,7 +2122,7 @@ func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
 
 // AssociatedFile describes an embedded file for PDF/A-3+ compliance with the
 // /AFRelationship and document-level /AF array required by Factur-X / ZUGFeRD.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type AssociatedFile struct {
 	// Name is the displayed file name.
 	Name string
@@ -2177,36 +2205,39 @@ func (w *Writer) RemoveAttachment(name string) {
 //
 // When the output is a full rewrite, [Writer.WriteTo] writes that rewrite
 // first and signs it in an incremental update on top, as a caller would by
-// writing, reopening and signing. Four cases take that path. [WithFullRewrite]
-// is signed on top of the rewrite it asks for. An edit that forces a full
-// rewrite ([Writer.DeletePages], [Writer.InsertPages], [Writer.FlattenForm],
-// [Writer.ClearMetadata], [Writer.Redact]) is signed on top of the rewritten
-// document. A remediation whose repairs need a full rewrite is signed on top
-// of its output, so the signed file validates like the unsigned one. A source
-// litho repaired on reading, its cross-reference table rebuilt or bytes found
-// before its header, is rewritten as an unsigned write with an edit rewrites
-// it: an update appended to the damaged bytes would carry their wrong offsets
-// into the signed file.
+// writing, reopening and signing. Four cases take that path:
+//
+//   - [WithFullRewrite] is signed on top of the rewrite it asks for.
+//   - An edit that forces a full rewrite ([Writer.DeletePages],
+//     [Writer.InsertPages], [Writer.FlattenForm], [Writer.ClearMetadata],
+//     [Writer.Redact]) is signed on top of the rewritten document.
+//   - A remediation whose repairs need a full rewrite is signed on top of its
+//     output, so the signed file validates like the unsigned one.
+//   - A source litho repaired on reading, its cross-reference table rebuilt or
+//     bytes found before its header, is rewritten as an unsigned write with an
+//     edit rewrites it. An update appended to the damaged bytes would carry
+//     their wrong offsets into the signed file.
 //
 // Sign registers the signer rather than queueing a mutation, so it may be
-// called at any point, after a remediation included: it is the one call
+// called at any point, after a remediation included. It is the one call
 // besides [Writer.WriteTo] and [Writer.Close] that a remediated Writer
 // accepts (see [Writer]). [Writer.WriteTo] applies every queued mutation and
 // every repair a remediation kept before computing the digest, and the
-// signature covers the result either way. The signer runs once, in WriteTo:
-// the files a remediation writes to revalidate its output are never signed.
+// signature covers the result either way. The signer runs once, in WriteTo.
+// The files a remediation writes to revalidate its output are never signed.
 //
-// What it is not compatible with is encryption, on the source or on the
-// output, and decryption, which [Writer.WriteTo] rejects with
+// Signing is not compatible with encryption, on the source or on the output,
+// or with decryption. [Writer.WriteTo] rejects them with
 // [ErrSignFullRewriteIncompatible]. The signature of an encrypted document
-// covers its encrypted bytes (ISO 32000-1, 12.8.1), and its signature
-// dictionary's strings are encrypted under the document's key like every
-// other string (ISO 32000-1, 7.6.1), an update litho cannot write. The source
-// decides: a remediation of an encrypted source works on a decrypted copy,
-// and signing is refused after it all the same, since the caller asked to sign
-// the encrypted document, not that copy. So does a [Pipeline] stage after a
-// Split or a Merge of an encrypted document. To sign a decrypted document,
-// write it, reopen the output and sign that.
+// covers its encrypted bytes (ISO 32000-1, 12.8.1). Its signature
+// dictionary's strings are encrypted under the document's key like every other
+// string (ISO 32000-1, 7.6.1), an update litho cannot write.
+//
+// The source decides. A remediation of an encrypted source works on a
+// decrypted copy, and signing is refused after it all the same, since the
+// caller asked to sign the encrypted document, not that copy. So does a
+// [Pipeline] stage after a Split or a Merge of an encrypted document. To sign a
+// decrypted document, write it, reopen the output and sign that.
 //
 // opts set the optional entries of the signature dictionary, the signing time
 // and the field the signature goes in (see [SignOption]). A later call
@@ -2258,44 +2289,52 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 // describes what was fixed and what could not be fixed automatically.
 // Uses incremental update to preserve existing document structure.
 //
-// Its output is never encrypted: every part of ISO 19005 forbids the Encrypt
-// key in the trailer (6.1.3 in each). It returns [ErrPDFAForbidsEncryption]
-// when [Writer.Encrypt] was called before it or [NewWriter] was given
-// [WithEncryption], and [Writer.WriteTo] returns it for WithEncryption.
+// Its output is never encrypted, because every part of ISO 19005 forbids the
+// Encrypt key in the trailer (6.1.3 in each). It returns
+// [ErrPDFAForbidsEncryption] when [Writer.Encrypt] was called before it or
+// [NewWriter] was given [WithEncryption]. [Writer.WriteTo] returns it for
+// WithEncryption.
 //
-// At PDF/A-1a and PDF/A-1b its output carries no cross-reference stream,
-// which ISO 19005-1, 6.1.4 forbids, and so no object stream, which requires
-// one. It returns [ErrPDFA1ForbidsObjectStreams] when [NewWriter] was given
-// [WithObjectStreams] or [WithXRefStream], and [Writer.WriteTo] returns it for
+// At PDF/A-1a and PDF/A-1b its output carries no cross-reference stream, which
+// ISO 19005-1, 6.1.4 forbids, and so no object stream, which requires one. It
+// returns [ErrPDFA1ForbidsObjectStreams] when [NewWriter] was given
+// [WithObjectStreams] or [WithXRefStream]. [Writer.WriteTo] returns it for
 // either. [WithDedup] stays allowed.
 //
 // ISO 19005-1, 6.5.3 and ISO 19005-2 to ISO 19005-4, 6.3.2 require annotation
 // flags that print an annotation and show it on screen. An annotation that
-// shows neither on screen nor in print, one whose Hidden flag is set or whose
-// NoView flag is set with neither Print nor ToggleNoView (ISO 32000-1, Table
-// 165), is removed rather than made visible: its pop-up and its replies go
-// with it, a widget takes its form field when it was the field's only one, and
-// a tagged document loses its structure element. [RemediationReport.Fixed]
-// names each removal. A signed signature field keeps its widget. Every other
-// annotation gets the flags those clauses require, so one that showed only in
-// print now shows on screen too.
+// shows neither on screen nor in print is removed rather than made visible.
+// Such an annotation has its Hidden flag set, or its NoView flag set with
+// neither Print nor ToggleNoView (ISO 32000-1, Table 165). A removal also
+// takes:
+//
+//   - The annotation's pop-up and its replies.
+//   - A widget's form field, when the widget was the field's only one.
+//   - The structure element of a tagged document.
+//
+// [RemediationReport.Fixed] names each removal. A signed signature field keeps
+// its widget. Every other annotation gets the flags those clauses require, so
+// one that showed only in print now shows on screen too.
 //
 // At PDF/A-1a and PDF/A-1b, which forbid transparency (ISO 19005-1, 6.4), it
-// flattens it first, in both modes, as [Writer.FlattenTransparency] does at
-// its default resolution: each page keeps its look, the transparent regions
-// composited into opaque images and the text kept as text. What flattening
-// leaves, annotation appearances, Type 3 glyphs that paint with transparency
-// and a page it refuses, is set opaque, which changes how it draws.
-// [RemediationReport.Fixed] says which. A composite of images and shadings
-// only is encoded as JPEG at quality 90 when that is smaller (see
-// [WithFlattenJPEGQuality]), every other one losslessly. The integrity probe
-// takes text flattening draws invisible, the text a constant alpha of 0 hid,
-// as kept, and counts each composite as the images it replaced. An output it
-// still refuses with its pages flattened is remediated again with every
-// page's transparency set opaque, and [RemediationReport.RolledBack] lists the
-// flattening.
+// flattens transparency first, in both modes, as [Writer.FlattenTransparency]
+// does at its default resolution. Each page keeps its look, the transparent
+// regions composited into opaque images and the text kept as text.
 //
-// It is the last edit on the Writer (see [Writer]): it judges the document the
+// What flattening leaves is set opaque, which changes how it draws. That
+// covers annotation appearances, Type 3 glyphs that paint with transparency
+// and a page it refuses. [RemediationReport.Fixed] says which. A composite of
+// images and shadings only is encoded as JPEG at quality 90 when that is
+// smaller (see [WithFlattenJPEGQuality]). Every other composite is encoded
+// losslessly.
+//
+// The integrity probe takes text flattening draws invisible, the text a
+// constant alpha of 0 hid, as kept, and counts each composite as the images it
+// replaced. An output it still refuses with its pages flattened is remediated
+// again with every page's transparency set opaque.
+// [RemediationReport.RolledBack] lists the flattening.
+//
+// It is the last edit on the Writer (see [Writer]). It judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
 func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
@@ -2417,7 +2456,7 @@ const (
 )
 
 // FacturXConfig describes the inputs to [Writer.RemediateFacturX].
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type FacturXConfig struct {
 	// InvoiceXML is the Cross-Industry Invoice (CII) XML payload that
 	// will be embedded as the Factur-X data file. Required, non-empty.
@@ -3615,71 +3654,76 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 	return copySourceCancellable(ctx, dst, f, stat.Size())
 }
 
-// WriteTo serializes the modified document to dst. By default it
-// emits an incremental update (appending a new xref and trailer to
-// the original bytes). Pass [WithFullRewrite] to force a clean
-// rewrite, or [WithWriteLogger] for structured logs covering every
-// mutation, best-effort fallback, and write-engine decision.
+// WriteTo serializes the modified document to dst. By default it emits an
+// incremental update, appending a new xref and trailer to the original bytes.
+// Pass [WithFullRewrite] to force a clean rewrite, or [WithWriteLogger] for
+// structured logs covering every mutation, best-effort fallback, and
+// write-engine decision.
 //
 // The options given to [NewWriter] apply first, and opts after them, so an
 // option in opts overrides the same setting given to NewWriter. Every refusal
 // below reads the options of both.
 //
-// WriteTo drains the mutation queue into the Writer's copy of the
-// document and leaves the [Reader] the Writer was built on as it was. It
-// is single-use: after it produces output successfully it returns
-// [ErrWriterConsumed] on every subsequent call. To produce another
-// output, create a new Writer, on the same Reader if you like. After
-// [Writer.Close] it returns [ErrWriterClosed].
+// WriteTo drains the mutation queue into the Writer's copy of the document and
+// leaves the [Reader] the Writer was built on as it was. It is single-use:
+// after it produces output successfully it returns [ErrWriterConsumed] on every
+// subsequent call. To produce another output, create a new Writer, on the same
+// Reader if you like. After [Writer.Close] it returns [ErrWriterClosed].
 //
-// After a remediation, WriteTo streams the temp file the remediation wrote
-// and removes it, whether the write succeeds or not. A signature, an
-// encryption, or a write option that shapes the serialization is not in that
-// file: WriteTo then removes it and serializes afresh. The one exception is
-// the output of a remediation that kept a later round, which the Writer
-// serializes from: a failed write keeps it for the retry, and it goes once a
-// write succeeds, or at [Writer.Close].
+// After a remediation, WriteTo streams the temp file the remediation wrote and
+// removes it, whether the write succeeds or not. A signature, an encryption, or
+// a write option that shapes the serialization is not in that file. WriteTo
+// then removes it and serializes afresh.
 //
-// WriteTo writes nothing, and returns the refusal, when a call was refused
-// after a remediation ([ErrEditAfterRemediation]), when [WithEncryption] asks
-// to encrypt the output of a PDF/A remediation ([ErrPDFAForbidsEncryption]),
-// when it asks to encrypt the output of a PDF/UA-1 remediation with
-// permissions that bar extraction for accessibility
-// ([ErrPDFUAForbidsBarringAccessibility]), and when [WithObjectStreams] or
-// [WithXRefStream] asks to write the output of a PDF/A-1 remediation with a
-// cross-reference stream ([ErrPDFA1ForbidsObjectStreams]).
+// The one exception is the output of a remediation that kept a later round,
+// which the Writer serializes from. A failed write keeps it for the retry, and
+// it goes once a write succeeds, or at [Writer.Close].
+//
+// WriteTo writes nothing, and returns the refusal, in these cases:
+//
+//   - A call was refused after a remediation ([ErrEditAfterRemediation]).
+//   - [WithEncryption] asks to encrypt the output of a PDF/A remediation
+//     ([ErrPDFAForbidsEncryption]).
+//   - [WithEncryption] asks to encrypt the output of a PDF/UA-1 remediation
+//     with permissions that bar extraction for accessibility
+//     ([ErrPDFUAForbidsBarringAccessibility]).
+//   - [WithObjectStreams] or [WithXRefStream] asks to write the output of a
+//     PDF/A-1 remediation with a cross-reference stream
+//     ([ErrPDFA1ForbidsObjectStreams]).
 //
 // Signing ([Writer.Sign]) is incompatible with encryption and decryption
-// ([Writer.Encrypt], [Writer.RemoveEncryption], [WithEncryption]); combining
+// ([Writer.Encrypt], [Writer.RemoveEncryption], [WithEncryption]). Combining
 // them returns [ErrSignFullRewriteIncompatible] instead of silently dropping
-// the requested operation. A full rewrite is signed: [WithFullRewrite], an
-// edit or a remediation whose output is one, and a source litho repaired on
+// the requested operation.
+//
+// A full rewrite is signed. That covers [WithFullRewrite], an edit or a
+// remediation whose output is a full rewrite, and a source litho repaired on
 // reading. WriteTo writes that output and signs it in an incremental update on
 // top (see [Writer.Sign]).
 //
-// Signing an encrypted source returns the same error even when the caller
-// asks for nothing else, after a remediation too, although the remediation
-// works on a decrypted copy, and in a [Pipeline] after a Split or a Merge of
-// an encrypted document, which the pipeline reopens in the clear: the
-// signature of an encrypted document belongs in its encrypted bytes, which
-// litho cannot write (see [Writer.Sign]). Encrypted-then-signed output is
+// Signing an encrypted source returns the same error even when the caller asks
+// for nothing else. It does so after a remediation too, although the
+// remediation works on a decrypted copy. It does so in a [Pipeline] after a
+// Split or a Merge of an encrypted document, which the pipeline reopens in the
+// clear. The signature of an encrypted document belongs in its encrypted bytes,
+// which litho cannot write (see [Writer.Sign]). Encrypted-then-signed output is
 // permitted by the specification but not yet implemented.
 //
-// After [Writer.Redact], WriteTo checks the output against every removed
-// string before writing a byte, and returns [ErrRedactionRefused] or
+// After [Writer.Redact], WriteTo checks the output against every removed string
+// before writing a byte. It returns [ErrRedactionRefused] or
 // [ErrRedactionIncomplete] rather than write a file that still holds one.
 //
-// A full rewrite leaves out the signatures of the document it rewrites: each
-// covers bytes the rewrite moves (ISO 32000-1, 12.8.1). The appearance of each
-// signed widget is drawn into its page, and [Writer.DroppedSignatures] names
-// what the output left out. An incremental update keeps every signature.
+// A full rewrite leaves out the signatures of the document it rewrites, because
+// each covers bytes the rewrite moves (ISO 32000-1, 12.8.1). The appearance of
+// each signed widget is drawn into its page, and [Writer.DroppedSignatures]
+// names what the output left out. An incremental update keeps every signature.
 //
 // A full rewrite writes the catalog, every page tree node and every page with
-// the entries ISO 32000-1, 7.7.2 and 7.7.3 require of them, derived from the
-// page tree the Reader reads, where the source lacks one or states a wrong
-// one: a page no node gives a media box is written US Letter, the size readers
-// assume for it. An incremental update writes them into the objects it writes,
-// and leaves the others as the source has them.
+// the entries ISO 32000-1, 7.7.2 and 7.7.3 require of them. It derives them
+// from the page tree the Reader reads, where the source lacks one or states a
+// wrong one. A page no node gives a media box is written US Letter, the size
+// readers assume for it. An incremental update writes them into the objects it
+// writes, and leaves the others as the source has them.
 func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (err error) {
 	defer recoverToError(w.logger(), "Writer.WriteTo", &err)
 	if w.closed {

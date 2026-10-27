@@ -97,24 +97,32 @@ const (
 	RenderCMYK
 )
 
-// WithRenderColorModel selects the colour model of the image returned.
-// Default [RenderRGB].
+// WithRenderColorModel selects the colour model of the image returned. Default
+// [RenderRGB].
 //
-// Under [RenderCMYK] the page is composited for a CMYK device: its
-// transparency blends in the device's CMYK, and the image holds the inks,
-// over paper that takes none. A page group whose /CS names another space
-// blends in the device's CMYK too, a deliberate departure from ISO 32000-1,
-// 11.4.7 and 11.3.4, which blend it in that space: a CMYK device composites
-// in its process space, the difference shows only under blend modes other
-// than Normal, and blending in the group's space first would convert every
-// colour through sRGB once more on the way to the device. DeviceCMYK colours reach the
-// device unchanged, DeviceGray as black ink alone, and a Separation or
-// DeviceN colour whose alternate is DeviceCMYK as its tint transform's
-// output: a device colour space addresses the output device directly
-// (8.6.4.1, 10.3). Every other colour, those of images and shadings
-// included, converts through its sRGB into the device's profile, relative
-// colorimetric, so a CMYK image of an ICCBased space is held to the sRGB
-// gamut on the way. The background converts the same way, white to no ink.
+// Under [RenderCMYK] the page is composited for a CMYK device. Its transparency
+// blends in the device's CMYK, and the image holds the inks, over paper that
+// takes none.
+//
+// A page group whose /CS names another space blends in the device's CMYK too.
+// This is a deliberate departure from ISO 32000-1, 11.4.7 and 11.3.4, which
+// blend it in that space. A CMYK device composites in its process space, and
+// the difference shows only under blend modes other than Normal. Blending in
+// the group's space first would convert every colour through sRGB once more on
+// the way to the device.
+//
+// Colours reach the device as follows:
+//
+//   - DeviceCMYK colours reach the device unchanged.
+//   - DeviceGray colours become black ink alone.
+//   - A Separation or DeviceN colour whose alternate is DeviceCMYK becomes its
+//     tint transform's output. A device colour space addresses the output
+//     device directly (8.6.4.1, 10.3).
+//   - Every other colour, those of images and shadings included, converts
+//     through its sRGB into the device's profile, relative colorimetric. A CMYK
+//     image of an ICCBased space is held to the sRGB gamut on the way.
+//   - The background converts the same way, white to no ink.
+//
 // Any other value makes [Reader.RenderPage] fail with
 // [ErrInvalidRenderOptions].
 func WithRenderColorModel(m RenderColorModel) RenderOption {
@@ -229,20 +237,26 @@ func WithRenderBackground(c color.Color) RenderOption {
 }
 
 // WithOverprintSimulation draws the page as a device that prints CMYK
-// separations prints it, as an overprint preview shows it (ISO 32000-1,
-// 8.6.7): the page composites in DeviceCMYK, read through the document's
-// output intent or the default CMYK profile, and a painting under overprint
-// leaves the process inks it does not paint as they were. A DeviceCMYK colour
-// under overprint mode 1 leaves those its zero components name, and a
-// Separation or DeviceN colour of process colorants those it does not name.
-// The first four spot colorants a page paints under overprint get
-// separations of their own: a colour naming one leaves the inks it does not
-// name under overprint, and each separation prints through its alternate
-// space once the page is drawn. A fifth spot colorant, and a spot colour
-// inside a transparency group, paints through its alternate space and
-// knocks out what lies under it. Without it, the default, every painting knocks out what lies under it, as
-// viewers draw a page on screen and as poppler's pdftoppm draws it without
-// -overprint.
+// separations prints it, as an overprint preview shows it (ISO 32000-1, 8.6.7).
+//
+// The page composites in DeviceCMYK, read through the document's output intent
+// or the default CMYK profile. A painting under overprint leaves the process
+// inks it does not paint as they were:
+//
+//   - A DeviceCMYK colour under overprint mode 1 leaves the inks its zero
+//     components name.
+//   - A Separation or DeviceN colour of process colorants leaves the inks it
+//     does not name.
+//
+// The first four spot colorants a page paints under overprint get separations
+// of their own. A colour naming one leaves the inks it does not name under
+// overprint, and each separation prints through its alternate space once the
+// page is drawn. A fifth spot colorant, and a spot colour inside a transparency
+// group, paints through its alternate space and knocks out what lies under it.
+//
+// Without this option, the default, every painting knocks out what lies under
+// it. Viewers draw a page this way on screen, and so does poppler's pdftoppm
+// without -overprint.
 func WithOverprintSimulation() RenderOption {
 	return func(o *renderOpts) {
 		o.overprint = true
@@ -250,20 +264,26 @@ func WithOverprintSimulation() RenderOption {
 }
 
 // WithRenderRedactionReading draws the colours as the pixel check of
-// [Writer.Redact] reads a blanked image, not as a viewer shows them: every
-// painting under the identity transfer function (ISO 32000-1, 10.5), every
-// colour under the /Default black point compensation whatever a graphics
-// state's /UseBlackPtComp asks (ISO 32000-2, Table 57), and an image with no
-// /Intent of its own under relative colorimetric, the graphics state's
-// initial intent (ISO 32000-1, 8.6.5.8), whatever the ri operator set.
+// [Writer.Redact] reads a blanked image, not as a viewer shows them.
+//
+// The reading differs from a viewer's in three ways:
+//
+//   - Every painting is under the identity transfer function (ISO 32000-1,
+//     10.5).
+//   - Every colour is under the /Default black point compensation, whatever a
+//     graphics state's /UseBlackPtComp asks (ISO 32000-2, Table 57).
+//   - An image with no /Intent of its own is under relative colorimetric, the
+//     graphics state's initial intent (ISO 32000-1, 8.6.5.8), whatever the ri
+//     operator set.
 //
 // Redaction blanks an image's covered samples to the darkest colour of its
 // colour space. A transfer function maps that colour to any other, white
-// included; an uncompensated profile whose black is lighter than sRGB's, or an
-// ri operator selecting a table that lifts the black (an output profile's
-// perceptual A2B0 may read full black ink at L* 50), draws it as a grey. Under
+// included. An uncompensated profile whose black is lighter than sRGB's draws
+// it as a grey. So does an ri operator selecting a table that lifts the black
+// (an output profile's perceptual A2B0 may read full black ink at L* 50). Under
 // this reading the blank of an image with no /Intent draws black or near it,
 // and every lighter sample stays lighter.
+//
 // A caller that checks a redaction's pixels itself, under
 // [WithoutRedactionPixelCheck], draws the page's images with it over black to
 // tell a blanked sample from a kept one, as the check does.
@@ -273,63 +293,82 @@ func WithRenderRedactionReading() RenderOption {
 	}
 }
 
-// RenderPage draws the given 1-based page and returns it as an *image.NRGBA,
-// or an *image.CMYK under [WithRenderColorModel] ([RenderCMYK]), whose (0, 0)
-// is the top-left corner of the page's crop box, or of the boundary
-// [WithRenderBox] selects, as displayed: its /Rotate and /UserUnit applied,
-// each side rounded up to whole pixels.
+// RenderPage draws the given 1-based page and returns it as an *image.NRGBA, or
+// an *image.CMYK under [WithRenderColorModel] ([RenderCMYK]).
 //
-// The renderer is litho's own. It draws paths, strokes, clipping, images and
-// inline images with their masks, shadings, shading and tiling patterns, form
-// XObjects, text in every rendering mode, Type 3 fonts included, and the
-// appearance streams of the page's annotations ([WithRenderTarget] selects
-// which), in colours converted to sRGB as litho decodes images: every colour
-// space of ISO 32000-1, 8.6, the default colour spaces of the resources and
-// the output intents of the page and the document honoured, uncalibrated
-// DeviceCMYK through [WithDefaultCMYKProfile] or litho's built-in printer
-// profile. It draws transparency: constant alpha, the sixteen blend modes
-// (ColorDodge and ColorBurn by the edition of ISO 32000 the document's
-// version names), soft masks, isolated and knockout transparency groups and
-// text knockout, blending in the grey or CMYK space a transparency group's
-// /CS names where its content paints with transparency, and in sRGB
-// otherwise, or in the device's CMYK under [RenderCMYK]. It draws without
-// overprinting unless [WithOverprintSimulation] asks for it. An annotation
-// with no appearance stream
-// draws as ISO 32000-1 defines it from its dictionary for the Square,
-// Circle, Line, Polygon, PolyLine, Ink, text markup and Link types, as
-// litho's own drawing of the predefined icon its /Name names for the Text
-// type (12.5.6.4, Table 172, an icon each viewer draws its own way, 24 units
-// square from the upper-left corner of /Rect, upright), and not at all for
-// the other icon and text types (FreeText, Stamp and the like); nothing is
-// written into the document. Content a document's default
-// optional content configuration hides is not drawn, nor are the kinds of
-// content [WithRenderContent] leaves out.
+// The image's (0, 0) is the top-left corner of the page's crop box, or of the
+// boundary [WithRenderBox] selects, as displayed: its /Rotate and /UserUnit
+// applied, each side rounded up to whole pixels. The renderer is litho's own.
 //
-// Glyphs are drawn from the programs the document embeds. litho bundles no
-// font program, so a font the document does not embed draws its glyphs as
-// hollow boxes as wide as the widths it declares, unless
-// [WithRenderFontProvider], [WithRenderFontFiles] or [WithRenderSystemFonts]
-// supplies a program for it.
+// # Supported
 //
-// It returns [ErrInvalidPageNumber] for a page outside the document,
-// [ErrInvalidRenderOptions] for a bad resolution, target, content, box,
-// colour model or CMYK profile, and
-// [ErrRenderTooLarge] when the page passes [Limits.MaxRenderPixels]. An image,
-// shading, pattern or form the file damages is left out of the page, as a
-// viewer leaves it out, and logged at Debug; so is an image whose mask
-// cannot be read, rather than painted showing what the mask hides. A mask
-// past [Limits.MaxImagePixels] is read at the resolution the page draws it
-// at. A soft mask of the graphics state whose group would pass
-// [Limits.MaxRenderPixels] is drawn at a coarser resolution, and hides what
-// it masks when even that does not fit; a transparency group past it paints
-// its content through the group's alpha and soft mask, without the group.
+// RenderPage draws:
 //
-// RenderPage is safe for concurrent use with every other read of the
-// [Reader], RenderPage included: each call draws into its own raster and
-// reads the document through its caches, which serialise themselves.
+//   - Paths, strokes, clipping, images and inline images with their masks,
+//     shadings, shading and tiling patterns, and form XObjects.
+//   - Text in every rendering mode, Type 3 fonts included.
+//   - The appearance streams of the page's annotations ([WithRenderTarget]
+//     selects which).
+//   - Colours converted to sRGB as litho decodes images. Every colour space of
+//     ISO 32000-1, 8.6 is honoured, as are the default colour spaces of the
+//     resources and the output intents of the page and the document.
+//     Uncalibrated DeviceCMYK goes through [WithDefaultCMYKProfile] or litho's
+//     built-in printer profile.
+//   - Transparency: constant alpha, the sixteen blend modes (ColorDodge and
+//     ColorBurn by the edition of ISO 32000 the document's version names), soft
+//     masks, isolated and knockout transparency groups and text knockout.
+//   - Blending in the grey or CMYK space a transparency group's /CS names where
+//     its content paints with transparency, and in sRGB otherwise, or in the
+//     device's CMYK under [RenderCMYK].
+//   - An annotation with no appearance stream, as ISO 32000-1 defines it from
+//     its dictionary, for the Square, Circle, Line, Polygon, PolyLine, Ink,
+//     text markup and Link types. A Text annotation draws as litho's own
+//     drawing of the predefined icon its /Name names (12.5.6.4, Table 172, an
+//     icon each viewer draws its own way, 24 units square from the upper-left
+//     corner of /Rect, upright). Nothing is written into the document.
+//   - Glyphs from the programs the document embeds.
 //
-// [Reader.RenderPageReport] draws the same page and also says what the
-// drawing approximated.
+// # Unsupported
+//
+// RenderPage does not draw:
+//
+//   - Overprinting, unless [WithOverprintSimulation] asks for it.
+//   - An annotation with no appearance stream of the other icon and text types
+//     (FreeText, Stamp and the like).
+//   - Content a document's default optional content configuration hides, nor
+//     the kinds of content [WithRenderContent] leaves out.
+//   - The glyphs of a font the document does not embed. litho bundles no font
+//     program, so such a font draws its glyphs as hollow boxes as wide as the
+//     widths it declares, unless [WithRenderFontProvider],
+//     [WithRenderFontFiles] or [WithRenderSystemFonts] supplies a program for
+//     it.
+//
+// An image, shading, pattern or form the file damages is left out of the page,
+// as a viewer leaves it out, and logged at Debug. So is an image whose mask
+// cannot be read, rather than painted showing what the mask hides. A mask past
+// [Limits.MaxImagePixels] is read at the resolution the page draws it at. A
+// soft mask of the graphics state whose group would pass
+// [Limits.MaxRenderPixels] is drawn at a coarser resolution, and hides what it
+// masks when even that does not fit. A transparency group past it paints its
+// content through the group's alpha and soft mask, without the group.
+//
+// # Errors
+//
+// RenderPage returns:
+//
+//   - [ErrInvalidPageNumber] for a page outside the document.
+//   - [ErrInvalidRenderOptions] for a bad resolution, target, content, box,
+//     colour model or CMYK profile.
+//   - [ErrRenderTooLarge] when the page passes [Limits.MaxRenderPixels].
+//
+// # Concurrency
+//
+// RenderPage is safe for concurrent use with every other read of the [Reader],
+// RenderPage included: each call draws into its own raster and reads the
+// document through its caches, which serialise themselves.
+//
+// [Reader.RenderPageReport] draws the same page and also says what the drawing
+// approximated.
 func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOption) (_ image.Image, err error) {
 	defer recoverToError(r.logger(), "Reader.RenderPage", &err)
 	img, _, err := r.renderPage(ctx, pageNum, opts)
@@ -340,7 +379,7 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 // asks, or did not draw: the parts of the image a caller should not take for
 // the page's exact look. Every count is zero for a page drawn as the file
 // describes it.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type RenderReport struct {
 	// PlaceholderGlyphs counts the glyphs drawn as hollow boxes, their font
 	// neither embedded nor supplied by [WithRenderFontProvider],

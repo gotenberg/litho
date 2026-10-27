@@ -23,7 +23,7 @@ const (
 )
 
 // UnseenText is a run of text a page draws that shows nowhere on it.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type UnseenText struct {
 	// Text is the run's text as text extraction reads it.
 	Text string `json:"text"`
@@ -39,7 +39,7 @@ type UnseenText struct {
 // TextContrast is a run of text whose contrast against what the page shows
 // under it falls short of the ratio WCAG 2.x requires of it, as
 // pdf.Reader.CheckTextContrast measures it.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type TextContrast struct {
 	// Text is the run's text as text extraction reads it.
 	Text string `json:"text"`
@@ -70,7 +70,7 @@ type TextContrast struct {
 }
 
 // ContrastReport is what pdf.Reader.CheckTextContrast found on a page.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type ContrastReport struct {
 	// Failures are the runs short of their required ratio, in content
 	// order.

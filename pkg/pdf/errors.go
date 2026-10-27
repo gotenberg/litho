@@ -72,11 +72,14 @@ var (
 	ErrImageNotDecodable = errors.New("image cannot be decoded")
 
 	// ErrRenderTooLarge is returned, wrapped, by [Reader.RenderPage] when the
-	// page at the requested resolution holds more than
-	// [Limits.MaxRenderPixels] pixels, when the clips it keeps at once hold
-	// more than eight times that, or when its content runs more operators
-	// than one render allows. Raising MaxRenderPixels or lowering the
-	// resolution reads the first two.
+	// render exceeds its budget. It does so in three cases:
+	//
+	//   - the page at the requested resolution holds more than
+	//     [Limits.MaxRenderPixels] pixels;
+	//   - the clips it keeps at once hold more than eight times that;
+	//   - its content runs more operators than one render allows.
+	//
+	// Raising MaxRenderPixels or lowering the resolution reads the first two.
 	ErrRenderTooLarge = errors.New("page render exceeds its budget")
 
 	// ErrInvalidRenderOptions is returned, wrapped, by [Reader.RenderPage]
@@ -155,31 +158,40 @@ var (
 	ErrWriterClosed = errors.New("writer closed; create a new Writer")
 
 	// ErrSignFullRewriteIncompatible is returned by [Writer.WriteTo] when
-	// [Writer.Sign] is combined with [Writer.Encrypt],
-	// [Writer.RemoveEncryption] or [WithEncryption], or with an encrypted
-	// source, a remediated one included, or one a [Pipeline] split or merged
-	// and reopened in the clear. Signing covers a ByteRange of the
-	// existing bytes via an incremental update, and the incremental update of
-	// an encrypted file would append the signature dictionary's strings in
-	// plaintext where its security handler requires ciphertext (ISO 32000-1,
-	// 7.6.1). Encrypted-then-signed output is permitted by the spec but not yet
-	// implemented.
+	// [Writer.Sign] is combined with encryption or decryption of the output.
 	//
-	// A full rewrite does not return it, despite the name: [WithFullRewrite],
-	// an edit that forces one ([Writer.DeletePages], [Writer.InsertPages],
-	// [Writer.FlattenForm], [Writer.ClearMetadata], [Writer.Redact]) and a
-	// remediation whose repairs need one, such as the formatting a PDF/A
-	// profile requires of the header and of every object. WriteTo writes the
-	// rewrite and signs it in an incremental update on top.
+	// It applies when Sign is combined with [Writer.Encrypt],
+	// [Writer.RemoveEncryption] or [WithEncryption]. It also applies with an
+	// encrypted source, a remediated one included, or one a [Pipeline] split or
+	// merged and reopened in the clear.
+	//
+	// Signing covers a ByteRange of the existing bytes via an incremental
+	// update. The incremental update of an encrypted file would append the
+	// signature dictionary's strings in plaintext where its security handler
+	// requires ciphertext (ISO 32000-1, 7.6.1). Encrypted-then-signed output is
+	// permitted by the spec but not yet implemented.
+	//
+	// A full rewrite does not return it, despite the name. Full rewrites are
+	// [WithFullRewrite], an edit that forces one ([Writer.DeletePages],
+	// [Writer.InsertPages], [Writer.FlattenForm], [Writer.ClearMetadata],
+	// [Writer.Redact]), and a remediation whose repairs need one, such as the
+	// formatting a PDF/A profile requires of the header and of every object.
+	// WriteTo writes the rewrite and signs it in an incremental update on top.
 	ErrSignFullRewriteIncompatible = errors.New("sign is incompatible with encryption and decryption")
 
 	// ErrSignatureFieldUnavailable is returned by [Writer.WriteTo] when the
-	// field [WithSignatureField] names cannot take the signature: a field of
-	// that name exists and is not a signature field, is signed already, or
-	// carries a /Lock of an action ISO 32000-1, Table 233 does not define or
-	// one a document timestamp is asked to honour, or no field has the name
-	// and it holds a period, which a new root field's name cannot (ISO
-	// 32000-1, 12.7.3.2). Nothing is written.
+	// field [WithSignatureField] names cannot take the signature. Nothing is
+	// written.
+	//
+	// The field cannot take the signature in these cases:
+	//
+	//   - a field of that name exists and is not a signature field;
+	//   - a field of that name exists and is signed already;
+	//   - a field of that name exists and carries a /Lock of an action ISO
+	//     32000-1, Table 233 does not define, or one a document timestamp is
+	//     asked to honour;
+	//   - no field has the name and it holds a period, which a new root
+	//     field's name cannot (ISO 32000-1, 12.7.3.2).
 	ErrSignatureFieldUnavailable = mutations.ErrSignatureFieldUnavailable
 
 	// ErrSignatureFieldLocked is returned by [Writer.WriteTo], with
@@ -285,21 +297,34 @@ var (
 	// so a reader that does could never open the output. Nothing is written.
 	ErrPasswordRejected = crypto.ErrPasswordRejected
 
-	// ErrRedactionRefused is returned by [Writer.Redact] when a region
-	// selects content that cannot be removed exactly: a text run the region
-	// covers only partly that cannot be split at its glyphs, a painted path
-	// that straddles the region and cannot be cut and clipped at it, a stroke
-	// whose width cannot be read, a path that took part in a clip, a shading
-	// paint (sh) the region may reach, content drawn by a form XObject, an
-	// image whose samples cannot be rewritten, an image also painted where
-	// the regions do not cover the same samples (blanking rewrites the image,
-	// so that other place would lose them too), or a removed run whose advance
-	// later text depends on and cannot be kept. Removing more than was asked
-	// changes the page outside the region, and reporting success over content
-	// still in the file is worse than refusing, so litho refuses and names the
-	// construct. The [Writer] is left exactly as it was. [Writer.WriteTo]
-	// returns it too when a region it re-applies at write time, over a page a
-	// later stage rebuilt, can no longer be removed exactly.
+	// ErrRedactionRefused is returned by [Writer.Redact] when a region selects
+	// content that cannot be removed exactly.
+	//
+	// The causes are:
+	//
+	//   - a text run the region covers only partly that cannot be split at its
+	//     glyphs;
+	//   - a painted path that straddles the region and cannot be cut and
+	//     clipped at it;
+	//   - a stroke whose width cannot be read;
+	//   - a path that took part in a clip;
+	//   - a shading paint (sh) the region may reach;
+	//   - content drawn by a form XObject;
+	//   - an image whose samples cannot be rewritten;
+	//   - an image also painted where the regions do not cover the same
+	//     samples (blanking rewrites the image, so that other place would lose
+	//     them too);
+	//   - a removed run whose advance later text depends on and cannot be
+	//     kept.
+	//
+	// Removing more than was asked changes the page outside the region.
+	// Reporting success over content still in the file is worse than refusing.
+	// litho therefore refuses and names the construct. The [Writer] is left
+	// exactly as it was.
+	//
+	// [Writer.WriteTo] returns it too when a region it re-applies at write
+	// time, over a page a later stage rebuilt, can no longer be removed
+	// exactly.
 	ErrRedactionRefused = errors.New("redaction refused: the region covers content that cannot be removed exactly")
 
 	// ErrRedactionIncomplete is returned by [Writer.Redact] when the
@@ -334,15 +359,21 @@ var (
 	// structures to the bottom, because it nests deeper than that prune's depth
 	// bound.
 	//
-	// Deleting a page means unhooking every reference that reaches it: the
-	// structure tree through /Pg, the outline through /Dest and /A, the named
-	// destination trees, and a field's /Kids through its widgets' /P. The
-	// rewrite copies whatever the catalog still reaches, so a reference left
-	// behind keeps the deleted page and its content stream alive. Writing that
-	// file would report one fewer page while still carrying the page's bytes,
-	// which is worse than refusing for a caller deleting a page to remove what
-	// is on it. Nothing is written. Real documents nest a few dozen levels in
-	// any of these structures, so none of them reaches this.
+	// Deleting a page means unhooking every reference that reaches it:
+	//
+	//   - the structure tree through /Pg;
+	//   - the outline through /Dest and /A;
+	//   - the named destination trees;
+	//   - a field's /Kids through its widgets' /P.
+	//
+	// The rewrite copies whatever the catalog still reaches, so a reference
+	// left behind keeps the deleted page and its content stream alive. Writing
+	// that file would report one fewer page while still carrying the page's
+	// bytes. That is worse than refusing for a caller deleting a page to remove
+	// what is on it. Nothing is written.
+	//
+	// Real documents nest a few dozen levels in any of these structures, so
+	// none of them reaches this.
 	ErrPageDeletionIncomplete = errors.New("page deletion incomplete: a prune stopped at its depth bound, so the deleted page would survive in the output")
 
 	// ErrAutoTagAlreadyTagged is what [AutoTagReport.Skipped] wraps when
@@ -399,12 +430,12 @@ var (
 	ErrNameHoldsNull = writer.ErrNameHoldsNull
 
 	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
-	// [Writer.RemediatePDFUA] when applied fixes cause the output to
-	// regress beyond the configured [RegressionTolerance] and rolling back
-	// content-modifying fixers did not recover the document. The source
-	// [Reader] is left untouched; the caller can retry with a looser
-	// tolerance, disable aggressive fixes, or report the document as
-	// unfixable.
+	// [Writer.RemediatePDFUA] when applied fixes make the output regress beyond
+	// the configured [RegressionTolerance]. It applies when rolling back
+	// content-modifying fixers did not recover the document.
+	//
+	// The source [Reader] is left untouched. The caller can retry with a looser
+	// tolerance, disable aggressive fixes, or report the document as unfixable.
 	ErrRemediationBrokePDF = errors.New("remediation broke the PDF beyond the configured regression tolerance")
 
 	// ErrRemediationUnverified is returned, wrapping the file-system error,
@@ -471,19 +502,22 @@ var (
 
 	// ErrEditAfterRemediation is returned, wrapped with the names of the
 	// refused call and of the remediation, when a [Writer] is asked for an edit
-	// after a remediation ([Writer.RemediatePDFA], [Writer.RemediatePDFUA],
-	// [Writer.RemediateWTPDF], [Writer.RemediateFacturX] or
-	// [Writer.RepairFacturX]), a second remediation included.
+	// after a remediation. The remediations are [Writer.RemediatePDFA],
+	// [Writer.RemediatePDFUA], [Writer.RemediateWTPDF],
+	// [Writer.RemediateFacturX] and [Writer.RepairFacturX]. A second
+	// remediation counts as an edit.
 	//
-	// A remediation validates and repairs the document as edited when it runs,
-	// and its [RemediationReport] describes the output only if nothing edits
-	// that document afterwards. After one, a Writer accepts [Writer.Sign],
-	// [Writer.WriteTo] and [Writer.Close], and refuses everything else: queue
-	// the edit before the remediation. A refused call queues nothing. A
-	// method that has an error return hands the refusal back at once, and
-	// every refusal, whatever the method, is also recorded: [Writer.WriteTo]
-	// returns the first one and writes nothing. [Pipeline.WriteTo] returns it too for a
-	// [Pipeline.Split] or [Pipeline.Merge] stage that follows a remediation.
+	// A remediation validates and repairs the document as edited when it runs.
+	// Its [RemediationReport] describes the output only if nothing edits that
+	// document afterwards. After one, a Writer accepts [Writer.Sign],
+	// [Writer.WriteTo] and [Writer.Close], and refuses everything else. Queue
+	// the edit before the remediation.
+	//
+	// A refused call queues nothing. A method that has an error return hands
+	// the refusal back at once. Every refusal, whatever the method, is also
+	// recorded. [Writer.WriteTo] returns the first one and writes nothing.
+	// [Pipeline.WriteTo] returns it too for a [Pipeline.Split] or
+	// [Pipeline.Merge] stage that follows a remediation.
 	ErrEditAfterRemediation = errors.New("edit after a remediation; queue it before the remediation")
 
 	// ErrPDFAForbidsEncryption is returned, naming the clause, when the output
@@ -695,7 +729,7 @@ var (
 // pipeline stage. Use [errors.As] to extract it; the wrapped Err matches one
 // of the pipeline sentinel errors for structural problems, or an execution
 // error for runtime failures.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type PipelineStageError struct {
 	// Index is the 0-based position of the stage in declaration order.
 	Index int

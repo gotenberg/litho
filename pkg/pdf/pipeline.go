@@ -63,7 +63,7 @@ type Pipeline struct {
 
 // PipelineResult holds per-stage execution info returned from
 // [Pipeline.WriteTo].
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type PipelineResult struct {
 	// Stages reports one entry per executed stage in declaration order.
 	Stages []StageReport
@@ -76,7 +76,7 @@ type PipelineResult struct {
 }
 
 // StageReport summarizes a single pipeline stage.
-// Values must not be shared across goroutines without synchronization.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type StageReport struct {
 	// Index is the 0-based position of the stage in declaration order.
 	Index int
