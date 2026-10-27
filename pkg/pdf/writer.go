@@ -1579,13 +1579,18 @@ const (
 // pages the Writer holds when GenerateBookmarks is queued: a page inserted
 // before it is read, and a page deleted before it yields no bookmark. A page of
 // the Reader is read as [Reader.GenerateBookmarks] reads it, so content
-// stamped or redacted on it on the same Writer is not read.
+// stamped or redacted on it on the same Writer is not read. [Writer.WriteTo]
+// returns [ErrInvalidBookmarkOptions] and writes nothing when a field of opts
+// is out of range.
 func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode BookmarkMergeMode) {
 	if w.refuseAfterRemediation("GenerateBookmarks") != nil {
 		return
 	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			if err := opts.validate(); err != nil {
+				return err
+			}
 			readerPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
 				return fmt.Errorf("resolving pages for bookmarks: %w", err)
@@ -4464,6 +4469,11 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 	if cfg.pageSizeErr != nil {
 		return cfg.pageSizeErr
 	}
+	if cfg.bookmarks != nil {
+		if err := cfg.bookmarks.Generation.validate(); err != nil {
+			return err
+		}
+	}
 
 	// The split reads a copy of src's document, so the logger it swaps in, and
 	// whatever the copy caches, stays out of src, which other goroutines may be
@@ -4554,6 +4564,11 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 	}
 	if cfg.pageSizeErr != nil {
 		return cfg.pageSizeErr
+	}
+	if cfg.bookmarks != nil {
+		if err := cfg.bookmarks.Generation.validate(); err != nil {
+			return err
+		}
 	}
 
 	// The merge reads a copy of each source's document, for the reason Split

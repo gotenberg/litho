@@ -623,6 +623,15 @@ var (
 	// disagrees. The [Writer] is left as it was.
 	ErrOutputIntentConflict = errors.New("an output intent the conversion keeps names another CMYK profile than the target's")
 
+	// ErrInvalidBookmarkOptions is returned, wrapped, when a
+	// [BookmarkGenerationOptions] field is out of range: a negative MaxDepth
+	// or MaxTitleLength, a MinFontSizeRatio that is negative or not finite,
+	// or a HeadingScoreThreshold outside 0 to 1. [Reader.GenerateBookmarks]
+	// returns it at once. [Writer.WriteTo] returns it for
+	// [Writer.GenerateBookmarks] and writes nothing, and [Split] and [Merge]
+	// return it for the Generation of [WithBookmarks] before reading a page.
+	ErrInvalidBookmarkOptions = errors.New("invalid bookmark generation options")
+
 	// ErrInvalidFlattenOptions is returned by [Writer.FlattenTransparency]
 	// when a [FlattenOption] is out of range: a [WithFlattenDPI] that is not
 	// a positive finite number. The [Writer] is left as it was.

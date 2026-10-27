@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1138,16 +1139,18 @@ func (r *Reader) Bookmarks(ctx context.Context) (_ []models.Bookmark, err error)
 // Values must not be shared across goroutines without synchronization.
 type BookmarkGenerationOptions struct {
 	// MaxDepth limits how many heading levels are included. Zero selects the
-	// default 3.
+	// default 3, and a negative value is refused.
 	MaxDepth int
 	// MinFontSizeRatio sets the minimum font size (relative to body text)
 	// for an element to be considered a heading. Zero selects the default 1.15
-	// (15% larger).
+	// (15% larger), and a negative or non-finite value is refused.
 	MinFontSizeRatio float64
 	// SkipHeaderFooter filters out text that appears as a running header or
 	// footer on many pages. Default true.
 	SkipHeaderFooter bool
-	// MaxTitleLength truncates long headings. Default 200.
+	// MaxTitleLength truncates a heading longer than this many characters and
+	// appends an ellipsis. Zero selects the default 200, and a negative value
+	// is refused.
 	MaxTitleLength int
 	// PreferStructureTree uses the PDF's structure tree (tagged PDFs) when
 	// available, falling back to font heuristics otherwise. Default true.
@@ -1164,7 +1167,7 @@ type BookmarkGenerationOptions struct {
 	// heading detection.
 	HeadingScorer HeadingScorer
 	// HeadingScoreThreshold is the minimum score for a candidate to be
-	// included as a heading. Zero selects the default 0.5.
+	// included as a heading, from 0 to 1. Zero selects the default 0.5.
 	HeadingScoreThreshold float64
 }
 
@@ -1263,23 +1266,36 @@ func adaptHeadingScorer(s HeadingScorer) bookmarks.HeadingScorer {
 // When the document has a structure tree and PreferStructureTree is true
 // (default), bookmarks are extracted from tagged H1-H6 elements. Otherwise,
 // bookmarks are inferred from font size relative to body text.
+//
+// It returns [ErrInvalidBookmarkOptions] when a field of opts is out of range.
 func (r *Reader) GenerateBookmarks(ctx context.Context, opts BookmarkGenerationOptions) (_ []models.Bookmark, err error) {
 	defer recoverToError(r.logger(), "Reader.GenerateBookmarks", &err)
+	if err := opts.validate(); err != nil {
+		return nil, err
+	}
 	input, err := r.buildBookmarkInput(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return bookmarks.Generate(ctx, input, bookmarks.Options{
-		MaxDepth:                opts.MaxDepth,
-		MinFontSizeRatio:        opts.MinFontSizeRatio,
-		SkipHeaderFooter:        opts.SkipHeaderFooter,
-		MaxTitleLength:          opts.MaxTitleLength,
-		PreferStructureTree:     opts.PreferStructureTree,
-		DetectNumbering:         opts.DetectNumbering,
-		StripNumberingFromTitle: opts.StripNumberingFromTitle,
-		Scorer:                  adaptHeadingScorer(opts.HeadingScorer),
-		ScoreThreshold:          opts.HeadingScoreThreshold,
-	})
+	return bookmarks.Generate(ctx, input, generationToInternal(opts))
+}
+
+// validate refuses a field out of range with [ErrInvalidBookmarkOptions].
+// Zero selects the default of every numeric field, so only a negative or
+// non-finite value is refused, and a HeadingScoreThreshold above 1, since a
+// [HeadingScorer] scores in [0, 1] and no candidate could reach it.
+func (o BookmarkGenerationOptions) validate() error {
+	switch {
+	case o.MaxDepth < 0:
+		return fmt.Errorf("%w: MaxDepth %d is negative", ErrInvalidBookmarkOptions, o.MaxDepth)
+	case o.MaxTitleLength < 0:
+		return fmt.Errorf("%w: MaxTitleLength %d is negative", ErrInvalidBookmarkOptions, o.MaxTitleLength)
+	case math.IsNaN(o.MinFontSizeRatio) || math.IsInf(o.MinFontSizeRatio, 0) || o.MinFontSizeRatio < 0:
+		return fmt.Errorf("%w: MinFontSizeRatio %v is not a non-negative finite number", ErrInvalidBookmarkOptions, o.MinFontSizeRatio)
+	case math.IsNaN(o.HeadingScoreThreshold) || o.HeadingScoreThreshold < 0 || o.HeadingScoreThreshold > 1:
+		return fmt.Errorf("%w: HeadingScoreThreshold %v is outside 0 to 1", ErrInvalidBookmarkOptions, o.HeadingScoreThreshold)
+	}
+	return nil
 }
 
 // buildBookmarkInput prepares the data needed by the bookmarks package:
