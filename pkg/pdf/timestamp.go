@@ -26,7 +26,10 @@ type timestampOpts struct {
 // WithTimestampField names the document timestamp's signature field, as
 // [WithSignatureField] names a signature's: an unsigned signature field of
 // that name takes it, and a new root field otherwise. Without it the field
-// is named Signature1, Signature2 or the first such name no field holds.
+// is named Signature1, Signature2 or the first such name no field holds, and
+// an empty name means the same. A field of that name that is not a signature
+// field, or is signed already, fails the write with
+// [ErrSignatureFieldUnavailable].
 func WithTimestampField(name string) TimestampOption {
 	return func(o *timestampOpts) { o.field = name }
 }
@@ -47,7 +50,8 @@ func WithTimestampField(name string) TimestampOption {
 // [WithLTV] adds, then the document timestamp. The authority is reached as
 // [WithTimestampAuthority] describes, and one that gives no usable token
 // fails the write with [ErrTimestampAuthority]. A later call replaces an
-// earlier one.
+// earlier one. An empty tsaURL, or one that is not http or https, fails the
+// write with the same error.
 //
 // A signature whose field carried a /Lock does not stop the timestamp: in a
 // new field it changes no field the signature's FieldMDP transform locked

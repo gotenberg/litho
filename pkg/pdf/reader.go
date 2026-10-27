@@ -1132,10 +1132,12 @@ func (r *Reader) Bookmarks(ctx context.Context) (_ []models.Bookmark, err error)
 // See [Reader.GenerateBookmarks] and [Writer.GenerateBookmarks].
 // Values must not be shared across goroutines without synchronization.
 type BookmarkGenerationOptions struct {
-	// MaxDepth limits how many heading levels are included. Default 3.
+	// MaxDepth limits how many heading levels are included. Zero selects the
+	// default 3.
 	MaxDepth int
 	// MinFontSizeRatio sets the minimum font size (relative to body text)
-	// for an element to be considered a heading. Default 1.15 (15% larger).
+	// for an element to be considered a heading. Zero selects the default 1.15
+	// (15% larger).
 	MinFontSizeRatio float64
 	// SkipHeaderFooter filters out text that appears as a running header or
 	// footer on many pages. Default true.
@@ -1157,7 +1159,7 @@ type BookmarkGenerationOptions struct {
 	// heading detection.
 	HeadingScorer HeadingScorer
 	// HeadingScoreThreshold is the minimum score for a candidate to be
-	// included as a heading. Default 0.5.
+	// included as a heading. Zero selects the default 0.5.
 	HeadingScoreThreshold float64
 }
 

@@ -374,7 +374,8 @@ func WithCompactionSkipped(dst *bool) WriteOption {
 
 // WithWriteLogger injects a structured logger for write-phase diagnostics.
 // Given to [NewWriter], it logs the Writer's [Writer.WriteTo], unless WriteTo
-// is given a logger of its own.
+// is given a logger of its own. A nil logger leaves the document's own
+// logger in place.
 func WithWriteLogger(logger *slog.Logger) WriteOption {
 	return func(o *writeOpts) {
 		o.logger = logger
@@ -382,10 +383,11 @@ func WithWriteLogger(logger *slog.Logger) WriteOption {
 }
 
 // WithPipelineTempDir directs a [Pipeline] to place intermediate temp files
-// in dir instead of [os.TempDir], the ones a remediation in an
+// in dir instead of [os.TempDir], the ones a remediation in a
 // [Pipeline.Apply] stage writes included. Useful in sandboxed environments
 // where the default temp directory is not writable. It sets what
 // [WithTempDir] sets.
+// An empty dir selects [os.TempDir].
 func WithPipelineTempDir(dir string) WriteOption {
 	return func(o *writeOpts) {
 		o.tempDir = dir
@@ -462,7 +464,8 @@ type RegressionTolerance struct {
 
 // DefaultRegressionTolerance is the tolerance applied when none is set via
 // [WithRegressionTolerance]. Values prioritize catching silent text loss,
-// which is the most common aggressive-fix failure mode.
+// which is the most common aggressive-fix failure mode. The two ratios are
+// fractions between 0 and 1, as [RegressionTolerance] defines them.
 var DefaultRegressionTolerance = RegressionTolerance{
 	MaxTextDropRatio:  0.1,
 	MaxImageDropRatio: 0.5,
@@ -628,7 +631,9 @@ type BookmarkOptions struct {
 	// during Split. Defaults to OrphanDrop.
 	OrphanPolicy OrphanPolicy
 	// PromoteOrphanChildren promotes children of dropped bookmarks to the
-	// dropped bookmark's level. Default true for Split.
+	// dropped bookmark's level. Split promotes them only when [WithBookmarks]
+	// is not given. Once it is, this field applies as set, so its zero value
+	// false drops the children with their parent.
 	PromoteOrphanChildren bool
 
 	// WrapEachSource wraps each source's bookmarks under a per-source
@@ -645,6 +650,12 @@ type BookmarkOptions struct {
 
 // Metadata holds document information dictionary fields for [Writer.SetMetadata].
 // Values must not be shared across goroutines without synchronization.
+//
+// Each field is the entry of the same name in the Info dictionary (ISO
+// 32000-1, Table 317). An empty field leaves the existing entry alone. A
+// value is written as given, with no check of its form: CreationDate and
+// ModDate belong in the PDF date form "D:YYYYMMDDHHmmSSOHH'mm" (ISO 32000-1,
+// 7.9.4).
 type Metadata struct {
 	Title        string
 	Author       string
@@ -1336,8 +1347,11 @@ func (w *Writer) ClearMetadata() {
 // which name the Reader's pages (see [Writer]). If no pages are specified,
 // every page the Writer holds when the rotation is queued is rotated: pages
 // inserted on it before are included, pages deleted on it before are not.
-// Rotation must be a multiple of 90 (0, 90, 180, 270). The mutation is queued
-// and applied when [Writer.WriteTo] is called.
+// Rotation must be a multiple of 90 and is written folded into 0, 90, 180 or
+// 270, so -90 becomes 270. Any other value returns [ErrInvalidRotation] at
+// once. The mutation is queued and applied when [Writer.WriteTo] is called,
+// which returns [ErrInvalidPageNumber] and writes nothing when a page named
+// lies outside the Reader's pages.
 func (w *Writer) RotatePages(rotation int, pages ...int) error {
 	if err := w.refuseAfterRemediation("RotatePages"); err != nil {
 		return err
@@ -1838,7 +1852,9 @@ func (w *Writer) RemoveEncryption() {
 // SetFormField sets the value of an AcroForm field by its fully qualified name.
 // Uses incremental update. Sets /NeedAppearances on the AcroForm so viewers
 // regenerate the visual appearance. The mutation is queued and applied when
-// [Writer.WriteTo] is called.
+// [Writer.WriteTo] is called, which fails and writes nothing when no field has
+// the name. A button field takes value as the name of its state, such as
+// "Off", and any other field takes it as a text string.
 func (w *Writer) SetFormField(name, value string) {
 	if w.refuseAfterRemediation("SetFormField") != nil {
 		return
@@ -2050,6 +2066,9 @@ func textStampToOptions(s TextStamp) mutations.TextStampOptions {
 // [Writer.WriteTo] drains the queue, so the caller must leave the slice
 // untouched until then. Reusing the buffer in between puts the later
 // contents in the file.
+//
+// An attachment of the same name replaces the earlier one. An empty mimeType
+// writes the file with no /Subtype.
 // [Writer.WriteTo] reports [ErrAttachmentTreeIncomplete] when the existing
 // /EmbeddedFiles tree nests deeper than the attachment walk reads: the tree is
 // rebuilt from that walk, so adding one attachment would drop the others.
@@ -2098,6 +2117,10 @@ type AssociatedFile struct {
 //
 // For generic attachments with no compliance requirement, prefer
 // [Writer.AddAttachment].
+//
+// A file of the same name replaces the earlier one and takes its place in the
+// /AF array. An empty MimeType writes no /Subtype, and an empty Relationship
+// writes no /AFRelationship.
 // [Writer.WriteTo] reports [ErrAttachmentTreeIncomplete] on a tree too deep to
 // read, for the reason given on [Writer.AddAttachment].
 func (w *Writer) AddAssociatedFile(af AssociatedFile) {
@@ -2124,7 +2147,9 @@ func (w *Writer) AddAssociatedFile(af AssociatedFile) {
 
 // RemoveAttachment removes a file from the document's /EmbeddedFiles name
 // tree by its filename. Uses incremental update. The mutation is queued and
-// applied when [Writer.WriteTo] is called.
+// applied when [Writer.WriteTo] is called. It also drops the FileAttachment
+// annotations that carry a file of that name. A name no attachment holds
+// leaves the document untouched and is not an error.
 // [Writer.WriteTo] reports [ErrAttachmentTreeIncomplete] when the tree nests
 // deeper than the attachment walk reads. That truncation has two silent
 // outcomes, which is why it refuses rather than proceeding: the rebuilt tree
