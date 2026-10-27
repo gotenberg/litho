@@ -2,6 +2,10 @@
 help: ## Show the help
 	@grep -hE '^[A-Za-z0-9_ \-]*?:.*##.*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
+.PHONY: build
+build: ## Build the litho CLI binary
+	go build -o litho ./cmd/litho
+
 # golangci-lint runs at a pinned version, so a Homebrew upgrade cannot move the
 # findings under the zero-warnings policy. v2.14.0 builds on Go 1.27. An env var
 # of the same name overrides it.
