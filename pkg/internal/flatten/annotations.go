@@ -209,7 +209,6 @@ func (f *flattener) selectedBakes(
 		baked []Rect
 	)
 	for _, a := range slices.Backward(apps) {
-
 		dict, err := document.ResolveDict(ctx, f.doc, annots[a.Index])
 		if err != nil || dict == nil {
 			continue
