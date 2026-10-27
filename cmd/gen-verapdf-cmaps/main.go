@@ -367,7 +367,7 @@ const commentWidth = 76
 func comment(text string) string {
 	var b strings.Builder
 	line := "//"
-	for _, word := range strings.Fields(text) {
+	for word := range strings.FieldsSeq(text) {
 		if len(line) > len("//") && len(line)+1+len(word) > commentWidth {
 			b.WriteString(line + "\n")
 			line = "//"

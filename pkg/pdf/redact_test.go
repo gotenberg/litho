@@ -30,7 +30,6 @@ func redactableTextPDF(info string) []byte {
 // redactableBodyPDF builds the document [redactableTextPDF] does, with body as
 // its content stream.
 func redactableBodyPDF(body, info string) []byte {
-
 	objs := "%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +

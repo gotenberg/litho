@@ -2,6 +2,7 @@ package cmap
 
 import (
 	"context"
+	"slices"
 	"testing"
 )
 
@@ -32,11 +33,8 @@ func TestParse_ZeroWidthCodespaceIsRejected(t *testing.T) {
 			t.Errorf("CodeSpaceRanges[%d] has a zero-width Low, want every range >= 1 byte", i)
 		}
 	}
-	for _, n := range cm.codeLengths() {
-		if n == 0 {
-			t.Errorf("codeLengths() = %v, want no zero entry", cm.codeLengths())
-			break
-		}
+	if slices.Contains(cm.codeLengths(), 0) {
+		t.Errorf("codeLengths() = %v, want no zero entry", cm.codeLengths())
 	}
 }
 

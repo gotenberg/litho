@@ -107,7 +107,7 @@ func systemFontDirs(goos string, getenv func(string) string, home string) []stri
 			add(home, ".local", "share", "fonts")
 		}
 		add(home, ".fonts")
-		for _, data := range strings.Split(getenv("XDG_DATA_DIRS"), ":") {
+		for data := range strings.SplitSeq(getenv("XDG_DATA_DIRS"), ":") {
 			if filepath.IsAbs(data) {
 				add(data, "fonts")
 			}

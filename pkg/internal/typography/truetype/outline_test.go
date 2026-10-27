@@ -20,12 +20,12 @@ type outlineGolden struct {
 	UnitsPerEm       int `json:"unitsPerEm"`
 	NumberOfHMetrics int `json:"numberOfHMetrics"`
 	Glyphs           []struct {
-		GID     int             `json:"gid"`
-		Name    string          `json:"name"`
-		Points  [][3]float64    `json:"points"`
-		Ends    []int           `json:"ends"`
-		Ops     [][]interface{} `json:"ops"`
-		Advance float64         `json:"advance"`
+		GID     int          `json:"gid"`
+		Name    string       `json:"name"`
+		Points  [][3]float64 `json:"points"`
+		Ends    []int        `json:"ends"`
+		Ops     [][]any      `json:"ops"`
+		Advance float64      `json:"advance"`
 	} `json:"glyphs"`
 }
 
@@ -87,7 +87,7 @@ func pathOps(p geom.Path) [][]float64 {
 }
 
 // goldenOps converts fontTools' recorded pen calls to [pathOps] notation.
-func goldenOps(t *testing.T, ops [][]interface{}) [][]float64 {
+func goldenOps(t *testing.T, ops [][]any) [][]float64 {
 	t.Helper()
 	codes := map[string]geom.Op{"M": geom.MoveTo, "L": geom.LineTo, "C": geom.CubicTo, "Z": geom.Close}
 	var out [][]float64

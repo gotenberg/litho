@@ -263,14 +263,22 @@ func TestMatchCIDSystemInfoDeclinesWhatItCannotRepair(t *testing.T) {
 		test    int
 		context string
 	}{
-		{"an unrelated width clause", "6.2.11.5", 1,
-			"font C0_0 on page 1: .notdef glyph width mismatch"},
-		{"CMap embedding, which litho cannot do", "6.3.3.3", 1,
-			`font C0_0 on page 1: CMap "Adobe-Japan1-UCS2" is not predefined and not embedded`},
-		{"a non-embedded /UseCMap base", "6.3.3.3", 1,
-			`font C0_0 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`},
-		{"a /UseCMap chain, part 2's t3", "6.2.11.3.3", 3,
-			`font C0_0 on page 1: CMap chain references non-predefined CMap "Adobe-Japan1-2"`},
+		{
+			"an unrelated width clause", "6.2.11.5", 1,
+			"font C0_0 on page 1: .notdef glyph width mismatch",
+		},
+		{
+			"CMap embedding, which litho cannot do", "6.3.3.3", 1,
+			`font C0_0 on page 1: CMap "Adobe-Japan1-UCS2" is not predefined and not embedded`,
+		},
+		{
+			"a non-embedded /UseCMap base", "6.3.3.3", 1,
+			`font C0_0 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`,
+		},
+		{
+			"a /UseCMap chain, part 2's t3", "6.2.11.3.3", 3,
+			`font C0_0 on page 1: CMap chain references non-predefined CMap "Adobe-Japan1-2"`,
+		},
 	} {
 		v := compliance.Violation{
 			Rule:    compliance.Rule{Clause: tc.clause, TestNumber: tc.test},

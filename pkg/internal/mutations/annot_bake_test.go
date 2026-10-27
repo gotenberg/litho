@@ -193,11 +193,15 @@ func TestBakeAnnotationsHoistsBuiltStreams(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	doc, page, alloc := bakeDoc(t, fieldObjsPDF(bakeObjs("")))
-	inner := ast.NewStream(ast.PdfDict{"Type": ast.PdfName("XObject"), "Subtype": ast.PdfName("Form"),
-		"BBox": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(1), ast.PdfInt(1)}}, []byte("0 0 1 1 re f"))
-	built := ast.NewStream(ast.PdfDict{"Type": ast.PdfName("XObject"), "Subtype": ast.PdfName("Form"),
+	inner := ast.NewStream(ast.PdfDict{
+		"Type": ast.PdfName("XObject"), "Subtype": ast.PdfName("Form"),
+		"BBox": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(1), ast.PdfInt(1)},
+	}, []byte("0 0 1 1 re f"))
+	built := ast.NewStream(ast.PdfDict{
+		"Type": ast.PdfName("XObject"), "Subtype": ast.PdfName("Form"),
 		"BBox":      ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(1), ast.PdfInt(1)},
-		"Resources": ast.PdfDict{"XObject": ast.PdfDict{"Fm0": inner}}}, []byte("/Fm0 Do"))
+		"Resources": ast.PdfDict{"XObject": ast.PdfDict{"Fm0": inner}},
+	}, []byte("/Fm0 Do"))
 	if err := BakeAnnotations(ctx, alloc, doc, page, []AnnotationBake{{Index: 0, Appearance: built, Matrix: [6]float64{1, 0, 0, 1, 0, 0}}}); err != nil {
 		t.Fatalf("BakeAnnotations: %v", err)
 	}

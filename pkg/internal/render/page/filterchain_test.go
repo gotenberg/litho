@@ -27,8 +27,10 @@ func TestUndecodableFilterBeforeAnother(t *testing.T) {
 		{"[/FlateDecode /Foo]", red},
 		{"/FlateDecode", red},
 	} {
-		f := fixture{objs: []string{stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Filter "+tc.chain, buf.String())},
-			page: "/Resources << /XObject << /Fm 5 0 R >> >>", content: "/Fm Do"}
+		f := fixture{
+			objs: []string{stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Filter "+tc.chain, buf.String())},
+			page: "/Resources << /XObject << /Fm 5 0 R >> >>", content: "/Fm Do",
+		}
 		img, _ := draw(t, f)
 		if got := at(t, img, 50, 50); !close8(got, tc.want, 1) {
 			t.Errorf("%s: (50,50) = %v, want %v", tc.chain, got, tc.want)

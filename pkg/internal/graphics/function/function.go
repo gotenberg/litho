@@ -483,10 +483,7 @@ func (f *Function) evalSampled(inputs []float64) []float64 {
 		stride := 1
 		for i := range m {
 			bit := (corner >> uint(i)) & 1
-			pos := lo[i] + bit
-			if pos > f.size[i]-1 {
-				pos = f.size[i] - 1
-			}
+			pos := min(lo[i]+bit, f.size[i]-1)
 			if bit == 1 {
 				weight *= frac[i]
 			} else {

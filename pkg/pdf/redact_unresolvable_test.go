@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"regexp"
 	"sort"
 	"testing"
@@ -28,9 +29,7 @@ func unresolvableDoc(extra map[int]string, catalogExtra, pageExtra, body string,
 		5: "<< /Font << /F1 4 0 R >> >>",
 		6: rawStream("", []byte(body)),
 	}
-	for n, o := range extra {
-		objs[n] = o
-	}
+	maps.Copy(objs, extra)
 	nums := make([]int, 0, len(objs))
 	for n := range objs {
 		nums = append(nums, n)

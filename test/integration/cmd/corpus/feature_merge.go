@@ -256,10 +256,11 @@ func runMerge(ctx context.Context, pdfPath string) (mergeOutput, error) {
 		OutText:    outText,
 		InputBM:    inputLeaves,
 		LithoOutBM: lithoOutLeaves,
+
+		// src is sources[0], whose catalog entries merge.go carries; src2 is the
+		// same document reopened, so reading the input side from src is correct.
+		catalogFacts: readCatalogFacts(ctx, src, out),
 	}
-	// src is sources[0], whose catalog entries merge.go carries; src2 is the
-	// same document reopened, so reading the input side from src is correct.
-	result.catalogFacts = readCatalogFacts(ctx, src, out)
 
 	return result, nil
 }

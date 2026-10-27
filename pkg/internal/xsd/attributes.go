@@ -234,7 +234,7 @@ func (w *AttributeWildcard) allows(ns string) bool {
 	case "##other":
 		return ns != "" && ns != w.TargetNamespace
 	}
-	for _, token := range strings.Fields(w.Namespace) {
+	for token := range strings.FieldsSeq(w.Namespace) {
 		switch token {
 		case "##targetNamespace":
 			if ns == w.TargetNamespace {

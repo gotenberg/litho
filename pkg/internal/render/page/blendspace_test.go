@@ -345,8 +345,11 @@ func TestCMYKLinksHonourUseBlackPtCompOff(t *testing.T) {
 			x    int
 			want blend.Components
 		}{
-			{"OFF fill", 10, offBlack}, {"ON fill", 30, onBlack}, {"default fill", 50, onBlack},
-			{"OFF image", 70, offBlack}, {"ON image", 90, onBlack},
+			{"OFF fill", 10, offBlack},
+			{"ON fill", 30, onBlack},
+			{"default fill", 50, onBlack},
+			{"OFF image", 70, offBlack},
+			{"ON image", 90, onBlack},
 		} {
 			if got, _ := res.Group.Components(c.x, 50); !closeTo(got, c.want) {
 				t.Errorf("%s = %v, want %v", c.name, got, c.want)

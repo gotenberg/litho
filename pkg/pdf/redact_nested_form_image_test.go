@@ -33,8 +33,10 @@ func TestWriter_Redact_BlanksANestedFormImageInPlace(t *testing.T) {
 			{"whole placement", []string{placeFormLeft}, []RedactRegion{{Page: 1, Rect: wholeLeft}}, 0, 0},
 			{"top half", []string{placeFormLeft}, []RedactRegion{{Page: 1, Rect: topLeft}}, 0, 0x40},
 			{
-				"same samples on every page", []string{placeFormLeft, placeFormLeft},
-				[]RedactRegion{{Page: 1, Rect: topLeft}, {Page: 2, Rect: topLeft}}, 0, 0x40,
+				"same samples on every page",
+				[]string{placeFormLeft, placeFormLeft},
+				[]RedactRegion{{Page: 1, Rect: topLeft}, {Page: 2, Rect: topLeft}},
+				0, 0x40,
 			},
 		} {
 			t.Run(strconv.Itoa(depth)+"/"+tc.name, func(t *testing.T) {

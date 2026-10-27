@@ -187,8 +187,11 @@ func TestRecompressImagesIndexedTranslatesColorKey(t *testing.T) {
 		key  ast.PdfArray
 		want ast.PdfObject
 	}{
-		{"masks two colours", ast.PdfArray{ast.PdfInt(2), ast.PdfInt(5), ast.PdfInt(0), ast.PdfInt(255), ast.PdfInt(0), ast.PdfInt(21)},
-			ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)}},
+		{
+			"masks two colours",
+			ast.PdfArray{ast.PdfInt(2), ast.PdfInt(5), ast.PdfInt(0), ast.PdfInt(255), ast.PdfInt(0), ast.PdfInt(21)},
+			ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)},
+		},
 		{"masks nothing", ast.PdfArray{ast.PdfInt(100), ast.PdfInt(200), ast.PdfInt(0), ast.PdfInt(255), ast.PdfInt(0), ast.PdfInt(255)}, nil},
 	}
 	for _, tc := range cases {

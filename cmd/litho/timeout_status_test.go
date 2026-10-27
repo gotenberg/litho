@@ -153,8 +153,10 @@ func TestTimeoutStatus(t *testing.T) {
 		{"cancellation is not a timeout", exitError, context.Canceled, exitError},
 
 		// A wrapped deadline still counts: errors.Is, not equality.
-		{"a wrapped deadline still converts", exitError,
-			fmt.Errorf("parsing xref: %w", context.DeadlineExceeded), exitTimeout},
+		{
+			"a wrapped deadline still converts", exitError,
+			fmt.Errorf("parsing xref: %w", context.DeadlineExceeded), exitTimeout,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

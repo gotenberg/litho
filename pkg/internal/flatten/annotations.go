@@ -208,8 +208,8 @@ func (f *flattener) selectedBakes(
 		bakes []mutations.AnnotationBake
 		baked []Rect
 	)
-	for k := len(apps) - 1; k >= 0; k-- {
-		a := apps[k]
+	for _, a := range slices.Backward(apps) {
+
 		dict, err := document.ResolveDict(ctx, f.doc, annots[a.Index])
 		if err != nil || dict == nil {
 			continue

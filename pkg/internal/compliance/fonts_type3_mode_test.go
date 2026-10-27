@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -38,12 +39,8 @@ func TestType3ProceduresJudgedOnceInFirstMode(t *testing.T) {
 	}
 	objs := func(a, b string, pages []string, extra map[int]string) []string {
 		all := map[int]string{51: exponentStream("", a), 52: exponentStream("", b)}
-		for n, body := range font {
-			all[n] = body
-		}
-		for n, body := range extra {
-			all[n] = body
-		}
+		maps.Copy(all, font)
+		maps.Copy(all, extra)
 		return drawnImageObjs(pages, all)
 	}
 	page := func(contents, annots string) string {

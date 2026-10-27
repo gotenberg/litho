@@ -2331,8 +2331,8 @@ func xmpScopedProperties(ctx context.Context, data []byte, uri string) []xmpScop
 	// scopes holds the declarations of each open element, innermost last.
 	var scopes []map[string]string
 	resolve := func(prefix string) string {
-		for i := len(scopes) - 1; i >= 0; i-- {
-			if u, ok := scopes[i][prefix]; ok {
+		for _, scope := range slices.Backward(scopes) {
+			if u, ok := scope[prefix]; ok {
 				return u
 			}
 		}

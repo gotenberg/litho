@@ -599,11 +599,11 @@ func (h *halftoneJudge) judge(ctx context.Context, obj ast.PdfObject, component 
 		return
 	}
 	components := halftoneComponents(ctx, h.doc, obj, dict)
-	for i := len(components) - 1; i >= 0; i-- {
+	for _, key := range slices.Backward(components) {
 		if ctx.Err() != nil {
 			return
 		}
-		key := components[i]
+
 		sub := dict[key]
 		listed := halftoneComponent{colorant: key, listed: true}
 		if _, indirect := sub.(ast.PdfIndirectRef); indirect {

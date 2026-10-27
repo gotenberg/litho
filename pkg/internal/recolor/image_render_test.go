@@ -43,9 +43,11 @@ func TestConvertImages_RenderAsBefore(t *testing.T) {
 		}
 		return out
 	}
-	tint := ast.PdfDict{"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)},
+	tint := ast.PdfDict{
+		"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)},
 		"C0": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0)},
-		"C1": ast.PdfArray{ast.PdfReal(0.1), ast.PdfReal(0.9), ast.PdfReal(0.2), ast.PdfReal(0.05)}, "N": ast.PdfInt(1)}
+		"C1": ast.PdfArray{ast.PdfReal(0.1), ast.PdfReal(0.9), ast.PdfReal(0.2), ast.PdfReal(0.05)}, "N": ast.PdfInt(1),
+	}
 	separation := ast.PdfArray{familySeparation, ast.PdfName("Spot"), familyCMYK, tint}
 	lab := ast.PdfArray{familyLab, ast.PdfDict{"WhitePoint": ast.PdfArray{ast.PdfReal(0.9505), ast.PdfInt(1), ast.PdfReal(1.089)}}}
 	iccCMYK := ast.PdfArray{familyICCBased, ast.PdfIndirectRef{ObjectNum: 9}}

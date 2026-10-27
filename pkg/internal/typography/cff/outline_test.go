@@ -17,10 +17,10 @@ import (
 // Type 2 interpreter draws (seac glyphs decomposed) and the advance width.
 type outlineGolden struct {
 	Glyphs []struct {
-		GID     int             `json:"gid"`
-		Name    string          `json:"name"`
-		Ops     [][]interface{} `json:"ops"`
-		Advance float64         `json:"advance"`
+		GID     int     `json:"gid"`
+		Name    string  `json:"name"`
+		Ops     [][]any `json:"ops"`
+		Advance float64 `json:"advance"`
 	} `json:"glyphs"`
 }
 
@@ -74,7 +74,7 @@ func pathOps(p geom.Path) [][]float64 {
 }
 
 // goldenOps converts fontTools' recorded pen calls to [pathOps] rows.
-func goldenOps(t *testing.T, ops [][]interface{}) [][]float64 {
+func goldenOps(t *testing.T, ops [][]any) [][]float64 {
 	t.Helper()
 	codes := map[string]geom.Op{"M": geom.MoveTo, "L": geom.LineTo, "C": geom.CubicTo, "Z": geom.Close}
 	var out [][]float64

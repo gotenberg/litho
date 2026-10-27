@@ -96,7 +96,7 @@ func sameColours(t *testing.T, a, b []byte) {
 			t.Fatal(err)
 		}
 		n := ta.Components()
-		for v := 0; v < 256; v++ {
+		for v := range 256 {
 			for ch := -1; ch < n; ch++ {
 				in := make([]byte, n)
 				for i := range in {

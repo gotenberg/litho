@@ -29,8 +29,10 @@ func unembeddedTextPDF() []byte {
 // rectProgram is a program named Rect whose A is a filled 600 by 500
 // rectangle.
 func rectProgram() []byte {
-	return fontbuild.TrueType{PostScriptName: "Rect", Family: "Rect", Subfamily: "Regular",
-		Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 600}}}.Build()
+	return fontbuild.TrueType{
+		PostScriptName: "Rect", Family: "Rect", Subfamily: "Regular",
+		Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 600}},
+	}.Build()
 }
 
 var (

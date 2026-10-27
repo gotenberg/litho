@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"log/slog"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -107,10 +108,8 @@ func ReadSMaskInData(ctx context.Context, doc *document.Document, stream ast.Pdf
 	}
 	mask := &DataSoftMask{Premultiplied: v == 2 || opacity[0].Kind == jpx.ChannelPremultiplied}
 	if mask.Premultiplied {
-		for _, ch := range colour {
-			if img.Signed(ch) {
-				return nil, fmt.Errorf("%w: signed JPEG 2000 colour premultiplied by its opacity", ErrDataSoftMask)
-			}
+		if slices.ContainsFunc(colour, img.Signed) {
+			return nil, fmt.Errorf("%w: signed JPEG 2000 colour premultiplied by its opacity", ErrDataSoftMask)
 		}
 	}
 	mask.Alpha, err = img.Render(ctx, opacity, filter.JPXChannelByte)

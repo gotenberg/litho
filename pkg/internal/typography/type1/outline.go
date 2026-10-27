@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -525,8 +526,8 @@ func (in *interpreter) callOtherSubr() error {
 	}
 	args := in.stack[in.top-int(n) : in.top]
 	in.ps = in.ps[:0]
-	for k := len(args) - 1; k >= 0; k-- {
-		in.ps = append(in.ps, args[k])
+	for _, arg := range slices.Backward(args) {
+		in.ps = append(in.ps, arg)
 	}
 	in.top -= int(n)
 	switch entry {

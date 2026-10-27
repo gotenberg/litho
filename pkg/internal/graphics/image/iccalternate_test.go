@@ -28,29 +28,59 @@ func TestDecodeImage_ICCBasedAlternate(t *testing.T) {
 		samples []byte
 		extra   []string
 	}{
-		{"a Lab alternate", "[/ICCBased 5 0 R]", lab, []byte{128, 200, 60},
-			[]string{unusable(3, lab)}},
-		{"a CalGray alternate", "[/ICCBased 5 0 R]", "[/CalGray << /WhitePoint [0.9505 1 1.089] /Gamma 2.2 >>]", []byte{128},
-			[]string{unusable(1, "[/CalGray << /WhitePoint [0.9505 1 1.089] /Gamma 2.2 >>]")}},
-		{"a Separation alternate", "[/ICCBased 5 0 R]", "[/Separation /Spot /DeviceRGB 6 0 R]", []byte{128},
-			[]string{unusable(1, "[/Separation /Spot /DeviceRGB 6 0 R]"), tint}},
-		{"an alternate through another ICCBased space", "[/ICCBased 5 0 R]", lab, []byte{128, 200, 60},
-			[]string{unusable(3, "[/ICCBased 6 0 R]"), unusable(3, lab)}},
-		{"an Indexed base", "[/Indexed [/ICCBased 5 0 R] 0 <80C83C>]", "[/Indexed " + lab + " 0 <80C83C>]", []byte{0},
-			[]string{unusable(3, lab)}},
-		{"a Separation's alternate", "[/Separation /Spot [/ICCBased 5 0 R] 6 0 R]", "[/Separation /Spot " + lab + " 6 0 R]", []byte{128},
-			[]string{unusable(3, lab), "<< /FunctionType 2 /Domain [0 1] /Range [0 100 -128 127 -128 127] /C0 [100 0 0] /C1 [30 60 -40] /N 1 >>"}},
-		{"a usable profile wins over its alternate", "[/ICCBased 5 0 R]", "[/ICCBased 6 0 R]", []byte{255, 0, 0},
+		{
+			"a Lab alternate", "[/ICCBased 5 0 R]", lab,
+			[]byte{128, 200, 60},
+			[]string{unusable(3, lab)},
+		},
+		{
+			"a CalGray alternate", "[/ICCBased 5 0 R]", "[/CalGray << /WhitePoint [0.9505 1 1.089] /Gamma 2.2 >>]",
+			[]byte{128},
+			[]string{unusable(1, "[/CalGray << /WhitePoint [0.9505 1 1.089] /Gamma 2.2 >>]")},
+		},
+		{
+			"a Separation alternate", "[/ICCBased 5 0 R]", "[/Separation /Spot /DeviceRGB 6 0 R]",
+			[]byte{128},
+			[]string{unusable(1, "[/Separation /Spot /DeviceRGB 6 0 R]"), tint},
+		},
+		{
+			"an alternate through another ICCBased space", "[/ICCBased 5 0 R]", lab,
+			[]byte{128, 200, 60},
+			[]string{unusable(3, "[/ICCBased 6 0 R]"), unusable(3, lab)},
+		},
+		{
+			"an Indexed base", "[/Indexed [/ICCBased 5 0 R] 0 <80C83C>]", "[/Indexed " + lab + " 0 <80C83C>]",
+			[]byte{0},
+			[]string{unusable(3, lab)},
+		},
+		{
+			"a Separation's alternate", "[/Separation /Spot [/ICCBased 5 0 R] 6 0 R]", "[/Separation /Spot " + lab + " 6 0 R]",
+			[]byte{128},
+			[]string{unusable(3, lab), "<< /FunctionType 2 /Domain [0 1] /Range [0 100 -128 127 -128 127] /C0 [100 0 0] /C1 [30 60 -40] /N 1 >>"},
+		},
+		{
+			"a usable profile wins over its alternate", "[/ICCBased 5 0 R]", "[/ICCBased 6 0 R]",
+			[]byte{255, 0, 0},
 			[]string{
 				fmt.Sprintf("<< /N 3 /Alternate %s /Length %d >>\nstream\n%s\nendstream", lab, len(flatProfile("RGB ", 25)), flatProfile("RGB ", 25)),
 				profileObj(3, flatProfile("RGB ", 25)),
-			}},
-		{"an alternate of other components reads as the device space", "[/ICCBased 5 0 R]", "/DeviceCMYK", []byte{255, 0, 0, 0},
-			[]string{unusable(4, "/DeviceRGB")}},
-		{"a Pattern alternate reads as the device space", "[/ICCBased 5 0 R]", "/DeviceRGB", []byte{10, 20, 30},
-			[]string{unusable(3, "[/Pattern /DeviceRGB]")}},
-		{"an alternate naming its own space ends at the device space", "[/ICCBased 5 0 R]", "/DeviceRGB", []byte{10, 20, 30},
-			[]string{unusable(3, "[/ICCBased 5 0 R]")}},
+			},
+		},
+		{
+			"an alternate of other components reads as the device space", "[/ICCBased 5 0 R]", "/DeviceCMYK",
+			[]byte{255, 0, 0, 0},
+			[]string{unusable(4, "/DeviceRGB")},
+		},
+		{
+			"a Pattern alternate reads as the device space", "[/ICCBased 5 0 R]", "/DeviceRGB",
+			[]byte{10, 20, 30},
+			[]string{unusable(3, "[/Pattern /DeviceRGB]")},
+		},
+		{
+			"an alternate naming its own space ends at the device space", "[/ICCBased 5 0 R]", "/DeviceRGB",
+			[]byte{10, 20, 30},
+			[]string{unusable(3, "[/ICCBased 5 0 R]")},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

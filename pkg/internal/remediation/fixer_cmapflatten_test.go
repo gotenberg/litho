@@ -349,28 +349,50 @@ func TestMatchCMapFlattenClaimsBothUseCMapRules(t *testing.T) {
 		want    bool
 	}{
 		// The contexts are the strings fonts_cmap.go actually emits.
-		{"ISO 19005-2 chain", "6.2.11.3.3",
-			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Japan1-4"`, true},
-		{"ISO 19005-4 chain", "6.2.10.3.3",
-			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Japan1-4"`, true},
-		{"ISO 14289-1 chain", "7.21.3.3",
-			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Korea1-2"`, true},
-		{"ISO 14289-2 chain", "8.4.5.4",
-			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Korea1-2"`, true},
-		{"ISO 19005-1 embedding", "6.3.3.3",
-			`font F1 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`, true},
-		{"ISO 19005-2 embedding", "6.2.11.3.3",
-			`font F1 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`, true},
-		{"ISO 14289-2 embedding", "8.4.5.4",
-			`font F1 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`, true},
-		{"ISO 19005-2 named encoding", "6.2.11.3.3",
-			`font F1 on page 1: CMap "UniAKR-UTF16-H" is not predefined and not embedded`, true},
-		{"ISO 19005-1 named encoding", "6.3.3.3",
-			`font F1 on page 1: CMap "UniAKR-UTF16-H" is not predefined and not embedded`, true},
-		{"the WMode disagreement under the same clause", "6.2.11.3.3",
-			"font F1 on page 1: CMap dict WMode=1 but stream WMode=0", false},
-		{"an unrelated font clause", "6.2.11.5",
-			`font F1 on page 1: CMap chain references non-predefined CMap "X"`, false},
+		{
+			"ISO 19005-2 chain", "6.2.11.3.3",
+			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Japan1-4"`, true,
+		},
+		{
+			"ISO 19005-4 chain", "6.2.10.3.3",
+			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Japan1-4"`, true,
+		},
+		{
+			"ISO 14289-1 chain", "7.21.3.3",
+			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Korea1-2"`, true,
+		},
+		{
+			"ISO 14289-2 chain", "8.4.5.4",
+			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Korea1-2"`, true,
+		},
+		{
+			"ISO 19005-1 embedding", "6.3.3.3",
+			`font F1 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`, true,
+		},
+		{
+			"ISO 19005-2 embedding", "6.2.11.3.3",
+			`font F1 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`, true,
+		},
+		{
+			"ISO 14289-2 embedding", "8.4.5.4",
+			`font F1 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`, true,
+		},
+		{
+			"ISO 19005-2 named encoding", "6.2.11.3.3",
+			`font F1 on page 1: CMap "UniAKR-UTF16-H" is not predefined and not embedded`, true,
+		},
+		{
+			"ISO 19005-1 named encoding", "6.3.3.3",
+			`font F1 on page 1: CMap "UniAKR-UTF16-H" is not predefined and not embedded`, true,
+		},
+		{
+			"the WMode disagreement under the same clause", "6.2.11.3.3",
+			"font F1 on page 1: CMap dict WMode=1 but stream WMode=0", false,
+		},
+		{
+			"an unrelated font clause", "6.2.11.5",
+			`font F1 on page 1: CMap chain references non-predefined CMap "X"`, false,
+		},
 	} {
 		v := compliance.Violation{
 			Rule:    compliance.Rule{Clause: tc.clause, TestNumber: 1},

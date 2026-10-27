@@ -32,7 +32,7 @@ func TestREADME_SignExampleRuns(t *testing.T) {
 	readme := readREADME(t)
 
 	var example []string
-	for _, line := range strings.Split(readme, "\n") {
+	for line := range strings.SplitSeq(readme, "\n") {
 		if fields := strings.Fields(line); len(fields) > 1 && fields[0] == "litho" && fields[1] == "sign" {
 			example = fields[1:]
 			break
@@ -102,7 +102,7 @@ func countFlagLines(t *testing.T, args ...string) int {
 	run(context.Background(), args, &stdout, &stderr)
 
 	n := 0
-	for _, line := range strings.Split(stdout.String()+stderr.String(), "\n") {
+	for line := range strings.SplitSeq(stdout.String()+stderr.String(), "\n") {
 		if strings.HasPrefix(line, "  -") {
 			n++
 		}

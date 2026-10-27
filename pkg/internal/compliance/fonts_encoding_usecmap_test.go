@@ -87,8 +87,11 @@ func TestEncodingCMapUseCMapEntry(t *testing.T) {
 	}{
 		{"a predefined base maps the code past the program", "/Identity-H", nil, true, true},
 		{"an embedded base maps the code to a glyph", "10 0 R", [][2]string{{"", "1 begincidchar\n<0043> 5\nendcidchar\n"}}, false, false},
-		{"an embedded base's notdef range maps the code to CID 0", "10 0 R",
-			[][2]string{{"", "1 beginnotdefrange\n<0000> <00FF> 0\nendnotdefrange\n"}}, true, true},
+		{
+			"an embedded base's notdef range maps the code to CID 0", "10 0 R",
+			[][2]string{{"", "1 beginnotdefrange\n<0000> <00FF> 0\nendnotdefrange\n"}},
+			true, true,
+		},
 		{"a base no reader bundles names no base", "/No-Such-H", nil, true, true},
 		{"a base only veraPDF bundles maps the code past the program", "/Adobe-KR-9", nil, true, true},
 		{"a chain that loops leaves the code unknown", "8 0 R", nil, false, false},

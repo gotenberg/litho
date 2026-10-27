@@ -547,7 +547,7 @@ func namedEncodingStream(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 func useCMapChain(ctx context.Context, doc *document.Document, dict ast.PdfDict) [][]byte {
 	var out [][]byte
 	seen := make(map[int]bool)
-	for depth := 0; depth < maxCMapChainDepth; depth++ {
+	for range maxCMapChainDepth {
 		ref, isRef := dict["UseCMap"].(ast.PdfIndirectRef)
 		if !isRef || ref.ObjectNum == 0 {
 			return out

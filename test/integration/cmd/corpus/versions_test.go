@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -573,9 +574,7 @@ func TestCheckCorpusVersions(t *testing.T) {
 	}
 	withValue := func(k, v string) map[string]string {
 		out := make(map[string]string, len(matching))
-		for key, val := range matching {
-			out[key] = val
-		}
+		maps.Copy(out, matching)
 		out[k] = v
 		return out
 	}

@@ -124,9 +124,7 @@ func scanClaimsParallel(ctx context.Context, pdfs []string, allow map[string]boo
 		if !acquire(ctx, sem) {
 			break
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() { <-sem }()
 			profile := detectClaimedProfile(ctx, path)
 			if profile == "" {
@@ -137,7 +135,7 @@ func scanClaimsParallel(ctx context.Context, pdfs []string, allow map[string]boo
 			}
 			base := strings.TrimSuffix(filepath.Base(path), ".pdf")
 			results[i] = claimRow{base: base, profile: profile}
-		}()
+		})
 	}
 	wg.Wait()
 	if err := ctx.Err(); err != nil {

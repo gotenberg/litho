@@ -3,6 +3,7 @@ package mutations
 import (
 	"bytes"
 	"context"
+	"maps"
 	"strconv"
 	"testing"
 
@@ -142,9 +143,7 @@ func TestPageBox_ReadsAStagedCropBox(t *testing.T) {
 	doc, page := boxShapeFixture(t, "", "/MediaBox [0 0 612 792]", "")
 	alloc := writer.NewObjAllocator(20)
 	staged := make(ast.PdfDict, len(page.Dict)+1)
-	for k, v := range page.Dict {
-		staged[k] = v
-	}
+	maps.Copy(staged, page.Dict)
 	staged["CropBox"] = ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(1500), ast.PdfInt(792)}
 	alloc.AllocAt(page.Ref.ObjectNum, staged)
 

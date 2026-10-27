@@ -278,16 +278,21 @@ func TestInsertPagesCarriesPageLabels(t *testing.T) {
 		keys        []int
 	}{
 		{
-			"plain pages into a labelled target", labelled, plain, 2, []int{3, 1},
-			[]string{"i", "ii", "3", "1", "A-5", "A-6", "A", "B"}, []int{0, 2, 3, 4, 6},
+			"plain pages into a labelled target", labelled, plain, 2,
+			[]int{3, 1},
+			[]string{"i", "ii", "3", "1", "A-5", "A-6", "A", "B"},
+			[]int{0, 2, 3, 4, 6},
 		},
 		{
 			"labelled pages into a plain target", plain, labelled, 1, nil,
-			append(append([]string{"1"}, sixLabelled...), "2", "3"), []int{0, 1, 3, 5, 7},
+			append(append([]string{"1"}, sixLabelled...), "2", "3"),
+			[]int{0, 1, 3, 5, 7},
 		},
 		{
-			"labelled pages into a labelled target", labelled, labelled, 6, []int{2, 3},
-			append(slices.Clone(sixLabelled), "ii", "A-5"), []int{0, 2, 4, 6, 7},
+			"labelled pages into a labelled target", labelled, labelled, 6,
+			[]int{2, 3},
+			append(slices.Clone(sixLabelled), "ii", "A-5"),
+			[]int{0, 2, 4, 6, 7},
 		},
 		{"plain pages into a plain target", plain, plain, 0, nil, nil, nil},
 	} {

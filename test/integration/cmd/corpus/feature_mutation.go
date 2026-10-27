@@ -538,7 +538,7 @@ func qpdfCheck(ctx context.Context, qpdf string, data []byte, password string) (
 // after any warning, "operation succeeded with warnings", names no class.
 func qpdfKinds(output, path string, exitErr *exec.ExitError) map[string]bool {
 	kinds := make(map[string]bool)
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "WARNING:") && !strings.HasPrefix(line, "ERROR:") && !strings.HasPrefix(line, "qpdf:") {
 			continue

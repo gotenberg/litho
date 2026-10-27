@@ -179,8 +179,7 @@ func TestDecodeDCT_BothDecodersFail(t *testing.T) {
 	if err == nil {
 		t.Fatal("decodeDCT accepted data that holds no JPEG")
 	}
-	var formatErr jpeg.FormatError
-	if !errors.As(err, &formatErr) {
+	if _, ok := errors.AsType[jpeg.FormatError](err); !ok {
 		t.Errorf("error %q does not carry image/jpeg's refusal", err)
 	}
 	if !errors.Is(err, dct.ErrMalformed) {

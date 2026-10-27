@@ -126,7 +126,7 @@ func usageSynopsisNames(t *testing.T, usage string) map[string]bool {
 		if open < 0 || close < open {
 			t.Fatalf("synopsis %q carries no <a|b> group", line)
 		}
-		for _, name := range strings.Split(line[open+1:close], "|") {
+		for name := range strings.SplitSeq(line[open+1:close], "|") {
 			if name = strings.TrimSpace(name); name != "" {
 				names[name] = true
 			}

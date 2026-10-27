@@ -80,9 +80,9 @@ func TestMergeCatalogFeature_Compare_CatalogViolationFails(t *testing.T) {
 	t.Parallel()
 	f := newMergeCatalogFeature()
 	out, _ := json.Marshal(mergeCatalogOutput{
-		InputPages:   1,
-		OutPages:     2,
-		catalogFacts: catalogFacts{OutAcroForm: true},
+		InputPages:  1,
+		OutPages:    2,
+		OutAcroForm: true,
 	})
 	v := f.Compare("doc", out)
 	if v.Match {
@@ -167,7 +167,7 @@ func TestMergeCatalogFeature_Compare_CleanCarriesMetrics(t *testing.T) {
 	out, _ := json.Marshal(mergeCatalogOutput{
 		InputPages:   2,
 		OutPages:     4,
-		catalogFacts: catalogFacts{InFormFields: true, OutAcroForm: true},
+		InFormFields: true, OutAcroForm: true,
 	})
 	v := f.Compare("doc", out)
 	if !v.Match {

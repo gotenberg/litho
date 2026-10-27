@@ -148,7 +148,7 @@ func drained(ctx context.Context, r io.Reader, limit int64) bool {
 // what follows its first character that is neither white space, eod, nor
 // accepted by digit. Data with neither has no tail.
 func asciiTail(data []byte, eod string, digit func(byte) bool) []byte {
-	for i := 0; i < len(data); i++ {
+	for i := range data {
 		if bytes.HasPrefix(data[i:], []byte(eod)) {
 			return data[i+len(eod):]
 		}

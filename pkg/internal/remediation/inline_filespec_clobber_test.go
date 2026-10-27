@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -104,9 +105,7 @@ func TestInlineFileSpecRepairs_KeepEarlierPendingWrites(t *testing.T) {
 			for _, objNum := range []int{3, 4} {
 				d := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: objNum})
 				marked := make(ast.PdfDict, len(d)+1)
-				for k, v := range d {
-					marked[k] = v
-				}
+				maps.Copy(marked, d)
 				marked["NM"] = ast.PdfString("pending")
 				alloc.AllocAt(objNum, marked)
 			}
@@ -115,9 +114,7 @@ func TestInlineFileSpecRepairs_KeepEarlierPendingWrites(t *testing.T) {
 				t.Fatal("precondition: object 6 is no stream")
 			}
 			imgDict := make(ast.PdfDict, len(img.Dict)+1)
-			for k, v := range img.Dict {
-				imgDict[k] = v
-			}
+			maps.Copy(imgDict, img.Dict)
 			imgDict["NM"] = ast.PdfString("pending")
 			alloc.AllocAt(6, ast.NewStream(imgDict, []byte{0xff}))
 

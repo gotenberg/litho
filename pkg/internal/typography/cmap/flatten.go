@@ -68,11 +68,11 @@ func FlattenUseCMap(ctx context.Context, using []byte, bases [][]byte) ([]byte, 
 	// Fold the chain weakest first: the furthest base is overwritten by every
 	// CMap above it, and the using CMap last of all.
 	merged := make(map[int]int)
-	for i := len(bases) - 1; i >= 0; i-- {
+	for i, base := range slices.Backward(bases) {
 		if err := ctx.Err(); err != nil {
 			return using, false, err
 		}
-		base, err := ParseCID(ctx, bases[i])
+		base, err := ParseCID(ctx, base)
 		if err != nil {
 			return using, false, fmt.Errorf("parsing base CMap %d of the usecmap chain: %w", i, err)
 		}

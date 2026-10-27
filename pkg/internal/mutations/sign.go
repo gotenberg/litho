@@ -705,8 +705,8 @@ func pageWidgetFieldNames(ctx context.Context, alloc *writer.ObjAllocator, doc *
 			nums = append(nums, ref.ObjectNum)
 			cur = field["Parent"]
 		}
-		for i := len(chain) - 1; i >= 0; i-- {
-			if t, hasT := chain[i]["T"]; hasT {
+		for i, c := range slices.Backward(chain) {
+			if t, hasT := c["T"]; hasT {
 				if s, err := document.ResolveString(ctx, doc, t); err == nil && s != "" {
 					if partial := document.DecodePdfString(s); name == "" {
 						name = partial

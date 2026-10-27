@@ -629,7 +629,7 @@ func widgetSignedField(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	if ref, isRef := annotObj.(ast.PdfIndirectRef); isRef {
 		visited[ref.ObjectNum] = true
 	}
-	for depth := 0; depth < maxFieldParentDepth; depth++ {
+	for range maxFieldParentDepth {
 		parentObj, has := chain[len(chain)-1]["Parent"]
 		if !has {
 			break

@@ -88,11 +88,11 @@ func TestMergeFeature_Compare_SinglePageFixtureIsExercised(t *testing.T) {
 	f := newMergeFeature()
 	f.pdfcpuGolds["doc"] = []normalizedBookmark{}
 	out, err := json.Marshal(mergeOutput{
-		InputPages:   1,
-		OutPages:     2,
-		InputText:    []string{"A"},
-		OutText:      []string{"A", "A"},
-		catalogFacts: catalogFacts{OutAcroForm: true},
+		InputPages:  1,
+		OutPages:    2,
+		InputText:   []string{"A"},
+		OutText:     []string{"A", "A"},
+		OutAcroForm: true,
 	})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)

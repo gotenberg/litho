@@ -27,12 +27,16 @@ func fixturePrograms() map[string][]byte {
 		return fontbuild.Glyph{Name: name, Unicode: r, Advance: adv}
 	}
 	sans := func(ps string, a, b uint16) []byte {
-		return fontbuild.TrueType{PostScriptName: ps, Family: ps, Subfamily: "Regular", NotdefAdvance: 500,
-			Glyphs: []fontbuild.Glyph{glyph("A", 'A', a), glyph("B", 'B', b)}}.Build()
+		return fontbuild.TrueType{
+			PostScriptName: ps, Family: ps, Subfamily: "Regular", NotdefAdvance: 500,
+			Glyphs: []fontbuild.Glyph{glyph("A", 'A', a), glyph("B", 'B', b)},
+		}.Build()
 	}
 	return map[string][]byte{
-		"Helvetica": fontbuild.TrueType{PostScriptName: "FixtureSans", Family: "Fixture Sans", Subfamily: "Regular", NotdefAdvance: 500,
-			Glyphs: []fontbuild.Glyph{glyph("H", 'H', 722), glyph("e", 'e', 556), glyph("l", 'l', 222), glyph("o", 'o', 556)}}.Build(),
+		"Helvetica": fontbuild.TrueType{
+			PostScriptName: "FixtureSans", Family: "Fixture Sans", Subfamily: "Regular", NotdefAdvance: 500,
+			Glyphs: []fontbuild.Glyph{glyph("H", 'H', 722), glyph("e", 'e', 556), glyph("l", 'l', 222), glyph("o", 'o', 556)},
+		}.Build(),
 		"Helvetica-Bold":    sans("FixtureSans-Bold", 722, 722),
 		"Helvetica-Oblique": sans("FixtureSans-Oblique", 667, 667),
 		"LithoSans":         sans("FixtureSans", 667, 667),
@@ -40,8 +44,10 @@ func fixturePrograms() map[string][]byte {
 		"LithoSerif": fontbuild.CFF{FontName: "FixtureSerif", Glyphs: []fontbuild.Glyph{
 			{Name: "A", Advance: 722}, {Name: "B", Advance: 667},
 		}}.Build(),
-		"LithoMincho": fontbuild.TrueType{PostScriptName: "FixtureMincho", Family: "Fixture Mincho", Subfamily: "Regular",
-			NotdefAdvance: 1000, Glyphs: []fontbuild.Glyph{glyph("uni3042", 0x3042, 1000)}}.Build(),
+		"LithoMincho": fontbuild.TrueType{
+			PostScriptName: "FixtureMincho", Family: "Fixture Mincho", Subfamily: "Regular",
+			NotdefAdvance: 1000, Glyphs: []fontbuild.Glyph{glyph("uni3042", 0x3042, 1000)},
+		}.Build(),
 	}
 }
 

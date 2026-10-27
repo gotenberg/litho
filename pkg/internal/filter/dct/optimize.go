@@ -110,7 +110,7 @@ func recode(ctx context.Context, data []byte, keepRestarts bool) ([]byte, bool, 
 			return nil, false, stats.restarts, nil //nolint:nilerr // A table that cannot be built leaves the image as it is.
 		}
 	}
-	enc := &encodeVisitor{tables: tables, coder: dcCoder{keepRestarts: keepRestarts}, bitWriter: bitWriter{out: make([]byte, 0, len(data))}}
+	enc := &encodeVisitor{tables: tables, coder: dcCoder{keepRestarts: keepRestarts}, out: make([]byte, 0, len(data))}
 	if _, err := walkSequential(ctx, data, enc); err != nil {
 		return nil, false, false, notOptimizable(err)
 	}

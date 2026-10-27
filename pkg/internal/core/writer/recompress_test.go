@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"maps"
 	"os"
 	"testing"
 
@@ -54,9 +55,7 @@ func imageDict(w, h int, extra ast.PdfDict) ast.PdfDict {
 		"ColorSpace":       ast.PdfName("DeviceRGB"),
 		"BitsPerComponent": ast.PdfInt(8),
 	}
-	for k, v := range extra {
-		d[k] = v
-	}
+	maps.Copy(d, extra)
 	return d
 }
 
@@ -97,8 +96,11 @@ func TestRecompressImagesKeepsSamplesAndShrinks(t *testing.T) {
 		{"uncompressed", nil, samples},
 		{"fast flate", ast.PdfName("FlateDecode"), zlibAt(t, zlib.BestSpeed, samples)},
 		{"ascii hex", ast.PdfName("ASCIIHexDecode"), []byte(hex.EncodeToString(samples) + ">")},
-		{"hex over flate", ast.PdfArray{ast.PdfName("ASCIIHexDecode"), ast.PdfName("FlateDecode")},
-			[]byte(hex.EncodeToString(zlibAt(t, zlib.BestSpeed, samples)) + ">")},
+		{
+			"hex over flate",
+			ast.PdfArray{ast.PdfName("ASCIIHexDecode"), ast.PdfName("FlateDecode")},
+			[]byte(hex.EncodeToString(zlibAt(t, zlib.BestSpeed, samples)) + ">"),
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -396,8 +398,11 @@ func TestRecompressImagesLeavesOtherJPEGsAlone(t *testing.T) {
 	}{
 		{"progressive", jpegDict(), progressive, ImageRecompression{}},
 		{"plugin claims DCTDecode", jpegDict(), data, ImageRecompression{Decoder: claim}},
-		{"under another filter", imageDict(32, 32, ast.PdfDict{"Filter": ast.PdfArray{ast.PdfName("ASCIIHexDecode"), ast.PdfName("DCTDecode")}}),
-			[]byte(hex.EncodeToString(data) + ">"), ImageRecompression{}},
+		{
+			"under another filter", imageDict(32, 32, ast.PdfDict{"Filter": ast.PdfArray{ast.PdfName("ASCIIHexDecode"), ast.PdfName("DCTDecode")}}),
+			[]byte(hex.EncodeToString(data) + ">"),
+			ImageRecompression{},
+		},
 		{"past the image budget", jpegDict(), data, ImageRecompression{Limits: limits.Limits{MaxImagePixels: 32*32 - 1}}},
 	}
 	for _, tc := range cases {

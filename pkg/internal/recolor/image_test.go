@@ -143,8 +143,10 @@ func TestConvertIndexed_ConvertsTheTableOnly(t *testing.T) {
 }
 
 func TestConvertSpots_KeptOrConverted(t *testing.T) {
-	tint := ast.PdfDict{"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)},
-		"C0": ast.PdfArray{ast.PdfInt(1)}, "C1": ast.PdfArray{ast.PdfInt(0)}, "N": ast.PdfInt(1)}
+	tint := ast.PdfDict{
+		"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)},
+		"C0": ast.PdfArray{ast.PdfInt(1)}, "C1": ast.PdfArray{ast.PdfInt(0)}, "N": ast.PdfInt(1),
+	}
 	cs := ast.PdfArray{familySeparation, ast.PdfName("Spot"), familyGray, tint}
 	data := []byte{0, 128, 255}
 
@@ -182,8 +184,10 @@ func TestConvertSpots_KeptOrConverted(t *testing.T) {
 }
 
 func TestConvert_LeavesWhatHasNoColour(t *testing.T) {
-	tint := ast.PdfDict{"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)},
-		"C0": ast.PdfArray{ast.PdfInt(1)}, "C1": ast.PdfArray{ast.PdfInt(0)}, "N": ast.PdfInt(1)}
+	tint := ast.PdfDict{
+		"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)},
+		"C0": ast.PdfArray{ast.PdfInt(1)}, "C1": ast.PdfArray{ast.PdfInt(0)}, "N": ast.PdfInt(1),
+	}
 	cases := map[string]ast.PdfStream{
 		"stencil mask":  imageStream(8, 1, nil, 1, []byte{0xaa}, ast.PdfDict{"ImageMask": ast.PdfBool(true)}),
 		"None colorant": imageStream(1, 1, ast.PdfArray{familySeparation, ast.PdfName("None"), familyGray, tint}, 8, []byte{9}, nil),
@@ -443,8 +447,10 @@ func TestConvertInline_WritesTheTargetSpace(t *testing.T) {
 }
 
 func TestConvertInline_KeepsASpotResource(t *testing.T) {
-	tint := ast.PdfDict{"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)},
-		"C0": ast.PdfArray{ast.PdfInt(1)}, "C1": ast.PdfArray{ast.PdfInt(0)}, "N": ast.PdfInt(1)}
+	tint := ast.PdfDict{
+		"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)},
+		"C0": ast.PdfArray{ast.PdfInt(1)}, "C1": ast.PdfArray{ast.PdfInt(0)}, "N": ast.PdfInt(1),
+	}
 	p := newTestPage(1, 1, imageStream(1, 1, familyGray, 8, []byte{0}, nil))
 	p.objs[5] = ast.PdfDict{"ColorSpace": ast.PdfDict{"CS0": ast.PdfArray{familySeparation, ast.PdfName("Spot"), familyGray, tint}}}
 	doc, pg := p.open(t)

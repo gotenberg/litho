@@ -121,9 +121,13 @@ func TestPageLabelTreeSplitsLargeTrees(t *testing.T) {
 func TestPageLabelTreeIsCompact(t *testing.T) {
 	t.Parallel()
 	labels := []pageLabel{
-		{style: "r", number: 1}, {style: "r", number: 2},
-		{style: "D", number: 5}, {style: "D", number: 6}, {style: "D", number: 8},
-		{prefix: "x", number: 1}, {prefix: "x", number: 9},
+		{style: "r", number: 1},
+		{style: "r", number: 2},
+		{style: "D", number: 5},
+		{style: "D", number: 6},
+		{style: "D", number: 8},
+		{prefix: "x", number: 1},
+		{prefix: "x", number: 9},
 		{style: "D", prefix: "x", number: 10},
 	}
 	tree := pageLabelTree(writer.NewObjAllocator(0), labels)

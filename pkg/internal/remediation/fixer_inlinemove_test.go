@@ -139,16 +139,27 @@ func TestFixInlineImageFilters_MovesCodecImages(t *testing.T) {
 		filter  ast.PdfObject
 		want    ast.PdfDict
 	}{
-		{"JBIG2Decode", "/CS /G /BPC 1 /F /JBIG2Decode", jbig2, ast.PdfName("JBIG2Decode"),
-			ast.PdfDict{"ColorSpace": ast.PdfName("DeviceGray"), "BitsPerComponent": ast.PdfInt(1)}},
-		{"full keys", "/ColorSpace /DeviceGray /BitsPerComponent 1 /Filter /JBIG2Decode", jbig2, ast.PdfName("JBIG2Decode"),
-			ast.PdfDict{"ColorSpace": ast.PdfName("DeviceGray"), "BitsPerComponent": ast.PdfInt(1)}},
-		{"mis-cased", "/CS /G /BPC 1 /F /jbig2decode", jbig2, ast.PdfName("JBIG2Decode"),
-			ast.PdfDict{"ColorSpace": ast.PdfName("DeviceGray")}},
-		{"mask in a chain", "/IM true /F [/AHx /JBIG2Decode]", jbig2Hex, ast.PdfArray{ast.PdfName("ASCIIHexDecode"), ast.PdfName("JBIG2Decode")},
-			ast.PdfDict{"ImageMask": ast.PdfBool(true)}},
-		{"JPXDecode", "/CS /RGB /BPC 8 /F /JPXDecode", jpx, ast.PdfName("JPXDecode"),
-			ast.PdfDict{"ColorSpace": ast.PdfName("DeviceRGB")}},
+		{
+			"JBIG2Decode", "/CS /G /BPC 1 /F /JBIG2Decode", jbig2, ast.PdfName("JBIG2Decode"),
+			ast.PdfDict{"ColorSpace": ast.PdfName("DeviceGray"), "BitsPerComponent": ast.PdfInt(1)},
+		},
+		{
+			"full keys", "/ColorSpace /DeviceGray /BitsPerComponent 1 /Filter /JBIG2Decode", jbig2, ast.PdfName("JBIG2Decode"),
+			ast.PdfDict{"ColorSpace": ast.PdfName("DeviceGray"), "BitsPerComponent": ast.PdfInt(1)},
+		},
+		{
+			"mis-cased", "/CS /G /BPC 1 /F /jbig2decode", jbig2, ast.PdfName("JBIG2Decode"),
+			ast.PdfDict{"ColorSpace": ast.PdfName("DeviceGray")},
+		},
+		{
+			"mask in a chain", "/IM true /F [/AHx /JBIG2Decode]", jbig2Hex,
+			ast.PdfArray{ast.PdfName("ASCIIHexDecode"), ast.PdfName("JBIG2Decode")},
+			ast.PdfDict{"ImageMask": ast.PdfBool(true)},
+		},
+		{
+			"JPXDecode", "/CS /RGB /BPC 8 /F /JPXDecode", jpx, ast.PdfName("JPXDecode"),
+			ast.PdfDict{"ColorSpace": ast.PdfName("DeviceRGB")},
+		},
 		{"JPXDecode reading its colour", "/F /JPXDecode", jpx, ast.PdfName("JPXDecode"), ast.PdfDict{}},
 	} {
 		for _, rule := range inlineFilterRules[1:] {
@@ -230,8 +241,11 @@ func TestFixInlineImageFilters_LeavesWhatItCannotMove(t *testing.T) {
 		pageCS        ast.PdfObject
 	}{
 		{"form without resources", "BI /W 8 /H 8 /CS /G /BPC 1 /F /JBIG2Decode ID " + jbig2 + "\nEI", "", []int{5}, ast.PdfName("DeviceGray")},
-		{"colour space only the page names", "BI /W 8 /H 8 /CS /CS0 /BPC 1 /F /JBIG2Decode ID " + jbig2 + "\nEI", "/Resources << >>", []int{5, 7, 9, 10},
-			ast.PdfArray{ast.PdfName("Indexed"), ast.PdfName("DeviceGray"), ast.PdfInt(1), ast.PdfString("\x00\xff")}},
+		{
+			"colour space only the page names", "BI /W 8 /H 8 /CS /CS0 /BPC 1 /F /JBIG2Decode ID " + jbig2 + "\nEI", "/Resources << >>",
+			[]int{5, 7, 9, 10},
+			ast.PdfArray{ast.PdfName("Indexed"), ast.PdfName("DeviceGray"), ast.PdfInt(1), ast.PdfString("\x00\xff")},
+		},
 		{"unknown colour space", "BI /W 8 /H 8 /CS /Nope /BPC 1 /F /JBIG2Decode ID " + jbig2 + "\nEI", "/Resources << >>", all, nil},
 		{"LZW before the codec", "BI /W 8 /H 8 /CS /G /BPC 1 /F [/LZW /JBIG2Decode] ID " + jbig2 + "\nEI", "/Resources << >>", all, nil},
 		{"undecodable data", "BI /W 8 /H 8 /CS /G /BPC 1 /F /JBIG2Decode ID xyz\nEI", "/Resources << >>", all, nil},

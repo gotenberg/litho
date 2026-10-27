@@ -348,7 +348,7 @@ func TestPipe_SecondDocumentStagesCloseTheirSources(t *testing.T) {
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			before := openFDs(t)
-			for i := 0; i < runs; i++ {
+			for range runs {
 				out := filepath.Join(t.TempDir(), "out.pdf")
 				if rc, errOut := runPipeArgs(t, tc.args(out)); rc != exitOK {
 					t.Fatalf("exit %d, stderr: %s", rc, errOut)

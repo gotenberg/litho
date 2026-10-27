@@ -119,8 +119,10 @@ func TestWithWholeFontPrograms_EmbedsWholePrograms(t *testing.T) {
 	t.Parallel()
 	data := unembeddedFontsDoc("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
 	program := fontbuild.TrueType{PostScriptName: "LiberationSans", Family: "Liberation Sans", Subfamily: "Regular", Glyphs: []fontbuild.Glyph{
-		{Name: "A", Unicode: 'A', Advance: 667}, {Name: "B", Unicode: 'B', Advance: 667},
-		{Name: "C", Unicode: 'C', Advance: 722}, {Name: "D", Unicode: 'D', Advance: 722},
+		{Name: "A", Unicode: 'A', Advance: 667},
+		{Name: "B", Unicode: 'B', Advance: 667},
+		{Name: "C", Unicode: 'C', Advance: 722},
+		{Name: "D", Unicode: 'D', Advance: 722},
 	}}.Build()
 	fonts := fstest.MapFS{"LiberationSans-Regular.ttf": {Data: program}}
 	for _, tc := range []struct {

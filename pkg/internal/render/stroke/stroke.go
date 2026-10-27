@@ -127,12 +127,12 @@ func Outline(path geom.Path, s Style, ctm geom.Matrix, tolerance float64) (geom.
 	}
 
 	st := stroker{
-		half:    s.Width / 2,
-		cap:     s.Cap,
-		join:    s.Join,
-		limit:   s.MiterLimit,
-		tol:     userTol,
-		builder: builder{m: ctm},
+		half:  s.Width / 2,
+		cap:   s.Cap,
+		join:  s.Join,
+		limit: s.MiterLimit,
+		tol:   userTol,
+		m:     ctm,
 	}
 	if math.IsNaN(st.limit) {
 		st.limit = DefaultMiterLimit

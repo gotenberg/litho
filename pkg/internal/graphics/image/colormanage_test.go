@@ -203,15 +203,18 @@ func TestDecodeImage_ICCBasedReadsItsProfile(t *testing.T) {
 		{"CMYK", 4, flatProfile("CMYK", 25), []byte{255, 0, 0, 0, 0, 0, 0, 255}, [][3]int{grey25, grey25}},
 		{
 			"an unreadable profile reads as DeviceRGB", 3, []byte("not a profile"),
-			[]byte{255, 0, 0, 10, 20, 30}, [][3]int{{255, 0, 0}, {10, 20, 30}},
+			[]byte{255, 0, 0, 10, 20, 30},
+			[][3]int{{255, 0, 0}, {10, 20, 30}},
 		},
 		{
 			"a profile of another space reads as DeviceCMYK", 4, flatProfile("RGB ", 25),
-			[]byte{255, 0, 0, 0, 0, 0, 0, 255}, [][3]int{cyan, black},
+			[]byte{255, 0, 0, 0, 0, 0, 0, 255},
+			[][3]int{cyan, black},
 		},
 		{
 			"a version 5 profile reads as DeviceCMYK", 4, version5(flatProfile("CMYK", 25)),
-			[]byte{255, 0, 0, 0, 0, 0, 0, 255}, [][3]int{cyan, black},
+			[]byte{255, 0, 0, 0, 0, 0, 0, 255},
+			[][3]int{cyan, black},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -297,18 +300,24 @@ func TestDecodeImage_ManagedPaletteAndTints(t *testing.T) {
 	}{
 		{
 			"indexed over ICCBased", "[/Indexed [/ICCBased 5 0 R] 1 <FF000000 00000000>]",
-			[]byte{0, 1}, []string{profileObj(4, flatProfile("CMYK", 25))}, [][3]int{grey25, grey25},
+			[]byte{0, 1},
+			[]string{profileObj(4, flatProfile("CMYK", 25))},
+			[][3]int{grey25, grey25},
 		},
 		{
 			"indexed over DeviceCMYK", "[/Indexed /DeviceCMYK 1 <FF000000 000000FF>]",
-			[]byte{0, 1}, nil, [][3]int{cyan, black},
+			[]byte{0, 1},
+			nil,
+			[][3]int{cyan, black},
 		},
 		{
 			"Separation over ICCBased", "[/Separation /Spot [/ICCBased 5 0 R] 6 0 R]",
-			[]byte{0, 255}, []string{
+			[]byte{0, 255},
+			[]string{
 				profileObj(4, flatProfile("CMYK", 25)),
 				"<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] /C1 [1 0 0 0] /N 1 >>",
-			}, [][3]int{grey25, grey25},
+			},
+			[][3]int{grey25, grey25},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -362,20 +371,47 @@ func TestDecodeImage_DefaultColorSpaces(t *testing.T) {
 		extra    []string
 		want     [3]int
 	}{
-		{"DefaultCMYK", "/DefaultCMYK [/ICCBased 5 0 R]", "/DeviceCMYK", []byte{255, 0, 0, 0},
-			[]string{profileObj(4, flatProfile("CMYK", 25))}, grey25},
-		{"DefaultRGB", "/DefaultRGB [/ICCBased 5 0 R]", "/DeviceRGB", []byte{255, 0, 0},
-			[]string{profileObj(3, flatProfile("RGB ", 25))}, grey25},
-		{"DefaultGray", "/DefaultGray [/ICCBased 5 0 R]", "/DeviceGray", []byte{255},
-			[]string{profileObj(1, flatProfile("GRAY", 25))}, grey25},
-		{"an Indexed base", "/DefaultCMYK [/ICCBased 5 0 R]", "[/Indexed /DeviceCMYK 0 <FF000000>]", []byte{0},
-			[]string{profileObj(4, flatProfile("CMYK", 25))}, grey25},
-		{"a Separation alternate", "/DefaultCMYK [/ICCBased 5 0 R]", "[/Separation /Spot /DeviceCMYK 6 0 R]", []byte{255},
-			[]string{profileObj(4, flatProfile("CMYK", 25)), tint}, grey25},
-		{"a default of another component count", "/DefaultRGB [/ICCBased 5 0 R]", "/DeviceRGB", []byte{10, 20, 30},
-			[]string{profileObj(4, flatProfile("CMYK", 25))}, [3]int{10, 20, 30}},
-		{"a default that is not CIE-based", "/DefaultCMYK /DeviceRGB", "/DeviceCMYK", []byte{255, 0, 0, 0},
-			nil, cyan},
+		{
+			"DefaultCMYK", "/DefaultCMYK [/ICCBased 5 0 R]", "/DeviceCMYK",
+			[]byte{255, 0, 0, 0},
+			[]string{profileObj(4, flatProfile("CMYK", 25))},
+			grey25,
+		},
+		{
+			"DefaultRGB", "/DefaultRGB [/ICCBased 5 0 R]", "/DeviceRGB",
+			[]byte{255, 0, 0},
+			[]string{profileObj(3, flatProfile("RGB ", 25))},
+			grey25,
+		},
+		{
+			"DefaultGray", "/DefaultGray [/ICCBased 5 0 R]", "/DeviceGray",
+			[]byte{255},
+			[]string{profileObj(1, flatProfile("GRAY", 25))},
+			grey25,
+		},
+		{
+			"an Indexed base", "/DefaultCMYK [/ICCBased 5 0 R]", "[/Indexed /DeviceCMYK 0 <FF000000>]",
+			[]byte{0},
+			[]string{profileObj(4, flatProfile("CMYK", 25))},
+			grey25,
+		},
+		{
+			"a Separation alternate", "/DefaultCMYK [/ICCBased 5 0 R]", "[/Separation /Spot /DeviceCMYK 6 0 R]",
+			[]byte{255},
+			[]string{profileObj(4, flatProfile("CMYK", 25)), tint},
+			grey25,
+		},
+		{
+			"a default of another component count", "/DefaultRGB [/ICCBased 5 0 R]", "/DeviceRGB",
+			[]byte{10, 20, 30},
+			[]string{profileObj(4, flatProfile("CMYK", 25))},
+			[3]int{10, 20, 30},
+		},
+		{
+			"a default that is not CIE-based", "/DefaultCMYK /DeviceRGB", "/DeviceCMYK",
+			[]byte{255, 0, 0, 0},
+			nil, cyan,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -496,26 +532,86 @@ func TestDecodeImage_DeviceRGBAndGrayReadTheOutputIntent(t *testing.T) {
 		extra   []string
 		want    [3]int
 	}{
-		{"DeviceRGB through an RGB profile", pdfContext{catalog: intents(5)}, "/DeviceRGB",
-			[]byte{10, 20, 30}, []string{rgb25}, grey25},
-		{"DeviceGray through a Gray profile", pdfContext{catalog: intents(5)}, "/DeviceGray",
-			[]byte{10}, []string{gray25}, grey25},
-		{"the first profile of the family", pdfContext{catalog: intents(5, 6)}, "/DeviceRGB",
-			[]byte{10, 20, 30}, []string{cmyk25, rgb25}, grey25},
-		{"the page's before the document's", pdfContext{catalog: intents(5), page: intents(6)}, "/DeviceRGB",
-			[]byte{10, 20, 30}, []string{rgb50, rgb25}, grey25},
-		{"an Indexed base", pdfContext{catalog: intents(5)}, "[/Indexed /DeviceRGB 0 <0A141E>]",
-			[]byte{0}, []string{rgb25}, grey25},
-		{"a Separation alternate", pdfContext{catalog: intents(5)}, "[/Separation /Spot /DeviceRGB 6 0 R]",
-			[]byte{255}, []string{rgb25, tint}, grey25},
-		{"an ICCBased space whose profile cannot be used", pdfContext{catalog: intents(5)}, "[/ICCBased 6 0 R]",
-			[]byte{10, 20, 30}, []string{rgb25, "<< /N 3 /Length 3 >>\nstream\nbad\nendstream"}, grey25},
-		{"DeviceRGB past a CMYK profile", pdfContext{catalog: intents(5)}, "/DeviceRGB",
-			[]byte{10, 20, 30}, []string{cmyk25}, [3]int{10, 20, 30}},
-		{"DeviceGray past an RGB profile", pdfContext{catalog: intents(5)}, "/DeviceGray",
-			[]byte{10}, []string{rgb25}, [3]int{10, 10, 10}},
-		{"a default colour space first", pdfContext{catalog: intents(5), resources: "/ColorSpace << /DefaultRGB [/ICCBased 6 0 R] >>"},
-			"/DeviceRGB", []byte{10, 20, 30}, []string{rgb25, rgb50}, grey50},
+		{
+			"DeviceRGB through an RGB profile",
+			pdfContext{catalog: intents(5)},
+			"/DeviceRGB",
+			[]byte{10, 20, 30},
+			[]string{rgb25},
+			grey25,
+		},
+		{
+			"DeviceGray through a Gray profile",
+			pdfContext{catalog: intents(5)},
+			"/DeviceGray",
+			[]byte{10},
+			[]string{gray25},
+			grey25,
+		},
+		{
+			"the first profile of the family",
+			pdfContext{catalog: intents(5, 6)},
+			"/DeviceRGB",
+			[]byte{10, 20, 30},
+			[]string{cmyk25, rgb25},
+			grey25,
+		},
+		{
+			"the page's before the document's",
+			pdfContext{catalog: intents(5), page: intents(6)},
+			"/DeviceRGB",
+			[]byte{10, 20, 30},
+			[]string{rgb50, rgb25},
+			grey25,
+		},
+		{
+			"an Indexed base",
+			pdfContext{catalog: intents(5)},
+			"[/Indexed /DeviceRGB 0 <0A141E>]",
+			[]byte{0},
+			[]string{rgb25},
+			grey25,
+		},
+		{
+			"a Separation alternate",
+			pdfContext{catalog: intents(5)},
+			"[/Separation /Spot /DeviceRGB 6 0 R]",
+			[]byte{255},
+			[]string{rgb25, tint},
+			grey25,
+		},
+		{
+			"an ICCBased space whose profile cannot be used",
+			pdfContext{catalog: intents(5)},
+			"[/ICCBased 6 0 R]",
+			[]byte{10, 20, 30},
+			[]string{rgb25, "<< /N 3 /Length 3 >>\nstream\nbad\nendstream"},
+			grey25,
+		},
+		{
+			"DeviceRGB past a CMYK profile",
+			pdfContext{catalog: intents(5)},
+			"/DeviceRGB",
+			[]byte{10, 20, 30},
+			[]string{cmyk25},
+			[3]int{10, 20, 30},
+		},
+		{
+			"DeviceGray past an RGB profile",
+			pdfContext{catalog: intents(5)},
+			"/DeviceGray",
+			[]byte{10},
+			[]string{rgb25},
+			[3]int{10, 10, 10},
+		},
+		{
+			"a default colour space first",
+			pdfContext{catalog: intents(5), resources: "/ColorSpace << /DefaultRGB [/ICCBased 6 0 R] >>"},
+			"/DeviceRGB",
+			[]byte{10, 20, 30},
+			[]string{rgb25, rgb50},
+			grey50,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

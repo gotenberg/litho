@@ -614,8 +614,8 @@ func (p *pairBudget) same(ctx context.Context, a *document.Document, x ast.PdfOb
 			if !ok || len(xv) != len(yv) {
 				return false
 			}
-			for i := len(xv) - 1; i >= 0; i-- {
-				stack = append(stack, pair{xv[i], yv[i]})
+			for i, x := range slices.Backward(xv) {
+				stack = append(stack, pair{x, yv[i]})
 			}
 		case ast.PdfStream:
 			yv, ok := py.(ast.PdfStream)

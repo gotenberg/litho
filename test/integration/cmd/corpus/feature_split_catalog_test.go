@@ -241,14 +241,14 @@ func TestSplitFeature_Compare_CatalogViolationFailsTheFixture(t *testing.T) {
 	t.Parallel()
 	f := newSplitFeature()
 	out, _ := json.Marshal(splitOutput{
-		InputPages:   2,
-		NumPages:     3,
-		InputFirst:   "First",
-		InputLast:    "Last",
-		OutFirst:     "First",
-		OutLast:      "Last",
-		OutRepeat:    "First",
-		catalogFacts: catalogFacts{OutAcroForm: true},
+		InputPages:  2,
+		NumPages:    3,
+		InputFirst:  "First",
+		InputLast:   "Last",
+		OutFirst:    "First",
+		OutLast:     "Last",
+		OutRepeat:   "First",
+		OutAcroForm: true,
 	})
 	v := f.Compare("doc", out)
 	if v.Match {

@@ -27,7 +27,7 @@ func pageCtxsForPages(ctx context.Context, doc *document.Document, pages ...ast.
 	for i, page := range pages {
 		contentBytes, contentErr := resolvePageContentBytes(ctx, doc, page)
 		out[i] = pageCtx{
-			pageObject:        pageObject{dict: page},
+			dict:              page,
 			resources:         resolveResources(ctx, doc, page),
 			content:           contentBytes,
 			parseFailed:       contentErr != nil,

@@ -231,8 +231,10 @@ func TestRenderFeatureLoadGoldens(t *testing.T) {
 	}
 
 	deep := t.TempDir()
-	writeRenderGolden(t, deep, renderIndex{ID: "a", DPI: renderDPI, PageCount: 9,
-		Pages: []renderIndexPage{{Page: renderMaxPages + 1, Error: "x"}}}, nil)
+	writeRenderGolden(t, deep, renderIndex{
+		ID: "a", DPI: renderDPI, PageCount: 9,
+		Pages: []renderIndexPage{{Page: renderMaxPages + 1, Error: "x"}},
+	}, nil)
 	if err := newRenderFeature().LoadGoldens(deep); err == nil || errors.Is(err, ErrNoGoldens) {
 		t.Errorf("golden past renderMaxPages: %v, want a refusal", err)
 	}
@@ -243,8 +245,10 @@ func TestRenderFeatureSkipsUntilLithoRenders(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeRenderGolden(t, dir, renderIndex{ID: "a", DPI: renderDPI, PageCount: 1,
-		Pages: []renderIndexPage{{Page: 1, File: "a.1.png"}}}, map[int]image.Image{1: whitePage(10, 10)})
+	writeRenderGolden(t, dir, renderIndex{
+		ID: "a", DPI: renderDPI, PageCount: 1,
+		Pages: []renderIndexPage{{Page: 1, File: "a.1.png"}},
+	}, map[int]image.Image{1: whitePage(10, 10)})
 	f := newRenderFeature()
 	f.render = nil
 	if err := f.LoadGoldens(dir); err != nil {
@@ -275,8 +279,10 @@ func TestRenderFeatureHandsLithoTheGoldensFonts(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, renderFontsDir), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	writeRenderGolden(t, dir, renderIndex{ID: "doc", DPI: renderDPI, PageCount: 1,
-		Pages: []renderIndexPage{{Page: 1, File: "doc.1.png"}}}, map[int]image.Image{1: whitePage(10, 10)})
+	writeRenderGolden(t, dir, renderIndex{
+		ID: "doc", DPI: renderDPI, PageCount: 1,
+		Pages: []renderIndexPage{{Page: 1, File: "doc.1.png"}},
+	}, map[int]image.Image{1: whitePage(10, 10)})
 	f := newRenderFeature()
 	var got int
 	f.render = func(_ context.Context, _ *pdf.Reader, _ int, _ float64, opts ...pdf.RenderOption) (image.Image, error) {

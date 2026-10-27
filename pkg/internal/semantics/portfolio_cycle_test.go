@@ -26,9 +26,11 @@ func efPDF(objs ...string) []byte {
 	return buf.Bytes()
 }
 
-const efCatalog = "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 4 0 R >> >>"
-const efPages = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
-const efPage = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"
+const (
+	efCatalog = "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 4 0 R >> >>"
+	efPages   = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+	efPage    = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"
+)
 
 // TestExtractEmbeddedFiles_SelfReferencingKidTerminates pins that an
 // /EmbeddedFiles name-tree node naming itself as its own kid is walked once

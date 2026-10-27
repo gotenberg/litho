@@ -63,8 +63,10 @@ func TestStroke(t *testing.T) {
 func TestClipping(t *testing.T) {
 	t.Parallel()
 	img, _ := draw(t, fixture{content: "20 20 40 40 re W n 0 g 0 0 100 100 re f"})
-	expect(t, img, 0, map[[2]int]rgb{{30, 70}: black, {20, 40}: black, {59, 79}: black,
-		{19, 50}: paper, {60, 50}: paper, {30, 39}: paper, {30, 80}: paper})
+	expect(t, img, 0, map[[2]int]rgb{
+		{30, 70}: black, {20, 40}: black, {59, 79}: black,
+		{19, 50}: paper, {60, 50}: paper, {30, 39}: paper, {30, 80}: paper,
+	})
 	// Q restores the clip of the state q saved (ISO 32000-1, 8.4.2).
 	img, _ = draw(t, fixture{content: "q 20 20 40 40 re W n Q 0 g 0 0 100 100 re f"})
 	expect(t, img, 0, map[[2]int]rgb{{5, 5}: black, {95, 95}: black})
@@ -444,9 +446,7 @@ func TestConcurrentRenders(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 8)
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			got, _, err := Render(context.Background(), doc, pg, Options{DPI: 72, Background: white})
 			if err != nil {
 				errs <- err
@@ -455,7 +455,7 @@ func TestConcurrentRenders(t *testing.T) {
 			if string(got.Image().Pix) != string(want.Image().Pix) {
 				errs <- errors.New("a concurrent render differs")
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)

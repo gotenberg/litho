@@ -200,13 +200,11 @@ func TestDecodeImage_Concurrent(t *testing.T) {
 	errs := make(chan error, 64)
 	for range 16 {
 		for _, name := range []string{"Im0", "Im1"} {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if _, err := r.DecodeImage(context.Background(), 1, name); err != nil {
 					errs <- err
 				}
-			}()
+			})
 		}
 	}
 	wg.Wait()

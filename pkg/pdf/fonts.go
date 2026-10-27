@@ -448,8 +448,8 @@ func withWidth(family, width string) string {
 // last hyphen, and "Helvetica-Narrow" names the family helveticanarrow.
 func splitFontName(name string) (string, fontStyle) {
 	fam, style := name, ""
-	if i := strings.IndexByte(name, ','); i >= 0 {
-		fam, style = name[:i], name[i+1:]
+	if before, after, ok := strings.Cut(name, ","); ok {
+		fam, style = before, after
 	} else if i := strings.LastIndexByte(name, '-'); i > 0 {
 		fam, style = name[:i], name[i+1:]
 	}

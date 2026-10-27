@@ -173,8 +173,11 @@ func TestRewrites_WriteThePageBoxesViewersRead(t *testing.T) {
 					name  string
 					value ast.PdfArray
 				}{
-					{"MediaBox", page.MediaBox}, {"CropBox", page.DeclaredCropBox}, {"BleedBox", page.DeclaredBleedBox},
-					{"TrimBox", page.DeclaredTrimBox}, {"ArtBox", page.DeclaredArtBox},
+					{"MediaBox", page.MediaBox},
+					{"CropBox", page.DeclaredCropBox},
+					{"BleedBox", page.DeclaredBleedBox},
+					{"TrimBox", page.DeclaredTrimBox},
+					{"ArtBox", page.DeclaredArtBox},
 				} {
 					if box.value != nil && !isRectangle(box.value) {
 						t.Errorf("page %d states /%s %v, want a rectangle", i+1, box.name, box.value)

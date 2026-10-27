@@ -394,8 +394,10 @@ func TestSpecialSpaces(t *testing.T) {
 	d := agreementDoc(t, "/DeviceGray", nil)
 	ctx, doc := d.ctx, d.doc
 
-	none := ast.PdfArray{ast.PdfName("Separation"), ast.PdfName("None"), ast.PdfName("DeviceGray"),
-		ast.PdfDict{"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)}, "N": ast.PdfInt(1)}}
+	none := ast.PdfArray{
+		ast.PdfName("Separation"), ast.PdfName("None"), ast.PdfName("DeviceGray"),
+		ast.PdfDict{"FunctionType": ast.PdfInt(2), "Domain": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)}, "N": ast.PdfInt(1)},
+	}
 	if _, err := ForObject(ctx, doc, none, nil, Options{}); !errors.Is(err, ErrPaintsNothing) {
 		t.Errorf("Separation /None: err = %v, want ErrPaintsNothing", err)
 	}

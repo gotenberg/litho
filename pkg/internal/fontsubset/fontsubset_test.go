@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"context"
 	"fmt"
+	"maps"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -113,9 +114,7 @@ func (d *testDoc) finish(res ast.PdfObject, extra ast.PdfDict, contents ...strin
 	}
 	d.alloc.AllocAt(pagesRef.ObjectNum, ast.PdfDict{"Type": ast.PdfName("Pages"), "Kids": kids, "Count": ast.PdfInt(len(kids))})
 	catalog := ast.PdfDict{"Type": ast.PdfName("Catalog"), "Pages": pagesRef}
-	for k, v := range extra {
-		catalog[k] = v
-	}
+	maps.Copy(catalog, extra)
 	return ast.PdfDict{"Root": d.add(catalog)}
 }
 

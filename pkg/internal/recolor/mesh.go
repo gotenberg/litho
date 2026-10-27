@@ -122,7 +122,7 @@ func (s *session) copyMesh(ctx context.Context, data []byte, l meshLayout, p *sp
 	patches := 0
 	// triangle is how many vertices the current type 4 triangle holds.
 	triangle := 0
-	for n := 0; n < maxMeshRecords; n++ {
+	for n := range maxMeshRecords {
 		if n%256 == 0 && ctx.Err() != nil {
 			return nil, ctx.Err()
 		}

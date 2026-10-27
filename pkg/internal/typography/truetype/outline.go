@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
@@ -334,10 +335,8 @@ func (w *glyphWalk) points(ctx context.Context, gid, depth int) (glyphPoints, er
 	// rather than drawn from the components read before the cycle, as PDF.js
 	// draws it (font_renderer.js, compileGlyf). The cycle check, with
 	// [maxComponentDepth] and [maxGlyphComponents], keeps the walk bounded.
-	for _, ancestor := range w.stack {
-		if ancestor == gid {
-			return glyphPoints{}, fmt.Errorf("%w: %w (glyph %d)", ErrInvalidFont, errComponentCycle, gid)
-		}
+	if slices.Contains(w.stack, gid) {
+		return glyphPoints{}, fmt.Errorf("%w: %w (glyph %d)", ErrInvalidFont, errComponentCycle, gid)
 	}
 	w.stack = append(w.stack, gid)
 	defer func() { w.stack = w.stack[:len(w.stack)-1] }()

@@ -628,7 +628,7 @@ func (e *encoder) write(ctx context.Context, dc, ac [2]*codeTable) ([]byte, erro
 		// Ss 0, Se 63, Ah and Al 0: the whole block in one scan (B.2.3).
 		return append(b, 0, 63, 0)
 	})
-	w := &scanWriter{bitWriter: bitWriter{out: out}, dc: dc, ac: ac}
+	w := &scanWriter{out: out, dc: dc, ac: ac}
 	if err := e.scan(ctx, w); err != nil {
 		return nil, err
 	}

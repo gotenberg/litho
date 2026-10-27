@@ -390,8 +390,10 @@ func TestFixFontEmbed_KeepsSomeProgramsWhole(t *testing.T) {
 		" /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 >>"
 	sharing := strings.Replace(subsetTrueTypeFont(), "/FontDescriptor << /Type /FontDescriptor /FontName /ArialMT /Flags 32"+
 		" /FontBBox [0 0 1000 800] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 >>", "/FontDescriptor 8 0 R", 1)
-	data := subsetFontsPDF(true, []string{sharing, sharing,
-		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"}, descriptor)
+	data := subsetFontsPDF(true, []string{
+		sharing, sharing,
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+	}, descriptor)
 	report, doc, _ := remediateFontsAndReopen(t, data, string(models.PDFA2b), subsetProvider(0))
 	if len(report.FontRefusals) != 0 {
 		t.Fatalf("refusals %v", report.FontRefusals)

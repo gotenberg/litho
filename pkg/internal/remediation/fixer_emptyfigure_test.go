@@ -316,14 +316,22 @@ func TestFixEmptyFigure_RemovesFigureAnInlineElementLists(t *testing.T) {
 		want   string
 		direct bool
 	}{
-		{name: "as an inline element's /K", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R >>] >>",
-			owner: 9, want: "[<< /Type /StructElem /S /Div >>]"},
-		{name: "in an inline element's /K array", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K << /Type /StructElem /S /Div /K [10 0 R " + marked + "] >> >>",
-			owner: 9, want: "<< /Type /StructElem /S /Div /K [" + marked + "] >>"},
-		{name: "in a /K array of its own an inline element names", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 11 0 R >>] >>",
-			extra: []string{"[10 0 R]"}, owner: 11, want: "[]"},
-		{name: "under an inline Figure that goes too", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Figure /K 10 0 R >> " + marked + "] >>",
-			owner: 9, want: "[" + marked + "]", direct: true},
+		{
+			name: "as an inline element's /K", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R >>] >>",
+			owner: 9, want: "[<< /Type /StructElem /S /Div >>]",
+		},
+		{
+			name: "in an inline element's /K array", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K << /Type /StructElem /S /Div /K [10 0 R " + marked + "] >> >>",
+			owner: 9, want: "<< /Type /StructElem /S /Div /K [" + marked + "] >>",
+		},
+		{
+			name: "in a /K array of its own an inline element names", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 11 0 R >>] >>",
+			extra: []string{"[10 0 R]"}, owner: 11, want: "[]",
+		},
+		{
+			name: "under an inline Figure that goes too", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Figure /K 10 0 R >> " + marked + "] >>",
+			owner: 9, want: "[" + marked + "]", direct: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -360,10 +368,14 @@ func TestFixEmptyFigure_RemovesFigureAnInlineElementLists(t *testing.T) {
 		})
 	}
 	for _, tc := range []struct{ name, elem, figure string }{
-		{name: "enclosing content", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R >>] >>",
-			figure: "<< /Type /StructElem /S /Figure /Pg 3 0 R /K 0 >>"},
-		{name: "named in the inline element's /Ref", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R /Ref [10 0 R] >>] >>",
-			figure: "<< /Type /StructElem /S /Figure >>"},
+		{
+			name: "enclosing content", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R >>] >>",
+			figure: "<< /Type /StructElem /S /Figure /Pg 3 0 R /K 0 >>",
+		},
+		{
+			name: "named in the inline element's /Ref", elem: "<< /Type /StructElem /S /Sect /P 5 0 R /K [<< /Type /StructElem /S /Div /K 10 0 R /Ref [10 0 R] >>] >>",
+			figure: "<< /Type /StructElem /S /Figure >>",
+		},
 	} {
 		t.Run("stays "+tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -534,9 +546,12 @@ func TestFixEmptyFigure_CleansEveryReference(t *testing.T) {
 		t.Errorf("/IDTree /Names = %s, want the P's and Figure 12's identifiers", names)
 	}
 	wantNums := ast.PdfArray{
-		ast.PdfInt(0), ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 8}, ast.PdfNull{}},
-		ast.PdfInt(1), ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 12}},
-		ast.PdfInt(2), ast.PdfIndirectRef{ObjectNum: 11},
+		ast.PdfInt(0),
+		ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 8}, ast.PdfNull{}},
+		ast.PdfInt(1),
+		ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 12}},
+		ast.PdfInt(2),
+		ast.PdfIndirectRef{ObjectNum: 11},
 	}
 	if nums := pendingDict(t, alloc, 7)["Nums"]; fmt.Sprint(nums) != fmt.Sprint(wantNums) {
 		t.Errorf("/ParentTree /Nums = %v, want %v", nums, wantNums)

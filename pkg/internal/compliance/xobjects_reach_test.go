@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -76,12 +77,8 @@ func TestImageRulesReachAppearancesAndGlyphs(t *testing.T) {
 	}
 	with := func(base map[int]string, more map[int]string) map[int]string {
 		out := make(map[int]string, len(base)+len(more))
-		for n, b := range base {
-			out[n] = b
-		}
-		for n, b := range more {
-			out[n] = b
-		}
+		maps.Copy(out, base)
+		maps.Copy(out, more)
 		return out
 	}
 

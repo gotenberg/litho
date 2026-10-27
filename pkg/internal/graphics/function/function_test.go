@@ -327,11 +327,21 @@ func TestBitsAt(t *testing.T) {
 		bps, i int
 		want   uint64
 	}{
-		{8, 0, 0xB2}, {8, 1, 0x4F},
-		{4, 0, 0xB}, {4, 1, 0x2}, {4, 2, 0x4}, {4, 3, 0xF},
-		{1, 0, 1}, {1, 1, 0}, {1, 2, 1}, {1, 3, 1},
+		{8, 0, 0xB2},
+		{8, 1, 0x4F},
+		{4, 0, 0xB},
+		{4, 1, 0x2},
+		{4, 2, 0x4},
+		{4, 3, 0xF},
+		{1, 0, 1},
+		{1, 1, 0},
+		{1, 2, 1},
+		{1, 3, 1},
 		{16, 0, 0xB24F},
-		{2, 0, 0b10}, {2, 1, 0b11}, {2, 2, 0b00}, {2, 3, 0b10},
+		{2, 0, 0b10},
+		{2, 1, 0b11},
+		{2, 2, 0b00},
+		{2, 3, 0b10},
 	} {
 		if got := bitsAt(data, tc.i, tc.bps); got != tc.want {
 			t.Errorf("bitsAt(%d bits, index %d) = %#x, want %#x", tc.bps, tc.i, got, tc.want)

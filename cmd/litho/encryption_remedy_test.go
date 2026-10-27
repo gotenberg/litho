@@ -29,7 +29,7 @@ func runCapturingStderr(t *testing.T, args []string) (int, string) {
 func encryptionWarningLine(t *testing.T, stderr string) string {
 	t.Helper()
 
-	for _, line := range strings.Split(stderr, "\n") {
+	for line := range strings.SplitSeq(stderr, "\n") {
 		if strings.Contains(line, encryptionWarning) {
 			return line
 		}

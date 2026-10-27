@@ -20,8 +20,11 @@ func TestRedactionNeedles(t *testing.T) {
 		{"whitespace and punctuation are not looked for", []string{" ", ".", ") ", "--"}, nil},
 		{"two characters are not looked for", []string{"12", " ", "v."}, nil},
 		{"a word drawn glyph by glyph is joined", []string{"S", "E", "C", "R", "E", "T"}, []string{"SECRET"}},
-		{"a joined line is split into words", []string{"J", "o", "h", "n", " ", "S", "m", "i", "t", "h", " ", "J", "r"},
-			[]string{"John", "Smith"}},
+		{
+			"a joined line is split into words",
+			[]string{"J", "o", "h", "n", " ", "S", "m", "i", "t", "h", " ", "J", "r"},
+			[]string{"John", "Smith"},
+		},
 		{"punctuation is trimmed from a joined word", []string{"(", "S", "E", "C", "R", "E", "T", ".", ")"}, []string{"SECRET"}},
 		{"an identifying run ends a join", []string{"S", "E", "keep", "C", "R", "E"}, []string{"keep", "CRE"}},
 		{"each needle once, in the order first met", []string{"plan", "x", "plan", "y"}, []string{"plan"}},

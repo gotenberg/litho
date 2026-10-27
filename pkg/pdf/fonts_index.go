@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 
@@ -369,12 +370,7 @@ var fontExtensions = []string{".ttf", ".otf", ".ttc", ".otc", ".cff"}
 // isFontFileName reports whether name carries one of [fontExtensions].
 func isFontFileName(name string) bool {
 	ext := strings.ToLower(path.Ext(name))
-	for _, e := range fontExtensions {
-		if ext == e {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(fontExtensions, ext)
 }
 
 // walkFontFS lists the font files under the root of fsys, in path order,

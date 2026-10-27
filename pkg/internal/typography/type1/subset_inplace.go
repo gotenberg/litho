@@ -414,7 +414,7 @@ func checkSubrs(ctx context.Context, body []byte, lenIV int) error {
 		return fmt.Errorf("%w: a /Subrs count that does not read", ErrSubsetUnsupported)
 	}
 	pos := loc[1]
-	for read := 0; read < count; read++ {
+	for read := range count {
 		if read%ctxCheckEvery == 0 {
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("subsetting a Type 1 program: %w", err)

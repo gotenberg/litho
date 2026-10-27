@@ -186,8 +186,10 @@ func leakVectors(t *testing.T) []leakVector {
 		},
 		{
 			name: "catalog private data",
-			plant: plant{catalog: "/PieceInfo << /App << /LastModified (D:20200101) /Private 7 0 R >> >>",
-				objects: plantStream(7, "", string(private))},
+			plant: plant{
+				catalog: "/PieceInfo << /App << /LastModified (D:20200101) /Private 7 0 R >> >>",
+				objects: plantStream(7, "", string(private)),
+			},
 			carrier: private,
 		},
 		{name: "signature reason", plant: signedField("/Reason (SECRET)"), carrier: []byte("SECRET")},

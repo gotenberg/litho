@@ -31,14 +31,22 @@ func TestAnnotOutsideCropBoxAsVeraPDFReadsIt(t *testing.T) {
 		objs []string
 		want string
 	}{
-		{"a Link on a page inheriting its media box", onePage("", " /MediaBox [0 0 612 792]", "50 700 200 720"),
-			"7.18.1/2:1 7.18.1/3:0 7.18.4/1:0 7.18.5/1:1 7.18.5/2:1"},
-		{"a Link off a page inheriting its media box", onePage("", " /MediaBox [0 0 612 792]", "700 700 800 720"),
-			"7.18.1/2:0 7.18.1/3:0 7.18.4/1:0 7.18.5/1:0 7.18.5/2:0"},
-		{"a Link off its page's own media box", onePage(" /MediaBox [0 0 612 792]", "", "700 700 800 720"),
-			"7.18.1/2:0 7.18.1/3:0 7.18.4/1:0 7.18.5/1:0 7.18.5/2:0"},
-		{"a Link above a crop box of three numbers", onePage(" /MediaBox [0 0 612 792] /CropBox [0 0 300]", "", "50 700 200 720"),
-			"7.18.1/2:0 7.18.1/3:0 7.18.4/1:0 7.18.5/1:0 7.18.5/2:0"},
+		{
+			"a Link on a page inheriting its media box", onePage("", " /MediaBox [0 0 612 792]", "50 700 200 720"),
+			"7.18.1/2:1 7.18.1/3:0 7.18.4/1:0 7.18.5/1:1 7.18.5/2:1",
+		},
+		{
+			"a Link off a page inheriting its media box", onePage("", " /MediaBox [0 0 612 792]", "700 700 800 720"),
+			"7.18.1/2:0 7.18.1/3:0 7.18.4/1:0 7.18.5/1:0 7.18.5/2:0",
+		},
+		{
+			"a Link off its page's own media box", onePage(" /MediaBox [0 0 612 792]", "", "700 700 800 720"),
+			"7.18.1/2:0 7.18.1/3:0 7.18.4/1:0 7.18.5/1:0 7.18.5/2:0",
+		},
+		{
+			"a Link above a crop box of three numbers", onePage(" /MediaBox [0 0 612 792] /CropBox [0 0 300]", "", "50 700 200 720"),
+			"7.18.1/2:0 7.18.1/3:0 7.18.4/1:0 7.18.5/1:0 7.18.5/2:0",
+		},
 		{"a widget whose /P names a page it lies off", []string{
 			"<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /Lang (en) /AcroForm << /Fields [6 0 R] >> >>",
 			"<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>",

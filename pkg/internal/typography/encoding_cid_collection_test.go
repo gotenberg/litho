@@ -30,8 +30,10 @@ func collectionType0Font(ordering string, enc ast.PdfObject, embedded bool) ast.
 		"Flags":    ast.PdfInt(4),
 	}
 	if embedded {
-		program := fontbuild.TrueType{PostScriptName: "LithoCollection", Family: "Litho", Subfamily: "Regular",
-			Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 500}}}.Build()
+		program := fontbuild.TrueType{
+			PostScriptName: "LithoCollection", Family: "Litho", Subfamily: "Regular",
+			Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 500}},
+		}.Build()
 		fd["FontFile2"] = ast.NewStream(ast.PdfDict{}, program)
 		cidFont["CIDToGIDMap"] = ast.NewStream(ast.PdfDict{}, []byte{0, 0, 0, 1, 0, 1})
 	}

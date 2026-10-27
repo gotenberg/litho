@@ -23,12 +23,18 @@ func TestMatchOutputIntentCleanup_ClaimsPartOneSameProfileRule(t *testing.T) {
 		v    compliance.Violation
 		want bool
 	}{
-		{"part 1 6.2.2 t2", compliance.Violation{Rule: compliance.Rule_19005_1_6_2_2_t02,
-			Context: "OutputIntent[1]: DestOutputProfile does not reference same object as first entry"}, true},
-		{"part 2 6.2.3 t2", compliance.Violation{Rule: compliance.Rule_19005_2_6_2_3_t02,
-			Context: "OutputIntent[1]: DestOutputProfile does not reference same object as first entry"}, true},
-		{"part 1 6.2.2 t1", compliance.Violation{Rule: compliance.Rule_19005_1_6_2_2_t01,
-			Context: "OutputIntent[0]: ICC profile header too short"}, false},
+		{"part 1 6.2.2 t2", compliance.Violation{
+			Rule:    compliance.Rule_19005_1_6_2_2_t02,
+			Context: "OutputIntent[1]: DestOutputProfile does not reference same object as first entry",
+		}, true},
+		{"part 2 6.2.3 t2", compliance.Violation{
+			Rule:    compliance.Rule_19005_2_6_2_3_t02,
+			Context: "OutputIntent[1]: DestOutputProfile does not reference same object as first entry",
+		}, true},
+		{"part 1 6.2.2 t1", compliance.Violation{
+			Rule:    compliance.Rule_19005_1_6_2_2_t01,
+			Context: "OutputIntent[0]: ICC profile header too short",
+		}, false},
 	} {
 		if got := matchOutputIntentCleanup(tc.v); got != tc.want {
 			t.Errorf("%s: matchOutputIntentCleanup = %v, want %v", tc.name, got, tc.want)

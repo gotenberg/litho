@@ -105,7 +105,7 @@ func usageCommandNames(t *testing.T) map[string]bool {
 	printUsage(&buf)
 
 	names := make(map[string]bool)
-	for _, line := range strings.Split(buf.String(), "\n") {
+	for line := range strings.SplitSeq(buf.String(), "\n") {
 		// Command rows are indented and start with the name. Section headers
 		// are flush left, and the global flag rows start with a dash.
 		if !strings.HasPrefix(line, "  ") {

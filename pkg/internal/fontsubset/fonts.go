@@ -94,7 +94,7 @@ func (w *walk) nodeAt(l loc) node {
 		return n
 	}
 	at := loc{obj: l.obj}
-	for _, key := range strings.Split(l.path, pathSep) {
+	for key := range strings.SplitSeq(l.path, pathSep) {
 		at = at.slot(key)
 		next, ok := w.g.child(n, key)
 		if !ok {

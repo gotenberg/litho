@@ -1093,8 +1093,8 @@ func (q *qnameScope) expand(raw string) (string, error) {
 // defaultNamespace returns the default namespace in scope, "" when none
 // is.
 func (q *qnameScope) defaultNamespace() string {
-	for i := len(q.bindings) - 1; i >= 0; i-- {
-		if ns, ok := q.bindings[i][""]; ok {
+	for _, v := range slices.Backward(q.bindings) {
+		if ns, ok := v[""]; ok {
 			return ns
 		}
 	}
@@ -1105,8 +1105,8 @@ func (q *qnameScope) defaultNamespace() string {
 // Per Namespaces in XML 1.0, 3 the xml prefix is bound by definition.
 // A prefix no element declares falls back to [wellKnownPrefixes].
 func (q *qnameScope) prefixNamespace(prefix string) (string, bool) {
-	for i := len(q.bindings) - 1; i >= 0; i-- {
-		if ns, ok := q.bindings[i][prefix]; ok {
+	for _, v := range slices.Backward(q.bindings) {
+		if ns, ok := v[prefix]; ok {
 			return ns, true
 		}
 	}
@@ -1505,7 +1505,7 @@ func buildSimpleType(doc *schemaDoc, raw *rawSimpleType) (*SimpleType, error) {
 // white-space-separated list, then the xs:simpleType children.
 func buildUnion(doc *schemaDoc, raw *rawUnion, st *SimpleType) error {
 	st.Union = true
-	for _, name := range strings.Fields(raw.MemberTypes) {
+	for name := range strings.FieldsSeq(raw.MemberTypes) {
 		ref, err := doc.qname(name)
 		if err != nil {
 			return err

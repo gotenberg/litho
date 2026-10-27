@@ -137,9 +137,7 @@ func loadFixturesAuto(ctx context.Context, m *Manifest, pdfs []string) ([]Fixtur
 		if !acquire(ctx, sem) {
 			break
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() { <-sem }()
 			base := strings.TrimSuffix(filepath.Base(path), ".pdf")
 			var profile string
@@ -160,7 +158,7 @@ func loadFixturesAuto(ctx context.Context, m *Manifest, pdfs []string) ([]Fixtur
 				PDFPath:    path,
 				SkipReason: m.Skips[id],
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	// A scan cut short read the files it never reached, and the ones it was

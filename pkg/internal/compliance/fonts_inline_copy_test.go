@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -175,9 +176,7 @@ func TestInlineFontJudgedPerCopy(t *testing.T) {
 			t.Run(string(f.profile)+" "+f.name+" "+layout, func(t *testing.T) {
 				t.Parallel()
 				all := inlineFontSubObjects(t)
-				for n, o := range objs {
-					all[n] = o
-				}
+				maps.Copy(all, objs)
 				doc, _ := objsDocPDF(t, sparseObjs(all)...)
 				viols, err := ValidatePDFA(context.Background(), doc, f.profile)
 				if err != nil {
@@ -266,9 +265,7 @@ func TestDescendantRulesOncePerDescendant(t *testing.T) {
 						47: "<< /Type /FontDescriptor /FontName /FooBar /Flags 32 /Ascent 700 /Descent -200 " +
 							"/CapHeight 700 /StemV 80 /FontBBox [0 0 500 700] /ItalicAngle 0 >>",
 					}
-					for n, o := range l.objs(d.font) {
-						all[n] = o
-					}
+					maps.Copy(all, l.objs(d.font))
 					doc, _ := objsDocPDF(t, sparseObjs(all)...)
 					viols, err := ValidatePDFA(context.Background(), doc, p.profile)
 					if err != nil {

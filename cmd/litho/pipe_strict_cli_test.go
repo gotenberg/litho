@@ -135,7 +135,7 @@ func TestPipeUsage_AdvertisesEveryStage(t *testing.T) {
 			inList = false
 			continue
 		}
-		for _, name := range strings.Split(line, ",") {
+		for name := range strings.SplitSeq(line, ",") {
 			if name = strings.TrimSpace(name); name != "" {
 				advertised[name] = true
 			}

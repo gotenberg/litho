@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -136,9 +137,7 @@ func remapRefs(obj ast.PdfObject, remap map[int]int) (ast.PdfObject, bool) {
 			rewritten, valChanged := remapRefs(val, remap)
 			if valChanged && !changed {
 				out = make(ast.PdfDict, len(v))
-				for k, existing := range v {
-					out[k] = existing
-				}
+				maps.Copy(out, v)
 				changed = true
 			}
 			if changed {

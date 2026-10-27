@@ -2,6 +2,7 @@ package recolor
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"testing"
 
@@ -19,9 +20,7 @@ func smaskInDataImage(t *testing.T, name string, extra ast.PdfDict) ast.PdfStrea
 		t.Fatal(err)
 	}
 	d := ast.PdfDict{"Filter": ast.PdfName("JPXDecode")}
-	for k, v := range extra {
-		d[k] = v
-	}
+	maps.Copy(d, extra)
 	img := imageStream(96, 64, nil, 8, data, d)
 	if _, ok := extra["BitsPerComponent"]; !ok {
 		delete(img.Dict, "BitsPerComponent")

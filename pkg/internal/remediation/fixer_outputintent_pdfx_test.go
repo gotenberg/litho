@@ -217,8 +217,10 @@ func TestDefaultCMYK_KeepsTheStockProfileWhenPDFARejectsTheDocuments(t *testing.
 		part    int
 	}{
 		{name: "version 4 under PDF/A-1", profile: v4, part: 1},
-		{name: "blending profile under PDF/A-4", profile: cmykICCProfile, part: 4,
-			page: "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Group << /S /Transparency /CS [/ICCBased 5 0 R] >> >>"},
+		{
+			name: "blending profile under PDF/A-4", profile: cmykICCProfile, part: 4,
+			page: "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Group << /S /Transparency /CS [/ICCBased 5 0 R] >> >>",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

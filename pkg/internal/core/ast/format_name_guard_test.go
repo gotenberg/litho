@@ -49,8 +49,7 @@ func TestFormatQuoteNeverTakesPdfName(t *testing.T) {
 			return filepath.SkipDir
 		}
 		bp, err := build.Default.ImportDir(dir, 0)
-		var noGo *build.NoGoError
-		if errors.As(err, &noGo) {
+		if _, ok := errors.AsType[*build.NoGoError](err); ok {
 			return nil
 		}
 		if err != nil {
