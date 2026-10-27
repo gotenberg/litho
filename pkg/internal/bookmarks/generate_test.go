@@ -74,6 +74,16 @@ func TestNormalizeTitle(t *testing.T) {
 	}
 }
 
+func TestNormalizeTitleTruncatesByCharacter(t *testing.T) {
+	t.Parallel()
+	// Every character is two bytes, so a byte cut at an odd length would
+	// split one and leave invalid UTF-8.
+	got := normalizeTitle("éééééé", 3)
+	if want := "ééé…"; got != want {
+		t.Errorf("normalizeTitle: got %q, want %q", got, want)
+	}
+}
+
 func TestGenerateFromFontSize_SimpleHeadings(t *testing.T) {
 	pages := []PageTextElements{
 		{

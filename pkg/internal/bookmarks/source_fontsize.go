@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
 	"github.com/gotenberg/litho/pkg/internal/typography"
@@ -229,7 +230,8 @@ func extractPageHeadings(ctx context.Context, page pageTextElements, maxTitleLen
 }
 
 // normalizeTitle collapses whitespace, strips control characters, removes
-// trailing page numbers and punctuation, and truncates to maxLength.
+// trailing page numbers and punctuation, and truncates to maxLength
+// characters.
 func normalizeTitle(s string, maxLength int) string {
 	// Collapse whitespace.
 	s = strings.Join(strings.Fields(s), " ")
@@ -243,8 +245,10 @@ func normalizeTitle(s string, maxLength int) string {
 	s = strings.TrimRight(s, ".:·•–—")
 	s = strings.TrimSpace(s)
 
-	if maxLength > 0 && len(s) > maxLength {
-		s = s[:maxLength] + "…"
+	// maxLength counts characters, not bytes: a byte cut could split a
+	// multi-byte character and leave invalid UTF-8 in the outline title.
+	if maxLength > 0 && utf8.RuneCountInString(s) > maxLength {
+		s = string([]rune(s)[:maxLength]) + "…"
 	}
 	return s
 }
