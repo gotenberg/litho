@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -45,7 +46,13 @@ func pipeUsage(w io.Writer) {
 	fmt.Fprintln(w, "        autotag, set-metadata, set-form, flatten-form,")
 	fmt.Fprintln(w, "        set-bookmarks, attach, detach, stamp-text, stamp-image,")
 	fmt.Fprintln(w, "        stamp-pdf, convert-colors, flatten-transparency, remediate,")
-	fmt.Fprintln(w, "        sign, timestamp")
+	fmt.Fprintln(w, "        sign, timestamp, optimize")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "optimize sets how the final write goes rather than editing the document,")
+	fmt.Fprintln(w, "so it may stand anywhere, alone included, at most once: it rewrites the")
+	fmt.Fprintln(w, "whole file with --compact, --recompress-images and --subset-fonts, each")
+	fmt.Fprintln(w, "of which its --no- flag turns off, and refuses a signed input without")
+	fmt.Fprintln(w, "--allow-signature-loss.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "A --cmyk-profile on a convert-colors or flatten-transparency stage sets")
 	fmt.Fprintln(w, "how the document reads DeviceCMYK for every stage; two stages naming")
@@ -77,7 +84,6 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 
 	// Extract -o, -p, and input file before stage parsing.
 	inputFile, password, outputFile, compacting, strict, pageSizeArg, stageArgs := parsePipeGlobals(args)
-	compact, recompressImages := compacting.compact, compacting.recompressImages
 	if inputFile == "" {
 		fmt.Fprintln(stderr, "pipe: missing input file")
 		return exitError
@@ -94,6 +100,20 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 
 	// Split stageArgs into groups: each group starts with a stage name.
 	groups := splitStageGroups(stageArgs)
+
+	// optimize is taken out before anything reads the stage list: it shapes
+	// the final write and edits nothing, so the stage-order rules, which are
+	// about edits, do not place it.
+	groups, optimizing, err := takeOptimizeStage(groups, compacting, stderr)
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return exitOK
+		}
+		fmt.Fprintf(stderr, "pipe stage \"optimize\": %v\n", err)
+		return exitError
+	}
+	compacting = optimizing.compaction
+	compact, recompressImages := compacting.compact, compacting.recompressImages
 
 	// Checked before the input is opened or any stage runs, so a pipeline the
 	// library would refuse partway through fails as a usage error instead.
@@ -122,16 +142,23 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 
 	pipeline := pdf.NewPipeline().Open(r)
 
-	if len(groups) == 0 {
+	if len(groups) == 0 && !optimizing.on {
 		fmt.Fprintln(stderr, "pipe: no stages specified")
 		return exitError
+	}
+	if optimizing.on && !optimizing.allowSignatureLoss {
+		if err := refuseSignatureLoss(ctx, r); err != nil {
+			fmt.Fprintf(stderr, "pipe stage \"optimize\": %v\n", err)
+			return exitError
+		}
 	}
 
 	// An encrypt stage makes the final output encrypted, which the write
 	// engine refuses to compact. splitStageGroups guarantees the first token
 	// of a group is the stage name, so this reads the pipeline rather than
 	// guessing at the argument list.
-	encryptsOutput, dropsEncryption, dropsXFA := false, false, false
+	// optimize rewrites the whole file, which no encryption survives either.
+	encryptsOutput, dropsEncryption, dropsXFA := false, optimizing.on, false
 	var packingRefusedProfile string
 	for _, g := range groups {
 		if len(g) == 0 {
@@ -273,7 +300,18 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// The default page size reaches every stage, not only the final write:
 	// Pipeline.WriteTo hands it to each Writer and each intermediate split or
 	// merge, since a stage that gives a page a media box gives it for good.
-	finalOpts := append(profileCompactWriteOptions(compacting, packingRefusedProfile), defaultPageSize.writeOptions()...)
+	compactOpts := profileCompactWriteOptions(compacting, packingRefusedProfile)
+	// An input that declares PDF/A-1 keeps the claim through every stage but a
+	// remediation to another PDF/A profile, which rewrites the identification,
+	// so optimize withholds packing from it as the standalone command does.
+	if optimizing.on && compact && packingRefusedProfile == "" && pdfaProfiles[remediateProfile(groups)] == "" && declaresPDFA1(ctx, r, stderr) {
+		compactOpts = unpackedCompactWriteOptions(compacting)
+		warnPackingWithheldForDeclaredPDFA1(stderr)
+	}
+	finalOpts := slices.Concat(compactOpts, defaultPageSize.writeOptions())
+	if optimizing.on {
+		finalOpts = append(finalOpts, pdf.WithFullRewrite())
+	}
 	// The standalone flatten-transparency rewrites a document with nothing to
 	// flatten whole all the same, and the stage writes what the command does.
 	if pipelineHasStage(groups, "flatten-transparency") {
@@ -451,6 +489,7 @@ func splitStageGroups(args []string) [][]string {
 var boolStageFlags = map[string]bool{
 	"aggressive": true, "generate": true, "no-font-subset": true, "system-fonts": true, "pades": true, "ltv": true,
 	"bpc": true, "no-bpc": true, "convert-spots": true, "k-only-black": true, "no-output-intent": true, "replace-output-intents": true, "printed-annotations": true, "overprint": true,
+	"no-compact": true, "no-recompress-images": true, "no-subset-fonts": true, "allow-signature-loss": true,
 	"h": true, "help": true,
 }
 
@@ -562,6 +601,76 @@ func validateSigningStage(groups [][]string, stage string) ([][]string, error) {
 		}
 	}
 	return groups[:at], nil
+}
+
+// pipeOptimize is what a pipeline's optimize stage asks of the final write.
+type pipeOptimize struct {
+	// on is set when the pipeline has an optimize stage.
+	on bool
+	// compaction is the passes the final write runs: the stage's together
+	// with the global flags'.
+	compaction compaction
+	// allowSignatureLoss is the stage's --allow-signature-loss.
+	allowSignatureLoss bool
+}
+
+// takeOptimizeStage removes the optimize stage from groups and returns the
+// rest with what it asks of the final write, given the global compaction
+// flags global.
+//
+// optimize edits nothing, so the stage list keeps the edits alone: a pipeline
+// whose only stage is optimize runs none, and optimize may follow remediate,
+// sign or timestamp, which shape no later edit but do take the final write.
+//
+// A pass runs when the stage or a global flag asks for it. A stage --no- flag
+// against the global flag that turns the same pass on is refused, since one
+// of the two must be a mistake. A second optimize stage is refused too: the
+// final write is one.
+func takeOptimizeStage(groups [][]string, global compaction, stderr io.Writer) ([][]string, pipeOptimize, error) {
+	result := pipeOptimize{compaction: global}
+	var rest [][]string
+	for _, g := range groups {
+		if len(g) == 0 || g[0] != "optimize" {
+			rest = append(rest, g)
+			continue
+		}
+		if result.on {
+			return nil, result, errors.New("only one optimize stage is allowed: a pipe writes its output once")
+		}
+		fs := flag.NewFlagSet("optimize", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		flags := registerOptimizeFlags(fs)
+		if err := fs.Parse(g[1:]); err != nil {
+			return nil, result, err
+		}
+		if fs.NArg() > 0 {
+			return nil, result, fmt.Errorf("unexpected argument %q", fs.Arg(0))
+		}
+		for _, conflict := range []struct {
+			off, on bool
+			name    string
+		}{
+			{*flags.noCompact, global.compact, "compact"},
+			{*flags.noRecompressImages, global.recompressImages, "recompress-images"},
+			{*flags.noSubsetFonts, global.subsetFonts, "subset-fonts"},
+		} {
+			if conflict.off && conflict.on {
+				return nil, result, fmt.Errorf("--no-%s contradicts the pipe's --%s", conflict.name, conflict.name)
+			}
+		}
+		c, err := flags.get()
+		if err != nil {
+			return nil, result, err
+		}
+		result.on = true
+		result.allowSignatureLoss = *flags.allowSignatureLoss
+		result.compaction = compaction{
+			compact:          c.compact || global.compact,
+			recompressImages: c.recompressImages || global.recompressImages,
+			subsetFonts:      c.subsetFonts || global.subsetFonts,
+		}
+	}
+	return rest, result, nil
 }
 
 // remediateProfile returns the --profile of the pipeline's remediate stage,
@@ -690,6 +799,7 @@ var stageCmds = map[string]bool{
 	"attach": true, "detach": true, "stamp-text": true,
 	"stamp-image": true, "stamp-pdf": true, "remediate": true, "autotag": true,
 	"sign": true, "timestamp": true, "convert-colors": true, "flatten-transparency": true,
+	"optimize": true,
 }
 
 func isStageCmd(s string) bool { return stageCmds[s] }

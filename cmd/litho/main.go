@@ -289,6 +289,8 @@ func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, st
 		return runEncrypt(ctx, globalArgs, stdout, stderr)
 	case "decrypt":
 		return runDecrypt(ctx, globalArgs, stdout, stderr)
+	case "optimize":
+		return runOptimize(ctx, globalArgs, stdout, stderr)
 	case "set-metadata":
 		return runSetMetadata(ctx, globalArgs, stdout, stderr)
 	case "set-form":
@@ -366,6 +368,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  flatten-transparency Composite transparency into opaque images, text kept")
 	fmt.Fprintln(w, "  encrypt       Encrypt a PDF with password")
 	fmt.Fprintln(w, "  decrypt       Remove encryption from a PDF")
+	fmt.Fprintln(w, "  optimize      Shrink a PDF: object streams, dedup, image recompression, font subsetting")
 	fmt.Fprintln(w, "  set-metadata  Set document metadata fields")
 	fmt.Fprintln(w, "  set-form      Set form field values")
 	fmt.Fprintln(w, "  flatten-form  Flatten form fields into content")

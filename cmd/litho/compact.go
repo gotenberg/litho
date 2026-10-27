@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -55,6 +57,92 @@ func registerCompactFlags(fs *flag.FlagSet) compactionFlags {
 				"keeping every glyph ID, when the command rewrites the whole file. Text added "+
 				"later in a subset font finds no glyph. Independent of --compact"),
 	}
+}
+
+// optimizeFlags holds the values [registerOptimizeFlags] binds.
+type optimizeFlags struct {
+	noCompact, noRecompressImages, noSubsetFonts, allowSignatureLoss *bool
+}
+
+// registerOptimizeFlags adds the flags of the optimize command and of the
+// optimize pipe stage to fs and returns their bound values.
+//
+// optimize runs every pass the compaction flags select, so its flags turn
+// passes off rather than on: --no-compact, --no-recompress-images and
+// --no-subset-fonts name the opt-in flag each one cancels. The trades that
+// keep image recompression and font subsetting out of --compact (see
+// [registerCompactFlags]) are the ones a caller asking to optimize has
+// accepted.
+func registerOptimizeFlags(fs *flag.FlagSet) optimizeFlags {
+	return optimizeFlags{
+		noCompact: fs.Bool("no-compact", false,
+			"Do not pack objects into object streams or merge duplicate streams"),
+		noRecompressImages: fs.Bool("no-recompress-images", false,
+			"Do not recompress images, the slowest pass on an image-heavy file"),
+		noSubsetFonts: fs.Bool("no-subset-fonts", false,
+			"Do not subset embedded fonts, so text added later in them still finds its glyphs"),
+		allowSignatureLoss: fs.Bool("allow-signature-loss", false,
+			"Optimize a signed document, whose signatures the rewrite leaves out (default: refused)"),
+	}
+}
+
+// get returns the passes the flags leave on. It fails when they turn every
+// pass off, since the command would then rewrite the file for nothing.
+func (f optimizeFlags) get() (compaction, error) {
+	c := compaction{compact: !*f.noCompact, recompressImages: !*f.noRecompressImages, subsetFonts: !*f.noSubsetFonts}
+	if c == (compaction{}) {
+		return c, errors.New("--no-compact, --no-recompress-images and --no-subset-fonts turn every pass off, which leaves nothing to optimize")
+	}
+	return c, nil
+}
+
+// refuseSignatureLoss returns an error naming the signed signature fields of r,
+// or nil when it has none.
+//
+// optimize always rewrites the whole file, and a signature's digest covers the
+// bytes of the file it was made in (ISO 32000-1, 12.8.1), so the output cannot
+// carry any of them. Every other rewriting command drops them with a warning,
+// because the rewrite is what the caller asked for. Shrinking a file is not
+// worth a signature unless the caller says so, so optimize refuses until
+// --allow-signature-loss.
+//
+// The check reads the signed fields alone, those a reader verifies. A usage
+// rights signature no field holds (ISO 32000-1, 12.8.2.3) is left out of the
+// refusal and still reported by [warnSignaturesDropped] after the write.
+func refuseSignatureLoss(ctx context.Context, r *pdf.Reader) error {
+	sigs, err := r.ExtractSignatures(ctx)
+	if err != nil {
+		return fmt.Errorf("reading the input's signatures: %w", err)
+	}
+	if len(sigs) == 0 {
+		return nil
+	}
+	names := make([]string, len(sigs))
+	for i, s := range sigs {
+		names[i] = fmt.Sprintf("%q", s.FieldName)
+	}
+	return fmt.Errorf("the input is signed (%s), and a full rewrite cannot keep a signature (ISO 32000-1, 12.8.1): pass --allow-signature-loss to optimize it anyway",
+		strings.Join(names, ", "))
+}
+
+// declaresPDFA1 reports whether r declares ISO 19005-1, whose 6.1.4 forbids
+// the cross-reference stream object-stream packing requires. A declaration
+// that cannot be read counts as none, as an input with no XMP does.
+func declaresPDFA1(ctx context.Context, r *pdf.Reader, stderr io.Writer) bool {
+	part, err := r.DeclaredPDFAPart(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "warning: reading the input's PDF/A declaration: %v\n", err)
+		return false
+	}
+	return part == 1
+}
+
+// warnPackingWithheldForDeclaredPDFA1 reports that optimize does not pack
+// objects because its input declares PDF/A-1, as [warnPackingWithheld] does
+// for a remediation target.
+func warnPackingWithheldForDeclaredPDFA1(stderr io.Writer) {
+	fmt.Fprintln(stderr, "warning: optimize does not pack objects into object streams, since the input declares PDF/A-1 "+
+		"and ISO 19005-1, 6.1.4 forbids the cross-reference stream they require. Duplicate streams are still merged.")
 }
 
 // registerCompactFlag adds -compact to fs and returns the bound value.
@@ -275,7 +363,17 @@ func compactWriteOptions(c compaction) []pdf.WriteOption {
 // profile permits. Callers report the withheld packing with
 // [warnPackingWithheld].
 func profileCompactWriteOptions(c compaction, profile string) []pdf.WriteOption {
-	if !c.compact || !packingForbiddenByProfile(profile) {
+	if !packingForbiddenByProfile(profile) {
+		return compactWriteOptions(c)
+	}
+	return unpackedCompactWriteOptions(c)
+}
+
+// unpackedCompactWriteOptions returns the write options c selects with
+// object-stream packing left out, for an output that must stay PDF/A-1: dedup
+// takes the place of -compact (see [profileCompactWriteOptions]).
+func unpackedCompactWriteOptions(c compaction) []pdf.WriteOption {
+	if !c.compact {
 		return compactWriteOptions(c)
 	}
 	rest := c

@@ -44,6 +44,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 - Encrypt (RC4, AES-128, AES-256), decrypt, and sign (PKCS#7/CMS or PAdES B-B to B-LTA, with RFC 3161 timestamps, incremental).
 - Flatten forms, set metadata and form fields, and manage attachments and bookmarks.
 - Convert every colour to CMYK, RGB, grey, an ICC profile or the document's output intent, keeping spot colours.
+- Optimize a file's size: object streams, stream dedup, lossless image recompression and font subsetting.
 - Chain operations through a `Pipeline` with managed intermediate storage.
 
 ## Install
@@ -219,6 +220,11 @@ litho stamp-text --text "DRAFT" -o stamped.pdf document.pdf
 # --subset-fonts cuts the embedded fonts down to the glyphs the document shows.
 litho merge --compact --recompress-images --subset-fonts -o merged.pdf a.pdf b.pdf
 
+# Shrink a file with every pass on; --no-recompress-images and the other --no-
+# flags turn one off.
+litho optimize -o small.pdf document.pdf
+litho pipe document.pdf stamp-text --text "DRAFT" optimize -o out.pdf
+
 # Chain operations in one command. A remediate stage runs last.
 litho pipe document.pdf rotate --angle 90 stamp-text --text "DRAFT" -o out.pdf
 litho pipe document.pdf rotate --angle 90 remediate --profile PDF/UA-1 -o out.pdf
@@ -239,6 +245,8 @@ litho sign --cert cert.pem --key key.pem --reason Approved -o signed.pdf documen
 Run `litho` with no arguments to list every subcommand, or `litho <command> -h` to see its flags.
 
 `--compact` is `pdf.WithObjectStreams` and `pdf.WithDedup`, and `--recompress-images` is `pdf.WithImageRecompression`. Every command that rewrites the whole file takes all three, `pipe` included, alone or together. `--recompress-images` re-encodes uncompressed, Flate, LZW and RunLength images as Flate with a PNG predictor where that is smaller, rewrites an 8-bit RGB image of at most 256 colours as an Indexed image where that is smaller, and re-codes sequential JPEG images with Huffman tables fitted to each image and without restart intervals, which keeps their coefficients, and every recompressed image decodes to the same samples as before. Progressive JPEG, JPEG 2000, JBIG2 and CCITT images are left as they are. It is a separate flag because it can take seconds on an image-heavy file that `--compact` alone writes in milliseconds. Neither applies to an encrypted output. `--subset-fonts` is `pdf.WithFontSubsetting`: it subsets the embedded TrueType, CFF and Type 1 fonts to the glyphs the document's pages, forms, patterns and annotation appearances can show, keeping every glyph ID, so every page renders and extracts as before and the compliance verdicts do not move. A font is left whole when litho cannot prove it saw every use of it, a form field types with it, or its program is OpenType. It is a separate flag because a subset font has no glyph for text added later, and it does apply to an encrypted output. For a PDF/A-1 target, `--compact` merges duplicate streams and does not pack objects, since ISO 19005-1 forbids the cross-reference stream packing needs.
+
+`optimize` rewrites the whole file for those passes alone, with all three on: `--no-compact`, `--no-recompress-images` and `--no-subset-fonts` turn one off, and turning off all three exits `1`. As a `pipe` stage it sets the final write rather than editing the document, so it may stand anywhere in the chain, alone included, once; a pass runs when the stage or a global flag asks for it, and a `--no-` flag against the global flag of the same pass exits `1`. A rewrite cannot keep a signature, so `optimize` refuses a signed input until `--allow-signature-loss`. An input that declares PDF/A-1 is deduplicated and not packed, and `optimize` says so.
 
 `--font-dir` is `pdf.WithFontFiles` over a directory: `remediate` and the `pipe` remediate stage search it recursively and embed a subset of the program each unembedded font takes (see [Embedding fonts](#embedding-fonts)). `--system-fonts` is `pdf.WithSystemFonts`: the operating system's fonts serve the fonts `--font-dir` supplies no program for, or every font without `--font-dir`. `remediate` lists every font left unembedded, with the reason, under `Fonts left unembedded`, or `refused_fonts` with `-f json`. `pipe` prints no report: `pipe --strict` exits `2` when a font stays unembedded. `--document-id` is `pdf.WithDocumentID`: 32 hex digits pin the trailer `/ID` a remediation writes when the document has no valid one, so two runs over the same file write the same bytes. A directory that does not exist, or a value that is not 32 hex digits, exits `1` and writes nothing.
 
