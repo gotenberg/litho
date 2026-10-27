@@ -157,6 +157,10 @@ Corpus measurements back a decision. They are not the decision. Keep them out of
 - Evidence behind a comment inside a function body, a struct field, or one entry of a `const` or `var` group moves to the section of the enclosing declaration. The comment keeps the reason.
 - The prose above the section reads complete without it.
 
+### Formatting Go files
+
+Run `make fmt` to format Go files before committing. It runs `go fix`, the formatters of the pinned golangci-lint and `go mod tidy` over the whole tree, so stage only the files your change touches.
+
 ### Formatting non-Go files
 
 Run `make prettify && make lint-prettier` for YAML, Markdown, and JSON.
