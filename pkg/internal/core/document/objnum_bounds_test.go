@@ -16,7 +16,7 @@ import (
 //
 //   - pdfjs GHOSTSCRIPT-698804-1-fuzzed.pdf: the shape this fixture
 //     reproduces.
-func mislabelledSubsectionPDF(trailerSize int) []byte {
+func mislabelledSubsectionPDF(trailerSize int64) []byte {
 	body := "%PDF-1.4\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
