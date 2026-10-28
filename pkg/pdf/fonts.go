@@ -130,7 +130,8 @@ func (r FontRefusal) String() string {
 //   - The interactive form's default resources name the font.
 //   - Validation rejects the subset where it accepts the whole program.
 //
-// A whole program is written once and shared by every font given it.
+// Fonts given the same program share it: one subset serves them all, and a
+// whole program is written once.
 // [RemediationReport.Fixed] states which each font received.
 //
 // A TrueType program receives the cmap a PDF reader looks its glyphs up through

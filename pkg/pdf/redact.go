@@ -188,9 +188,10 @@ func WithStrictRedaction() RedactOption {
 // An annotation reaching outside the regions is refused otherwise, since an
 // annotation is atomic (ISO 32000-1, 12.5.2). With the fallback, Redact first
 // draws it into its page as a viewer draws it (12.5.5, Algorithm 8.1). It then
-// removes the annotation with its pop-up and the text and geometry it carries.
-// Its look is then page content the regions cut, and nothing of it marks what
-// lay inside them. [RedactReport.BakedAnnotations] counts them.
+// removes the annotation with its pop-up and the text and geometry it carries,
+// and a reply to it loses its /IRT entry (12.5.6.2). Its look is then page
+// content the regions cut, and nothing of it marks what lay inside them.
+// [RedactReport.BakedAnnotations] counts them.
 //
 // These annotations still refuse: a widget, its look being its field's value
 // (12.7.3.3), a pop-up, an annotation under optional content, a NoRotate one on

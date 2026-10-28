@@ -451,6 +451,9 @@ type IntentFallback struct {
 // families. The conversion is lossy by nature: a colour outside the target's
 // gamut moves to one inside it, and a conversion back does not restore it.
 //
+// A JPEG 2000 image that carries its soft mask in its data (/SMaskInData,
+// ISO 32000-1, Table 89) comes out with it as an explicit /SMask image.
+//
 // # Spot colours and output intents
 //
 // Spot colours, Separation and DeviceN, are kept by default. Their colorants

@@ -75,8 +75,9 @@ func encryptWriteOptions(userPwd, ownerPwd, algorithm string, stderr io.Writer) 
 // answered a confidentiality downgrade with a command that fails. Advice a
 // command refuses is worse than no advice.
 //
-// README.md already documents three remedies, one per family. The two variants
-// below carry the other two, so the message a caller sees and the manual agree.
+// The command documentation (doc.go) lists three remedies, one per family.
+// The two variants below carry the other two, so the message a caller sees and
+// the manual agree.
 func warnEncryptionDropped(stderr io.Writer, readers ...*pdf.Reader) {
 	warnEncryptionDroppedWithRemedy(stderr, false,
 		"Run litho encrypt on the result to protect it again.", readers...)

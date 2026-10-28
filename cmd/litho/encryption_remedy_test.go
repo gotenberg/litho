@@ -86,8 +86,9 @@ func TestEncryptionWarning_NamesNoFlagTheCommandRejects(t *testing.T) {
 }
 
 // TestEncryptionWarning_EachFamilyGetsItsOwnRemedy pins the three remedies
-// README.md documents: split and merge take --user-password, pipe takes an
-// encrypt stage, everything else is followed by litho encrypt.
+// the command documentation (doc.go) lists: split and merge take
+// --user-password, pipe takes an encrypt stage, everything else is followed by
+// litho encrypt.
 //
 // The negative half carries the defect. A command with no encryption flag must
 // not name one, which is what the widened single message did.
