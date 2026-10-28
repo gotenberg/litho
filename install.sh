@@ -7,8 +7,8 @@
 #   LITHO_VERSION      release tag to install, for example v1.2.3 (default: latest)
 #   LITHO_INSTALL_DIR  directory for the binary (default: /usr/local/bin)
 #
-# Supports Linux on amd64, arm64, ppc64le, riscv64 and loong64, and macOS and
-# FreeBSD on amd64 and arm64. Windows users download the zip from the releases
+# Supports Linux on amd64, arm64, 386, armv7, ppc64le, riscv64, s390x and
+# loong64, and macOS and FreeBSD on amd64 and arm64. Windows users download the zip from the releases
 # page.
 
 set -eu
@@ -40,8 +40,11 @@ esac
 case "$(uname -m)" in
 x86_64 | amd64) arch=amd64 ;;
 arm64 | aarch64) arch=arm64 ;;
+i386 | i686) arch=386 ;;
+armv7l | armv8l) arch=armv7 ;;
 ppc64le) arch=ppc64le ;;
 riscv64) arch=riscv64 ;;
+s390x) arch=s390x ;;
 loongarch64) arch=loong64 ;;
 *) fail "unsupported architecture $(uname -m); download a binary from ${RELEASES}" ;;
 esac

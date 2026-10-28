@@ -13,7 +13,7 @@ go install github.com/gotenberg/litho/cmd/litho@latest
 
 Go 1.27.3+. No CGO.
 
-Prebuilt 64-bit `litho` binaries for Linux (amd64, arm64, ppc64le, riscv64, loong64), macOS, FreeBSD and Windows (amd64, arm64) ship with each [GitHub release](https://github.com/gotenberg/litho/releases). On Linux, macOS and FreeBSD, the install script downloads one, verifies its checksum and installs it in `/usr/local/bin`:
+Prebuilt `litho` binaries for Linux (amd64, arm64, 386, armv7, ppc64le, riscv64, s390x, loong64), macOS, FreeBSD and Windows (amd64, arm64) ship with each [GitHub release](https://github.com/gotenberg/litho/releases). On Linux, macOS and FreeBSD, the install script downloads one, verifies its checksum and installs it in `/usr/local/bin`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gotenberg/litho/main/install.sh | sh
