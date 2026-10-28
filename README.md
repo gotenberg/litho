@@ -11,7 +11,7 @@ go get github.com/gotenberg/litho
 go install github.com/gotenberg/litho/cmd/litho@latest
 ```
 
-Go 1.27.0+. No CGO.
+Go 1.27.3+. No CGO.
 
 ## Quick start
 
@@ -52,11 +52,9 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-litho is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+- Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Bug reports: [GitHub Issues](https://github.com/gotenberg/litho/issues)
+- Security vulnerabilities: [SECURITY.md](SECURITY.md)
 
 ## Acknowledgments
 

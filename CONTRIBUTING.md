@@ -8,8 +8,8 @@ litho is a pure-Go PDF Conforming Processor. Two rules override everything else:
 ## Toolchain
 
 - Module: `github.com/gotenberg/litho`
-- Go: 1.27.0+, no CGO
-- Node.js, for Prettier (`package.json`)
+- Go: 1.27.3+, no CGO
+- Node.js (see `.node-version`), for Prettier linting
 - Docker, optional: provisions the integration corpora at the tool versions `test/integration/corpus/versions.env` pins
 
 The Makefile runs golangci-lint and unparam at pinned versions through `go run`, never the copy on your `PATH`.
@@ -35,19 +35,27 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 
 ## Setup and Makefile
 
-| Command              | Purpose                                                       | When to use                        |
-| -------------------- | ------------------------------------------------------------- | ---------------------------------- |
-| `make build`         | Build the `litho` CLI                                         | Manual testing                     |
-| `make fmt`           | `go fix`, pinned formatters and `go mod tidy` over the tree   | Before committing                  |
-| `make lint`          | Pinned golangci-lint, zero warnings                           | Before committing                  |
-| `make lint-unparam`  | Pinned unparam: unused parameters and results                 | Before committing                  |
-| `make prettify`      | Format Markdown, YAML and JSON                                | Before committing                  |
-| `make lint-prettier` | Lint Markdown, YAML and JSON                                  | Before committing                  |
-| `make test-unit`     | `go test -race ./...`                                         | Before committing                  |
-| `make bench`         | `go test -bench=. -benchmem ./...`                            | Performance changes                |
-| `make godoc`         | Serve the godoc locally                                       | To check documentation             |
-| `make corpus-check`  | Fail if a (corpus, feature) cell regressed against a baseline | Before pushing: the repo has no CI |
-| `make help`          | List every target, the golden regenerators included           | To find the rest                   |
+| Command                | Purpose                                                                      | When to use                                        |
+| ---------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------- |
+| `make help`            | Show the available commands                                                  | To discover targets                                |
+| `make build`           | Build the `litho` CLI                                                        | Manual testing                                     |
+| `make fmt`             | Format Go code and tidy the dependencies                                     | Before committing                                  |
+| `make prettify`        | Format non-Go files (Markdown, YAML, JSON)                                   | Before committing                                  |
+| `make lint`            | Lint Go code (zero warnings permitted)                                       | Before committing                                  |
+| `make lint-prettier`   | Lint non-Go files                                                            | Before committing                                  |
+| `make lint-todo`       | Find TODOs in Go code                                                        | Before committing                                  |
+| `make lint-unparam`    | Pinned unparam: unused parameters and results                                | Before committing                                  |
+| `make test-unit`       | `go test -race ./...`                                                        | Before committing                                  |
+| `make bench`           | `go test -bench=. -benchmem ./...`                                           | Performance changes                                |
+| `make godoc`           | Serve the godoc locally                                                      | To check documentation                             |
+| `make corpus`          | Score litho across the (corpus, feature) matrix. Auto-provisions the corpora | To measure the corpus matrix                       |
+| `make corpus-init`     | Provision missing corpora via Docker at the pinned versions                  | Before the first `make corpus`                     |
+| `make corpus-tools`    | Compare the local oracle tools with the pinned versions                      | When a corpus run reports version drift            |
+| `make corpus-baseline` | Rewrite `test/integration/baseline.json` with the current matrix scores      | After an intended score change                     |
+| `make corpus-check`    | Fail if a (corpus, feature) cell regressed against a baseline                | Before pushing: the repo has no CI                 |
+| `make clean-corpus`    | Remove all corpus testdata                                                   | To force re-provisioning on the next `make corpus` |
+| `make outline-goldens` | Regenerate the TrueType and CFF outline goldens                              | After a font outline change                        |
+| `make icc-goldens`     | Regenerate the ICC transform goldens                                         | After a color transform change                     |
 
 `make fmt` rewrites the whole tree: stage only the files your change touches.
 
@@ -123,14 +131,14 @@ Code that produces a compliance verdict, accepts or rejects a construct, or hard
 ### Tone
 
 - Short, declarative sentences. Say what it does, then stop.
-- Lead with the action. "Validates font embedding", not "This function validates font embedding".
-- Active voice. "litho checks the profile", not "The profile is checked by litho".
+- Lead with the action. "Validates the input", not "This function validates the input".
+- Active voice. "litho checks the input", not "The input is checked by litho".
 - No em dashes. Use a period, colon, or comma.
 - No "we" hedging. "Don't...", not "We do not recommend...".
 
 ### Godoc
 
-Every exported identifier has a doc comment starting with its name, and every package a `doc.go`. Reference identifiers with `[Name]` for pkg.go.dev links. Test, fuzz, benchmark and example functions are exempt.
+Every exported identifier has a doc comment starting with its name, and every package a `doc.go` with a `// Package foo ...` comment. Reference identifiers with `[Name]` for pkg.go.dev links. Test, fuzz, benchmark and example functions are exempt.
 
 A doc comment is a contract with the caller. Write down what the caller can rely on, and nothing they cannot act on.
 
@@ -148,9 +156,10 @@ Public godoc never mentions the corpus, corpus files, gate cells, measurement co
 
 ### Code comments
 
-- Explain _why_, not _what_. Reference spec clauses: `// Per ISO 32000-2, Table 116...`.
+- Explain _why_, not _what_.
 - No numbered steps, no section separators, no comments that restate the code.
 - Mark debt with `// TODO: [context]`.
+- Reference spec clauses: `// Per ISO 32000-2, Table 116...`.
 
 ### Corpus evidence
 
@@ -180,9 +189,11 @@ The integration matrix scores litho against oracles over several corpora. When n
 
 ### Commits
 
-[Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <description>`, with `feat`, `fix`, `refactor`, `test`, `docs` or `chore`.
+[Conventional Commits](https://www.conventionalcommits.org/), title only: `<type>(<scope>): <description>`. No body, no trailers (no `Co-Authored-By`, no `Signed-off-by`).
 
-Stage specific files. Never `git add -A`.
+Common types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `ci`, `build`. The scope names the area of the change.
+
+Stage specific files. Never `git add -A` or `git add .`.
 
 ### Checklist
 
