@@ -53,7 +53,7 @@ func TestFlattenUseCMap_InlinesTheChain(t *testing.T) {
 		t.Errorf("merged map holds %d codes, want 512", len(got.Mapping))
 	}
 	// The using CMap overrides the base on the codes it defines.
-	for code, want := range map[int]int{0x0000: 900, 0x000F: 915, 0x0010: 0x10, 0x01FF: 0x1FF} {
+	for code, want := range map[int64]int{0x0000: 900, 0x000F: 915, 0x0010: 0x10, 0x01FF: 0x1FF} {
 		if got.Mapping[code] != want {
 			t.Errorf("code %#04x maps to %d, want %d", code, got.Mapping[code], want)
 		}

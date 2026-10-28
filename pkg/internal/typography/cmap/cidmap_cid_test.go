@@ -33,7 +33,7 @@ end end`)
 	}
 	tests := []struct {
 		name string
-		code int
+		code int64
 		cid  int
 		ok   bool
 	}{

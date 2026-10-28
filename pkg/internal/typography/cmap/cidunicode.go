@@ -84,12 +84,12 @@ const identityCIDCodes = 0x10000
 
 // isIdentityCIDMapping reports whether m maps each two-byte code to itself
 // and nothing else, as the Identity-H and Identity-V programs do.
-func isIdentityCIDMapping(m map[int]int) bool {
+func isIdentityCIDMapping(m map[int64]int) bool {
 	if len(m) != identityCIDCodes {
 		return false
 	}
 	for code, cid := range m {
-		if code != cid {
+		if code != int64(cid) {
 			return false
 		}
 	}

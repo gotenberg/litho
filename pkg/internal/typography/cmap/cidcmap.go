@@ -17,7 +17,7 @@ import (
 // /Encoding entry in the Type0 font dictionary. It maps byte sequences from
 // the content stream to CID values used for width lookup in the /W array.
 type CIDCMap struct {
-	Mapping map[int]int
+	Mapping map[int64]int
 
 	// notdefs holds the program's notdefchar and notdefrange entries in the
 	// order it defines them, and useCMaps the bases its usecmap operators
@@ -50,17 +50,6 @@ func (c *CIDCMap) UseCMapOperands() (names []string, ok bool) {
 	return names, !c.incomplete
 }
 
-// strToInt converts a PDF hex string (byte sequence) to an integer by
-// treating each byte as a big-endian digit (b[0]<<8 | b[1] for 2 bytes, etc.).
-func strToInt(s ast.PdfString) int {
-	b := []byte(s)
-	result := 0
-	for _, v := range b {
-		result = result<<8 | int(v)
-	}
-	return result
-}
-
 // ParseCID extracts CID mapping data from a CMap stream payload.
 // It handles begincidchar/endcidchar and begincidrange/endcidrange sections,
 // and records the notdefchar and notdefrange sections and the usecmap
@@ -78,7 +67,7 @@ func parseCID(ctx context.Context, data []byte, b *parseBudget) (*CIDCMap, error
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
 
-	c := &CIDCMap{Mapping: make(map[int]int)}
+	c := &CIDCMap{Mapping: make(map[int64]int)}
 	// lastName is the name token most recently read outside a mapping block,
 	// the operand a usecmap operator takes (ISO 32000-1, 9.7.5.4).
 	lastName := ""
@@ -175,7 +164,7 @@ func parseCID(ctx context.Context, data []byte, b *parseBudget) (*CIDCMap, error
 				}
 				// One cidrange expands to at most maxRangeEntries codes, and
 				// the program's ranges together to maxCMapRangeCodes.
-				span := min(high-low, maxRangeEntries-1)
+				span := int(min(high-low, maxRangeEntries-1))
 				dst, okCID := cidValue(int64(dstInt), span)
 				if !okCID {
 					continue
@@ -184,7 +173,7 @@ func parseCID(ctx context.Context, data []byte, b *parseBudget) (*CIDCMap, error
 					if err := b.rangeCode(ctx); err != nil {
 						return nil, err
 					}
-					c.Mapping[low+i] = dst + i
+					c.Mapping[low+int64(i)] = dst + i
 				}
 			}
 		case tok.Type == lexer.TokenKeyword && (tok.Value == "beginnotdefchar" || tok.Value == "beginnotdefrange"):

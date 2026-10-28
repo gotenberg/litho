@@ -51,7 +51,7 @@ func TestConformanceCIDBaseVeraPDFOnly(t *testing.T) {
 	if !b.Map.UnmappedNotdef() {
 		t.Error("a fully resolved base is not closed")
 	}
-	for code, want := range map[int]int{0x0005: 5, 0x5970: 22896} {
+	for code, want := range map[int64]int{0x0005: 5, 0x5970: 22896} {
 		if cid, ok := b.Map.lookup(code); !ok || cid != want {
 			t.Errorf("Adobe-KR-9 %04X = %d (%v), want %d", code, cid, ok, want)
 		}
@@ -87,7 +87,7 @@ func TestConformanceCIDBaseRevisedCMaps(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name       string
-		code       int
+		code       int64
 		vera, text int // 0 for a code the copy leaves unmapped
 	}{
 		{"UniGB-UTF16-H", 0x2002, 7716, 0},

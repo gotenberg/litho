@@ -405,7 +405,7 @@ func TestMatchCMapFlattenClaimsBothUseCMapRules(t *testing.T) {
 }
 
 // ParseCIDForTest exposes the CID mapping of a CMap program.
-func ParseCIDForTest(ctx context.Context, data []byte) (map[int]int, error) {
+func ParseCIDForTest(ctx context.Context, data []byte) (map[int64]int, error) {
 	c, err := cmap.ParseCID(ctx, data)
 	if err != nil {
 		return nil, err

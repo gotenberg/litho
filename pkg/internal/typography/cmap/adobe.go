@@ -252,7 +252,7 @@ func loadPredefinedCMapUncached(name string) *CMap {
 // width whose integer range [low, high] contains the code. The previous version
 // truncated the code to n bytes before the range check, so a value like 0xE644
 // matched a 1-byte range on its low byte (0x44) and was mis-sized as 1 byte.
-func byteLength(code int, codespaces []CodeSpaceRange) int {
+func byteLength(code int64, codespaces []CodeSpaceRange) int {
 	for n := 1; n <= 4; n++ {
 		if code >= 1<<(8*n) {
 			continue // the value does not fit in n bytes
@@ -261,15 +261,7 @@ func byteLength(code int, codespaces []CodeSpaceRange) int {
 			if len(cs.Low) != n {
 				continue
 			}
-			low := 0
-			for _, b := range cs.Low {
-				low = (low << 8) | int(b)
-			}
-			high := 0
-			for _, b := range cs.High {
-				high = (high << 8) | int(b)
-			}
-			if code >= low && code <= high {
+			if code >= byteValue(cs.Low) && code <= byteValue(cs.High) {
 				return n
 			}
 		}

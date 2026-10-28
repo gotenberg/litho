@@ -33,19 +33,20 @@ const maxPredefinedBaseDepth = 5
 // notdefSpan is one notdefchar or notdefrange entry: every source code lo to
 // hi maps to cid, which, unlike a cidrange's, does not increment.
 type notdefSpan struct {
-	lo, hi, cid int
+	lo, hi int64
+	cid    int
 }
 
 // mappedCID returns the CID the cidchar and cidrange mappings of m and of its
 // bases give code, ignoring notdef mappings, as veraPDF's CMap.toCID walks its
 // cidMappings list before its notDefMappings list.
-func (m *CIDMap) mappedCID(code int) (int, bool) {
+func (m *CIDMap) mappedCID(code int64) (int, bool) {
 	if c, ok := m.charToCID[code]; ok {
 		return c, true
 	}
 	for _, s := range m.spans {
 		if code >= s.lo && code <= s.hi {
-			return s.cid + code - s.lo, true
+			return s.cid + int(code-s.lo), true
 		}
 	}
 	for _, b := range m.bases {
@@ -58,7 +59,7 @@ func (m *CIDMap) mappedCID(code int) (int, bool) {
 
 // lookup returns the CID m maps code to, through its cid mappings or, failing
 // those, its notdef mappings, and false when neither covers the code.
-func (m *CIDMap) lookup(code int) (int, bool) {
+func (m *CIDMap) lookup(code int64) (int, bool) {
 	if c, ok := m.mappedCID(code); ok {
 		return c, true
 	}
@@ -75,11 +76,11 @@ func (m *CIDMap) lookup(code int) (int, bool) {
 // overrides one of a base, and an earlier base one of a later base. Notdef
 // mappings are left out. It reports false for a map holding a span, the
 // Identity CMaps, whose 65536 codes no caller enumerates.
-func (m *CIDMap) cidMappings() (map[int]int, bool) {
+func (m *CIDMap) cidMappings() (map[int64]int, bool) {
 	if len(m.spans) > 0 {
 		return nil, false
 	}
-	out := make(map[int]int, len(m.charToCID))
+	out := make(map[int64]int, len(m.charToCID))
 	for _, b := range slices.Backward(m.bases) {
 		bm, ok := b.cidMappings()
 		if !ok {
@@ -328,7 +329,7 @@ func loadPredefinedCIDBase(set baseSet, name string, depth int) *CIDMap {
 // and cidrange mappings, notdef mappings, codespaces, the base it names, and
 // its writing mode.
 type bcmapCIDProgram struct {
-	charToCID  map[int]int
+	charToCID  map[int64]int
 	notdefs    []notdefSpan
 	codespaces []CodeSpaceRange
 	useCMap    string
@@ -346,7 +347,7 @@ func parseBCMapCIDProgram(data []byte) (*bcmapCIDProgram, error) {
 	// Position 1 skips the header byte (type<<1 | wmode), whose low bit is
 	// the CMap's /WMode, as PDF.js's BinaryCMapReader reads it.
 	s := &bcmapStream{data: data, pos: 1}
-	prog := &bcmapCIDProgram{charToCID: make(map[int]int, 8192), wmode: int(data[0] & 1)} //nolint:mnd // typical CMap size
+	prog := &bcmapCIDProgram{charToCID: make(map[int64]int, 8192), wmode: int(data[0] & 1)} //nolint:mnd // typical CMap size
 	for s.pos < len(s.data) {
 		tag, tagErr := s.readByte()
 		if tagErr != nil {
@@ -370,7 +371,7 @@ func parseBCMapCIDProgram(data []byte) (*bcmapCIDProgram, error) {
 		}
 		seq := tag&0x10 != 0
 		dataSize := int(tag & 0x0F)
-		count, err := s.readNumber()
+		count, err := s.readCount()
 		if err != nil {
 			return nil, fmt.Errorf("bcmap record count: %w", err)
 		}
@@ -403,12 +404,9 @@ func parseBCMapCIDProgram(data []byte) (*bcmapCIDProgram, error) {
 // readString reads a VLQ-length-prefixed string, each character a VLQ number,
 // as PDF.js's BinaryCMapReader readString does.
 func (s *bcmapStream) readString() (string, error) {
-	length, err := s.readNumber()
+	length, err := s.readCount()
 	if err != nil {
-		return "", err
-	}
-	if length > len(s.data)-s.pos {
-		return "", fmt.Errorf("reading a %d-character string: %w", length, errUnexpectedBCMapEnd)
+		return "", fmt.Errorf("reading a string length: %w", err)
 	}
 	out := make([]rune, 0, length)
 	for range length {
@@ -425,9 +423,9 @@ func (s *bcmapStream) readString() (string, error) {
 // the one CID every code in it maps to, appending them to dst. The ranges are
 // delta-encoded as the codespace records are.
 func (s *bcmapStream) collectNotdef(count, dataSize int, dst []notdefSpan) ([]notdefSpan, error) {
-	var end int
+	var end int64
 	for i := range count {
-		var start int
+		var start int64
 		if i == 0 {
 			v, err := s.readHex(dataSize)
 			if err != nil {
@@ -453,7 +451,7 @@ func (s *bcmapStream) collectNotdef(count, dataSize int, dst []notdefSpan) ([]no
 		if len(dst) >= maxNotdefEntries {
 			return nil, fmt.Errorf("more than %d notdef entries", maxNotdefEntries)
 		}
-		dst = append(dst, notdefSpan{lo: start, hi: end, cid: cid})
+		dst = append(dst, notdefSpan{lo: start, hi: end, cid: int(cid)}) //nolint:gosec // bundled CMaps hold CIDs below 65536 (ISO 32000-1, Annex C).
 	}
 	return dst, nil
 }

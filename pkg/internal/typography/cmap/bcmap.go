@@ -1,6 +1,9 @@
 package cmap
 
-import "io"
+import (
+	"fmt"
+	"io"
+)
 
 // ucs2DataSize is the fixed data size (bytes minus 1) for UCS-2 keys in
 // bfchar/bfrange records. A value of 1 means 2-byte (UCS-2) character codes.
@@ -24,22 +27,36 @@ func (s *bcmapStream) readByte() (byte, error) {
 
 // readNumber reads a VLQ-encoded unsigned integer. Each byte contributes 7
 // payload bits (mask 0x7F); bit 7 (0x80) is the continuation flag.
-func (s *bcmapStream) readNumber() (int, error) {
-	var n int
+func (s *bcmapStream) readNumber() (int64, error) {
+	var n int64
 	for {
 		b, err := s.readByte()
 		if err != nil {
 			return 0, err
 		}
-		n = (n << 7) | int(b&0x7F)
+		n = (n << 7) | int64(b&0x7F)
 		if b&0x80 == 0 {
 			return n, nil
 		}
 	}
 }
 
+// readCount reads a VLQ record or string length. Every counted item takes at
+// least one byte, so a count past the bytes left names data the stream does
+// not hold; bounding it there also keeps it within int on a 32-bit platform.
+func (s *bcmapStream) readCount() (int, error) {
+	n, err := s.readNumber()
+	if err != nil {
+		return 0, err
+	}
+	if n > int64(len(s.data)-s.pos) {
+		return 0, fmt.Errorf("a count of %d past the %d bytes left: %w", n, len(s.data)-s.pos, errUnexpectedBCMapEnd)
+	}
+	return int(n), nil
+}
+
 // readSigned reads a zig-zag encoded signed integer built on top of readNumber.
-func (s *bcmapStream) readSigned() (int, error) {
+func (s *bcmapStream) readSigned() (int64, error) {
 	raw, err := s.readNumber()
 	if err != nil {
 		return 0, err
@@ -51,14 +68,14 @@ func (s *bcmapStream) readSigned() (int, error) {
 }
 
 // readHex reads dataSize+1 raw bytes as a big-endian unsigned integer.
-func (s *bcmapStream) readHex(dataSize int) (int, error) {
+func (s *bcmapStream) readHex(dataSize int) (int64, error) {
 	n := dataSize + 1
 	if s.pos+n > len(s.data) {
 		return 0, io.ErrUnexpectedEOF
 	}
-	var val int
+	var val int64
 	for range n {
-		val = (val << 8) | int(s.data[s.pos])
+		val = (val << 8) | int64(s.data[s.pos])
 		s.pos++
 	}
 	return val, nil
@@ -67,7 +84,7 @@ func (s *bcmapStream) readHex(dataSize int) (int, error) {
 // skipString reads and discards a VLQ-length-prefixed string (used for
 // metadata records such as comments and usecmap references).
 func (s *bcmapStream) skipString() error {
-	length, err := s.readNumber()
+	length, err := s.readCount()
 	if err != nil {
 		return err
 	}
@@ -82,10 +99,10 @@ func (s *bcmapStream) skipString() error {
 // collectCodespace parses codespace range entries (type 0) and returns them.
 func (s *bcmapStream) collectCodespace(count, dataSize int) ([]CodeSpaceRange, error) {
 	var ranges []CodeSpaceRange
-	var end int
+	var end int64
 	byteLen := dataSize + 1
 	for i := range count {
-		var start int
+		var start int64
 		if i == 0 {
 			v, err := s.readHex(dataSize)
 			if err != nil {
@@ -112,7 +129,7 @@ func (s *bcmapStream) collectCodespace(count, dataSize int) ([]CodeSpaceRange, e
 }
 
 // intToBytes converts an integer to a big-endian byte slice of the given length.
-func intToBytes(val, length int) []byte {
+func intToBytes(val int64, length int) []byte {
 	b := make([]byte, length)
 	for i := length - 1; i >= 0; i-- {
 		b[i] = byte(val & 0xFF) //nolint:gosec // intentional truncation
@@ -123,9 +140,9 @@ func intToBytes(val, length int) []byte {
 
 // advanceCodespace advances past codespace range entries (type 0).
 func (s *bcmapStream) advanceCodespace(count, dataSize int) error {
-	var end int
+	var end int64
 	for i := range count {
-		var start int
+		var start int64
 		if i == 0 {
 			v, err := s.readHex(dataSize)
 			if err != nil {
@@ -150,9 +167,9 @@ func (s *bcmapStream) advanceCodespace(count, dataSize int) error {
 
 // advanceNotdef advances past notdef range entries (type 1).
 func (s *bcmapStream) advanceNotdef(count, dataSize int) error {
-	var end int
+	var end int64
 	for i := range count {
-		var start int
+		var start int64
 		if i == 0 {
 			v, err := s.readHex(dataSize)
 			if err != nil {
@@ -181,8 +198,8 @@ func (s *bcmapStream) advanceNotdef(count, dataSize int) error {
 // collectCIDChar parses cidchar entries (type 2) into code→CID mappings.
 // Each entry maps a single character code to a CID. Entries are
 // delta-encoded: subsequent char codes and CIDs are offsets from the previous.
-func (s *bcmapStream) collectCIDChar(count, dataSize int, seq bool, dst map[int]int) error {
-	var char, code int
+func (s *bcmapStream) collectCIDChar(count, dataSize int, seq bool, dst map[int64]int) error {
+	var char, code int64
 	for i := range count {
 		if i == 0 {
 			v, err := s.readHex(dataSize)
@@ -211,17 +228,17 @@ func (s *bcmapStream) collectCIDChar(count, dataSize int, seq bool, dst map[int]
 			}
 			code += 1 + delta
 		}
-		dst[char] = code
+		dst[char] = int(code) //nolint:gosec // bundled CMaps hold CIDs below 65536 (ISO 32000-1, Annex C).
 	}
 	return nil
 }
 
 // collectCIDRange parses cidrange entries (type 3) into code→CID mappings.
 // Each entry maps a contiguous range [start, end] to CIDs starting at code.
-func (s *bcmapStream) collectCIDRange(count, dataSize int, seq bool, dst map[int]int) error {
-	var prevEnd int
+func (s *bcmapStream) collectCIDRange(count, dataSize int, seq bool, dst map[int64]int) error {
+	var prevEnd int64
 	for i := range count {
-		var start int
+		var start int64
 		if i == 0 {
 			v, err := s.readHex(dataSize)
 			if err != nil {
@@ -249,7 +266,7 @@ func (s *bcmapStream) collectCIDRange(count, dataSize int, seq bool, dst map[int
 			return err
 		}
 		for j := start; j <= end; j++ {
-			dst[j] = code + (j - start)
+			dst[j] = int(code + (j - start)) //nolint:gosec // bundled CMaps hold CIDs below 65536 (ISO 32000-1, Annex C).
 		}
 		prevEnd = end
 	}

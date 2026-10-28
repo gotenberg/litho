@@ -96,15 +96,11 @@ func (b *parseBudget) codeSpace() error {
 // codeInt reads a character code as the integer [ParseCID] keys it by. It
 // reports false for a code outside the one to four bytes ISO 32000-1, 9.7.6.2
 // defines, whose value would not fit the key.
-func codeInt(s []byte) (int, bool) {
+func codeInt(s []byte) (int64, bool) {
 	if len(s) == 0 || len(s) > maxCodeBytes {
 		return 0, false
 	}
-	v := 0
-	for _, b := range s {
-		v = v<<8 | int(b)
-	}
-	return v, true
+	return byteValue(s), true
 }
 
 // cidValue reads the CID a cidchar, cidrange or notdef entry maps its first

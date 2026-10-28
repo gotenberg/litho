@@ -94,7 +94,7 @@ func (c *CMap) WithBase(chars, fill map[string]string, all bool) *CMap {
 			}
 			mapped[v] = true
 			if width > 0 && width < 8 && v < 1<<(8*width) {
-				code = string(intToBytes(int(v), width)) //nolint:gosec // v < 1<<56, checked above.
+				code = string(intToBytes(int64(v), width)) //nolint:gosec // v < 1<<56, checked above.
 			}
 			out.Mapping[code] = uni
 			if out.strict != nil {
@@ -259,7 +259,7 @@ func parseBCMapBFMappings(data []byte) (chars, ranges map[string]string, err err
 		if dataSize+1 > maxBCMapNumBytes {
 			return nil, nil, errBCMapNumTooWide
 		}
-		count, countErr := s.readNumber()
+		count, countErr := s.readCount()
 		if countErr != nil {
 			return nil, nil, fmt.Errorf("bcmap record count: %w", countErr)
 		}

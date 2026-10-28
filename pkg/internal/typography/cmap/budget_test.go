@@ -207,7 +207,7 @@ func TestParseCIDRejectsOutOfRangeValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseCID: %v", err)
 	}
-	want := map[int]int{0x41: 7, 0x43: 9, 0x300: 70000, 0x301: 70001}
+	want := map[int64]int{0x41: 7, 0x43: 9, 0x300: 70000, 0x301: 70001}
 	if len(c.Mapping) != len(want) {
 		t.Fatalf("Mapping = %v, want %v", c.Mapping, want)
 	}

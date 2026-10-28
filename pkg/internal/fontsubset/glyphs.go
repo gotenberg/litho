@@ -460,10 +460,14 @@ func (w *walk) cidsShown(ctx context.Context, top node, use *fontUse) (map[int]b
 		// through the CMap and as a CID of its own, so every split a reader
 		// may make is kept.
 		for i := range data {
-			v := 0
+			var v int64
 			for n := 1; n <= maxCodeBytes && i+n <= len(data); n++ {
-				v = v<<8 | int(data[i+n-1])
-				cids[v] = true
+				v = v<<8 | int64(data[i+n-1])
+				// A value past int names no CID a font holds (CIDs stop at
+				// 65535, ISO 32000-1, Annex C), and only a 32-bit int is short.
+				if v <= math.MaxInt {
+					cids[int(v)] = true
+				}
 				if cid, ok := m.MappedCID(v); ok {
 					cids[cid] = true
 				}

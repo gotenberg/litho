@@ -83,7 +83,7 @@ func TestCIDMap_Decode_RoundTrip(t *testing.T) {
 		t.Fatal("expected a CID map for 90ms-RKSJ-H")
 	}
 
-	width := func(code int) int {
+	width := func(code int64) int {
 		for _, n := range m.cs.codeLengths() {
 			if code >= 1<<(8*n) {
 				continue // value would be truncated at this width
@@ -95,7 +95,7 @@ func TestCIDMap_Decode_RoundTrip(t *testing.T) {
 		return 0
 	}
 
-	oneByte, twoByte := -1, -1
+	oneByte, twoByte := int64(-1), int64(-1)
 	for code := range m.charToCID {
 		switch width(code) {
 		case 1:
@@ -112,7 +112,7 @@ func TestCIDMap_Decode_RoundTrip(t *testing.T) {
 		}
 	}
 
-	for _, code := range []int{oneByte, twoByte} {
+	for _, code := range []int64{oneByte, twoByte} {
 		if code < 0 {
 			continue
 		}
@@ -149,7 +149,7 @@ func TestCIDMap_Decode_RealignsAfterUnmappedMultiByte(t *testing.T) {
 
 	// Find a 2-byte value that is in the codespace but absent from the map.
 	var unmapped []byte
-	for v := 0x8140; v <= 0x9FFC && unmapped == nil; v++ {
+	for v := int64(0x8140); v <= 0x9FFC && unmapped == nil; v++ {
 		b := intToBytes(v, 2)
 		if m.cs.inCodeSpace(b) {
 			if _, ok := m.charToCID[v]; !ok {

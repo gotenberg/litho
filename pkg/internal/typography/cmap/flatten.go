@@ -2,6 +2,7 @@ package cmap
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -35,10 +36,13 @@ var (
 
 // cidSpan is one begincidrange entry: the source codes lo to hi map to
 // consecutive CIDs starting at cid.
-type cidSpan struct{ lo, hi, cid int }
+type cidSpan struct {
+	lo, hi int64
+	cid    int
+}
 
 // codeSpan is one begincodespacerange entry as an integer interval.
-type codeSpan struct{ lo, hi int }
+type codeSpan struct{ lo, hi int64 }
 
 // FlattenUseCMap inlines the mappings of the CMaps a CMap builds on, returning
 // a program that needs no /UseCMap reference.
@@ -67,7 +71,7 @@ func FlattenUseCMap(ctx context.Context, using []byte, bases [][]byte) ([]byte, 
 
 	// Fold the chain weakest first: the furthest base is overwritten by every
 	// CMap above it, and the using CMap last of all.
-	merged := make(map[int]int)
+	merged := make(map[int64]int)
 	for i, base := range slices.Backward(bases) {
 		if err := ctx.Err(); err != nil {
 			return using, false, err
@@ -168,17 +172,17 @@ func mergedCodeSpaces(ctx context.Context, using []byte, bases [][]byte) (int, [
 }
 
 // byteValue reads a big-endian code.
-func byteValue(b []byte) int {
-	v := 0
+func byteValue(b []byte) int64 {
+	var v int64
 	for _, c := range b {
-		v = v<<8 | int(c)
+		v = v<<8 | int64(c)
 	}
 	return v
 }
 
 // mergeSpans collapses overlapping and adjacent intervals.
 func mergeSpans(in []codeSpan) []codeSpan {
-	slices.SortFunc(in, func(a, b codeSpan) int { return a.lo - b.lo })
+	slices.SortFunc(in, func(a, b codeSpan) int { return cmp.Compare(a.lo, b.lo) })
 	out := make([]codeSpan, 0, len(in))
 	for _, s := range in {
 		if n := len(out); n > 0 && s.lo <= out[n-1].hi+1 {
@@ -193,8 +197,8 @@ func mergeSpans(in []codeSpan) []codeSpan {
 // compressCID turns an expanded code-to-CID map back into ranges, breaking a
 // run wherever the codes stop being consecutive, the CIDs stop being
 // consecutive, or the code enters a new first-byte block.
-func compressCID(m map[int]int) []cidSpan {
-	codes := make([]int, 0, len(m))
+func compressCID(m map[int64]int) []cidSpan {
+	codes := make([]int64, 0, len(m))
 	for c := range m {
 		codes = append(codes, c)
 	}
@@ -231,6 +235,6 @@ func writeCIDRanges(buf *bytes.Buffer, spans []cidSpan, width int) {
 }
 
 // hexCode writes a code as the hex string of the chain's code width.
-func hexCode(v, width int) string {
+func hexCode(v int64, width int) string {
 	return fmt.Sprintf("<%0*X>", width*2, v)
 }

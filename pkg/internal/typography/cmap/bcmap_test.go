@@ -8,7 +8,7 @@ func TestBcmapStreamReadNumber(t *testing.T) {
 	tests := []struct {
 		name string
 		data []byte
-		want int
+		want int64
 	}{
 		{"single byte zero", []byte{0x00}, 0},
 		{"single byte 127", []byte{0x7F}, 127},
@@ -34,7 +34,7 @@ func TestBcmapStreamReadSigned(t *testing.T) {
 	tests := []struct {
 		name string
 		data []byte
-		want int
+		want int64
 	}{
 		{"zero", []byte{0x00}, 0},
 		{"positive 1", []byte{0x02}, 1},
@@ -61,7 +61,7 @@ func TestBcmapStreamReadHex(t *testing.T) {
 		name     string
 		data     []byte
 		dataSize int
-		want     int
+		want     int64
 	}{
 		{"1 byte", []byte{0x42}, 0, 0x42},
 		{"2 bytes", []byte{0x00, 0x20}, 1, 0x0020},

@@ -15,7 +15,8 @@ func TestByteLength(t *testing.T) {
 		{Low: []byte{0xE0, 0x40}, High: []byte{0xFC, 0xFC}},
 	}
 	cases := []struct {
-		code, want int
+		code int64
+		want int
 	}{
 		{0x44, 1},   // ASCII 'D'
 		{0xA1, 1},   // half-width katakana, single byte

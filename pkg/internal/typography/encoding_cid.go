@@ -215,9 +215,9 @@ func (f *Font) encodingCID(code []byte, charCode int) (cid int, mapped bool) {
 	if f.encodingCIDs.cids != nil && len(code) <= maxEncodingCodeBytes {
 		// The code's own value, not charCode, which carries two bytes at
 		// most: a three-byte UTF-8 code is one code of its CMap.
-		value := 0
+		var value int64
 		for _, b := range code {
-			value = value<<8 | int(b)
+			value = value<<8 | int64(b)
 		}
 		if cid, ok := f.encodingCIDs.cids.MappedCID(value); ok {
 			return cid, true
@@ -340,9 +340,9 @@ func (f *Font) MappedEncodingCodes(data []byte) (codes []EncodingCode, ok bool) 
 		n = min(max(n, 1), len(data))
 		code := EncodingCode{Code: data[:n]}
 		if !undefined && n <= maxEncodingCodeBytes {
-			value := 0
+			var value int64
 			for _, b := range data[:n] {
-				value = value<<8 | int(b)
+				value = value<<8 | int64(b)
 			}
 			code.CID, code.Mapped = f.encodingCIDs.cids.MappedCID(value)
 		}

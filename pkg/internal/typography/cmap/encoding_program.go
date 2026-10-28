@@ -120,7 +120,8 @@ func collectionCMapCIDSystemInfo(name string) (string, string, int, bool) {
 // widthSpan is a run of codes of one byte width: a cidrange entry when cid
 // increments along it, a notdefrange entry when it does not.
 type widthSpan struct {
-	lo, hi, cid, width int
+	lo, hi     int64
+	cid, width int
 }
 
 // renderEncoding writes m as a self-contained CMap program named name and
@@ -210,7 +211,7 @@ func sameCodeSpace(a, b CodeSpaceRange) bool {
 // by byte as a reader splits codes (Adobe Technical Note #5014,
 // begincodespacerange). It reports false when no width, or more than one,
 // does, since the value then names no code, or two.
-func codeWidth(cs *CMap, code int) (int, bool) {
+func codeWidth(cs *CMap, code int64) (int, bool) {
 	width := 0
 	for n := 1; n <= maxCMapCodeBytes; n++ {
 		if n < maxCMapCodeBytes && code >= 1<<(8*n) {
@@ -232,7 +233,7 @@ func codeWidth(cs *CMap, code int) (int, bool) {
 // consecutive or the code enters a new block of its last byte: a range
 // crossing one is what Adobe Technical Note #5411, 1.4.1 rules invalid. It
 // reports false when a code's width is not settled ([codeWidth]).
-func cidRunsByWidth(cs *CMap, charToCID map[int]int) ([]widthSpan, bool) {
+func cidRunsByWidth(cs *CMap, charToCID map[int64]int) ([]widthSpan, bool) {
 	codes := slices.Sorted(maps.Keys(charToCID))
 	out := make([]widthSpan, 0, len(codes))
 	for _, c := range codes {
@@ -242,7 +243,7 @@ func cidRunsByWidth(cs *CMap, charToCID map[int]int) ([]widthSpan, bool) {
 		}
 		if n := len(out); n > 0 {
 			last := &out[n-1]
-			if last.width == w && c == last.hi+1 && charToCID[c] == last.cid+(c-last.lo) && c>>8 == last.hi>>8 {
+			if last.width == w && c == last.hi+1 && int64(charToCID[c]) == int64(last.cid)+(c-last.lo) && c>>8 == last.hi>>8 {
 				last.hi = c
 				continue
 			}

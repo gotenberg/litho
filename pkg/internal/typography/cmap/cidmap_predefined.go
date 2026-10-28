@@ -2,8 +2,6 @@ package cmap
 
 import (
 	"slices"
-
-	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
 // CIDCode is one decoded character code: its CID and whether the encoding CMap
@@ -24,7 +22,7 @@ type CIDCode struct {
 // encoding CMap, honouring its multi-byte codespace ranges. It is the code->CID
 // counterpart of the code->Unicode [CMap] that [LoadPredefinedCMap] builds.
 type CIDMap struct {
-	charToCID map[int]int
+	charToCID map[int64]int
 	// spans maps code ranges to incrementing CIDs, consulted after charToCID:
 	// the Identity CMaps, which map every two-byte code to itself.
 	spans []cidSpan
@@ -146,7 +144,7 @@ func (m *CIDMap) CodeLength(data []byte) (n int, undefined bool) {
 // the reading of a viewer's metrics lookup, which PDF.js performs
 // (fonts.js, _charToGlyph) by taking the width of the code itself when its
 // CMap does not contain it. A validator decodes through [CIDMap.Decode].
-func (m *CIDMap) MappedCID(code int) (int, bool) {
+func (m *CIDMap) MappedCID(code int64) (int, bool) {
 	return m.mappedCID(code)
 }
 
@@ -190,7 +188,7 @@ func (m *CIDMap) next(data []byte, lengths []int, hasShort bool) (consumed, cid 
 		if !m.cs.inCodeSpaceBytewise(candidate) {
 			continue
 		}
-		if c, ok := m.lookup(strToInt(ast.PdfString(candidate))); ok {
+		if c, ok := m.lookup(byteValue(candidate)); ok {
 			return n, c, true, false
 		}
 		// In codespace but unmapped: prefer a shorter mapped prefix that is a
@@ -202,7 +200,7 @@ func (m *CIDMap) next(data []byte, lengths []int, hasShort bool) (consumed, cid 
 			if !m.cs.inCodeSpaceBytewise(data[:shorter]) {
 				continue
 			}
-			if c, ok := m.lookup(strToInt(ast.PdfString(data[:shorter]))); ok {
+			if c, ok := m.lookup(byteValue(data[:shorter])); ok {
 				return shorter, c, true, false
 			}
 		}
