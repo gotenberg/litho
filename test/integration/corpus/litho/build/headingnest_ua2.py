@@ -17,7 +17,7 @@ Each H is the first element of its Sect and the only H there. The four H
 are the file's one defect: the font is embedded, the XMP packet claims PDF/UA-2
 and every other element is a standard PDF 2.0 type.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

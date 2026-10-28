@@ -15,7 +15,7 @@ RGB profile. The profile-less GTS_PDFA1 intent is replaced, the PDF/X intent
 is kept (ISO 32000-1, 14.11.5), and ISO 19005-2, 6.2.3 t2 asks both intents to
 name the new profile object.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

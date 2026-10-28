@@ -27,7 +27,7 @@ document rather than a bare metadata carrier, and a second independent defect,
 a figure with no alternate description, so a clause-5 verdict is visibly
 separate from the structure checks.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

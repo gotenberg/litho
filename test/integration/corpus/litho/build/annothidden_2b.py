@@ -38,7 +38,7 @@ Page 2, whose /Annots is a direct array:
 Every annotation but the pop-ups carries an empty /AP /N form, so 6.3.3 is
 silent, and the pages draw nothing. The XMP packet claims PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import os

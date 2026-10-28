@@ -28,7 +28,7 @@ one type as one, so two inline Divs would hide the first one's Figure from it.
 A P marks MCID 0 around a filled rectangle. The page's /ParentTree array names
 the P and F1.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

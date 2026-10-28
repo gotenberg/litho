@@ -25,7 +25,7 @@ association repair the file specifications typed /Filespec, so each of these
 kept its finding through remediation. A CMYK OutputIntent covers the DeviceCMYK
 alternates.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

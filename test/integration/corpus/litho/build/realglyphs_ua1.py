@@ -31,7 +31,7 @@ procedure's rendering mode 2 makes the page's glyph the cell's (page 7).
 
 A CMYK OutputIntent covers the DeviceGray every glyph paints in.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

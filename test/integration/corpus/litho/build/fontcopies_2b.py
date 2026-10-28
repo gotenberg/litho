@@ -64,7 +64,7 @@ read through it; M4 embeds a program with no /CIDToGIDMap, 6.2.11.3.2 t1; and
 the two pages inheriting their resources resolve every font through them,
 6.2.2 t2.
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set.
 """
 

@@ -22,7 +22,7 @@ PDF/UA-2 remediation makes:
 The root `Document` declares the PDF 2.0 namespace. The font is embedded and
 draws only `A` and `B`, which is all the text uses.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

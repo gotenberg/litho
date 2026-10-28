@@ -27,7 +27,7 @@ first three lines; losing the shift of the one before q at the Td opened one
 on the fourth. A CMYK output intent covers the initial DeviceGray and the XMP
 claims PDF/A-2b, so nothing but the text fires at PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

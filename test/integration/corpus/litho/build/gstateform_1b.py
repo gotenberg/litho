@@ -32,7 +32,7 @@ a plain form against the PostScript and OPI ones, and an ICC profile whose `/N`
 agrees with its header against the one where it does not. The twins share the
 page, so over-suppression and over-reporting both show up as a count.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

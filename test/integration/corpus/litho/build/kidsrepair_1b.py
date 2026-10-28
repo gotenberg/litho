@@ -28,7 +28,7 @@ the page tree node holding them. The tree is built by hand: pikepdf's page list
 flattens it and pushes inherited attributes onto each page, which would delete
 the construct the fixture exists for.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

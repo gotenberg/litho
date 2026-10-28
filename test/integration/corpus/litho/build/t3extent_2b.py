@@ -26,7 +26,7 @@ box T3 states.
 The RGB output intent covers DeviceGray, so the file is conforming at
 PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

@@ -26,7 +26,7 @@ A2B0 and B2A0 transforms over a two-point grid. Only the device class is
 wrong. The page paints a DeviceCMYK square, an ICCBased square and its text
 in the conforming embedded TrueType of baretree_2b.pdf.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

@@ -23,7 +23,7 @@ The file is tagged, with a structure tree of one /Document element that owns
 no content, so it fails no test of 6.7.4 at all. Its sibling mcform_2a.pdf
 carries the shapes veraPDF does judge and litho missed.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save, xmp_packet

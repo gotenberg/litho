@@ -25,7 +25,7 @@ the glyphs Fm draws refused the redaction.
 The RGB output intent covers DeviceGray, so the file is conforming at
 PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

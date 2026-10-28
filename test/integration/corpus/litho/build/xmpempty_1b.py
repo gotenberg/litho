@@ -25,7 +25,7 @@ control character, raw or referenced, as a space. So no analogue equals the
 entry. /Creator carries 0x18, which PDFDocEncoding maps to a breve, and equals
 an analogue holding the breve.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

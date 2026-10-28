@@ -22,7 +22,7 @@ covers neither on page 2, so each of the three placements gets a copy of its
 own, the Photo's with a soft mask of its own. The centred quarter of page 1,
 [100 100 300 300], covers a different corner of each placement.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

@@ -17,7 +17,7 @@ action-type rules stay silent and the key restriction stands alone. The
 catalog /AA is an object of its own, so a fix that edits it must write it back
 rather than a copy of the document's version.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

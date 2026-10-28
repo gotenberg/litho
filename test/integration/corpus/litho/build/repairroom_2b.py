@@ -38,7 +38,7 @@ The font is the conforming non-symbolic TrueType of `repairleft_4.pdf`,
 embedded, with `/Widths` from code 1 so the `.notdef` width agrees with the
 dictionary. A CMYK OutputIntent covers the DeviceCMYK alternates.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

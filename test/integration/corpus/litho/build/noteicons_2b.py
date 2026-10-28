@@ -26,7 +26,7 @@ Each annotation sets /F 4 and lacks the /AP that ISO 19005-2, 6.3.3 requires,
 so 6.3.3 t1 fires. The file declares no OutputIntent, and the /C arrays are
 the only colour it uses.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, attach_xmp, pikepdf, save, xmp_packet

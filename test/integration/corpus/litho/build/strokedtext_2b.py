@@ -29,7 +29,7 @@ inside the quarter and under the band.
 The RGB output intent covers DeviceGray, and the font is embedded, so the
 file is conforming at PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _cff

@@ -30,7 +30,7 @@ K4's /UseCMap and K5's /Encoding name no CMap of Table 118, which 6.2.11.3.3
 t3 and t1 answer, and veraPDF knows no CIDSystemInfo for UniAKR-UTF16-H, which
 6.2.11.3.1 t1 answers.
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set, and _encodingcmap for the font program.
 """
 

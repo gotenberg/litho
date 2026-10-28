@@ -7,7 +7,7 @@ exactly the masking this corpus exists to catch. Marked content, the parent
 tree and the role map are all wired, and the defects are planted one per
 construct.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

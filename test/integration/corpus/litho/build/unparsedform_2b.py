@@ -24,7 +24,7 @@ page, [100 100 300 300], covers `Card` whole and misses `Broken`; the band
 through the centre cuts `Card` and misses `Broken`; the whole page covers
 both.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import zlib

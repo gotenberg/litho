@@ -25,7 +25,7 @@ The properties are deliberately identical across the three schemas. If a check
 condemned the schema for something a property carries, all three would fire and
 the file would prove nothing about the container.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

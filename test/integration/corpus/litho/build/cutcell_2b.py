@@ -25,7 +25,7 @@ band scenario, [190 210] on a page with no text, lies inside the cells of row
 
 The RGB output intent covers DeviceGray.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

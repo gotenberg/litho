@@ -23,7 +23,7 @@ Four entries, each construct measured on veraPDF 1.30.2 with a crafted file:
 | `et:a` written at top level, `et` naming only value types       | `6.6.2.3.1/1`, |
 |                                                                 | `6.6.2.3.1/2`  |
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

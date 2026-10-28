@@ -29,7 +29,7 @@ and a gamma 2.2 kTRC curve. Only the device class is wrong. The page paints a
 DeviceGray square and its text in the conforming embedded TrueType of
 baretree_2b.pdf, both in DeviceGray, which the grey intent covers.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

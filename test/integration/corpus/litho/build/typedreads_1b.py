@@ -61,7 +61,7 @@ planted as a placeholder literal of the same width and patched as bytes after
 the save, which moves no offset. The page tree is built by hand, since
 pikepdf's page list pushes an inherited /MediaBox onto each page.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import pathlib

@@ -16,12 +16,12 @@ only a predefined base.
 The `/UseCMap` of font C references an embedded CMap stream rather than naming
 one. That is not decoration: a `/UseCMap` naming a CMap veraPDF cannot resolve
 makes it throw, abandoning the run, so the reference has to point at a real
-stream. See ../README.md.
+stream. See ../FIXTURES.md.
 
 The descendant CIDFonts carry no font program, which is a defect of a different
 clause entirely, so a CMap verdict is visibly separate from the embedding one.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

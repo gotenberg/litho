@@ -41,7 +41,7 @@ halves need a table each, and table F's earlier cells all carry a valid
 
 Tests 3 and 4 belong to `tablespan_ua2.pdf` and are not repeated here.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

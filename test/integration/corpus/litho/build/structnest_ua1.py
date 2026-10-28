@@ -15,7 +15,7 @@ break.
 The page carries no text, only artifact and tagged vector content, so the
 document-wide language tests stay out of the way of the per-element ones.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

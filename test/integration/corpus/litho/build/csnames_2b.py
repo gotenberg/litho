@@ -56,7 +56,7 @@ enough to need litho's bound on the names one link follows. The page group
 naming an entry is already in `blendcs_4.pdf`, and an entry holding an
 indirect family name in govdocs thread_300_300760.pdf.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

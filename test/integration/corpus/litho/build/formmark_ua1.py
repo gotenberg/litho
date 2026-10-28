@@ -31,7 +31,7 @@ No form paints untagged content, so 7.1 test 3 and ISO 14289-2, 8.2.2 test 1
 stay silent, and the two findings come from inside a form. The page shows no
 text, so no font clause fires. The XMP packet claims PDF/UA-1.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

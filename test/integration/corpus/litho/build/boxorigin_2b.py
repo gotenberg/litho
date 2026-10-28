@@ -27,7 +27,7 @@ could not tell a stamp placed at the corner from one placed at the origin or
 moved by the box origin twice. No page draws anything, so every page reads the
 same under every mutation, and the file conforms at PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, attach_xmp, pikepdf, save, xmp_packet

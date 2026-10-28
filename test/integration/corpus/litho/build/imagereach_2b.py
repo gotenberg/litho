@@ -21,7 +21,7 @@ page's resources (ISO 32000-1, 7.8.3): litho fails both rules once, and
 veraPDF, which reads the shared stream through the first page alone, fails
 neither.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

@@ -20,7 +20,7 @@ the array, and a number in /First as an outline item it could not rewrite.
 Page 2 draws text no redaction of page 1 touches, a control for the pages the
 redaction leaves alone.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

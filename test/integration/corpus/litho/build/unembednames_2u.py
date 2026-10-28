@@ -25,7 +25,7 @@ leave out fails t1. Each font rides on its own resource name:
       fail t2 and 6.2.11.8 t1 once each, and H2, built in mode 3, passes the
       embedding rule.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

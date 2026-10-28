@@ -15,7 +15,7 @@ bfchar, which maps to Unicode, not to CIDs (9.10.3):
 | U1   | 0005 0009 | 5, 9 absent | 6.2.11.4.1 t2 and 6.2.11.8 t1  |
 | U2   | 0001 0006 | 1, 6        | silent, the control            |
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set, and _encodingcmap for the font program.
 """
 

@@ -36,7 +36,7 @@ Microsoft Symbol (3,0) subtable, and map their codes through /ToUnicode, so no
 other font clause fires. No font here fails the rule, so the rule class stays
 out of both tools' sets, and reporting either font adds it back.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

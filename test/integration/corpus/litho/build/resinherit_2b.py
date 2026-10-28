@@ -44,7 +44,7 @@ patched as bytes after the save, which moves no offset. The tree is built by
 hand: pikepdf's page list flattens it and pushes inherited attributes onto each
 page, which would delete the constructs the fixture exists for.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import pathlib

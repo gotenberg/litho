@@ -23,7 +23,7 @@ its version and device class, but it holds no transform, so litho, poppler
 The RGB-header stream states the Lab ranges in its /Range (Table 66), so the
 components the content gives are in range for both spaces.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

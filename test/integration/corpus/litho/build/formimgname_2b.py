@@ -21,7 +21,7 @@ show above the cell's dark level once drawn over black.
 
 The file declares no OutputIntent, so DeviceRGB and DeviceGray fail.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

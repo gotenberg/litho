@@ -25,7 +25,7 @@ region the redaction cells clear, since a redaction refuses to cross a
 shading. The region's edges fall between `Im`'s samples, so it covers the
 middle two samples of the bottom two rows whole.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

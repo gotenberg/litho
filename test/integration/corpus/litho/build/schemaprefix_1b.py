@@ -28,7 +28,7 @@ and stops reports one rule where four are due, and a check that condemns a
 whole `rdf:Seq` once a member fails wrongly reports the conforming sixth type
 and the conforming seventh schema entry.
 
-Deliberately unreached, with the evidence in ../README.md:
+Deliberately unreached, with the evidence in ../FIXTURES.md:
 
   * t6, the property container. veraPDF reports it for an `rdf:Bag` or a bare
     literal in place of the `rdf:Seq`; litho reports neither, so planting it
@@ -44,7 +44,7 @@ reports that test from the absence of a structure tree alone. One line of text
 keeps the two tools agreed on every profile so the clause under test is the
 only thing this fixture says.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

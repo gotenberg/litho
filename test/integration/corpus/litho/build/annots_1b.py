@@ -22,7 +22,7 @@ the test permits `/C` and `/IC` when the destination profile is RGB, and with
 no output intent at all there is no RGB to permit it. The missing OutputIntent
 is itself a separate defect the file already carries.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

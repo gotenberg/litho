@@ -18,7 +18,7 @@ once, as veraPDF 1.30.2 does: the rule set and the instance count agree.
 A P element beside the two Sects marks a filled rectangle, so the page has
 tagged content and draws no text.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

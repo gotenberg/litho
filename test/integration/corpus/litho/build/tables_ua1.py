@@ -12,7 +12,7 @@ a check that reports per document rather than per element is visible as a
 count, and a check that latches on the first table is visible as a missing
 rule on the second.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

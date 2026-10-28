@@ -31,7 +31,7 @@ U+E000 is the first Private Use Area code point. It rides in a UTF-16BE string
 with a byte order mark, which is how a PDF text string carries anything outside
 PDFDocEncoding.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

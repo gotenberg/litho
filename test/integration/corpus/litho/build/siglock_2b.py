@@ -28,7 +28,7 @@ merged with its widget, printed, on the one page; the signature widgets are of
 zero size, the text widgets' appearances paint nothing, and the page shows
 nothing. The XMP packet claims PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

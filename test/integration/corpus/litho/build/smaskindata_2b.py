@@ -28,7 +28,7 @@ carries the encoder's version stripped. The JP2 boxes are written here.
 The file declares no OutputIntent and its page no /Group: it paints
 DeviceRGB, which fails ISO 19005-2, 6.2.4.3, and holds transparency.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import base64

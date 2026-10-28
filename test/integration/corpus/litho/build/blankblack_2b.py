@@ -26,7 +26,7 @@ PDFium all show as a saturated blue. Each image is a 16x16 ramp, drawn
 side by side, the YCC image in the middle of the page, where every scenario
 of the redact-render cell blanks part of it.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

@@ -19,7 +19,7 @@ to "Y". The page shows "Hello world":
 A CMYK output intent covers the initial DeviceGray and the XMP claims PDF/A-2u,
 so every shown code has a Unicode value and none of the font rules fire.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

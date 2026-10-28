@@ -20,7 +20,7 @@ glyph. G2 is a reference-only Adobe-Japan1 font: it fails the embedding
 rules, and is there because ISO 32000-1, 9.10.2 reads its CIDs through the
 collection whether or not a program is embedded.
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set, and _encodingcmap for the font program.
 """
 

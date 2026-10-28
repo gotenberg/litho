@@ -27,7 +27,7 @@ rendering.
 The file declares an RGB output intent, so its DeviceRGB colours are in
 order, and it is conforming at PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, tounicode_cmap, type3_font, xmp_packet

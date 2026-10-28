@@ -48,7 +48,7 @@ granularity. Keeping the page silent leaves Fm2 and Fm3 as the only sources.
 Beyond the clause the file carries no /Metadata, an independent defect, so a
 colour verdict is visibly separate from it.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

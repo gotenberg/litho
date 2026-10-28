@@ -22,7 +22,7 @@ Each page paints one square of its own and the shared square:
 Page 2 must keep the shared square after page 1 is repaired, page 4 must not
 gain page 3's square, and page 5 is the control the in-place rewrite keeps.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

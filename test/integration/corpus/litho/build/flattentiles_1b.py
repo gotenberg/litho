@@ -24,7 +24,7 @@ The file declares no OutputIntent, so the DeviceRGB paint fails 6.2.3.3 t1 and
 the DeviceGray paint 6.2.3.3 t3 at PDF/A-1b, and the constant alpha fails 6.4
 t6.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import zlib

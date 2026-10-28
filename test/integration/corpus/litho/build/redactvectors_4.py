@@ -27,7 +27,7 @@ both and finds nothing.
 
 Page 2 draws text no redaction of page 1 touches.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import base64

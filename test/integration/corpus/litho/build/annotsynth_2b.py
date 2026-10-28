@@ -22,7 +22,7 @@ so 6.3.3 t1 fires. The file declares no OutputIntent, so DeviceRGB fails
 6.2.4.3 t2, and the half-opaque polygon is no transparency the page content
 holds.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

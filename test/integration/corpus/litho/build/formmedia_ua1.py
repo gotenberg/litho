@@ -41,7 +41,7 @@ what prove them silent.
 The font is not embedded, so the font clauses fire independently of everything
 above and a structure verdict stays visibly separate from them.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

@@ -19,7 +19,7 @@ and at the later parts the file is as conforming as their claims allow.
 The profile is the structurally minimal header iccbased_4.py builds, with the
 version field set to 4.2.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

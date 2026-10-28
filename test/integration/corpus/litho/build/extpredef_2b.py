@@ -24,7 +24,7 @@ veraPDF 1.30.2 with a crafted file:
 | `ex:evt`              | `seq ResourceEvent`           | `stEvt:when` holding `notadate` |
 | `ex:path`             | `XPath`                       | `///`                          |
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

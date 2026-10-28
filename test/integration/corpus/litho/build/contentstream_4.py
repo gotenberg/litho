@@ -24,7 +24,7 @@ The inherited dictionary defines `/F1`, and the stream draws with it as well.
 That is the control for test 3: the verdict lands on the name that resolves
 nowhere, not on every name the stream uses.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

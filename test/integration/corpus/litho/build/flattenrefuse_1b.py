@@ -26,7 +26,7 @@ result over the page beneath, as painting it directly does (ISO 32000-1,
 The file declares no OutputIntent, so the DeviceRGB paint fails 6.2.3.3 t1 at
 PDF/A-1b; the groups fail 6.4 t3 and the constant alpha 6.4 t6.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

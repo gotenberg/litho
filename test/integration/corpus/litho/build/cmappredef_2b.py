@@ -30,7 +30,7 @@ comes from the CMap composed with the Adobe-Japan1 CID-to-Unicode table, as
 PDF.js composes it (ISO 32000-1, 9.10.2). EUC-V's own records hold no <41>
 and no <A4A2>, so only its base EUC-H turns them into A and U+3042.
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set.
 """
 

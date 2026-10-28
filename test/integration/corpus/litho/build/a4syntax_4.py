@@ -33,7 +33,7 @@ what it replaces, so no cross-reference offset moves. The builder refuses any
 patch that would change a length rather than silently corrupting the file. See
 `filestruct_1b.py` and `xref_1b.py` for the same technique.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import re

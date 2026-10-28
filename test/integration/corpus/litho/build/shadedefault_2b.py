@@ -22,7 +22,7 @@ Page 4 selects the colorant of page 1's shading through a /ColorSpace entry,
 which a /DefaultCMYK reaches, so the remediated output must give both the same
 alternate (ISO 19005-2, 6.2.4.4 t2).
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

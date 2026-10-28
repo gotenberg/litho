@@ -44,7 +44,7 @@ corpus.
 The blob is embedded rather than generated: openssl stamps a signingTime, so
 shelling out would cost the fixture its byte-for-byte rebuild.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import base64

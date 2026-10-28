@@ -68,7 +68,7 @@ qpdf drops a null dictionary value and cannot write a reference to a missing
 object, so pages 17 and 19 carry placeholder names of the same length, patched
 as bytes after the save, which moves no offset.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import pathlib

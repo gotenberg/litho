@@ -38,7 +38,7 @@ up a /Default space for a device space in the /Resources page 1 lacks, and a
 repair of device colour would give the page /Resources ahead of the graphics
 repair. The XMP packet claims PDF/A-2u.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

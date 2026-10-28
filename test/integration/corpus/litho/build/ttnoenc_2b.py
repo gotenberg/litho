@@ -24,7 +24,7 @@ Each font carries /Widths matching its program, so the width clause stays
 silent wherever the glyph is found. No font carries /ToUnicode, so the Unicode
 clauses of parts 2u, 2a, 3u, 3a and PDF/UA read whatever the encoding names.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

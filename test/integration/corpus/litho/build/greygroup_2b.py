@@ -27,7 +27,7 @@ group, read back under relative colorimetric, and reaches it through sRGB.
 RGB colours are in `rgb`, a gamma 2.2 display profile with the sRGB
 primaries.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

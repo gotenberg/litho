@@ -26,7 +26,7 @@ survive pikepdf. Each stream is therefore planted after the save, its dictionary
 padded with spaces so the object keeps its byte length and no cross-reference
 offset moves. Padding after `endobj` instead would cost a `6.1.8/1`.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import re

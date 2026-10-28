@@ -50,7 +50,7 @@ eight tests in the cross-profile comparison.
 The dates are content, not build metadata, so they are hard coded. Reading a
 clock here would make the fixture rebuild differently every run.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

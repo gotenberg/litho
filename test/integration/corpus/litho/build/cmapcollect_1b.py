@@ -19,7 +19,7 @@ program of _encodingcmap, whose /CIDToGIDMap sends CIDs 1 to 6 to a glyph:
 | ---- | ----------------- | --------- | ---- | ------------------------- |
 | C1   | `/Adobe-Korea1-2` | 0001 0002 | 1, 2 | 6.3.3.1 t1 and 6.3.3.3 t1 |
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set.
 """
 

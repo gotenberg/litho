@@ -18,7 +18,7 @@ Two OCGs, "Shown" and "Hidden", and four configurations, each named:
 | /Configs[2] object | empty                          | 6.9 t3            |
 
 The page draws nothing and the XMP packet claims PDF/A-2b. Every count was
-confirmed with live veraPDF 1.30.2. See ../README.md for the authoritative
+confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the authoritative
 expected firing set.
 """
 

@@ -28,7 +28,7 @@ lossless generic region coded with MMR (ITU-T T.88, 6.2.6) and an end of page
 segment, the same 8x8 diagonal band the CCF control codes with Group 4. No
 image refers to JBIG2Globals.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import binascii

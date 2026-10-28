@@ -24,7 +24,7 @@ content fails nothing, and test 2 counts the three nested streams.
 A CMYK OutputIntent covers the initial DeviceGray every stream paints in, and
 the file draws no text, so no colour or font clause fires beside test 2.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

@@ -35,9 +35,9 @@ Test 1 is reached through the device class rather than through the data colour
 space. Both routes fire it, but a profile declaring `Lab ` makes litho report
 ISO 19005-2, 6.2.4.3 t4 against the page's device colour operators while
 veraPDF does not, and a fixture is not the place to carry that. See
-../README.md.
+../FIXTURES.md.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

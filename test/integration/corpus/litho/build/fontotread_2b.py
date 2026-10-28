@@ -28,7 +28,7 @@ CIDs 1 and 2 under Identity-H:
 
 W2 and W6 fail the width rule, W1, W3, W4, W5 and H1 pass it.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

@@ -20,7 +20,7 @@ DisplayDocTitle, so the rules that fire before remediation are the untagged
 pages and the non-embedded font, and the font is the one residual remediation
 leaves.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

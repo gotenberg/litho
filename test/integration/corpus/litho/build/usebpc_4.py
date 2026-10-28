@@ -27,7 +27,7 @@ pages 1 and 2 and judge a blanked image by its darkness over black, which a
 blank under /OFF, drawn L* 42, cannot reach (the library's pixel check reads
 it compensated).
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

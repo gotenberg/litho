@@ -21,7 +21,7 @@ own, and shows one code:
 No corpus file but pdfjs issue12823.pdf, which no gated corpus holds, writes a
 Type 0 font with no descendant dictionary.
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set.
 """
 

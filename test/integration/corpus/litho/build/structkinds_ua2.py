@@ -39,7 +39,7 @@ declared in the root's `/Namespaces`.
 The font is not embedded, so a structure verdict is visibly separate from the
 font clause.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

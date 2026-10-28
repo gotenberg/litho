@@ -28,7 +28,7 @@ first item and the two links' /Dest, test 2 for the five GoTo actions.
 
 The font is embedded and draws only `A` and `B`, which is all the text uses.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

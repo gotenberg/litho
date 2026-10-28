@@ -25,7 +25,7 @@ font's `/Widths` cover the codes from 1, so the width of the `.notdef` glyph
 agrees with the dictionary, and the Type0 font carries a ToUnicode CMap so its
 code maps to U+0041.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import zlib

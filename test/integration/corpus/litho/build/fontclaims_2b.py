@@ -31,7 +31,7 @@ Each construct rides on a font of its own, so each count has one source:
       there, so the code references .notdef. A /ToUnicode maps the code, so
       the Unicode rules have a value to judge rather than the .notdef name.
 
-Every count was confirmed with live veraPDF 1.30. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30. See ../FIXTURES.md for the
 authoritative expected firing set.
 """
 

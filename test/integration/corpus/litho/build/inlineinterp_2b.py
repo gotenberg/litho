@@ -26,7 +26,7 @@ is not embedded: ISO 19005-2, 6.2.11.4.1 t1, which no repair answers. It stays
 in every remediated output, so a rewrite of the page that a validator can no
 longer read shows as a finding one tool reports and the other does not.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

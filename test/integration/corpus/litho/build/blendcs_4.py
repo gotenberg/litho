@@ -36,7 +36,7 @@ use: the second page's forms use transparency and it has no group, which both
 tools fail once, and the first page paints nothing transparent, so its named
 group owes the rule nothing.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

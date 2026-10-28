@@ -30,7 +30,7 @@ once: the shared one is one object, judged once. The one carrying /SD passes.
 
 The font is embedded and draws only `A` and `B`, which is all the text uses.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

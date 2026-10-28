@@ -19,7 +19,7 @@ annotations set /F 4 and lack an /AP. ISO 19005-2, 6.3.3 exempts the Line,
 whose /Rect has no area, and 6.3.3 t1 fires for the PolyLine. The file
 declares no OutputIntent, so DeviceRGB fails 6.2.4.3 t2.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

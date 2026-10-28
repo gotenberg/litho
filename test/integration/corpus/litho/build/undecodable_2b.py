@@ -42,7 +42,7 @@ Page 11 shows the one glyph of a Type 3 font whose procedure is `/AHx` over
 `500 0 d0`, under a `/Widths` of 500. veraPDF cannot read the procedure, takes
 the missing width of 0, and fails the glyph width.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import base64

@@ -34,7 +34,7 @@ annotation is also a forbidden subtype (ISO 19005-4, 6.3.1), which answers on
 its own object; every annotation carries an appearance, so ISO 19005-4, 6.3.3
 stays silent.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

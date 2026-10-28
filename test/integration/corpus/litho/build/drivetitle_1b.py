@@ -26,7 +26,7 @@ t4), so a check that latches on the first cannot hide the second.
 The file is otherwise a conforming PDF/A-1b document, built as
 iccv4intent_1b.pdf with a v2 CMYK destination profile.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

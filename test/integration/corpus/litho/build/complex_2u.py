@@ -14,7 +14,7 @@ Three must-not-fire controls guard against over-suppression:
   * a Private Use Area glyph wrapped in a marked-content /ActualText, which
     6.2.11.7.3 exempts.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

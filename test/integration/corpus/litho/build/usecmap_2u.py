@@ -59,7 +59,7 @@ Adobe's Japan1 resource maps through the last bfrange of a block it counts as
 drops them and fails both: an artifact of its copy, not of the rule, which C6
 showing them would turn into a disagreeing cell.
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set.
 """
 

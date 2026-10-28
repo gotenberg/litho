@@ -21,7 +21,7 @@ of them holds text the cut divides:
 Page 2 is the refusal that stays: one paragraph, MCID 0, holding its words in
 /ActualText, whose line the centred quarter cuts.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

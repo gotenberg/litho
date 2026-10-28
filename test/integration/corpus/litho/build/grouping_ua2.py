@@ -39,7 +39,7 @@ construct the wrong half would condemn:
 Every firing above was measured on veraPDF 1.30.2 and litho, one construct per
 file, before being planted together.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

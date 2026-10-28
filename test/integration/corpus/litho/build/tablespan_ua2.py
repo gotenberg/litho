@@ -20,7 +20,7 @@ veraPDF agrees it is not an intersection. `t2` and `t4` need span geometries
 this builder could not produce, and `t5`/`t6` are the header association
 `tables_ua1.pdf` already covers.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

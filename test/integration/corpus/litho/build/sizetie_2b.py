@@ -18,7 +18,7 @@ The file conforms to PDF/A-2b: the text is in the conforming embedded
 TrueType of ttcmap_2b.pdf, in the initial DeviceGray a CMYK OutputIntent
 covers, as in pagelabels_2b.pdf, so no colour or font clause fires.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

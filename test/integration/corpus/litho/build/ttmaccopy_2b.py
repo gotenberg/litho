@@ -21,7 +21,7 @@ genuine Mac OS Roman table: read as anything else, 80 and 8A are "€Š".
 Both fonts are symbolic, embedded and drawn, and declare two subtables with no
 (3,0), so 6.2.11.6 t4 fires once per program; neither declares /Encoding, so
 6.2.11.6 t3 stays silent. Every count was confirmed with live veraPDF 1.30.2.
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

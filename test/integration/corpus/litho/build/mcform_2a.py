@@ -22,7 +22,7 @@ The file is tagged, with a structure tree of one /Document element that owns
 no content. Its sibling mclang_2a.pdf carries the shapes veraPDF does not
 judge and litho reported.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save, xmp_packet

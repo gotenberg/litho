@@ -27,7 +27,7 @@ dictionary. ISO 32000-1, 7.7.4 makes the tree a map of document-level
 JavaScript actions, and an empty one holds none, so no action-type rule
 (ISO 19005-1, 6.6.1 and ISO 19005-2/3, 6.5.1) may fire on it.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

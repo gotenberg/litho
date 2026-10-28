@@ -42,7 +42,7 @@ colorant, and failed t6 for /Red and /Blue. A halftone named by a name other
 than /Default has no type and names itself, and a type 6 halftone is a
 stream; litho read neither.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

@@ -32,7 +32,7 @@ repeated one would make the verdict depend on that order.
 ISO 19005-1 builds no package for a page's metadata stream, so the page
 packets are silent at PDF/A-1b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

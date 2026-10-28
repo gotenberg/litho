@@ -26,7 +26,7 @@ and lies clear of it, and so does the second `L`, under the initial pen.
 The font states /Resources of its own, and the RGB output intent covers
 DeviceGray, so the file is conforming at PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, tounicode_cmap, xmp_packet

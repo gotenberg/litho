@@ -45,7 +45,7 @@ The graphics state whose `/RI` is written directly is set by one `gs` alone:
 ISO 19005-1, 6.2.9 t1 judges the same `/RI`, and litho judges it once per
 graphics state its resources list, where veraPDF judges it at every `gs`.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

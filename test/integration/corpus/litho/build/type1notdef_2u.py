@@ -25,7 +25,7 @@ NC, N1's program showing 41 42 only, is the control. N1, N2, N3 and N5 also
 fail 6.2.11.4.1 t2 for their second code, a glyph the program does not hold;
 N4 and N6 do not, since a CFF holds .notdef; N2 fails 6.2.11.5 t1 too.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _cff

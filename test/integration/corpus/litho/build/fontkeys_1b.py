@@ -16,7 +16,7 @@ fixture. veraPDF builds a font object only for the five subtypes test 2
 permits, so a font naming any other reaches no test at all. And a font with no
 `/BaseFont`, which is what test 3 judges, makes veraPDF throw at PDF/A-1b: the
 identical file validates at PDF/A-2b and reports the part-2 spelling of the
-same requirement. litho reports both. See ../README.md.
+same requirement. litho reports both. See ../FIXTURES.md.
 
 The clause splits by object, which decides which font can carry which defect.
 Tests 1 and 7 are scoped to `PDFont` and apply to every font; tests 4, 5
@@ -29,7 +29,7 @@ A stream carrying an `/F` key sits beside the fonts. ISO 19005-1, 6.1.7
 forbids it, it belongs to no font clause, and it gives the file a defect from a
 different part of the specification entirely.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

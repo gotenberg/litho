@@ -32,7 +32,7 @@ PDF/UA-1 exactly two rules answer: the permissions and `7.21.4.1`. A checker
 reading the permissions wrongly shows up immediately rather than behind a
 neighbour.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import hashlib

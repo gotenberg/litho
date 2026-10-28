@@ -35,7 +35,7 @@ shading pattern or a /Pattern dictionary reached twice counts once (pages 12
 and 13). Page 8's pattern and shading are direct objects, so the `scn` and the
 fill that follows it are each a link to the shading's colour space.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

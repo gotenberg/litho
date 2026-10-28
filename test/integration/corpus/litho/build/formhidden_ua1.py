@@ -26,7 +26,7 @@ The page's text shows only A and B in the conforming embedded TrueType of
 ttcmap_2b.pdf, so no font clause fires. The XMP packet carries dc:title and
 pdfuaid:part 1.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

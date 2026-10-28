@@ -18,7 +18,7 @@ PDF/A-2b is a false positive. The one rule this fixture fires in 6.6.2.3 is
 | `xmpMM:DerivedFrom` | `RefX`, holding `stRef:filePath`   | a RefX structure                 | judged against its declaration first         |
 | `dc:title`        | none; dc extended with `dc:foo`      | a Lang Alt                       | judged against its predefined type           |
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

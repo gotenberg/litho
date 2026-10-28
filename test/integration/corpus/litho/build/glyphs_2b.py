@@ -51,7 +51,7 @@ paints `.notdef` by its number, and CID1 and CID4 both reach it by resolving a
 CID the program does not hold. litho reports only CID2, an under-count recorded
 against the fixture rather than papered over.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

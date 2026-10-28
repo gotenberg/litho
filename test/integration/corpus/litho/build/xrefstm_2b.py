@@ -41,7 +41,7 @@ The first section's direct /Info holds `(QQQQQ)`, patched as bytes into
 `<414>  ` after the save, since qpdf writes every string it knows as a literal
 of its own choosing; the width is kept, so no offset moves.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import pathlib

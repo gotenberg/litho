@@ -22,7 +22,7 @@ Type 3 fonts out of scope) and carries a ToUnicode CMap.
 
 A CMYK OutputIntent covers the DeviceGray every stream paints in.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

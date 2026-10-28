@@ -27,7 +27,7 @@ stripped, as _jp2.py describes:
     python3 -c "open('one.raw','wb').write(bytes([128]*64))"
     opj_compress -i one.raw -o one.j2k -F 8,8,1,8,u -n 1 -r 1
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import base64

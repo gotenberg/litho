@@ -43,7 +43,7 @@ firing against any of them is over-suppression rather than a missing case. The
 `Stamp` control uses `/Name` rather than `/Contents` deliberately: the test
 accepts either, and only the `/Name` branch is otherwise unexercised.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

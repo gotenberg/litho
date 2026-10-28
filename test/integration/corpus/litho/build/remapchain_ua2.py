@@ -20,7 +20,7 @@ None of the three fires 8.2.4.
 
 The font is embedded and draws only `A` and `B`, which is all the text uses.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

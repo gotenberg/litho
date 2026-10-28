@@ -22,12 +22,12 @@ The `/Differences` route to test 2 is deliberately absent. The test permits
 differences whose glyph names are Unicode compliant, and veraPDF accepts every
 difference on a font with no embedded program, including names that are plainly
 not compliant, while litho reports them. Planting one would add a disagreeing
-cell rather than coverage. See ../README.md.
+cell rather than coverage. See ../FIXTURES.md.
 
 Per part the clause is ISO 19005-1, 6.3.6, ISO 19005-2 and -3, 6.2.11.6, and
 ISO 19005-4, 6.2.10.6.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

@@ -18,13 +18,13 @@ top-level artifact. Both are must-not-fire controls, because the rule is about
 nesting rather than about artifacts or tags as such.
 
 Test 12 of the clause, a structure element missing its `/P`, is deliberately
-absent, and litho and veraPDF disagree about it. See ../README.md.
+absent, and litho and veraPDF disagree about it. See ../FIXTURES.md.
 
 Beyond the clause the file carries two independent defects, no XMP packet and
 a non-embedded font, so a marking verdict is visibly separate from the
 metadata and font clauses.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

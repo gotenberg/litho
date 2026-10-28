@@ -25,7 +25,7 @@ OutputIntent covers the DeviceCMYK alternate. The tree is built by hand:
 pikepdf's page list flattens it and pushes inherited attributes onto each page,
 which would delete the construct the fixture exists for.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

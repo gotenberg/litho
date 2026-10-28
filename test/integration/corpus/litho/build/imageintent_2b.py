@@ -25,7 +25,7 @@ Two 100 x 200 pages, each painting three 80 x 50 images from x = 10:
 
 so page 1 reads dark, mid, dark, and page 2 mid, dark, mid.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

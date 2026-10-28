@@ -24,7 +24,7 @@ F1, F2, M1 to M4 are not embedded. F3 and F4 are, and F5 fails the width rule
 alone. OK, a Type 1 font over a whole "OTTO" with 'CFF ' outlines, is the
 control.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

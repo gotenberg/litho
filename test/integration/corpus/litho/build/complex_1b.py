@@ -10,7 +10,7 @@ Two must-not-fire controls guard against over-suppression:
   * a Type3 glyph whose /Widths entry is skewed but which is never rendered,
   * a hidden annotation with no appearance stream, exempted by 6.5.3.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

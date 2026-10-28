@@ -22,7 +22,7 @@ DeviceGray on the strength of any output intent.
 
 The document has no /Metadata, so the metadata clauses answer from elsewhere.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

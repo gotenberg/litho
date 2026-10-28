@@ -45,7 +45,7 @@ Beyond the forms the file has no `/Metadata` and paints text in an unembedded
 Helvetica with no OutputIntent, three further independent defects that keep the
 signature verdicts visibly separate from the rest of the document.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import base64

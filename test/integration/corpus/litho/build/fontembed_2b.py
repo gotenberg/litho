@@ -26,7 +26,7 @@ font becomes:
   WD  LithoWide, a TrueType font declaring 900 where the program advances
       667: refused, since embedding it would move its text.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

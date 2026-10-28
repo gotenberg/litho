@@ -27,7 +27,7 @@ The CMYK output intent covers DeviceGray and DeviceCMYK, and overprint mode 1
 over DeviceCMYK is allowed at PDF/A-2b (ISO 19005-2, 6.2.4.2 restricts it
 over ICCBased CMYK alone).
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, type3_font, xmp_packet

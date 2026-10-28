@@ -26,7 +26,7 @@ its own. A firing against any of them is over-suppression.
 planted: the other two would collapse onto the same rule and prove nothing extra,
 while `/OPI` is the one a real producer emits.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

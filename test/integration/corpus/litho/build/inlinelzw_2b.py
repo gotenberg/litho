@@ -25,7 +25,7 @@ image of its own, so each forbidden image here fails the rule once:
 Every image draws the same eight grey samples, and its data is real LZW, so a
 repair that moves a pixel shows.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import binascii

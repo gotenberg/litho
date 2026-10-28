@@ -35,7 +35,7 @@ marks around a drawing, and K3, which has no kid but which the outline item
 `Pinned` names in a destination array, where no page destination stands
 beside it.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

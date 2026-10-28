@@ -18,7 +18,7 @@ pin it, so two runs of this script differ inside /O, /U and every encrypted
 string. Regenerate it deliberately; do not diff it against a fresh build the
 way the other builders allow.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import os

@@ -27,7 +27,7 @@ verdict belongs to the node holding two, not to every node holding any.
 Beyond the clause the file carries two independent defects, no XMP packet and a
 non-embedded font, so a heading verdict is visibly separate from them.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

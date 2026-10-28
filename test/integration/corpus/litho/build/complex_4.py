@@ -14,7 +14,7 @@ Four must-not-fire controls guard against over-suppression:
   * one file specification carries /AFRelationship next to one that does not,
   * a second image carries /Interpolate false next to one set true.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

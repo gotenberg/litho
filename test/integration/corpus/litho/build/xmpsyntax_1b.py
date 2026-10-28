@@ -30,7 +30,7 @@ pikepdf regenerates the XMP packet on save unless both `preserve_pdfa` and
 `fix_metadata_version` are off, which silently repairs the planted `<`. The
 build asserts the byte survived rather than trusting the flags.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

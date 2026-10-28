@@ -15,7 +15,7 @@ Four must-not-fire controls guard against over-suppression:
     specification reports the wrong count,
   * a conforming annotation with correct flags and an appearance stream.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

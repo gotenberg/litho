@@ -14,7 +14,7 @@ indirect object, and the PDF/X profile is one PDF/A admits for CMYK, so the
 PDF/A intent can name it and leave the PDF/X intent as it is. A repair that
 replaces the whole /OutputIntents array drops the PDF/X intent.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

@@ -30,7 +30,7 @@ control.
 carrying rich text must carry the plain equivalent and the two must agree. The
 control carries both, equal.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

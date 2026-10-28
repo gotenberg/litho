@@ -38,7 +38,7 @@ after its first bad glyph, or condemns a font wholesale, shows as a count:
       one. veraPDF reads a Type0 font's name from its descendant, so the
       /BaseFont rule passes. The control.
 
-Every count was confirmed with live veraPDF 1.30. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30. See ../FIXTURES.md for the
 authoritative expected firing set.
 """
 

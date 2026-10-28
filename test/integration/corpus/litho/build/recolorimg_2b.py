@@ -22,7 +22,7 @@ that no other corpus file reaches:
 Every image is in a device-independent space and the page group states its
 blending space, so the file needs no output intent and conforms at PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import zlib

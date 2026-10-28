@@ -25,7 +25,7 @@ link to /Two compares it with itself, which ISO 19005-2, 6.2.4.4 t2 must find
 consistent. No corpus file holds a type 4 function past a limit, nor a direct
 tint transform naming another object.
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set.
 """
 

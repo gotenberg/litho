@@ -18,7 +18,7 @@ conforming PDF/UA-1 file: a structure tree whose /P reaches the paragraph,
 pdfuaid claim, and the conforming embedded TrueType of baretree_2b.pdf. So at
 PDF/UA-1 and PDF/UA-2 the unclosed sequence is the one content finding.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

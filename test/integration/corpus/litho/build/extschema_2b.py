@@ -13,7 +13,7 @@ completely. Sibling entries are the point: a check that reports the first bad
 schema and stops never reaches the second, and a check that condemns the bag
 once a defect is seen wrongly reports the third.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

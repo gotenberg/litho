@@ -41,7 +41,7 @@ it is a control rather than a gap. `6.7.2.1/1` needs the catalog to have no
 metadata stream, which would take the PDF/A-4 declaration with it and silence
 everything else the fixture is for.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import zlib

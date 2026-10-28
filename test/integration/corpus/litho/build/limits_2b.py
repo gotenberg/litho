@@ -22,7 +22,7 @@ which belongs in a small fixture. `t5` needs a real closer to zero than
 explicitly permits; the same byte patch cannot help, because a denormal written
 long enough to patch is a different value. Those stay uncovered deliberately.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import pathlib

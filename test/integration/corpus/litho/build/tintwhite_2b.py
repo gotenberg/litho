@@ -23,7 +23,7 @@ The region the redaction cells clear, the page's centred quarter, x 25-75 and
 y 50-150, falls on `Im`'s sample edges and covers its middle two columns and
 the middle of the white fill.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

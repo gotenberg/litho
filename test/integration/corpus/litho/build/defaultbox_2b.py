@@ -30,7 +30,7 @@ and states its own /Resources, so no colour, font or resource clause fires.
 The tree is built by hand: pikepdf's page list flattens it, which would move
 the node's box onto its page.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

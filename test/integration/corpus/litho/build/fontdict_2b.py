@@ -11,7 +11,7 @@ reports the first offending font and stops reports one rule where four are
 due. A fifth, fully conforming font is drawn alongside them, so
 over-suppression is visible too.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

@@ -23,7 +23,7 @@ poppler 26.09.0 and PDFium blend every group in RGB, so they draw the overlap
 of page 1 as the RGB product of cyan and magenta where ISO 32000-1 makes it
 the colour of both inks.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

@@ -35,7 +35,7 @@ emits a conforming end-of-line. They are patched into the saved bytes,
 each replacement the same length as what it replaces, so no cross-reference
 offset moves. The builder refuses any patch that would change a length.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import re

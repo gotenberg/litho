@@ -23,7 +23,7 @@ spaces.
 The document has no /Metadata and no output intent, so the metadata and
 colour clauses answer from elsewhere in the specification.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

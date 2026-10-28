@@ -45,7 +45,7 @@ a full-area widget, and a `Popup` left outside the tree. veraPDF reports a rule
 once however many annotations break it, so rule-set agreement alone cannot see
 these; the per-rule failed-check counts are what prove them.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

@@ -21,7 +21,7 @@ Controls, each embedded: OK the well-formed Type 1 program U1 and U2 are cut
 from, CN a CFF with an empty Name INDEX, and TK the well-formed TrueType T2
 and T3 are cut from.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

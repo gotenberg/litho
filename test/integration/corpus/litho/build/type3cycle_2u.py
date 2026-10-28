@@ -22,7 +22,7 @@ rule silent outside PDF/A-1a.
 
 A CMYK OutputIntent covers the DeviceGray every stream paints in.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

@@ -34,7 +34,7 @@ holding one Link written inline with no /Contents: veraPDF builds that Link
 once per page, so 7.18.5 test 2 counts it twice. The XMP packet claims
 PDF/UA-1, and the font is not embedded.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

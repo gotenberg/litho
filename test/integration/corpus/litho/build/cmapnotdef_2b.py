@@ -15,7 +15,7 @@ reached this.
 N1's code 0043 reaches CID 0, which is .notdef, and absent as well: veraPDF's
 CIDFontType2Program.containsCID refuses CID 0 and GFGlyph exempts only code 0.
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set, and _encodingcmap for the font program.
 """
 

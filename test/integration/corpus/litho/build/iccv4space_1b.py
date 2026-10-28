@@ -26,7 +26,7 @@ Every profile value is computed here from published constants: the sRGB curve
 parameters and D65 chromaticity of IEC 61966-2-1, and the Bradford cone
 response matrix of ICC.1:2010, Annex E.3.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

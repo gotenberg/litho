@@ -24,7 +24,7 @@ page composite in its group's space. Each row is 80 x 50 from x = 10:
 | y 80-130  | `Im` after `/Perceptual ri`: L* 75                             |
 | y 20-70   | a fill of `0 0 0 0.5 sc` in `split` after `/Perceptual ri`     |
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

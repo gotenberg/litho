@@ -20,7 +20,7 @@ Controls: HK the program H1 is cut from, its 'head' stating 2048 units, and
 HO an OpenType program with CFF outlines and no 'head', whose widths a Type 1
 font reads from the CFF and not at 2048.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

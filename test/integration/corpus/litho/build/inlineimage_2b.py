@@ -33,7 +33,7 @@ The marked-content `/Lang` fires at PDF/UA-1 and PDF/UA-2 only: ISO 19005-2
 judges no language outside the structure tree, so at the home profile it is a
 passenger that the PDF/UA cells of the same file answer.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

@@ -24,7 +24,7 @@ it belongs to a file of its own and is not planted here.
 Beyond the clause the file carries the usual independent defects, no XMP packet
 and no output intent, so a table verdict is visibly separate from them.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import pathlib

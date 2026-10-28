@@ -28,7 +28,7 @@ The key and its self-signed certificate are throwaway test material generated
 once for this fixture. poppler's pdfsig reports the signature valid, its
 certificate untrusted.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import base64

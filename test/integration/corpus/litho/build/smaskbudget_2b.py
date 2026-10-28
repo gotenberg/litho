@@ -21,7 +21,7 @@ litho renders page 1's mask group at half the resolution, and paints page 2's
 group content into the page at the group's alpha. Before, both painted the
 red opaque and unmasked.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

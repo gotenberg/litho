@@ -46,7 +46,7 @@ turning an unresolvable code into a firing one, which is the direction that has
 produced false positives on real-world corpora before and wants a wide sweep
 first.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

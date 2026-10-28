@@ -27,7 +27,7 @@ wrong. The page paints a DeviceCMYK square and its text in the conforming
 embedded TrueType of baretree_2b.pdf, both in DeviceCMYK, which the CMYK intent
 covers.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

@@ -38,7 +38,7 @@ The pinned pdf.js shows the pages at 612 by 792, 600 by 800, 612 by 792, 600
 by 800 and 400 by 500, and so does every rewrite of the file. No page draws
 anything, so the pages read the same under every mutation.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, attach_xmp, pikepdf, save, xmp_packet

@@ -26,7 +26,7 @@ joins the copied groups to both configurations.
 
 The font is embedded and draws only `A` and `B`, which is all the text uses.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

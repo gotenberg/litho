@@ -47,7 +47,7 @@ The page paints its own text inside the ICCBased scope, because text drawn with
 no colour space selected is itself a DeviceGray use and would report the clause
 from the page, masking every object above.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

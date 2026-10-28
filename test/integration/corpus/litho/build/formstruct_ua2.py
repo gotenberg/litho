@@ -26,7 +26,7 @@ in the element's `/K`, so the parent tree maps each widget's number back to the
 element that encloses it. Getting that wiring wrong makes every widget look
 unparented, which would fire test 1 everywhere and mask the rest.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

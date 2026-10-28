@@ -22,7 +22,7 @@ The page's own content draws nothing. The file has no /StructTreeRoot and no
 /MarkInfo; the XMP packet claims PDF/UA-1, and an RGB OutputIntent covers the
 DeviceRGB the appearances paint.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

@@ -28,7 +28,7 @@ The file declares no OutputIntent and its pages no /Group, so every page that
 paints DeviceRGB fails ISO 19005-2, 6.2.4.3 t2 and every page that holds
 transparency fails 6.2.10 t2.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

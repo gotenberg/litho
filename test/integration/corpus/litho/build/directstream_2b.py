@@ -30,7 +30,7 @@ revision is saved by pikepdf, and a second revision is appended by hand, as an
 incremental update rewriting the page, indexed by a cross-reference table of
 its own.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import pathlib

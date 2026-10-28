@@ -24,7 +24,7 @@ pikepdf regenerates the packet on save unless both `preserve_pdfa` and
 `fix_metadata_version` are off, and the regenerated header carries neither
 attribute. The build asserts both survived rather than trusting the flags.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, out_path, pikepdf, save, xmp_packet

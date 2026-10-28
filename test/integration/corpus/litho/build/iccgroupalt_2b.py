@@ -24,7 +24,7 @@ painting in the text's colour, with a /ToUnicode map:
 |      | header and a Separation /Alternate, red then green Multiply              |
 | 2    | text at ca 0.5 in the GRAY-header space, tint 0.6, over the bare page    |
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

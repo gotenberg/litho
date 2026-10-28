@@ -25,7 +25,7 @@ same page reaches each of those counts:
 | GSn          | directly | one gs in a form a form paints   | `6.2.5/3`        |
 | GSi          | directly | one gs in a form no Do paints    | silent           |
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

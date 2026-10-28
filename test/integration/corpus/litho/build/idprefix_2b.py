@@ -22,7 +22,7 @@ Two independent defects sit beside the prefixes: a `/Metadata` stream on page
 transfer function. Neither belongs to 6.6.4, so they show that a prefix
 verdict on the identification schema does not leak into unrelated clauses.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

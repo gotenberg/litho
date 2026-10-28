@@ -31,7 +31,7 @@ ones most likely to condemn a legitimate span, and because a document whose only
 defect sat in the XFA packet would let a check that stops at the first structural
 complaint look correct.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

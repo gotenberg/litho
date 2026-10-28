@@ -24,7 +24,7 @@ placement, and a Frame copy drawing a Card copy for the nested one. The
 centred quarter of page 1, [100 100 300 300], covers a different corner of
 each placement.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

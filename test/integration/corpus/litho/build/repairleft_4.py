@@ -44,7 +44,7 @@ file where that repair runs carries a device blending space no finding names.
 The tree is built by hand: pikepdf's page list pushes inherited attributes onto
 each page, which would delete the inheritance the fixture exists for.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

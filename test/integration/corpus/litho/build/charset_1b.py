@@ -50,7 +50,7 @@ Neither `/Metadata` nor an output intent is present, so the file also answers
 the metadata and colour clauses. They belong to different parts of the
 specification entirely and give the font verdicts something to hide behind.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _cff

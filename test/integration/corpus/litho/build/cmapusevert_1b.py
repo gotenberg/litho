@@ -17,7 +17,7 @@ shows it, so only the base's embedding answers:
 | ---- | --------------------------------------------- | ----- | ---- | ------------------- |
 | V1   | cidchar 2121 to 1, `/UseCMap /V`, Adobe-Japan1 | 2121  | 1    | 6.3.3.3 t1          |
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set.
 """
 

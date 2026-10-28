@@ -22,7 +22,7 @@ DisplayDocTitle, an XMP packet carrying dc:title and the pdfuaid claim, and the
 conforming embedded TrueType of baretree_2b.pdf. So the input fails only the
 tagging clauses, and auto-tagging is what remediation has to get right.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

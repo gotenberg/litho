@@ -30,7 +30,7 @@ one state, which an uncoloured pattern turns off for all of them, so the page
 painting `PUnc` beside `PCol` would silence the coloured control too. The form
 carries its own resources, so it uses no inherited name itself.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

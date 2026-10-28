@@ -26,7 +26,7 @@ The font is the conforming non-symbolic TrueType of ttcmap_2b.pdf, embedded,
 and every string shows only A and B, the glyphs its program holds, so no font
 clause fires. The file has no structure tree, no XMP packet and no /Lang.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

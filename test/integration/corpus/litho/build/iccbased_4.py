@@ -28,7 +28,7 @@ so each is a 128-byte header plus an empty tag table, carrying a real size, an
 `acsp` signature and a PCS illuminant, because veraPDF parses profile bytes
 eagerly and throws on a placeholder.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

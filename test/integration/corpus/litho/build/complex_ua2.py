@@ -15,7 +15,7 @@ Four must-not-fire controls guard against over-suppression:
   * an invisible annotation outside the structure tree, which 8.9.2.2
     exempts because it has no enclosing structure element.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

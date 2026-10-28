@@ -27,7 +27,7 @@ and later permit ICC version 4, so page 3 fails only at PDF/A-1, whose ISO
 it reads the stream under the same resources as page 1, and is judged once
 with it.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

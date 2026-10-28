@@ -27,7 +27,7 @@ PDF/A-3b, ISO 19005-3, 6.8 t1 fires on `LK1` and `LK2`, t2 on `LK1`, t3 on
 objects it lists, and veraPDF counts an inline one as associated with nothing,
 even one an /AF array lists inline.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

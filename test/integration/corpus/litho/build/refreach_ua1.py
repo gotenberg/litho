@@ -25,7 +25,7 @@ form that nothing draws, and the glyph the page shows draws none.
 
 A CMYK OutputIntent covers the DeviceGray every stream paints in.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

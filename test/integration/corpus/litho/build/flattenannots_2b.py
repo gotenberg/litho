@@ -37,7 +37,7 @@ The file declares no OutputIntent and its pages no /Group, so DeviceRGB fails
 ISO 19005-2, 6.2.4.3 t2 and every page holding transparency 6.2.10 t2; the
 appearance-less Square fails 6.3.3 t1 and the hidden one 6.3.2 t2.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, tounicode_cmap, type3_font, xmp_packet

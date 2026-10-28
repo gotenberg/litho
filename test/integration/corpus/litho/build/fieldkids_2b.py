@@ -22,7 +22,7 @@ group.inner fails ISO 19005-2, 6.4.1 test 1 (/AA on a widget), and the widget
 of check fails 6.3.3 test 1 (no /AP); at part 1 they fail ISO 19005-1, 6.6.2
 test 1 and 6.9 test 2. The XMP packet claims PDF/A-2b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

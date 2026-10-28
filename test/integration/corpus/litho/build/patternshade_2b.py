@@ -24,7 +24,7 @@ t2 silent at PDF/A-1b.
 
 A CMYK OutputIntent covers DeviceCMYK and the DeviceGray a glyph shows in.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

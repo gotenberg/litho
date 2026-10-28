@@ -31,7 +31,7 @@ flattened appearances are tagged content (formuntagged_ua1.pdf covers the
 untagged case). The file
 declares an RGB OutputIntent, and every widget prints.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

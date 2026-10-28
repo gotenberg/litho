@@ -17,7 +17,7 @@ and refuse a uniXXXX spelling. Each font rides on its own resource name:
       /ToUnicode: a map leaving 42 out would claim a repair veraPDF does not
       see.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

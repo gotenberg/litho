@@ -27,7 +27,7 @@ for every reader of the file. Page 2 draws one paragraph.
 The font is Helvetica, not embedded (ISO 14289-1, 7.21.4.1 t1), and the XMP
 packet carries no dc:title (7.1 t9): both are independent of the trees.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

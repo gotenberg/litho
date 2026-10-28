@@ -11,7 +11,7 @@ Page 1 also carries a conforming counterpart of the constructs that fail on
 pages 2 and 3, so a check that scans only page 1 stays silent rather than
 firing, which makes the failure mode a missing rule rather than a wrong one.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

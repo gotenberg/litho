@@ -17,7 +17,7 @@ ISO 19005-2, 6.2.11.7.2 asks a Unicode value of every shown glyph, which ISO
 litho used to exempt the font: its name holds "Symbol" and its /CharSet lists
 only Symbol-font names. veraPDF reads neither.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

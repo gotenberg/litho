@@ -21,7 +21,7 @@ the text that shows it, never through a Tf alone, so `6.2.6/1` stays silent.
 
 A CMYK OutputIntent covers the DeviceGray every cell and glyph shows text in.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

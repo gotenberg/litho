@@ -36,7 +36,7 @@ tag, and reported ISO 14289-1, 5 t2 on a packet claiming part 1.
 
 No text is drawn, so the pages read the same under every mutation.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

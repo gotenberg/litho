@@ -31,7 +31,7 @@ are patched into the saved bytes instead, each replacement the same length as
 what it replaces, so every cross-reference offset stays valid. See
 `limits_2b.py` and `xref_1b.py` for the same technique.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import re

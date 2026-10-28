@@ -31,7 +31,7 @@ would once the value is read: a type with no field is Text, and the fields of
 a structure written as a nested rdf:Description are no properties of their own,
 even in the property's namespace.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, pikepdf, save

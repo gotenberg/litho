@@ -20,7 +20,7 @@ and carry real transforms: the RGB one a matrix and gamma 2.2 curves over an
 XYZ connection space, the CMYK one lut8 A2B0 and B2A0 tables over Lab, as in
 iccbadcmyk_1b.pdf. The page carries no text, so no font rule fires.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

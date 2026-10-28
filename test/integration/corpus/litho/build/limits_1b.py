@@ -39,7 +39,7 @@ implementation limits rather than that divergence.
 
 Deliberately no /Metadata and no /OutputIntents, as in `limits_2b.pdf`.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from decimal import Decimal

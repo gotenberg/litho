@@ -44,7 +44,7 @@ issue15150.pdf a /Resources naming no dictionary.
 The tree is built by hand: pikepdf's page list flattens it, which would delete
 the constructs the fixture exists for.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

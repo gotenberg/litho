@@ -30,7 +30,7 @@ an output intent, so three further clauses answer from elsewhere in the
 specification. A checker that stops at its first verdict reports one rule where
 four are due.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

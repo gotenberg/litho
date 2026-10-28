@@ -24,7 +24,7 @@ often it is drawn, and a form's levels do not add to its painter's.
 
 A CMYK OutputIntent covers the DeviceGray every stream paints in.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

@@ -14,7 +14,7 @@ DeviceGray, which the intent characterises:
 | 1    | no `/Group`: a light square at ca 0.5 over a dark backdrop              |
 | 2    | a `/Group` with no `/CS`: a light square Multiply over a mid backdrop   |
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

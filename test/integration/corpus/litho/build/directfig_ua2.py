@@ -21,7 +21,7 @@ Figure directly, so this file packs the places one can sit into one page:
 A P marks MCID 0 around a filled rectangle. The page's /ParentTree array names,
 for each identifier, the nearest element written as an object of its own.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

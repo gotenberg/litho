@@ -41,7 +41,7 @@ language alternative where the schema defines MIMEType text, which fails t2.
 xmp:CreatorTool is a predefined text property and stays silent. Part 1 judges
 the catalog packet alone, so the page packet is silent at PDF/A-1b.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

@@ -26,7 +26,7 @@ the redact-render cell's p1-quarter and p1-band regions cut it: the default
 mode refuses the shading, and the fallback rasterises it.
 
 /TR fails 6.2.5/1 at PDF/A-2b (ISO 19005-2, 6.2.5 forbids the key). See
-../README.md for the authoritative expected firing set.
+../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, attach_xmp, pikepdf, save, xmp_packet

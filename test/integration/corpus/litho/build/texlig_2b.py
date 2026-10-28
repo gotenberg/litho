@@ -24,7 +24,7 @@ Read with every unmapped whitespace code as a space, the first line was
 XMP claims PDF/A-2b, so the planted glyph, width and Unicode gaps are what
 fires.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import struct

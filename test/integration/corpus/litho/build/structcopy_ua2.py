@@ -29,7 +29,7 @@ PDF/UA accepts: `mutate-pages` moves page 1 behind page 3, and the copy carries
 its elements. The font is embedded and draws only `A` and `B`, which is all the
 text uses, so no font rule masks the structure.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

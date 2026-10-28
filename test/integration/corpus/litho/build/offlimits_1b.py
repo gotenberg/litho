@@ -42,7 +42,7 @@ repair reads: it clamps the one compliance judges, on page 14, and leaves the
 three it does not, since rewriting them changes the file for no rule. It does
 clamp the `w` of the cells on pages 6, 8 and 9, which compliance never builds.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

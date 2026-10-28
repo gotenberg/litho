@@ -6,7 +6,7 @@ fire. Each construct below is independent of the others, and two of them
 are deliberate MUST-NOT-FIRE controls guarding against over-suppression in
 litho's usage-scoping logic.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

@@ -48,7 +48,7 @@ covers the plainest failure: an Info entry with no XMP counterpart at all.
 Beyond the clause the file carries no `/OutputIntents`, an independent defect, so
 a synchronization verdict is visibly separate from it.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, String, pikepdf, save

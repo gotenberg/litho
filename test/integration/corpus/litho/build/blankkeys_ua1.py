@@ -20,7 +20,7 @@ them by /OBJR and their /StructParent keys map back to those elements (ISO
 32000-1, 14.7.4.3 and 14.7.4.4). veraPDF reads such a Do as untagged content
 (ISO 14289-1, 7.1 test 3), and so does litho.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import zlib

@@ -31,7 +31,7 @@ nothing to fail.
 No stream names a resource, so 6.2.2 t3 reaches the rule set through the
 missing dictionaries alone, and a check that misses them drops the rule.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import (

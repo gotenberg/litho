@@ -36,7 +36,7 @@ builder can plant object by object. The `/ID` values are patched afterwards
 against the bytes qpdf wrote: they are hex strings of a fixed width, so no
 offset moves and the linearized layout survives.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import re

@@ -29,7 +29,7 @@ under /OFF it enters without compensation, as Little CMS converts without
 cmsFLAGS_BLACKPOINTCOMPENSATION, so the shadows below the profile's black
 crush to black when the composite is read back.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import os

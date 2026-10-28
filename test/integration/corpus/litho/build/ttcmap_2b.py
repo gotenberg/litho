@@ -34,7 +34,7 @@ fixture is about. Measured on both tools: format 3.0 adds that clause, format
 Per part the clause is ISO 19005-2 and -3, 6.2.11.6, ISO 19005-4, 6.2.10.6,
 ISO 14289-1, 7.21.6, and ISO 14289-2, 8.4.5.7.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _truetype

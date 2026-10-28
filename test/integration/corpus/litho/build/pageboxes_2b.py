@@ -42,7 +42,7 @@ Every other box passes it, and every output passes it.
 
 No text is drawn, so the pages read the same under every mutation.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, attach_xmp, pikepdf, save, xmp_packet

@@ -23,7 +23,7 @@ by 200 and draw in DeviceGray:
 Page 1 also draws a grey bar across the middle. Every annotation but the
 pop-ups sets /F 4 and has a normal appearance stream.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 from _common import Array, Dictionary, Name, Stream, attach_xmp, pikepdf, save, xmp_packet

@@ -26,7 +26,7 @@ Identity-H:
 Controls: EK the whole program E1 to E5 are cut from, and CK the whole
 CID-keyed program C1 and C2 are cut from.
 
-See ../README.md for the authoritative expected firing set.
+See ../FIXTURES.md for the authoritative expected firing set.
 """
 
 import _cff

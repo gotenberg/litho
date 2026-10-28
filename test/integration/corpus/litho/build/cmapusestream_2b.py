@@ -16,7 +16,7 @@ Both CIDs select a glyph, so the glyph rules stay silent: a reader that left
 0042 unmapped would send it to CID 0, absent and .notdef. The base is a stream
 whose name is no predefined CMap, which ISO 19005-2, 6.2.11.3.3 t3 fails.
 
-Every count was confirmed with live veraPDF 1.30.2. See ../README.md for the
+Every count was confirmed with live veraPDF 1.30.2. See ../FIXTURES.md for the
 authoritative expected firing set, and _encodingcmap for the font program.
 """
 
