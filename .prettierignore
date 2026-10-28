@@ -1,3 +1,4 @@
 /test/integration/corpus/Dockerfile
 /test/integration/corpus/pdf.js/Dockerfile
 /test/integration/corpus/verapdf/Dockerfile
+/dist/

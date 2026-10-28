@@ -1,0 +1,48 @@
+version: 2
+
+builds:
+  - main: ./cmd/litho
+    binary: litho
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version=v{{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    # 64-bit only: litho holds 4-byte character codes and multi-GiB budgets in
+    # int, which a 32-bit int cannot represent.
+    targets:
+      - linux_amd64
+      - linux_arm64
+      - linux_ppc64le
+      - linux_riscv64
+      - linux_loong64
+      - darwin_amd64
+      - darwin_arm64
+      - freebsd_amd64
+      - freebsd_arm64
+      - windows_amd64
+      - windows_arm64
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  disable: true
+
+# The release already exists: the workflow runs when it is published. Keep its
+# title and notes, and only attach the archives.
+release:
+  mode: keep-existing
+  extra_files:
+    - glob: ./install.sh
