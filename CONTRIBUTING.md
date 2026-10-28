@@ -1,104 +1,124 @@
 # Contributing to litho
 
-litho is a pure-Go PDF Conforming Processor. Two rules override everything else: **correctness** (every output must be a valid PDF that viewers can open) and **thread safety** (every public type documents its concurrency contract and honors it under `-race`).
+litho is a pure-Go PDF Conforming Processor. Two rules override everything else:
+
+- **Correctness.** Every output is a valid PDF that viewers can open.
+- **Thread safety.** Every public type documents its concurrency contract and honors it under `-race`.
+
+## Toolchain
 
 - Module: `github.com/gotenberg/litho`
-- Go: 1.27.0+
-- Lint: `make fmt`, `make lint` and `make lint-todo` run golangci-lint at the version the Makefile pins (`GOLANGCI_LINT_VERSION`) through `go run`, not the copy on your `PATH`
-- Optional: Docker (corpus provisioning, at the tool versions `test/integration/corpus/versions.env` pins)
+- Go: 1.27.0+, no CGO
+- Node.js, for Prettier (`package.json`)
+- Docker, optional: provisions the integration corpora at the tool versions `test/integration/corpus/versions.env` pins
 
-## Quick start
+The Makefile runs golangci-lint and unparam at pinned versions through `go run`, never the copy on your `PATH`.
 
-```bash
-go build ./cmd/litho
-make fmt && make lint # zero warnings policy, pinned golangci-lint
-make test-unit        # go test -race ./...
-make bench            # go test -bench=. -benchmem ./...
+## Before you start
+
+Plan non-trivial changes before coding: the problem, the approach, the affected files, and the test strategy. Open an issue or a draft PR to discuss it.
+
+One thing per PR. Keep features, bug fixes, and refactoring in separate PRs.
+
+## Project layout
+
+```
+cmd/litho/           -> The CLI. A thin front end to pkg/pdf.
+cmd/gen-*/           -> Generators for committed tables (rules, CMaps, fonts, Schematron).
+pkg/pdf/             -> Public API: Reader, Writer, Pipeline, options, sentinel errors.
+pkg/models/          -> Public data types pkg/pdf returns.
+pkg/plugins/         -> Public interfaces a caller implements.
+pkg/internal/        -> Everything else: parser, filters, fonts, compliance, remediation, renderer.
+examples/            -> Runnable programs, one per task.
+test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and other oracles.
 ```
 
-## Coding rules
+## Setup and Makefile
+
+| Command              | Purpose                                                       | When to use                        |
+| -------------------- | ------------------------------------------------------------- | ---------------------------------- |
+| `make build`         | Build the `litho` CLI                                         | Manual testing                     |
+| `make fmt`           | `go fix`, pinned formatters and `go mod tidy` over the tree   | Before committing                  |
+| `make lint`          | Pinned golangci-lint, zero warnings                           | Before committing                  |
+| `make lint-unparam`  | Pinned unparam: unused parameters and results                 | Before committing                  |
+| `make prettify`      | Format Markdown, YAML and JSON                                | Before committing                  |
+| `make lint-prettier` | Lint Markdown, YAML and JSON                                  | Before committing                  |
+| `make test-unit`     | `go test -race ./...`                                         | Before committing                  |
+| `make bench`         | `go test -bench=. -benchmem ./...`                            | Performance changes                |
+| `make godoc`         | Serve the godoc locally                                       | To check documentation             |
+| `make corpus-check`  | Fail if a (corpus, feature) cell regressed against a baseline | Before pushing: the repo has no CI |
+| `make help`          | List every target, the golden regenerators included           | To find the rest                   |
+
+`make fmt` rewrites the whole tree: stage only the files your change touches.
+
+## Code conventions
 
 ### Encapsulation
 
-`pkg/pdf` and `pkg/models` are the public surface. No type from `pkg/internal/` may appear in a public signature, not even through a type alias. Translate at the boundary; use adapters for interfaces.
+`pkg/pdf`, `pkg/models` and `pkg/plugins` are the public surface. No type from `pkg/internal/` appears in a public signature, not even through a type alias. Translate at the boundary; use adapters for interfaces.
 
 ### Error handling
 
-- Never assign errors to `_` without a justification comment. If justified, log at Debug via `doc.Logger`.
-- Do not use `_ = variable` to suppress unused warnings. If a variable is unused, remove it. If a function parameter is unused, prefix it with `_` in the signature. If a multi-return value is unused, capture it as `_` directly in the assignment (e.g., `_, b, err := f()`).
-- Every named parameter must be used in the function body. Never leave a named-but-unused parameter: Go compiles it, but it misleads readers into thinking the value matters. The default fix is to remove the parameter and update callers. Prefix with `_` only when the signature is constrained by an interface, a function type, or a uniform calling convention (see `pkg/internal/compliance/doc.go`). Run `make lint-unparam`, the pinned `unparam`, to catch these before submitting.
 - Wrap and propagate every error: `fmt.Errorf("resolving font on page %d: %w", pageNum, err)`.
 - Match errors with `errors.Is`, never `strings.Contains`.
 - Sentinel errors live in `errors.go` per package.
-- Every `//nolint` directive carries a trailing justification on the same line; bare `//nolint` is rejected. Prefer fixing the finding over suppressing it. A `gosec` suppression on an integer conversion (`uintN(x)`) states the bound that makes the conversion safe.
+- Never assign an error to `_` without a justification comment. If justified, log it at Debug via `doc.Logger`.
+- Every named parameter is used. Remove an unused one and update the callers; prefix it with `_` only when an interface or a function type fixes the signature. Never write `_ = variable` to silence the compiler.
+- Every `//nolint` carries a justification on the same line. A `gosec` suppression on an integer conversion states the bound that makes it safe.
 
 ### Context
 
-Every public method that does I/O, loops, or recursion takes `context.Context` as its first parameter. Never store `ctx` in a struct field.
+Every public method that does I/O, loops, or recursion takes `context.Context` first. Never store `ctx` in a struct field. Trivial accessors of cached scalars (page count, PDF version) omit it.
 
-Check `ctx.Err()` at natural checkpoints (per ~100 content-stream operators, per page-tree node, per xref entry, per filter buffer). Do NOT check in the lexer's per-token loop.
-
-Trivial accessors returning cached scalars (page count, PDF version) omit `ctx`.
+Check `ctx.Err()` at natural checkpoints: per ~100 content-stream operators, per page-tree node, per xref entry, per filter buffer. Never in the lexer's per-token loop.
 
 ### Thread safety
 
-`Document` is safe for concurrent reads after construction. Mutable caches use `sync.RWMutex`. Validation runs serialize via `Document.LockValidationRun`. The `Authenticate` call is part of the setup phase and must complete before concurrent use begins.
+`Document` is safe for concurrent reads after construction. Mutable caches use `sync.RWMutex`. Validation runs serialize via `Document.LockValidationRun`. `Authenticate` belongs to setup and completes before concurrent use begins.
 
-Nothing that writes a document writes into the `Reader` it reads. `NewWriter`, `Split` and `Merge` work on `Document.Fork`, a copy with its own trailer, caches and logger, so their edits and the logger `WithWriteLogger` swaps in stay out of a `Reader` other goroutines read. A field added to `Document` or `Reader` needs a fork decision (`TestForkDecidesEveryField`, `TestReaderForkDecidesEveryField`).
-
-Document the concurrency contract on every public type.
+Nothing that writes a document writes into the `Reader` it reads. `NewWriter`, `Split` and `Merge` work on `Document.Fork`, a copy with its own trailer, caches and logger. A field added to `Document` or `Reader` needs a fork decision (`TestForkDecidesEveryField`, `TestReaderForkDecidesEveryField`).
 
 ### Resource streaming
 
-Never load embedded files, images, or binary streams into memory during parsing. The public API returns `Open func(ctx context.Context) (io.ReadCloser, error)`, not `[]byte`. Filters apply lazily inside the `Open` path.
+Never load embedded files, images, or binary streams into memory during parsing. The public API returns `Open func(ctx context.Context) (io.ReadCloser, error)`, not `[]byte`, and filters apply lazily inside `Open`.
 
 ### Parser safety
 
-Validate token types with `Expect`. Handle `io.EOF` gracefully. Never panic. Track visited nodes in `ResolveObject` to break circular references. Prefer typed resolvers (`ResolveDict`, `ResolveArray`, `ResolveName`) over `ResolveObject`.
+- Validate token types with `Expect`. Handle `io.EOF` gracefully. Never panic.
+- Track visited nodes in `ResolveObject` to break circular references.
+- Prefer typed resolvers (`ResolveDict`, `ResolveArray`, `ResolveName`) over `ResolveObject`.
+- `ResolveDict`, `DecodePdfString`, `Float` and friends live in `pkg/internal/core/document`. Don't reimplement them.
 
-### Naming
+### Untrusted input
 
-- No `Get` prefix on accessors: `Metadata()`, not `GetMetadata()`. Go convention. This applies to unexported functions too: `resolveResources`, not `getResources`.
-- Use `Resolve` for functions that chase indirect references and build typed objects: `ResolveCatalog`, `ResolvePages`, `ResolveFont`, `ResolveOutline`.
-- Use `Extract` for page-scoped data retrieval: `ExtractText`, `ExtractImages`, `ExtractAnnotations`.
-- Use `Set` for setters: `SetMetadata`, `SetCachedCMap`.
-- For simple dict/struct field accessors that do no ref-chasing, drop the prefix entirely: `dictInt`, not `getInt`.
+- Any length, count, or offset read from the PDF is untrusted. Bound it before `make`, a buffer, or a loop, against a natural limit (page count vs `/Size`, `/Length` vs `Document.FileSize()`) or a documented cap. Reject negative and overflowing values: a panicking `make` is a denial of service.
+- Every defensive cap is a named package-level const whose comment says it is an anti-DoS guard, not spec-mandated, and why its value is safe for real documents (see `maxPageTreeDepth`). No bare numeric limits, and no conceptual limit defined twice with divergent values.
+- A cap that bounds a resource a caller trades against what litho reads joins `pdf.Limits`, with a default equal to the const it replaces, a ceiling, a CLI flag, and a test that lowers it through the public API. Code reads `Document.Limits` at run time, never the const. A cap derived from a budget keeps a documented relation to it (see `pdf.Limits`). A recursion guard that protects litho's own stack never joins it: no `recover` catches a Go stack overflow.
 
-### No duplication of core logic
+### Panics and goroutines
 
-`ResolveDict`, `DecodePdfString`, `Float`, and friends live in `pkg/internal/core/document`. Do not reimplement them in other packages.
-
-### Spec-grounded behavior
-
-Any code that produces a compliance verdict, accepts or rejects a construct, or hardcodes a spec table cites the governing clause (ISO 32000-1/2, ISO 19005-x, ISO 14289-x, EN 16931, Factur-X) at the decision site. Deliberate leniency toward real-world producers names the specific clause it relaxes and the empirical reason (which producer, why), so a divergence is auditable rather than supposed. Hardcoded spec tables carry an inline citation to the table they mirror and, where licensing permits, are generated.
-
-## Safety and robustness
-
-### Untrusted input sizes
-
-Any length, count, or offset read from the PDF is untrusted. Before `make([]T, n)`, allocating a buffer, or looping `n` times, validate `n` against a documented bound or against `Document.FileSize()`. Reject negative and overflowing values explicitly: a panicking `make` is itself a denial of service. Prefer a natural bound (page count vs trailer `/Size`, stream `/Length` vs file size) over an arbitrary constant.
-
-### Panic boundary
-
-Internal code never panics (see [Parser safety](#parser-safety)) and never calls `recover()`, except in a goroutine worker (see [Goroutine lifecycle](#goroutine-lifecycle)). As defense-in-depth against crafted input, every exported `pkg/pdf` entry point that processes document bytes installs a top-level `recover()` that converts an unexpected panic into a wrapped sentinel logged at Error via `doc.Logger` with the recovered value and a stack. The boundary is a safety net, not a license to panic.
-
-### Resource limits
-
-Every defensive cap (recursion depth, buffer size, decompression output, iteration count) is a named const at package scope with a comment stating it is an anti-DoS guard, not spec-mandated, and why the chosen value is safe for real documents. See `maxPageTreeDepth` in `catalog.go` and `maxNameTreeDepth` in `nametree.go`. No bare numeric literals as limits. The same conceptual limit must not be defined with divergent values across packages without a documented cross-reference.
-
-Six caps are resource budgets a caller configures through `pdf.Limits` (`pdf.WithLimits`, and the `--max-*` CLI flags): the decoded bytes of one stream, the pixels of one image, the embedded PDF compliance opens, the nesting of form XObjects, the object cache, and the pixels of one rendered page. Their defaults are the named consts of `pkg/internal/limits`, and code reads the document's value at run time through `Document.Limits`, never the const, so a lowered budget reaches every walk. A codec cap that bounds pixels or samples scales with the image budget (`Limits.ScaleImageCap`). Five caps derive from the stream budget: the decoded content of one page across its `/Contents` array is a quarter of it (`Limits.MaxPageContentBytes`), the object-stream cache is equal to it (`Limits.MaxObjStmCacheBytes`), and the font-program cache, the colour-transform cache and the parsed form content cache are a quarter of it each (`Limits.MaxFontProgCacheBytes`, `Limits.MaxColorCacheBytes`, `Limits.MaxFormCacheBytes`). A cap that bounds what a budget bounds, a sum of it or a cache of it, derives from that budget in a documented relation that keeps its default, rather than staying fixed when a caller moves the budget.
-
-A new cap stays an internal const, unless it bounds a resource a caller has reason to trade against what litho reads: then it joins `Limits`, with a default equal to the const it replaces, a ceiling, a CLI flag, and a test that lowers it through the public API. A recursion guard that protects litho's own stack never joins it, since a Go stack overflow is fatal and no recover catches it.
-
-### Goroutine lifecycle
-
-Every goroutine has a defined exit condition and cannot outlive its parent call. `ctx` propagates into every goroutine, and result collection selects on `ctx.Done()` so cancellation short-circuits. Each worker recovers panics into an error result wrapping `document.ErrInternalPanic` (re-exported as `pdf.ErrInternalPanic`) and logs them, so one bad worker cannot crash the host: the entry point's `recover()` runs on the calling goroutine and never sees a worker's panic. Fan-out is bounded by a fixed count or a worker pool, never one goroutine per untrusted-input element.
+- Internal code never panics and never calls `recover()`. Every exported `pkg/pdf` entry point that processes document bytes installs a top-level `recover()` that logs the panic at Error and returns a wrapped sentinel.
+- Every goroutine exits before its parent call returns. `ctx` reaches every goroutine, and result collection selects on `ctx.Done()`.
+- Each worker recovers its own panics into an error wrapping `document.ErrInternalPanic`, since the entry point's `recover()` never sees them.
+- Fan-out is bounded by a fixed count or a pool, never one goroutine per untrusted-input element.
 
 ### Deterministic output
 
-Given identical input bytes and identical options, the writer produces identical output bytes; encryption, whose keys, salts, IVs and `/ID` are random by necessity, is the one documented exception. A new trailer `/ID` is derived from the content, and `WithDocumentID` pins it. Never iterate a Go map to emit ordered output: sort keys or object numbers first. Confine any unavoidable nondeterministic input so reproducible-build callers can pin it. The gate's `determinism` cell runs each operation twice over the litho corpus.
+Identical input bytes and options write identical output bytes. Encryption, whose keys, salts, IVs and `/ID` are random, is the one exception. Never iterate a Go map to emit ordered output.
 
-## Documentation rules
+### Spec-grounded behavior
+
+Code that produces a compliance verdict, accepts or rejects a construct, or hardcodes a spec table cites the governing clause (ISO 32000-1/2, ISO 19005-x, ISO 14289-x, EN 16931, Factur-X) at the decision. Deliberate leniency toward real-world producers names the clause it relaxes and the producer that needs it. Hardcoded tables cite the table they mirror and, where licensing permits, are generated.
+
+### Naming
+
+- No `Get` prefix, exported or not: `Metadata()`, `resolveResources`.
+- `Resolve` chases indirect references and builds typed objects: `ResolveCatalog`, `ResolveFont`.
+- `Extract` retrieves page-scoped data: `ExtractText`, `ExtractImages`.
+- `Set` for setters: `SetMetadata`.
+- Plain field accessors that chase nothing take no prefix: `dictInt`.
+
+## Documentation conventions
 
 ### Tone
 
@@ -110,49 +130,31 @@ Given identical input bytes and identical options, the writer produces identical
 
 ### Godoc
 
-Every exported type and function has a Godoc comment starting with its identifier name:
-
-```go
-// Violation records a single rule violation with context.
-type Violation struct { ... }
-```
-
-Test, fuzz, benchmark and example functions are exempt, since go doc never renders them. Give one a doc comment when it carries corpus evidence or a reason the code does not show, and start it with the function name.
-
-Every package has a `doc.go` with a `// Package foo ...` comment.
-
-Reference identifiers with `[Name]` brackets for pkg.go.dev linking:
-
-```go
-// ValidatePDFA returns violations as []error where each element
-// is a [Violation] value. See [Rule] for the structured fields.
-```
+Every exported identifier has a doc comment starting with its name, and every package a `doc.go`. Reference identifiers with `[Name]` for pkg.go.dev links. Test, fuzz, benchmark and example functions are exempt.
 
 A doc comment is a contract with the caller. Write down what the caller can rely on, and nothing they cannot act on.
 
-- **The first sentence stands alone.** go doc and pkg.go.dev show it in package indexes. Make it a complete summary: `// Page returns the geometry and metadata of one page.`, then the details.
-- **Document the contract, not the implementation.** Inputs and their valid ranges, the result, what the zero value or a nil argument means, which sentinel errors come back (`[ErrEncrypted]`), and what the call leaves unchanged. Algorithms, helper names and internal packages belong in code comments.
-- **State ownership and lifetime.** Who closes the `io.ReadCloser`, whether a returned slice aliases internal state, how long a value stays valid, whether the call mutates its argument.
-- **State the concurrency contract on the type**, once, then only where a method deviates from it.
-- **Options state their default and their range.** Every `With*` option says what happens without it, which values it accepts, and what an out-of-range value does.
-- **Name the cost of a trade-off.** When an option or method trades size, speed or memory against fidelity, say which way and roughly how much, so the caller can choose.
-- **Cite the clause at the decision.** `(ISO 32000-1, 7.4.4.4)` grounds the behavior. Name viewers (`pdf.js`, `poppler`) only when matching them is the documented behavior.
-- **One idea per paragraph.** Split a long comment into short paragraphs, `# Headings`, and `-` lists (Go doc comment syntax). A sentence that needs three colons and two semicolons is three sentences.
-- **Say what is not supported.** An explicit limit (`Only sequential JPEG qualifies.`) saves the caller an experiment.
+- **The first sentence stands alone.** Package indexes show only it.
+- **Document the contract, not the implementation.** Valid inputs, the result, what a zero value or nil means, the sentinel errors returned, what stays unchanged.
+- **State ownership and lifetime.** Who closes the `io.ReadCloser`, whether a slice aliases internal state, whether the call mutates its argument.
+- **State the concurrency contract on the type**, once, then only where a method deviates.
+- **Options state their default and their range**, and what an out-of-range value does.
+- **Name the cost of a trade-off**: size, speed or memory against fidelity, which way and roughly how much.
+- **Cite the clause at the decision**: `(ISO 32000-1, 7.4.4.4)`. Name viewers only when matching them is the documented behavior.
+- **One idea per paragraph.** Use short paragraphs, `# Headings` and `-` lists.
+- **Say what is not supported.** `Only sequential JPEG qualifies.` saves the caller an experiment.
 
-Public godoc speaks to callers. Never mention the corpus, corpus files, gate cells, measurement counts, commit hashes, or how a behavior was found in the godoc of an exported identifier in `pkg/pdf`, `pkg/models`, or `pkg/plugins`. Corpus evidence lives on the unexported declaration that makes the decision (see [Corpus evidence](#corpus-evidence)); if none exists, put it on the test that locks the behavior. `TestPublicGodocNeverMentionsCorpus` enforces this.
+Public godoc never mentions the corpus, corpus files, gate cells, measurement counts, commit hashes, or how a behavior was found. `TestPublicGodocNeverMentionsCorpus` enforces it.
 
 ### Code comments
 
-- Explain _why_, not _what_.
-- No numbered step comments. No noise comments that restate the code.
-- No section-separator comments (`// --- Foo ---`). Use whitespace and function grouping instead.
-- Reference spec clauses: `// Per ISO 32000-2, Table 116...`.
+- Explain _why_, not _what_. Reference spec clauses: `// Per ISO 32000-2, Table 116...`.
+- No numbered steps, no section separators, no comments that restate the code.
 - Mark debt with `// TODO: [context]`.
 
 ### Corpus evidence
 
-Corpus measurements back a decision. They are not the decision. Keep them out of the prose and collect them in a `# Corpus evidence` section, the last block of the declaration's doc comment. Only unexported declarations, `pkg/internal` declarations and tests carry this section: the public surface never does (see [Godoc](#godoc)).
+Corpus measurements back a decision; they are not the decision. Collect them in a `# Corpus evidence` section, the last block of the doc comment of the unexported declaration that decides, or of the test that locks the behavior. The prose above it reads complete without it.
 
 ```go
 // maxPageTreeDepth caps recursion so a self-referential /Kids chain cannot
@@ -162,72 +164,41 @@ Corpus measurements back a decision. They are not the decision. Keep them out of
 // # Corpus evidence
 //
 //   - All corpora: 5170 of 5171 files parse, and the deepest page tree is 4.
-//   - All corpora: no file nests deeper than 100, so the gap with the
-//     compliance and remediation caps is never reached.
 ```
 
-- One bullet per finding. Each bullet starts with the corpus it was measured on (`All corpora`, `govdocs`, `pdfjs`, `verapdf`, `pdf20`, `pdfcpu`, `facturx`, `litho`), then the file names when the finding is file-specific, then a colon.
-- A corpus mention is the word corpus, a corpus name, a corpus file, or a count measured over corpus files. PDF.js, veraPDF, and pdfcpu as tools are not corpus mentions.
-- Evidence behind a comment inside a function body, a struct field, or one entry of a `const` or `var` group moves to the section of the enclosing declaration. The comment keeps the reason.
-- The prose above the section reads complete without it.
-
-### Formatting Go files
-
-Run `make fmt` to format Go files before committing. It runs `go fix`, the formatters of the pinned golangci-lint and `go mod tidy` over the whole tree, so stage only the files your change touches.
-
-### Formatting non-Go files
-
-Run `make prettify && make lint-prettier` for YAML, Markdown, and JSON.
+One bullet per finding, starting with the corpus (`All corpora`, `govdocs`, `pdfjs`, `verapdf`, `pdf20`, `pdfcpu`, `facturx`, `litho`), then the file names when file-specific, then a colon. Evidence behind a comment inside a function, a struct field, or a `const` group moves to the enclosing declaration.
 
 ## Testing
 
-Tests live in `_test.go` files alongside the code.
+Tests live in `_test.go` files beside the code. Assert observable contracts (expected text present, page count matches), not internal state. Exact-value assertions belong in dedicated regression tests.
 
-Behavior-focused tests assert observable contracts (non-nil output, expected text present, page count matches) rather than internal state. Exact-value assertions that would lock the implementation belong in dedicated regression tests, not in smoke tests.
+Any function whose leading argument is attacker-controlled `[]byte` (filter `Decode`, predictors, font and CMap parsers, image decoders) ships a `Fuzz*` target in a `*_fuzz_test.go`, seeded with one valid and one truncated input.
 
-### Fuzzing
-
-Fuzz tests exist for the lexer and parser. Any function whose leading argument is attacker-controlled `[]byte` (stream filter `Decode`, predictors, font/CMap table parsers, image decoders) ships a `Fuzz*` target in a `*_fuzz_test.go` beside it, seeded with one valid and one truncated input, asserting it never panics.
-
-See:
-
-- [test/integration/README.md](test/integration/README.md): corpus CLI tool usage, veraPDF and PDF.js corpora.
-- [pkg/internal/compliance/README.md](pkg/internal/compliance/README.md): compliance engine architecture.
-- [pkg/internal/remediation/README.md](pkg/internal/remediation/README.md): remediation fixer contract.
+The integration matrix scores litho against oracles over several corpora. When no corpus file reaches a construct, craft a fixture in the litho corpus. See [test/integration/README.md](test/integration/README.md).
 
 ## Pull requests
 
-Plan non-trivial changes before coding. Present problem, approach, affected files, and test strategy.
-
-### Checklist
-
-- [ ] Encapsulation: no `pkg/internal` types in public signatures.
-- [ ] Error handling: all errors wrapped; silenced errors justified and logged.
-- [ ] Context: I/O and recursive functions accept and check `context.Context`.
-- [ ] Thread safety: concurrency contract documented and honored under `-race`.
-- [ ] Resource streaming: no eager materialization of binary resources.
-- [ ] Safety: file-derived sizes bounded before allocation; defensive caps are named consts; new byte decoders have a fuzz target.
-- [ ] Spec-grounded: verdicts, accept/reject decisions, and hardcoded tables cite their clause; deliberate leniency names the clause it relaxes.
-- [ ] Linting: `make fmt && make lint && make lint-unparam` passes with zero warnings.
-- [ ] Documentation: Godoc on all exports; `doc.go` per package; no corpus mention in public godoc.
-- [ ] Tests: new behavior covered; no regressions; corpora unchanged.
-
 ### Commits
 
-[Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
+[Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <description>`, with `feat`, `fix`, `refactor`, `test`, `docs` or `chore`.
 
 Stage specific files. Never `git add -A`.
 
-## Dependencies
+### Checklist
 
-| Dependency                      | Purpose                                               |
-| ------------------------------- | ----------------------------------------------------- |
-| `github.com/dop251/goja`        | JavaScript VM for dynamic form fields                 |
-| `github.com/andybalholm/brotli` | Brotli stream decompression                           |
-| `golang.org/x/text`             | Unicode text processing                               |
-| `github.com/antchfx/xpath`      | XPath 1.0 evaluator backing the Schematron engine     |
-| `github.com/antchfx/xmlquery`   | XML DOM + XPath navigator paired with `antchfx/xpath` |
+- [ ] No `pkg/internal` type in a public signature.
+- [ ] Errors wrapped; silenced errors justified and logged.
+- [ ] I/O and recursive functions take and check `context.Context`.
+- [ ] Concurrency contract documented and honored under `-race`.
+- [ ] No eager materialization of binary resources.
+- [ ] File-derived sizes bounded before allocation; caps are named consts; new byte decoders have a fuzz target.
+- [ ] Verdicts, accept/reject decisions and hardcoded tables cite their clause.
+- [ ] `make fmt && make lint && make lint-unparam && make prettify && make lint-prettier` pass with zero warnings.
+- [ ] Godoc on every export, `doc.go` per package, no corpus mention in public godoc.
+- [ ] `make test-unit` and `make corpus-check` pass.
 
-### Filter plugins
+## Further reading
 
-litho decodes every standard stream filter in pure Go, JBIG2Decode and JPXDecode included, and ships no plugin. `pkg/plugins` defines `FilterDecoder`, which a caller implements to decode a filter litho does not know or to replace a built-in decoder; `pdf.WithFilterPlugin` registers one, and it takes precedence over the built-in decoder for its filter name.
+- [`test/integration/README.md`](test/integration/README.md): the corpus matrix, tool versions, the regression baseline.
+- [`pkg/internal/compliance/README.md`](pkg/internal/compliance/README.md): the compliance engine.
+- [`pkg/internal/remediation/README.md`](pkg/internal/remediation/README.md): the remediation fixer contract.
