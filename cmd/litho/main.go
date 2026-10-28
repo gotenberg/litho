@@ -83,6 +83,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		case arg == "--help" || arg == "-h":
 			printUsage(stdout)
 			return exitOK
+		case arg == "--version":
+			fmt.Fprintln(stdout, "litho", versionString())
+			return exitOK
 		case arg == "--timeout" || strings.HasPrefix(arg, "--timeout="):
 			value, split := strings.CutPrefix(arg, "--timeout=")
 			if !split {
@@ -394,6 +397,7 @@ func printUsage(w io.Writer) {
 			{"--timeout D", "Timeout duration (e.g., 30s, 5m)"},
 			{"--log-level L", "Library diagnostics on stderr: off, error, warn, info, debug"},
 			{"--help, -h", "Show this help"},
+			{"--version", "Print the litho version"},
 		}},
 	}
 	// Every description starts in one column, past the longest name, so a

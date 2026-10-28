@@ -24,10 +24,10 @@
 // # Global flags
 //
 // Global flags precede the command: --timeout bounds the run, --log-level
-// sends library diagnostics to stderr, and --max-stream-bytes,
-// --max-image-pixels, --max-embedded-file-bytes, --max-form-depth,
-// --max-cached-objects and --max-render-pixels set the resource limits
-// (pdf.Limits). A limit holds every document the command reads, each input of
+// sends library diagnostics to stderr, --version prints the litho version and
+// exits, and --max-stream-bytes, --max-image-pixels, --max-embedded-file-bytes,
+// --max-form-depth, --max-cached-objects and --max-render-pixels set the
+// resource limits (pdf.Limits). A limit holds every document the command reads, each input of
 // a multi-input command and each pipe stage included.
 //
 // A byte count takes a plain integer or a KiB, MiB or GiB suffix, the other
