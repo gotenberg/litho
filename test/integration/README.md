@@ -89,7 +89,7 @@ make clean-corpus
 make corpus-baseline
 
 # Fail if any (corpus, feature) cell regressed against the baseline.
-# The merge gate: the repo has no CI, so run it before pushing.
+# The merge gate: CI runs no corpus, so run it before pushing.
 # Improvements are non-fatal but noted.
 make corpus-check
 ```

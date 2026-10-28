@@ -70,10 +70,35 @@ jobs:
       - name: Run tests
         run: make test-unit
 
+  # Gotenberg ships linux/386 and linux/arm/v7, where int is 32 bits. An amd64
+  # runner executes 386 binaries natively; -race does not support 386. armv7
+  # shares the 32-bit int, so vetting it catches what only ARM rejects.
+  test-unit-32bit:
+    needs:
+      - lint
+      - lint-prettier
+    name: Run unit tests (32-bit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests on linux/386
+        run: make test-unit-386
+
+      - name: Vet linux/arm/v7
+        run: GOOS=linux GOARCH=arm GOARM=7 go vet ./...
+
   snapshot:
     if: github.event_name == 'pull_request'
     needs:
       - test-unit
+      - test-unit-32bit
     name: Snapshot release
     runs-on: ubuntu-latest
     steps:

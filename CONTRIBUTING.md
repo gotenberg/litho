@@ -46,13 +46,14 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 | `make lint-todo`       | Find TODOs in Go code                                                        | Before committing                                  |
 | `make lint-unparam`    | Pinned unparam: unused parameters and results                                | Before committing                                  |
 | `make test-unit`       | `go test -race ./...`                                                        | Before committing                                  |
+| `make test-unit-386`   | `go test ./...` on linux/386, where `int` is 32 bits                         | Integer-width changes (needs linux/amd64)          |
 | `make bench`           | `go test -bench=. -benchmem ./...`                                           | Performance changes                                |
 | `make godoc`           | Serve the godoc locally                                                      | To check documentation                             |
 | `make corpus`          | Score litho across the (corpus, feature) matrix. Auto-provisions the corpora | To measure the corpus matrix                       |
 | `make corpus-init`     | Provision missing corpora via Docker at the pinned versions                  | Before the first `make corpus`                     |
 | `make corpus-tools`    | Compare the local oracle tools with the pinned versions                      | When a corpus run reports version drift            |
 | `make corpus-baseline` | Rewrite `test/integration/baseline.json` with the current matrix scores      | After an intended score change                     |
-| `make corpus-check`    | Fail if a (corpus, feature) cell regressed against a baseline                | Before pushing: the repo has no CI                 |
+| `make corpus-check`    | Fail if a (corpus, feature) cell regressed against a baseline                | Before pushing: CI runs no corpus                  |
 | `make clean-corpus`    | Remove all corpus testdata                                                   | To force re-provisioning on the next `make corpus` |
 | `make outline-goldens` | Regenerate the TrueType and CFF outline goldens                              | After a font outline change                        |
 | `make icc-goldens`     | Regenerate the ICC transform goldens                                         | After a color transform change                     |
