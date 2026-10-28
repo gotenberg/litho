@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // StagedPages returns the document's pages as the edits queued in alloc leave
@@ -93,7 +94,7 @@ func stagedPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	}
 	page.SetBoxes(box("MediaBox"), box("CropBox"), box("BleedBox"), box("TrimBox"), box("ArtBox"))
 	if rotate, isInt := dict["Rotate"].(ast.PdfInt); isInt {
-		page.Rotate = int(rotate)
+		page.Rotate = intconv.Clamp(rotate)
 	}
 	if v := document.Float(dict["UserUnit"]); v > 0 {
 		page.UserUnit = v

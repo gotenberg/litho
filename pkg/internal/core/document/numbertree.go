@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxNumberTreeDepth caps the recursion depth in [LookupNumberTree]. Anti-DoS
@@ -80,7 +81,7 @@ func searchNumberTreeAt(
 		}
 		for i := 0; i+1 < len(nums); i += 2 {
 			k, kErr := ResolveInt(ctx, doc, nums[i])
-			if kErr != nil || int(k) != key {
+			if kErr != nil || intconv.Clamp(k) != key {
 				continue
 			}
 			return nums[i+1], nil
@@ -172,7 +173,7 @@ func walkNumberTreeAt(
 			// ResolveInt reads as 0, names no key either.
 			k, err := ResolveObject(ctx, doc, nums[i])
 			if key, ok := k.(ast.PdfInt); err == nil && ok {
-				leaf(int(key), nums[i+1])
+				leaf(intconv.Clamp(key), nums[i+1])
 			}
 		}
 	}

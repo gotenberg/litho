@@ -3,6 +3,8 @@ package icc
 import (
 	"encoding/binary"
 	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxTags bounds the tag table of a profile. It is an anti-DoS guard, not
@@ -98,10 +100,10 @@ func parse(data []byte) (*Profile, error) {
 		tags:    make(map[string][]byte),
 	}
 	count := binary.BigEndian.Uint32(data[128:])
-	if count > maxTags || 132+12*int(count) > len(data) {
+	if count > maxTags || 132+12*intconv.Clamp(count) > len(data) {
 		return nil, fmt.Errorf("%w: tag table of %d entries", ErrMalformed, count)
 	}
-	for i := range int(count) {
+	for i := range intconv.Clamp(count) {
 		e := data[132+12*i:]
 		sig := string(e[:4])
 		off, size := binary.BigEndian.Uint32(e[4:]), binary.BigEndian.Uint32(e[8:])

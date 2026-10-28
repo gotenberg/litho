@@ -7,6 +7,8 @@ import (
 	"maps"
 	"math"
 	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // subsetTables are the tables a subset carries, in the tag order of the table
@@ -202,7 +204,7 @@ func glyphOffsets(loca []byte, glyfLen, numGlyphs int, long bool) ([]int, error)
 	offsets := make([]int, numGlyphs+1)
 	for i := range offsets {
 		if long {
-			offsets[i] = int(binary.BigEndian.Uint32(loca[4*i:]))
+			offsets[i] = intconv.Clamp(binary.BigEndian.Uint32(loca[4*i:]))
 		} else {
 			offsets[i] = 2 * int(binary.BigEndian.Uint16(loca[2*i:]))
 		}
@@ -328,7 +330,7 @@ func subsetCmap(ctx context.Context, cmap []byte, newGID map[uint16]uint16) ([]b
 	}
 	var subs []subtable
 	for _, r := range records {
-		if int(r.offset) >= len(cmap) {
+		if intconv.Clamp(r.offset) >= len(cmap) {
 			continue
 		}
 		codes, language, err := decodeCmapSubtable(ctx, cmap[r.offset:])
@@ -388,7 +390,7 @@ func format12CodeToGID(ctx context.Context, sub []byte) (map[uint32]uint16, erro
 	if len(sub) < 16 {
 		return nil, fmt.Errorf("%w: format 12 header too short", ErrInvalidFont)
 	}
-	numGroups := int(binary.BigEndian.Uint32(sub[12:16]))
+	numGroups := intconv.Clamp(binary.BigEndian.Uint32(sub[12:16]))
 	if numGroups < 0 || numGroups > (len(sub)-16)/12 {
 		return nil, fmt.Errorf("%w: format 12 groups truncated", ErrInvalidFont)
 	}
@@ -465,7 +467,7 @@ func encodeFormat6(language uint32, sorted []uint32, codes map[uint32]uint16) []
 	first, count := uint32(0), 0
 	if len(sorted) > 0 {
 		first = sorted[0]
-		count = int(sorted[len(sorted)-1]-first) + 1
+		count = intconv.Clamp(sorted[len(sorted)-1]-first) + 1
 	}
 	length := 10 + 2*count
 	if length > math.MaxUint16 {
@@ -516,7 +518,7 @@ func encodeFormat4(language uint32, sorted []uint32, codes map[uint32]uint16) []
 	glyphIDs := 0
 	for _, s := range segs {
 		if !s.delta {
-			glyphIDs += int(s.end-s.start) + 1
+			glyphIDs += intconv.Clamp(s.end-s.start) + 1
 		}
 	}
 	length := 16 + 8*segCount + 2*glyphIDs
@@ -563,7 +565,7 @@ func encodeFormat4(language uint32, sorted []uint32, codes map[uint32]uint16) []
 			continue
 		}
 		out = binary.BigEndian.AppendUint16(out, uint16(2*(segCount-i)+2*next)) //nolint:gosec // G115: bounded by length <= MaxUint16.
-		next += int(s.end-s.start) + 1
+		next += intconv.Clamp(s.end-s.start) + 1
 	}
 	for _, s := range segs {
 		if s.delta {

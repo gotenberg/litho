@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // The ESIC extension levels ETSI EN 319 142-1 V1.2.1, 5.6 has a writer
@@ -112,5 +113,5 @@ func esicCovers(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	if err != nil {
 		return false
 	}
-	return int(declaredLevel) >= level
+	return intconv.Clamp(declaredLevel) >= level
 }

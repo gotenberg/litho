@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -107,7 +108,7 @@ func parseCFF2INDEX(data []byte, pos int) ([][]byte, error) {
 	if uint64(count) > uint64(len(data)) {
 		return nil, ErrTruncated
 	}
-	_, entries, err := parseINDEXBody(data, pos+4, int(count))
+	_, entries, err := parseINDEXBody(data, pos+4, intconv.Clamp(count))
 	return entries, err
 }
 
@@ -409,9 +410,9 @@ func parseCFF2FDSelect(data []byte, offset, numGlyphs int) []uint16 {
 		pos := offset + 5
 		prev := 0
 		for r := uint32(0); r < nRanges && pos+rangeSize+4 <= len(data); r++ {
-			first := int(binary.BigEndian.Uint32(data[pos:]))
+			first := intconv.Clamp(binary.BigEndian.Uint32(data[pos:]))
 			fd := binary.BigEndian.Uint16(data[pos+4:])
-			next := int(binary.BigEndian.Uint32(data[pos+rangeSize:]))
+			next := intconv.Clamp(binary.BigEndian.Uint32(data[pos+rangeSize:]))
 			if first < prev || next < first {
 				break
 			}

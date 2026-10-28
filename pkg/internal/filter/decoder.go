@@ -12,6 +12,7 @@ import (
 	"github.com/andybalholm/brotli"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
@@ -493,7 +494,7 @@ func (d *Decoder) marshalParms(ctx context.Context, filterName ast.PdfName, dict
 
 		switch val := v.(type) {
 		case ast.PdfInt:
-			out[key] = int(val)
+			out[key] = intconv.Clamp(val)
 		case ast.PdfReal:
 			out[key] = float64(val)
 		case ast.PdfBool:

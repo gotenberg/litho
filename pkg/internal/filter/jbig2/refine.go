@@ -3,6 +3,8 @@ package jbig2
 import (
 	"context"
 	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // refineParams holds the parameters of the generic refinement region decoding
@@ -77,7 +79,7 @@ func refPixel(b *Bitmap, x, y int64) uint32 {
 	if x < 0 || y < 0 || x >= int64(b.Width) || y >= int64(b.Height) {
 		return 0
 	}
-	return b.pixel(int(x), int(y))
+	return b.pixel(intconv.Clamp(x), intconv.Clamp(y))
 }
 
 // refineSLTPContext is the context of Figures 14 and 15: every template pixel

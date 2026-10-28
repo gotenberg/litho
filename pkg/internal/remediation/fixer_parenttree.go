@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxParentTreeMCID bounds a marked-content id read from a structure element.
@@ -109,7 +110,7 @@ func fixParentTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	existingKeys := make(map[int]bool)
 	for i := 0; i+1 < len(nums); i += 2 {
 		if k, err := document.ResolveInt(ctx, doc, nums[i]); err == nil {
-			existingKeys[int(k)] = true
+			existingKeys[intconv.Clamp(k)] = true
 		}
 	}
 
@@ -127,7 +128,7 @@ func fixParentTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		key := -1
 		if spObj, ok := pageDict["StructParents"]; ok {
 			if k, err := document.ResolveInt(ctx, doc, spObj); err == nil {
-				key = int(k)
+				key = intconv.Clamp(k)
 			}
 		}
 		if key >= 0 && existingKeys[key] {
@@ -182,13 +183,13 @@ func structElemMCIDs(ctx context.Context, doc *document.Document, kObj ast.PdfOb
 		switch v := item.(type) {
 		case ast.PdfInt:
 			if v >= 0 && v <= maxParentTreeMCID {
-				out = append(out, int(v))
+				out = append(out, intconv.Clamp(v))
 			}
 		default:
 			if d, err := document.ResolveDict(ctx, doc, item); err == nil && d != nil {
 				if t, _ := document.ResolveName(ctx, doc, d["Type"]); t == "MCR" {
 					if n, ok := d["MCID"].(ast.PdfInt); ok && n >= 0 && n <= maxParentTreeMCID {
-						out = append(out, int(n))
+						out = append(out, intconv.Clamp(n))
 					}
 				}
 			}

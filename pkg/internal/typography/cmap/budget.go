@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxCMapRangeCodes caps the codes the range entries of one CMap program
@@ -111,5 +113,5 @@ func cidValue(d int64, span int) (int, bool) {
 	if d < 0 || d > int64(math.MaxInt)-int64(span) {
 		return 0, false
 	}
-	return int(d), true
+	return intconv.Clamp(d), true
 }

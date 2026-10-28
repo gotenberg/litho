@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/postscript"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Bounds on the untrusted sizes a function object declares.
@@ -160,7 +161,7 @@ func newAt(ctx context.Context, doc *document.Document, obj ast.PdfObject, st *c
 		return nil, fmt.Errorf("%w: no /FunctionType: %w", ErrMalformed, err)
 	}
 
-	f := &Function{kind: int(typeNum)}
+	f := &Function{kind: intconv.Clamp(typeNum)}
 	if f.domain, err = floats(ctx, doc, dict["Domain"]); err != nil || len(f.domain) < 2 || len(f.domain)%2 != 0 {
 		return nil, fmt.Errorf("%w: /Domain is required and holds pairs", ErrMalformed)
 	}
@@ -256,7 +257,7 @@ func (f *Function) initSampled(ctx context.Context, doc *document.Document, dict
 	if err != nil {
 		return fmt.Errorf("%w: no /BitsPerSample: %w", ErrMalformed, err)
 	}
-	bps := int(bpsInt)
+	bps := intconv.Clamp(bpsInt)
 	switch bps {
 	case 1, 2, 4, 8, 12, 16, 24, 32:
 	default:

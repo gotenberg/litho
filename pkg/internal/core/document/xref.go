@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxEndobjScanBytes bounds the window read while looking for an object's
@@ -413,7 +414,7 @@ func (d *Document) trailerObjectCount() (int, bool) {
 	}
 	// Bounded above by d.size, an int64 file size, so the conversion cannot
 	// overflow an int on any platform litho builds for.
-	return int(size), true
+	return intconv.Clamp(size), true
 }
 
 // mergeTrailerKeys copies /Root and /Info from an older trailer into the

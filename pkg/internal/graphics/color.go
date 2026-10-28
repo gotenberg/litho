@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Colour space families, the names ISO 32000-1, 8.6.3, Table 62 gives them.
@@ -211,7 +212,7 @@ func (m *Machine) iccComponents(ctx context.Context, def ast.PdfArray) int {
 	}
 	switch n {
 	case 1, 3, 4:
-		return int(n)
+		return intconv.Clamp(n)
 	}
 	return 0
 }

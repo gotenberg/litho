@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 )
 
@@ -332,7 +333,7 @@ func (f *emptyFigures) lookup(ctx context.Context, obj ast.PdfObject) (ast.PdfOb
 func (f *emptyFigures) intValue(ctx context.Context, obj ast.PdfObject) (int, bool) {
 	v, state := f.lookup(ctx, obj)
 	i, isInt := v.(ast.PdfInt)
-	return int(i), state == lookupFound && isInt
+	return intconv.Clamp(i), state == lookupFound && isInt
 }
 
 // kids returns the entries of a /K value: the array's, or the one entry it is
@@ -511,7 +512,7 @@ func (f *emptyFigures) goes(ctx context.Context, num int, onPath map[int]bool) b
 // cover.
 func (f *emptyFigures) encloses(ctx context.Context, fig ast.PdfDict, kid ast.PdfObject, onPath map[int]bool) bool {
 	if mcid, isInt := kid.(ast.PdfInt); isInt {
-		return f.marked(ctx, fig["Pg"], int(mcid))
+		return f.marked(ctx, fig["Pg"], intconv.Clamp(mcid))
 	}
 	obj, state := f.lookup(ctx, kid)
 	switch state {

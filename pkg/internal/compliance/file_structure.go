@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 const (
@@ -903,7 +904,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		if err != nil {
 			continue
 		}
-		expOff := int(absExpectedEnd - winStart)
+		expOff := intconv.Clamp(absExpectedEnd - winStart)
 
 		var found []Violation
 		esRel := bytes.Index(win, []byte("endstream"))

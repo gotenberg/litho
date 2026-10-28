@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // SymbolCharCodeToGID returns a character-code → glyph-ID map for a symbolic
@@ -61,7 +63,7 @@ func SymbolCharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, e
 	if chosenPriority == 0 {
 		return nil, nil
 	}
-	if int(chosenOffset) >= len(cmapData) {
+	if intconv.Clamp(chosenOffset) >= len(cmapData) {
 		return nil, fmt.Errorf("%w: cmap subtable offset out of bounds", ErrInvalidFont)
 	}
 	sub := cmapData[chosenOffset:]
@@ -191,7 +193,7 @@ func format4CodeToGID(ctx context.Context, data []byte, out map[uint32]uint16) e
 			if rangeOff == 0 {
 				gid = uint16(int32(code) + int32(idDelta)) //nolint:gosec // spec: modular arithmetic
 			} else {
-				glyphIdx := int(rangeOff)/2 + int(code) - int(startCode) + i
+				glyphIdx := int(rangeOff)/2 + intconv.Clamp(code) - int(startCode) + i
 				byteOff := idRangeOffsetOff + glyphIdx*2
 				if byteOff+2 > len(data) {
 					continue

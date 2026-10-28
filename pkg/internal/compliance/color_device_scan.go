@@ -6,6 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // formGroupICCColorSpace returns the type of the blending colour space of a
@@ -237,7 +238,7 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 		case "Tr":
 			if len(op.Operands) >= 1 {
 				if mode, ok := op.Operands[0].(ast.PdfInt); ok {
-					textRender = int(mode)
+					textRender = intconv.Clamp(mode)
 				}
 			}
 		case "g", "G":

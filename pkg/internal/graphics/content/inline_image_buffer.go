@@ -3,6 +3,7 @@ package content
 import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // veraPDF reads a content stream through a buffer of veraBufferSize bytes
@@ -110,11 +111,11 @@ func (r *inlineImages) objectEnd(pos, q int) int {
 	switch {
 	case err != nil || tok.Type == lexer.TokenError:
 	case tok.Type == lexer.TokenName || tok.Type == lexer.TokenNumber:
-		end = min(q+int(p.PeekEnd(0))+1, window)
+		end = min(q+intconv.Clamp(p.PeekEnd(0))+1, window)
 	case tok.Type == lexer.TokenDelimiter && (tok.Value == "[" || tok.Value == "<<"):
 		end = q + containerEnd(p)
 	default:
-		end = q + int(p.PeekEnd(0))
+		end = q + intconv.Clamp(p.PeekEnd(0))
 	}
 	r.objectBudget -= max(end-q, 1)
 	return max(end, q+1)
@@ -131,9 +132,9 @@ func containerEnd(p *parser.Parser) int {
 	for {
 		tok, err := p.Peek(0)
 		if err != nil || tok.Type == lexer.TokenError || tok.Type == lexer.TokenEOF {
-			return int(p.Position())
+			return intconv.Clamp(p.Position())
 		}
-		end := int(p.PeekEnd(0))
+		end := intconv.Clamp(p.PeekEnd(0))
 		if _, err := p.Consume(); err != nil {
 			return end
 		}

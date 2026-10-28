@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -63,7 +64,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 		if end < prevEnd {
 			end = prevEnd
 		}
-		*ranges = append(*ranges, ByteRange{Start: int(prevEnd), End: int(end)})
+		*ranges = append(*ranges, ByteRange{Start: intconv.Clamp(prevEnd), End: intconv.Clamp(end)})
 		prevEnd = end
 	}
 
@@ -114,7 +115,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 				}
 				biOperands := []ast.PdfObject{dict}
 				if o.inlineData {
-					biOperands = append(biOperands, ast.PdfString(inlineImageData(data, idEnd, int(p.Position()))))
+					biOperands = append(biOperands, ast.PdfString(inlineImageData(data, idEnd, intconv.Clamp(p.Position()))))
 				}
 				ops = append(ops, Operation{Operator: "BI", Operands: biOperands})
 				placer.place("BI", ops[len(ops)-1].Operands)
@@ -139,7 +140,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 				if images == nil {
 					images = newStreamImages(data, o)
 				}
-				if err := p.ResumeAt(int64(images.resume(ctx, int(p.Position()), nil))); err != nil {
+				if err := p.ResumeAt(int64(images.resume(ctx, intconv.Clamp(p.Position()), nil))); err != nil {
 					return nil, fmt.Errorf("inline image data: %w", err)
 				}
 				if images.lost {
@@ -221,7 +222,7 @@ func readInlineImage(ctx context.Context, p *parser.Parser, o readOptions, image
 		if err != nil || p.SkippedInlineImageKey() {
 			return nil, 0, false, ctx.Err()
 		}
-		idEnd := int(p.Position())
+		idEnd := intconv.Clamp(p.Position())
 		end, stops := images.pdfjsEnd(ctx, idEnd, dict)
 		if stops {
 			return nil, 0, false, nil
@@ -232,14 +233,14 @@ func readInlineImage(ctx context.Context, p *parser.Parser, o readOptions, image
 		if err != nil {
 			return nil, 0, false, err
 		}
-		idEnd := int(p.Position())
+		idEnd := intconv.Clamp(p.Position())
 		return dict, idEnd, true, p.ResumeAt(int64(images.resume(ctx, idEnd, dict)))
 	default:
 		dict, err := p.ParseInlineImageHeader(ctx)
 		if err != nil {
 			return nil, 0, false, err
 		}
-		idEnd := int(p.Position())
+		idEnd := intconv.Clamp(p.Position())
 		return dict, idEnd, true, p.ResumeAt(int64(images.repairEnd(ctx, idEnd, dict)))
 	}
 }

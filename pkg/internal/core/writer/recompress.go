@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -573,7 +574,7 @@ func samplePredictorLayout(pending map[int]ast.PdfObject, dict ast.PdfDict, widt
 	if rowBytes < 1 || int64(decodedLen)/rowBytes != height || int64(decodedLen)%rowBytes != 0 {
 		return nil
 	}
-	return &predictorLayout{colors: int(colors), bpc: int(bpc), columns: int(width)}
+	return &predictorLayout{colors: intconv.Clamp(colors), bpc: intconv.Clamp(bpc), columns: intconv.Clamp(width)}
 }
 
 // colorComponents returns the number of components of an image's colour space

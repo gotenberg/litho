@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // pageBoundaries are the page boundaries of ISO 32000-1, 14.11.2, each a
@@ -468,7 +469,7 @@ func (s *pageTreeRepair) nodeKids(ctx context.Context, dict ast.PdfDict, out *co
 	if err != nil {
 		return 0, err
 	}
-	if n, isInt := count.(ast.PdfInt); !isInt || int(n) != pages {
+	if n, isInt := count.(ast.PdfInt); !isInt || intconv.Clamp(n) != pages {
 		out.set("Count", ast.PdfInt(pages))
 	}
 	return pages, nil

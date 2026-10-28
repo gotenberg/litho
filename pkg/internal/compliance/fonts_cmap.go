@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
@@ -468,7 +469,7 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 		streamWMode := max(ExtractCMapStreamWMode(data),
 			// default WMode per spec
 			0)
-		if int(dictWMode) != streamWMode {
+		if intconv.Clamp(dictWMode) != streamWMode {
 			results = append(results, failf(ruleT2,
 				"font %s on page %d: CMap dict WMode=%d but stream WMode=%d",
 				fontName, pageNum, dictWMode, streamWMode)...)

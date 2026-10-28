@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // markupAnnotSubtypes lists the markup annotation types per ISO 32000-2,
@@ -153,7 +154,7 @@ func annotFlags(ctx context.Context, doc *document.Document, annot ast.PdfDict) 
 	if err != nil {
 		return 0
 	}
-	return int(flags)
+	return intconv.Clamp(flags)
 }
 
 // annotArtifactRepair decides how an annotation that trips a §8.9.2.2 / §8.9.2.4

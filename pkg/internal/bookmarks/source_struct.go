@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -235,7 +236,7 @@ func collectTextFromK(
 	switch v := resolved.(type) {
 	case ast.PdfInt:
 		// Direct MCID on the current page.
-		if text, ok := mcidTextByPage[currentPage][int(v)]; ok {
+		if text, ok := mcidTextByPage[currentPage][intconv.Clamp(v)]; ok {
 			if sb.Len() > 0 {
 				sb.WriteByte(' ')
 			}
@@ -254,7 +255,7 @@ func collectTextFromK(
 
 		if mcidObj, ok := v["MCID"]; ok {
 			if mcid, ok := mcidObj.(ast.PdfInt); ok {
-				if text, ok := mcidTextByPage[pg][int(mcid)]; ok {
+				if text, ok := mcidTextByPage[pg][intconv.Clamp(mcid)]; ok {
 					if sb.Len() > 0 {
 						sb.WriteByte(' ')
 					}

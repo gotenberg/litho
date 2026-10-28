@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maskReduceRowsPerCheck is how many source rows [DecodeMaskAt] reads between
@@ -72,8 +73,8 @@ func maskGrid(width, height, cols, rows int, maxPixels int64) (kx, ky int) {
 		s := math.Sqrt(float64(maxPixels) / float64(n))
 		// Raising a side to one sample can lift the product past the
 		// budget again, so the other side takes what the first leaves.
-		cols = int(min(max(int64(float64(cols)*s), 1), maxPixels))
-		rows = int(min(max(int64(float64(rows)*s), 1), maxPixels/int64(cols)))
+		cols = intconv.Clamp(min(max(int64(float64(cols)*s), 1), maxPixels))
+		rows = intconv.Clamp(min(max(int64(float64(rows)*s), 1), maxPixels/int64(cols)))
 	}
 	return ceilDiv(width, cols), ceilDiv(height, rows)
 }

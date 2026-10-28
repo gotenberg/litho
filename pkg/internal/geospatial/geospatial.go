@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -153,7 +154,7 @@ func parseGCS(ctx context.Context, doc *document.Document, gcsDict ast.PdfDict, 
 		}
 		switch v := epsgRes.(type) {
 		case ast.PdfInt:
-			geo.EPSG = fmt.Sprintf("%d", int(v))
+			geo.EPSG = fmt.Sprintf("%d", intconv.Clamp(v))
 		case ast.PdfString:
 			geo.EPSG = string(v)
 		}

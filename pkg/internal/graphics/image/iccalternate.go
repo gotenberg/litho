@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxICCAlternateDepth bounds the colour space arrays a substitution of
@@ -209,8 +210,8 @@ func unusableICCAlternate(ctx context.Context, doc *document.Document, arr ast.P
 	if err != nil || (n != 1 && n != 3 && n != 4) {
 		return nil, "", false
 	}
-	if ICCBasedUsable(ctx, doc, arr[1], int(n), intent) {
+	if ICCBasedUsable(ctx, doc, arr[1], intconv.Clamp(n), intent) {
 		return nil, "", false
 	}
-	return ICCAlternate(ctx, doc, stream.Dict, int(n))
+	return ICCAlternate(ctx, doc, stream.Dict, intconv.Clamp(n))
 }

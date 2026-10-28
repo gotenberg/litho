@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/filter/mq"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxSymbols bounds how many symbols a dictionary may define or export and how
@@ -132,7 +133,7 @@ func decodeSymbolDict(ctx context.Context, seg segment, inSyms []*Bitmap, last *
 			return nil, err
 		}
 	} else {
-		st.iaid = newIAID(symbolCodeLen(len(inSyms) + int(h.numNew)))
+		st.iaid = newIAID(symbolCodeLen(len(inSyms) + intconv.Clamp(h.numNew)))
 		if newSyms, err = decodeSymbols(ctx, h, inSyms, st); err != nil {
 			return nil, err
 		}
@@ -196,7 +197,7 @@ func decodeSymbols(ctx context.Context, h symbolHeader, inSyms []*Bitmap, st *ar
 			if width < 0 || bitmapExceeds(width, height, st.budget.byteCap()) {
 				return nil, fmt.Errorf("%w: symbol of %dx%d pixels", ErrMalformed, width, height)
 			}
-			bs, err := decodeSymbolBitmap(ctx, h, int(width), int(height), all, st)
+			bs, err := decodeSymbolBitmap(ctx, h, intconv.Clamp(width), intconv.Clamp(height), all, st)
 			if err != nil {
 				return nil, fmt.Errorf("symbol %d: %w", decoded(), err)
 			}
@@ -379,7 +380,7 @@ func decodeSymbolsHuffman(ctx context.Context, h symbolHeader, inSyms []*Bitmap,
 	all := make([]*Bitmap, len(inSyms), int64(len(inSyms))+h.numNew)
 	copy(all, inSyms)
 	// 6.5.8.2.3: fixed-length IDs over every symbol the dictionary can see.
-	hs.idLen = max(symbolCodeLen(len(inSyms)+int(h.numNew)), 1)
+	hs.idLen = max(symbolCodeLen(len(inSyms)+intconv.Clamp(h.numNew)), 1)
 	hs.agg.idLen = hs.idLen
 	decoded := func() int64 { return int64(len(all) - len(inSyms)) }
 	var height, empty int64
@@ -418,7 +419,7 @@ func decodeSymbolsHuffman(ctx context.Context, h symbolHeader, inSyms []*Bitmap,
 				widths = append(widths, width)
 				continue
 			}
-			bs, err := decodeSymbolBitmapHuffman(ctx, h, int(width), int(height), all, hs)
+			bs, err := decodeSymbolBitmapHuffman(ctx, h, intconv.Clamp(width), intconv.Clamp(height), all, hs)
 			if err != nil {
 				return nil, fmt.Errorf("symbol %d: %w", decoded(), err)
 			}
@@ -460,20 +461,20 @@ func collectiveSymbols(ctx context.Context, widths []int64, total, height int64,
 		if size > int64(len(hs.r.data)-hs.r.pos) {
 			return nil, fmt.Errorf("%w: uncompressed collective bitmap of %d bytes, %d remain", ErrMalformed, size, len(hs.r.data)-hs.r.pos)
 		}
-		if collective, err = newBitmap(int(total), int(height)); err != nil {
+		if collective, err = newBitmap(intconv.Clamp(total), intconv.Clamp(height)); err != nil {
 			return nil, err
 		}
-		copy(collective.Data, hs.r.data[hs.r.pos:hs.r.pos+int(size)])
+		copy(collective.Data, hs.r.data[hs.r.pos:hs.r.pos+intconv.Clamp(size)])
 	} else {
 		if size < 0 || size > int64(len(hs.r.data)-hs.r.pos) {
 			return nil, fmt.Errorf("%w: collective bitmap of %d bytes, %d remain", ErrMalformed, size, len(hs.r.data)-hs.r.pos)
 		}
 		// Table 19: MMR with a known byte count, so EOFB may be absent.
-		if collective, err = decodeMMR(ctx, int(total), int(height), hs.r.data[hs.r.pos:hs.r.pos+int(size)]); err != nil {
+		if collective, err = decodeMMR(ctx, intconv.Clamp(total), intconv.Clamp(height), hs.r.data[hs.r.pos:hs.r.pos+intconv.Clamp(size)]); err != nil {
 			return nil, err
 		}
 	}
-	hs.r.pos += int(size)
+	hs.r.pos += intconv.Clamp(size)
 
 	syms := make([]*Bitmap, len(widths))
 	var x int64

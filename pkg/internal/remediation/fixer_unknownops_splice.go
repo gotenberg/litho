@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // spliceCheckInterval is how many operations [spliceOperations] reads
@@ -331,7 +332,7 @@ func inlineImageStart(span []byte) (int, bool) {
 		if err != nil || tok.Type == lexer.TokenError || tok.Type == lexer.TokenEOF {
 			return 0, false
 		}
-		end := int(p.PeekEnd(0))
+		end := intconv.Clamp(p.PeekEnd(0))
 		if _, err := p.Consume(); err != nil {
 			return 0, false
 		}

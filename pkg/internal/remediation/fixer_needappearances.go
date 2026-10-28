@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 func matchNeedAppearances(v compliance.Violation) bool {
@@ -376,7 +377,7 @@ func fieldFlags(ctx context.Context, doc *document.Document, annot ast.PdfDict) 
 	seen := make(map[int]bool)
 	for depth := 0; depth < maxFieldParentDepth && dict != nil; depth++ {
 		if flags, ok := dict["Ff"].(ast.PdfInt); ok {
-			return int(flags)
+			return intconv.Clamp(flags)
 		}
 		_, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
 		if !ok {

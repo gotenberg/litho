@@ -22,6 +22,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Float safely extracts a float64 from a [ast.PdfObject].
@@ -665,7 +666,7 @@ func (d *Document) decodeObjectStreamHeader(ctx context.Context, objStmNum int, 
 	if !ok {
 		return nil, fmt.Errorf("object stream /N is not an integer")
 	}
-	n := int(nInt)
+	n := intconv.Clamp(nInt)
 
 	firstObj, ok := stream.Dict["First"]
 	if !ok {
@@ -678,7 +679,7 @@ func (d *Document) decodeObjectStreamHeader(ctx context.Context, objStmNum int, 
 
 	// 7.5.7, Table 16: /First is "the byte offset in the decoded stream of
 	// the first compressed object", so it lies inside the decoded bytes.
-	first := int(firstInt)
+	first := intconv.Clamp(firstInt)
 	if first < 0 || first > len(decoded) {
 		return nil, fmt.Errorf("object stream %d: /First %d lies outside its %d decoded bytes", objStmNum, first, len(decoded))
 	}

@@ -6,6 +6,8 @@ import (
 	"math"
 	"slices"
 	"unicode/utf16"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // v2Version is the header version ToV2 writes: 2.4.0, the version of
@@ -134,7 +136,7 @@ func ToV2(data []byte) ([]byte, error) {
 // table, so the converted profile lists them as the source does. A signature
 // the table repeats is kept once, as [Parse] keeps one.
 func tagOrder(data []byte) []string {
-	count := int(binary.BigEndian.Uint32(data[128:]))
+	count := intconv.Clamp(binary.BigEndian.Uint32(data[128:]))
 	sigs := make([]string, 0, count)
 	for i := range count {
 		sig := string(data[132+12*i : 136+12*i])
@@ -188,20 +190,20 @@ func mlucText(b []byte) (string, error) {
 		return "", nil
 	}
 	pick := 0
-	for i := range int(count) {
-		if string(b[16+i*int(size):][:2]) == "en" {
+	for i := range intconv.Clamp(count) {
+		if string(b[16+i*intconv.Clamp(size):][:2]) == "en" {
 			pick = i
 			break
 		}
 	}
-	rec := b[16+pick*int(size):]
+	rec := b[16+pick*intconv.Clamp(size):]
 	length, offset := binary.BigEndian.Uint32(rec[4:]), binary.BigEndian.Uint32(rec[8:])
 	if uint64(offset)+uint64(length) > uint64(len(b)) || length%2 != 0 {
 		return "", fmt.Errorf("%w: multiLocalizedUnicode record past its tag", ErrMalformed)
 	}
 	units := make([]uint16, length/2)
 	for i := range units {
-		units[i] = binary.BigEndian.Uint16(b[int(offset)+2*i:])
+		units[i] = binary.BigEndian.Uint16(b[intconv.Clamp(offset)+2*i:])
 	}
 	return string(utf16.Decode(units)), nil
 }

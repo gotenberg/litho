@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxCurveEntries bounds a sampled curve. It is an anti-DoS guard, not
@@ -89,10 +91,10 @@ func readCurve(b []byte) (curve, int, error) {
 	switch string(b[:4]) {
 	case "curv":
 		n := binary.BigEndian.Uint32(b[8:])
-		if n > maxCurveEntries || 12+2*int(n) > len(b) {
+		if n > maxCurveEntries || 12+2*intconv.Clamp(n) > len(b) {
 			return nil, 0, fmt.Errorf("%w: curve of %d entries", ErrMalformed, n)
 		}
-		size := 12 + 2*int(n)
+		size := 12 + 2*intconv.Clamp(n)
 		switch n {
 		case 0:
 			return sampled(nil), size, nil

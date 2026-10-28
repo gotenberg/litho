@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
 	"github.com/gotenberg/litho/pkg/internal/imagetiles"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // lossyFormLevels is how many form XObjects [EncodeBlankedPhotographs] puts
@@ -191,13 +192,18 @@ func encodeBlankedPhotograph(ctx context.Context, alloc *writer.ObjAllocator, do
 	if err != nil {
 		return false, fmt.Errorf("decoding the blanked samples: %w", err)
 	}
-	pixels := int(w) * int(h)
+	// Bounded by the samples before the product, which a crafted size would
+	// otherwise overflow to 0 and divide by.
+	if int64(w) > int64(len(samples))/int64(h) {
+		return keep("its samples are not 1, 3 or 4 components a pixel")
+	}
+	pixels := int(w) * int(h) // fits int: at most len(samples), checked above
 	comps := len(samples) / pixels
 	if (comps != 1 && comps != 3 && comps != 4) || len(samples) != comps*pixels {
 		return keep("its samples are not 1, 3 or 4 components a pixel")
 	}
 
-	px := image.Rect(0, 0, int(w), int(h))
+	px := image.Rect(0, 0, intconv.Clamp(w), intconv.Clamp(h))
 	var reach []image.Rectangle
 	for _, r := range photo.Reach {
 		if wide := r.Inset(-imagetiles.UnderlayBand).Intersect(px); !wide.Empty() {
@@ -265,10 +271,10 @@ func encodeBlankedPhotograph(ctx context.Context, alloc *writer.ObjAllocator, do
 				"Subtype": ast.PdfName("Form"),
 				"BBox":    clipFreeBox(),
 				"Matrix": ast.PdfArray{
-					unitFraction(t.Px.Dx(), int(w)), ast.PdfInt(0), ast.PdfInt(0),
-					unitFraction(t.Px.Dy(), int(h)),
-					unitFraction(t.Px.Min.X, int(w)),
-					unitFraction(int(h)-t.Px.Max.Y, int(h)),
+					unitFraction(t.Px.Dx(), intconv.Clamp(w)), ast.PdfInt(0), ast.PdfInt(0),
+					unitFraction(t.Px.Dy(), intconv.Clamp(h)),
+					unitFraction(t.Px.Min.X, intconv.Clamp(w)),
+					unitFraction(intconv.Clamp(h)-t.Px.Max.Y, intconv.Clamp(h)),
 				},
 				"Resources": ast.PdfDict{"XObject": ast.PdfDict{"I": ref}},
 			}, []byte("/I Do")))

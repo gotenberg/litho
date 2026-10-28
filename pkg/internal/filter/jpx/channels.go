@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Enumerated colour spaces, T.800 Table I.10. ISO/IEC 15444-2, Table M.25
@@ -85,7 +87,7 @@ func rankColours(specs []colourSpec) []Colour {
 	for i, c := range ranked {
 		switch c.Method {
 		case methodEnumerated:
-			colours[i].Enumerated = int(c.EnumCS)
+			colours[i].Enumerated = intconv.Clamp(c.EnumCS)
 			colours[i].Lab = c.lab
 		case methodICC, methodAnyICC:
 			colours[i].ICC = c.profile

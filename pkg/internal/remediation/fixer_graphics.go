@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 func matchGraphics(v compliance.Violation) bool {
@@ -626,7 +627,7 @@ func normalizeHalftone(ctx context.Context, doc *document.Document, htObj ast.Pd
 	if htTypeObj, ok := newDict["HalftoneType"]; ok {
 		switch t := htTypeObj.(type) {
 		case ast.PdfInt:
-			htType = int(t)
+			htType = intconv.Clamp(t)
 		case ast.PdfReal:
 			htType = int(t)
 		}

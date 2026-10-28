@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // The /Ff bits of a seed value dictionary that make an entry a requirement
@@ -560,7 +561,7 @@ func hasKidFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 // seedInt returns obj as an integer, 0 when it is none.
 func seedInt(ctx context.Context, doc *document.Document, obj ast.PdfObject) int {
 	if n, ok := resolved(ctx, doc, obj).(ast.PdfInt); ok {
-		return int(n)
+		return intconv.Clamp(n)
 	}
 	return 0
 }

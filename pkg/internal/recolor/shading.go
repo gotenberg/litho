@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxStitchDepth bounds how deep [session.resampleFunction] keeps the
@@ -107,7 +108,7 @@ func (s *session) convertShading(ctx context.Context, resolved ast.PdfObject) (a
 		}
 		out["Function"] = fn
 	case kind >= 4 && kind <= 7 && isStream:
-		converted, decode, err := s.convertMesh(ctx, int(kind), dict, stream, p)
+		converted, decode, err := s.convertMesh(ctx, intconv.Clamp(kind), dict, stream, p)
 		if err != nil {
 			return nil, false, err
 		}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // resolvePatternType looks up a pattern name in the current resources and
@@ -63,7 +64,7 @@ func classifyPattern(ctx context.Context, doc *document.Document, dict ast.PdfDi
 	}
 
 	if ptInt, ok := ptRes.(ast.PdfInt); ok {
-		switch int(ptInt) {
+		switch intconv.Clamp(ptInt) {
 		case 1:
 			return "Tiling"
 		case 2:

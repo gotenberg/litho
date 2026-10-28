@@ -6,6 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Line cap styles, ISO 32000-1, 8.4.3.3, Table 54.
@@ -118,7 +119,7 @@ func handleLineCap(_ context.Context, _ *Machine, state *State, op content.Opera
 // keeps a shape the spec defines.
 func setLineCap(state *State, obj ast.PdfObject) {
 	if v, ok := obj.(ast.PdfInt); ok && v >= LineCapButt && v <= LineCapProjecting {
-		state.LineCap = int(v)
+		state.LineCap = intconv.Clamp(v)
 	}
 }
 
@@ -133,7 +134,7 @@ func handleLineJoin(_ context.Context, _ *Machine, state *State, op content.Oper
 // a value outside them leaves the style unchanged, as [setLineCap] does.
 func setLineJoin(state *State, obj ast.PdfObject) {
 	if v, ok := obj.(ast.PdfInt); ok && v >= LineJoinMiter && v <= LineJoinBevel {
-		state.LineJoin = int(v)
+		state.LineJoin = intconv.Clamp(v)
 	}
 }
 
@@ -313,7 +314,7 @@ func (m *Machine) applyExtGState(ctx context.Context, state *State, gs ast.PdfDi
 		state.FillOverprint = v
 	}
 	if v, ok := resolved("OPM").(ast.PdfInt); ok && (v == 0 || v == 1) {
-		state.OverprintMode = int(v)
+		state.OverprintMode = intconv.Clamp(v)
 	}
 	if font, ok := resolved("Font").(ast.PdfArray); ok && len(font) == 2 {
 		if size, ok := document.Number(font[1]); ok {

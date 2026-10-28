@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"unicode/utf16"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxXMPDepth caps the element nesting level while walking XMP. Anti-DoS
@@ -86,7 +88,7 @@ func findXMPProperty(xmp []byte, nsURI, localName string) xmpPropertyLocation {
 		}
 
 		// Attribute form: ` pdfaid:conformance="..."` on the start tag.
-		if attrLoc, found := findAttributeRange(xmp, int(startOff), int(endOff), nsURI, localName); found {
+		if attrLoc, found := findAttributeRange(xmp, intconv.Clamp(startOff), intconv.Clamp(endOff), nsURI, localName); found {
 			return attrLoc
 		}
 
@@ -229,7 +231,7 @@ func findChildElementRange(dec *xml.Decoder, xmp []byte, descName xml.Name, nsUR
 				// so the byte offset of the child element's closing
 				// tag is known.
 				if endOff, ok := consumeElement(dec, t.Name); ok {
-					spliceStart := int(tokStart)
+					spliceStart := intconv.Clamp(tokStart)
 					// Expand backwards to include the indentation and
 					// any preceding \n so the removed slice is a clean
 					// line (or segment) removal.
@@ -283,7 +285,7 @@ func consumeElement(dec *xml.Decoder, name xml.Name) (int, bool) {
 		case xml.EndElement:
 			depth--
 			if depth == 0 && t.Name == name {
-				return int(dec.InputOffset()), true
+				return intconv.Clamp(dec.InputOffset()), true
 			}
 		}
 	}
@@ -797,7 +799,7 @@ func findRDFDescriptionOpenRange(xmp []byte) (int, int, error) {
 			continue
 		}
 		if isRDFDescription(startElem.Name) {
-			return int(tokStart), int(tokEnd), nil
+			return intconv.Clamp(tokStart), intconv.Clamp(tokEnd), nil
 		}
 	}
 }
@@ -837,7 +839,7 @@ func findRDFDescriptionCloseOffset(xmp []byte) (int, error) {
 			}
 			depth--
 			if depth == 0 && isRDFDescription(t.Name) {
-				return int(tokStart), nil
+				return intconv.Clamp(tokStart), nil
 			}
 		}
 	}

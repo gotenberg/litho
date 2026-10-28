@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Annotation flag bit constants from PDF Reference, Table 165.
@@ -322,7 +323,7 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 			return nil
 		}
 
-		f := int(flags)
+		f := intconv.Clamp(flags)
 		return checkFlagValues1(f, loc)
 	}
 
@@ -342,7 +343,7 @@ func checkAnnotFlags(ctx context.Context, doc *document.Document, annot ast.PdfD
 		return nil
 	}
 
-	f := int(flags)
+	f := intconv.Clamp(flags)
 	return checkFlagValues2Plus(f, part, loc)
 }
 

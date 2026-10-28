@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxSpaceDepth bounds how deep colour space definitions nest: a Pattern
@@ -438,7 +439,7 @@ func (s *session) readICC(ctx context.Context, arr ast.PdfArray, depth int, role
 		return &spacePlan{kind: planUnknown, err: fmt.Errorf("%w: ICCBased stream: %w", ErrUnsupportedSpace, err)}
 	}
 	nv, err := document.ResolveInt(ctx, s.doc, stream.Dict["N"])
-	n := int(nv)
+	n := intconv.Clamp(nv)
 	if err != nil || (n != 1 && n != 3 && n != 4) {
 		return &spacePlan{kind: planUnknown, err: fmt.Errorf("%w: ICCBased /N %d", ErrUnsupportedSpace, n)}
 	}
@@ -550,7 +551,7 @@ func (s *session) planIndexed(ctx context.Context, arr ast.PdfArray, depth int) 
 		return &spacePlan{kind: planUnknown, n: 1, err: fmt.Errorf("%w: Indexed base: %v", ErrUnsupportedSpace, base.err)}
 	}
 	hv, err := document.ResolveInt(ctx, s.doc, arr[2])
-	hival := int(hv)
+	hival := intconv.Clamp(hv)
 	if err != nil || hival < 0 || hival > maxIndexedHival {
 		return &spacePlan{kind: planUnknown, n: 1, err: fmt.Errorf("%w: Indexed hival %d", ErrUnsupportedSpace, hival)}
 	}

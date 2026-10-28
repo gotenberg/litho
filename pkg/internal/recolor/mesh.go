@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // meshComponentBits is the depth a converted mesh writes its colour
@@ -82,7 +83,7 @@ func (s *session) meshInt(ctx context.Context, dict ast.PdfDict, key ast.PdfName
 	v, err := document.ResolveInt(ctx, s.doc, dict[key])
 	if err == nil {
 		for _, a := range allowed {
-			if int(v) == a {
+			if intconv.Clamp(v) == a {
 				return a, nil
 			}
 		}

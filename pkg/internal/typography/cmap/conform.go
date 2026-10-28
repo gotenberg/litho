@@ -183,7 +183,7 @@ func conformEntries(entries []bfRangeEntry) ([]bfRangeEntry, bool) {
 // Every run starts from the destination [Parse] reaches at that code, so the
 // runs map exactly what e does.
 func appendConformingRuns(out []bfRangeEntry, e bfRangeEntry) []bfRangeEntry {
-	count := int(e.hi-e.lo) + 1 //nolint:gosec // e.hi-e.lo < maxRangeEntries, checked by conformEntries.
+	count := int(e.hi-e.lo) + 1 //nolint:gosec // fits int: e.hi-e.lo < maxRangeEntries, checked by conformEntries.
 	if e.isArray {
 		// Parse maps no code past the array's end, so the runs stop there.
 		count = min(count, len(e.dstArr))

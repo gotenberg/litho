@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/filter/mq"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxPatterns bounds the patterns one pattern dictionary may define. It is an
@@ -55,12 +56,12 @@ func decodePatternDict(ctx context.Context, seg segment, b *budget) (*patternDic
 	var err error
 	if mmr {
 		// The data length is known, so EOFB may be absent (6.2.6).
-		collective, err = decodeMMR(ctx, int(total), int(height), data)
+		collective, err = decodeMMR(ctx, intconv.Clamp(total), intconv.Clamp(height), data)
 	} else {
 		// Table 27: AT pixel A1 sits one pattern to the left, the others at
 		// their nominal places.
-		p := genericParams{width: int(total), height: int(height), template: template}
-		p.at = [4][2]int{{-int(width), 0}, {-3, -1}, {2, -2}, {-2, -2}}
+		p := genericParams{width: intconv.Clamp(total), height: intconv.Clamp(height), template: template}
+		p.at = [4][2]int{{-intconv.Clamp(width), 0}, {-3, -1}, {2, -2}, {-2, -2}}
 		collective, err = decodeGeneric(ctx, p, mq.NewDecoder(data), make([]mq.Context, genericContexts(template)))
 	}
 	if err != nil {
@@ -134,7 +135,7 @@ func decodeHalftone(ctx context.Context, seg segment, dict *patternDict, b *budg
 	if err := b.chargeBuffer(h.info.width, h.info.height); err != nil {
 		return nil, regionInfo{}, err
 	}
-	region, err := newBitmap(int(h.info.width), int(h.info.height))
+	region, err := newBitmap(intconv.Clamp(h.info.width), intconv.Clamp(h.info.height))
 	if err != nil {
 		return nil, regionInfo{}, err
 	}
@@ -159,14 +160,14 @@ func decodeHalftone(ctx context.Context, seg segment, dict *patternDict, b *budg
 	var skip *Bitmap
 	if h.enableSkip {
 		// 6.6.5.1: skip every cell whose pattern would fall wholly outside.
-		if skip, err = newBitmap(int(h.gridW), int(h.gridH)); err != nil {
+		if skip, err = newBitmap(intconv.Clamp(h.gridW), intconv.Clamp(h.gridH)); err != nil {
 			return nil, regionInfo{}, err
 		}
 		for mg := range h.gridH {
 			for ng := range h.gridW {
 				x, y := cell(ng, mg)
 				if x+pw <= 0 || x >= h.info.width || y+ph <= 0 || y >= h.info.height {
-					skip.setPixel(int(ng), int(mg), 1)
+					skip.setPixel(intconv.Clamp(ng), intconv.Clamp(mg), 1)
 				}
 			}
 		}
@@ -174,7 +175,7 @@ func decodeHalftone(ctx context.Context, seg segment, dict *patternDict, b *budg
 
 	bits := symbolCodeLen(len(dict.patterns))
 	gray, err := decodeGrayScale(ctx, grayParams{
-		width: int(h.gridW), height: int(h.gridH), bits: bits,
+		width: intconv.Clamp(h.gridW), height: intconv.Clamp(h.gridH), bits: bits,
 		mmr: h.mmr, template: h.template, skip: skip,
 	}, seg.data[h.dataStart:], b)
 	if err != nil {

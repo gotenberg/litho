@@ -78,7 +78,7 @@ func (r *lzwReader) readCode() (int, error) {
 	}
 
 	r.nBits -= uint(r.codeWidth)                            //nolint:gosec // codeWidth is 9–12
-	code := int(r.bits>>r.nBits) & ((1 << r.codeWidth) - 1) //nolint:gosec // masked to codeWidth bits
+	code := int(r.bits>>r.nBits) & ((1 << r.codeWidth) - 1) //nolint:gosec // fits int: masked to codeWidth bits
 	return code, nil
 }
 

@@ -48,7 +48,7 @@ func (r *bitReader) bit() int {
 	if r.n == 0 {
 		r.fill()
 	}
-	b := int(r.acc >> 31)
+	b := int(r.acc >> 31) // fits int: one bit
 	r.acc <<= 1
 	r.n--
 	return b
@@ -59,7 +59,7 @@ func (r *bitReader) bits(n int) int {
 	if r.n < n {
 		r.fill()
 	}
-	v := int(r.acc >> (32 - n))
+	v := int(r.acc >> (32 - n)) // fits int: at most 16 bits
 	r.acc <<= n
 	r.n -= n
 	return v

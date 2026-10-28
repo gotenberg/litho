@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"sync/atomic"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/panicerr"
 )
 
@@ -114,7 +115,7 @@ func forEach(ctx context.Context, n, nw int, work func(w, i int) error) error {
 				ch <- res
 			}()
 			for {
-				item = int(next.Add(1) - 1)
+				item = intconv.Clamp(next.Add(1) - 1)
 				if item >= n || int64(item) > failed.Load() {
 					return
 				}

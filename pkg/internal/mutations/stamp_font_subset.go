@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
@@ -359,7 +360,7 @@ func findTableOffset(data []byte, tag string) int {
 	for i := range numTables {
 		rec := data[12+i*16 : 12+(i+1)*16]
 		if string(rec[0:4]) == tag {
-			return int(binary.BigEndian.Uint32(rec[8:12]))
+			return intconv.Clamp(binary.BigEndian.Uint32(rec[8:12]))
 		}
 	}
 	return -1

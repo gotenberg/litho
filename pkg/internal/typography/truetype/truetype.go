@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 const (
@@ -357,7 +359,7 @@ func parseCmap(ctx context.Context, data []byte) (map[uint16]rune, error) {
 		}
 	}
 
-	if int(best.offset) >= len(data) {
+	if intconv.Clamp(best.offset) >= len(data) {
 		return nil, fmt.Errorf("%w: cmap subtable offset out of bounds", ErrInvalidFont)
 	}
 
@@ -480,7 +482,7 @@ func parseCmapFormat4(ctx context.Context, data []byte) (map[uint16]rune, error)
 			} else {
 				// Index into glyphIdArray:
 				// rangeOff/2 + (code - startCode) + &idRangeOffset[i] - &idRangeOffset[0]
-				glyphIdx := int(rangeOff)/2 + int(code) - int(startCode) + i
+				glyphIdx := int(rangeOff)/2 + intconv.Clamp(code) - int(startCode) + i
 				byteOff := idRangeOffsetOff + glyphIdx*2
 				if byteOff+2 > len(data) {
 					continue
@@ -510,7 +512,7 @@ func parseCmapFormat12(ctx context.Context, data []byte) (map[uint16]rune, error
 		return nil, fmt.Errorf("%w: format 12 header too short", ErrInvalidFont)
 	}
 
-	numGroups := int(binary.BigEndian.Uint32(data[12:16]))
+	numGroups := intconv.Clamp(binary.BigEndian.Uint32(data[12:16]))
 	if len(data) < 16+numGroups*12 {
 		return nil, fmt.Errorf("%w: format 12 data truncated", ErrInvalidFont)
 	}

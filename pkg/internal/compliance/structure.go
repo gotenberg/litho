@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // standardStructTypesPDF17 is the vocabulary of the PDF 1.7 standard structure
@@ -1649,7 +1650,7 @@ func ownedAttributeInt(ctx context.Context, doc *document.Document, obj ast.PdfO
 			continue
 		}
 		if v, verr := document.ResolveInt(ctx, doc, d[key]); verr == nil && v > 0 {
-			return int(v), true
+			return intconv.Clamp(v), true
 		}
 	}
 	return 0, false

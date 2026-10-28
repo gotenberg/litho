@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // matchDeviceNColorants matches PDF/A-2/3/4 §6.2.4.4 violations about
@@ -266,7 +267,7 @@ func colorSpaceComponents(ctx context.Context, doc *document.Document, csObj ast
 		if err != nil || n < 1 || n > defaultComponents {
 			return defaultComponents
 		}
-		return int(n)
+		return intconv.Clamp(n)
 	}
 	return defaultComponents
 }

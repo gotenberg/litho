@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/imgpaint"
 )
 
@@ -82,7 +83,7 @@ func (im *Images) convertPixels(ctx context.Context, label ast.PdfName, stream a
 		if err != nil {
 			return stream, ImageUnchanged, fmt.Errorf("%w: /BitsPerComponent: %w", ErrImageNotConverted, err)
 		}
-		bpc = int(v)
+		bpc = intconv.Clamp(v)
 	}
 	if out, ok, err := im.convertToIndexed(ctx, stream, sp, resources, page, inline, filterName, width, height, bpc); err != nil {
 		return stream, ImageUnchanged, err
@@ -175,7 +176,7 @@ func (im *Images) dimensions(ctx context.Context, dict ast.PdfDict) (int, int, e
 	if w <= 0 || h <= 0 || int64(w) > maxPixels/int64(h) {
 		return 0, 0, fmt.Errorf("%w: %dx%d pixels, past the image budget of %d", ErrImageNotConverted, w, h, maxPixels)
 	}
-	return int(w), int(h), nil
+	return intconv.Clamp(w), intconv.Clamp(h), nil
 }
 
 // measureDCT takes a JPEG's component count from its decoded samples, as
@@ -321,7 +322,7 @@ func (im *Images) rewriteMasks(ctx context.Context, label ast.PdfName, dict ast.
 		if err != nil {
 			return fmt.Errorf("%w: colour-key range %d: %w", ErrImageNotConverted, i, err)
 		}
-		keys[i] = int(n)
+		keys[i] = intconv.Clamp(n)
 	}
 	plane, err := imgpaint.ColorKey(raw.data, raw.width, raw.height, raw.comps, raw.bpc, keys, im.doc.Limits().MaxImagePixels)
 	if err != nil {
@@ -436,7 +437,7 @@ func (p *pixelConverter) run(ctx context.Context) ([]byte, error) {
 			if useMemo {
 				// The key is stored plus one so the zero key is told from
 				// an empty slot.
-				slot := int((key * memoMultiplier) >> shift) //nolint:gosec // Below 1 << memoBits.
+				slot := int((key * memoMultiplier) >> shift) //nolint:gosec // fits int: below 1 << memoBits.
 				if memoKeys[slot] == key+1 {
 					copy(px, memoVals[slot*pixelBytes:(slot+1)*pixelBytes])
 					continue

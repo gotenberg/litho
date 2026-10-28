@@ -52,7 +52,7 @@ func (s *bcmapStream) readCount() (int, error) {
 	if n > int64(len(s.data)-s.pos) {
 		return 0, fmt.Errorf("a count of %d past the %d bytes left: %w", n, len(s.data)-s.pos, errUnexpectedBCMapEnd)
 	}
-	return int(n), nil
+	return int(n), nil // fits int: at most len(s.data), checked above
 }
 
 // readSigned reads a zig-zag encoded signed integer built on top of readNumber.
@@ -228,7 +228,7 @@ func (s *bcmapStream) collectCIDChar(count, dataSize int, seq bool, dst map[int6
 			}
 			code += 1 + delta
 		}
-		dst[char] = int(code) //nolint:gosec // bundled CMaps hold CIDs below 65536 (ISO 32000-1, Annex C).
+		dst[char] = int(code) //nolint:gosec // fits int: bundled CMaps hold CIDs below 65536 (ISO 32000-1, Annex C).
 	}
 	return nil
 }
@@ -266,7 +266,7 @@ func (s *bcmapStream) collectCIDRange(count, dataSize int, seq bool, dst map[int
 			return err
 		}
 		for j := start; j <= end; j++ {
-			dst[j] = int(code + (j - start)) //nolint:gosec // bundled CMaps hold CIDs below 65536 (ISO 32000-1, Annex C).
+			dst[j] = int(code + (j - start)) //nolint:gosec // fits int: bundled CMaps hold CIDs below 65536 (ISO 32000-1, Annex C).
 		}
 		prevEnd = end
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
@@ -104,7 +105,7 @@ func (w *textStateWalk) step(op content.Operation) {
 	case "Tr":
 		if len(op.Operands) >= 1 {
 			if mode, ok := op.Operands[0].(ast.PdfInt); ok {
-				w.mode = int(mode)
+				w.mode = intconv.Clamp(mode)
 			}
 		}
 	}
@@ -1768,7 +1769,7 @@ func mcidActualTextCoverage(ctx context.Context, doc *document.Document, treeRoo
 	if err != nil || ptDict == nil {
 		return out
 	}
-	arr, err := document.ResolveArray(ctx, doc, numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool)))
+	arr, err := document.ResolveArray(ctx, doc, numberTreeLookupObj(ctx, doc, ptDict, intconv.Clamp(key), 0, make(map[int]bool)))
 	if err != nil {
 		return out
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // structTextKeys are the structure element entries that hold a copy of the text
@@ -263,7 +264,7 @@ func (s *structTextScrub) kids(ctx context.Context, kObj ast.PdfObject, pg, dept
 // reference, an object reference, or an element.
 func (s *structTextScrub) kid(ctx context.Context, kid ast.PdfObject, pg, depth int) contentSides {
 	if mcid, isInt := kid.(ast.PdfInt); isInt {
-		return s.mcid(int(mcid), pg)
+		return s.mcid(intconv.Clamp(mcid), pg)
 	}
 	return s.once(kid, pg, func() contentSides {
 		dict, err := resolveDictAllocFirst(ctx, s.alloc, s.doc, kid)
@@ -441,9 +442,9 @@ func pageParentTreeEntries(ctx context.Context, doc *document.Document, page *do
 		return nil, nil
 	}
 
-	value, err := document.LookupNumberTree(ctx, doc, parentTree, int(key))
+	value, err := document.LookupNumberTree(ctx, doc, parentTree, intconv.Clamp(key))
 	if err != nil {
-		return nil, fmt.Errorf("looking up /ParentTree entry %d: %w", int(key), err)
+		return nil, fmt.Errorf("looking up /ParentTree entry %d: %w", intconv.Clamp(key), err)
 	}
 	entries, err := document.ResolveArray(ctx, doc, value)
 	if err != nil {
@@ -498,7 +499,7 @@ func structElementsByMCID(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		for _, kid := range structKidListOnce(ctx, alloc, doc, kObj, visited) {
 			if mcid, isInt := kid.(ast.PdfInt); isInt {
 				if _, here := onPage(nil, pg); here && owner != nil {
-					add(int(mcid), owner)
+					add(intconv.Clamp(mcid), owner)
 				}
 				continue
 			}

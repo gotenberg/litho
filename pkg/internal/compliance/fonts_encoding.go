@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
@@ -1156,7 +1157,7 @@ func differencesGlyphNames(ctx context.Context, doc *document.Document, encDict 
 	for _, item := range diffArr {
 		switch v := item.(type) {
 		case ast.PdfInt:
-			code = int(v)
+			code = intconv.Clamp(v)
 		case ast.PdfName:
 			if code >= 0 && code <= 255 {
 				result[byte(code)] = string(v) //nolint:gosec // G115: code is bounded to 0..255 by the guard above.

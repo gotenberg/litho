@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // inlineImageCheckInterval is how many bytes of inline image data
@@ -343,7 +344,7 @@ func (r *inlineImages) scan(ctx context.Context, start int, length dataLength) (
 			}
 			return len(data), nil
 		}
-		from = max(start, start+int(length.n)-2)
+		from = max(start, start+intconv.Clamp(length.n)-2)
 	}
 	for j := from; j+2 < len(data); j++ {
 		if (j-from)%inlineImageCheckInterval == 0 && ctx.Err() != nil {
@@ -507,7 +508,7 @@ func (r *inlineImages) header(ctx context.Context, q int) *nextImage {
 	end := min(len(r.data), q+r.budget)
 	p := newParser(r.data[q:end], readOptions{})
 	dict, err := p.ParseInlineImageHeader(ctx)
-	read := int(p.Position())
+	read := intconv.Clamp(p.Position())
 	r.budget -= max(read, 1)
 	r.reach = max(r.reach, q+read)
 	if err != nil || p.Abandoned() {

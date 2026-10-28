@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -108,7 +109,7 @@ func New(ctx context.Context, doc *document.Document, obj ast.PdfObject, compone
 	if err != nil {
 		return nil, fmt.Errorf("%w: no /ShadingType: %w", ErrMalformed, err)
 	}
-	s := &Shading{kind: int(kind)}
+	s := &Shading{kind: intconv.Clamp(kind)}
 	if s.kind < 1 || s.kind > 7 {
 		return nil, fmt.Errorf("%w: /ShadingType %d", ErrUnsupportedType, s.kind)
 	}

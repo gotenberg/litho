@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // checkEncryptionPermissions validates PDF/UA-1 §7.16: if encrypted, the
@@ -58,9 +59,9 @@ func checkEncryptionPermissions(ctx context.Context, doc *document.Document, pro
 
 	// Bit 10 (1-indexed) = bit 9 (0-indexed) = 0x200.
 	const accessibilityBit = 1 << 9
-	if int(pVal)&accessibilityBit == 0 {
+	if intconv.Clamp(pVal)&accessibilityBit == 0 {
 		return failf(Rule_14289_1_7_16_t01,
-			"10th bit of /P (%d) is false, accessibility content extraction not permitted", int(pVal))
+			"10th bit of /P (%d) is false, accessibility content extraction not permitted", intconv.Clamp(pVal))
 	}
 
 	return nil

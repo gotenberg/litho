@@ -25,6 +25,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxIndexedHival is the largest /Indexed hival ISO 32000-1, 8.6.6.3 allows:
@@ -821,7 +822,7 @@ func locateInlineImage(ctx context.Context, data []byte, r content.ByteRange, di
 	if err != nil || !reflect.DeepEqual(got, dict) {
 		return inlineImageBytes{}, errInlineBytes
 	}
-	idEnd := start + int(p.Position())
+	idEnd := start + intconv.Clamp(p.Position())
 	keys := p.InlineImageKeys()
 
 	if other := ends.End(ctx, idEnd, dict); other != r.End {
@@ -853,7 +854,7 @@ func inlineImageKeyword(span []byte) (int, bool) {
 		if err != nil || tok.Type == lexer.TokenError || tok.Type == lexer.TokenEOF {
 			return 0, false
 		}
-		end := int(p.PeekEnd(0))
+		end := intconv.Clamp(p.PeekEnd(0))
 		if _, err := p.Consume(); err != nil {
 			return 0, false
 		}

@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // paintTransparency answers whether a page contains transparency, the
@@ -357,7 +358,7 @@ func (w *paintTransparency) streamOps(ctx context.Context, ops []content.Operati
 		case "Tr":
 			if len(op.Operands) >= 1 {
 				if mode, ok := op.Operands[0].(ast.PdfInt); ok {
-					st.textRender = int(mode)
+					st.textRender = intconv.Clamp(mode)
 				}
 			}
 		case "Tf":

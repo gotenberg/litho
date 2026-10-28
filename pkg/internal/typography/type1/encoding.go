@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // eexecMarker is the PostScript keyword that begins the encrypted
@@ -36,7 +38,7 @@ func parseCode(tok string) (int, error) {
 		return 0, fmt.Errorf("type1: radix %q out of range", base)
 	}
 	v, err := strconv.ParseInt(digits, b, 32)
-	return int(v), err
+	return intconv.Clamp(v), err
 }
 
 // namedEncodingRe captures the case where /Encoding references a

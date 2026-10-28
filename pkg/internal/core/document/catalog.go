@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Catalog represents the root node of the PDF document.
@@ -595,7 +596,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			}
 		}
 		if rotInt, ok := rotObj.(ast.PdfInt); ok {
-			currentRotate = int(rotInt)
+			currentRotate = intconv.Clamp(rotInt)
 		}
 	}
 

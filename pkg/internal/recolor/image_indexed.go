@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // convertIndexed converts an Indexed image by its colour table alone: the
@@ -82,7 +83,7 @@ func (im *Images) indexedSpace(ctx context.Context, sp imageSpace, resources, pa
 			return nil, fmt.Errorf("an inline image cannot name the target space")
 		}
 	}
-	entries := int(hival) + 1
+	entries := intconv.Clamp(hival) + 1
 	table, err := lookupTable(ctx, im.doc, sp.arr[3], entries*base.comps)
 	if err != nil {
 		return nil, err

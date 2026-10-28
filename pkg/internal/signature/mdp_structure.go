@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // annotationTagType returns the standard structure type that tags an
@@ -531,7 +532,7 @@ func (t *tagDiff) structParent(ctx context.Context, num int) (int, bool) {
 	}
 	key, err := document.ResolveObject(ctx, t.doc, annot["StructParent"])
 	if v, ok := key.(ast.PdfInt); err == nil && ok {
-		return int(v), true
+		return intconv.Clamp(v), true
 	}
 	return 0, false
 }

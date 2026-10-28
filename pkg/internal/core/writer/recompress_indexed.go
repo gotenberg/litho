@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxIndexedColors is the most colours an Indexed colour space can hold: its
@@ -154,9 +155,9 @@ func indexedForm(pending map[int]ast.PdfObject, dict ast.PdfDict, decoded []byte
 			nMasked++
 		}
 	}
-	palette := &indexedPalette{lookup: lookup, bits: indexBits(len(colors)), width: int(width)}
+	palette := &indexedPalette{lookup: lookup, bits: indexBits(len(colors)), width: intconv.Clamp(width)}
 	samples, ok := palette.indices(decoded)
-	if !ok || !bytes.Equal(palette.expand(samples, int(height)), decoded) {
+	if !ok || !bytes.Equal(palette.expand(samples, intconv.Clamp(height)), decoded) {
 		return sampleForm{}, false
 	}
 
@@ -176,7 +177,7 @@ func indexedForm(pending map[int]ast.PdfObject, dict ast.PdfDict, decoded []byte
 	return sampleForm{
 		samples: samples,
 		dict:    out,
-		layout:  &predictorLayout{colors: 1, bpc: palette.bits, columns: int(width)},
+		layout:  &predictorLayout{colors: 1, bpc: palette.bits, columns: intconv.Clamp(width)},
 		indexed: palette,
 	}, true
 }

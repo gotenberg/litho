@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 )
 
@@ -227,7 +228,7 @@ func repairKeptAnnot(dict ast.PdfDict, subtype ast.PdfName, plan removalPlan) (a
 		currentF := 0
 		fObj, hasF := dict["F"]
 		if fInt, isInt := fObj.(ast.PdfInt); isInt {
-			currentF = int(fInt)
+			currentF = intconv.Clamp(fInt)
 		}
 		if !hasF || currentF&annotFlagPrint == 0 || currentF&annotFlagsForbidden != 0 {
 			edit()

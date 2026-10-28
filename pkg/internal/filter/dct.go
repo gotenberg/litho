@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -39,7 +40,7 @@ func probeDCT(ctx context.Context, data []byte, _, dict ast.PdfDict, lim limits.
 // states none.
 func dctStatedHeight(dict ast.PdfDict) int {
 	if v, ok := dict["Height"].(ast.PdfInt); ok {
-		return int(v)
+		return intconv.Clamp(v)
 	}
 	return 0
 }
@@ -84,7 +85,7 @@ func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict, maxSam
 		// keeps its reading.
 		colorTransform := -1
 		if v, ok := parms["ColorTransform"].(ast.PdfInt); ok {
-			colorTransform = int(v)
+			colorTransform = intconv.Clamp(v)
 		}
 		out, _, _, _, lerr := dct.Decode(ctx, data, colorTransform, dctStatedHeight(dict), maxSamples)
 		if lerr == nil {

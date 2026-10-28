@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // csRef is a colour space a content stream selects, as the
@@ -291,7 +292,7 @@ func walkColorSpaceLinksWith(ctx context.Context, ops []content.Operation, entry
 		case "Tr":
 			if len(op.Operands) >= 1 {
 				if mode, ok := op.Operands[0].(ast.PdfInt); ok {
-					st.textRender = int(mode)
+					st.textRender = intconv.Clamp(mode)
 				}
 			}
 		case "Tf":

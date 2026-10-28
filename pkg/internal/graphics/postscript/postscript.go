@@ -480,10 +480,13 @@ func execOp(op string, stack *[]float64, _ []token) error {
 		}
 		val := int64(a)
 		shift := int64(b)
+		// A shift of 64 bits or more clears val left and fills it with its
+		// sign right; capping the count first keeps it within a 32-bit uint
+		// and -shift from overflowing.
 		if shift >= 0 {
-			*stack = append(*stack, float64(val<<uint(shift))) //nolint:gosec // Intentional PS bitshift semantics.
+			*stack = append(*stack, float64(val<<uint(min(shift, 64)))) //nolint:gosec // fits uint: at most 64.
 		} else {
-			*stack = append(*stack, float64(val>>uint(-shift))) //nolint:gosec // Intentional PS bitshift semantics.
+			*stack = append(*stack, float64(val>>uint(-max(shift, -64)))) //nolint:gosec // fits uint: at most 64.
 		}
 
 	// Boolean constants.

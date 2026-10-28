@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -283,7 +284,7 @@ func (m *mesh) readPatches(ctx context.Context, r *bitReader, p meshParams) erro
 		firstColor := 0
 		if flag != 0 {
 			prev := m.patches[len(m.patches)-1]
-			f := int(flag)
+			f := intconv.Clamp(flag)
 			for k := range 4 {
 				pt.p[boundary[k]] = prev.p[boundary[(3*f+k)%12]]
 			}
@@ -395,5 +396,5 @@ func intEntry(ctx context.Context, doc *document.Document, dict ast.PdfDict, key
 	if err != nil {
 		return 0, fmt.Errorf("%w: /%s: %w", ErrMalformed, key, err)
 	}
-	return int(v), nil
+	return intconv.Clamp(v), nil
 }

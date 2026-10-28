@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -309,9 +311,9 @@ func existingParentTreeNums(ctx context.Context, alloc *writer.ObjAllocator, doc
 		if !isInt {
 			return nil, 0, false
 		}
-		if int(key) >= nextKey {
-			nextKey = int(key) + 1
-		}
+		// Capped before the increment, so the largest key cannot wrap the
+		// next one negative.
+		nextKey = max(nextKey, intconv.Clamp(min(key, math.MaxInt64-1)+1))
 	}
 	return out, nextKey, true
 }

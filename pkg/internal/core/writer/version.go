@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // minXRefStreamVersion is the earliest PDF version that defines object streams
@@ -325,7 +326,7 @@ func mergeADBE(prior ast.PdfDict, baseVersion string, level int) ast.PdfDict {
 	}
 	merged["BaseVersion"] = ast.PdfName(base)
 
-	if n, ok := prior["ExtensionLevel"].(ast.PdfInt); ok && int(n) > level {
+	if n, ok := prior["ExtensionLevel"].(ast.PdfInt); ok && intconv.Clamp(n) > level {
 		merged["ExtensionLevel"] = n
 	} else {
 		merged["ExtensionLevel"] = ast.PdfInt(level)

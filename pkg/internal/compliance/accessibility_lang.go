@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // langTagAlphaNum and langTagAlphaOnly encode the two language-tag grammars the
@@ -520,7 +521,7 @@ func pageParentTreeEntries(ctx context.Context, doc *document.Document, parentTr
 	if err != nil {
 		return nil, true
 	}
-	return numberTreeLookup(ctx, doc, parentTree, int(key), 0, make(map[int]bool))
+	return numberTreeLookup(ctx, doc, parentTree, intconv.Clamp(key), 0, make(map[int]bool))
 }
 
 // checkLangRequired ensures the catalog has a /Lang key with a valid RFC 3066 tag.
@@ -762,7 +763,7 @@ func structElementLang(ctx context.Context, doc *document.Document, treeRoot, ob
 	if err != nil || ptDict == nil {
 		return ""
 	}
-	elem, err := document.ResolveDict(ctx, doc, numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool)))
+	elem, err := document.ResolveDict(ctx, doc, numberTreeLookupObj(ctx, doc, ptDict, intconv.Clamp(key), 0, make(map[int]bool)))
 	if err != nil || elem == nil {
 		return ""
 	}

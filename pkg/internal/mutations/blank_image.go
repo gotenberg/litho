@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maskEntries are the image dictionary entries that say which samples are
@@ -520,7 +521,7 @@ func blankDataSoftMask(
 	if errW != nil || errH != nil || w <= 0 || h <= 0 || w > math.MaxInt32 || h > math.MaxInt32 {
 		return nil, nil, fmt.Errorf("%w: %q: no image size for the soft mask of its data", ErrImageNotDecodable, box.Name)
 	}
-	m, err := pdfimage.ReadSMaskInData(ctx, doc, stream, int(w), int(h))
+	m, err := pdfimage.ReadSMaskInData(ctx, doc, stream, intconv.Clamp(w), intconv.Clamp(h))
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 	}
@@ -533,8 +534,8 @@ func blankDataSoftMask(
 		return nil, nil, fmt.Errorf("%w: %q carries a /Decode over colour premultiplied by its opacity",
 			ErrImageCarriesSampleEntries, box.Name)
 	}
-	gray := &image.Gray{Pix: slices.Clone(m.Alpha), Stride: int(w), Rect: image.Rect(0, 0, int(w), int(h))}
-	if _, err := forCoveredSamples(box, zones, int(w), int(h), func(px, py int) {
+	gray := &image.Gray{Pix: slices.Clone(m.Alpha), Stride: intconv.Clamp(w), Rect: image.Rect(0, 0, intconv.Clamp(w), intconv.Clamp(h))}
+	if _, err := forCoveredSamples(box, zones, intconv.Clamp(w), intconv.Clamp(h), func(px, py int) {
 		gray.Pix[gray.PixOffset(px, py)] = 0xff
 	}); err != nil {
 		return nil, nil, fmt.Errorf("%q: soft mask: %w", box.Name, err)
@@ -933,7 +934,7 @@ func touchedSamplesAlreadyBlank(
 		// The decode in blankImage rules on an image with no size.
 		return false, nil
 	}
-	centres, err := forCoveredSamples(box, zones, int(w), int(h), func(int, int) {})
+	centres, err := forCoveredSamples(box, zones, intconv.Clamp(w), intconv.Clamp(h), func(int, int) {})
 	if err != nil {
 		return false, fmt.Errorf("%q: %w", box.Name, err)
 	}

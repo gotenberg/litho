@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 func iccBasedProfileRule(part int) Rule {
@@ -198,7 +199,7 @@ func iccBasedComponents(ctx context.Context, doc *document.Document, arr ast.Pdf
 	if err != nil {
 		return 0
 	}
-	return int(n)
+	return intconv.Clamp(n)
 }
 
 // reportUnreadableICCN reports /N against a profile whose own component count
@@ -252,7 +253,7 @@ func checkICCBasedArray(ctx context.Context, doc *document.Document, arr ast.Pdf
 		doc.Logger.Debug("compliance.color: cannot decode ICCBased stream", "page", pageIdx, "where", where, "error", err)
 		*results = append(*results, failf(iccBasedProfileRule(part),
 			"page %d, %s: cannot decode ICCBased profile", pageIdx+1, where)...)
-		reportUnreadableICCN(nRule, int(nVal), pageIdx, where, results)
+		reportUnreadableICCN(nRule, intconv.Clamp(nVal), pageIdx, where, results)
 		return
 	}
 
@@ -260,7 +261,7 @@ func checkICCBasedArray(ctx context.Context, doc *document.Document, arr ast.Pdf
 	if !ok {
 		*results = append(*results, failf(iccBasedProfileRule(part),
 			"page %d, %s: ICC profile header too short", pageIdx+1, where)...)
-		reportUnreadableICCN(nRule, int(nVal), pageIdx, where, results)
+		reportUnreadableICCN(nRule, intconv.Clamp(nVal), pageIdx, where, results)
 		return
 	}
 
@@ -270,7 +271,7 @@ func checkICCBasedArray(ctx context.Context, doc *document.Document, arr ast.Pdf
 	}
 
 	expectedN := expectedComponentCount(hdr.colorSpace)
-	if nRule.Specification != "" && (expectedN == 0 || int(nVal) != expectedN) {
+	if nRule.Specification != "" && (expectedN == 0 || intconv.Clamp(nVal) != expectedN) {
 		*results = append(*results, failf(nRule,
 			"page %d, %s: /N=%d does not match ICC colour space %q", pageIdx+1, where, nVal, hdr.colorSpace)...)
 	}

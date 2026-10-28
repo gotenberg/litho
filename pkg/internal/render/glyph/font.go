@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
@@ -465,7 +466,7 @@ func (f *Font) selectEmbedded(code Code) (glyphRef, bool) {
 // 9.7.6.3).
 func (f *Font) cid(code Code) (int, bool) {
 	if f.cids == nil {
-		return int(code.Value), len(code.Bytes) == 2
+		return intconv.Clamp(code.Value), len(code.Bytes) == 2
 	}
 	decoded := f.cids.Decode(code.Bytes)
 	if len(decoded) == 0 {

@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxOverprintFormOps bounds the operations one session reads again to judge
@@ -158,7 +159,7 @@ func (cr *contentRewriter) applyGS(ctx context.Context, name ast.PdfName) {
 	}
 	if o, err := s.resolve(ctx, gs["OPM"]); err == nil {
 		if v, ok := o.(ast.PdfInt); ok && (v == 0 || v == 1) {
-			st.mode, st.site = int(v), gsSite{}
+			st.mode, st.site = intconv.Clamp(v), gsSite{}
 			if v == 1 {
 				if ref, ok := all[name].(ast.PdfIndirectRef); ok {
 					st.site.obj = ref.ObjectNum
@@ -494,7 +495,7 @@ func (cr *contentRewriter) type3Font(ctx context.Context, name ast.PdfName) (*ty
 	for _, o := range arr {
 		switch v := o.(type) {
 		case ast.PdfInt:
-			code = int(v)
+			code = intconv.Clamp(v)
 		case ast.PdfName:
 			if code >= 0 && code <= 0xff {
 				if ref, ok := procs[v].(ast.PdfIndirectRef); ok {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // resolveInt extracts an integer from a dictionary key, delegating resolution
@@ -20,7 +21,7 @@ func resolveInt(ctx context.Context, doc *document.Document, dict ast.PdfDict, k
 	if err != nil {
 		return 0, fmt.Errorf("key %s: %w", key, err)
 	}
-	return int(val), nil
+	return intconv.Clamp(val), nil
 }
 
 // resolveName extracts a name string from a dictionary key, delegating

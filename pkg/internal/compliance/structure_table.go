@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // validateTableContainment checks PDF/UA table containment rules.
@@ -373,7 +374,7 @@ func cellSpan(ctx context.Context, state *walkState, cell ast.PdfDict, key ast.P
 	aDict, err := document.ResolveDict(ctx, doc, aObj)
 	if err == nil && aDict != nil {
 		if v, _ := document.ResolveInt(ctx, doc, aDict[key]); v > 0 {
-			return int(v)
+			return intconv.Clamp(v)
 		}
 		return cellClassSpan(ctx, state, cell, key)
 	}
@@ -387,7 +388,7 @@ func cellSpan(ctx context.Context, state *walkState, cell ast.PdfDict, key ast.P
 			continue
 		}
 		if v, _ := document.ResolveInt(ctx, doc, d[key]); v > 0 {
-			return int(v)
+			return intconv.Clamp(v)
 		}
 	}
 	return cellClassSpan(ctx, state, cell, key)

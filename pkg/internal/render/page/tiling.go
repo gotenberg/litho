@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
@@ -114,7 +115,7 @@ func (r *renderer) compileTiling(obj ast.PdfObject) (*tilingPattern, error) {
 	if err != nil || (paint != paintTypeColoured && paint != paintTypeUncoloured) {
 		return nil, fmt.Errorf("tiling pattern /PaintType %d is neither 1 nor 2: %w", paint, err)
 	}
-	tp.paintType = int(paint)
+	tp.paintType = intconv.Clamp(paint)
 	box, ok := r.numberArray(dict["BBox"], 4)
 	if !ok {
 		return nil, errors.New("tiling pattern has no usable /BBox")
@@ -279,7 +280,7 @@ func (r *renderer) tilingSource(s *scope, tp *tilingPattern, resources ast.PdfDi
 		if tw*th < area && tw*th <= cacheCap {
 			ox, oy := math.Floor(o.X), math.Floor(o.Y)
 			toTile := p.Mul(geom.Matrix{1, 0, 0, 1, -ox, -oy})
-			tile, release, err := r.tile(s, tp, resources, toTile, int(tw), int(th))
+			tile, release, err := r.tile(s, tp, resources, toTile, intconv.Clamp(tw), intconv.Clamp(th))
 			if err != nil || tile == nil {
 				return nil, err
 			}

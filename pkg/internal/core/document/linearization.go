@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // LinearizationParams holds the parameters extracted from a Linearization
@@ -114,12 +115,12 @@ func probeLinearization(r io.ReaderAt, fileSize, headerOffset int64) *Linearizat
 
 	// /O: first page object number.
 	if oObj, ok := linDict["O"]; ok {
-		params.FirstPageObjNum = int(pdfToInt64(oObj))
+		params.FirstPageObjNum = intconv.Clamp(pdfToInt64(oObj))
 	}
 
 	// /N: number of pages.
 	if nObj, ok := linDict["N"]; ok {
-		params.NumPages = int(pdfToInt64(nObj))
+		params.NumPages = intconv.Clamp(pdfToInt64(nObj))
 	}
 
 	// /E: end of first page section.
@@ -244,15 +245,12 @@ func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) 
 	br := newBitReader(data)
 
 	// Read header fields.
-	//nolint:gosec // Bit-field widths are bounded by the PDF spec; overflow is not possible.
-	minObjsPerPage := int(br.readBits(32))
+	minObjsPerPage := intconv.Clamp(br.readBits(32))
 	_ = br.readBits(32) // location of first page's objects (item 2)
-	//nolint:gosec // 16-bit field.
-	bitsObjCountDelta := int(br.readBits(16))
+	bitsObjCountDelta := intconv.Clamp(br.readBits(16))
 	//nolint:gosec // 32-bit field fits in int64.
 	minPageLength := int64(br.readBits(32))
-	//nolint:gosec // 16-bit field.
-	bitsPageLenDelta := int(br.readBits(16))
+	bitsPageLenDelta := intconv.Clamp(br.readBits(16))
 	_ = br.readBits(32) // min content stream offset (item 6)
 	_ = br.readBits(16) // bits for content offset delta (item 7)
 	_ = br.readBits(32) // min content stream length (item 8)
@@ -272,7 +270,7 @@ func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) 
 	for i := range numPages {
 		delta := 0
 		if bitsObjCountDelta > 0 {
-			delta = int(br.readBits(bitsObjCountDelta)) //nolint:gosec // Bounded by bitsObjCountDelta.
+			delta = intconv.Clamp(br.readBits(bitsObjCountDelta))
 		}
 		entries[i].ObjCount = minObjsPerPage + delta
 	}

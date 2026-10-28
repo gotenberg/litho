@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 func matchFormTooltip(v compliance.Violation) bool {
@@ -113,7 +114,7 @@ func enclosingAlt(ctx context.Context, doc *document.Document, parentTree ast.Pd
 	if err != nil {
 		return "", false
 	}
-	elemObj, err := document.LookupNumberTree(ctx, doc, parentTree, int(key))
+	elemObj, err := document.LookupNumberTree(ctx, doc, parentTree, intconv.Clamp(key))
 	if err != nil || elemObj == nil {
 		return "", false
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 func outputIntentICCRule(part int) Rule {
@@ -205,7 +206,7 @@ func checkOutputIntentProfileComponents(ctx context.Context, doc *document.Docum
 	}
 
 	want, known := iccColorSpaceComponents[hdr.colorSpace]
-	if !known || int(nVal) != want {
+	if !known || intconv.Clamp(nVal) != want {
 		*results = append(*results, failf(rule,
 			"%s: /DestOutputProfile states /N %d for ICC colour space %q", label, nVal, hdr.colorSpace)...)
 	}

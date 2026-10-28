@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
@@ -338,7 +339,7 @@ func (w *walk) differences(font node) map[byte]string {
 	for _, elem := range w.g.elements(diffs) {
 		switch v := elem.val.(type) {
 		case ast.PdfInt:
-			code = int(v)
+			code = intconv.Clamp(v)
 		case ast.PdfName:
 			if code >= 0 && code <= 0xFF {
 				out[byte(code)] = string(v)
@@ -466,7 +467,7 @@ func (w *walk) cidsShown(ctx context.Context, top node, use *fontUse) (map[int]b
 				// A value past int names no CID a font holds (CIDs stop at
 				// 65535, ISO 32000-1, Annex C), and only a 32-bit int is short.
 				if v <= math.MaxInt {
-					cids[int(v)] = true
+					cids[int(v)] = true // fits int: checked above
 				}
 				if cid, ok := m.MappedCID(v); ok {
 					cids[cid] = true

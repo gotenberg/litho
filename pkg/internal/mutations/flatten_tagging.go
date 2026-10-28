@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Field flags of a button field (ISO 32000-1, Table 226): bit 16 is Radio and
@@ -678,7 +679,7 @@ func intEntry(ctx context.Context, doc *document.Document, obj ast.PdfObject) (i
 		return 0, false
 	}
 	i, ok := resolved.(ast.PdfInt)
-	return int(i), ok
+	return intconv.Clamp(i), ok
 }
 
 // collectObjectRefOwners records, for each object an /OBJR kid references (ISO

@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxStructKey is the highest /StructParents or /StructParent key an output
@@ -611,9 +612,9 @@ func (t *structOutput) settle(ctx context.Context, s *structSource) error {
 		for _, num := range copiedObjects(s.copier, s.pageRefs) {
 			dict := structKeysOf(t.alloc, num)
 			for _, entry := range structKeyEntries {
-				if key, isInt := dict[entry].(ast.PdfInt); isInt && key >= 0 && !seen[int(key)] {
-					seen[int(key)] = true
-					fresh = append(fresh, int(key))
+				if key, isInt := dict[entry].(ast.PdfInt); isInt && key >= 0 && !seen[intconv.Clamp(key)] {
+					seen[intconv.Clamp(key)] = true
+					fresh = append(fresh, intconv.Clamp(key))
 				}
 			}
 		}
@@ -656,11 +657,13 @@ func (t *structOutput) settle(ctx context.Context, s *structSource) error {
 			if !isInt {
 				continue
 			}
-			if key < 0 || base+int(key) > maxStructKey {
+			// Compared in PdfInt, so a key near the int range cannot wrap
+			// base+key below the bound.
+			if key < 0 || key > ast.PdfInt(maxStructKey-base) {
 				delete(dict, entry)
 				continue
 			}
-			dict[entry] = ast.PdfInt(base + int(key))
+			dict[entry] = ast.PdfInt(base) + key
 		}
 	}
 	t.nextKey = min(base+maxKey+1, maxStructKey)

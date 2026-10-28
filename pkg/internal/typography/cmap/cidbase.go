@@ -46,7 +46,7 @@ func (m *CIDMap) mappedCID(code int64) (int, bool) {
 	}
 	for _, s := range m.spans {
 		if code >= s.lo && code <= s.hi {
-			return s.cid + int(code-s.lo), true
+			return s.cid + int(code-s.lo), true // fits int: a span covers the 65536 codes of an Identity CMap
 		}
 	}
 	for _, b := range m.bases {
@@ -451,7 +451,7 @@ func (s *bcmapStream) collectNotdef(count, dataSize int, dst []notdefSpan) ([]no
 		if len(dst) >= maxNotdefEntries {
 			return nil, fmt.Errorf("more than %d notdef entries", maxNotdefEntries)
 		}
-		dst = append(dst, notdefSpan{lo: start, hi: end, cid: int(cid)}) //nolint:gosec // bundled CMaps hold CIDs below 65536 (ISO 32000-1, Annex C).
+		dst = append(dst, notdefSpan{lo: start, hi: end, cid: int(cid)}) //nolint:gosec // fits int: bundled CMaps hold CIDs below 65536 (ISO 32000-1, Annex C).
 	}
 	return dst, nil
 }

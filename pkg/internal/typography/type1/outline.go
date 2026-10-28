@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
@@ -768,8 +769,8 @@ func joinPFBSegments(data []byte) []byte {
 			out = append(out, data[pos:]...)
 			break
 		}
-		out = append(out, data[pos:pos+int(n)]...)
-		pos += int(n)
+		out = append(out, data[pos:pos+intconv.Clamp(n)]...)
+		pos += intconv.Clamp(n)
 	}
 	return out
 }

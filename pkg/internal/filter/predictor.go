@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // predictorParams holds the parameters extracted from a /DecodeParms dictionary
@@ -57,7 +58,7 @@ func extractPredictorParams(parms ast.PdfDict) *predictorParams {
 func pdfInt(obj ast.PdfObject) int {
 	switch v := obj.(type) {
 	case ast.PdfInt:
-		return int(v)
+		return intconv.Clamp(v)
 	case ast.PdfReal:
 		return int(v)
 	default:

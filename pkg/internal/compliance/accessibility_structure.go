@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // standardNamespaceURIs lists the namespace URIs that are "standard" per
@@ -1317,7 +1318,7 @@ func checkAnnotArtifactFlags(ctx context.Context, doc *document.Document, catalo
 			doc.Logger.Debug("compliance.accessibility: cannot resolve annotation flags", "error", err)
 			continue
 		}
-		f := int(flags)
+		f := intconv.Clamp(flags)
 
 		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 		loc := fmt.Sprintf("page %d, annot %d (%s)", pa.pageIdx+1, pa.annotIdx, subtype)

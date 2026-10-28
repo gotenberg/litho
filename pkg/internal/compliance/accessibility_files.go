@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // checkPDFUAFileSpecFUF validates that file specification dictionaries for embedded
@@ -306,7 +307,7 @@ func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.
 		// isOutsideCropBox == true.
 		flags, _ := document.ResolveInt(ctx, doc, annot["F"])
 		const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
-		if int(flags)&hiddenBit != 0 || isAnnotOutsideCropBox(ctx, doc, annot, pa.page) {
+		if intconv.Clamp(flags)&hiddenBit != 0 || isAnnotOutsideCropBox(ctx, doc, annot, pa.page) {
 			continue
 		}
 		// /Contents is a text string, judged by the text it decodes to: a byte
@@ -450,7 +451,7 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 		// probe veraPDF reported in full.
 		flags, _ := document.ResolveInt(ctx, doc, annot["F"])
 		const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
-		if int(flags)&hiddenBit != 0 {
+		if intconv.Clamp(flags)&hiddenBit != 0 {
 			continue
 		}
 		// A widget whose rectangle lies off the crop box of the page listing
@@ -501,7 +502,7 @@ func enclosingStructElemHasAlt(ctx context.Context, doc *document.Document, tree
 	if err != nil || ptDict == nil {
 		return false
 	}
-	elemObj := numberTreeLookupObj(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+	elemObj := numberTreeLookupObj(ctx, doc, ptDict, intconv.Clamp(key), 0, make(map[int]bool))
 	if elemObj == nil {
 		return false
 	}

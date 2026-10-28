@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -405,7 +406,7 @@ func isAnnotHidden(ctx context.Context, doc *document.Document, annot ast.PdfDic
 	if err != nil {
 		return false
 	}
-	return int(flags)&annotFlagHidden != 0
+	return intconv.Clamp(flags)&annotFlagHidden != 0
 }
 
 // isAnnotOutsideCropBox reports whether the annotation's /Rect lies entirely

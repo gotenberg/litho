@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
@@ -533,7 +534,7 @@ func readOffset(data []byte, size int) int {
 	case 3:
 		return int(data[0])<<16 | int(data[1])<<8 | int(data[2])
 	case 4:
-		return int(binary.BigEndian.Uint32(data[:4]))
+		return intconv.Clamp(binary.BigEndian.Uint32(data[:4]))
 	}
 	return 0
 }

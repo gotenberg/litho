@@ -1,6 +1,10 @@
 package xsd
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
+)
 
 // temporalKind names one of the eight date/time primitives of XML
 // Schema Part 2, 3.2.7 to 3.2.14. They share the dateTime value model
@@ -552,7 +556,7 @@ func (d durationValue) addTo(year int64, month int) instant {
 	}
 	months := int64(month-1) + sign*d.months
 	endYear := year + sign*d.years + floorDiv(months, 12)
-	endMonth := int(floorMod(months, 12)) + 1
+	endMonth := intconv.Clamp(floorMod(months, 12)) + 1
 	sec := daysFromCivil(endYear, endMonth, 1)*secondsPerDay +
 		sign*(d.days*secondsPerDay+d.hours*3600+d.minutes*60+d.seconds)
 	frac := d.frac

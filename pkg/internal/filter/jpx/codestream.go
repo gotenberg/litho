@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Marker codes, ITU-T T.800, Table A.2.
@@ -679,7 +681,7 @@ func (cs *codestream) parseTilePart(b []byte, off int, ppmData *[]byte, havePPM 
 		return 0, fmt.Errorf("%w: SOT marker segment of %d bytes", ErrMalformed, len(sot))
 	}
 	index := int(binary.BigEndian.Uint16(sot))
-	length := int(binary.BigEndian.Uint32(sot[2:]))
+	length := intconv.Clamp(binary.BigEndian.Uint32(sot[2:]))
 	if index >= len(cs.tiles) {
 		return 0, fmt.Errorf("%w: tile-part for tile %d of %d", ErrMalformed, index, len(cs.tiles))
 	}
@@ -759,7 +761,7 @@ func (cs *codestream) parseTilePart(b []byte, off int, ppmData *[]byte, havePPM 
 		if len(*ppmData) < 4 {
 			return 0, fmt.Errorf("%w: PPM holds no packet headers for tile-part %d of tile %d", ErrMalformed, t.parts-1, index)
 		}
-		n := int(binary.BigEndian.Uint32(*ppmData))
+		n := intconv.Clamp(binary.BigEndian.Uint32(*ppmData))
 		if n > len(*ppmData)-4 {
 			return 0, fmt.Errorf("%w: PPM declares %d bytes of packet headers, %d remain", ErrMalformed, n, len(*ppmData)-4)
 		}

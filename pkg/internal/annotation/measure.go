@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -196,7 +197,7 @@ func parseNumberFormatArray(ctx context.Context, doc *document.Document, obj ast
 	if dObj, ok := nfDict["D"]; ok {
 		dInt, err := document.ResolveInt(ctx, doc, dObj)
 		if err == nil && dInt != 0 {
-			axis.Decimals = int(dInt)
+			axis.Decimals = intconv.Clamp(dInt)
 		}
 	}
 

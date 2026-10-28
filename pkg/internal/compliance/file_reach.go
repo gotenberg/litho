@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // typedValue is one value veraPDF judges once more than the object sweep does,
@@ -338,7 +339,7 @@ func structParentLangValues(ctx context.Context, vctx *validationCtx, root ast.P
 		if err != nil || !isInt {
 			return holder, true
 		}
-		elemRaw, ok := parents[int(index)]
+		elemRaw, ok := parents[intconv.Clamp(index)]
 		if !ok {
 			return holder, true
 		}

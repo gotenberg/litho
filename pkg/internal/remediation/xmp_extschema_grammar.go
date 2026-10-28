@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // xmpRDFNS is the namespace of the RDF syntax XMP is written in.
@@ -79,7 +80,7 @@ func repairExtensionSchemaGrammar(xmp []byte) ([]byte, []string) {
 
 	w := extSchemaGrammarWalk{xmp: xmp}
 	for {
-		startOff := int(dec.InputOffset())
+		startOff := intconv.Clamp(dec.InputOffset())
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
 			break
@@ -87,7 +88,7 @@ func repairExtensionSchemaGrammar(xmp []byte) ([]byte, []string) {
 		if err != nil {
 			return xmp, nil
 		}
-		endOff := int(dec.InputOffset())
+		endOff := intconv.Clamp(dec.InputOffset())
 
 		ok := true
 		switch t := tok.(type) {

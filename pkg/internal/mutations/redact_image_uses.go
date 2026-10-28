@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
@@ -838,5 +839,5 @@ func imageSize(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 	if wErr != nil || hErr != nil || w <= 0 || h <= 0 {
 		return 0, 0, fmt.Errorf("%w: object %d has no usable /Width and /Height", ErrImageShared, objNum)
 	}
-	return int(w), int(h), nil
+	return intconv.Clamp(w), intconv.Clamp(h), nil
 }

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Segment types, ITU-T T.88, 7.3.
@@ -146,7 +148,7 @@ func parseSegment(b []byte) (segment, int, error) {
 		count = c.u32() & 0x1FFFFFFF
 		// One retain bit for this segment and one per referred-to segment,
 		// rounded up to whole bytes: 4 + (R + 1)/8 bytes in all.
-		c.take(int((uint64(count) + 8) / 8))
+		c.take(intconv.Clamp((uint64(count) + 8) / 8))
 	} else {
 		count = uint32(c.u8() >> 5)
 		if count > 4 {
@@ -198,8 +200,8 @@ func parseSegment(b []byte) (segment, int, error) {
 		return segment{}, 0, fmt.Errorf("%w: segment %d declares %d data bytes, %d remain",
 			ErrMalformed, seg.number, length, len(b)-c.off)
 	}
-	seg.data = b[c.off : c.off+int(length)]
-	return seg, c.off + int(length), nil
+	seg.data = b[c.off : c.off+int(length)] // fits int: at most len(b)-c.off, checked above
+	return seg, c.off + int(length), nil    // fits int: at most len(b)-c.off, checked above
 }
 
 // parseUnknownLength finds the end of an immediate generic region whose data

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 	"github.com/gotenberg/litho/pkg/internal/typography/type1"
@@ -153,7 +154,7 @@ func applyDifferences(ctx context.Context, doc *document.Document, names *nameTa
 		}
 		switch v := resolved.(type) {
 		case ast.PdfInt:
-			code = int(v)
+			code = intconv.Clamp(v)
 		case ast.PdfReal:
 			code = int(v)
 		case ast.PdfName:

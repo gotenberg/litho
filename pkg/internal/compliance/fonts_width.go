@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
@@ -629,7 +630,7 @@ func type1WidthsArray(ctx context.Context, doc *document.Document, fontDict ast.
 	if errFirst != nil || errLast != nil || !okFirst || !okLast {
 		return nil, 0, 0
 	}
-	return arr, int(fc), int(lc)
+	return arr, intconv.Clamp(fc), intconv.Clamp(lc)
 }
 
 // widthValue resolves a width-array entry and returns its numeric value. A
@@ -726,12 +727,12 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 	// Every shown code is its own glyph; see [fontJudgements.glyphs].
 	var results []Violation
 	if usage.charCodes[0] {
-		results = checkSimpleFontCode0Width(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID, int(firstChar), widths)
+		results = checkSimpleFontCode0Width(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID, intconv.Clamp(firstChar), widths)
 	}
 
 	faults := newGlyphFaults(rule)
 	for i, wObj := range widths {
-		charCode := int(firstChar) + i
+		charCode := intconv.Clamp(firstChar) + i
 		if charCode < 0 || charCode > 255 {
 			continue
 		}
@@ -792,7 +793,7 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 	}
 	results = append(results, faults.violations()...)
 
-	return append(results, checkSimpleFontUncoveredWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID, int(firstChar), len(widths), usage)...)
+	return append(results, checkSimpleFontUncoveredWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, charCodeToGID, intconv.Clamp(firstChar), len(widths), usage)...)
 }
 
 // checkSimpleFontUncoveredWidths applies the glyph-width rule to the shown codes
@@ -1390,7 +1391,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			i++
 			continue
 		}
-		cidStart := int(cidStartInt)
+		cidStart := intconv.Clamp(cidStartInt)
 		i++
 		if i >= len(wArr) {
 			break
@@ -1454,7 +1455,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			i++
 		case ast.PdfInt:
 			// [cidStart cidEnd w]
-			cidEnd := int(next)
+			cidEnd := intconv.Clamp(next)
 			i++
 			if i >= len(wArr) {
 				break

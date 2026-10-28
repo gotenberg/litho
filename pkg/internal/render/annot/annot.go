@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -259,7 +260,7 @@ func collectOne(ctx context.Context, doc *document.Document, elem ast.PdfObject,
 	flags := 0
 	if fObj, err := document.ResolveObject(ctx, doc, dict["F"]); err == nil {
 		if f, ok := fObj.(ast.PdfInt); ok {
-			flags = int(f)
+			flags = intconv.Clamp(f)
 		}
 		// Table 164 makes /F an integer; a real is not read as flags.
 	} else {

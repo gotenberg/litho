@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // XRef entry type constants (ISO 32000-1, Table 18).
@@ -113,9 +114,9 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 	if !ok {
 		return 0, fmt.Errorf("%w: /W[2] is not an integer", ErrMalformedXRef)
 	}
-	w0 := int(w0Int)
-	w1 := int(w1Int)
-	w2 := int(w2Int)
+	w0 := intconv.Clamp(w0Int)
+	w1 := intconv.Clamp(w1Int)
+	w2 := intconv.Clamp(w2Int)
 	// Per ISO 32000-1, Table 17 each /W element is a NON-NEGATIVE integer field
 	// width. The entry loop slices entryData by these three values, so a crafted
 	// negative one indexes out of range: /W[0] breaks entryData[0:w0], /W[1]
@@ -141,7 +142,7 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 	if !ok {
 		return 0, fmt.Errorf("%w: /Size is not an integer", ErrMalformedXRef)
 	}
-	size := int(sizeInt)
+	size := intconv.Clamp(sizeInt)
 
 	var indexArray ast.PdfArray
 	if indexObj, ok := stream.Dict["Index"]; ok {
@@ -177,8 +178,8 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 		if !ok {
 			return 0, fmt.Errorf("%w: /Index count is not an integer", ErrMalformedXRef)
 		}
-		startObj := int(startInt)
-		count := int(countInt)
+		startObj := intconv.Clamp(startInt)
+		count := intconv.Clamp(countInt)
 
 		// Three zero /W widths mean the stream carries no entry data, so this
 		// subsection describes no readable entry: the loop below defaults every
@@ -218,22 +219,22 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 			}
 
 			entry := XRefEntry{
-				Type: int(field1),
+				Type: intconv.Clamp(field1),
 			}
 
 			switch entry.Type {
 			case XRefTypeFree:
 				entry.Free = true
 				entry.Offset = field2
-				entry.Generation = int(field3)
+				entry.Generation = intconv.Clamp(field3)
 			case XRefTypeNormal:
 				entry.Free = false
 				entry.Offset = field2
-				entry.Generation = int(field3)
+				entry.Generation = intconv.Clamp(field3)
 			case XRefTypeCompressed:
 				entry.Free = false
-				entry.ObjStmNum = int(field2)
-				entry.ObjStmIndex = int(field3)
+				entry.ObjStmNum = intconv.Clamp(field2)
+				entry.ObjStmIndex = intconv.Clamp(field3)
 				entry.Generation = 0
 			}
 

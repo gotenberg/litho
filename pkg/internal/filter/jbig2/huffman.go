@@ -2,6 +2,8 @@ package jbig2
 
 import (
 	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxPrefixLen bounds the prefix code length a Huffman table line may have.
@@ -177,7 +179,7 @@ type stdTable struct {
 func (s stdTable) build() []huffLine {
 	lines := make([]huffLine, 0, len(s.lines)+3)
 	for _, l := range s.lines {
-		lines = append(lines, huffLine{prefLen: int(l[1]), rangeLen: int(l[2]), rangeLow: l[0]})
+		lines = append(lines, huffLine{prefLen: intconv.Clamp(l[1]), rangeLen: intconv.Clamp(l[2]), rangeLow: l[0]})
 	}
 	low := s.lines[0][0]
 	last := s.lines[len(s.lines)-1]
@@ -476,7 +478,7 @@ func decodeSymbolIDTable(r *bitReader, numSyms int) (*huffTable, error) {
 			}
 			repeat = n + 11
 		default:
-			length = int(code)
+			length = intconv.Clamp(code)
 		}
 		if len(lengths)+repeat > numSyms {
 			return nil, fmt.Errorf("%w: symbol ID code lengths run past the %d symbols", ErrMalformed, numSyms)

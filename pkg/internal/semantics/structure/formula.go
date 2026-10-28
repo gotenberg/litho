@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -258,7 +259,7 @@ func (c *contentCollector) collect(ctx context.Context, obj, pg ast.PdfObject, d
 	}
 	switch v := resolved.(type) {
 	case ast.PdfInt:
-		c.add(pg, int(v))
+		c.add(pg, intconv.Clamp(v))
 	case ast.PdfArray:
 		for _, item := range v {
 			c.collect(ctx, item, pg, depth+1)
@@ -274,7 +275,7 @@ func (c *contentCollector) collect(ctx context.Context, obj, pg ast.PdfObject, d
 				if mcrPg, has := v["Pg"]; has {
 					own = mcrPg
 				}
-				c.add(own, int(mcid))
+				c.add(own, intconv.Clamp(mcid))
 			}
 			return
 		}

@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // widthFixTolerance mirrors the compliance width-consistency tolerance: a width
@@ -188,7 +189,7 @@ func resolveIntElem(ctx context.Context, doc *document.Document, obj ast.PdfObje
 		return 0, false
 	}
 	if n, ok := r.(ast.PdfInt); ok {
-		return int(n), true
+		return intconv.Clamp(n), true
 	}
 	return 0, false
 }

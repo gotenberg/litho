@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // matchListContent matches the violation an LI raises when it holds real
@@ -197,7 +198,7 @@ func planListContentRepair(ctx context.Context, doc *document.Document, node str
 				unsupported = true
 				continue
 			}
-			mcids = append(mcids, int(n))
+			mcids = append(mcids, intconv.Clamp(n))
 			continue
 		}
 		d, err := document.ResolveDict(ctx, doc, item)
@@ -280,7 +281,7 @@ func repointParentTree(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		}
 		slot := -1
 		for i := 0; i+1 < len(nums); i += 2 {
-			if k, isInt := nums[i].(ast.PdfInt); isInt && int(k) == int(key) {
+			if k, isInt := nums[i].(ast.PdfInt); isInt && intconv.Clamp(k) == intconv.Clamp(key) {
 				slot = i + 1
 				break
 			}

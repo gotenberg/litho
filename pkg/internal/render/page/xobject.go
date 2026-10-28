@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -499,7 +500,7 @@ func (r *renderer) colorKey(stream ast.PdfStream, ranges ast.PdfArray, width, he
 		if err != nil {
 			return nil, fmt.Errorf("colour key: range %d: %w", i, err)
 		}
-		keys[i] = int(n)
+		keys[i] = intconv.Clamp(n)
 	}
 	maxPixels := r.doc.Limits().WithDefaults().MaxImagePixels
 	if width <= 0 || height <= 0 || int64(width) > maxPixels/int64(height) || bpc < 1 || bpc > 16 || space.Components < 1 {
@@ -517,7 +518,7 @@ func (r *renderer) colorKey(stream ast.PdfStream, ranges ast.PdfArray, width, he
 	if err != nil {
 		return nil, fmt.Errorf("colour key: reading samples: %w", err)
 	}
-	return imgpaint.ColorKey(data, width, height, space.Components, int(bpc), keys, maxPixels)
+	return imgpaint.ColorKey(data, width, height, space.Components, intconv.Clamp(bpc), keys, maxPixels)
 }
 
 // visible reports whether optional content oc, an /OC entry, is shown (ISO

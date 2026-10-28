@@ -20,6 +20,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/ccitt"
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -1016,7 +1017,7 @@ func ccittError(err error) error {
 // integer.
 func pdfIntOr(v ast.PdfObject, def int) int {
 	if n, ok := v.(ast.PdfInt); ok {
-		return int(n)
+		return intconv.Clamp(n)
 	}
 	return def
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
@@ -1063,7 +1064,7 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 					}
 					switch v := itemRes.(type) {
 					case ast.PdfInt:
-						currentIndex = int(v)
+						currentIndex = intconv.Clamp(v)
 					case ast.PdfName:
 						applyDifferencesName(font, byte(currentIndex), string(v), isDingbats, isSymbol)
 						currentIndex++
@@ -3153,7 +3154,7 @@ func fontIsSymbolicByFlags(ctx context.Context, doc *document.Document, fontDict
 		return false
 	}
 	const symbolicBit = 1 << 2 // bit 3 in Adobe's 1-indexed numbering
-	return int(flagsInt)&symbolicBit != 0
+	return intconv.Clamp(flagsInt)&symbolicBit != 0
 }
 
 // trueTypeTakesStandardEncoding reports whether a TrueType font that states
@@ -3195,7 +3196,7 @@ func trueTypeTakesStandardEncoding(ctx context.Context, doc *document.Document, 
 	}
 	flags, ok := fdDict["Flags"].(ast.PdfInt)
 	const nonsymbolicBit = 1 << 5 // bit 6 in Adobe's 1-indexed numbering
-	return ok && int(flags)&nonsymbolicBit != 0
+	return ok && intconv.Clamp(flags)&nonsymbolicBit != 0
 }
 
 // applyTrueTypeBuiltinEncoding switches font.Encoding to MacRomanEncoding

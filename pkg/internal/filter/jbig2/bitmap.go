@@ -3,6 +3,7 @@ package jbig2
 import (
 	"fmt"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -197,7 +198,7 @@ func (b *Bitmap) combine(src *Bitmap, x, y int64, op int) error {
 func rowBits(row []byte, bit int64) byte {
 	// An arithmetic shift floors a negative bit, and its low three bits are
 	// then its offset in that byte.
-	i, sh := bit>>3, uint(bit&7)
+	i, sh := bit>>3, uint(bit&7) // fits uint: below 8
 	at := func(k int64) byte {
 		if k < 0 || k >= int64(len(row)) {
 			return 0
@@ -227,13 +228,13 @@ func (b *Bitmap) columns(x, width int64) (*Bitmap, error) {
 	if x < 0 || width < 0 || x+width > int64(b.Width) {
 		return nil, fmt.Errorf("%w: columns %d to %d of a %d-pixel-wide bitmap", ErrMalformed, x, x+width-1, b.Width)
 	}
-	out, err := newBitmap(int(width), b.Height)
+	out, err := newBitmap(intconv.Clamp(width), b.Height)
 	if err != nil {
 		return nil, err
 	}
 	for y := range b.Height {
-		for cx := range int(width) {
-			if b.pixel(int(x)+cx, y) != 0 {
+		for cx := range intconv.Clamp(width) {
+			if b.pixel(intconv.Clamp(x)+cx, y) != 0 {
 				out.setPixel(cx, y, 1)
 			}
 		}

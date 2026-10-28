@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // parentTreeMCIDReach maps each MCID the ParentTree entry of holder's
@@ -27,7 +28,7 @@ func parentTreeMCIDReach(ctx context.Context, doc *document.Document, treeRoot, 
 	if err != nil || ptDict == nil {
 		return reach, true
 	}
-	entries, complete := numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+	entries, complete := numberTreeLookup(ctx, doc, ptDict, intconv.Clamp(key), 0, make(map[int]bool))
 	for mcid, elem := range entries {
 		if !isNullObject(elem) {
 			reach[mcid] = structElemReachesRoot(ctx, doc, elem)
@@ -48,7 +49,7 @@ func structParentEntry(ctx context.Context, doc *document.Document, treeRoot, ho
 	if err != nil || ptDict == nil {
 		return nil, true
 	}
-	return numberTreeValue(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+	return numberTreeValue(ctx, doc, ptDict, intconv.Clamp(key), 0, make(map[int]bool))
 }
 
 // structElemReachesRoot reports whether climbing /P from elem reaches a
@@ -96,7 +97,7 @@ func mcidValue(ctx context.Context, doc *document.Document, obj ast.PdfObject) (
 		return 0, false
 	}
 	n, ok := resolved.(ast.PdfInt)
-	return int(n), ok
+	return intconv.Clamp(n), ok
 }
 
 // numberTreeLookup resolves a key in a number tree (Nums leaves, Kids
@@ -117,7 +118,7 @@ func numberTreeLookup(ctx context.Context, doc *document.Document, node ast.PdfD
 		if err == nil {
 			for i := 0; i+1 < len(nums); i += 2 {
 				k, kerr := document.ResolveInt(ctx, doc, nums[i])
-				if kerr != nil || int(k) != key {
+				if kerr != nil || intconv.Clamp(k) != key {
 					continue
 				}
 				// The key is here, so the answer is whole whether or not its

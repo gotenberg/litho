@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
@@ -278,7 +279,7 @@ func (e *fontEmbedder) sharingWhole(ctx context.Context, members []*queuedFont, 
 func (e *fontEmbedder) codeMapping(ctx context.Context, plan *embedPlan) string {
 	var sb strings.Builder
 	sb.WriteString(nameOf(ctx, e.doc, plan.font["Subtype"]))
-	if flags, ok := plan.descriptor["Flags"].(ast.PdfInt); ok && int(flags)&fontFlagSymbolic != 0 {
+	if flags, ok := plan.descriptor["Flags"].(ast.PdfInt); ok && intconv.Clamp(flags)&fontFlagSymbolic != 0 {
 		sb.WriteString(" symbolic")
 	}
 	enc := plan.font["Encoding"]

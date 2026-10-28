@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // emptyBoundingBox represents an uninitialized bounding box. It uses
@@ -1176,7 +1177,7 @@ func applyBDCOptionalContent(m *Machine, state *State, mcState *MarkedContentSta
 func applyBDCProperties(mcState *MarkedContentState, props ast.PdfDict) {
 	if mcidObj, ok := props["MCID"]; ok {
 		if mcidInt, isInt := mcidObj.(ast.PdfInt); isInt {
-			mcState.MCID = int(mcidInt)
+			mcState.MCID = intconv.Clamp(mcidInt)
 		}
 	}
 	if actualText, ok := props["ActualText"]; ok {

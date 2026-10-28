@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/filter/mq"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxDecodedAreas bounds the work one Decode call does, counted in units of
@@ -320,7 +321,7 @@ func (d *decoder) pageInformation(seg segment) error {
 	if limit := d.budget.byteCap(); bitmapExceeds(int64(width), h, limit) {
 		return fmt.Errorf("%w: bitmap of %dx%d pixels exceeds %d bytes", ErrLimit, width, h, limit)
 	}
-	page, err := newBitmap(int(width), int(h))
+	page, err := newBitmap(intconv.Clamp(width), intconv.Clamp(h))
 	if err != nil {
 		return err
 	}
@@ -345,7 +346,7 @@ func (d *decoder) endOfStripe(seg segment) error {
 			return err
 		}
 	}
-	d.stripeEnd = int(min(endRow+1, d.budget.byteCap()))
+	d.stripeEnd = intconv.Clamp(min(endRow+1, d.budget.byteCap()))
 	return nil
 }
 
@@ -360,7 +361,7 @@ func (d *decoder) growPage(height int64) error {
 	if bitmapExceeds(int64(d.page.Width), height, limit) {
 		return fmt.Errorf("%w: bitmap of %dx%d pixels exceeds %d bytes", ErrLimit, d.page.Width, height, limit)
 	}
-	grown, err := newBitmap(d.page.Width, int(height))
+	grown, err := newBitmap(d.page.Width, intconv.Clamp(height))
 	if err != nil {
 		return err
 	}
@@ -473,7 +474,7 @@ func (d *decoder) genericRegion(ctx context.Context, seg segment) (*Bitmap, regi
 	if err := d.budget.charge(info.width, info.height); err != nil {
 		return nil, regionInfo{}, err
 	}
-	bm, err := decodeGenericSegment(ctx, seg.data, int(info.width), int(info.height))
+	bm, err := decodeGenericSegment(ctx, seg.data, intconv.Clamp(info.width), intconv.Clamp(info.height))
 	return bm, info, err
 }
 
@@ -492,7 +493,7 @@ func (d *decoder) textRegion(ctx context.Context, seg segment) (*Bitmap, regionI
 		return nil, regionInfo{}, fmt.Errorf("%w: text region of %dx%d pixels exceeds %d bytes", ErrLimit, ts.info.width, ts.info.height, limit)
 	}
 	p := ts.params
-	p.width, p.height = int(ts.info.width), int(ts.info.height)
+	p.width, p.height = intconv.Clamp(ts.info.width), intconv.Clamp(ts.info.height)
 	p.syms = syms
 	gr := make([]mq.Context, refineContexts(p.refTemplate))
 	if ts.huffman {
@@ -529,8 +530,8 @@ func (d *decoder) refinementRegion(ctx context.Context, seg segment) error {
 	c := &cursor{b: seg.data, off: regionInfoSize}
 	flags := c.u8()
 	p := refineParams{
-		width:    int(info.width),
-		height:   int(info.height),
+		width:    intconv.Clamp(info.width),
+		height:   intconv.Clamp(info.height),
 		template: int(flags & 1),
 		tpgron:   flags&2 != 0,
 	}

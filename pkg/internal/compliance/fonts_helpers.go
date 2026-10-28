@@ -12,6 +12,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
@@ -342,7 +343,7 @@ func checkSimpleFontRequiredKeys(ctx context.Context, doc *document.Document, fo
 	if errL != nil {
 		last = 0
 	}
-	if expected := int(last - first + 1); len(widths) != expected {
+	if expected := intconv.Clamp(last - first + 1); len(widths) != expected {
 		results = append(results, failf(fontReqKeyRule(part, 6),
 			"simple font /Widths has %d entries, expected %d", len(widths), expected)...)
 	}
@@ -937,7 +938,7 @@ func isSymbolicFont(ctx context.Context, doc *document.Document, fd ast.PdfDict)
 		return false
 	}
 	const symbolicBit = 1 << 2 // bit 3 (0-indexed bit 2) = symbolic
-	symbolic := (int(flags) & symbolicBit) != 0
+	symbolic := (intconv.Clamp(flags) & symbolicBit) != 0
 	return symbolic
 }
 
@@ -1049,7 +1050,7 @@ func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontD
 	for _, item := range diffArr {
 		switch v := item.(type) {
 		case ast.PdfInt:
-			code = int(v)
+			code = intconv.Clamp(v)
 		case ast.PdfName:
 			if v == ".notdef" && code >= 0 && code <= 255 && usage.charCodes[byte(code)] { //nolint:gosec // G115: code is bounded to 0..255 by the guard.
 				faults.add(uint32(code), "font %s on page %d: charCode %d maps to .notdef via /Differences", fontName, pageNum, code) //nolint:gosec // G115: code is bounded to 0..255 by the guard.

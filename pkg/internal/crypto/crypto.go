@@ -12,6 +12,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/crypto/saslprep"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 var paddingString = []byte{
@@ -41,7 +42,7 @@ type Handler struct {
 
 func dictInt(dict ast.PdfDict, key ast.PdfName, defaultVal int) int {
 	if val, ok := dict[key].(ast.PdfInt); ok {
-		return int(val)
+		return intconv.Clamp(val)
 	}
 	return defaultVal
 }

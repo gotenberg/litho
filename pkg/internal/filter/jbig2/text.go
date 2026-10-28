@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/filter/mq"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxTextInstances bounds the symbol instances one text region may declare.
@@ -203,8 +204,8 @@ func refineSymbol(ctx context.Context, p textParams, symbol *Bitmap, rdw, rdh, r
 	// own example needs: page 3 of the Annex H.1 datastream refines a symbol
 	// by such a delta, and truncating toward zero shifts it by a pixel.
 	return decodeRefinement(ctx, refineParams{
-		width:     int(w),
-		height:    int(h),
+		width:     intconv.Clamp(w),
+		height:    intconv.Clamp(h),
 		template:  p.refTemplate,
 		reference: symbol,
 		dx:        rdw>>1 + rdx,
@@ -325,8 +326,8 @@ func (h *huffText) refinementBlock() ([]byte, error) {
 	if size < 0 || size > int64(len(h.r.data)-h.r.pos) {
 		return nil, fmt.Errorf("%w: refinement data of %d bytes, %d remain", ErrMalformed, size, len(h.r.data)-h.r.pos)
 	}
-	block := h.r.data[h.r.pos : h.r.pos+int(size)]
-	h.r.pos += int(size)
+	block := h.r.data[h.r.pos : h.r.pos+intconv.Clamp(size)]
+	h.r.pos += intconv.Clamp(size)
 	return block, nil
 }
 

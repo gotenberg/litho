@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
@@ -176,7 +177,7 @@ func alignCMapWMode(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		// nothing to disagree with.
 		0)
 	dictWMode, err := document.ResolveInt(ctx, doc, stream.Dict["WMode"])
-	if err != nil || int(dictWMode) == programWMode {
+	if err != nil || intconv.Clamp(dictWMode) == programWMode {
 		return 0
 	}
 
@@ -252,7 +253,7 @@ func alignCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			changed = true
 		}
 	}
-	if have, err := document.ResolveInt(ctx, doc, sysDict["Supplement"]); err == nil && int(have) > cmapSup {
+	if have, err := document.ResolveInt(ctx, doc, sysDict["Supplement"]); err == nil && intconv.Clamp(have) > cmapSup {
 		patched["Supplement"] = ast.PdfInt(cmapSup)
 		changed = true
 	}
@@ -292,7 +293,7 @@ func cmapCIDSystemInfo(ctx context.Context, doc *document.Document, fontDict ast
 		if rErr != nil || oErr != nil || sErr != nil {
 			return "", "", 0, false
 		}
-		return document.DecodePdfString(reg), document.DecodePdfString(ord), int(sup), true
+		return document.DecodePdfString(reg), document.DecodePdfString(ord), intconv.Clamp(sup), true
 	}
 	encName, err := document.ResolveName(ctx, doc, encObj)
 	if err != nil || encName == "" {

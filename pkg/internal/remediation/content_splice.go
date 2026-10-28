@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // contentTokenCheckInterval is how many tokens [contentTokenSplices] reads
@@ -143,7 +144,7 @@ func walkTokens(ctx context.Context, data []byte, lex *lexer.Lexer, offer tokenO
 		if tok.Type == lexer.TokenEOF {
 			return splices, true
 		}
-		end := int(p.PeekEnd(0))
+		end := intconv.Clamp(p.PeekEnd(0))
 		if _, err := p.Consume(); err != nil {
 			return splices, false
 		}
@@ -244,7 +245,7 @@ func inlineImageDictSplices(ctx context.Context, p *parser.Parser, images *conte
 			}
 			continue
 		}
-		if s, ok := offer(tok, tokenPlace{depth: depth, inlineImage: true, end: int(p.PeekEnd(i))}); ok {
+		if s, ok := offer(tok, tokenPlace{depth: depth, inlineImage: true, end: intconv.Clamp(p.PeekEnd(i))}); ok {
 			splices = append(splices, s)
 		}
 	}
@@ -254,7 +255,7 @@ func inlineImageDictSplices(ctx context.Context, p *parser.Parser, images *conte
 	if err != nil {
 		return nil, false
 	}
-	if err := p.ResumeAt(int64(images.End(ctx, int(p.Position()), dict))); err != nil {
+	if err := p.ResumeAt(int64(images.End(ctx, intconv.Clamp(p.Position()), dict))); err != nil {
 		return nil, false
 	}
 	if dictTokens == 0 || p.Consumed()-before != dictTokens {

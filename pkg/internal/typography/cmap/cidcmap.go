@@ -164,7 +164,7 @@ func parseCID(ctx context.Context, data []byte, b *parseBudget) (*CIDCMap, error
 				}
 				// One cidrange expands to at most maxRangeEntries codes, and
 				// the program's ranges together to maxCMapRangeCodes.
-				span := int(min(high-low, maxRangeEntries-1))
+				span := int(min(high-low, maxRangeEntries-1)) // fits int: below maxRangeEntries
 				dst, okCID := cidValue(int64(dstInt), span)
 				if !okCID {
 					continue

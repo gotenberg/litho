@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
@@ -262,7 +263,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 
 	firstChar := 0
 	if fc, ok := fontDict["FirstChar"].(ast.PdfInt); ok {
-		firstChar = int(fc)
+		firstChar = intconv.Clamp(fc)
 	}
 
 	// Shared metrics with the width CHECK (compliance.ExpectedSimpleFontWidths):
@@ -1209,7 +1210,7 @@ func fontIsSymbolic(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		return false
 	}
 	const symbolicFlag = 1 << 2
-	return int(flags)&symbolicFlag != 0
+	return intconv.Clamp(flags)&symbolicFlag != 0
 }
 
 // fixSimpleFontToUnicode generates a /ToUnicode CMap for a simple font that

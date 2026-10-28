@@ -3,6 +3,8 @@ package icc
 import (
 	"encoding/binary"
 	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxChannels bounds the input channels of a lookup table: the 15 channels of
@@ -215,7 +217,7 @@ func readLutABHeader(b []byte, pcs, kind string) (*pipeline, lutAB, error) {
 	if p.in < 1 || p.in > maxChannels || p.out < 1 || p.out > maxOutputs {
 		return nil, lutAB{}, fmt.Errorf("%w: %s of %d inputs and %d outputs", ErrMalformed, kind, p.in, p.out)
 	}
-	u := func(at int) int { return int(binary.BigEndian.Uint32(b[at:])) }
+	u := func(at int) int { return intconv.Clamp(binary.BigEndian.Uint32(b[at:])) }
 	return p, lutAB{b: u(12), matrix: u(16), m: u(20), clut: u(24), a: u(28)}, nil
 }
 

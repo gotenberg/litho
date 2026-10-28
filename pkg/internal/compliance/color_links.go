@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxColorSpaceNesting bounds how deeply [colorLinkWalk.judgeSpace] follows
@@ -912,7 +913,7 @@ func extGStateOverprint(ctx context.Context, doc *document.Document, obj ast.Pdf
 	}
 	if _, ok := gs["OPM"]; ok {
 		if mode, err := document.ResolveInt(ctx, doc, gs["OPM"]); err == nil {
-			cur.mode = int(mode)
+			cur.mode = intconv.Clamp(mode)
 		}
 	}
 	return cur

@@ -20,6 +20,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // matchInlineImageFilter claims the inline image filter rule in every spelling
@@ -537,7 +538,7 @@ func inlineImageDataStart(ctx context.Context, image []byte, dict ast.PdfDict) (
 	if err != nil || !reflect.DeepEqual(got, dict) {
 		return 0, false
 	}
-	idEnd := int(p.Position())
+	idEnd := intconv.Clamp(p.Position())
 	if idEnd < len(image) && isWhiteSpaceByte(image[idEnd]) {
 		idEnd++
 	}

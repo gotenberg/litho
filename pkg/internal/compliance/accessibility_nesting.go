@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // checkAnnotationNesting validates PDF/UA-1 §7.18.x annotation nesting rules:
@@ -216,7 +217,7 @@ func numberTreeValue(ctx context.Context, doc *document.Document, node ast.PdfDi
 		if err == nil {
 			for i := 0; i+1 < len(nums); i += 2 {
 				k, kerr := document.ResolveInt(ctx, doc, nums[i])
-				if kerr != nil || int(k) != key {
+				if kerr != nil || intconv.Clamp(k) != key {
 					continue
 				}
 				return nums[i+1], true

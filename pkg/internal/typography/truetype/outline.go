@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -276,8 +277,8 @@ func (f *Font) glyphData(gid int) ([]byte, error) {
 	}
 	var start, end, entries int
 	if f.longLoca {
-		start = int(binary.BigEndian.Uint32(f.loca[4*gid:]))
-		end = int(binary.BigEndian.Uint32(f.loca[4*gid+4:]))
+		start = intconv.Clamp(binary.BigEndian.Uint32(f.loca[4*gid:]))
+		end = intconv.Clamp(binary.BigEndian.Uint32(f.loca[4*gid+4:]))
 		entries = len(f.loca) / 4
 	} else {
 		start = 2 * int(binary.BigEndian.Uint16(f.loca[2*gid:]))

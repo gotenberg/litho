@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // sRGBICCProfile is litho's built-in sRGB profile, shared with the writers
@@ -798,7 +799,7 @@ func admittedDestinationProfile(ctx context.Context, alloc *writer.ObjAllocator,
 	if !ok {
 		return false
 	}
-	if n, err := document.ResolveInt(ctx, doc, stream.Dict["N"]); err != nil || int(n) != components {
+	if n, err := document.ResolveInt(ctx, doc, stream.Dict["N"]); err != nil || intconv.Clamp(n) != components {
 		return false
 	}
 	data := decodedProfile(ctx, alloc, doc, ref)

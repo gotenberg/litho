@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxTemplatePageCompare bounds how many pairs of objects [addedPage] compares,
@@ -324,7 +325,7 @@ func (m *templateMatch) attributes(ctx context.Context, t *templatePage) pageAtt
 			case "Rotate":
 				if resolved, err := document.ResolveObject(ctx, m.rev, value); err == nil {
 					if rotate, ok := resolved.(ast.PdfInt); ok {
-						attrs.rotate = int(rotate)
+						attrs.rotate = intconv.Clamp(rotate)
 					}
 				}
 			}

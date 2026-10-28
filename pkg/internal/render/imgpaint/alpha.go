@@ -6,6 +6,7 @@ import (
 	"image/color"
 
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxColorKeyComponents bounds the components a colour-key mask compares per
@@ -121,9 +122,9 @@ func ColorKey(data []byte, width, height, components, bpc int, ranges []int, max
 		out.A[i] = 255
 	}
 	rows := min(int64(height), int64(len(data))/rowBytes64)
-	rowBytes := int(rowBytes64)
+	rowBytes := intconv.Clamp(rowBytes64)
 	mask := byte(1<<min(bpc, 8) - 1)
-	for y := range int(rows) {
+	for y := range intconv.Clamp(rows) {
 		row := data[y*rowBytes : (y+1)*rowBytes]
 		for x := range width {
 			keyed := true

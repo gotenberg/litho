@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // ResolveNamedDest looks up a named destination by name, searching the [Catalog]
@@ -345,10 +346,10 @@ func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int
 		// generation the page does not.
 		return pageMap[ast.PdfIndirectRef{ObjectNum: first.ObjectNum}]
 	case ast.PdfInt:
-		if first < 0 || int(first) >= len(pageMap) {
+		if first < 0 || intconv.Clamp(first) >= len(pageMap) {
 			return 0
 		}
-		return int(first) + 1
+		return intconv.Clamp(first) + 1
 	}
 	return 0
 }
