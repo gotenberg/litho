@@ -13,6 +13,10 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
+// maxRaceSeparationWorkers bounds how many remediations
+// [TestRaceSeparationRemediation] runs at once.
+const maxRaceSeparationWorkers = 32
+
 // TestRaceSeparationRemediation guards Separation canonicalisation
 // determinism. The fixer once picked the canonical (alt, tintFunc) per colorant
 // by iterating the /ColorSpace dict in Go's randomised map order, so the same
@@ -65,15 +69,25 @@ func TestRaceSeparationRemediation(t *testing.T) {
 		return string(sum[:]), ids
 	}
 
+	// The race needs many remediations in flight, not all of them: starting
+	// all 20 rounds over 221 fixtures at once peaked at 1.8 GB resident on
+	// amd64 and exhausted the 4 GB a 386 process addresses. Bounded, it
+	// peaks at 300 MB.
+	slots := make(chan struct{}, maxRaceSeparationWorkers)
 	var mu sync.Mutex
 	shas := map[string]bool{}
 	var wg sync.WaitGroup
 	for range 20 {
 		for _, m := range others {
-			wg.Add(1)
-			go func(path string) { defer wg.Done(); _, _ = remediate(path) }(m)
+			slots <- struct{}{}
+			wg.Go(func() {
+				defer func() { <-slots }()
+				_, _ = remediate(m)
+			})
 		}
+		slots <- struct{}{}
 		wg.Go(func() {
+			defer func() { <-slots }()
 			sum, ids := remediate(target[0])
 			mu.Lock()
 			shas[sum] = true
