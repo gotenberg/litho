@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -84,13 +85,13 @@ func TestOpen_RefusesInvalidLimits(t *testing.T) {
 		"negative embedded file bytes":  {MaxEmbeddedFileBytes: -1},
 		"negative form depth":           {MaxFormDepth: -1},
 		"negative cached objects":       {MaxCachedObjects: -1},
-		"stream bytes past ceiling":     {MaxStreamBytes: 4<<30 + 1},
-		"image pixels past ceiling":     {MaxImagePixels: 1<<30 + 1},
-		"embedded bytes past ceiling":   {MaxEmbeddedFileBytes: 4<<30 + 1},
+		"stream bytes past ceiling":     {MaxStreamBytes: limits.MaxStreamBytesCeiling + 1},
+		"image pixels past ceiling":     {MaxImagePixels: limits.MaxImagePixelsCeiling + 1},
+		"embedded bytes past ceiling":   {MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling + 1},
 		"form depth past ceiling":       {MaxFormDepth: 257},
 		"cached objects past ceiling":   {MaxCachedObjects: 8_388_608},
 		"negative render pixels":        {MaxRenderPixels: -1},
-		"render pixels past ceiling":    {MaxRenderPixels: 1<<30 + 1},
+		"render pixels past ceiling":    {MaxRenderPixels: limits.MaxRenderPixelsCeiling + 1},
 		"one bad field among good ones": {MaxStreamBytes: 1 << 20, MaxFormDepth: -3},
 	} {
 		if _, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)), WithLimits(l)); !errors.Is(err, ErrInvalidLimits) {
@@ -99,12 +100,12 @@ func TestOpen_RefusesInvalidLimits(t *testing.T) {
 	}
 
 	ceilings := Limits{
-		MaxStreamBytes:       4 << 30,
-		MaxImagePixels:       1 << 30,
-		MaxEmbeddedFileBytes: 4 << 30,
-		MaxFormDepth:         256,
-		MaxCachedObjects:     8_388_607,
-		MaxRenderPixels:      1 << 30,
+		MaxStreamBytes:       limits.MaxStreamBytesCeiling,
+		MaxImagePixels:       limits.MaxImagePixelsCeiling,
+		MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling,
+		MaxFormDepth:         limits.MaxFormDepthCeiling,
+		MaxCachedObjects:     limits.MaxCachedObjectsCeiling,
+		MaxRenderPixels:      limits.MaxRenderPixelsCeiling,
 	}
 	for _, l := range []Limits{{}, DefaultLimits(), ceilings, {MaxFormDepth: 1, MaxCachedObjects: 1}} {
 		openLimited(t, data, l)
@@ -124,12 +125,12 @@ func TestLimitsValidate_IsTheCheckOpenRuns(t *testing.T) {
 		field string
 	}{
 		"negative stream bytes":        {Limits{MaxStreamBytes: -1}, "MaxStreamBytes"},
-		"image pixels past ceiling":    {Limits{MaxImagePixels: 1<<30 + 1}, "MaxImagePixels"},
-		"embedded bytes past ceiling":  {Limits{MaxEmbeddedFileBytes: 4<<30 + 1}, "MaxEmbeddedFileBytes"},
+		"image pixels past ceiling":    {Limits{MaxImagePixels: limits.MaxImagePixelsCeiling + 1}, "MaxImagePixels"},
+		"embedded bytes past ceiling":  {Limits{MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling + 1}, "MaxEmbeddedFileBytes"},
 		"form depth past ceiling":      {Limits{MaxFormDepth: 257}, "MaxFormDepth"},
 		"negative cached objects":      {Limits{MaxCachedObjects: -1}, "MaxCachedObjects"},
-		"render pixels past ceiling":   {Limits{MaxRenderPixels: 1<<30 + 1}, "MaxRenderPixels"},
-		"the first bad field is named": {Limits{MaxStreamBytes: 4<<30 + 1, MaxFormDepth: -1}, "MaxStreamBytes"},
+		"render pixels past ceiling":   {Limits{MaxRenderPixels: limits.MaxRenderPixelsCeiling + 1}, "MaxRenderPixels"},
+		"the first bad field is named": {Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling + 1, MaxFormDepth: -1}, "MaxStreamBytes"},
 	} {
 		verr := tc.l.Validate()
 		if !errors.Is(verr, ErrInvalidLimits) {
@@ -146,12 +147,12 @@ func TestLimitsValidate_IsTheCheckOpenRuns(t *testing.T) {
 	}
 
 	ceilings := Limits{
-		MaxStreamBytes:       4 << 30,
-		MaxImagePixels:       1 << 30,
-		MaxEmbeddedFileBytes: 4 << 30,
-		MaxFormDepth:         256,
-		MaxCachedObjects:     8_388_607,
-		MaxRenderPixels:      1 << 30,
+		MaxStreamBytes:       limits.MaxStreamBytesCeiling,
+		MaxImagePixels:       limits.MaxImagePixelsCeiling,
+		MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling,
+		MaxFormDepth:         limits.MaxFormDepthCeiling,
+		MaxCachedObjects:     limits.MaxCachedObjectsCeiling,
+		MaxRenderPixels:      limits.MaxRenderPixelsCeiling,
 	}
 	for _, l := range []Limits{{}, DefaultLimits(), ceilings} {
 		if err := l.Validate(); err != nil {

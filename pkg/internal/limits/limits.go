@@ -1,6 +1,9 @@
 package limits
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 // Limits holds the six resource budgets of one document. A zero field stands
 // for its default, which [Limits.WithDefaults] fills in. Only these six are
@@ -172,20 +175,25 @@ const DefaultMaxRenderPixels = 50_000_000
 // Ceilings bound what a caller may configure. Past its ceiling a budget stops
 // being a guard: one operation would hold more memory than a host has, or the
 // arithmetic built on the budget would leave the int64 range.
+//
+// A ceiling that sizes one allocation is also held to [math.MaxInt], so that
+// allocation stays indexable by int. On a 64-bit platform that changes
+// nothing; on a 32-bit one it lowers the byte ceilings to 2 GiB - 1 and the
+// pixel ceilings to the count whose buffer fits.
 const (
 	// MaxStreamBytesCeiling is 4 GiB, sixteen times the default. One decode
-	// holds its whole output in memory.
-	MaxStreamBytesCeiling = 4 << 30
+	// holds its whole output in memory, in one []byte.
+	MaxStreamBytesCeiling = min(4<<30, math.MaxInt)
 
 	// MaxImagePixelsCeiling is 2^30 pixels. The decoder reads up to four
 	// bytes a pixel, so the samples of one image then reach the stream
 	// ceiling, and every codec cap [Limits.ScaleImageCap] scales stays well
 	// inside int64.
-	MaxImagePixelsCeiling = 1 << 30
+	MaxImagePixelsCeiling = min(1<<30, math.MaxInt/4)
 
 	// MaxEmbeddedFileBytesCeiling is 4 GiB, the stream ceiling: an embedded
 	// PDF is held whole in memory while it is validated.
-	MaxEmbeddedFileBytesCeiling = 4 << 30
+	MaxEmbeddedFileBytesCeiling = MaxStreamBytesCeiling
 
 	// MaxFormDepthCeiling is 256, the depth guard of the page tree. Each level
 	// costs a few stack frames in every walk that reads it, which keeps the
@@ -200,7 +208,7 @@ const (
 	// MaxRenderPixelsCeiling is 2^30 pixels, the image ceiling. The page
 	// raster then holds 16 GiB, past what one render can reasonably ask of a
 	// host.
-	MaxRenderPixelsCeiling = 1 << 30
+	MaxRenderPixelsCeiling = min(1<<30, math.MaxInt/16)
 )
 
 // Default returns every budget at its default.

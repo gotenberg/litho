@@ -85,7 +85,7 @@ func TestDerivedBounds_FollowTheStreamBudget(t *testing.T) {
 		{"default", limits.Default(), 64 << 20, 256 << 20, 64 << 20, 64 << 20},
 		{"zero reads as the default", limits.Limits{}, 64 << 20, 256 << 20, 64 << 20, 64 << 20},
 		{"raised", limits.Limits{MaxStreamBytes: 1 << 30}, 256 << 20, 1 << 30, 256 << 20, 256 << 20},
-		{"ceiling", limits.Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling}, 1 << 30, 4 << 30, 1 << 30, 1 << 30},
+		{"ceiling", limits.Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling}, limits.MaxStreamBytesCeiling / 4, limits.MaxStreamBytesCeiling, limits.MaxStreamBytesCeiling / 4, limits.MaxStreamBytesCeiling / 4},
 		{"lowered", limits.Limits{MaxStreamBytes: 64 << 10}, 16 << 10, 64 << 10, 16 << 10, 16 << 10},
 		{"below four bytes", limits.Limits{MaxStreamBytes: 3}, 1, 3, 1, 1},
 	} {

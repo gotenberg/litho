@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -197,14 +199,16 @@ func TestRun_LimitFlagsPastTheirCeiling(t *testing.T) {
 		})
 	}
 
+	// The ceilings pdf.Limits documents, lower on a 32-bit platform.
+	bytesCeiling := strconv.FormatInt(min(4<<30, math.MaxInt), 10)
 	path := writeTempPDF(t, nestedImagePDF())
 	for _, args := range [][]string{
-		{"--max-stream-bytes", "4GiB", "images", path},
-		{"--max-image-pixels", "1073741824", "images", path},
-		{"--max-embedded-file-bytes", "4GiB", "images", path},
+		{"--max-stream-bytes", bytesCeiling, "images", path},
+		{"--max-image-pixels", strconv.FormatInt(min(1<<30, math.MaxInt/4), 10), "images", path},
+		{"--max-embedded-file-bytes", bytesCeiling, "images", path},
 		{"--max-form-depth", "256", "images", path},
 		{"--max-cached-objects", "8388607", "images", path},
-		{"--max-render-pixels", "1073741824", "images", path},
+		{"--max-render-pixels", strconv.FormatInt(min(1<<30, math.MaxInt/16), 10), "images", path},
 	} {
 		var stdout, stderr bytes.Buffer
 		if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {

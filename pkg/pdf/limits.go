@@ -16,6 +16,12 @@ import "github.com/gotenberg/litho/pkg/internal/limits"
 // reports the same error without opening a document. Pass it to [Open] or
 // [OpenFile] with [WithLimits].
 //
+// The ceilings below hold on a 64-bit platform. On a 32-bit one, where a Go
+// int, and with it any one buffer, stops below 2 GiB, they are lower:
+// MaxStreamBytes and MaxEmbeddedFileBytes at most 2 GiB - 1, MaxImagePixels at
+// most 2^29 - 1 and MaxRenderPixels at most 2^27 - 1. The defaults are the same
+// on both.
+//
 // The recursion guards that protect litho's own stack are not configurable:
 // the depth of the page tree, of nested arrays and dictionaries, of name,
 // number and structure trees, of CMap chains, and the like. A Go stack
