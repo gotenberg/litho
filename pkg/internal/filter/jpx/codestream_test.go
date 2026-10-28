@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"math"
 	"slices"
 	"testing"
 )
@@ -325,5 +326,38 @@ func TestReadSIZ(t *testing.T) {
 	}
 	if _, err := ReadSIZ(make([]byte, 30)); !errors.Is(err, ErrMalformed) {
 		t.Errorf("ReadSIZ of 30 bytes = %v, want %v", err, ErrMalformed)
+	}
+}
+
+// TestParseSIZ_RefusesATileGridPastTheInt pins that a SIZ whose tile count
+// overflows an int is refused, not allocated: 2^32-1 tiles of one grid point
+// on each axis multiply to about 2^64, which wrapped negative past the
+// maxTiles check and reached make.
+func TestParseSIZ_RefusesATileGridPastTheInt(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name                        string
+		width, height, tileW, tileH uint32
+	}{
+		{"one-point tiles on the largest grid", math.MaxUint32, math.MaxUint32, 1, 1},
+		{"one-point tiles, one tall row", math.MaxUint32, 1, 1, 1},
+		{"largest grid, largest tiles", math.MaxUint32, math.MaxUint32, math.MaxUint32, math.MaxUint32},
+	} {
+		cs, err := parseSIZ(sizBody(tc.width, tc.height, tc.tileW, tc.tileH, 1))
+		if tc.tileW == math.MaxUint32 {
+			// One tile: valid on a 64-bit platform, unsupported past the int
+			// range on a 32-bit one.
+			if err != nil && !errors.Is(err, ErrUnsupported) {
+				t.Errorf("%s: parseSIZ error = %v, want nil or ErrUnsupported", tc.name, err)
+			}
+			if err == nil && len(cs.tiles) != 1 {
+				t.Errorf("%s: %d tiles, want 1", tc.name, len(cs.tiles))
+			}
+			continue
+		}
+		if err == nil {
+			t.Errorf("%s: parseSIZ accepted %dx%d tiles", tc.name, cs.tilesX, cs.tilesY)
+		}
 	}
 }

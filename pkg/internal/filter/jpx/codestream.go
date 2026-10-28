@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"slices"
 )
 
@@ -27,6 +28,14 @@ const (
 // maxTiles is the number of tiles a codestream can address: Isot runs from 0
 // to 65 534 (T.800, Table A.5).
 const maxTiles = 65535
+
+// maxGridCoordinate bounds every SIZ coordinate and tile size, so the
+// reference-grid arithmetic of T.800, B.2 and B.3, which adds a coordinate to a
+// tile size, stays within int. Not spec-mandated: Table A.9 lets each field
+// reach 2^32 - 1. On a 64-bit platform no field reaches the bound; on a 32-bit
+// one a grid past 2^29 is refused as unsupported, past the pixels the image
+// budget admits there anyway.
+const maxGridCoordinate = math.MaxInt / 4
 
 // maxComponents is the largest Csiz, 16 384 (T.800, Table A.9).
 const maxComponents = 16384
@@ -334,9 +343,14 @@ func parseSIZ(body []byte) (*codestream, error) {
 	if err != nil || n < 1 || n > maxComponents || len(body) != sizFixedBytes+3*n {
 		return nil, fmt.Errorf("%w: SIZ marker segment of %d bytes for %d components", ErrMalformed, len(body), n)
 	}
+	for _, v := range []uint32{siz.Xsiz, siz.Ysiz, siz.XOsiz, siz.YOsiz, siz.XTsiz, siz.YTsiz, siz.XTOsiz, siz.YTOsiz} {
+		if uint64(v) > maxGridCoordinate {
+			return nil, fmt.Errorf("%w: SIZ grid value %d past %d", ErrUnsupported, v, maxGridCoordinate)
+		}
+	}
 	cs := &codestream{
-		x1: int(siz.Xsiz), y1: int(siz.Ysiz), x0: int(siz.XOsiz), y0: int(siz.YOsiz),
-		tileW: int(siz.XTsiz), tileH: int(siz.YTsiz), tileX0: int(siz.XTOsiz), tileY0: int(siz.YTOsiz),
+		x1: int(siz.Xsiz), y1: int(siz.Ysiz), x0: int(siz.XOsiz), y0: int(siz.YOsiz), // fits int: at most maxGridCoordinate, checked above
+		tileW: int(siz.XTsiz), tileH: int(siz.YTsiz), tileX0: int(siz.XTOsiz), tileY0: int(siz.YTOsiz), // fits int: at most maxGridCoordinate, checked above
 	}
 	// T.800, B.2 and B.3: a non-empty image area, tiles of at least one grid
 	// point, a tile grid that starts no later than the image area (B-3) and a
@@ -351,7 +365,9 @@ func parseSIZ(body []byte) (*codestream, error) {
 	}
 	cs.tilesX = ceilDiv(cs.x1-cs.tileX0, cs.tileW)
 	cs.tilesY = ceilDiv(cs.y1-cs.tileY0, cs.tileH)
-	if cs.tilesX*cs.tilesY > maxTiles {
+	// Divided, not multiplied: tilesX and tilesY each reach 2^32 - 1 on one-point
+	// tiles, and their product wraps an int64 negative past the bound.
+	if cs.tilesX > maxTiles/cs.tilesY {
 		return nil, fmt.Errorf("%w: %dx%d tiles, more than tile indices can address", ErrMalformed, cs.tilesX, cs.tilesY)
 	}
 	cs.components = make([]component, n)
@@ -370,9 +386,14 @@ func parseSIZ(body []byte) (*codestream, error) {
 	return cs, nil
 }
 
-// ceilDiv returns a / b rounded up, for a >= 0 and b > 0.
+// ceilDiv returns a / b rounded up, for a >= 0 and b > 0, without forming
+// a + b, which overflows for a near the int range.
 func ceilDiv(a, b int) int {
-	return (a + b - 1) / b
+	q := a / b
+	if a%b != 0 {
+		q++
+	}
+	return q
 }
 
 // componentIndex reads the component index that starts COC, QCC, RGN and POC
