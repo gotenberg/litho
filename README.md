@@ -12,7 +12,7 @@
 
 **litho** is a pure-Go PDF Conforming Processor. Read, validate, remediate, and produce PDF documents with no C dependencies.
 
-litho implements ISO 32000 (PDF 1.4 through 2.0). It extracts text and structured content, validates against PDF/A, PDF/UA, WTPDF, Factur-X and ZUGFeRD, repairs non-conformant files, and edits, renders, encrypts and signs them. Every output is a valid PDF, and every public type honors its documented concurrency contract under `-race`.
+litho implements ISO 32000 (PDF 1.4 through 2.0). It extracts text and structured content, validates against PDF/A, PDF/UA, WTPDF, Factur-X and ZUGFeRD, repairs non-conformant files, and edits, renders, encrypts and signs them.
 
 ## Install
 
