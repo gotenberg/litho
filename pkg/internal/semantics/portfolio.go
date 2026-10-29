@@ -231,9 +231,21 @@ func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObj
 		}
 	}
 
+	// /AFRelationship names how an associated file relates to the content
+	// (ISO 32000-2, Table 43; ISO 19005-3, 6.8).
+	relationship := ""
+	if relObj, ok := specDict["AFRelationship"]; ok {
+		relName, err := document.ResolveName(ctx, doc, relObj)
+		if err != nil {
+			doc.Logger.Debug("resolving file specification /AFRelationship", slog.Any("err", err))
+		}
+		relationship = string(relName)
+	}
+
 	return &models.EmbeddedFile{
-		Name:     filename,
-		MIMEType: mimeType,
-		Open:     doc.OpenFunc(stream),
+		Name:         filename,
+		MIMEType:     mimeType,
+		Relationship: relationship,
+		Open:         doc.OpenFunc(stream),
 	}, streamNum, nil
 }

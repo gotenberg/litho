@@ -258,3 +258,33 @@ func TestPageAssociatedFileFound(t *testing.T) {
 		t.Errorf("got %d files %+v, want the page's associated file", len(files), files)
 	}
 }
+
+// TestEmbeddedFileRelationship pins that /AFRelationship is reported as is,
+// and left empty when the specification has none.
+func TestEmbeddedFileRelationship(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, entry, want string
+	}{
+		{"data", " /AFRelationship /Data", "Data"},
+		{"none", "", ""},
+	} {
+		const payload = "<invoice/>"
+		data := buildPDF([]string{
+			"<< /Type /Catalog /Pages 2 0 R /AF [4 0 R] >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+			"<< /Type /Filespec /F (factur-x.xml) /UF (factur-x.xml)" + tc.entry + " /EF << /F 5 0 R >> >>",
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(payload), payload),
+		})
+
+		files, err := ExtractEmbeddedFiles(context.Background(), openBytes(t, data))
+		if err != nil {
+			t.Fatalf("%s: ExtractEmbeddedFiles: %v", tc.name, err)
+		}
+		if len(files) != 1 || files[0].Relationship != tc.want {
+			t.Errorf("%s: files = %+v, want one with relationship %q", tc.name, files, tc.want)
+		}
+	}
+}

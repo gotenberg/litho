@@ -327,6 +327,10 @@ type EmbeddedFile struct {
 	// MIMEType is the stream's /Subtype name, such as application/pdf, or
 	// empty when the stream has none.
 	MIMEType string `json:"mimeType,omitempty"`
+	// Relationship is the file specification's /AFRelationship, such as Source,
+	// Data, Alternative, Supplement or Unspecified (ISO 32000-2, Table 43), or
+	// empty when the specification has none.
+	Relationship string `json:"relationship,omitempty"`
 	// Open reads the file's decoded content. Each call returns a new reader.
 	Open func(ctx context.Context) (io.ReadCloser, error) `json:"-"`
 }
