@@ -9,7 +9,7 @@ litho is licensed under the GNU Affero General Public License version 3.0. This 
 ## 1. Definitions
 
 1. **"You"** means the individual or legal entity that signs this Agreement. For a legal entity, "You" includes every entity that controls, is controlled by, or is under common control with it.
-2. **"Licensor"** means [LICENSOR], the owner and maintainer of the Projects, and any successor or assignee.
+2. **"Licensor"** means Julien Neuhart, the owner and maintainer of the Projects, and any successor or assignee.
 3. **"litho"** means the software project hosted at https://github.com/gotenberg/litho, distributed under the GNU Affero General Public License version 3.0 ("AGPL-3.0").
 4. **"Gotenberg"** means the software project hosted at https://github.com/gotenberg/gotenberg, distributed under the MIT License.
 5. **"Projects"** means litho, Gotenberg, and any other software project owned or managed by the Licensor.
@@ -61,7 +61,7 @@ You represent that:
 3. **No obligation to support.** You are not required to provide support for Your Contributions.
 4. **Transfer.** The Licensor may assign this Agreement to a successor that takes over the Projects, provided the successor is bound by Section 4.
 5. **Entire agreement.** This Agreement is the entire agreement between You and the Licensor on its subject. If a provision is unenforceable, the rest remains in effect.
-6. **Governing law.** This Agreement is governed by the laws of [JURISDICTION], without regard to its conflict of laws rules.
+6. **Governing law.** This Agreement is governed by the laws of France, without regard to its conflict of laws rules.
 
 ## How to sign
 
@@ -73,4 +73,4 @@ I have read the litho CLA Document and I hereby sign the CLA
 
 Your GitHub account name, user ID, the comment and its timestamp are recorded as your signature. You only sign once.
 
-**Legal entities** sign once by email to [LICENSOR CONTACT], giving the entity's legal name and registered address, the signatory's name and title, the GitHub accounts authorized to contribute on its behalf, the date, and a signature.
+**Legal entities** sign once by email to neuhart.julien@gmail.com, giving the entity's legal name and registered address, the signatory's name and title, the GitHub accounts authorized to contribute on its behalf, the date, and a signature.
