@@ -1,0 +1,14 @@
+{
+  "signedContributors": [
+    {
+      "name": "gulien",
+      "id": 8983173,
+      "comment_id": 6496471370,
+      "created_at": "2026-10-29T12:18:55Z",
+      "repoId": 1176009403,
+      "pullRequestNo": 1,
+      "claVersion": "1",
+      "claUrl": "https://github.com/gotenberg/litho/blob/main/CLA.md"
+    }
+  ]
+}
