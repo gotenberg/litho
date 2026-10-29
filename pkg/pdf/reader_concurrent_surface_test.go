@@ -56,6 +56,7 @@ func TestConcurrentReaderSurface(t *testing.T) {
 		{"HasFormFields", func(c context.Context) { _, _ = r.HasFormFields(c) }},
 		{"HasXFAForm", func(c context.Context) { _ = r.HasXFAForm(c) }},
 		{"IsPortfolio", func(c context.Context) { _, _ = r.IsPortfolio(c) }},
+		{"IsTagged", func(c context.Context) { _, _ = r.IsTagged(c) }},
 		{"Metadata", func(c context.Context) { _, _ = r.Metadata(c) }},
 		{"PageCount", func(c context.Context) { _, _ = r.PageCount(c) }},
 		{"UndecodableStreams", func(c context.Context) { _, _ = r.UndecodableStreams(c) }},
