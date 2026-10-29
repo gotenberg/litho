@@ -57,7 +57,7 @@ test-unit: ## Run unit tests
 # Runs natively on linux/amd64 only; elsewhere a 386 binary needs emulation.
 .PHONY: test-unit-386
 test-unit-386: ## Run unit tests on linux/386, where int is 32 bits
-	GOOS=linux GOARCH=386 go test ./...
+	CGO_ENABLED=0 GOOS=linux GOARCH=386 go test ./...
 
 .PHONY: bench
 bench: ## Run all benchmarks
