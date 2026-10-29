@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/gotenberg/art/main/litho-logo.png" alt="litho Logo" width="150" height="150" />
+    <img src="https://raw.githubusercontent.com/gotenberg/art/main/litho-logo.svg" alt="litho Logo" width="600" />
     <h3 align="center">litho</h3>
     <p align="center">A PDF Conforming Processor</p>
     <p align="center">
