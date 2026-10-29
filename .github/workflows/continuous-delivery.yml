@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write
 
+# litho is pure Go: building without cgo catches any dependency that needs it.
+env:
+  CGO_ENABLED: "0"
+
 jobs:
   release:
     name: Release binaries

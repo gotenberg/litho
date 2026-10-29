@@ -15,6 +15,10 @@ concurrency:
 permissions:
   contents: read
 
+# litho is pure Go: building without cgo catches any dependency that needs it.
+env:
+  CGO_ENABLED: "0"
+
 jobs:
   lint:
     name: Lint Golang codebase
@@ -58,6 +62,9 @@ jobs:
       - lint-prettier
     name: Run unit tests
     runs-on: ubuntu-latest
+    # On Linux, -race requires cgo.
+    env:
+      CGO_ENABLED: "1"
     steps:
       - name: Checkout source code
         uses: actions/checkout@v7
