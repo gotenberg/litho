@@ -72,6 +72,12 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 - Bug reports: [GitHub Issues](https://github.com/gotenberg/litho/issues)
 - Security vulnerabilities: [SECURITY.md](SECURITY.md)
 
+## License
+
+litho is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+
+[Gotenberg](https://github.com/gotenberg/gotenberg) embeds litho and ships it under the MIT License, as its copyright owner allows. Contributors sign the [Contributor License Agreement](CLA.md), which grants that right for their contributions. Any other use of litho follows the AGPL-3.0.
+
 ## Acknowledgments
 
 litho's text extraction, CMap handling and font resolution draw on Mozilla's [PDF.js](https://github.com/mozilla/pdf.js). Its PDF/A, PDF/UA and WTPDF rule set and clause numbering follow [veraPDF](https://github.com/veraPDF).
