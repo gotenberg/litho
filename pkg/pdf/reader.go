@@ -1497,6 +1497,15 @@ func (r *Reader) IsPortfolio(ctx context.Context) (_ bool, err error) {
 	return semantics.IsPortfolio(ctx, r.doc)
 }
 
+// IsTagged reports whether the document declares itself a Tagged PDF: its
+// catalog holds a structure tree root and a mark information dictionary whose
+// Marked entry is true (ISO 32000-1, 14.8.1). It reads the declaration only;
+// [Reader.ValidatePDFUA] checks the structure against the content.
+func (r *Reader) IsTagged(ctx context.Context) (_ bool, err error) {
+	defer recoverToError(r.logger(), "Reader.IsTagged", &err)
+	return semantics.IsTagged(ctx, r.doc)
+}
+
 // EmbeddedFiles returns every file embedded in the document: the /EmbeddedFiles
 // name tree plus the files carried by FileAttachment annotations, which readers
 // list alongside them. Each item includes the original filename, MIME type, and
