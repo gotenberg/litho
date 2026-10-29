@@ -64,7 +64,7 @@ func runContrast(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		}
 		pageNums := make([]int, 0, pageCount)
 		if *pagesFlag != "" {
-			pageNums, err = parsePages(*pagesFlag, pageCount)
+			pageNums, err = pdf.ParsePageRanges(*pagesFlag, pageCount)
 			if err != nil {
 				closer()
 				fmt.Fprintf(stderr, "%s: %v\n", path, err)

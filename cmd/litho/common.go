@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -384,131 +383,9 @@ func reorderArgs(fs *flag.FlagSet, args []string) []string {
 	return append(flags, positional...)
 }
 
-// parsePages parses a page range specification into a slice of 1-based page
-// numbers, in the order the specification lists them.
-//
-// It does NOT sort or deduplicate: "3,1" returns [3, 1] and "1,1" returns
-// [1, 1]. The comment here claimed "sorted" for a long time and the body never
-// did it. Callers are unaffected because the page operations treat the list as
-// a SET, measured on a three-page document: `delete --pages 1,1` removes one
-// page and `delete --pages 3,1` removes both, while `rotate --pages 3,1`
-// rotates pages 1 and 3 and leaves 2 alone. Sort here only if a caller appears
-// that needs ordering, and give it a test that compares VALUES.
-//
-// Supported syntax:
-//
-//	"1"         → [1]
-//	"1-3"       → [1, 2, 3]
-//	"1,3,5"     → [1, 3, 5]
-//	"1-3,7-9"   → [1, 2, 3, 7, 8, 9]
-//	"even"      → [2, 4, 6, ...]
-//	"odd"       → [1, 3, 5, ...]
-//	"last"      → [pageCount]
-//
-// A specification that names no page in this document is an error, never an
-// empty slice. "even" on a one-page document selects nothing, and an empty
-// selection cannot be handed to the page operations: [pdf.Writer.RotatePages]
-// and the three stamps document an empty variadic as EVERY page, so returning
-// one silently inverts the request. Measured before this guard existed:
-// `rotate -angle 90 -pages even` on a one-page file rotated page 1 and exited 0.
-// Only "even" and "odd" can select nothing. A comma or range part yields at
-// least one page or fails ("1,,2" fails in Atoi), and "last" already rejects a
-// page-less document.
-func parsePages(spec string, pageCount int) ([]int, error) {
-	spec = strings.TrimSpace(spec)
-	if spec == "" {
-		return nil, fmt.Errorf("empty page specification")
-	}
-
-	// Callers that want every page pass no -pages flag at all and never reach
-	// here, so refusing an empty selection cannot break that path.
-	selected := func(pages []int) ([]int, error) {
-		if len(pages) == 0 {
-			return nil, fmt.Errorf("page specification %q selects no pages in a %d-page document", spec, pageCount)
-		}
-		return pages, nil
-	}
-
-	switch strings.ToLower(spec) {
-	case "even":
-		var pages []int
-		for i := 2; i <= pageCount; i += 2 {
-			pages = append(pages, i)
-		}
-		return selected(pages)
-	case "odd":
-		var pages []int
-		for i := 1; i <= pageCount; i += 2 {
-			pages = append(pages, i)
-		}
-		return selected(pages)
-	case "last":
-		if pageCount < 1 {
-			return nil, fmt.Errorf("document has no pages")
-		}
-		return []int{pageCount}, nil
-	}
-
-	// Bounds are checked per part, BEFORE the range is expanded. The expansion
-	// appends one entry per page it spans, so validating afterwards let
-	// "1-10000000" build a 10-million-entry slice on a five-page document and
-	// only then report that page 6 is out of range: 469 MiB and 56 ms, all of it
-	// discarded, growing linearly with the endpoint until the allocation fails.
-	// Anti-DoS guard, not spec-mandated. The bound is pageCount itself rather
-	// than an invented constant, and the checks run in list order with endpoints
-	// before their interior, which reports the same offending page the
-	// post-expansion scan did: it named the first offender in expansion order,
-	// and that is always an endpoint.
-	inRange := func(p int) error {
-		if p < 1 || p > pageCount {
-			return fmt.Errorf("page %d out of range [1, %d]", p, pageCount)
-		}
-		return nil
-	}
-
-	var pages []int
-	for part := range strings.SplitSeq(spec, ",") {
-		part = strings.TrimSpace(part)
-		if strings.Contains(part, "-") {
-			bounds := strings.SplitN(part, "-", 2)
-			start, err := strconv.Atoi(strings.TrimSpace(bounds[0]))
-			if err != nil {
-				return nil, fmt.Errorf("invalid page number %q", bounds[0])
-			}
-			end, err := strconv.Atoi(strings.TrimSpace(bounds[1]))
-			if err != nil {
-				return nil, fmt.Errorf("invalid page number %q", bounds[1])
-			}
-			if start > end {
-				return nil, fmt.Errorf("invalid range %d-%d: start > end", start, end)
-			}
-			if err := inRange(start); err != nil {
-				return nil, err
-			}
-			if err := inRange(end); err != nil {
-				return nil, err
-			}
-			for i := start; i <= end; i++ {
-				pages = append(pages, i)
-			}
-		} else {
-			n, err := strconv.Atoi(part)
-			if err != nil {
-				return nil, fmt.Errorf("invalid page number %q", part)
-			}
-			if err := inRange(n); err != nil {
-				return nil, err
-			}
-			pages = append(pages, n)
-		}
-	}
-
-	return pages, nil
-}
-
 // resolvePages opens path and resolves the list of page numbers to
 // process. An empty pagesSpec means every page; otherwise it is parsed
-// with [parsePages]. The caller must call the returned closer when the
+// with [pdf.ParsePageRanges]. The caller must call the returned closer when the
 // reader is no longer needed. On error the cause is already written to
 // stderr and the reader (if any) is closed, so the caller can just
 // return a non-zero exit code.
@@ -528,7 +405,7 @@ func resolvePages(ctx context.Context, path, password, pagesSpec string, stderr 
 
 	var pageNums []int
 	if pagesSpec != "" {
-		pageNums, err = parsePages(pagesSpec, pageCount)
+		pageNums, err = pdf.ParsePageRanges(pagesSpec, pageCount)
 		if err != nil {
 			closer()
 			fmt.Fprintf(stderr, "%s: %v\n", path, err)

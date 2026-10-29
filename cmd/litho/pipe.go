@@ -875,7 +875,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			var pageNums []int
 			if *pages != "" {
 				var err error
-				pageNums, err = parsePages(*pages, pageCount)
+				pageNums, err = pdf.ParsePageRanges(*pages, pageCount)
 				if err != nil {
 					return err
 				}
@@ -894,7 +894,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			return nil, fmt.Errorf("--pages is required")
 		}
 		pageCount, _ := src.PageCount(ctx)
-		pageNums, err := parsePages(*pages, pageCount)
+		pageNums, err := pdf.ParsePageRanges(*pages, pageCount)
 		if err != nil {
 			return nil, err
 		}
@@ -943,7 +943,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		}
 		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
 			pageCount, _ := src.PageCount(ctx)
-			pageNums, err := parsePages(*pages, pageCount)
+			pageNums, err := pdf.ParsePageRanges(*pages, pageCount)
 			if err != nil {
 				return err
 			}
@@ -1087,7 +1087,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			if *pages != "" {
 				pageCount, _ := src.PageCount(ctx)
 				var err error
-				pageNums, err = parsePages(*pages, pageCount)
+				pageNums, err = pdf.ParsePageRanges(*pages, pageCount)
 				if err != nil {
 					return err
 				}
@@ -1134,7 +1134,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			if *pages != "" {
 				pageCount, _ := src.PageCount(ctx)
 				var err error
-				pageNums, err = parsePages(*pages, pageCount)
+				pageNums, err = pdf.ParsePageRanges(*pages, pageCount)
 				if err != nil {
 					return err
 				}
@@ -1332,7 +1332,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 				if err != nil {
 					return fmt.Errorf("reading source page count: %w", err)
 				}
-				srcPageList, err = parsePages(*sourcePages, srcPageCount)
+				srcPageList, err = pdf.ParsePageRanges(*sourcePages, srcPageCount)
 				if err != nil {
 					return err
 				}
@@ -1407,7 +1407,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 				if err != nil {
 					return fmt.Errorf("reading page count: %w", err)
 				}
-				pageNums, err = parsePages(*pages, pageCount)
+				pageNums, err = pdf.ParsePageRanges(*pages, pageCount)
 				if err != nil {
 					return err
 				}

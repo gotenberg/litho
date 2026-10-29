@@ -99,6 +99,11 @@ var (
 	// an insertion position outside [0, pageCount].
 	ErrInvalidPageNumber = mutations.ErrInvalidPageNumber
 
+	// ErrInvalidPageRange is returned, wrapped, by [ParsePageRanges] when a
+	// page range specification is empty or malformed, names a page outside
+	// the document, or selects no page.
+	ErrInvalidPageRange = errors.New("invalid page range")
+
 	// ErrInvalidRotation is returned when a rotation value is not a
 	// multiple of 90.
 	ErrInvalidRotation = errors.New("rotation must be a multiple of 90")

@@ -81,7 +81,7 @@ func TestDelete_RefusesToEmptyTheDocument(t *testing.T) {
 	}
 }
 
-// TestDelete_RejectsAnUnparseablePageRange covers the parsePages arm, which is
+// TestDelete_RejectsAnUnparseablePageRange covers the pdf.ParsePageRanges arm, which is
 // a different failure from the usage guard: -pages is present, so the command
 // gets as far as parsing it.
 func TestDelete_RejectsAnUnparseablePageRange(t *testing.T) {

@@ -58,7 +58,7 @@ func runRotate(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 			fmt.Fprintf(stderr, "reading page count: %v\n", err)
 			return exitError
 		}
-		pageList, err = parsePages(*pages, pageCount)
+		pageList, err = pdf.ParsePageRanges(*pages, pageCount)
 		if err != nil {
 			fmt.Fprintf(stderr, "parsing pages: %v\n", err)
 			return exitError

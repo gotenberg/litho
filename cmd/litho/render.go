@@ -134,7 +134,7 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 	pageNums := make([]int, 0, pageCount)
 	if *pagesFlag != "" {
-		if pageNums, err = parsePages(*pagesFlag, pageCount); err != nil {
+		if pageNums, err = pdf.ParsePageRanges(*pagesFlag, pageCount); err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", path, err)
 			return exitError
 		}

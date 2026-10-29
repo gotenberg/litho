@@ -213,57 +213,6 @@ func TestText_MissingFile(t *testing.T) {
 	}
 }
 
-func TestParsePages(t *testing.T) {
-	tests := []struct {
-		spec      string
-		pageCount int
-		want      []int
-		wantErr   bool
-	}{
-		{"1", 5, []int{1}, false},
-		{"1-3", 5, []int{1, 2, 3}, false},
-		{"1,3,5", 5, []int{1, 3, 5}, false},
-		{"1-3,5", 5, []int{1, 2, 3, 5}, false},
-		{"even", 6, []int{2, 4, 6}, false},
-		{"odd", 6, []int{1, 3, 5}, false},
-		{"last", 5, []int{5}, false},
-		{"0", 5, nil, true},
-		{"6", 5, nil, true},
-		{"3-1", 5, nil, true},
-		{"", 5, nil, true},
-		{"abc", 5, nil, true},
-		// parsePages neither sorts nor deduplicates, and the page operations
-		// treat its result as a SET, so these two pin the real contract rather
-		// than the "sorted slice" the doc comment used to promise.
-		{"3,1", 5, []int{3, 1}, false},
-		{"1,1", 5, []int{1, 1}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.spec, func(t *testing.T) {
-			got, err := parsePages(tt.spec, tt.pageCount)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parsePages(%q, %d) err=%v, wantErr=%t", tt.spec, tt.pageCount, err, tt.wantErr)
-				return
-			}
-			if err != nil {
-				return
-			}
-			// Compare VALUES, not just the length. This assertion read
-			// `len(got) != len(tt.want)` for a long time, which made every want
-			// slice above decorative: parsePages("1-3", 5) could have returned
-			// [9, 9, 9] and passed.
-			if len(got) != len(tt.want) {
-				t.Fatalf("parsePages(%q, %d) = %v, want %v", tt.spec, tt.pageCount, got, tt.want)
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Fatalf("parsePages(%q, %d) = %v, want %v", tt.spec, tt.pageCount, got, tt.want)
-				}
-			}
-		})
-	}
-}
-
 // TestRun_GlobalFlagsCompose pins that the two value-consuming globals do not
 // eat each other.
 //

@@ -54,7 +54,7 @@ func runInsert(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 			fmt.Fprintf(stderr, "reading source page count: %v\n", err)
 			return exitError
 		}
-		srcPageList, err = parsePages(*sourcePages, srcPageCount)
+		srcPageList, err = pdf.ParsePageRanges(*sourcePages, srcPageCount)
 		if err != nil {
 			fmt.Fprintf(stderr, "parsing source pages: %v\n", err)
 			return exitError

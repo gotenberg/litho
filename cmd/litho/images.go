@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 type imageInfo struct {
@@ -59,7 +61,7 @@ func runImages(ctx context.Context, args []string, stdout, stderr io.Writer) int
 
 		var pageNums []int
 		if *pagesFlag != "" {
-			pageNums, err = parsePages(*pagesFlag, pageCount)
+			pageNums, err = pdf.ParsePageRanges(*pagesFlag, pageCount)
 			if err != nil {
 				closer()
 				fmt.Fprintf(stderr, "%s: %v\n", path, err)
