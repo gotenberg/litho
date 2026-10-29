@@ -1,0 +1,285 @@
+# Checks that every contributor to a pull request has signed the litho CLA.
+#
+# Self-contained: it only uses GitHub's own actions/github-script, and never
+# checks out or runs code from the pull request, so it is safe to run with
+# pull_request_target on pull requests from forks.
+#
+# Contributors sign by posting the sign phrase as a comment on their pull
+# request. Signatures are committed as JSON to the SIGNATURES_BRANCH branch,
+# which the workflow creates on first use. Do not protect that branch.
+#
+# Require the "CLA" status check in the branch protection rules of main.
+
+name: CLA
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, closed]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write # Commit signatures to the signatures branch.
+  issues: write # Comment on and lock pull requests (they are issues in the API).
+  pull-requests: write # Read pull requests and their commits.
+  statuses: write # Set the "CLA" commit status.
+
+concurrency:
+  group: cla-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  cla:
+    # On comments, only run for pull requests, and only for the sign phrase
+    # or "recheck" (contains() and == are case-insensitive).
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+        (contains(github.event.comment.body, 'hereby sign the CLA') ||
+         github.event.comment.body == 'recheck'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check CLA signatures
+        uses: actions/github-script@v9
+        env:
+          SIGN_PHRASE: I have read the litho CLA Document and I hereby sign the CLA
+          CLA_URL: https://github.com/gotenberg/litho/blob/main/CLA.md
+          CLA_VERSION: "1"
+          SIGNATURES_BRANCH: cla-signatures
+          SIGNATURES_PATH: signatures/cla.json
+          # Logins that never need to sign. Accounts of type Bot are always skipped.
+          ALLOWLIST: dependabot[bot],renovate[bot],github-actions[bot]
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const env = process.env;
+            const MARKER = '<!-- litho-cla-bot -->';
+            const STATUS_CONTEXT = 'CLA';
+
+            const normalize = (s) =>
+              (s || '').trim().replace(/\s+/g, ' ').replace(/[.!]+$/, '').toLowerCase();
+            const phrase = normalize(env.SIGN_PHRASE);
+            const allowlist = new Set(
+              env.ALLOWLIST.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+            );
+            const safe = (s) => String(s).replace(/[`\r\n]/g, "'");
+
+            const prNumber = context.payload.pull_request?.number ?? context.payload.issue.number;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+
+            // Lock merged pull requests so signature comments cannot be edited afterwards.
+            if (context.eventName === 'pull_request_target' && context.payload.action === 'closed') {
+              if (pr.merged && !pr.locked) {
+                await github.rest.issues.lock({ owner, repo, issue_number: prNumber, lock_reason: 'resolved' });
+              }
+              return;
+            }
+            if (pr.state !== 'open') return;
+
+            // 1. Who must sign: the pull request author, every commit author,
+            //    and every Co-authored-by trailer.
+            const required = new Map(); // GitHub user id -> login
+            const unlinked = new Set(); // authors with no GitHub account
+            const addUser = (user) => {
+              if (!user || user.type === 'Bot' || allowlist.has(user.login.toLowerCase())) return;
+              required.set(user.id, user.login);
+            };
+
+            addUser(pr.user);
+
+            // Note: the API returns at most 250 commits for a pull request.
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner, repo, pull_number: prNumber, per_page: 100,
+            });
+
+            const coAuthorRe = /^co-authored-by:\s*(.*?)\s*<([^>]+)>\s*$/gim;
+            const noreplyRe = /^(?:\d+\+)?([a-z0-9-]+(?:\[bot\])?)@users\.noreply\.github\.com$/i;
+            const lookedUp = new Map();
+
+            for (const c of commits) {
+              if (c.author) {
+                addUser(c.author);
+              } else {
+                unlinked.add(`${c.commit.author.name} <${c.commit.author.email}>`);
+              }
+
+              for (const [, name, email] of c.commit.message.matchAll(coAuthorRe)) {
+                const match = email.match(noreplyRe);
+                if (!match) {
+                  unlinked.add(`${name} <${email}>`);
+                  continue;
+                }
+                const login = match[1].toLowerCase();
+                if (!lookedUp.has(login)) {
+                  try {
+                    const { data } = await github.rest.users.getByUsername({ username: login });
+                    lookedUp.set(login, data);
+                  } catch {
+                    lookedUp.set(login, null);
+                  }
+                }
+                const user = lookedUp.get(login);
+                if (user) addUser(user);
+                else unlinked.add(`${name} <${email}>`);
+              }
+            }
+
+            // 2. Who has already signed.
+            async function loadSignatures() {
+              try {
+                const { data } = await github.rest.repos.getContent({
+                  owner, repo, path: env.SIGNATURES_PATH, ref: env.SIGNATURES_BRANCH,
+                });
+                const json = JSON.parse(Buffer.from(data.content, 'base64').toString('utf8'));
+                json.signedContributors ??= [];
+                return { sha: data.sha, json };
+              } catch (e) {
+                if (e.status === 404) return { sha: undefined, json: { signedContributors: [] } };
+                throw e;
+              }
+            }
+
+            async function ensureBranch() {
+              try {
+                await github.rest.git.getRef({ owner, repo, ref: `heads/${env.SIGNATURES_BRANCH}` });
+              } catch (e) {
+                if (e.status !== 404) throw e;
+                // Create an orphan branch that only holds signatures.
+                const { data: tree } = await github.rest.git.createTree({
+                  owner, repo,
+                  tree: [{
+                    path: 'README.md', mode: '100644', type: 'blob',
+                    content: `# CLA signatures\n\nSignatures of the litho CLA: ${env.CLA_URL}\n`,
+                  }],
+                });
+                const { data: commit } = await github.rest.git.createCommit({
+                  owner, repo, message: 'Create CLA signatures branch', tree: tree.sha, parents: [],
+                });
+                await github.rest.git.createRef({
+                  owner, repo, ref: `refs/heads/${env.SIGNATURES_BRANCH}`, sha: commit.sha,
+                });
+              }
+            }
+
+            const { json: signatures } = await loadSignatures();
+            const signedIds = new Set(signatures.signedContributors.map((s) => s.id));
+
+            // 3. Record new signatures posted as comments on this pull request.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: prNumber, per_page: 100,
+            });
+
+            const newSignatures = [];
+            for (const comment of comments) {
+              const user = comment.user;
+              if (!user || !required.has(user.id) || signedIds.has(user.id)) continue;
+              if (normalize(comment.body) !== phrase) continue;
+              signedIds.add(user.id);
+              newSignatures.push({
+                name: user.login,
+                id: user.id,
+                comment_id: comment.id,
+                created_at: comment.created_at,
+                repoId: context.payload.repository.id,
+                pullRequestNo: prNumber,
+                claVersion: env.CLA_VERSION,
+                claUrl: env.CLA_URL,
+              });
+            }
+
+            if (newSignatures.length > 0) {
+              await ensureBranch();
+              // Retry on conflicts: another pull request may write at the same time.
+              for (let attempt = 1; ; attempt++) {
+                const current = await loadSignatures();
+                const have = new Set(current.json.signedContributors.map((s) => s.id));
+                const toAdd = newSignatures.filter((s) => !have.has(s.id));
+                if (toAdd.length === 0) break;
+                current.json.signedContributors.push(...toAdd);
+                try {
+                  await github.rest.repos.createOrUpdateFileContents({
+                    owner, repo,
+                    path: env.SIGNATURES_PATH,
+                    branch: env.SIGNATURES_BRANCH,
+                    sha: current.sha,
+                    message: `${toAdd.map((s) => s.name).join(', ')} signed the CLA in #${prNumber}`,
+                    content: Buffer.from(JSON.stringify(current.json, null, 2) + '\n').toString('base64'),
+                  });
+                  break;
+                } catch (e) {
+                  if ((e.status === 409 || e.status === 422) && attempt < 5) {
+                    await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+                    continue;
+                  }
+                  throw e;
+                }
+              }
+              for (const s of newSignatures) {
+                await github.rest.reactions
+                  .createForIssueComment({ owner, repo, comment_id: s.comment_id, content: '+1' })
+                  .catch(() => {});
+              }
+            }
+
+            // 4. Report: commit status and a single bot comment.
+            const missing = [...required].filter(([id]) => !signedIds.has(id)).map(([, login]) => login);
+            const signed = [...required].filter(([id]) => signedIds.has(id)).map(([, login]) => login);
+            const ok = missing.length === 0 && unlinked.size === 0;
+
+            await github.rest.repos.createCommitStatus({
+              owner, repo,
+              sha: pr.head.sha,
+              state: ok ? 'success' : 'failure',
+              context: STATUS_CONTEXT,
+              description: ok
+                ? 'All contributors have signed the CLA'
+                : `${missing.length + unlinked.size} contributor(s) still need to sign the CLA`,
+              target_url: env.CLA_URL,
+            });
+
+            const lines = [MARKER];
+            if (ok) {
+              lines.push(`All contributors have signed the [litho CLA](${env.CLA_URL}). Thank you!`);
+            } else {
+              lines.push(
+                'Thank you for your contribution! litho is licensed under AGPL-3.0, and parts of it also ship in ' +
+                  '[Gotenberg](https://github.com/gotenberg/gotenberg) under the MIT License. Before we can merge ' +
+                  `this pull request, every contributor must sign the [litho Contributor License Agreement](${env.CLA_URL}).`,
+              );
+              if (missing.length > 0) {
+                lines.push(
+                  '',
+                  'To sign, post this exact comment on this pull request:',
+                  '',
+                  '```',
+                  env.SIGN_PHRASE,
+                  '```',
+                  '',
+                  ...signed.map((login) => `- [x] @${login}`),
+                  ...missing.map((login) => `- [ ] @${login}`),
+                );
+              }
+              if (unlinked.size > 0) {
+                lines.push(
+                  '',
+                  'These commit authors are not linked to a GitHub account, so they cannot sign. Add the email ' +
+                    'address to a GitHub account, or use a GitHub no-reply address in the commit or ' +
+                    'Co-authored-by trailer, then push again:',
+                  '',
+                  ...[...unlinked].map((u) => `- \`${safe(u)}\``),
+                );
+              }
+              lines.push('', 'Comment `recheck` to run the check again.');
+            }
+            const body = lines.join('\n');
+
+            const existing = comments.find((c) => c.user?.type === 'Bot' && c.body?.includes(MARKER));
+            if (existing) {
+              if (existing.body !== body) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              }
+            } else if (!ok) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+            }
+
+            core.info(ok ? 'CLA check passed.' : `Waiting for: ${[...missing, ...unlinked].join(', ')}`);
