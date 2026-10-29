@@ -18,8 +18,25 @@ import (
 const fetchTimeout = time.Minute
 
 // httpClient is the client litho reaches timestamp authorities, OCSP
-// responders and CRL and certificate servers with.
+// responders and CRL and certificate servers with, unless the context names
+// another (see [ContextWithHTTPClient]).
 var httpClient = &http.Client{Timeout: fetchTimeout}
+
+type httpClientKey struct{}
+
+// ContextWithHTTPClient returns a copy of ctx whose fetches go through client.
+// A nil client keeps the default one.
+func ContextWithHTTPClient(ctx context.Context, client *http.Client) context.Context {
+	return context.WithValue(ctx, httpClientKey{}, client)
+}
+
+// clientFor returns the client ctx names, or the default one.
+func clientFor(ctx context.Context) *http.Client {
+	if client, ok := ctx.Value(httpClientKey{}).(*http.Client); ok && client != nil {
+		return client
+	}
+	return httpClient
+}
 
 // post sends body to rawURL as a POST of contentType and returns the answer,
 // refusing a status other than 200 and an answer of more than limit bytes.
@@ -75,7 +92,7 @@ func redacted(rawURL string) string {
 // do sends req and reads its answer (see [post]). The answer's content type
 // is not checked: its DER is, by whoever reads it.
 func do(req *http.Request, limit int64) ([]byte, error) {
-	resp, err := httpClient.Do(req)
+	resp, err := clientFor(req.Context()).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("reaching %s: %w", req.URL.Redacted(), err)
 	}
