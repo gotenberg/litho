@@ -1,8 +1,6 @@
 <p align="center">
     <img src="https://raw.githubusercontent.com/gotenberg/art/main/litho-logo.svg" alt="litho Logo" width="600" />
     <p align="center">
-        <a href="https://github.com/gotenberg/litho/releases/latest"><img alt="Latest version" src="https://img.shields.io/github/v/release/gotenberg/litho?label=latest"></a>
-        <a href="https://github.com/gotenberg/litho/pkgs/container/litho"><img alt="GitHub Packages downloads" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fipitio.github.io%2Fbackage%2Fgotenberg%2Flitho%2Flitho.json&query=%24.downloads&logo=github&label=downloads&color=blue"></a>
         <a href="https://github.com/gotenberg/litho/actions/workflows/continuous-integration.yml"><img alt="Continuous Integration" src="https://github.com/gotenberg/litho/actions/workflows/continuous-integration.yml/badge.svg"></a>
         <a href="https://pkg.go.dev/github.com/gotenberg/litho"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/gotenberg/litho.svg"></a>
     </p>
