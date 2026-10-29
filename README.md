@@ -1,5 +1,7 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/gotenberg/art/main/litho-logo.svg" alt="litho Logo" width="300" />
+    <img src="https://raw.githubusercontent.com/gotenberg/art/main/litho-logo.png" alt="litho Logo" width="150" height="150" />
+    <h3 align="center">litho</h3>
+    <p align="center">A pure-Go PDF Conforming Processor</p>
     <p align="center">
         <a href="https://github.com/gotenberg/litho/actions/workflows/continuous-integration.yml"><img alt="Continuous Integration" src="https://github.com/gotenberg/litho/actions/workflows/continuous-integration.yml/badge.svg"></a>
         <a href="https://pkg.go.dev/github.com/gotenberg/litho"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/gotenberg/litho.svg"></a>
