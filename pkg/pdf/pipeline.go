@@ -57,8 +57,7 @@ import (
 // pipeline on one goroutine and hand the finished value to [Pipeline.WriteTo].
 // [PipelineResult] carries the same requirement.
 type Pipeline struct {
-	stages   []stage
-	firstErr error
+	stages []stage
 }
 
 // PipelineResult holds per-stage execution info returned from
@@ -93,9 +92,6 @@ type StageReport struct {
 
 // NewPipeline creates an empty [Pipeline]. Seed it with [Pipeline.Open].
 func NewPipeline() *Pipeline { return &Pipeline{} }
-
-// Err returns the first build-time validation error, or nil.
-func (p *Pipeline) Err() error { return p.firstErr }
 
 func (p *Pipeline) add(s stage) *Pipeline {
 	p.stages = append(p.stages, s)
@@ -141,15 +137,7 @@ func (p *Pipeline) Apply(fn func(ctx context.Context, w *Writer) error) *Pipelin
 // depends on what the Apply closures call, and is enforced at execution time:
 // it does not appear here.
 func (p *Pipeline) Validate() error {
-	var errs []error
-	if p.firstErr != nil {
-		errs = append(errs, p.firstErr)
-	}
-	errs = append(errs, p.buildValidationErrors()...)
-	if len(errs) == 0 {
-		return nil
-	}
-	return errors.Join(errs...)
+	return errors.Join(p.buildValidationErrors()...)
 }
 
 func (p *Pipeline) buildValidationErrors() []error {
