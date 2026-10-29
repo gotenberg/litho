@@ -271,6 +271,9 @@ type ImageMeta struct {
 	// Filename is the name the image has in its resource dictionary, such as
 	// Im0. It is not a file name and can repeat on one page.
 	Filename string `json:"filename"`
+	// ObjectNum is the object number of the image XObject, shared by every
+	// placement of the same image, or 0 when the image is a direct object.
+	ObjectNum int `json:"objectNum,omitempty"`
 	// Width is the image width in samples.
 	Width int `json:"width"`
 	// Height is the image height in samples.

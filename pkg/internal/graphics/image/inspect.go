@@ -118,8 +118,8 @@ func ExtractImages(ctx context.Context, doc *document.Document, page *document.P
 //     nested in form XObjects on 583 pages of the pdfjs and govdocs corpora.
 func ExtractImagesRecursive(ctx context.Context, doc *document.Document, page *document.Page) []models.ImageMeta {
 	var images []models.ImageMeta
-	walkPageImages(ctx, doc, page, func(name string, stream ast.PdfStream, resources ast.PdfDict) bool {
-		if meta, ok := imageMeta(ctx, doc, name, stream, colorContext{resources: resources, page: page.Dict}); ok {
+	walkPageImages(ctx, doc, page, func(name string, objNum int, stream ast.PdfStream, resources ast.PdfDict) bool {
+		if meta, ok := imageMeta(ctx, doc, name, objNum, stream, colorContext{resources: resources, page: page.Dict}); ok {
 			images = append(images, meta)
 		}
 		return true
@@ -128,8 +128,9 @@ func ExtractImagesRecursive(ctx context.Context, doc *document.Document, page *d
 }
 
 // imageVisitor receives each image stream a walk reaches, under the resource
-// name it is found by, and reports whether the walk goes on.
-type imageVisitor func(name string, stream ast.PdfStream, resources ast.PdfDict) bool
+// name it is found by, with its object number (0 for a direct object), and
+// reports whether the walk goes on.
+type imageVisitor func(name string, objNum int, stream ast.PdfStream, resources ast.PdfDict) bool
 
 // walkPageImages visits the image XObjects a page shows, in the order
 // [ExtractImagesRecursive] lists them: its resources, then its annotations'
@@ -148,11 +149,11 @@ func findImage(ctx context.Context, doc *document.Document, page *document.Page,
 	var found ast.PdfStream
 	var foundIn ast.PdfDict
 	ok := false
-	walkPageImages(ctx, doc, page, func(n string, stream ast.PdfStream, resources ast.PdfDict) bool {
+	walkPageImages(ctx, doc, page, func(n string, _ int, stream ast.PdfStream, resources ast.PdfDict) bool {
 		if n != name {
 			return true
 		}
-		if _, listed := imageMeta(ctx, doc, n, stream, colorContext{}); !listed {
+		if _, listed := imageMeta(ctx, doc, n, 0, stream, colorContext{}); !listed {
 			return true
 		}
 		found, foundIn, ok = stream, resources, true
@@ -338,7 +339,11 @@ func walkImages(ctx context.Context, doc *document.Document, resources ast.PdfDi
 
 		switch subtype {
 		case "Image":
-			if !visit(nameStr, stream, resources) {
+			objNum := 0
+			if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+				objNum = ref.ObjectNum
+			}
+			if !visit(nameStr, objNum, stream, resources) {
 				return false
 			}
 		case "Form":
@@ -507,7 +512,7 @@ func statedBitsPerComponent(ctx context.Context, doc *document.Document, dict as
 
 // imageMeta reads the metadata an Image XObject states. Its Decode function
 // reads the colours in cc.
-func imageMeta(ctx context.Context, doc *document.Document, name string, stream ast.PdfStream, cc colorContext) (models.ImageMeta, bool) {
+func imageMeta(ctx context.Context, doc *document.Document, name string, objNum int, stream ast.PdfStream, cc colorContext) (models.ImageMeta, bool) {
 	width, err := resolveInt(ctx, doc, stream.Dict, "Width")
 	if err != nil {
 		return models.ImageMeta{}, false
@@ -519,6 +524,7 @@ func imageMeta(ctx context.Context, doc *document.Document, name string, stream 
 	bitsPerComp := statedBitsPerComponent(ctx, doc, stream.Dict)
 	return models.ImageMeta{
 		Filename:         name,
+		ObjectNum:        objNum,
 		Width:            width,
 		Height:           height,
 		ColorSpace:       resolveColorSpace(ctx, doc, stream.Dict),

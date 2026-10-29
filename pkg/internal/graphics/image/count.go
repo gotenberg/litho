@@ -15,8 +15,8 @@ import (
 // listing.
 func CountResourceImages(ctx context.Context, doc *document.Document, resources ast.PdfDict) int {
 	n := 0
-	walkImages(ctx, doc, resources, make(map[int]bool), 0, func(name string, stream ast.PdfStream, res ast.PdfDict) bool {
-		if _, ok := imageMeta(ctx, doc, name, stream, colorContext{resources: res}); ok {
+	walkImages(ctx, doc, resources, make(map[int]bool), 0, func(name string, _ int, stream ast.PdfStream, res ast.PdfDict) bool {
+		if _, ok := imageMeta(ctx, doc, name, 0, stream, colorContext{resources: res}); ok {
 			n++
 		}
 		return true
