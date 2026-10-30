@@ -763,3 +763,105 @@ func (e *PipelineStageError) Error() string {
 
 // Unwrap returns the wrapped error so callers can use [errors.Is].
 func (e *PipelineStageError) Unwrap() error { return e.Err }
+
+// invalidInputErrors lists the sentinels the caller causes: a document litho
+// cannot read or edit as asked, or an argument out of range. See
+// [IsInvalidInput]. TestEverySentinelIsClassified fails when a sentinel is
+// neither in it nor in the test's list of the other sentinels.
+var invalidInputErrors = []error{
+	ErrInvalidPassword,
+	ErrNotAPDF,
+	ErrDamagedXRef,
+	ErrUnsupportedEncryption,
+	ErrFontMissing,
+	ErrRequiresOCR,
+	ErrImageNotFound,
+	ErrImageNotDecodable,
+	ErrRenderTooLarge,
+	ErrInvalidRenderOptions,
+	ErrInvalidPageNumber,
+	ErrInvalidPageRange,
+	ErrInvalidRotation,
+	ErrEmptyPageList,
+	ErrEmptyText,
+	ErrEmptyData,
+	ErrUnsupportedMimeType,
+	ErrInvalidFont,
+	ErrSourceIndexOutOfRange,
+	ErrInvalidPageSize,
+	ErrSignFullRewriteIncompatible,
+	ErrSignatureFieldUnavailable,
+	ErrSignatureFieldLocked,
+	ErrSeedValueUnmet,
+	ErrSignatureNotPAdES,
+	ErrCertificateRevoked,
+	ErrSignerKeyUnsupported,
+	ErrSignerKeyMismatch,
+	ErrSignerCertificateUsage,
+	ErrSignerKeyEncrypted,
+	ErrSignerPEM,
+	ErrSignerPKCS12,
+	ErrSignerPKCS12Password,
+	ErrEncryptedNotAuthenticated,
+	ErrPasswordRejected,
+	ErrRedactionRefused,
+	ErrRedactionIncomplete,
+	ErrRedactionPixelCheck,
+	ErrInvalidRedactOptions,
+	ErrPageDeletionIncomplete,
+	ErrAutoTagAlreadyTagged,
+	ErrAutoTagMarkedContent,
+	ErrAutoTagUnreadableContent,
+	ErrAutoTagNothingToTag,
+	ErrAttachmentTreeIncomplete,
+	ErrNameHoldsNull,
+	ErrRemediationBrokePDF,
+	ErrRemediationUnverified,
+	ErrFontNotSupplied,
+	ErrFontProgramInvalid,
+	ErrFontEmbeddingRestricted,
+	ErrFontKind,
+	ErrFontCoverage,
+	ErrFontWidths,
+	ErrFontRejected,
+	ErrFontUnwritable,
+	ErrFontRolledBack,
+	ErrEditAfterRemediation,
+	ErrPDFAForbidsEncryption,
+	ErrPDFA1ForbidsObjectStreams,
+	ErrPDFUAForbidsBarringAccessibility,
+	ErrEmptyInvoiceXML,
+	ErrNoInvoiceAttachment,
+	ErrInvalidFacturXLevel,
+	ErrInvalidFacturXProfile,
+	ErrInvalidZUGFeRDVersion,
+	ErrInvalidCMYKProfile,
+	ErrInvalidColorTarget,
+	ErrNoOutputIntent,
+	ErrColorConversionRefused,
+	ErrOutputIntentConflict,
+	ErrInvalidBookmarkOptions,
+	ErrInvalidFlattenOptions,
+	ErrTransparencyFlatteningRefused,
+	ErrInvalidLimits,
+	ErrStreamTooLarge,
+	ErrDamagedStream,
+	ErrPageContentTooLarge,
+	ErrImageTooLarge,
+	ErrPipelineNothingToMerge,
+	ErrPipelineEmptyPageList,
+}
+
+// IsInvalidInput reports whether err comes from the caller's input: a
+// document litho cannot read or edit as asked, or an argument out of range.
+// A service answers such an error as a client error, and any other as a
+// server error.
+func IsInvalidInput(err error) bool {
+	for _, target := range invalidInputErrors {
+		if errors.Is(err, target) {
+			return true
+		}
+	}
+
+	return false
+}
