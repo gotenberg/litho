@@ -3871,8 +3871,8 @@ func TestWriter_RemediateFacturX_RoundTrip(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("attachment count: got %d, want 1", len(files))
 	}
-	if files[0].Name != DefaultFacturXFileName {
-		t.Errorf("attachment name: got %q, want %q", files[0].Name, DefaultFacturXFileName)
+	if files[0].Name != "factur-x.xml" {
+		t.Errorf("attachment name: got %q, want %q", files[0].Name, "factur-x.xml")
 	}
 	if files[0].MIMEType != "text/xml" {
 		t.Errorf("attachment MIME: got %q, want %q", files[0].MIMEType, "text/xml")
@@ -3893,8 +3893,8 @@ func TestWriter_RemediateFacturX_RoundTrip(t *testing.T) {
 	// The serializer hex-escapes the forward slash in "text/xml",
 	// so the raw stream check uses the escaped form (#2F).
 	rawPDF := out.String()
-	if !strings.Contains(rawPDF, "/AFRelationship /Data") {
-		t.Error("output PDF missing /AFRelationship /Data on filespec")
+	if !strings.Contains(rawPDF, "/AFRelationship /Alternative") {
+		t.Error("output PDF missing /AFRelationship /Alternative on filespec")
 	}
 	if !strings.Contains(rawPDF, "/Subtype /text#2Fxml") {
 		t.Error("output PDF missing /Subtype /text/xml on embedded stream")
@@ -3944,19 +3944,86 @@ func TestWriter_RemediateFacturX_XRechnungLevel(t *testing.T) {
 	}
 }
 
+// TestWriter_RemediateFacturX_AppliesDefaults pins the file name and
+// /AFRelationship RemediateFacturX writes for each level when the caller
+// sets neither (Factur-X 1.07.2, 6.2, 6.2.2 and 7.7), and that litho's own
+// validator accepts them.
 func TestWriter_RemediateFacturX_AppliesDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		level            models.FacturXLevel
+		wantName, wantAF string
+	}{
+		{models.FacturXMinimum, "factur-x.xml", "Data"},
+		{models.FacturXBasicWL, "factur-x.xml", "Data"},
+		{models.FacturXBasic, "factur-x.xml", "Alternative"},
+		{models.FacturXEN16931, "factur-x.xml", "Alternative"},
+		{models.FacturXExtended, "factur-x.xml", "Alternative"},
+		{models.FacturXXRechnung, "xrechnung.xml", "Alternative"},
+	} {
+		t.Run(string(tc.level), func(t *testing.T) {
+			ctx := context.Background()
+			data := writerTestPDF()
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+
+			w := NewWriter(r)
+			// Profile, FileName, DocumentType, Relationship omitted on purpose.
+			if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+				InvoiceXML: []byte(facturXSampleCII),
+				Level:      tc.level,
+			}); err != nil {
+				t.Fatalf("RemediateFacturX: %v", err)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+			if err != nil {
+				t.Fatalf("reopen: %v", err)
+			}
+			defer r2.Close()
+
+			files, err := r2.EmbeddedFiles(ctx)
+			if err != nil {
+				t.Fatalf("EmbeddedFiles: %v", err)
+			}
+			if len(files) != 1 || files[0].Name != tc.wantName || files[0].Relationship != tc.wantAF {
+				t.Fatalf("embedded files = %+v, want one %q with relationship %q", files, tc.wantName, tc.wantAF)
+			}
+
+			violations, err := r2.ValidateFacturX(ctx)
+			if err != nil {
+				t.Fatalf("ValidateFacturX: %v", err)
+			}
+			for _, v := range violations {
+				msg := v.Error()
+				if strings.Contains(msg, "clause INVOICE") &&
+					!strings.Contains(msg, "PDF/A-3 violations on the archival base") {
+					t.Errorf("unexpected hybrid-invoice violation: %v", v)
+				}
+			}
+		})
+	}
+}
+
+// TestReader_ValidateFacturX_XRechnungFileName pins that an XRECHNUNG
+// invoice embedded as factur-x.xml fails validation: Factur-X 1.07.2, 7.7
+// requires xrechnung.xml and forbids a factur-x.xml.
+func TestReader_ValidateFacturX_XRechnungFileName(t *testing.T) {
 	ctx := context.Background()
 	data := writerTestPDF()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-
 	w := NewWriter(r)
-	// Profile, FileName, DocumentType, Relationship omitted on purpose.
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCII),
-		Level:      models.FacturXBasic,
+		Level:      models.FacturXXRechnung,
+		FileName:   "factur-x.xml",
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
 	}
@@ -3964,13 +4031,24 @@ func TestWriter_RemediateFacturX_AppliesDefaults(t *testing.T) {
 	if err := w.WriteTo(ctx, &out); err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
-
-	rawPDF := out.String()
-	if !strings.Contains(rawPDF, DefaultFacturXFileName) {
-		t.Errorf("expected default file name %q in output", DefaultFacturXFileName)
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
 	}
-	if !strings.Contains(rawPDF, "/AFRelationship /"+DefaultFacturXRelationship) {
-		t.Errorf("expected default relationship %q in output", DefaultFacturXRelationship)
+	defer r2.Close()
+
+	violations, err := r2.ValidateFacturX(ctx)
+	if err != nil {
+		t.Fatalf("ValidateFacturX: %v", err)
+	}
+	var named, conflict bool
+	for _, v := range violations {
+		msg := v.Error()
+		named = named || strings.Contains(msg, `no filespec named "xrechnung.xml"`)
+		conflict = conflict || strings.Contains(msg, `conflicting variant name "factur-x.xml"`)
+	}
+	if !named || !conflict {
+		t.Errorf("violations = %v, want the missing xrechnung.xml and the conflicting factur-x.xml", violations)
 	}
 }
 

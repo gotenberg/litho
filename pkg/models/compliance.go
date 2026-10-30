@@ -182,7 +182,10 @@ const (
 	// Profiles: MINIMUM, BASIC, COMFORT, EXTENDED.
 	ZUGFeRD2 ZUGFeRDVersion = "2.0"
 	// ZUGFeRD21 identifies the joint ZUGFeRD 2.1+ / Factur-X 1.0+
-	// specification. Filename: factur-x.xml. AFRelationship: Data.
+	// specification. Filename: factur-x.xml, or xrechnung.xml for
+	// XRECHNUNG. AFRelationship: Data for MINIMUM and BASIC WL,
+	// Alternative for XRECHNUNG, and Data, Source or Alternative for the
+	// other levels.
 	// Profiles: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG.
 	ZUGFeRD21 ZUGFeRDVersion = "2.1"
 )

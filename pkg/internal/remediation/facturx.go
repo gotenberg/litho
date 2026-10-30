@@ -32,16 +32,15 @@ type FacturXOptions struct {
 	// archival base. Must be one of [models.PDFA3a], [models.PDFA3b],
 	// or [models.PDFA3u].
 	Profile models.PDFAProfile
-	// FileName is the embedded file name. Factur-X mandates
-	// "factur-x.xml"; ZUGFeRD 2.0 used "zugferd-invoice.xml". The same
-	// value is written into the XMP `fx:DocumentFileName` property.
+	// FileName is the embedded file name, from
+	// compliance.FacturXEmbeddingFor unless the caller overrides it. The
+	// same value is written into the XMP `fx:DocumentFileName` property.
 	FileName string
 	// DocumentType is the value of the XMP `fx:DocumentType` property.
 	// Defaults to "INVOICE" when empty.
 	DocumentType string
-	// Relationship is the embedded-file `/AFRelationship` value.
-	// Factur-X mandates "Data"; ZUGFeRD 2.0 legacy producers used
-	// "Alternative".
+	// Relationship is the embedded-file `/AFRelationship` value, from
+	// compliance.FacturXEmbeddingFor unless the caller overrides it.
 	Relationship string
 }
 

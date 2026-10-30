@@ -220,9 +220,11 @@ func WithFacturXSchematronOverrides(m map[string]schematron.RuleOverride) Factur
 // and 2.0 generations. The validator multiplexes a single check
 // pipeline across these variants so the rule list stays linear.
 type hybridInvoiceVariant struct {
-	label           string
-	fileName        string
-	relationship    string
+	label    string
+	fileName string
+	// relationships lists the /AFRelationship values the variant's
+	// specification admits.
+	relationships   []string
 	namespaceURI    string
 	namespacePrefix string
 	documentVersion string
@@ -232,24 +234,41 @@ type hybridInvoiceVariant struct {
 	// ("2p0"); a non-empty altVersions list relaxes the check to
 	// admit both.
 	altVersions []string
-	// altRelationships lists additional acceptable values for the
-	// embedded filespec's /AFRelationship. Factur-X 1.0+ mandates
-	// /Data; many real-world producers carry over /Alternative from
-	// ZUGFeRD 2.0 and the spec text tolerates either spelling.
+	// altRelationships lists /AFRelationship values outside the
+	// specification that strict validation reports and lenient
+	// validation accepts.
 	altRelationships []string
 	allowedLevels    map[string]bool
 	conflictNames    []string
+	// byLevel makes the embedding depend on the XMP conformance level:
+	// Factur-X 1.0+ fixes the file name and relationships per level
+	// ([FacturXEmbeddingFor]).
+	byLevel bool
+}
+
+// atLevel returns v with the file name, relationships and conflicting
+// names the specification fixes for level.
+func (v hybridInvoiceVariant) atLevel(level models.FacturXLevel) hybridInvoiceVariant {
+	e := FacturXEmbeddingFor(level)
+	v.fileName = e.FileName
+	v.relationships = e.Relationships
+	v.altRelationships = e.Tolerated
+	v.conflictNames = e.ConflictNames
+	return v
 }
 
 //nolint:gochecknoglobals // immutable variant descriptors.
 var (
 	variantFacturX = hybridInvoiceVariant{
-		label:            "Factur-X 1.0+/ZUGFeRD 2.1+",
-		fileName:         "factur-x.xml",
-		relationship:     "Data",
-		altRelationships: []string{"Alternative"},
-		namespaceURI:     "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#",
-		namespacePrefix:  "fx",
+		label: "Factur-X 1.0+/ZUGFeRD 2.1+",
+		// The file name, relationships and conflicting names depend on
+		// the conformance level (atLevel); these are the defaults
+		// before the XMP is read.
+		fileName:        "factur-x.xml",
+		relationships:   []string{"Data", "Source", "Alternative"},
+		byLevel:         true,
+		namespaceURI:    "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#",
+		namespacePrefix: "fx",
 		// fx:Version is the metadata extension schema version, not
 		// the spec version. Factur-X 1.0.07 fixes it at "1.0";
 		// some producers reuse the spec version "2.1" instead and
@@ -267,7 +286,7 @@ var (
 	variantZUGFeRD20 = hybridInvoiceVariant{
 		label:           "ZUGFeRD 2.0",
 		fileName:        "zugferd-invoice.xml",
-		relationship:    "Alternative",
+		relationships:   []string{"Alternative"},
 		namespaceURI:    "urn:zugferd:pdfa:CrossIndustryDocument:invoice:2p0#",
 		namespacePrefix: "zf",
 		// ZUGFeRD 2.0 producers split on the zf:Version value: some
@@ -289,7 +308,7 @@ var (
 	variantZUGFeRD10 = hybridInvoiceVariant{
 		label:           "ZUGFeRD 1.0",
 		fileName:        "ZUGFeRD-invoice.xml",
-		relationship:    "Alternative",
+		relationships:   []string{"Alternative"},
 		namespaceURI:    "urn:ferd:pdfa:CrossIndustryDocument:invoice:1p0#",
 		namespacePrefix: "zf",
 		// Some ZUGFeRD 1.0 producers ship zf:Version = "1.0" even
@@ -359,6 +378,10 @@ func validateHybridInvoice(ctx context.Context, doc *document.Document, v hybrid
 	catalog, err := resolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("resolving catalog: %w", err)
+	}
+	if v.byLevel {
+		level := decodeHybridInvoiceXMP(readInvoiceXMP(ctx, doc, catalog), v).conformanceLevel
+		v = v.atLevel(models.FacturXLevel(level))
 	}
 
 	invoice := locateInvoiceFileSpec(ctx, doc, catalog, v)
@@ -509,16 +532,17 @@ func checkInvoiceAFRelationship(ctx context.Context, doc *document.Document, inv
 	if err != nil {
 		return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship unreadable: %v", v.label, invoice.objNum, err)
 	}
-	if string(got) == v.relationship {
+	if slices.Contains(v.relationships, string(got)) {
 		return nil
 	}
+	want := strings.Join(v.relationships, " or ")
 	if slices.Contains(v.altRelationships, string(got)) {
 		if lenient {
 			return nil
 		}
-		return failf(Rule_invoice_AFRelationshipNonSpec, "%s: filespec object %d /AFRelationship = %q is tolerated but the spec mandates %q", v.label, invoice.objNum, string(got), v.relationship)
+		return failf(Rule_invoice_AFRelationshipNonSpec, "%s: filespec object %d /AFRelationship = %q is tolerated but the spec mandates %s", v.label, invoice.objNum, string(got), want)
 	}
-	return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship = %q, want %q", v.label, invoice.objNum, string(got), v.relationship)
+	return failf(Rule_invoice_AFRelationship, "%s: filespec object %d /AFRelationship = %q, want %s", v.label, invoice.objNum, string(got), want)
 }
 
 func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, lenient bool) []Violation {

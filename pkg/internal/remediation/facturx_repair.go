@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -15,19 +17,23 @@ import (
 )
 
 // hybridInvoiceName describes one hybrid-invoice convention litho can
-// repair: the mandated embedded file name and its /AFRelationship.
-// Factur-X 1.0.07 §5.2 mandates factur-x.xml with Data; ZUGFeRD 2.0
-// used zugferd-invoice.xml with Alternative; ZUGFeRD 1.0 used
-// ZUGFeRD-invoice.xml with Alternative. The list mirrors the variants
-// the compliance side validates (internal/compliance/facturx.go).
+// repair: the embedded file name and its /AFRelationship. Factur-X 1.0+
+// embeds factur-x.xml, or xrechnung.xml for the XRECHNUNG level, with a
+// relationship that depends on the level (compliance.FacturXEmbeddingFor);
+// ZUGFeRD 2.0 used zugferd-invoice.xml and ZUGFeRD 1.0
+// ZUGFeRD-invoice.xml, both with Alternative. The list mirrors the
+// variants the compliance side validates (internal/compliance/facturx.go).
 type hybridInvoiceName struct {
-	fileName     string
+	fileName string
+	// relationship is the fixed /AFRelationship of a legacy convention;
+	// empty for Factur-X 1.0+, whose relationship follows the level.
 	relationship ast.PdfName
 }
 
 //nolint:gochecknoglobals // static spec table
 var hybridInvoiceNames = []hybridInvoiceName{
-	{"factur-x.xml", "Data"},
+	{"factur-x.xml", ""},
+	{"xrechnung.xml", ""},
 	{"zugferd-invoice.xml", "Alternative"},
 	{"ZUGFeRD-invoice.xml", "Alternative"},
 }
@@ -63,12 +69,20 @@ func RepairHybridInvoice(ctx context.Context, doc *document.Document, alloc *wri
 	maps.Copy(newSpec, specDict)
 	dirty := false
 
-	// /AFRelationship per the variant's convention (ISO 32000-2 §14.13;
-	// Factur-X 1.0.07 §5.2 mandates Data, ZUGFeRD 1.0/2.0 Alternative).
-	if got, _ := document.ResolveName(ctx, doc, specDict["AFRelationship"]); got != name.relationship {
-		newSpec["AFRelationship"] = name.relationship
+	// /AFRelationship per the variant's convention (ISO 32000-2 §14.13).
+	// A Factur-X 1.0+ value the level admits stays: Factur-X 1.07.2 §6.2.2
+	// lets BASIC and above pick Data, Source or Alternative by how the PDF
+	// was made. ZUGFeRD 1.0 and 2.0 fix Alternative.
+	got, _ := document.ResolveName(ctx, doc, specDict["AFRelationship"])
+	want, admitted := name.relationship, []string{string(name.relationship)}
+	if want == "" {
+		e := compliance.FacturXEmbeddingFor(inferFacturXLevel(ctx, alloc, doc, specDict))
+		want, admitted = ast.PdfName(e.Relationship), e.Relationships
+	}
+	if !slices.Contains(admitted, string(got)) {
+		newSpec["AFRelationship"] = want
 		dirty = true
-		fixes = append(fixes, fmt.Sprintf("set invoice /AFRelationship to %s", string(name.relationship)))
+		fixes = append(fixes, fmt.Sprintf("set invoice /AFRelationship to %s", string(want)))
 	}
 
 	// Filespecs must carry both /F and /UF (ISO 19005-3 §6.9).

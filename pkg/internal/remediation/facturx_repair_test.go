@@ -54,7 +54,7 @@ func TestRepairHybridInvoice(t *testing.T) {
 	}
 	joined := strings.Join(fixes, "; ")
 	for _, want := range []string{
-		"set invoice /AFRelationship to Data",
+		"set invoice /AFRelationship to Alternative",
 		"mirrored invoice filespec /F and /UF",
 		"set invoice stream /Subtype to text/xml",
 		"added invoice filespec to catalog /AF",
@@ -68,8 +68,9 @@ func TestRepairHybridInvoice(t *testing.T) {
 	if !ok {
 		t.Fatal("filespec not queued")
 	}
-	if rel, _ := spec["AFRelationship"].(ast.PdfName); rel != "Data" {
-		t.Errorf("AFRelationship = %v, want Data", spec["AFRelationship"])
+	// The payload names no level, so the BASIC and above default applies.
+	if rel, _ := spec["AFRelationship"].(ast.PdfName); rel != "Alternative" {
+		t.Errorf("AFRelationship = %v, want Alternative", spec["AFRelationship"])
 	}
 	if _, hasUF := spec["UF"]; !hasUF {
 		t.Error("missing mirrored /UF")

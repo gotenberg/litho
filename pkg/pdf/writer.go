@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -2453,18 +2454,10 @@ const (
 	// DefaultFacturXProfile is the PDF/A-3 conformance level used when
 	// [FacturXConfig.Profile] is empty.
 	DefaultFacturXProfile = models.PDFA3b
-	// DefaultFacturXFileName is the embedded file name used when
-	// [FacturXConfig.FileName] is empty. Matches the Factur-X 1.0.07
-	// specification.
-	DefaultFacturXFileName = "factur-x.xml"
 	// DefaultFacturXDocumentType is the value written into the XMP
 	// `fx:DocumentType` property when [FacturXConfig.DocumentType] is
 	// empty.
 	DefaultFacturXDocumentType = "INVOICE"
-	// DefaultFacturXRelationship is the `/AFRelationship` value used
-	// when [FacturXConfig.Relationship] is empty. Factur-X mandates
-	// "Data"; legacy ZUGFeRD 2.0 producers used "Alternative".
-	DefaultFacturXRelationship = "Data"
 )
 
 // FacturXConfig describes the inputs to [Writer.RemediateFacturX].
@@ -2482,14 +2475,20 @@ type FacturXConfig struct {
 	// [models.PDFA3u].
 	Profile models.PDFAProfile
 	// FileName is the embedded file name. Optional; defaults to
-	// [DefaultFacturXFileName]. The same value is written into the XMP
-	// `fx:DocumentFileName` property.
+	// "xrechnung.xml" for [models.FacturXXRechnung] and "factur-x.xml"
+	// for every other level (Factur-X 1.07.2, 6.2 and 7.7). The same
+	// value is written into the XMP `fx:DocumentFileName` property.
 	FileName string
 	// DocumentType is the value of the XMP `fx:DocumentType` property.
 	// Optional; defaults to [DefaultFacturXDocumentType].
 	DocumentType string
 	// Relationship is the embedded-file `/AFRelationship` value.
-	// Optional; defaults to [DefaultFacturXRelationship].
+	// Optional; defaults to "Data" for [models.FacturXMinimum] and
+	// [models.FacturXBasicWL], whose XML carries less than the visual
+	// part, and "Alternative" for every other level (Factur-X 1.07.2,
+	// 6.2.2 and 7.7). BASIC, EN 16931 and EXTENDED also admit "Data" or
+	// "Source" in France, depending on how the PDF was made; Germany
+	// admits "Alternative" alone.
 	Relationship string
 }
 
@@ -2506,7 +2505,7 @@ type FacturXConfig struct {
 // legacy generations differ only in the embedded file name and
 // relationship, which [FacturXConfig] can reproduce:
 //
-//   - ZUGFeRD 2.1+ / Factur-X: FileName "factur-x.xml", Relationship "Data" (the defaults).
+//   - ZUGFeRD 2.1+ / Factur-X: the defaults, which follow the level.
 //   - ZUGFeRD 2.0:             FileName "zugferd-invoice.xml", Relationship "Alternative".
 //   - ZUGFeRD 1.0:             FileName "ZUGFeRD-invoice.xml", Relationship "Alternative".
 //
@@ -2539,9 +2538,10 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 	if profile != models.PDFA3a && profile != models.PDFA3b && profile != models.PDFA3u {
 		return nil, fmt.Errorf("%w: got %q", ErrInvalidFacturXProfile, profile)
 	}
+	embedding := compliance.FacturXEmbeddingFor(cfg.Level)
 	fileName := cfg.FileName
 	if fileName == "" {
-		fileName = DefaultFacturXFileName
+		fileName = embedding.FileName
 	}
 	docType := cfg.DocumentType
 	if docType == "" {
@@ -2549,7 +2549,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 	}
 	relationship := cfg.Relationship
 	if relationship == "" {
-		relationship = DefaultFacturXRelationship
+		relationship = embedding.Relationship
 	}
 
 	rcfg, remOpts := w.remediateConfig(opts)
