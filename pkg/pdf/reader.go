@@ -798,6 +798,8 @@ type extractTextOpts struct {
 	includeClipPath  bool
 	includeClipped   bool
 	includeArtifacts bool
+	// includeAnnotations reads annotation appearances ([WithAnnotationText]).
+	includeAnnotations bool
 	// markUnvalued reads every glyph whose code has no Unicode value as
 	// U+FFFD ([withUnvaluedMarked]).
 	markUnvalued bool
@@ -857,6 +859,21 @@ func WithClipPathText() ExtractTextOption {
 func WithClippedText() ExtractTextOption {
 	return func(o *extractTextOpts) {
 		o.includeClipped = true
+	}
+}
+
+// WithAnnotationText includes the text of annotation appearances: a FreeText
+// comment, a stamp, a filled form field. It reads the normal appearance stream
+// of every annotation a viewer shows (ISO 32000-1, 12.5.5), after the page's
+// own content, and places it on the page as a viewer draws it.
+//
+// By default annotations are left out: they overlay the page rather than form
+// part of its content. [WithHiddenText] does not include them. An annotation
+// that is hidden or has no appearance stream contributes nothing; no
+// appearance is synthesized from its dictionary.
+func WithAnnotationText() ExtractTextOption {
+	return func(o *extractTextOpts) {
+		o.includeAnnotations = true
 	}
 }
 
@@ -931,6 +948,7 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 		StripHidden:    !o.includeHidden && !o.includeClipPath,
 		StripClipped:   !o.includeHidden && !o.includeClipped,
 		StripArtifacts: !o.includeHidden && !o.includeArtifacts,
+		Annotations:    o.includeAnnotations,
 	}
 	// The reading of what the page shows reads text drawn again over
 	// itself, a shadow or a fake bold, once; one asking for invisible text

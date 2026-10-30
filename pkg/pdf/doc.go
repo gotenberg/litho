@@ -130,7 +130,8 @@
 //     [WithLimits], [WithStrictStreams].
 //   - [Reader.ExtractText] and [Reader.ExtractAllText] take
 //     [ExtractTextOption]: [WithHiddenText], [WithInvisibleText],
-//     [WithClipPathText], [WithClippedText], [WithArtifacts].
+//     [WithClipPathText], [WithClippedText], [WithArtifacts],
+//     [WithAnnotationText].
 //   - [Reader.RenderPage], [Reader.RenderPageReport] and
 //     [WithRedactionGlyphOutlines] take [RenderOption]: [WithRenderDPI],
 //     [WithRenderBackground],

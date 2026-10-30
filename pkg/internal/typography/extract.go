@@ -778,6 +778,10 @@ type ExtractionConfig struct {
 	// reading of what a page shows, which [ExtractionConfig.StripInvisible]
 	// asks for. Unset, every copy the content stream draws is read.
 	DropOverdrawn bool
+	// Annotations reads the text of the normal appearance stream of every
+	// annotation a viewer shows on the page, after the page's own content
+	// ([extractAnnotationText]). Unset, annotation appearances are left out.
+	Annotations bool
 }
 
 // HasWhiteFillInvisible reports an element invisible by its white paint
@@ -850,8 +854,35 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 	if record.merged {
 		resources = page.Resources
 	}
+	// The annotations draw over the page in its initial graphics state
+	// (ISO 32000-1, 12.5.5), not in whatever state the page's content
+	// leaves behind, so the state is captured before the page runs.
+	var initial []graphics.State
+	if record.annotations {
+		initial = slices.Clone(machine.Stack)
+	}
 	if err := extractTextRecursive(ctx, doc, machine, resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr, pageOpsPtr, runs); err != nil {
 		return extraction{}, err
+	}
+	if record.annotations {
+		before := len(elements)
+		if err := extractAnnotationText(ctx, doc, machine, page, resources, initial, &elements, runs); err != nil {
+			return extraction{}, err
+		}
+		// An annotation's glyphs come from its own appearance stream: no
+		// offset into the page's operations addresses them, and its fonts
+		// sit in the appearance's resources.
+		for range len(elements) - before {
+			if originsPtr != nil {
+				origins = append(origins, OriginUnattributable)
+			}
+			if fontRefsPtr != nil {
+				fontRefs = append(fontRefs, FontUnattributable)
+			}
+			if pageOpsPtr != nil {
+				pageOps = append(pageOps, OriginUnattributable)
+			}
+		}
 	}
 
 	if doc != nil {
@@ -915,6 +946,9 @@ type extractionRecord struct {
 	// redaction misses no text a viewer resolving past the page's own
 	// /Resources shows.
 	merged bool
+	// annotations also reads the annotations' normal appearances
+	// ([extractAnnotationText]).
+	annotations bool
 }
 
 // extraction is what [extractElements] returns: the elements and, parallel
@@ -1196,7 +1230,7 @@ func rectsIntersect(a, b [4]float64) bool {
 func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, config ExtractionConfig) (string, error) {
 	machine.StripArtifacts = config.StripArtifacts
 
-	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{runFonts: true})
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{runFonts: true, annotations: config.Annotations})
 	if err != nil {
 		return "", err
 	}
