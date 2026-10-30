@@ -3,6 +3,7 @@ package typography
 import (
 	"context"
 	"log/slog"
+	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -64,9 +65,7 @@ func extractAnnotationText(ctx context.Context, doc *document.Document, machine 
 		// An appearance without /Resources looks names up in the page's
 		// (ISO 32000-1, 7.8.3), which handleDoOp falls back to.
 		annotRes := make(ast.PdfDict, len(resources)+1)
-		for k, v := range resources {
-			annotRes[k] = v
-		}
+		maps.Copy(annotRes, resources)
 		annotRes["XObject"] = ast.PdfDict{annotXObjectName: target}
 
 		do := content.Operation{Operator: "Do", Operands: ast.PdfArray{annotXObjectName}}
