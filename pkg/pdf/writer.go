@@ -859,9 +859,9 @@ type Signer interface {
 // A remediation is the last edit on a Writer. It writes the edits queued
 // before it to a temp file and validates, repairs and measures that document,
 // so its [RemediationReport] describes the output. After it, the Writer
-// accepts [Writer.Sign], [Writer.Timestamp], [Writer.WriteTo] and
-// [Writer.Close], and refuses every other call, a second remediation
-// included, with [ErrEditAfterRemediation]:
+// accepts [Writer.Sign], [Writer.Timestamp], [Writer.SetEditLabel],
+// [Writer.WriteTo] and [Writer.Close], and refuses every other call that
+// edits, a second remediation included, with [ErrEditAfterRemediation]:
 // the refused call queues nothing, a method with an error return returns the
 // refusal, and WriteTo returns the first refusal, whatever the method, and
 // writes nothing. A remediation that fails leaves the Writer open to edits.
@@ -938,6 +938,15 @@ type Writer struct {
 	timestamp       *timestampOpts
 	signOpts        signOpts
 	requiredVersion string
+
+	// editLabel is the label [Writer.SetEditLabel] set, which every edit
+	// queued from then on carries. signLabel and timestampLabel are the labels
+	// in effect when [Writer.Sign] and [Writer.Timestamp] were last called,
+	// which a failure of the signature or of the timestamp reports (see
+	// [EditError]).
+	editLabel      string
+	signLabel      string
+	timestampLabel string
 
 	// remediation names the remediation method that ran on the Writer, ""
 	// until one succeeds. From then on the Writer accepts Sign, WriteTo and
@@ -1043,11 +1052,47 @@ func (w *Writer) rewritesForOptions(ctx context.Context, cfg writeOpts) bool {
 
 // mutation is a deferred modification applied during WriteTo.
 type mutation struct {
-	apply func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error
+	apply mutations.MutationFunc
 	// pageSource is the document an insertion copies pages from, nil for
 	// every other edit. The output declares at least its version (see
 	// [Writer.InsertPages]).
 	pageSource *document.Document
+	// method names the Writer method that queued the edit, and label is the
+	// label in effect then (see [Writer.SetEditLabel]). A failure of apply
+	// reports both (see [EditError]).
+	method string
+	label  string
+}
+
+// queue appends m, which the Writer method named method queues, under the
+// label in effect.
+func (w *Writer) queue(method string, m mutation) {
+	m.method = method
+	m.label = w.editLabel
+	w.mutations = append(w.mutations, m)
+}
+
+// run applies m and reports a failure as the [EditError] of the call that
+// queued it. index is m's position in the queue, which only the Debug log
+// records: a caller cannot map it back to a call, since a remediation clears
+// the queue it writes out, a Split or a Merge stage starts another Writer, and
+// one call may queue more than one edit. A cancellation is no failure of the
+// edit and is returned as it is.
+func (m mutation) run(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, index int) error {
+	err := m.apply(ctx, alloc, doc)
+	if err == nil {
+		return nil
+	}
+	doc.Logger.Debug("edit failed",
+		slog.Int("index", index),
+		slog.String("method", m.method),
+		slog.String("label", m.label),
+		slog.Any("err", err),
+	)
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+		return err
+	}
+	return &EditError{Label: m.label, Method: m.method, Err: err}
 }
 
 // pageSources returns the documents the queued insertions copy pages from,
@@ -1232,9 +1277,25 @@ func (w *Writer) refuseAfterRemediation(call string) error {
 	}
 	err := fmt.Errorf("%w: Writer.%s after Writer.%s", ErrEditAfterRemediation, call, w.remediation)
 	if w.refused == nil {
-		w.refused = err
+		// WriteTo may run far from the refused call, in a later pipeline
+		// stage, so the record names it as an edit that failed does.
+		w.refused = &EditError{Label: w.editLabel, Method: call, Err: err}
 	}
 	return err
+}
+
+// SetEditLabel labels the edits queued on the Writer from now on. An edit that
+// fails when the Writer applies it reports the label in its [EditError], so a
+// caller that queues edits from several places can tell which of them queued
+// it. An empty label clears it.
+//
+// The label covers every method that queues an edit, and [Writer.Sign] and
+// [Writer.Timestamp], which record the label in effect when they are called.
+// An edit keeps the label it was queued under: a later call changes the label
+// of later edits only. A [Pipeline] stage given [WithEditLabel] sets the label
+// of its Writer for the stage's closure and clears it after.
+func (w *Writer) SetEditLabel(label string) {
+	w.editLabel = label
 }
 
 // createTemp creates a temp file named after pattern in the Writer's temp
@@ -1333,7 +1394,7 @@ func (w *Writer) SetMetadata(meta Metadata) {
 	if w.refuseAfterRemediation("SetMetadata") != nil {
 		return
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("SetMetadata", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.SetMetadata(ctx, alloc, doc, mutations.Metadata(meta))
 		},
@@ -1345,7 +1406,7 @@ func (w *Writer) SetMetadata(meta Metadata) {
 	// second mutation rather than folded into the first because the
 	// synchronisation lives in the remediation package, which imports
 	// mutations and so cannot be imported by it.
-	w.mutations = append(w.mutations, mutation{
+	w.queue("SetMetadata", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			// The fix list is for a remediation report; a plain metadata edit
 			// has nowhere to show it.
@@ -1363,7 +1424,7 @@ func (w *Writer) ClearMetadata() {
 		return
 	}
 	w.forceRewrite = true
-	w.mutations = append(w.mutations, mutation{
+	w.queue("ClearMetadata", mutation{
 		apply: mutations.ClearMetadata,
 	})
 }
@@ -1384,7 +1445,7 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 	if rotation%90 != 0 {
 		return fmt.Errorf("%w: got %d", ErrInvalidRotation, rotation)
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("RotatePages", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
@@ -1427,7 +1488,7 @@ func (w *Writer) DeletePages(pages ...int) error {
 		return ErrEmptyPageList
 	}
 	w.forceRewrite = true
-	w.mutations = append(w.mutations, mutation{
+	w.queue("DeletePages", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
@@ -1518,7 +1579,7 @@ func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error 
 	// numbered there (see [Writer.promotePageTree]) and never in source.
 	source = source.fork()
 	w.forceRewrite = true
-	w.mutations = append(w.mutations, mutation{
+	w.queue("InsertPages", mutation{
 		pageSource: source.doc,
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			targetPages, err := w.reader.resolvePages(ctx)
@@ -1544,7 +1605,7 @@ func (w *Writer) SetBookmarks(bookmarks []models.Bookmark) {
 	if w.refuseAfterRemediation("SetBookmarks") != nil {
 		return
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("SetBookmarks", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
@@ -1587,7 +1648,7 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 	if w.refuseAfterRemediation("GenerateBookmarks") != nil {
 		return
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("GenerateBookmarks", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			if err := opts.validate(); err != nil {
 				return err
@@ -1707,7 +1768,7 @@ func (w *Writer) AutoTag() *AutoTagReport {
 	if w.refuseAfterRemediation("AutoTag") != nil {
 		return report
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("AutoTag", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			// A redaction and a remediation apply the queued edits before
 			// WriteTo does, and one that fails leaves them queued, so the edit
@@ -1900,7 +1961,7 @@ func (w *Writer) SetFormField(name, value string) {
 	if w.refuseAfterRemediation("SetFormField") != nil {
 		return
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("SetFormField", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.SetFormField(ctx, alloc, doc, name, value)
 		},
@@ -1941,7 +2002,7 @@ func (w *Writer) FlattenForm() {
 		return
 	}
 	w.forceRewrite = true
-	w.mutations = append(w.mutations, mutation{
+	w.queue("FlattenForm", mutation{
 		apply: mutations.FlattenForm,
 	})
 }
@@ -1975,7 +2036,7 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	if stamp.Text == "" {
 		return ErrEmptyText
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("StampText", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
@@ -2006,7 +2067,7 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 	if stamp.MimeType != "image/jpeg" && stamp.MimeType != "image/png" {
 		return fmt.Errorf("%w: %q", ErrUnsupportedMimeType, stamp.MimeType)
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("StampImage", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
@@ -2045,7 +2106,7 @@ func (w *Writer) StampPDF(stamp PDFStamp, pages ...int) error {
 	if stamp.Source == nil {
 		return ErrNilSource
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("StampPDF", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
@@ -2118,7 +2179,7 @@ func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
 	if w.refuseAfterRemediation("AddAttachment") != nil {
 		return
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("AddAttachment", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			if err := mutations.AddAttachment(ctx, alloc, doc, name, data, mimeType); err != nil {
 				// Translate at the boundary so a caller can match with
@@ -2168,7 +2229,7 @@ func (w *Writer) AddAssociatedFile(af AssociatedFile) {
 	if w.refuseAfterRemediation("AddAssociatedFile") != nil {
 		return
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("AddAssociatedFile", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			err := mutations.AddAttachmentWithOptions(ctx, alloc, doc, af.Name, af.Data, mutations.AttachmentOptions{
 				MimeType:       af.MimeType,
@@ -2200,7 +2261,7 @@ func (w *Writer) RemoveAttachment(name string) {
 	if w.refuseAfterRemediation("RemoveAttachment") != nil {
 		return
 	}
-	w.mutations = append(w.mutations, mutation{
+	w.queue("RemoveAttachment", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			if err := mutations.RemoveAttachment(ctx, alloc, doc, name); err != nil {
 				if errors.Is(err, mutations.ErrAttachmentTreeIncomplete) {
@@ -2257,6 +2318,7 @@ func (w *Writer) RemoveAttachment(name string) {
 // replaces the signer and the options of an earlier one.
 func (w *Writer) Sign(signer Signer, opts ...SignOption) {
 	w.signer = signer
+	w.signLabel = w.editLabel
 	w.signOpts = signOpts{}
 	for _, o := range opts {
 		o(&w.signOpts)
@@ -3984,7 +4046,7 @@ func (w *Writer) writeSignedRewrite(ctx context.Context, dst io.Writer, step *si
 		base.doc.Logger = cfg.logger
 	}
 	if err := mutations.WriteWithSignature(ctx, dst, base.doc, step.signer, step.info, nil, nil, cfg.xrefStream, w.mediaBoxDefault(cfg)); err != nil {
-		return fmt.Errorf("signing the rewritten document: %w", err)
+		return step.fail(ctx, fmt.Errorf("signing the rewritten document: %w", err))
 	}
 	return nil
 }
@@ -4240,7 +4302,9 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 		pending := w.unfoldedMutations()
 		mutFuncs := make([]mutations.MutationFunc, len(pending))
 		for i, m := range pending {
-			mutFuncs[i] = m.apply
+			mutFuncs[i] = func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+				return m.run(ctx, alloc, doc, w.folded+i)
+			}
 		}
 		// The promoted page tree goes under the overrides, which build on it,
 		// since the update names its pages by the numbers it gave them.
@@ -4250,7 +4314,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 		} else {
 			maps.Copy(overrides, w.rewriteOverrides)
 		}
-		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, step.signer, step.info, overrides, mutFuncs, cfg.xrefStream, w.mediaBoxDefault(cfg))
+		return step.fail(ctx, mutations.WriteWithSignature(ctx, dst, w.reader.doc, step.signer, step.info, overrides, mutFuncs, cfg.xrefStream, w.mediaBoxDefault(cfg)))
 	}
 
 	if cfg.fullRewrite || w.forceRewrite {
@@ -4283,8 +4347,8 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 				mutAlloc.AllocAt(objNum, obj)
 			}
 			for i, m := range pending {
-				if err := m.apply(ctx, mutAlloc, w.reader.doc); err != nil {
-					return fmt.Errorf("applying mutation %d: %w", w.folded+i, err)
+				if err := m.run(ctx, mutAlloc, w.reader.doc, w.folded+i); err != nil {
+					return err
 				}
 			}
 			if len(mutAlloc.Pending()) > 0 {
@@ -4345,8 +4409,8 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 	}
 
 	for i, m := range w.unfoldedMutations() {
-		if err := m.apply(ctx, alloc, doc); err != nil {
-			return fmt.Errorf("applying mutation %d: %w", w.folded+i, err)
+		if err := m.run(ctx, alloc, doc, w.folded+i); err != nil {
+			return err
 		}
 		logger.Debug("mutation applied", slog.Int("index", w.folded+i))
 	}

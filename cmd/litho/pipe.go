@@ -218,11 +218,14 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		}
 	}()
 
-	for _, group := range groups {
+	for i, group := range groups {
 		stageName := group[0]
 		stageFlags := group[1:]
 
-		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password, stderr, &remediationResidual, &stageReaders, &autoTagReports)
+		// Each stage labels the edits it queues, so an edit that fails when a
+		// later stage writes the document names the stage that asked for it.
+		labeled := labeledPipeline{Pipeline: pipeline, label: fmt.Sprintf("%s #%d", stageName, i+1)}
+		closers, err := addStage(ctx, labeled, r, stageName, stageFlags, password, stderr, &remediationResidual, &stageReaders, &autoTagReports)
 		stageClosers = append(stageClosers, closers...)
 		if err != nil {
 			// Asking a stage for its flags is a request, not a failure. The
@@ -857,10 +860,13 @@ var xfaDroppingStages = map[string]bool{
 // "pipe stage" line reached the writer. Every other command in this package
 // wires its FlagSet the same way.
 //
+// p labels each Apply stage it adds with the stage's name and its 1-based
+// position among the command's stages (see [labeledPipeline]).
+//
 // An autotag stage appends its report to autoTagged when the stage runs. The
 // Writer fills it later, when it applies the edit, so the caller reads it only
 // after [pdf.Pipeline.WriteTo] returns.
-func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string, stderr io.Writer, residual *[]error, opened *[]*pdf.Reader, autoTagged *[]*pdf.AutoTagReport) ([]func(), error) {
+func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name string, args []string, password string, stderr io.Writer, residual *[]error, opened *[]*pdf.Reader, autoTagged *[]*pdf.AutoTagReport) ([]func(), error) {
 	switch name {
 	case "rotate":
 		fs := flag.NewFlagSet("rotate", flag.ContinueOnError)
@@ -1474,4 +1480,19 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 	}
 
 	return nil, nil
+}
+
+// labeledPipeline adds the stages of one command-line stage to a
+// [pdf.Pipeline], labeling each Apply stage with label (see
+// [pdf.WithEditLabel]). An edit that fails when a later stage writes the
+// document then reports the stage that queued it, where the pipeline's own
+// error names only the stage that wrote it.
+type labeledPipeline struct {
+	*pdf.Pipeline
+	label string
+}
+
+// Apply adds fn as a [pdf.Pipeline.Apply] stage labeled with p's label.
+func (p labeledPipeline) Apply(fn func(ctx context.Context, w *pdf.Writer) error) {
+	p.Pipeline.Apply(fn, pdf.WithEditLabel(p.label))
 }

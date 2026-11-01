@@ -750,12 +750,21 @@ var (
 // pipeline stage. Use [errors.As] to extract it; the wrapped Err matches one
 // of the pipeline sentinel errors for structural problems, or an execution
 // error for runtime failures.
+//
+// The stage is where the failure surfaced, which for an edit is not always
+// the stage that queued it: an edit applies when a later stage writes the
+// document, a Split, a Merge, a remediation or the final write. Err then
+// holds the edit's [EditError], whose Label names the Apply stage that queued
+// it.
 // Concurrent reads of a value are safe; a write needs synchronization.
 type PipelineStageError struct {
 	// Index is the 0-based position of the stage in declaration order.
 	Index int
 	// Name is the short stage identifier, e.g. "split", "remediate-pdfa".
 	Name string
+	// Label is the label [WithEditLabel] gave the stage, "" for an unlabeled
+	// Apply stage and for every other stage.
+	Label string
 	// Err is the underlying error.
 	Err error
 }
@@ -765,11 +774,62 @@ func (e *PipelineStageError) Error() string {
 	if e == nil || e.Err == nil {
 		return "pipeline stage error"
 	}
+	if e.Label != "" {
+		return fmt.Sprintf("pipeline stage %d (%s %q): %s", e.Index, e.Name, e.Label, e.Err.Error())
+	}
 	return fmt.Sprintf("pipeline stage %d (%s): %s", e.Index, e.Name, e.Err.Error())
 }
 
 // Unwrap returns the wrapped error so callers can use [errors.Is].
 func (e *PipelineStageError) Unwrap() error { return e.Err }
+
+// EditError reports an edit queued on a [Writer] that failed when litho
+// applied it. Use [errors.As] to extract it.
+//
+// A Writer applies the edits it queues later than they are queued: during
+// [Writer.WriteTo], or during a [Writer.Redact], [Writer.ConvertColors],
+// [Writer.FlattenTransparency] or remediation that reads the document as the
+// edits before it leave it. The error of such a call, when an edit fails,
+// holds the EditError of the call that queued the edit. A signature or a
+// document timestamp that fails is reported the same way, under the method
+// that asked for it.
+//
+// [Writer.WriteTo] also returns one for the first call a remediated Writer
+// refused (see [ErrEditAfterRemediation]).
+//
+// Err matches what the method documents under [errors.Is], so
+// [IsInvalidInput] classifies an EditError as it classifies Err.
+// Concurrent reads of a value are safe; a write needs synchronization.
+type EditError struct {
+	// Label is the label in effect when the edit was queued, set by
+	// [Writer.SetEditLabel] or by the [WithEditLabel] of the [Pipeline.Apply]
+	// stage that queued it. It is "" for an unlabeled edit.
+	Label string
+	// Method names the [Writer] method that queued the edit, such as
+	// "StampPDF", "Sign" or "Timestamp".
+	Method string
+	// Err is the underlying error.
+	Err error
+}
+
+// Error implements the error interface.
+func (e *EditError) Error() string {
+	if e == nil || e.Err == nil {
+		return "edit failed"
+	}
+	if e.Label != "" {
+		return fmt.Sprintf("edit %q, Writer.%s: %s", e.Label, e.Method, e.Err.Error())
+	}
+	return fmt.Sprintf("Writer.%s: %s", e.Method, e.Err.Error())
+}
+
+// Unwrap returns the wrapped error so callers can use [errors.Is].
+func (e *EditError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
 
 // invalidInputErrors lists the sentinels the caller causes: a document litho
 // cannot read or edit as asked, or an argument out of range. See

@@ -182,6 +182,7 @@
 //   - [Writer.FlattenTransparency] takes [FlattenOption]: [WithFlattenDPI],
 //     [WithFlattenPrintedAnnotations], [WithFlattenJPEGQuality],
 //     [WithFlattenOverprintSimulation].
+//   - [Pipeline.Apply] takes [ApplyOption]: [WithEditLabel].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:

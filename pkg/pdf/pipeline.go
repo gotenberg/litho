@@ -126,8 +126,36 @@ func (p *Pipeline) Merge(others []*Reader, opts ...WriteOption) *Pipeline {
 //
 // The [context.Context] passed to the closure is the one the caller
 // provided to [Pipeline.WriteTo].
-func (p *Pipeline) Apply(fn func(ctx context.Context, w *Writer) error) *Pipeline {
-	return p.add(&applyStage{fn: fn})
+//
+// Most Writer methods queue an edit that a later stage applies, when it
+// writes the document. An edit that fails then surfaces in that stage's
+// [PipelineStageError], and the [EditError] it holds names the method that
+// queued the edit and the label [WithEditLabel] gave this stage.
+func (p *Pipeline) Apply(fn func(ctx context.Context, w *Writer) error, opts ...ApplyOption) *Pipeline {
+	var o applyOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return p.add(&applyStage{fn: fn, label: o.label})
+}
+
+// ApplyOption configures a [Pipeline.Apply] stage.
+type ApplyOption func(*applyOpts)
+
+// applyOpts holds what the [ApplyOption] values of a [Pipeline.Apply] stage
+// set.
+type applyOpts struct {
+	label string
+}
+
+// WithEditLabel labels a [Pipeline.Apply] stage. The stage's [Writer] labels
+// every edit the closure queues, as [Writer.SetEditLabel] does, so an
+// [EditError] for one of them carries the label wherever the edit fails, and
+// a [PipelineStageError] for the stage itself carries it in Label. The label
+// covers the closure alone: the next stage starts with none unless it is given
+// one. An empty label labels nothing.
+func WithEditLabel(label string) ApplyOption {
+	return func(o *applyOpts) { o.label = label }
 }
 
 // Validate runs build-time structural checks without executing the
@@ -159,7 +187,7 @@ func (p *Pipeline) buildValidationErrors() []error {
 			hasSource = true
 		} else if !hasSource {
 			errs = append(errs, &PipelineStageError{
-				Index: i, Name: s.name(), Err: ErrPipelineNoSource,
+				Index: i, Name: s.name(), Label: stageLabel(s), Err: ErrPipelineNoSource,
 			})
 		}
 
@@ -235,16 +263,17 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 
 	for i, s := range p.stages {
 		if err := ctx.Err(); err != nil {
-			return nil, &PipelineStageError{Index: i, Name: s.name(), Err: err}
+			return nil, &PipelineStageError{Index: i, Name: s.name(), Label: stageLabel(s), Err: err}
 		}
 		ex.stageIdx = i
 		if err := s.apply(ctx, ex); err != nil {
 			logger.Debug("stage failed",
 				slog.Int("stage", i),
 				slog.String("name", s.name()),
+				slog.String("label", stageLabel(s)),
 				slog.Any("err", err),
 			)
-			return nil, &PipelineStageError{Index: i, Name: s.name(), Err: err}
+			return nil, &PipelineStageError{Index: i, Name: s.name(), Label: stageLabel(s), Err: err}
 		}
 	}
 
@@ -290,6 +319,15 @@ type stage interface {
 	kind() stageKind
 	name() string
 	apply(ctx context.Context, ex *executor) error
+}
+
+// stageLabel returns the label [WithEditLabel] gave s, "" when s is not an
+// Apply stage or has none.
+func stageLabel(s stage) string {
+	if a, ok := s.(*applyStage); ok {
+		return a.label
+	}
+	return ""
 }
 
 // executor drives the sequential execution of pipeline stages.
@@ -636,14 +674,22 @@ func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
 }
 
 type applyStage struct {
-	fn func(ctx context.Context, w *Writer) error
+	fn    func(ctx context.Context, w *Writer) error
+	label string
 }
 
 func (s *applyStage) kind() stageKind { return kindApply }
 func (s *applyStage) name() string    { return stageNameApply }
+
+// apply runs the closure with the Writer's label set to the stage's, and
+// clears it after, so no label reaches the edits of a later stage that shares
+// the Writer.
 func (s *applyStage) apply(ctx context.Context, ex *executor) error {
 	ex.ensureWriter()
-	if err := s.fn(ctx, ex.writer); err != nil {
+	w := ex.writer
+	w.SetEditLabel(s.label)
+	defer w.SetEditLabel("")
+	if err := s.fn(ctx, w); err != nil {
 		return err
 	}
 	ex.recordStage(s.name(), false, 0)

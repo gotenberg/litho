@@ -931,8 +931,8 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	// was.
 	seedAllocator(alloc, w.rewriteOverrides)
 	for i, m := range w.unfoldedMutations() {
-		if applyErr := m.apply(ctx, alloc, doc); applyErr != nil {
-			return nil, fmt.Errorf("applying staged mutation %d before redaction: %w", w.folded+i, applyErr)
+		if applyErr := m.run(ctx, alloc, doc, w.folded+i); applyErr != nil {
+			return nil, fmt.Errorf("applying the edits queued before Writer.Redact: %w", applyErr)
 		}
 	}
 	// What the passes below queue is told apart from what the stages above

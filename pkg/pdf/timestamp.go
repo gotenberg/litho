@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -61,16 +62,38 @@ func WithTimestampField(name string) TimestampOption {
 // [ErrSignatureFieldLocked], since signing it would change it.
 func (w *Writer) Timestamp(tsaURL string, opts ...TimestampOption) {
 	w.timestamp = &timestampOpts{url: tsaURL}
+	w.timestampLabel = w.editLabel
 	for _, o := range opts {
 		o(w.timestamp)
 	}
 }
 
 // signingStep is one signature an output takes: the signer that computes its
-// /Contents and the dictionary it goes under.
+// /Contents and the dictionary it goes under. method names the Writer method
+// that asked for it, and label the label in effect then, which a failure of
+// the step reports (see [signingStep.fail]).
 type signingStep struct {
 	signer mutations.Signer
 	info   mutations.SignatureInfo
+	method string
+	label  string
+}
+
+// fail reports err, a failure of the write that adds s's signature, as the
+// [EditError] of the call that asked for it. An edit queued before the
+// signature that failed already names its own call, and a cancellation is no
+// failure of the signature: both are returned as they are.
+func (s *signingStep) fail(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := errors.AsType[*EditError](err); ok {
+		return err
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+		return err
+	}
+	return &EditError{Label: s.label, Method: s.method, Err: err}
 }
 
 // signingSteps returns the signatures [Writer.WriteTo] appends, in order: the
@@ -80,12 +103,14 @@ func (w *Writer) signingSteps() []signingStep {
 	var steps []signingStep
 	if w.signer != nil {
 		adapter, info := w.signing(w.signer)
-		steps = append(steps, signingStep{signer: adapter, info: info})
+		steps = append(steps, signingStep{signer: adapter, info: info, method: "Sign", label: w.signLabel})
 	}
 	if w.timestamp != nil {
 		steps = append(steps, signingStep{
 			signer: docTimestamper{},
 			info:   mutations.SignatureInfo{Field: w.timestamp.field, DocTimeStamp: true, TimestampURL: w.timestamp.url},
+			method: "Timestamp",
+			label:  w.timestampLabel,
 		})
 	}
 	return steps
@@ -113,16 +138,17 @@ func (w *Writer) writeSigned(ctx context.Context, dst io.Writer, write func(cont
 	}
 	out := buf.Bytes()
 	if ltv {
+		// WithLTV is an option of the signature, which is the first step.
 		next, err := w.appendValidationData(ctx, out, opts...)
 		if err != nil {
-			return err
+			return steps[0].fail(ctx, err)
 		}
 		out = next
 	}
 	for i := range steps[1:] {
 		next, err := w.appendSignature(ctx, out, &steps[1+i], opts...)
 		if err != nil {
-			return err
+			return steps[1+i].fail(ctx, err)
 		}
 		out = next
 	}

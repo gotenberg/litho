@@ -573,8 +573,8 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 	// conversion reads the document as the caller staged it.
 	seedAllocator(alloc, w.rewriteOverrides)
 	for i, m := range w.unfoldedMutations() {
-		if applyErr := m.apply(ctx, alloc, doc); applyErr != nil {
-			return nil, fmt.Errorf("applying staged mutation %d before colour conversion: %w", w.folded+i, applyErr)
+		if applyErr := m.run(ctx, alloc, doc, w.folded+i); applyErr != nil {
+			return nil, fmt.Errorf("applying the edits queued before Writer.ConvertColors: %w", applyErr)
 		}
 	}
 	staged := alloc.Writes()

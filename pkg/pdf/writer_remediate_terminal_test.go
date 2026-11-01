@@ -20,7 +20,9 @@ import (
 // terminalCalls names the Writer methods a remediated Writer still accepts:
 // Timestamp registers a document timestamp as Sign registers a signature.
 // DroppedSignatures edits nothing: it reports on the output WriteTo wrote.
-var terminalCalls = []string{"Sign", "Timestamp", "WriteTo", "Close", "DroppedSignatures"}
+// SetEditLabel edits nothing either: it labels the calls after it, Sign and
+// Timestamp among them.
+var terminalCalls = []string{"Sign", "Timestamp", "WriteTo", "Close", "DroppedSignatures", "SetEditLabel"}
 
 // refusedCall is one Writer method a remediated Writer refuses, called the way
 // a caller would call it after the remediation.
