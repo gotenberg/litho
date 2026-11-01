@@ -40,7 +40,8 @@ const maxFieldTreeDepth = 64
 // (12.5.6.19). A producer may write the widget without registering the field,
 // leaving it reachable only from the page. Setting one of those registers it,
 // creating the interactive form when the document states none, so a viewer
-// that reads the form finds the value.
+// that reads the form finds the value. A name found in neither returns
+// [ErrFormFieldNotFound].
 //
 // The form, its fields and the widgets are read from alloc first, as earlier
 // stages staged them: each is rewritten from what is read, so reading the
@@ -98,7 +99,7 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			return err
 		}
 		if !ok {
-			return fmt.Errorf("form field %q not found", name)
+			return fmt.Errorf("%w: %q", ErrFormFieldNotFound, name)
 		}
 		registered = ref
 	}

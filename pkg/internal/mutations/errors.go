@@ -399,6 +399,16 @@ var ErrAnnotationNotPlaceable = errors.New("annotation rectangle cannot be read"
 // the caller the document was cleared.
 var ErrFieldValueNotAddressable = errors.New("form field value has no indirect reference")
 
+// ErrFormFieldNotFound reports a form field name the document does not carry.
+//
+// [SetFormField] looks for the name in the interactive form's /Fields (ISO
+// 32000-1, 12.7.2) and among the widget annotations the pages carry
+// (12.5.6.19). A name found in neither, including in a document with no form at
+// all, is the caller's mistake: inventing the field would leave a value no
+// widget displays. pdf.ErrFormFieldNotFound is this value, so a caller matches
+// it with errors.Is without importing pkg/internal.
+var ErrFormFieldNotFound = errors.New("form field not found")
+
 // ErrOutlineItemNotAddressable reports an outline item quoting removed text
 // that the mutation cannot rewrite, because the entry naming it is not an
 // indirect reference.

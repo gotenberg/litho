@@ -3,8 +3,8 @@ package mutations
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -212,7 +212,42 @@ func TestSetFormFieldUnknownNameStillFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("setting an absent field reported success")
 	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("error = %v, want it to say the field was not found", err)
+	if !errors.Is(err, ErrFormFieldNotFound) {
+		t.Errorf("error = %v, want ErrFormFieldNotFound", err)
+	}
+}
+
+// TestSetFormFieldUnknownNameIsErrFormFieldNotFound pins the sentinel a caller
+// matches to tell its own mistake from a failure of litho: an unknown name in a
+// document with a form, and any name in a document with no form at all.
+func TestSetFormFieldUnknownNameIsErrFormFieldNotFound(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		objs []string
+	}{
+		{"form without the field", []string{
+			"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+			"<< /FT /Tx /T (username) /V (alice) >>",
+		}},
+		{"no form at all", []string{
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, doc, alloc := setFormDoc(t, tc.objs)
+			err := SetFormField(ctx, alloc, doc, "not-a-field", "bob")
+			if !errors.Is(err, ErrFormFieldNotFound) {
+				t.Fatalf("error = %v, want ErrFormFieldNotFound", err)
+			}
+		})
 	}
 }

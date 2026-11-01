@@ -1,7 +1,7 @@
 package mutations
 
 import (
-	"strings"
+	"errors"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -37,8 +37,8 @@ func TestSetFormField_KidsCycleTerminates(t *testing.T) {
 	if err == nil {
 		t.Fatal("setting an absent field reported success")
 	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("error = %v, want it to say the field was not found", err)
+	if !errors.Is(err, ErrFormFieldNotFound) {
+		t.Errorf("error = %v, want ErrFormFieldNotFound", err)
 	}
 }
 

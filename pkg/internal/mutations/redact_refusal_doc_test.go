@@ -26,6 +26,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrAnnotationAppearanceHoldsText": "ScrubAnnotationText, document-wide rather than in-region",
 	"ErrAnnotationNotAddressable":      "ScrubAnnotationText",
 	"ErrFieldValueNotAddressable":      "ScrubFormFieldValues",
+	"ErrFormFieldNotFound":             "SetFormField",
 	"ErrOutlineItemNotAddressable":     "ScrubOutlineTitles",
 	"ErrScanTokenEmpty":                "ScanOutputForTokens",
 	"ErrNestedContainerUnread":         "ScanOutputForTokens, which reports the carrying stream unreadable",

@@ -1893,9 +1893,9 @@ func (w *Writer) RemoveEncryption() {
 // SetFormField sets the value of an AcroForm field by its fully qualified name.
 // Uses incremental update. Sets /NeedAppearances on the AcroForm so viewers
 // regenerate the visual appearance. The mutation is queued and applied when
-// [Writer.WriteTo] is called, which fails and writes nothing when no field has
-// the name. A button field takes value as the name of its state, such as
-// "Off", and any other field takes it as a text string.
+// [Writer.WriteTo] is called, which returns [ErrFormFieldNotFound] and writes
+// nothing when no field has the name. A button field takes value as the name
+// of its state, such as "Off", and any other field takes it as a text string.
 func (w *Writer) SetFormField(name, value string) {
 	if w.refuseAfterRemediation("SetFormField") != nil {
 		return

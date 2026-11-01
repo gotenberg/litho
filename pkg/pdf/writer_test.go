@@ -963,18 +963,36 @@ func TestWriter_SetFormField(t *testing.T) {
 	}
 }
 
+// TestWriter_SetFormField_NotFound pins that an unknown field name is the
+// caller's mistake: WriteTo returns [ErrFormFieldNotFound], which
+// [IsInvalidInput] classifies, whether the document has a form or none at all.
 func TestWriter_SetFormField_NotFound(t *testing.T) {
-	data := formPDF()
-	ctx := context.Background()
+	cases := []struct {
+		name string
+		data []byte
+	}{
+		{"form without the field", formPDF()},
+		{"no form at all", minimalPDF()},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
 
-	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
-	w := NewWriter(r)
-	w.SetFormField("nonexistent", "value")
+			r, err := Open(ctx, bytes.NewReader(tc.data), int64(len(tc.data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			w := NewWriter(r)
+			w.SetFormField("nonexistent", "value")
 
-	var out bytes.Buffer
-	err := w.WriteTo(ctx, &out)
-	if err == nil {
-		t.Error("expected error for nonexistent field")
+			err = w.WriteTo(ctx, io.Discard)
+			if !errors.Is(err, ErrFormFieldNotFound) {
+				t.Fatalf("WriteTo error = %v, want ErrFormFieldNotFound", err)
+			}
+			if !IsInvalidInput(err) {
+				t.Errorf("IsInvalidInput(%v) = false, want true", err)
+			}
+		})
 	}
 }
 

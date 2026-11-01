@@ -91,6 +91,13 @@ var (
 	// through or is given for an RGB render.
 	ErrInvalidRenderOptions = errors.New("invalid render options")
 
+	// ErrFormFieldNotFound is returned, wrapped, by [Writer.WriteTo] when no
+	// field has the name [Writer.SetFormField] gave: the interactive form's
+	// /Fields (ISO 32000-1, 12.7.2) does not list it and no page carries a
+	// widget of that name (12.5.6.19). A document with no form at all returns
+	// it too. The message names the field. Nothing is written.
+	ErrFormFieldNotFound = mutations.ErrFormFieldNotFound
+
 	// ErrInvalidPageNumber is returned when a page number is outside the
 	// valid range [1, pageCount]: by the [Reader] methods that take one, by
 	// [Writer.Redact] and [Split], and by [Writer.WriteTo] for a page
@@ -779,6 +786,7 @@ var invalidInputErrors = []error{
 	ErrImageNotDecodable,
 	ErrRenderTooLarge,
 	ErrInvalidRenderOptions,
+	ErrFormFieldNotFound,
 	ErrInvalidPageNumber,
 	ErrInvalidPageRange,
 	ErrInvalidRotation,
