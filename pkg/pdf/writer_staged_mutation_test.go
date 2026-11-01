@@ -700,7 +700,7 @@ func TestWriterDeletionKeepsAFieldEditOnTheSameWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FormFields: %v", err)
 	}
-	if !slices.Contains(fields, models.FormField{Name: "name", Value: "new"}) {
+	if !slices.ContainsFunc(fields, func(f models.FormField) bool { return f.Name == "name" && f.Value == "new" }) {
 		t.Errorf("the output form holds %+v, want the field set to new", fields)
 	}
 	if n, err := out.PageCount(ctx); err != nil || n != 2 {

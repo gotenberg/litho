@@ -97,7 +97,8 @@ func HasPageWidgetField(ctx context.Context, doc *document.Document) bool {
 const maxFieldParentDepth = 64
 
 // unregisteredWidgetFields returns the form fields a page carries that the
-// interactive form's /Fields array does not list.
+// interactive form's /Fields array does not list, and records in col where
+// each widget a page lists shows (see [fieldCollector]).
 //
 // A widget annotation either is the field (its dictionary carries /FT and /T)
 // or presents one through /Parent (ISO 32000-1, 12.5.6.19). The field the
@@ -107,6 +108,7 @@ func unregisteredWidgetFields(
 	doc *document.Document,
 	catalog *document.Catalog,
 	registered ast.PdfArray,
+	col *fieldCollector,
 ) ast.PdfArray {
 	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
@@ -122,9 +124,12 @@ func unregisteredWidgetFields(
 	}
 
 	var out ast.PdfArray
-	for _, page := range pages {
+	for i, page := range pages {
 		if ctx.Err() != nil {
 			return out
+		}
+		if _, ok := col.pages[page.Ref.ObjectNum]; !ok {
+			col.pages[page.Ref.ObjectNum] = i + 1
 		}
 		annotsObj, ok := page.Dict["Annots"]
 		if !ok {
@@ -136,7 +141,21 @@ func unregisteredWidgetFields(
 			continue
 		}
 		for _, annotObj := range annotsArr {
-			fieldObj, ok := widgetFieldRoot(ctx, doc, annotObj)
+			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+			if err != nil || annotDict == nil {
+				continue
+			}
+			if subtype, err := document.ResolveName(ctx, doc, annotDict["Subtype"]); err != nil || subtype != "Widget" {
+				continue
+			}
+			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
+				// A widget two pages list shows on the first, as a viewer
+				// walking the pages in order meets it.
+				if _, placed := col.widgets[ref.ObjectNum]; !placed {
+					col.widgets[ref.ObjectNum] = widgetPlace{page: i + 1, rect: normalizedRect(ctx, doc, annotDict["Rect"])}
+				}
+			}
+			fieldObj, ok := widgetDictFieldRoot(ctx, doc, annotObj, annotDict)
 			if !ok {
 				continue
 			}
@@ -161,7 +180,12 @@ func widgetFieldRoot(ctx context.Context, doc *document.Document, annotObj ast.P
 	if subtype, err := document.ResolveName(ctx, doc, annotDict["Subtype"]); err != nil || subtype != "Widget" {
 		return nil, false
 	}
+	return widgetDictFieldRoot(ctx, doc, annotObj, annotDict)
+}
 
+// widgetDictFieldRoot is [widgetFieldRoot] for annotObj, a widget annotation
+// whose dictionary annotDict the caller has resolved.
+func widgetDictFieldRoot(ctx context.Context, doc *document.Document, annotObj ast.PdfObject, annotDict ast.PdfDict) (ast.PdfObject, bool) {
 	current, currentDict := annotObj, annotDict
 	seen := make(map[int]bool)
 	for range maxFieldParentDepth {
@@ -255,7 +279,7 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 		sort.Strings(names)
 		results := make([]models.FormField, 0, len(names))
 		for _, k := range names {
-			results = append(results, models.FormField{Name: k, Value: xfaData[k]})
+			results = append(results, models.FormField{Name: k, Value: xfaData[k], Type: models.FormFieldXFA})
 		}
 		return results, nil
 	}
@@ -269,7 +293,8 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 			}
 		}
 	}
-	pageFields := unregisteredWidgetFields(ctx, doc, catalog, fieldsArr)
+	col := newFieldCollector()
+	pageFields := unregisteredWidgetFields(ctx, doc, catalog, fieldsArr, col)
 	if len(fieldsArr) == 0 && len(pageFields) == 0 {
 		// Per ISO 32000-1, Table 218, /Fields may legitimately be empty: an
 		// interactive form carrying only /DA, /DR or /NeedAppearances declares
@@ -281,71 +306,48 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 	}
 
 	// Start with XFA data as the base, then overlay AcroForm fields.
-	formDataMap := make(map[string]string)
-	maps.Copy(formDataMap, xfaData)
+	maps.Copy(col.formData, xfaData)
 
-	// Track fields that have calculation scripts
-	calcScripts := make(map[string]string)
-
-	var order []string
-	seenName := make(map[string]bool)
 	if len(fieldsArr) > 0 {
-		err = traverseFields(ctx, doc, fieldsArr, "", "", formDataMap, calcScripts, &order, seenName)
-		if err != nil {
+		if err := traverseFields(ctx, doc, fieldsArr, col); err != nil {
 			return nil, fmt.Errorf("traversing form fields: %w", err)
 		}
 	}
 	if len(pageFields) > 0 {
-		err = traverseFields(ctx, doc, pageFields, "", "", formDataMap, calcScripts, &order, seenName)
-		if err != nil {
+		if err := traverseFields(ctx, doc, pageFields, col); err != nil {
 			return nil, fmt.Errorf("traversing page form fields: %w", err)
 		}
 	}
 
 	// A field's calculate action (ISO 32000-1, 12.6.3, Table 196) computes the
 	// value it displays from the values read above.
-	if err := runCalculations(ctx, doc, calcScripts, order, formDataMap); err != nil {
+	if err := runCalculations(ctx, doc, col.calcScripts, col.order, col.formData); err != nil {
 		return nil, err
 	}
 
-	if !includeEmpty {
-		// Filled-in values only, in document order. Ranging the map emitted a
-		// different order on every run, which the writer's determinism rule
-		// forbids and which made `litho forms` output unstable.
-		var filled []models.FormField
-		for _, name := range order {
-			if v, ok := formDataMap[name]; ok {
-				filled = append(filled, models.FormField{Name: name, Value: v})
-			}
-		}
-		// XFA supplies names the AcroForm tree never lists; keep them, sorted so
-		// the result stays stable.
-		var extra []string
-		for name := range formDataMap {
-			if !seenName[name] {
-				extra = append(extra, name)
-			}
-		}
-		sort.Strings(extra)
-		for _, name := range extra {
-			filled = append(filled, models.FormField{Name: name, Value: formDataMap[name]})
-		}
-		return filled, nil
-	}
-
-	var results []models.FormField
-	for _, name := range order {
-		results = append(results, models.FormField{Name: name, Value: formDataMap[name]})
-	}
+	// XFA supplies names the AcroForm tree never lists; they follow the tree's
+	// fields, sorted so the result stays stable.
 	var extra []string
-	for name := range formDataMap {
-		if !seenName[name] {
+	for name := range col.formData {
+		if !col.seen[name] {
 			extra = append(extra, name)
 		}
 	}
 	sort.Strings(extra)
+
+	// Filled-in values only, unless includeEmpty, in document order. Ranging
+	// the map emitted a different order on every run, which the writer's
+	// determinism rule forbids and which made `litho forms` output unstable.
+	var results []models.FormField
+	for _, name := range col.order {
+		value, ok := col.formData[name]
+		if !ok && !includeEmpty {
+			continue
+		}
+		results = append(results, col.field(name, value, ok))
+	}
 	for _, name := range extra {
-		results = append(results, models.FormField{Name: name, Value: formDataMap[name]})
+		results = append(results, models.FormField{Name: name, Value: col.formData[name], Type: models.FormFieldXFA})
 	}
 	return results, nil
 }
@@ -404,13 +406,11 @@ func joinChoiceValue(ctx context.Context, doc *document.Document, arr ast.PdfArr
 	return strings.Join(parts, choiceValueSeparator)
 }
 
-// traverseFields records into formData, calcScripts and order the fields of
-// the list fields and their descendants, under a parent whose fully qualified
-// name is parentName and whose inheritable /FT is inheritedFT (ISO 32000-1,
-// 12.7.3.1, Table 220). See [traverseFieldsAt].
-func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool) error {
+// traverseFields records into col the root fields of the list fields and
+// their descendants. See [traverseFieldsAt].
+func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, col *fieldCollector) error {
 	tr := &fieldTraversal{onPath: make(map[int]bool), walked: make(map[fieldVisit]bool)}
-	return traverseFieldsAt(ctx, doc, fields, parentName, inheritedFT, formData, calcScripts, order, seen, tr, 0)
+	return traverseFieldsAt(ctx, doc, fields, "", fieldInheritance{}, col, tr, 0)
 }
 
 // maxFieldTreeDepth bounds the descent DOWN a field's /Kids in
@@ -437,12 +437,13 @@ const maxFieldTreeVisits = 1 << 18
 
 // fieldVisit keys one unit of a [traverseFields] walk: an indirect field, or a
 // /Kids array written as an object of its own, reached under the fully
-// qualified name parent with the inherited field type ft. The entries the walk
+// qualified name parent with the inherited entries inh. The entries the walk
 // records below it depend on nothing else, so a unit reached again adds
 // nothing.
 type fieldVisit struct {
-	obj        int
-	parent, ft string
+	obj    int
+	parent string
+	inh    inheritedKey
 }
 
 // fieldTraversal carries the state of one [traverseFields] walk.
@@ -456,16 +457,16 @@ type fieldTraversal struct {
 	visits int
 }
 
-// firstVisit reports whether obj, reached under parent with the inherited type
-// ft, is a unit this walk has not walked yet, and records it. A direct object
-// lives in the one container that spells it out, so only its container can be
-// reached twice.
-func (tr *fieldTraversal) firstVisit(obj ast.PdfObject, parent, ft string) bool {
+// firstVisit reports whether obj, reached under parent with the inherited
+// entries inh, is a unit this walk has not walked yet, and records it. A
+// direct object lives in the one container that spells it out, so only its
+// container can be reached twice.
+func (tr *fieldTraversal) firstVisit(obj ast.PdfObject, parent string, inh fieldInheritance) bool {
 	ref, ok := obj.(ast.PdfIndirectRef)
 	if !ok {
 		return true
 	}
-	key := fieldVisit{obj: ref.ObjectNum, parent: parent, ft: ft}
+	key := fieldVisit{obj: ref.ObjectNum, parent: parent, inh: inh.key()}
 	if tr.walked[key] {
 		return false
 	}
@@ -520,15 +521,16 @@ func (tr *fieldTraversal) leave(obj ast.PdfObject) {
 // direct fields it holds name again, would otherwise fan out 2^depth up to
 // [maxFieldTreeDepth]. Fields that give a shared child distinct names are
 // bounded by [maxFieldTreeVisits].
-func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool, tr *fieldTraversal, depth int) error {
+func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inh fieldInheritance, col *fieldCollector, tr *fieldTraversal, depth int) error {
 	if depth > maxFieldTreeDepth {
 		return nil
 	}
+	formData, calcScripts := col.formData, col.calcScripts
 	for _, fieldObj := range fields {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("traversing form fields: %w", err)
 		}
-		if !tr.firstVisit(fieldObj, parentName, inheritedFT) {
+		if !tr.firstVisit(fieldObj, parentName, inh) {
 			continue
 		}
 		if tr.visits >= maxFieldTreeVisits {
@@ -561,14 +563,10 @@ func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.Pd
 			}
 		}
 
-		// Field Type (/FT) can be inherited
-		currentFT := inheritedFT
-		if ftObj, ok := fieldDict["FT"]; ok {
-			ftName, err := document.ResolveName(ctx, doc, ftObj)
-			if err == nil && ftName != "" {
-				currentFT = string(ftName)
-			}
-		}
+		// /FT, /Ff, /V and the entries of Tables 229 and 231 are inherited
+		// (ISO 32000-1, 12.7.3.1, Table 220).
+		cur := inh.with(ctx, doc, fieldObj, fieldDict)
+		currentFT := cur.ft
 
 		// Extract Value (/V)
 		if vObj, ok := fieldDict["V"]; ok {
@@ -643,19 +641,24 @@ func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.Pd
 				// reported as a terminal field below. Skipping a cycle must
 				// bound the walk without changing what gets reported.
 				hasKids = true
-				if err := traverseKids(ctx, doc, fieldObj, kidsObj, kidsArr, fullName, currentFT, formData, calcScripts, order, seen, tr, depth); err != nil {
+				if err := traverseKids(ctx, doc, fieldObj, kidsObj, kidsArr, fullName, cur, col, tr, depth); err != nil {
 					return err
 				}
 			}
 		}
 
-		// Record the terminal field itself, whether or not it carries a value.
-		// A field is named by /FT or /T (ISO 32000-1, Table 220); producers also
-		// drop plain annotations into /Fields, and those name no field at all.
-		if !hasKids && fullName != "" && order != nil && !seen[fullName] {
+		// Record the terminal field itself, whether or not it carries a value,
+		// and describe it, or add this widget to the field another terminal
+		// node of the same name described. A field is named by /FT or /T (ISO
+		// 32000-1, Table 220); producers also drop plain annotations into
+		// /Fields, and those name no field at all.
+		if !hasKids && fullName != "" {
 			if _, isField := fieldDict["FT"]; isField || currentFT != "" || partialName != "" {
-				seen[fullName] = true
-				*order = append(*order, fullName)
+				if !col.seen[fullName] {
+					col.seen[fullName] = true
+					col.order = append(col.order, fullName)
+				}
+				col.describe(ctx, doc, fieldObj, fieldDict, fullName, cur)
 			}
 		}
 	}
@@ -663,9 +666,10 @@ func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.Pd
 }
 
 // traverseKids walks kids, the /Kids array kidsObj of the field fieldObj named
-// fullName, for [traverseFieldsAt]: once per unit ([fieldVisit]), and not at
-// all when the field or the array is already on the path.
-func traverseKids(ctx context.Context, doc *document.Document, fieldObj, kidsObj ast.PdfObject, kids ast.PdfArray, fullName, currentFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool, tr *fieldTraversal, depth int) error {
+// fullName, whose own and inherited entries are inh, for [traverseFieldsAt]:
+// once per unit ([fieldVisit]), and not at all when the field or the array is
+// already on the path.
+func traverseKids(ctx context.Context, doc *document.Document, fieldObj, kidsObj ast.PdfObject, kids ast.PdfArray, fullName string, inh fieldInheritance, col *fieldCollector, tr *fieldTraversal, depth int) error {
 	if !tr.enter(fieldObj) {
 		return nil
 	}
@@ -674,10 +678,10 @@ func traverseKids(ctx context.Context, doc *document.Document, fieldObj, kidsObj
 		return nil
 	}
 	defer tr.leave(kidsObj)
-	if !tr.firstVisit(kidsObj, fullName, currentFT) {
+	if !tr.firstVisit(kidsObj, fullName, inh) {
 		return nil
 	}
-	if err := traverseFieldsAt(ctx, doc, kids, fullName, currentFT, formData, calcScripts, order, seen, tr, depth+1); err != nil {
+	if err := traverseFieldsAt(ctx, doc, kids, fullName, inh, col, tr, depth+1); err != nil {
 		return fmt.Errorf("traversing child fields: %w", err)
 	}
 	return nil

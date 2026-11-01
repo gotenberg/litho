@@ -5,6 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -64,10 +67,37 @@ func runForms(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 				fmt.Fprintln(stdout, "(no form fields)")
 			} else {
 				for _, f := range res.Fields {
-					fmt.Fprintf(stdout, "%s: %s\n", f.Name, f.Value)
+					fmt.Fprintf(stdout, "%s%s: %s\n", f.Name, formFieldTraits(f), f.Value)
 				}
 			}
 		}
 	}
 	return exitOK
+}
+
+// formFieldTraits returns what the text output says of f beside its name: its
+// type and the pages its widgets are on, such as " (radio, pages 1,2)", or ""
+// when it knows neither.
+func formFieldTraits(f models.FormField) string {
+	var pages []string
+	for _, w := range f.Widgets {
+		if p := strconv.Itoa(w.PageNumber); !slices.Contains(pages, p) {
+			pages = append(pages, p)
+		}
+	}
+	var traits []string
+	if f.Type != "" {
+		traits = append(traits, string(f.Type))
+	}
+	switch len(pages) {
+	case 0:
+	case 1:
+		traits = append(traits, "page "+pages[0])
+	default:
+		traits = append(traits, "pages "+strings.Join(pages, ","))
+	}
+	if len(traits) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(traits, ", ") + ")"
 }
