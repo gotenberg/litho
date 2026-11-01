@@ -41,7 +41,8 @@ const maxFieldTreeDepth = 64
 // leaving it reachable only from the page. Setting one of those registers it,
 // creating the interactive form when the document states none, so a viewer
 // that reads the form finds the value. A name found in neither returns
-// [ErrFormFieldNotFound].
+// [ErrFormFieldNotFound], and a value the field cannot hold
+// [ErrFormFieldValue] (see [checkFieldValue]).
 //
 // The form, its fields and the widgets are read from alloc first, as earlier
 // stages staged them: each is rewritten from what is read, so reading the
@@ -55,6 +56,24 @@ const maxFieldTreeDepth = 64
 //     PDF/A-2b remediation was rewritten from its source copy, and the output
 //     failed ISO 19005-2, 6.4.1 again.
 func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name, value string) error {
+	return setField(ctx, alloc, doc, name, fieldValue{values: []string{value}})
+}
+
+// SetFormFieldValues finds a list box by name and sets its selections, which
+// /V holds as an array of text strings and /I as their positions in /Opt (ISO
+// 32000-1, Table 231), as [SetFormField] finds and sets a field. The field
+// must allow several selections (Table 230), unless values holds one, which
+// any field takes as [SetFormField] does. A value outside the field's options
+// returns [ErrFormFieldValue].
+func SetFormFieldValues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string, values []string) error {
+	if len(values) == 0 {
+		return fmt.Errorf("%w: no value for field %q", ErrFormFieldValue, name)
+	}
+	return setField(ctx, alloc, doc, name, fieldValue{values: values, list: true})
+}
+
+// setField is [SetFormField] and [SetFormFieldValues], writing val.
+func setField(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name string, val fieldValue) error {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
@@ -85,7 +104,7 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 
 	found := false
 	if len(fieldsArr) > 0 {
-		found, err = findAndSetField(ctx, doc, alloc, fieldsArr, "", "", name, value)
+		found, err = findAndSetField(ctx, doc, alloc, fieldsArr, name, val)
 		if err != nil {
 			return err
 		}
@@ -94,7 +113,7 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	// Not in the form: the field may exist only as a page widget.
 	var registered ast.PdfIndirectRef
 	if !found {
-		ref, ok, err := setPageWidgetField(ctx, alloc, doc, name, value)
+		ref, ok, err := setPageWidgetField(ctx, alloc, doc, name, val)
 		if err != nil {
 			return err
 		}
@@ -147,7 +166,8 @@ func setPageWidgetField(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
-	name, value string,
+	name string,
+	val fieldValue,
 ) (ast.PdfIndirectRef, bool, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -171,7 +191,7 @@ func setPageWidgetField(
 			continue
 		}
 		for _, annotObj := range annotsArr {
-			fieldObj, fieldDict, fieldFT, qualified, ok := widgetFieldIdentity(ctx, doc, alloc, annotObj)
+			fieldObj, fieldDict, entries, qualified, ok := widgetFieldIdentity(ctx, doc, alloc, annotObj)
 			if !ok || qualified != name {
 				continue
 			}
@@ -182,11 +202,9 @@ func setPageWidgetField(
 				continue
 			}
 
-			newDict := make(ast.PdfDict, len(fieldDict)+1)
-			maps.Copy(newDict, fieldDict)
-			setFieldValue(newDict, fieldFT, value)
-			alloc.AllocAt(ref.ObjectNum, newDict)
-			setKidAppearanceStates(ctx, doc, alloc, newDict, fieldFT, value)
+			if err := writeFieldValue(ctx, doc, alloc, ref, fieldDict, name, entries, val); err != nil {
+				return ast.PdfIndirectRef{}, false, err
+			}
 
 			// ISO 32000-1, 12.7.2: /Fields lists the document's ROOT fields.
 			// Registering the named node instead would rename a nested field,
@@ -222,15 +240,15 @@ func rootFieldRef(ctx context.Context, doc *document.Document, annotObj ast.PdfO
 }
 
 // widgetFieldIdentity returns the field object a widget presents, its
-// dictionary, its field type, and its fully qualified name. The widget is read
-// from alloc first.
-func widgetFieldIdentity(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotObj ast.PdfObject) (ast.PdfObject, ast.PdfDict, string, string, bool) {
+// dictionary, the entries it states or inherits, among them its field type,
+// and its fully qualified name. The widget is read from alloc first.
+func widgetFieldIdentity(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotObj ast.PdfObject) (ast.PdfObject, ast.PdfDict, fieldEntries, string, bool) {
 	annotDict, err := resolveDictAllocFirst(ctx, alloc, doc, annotObj)
 	if err != nil || annotDict == nil {
-		return nil, nil, "", "", false
+		return nil, nil, fieldEntries{}, "", false
 	}
 	if subtype, err := document.ResolveName(ctx, doc, annotDict["Subtype"]); err != nil || subtype != "Widget" {
-		return nil, nil, "", "", false
+		return nil, nil, fieldEntries{}, "", false
 	}
 
 	var (
@@ -242,9 +260,30 @@ func widgetFieldIdentity(ctx context.Context, doc *document.Document, alloc *wri
 		nodeObj    = annotObj
 		haveField  bool
 		haveFTNode bool
+		// The chain is walked from the widget up, so the first node that
+		// states an entry is the nearest, whose value the field takes.
+		ff, haveFf = 0, false
+		opt        ast.PdfObject
+		haveOpt    bool
+		optFrom    int
 	)
 	seen := make(map[int]bool)
 	for range maxFieldTreeDepth {
+		if !haveFf {
+			if ffObj, ok := node["Ff"]; ok {
+				if v, err := document.ResolveInt(ctx, doc, ffObj); err == nil {
+					ff, haveFf = int(v&math.MaxInt32), true // fits int: masked to 31 bits, which hold every flag ISO 32000-1 defines
+				}
+			}
+		}
+		if !haveOpt {
+			if o, ok := node["Opt"]; ok {
+				opt, haveOpt = o, true
+				if ref, isRef := nodeObj.(ast.PdfIndirectRef); isRef {
+					optFrom = ref.ObjectNum
+				}
+			}
+		}
 		partial := ""
 		if tObj, ok := node["T"]; ok {
 			if tStr, err := document.ResolveString(ctx, doc, tObj); err == nil && tStr != "" {
@@ -273,7 +312,7 @@ func widgetFieldIdentity(ctx context.Context, doc *document.Document, alloc *wri
 	}
 
 	if !haveField || !haveFTNode {
-		return nil, nil, "", "", false
+		return nil, nil, fieldEntries{}, "", false
 	}
 
 	// The chain was walked from the widget upwards, so the names are innermost
@@ -281,24 +320,27 @@ func widgetFieldIdentity(ctx context.Context, doc *document.Document, alloc *wri
 	for i, j := 0, len(names)-1; i < j; i, j = i+1, j-1 {
 		names[i], names[j] = names[j], names[i]
 	}
-	return fieldObj, fieldDict, fieldFT, strings.Join(names, "."), true
+	entries := fieldEntries{ft: fieldFT, ff: ff, opt: opt, optFrom: optFrom}
+	return fieldObj, fieldDict, entries, strings.Join(names, "."), true
 }
 
-// findAndSetField recursively traverses the field tree to find and update a
-// field. parentFT carries the field type down the tree, which a kid inherits
-// when it does not state its own (ISO 32000-1, 12.7.3.1).
-func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName, parentFT, targetName, value string) (bool, error) {
+// findAndSetField recursively traverses the root fields in fields to find the
+// field targetName and write val on it. The entries a kid does not state it
+// takes from its ancestors (ISO 32000-1, 12.7.3.1), which carry them down.
+func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, targetName string, val fieldValue) (bool, error) {
 	fs := &fieldSearch{onPath: make(map[int]bool), searched: make(map[fieldSearchKey]bool)}
-	return findAndSetFieldAt(ctx, doc, alloc, fields, parentName, parentFT, targetName, value, fs, 0)
+	return findAndSetFieldAt(ctx, doc, alloc, fields, "", fieldEntries{}, targetName, val, fs, 0)
 }
 
 // fieldSearchKey keys one unit of a [findAndSetField] search: an indirect
 // field, or a /Kids array written as an object of its own, reached under the
-// fully qualified name parent with the inherited field type ft. Whether the
-// target lies below it depends on nothing else.
+// fully qualified name parent with the inherited field type ft, flags ff and
+// the /Opt the node numbered optFrom stated. Whether the target lies below it,
+// and what it may be set to, depends on nothing else.
 type fieldSearchKey struct {
-	obj        int
-	parent, ft string
+	obj         int
+	parent, ft  string
+	ff, optFrom int
 }
 
 // fieldSearch carries the state of one [findAndSetField] search.
@@ -311,15 +353,15 @@ type fieldSearch struct {
 }
 
 // firstSearch reports whether obj, reached under parent with the inherited
-// type ft, is a unit this search has not searched yet, and records it. A
+// entries e, is a unit this search has not searched yet, and records it. A
 // direct object lives in the one container that spells it out, so only its
 // container can be reached twice.
-func (fs *fieldSearch) firstSearch(obj ast.PdfObject, parent, ft string) bool {
+func (fs *fieldSearch) firstSearch(obj ast.PdfObject, parent string, e fieldEntries) bool {
 	ref, ok := obj.(ast.PdfIndirectRef)
 	if !ok {
 		return true
 	}
-	key := fieldSearchKey{obj: ref.ObjectNum, parent: parent, ft: ft}
+	key := fieldSearchKey{obj: ref.ObjectNum, parent: parent, ft: e.ft, ff: e.ff, optFrom: e.optFrom}
 	if fs.searched[key] {
 		return false
 	}
@@ -373,7 +415,7 @@ func (fs *fieldSearch) leave(obj ast.PdfObject) {
 // give a shared child distinct names reach only the names the target begins
 // with. The descent borrows [maxFieldParentDepth], named for the /Parent
 // ascent, for the stack's sake, as signedFieldWalk does.
-func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName, parentFT, targetName, value string, fs *fieldSearch, depth int) (bool, error) {
+func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName string, parent fieldEntries, targetName string, val fieldValue, fs *fieldSearch, depth int) (bool, error) {
 	if depth > maxFieldParentDepth {
 		return false, nil
 	}
@@ -381,7 +423,7 @@ func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *write
 		if err := ctx.Err(); err != nil {
 			return false, fmt.Errorf("searching the form fields: %w", err)
 		}
-		if !fs.firstSearch(fieldObj, parentName, parentFT) {
+		if !fs.firstSearch(fieldObj, parentName, parent) {
 			continue
 		}
 		var fieldRef ast.PdfIndirectRef
@@ -405,12 +447,7 @@ func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *write
 				partialName = document.DecodePdfString(tStr)
 			}
 		}
-		fieldFT := parentFT
-		if ftObj, ok := fieldDict["FT"]; ok {
-			if ft, err := document.ResolveName(ctx, doc, ftObj); err == nil && ft != "" {
-				fieldFT = string(ft)
-			}
-		}
+		entries := parent.with(ctx, doc, fieldObj, fieldDict)
 
 		fullName := parentName
 		if partialName != "" {
@@ -422,14 +459,9 @@ func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *write
 		}
 
 		if fullName == targetName {
-			// Found it: update /V.
-			newDict := make(ast.PdfDict, len(fieldDict)+1)
-			maps.Copy(newDict, fieldDict)
-			setFieldValue(newDict, fieldFT, value)
-			if fieldRef.ObjectNum > 0 {
-				alloc.AllocAt(fieldRef.ObjectNum, newDict)
+			if err := writeFieldValue(ctx, doc, alloc, fieldRef, fieldDict, targetName, entries, val); err != nil {
+				return false, err
 			}
-			setKidAppearanceStates(ctx, doc, alloc, newDict, fieldFT, value)
 			return true, nil
 		}
 
@@ -437,7 +469,7 @@ func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *write
 			continue
 		}
 		if kidsObj, ok := fieldDict["Kids"]; ok {
-			found, err := searchKids(ctx, doc, alloc, fieldObj, kidsObj, fullName, fieldFT, targetName, value, fs, depth)
+			found, err := searchKids(ctx, doc, alloc, fieldObj, kidsObj, fullName, entries, targetName, val, fs, depth)
 			if err != nil || found {
 				return found, err
 			}
@@ -449,7 +481,7 @@ func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *write
 // searchKids searches the /Kids array kidsObj of the field fieldObj named
 // fullName, for [findAndSetFieldAt]: once per unit ([fieldSearchKey]), and not
 // at all when the field or the array is already on the path.
-func searchKids(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fieldObj, kidsObj ast.PdfObject, fullName, fieldFT, targetName, value string, fs *fieldSearch, depth int) (bool, error) {
+func searchKids(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fieldObj, kidsObj ast.PdfObject, fullName string, entries fieldEntries, targetName string, val fieldValue, fs *fieldSearch, depth int) (bool, error) {
 	if !fs.enter(fieldObj) {
 		return false, nil
 	}
@@ -458,78 +490,14 @@ func searchKids(ctx context.Context, doc *document.Document, alloc *writer.ObjAl
 		return false, nil
 	}
 	defer fs.leave(kidsObj)
-	if !fs.firstSearch(kidsObj, fullName, fieldFT) {
+	if !fs.firstSearch(kidsObj, fullName, entries) {
 		return false, nil
 	}
 	// A /Kids that does not resolve holds no field to find.
 	if kidsArr, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj); err == nil && kidsArr != nil {
-		return findAndSetFieldAt(ctx, doc, alloc, kidsArr, fullName, fieldFT, targetName, value, fs, depth+1)
+		return findAndSetFieldAt(ctx, doc, alloc, kidsArr, fullName, entries, targetName, val, fs, depth+1)
 	}
 	return false, nil
-}
-
-// setFieldValue writes /V in the representation the field's type requires.
-//
-// A button field's value is a NAME: the on-state chosen from its appearance
-// subdictionary, or /Off (ISO 32000-1, 12.7.4.2.3). Only a text or choice
-// field takes a text string (Table 228). Writing a string for every type, which
-// this used to do, produced a checkbox whose /V was `(LITHOPROBE)` instead of
-// `/LITHOPROBE`, and litho's own form reader then listed NO fields at all: one
-// bad assignment hid the whole form, even on entirely well-formed input.
-//
-// The caller supplies the state name; an unknown one leaves the button off in
-// every viewer, which is the spec's own answer to a value that names no
-// appearance.
-//
-// # Corpus evidence
-//
-//   - pdfjs checkbox-bad-appearance.pdf: shows the hidden form on entirely
-//     well-formed input.
-func setFieldValue(dict ast.PdfDict, fieldFT, value string) {
-	if fieldFT == "Btn" {
-		dict["V"] = ast.PdfName(value)
-		return
-	}
-	dict["V"] = document.EncodePdfString(value)
-}
-
-// setKidAppearanceStates points every widget of a button field at the appearance
-// matching the new value.
-//
-// /AS selects which appearance in /AP is drawn (ISO 32000-1, 12.5.5). Leaving it
-// on the previous state renders the OLD state, so a checkbox set to /Off still
-// shows a tick until a viewer regenerates appearances. /V alone is not enough.
-func setKidAppearanceStates(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fieldDict ast.PdfDict, fieldFT, value string) {
-	if fieldFT != "Btn" {
-		return
-	}
-
-	kidsArr, err := resolveArrayAllocFirst(ctx, alloc, doc, fieldDict["Kids"])
-	if err != nil || kidsArr == nil {
-		// A field merged with its widget carries /AP itself (12.5.6.19).
-		if _, hasAP := fieldDict["AP"]; hasAP {
-			fieldDict["AS"] = ast.PdfName(value)
-		}
-		return
-	}
-
-	for _, kidObj := range kidsArr {
-		kidRef, ok := kidObj.(ast.PdfIndirectRef)
-		if !ok {
-			continue
-		}
-		kidDict, err := resolveDictAllocFirst(ctx, alloc, doc, kidObj)
-		if err != nil || kidDict == nil {
-			continue
-		}
-		if _, hasAP := kidDict["AP"]; !hasAP {
-			continue
-		}
-		newKid := make(ast.PdfDict, len(kidDict)+1)
-		maps.Copy(newKid, kidDict)
-		newKid["AS"] = ast.PdfName(value)
-		alloc.AllocAt(kidRef.ObjectNum, newKid)
-	}
 }
 
 // FlattenForm bakes form field appearances into page content and removes

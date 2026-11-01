@@ -409,6 +409,14 @@ var ErrFieldValueNotAddressable = errors.New("form field value has no indirect r
 // it with errors.Is without importing pkg/internal.
 var ErrFormFieldNotFound = errors.New("form field not found")
 
+// ErrFormFieldValue reports a value a form field cannot hold: one for a push
+// button or a signature field, a state no widget of a check box or radio
+// button group shows, a value outside the options of a choice field the user
+// cannot type into, or several selections for a field that allows one (see
+// [SetFormField] and [SetFormFieldValues]). pdf.ErrFormFieldValue is this
+// value.
+var ErrFormFieldValue = errors.New("value the form field cannot hold")
+
 // ErrTextNotEncodable reports stamp text a standard font cannot draw.
 //
 // [StampText] writes a standard font's text in WinAnsiEncoding (ISO 32000-1,

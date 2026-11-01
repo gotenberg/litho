@@ -81,6 +81,10 @@ func refusedCalls(t *testing.T) []refusedCall {
 			w.SetFormField("name", "late")
 			return nil
 		}},
+		{"SetFormFieldValues", func(_ context.Context, _ *testing.T, w *Writer) error {
+			w.SetFormFieldValues("name", []string{"late"})
+			return nil
+		}},
 		{"FlattenForm", func(_ context.Context, _ *testing.T, w *Writer) error { w.FlattenForm(); return nil }},
 		{"StampText", func(_ context.Context, _ *testing.T, w *Writer) error {
 			return w.StampText(TextStamp{Text: "LATE", X: 50, Y: 50})

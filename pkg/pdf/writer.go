@@ -1955,8 +1955,22 @@ func (w *Writer) RemoveEncryption() {
 // Uses incremental update. Sets /NeedAppearances on the AcroForm so viewers
 // regenerate the visual appearance. The mutation is queued and applied when
 // [Writer.WriteTo] is called, which returns [ErrFormFieldNotFound] and writes
-// nothing when no field has the name. A button field takes value as the name
-// of its state, such as "Off", and any other field takes it as a text string.
+// nothing when no field has the name.
+//
+// A check box or a radio button group takes value as the name of a state, one
+// [models.FormField.States] lists or "Off", and each of its widgets shows that
+// state where it has it and Off elsewhere. Any other field takes value as a
+// text string. [Writer.WriteTo] returns [ErrFormFieldValue] and writes nothing
+// for a value the field cannot hold:
+//
+//   - any value for a push button or a signature field;
+//   - a state no widget of a check box or radio button group shows;
+//   - a value none of the options of a list box or a combo box holds, unless
+//     the combo box is editable.
+//
+// A button whose widgets state no appearance, and a choice field with no
+// options, take any value. Use [Writer.SetFormFieldValues] to select several
+// items of a list box.
 func (w *Writer) SetFormField(name, value string) {
 	if w.refuseAfterRemediation("SetFormField") != nil {
 		return
@@ -1964,6 +1978,30 @@ func (w *Writer) SetFormField(name, value string) {
 	w.queue("SetFormField", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.SetFormField(ctx, alloc, doc, name, value)
+		},
+	})
+}
+
+// SetFormFieldValues selects values in the list box with the fully qualified
+// name name, as [Writer.SetFormField] sets a field: the selections, in the
+// order given, as the field's value, and their positions among its options
+// (ISO 32000-1, Table 231). The mutation is queued and applied when
+// [Writer.WriteTo] is called.
+//
+// The field must allow several selections ([models.FormField.MultiSelect]),
+// unless values holds one value, which any field takes as SetFormField takes
+// it. [Writer.WriteTo] returns [ErrFormFieldNotFound] when no field has the
+// name, and [ErrFormFieldValue] for an empty values, for several values on a
+// field that allows one, and for a value none of the field's options holds.
+// Nothing is written then. values is copied.
+func (w *Writer) SetFormFieldValues(name string, values []string) {
+	if w.refuseAfterRemediation("SetFormFieldValues") != nil {
+		return
+	}
+	values = slices.Clone(values)
+	w.queue("SetFormFieldValues", mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			return mutations.SetFormFieldValues(ctx, alloc, doc, name, values)
 		},
 	})
 }

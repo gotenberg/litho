@@ -51,7 +51,7 @@ func cyclicFieldParentDoc(t *testing.T) (context.Context, *document.Document) {
 func TestWidgetFieldIdentity_CycleDoesNotFabricateAQualifiedName(t *testing.T) {
 	ctx, doc := cyclicFieldParentDoc(t)
 
-	_, _, fieldFT, qualified, ok := widgetFieldIdentity(ctx, doc, nil, ast.PdfIndirectRef{ObjectNum: 6})
+	_, _, entries, qualified, ok := widgetFieldIdentity(ctx, doc, nil, ast.PdfIndirectRef{ObjectNum: 6})
 	if !ok {
 		t.Fatal("widgetFieldIdentity refused a widget whose field states /FT and /T")
 	}
@@ -61,8 +61,8 @@ func TestWidgetFieldIdentity_CycleDoesNotFabricateAQualifiedName(t *testing.T) {
 	if strings.Contains(qualified, ".") {
 		t.Errorf("qualified name %q repeats a partial name, so the cycle was walked more than once", qualified)
 	}
-	if fieldFT != "Tx" {
-		t.Errorf("field type = %q, want Tx", fieldFT)
+	if entries.ft != "Tx" {
+		t.Errorf("field type = %q, want Tx", entries.ft)
 	}
 }
 

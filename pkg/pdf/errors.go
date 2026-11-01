@@ -98,6 +98,15 @@ var (
 	// it too. The message names the field. Nothing is written.
 	ErrFormFieldNotFound = mutations.ErrFormFieldNotFound
 
+	// ErrFormFieldValue is returned, wrapped, by [Writer.WriteTo] when
+	// [Writer.SetFormField] or [Writer.SetFormFieldValues] gave a field a value
+	// it cannot hold: any value for a push button or a signature field, a state
+	// no widget of a check box or radio button group shows, a value none of the
+	// options of a list box or a non-editable combo box holds, or several
+	// selections for a field that allows one. The message names the field and
+	// what it takes. Nothing is written.
+	ErrFormFieldValue = mutations.ErrFormFieldValue
+
 	// ErrInvalidPageNumber is returned when a page number is outside the
 	// valid range [1, pageCount]: by the [Reader] methods that take one, by
 	// [Writer.Redact] and [Split], and by [Writer.WriteTo] for a page
@@ -865,6 +874,7 @@ var invalidInputErrors = []error{
 	ErrRenderTooLarge,
 	ErrInvalidRenderOptions,
 	ErrFormFieldNotFound,
+	ErrFormFieldValue,
 	ErrInvalidPageNumber,
 	ErrInvalidPageRange,
 	ErrInvalidRotation,

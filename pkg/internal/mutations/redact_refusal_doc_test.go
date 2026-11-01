@@ -27,6 +27,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrAnnotationNotAddressable":      "ScrubAnnotationText",
 	"ErrFieldValueNotAddressable":      "ScrubFormFieldValues",
 	"ErrFormFieldNotFound":             "SetFormField",
+	"ErrFormFieldValue":                "SetFormField and SetFormFieldValues",
 	"ErrTextNotEncodable":              "StampText and CheckStandardFontText",
 	"ErrInvalidImage":                  "StampImage and CheckStampImage",
 	"ErrNoPageLeft":                    "DeletePages",
