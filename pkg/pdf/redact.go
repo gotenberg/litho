@@ -798,7 +798,7 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...Red
 	}
 	// The renderer the fallback composites with reads the document, not the
 	// edits queued on it, so those are written out first.
-	undo, err := w.materialize(ctx)
+	undo, err := w.materialize(ctx, "Redact")
 	if err != nil {
 		return nil, err
 	}
@@ -869,7 +869,7 @@ func (w *Writer) bakeRedactedAnnotations(ctx context.Context, regions []RedactRe
 	w.rewriteOverrides = alloc.Pending()
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
-	undo, err := w.materializeNow(ctx)
+	undo, err := w.materializeNow(ctx, "Redact")
 	if err != nil {
 		w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
 		return 0, noop, err
@@ -888,12 +888,15 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	// redaction's passes have not started on.
 	var before *Reader
 	if !o.noPixelCheck {
+		// A failure here is the write's, not the check's: an edit queued
+		// before Redact that fails reports its own EditError, as WriteTo
+		// would, and is no redaction a caller can fix by moving a region.
 		staged, release, stagedErr := w.stagedReader(ctx)
 		if stagedErr != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			return nil, &RedactionPixelError{Err: fmt.Errorf("writing the staged document: %w", stagedErr)}
+			return nil, fmt.Errorf("writing the document the redaction pixel check compares against: %w", stagedErr)
 		}
 		defer release()
 		before = staged
@@ -1127,7 +1130,9 @@ func (w *Writer) checkRedactedOutput(ctx context.Context, samePage []RedactionHi
 			// The copies cannot be drawn, so none is proved seen.
 			return slices.Clone(samePage), fmt.Errorf("%w: writing the redacted document to draw the copies left on its pages: %w", ErrRedactionIncomplete, err)
 		}
-		return nil, &RedactionPixelError{Err: fmt.Errorf("writing the redacted document: %w", err)}
+		// The write failed, not the check, as for the staged document the
+		// check compares against.
+		return nil, fmt.Errorf("writing the redacted document for the redaction pixel check: %w", err)
 	}
 	defer release()
 	unseen, err := unseenSamePageCopies(ctx, after, samePage)

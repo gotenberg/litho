@@ -2860,7 +2860,10 @@ func pdfaEncryptionClause(profile models.PDFAProfile) string {
 // materialize writes the edits queued on the Writer to a temp file and makes
 // that file the document the Writer edits (see [Writer.rebase]), so a
 // remediation validates, repairs and measures the document the caller staged
-// rather than the source. It does nothing when nothing is queued.
+// rather than the source. It does nothing when nothing is queued. method names
+// the Writer method that reads the document, a remediation,
+// [Writer.FlattenTransparency] or [Writer.Redact]'s raster fallback, and a
+// failure names it.
 //
 // The remediation validated the source while its fixers repaired the objects
 // the queued edits had staged, so it neither saw what an edit introduced nor
@@ -2898,23 +2901,24 @@ func pdfaEncryptionClause(profile models.PDFAProfile) string {
 //     a deletion left, and the repairs of objects only the deleted page used
 //     are no longer claimed.
 //   - All corpora: with no edit queued, all 72 reports are unchanged.
-func (w *Writer) materialize(ctx context.Context) (undo func(), err error) {
+func (w *Writer) materialize(ctx context.Context, method string) (undo func(), err error) {
 	if len(w.mutations) == 0 && len(w.rewriteOverrides) == 0 && !w.trailerDirty && !w.decrypt {
 		return func() {}, nil
 	}
-	return w.materializeNow(ctx)
+	return w.materializeNow(ctx, method)
 }
 
 // materializeNow writes the document as [Writer.materialize] does, with
 // nothing queued as well: a full rewrite of an unedited document still draws
 // its signed signatures into their pages (see
-// [mutations.BakeSignaturesForRewrite]).
-func (w *Writer) materializeNow(ctx context.Context) (undo func(), err error) {
+// [mutations.BakeSignaturesForRewrite]). method names the Writer method that
+// reads the document, which a failure names.
+func (w *Writer) materializeNow(ctx context.Context, method string) (undo func(), err error) {
 	prevDropped := slices.Clone(w.droppedSignatures)
 	path, err := w.writeTempFile(ctx, w, "litho-staged-*.pdf")
 	if err != nil {
 		w.droppedSignatures = prevDropped
-		return nil, fmt.Errorf("writing the edited document to remediate: %w", err)
+		return nil, fmt.Errorf("writing the document Writer.%s reads: %w", method, err)
 	}
 	logger := w.reader.doc.Logger
 	// The file is the Writer's once rebase makes it the document the Writer
@@ -2929,7 +2933,7 @@ func (w *Writer) materializeNow(ctx context.Context) (undo func(), err error) {
 	next, err := w.reader.reopenFile(ctx, path)
 	if err != nil {
 		w.droppedSignatures = prevDropped
-		return nil, fmt.Errorf("reopening the edited document to remediate: %w", err)
+		return nil, fmt.Errorf("reopening the document Writer.%s reads: %w", method, err)
 	}
 	owned = true
 	prevReader, prevMutations, prevOverrides := w.reader, w.mutations, w.rewriteOverrides
@@ -3064,7 +3068,7 @@ func (w *Writer) remediate(
 	if target.xrefStreamClause != "" && w.defaults.writesXRefStream() {
 		return nil, fmt.Errorf("%w (%s): %s given to NewWriter before Writer.%s", ErrPDFA1ForbidsObjectStreams, target.xrefStreamClause, w.defaults.xrefStreamOption(), target.method)
 	}
-	unmaterialize, err := w.materialize(ctx)
+	unmaterialize, err := w.materialize(ctx, target.method)
 	if err != nil {
 		return nil, err
 	}

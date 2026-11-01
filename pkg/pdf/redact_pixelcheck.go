@@ -69,8 +69,7 @@ const (
 // Use [errors.As] to read it.
 // Concurrent reads of a value are safe; a write needs synchronization.
 type RedactionPixelError struct {
-	// Page is the 1-based page whose check failed, 0 when the document
-	// could not be written or reopened to render it.
+	// Page is the 1-based page whose check failed.
 	Page int
 	// Region is the region, as given to [Writer.Redact], inside which the
 	// redacted page still paints something other than paper or a blanked
@@ -138,8 +137,11 @@ func (e *RedactionPixelError) Unwrap() []error {
 // sees. A path, an image or an annotation may still paint inside a region.
 //
 // A page the check cannot render also refuses, with its cause in
-// [RedactionPixelError.Err]. That covers a page past [Limits.MaxRenderPixels]
-// and one that fails to reopen. A check that did not run proved nothing.
+// [RedactionPixelError.Err]. That covers a page past [Limits.MaxRenderPixels].
+// A check that did not run proved nothing. A document the check cannot write
+// or reopen to render fails Redact with the cause itself, not a
+// RedactionPixelError: an edit queued before Redact that fails reports its
+// [EditError], as [Writer.WriteTo] would.
 //
 // The check renders the redacted document as [Writer.WriteTo] would write it,
 // through a temp file in the Writer's temp directory. It draws annotations as a

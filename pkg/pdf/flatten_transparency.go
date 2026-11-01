@@ -310,7 +310,7 @@ func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption)
 
 	// The renderer reads the document, not the edits queued on it, so
 	// those are written out first.
-	undo, err := w.materialize(ctx)
+	undo, err := w.materialize(ctx, "FlattenTransparency")
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +460,7 @@ func (w *Writer) bakeAnnotations(ctx context.Context, o flattenOpts) (bakedAnnot
 	w.rewriteOverrides = alloc.Pending()
 	w.folded = len(w.mutations)
 	w.forceRewrite = true
-	undo, err := w.materializeNow(ctx)
+	undo, err := w.materializeNow(ctx, "FlattenTransparency")
 	if err != nil {
 		w.rewriteOverrides, w.folded, w.forceRewrite = prevOverrides, prevFolded, prevForce
 		return bakedAnnotations{}, noop, err
@@ -478,7 +478,7 @@ func (w *Writer) bakeAnnotations(ctx context.Context, o flattenOpts) (bakedAnnot
 func (w *Writer) rewriteSignatures(ctx context.Context) (func(), error) {
 	prevForce := w.forceRewrite
 	w.forceRewrite = true
-	undo, err := w.materializeNow(ctx)
+	undo, err := w.materializeNow(ctx, "FlattenTransparency")
 	if err != nil {
 		w.forceRewrite = prevForce
 		return nil, err
