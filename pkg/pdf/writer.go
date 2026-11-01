@@ -1471,7 +1471,7 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 // insertion keeps the inserted pages, and one queued after another deletion
 // keeps what that one removed out. It may name every page of the Reader when
 // an insertion queued before it leaves the document a page; [Writer.WriteTo]
-// refuses a deletion that leaves none.
+// refuses a deletion that leaves none with [ErrNoPageLeft].
 //
 // The pages kept show the labels they displayed (ISO 32000-1, 12.4.2).
 //
@@ -2029,12 +2029,22 @@ func (w *Writer) FlattenForm() {
 // [TextStamp.Font]: litho embeds the whole font program with a matching
 // ToUnicode CMap. With the default font, PDF/UA validation reports a
 // 7.21.4.1 violation naming the stamp font.
+//
+// A standard font draws only the characters of WinAnsiEncoding (ISO 32000-1,
+// Annex D.2), Latin-1 and a few more. Text with any other character, Cyrillic
+// or Japanese for instance, returns [ErrTextNotEncodable] at once and queues
+// nothing; supply a TTF that covers it through [TextStamp.Font].
 func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	if err := w.refuseAfterRemediation("StampText"); err != nil {
 		return err
 	}
 	if stamp.Text == "" {
 		return ErrEmptyText
+	}
+	if len(stamp.Font.ttf) == 0 {
+		if err := mutations.CheckStandardFontText(stamp.Text); err != nil {
+			return err
+		}
 	}
 	w.queue("StampText", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
@@ -2057,6 +2067,11 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 //
 // The stamp is marked as an /Artifact, so it does not cost a tagged document
 // its ISO 14289-1, 7.1 conformance.
+//
+// Data that does not read as an image of the MimeType returns
+// [ErrInvalidImage] at once and queues nothing. Only the image's header is read
+// then, so a PNG whose pixel data is damaged fails [Writer.WriteTo] with the
+// same error.
 func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 	if err := w.refuseAfterRemediation("StampImage"); err != nil {
 		return err
@@ -2066,6 +2081,9 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 	}
 	if stamp.MimeType != "image/jpeg" && stamp.MimeType != "image/png" {
 		return fmt.Errorf("%w: %q", ErrUnsupportedMimeType, stamp.MimeType)
+	}
+	if err := mutations.CheckStampImage(stamp.Data, stamp.MimeType); err != nil {
+		return err
 	}
 	w.queue("StampImage", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {

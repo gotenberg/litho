@@ -138,6 +138,24 @@ var (
 	// structurally invalid.
 	ErrInvalidFont = errors.New("invalid font data")
 
+	// ErrInvalidImage is returned, wrapped, by [Writer.StampImage] when
+	// [ImageStamp.Data] does not read as an image of its MimeType, and by
+	// [Writer.WriteTo] when a PNG whose header reads has pixel data that does
+	// not decode. Nothing is written in that case.
+	ErrInvalidImage = mutations.ErrInvalidImage
+
+	// ErrTextNotEncodable is returned, wrapped, by [Writer.StampText] when the
+	// stamp uses a standard font and its text holds a character outside
+	// WinAnsiEncoding (ISO 32000-1, Annex D.2), the encoding a standard font's
+	// text is written in. A font that covers the text, given in
+	// [TextStamp.Font], stamps it.
+	ErrTextNotEncodable = mutations.ErrTextNotEncodable
+
+	// ErrNoPageLeft is returned, wrapped, by [Writer.WriteTo] when the
+	// deletions [Writer.DeletePages] queued, together with the insertions
+	// before them, leave the document no page. Nothing is written.
+	ErrNoPageLeft = mutations.ErrNoPageLeft
+
 	// ErrSourceIndexOutOfRange guards the text-element callback that
 	// [Writer.Merge] hands to bookmark generation, which is the only place
 	// it is produced. No exported method returns it: the callback's caller
@@ -855,6 +873,9 @@ var invalidInputErrors = []error{
 	ErrEmptyData,
 	ErrUnsupportedMimeType,
 	ErrInvalidFont,
+	ErrInvalidImage,
+	ErrTextNotEncodable,
+	ErrNoPageLeft,
 	ErrSourceIndexOutOfRange,
 	ErrInvalidPageSize,
 	ErrSignFullRewriteIncompatible,

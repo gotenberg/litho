@@ -38,6 +38,47 @@ type ImageStampOptions struct {
 	Rotation float64
 }
 
+// CheckStampImage returns [ErrInvalidImage], wrapped, when data does not read
+// as an image of mimeType: a JPEG whose markers name no frame of one, three or
+// four components, or a PNG whose header does not decode. It reads the headers
+// alone, so a caller checks a stamp before it is applied. A PNG whose pixel
+// data is damaged passes, and fails with the same error when [StampImage]
+// decodes it.
+func CheckStampImage(data []byte, mimeType string) error {
+	switch mimeType {
+	case "image/jpeg":
+		if _, _, err := jpegFrame(data); err != nil {
+			return err
+		}
+	case "image/png":
+		if _, err := png.DecodeConfig(bytes.NewReader(data)); err != nil {
+			return fmt.Errorf("%w: PNG: %w", ErrInvalidImage, err)
+		}
+	}
+	return nil
+}
+
+// jpegFrame returns the size of the frame data's markers declare and the
+// colour space its component count selects, or [ErrInvalidImage], wrapped,
+// when they declare none litho embeds.
+func jpegFrame(data []byte) (size [2]int, colorSpace ast.PdfName, err error) {
+	w, h, cs, err := readJPEGDimensions(data)
+	if err != nil {
+		return size, "", fmt.Errorf("%w: JPEG: %w", ErrInvalidImage, err)
+	}
+	switch cs {
+	case 1:
+		colorSpace = "DeviceGray"
+	case 3:
+		colorSpace = "DeviceRGB"
+	case 4:
+		colorSpace = "DeviceCMYK"
+	default:
+		return size, "", fmt.Errorf("%w: JPEG with %d components", ErrInvalidImage, cs)
+	}
+	return [2]int{w, h}, colorSpace, nil
+}
+
 // StampImage draws an image overlay on each selected page.
 func StampImage(
 	ctx context.Context,
@@ -115,21 +156,11 @@ func StampImage(
 // are stored unchanged (the PDF /DCTDecode filter reads the same format),
 // so embedding is a zero-copy operation aside from the dict wrapper.
 func buildJPEGXObject(data []byte) (ast.PdfStream, int, int, error) {
-	w, h, cs, err := readJPEGDimensions(data)
+	size, colorSpace, err := jpegFrame(data)
 	if err != nil {
 		return ast.PdfStream{}, 0, 0, err
 	}
-	var colorSpace ast.PdfName
-	switch cs {
-	case 1:
-		colorSpace = "DeviceGray"
-	case 3:
-		colorSpace = "DeviceRGB"
-	case 4:
-		colorSpace = "DeviceCMYK"
-	default:
-		return ast.PdfStream{}, 0, 0, fmt.Errorf("unsupported jpeg component count %d", cs)
-	}
+	w, h := size[0], size[1]
 	dict := ast.PdfDict{
 		"Type":             ast.PdfName("XObject"),
 		"Subtype":          ast.PdfName("Image"),
@@ -139,7 +170,7 @@ func buildJPEGXObject(data []byte) (ast.PdfStream, int, int, error) {
 		"BitsPerComponent": ast.PdfInt(8),
 		"Filter":           ast.PdfName("DCTDecode"),
 	}
-	if cs == 4 && adobeMarked(data) {
+	if colorSpace == "DeviceCMYK" && adobeMarked(data) {
 		// Photoshop, and the writers that follow it, store an Adobe-marked
 		// CMYK JPEG inverted, while the DCTDecode filter hands its samples on
 		// as stored (ISO 32000-1, 7.4.8). A /Decode array that inverts every
@@ -243,7 +274,7 @@ func readJPEGDimensions(data []byte) (width, height, components int, err error) 
 func buildPNGXObject(alloc *writer.ObjAllocator, data []byte) (ast.PdfStream, int, int, error) {
 	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
-		return ast.PdfStream{}, 0, 0, fmt.Errorf("decoding PNG: %w", err)
+		return ast.PdfStream{}, 0, 0, fmt.Errorf("%w: PNG: %w", ErrInvalidImage, err)
 	}
 	bounds := img.Bounds()
 	w := bounds.Dx()

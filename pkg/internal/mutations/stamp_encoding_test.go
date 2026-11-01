@@ -3,6 +3,7 @@ package mutations
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -107,10 +108,13 @@ func TestStampTextWritesWinAnsiBytes(t *testing.T) {
 }
 
 // TestStampTextRefusesUnencodableText pins that text a standard font cannot
-// express is reported rather than stamped as mojibake.
+// express is reported rather than stamped as mojibake, with a sentinel a caller
+// matches.
 //
 // litho used to write the UTF-8 bytes anyway, and both poppler and litho read
-// the result back as "Ð¡Ð£Ð’ÐžÐ ÐžÐ’".
+// the result back as "Ð¡Ð£Ð’ÐžÐ ÐžÐ’". The refusal once told every caller to
+// pass the CLI's -font flag, which a library caller does not have: that advice
+// is the CLI's to give.
 func TestStampTextRefusesUnencodableText(t *testing.T) {
 	t.Parallel()
 
@@ -119,11 +123,17 @@ func TestStampTextRefusesUnencodableText(t *testing.T) {
 		Text:     "СУВОРОВ",
 		FontSize: 12,
 	}, nil)
-	if err == nil {
-		t.Fatal("stamping text the font cannot express reported success")
+	if !errors.Is(err, ErrTextNotEncodable) {
+		t.Fatalf("StampText = %v, want ErrTextNotEncodable", err)
 	}
-	if !strings.Contains(err.Error(), "-font") {
-		t.Errorf("the error does not say how to stamp the text: %v", err)
+	if strings.Contains(err.Error(), "-font") {
+		t.Errorf("the library error names a CLI flag: %v", err)
+	}
+	if err := CheckStandardFontText("日本語"); !errors.Is(err, ErrTextNotEncodable) {
+		t.Errorf("CheckStandardFontText(日本語) = %v, want ErrTextNotEncodable", err)
+	}
+	if err := CheckStandardFontText("Café"); err != nil {
+		t.Errorf("CheckStandardFontText(Café) = %v, want nil", err)
 	}
 }
 

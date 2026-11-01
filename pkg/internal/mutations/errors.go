@@ -409,6 +409,26 @@ var ErrFieldValueNotAddressable = errors.New("form field value has no indirect r
 // it with errors.Is without importing pkg/internal.
 var ErrFormFieldNotFound = errors.New("form field not found")
 
+// ErrTextNotEncodable reports stamp text a standard font cannot draw.
+//
+// [StampText] writes a standard font's text in WinAnsiEncoding (ISO 32000-1,
+// Annex D.2), one byte a character. A character outside it has no code to
+// show, and writing the text's UTF-8 bytes instead puts mojibake on the page,
+// so the stamp is refused and the caller supplies a font that covers the text.
+// pdf.ErrTextNotEncodable is this value.
+var ErrTextNotEncodable = errors.New("text cannot be encoded in WinAnsiEncoding, which the standard fonts use")
+
+// ErrInvalidImage reports stamp image data that does not decode as the image
+// type it is given as. pdf.ErrInvalidImage is this value.
+var ErrInvalidImage = errors.New("invalid image data")
+
+// ErrNoPageLeft reports a page deletion that would leave the document no page.
+//
+// The page tree's /Count would be zero and its /Kids empty (ISO 32000-1,
+// 7.7.3.2), a document no viewer has a page of to show. pdf.ErrNoPageLeft is
+// this value.
+var ErrNoPageLeft = errors.New("cannot delete all pages")
+
 // ErrOutlineItemNotAddressable reports an outline item quoting removed text
 // that the mutation cannot rewrite, because the entry naming it is not an
 // indirect reference.

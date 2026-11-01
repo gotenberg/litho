@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -97,7 +98,7 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 	}
 
 	if err := w.StampText(stamp, pageList...); err != nil {
-		fmt.Fprintf(stderr, "stamping text: %v\n", err)
+		fmt.Fprintf(stderr, "stamping text: %v%s\n", err, fontHint(err))
 		return exitError
 	}
 
@@ -119,6 +120,17 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 	}
 
 	return exitOK
+}
+
+// fontHint returns the advice the CLI adds to err: text the standard fonts
+// cannot encode stamps with a TTF the -font flag supplies. The library names
+// [pdf.TextStamp.Font], which a command-line caller cannot reach, so the hint
+// lives here.
+func fontHint(err error) string {
+	if errors.Is(err, pdf.ErrTextNotEncodable) {
+		return "; supply a TTF with -font to stamp it"
+	}
+	return ""
 }
 
 // parseHexColor converts a hex color string like "#ff0000" or "ff0000" into

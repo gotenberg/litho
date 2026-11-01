@@ -41,6 +41,18 @@ type TextStampOptions struct {
 	TTFBytes []byte
 }
 
+// CheckStandardFontText returns [ErrTextNotEncodable], wrapped, when a
+// standard font cannot draw text: one of its characters lies outside
+// WinAnsiEncoding (ISO 32000-1, Annex D.2), the encoding [StampText] writes a
+// standard font's text in. It reads text alone, so a caller checks a stamp
+// before it is applied.
+func CheckStandardFontText(text string) error {
+	if _, ok := winAnsiEncode(text); !ok {
+		return fmt.Errorf("%w: %q", ErrTextNotEncodable, text)
+	}
+	return nil
+}
+
 // StampText draws a single line of text on the given 1-based page numbers.
 // See [TextStampOptions] for the available parameters. If pageNums is
 // empty, the stamp is applied to every page the document holds as alloc
@@ -126,12 +138,11 @@ func StampText(
 		// bytes on the page for every accented character and a viewer decoded
 		// each one separately: stamping "Café" produced "CafÃ©", and a Cyrillic
 		// stamp came out as mojibake end to end. A caller whose text this
-		// encoding cannot express is told to supply a font rather than handed a
-		// corrupted page.
+		// encoding cannot express is refused rather than handed a corrupted
+		// page.
 		winAnsi, encodable := winAnsiEncode(opts.Text)
 		if !encodable {
-			return fmt.Errorf("stamp text cannot be written in the WinAnsi encoding a standard "+
-				"font uses; supply a TTF with -font to stamp %q", opts.Text)
+			return CheckStandardFontText(opts.Text)
 		}
 		encoded = "(" + escapePDFString(string(winAnsi)) + ")"
 	}

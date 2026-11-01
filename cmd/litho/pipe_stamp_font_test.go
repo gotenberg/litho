@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// The shared stamp path tells a caller whose text WinAnsi cannot express to
-// "supply a TTF with -font". That advice reached the pipe stage, which did not
-// define -font, so a pipeline was told to pass a flag the same command then
+// The CLI tells a caller whose text WinAnsi cannot express to "supply a TTF
+// with -font" (see [fontHint]). That advice reached the pipe stage, which did
+// not define -font, so a pipeline was told to pass a flag the same command then
 // rejected with "flag provided but not defined": a closed loop with no way out.
 //
 // The flag is also the only way to stamp and keep PDF/A conformance, since the
@@ -77,7 +77,7 @@ func TestPipeStampText_RejectsAFontFileThatIsNotATTF(t *testing.T) {
 }
 
 // TestPipeStampText_AdviceIsNowActionable pins the reason the flag exists here.
-// The shared path still refuses text WinAnsi cannot express and still names
+// The stamp still refuses text WinAnsi cannot express, the CLI still names
 // -font, and that flag is now something this surface accepts.
 func TestPipeStampText_AdviceIsNowActionable(t *testing.T) {
 	src := writeTempPDF(t, redactableCLIPDF())
@@ -91,6 +91,23 @@ func TestPipeStampText_AdviceIsNowActionable(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "-font") {
 		t.Errorf("the refusal no longer names the remedy; stderr: %s", stderr)
+	}
+}
+
+// TestStampText_AdviceNamesTheFontFlag pins the hint on the standalone command.
+// The library's error names no flag, since a library caller has none, so the
+// CLI adds it.
+func TestStampText_AdviceNamesTheFontFlag(t *testing.T) {
+	src := writeTempPDF(t, redactableCLIPDF())
+	out := filepath.Join(t.TempDir(), "out.pdf")
+
+	rc, _, stderr := runPipeCLI(t, "stamp-text", "-text", unencodableStampText(), "-o", out, src)
+
+	if rc == exitOK {
+		t.Fatal("text the standard font cannot express was stamped anyway")
+	}
+	if !strings.Contains(stderr, "-font") {
+		t.Errorf("the refusal does not name the remedy; stderr: %s", stderr)
 	}
 }
 

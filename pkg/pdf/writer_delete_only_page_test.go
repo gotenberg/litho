@@ -3,8 +3,8 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"errors"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -61,8 +61,8 @@ func TestWriterDeletesTheOnlySourcePageAfterAnInsertion(t *testing.T) {
 			t.Fatalf("DeletePages: %v", err)
 		}
 		err := w.WriteTo(ctx, &bytes.Buffer{})
-		if err == nil || !strings.Contains(err.Error(), "cannot delete all") {
-			t.Errorf("WriteTo = %v, want the refusal to empty the document", err)
+		if !errors.Is(err, ErrNoPageLeft) || !IsInvalidInput(err) {
+			t.Errorf("WriteTo = %v, want ErrNoPageLeft, classified as invalid input", err)
 		}
 	})
 }

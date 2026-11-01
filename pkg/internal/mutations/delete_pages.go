@@ -44,7 +44,7 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			}
 		}
 		if len(kept) == 0 {
-			return fmt.Errorf("cannot delete all %d pages", len(staged))
+			return fmt.Errorf("%w: the deletion leaves none of %d", ErrNoPageLeft, len(staged))
 		}
 		if err := rebuildPageTree(ctx, alloc, doc, allPages, kept); err != nil {
 			return err
@@ -53,7 +53,7 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	}
 
 	if len(deleteSet) >= len(allPages) {
-		return fmt.Errorf("cannot delete all %d pages", len(allPages))
+		return fmt.Errorf("%w: the deletion leaves none of %d", ErrNoPageLeft, len(allPages))
 	}
 
 	// Collect kept page indices (0-based), preserving original order.

@@ -334,7 +334,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		// that fails while it is being BUILT never reaches here, which is why
 		// only the write-time failures leaked.
 		abandonOutput(outputFile, closeDst)
-		fmt.Fprintf(stderr, "pipe: %v\n", err)
+		fmt.Fprintf(stderr, "pipe: %v%s\n", err, fontHint(err))
 		return exitError
 	}
 
@@ -1041,12 +1041,12 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		opacity := fs.Float64("opacity", 1.0, "Opacity 0.0-1.0")
 		rotation := fs.Float64("rotation", 0, "Rotation degrees")
 		color := fs.String("color", "", "Hex color (#rrggbb)")
-		// The stage lacked this flag while the shared stamp path tells a caller
-		// to "supply a TTF with -font" when WinAnsi cannot express the text, so
-		// a pipeline was handed advice its own surface then rejected with
-		// "flag provided but not defined". It is also the only way to stamp and
-		// keep PDF/A conformance: the default standard font is not embedded,
-		// which ISO 19005-2, 6.2.11.4.1 forbids.
+		// The stage lacked this flag while the CLI tells a caller to "supply a
+		// TTF with -font" when WinAnsi cannot express the text (see
+		// [fontHint]), so a pipeline was handed advice its own surface then
+		// rejected with "flag provided but not defined". It is also the only way
+		// to stamp and keep PDF/A conformance: the default standard font is not
+		// embedded, which ISO 19005-2, 6.2.11.4.1 forbids.
 		fontPath := fs.String("font", "", "Path to a TTF font file")
 		fontSize := fs.Float64("font-size", 36, "Font size")
 		x := fs.Float64("x", 0, "X position")
