@@ -91,12 +91,13 @@ func runCalculations(ctx context.Context, doc *document.Document, scripts map[st
 	}
 
 	// getField hands a script a field object carrying the value the field
-	// holds now, the one the document stores or a calculation run before.
+	// holds now, the one the document stores or a calculation run before. A
+	// script calls it as this.getField: at the top level of a script, this is
+	// the global object, which holds getField.
 	//
-	// goja Set and RunString errors on the bootstrap below are dropped: these
-	// assignments cannot fail, and a script's own error leaves its field as the
-	// document stores it.
-	_ = vm.Set("getField", func(call goja.FunctionCall) goja.Value { //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
+	// goja Set errors are dropped: setting a global or a property of a plain
+	// object cannot fail.
+	_ = vm.Set("getField", func(call goja.FunctionCall) goja.Value { //nolint:errcheck // Best-effort JS execution; setting a global cannot fail.
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -104,7 +105,6 @@ func runCalculations(ctx context.Context, doc *document.Document, scripts map[st
 		_ = field.Set("value", values[call.Arguments[0].String()]) //nolint:errcheck // Best-effort JS execution; setting a property of a plain object cannot fail.
 		return field
 	})
-	_, _ = vm.RunString(`var this = { getField: getField };`) //nolint:errcheck // Best-effort JS execution; the bootstrap cannot fail.
 
 	docScripts, scriptsErr := ExtractDocumentScripts(ctx, doc)
 	if scriptsErr != nil {
