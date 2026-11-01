@@ -1353,6 +1353,8 @@ func (r *Reader) buildBookmarkInput(ctx context.Context) (bookmarks.Input, error
 // evaluating any PDF JavaScript calculation scripts. Use this when all
 // you need is "what did the user type".
 //
+// The calculation scripts run as [Reader.FormFields] describes.
+//
 // Use [Reader.FormFields] to list every field, including the ones nobody
 // filled in.
 func (r *Reader) FormData(ctx context.Context) (_ map[string]string, err error) {
@@ -1372,6 +1374,13 @@ func (r *Reader) FormData(ctx context.Context) (_ map[string]string, err error) 
 // FormFields lists every named field of the interactive form, in the order the
 // field tree gives them, evaluating any PDF JavaScript calculation scripts. A
 // field nobody filled in is reported with an empty value.
+//
+// A field's calculation script (ISO 32000-1, 12.6.3) sets the value reported
+// for it, best effort: a script that fails leaves the value the document
+// stores. The scripts run in document order, under ctx and a budget of one
+// second a document. A ctx done while they run returns its error. A budget
+// spent leaves every field with the value the document stores: a script that
+// never ends costs a second, not the call.
 //
 // Use [Reader.FormData] for the flat name-to-value mapping of the fields that
 // actually carry a value.

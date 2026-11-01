@@ -9,8 +9,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/dop251/goja"
-
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
@@ -304,64 +302,10 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 		}
 	}
 
-	// If there are calculation scripts, evaluate them using goja
-	if len(calcScripts) > 0 {
-		vm := goja.New()
-
-		// Inject mock this.getField("Name").value API.
-		// goja Set/RunString calls for VM bootstrap are best-effort: these trivial
-		// assignments and object property sets cannot fail in practice.
-		_ = vm.Set("getField", func(call goja.FunctionCall) goja.Value { //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
-			if len(call.Arguments) > 0 {
-				fieldName := call.Arguments[0].String()
-
-				// Create a mock Field object
-				fieldObj := vm.NewObject()
-				_ = fieldObj.Set("value", "") //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
-				if val, exists := formDataMap[fieldName]; exists {
-					_ = fieldObj.Set("value", val) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
-				}
-
-				// Provide a setter to update formData
-				return fieldObj
-			}
-			return goja.Undefined()
-		})
-
-		// Map 'this.getField' -> global 'getField'
-		_, _ = vm.RunString(`var this = { getField: getField };`) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
-
-		// Inject Document-level scripts first (best-effort: malformed JS is non-fatal)
-		docScripts, scriptsErr := ExtractDocumentScripts(ctx, doc)
-		if scriptsErr != nil {
-			// Not a goja failure like the calls around it. This one is the
-			// name-tree walk declining to yield scripts at all, a malformed
-			// /Names dictionary or a tree past maxDocumentScriptsSize. Field
-			// calculations still run, they just run without the
-			// document-level scripts.
-			doc.Logger.Debug("extracting document-level JavaScript; continuing without it",
-				slog.Any("err", scriptsErr))
-		}
-		for _, script := range docScripts {
-			_, _ = vm.RunString(script) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
-		}
-
-		// Execute field calculations
-		for fieldName, script := range calcScripts {
-			// PDF Calculate scripts output to `event.value`
-			// Mock the event object.
-			_, _ = vm.RunString(`var event = { value: "" };`) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
-
-			// Execute the specific calculation logic
-			_, err := vm.RunString(script)
-			if err == nil {
-				// Retrieve the calculated value
-				eventVal := vm.Get("event").ToObject(vm).Get("value").String()
-				if eventVal != "" && eventVal != "undefined" {
-					formDataMap[fieldName] = eventVal
-				}
-			}
-		}
+	// A field's calculate action (ISO 32000-1, 12.6.3, Table 196) computes the
+	// value it displays from the values read above.
+	if err := runCalculations(ctx, doc, calcScripts, order, formDataMap); err != nil {
+		return nil, err
 	}
 
 	if !includeEmpty {
