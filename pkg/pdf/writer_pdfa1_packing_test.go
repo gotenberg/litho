@@ -23,8 +23,11 @@ func TestWriterRefusesToPackAPDFA1Remediation(t *testing.T) {
 		name string
 		// atNew are the options given to NewWriter, refused by the
 		// remediation itself.
-		atNew     []WriteOption
-		profile   models.PDFAProfile
+		atNew   []WriteOption
+		profile models.PDFAProfile
+		// pdfua pairs the remediation with a PDF/UA profile ([WithPDFUA]),
+		// "" for none.
+		pdfua     models.PDFUAProfile
 		writeOpts []WriteOption
 		wantOpt   string
 	}{
@@ -46,6 +49,20 @@ func TestWriterRefusesToPackAPDFA1Remediation(t *testing.T) {
 			atNew:   []WriteOption{WithObjectStreams()},
 			wantOpt: "WithObjectStreams",
 		},
+		{
+			name:      "WithObjectStreams after a PDF/A-1b and PDF/UA-1 remediation",
+			profile:   models.PDFA1b,
+			pdfua:     models.PDFUA1,
+			writeOpts: []WriteOption{WithObjectStreams()},
+			wantOpt:   "WithObjectStreams",
+		},
+		{
+			name:    "WithXRefStream given to NewWriter before a PDF/A-1a and PDF/UA-1 remediation",
+			profile: models.PDFA1a,
+			pdfua:   models.PDFUA1,
+			atNew:   []WriteOption{WithXRefStream()},
+			wantOpt: "WithXRefStream",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -59,7 +76,11 @@ func TestWriterRefusesToPackAPDFA1Remediation(t *testing.T) {
 			defer r.Close()
 			w := NewWriter(r, tc.atNew...)
 			defer w.Close()
-			_, err = w.RemediatePDFA(ctx, tc.profile)
+			var opts []RemediateOption
+			if tc.pdfua != "" {
+				opts = append(opts, WithPDFUA(tc.pdfua))
+			}
+			_, err = w.RemediatePDFA(ctx, tc.profile, opts...)
 			check := func(what string, err error) {
 				t.Helper()
 				if !errors.Is(err, ErrPDFA1ForbidsObjectStreams) {

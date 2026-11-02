@@ -80,6 +80,11 @@
 // remediated Writer holds its output in a temp file until [Writer.WriteTo]
 // streams it or [Writer.Close] removes it.
 //
+// [WithPDFUA] makes a PDF/A remediation, a Factur-X one included, target a
+// PDF/UA profile too, so that the output conforms to both: PDF/A-1, PDF/A-2
+// and PDF/A-3 pair with PDF/UA-1, PDF/A-4 with PDF/UA-2, and any other pair
+// is refused with [ErrIncompatibleProfiles].
+//
 // A remediation is the last edit on a Writer. Queue every other edit first:
 // the remediation judges and repairs the document they produce, so its
 // [RemediationReport] describes the output. After it, only [Writer.Sign],
@@ -159,7 +164,9 @@
 //     [Writer.RepairFacturX] take [RemediateOption]: [WithLanguage],
 //     [WithAggressiveFixes], [WithRegressionTolerance], [WithFigureAltText],
 //     [WithDocumentID], [WithFontProvider], [WithFontFiles],
-//     [WithSystemFonts], [WithWholeFontPrograms].
+//     [WithSystemFonts], [WithWholeFontPrograms], and, for
+//     [Writer.RemediatePDFA], [Writer.RemediateFacturX] and
+//     [Writer.RepairFacturX], [WithPDFUA].
 //   - [Writer.Sign] takes [SignOption]: [WithSignatureReason],
 //     [WithSignatureLocation], [WithSignatureContactInfo], [WithSignerName],
 //     [WithSigningTime], [WithSignatureField], [WithPAdES],

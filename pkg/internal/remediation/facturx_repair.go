@@ -38,6 +38,23 @@ var hybridInvoiceNames = []hybridInvoiceName{
 	{"ZUGFeRD-invoice.xml", "Alternative"},
 }
 
+// HasHybridInvoice reports whether doc embeds an attachment named after a
+// known hybrid-invoice convention, the attachment [RepairHybridInvoice]
+// repairs. It writes nothing.
+func HasHybridInvoice(ctx context.Context, doc *document.Document) bool {
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
+	if !ok {
+		return false
+	}
+	alloc := writer.NewObjAllocator(0)
+	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict == nil {
+		return false
+	}
+	_, _, specDict := locateInvoiceAttachment(ctx, alloc, doc, catalogDict)
+	return specDict != nil
+}
+
 // RepairHybridInvoice fixes the PDF-container half of a received hybrid
 // invoice in place: catalog /AF membership, the filespec
 // /AFRelationship, and the embedded stream /Subtype. The invoice XML

@@ -594,6 +594,17 @@ var (
 	// [WithEncryption] asks for them after it. Nothing is written.
 	ErrPDFUAForbidsBarringAccessibility = errors.New("PDF/UA-1 requires an encrypted file to permit content extraction for accessibility: bit 10 of the P key shall be set")
 
+	// ErrIncompatibleProfiles is returned, naming both profiles, when
+	// [WithPDFUA] pairs a PDF/A profile with a PDF/UA profile no file can
+	// conform to together, because each requires another PDF version.
+	// PDF/UA-1 requires a version from 1.0 to 1.7 (ISO 14289-1, 6.1), so it
+	// pairs with PDF/A-1, PDF/A-2 and PDF/A-3, Factur-X among them. PDF/A-4
+	// requires a 2.x version (ISO 19005-4, 6.1.2) and PDF/UA-2 version 2.0
+	// (ISO 14289-2, 6.1), so they pair with each other. [Writer.RemediatePDFA],
+	// [Writer.RemediateFacturX] and [Writer.RepairFacturX] return it before
+	// reading the document, and the Writer is left as it was.
+	ErrIncompatibleProfiles = errors.New("the PDF/A and PDF/UA profiles require different PDF versions")
+
 	// ErrEmptyInvoiceXML is returned by [Writer.RemediateFacturX] when
 	// [FacturXConfig.InvoiceXML] is nil or zero-length. Factur-X
 	// requires an embedded Cross-Industry Invoice payload.
@@ -929,6 +940,7 @@ var invalidInputErrors = []error{
 	ErrPDFAForbidsEncryption,
 	ErrPDFA1ForbidsObjectStreams,
 	ErrPDFUAForbidsBarringAccessibility,
+	ErrIncompatibleProfiles,
 	ErrEmptyInvoiceXML,
 	ErrNoInvoiceAttachment,
 	ErrInvalidFacturXLevel,

@@ -16,6 +16,8 @@ The engine validates `doc` and repairs through the allocator, so the two agree o
 
 The writer drives remediation to a bounded fixpoint: up to `maxRemediationRounds` passes, each extra round gated by an output-integrity probe, a regression check, and a revalidation that must strictly shrink the violation set. Trailer `/ID` regeneration is the only nondeterminism seam; `Options.PinnedID` (public `pdf.WithDocumentID`) pins it for byte-identical builds.
 
+A remediation to a PDF/A and a PDF/UA profile together (public `pdf.WithPDFUA`) runs one engine per round, `RemediatePDFUA` first, then the PDF/A one, and judges every round against both profiles, for up to `maxPairRemediationRounds` passes. Each engine keeps the other's claim: a PDF/UA run declares the `pdfuaid` it writes under the PDF/A part the packet claims, and a PDF/A run adds that declaration to an extension schema block the packet already holds.
+
 ## Fixer contract
 
 ```go

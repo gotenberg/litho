@@ -449,8 +449,9 @@ func WithBookmarks(opts BookmarkOptions) WriteOption {
 	}
 }
 
-// RemediateOption configures the behavior of [Writer.RemediatePDFA] and
-// [Writer.RemediatePDFUA].
+// RemediateOption configures the behavior of [Writer.RemediatePDFA],
+// [Writer.RemediatePDFUA], [Writer.RemediateWTPDF],
+// [Writer.RemediateFacturX] and [Writer.RepairFacturX].
 // RemediateOption closures must be safe to call from any goroutine.
 type RemediateOption func(*remediateOpts)
 
@@ -463,6 +464,9 @@ type remediateOpts struct {
 	fonts           FontProvider
 	systemFonts     *fontFiles
 	wholeFonts      bool
+	// pdfua is the PDF/UA profile a PDF/A-based remediation targets too, ""
+	// for none (see [WithPDFUA]).
+	pdfua models.PDFUAProfile
 }
 
 // RegressionTolerance bounds the integrity probe that runs after
@@ -563,6 +567,38 @@ func WithRegressionTolerance(tol RegressionTolerance) RemediateOption {
 	}
 }
 
+// WithPDFUA makes [Writer.RemediatePDFA], [Writer.RemediateFacturX] and
+// [Writer.RepairFacturX] remediate the document to the PDF/UA profile too, so
+// that the output conforms to both standards and claims both, the PDF/A one
+// through pdfaid and the PDF/UA one through pdfuaid (ISO 14289-1 and ISO
+// 14289-2, 5). Neither ISO 19005 nor ISO 14289 forbids a file to conform to
+// the other.
+//
+// The pair follows the PDF version each standard requires. PDF/UA-1 pairs
+// with PDF/A-1, PDF/A-2 and PDF/A-3, Factur-X among them, and PDF/UA-2 with
+// PDF/A-4. Any other pair returns [ErrIncompatibleProfiles]. A PDF/A level A
+// is not required: PDF/A-2b and PDF/UA-1 pair. Every refusal of the PDF/A
+// remediation applies to the pair: encryption ([ErrPDFAForbidsEncryption]),
+// and cross-reference streams at PDF/A-1 ([ErrPDFA1ForbidsObjectStreams]).
+//
+// The remediation runs the PDF/UA engine first, then the PDF/A one, and
+// alternates them for as long as each round still fixes something, up to four
+// rounds against three for one profile. Every round judges its output against
+// both profiles, so [RemediationReport.Residual] lists what the output leaves
+// of either, and [Violation.Specification] tells them apart: ISO_14289_1,
+// ISO_14289_2 and ISO_32005 name the PDF/UA violations, and every other
+// specification, ISO_19005_1 to ISO_19005_4 among them, the violations of the
+// PDF/A side. An empty Residual means the output conforms to both. The cost is
+// one more validation per round, and one more round at most.
+//
+// An empty profile, the default, remediates to the PDF/A profile alone.
+// [Writer.RemediatePDFUA] and [Writer.RemediateWTPDF] ignore the option.
+func WithPDFUA(profile models.PDFUAProfile) RemediateOption {
+	return func(o *remediateOpts) {
+		o.pdfua = profile
+	}
+}
+
 // RemediationReport describes what the remediation engine fixed and what it
 // could not fix automatically.
 // Concurrent reads of a value are safe; a write needs synchronization.
@@ -575,6 +611,9 @@ type RemediationReport struct {
 	// [RemediationReport.ResidualViolations] returns the same findings as
 	// structured [Violation] values. If content-modifying fixers were rolled
 	// back, the violations they had claimed to handle move back here.
+	//
+	// A remediation given [WithPDFUA] lists the violations of both its
+	// profiles here, each [Violation] naming its standard in Specification.
 	//
 	// A non-empty Residual does not stop the output from ASSERTING the
 	// profile. The identification schemas are themselves requirements
@@ -2465,6 +2504,10 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 // again with every page's transparency set opaque.
 // [RemediationReport.RolledBack] lists the flattening.
 //
+// Given [WithPDFUA], it remediates to that PDF/UA profile too, and the output
+// conforms to both profiles. A PDF/UA profile the PDF/A one does not pair
+// with returns [ErrIncompatibleProfiles].
+//
 // It is the last edit on the Writer (see [Writer]). It judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
@@ -2475,9 +2518,17 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 		return r.ValidatePDFA(ctx, profile)
 	}
 	target := remediationTarget{method: "RemediatePDFA", pdfaClause: pdfaEncryptionClause(profile), xrefStreamClause: pdfaXRefStreamClause(profile)}
-	return w.remediateFlattening(ctx, target, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+	run := func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
-	})
+	}
+	if cfg.pdfua == "" {
+		return w.remediateFlattening(ctx, target, cfg.tolerance, revalidate, run)
+	}
+	if err := checkPair(profile, cfg.pdfua); err != nil {
+		return nil, err
+	}
+	pair := newPairedRemediation(cfg.pdfua, remOpts, revalidate, run)
+	return w.remediateFlattening(ctx, pair.target(target), cfg.tolerance, pair.revalidate, pair.run)
 }
 
 // remediateFlattening runs [Writer.remediate] for a remediation whose engine,
@@ -2641,6 +2692,10 @@ type FacturXConfig struct {
 // returns [ErrPDFAForbidsEncryption] when [Writer.Encrypt] was called before
 // it or [NewWriter] was given [WithEncryption], and [Writer.WriteTo] returns
 // it for WithEncryption.
+//
+// Given [WithPDFUA] with [models.PDFUA1], it remediates to PDF/UA-1 too, and
+// the output is a Factur-X invoice that conforms to PDF/UA-1. PDF/UA-2
+// returns [ErrIncompatibleProfiles].
 func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateFacturX", &err)
 	if len(cfg.InvoiceXML) == 0 {
@@ -2683,9 +2738,17 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 		Relationship: relationship,
 	}
 	target := remediationTarget{method: "RemediateFacturX", pdfaClause: pdfaEncryptionClause(profile)}
-	return w.remediate(ctx, target, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+	run := func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		return remediation.RemediateFacturX(ctx, doc, alloc, fxOpts, remOpts.WithDisabled(disabled))
-	})
+	}
+	if rcfg.pdfua == "" {
+		return w.remediate(ctx, target, rcfg.tolerance, revalidate, run)
+	}
+	if err := checkPair(profile, rcfg.pdfua); err != nil {
+		return nil, err
+	}
+	pair := newPairedRemediation(rcfg.pdfua, remOpts, revalidate, run)
+	return w.remediate(ctx, pair.target(target), rcfg.tolerance, pair.revalidate, pair.run)
 }
 
 // RepairFacturX repairs the PDF-container metadata of a received hybrid
@@ -2705,6 +2768,12 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 // it returns [ErrPDFAForbidsEncryption] when [Writer.Encrypt] was called before
 // it or [NewWriter] was given [WithEncryption], and [Writer.WriteTo] returns
 // it for WithEncryption.
+//
+// Given [WithPDFUA] with [models.PDFUA1], it remediates the document to
+// PDF/UA-1 too, and judges the output against both. The repair still touches
+// no invoice XML, while the PDF/UA remediation may tag the pages and repair
+// what PDF/UA-1 requires. PDF/UA-2 returns [ErrIncompatibleProfiles], and a
+// document without an invoice [ErrNoInvoiceAttachment], before either runs.
 func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RepairFacturX", &err)
 	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
@@ -2718,7 +2787,7 @@ func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ 
 	// encrypted either.
 	target := remediationTarget{method: "RepairFacturX", pdfaClause: pdfaEncryptionClause(models.PDFA3b)}
 	// The repair runs no content-tier fixer, so there is none to disable.
-	return w.remediate(ctx, target, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ []string) (*remediation.Report, error) {
+	run := func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ []string) (*remediation.Report, error) {
 		fixes, repairErr := remediation.RepairHybridInvoice(ctx, doc, alloc)
 		if repairErr != nil {
 			return nil, repairErr
@@ -2731,7 +2800,24 @@ func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ 
 			return nil, ErrNoInvoiceAttachment
 		}
 		return &remediation.Report{Fixed: fixes}, nil
-	})
+	}
+	if rcfg.pdfua == "" {
+		return w.remediate(ctx, target, rcfg.tolerance, revalidate, run)
+	}
+	if err := checkPair(models.PDFA3b, rcfg.pdfua); err != nil {
+		return nil, err
+	}
+	_, remOpts := w.remediateConfig(opts)
+	pair := newPairedRemediation(rcfg.pdfua, remOpts, revalidate, run)
+	// The PDF/UA engine runs first, and would remediate a document the repair
+	// then refuses: the refusal comes before it.
+	pair.first = func(ctx context.Context, doc *document.Document) error {
+		if !remediation.HasHybridInvoice(ctx, doc) {
+			return ErrNoInvoiceAttachment
+		}
+		return nil
+	}
+	return w.remediate(ctx, pair.target(target), rcfg.tolerance, pair.revalidate, pair.run)
 }
 
 // integritySnap captures the signals the post-remediation probe compares
@@ -2830,6 +2916,171 @@ type remediationTarget struct {
 	pdfaClause          string
 	accessibilityClause string
 	xrefStreamClause    string
+	// rounds bounds the rounds of the run, the first included, 0 for
+	// maxRemediationRounds.
+	rounds int
+	// begin, when set, runs before the first round of every run, so that an
+	// engine keeping state across rounds starts each run afresh: a run
+	// [Writer.remediateFlattening] repeats included.
+	begin func()
+}
+
+// maxRounds returns the bound on the rounds of a run for t.
+func (t remediationTarget) maxRounds() int {
+	if t.rounds > 0 {
+		return t.rounds
+	}
+	return maxRemediationRounds
+}
+
+// checkPair returns [ErrIncompatibleProfiles] when no file can conform to the
+// PDF/A profile pdfa and the PDF/UA profile pdfua together: PDF/UA-1 requires a
+// PDF version from 1.0 to 1.7 (ISO 14289-1, 6.1), PDF/UA-2 version 2.0 (ISO
+// 14289-2, 6.1), and PDF/A-4 a 2.x version (ISO 19005-4, 6.1.2), while PDF/A-1
+// to PDF/A-3 build on PDF 1.4 and ISO 32000-1. A profile neither part names
+// is left to the validation, which refuses it as it refuses it alone.
+func checkPair(pdfa models.PDFAProfile, pdfua models.PDFUAProfile) error {
+	aPart, uaPart := compliance.PDFAPart(string(pdfa)), compliance.PDFUAPart(string(pdfua))
+	if aPart == 0 || uaPart == 0 {
+		return nil
+	}
+	if (aPart == 4) != (uaPart == 2) {
+		return fmt.Errorf("%w: %s requires PDF/UA-%d, not %s", ErrIncompatibleProfiles, pdfa, pairedPDFUAPart(aPart), pdfua)
+	}
+	return nil
+}
+
+// pairedPDFUAPart returns the part of ISO 14289 that pairs with part aPart of
+// ISO 19005 (see [checkPair]).
+func pairedPDFUAPart(aPart int) int {
+	if aPart == 4 {
+		return 2
+	}
+	return 1
+}
+
+// maxPairRemediationRounds bounds the rounds of a remediation to a PDF/A and a
+// PDF/UA profile together ([WithPDFUA]), counting the first. Anti-livelock
+// guard, not spec-mandated: the two engines take turns, so four rounds give
+// each a pass on what the other repaired, and a repair of one the other
+// undoes must terminate instead of looping.
+const maxPairRemediationRounds = 4
+
+// pairEngine names the engine a round of a paired remediation runs.
+type pairEngine int
+
+const (
+	// pairNone is the engine before the first round.
+	pairNone pairEngine = iota
+	// pairPDFUA is the PDF/UA engine.
+	pairPDFUA
+	// pairPDFA is the engine of the PDF/A-based target: PDF/A, Factur-X, or
+	// the repair of a received invoice.
+	pairPDFA
+)
+
+// pairedRemediation remediates to a PDF/A-based target and a PDF/UA profile
+// together ([WithPDFUA]). Each round runs one engine on the output of the
+// round before: the PDF/UA one first, then the other one's, as long as the
+// other profile leaves violations, and the same one again otherwise. Every
+// output is judged against both profiles. Its state belongs to one remediation
+// on one goroutine.
+type pairedRemediation struct {
+	pdfua models.PDFUAProfile
+	// validateA judges an output against the PDF/A-based target, and
+	// validateUA against the PDF/UA profile.
+	validateA, validateUA func(context.Context, *Reader) ([]error, error)
+	// runA runs the engine of the PDF/A-based target, and runUA the PDF/UA
+	// one.
+	runA, runUA remediationRun
+	// first, when set, runs before the first round, and its error fails the
+	// remediation as the first round's would.
+	first func(context.Context, *document.Document) error
+	// last is the engine of the round that ran last.
+	last pairEngine
+	// leftA and leftUA count the violations of each profile in the output
+	// judged last, which is the output the next round repairs: a round whose
+	// output is not kept ends the remediation.
+	leftA, leftUA int
+}
+
+// begin starts a remediation run afresh (see [remediationTarget.begin]).
+func (p *pairedRemediation) begin() {
+	p.last, p.leftA, p.leftUA = pairNone, 0, 0
+}
+
+// revalidate judges the output r reads against both profiles, the PDF/A-based
+// target's violations first.
+func (p *pairedRemediation) revalidate(ctx context.Context, r *Reader) ([]error, error) {
+	a, err := p.validateA(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	ua, err := p.validateUA(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	p.leftA, p.leftUA = len(a), len(ua)
+	return append(slices.Clone(a), ua...), nil
+}
+
+// next returns the engine of the next round: the PDF/UA one first, then the
+// other one while the other profile leaves violations, and the profile that
+// still has some otherwise.
+func (p *pairedRemediation) next() pairEngine {
+	switch {
+	case p.last == pairNone:
+		return pairPDFUA
+	case p.last == pairPDFUA && p.leftA > 0:
+		return pairPDFA
+	case p.last == pairPDFA && p.leftUA > 0:
+		return pairPDFUA
+	case p.leftA > 0:
+		return pairPDFA
+	default:
+		return pairPDFUA
+	}
+}
+
+// run runs one round, with the engine [pairedRemediation.next] picks.
+func (p *pairedRemediation) run(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+	engine := p.next()
+	if p.last == pairNone && p.first != nil {
+		if err := p.first(ctx, doc); err != nil {
+			return nil, err
+		}
+	}
+	p.last = engine
+	if engine == pairPDFUA {
+		return p.runUA(ctx, alloc, doc, disabled)
+	}
+	return p.runA(ctx, alloc, doc, disabled)
+}
+
+// target returns t set to run the pair: its rounds, its fresh start, and the
+// accessibility clause of the PDF/UA profile.
+func (p *pairedRemediation) target(t remediationTarget) remediationTarget {
+	t.accessibilityClause = pdfuaAccessibilityClause(p.pdfua)
+	t.rounds = maxPairRemediationRounds
+	t.begin = p.begin
+	return t
+}
+
+// newPairedRemediation returns the paired remediation of the PDF/A-based
+// target that validateA judges and runA repairs with the PDF/UA profile pdfua,
+// whose engine runs with remOpts.
+func newPairedRemediation(pdfua models.PDFUAProfile, remOpts remediation.Options, validateA func(context.Context, *Reader) ([]error, error), runA remediationRun) *pairedRemediation {
+	return &pairedRemediation{
+		pdfua:     pdfua,
+		validateA: validateA,
+		validateUA: func(ctx context.Context, r *Reader) ([]error, error) {
+			return r.ValidatePDFUA(ctx, pdfua)
+		},
+		runA: runA,
+		runUA: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+			return remediation.RemediatePDFUA(ctx, doc, alloc, pdfua, remOpts.WithDisabled(disabled))
+		},
+	}
 }
 
 // pdfaXRefStreamClause returns the clause of profile that forbids
@@ -3105,6 +3356,9 @@ func (w *Writer) remediate(
 	// the profile forbids.
 	if target.xrefStreamClause != "" && w.defaults.writesXRefStream() {
 		return nil, fmt.Errorf("%w (%s): %s given to NewWriter before Writer.%s", ErrPDFA1ForbidsObjectStreams, target.xrefStreamClause, w.defaults.xrefStreamOption(), target.method)
+	}
+	if target.begin != nil {
+		target.begin()
 	}
 	unmaterialize, err := w.materialize(ctx, target.method)
 	if err != nil {
@@ -3383,8 +3637,11 @@ func (w *Writer) remediate(
 	// when it fixed something and survives the same probe-and-revalidate
 	// gates; otherwise the previous round's output stands.
 	keptLater := false
-	for round := 2; round <= maxRemediationRounds && len(residual) > 0; round++ {
-		next, ok, err := w.remediationRound(ctx, temps, tmpPath, run, disabled, revalidate, baseline, tol)
+	// rewritten tells that the output standing is a full rewrite, which a
+	// later round's rewrite repairs nothing of (see [repaired]).
+	rewritten := w.forceRewrite
+	for round := 2; round <= target.maxRounds() && len(residual) > 0; round++ {
+		next, ok, err := w.remediationRound(ctx, temps, tmpPath, run, disabled, revalidate, baseline, tol, rewritten)
 		if err != nil {
 			temps.remove(tmpPath)
 			restorePreState()
@@ -3409,6 +3666,7 @@ func (w *Writer) remediate(
 		fixed = append(fixed, next.fixed...)
 		rolledBack = append(rolledBack, next.rolledBack...)
 		disabled = append(disabled, next.disabled...)
+		rewritten = rewritten || next.rewrote
 		keptLater = true
 	}
 	// A cancellation inside a round ends the loop as a round that fixed
@@ -3471,6 +3729,25 @@ func countRepairs(fixes []string) int {
 	return n
 }
 
+// repaired reports whether a later round whose pass reported fixes and asked
+// for a full rewrite when needsRewrite is set repairs something. The fixes
+// count, but for the full-rewrite note (see [countRepairs]), which counts as
+// well when the round's input, the output standing, is not a full rewrite
+// already, rewritten false: the rewrite then repairs the formatting the
+// incremental updates of that output carry. The first round of the PDF/A
+// engine of a paired remediation ([WithPDFUA]) runs on the incremental output
+// of the PDF/UA one.
+//
+// # Corpus evidence
+//
+//   - litho extguards_2b: at PDF/A-2b with PDF/UA-1, the whole repair of the
+//     first PDF/A round was the full rewrite of a stream whose /Length the
+//     source got wrong (ISO 19005-2, 6.1.7.1 t1). The round was dropped as one
+//     that fixed nothing, and the output kept the defect.
+func repaired(fixes []string, needsRewrite, rewritten bool) bool {
+	return countRepairs(fixes) > 0 || needsRewrite && !rewritten
+}
+
 // dedupeFixes drops repeated fix descriptions, keeping the first of each in
 // order. A fixer that summarises its work in one sentence returns that same
 // sentence in every round it runs.
@@ -3518,12 +3795,16 @@ type roundResult struct {
 	// fontsJudged whenever the round's pass judged them, kept or not.
 	fonts       []remediation.FontRefusal
 	fontsJudged bool
+	// rewrote tells that the round's output is a full rewrite.
+	rewrote bool
 }
 
 // remediationRound reopens the serialized output at path and runs the
 // remediation engine once more against it, with the fixers disabled names
 // switched off. It returns ok=false (changing nothing) when the round fixes
 // nothing, fails to serialize, or fails the integrity and regression gates.
+// rewritten tells that path holds a full rewrite, which a full rewrite of the
+// round repairs nothing of (see [repaired]).
 //
 // A round whose output regresses is rolled back as the first round is: the
 // repairs of its content-tier fixers are discarded and those of the others
@@ -3542,6 +3823,7 @@ func (w *Writer) remediationRound(
 	revalidate func(context.Context, *Reader) ([]error, error),
 	baseline integritySnap,
 	tol RegressionTolerance,
+	rewritten bool,
 ) (roundResult, bool, error) {
 	logger := w.reader.doc.Logger
 
@@ -3579,7 +3861,7 @@ func (w *Writer) remediationRound(
 		r.fonts, r.fontsJudged = fontVerdict(rep, true)
 		return r
 	}
-	if countRepairs(rep.Fixed) == 0 {
+	if !repaired(rep.Fixed, rep.NeedsFullRewrite, rewritten) {
 		return discarded(), false, nil
 	}
 
@@ -3596,7 +3878,7 @@ func (w *Writer) remediationRound(
 		return roundResult{}, false, err
 	}
 	if reason == "" {
-		kept := roundResult{path: tmpPath, residual: res, fixed: rep.Fixed, dropped: w2.droppedSignatures}
+		kept := roundResult{path: tmpPath, residual: res, fixed: rep.Fixed, dropped: w2.droppedSignatures, rewrote: rep.NeedsFullRewrite}
 		kept.fonts, kept.fontsJudged = fontVerdict(rep, false)
 		return kept, true, nil
 	}
@@ -3609,7 +3891,7 @@ func (w *Writer) remediationRound(
 	// The allocator restores its pending map in place, which w2 writes from.
 	alloc.Restore(*rep.ContentSnapshot)
 	kept := keepFixedWithout(rep.Fixed, rep.ContentFixed)
-	if countRepairs(kept) == 0 {
+	if !repaired(kept, rep.NeedsFullRewrite, rewritten) {
 		return discarded(), false, nil
 	}
 	tmpPath, res, reason, err = w.writeRound(ctx, temps, w2, revalidate, baseline, tol)
@@ -3623,7 +3905,7 @@ func (w *Writer) remediationRound(
 	}
 	result := discarded()
 	result.path, result.residual, result.fixed, result.rolledBack, result.disabled = tmpPath, res, kept, rep.ContentFixed, rep.ContentFixers
-	result.dropped = w2.droppedSignatures
+	result.dropped, result.rewrote = w2.droppedSignatures, rep.NeedsFullRewrite
 	return result, true, nil
 }
 
