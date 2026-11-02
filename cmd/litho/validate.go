@@ -14,6 +14,9 @@ import (
 )
 
 type violationInfo struct {
+	// Profile names the profile of a pair the violation belongs to, "" for
+	// one profile.
+	Profile       string `json:"profile,omitempty"`
 	Specification string `json:"specification,omitempty"`
 	Clause        string `json:"clause"`
 	Test          int    `json:"test"`
@@ -22,14 +25,29 @@ type violationInfo struct {
 	Severity      string `json:"severity"`
 }
 
+// validateResult is the verdict on one file. For a pair, Profile is a JSON
+// array, Compliant holds when the file conforms to both profiles, and
+// Violations lists those of each profile in the order of Profile, each naming
+// its profile.
 type validateResult struct {
 	File       string          `json:"file"`
-	Profile    string          `json:"profile"`
+	Profile    profileNames    `json:"profile"`
 	Compliant  bool            `json:"compliant"`
 	Violations []violationInfo `json:"violations,omitempty"`
 	// Advisories list Schematron rules the bundled engine could not
 	// evaluate (Factur-X / ZUGFeRD only). They do not affect Compliant.
 	Advisories []string `json:"advisories,omitempty"`
+	// verdicts holds each profile's own verdict, in the order of Profile, for
+	// the text report.
+	verdicts []profileVerdict
+}
+
+// profileVerdict is the verdict of one profile on one file.
+type profileVerdict struct {
+	profile    string
+	compliant  bool
+	violations []violationInfo
+	advisories []string
 }
 
 var pdfaProfiles = map[string]models.PDFAProfile{
@@ -71,17 +89,27 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	fs.SetOutput(stderr)
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
-	profile := fs.String("profile", "", "Compliance profile (e.g., PDF/A-2b, PDF/UA-1)")
+	var profiles profileFlags
+	fs.Var(&profiles, "profile", "Compliance profile (e.g., PDF/A-2b, PDF/UA-1; repeatable, to pair a PDF/A, Factur-X "+
+		"or ZUGFeRD profile with the PDF/UA profile of its PDF version, in either order, which the file must conform to both of)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 
 	files := fs.Args()
-	if len(files) == 0 || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho validate --profile PROFILE [-f json] [-p password] <file> [file...]")
+	if len(files) == 0 || len(profiles) == 0 {
+		fmt.Fprintln(stderr, "Usage: litho validate --profile PROFILE [--profile PDF/UA-N] [-f json] [-p password] <file> [file...]")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(validateProfileNames(), ", "))
+		fmt.Fprintln(stderr, "Repeat --profile for a pair: "+validPairs())
+		return exitError
+	}
+	// The pairs are those remediate takes, so that validate can judge what a
+	// paired remediation claims.
+	req, err := parseProfiles(profiles)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
 	}
 
@@ -95,59 +123,28 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			return exitError
 		}
 
-		res := validateResult{File: path, Profile: *profile}
-
-		if pdfaP, ok := pdfaProfiles[*profile]; ok {
-			violations, err := r.ValidatePDFAReport(ctx, pdfaP)
+		res := validateResult{File: path, Profile: profileNames(req.names), Compliant: true}
+		for _, profile := range req.names {
+			verdict, known, err := validateProfile(ctx, r, profile)
+			if !known {
+				closer()
+				fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", profile, strings.Join(validateProfileNames(), ", "))
+				return exitError
+			}
 			if err != nil {
 				closer()
 				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				return exitError
 			}
-			res.Compliant = len(violations) == 0
-			res.Violations = structuredViolations(violations)
-		} else if pdfuaP, ok := pdfuaProfiles[*profile]; ok {
-			violations, err := r.ValidatePDFUAReport(ctx, pdfuaP)
-			if err != nil {
-				closer()
-				fmt.Fprintf(stderr, "%s: %v\n", path, err)
-				return exitError
+			if req.isPair() {
+				for i := range verdict.violations {
+					verdict.violations[i].Profile = profile
+				}
 			}
-			res.Compliant = len(violations) == 0
-			res.Violations = structuredViolations(violations)
-		} else if wtpdfP, ok := wtpdfProfiles[*profile]; ok {
-			violations, err := r.ValidateWTPDFReport(ctx, wtpdfP)
-			if err != nil {
-				closer()
-				fmt.Fprintf(stderr, "%s: %v\n", path, err)
-				return exitError
-			}
-			res.Compliant = len(violations) == 0
-			res.Violations = structuredViolations(violations)
-		} else if *profile == facturXProfileName {
-			rep, err := r.ValidateFacturXReport(ctx)
-			if err != nil {
-				closer()
-				fmt.Fprintf(stderr, "%s: %v\n", path, err)
-				return exitError
-			}
-			res.Compliant = len(rep.Fatals()) == 0
-			res.Violations = structuredViolations(rep.Structured())
-			res.Advisories = advisoryMessages(rep.Advisories)
-		} else if ver, ok := zugferdProfiles[*profile]; ok {
-			rep, err := r.ValidateZUGFeRDReport(ctx, ver)
-			if err != nil {
-				closer()
-				fmt.Fprintf(stderr, "%s: %v\n", path, err)
-				return exitError
-			}
-			res.Compliant = len(rep.Fatals()) == 0
-			res.Violations = structuredViolations(rep.Structured())
-			res.Advisories = advisoryMessages(rep.Advisories)
-		} else {
-			closer()
-			fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", *profile, strings.Join(validateProfileNames(), ", "))
-			return exitError
+			res.Compliant = res.Compliant && verdict.compliant
+			res.Violations = append(res.Violations, verdict.violations...)
+			res.Advisories = append(res.Advisories, verdict.advisories...)
+			res.verdicts = append(res.verdicts, verdict)
 		}
 
 		if !res.Compliant {
@@ -175,23 +172,10 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			if len(results) > 1 {
 				fmt.Fprintf(stdout, "--- %s ---\n", res.File)
 			}
-			switch {
-			case res.Compliant && len(res.Violations) == 0:
-				fmt.Fprintf(stdout, "%s: compliant\n", res.Profile)
-			case res.Compliant:
-				fmt.Fprintf(stdout, "%s: compliant, %d warning(s)\n", res.Profile, len(res.Violations))
-			default:
-				fmt.Fprintf(stdout, "%s: %d violation(s)\n", res.Profile, len(res.Violations))
-			}
-			for _, v := range res.Violations {
-				fmt.Fprintf(stdout, "  [%s] clause %s test %d: %s", v.Severity, v.Clause, v.Test, v.Description)
-				if v.Context != "" {
-					fmt.Fprintf(stdout, " [%s]", v.Context)
-				}
-				fmt.Fprintln(stdout)
-			}
-			for _, a := range res.Advisories {
-				fmt.Fprintf(stdout, "  advisory: %s\n", a)
+			// A pair prints one verdict per profile, each as one profile
+			// prints its own.
+			for _, verdict := range res.verdicts {
+				writeVerdict(stdout, verdict)
 			}
 		}
 	}
@@ -200,6 +184,70 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		return exitValidationFail
 	}
 	return exitOK
+}
+
+// validateProfile judges the document r reads against profile. known is
+// false, and nothing is judged, for a profile [validateProfileNames] does not
+// list.
+//
+// A Factur-X or ZUGFeRD report holds warnings too, soft findings that do not
+// fail conformance on their own, so its verdict counts the fatal violations
+// alone. Every PDF/A, PDF/UA and WTPDF violation is fatal.
+func validateProfile(ctx context.Context, r *pdf.Reader, profile string) (verdict profileVerdict, known bool, err error) {
+	verdict.profile = profile
+	var violations []pdf.Violation
+	switch {
+	case pdfaProfiles[profile] != "":
+		violations, err = r.ValidatePDFAReport(ctx, pdfaProfiles[profile])
+	case pdfuaProfiles[profile] != "":
+		violations, err = r.ValidatePDFUAReport(ctx, pdfuaProfiles[profile])
+	case wtpdfProfiles[profile] != "":
+		violations, err = r.ValidateWTPDFReport(ctx, wtpdfProfiles[profile])
+	case profile == facturXProfileName || zugferdProfiles[profile] != "":
+		var rep pdf.FacturXReport
+		if profile == facturXProfileName {
+			rep, err = r.ValidateFacturXReport(ctx)
+		} else {
+			rep, err = r.ValidateZUGFeRDReport(ctx, zugferdProfiles[profile])
+		}
+		if err != nil {
+			return verdict, true, err
+		}
+		verdict.compliant = len(rep.Fatals()) == 0
+		verdict.violations = structuredViolations(rep.Structured())
+		verdict.advisories = advisoryMessages(rep.Advisories)
+		return verdict, true, nil
+	default:
+		return verdict, false, nil
+	}
+	if err != nil {
+		return verdict, true, err
+	}
+	verdict.compliant = len(violations) == 0
+	verdict.violations = structuredViolations(violations)
+	return verdict, true, nil
+}
+
+// writeVerdict prints the text report of one profile's verdict.
+func writeVerdict(w io.Writer, verdict profileVerdict) {
+	switch {
+	case verdict.compliant && len(verdict.violations) == 0:
+		fmt.Fprintf(w, "%s: compliant\n", verdict.profile)
+	case verdict.compliant:
+		fmt.Fprintf(w, "%s: compliant, %d warning(s)\n", verdict.profile, len(verdict.violations))
+	default:
+		fmt.Fprintf(w, "%s: %d violation(s)\n", verdict.profile, len(verdict.violations))
+	}
+	for _, v := range verdict.violations {
+		fmt.Fprintf(w, "  [%s] clause %s test %d: %s", v.Severity, v.Clause, v.Test, v.Description)
+		if v.Context != "" {
+			fmt.Fprintf(w, " [%s]", v.Context)
+		}
+		fmt.Fprintln(w)
+	}
+	for _, a := range verdict.advisories {
+		fmt.Fprintf(w, "  advisory: %s\n", a)
+	}
 }
 
 // structuredViolations maps the structured [pdf.Violation] values from

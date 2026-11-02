@@ -34,11 +34,14 @@ var facturxVariants = map[string]facturxVariant{
 	"ZUGFeRD-1.0":      {fileName: "ZUGFeRD-invoice.xml", relationship: "Alternative"},
 }
 
+// remediateResult is the report of remediate. A pair's Profile is a JSON
+// array, and each of its Residual entries starts with the profile it belongs
+// to (see [residualMessages]).
 type remediateResult struct {
-	Profile      string   `json:"profile"`
-	Fixed        []string `json:"fixed"`
-	Residual     []string `json:"residual,omitempty"`
-	RefusedFonts []string `json:"refused_fonts,omitempty"`
+	Profile      profileNames `json:"profile"`
+	Fixed        []string     `json:"fixed"`
+	Residual     []string     `json:"residual,omitempty"`
+	RefusedFonts []string     `json:"refused_fonts,omitempty"`
 }
 
 func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -47,7 +50,9 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
-	profile := fs.String("profile", "", "Compliance profile (required, e.g., PDF/A-2b, PDF/UA-1, Factur-X)")
+	var profiles profileFlags
+	fs.Var(&profiles, "profile", "Compliance profile (required, e.g., PDF/A-2b, PDF/UA-1, Factur-X; repeatable, "+
+		"to pair a PDF/A, Factur-X or ZUGFeRD profile with the PDF/UA profile of its PDF version, in either order)")
 	aggressive := fs.Bool("aggressive", false, "Enable aggressive fixes that may alter visible content")
 	format := fs.String("f", "text", "Output format: text or json")
 	invoice := fs.String("invoice", "", "Cross-Industry Invoice XML to embed (Factur-X / ZUGFeRD profiles)")
@@ -62,12 +67,27 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return code
 	}
 
-	if fs.NArg() < 1 || *output == "" || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--font-dir DIR] [--system-fonts] [--no-font-subset] [--document-id HEX] [--compact] [--recompress-images] [--subset-fonts] [--strict] -o out.pdf")
+	if fs.NArg() < 1 || *output == "" || len(profiles) == 0 {
+		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--profile PDF/UA-N] [--aggressive] [--font-dir DIR] [--system-fonts] [--no-font-subset] [--document-id HEX] [--compact] [--recompress-images] [--subset-fonts] [--strict] -o out.pdf")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
+		fmt.Fprintln(stderr, "Repeat --profile for a pair: "+validPairs())
 		return exitError
 	}
+
+	// A pair that cannot exist fails here, before the document opens, as a
+	// usage error: the library would refuse it with
+	// pdf.ErrIncompatibleProfiles only once the remediation runs.
+	req, err := parseProfiles(profiles)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return exitError
+	}
+	// The PDF/A side of a pair, or the lone profile, decides the method, the
+	// encryption warning and what --compact may do: no part of ISO 14289
+	// forbids encryption or packing, so the PDF/UA side of a pair adds no
+	// restriction to them.
+	profile := req.target
 
 	fontOpts, err := fonts.options()
 	if err != nil {
@@ -89,7 +109,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 
 	// This command has no encryption flag, so it can never be encrypting. A
 	// PDF/A output, Factur-X's PDF/A-3 included, cannot take encryption back.
-	if _, facturX := facturxVariants[*profile]; pdfaProfiles[*profile] != "" || facturX {
+	if _, facturX := facturxVariants[profile]; pdfaProfiles[profile] != "" || facturX {
 		warnEncryptionDroppedByPDFA(stderr, false, r)
 	} else {
 		warnEncryptionDropped(stderr, r)
@@ -106,22 +126,27 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if idOpt != nil {
 		remOpts = append(remOpts, idOpt)
 	}
+	// parseProfiles pairs PDF/UA with a PDF/A, Factur-X or ZUGFeRD target
+	// only, the targets whose methods take the option.
+	if req.isPair() {
+		remOpts = append(remOpts, pdf.WithPDFUA(pdfuaProfiles[req.pdfua]))
+	}
 
 	var report *pdf.RemediationReport
 
-	if pdfaP, ok := pdfaProfiles[*profile]; ok {
+	if pdfaP, ok := pdfaProfiles[profile]; ok {
 		report, err = w.RemediatePDFA(ctx, pdfaP, remOpts...)
-	} else if pdfuaP, ok := pdfuaProfiles[*profile]; ok {
+	} else if pdfuaP, ok := pdfuaProfiles[profile]; ok {
 		report, err = w.RemediatePDFUA(ctx, pdfuaP, remOpts...)
-	} else if wtpdfP, ok := wtpdfProfiles[*profile]; ok {
+	} else if wtpdfP, ok := wtpdfProfiles[profile]; ok {
 		report, err = w.RemediateWTPDF(ctx, wtpdfP, remOpts...)
-	} else if variant, ok := facturxVariants[*profile]; ok {
+	} else if variant, ok := facturxVariants[profile]; ok {
 		report, err = remediateFacturX(ctx, w, variant, *invoice, *level, remOpts, stderr)
 		if err == errBadFacturXInput {
 			return exitError
 		}
 	} else {
-		fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", *profile, strings.Join(remediateProfileNames(), ", "))
+		fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", profile, strings.Join(remediateProfileNames(), ", "))
 		return exitError
 	}
 
@@ -134,8 +159,8 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	// flag is accepted the way pipe accepts it: it applies when a rewrite
 	// happens. PDF/A-1 keeps dedup and withholds packing, since packing would
 	// hand back a file that no longer conforms to the profile this command was
-	// asked to produce.
-	warnPackingWithheld(stderr, *compactFlags.compact, *profile)
+	// asked to produce. A pair packs as its PDF/A side does.
+	warnPackingWithheld(stderr, *compactFlags.compact, profile)
 
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {
@@ -144,7 +169,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	var compactionSkipped bool
-	writeOpts := append(profileCompactWriteOptions(compactFlags.get(), *profile), pdf.WithCompactionSkipped(&compactionSkipped))
+	writeOpts := append(profileCompactWriteOptions(compactFlags.get(), profile), pdf.WithCompactionSkipped(&compactionSkipped))
 	if err := w.WriteTo(ctx, dst, writeOpts...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
@@ -155,14 +180,12 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintf(stderr, "closing output: %v\n", err)
 		return exitError
 	}
-	warnCompactIncremental(stderr, compactFlags.get(), compactionSkipped, *profile)
+	warnCompactIncremental(stderr, compactFlags.get(), compactionSkipped, profile)
 
 	result := remediateResult{
-		Profile: *profile,
-		Fixed:   report.Fixed,
-	}
-	for _, e := range report.Residual {
-		result.Residual = append(result.Residual, e.Error())
+		Profile:  profileNames(req.names),
+		Fixed:    report.Fixed,
+		Residual: residualMessages(report, req),
 	}
 	for _, refusal := range report.FontRefusals {
 		result.RefusedFonts = append(result.RefusedFonts, refusal.String())
@@ -180,7 +203,11 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 			return code
 		}
 	default:
-		fmt.Fprintf(reportOut, "Profile:  %s\n", result.Profile)
+		if req.isPair() {
+			fmt.Fprintf(reportOut, "Profiles: %s\n", strings.Join(result.Profile, ", "))
+		} else {
+			fmt.Fprintf(reportOut, "Profile:  %s\n", profile)
+		}
 		fmt.Fprintf(reportOut, "Fixed:    %d\n", len(result.Fixed))
 		for _, f := range result.Fixed {
 			fmt.Fprintf(reportOut, "  %s\n", f)
@@ -203,7 +230,9 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	// remains (ISO 19005-1, 6.7.11 and ISO 14289-1, clause 5 make those
 	// entries requirements in their own right), so a document with fatal
 	// residuals still ASSERTS a conformance it does not have. Exiting 0 tells
-	// a pipeline the file is ready, and only the report says otherwise.
+	// a pipeline the file is ready, and only the report says otherwise. A
+	// pair's residual holds the violations of both profiles, so either one
+	// failing fails the verdict.
 	//
 	// The status mirrors validate rather than inventing one: exitValidationFail
 	// means the document did not conform, and exitError stays reserved for the
@@ -213,6 +242,33 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return exitValidationFail
 	}
 	return exitOK
+}
+
+// residualMessages renders the residual violations of report, a remediation
+// to req. One profile keeps the bare messages. A pair prefixes each with the
+// profile it belongs to (see [profileRequest.profileOf]) and groups them in
+// the order the caller named the profiles: a clause number alone does not
+// say which standard it is from.
+func residualMessages(report *pdf.RemediationReport, req profileRequest) []string {
+	var out []string
+	if !req.isPair() {
+		for _, e := range report.Residual {
+			out = append(out, e.Error())
+		}
+		return out
+	}
+	// ResidualViolations maps Residual one for one, in order. Its messages
+	// differ from Residual's for an error that is no compliance violation,
+	// so the text stays Residual's and the violation lends its standard.
+	violations := report.ResidualViolations()
+	for _, profile := range req.names {
+		for i, e := range report.Residual {
+			if req.profileOf(violations[i].Specification) == profile {
+				out = append(out, profile+": "+e.Error())
+			}
+		}
+	}
+	return out
 }
 
 // fatalResiduals returns the residual violations that fail conformance.
@@ -240,7 +296,7 @@ func fatalResiduals(report *pdf.RemediationReport) []pdf.Violation {
 // [errBadFacturXInput]; any other error is the remediation failure.
 func remediateFacturX(ctx context.Context, w *pdf.Writer, variant facturxVariant, invoicePath, level string, opts []pdf.RemediateOption, stderr io.Writer) (*pdf.RemediationReport, error) {
 	if invoicePath == "" || level == "" {
-		fmt.Fprintln(stderr, `Usage: litho remediate <file> --profile Factur-X --invoice cii.xml --level "EN 16931" -o out.pdf`)
+		fmt.Fprintln(stderr, `Usage: litho remediate <file> --profile Factur-X [--profile PDF/UA-1] --invoice cii.xml --level "EN 16931" -o out.pdf`)
 		return nil, errBadFacturXInput
 	}
 

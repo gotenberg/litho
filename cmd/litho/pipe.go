@@ -59,7 +59,9 @@ func pipeUsage(w io.Writer) {
 	fmt.Fprintln(w, "different profiles are refused.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "remediate runs at most once, as the last stage but sign and timestamp,")
-	fmt.Fprintln(w, "and a PDF/A profile takes no encrypt stage. sign and timestamp run at")
+	fmt.Fprintln(w, "and a PDF/A profile takes no encrypt stage. Its -profile repeats to pair")
+	fmt.Fprintln(w, "a PDF/A profile with the PDF/UA profile of its PDF version: PDF/A-1 to")
+	fmt.Fprintln(w, "PDF/A-3 with PDF/UA-1, PDF/A-4 with PDF/UA-2. sign and timestamp run at")
 	fmt.Fprintln(w, "most once each, as the last stages, timestamp after sign, and take no")
 	fmt.Fprintln(w, "encrypt or decrypt stage.")
 }
@@ -179,8 +181,9 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		// wrote a document that no longer conformed to the profile it had just
 		// remediated to, exit 0 and silent. Measured on one file: ISO 19005-1,
 		// 6.1.4 test 3, exactly one violation the uncompacted pipeline lacks.
+		// A pair packs as its PDF/A side does.
 		if g[0] == "remediate" {
-			if p := stageProfileValue(g); packingForbiddenByProfile(p) {
+			if p := stageTargetProfile(g); packingForbiddenByProfile(p) {
 				packingRefusedProfile = p
 			}
 		}
@@ -557,7 +560,8 @@ func validateStageOrder(groups [][]string) error {
 	if len(after) > 0 {
 		return fmt.Errorf("remediate must be the last stage, since its report describes the output only when nothing edits it afterwards: move %s before remediate", strings.Join(after, ", "))
 	}
-	profile := stageProfileValue(groups[remediateAt])
+	// A pair's PDF/A side forbids encryption as the lone profile does.
+	profile := stageTargetProfile(groups[remediateAt])
 	if pdfaProfiles[profile] == "" {
 		return nil
 	}
@@ -676,12 +680,13 @@ func takeOptimizeStage(groups [][]string, global compaction, stderr io.Writer) (
 	return rest, result, nil
 }
 
-// remediateProfile returns the --profile of the pipeline's remediate stage,
-// or "" when it has none.
+// remediateProfile returns the profile the pipeline's remediate stage
+// remediates to, the PDF/A side of a pair (see [stageTargetProfile]), or ""
+// when it has none.
 func remediateProfile(groups [][]string) string {
 	for _, g := range groups {
 		if len(g) > 0 && g[0] == "remediate" {
-			return stageProfileValue(g)
+			return stageTargetProfile(g)
 		}
 	}
 	return ""
@@ -698,37 +703,55 @@ func pdfaEncryptionClause(profile string) string {
 	return "ISO 19005-" + part[:1] + ", 6.1.3"
 }
 
-// stageProfileValue returns the --profile a stage group carries, or "".
+// stageTargetProfile returns the profile a stage group's --profile list
+// remediates to: the lone profile, or the PDF/A side of a pair, which decides
+// packing and encryption as the lone profile does (see [profileRequest]). It
+// returns "" for a group naming no profile, or profiles that do not pair,
+// which the stage refuses when addStage builds it.
 //
 // All four spellings, because the CLI accepts all four: `-profile X`,
 // `--profile X`, `-profile=X` and `--profile=X`. [splitStageGroups] keeps a
-// stage's flags verbatim in its group, so the value is readable here without
-// the stage's own FlagSet, which addStage builds later and keeps inside a
-// closure runPipe cannot reach.
-func stageProfileValue(group []string) string {
-	return stageFlagValue(group, "profile")
+// stage's flags verbatim in its group, so the values are readable here
+// without the stage's own FlagSet, which addStage builds later and keeps
+// inside a closure runPipe cannot reach.
+func stageTargetProfile(group []string) string {
+	req, err := parseProfiles(stageFlagValues(group, "profile"))
+	if err != nil {
+		return ""
+	}
+	return req.target
 }
 
-// stageFlagValue returns the value a stage group gives the flag flagName, in
-// any of the four spellings [stageProfileValue] reads, or "". The first
-// token, the stage name, is never read as a flag.
+// stageFlagValue returns the first value a stage group gives the flag
+// flagName, or "" (see [stageFlagValues]).
 func stageFlagValue(group []string, flagName string) string {
-	for i, arg := range group {
-		if i == 0 {
-			continue
-		}
-		name, value, hasEq := strings.Cut(arg, "=")
+	if values := stageFlagValues(group, flagName); len(values) > 0 {
+		return values[0]
+	}
+	return ""
+}
+
+// stageFlagValues returns every value a stage group gives the flag flagName,
+// in any of the four spellings [stageTargetProfile] reads, in order. The
+// first token, the stage name, is never read as a flag, nor is a token
+// consumed as a value.
+func stageFlagValues(group []string, flagName string) []string {
+	var values []string
+	for i := 1; i < len(group); i++ {
+		name, value, hasEq := strings.Cut(group[i], "=")
 		if name != "-"+flagName && name != "--"+flagName {
 			continue
 		}
 		if hasEq {
-			return value
+			values = append(values, value)
+			continue
 		}
 		if i+1 < len(group) {
-			return group[i+1]
+			i++
+			values = append(values, group[i])
 		}
 	}
-	return ""
+	return values
 }
 
 // cmykProfileStages names the stages that take --cmyk-profile, as their
@@ -1151,16 +1174,21 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 	case "remediate":
 		fs := flag.NewFlagSet("remediate", flag.ContinueOnError)
 		fs.SetOutput(stderr)
-		profile := fs.String("profile", "", "Compliance profile (required)")
+		var profiles profileFlags
+		fs.Var(&profiles, "profile", "Compliance profile (required; repeatable, to pair a PDF/A profile with the PDF/UA profile of its PDF version)")
 		aggressive := fs.Bool("aggressive", false, "Enable aggressive fixers")
 		fonts := registerFontFlags(fs)
 		documentID := registerDocumentIDFlag(fs)
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
-		if *profile == "" {
-			return nil, fmt.Errorf("--profile is required")
+		req, err := parseProfiles(profiles)
+		if err != nil {
+			return nil, err
 		}
+		// The PDF/A side of a pair picks the method, as the standalone
+		// command's does.
+		profile := req.target
 		fontOpts, err := fonts.options()
 		if err != nil {
 			return nil, err
@@ -1178,17 +1206,20 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 			if idOpt != nil {
 				opts = append(opts, idOpt)
 			}
+			if req.isPair() {
+				opts = append(opts, pdf.WithPDFUA(pdfuaProfiles[req.pdfua]))
+			}
 			// The report was discarded here because this command prints
 			// nothing. That answered the PRINTING question only: the exit code
 			// is a separate channel, and --strict needs the residuals to judge.
-			if pdfaP, ok := pdfaProfiles[*profile]; ok {
+			if pdfaP, ok := pdfaProfiles[profile]; ok {
 				rep, err := w.RemediatePDFA(ctx, pdfaP, opts...)
 				if rep != nil && residual != nil {
 					*residual = append(*residual, rep.Residual...)
 				}
 				return err
 			}
-			if pdfuaP, ok := pdfuaProfiles[*profile]; ok {
+			if pdfuaP, ok := pdfuaProfiles[profile]; ok {
 				rep, err := w.RemediatePDFUA(ctx, pdfuaP, opts...)
 				if rep != nil && residual != nil {
 					*residual = append(*residual, rep.Residual...)
@@ -1206,14 +1237,14 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 			// flags to accept, and inventing them here would be a feature, not
 			// a wiring fix. The error names the profile and claims nothing
 			// about what else is available, so it stays honest either way.
-			if wtpdfP, ok := wtpdfProfiles[*profile]; ok {
+			if wtpdfP, ok := wtpdfProfiles[profile]; ok {
 				rep, err := w.RemediateWTPDF(ctx, wtpdfP, opts...)
 				if rep != nil && residual != nil {
 					*residual = append(*residual, rep.Residual...)
 				}
 				return err
 			}
-			return fmt.Errorf("unknown profile %q", *profile)
+			return fmt.Errorf("unknown profile %q", profile)
 		})
 
 	case "sign":

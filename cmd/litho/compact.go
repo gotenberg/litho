@@ -210,6 +210,10 @@ func warnCompactSkipped(stderr io.Writer, compact, encrypting bool) {
 // generation the variant names, so none of them is affected. An unknown
 // profile is not forbidden here: [runRemediate] rejects it before the write,
 // and answering "forbidden" would silence packing for a typo.
+//
+// A PDF/A and PDF/UA pair passes its PDF/A side, [profileRequest.target]: no
+// part of ISO 14289 forbids either construct, so PDF/A-1b paired with PDF/UA-1
+// withholds packing as PDF/A-1b alone does.
 func packingForbiddenByProfile(profile string) bool {
 	p, ok := pdfaProfiles[profile]
 	if !ok {

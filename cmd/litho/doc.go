@@ -74,6 +74,24 @@
 // directory that does not exist, or a --document-id that is not 32 hex
 // digits, exits 1 and writes nothing.
 //
+// # Profile pairs
+//
+// remediate, validate and the pipe's remediate stage take --profile twice for
+// a pair: a PDF/A, Factur-X or ZUGFeRD profile and the PDF/UA profile of its
+// PDF version, in either order. PDF/UA-1 pairs with PDF/A-1 to PDF/A-3,
+// Factur-X and ZUGFeRD, and PDF/UA-2 with PDF/A-4. Any other list exits 1,
+// names the pairs, and writes nothing. The pipe stage takes no Factur-X or
+// ZUGFeRD profile, paired or not.
+//
+// remediate makes the output conform to both profiles (pdf.WithPDFUA). Its
+// report names the pair as given, a JSON array with -f json, and starts each
+// residual violation with the profile it belongs to. The PDF/A profile alone
+// decides what --compact may pack and refuses encryption, since PDF/UA
+// restricts neither. --strict exits 2 on a residual of either profile.
+//
+// validate reports each profile in turn, and exits 2 unless the document
+// conforms to both. With -f json, each violation names its profile.
+//
 // # Encrypted documents
 //
 // Editing an encrypted document produces an unprotected one: no command keeps

@@ -43,6 +43,11 @@ func TestPipe_RefusesAStageOrderBeforeRunningAnything(t *testing.T) {
 			stages: []string{"encrypt", "-user-password", "u", "remediate", "-profile", "PDF/A-2b"},
 			want:   []string{"ISO 19005-2, 6.1.3", `"encrypt"`},
 		},
+		{
+			name:   "encrypt before a PDF/UA and PDF/A pair",
+			stages: []string{"encrypt", "-user-password", "u", "remediate", "-profile", "PDF/UA-1", "-profile", "PDF/A-2b"},
+			want:   []string{"remediate -profile PDF/A-2b", "ISO 19005-2, 6.1.3", `"encrypt"`},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out.pdf")
