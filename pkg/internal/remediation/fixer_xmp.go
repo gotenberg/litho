@@ -8,6 +8,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -609,7 +610,15 @@ func generateXMP(part int, conformance string, uaPart int, info infoMetadata) st
 	sb.WriteString("</rdf:RDF>\n")
 	sb.WriteString("</x:xmpmeta>\n")
 	sb.WriteString("<?xpacket end=\"w\"?>")
-	return sb.String()
+	if part < 1 || part > 3 || uaPart == 0 {
+		return sb.String()
+	}
+	// The pdfuaid properties are no property of the XMP Specification's
+	// predefined schemas, so a PDF/A-1 to PDF/A-3 packet declares them in an
+	// extension schema (ISO 19005-1, 6.7.9; ISO 19005-2 and ISO 19005-3,
+	// 6.6.2.3.1). PDF/A-4 dropped the requirement.
+	packet, _ := applyExtensionSchemas([]byte(sb.String()), part)
+	return string(packet)
 }
 
 // XMP namespace URIs used by the remediation fixer. Kept as package-level
@@ -900,10 +909,35 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 	buf, syncFixes := syncInfoIntoXMP(buf, info, uaPart)
 	fixes = append(fixes, syncFixes...)
 
-	buf, extFixes := applyExtensionSchemas(buf, part)
+	// A run for another standard than PDF/A, a PDF/UA one, keeps the PDF/A
+	// claim the packet makes, so the packet still owes that claim the
+	// declarations it requires (ISO 19005-1, 6.7.9; ISO 19005-2 and ISO
+	// 19005-3, 6.6.2.3.1). The pdfuaid:part such a run writes is no property of
+	// the XMP Specification's predefined schemas, and left undeclared it broke
+	// the PDF/A-1 to PDF/A-3 conformance of every file it remediated.
+	extPart := part
+	if extPart == 0 {
+		extPart = claimedPDFAPart(buf)
+	}
+	buf, extFixes := applyExtensionSchemas(buf, extPart)
 	fixes = append(fixes, extFixes...)
 
 	return string(buf), fixes
+}
+
+// claimedPDFAPart returns the part of ISO 19005 the packet buf claims through
+// pdfaid:part, 1 to 4, read as the validator reads it, or 0 when it claims
+// none. The first value that is a part number wins.
+func claimedPDFAPart(buf []byte) int {
+	for _, n := range compliance.XMPProperties(buf) {
+		if n.NS != pdfaidNS || n.Name != "part" || n.Kind != compliance.XMPSimple {
+			continue
+		}
+		if part, err := strconv.Atoi(strings.TrimSpace(n.Value)); err == nil && part >= 1 && part <= 4 {
+			return part
+		}
+	}
+	return 0
 }
 
 // applyExtensionSchemas ensures buf declares an XMP extension schema for every
@@ -930,6 +964,9 @@ func applyExtensionSchemas(buf []byte, part int) ([]byte, []string) {
 		repaired, grammarFixes := repairExtensionSchemaGrammar(buf)
 		buf = repaired
 		fixes = append(fixes, grammarFixes...)
+		declared, declFixes := declareIdentificationSchemas(buf, part)
+		buf = declared
+		fixes = append(fixes, declFixes...)
 	}
 	if !strings.Contains(string(buf), "pdfaExtension:schemas") {
 		schemas, stripKeys := extractUnknownNamespaceProperties(buf, part)
@@ -965,6 +1002,80 @@ func applyExtensionSchemas(buf []byte, part int) ([]byte, []string) {
 		}
 	}
 	return buf, fixes
+}
+
+// identificationNamespaces are the identification schemas of the standards a
+// PDF/A file can conform to besides ISO 19005, whose properties a remediation
+// writes: pdfuaid, the PDF/UA identification schema (ISO 14289-1 and ISO
+// 14289-2, 5). Neither the XMP Specification nor ISO 19005 predefines them, so
+// under PDF/A-1 to PDF/A-3 a packet using one declares it in an extension
+// schema (ISO 19005-1, 6.7.9; ISO 19005-2 and ISO 19005-3, 6.6.2.3.1).
+var identificationNamespaces = []string{pdfuaidNS}
+
+// declareIdentificationSchemas adds to the extension schema block the packet buf
+// already holds an entry for each identification namespace
+// ([identificationNamespaces]) the packet uses and the block does not
+// declare, under PDF/A part 1 to 3. Returns buf unchanged when the block has
+// no rdf:Bag to extend.
+//
+// A block is generated only when the packet has none, so a packet that came
+// with one, the Factur-X block of an invoice, kept its pdfuaid:part
+// undeclared, and [fixXMPSchema] then stripped the property ISO 14289-1, 5
+// requires, which broke the PDF/UA claim of a file still reported as fixed.
+// Other undeclared namespaces keep that strip: their declarations are the
+// producer's, and stripping an undeclared custom property is the repair
+// [fixXMPSchema] documents.
+func declareIdentificationSchemas(buf []byte, part int) ([]byte, []string) {
+	start := bytes.Index(buf, []byte("<pdfaExtension:schemas"))
+	if start < 0 {
+		return buf, nil
+	}
+	end := bytes.Index(buf[start:], []byte("</pdfaExtension:schemas>"))
+	if end < 0 {
+		return buf, nil
+	}
+	block := buf[start : start+end]
+	schemas, _ := extractUnknownNamespaceProperties(buf, part)
+	var missing []extSchemaInfo
+	for _, sc := range schemas {
+		if slices.Contains(identificationNamespaces, sc.nsURI) && !bytes.Contains(block, []byte(sc.nsURI)) {
+			missing = append(missing, sc)
+		}
+	}
+	if len(missing) == 0 {
+		return buf, nil
+	}
+	// The block's own rdf:Bag holds its entries (ISO 19005-2, 6.6.2.3.2), and
+	// its end tag is the last one before the block's: an entry nests its
+	// arrays in rdf:Seq.
+	bagEnd := bytes.LastIndex(block, []byte("</rdf:Bag>"))
+	if bagEnd < 0 {
+		return buf, nil
+	}
+	// The entries name their fields with the pdfaSchema and pdfaProperty
+	// prefixes ISO 19005-2, 6.6.2.3.3 requires. A block that uses neither may
+	// sit where neither is bound, so each entry binds the ones the block does
+	// not use itself. An identification schema defines no structure type, so
+	// pdfaType and pdfaField stay unused.
+	var bindings strings.Builder
+	for _, b := range []struct{ prefix, uri string }{{"pdfaSchema", pdfaSchemaNS}, {"pdfaProperty", pdfaPropertyNS}} {
+		if !bytes.Contains(block, []byte("<"+b.prefix+":")) {
+			fmt.Fprintf(&bindings, ` xmlns:%s="%s"`, b.prefix, b.uri)
+		}
+	}
+	var entries strings.Builder
+	writeExtensionSchemaEntries(&entries, missing, bindings.String())
+	// Before the indentation of the end tag, when it starts its line, so the
+	// entries keep the indentation they were written with.
+	at := start + bagEnd
+	if lineStart := bytes.LastIndexByte(buf[:at], '\n') + 1; len(bytes.Trim(buf[lineStart:at], " \t")) == 0 {
+		at = lineStart
+	}
+	out := make([]byte, 0, len(buf)+entries.Len())
+	out = append(out, buf[:at]...)
+	out = append(out, entries.String()...)
+	out = append(out, buf[at:]...)
+	return out, []string{fmt.Sprintf("declared %d identification schema(s) in the existing extension schema block", len(missing))}
 }
 
 // extensionSchemaIncomplete reports whether the pdfaExtension:schemas
@@ -1267,6 +1378,9 @@ func extractUnknownNamespaceProperties(data []byte, part int) ([]extSchemaInfo, 
 			stripKeys = append(stripKeys, xmpPropKey{nsURI: n.NS, name: n.Name})
 			continue
 		}
+		if std, ok := identificationValueType(n); ok {
+			vt = std
+		}
 		e.props = append(e.props, extPropInfo{name: n.Name, valueType: vt})
 		e.types = append(e.types, inf.defined...)
 	}
@@ -1293,6 +1407,33 @@ func extractUnknownNamespaceProperties(data []byte, part int) ([]extSchemaInfo, 
 		schemas = append(schemas, extSchemaInfo{nsURI: nsURI, prefix: prefix, properties: props, types: e.types})
 	}
 	return schemas, stripKeys
+}
+
+// identificationValueTypes lists the value types the identification schemas
+// give their properties, which their declarations state rather than the
+// shape of the value: ISO 14289-1, 5 makes pdfuaid:part an Integer and
+// pdfuaid:amd and pdfuaid:corr Text, and ISO 14289-2, 5 makes pdfuaid:rev an
+// Integer, the four-digit year of the revision.
+var identificationValueTypes = map[string]map[string]string{
+	pdfuaidNS: {"part": "Integer", "rev": "Integer", "amd": "Text", "corr": "Text"},
+}
+
+// identificationValueType returns the value type the identification schema of
+// n's namespace gives it ([identificationValueTypes]), and false for any
+// other property. An Integer property whose value is no integer is declared
+// Text, the type it holds: a declaration its value does not match fails ISO
+// 19005-2, 6.6.2.3.1 t2 and ISO 19005-1, 6.7.9 t3 as surely as a missing one.
+func identificationValueType(n *compliance.XMPNode) (string, bool) {
+	vt, ok := identificationValueTypes[n.NS][n.Name]
+	if !ok || n.Kind != compliance.XMPSimple {
+		return "", false
+	}
+	if vt == "Integer" {
+		if _, err := strconv.Atoi(strings.TrimSpace(n.Value)); err != nil {
+			return "Text", true
+		}
+	}
+	return vt, true
 }
 
 // xmpNamespacePrefixes maps each namespace URI the packet binds to the prefix
@@ -1440,21 +1581,29 @@ func stripXMPPropertyKeys(xmp []byte, keys []xmpPropKey) ([]byte, int) {
 func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 	var sb strings.Builder
 	sb.WriteString("  <pdfaExtension:schemas>\n    <rdf:Bag>\n")
+	writeExtensionSchemaEntries(&sb, schemas, "")
+	sb.WriteString("    </rdf:Bag>\n  </pdfaExtension:schemas>\n")
+	return sb.String()
+}
 
+// writeExtensionSchemaEntries writes one rdf:li entry of a pdfaExtension:schemas
+// bag per schema to sb. bindings, namespace declarations such as
+// ` xmlns:pdfaSchema="..."`, go on each entry's start tag, "" for none.
+func writeExtensionSchemaEntries(sb *strings.Builder, schemas []extSchemaInfo, bindings string) {
 	for _, s := range schemas {
-		sb.WriteString("      <rdf:li rdf:parseType=\"Resource\">\n")
-		fmt.Fprintf(&sb, "        <pdfaSchema:schema>%s</pdfaSchema:schema>\n", xmlEscape(s.prefix))
-		fmt.Fprintf(&sb, "        <pdfaSchema:namespaceURI>%s</pdfaSchema:namespaceURI>\n", xmlEscape(s.nsURI))
-		fmt.Fprintf(&sb, "        <pdfaSchema:prefix>%s</pdfaSchema:prefix>\n", xmlEscape(s.prefix))
+		fmt.Fprintf(sb, "      <rdf:li rdf:parseType=\"Resource\"%s>\n", bindings)
+		fmt.Fprintf(sb, "        <pdfaSchema:schema>%s</pdfaSchema:schema>\n", xmlEscape(s.prefix))
+		fmt.Fprintf(sb, "        <pdfaSchema:namespaceURI>%s</pdfaSchema:namespaceURI>\n", xmlEscape(s.nsURI))
+		fmt.Fprintf(sb, "        <pdfaSchema:prefix>%s</pdfaSchema:prefix>\n", xmlEscape(s.prefix))
 
 		if len(s.properties) > 0 {
 			sb.WriteString("        <pdfaSchema:property>\n          <rdf:Seq>\n")
 			for _, prop := range s.properties {
 				sb.WriteString("            <rdf:li rdf:parseType=\"Resource\">\n")
-				fmt.Fprintf(&sb, "              <pdfaProperty:name>%s</pdfaProperty:name>\n", xmlEscape(prop.name))
-				fmt.Fprintf(&sb, "              <pdfaProperty:valueType>%s</pdfaProperty:valueType>\n", xmlEscape(prop.valueType))
+				fmt.Fprintf(sb, "              <pdfaProperty:name>%s</pdfaProperty:name>\n", xmlEscape(prop.name))
+				fmt.Fprintf(sb, "              <pdfaProperty:valueType>%s</pdfaProperty:valueType>\n", xmlEscape(prop.valueType))
 				sb.WriteString("              <pdfaProperty:category>internal</pdfaProperty:category>\n")
-				fmt.Fprintf(&sb, "              <pdfaProperty:description>%s</pdfaProperty:description>\n", xmlEscape(prop.name))
+				fmt.Fprintf(sb, "              <pdfaProperty:description>%s</pdfaProperty:description>\n", xmlEscape(prop.name))
 				sb.WriteString("            </rdf:li>\n")
 			}
 			sb.WriteString("          </rdf:Seq>\n        </pdfaSchema:property>\n")
@@ -1467,16 +1616,16 @@ func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 			sb.WriteString("        <pdfaSchema:valueType>\n          <rdf:Seq>\n")
 			for _, typ := range s.types {
 				sb.WriteString("            <rdf:li rdf:parseType=\"Resource\">\n")
-				fmt.Fprintf(&sb, "              <pdfaType:type>%s</pdfaType:type>\n", xmlEscape(typ.name))
-				fmt.Fprintf(&sb, "              <pdfaType:namespaceURI>%s</pdfaType:namespaceURI>\n", xmlEscape(typ.ns))
-				fmt.Fprintf(&sb, "              <pdfaType:prefix>%s</pdfaType:prefix>\n", xmlEscape(typ.prefix))
-				fmt.Fprintf(&sb, "              <pdfaType:description>%s</pdfaType:description>\n", xmlEscape(typ.name))
+				fmt.Fprintf(sb, "              <pdfaType:type>%s</pdfaType:type>\n", xmlEscape(typ.name))
+				fmt.Fprintf(sb, "              <pdfaType:namespaceURI>%s</pdfaType:namespaceURI>\n", xmlEscape(typ.ns))
+				fmt.Fprintf(sb, "              <pdfaType:prefix>%s</pdfaType:prefix>\n", xmlEscape(typ.prefix))
+				fmt.Fprintf(sb, "              <pdfaType:description>%s</pdfaType:description>\n", xmlEscape(typ.name))
 				sb.WriteString("              <pdfaType:field>\n                <rdf:Seq>\n")
 				for _, f := range typ.fields {
 					sb.WriteString("                  <rdf:li rdf:parseType=\"Resource\">\n")
-					fmt.Fprintf(&sb, "                    <pdfaField:name>%s</pdfaField:name>\n", xmlEscape(f.name))
-					fmt.Fprintf(&sb, "                    <pdfaField:valueType>%s</pdfaField:valueType>\n", xmlEscape(f.valueType))
-					fmt.Fprintf(&sb, "                    <pdfaField:description>%s</pdfaField:description>\n", xmlEscape(f.name))
+					fmt.Fprintf(sb, "                    <pdfaField:name>%s</pdfaField:name>\n", xmlEscape(f.name))
+					fmt.Fprintf(sb, "                    <pdfaField:valueType>%s</pdfaField:valueType>\n", xmlEscape(f.valueType))
+					fmt.Fprintf(sb, "                    <pdfaField:description>%s</pdfaField:description>\n", xmlEscape(f.name))
 					sb.WriteString("                  </rdf:li>\n")
 				}
 				sb.WriteString("                </rdf:Seq>\n              </pdfaType:field>\n")
@@ -1487,9 +1636,6 @@ func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 
 		sb.WriteString("      </rdf:li>\n")
 	}
-
-	sb.WriteString("    </rdf:Bag>\n  </pdfaExtension:schemas>\n")
-	return sb.String()
 }
 
 // injectPropertyOnce inserts element into the packet unless an element with the
