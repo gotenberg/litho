@@ -534,3 +534,111 @@ func TestRepaired(t *testing.T) {
 		}
 	}
 }
+
+// TestRemediatePDFA1WithPDFUAKeepsFlattening pins that a paired remediation
+// at PDF/A-1b keeps the transparency flattening of its first PDF/A round, a
+// later round, which the integrity probe measures as it measures a first one:
+// text shown at constant alpha 0, which flattening draws in rendering mode 3
+// and the default extraction leaves out, counts as kept. The round was
+// measured against the source's visible text, refused, and the output kept
+// its transparency, which ISO 19005-1, 6.4 forbids.
+func TestRemediatePDFA1WithPDFUAKeepsFlattening(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	in := colorFixturePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R " +
+			"/Resources << /Font << /F1 5 0 R >> /ExtGState << /Zero 6 0 R >> >> >>",
+		colorStream("", "q /Zero gs BT /F1 12 Tf 10 100 Td (Searchable text nobody sees) Tj ET Q "+
+			"BT /F1 12 Tf 10 50 Td (Shown) Tj ET"),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+		"<< /Type /ExtGState /ca 0 >>",
+	})
+	w := NewWriter(openColorPDF(t, in))
+	t.Cleanup(func() { _ = w.Close() })
+	report, err := w.RemediatePDFA(ctx, models.PDFA1b, WithPDFUA(models.PDFUA1))
+	if err != nil {
+		t.Fatalf("RemediatePDFA: %v", err)
+	}
+	if !slicesContainPrefix(report.Fixed, "flattened transparency on 1 page(s)") || len(report.RolledBack) != 0 {
+		t.Errorf("flattening not kept: Fixed = %q, RolledBack = %q", report.Fixed, report.RolledBack)
+	}
+	for _, v := range report.ResidualViolations() {
+		if v.Clause == "6.4" {
+			t.Errorf("transparency left: %v", v)
+		}
+	}
+	var buf bytes.Buffer
+	if err := w.WriteTo(ctx, &buf); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if text, err := openColorPDF(t, buf.Bytes()).ExtractText(ctx, 1, WithInvisibleText()); err != nil || !strings.Contains(text, "Searchable text nobody sees") {
+		t.Errorf("text lost: %q, %v", text, err)
+	}
+}
+
+// TestRemediatePDFA1WithPDFUAFlatteningFallsBackOnALoss pins that a later
+// round whose output the integrity probe refuses with its transparency
+// flattened, for a loss flattening does not account for, runs again with the
+// flattening disabled, as a first round does ([Writer.remediateFlattening]),
+// and lists the flattening as rolled back. The PDF/A engine here drops page
+// 1's content after a run that flattened it, in the second round of a pair
+// whose PDF/UA profile the document already meets.
+func TestRemediatePDFA1WithPDFUAFlatteningFallsBackOnALoss(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	w := NewWriter(openColorPDF(t, transparentPDF()))
+	t.Cleanup(func() { _ = w.Close() })
+	pair := &pairedRemediation{
+		pdfua:      models.PDFUA1,
+		validateA:  func(ctx context.Context, r *Reader) ([]error, error) { return r.ValidatePDFA(ctx, models.PDFA1b) },
+		validateUA: func(context.Context, *Reader) ([]error, error) { return nil, nil },
+		runUA: func(context.Context, *writer.ObjAllocator, *document.Document, []string) (*remediation.Report, error) {
+			return &remediation.Report{}, nil
+		},
+		runA: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+			rep, err := remediation.RemediatePDFA(ctx, doc, alloc, models.PDFA1b, remediation.Options{PreserveContent: true}.WithDisabled(disabled))
+			if err != nil || len(rep.Flattened) == 0 {
+				return rep, err
+			}
+			catalog, err := document.ResolveCatalog(ctx, doc)
+			if err != nil {
+				t.Fatalf("ResolveCatalog: %v", err)
+			}
+			pages, err := document.ResolvePages(ctx, doc, catalog)
+			if err != nil || len(pages) == 0 {
+				t.Fatalf("ResolvePages: %v", err)
+			}
+			page := maps.Clone(pages[0].Dict)
+			if queued, ok := alloc.Pending()[pages[0].Ref.ObjectNum].(ast.PdfDict); ok {
+				page = maps.Clone(queued)
+			}
+			page["Contents"] = alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(0)}, nil))
+			alloc.AllocAt(pages[0].Ref.ObjectNum, page)
+			// The loss sits outside the content tier, as the flattening
+			// does, so no rollback reaches it.
+			rep.ContentSnapshot = nil
+			return rep, nil
+		},
+	}
+	report, err := w.remediateFlattening(ctx, pair.target(remediationTarget{method: "RemediatePDFA"}), DefaultRegressionTolerance, pair.revalidate, pair.run)
+	if err != nil {
+		t.Fatalf("remediateFlattening: %v", err)
+	}
+	if !slicesContainPrefix(report.RolledBack, "flattened transparency on 1 page(s)") || slicesContainPrefix(report.Fixed, "flattened transparency") {
+		t.Errorf("flattening not abandoned: Fixed = %q, RolledBack = %q", report.Fixed, report.RolledBack)
+	}
+	for _, v := range report.ResidualViolations() {
+		if v.Clause == "6.4" {
+			t.Errorf("transparency left: %v", v)
+		}
+	}
+	var buf bytes.Buffer
+	if err := w.WriteTo(ctx, &buf); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if text, err := openColorPDF(t, buf.Bytes()).ExtractText(ctx, 1); err != nil || !strings.Contains(text, "Above everything") {
+		t.Errorf("text lost: %q, %v", text, err)
+	}
+}

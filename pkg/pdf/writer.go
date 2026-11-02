@@ -3667,6 +3667,9 @@ func (w *Writer) remediate(
 		rolledBack = append(rolledBack, next.rolledBack...)
 		disabled = append(disabled, next.disabled...)
 		rewritten = rewritten || next.rewrote
+		if next.baseline != nil {
+			baseline = *next.baseline
+		}
 		keptLater = true
 	}
 	// A cancellation inside a round ends the loop as a round that fixed
@@ -3797,6 +3800,10 @@ type roundResult struct {
 	fontsJudged bool
 	// rewrote tells that the round's output is a full rewrite.
 	rewrote bool
+	// baseline, when set, is the integrity baseline the round measured its
+	// output against because it flattened transparency, which the later
+	// rounds measure theirs against (see [Writer.remediationRound]).
+	baseline *integritySnap
 }
 
 // remediationRound reopens the serialized output at path and runs the
@@ -3811,9 +3818,25 @@ type roundResult struct {
 // kept, and the round is kept when what remains still fixes something and
 // passes the gates, with those fixers named for the later rounds to disable.
 //
+// A round that flattened transparency is measured as the first round is (see
+// [Writer.remediate]), against a baseline that counts invisible text and each
+// composite as the images it replaced, which the later rounds then measure
+// theirs against. One whose output still regresses runs again with the
+// flattening disabled, as [Writer.remediateFlattening] runs a first round
+// again, and lists the flattening as rolled back.
+//
 // A temp file the round cannot write is returned as an error wrapping
 // [ErrRemediationUnverified], since it says nothing about the round. The
 // files the round writes are recorded in temps, the one it keeps included.
+//
+// # Corpus evidence
+//
+//   - litho flattentext_2b: at PDF/A-1a and PDF/A-1b paired with PDF/UA-1, the
+//     PDF/A engine flattens in the second round, which hides the text drawn at
+//     alpha 0. Measured against the source's visible text, the round was
+//     refused, and the output kept 62 and 63 PDF/A-1 violations that each
+//     remediation alone fixes. It now passes litho and veraPDF 1.30.3 at both
+//     profiles, and no other PDF/A-1 pair of the litho corpus moves.
 func (w *Writer) remediationRound(
 	ctx context.Context,
 	temps *remediationTemps,
@@ -3865,6 +3888,41 @@ func (w *Writer) remediationRound(
 		return discarded(), false, nil
 	}
 
+	// A round that flattened transparency is measured as the first round
+	// measures one (see [Writer.remediate]): text counted with invisible
+	// text, and each composite counted as the images it replaced. The first
+	// round of the PDF/A engine of a paired remediation ([WithPDFUA]) is a
+	// later round. A zero baseline, a source the probe could not read, stays
+	// as it is, as the first round leaves it.
+	unflattened := baseline
+	var rebased *integritySnap
+	if len(rep.Flattened) > 0 && baseline.pageCount > 0 {
+		snap, err := probeIntegrityText(ctx, w.reader, true)
+		if err == nil {
+			snap.imageCount = max(0, snap.imageCount-rep.FlattenedImages)
+			baseline, rebased = snap, &snap
+		}
+	}
+	// regressed ends a round whose output regressed for reason. One that
+	// flattened transparency runs again with the flattening disabled, so the
+	// transparency is set opaque instead, as [Writer.remediateFlattening]
+	// remediates a first round again, and lists the flattening as rolled
+	// back.
+	regressed := func(reason string) (roundResult, bool, error) {
+		if len(rep.Flattened) == 0 || slices.Contains(disabled, remediation.FlattenFixer) {
+			logger.Debug("remediate: round regressed, keeping previous output", slog.String("reason", reason))
+			return discarded(), false, nil
+		}
+		logger.Debug("remediate: round regressed with flattened transparency, running it without flattening", slog.String("reason", reason))
+		retry, ok, err := w.remediationRound(ctx, temps, path, run, append(slices.Clone(disabled), remediation.FlattenFixer), revalidate, unflattened, tol, rewritten)
+		if err != nil || !ok {
+			return retry, ok, err
+		}
+		retry.rolledBack = append(slices.Clone(rep.Flattened), retry.rolledBack...)
+		retry.disabled = append(retry.disabled, remediation.FlattenFixer)
+		return retry, true, nil
+	}
+
 	// w2 writes r2 itself, not a copy: the round's repairs to the trailer are
 	// in r2, and the round is r2's only reader.
 	w2 := newWriterOn(r2)
@@ -3878,14 +3936,12 @@ func (w *Writer) remediationRound(
 		return roundResult{}, false, err
 	}
 	if reason == "" {
-		kept := roundResult{path: tmpPath, residual: res, fixed: rep.Fixed, dropped: w2.droppedSignatures, rewrote: rep.NeedsFullRewrite}
+		kept := roundResult{path: tmpPath, residual: res, fixed: rep.Fixed, dropped: w2.droppedSignatures, rewrote: rep.NeedsFullRewrite, baseline: rebased}
 		kept.fonts, kept.fontsJudged = fontVerdict(rep, false)
 		return kept, true, nil
 	}
 	if rep.ContentSnapshot == nil {
-		logger.Debug("remediate: round regressed, keeping previous output",
-			slog.String("reason", reason))
-		return discarded(), false, nil
+		return regressed(reason)
 	}
 
 	// The allocator restores its pending map in place, which w2 writes from.
@@ -3899,13 +3955,11 @@ func (w *Writer) remediationRound(
 		return roundResult{}, false, err
 	}
 	if reason != "" {
-		logger.Debug("remediate: round regressed after rollback, keeping previous output",
-			slog.String("reason", reason))
-		return discarded(), false, nil
+		return regressed(reason + " (persisted after rollback)")
 	}
 	result := discarded()
 	result.path, result.residual, result.fixed, result.rolledBack, result.disabled = tmpPath, res, kept, rep.ContentFixed, rep.ContentFixers
-	result.dropped, result.rewrote = w2.droppedSignatures, rep.NeedsFullRewrite
+	result.dropped, result.rewrote, result.baseline = w2.droppedSignatures, rep.NeedsFullRewrite, rebased
 	return result, true, nil
 }
 
