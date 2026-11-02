@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-10-25T20:40:51Z",
+  "captured_at": "2026-11-02T17:22:42Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -430,6 +430,19 @@
             "verapdf_post": 3005,
             "verapdf_pre": 19719,
             "verapdf_regressed": 0
+          }
+        },
+        "remediation-pair": {
+          "matched": 106,
+          "mismatched": 151,
+          "skipped": 0,
+          "metrics": {
+            "disagreement": 1,
+            "fully_fixed": 106,
+            "litho_post": 575,
+            "litho_pre": 2870,
+            "parse_failed": 0,
+            "verapdf_post": 574
           }
         },
         "render": {

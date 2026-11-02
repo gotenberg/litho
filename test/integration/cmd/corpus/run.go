@@ -26,6 +26,7 @@ var featureRegistry = append([]FeatureFactory{
 	func() Feature { return newComplianceFeature() },
 	func() Feature { return newRemediationFeature(false) },
 	func() Feature { return newRemediationFeature(true) },
+	func() Feature { return newRemediationPairFeature() },
 	func() Feature { return newBookmarksFeature() },
 	func() Feature { return newSplitFeature() },
 	func() Feature { return newMergeFeature() },

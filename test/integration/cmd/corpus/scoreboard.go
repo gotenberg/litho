@@ -96,6 +96,9 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 		veraRegressed := fr.Metrics["verapdf_regressed"]
 		fmt.Fprintf(w, "%s %s  fully_fixed=%d  litho_regressed=%d  verapdf_regressed=%d\n",
 			prefix, primary, fullyFixed, lithoRegressed, veraRegressed)
+	case "remediation-pair":
+		fmt.Fprintf(w, "%s %s  fully_fixed=%d  disagreement=%d  parse_failed=%d\n",
+			prefix, primary, fr.Metrics["fully_fixed"], fr.Metrics["disagreement"], fr.Metrics["parse_failed"])
 	default:
 		fmt.Fprintf(w, "%s %s%s\n", prefix, primary, firedMutationMetrics(fr))
 	}
