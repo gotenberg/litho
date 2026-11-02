@@ -45,7 +45,7 @@ violations, err := r.ValidatePDFAReport(ctx, models.PDFA2b)
 
 ```bash
 litho validate --profile PDF/A-2b document.pdf
-litho remediate --profile PDF/A-2b --font-dir /usr/share/fonts -o fixed.pdf document.pdf
+litho remediate --profile PDF/A-2b --profile PDF/UA-1 --font-dir /usr/share/fonts -o fixed.pdf document.pdf
 litho sign --cert cert.pem --key key.pem --reason Approved -o signed.pdf document.pdf
 ```
 
@@ -55,7 +55,7 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 
 - **Extract** text with layout inference, positioned text, tables, images decoded to sRGB, annotations, form fields, bookmarks, attachments, and PDF 2.0 data (geospatial, measurements, 3D, formulas).
 - **Validate** PDF/A (every part and level), PDF/UA-1 and UA-2, WTPDF 1.0, Factur-X and ZUGFeRD, with the clause, test number and severity of each violation.
-- **Remediate** PDF/A, PDF/UA and WTPDF violations, embedding the fonts you supply, behind an integrity check that rolls back a fix that degrades the document.
+- **Remediate** PDF/A, PDF/UA and WTPDF violations, to one profile or to a PDF/A and PDF/UA pair at once, embedding the fonts you supply, behind an integrity check that rolls back a fix that degrades the document.
 - **Edit** pages (rotate, delete, insert, split, merge), stamps and watermarks, metadata, form fields, bookmarks and attachments, auto-tagging, redaction, colour conversion and transparency flattening.
 - **Render** pages to images, on screen or for print, RGB or CMYK.
 - **Protect** with RC4, AES-128 or AES-256 encryption, and PKCS#7 or PAdES signatures up to B-LTA.
