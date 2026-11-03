@@ -122,8 +122,9 @@ var (
 	// valid range [1, pageCount]: by the [Reader] methods that take one, by
 	// [Writer.Redact] and [Split], and by [Writer.WriteTo] for a page
 	// [Writer.RotatePages], [Writer.DeletePages], [Writer.InsertPages],
-	// [Writer.StampText], [Writer.StampImage] or [Writer.StampPDF] named, or
-	// an insertion position outside [0, pageCount].
+	// [Writer.StampText], [Writer.StampImage], [Writer.StampPDF] or
+	// [Writer.SetBookmarks] named, or an insertion position outside
+	// [0, pageCount].
 	ErrInvalidPageNumber = mutations.ErrInvalidPageNumber
 
 	// ErrInvalidPageRange is returned, wrapped, by [ParsePageRanges] when a
@@ -144,7 +145,9 @@ var (
 	// source document is required.
 	ErrNilSource = errors.New("source reader is nil")
 
-	// ErrEmptyText is returned when a text stamp has an empty string.
+	// ErrEmptyText is returned when a text stamp has an empty string, and,
+	// wrapped, by [Writer.WriteTo] for a bookmark [Writer.SetBookmarks] gave
+	// an empty title.
 	ErrEmptyText = errors.New("empty text")
 
 	// ErrEmptyData is returned when image stamp data is empty.

@@ -12,6 +12,7 @@ import (
 	"math"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -1645,6 +1646,14 @@ func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error 
 
 // SetBookmarks replaces the document outline with the given bookmarks.
 // The mutation is queued and applied when [Writer.WriteTo] is called.
+//
+// Every bookmark, nested ones included, needs a title and a page from 1 to the
+// page count of the Reader the Writer was built on. An outline item opens a
+// destination on a page of the document (ISO 32000-1, 12.3.3 and 12.3.2), and
+// an item naming no page reads back with page 0 and opens nothing. WriteTo
+// returns [ErrInvalidPageNumber] for a page outside that range and
+// [ErrEmptyText] for an empty title, each wrapped with the bookmark's position
+// and title, the page number and the page count, and writes nothing.
 func (w *Writer) SetBookmarks(bookmarks []models.Bookmark) {
 	if w.refuseAfterRemediation("SetBookmarks") != nil {
 		return
@@ -1655,9 +1664,36 @@ func (w *Writer) SetBookmarks(bookmarks []models.Bookmark) {
 			if err != nil {
 				return fmt.Errorf("resolving pages for bookmarks: %w", err)
 			}
+			if err := checkBookmarks(bookmarks, len(resolvedPages), ""); err != nil {
+				return err
+			}
 			return mutations.SetBookmarks(ctx, alloc, doc, resolvedPages, bookmarks)
 		},
 	})
+}
+
+// checkBookmarks refuses a bookmark of bookmarks, or of their children, with
+// an empty title or a page outside 1..pages. path is the position of the
+// level in the outline, "" for the top one, and the refusal names the
+// bookmark's position as 1-based indexes joined by periods ("2.1" is the first
+// child of the second bookmark).
+func checkBookmarks(bookmarks []models.Bookmark, pages int, path string) error {
+	for i, b := range bookmarks {
+		pos := strconv.Itoa(i + 1)
+		if path != "" {
+			pos = path + "." + pos
+		}
+		if b.Title == "" {
+			return fmt.Errorf("%w: bookmark %s has an empty title", ErrEmptyText, pos)
+		}
+		if b.PageNumber < 1 || b.PageNumber > pages {
+			return fmt.Errorf("%w: bookmark %s %q names page %d, and the document has %d pages", ErrInvalidPageNumber, pos, b.Title, b.PageNumber, pages)
+		}
+		if err := checkBookmarks(b.Children, pages, pos); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // BookmarkMergeMode controls how auto-generated bookmarks are combined with
