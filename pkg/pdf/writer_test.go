@@ -3820,6 +3820,22 @@ const facturXSampleCII = `<?xml version="1.0" encoding="UTF-8"?>
   </rsm:SupplyChainTradeTransaction>
 </rsm:CrossIndustryInvoice>`
 
+// facturXGuidelines maps each Factur-X level to the specification identifier
+// its invoices declare (Factur-X 1.0.07, 4.3).
+var facturXGuidelines = map[models.FacturXLevel]string{
+	models.FacturXMinimum:   "urn:factur-x.eu:1p0:minimum",
+	models.FacturXBasicWL:   "urn:factur-x.eu:1p0:basicwl",
+	models.FacturXBasic:     "urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic",
+	models.FacturXEN16931:   "urn:cen.eu:en16931:2017",
+	models.FacturXExtended:  "urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:extended",
+	models.FacturXXRechnung: "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0",
+}
+
+// facturXSampleCIIAt is [facturXSampleCII] declaring level.
+func facturXSampleCIIAt(level models.FacturXLevel) string {
+	return strings.Replace(facturXSampleCII, "urn:factur-x.eu:1p0:minimum", facturXGuidelines[level], 1)
+}
+
 func TestWriter_RemediateFacturX_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 	data := writerTestPDF()
@@ -3831,7 +3847,7 @@ func TestWriter_RemediateFacturX_RoundTrip(t *testing.T) {
 
 	w := NewWriter(r)
 	report, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	})
 	if err != nil {
@@ -3904,7 +3920,7 @@ func TestWriter_RemediateFacturX_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading attachment: %v", err)
 	}
-	if string(got) != facturXSampleCII {
+	if string(got) != facturXSampleCIIAt(models.FacturXEN16931) {
 		t.Errorf("attachment payload diverged from input invoice XML")
 	}
 
@@ -3929,7 +3945,7 @@ func TestWriter_RemediateFacturX_XRechnungLevel(t *testing.T) {
 
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXXRechnung)),
 		Level:      models.FacturXXRechnung,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
@@ -3989,7 +4005,7 @@ func TestWriter_RemediateFacturX_AppliesDefaults(t *testing.T) {
 			w := NewWriter(r)
 			// Profile, FileName, DocumentType, Relationship omitted on purpose.
 			if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-				InvoiceXML: []byte(facturXSampleCII),
+				InvoiceXML: []byte(facturXSampleCIIAt(tc.level)),
 				Level:      tc.level,
 			}); err != nil {
 				t.Fatalf("RemediateFacturX: %v", err)
@@ -4039,7 +4055,7 @@ func TestReader_ValidateFacturX_XRechnungFileName(t *testing.T) {
 	}
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXXRechnung)),
 		Level:      models.FacturXXRechnung,
 		FileName:   "factur-x.xml",
 	}); err != nil {
@@ -4084,7 +4100,7 @@ func TestReader_ValidateFacturX_RoundTrip(t *testing.T) {
 	}
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
@@ -4132,7 +4148,7 @@ func TestReader_ValidateZUGFeRD_VersionMismatch(t *testing.T) {
 	}
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXBasic)),
 		Level:      models.FacturXBasic,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
@@ -4194,7 +4210,7 @@ func TestReader_ValidateFacturX_WithXSD(t *testing.T) {
 	}
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
@@ -4249,7 +4265,7 @@ func TestReader_ValidateFacturX_WithSchematron_HappyPath(t *testing.T) {
 	}
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
@@ -4299,7 +4315,7 @@ func TestReader_ValidateFacturX_WithSchematron_AssertFires(t *testing.T) {
 	}
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
@@ -4354,7 +4370,7 @@ func TestReader_ValidateFacturX_WithSchematron_SkippedAdvisory(t *testing.T) {
 	}
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
@@ -4413,7 +4429,7 @@ func TestReader_ValidateFacturXReport_PartitionsAdvisories(t *testing.T) {
 	}
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
@@ -4467,7 +4483,7 @@ func TestReader_ValidateFacturX_BundledXSDDefault(t *testing.T) {
 	}
 	w := NewWriter(r)
 	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
-		InvoiceXML: []byte(facturXSampleCII),
+		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXMinimum)),
 		Level:      models.FacturXMinimum,
 	}); err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)

@@ -132,7 +132,7 @@ func refusedCalls(t *testing.T) []refusedCall {
 			return err
 		}},
 		{"RemediateFacturX", func(ctx context.Context, _ *testing.T, w *Writer) error {
-			_, err := w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte("<x/>"), Level: models.FacturXMinimum})
+			_, err := w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum})
 			return err
 		}},
 		{"RepairFacturX", func(ctx context.Context, _ *testing.T, w *Writer) error {

@@ -621,6 +621,21 @@ var (
 	// [models.FacturXLevel] constants.
 	ErrInvalidFacturXLevel = errors.New("factur-x conformance level is invalid")
 
+	// ErrInvoiceNotCII is returned, wrapped with the reason, by
+	// [Writer.RemediateFacturX] when [FacturXConfig.InvoiceXML] is not
+	// well-formed XML whose root is CrossIndustryInvoice in the UN/CEFACT
+	// CrossIndustryInvoice:100 namespace, the syntax Factur-X 1.0.07 embeds
+	// (EN 16931-3-3). The Writer is left as it was.
+	ErrInvoiceNotCII = compliance.ErrInvoiceNotCII
+
+	// ErrFacturXLevelMismatch is returned, wrapped, by
+	// [Writer.RemediateFacturX] when [FacturXConfig.Level] is not the level
+	// the invoice XML declares in its specification identifier (BT-24),
+	// which Factur-X 1.0.07, 4.3 fixes per level and the validator judges
+	// the XML against. The message names both levels and the identifier.
+	// The Writer is left as it was.
+	ErrFacturXLevelMismatch = errors.New("factur-x conformance level does not match the invoice XML")
+
 	// ErrInvalidFacturXProfile is returned by [Writer.RemediateFacturX]
 	// when [FacturXConfig.Profile] is not a PDF/A-3 conformance level.
 	// Factur-X 1.0.07 mandates a PDF/A-3 archival base.
@@ -944,6 +959,8 @@ var invalidInputErrors = []error{
 	ErrEmptyInvoiceXML,
 	ErrNoInvoiceAttachment,
 	ErrInvalidFacturXLevel,
+	ErrInvoiceNotCII,
+	ErrFacturXLevelMismatch,
 	ErrInvalidFacturXProfile,
 	ErrInvalidZUGFeRDVersion,
 	ErrInvalidCMYKProfile,

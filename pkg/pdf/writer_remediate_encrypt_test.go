@@ -54,7 +54,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			data:    signablePDF,
 			encrypt: true,
 			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
-				return w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte("<x/>"), Level: models.FacturXMinimum})
+				return w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum})
 			},
 			wantClause: "ISO 19005-3, 6.1.3",
 		},

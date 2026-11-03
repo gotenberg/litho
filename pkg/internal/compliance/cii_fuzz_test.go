@@ -52,6 +52,7 @@ func FuzzCII(f *testing.F) {
 		}
 
 		_ = scanCIIProfileID(data)
+		_, _, _ = InvoiceLevel(data)
 
 		for _, lenient := range []bool{false, true} {
 			_, _, _, _ = scanCIIPresence(data, lenient)

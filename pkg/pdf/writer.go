@@ -615,6 +615,11 @@ type RemediationReport struct {
 	// A remediation given [WithPDFUA] lists the violations of both its
 	// profiles here, each [Violation] naming its standard in Specification.
 	//
+	// A Factur-X remediation or repair lists the failures a validation of its
+	// output reports, [FacturXReport.Fatals]: a warning does not fail
+	// conformance and is not listed, so an empty Residual means the output
+	// validates.
+	//
 	// A non-empty Residual does not stop the output from ASSERTING the
 	// profile. The identification schemas are themselves requirements
 	// (ISO 19005-1, 6.7.11 and ISO 14289-1, clause 5), so remediation writes
@@ -2696,6 +2701,18 @@ type FacturXConfig struct {
 // Given [WithPDFUA] with [models.PDFUA1], it remediates to PDF/UA-1 too, and
 // the output is a Factur-X invoice that conforms to PDF/UA-1. PDF/UA-2
 // returns [ErrIncompatibleProfiles].
+//
+// With the file name of the level, the default, the output is a Factur-X
+// invoice and is judged as one: the residual holds what
+// [Reader.ValidateFacturX] finds failing on it, the XSD and Schematron
+// verdicts on the invoice XML included, and leaves out its warnings, as
+// [FacturXReport.Fatals] does. An empty residual means the output validates.
+// Before reading the document, it returns [ErrInvoiceNotCII] for an invoice
+// XML that is not a Cross-Industry Invoice, and [ErrFacturXLevelMismatch] when
+// the XML declares another level than [FacturXConfig.Level] (Factur-X 1.0.07,
+// 4.3). An XRechnung invoice is accepted at BASIC, EN 16931 and EXTENDED,
+// where it validates. Another file name, a legacy ZUGFeRD layout, is judged
+// against the PDF/A-3 profile alone and its XML is not checked.
 func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateFacturX", &err)
 	if len(cfg.InvoiceXML) == 0 {
@@ -2725,8 +2742,27 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 		relationship = embedding.Relationship
 	}
 
+	// A file name of the level's own embeds a Factur-X invoice, which the
+	// output is judged as: the invoice XML must declare the level asked for,
+	// and the residual is what Reader.ValidateFacturX finds failing. Another
+	// name embeds a legacy ZUGFeRD payload, judged as its PDF/A-3 base alone.
+	facturX := fileName == embedding.FileName
+
 	rcfg, remOpts := w.remediateConfig(opts)
+	if rcfg.pdfua != "" {
+		if err := checkPair(profile, rcfg.pdfua); err != nil {
+			return nil, err
+		}
+	}
+	if facturX {
+		if err := checkInvoiceLevel(cfg.InvoiceXML, cfg.Level); err != nil {
+			return nil, err
+		}
+	}
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
+		if facturX {
+			return facturXResidual(ctx, r, profile)
+		}
 		return r.ValidatePDFA(ctx, profile)
 	}
 	fxOpts := remediation.FacturXOptions{
@@ -2744,9 +2780,6 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 	if rcfg.pdfua == "" {
 		return w.remediate(ctx, target, rcfg.tolerance, revalidate, run)
 	}
-	if err := checkPair(profile, rcfg.pdfua); err != nil {
-		return nil, err
-	}
 	pair := newPairedRemediation(rcfg.pdfua, remOpts, revalidate, run)
 	return w.remediate(ctx, pair.target(target), rcfg.tolerance, pair.revalidate, pair.run)
 }
@@ -2756,7 +2789,9 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 // filespec /AFRelationship and /F + /UF pair, and the embedded stream
 // /Subtype. The invoice XML payload is business data and is never
 // modified; XSD or Schematron findings inside it remain in the residual
-// list. Returns [ErrNoInvoiceAttachment] when the document carries no
+// list. The residual holds what [Reader.ValidateFacturX] finds failing on the
+// output and leaves out its warnings, as [FacturXReport.Fatals] does, so it
+// matches [Writer.RemediateFacturX] on the same invoice. Returns [ErrNoInvoiceAttachment] when the document carries no
 // known invoice attachment. Use [Writer.RemediateFacturX] to embed a new
 // invoice instead.
 //
@@ -2781,7 +2816,7 @@ func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ 
 		o(&rcfg)
 	}
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
-		return r.ValidateFacturX(ctx)
+		return facturXResidual(ctx, r, models.PDFA3b)
 	}
 	// A Factur-X invoice is a PDF/A-3 file, so the repaired one is never
 	// encrypted either.

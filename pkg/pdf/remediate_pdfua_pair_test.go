@@ -221,7 +221,7 @@ func TestRemediateWithPDFUARefusesIncompatiblePairs(t *testing.T) {
 			name: "Factur-X and PDF/UA-2",
 			data: signablePDF,
 			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
-				return w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte("<x/>"), Level: models.FacturXMinimum}, WithPDFUA(models.PDFUA2))
+				return w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum}, WithPDFUA(models.PDFUA2))
 			},
 			want: "PDF/A-3b requires PDF/UA-1, not PDF/UA-2",
 		},
@@ -286,7 +286,7 @@ func TestRemediateFacturXWithPDFUAConformsToBoth(t *testing.T) {
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	report, err := w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte("<x/>"), Level: models.FacturXMinimum}, WithPDFUA(models.PDFUA1), pairFonts)
+	report, err := w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: compliantInvoiceXML(t), Level: models.FacturXEN16931}, WithPDFUA(models.PDFUA1), pairFonts)
 	if err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
 	}

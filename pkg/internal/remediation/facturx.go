@@ -65,13 +65,22 @@ func RemediateFacturX(ctx context.Context, doc *document.Document, alloc *writer
 	// embedded stream /Subtype. text/xml is the spec-correct value
 	// and what the writer emits; the consumer side stays lenient
 	// against application/xml producers.
-	attachErr := mutations.AddAttachmentWithOptions(ctx, alloc, doc, cfg.FileName, cfg.InvoiceXML, mutations.AttachmentOptions{
-		MimeType:       "text/xml",
-		AFRelationship: cfg.Relationship,
-		AddToCatalogAF: true,
-	})
-	if attachErr != nil {
-		return nil, fmt.Errorf("factur-x: embedding invoice: %w", attachErr)
+	//
+	// A document that already embeds this very invoice, as the output of an
+	// earlier remediation round does, keeps it: replacing it leaves the old
+	// file specification behind, which the PDF/A-3 fixer adding every file
+	// specification to the catalog /AF (ISO 19005-3, 6.8) would list again
+	// beside the new one, and the output would carry the invoice twice.
+	embed := !invoiceEmbedded(ctx, alloc, doc, cfg)
+	if embed {
+		attachErr := mutations.AddAttachmentWithOptions(ctx, alloc, doc, cfg.FileName, cfg.InvoiceXML, mutations.AttachmentOptions{
+			MimeType:       "text/xml",
+			AFRelationship: cfg.Relationship,
+			AddToCatalogAF: true,
+		})
+		if attachErr != nil {
+			return nil, fmt.Errorf("factur-x: embedding invoice: %w", attachErr)
+		}
 	}
 
 	report, err := RemediatePDFA(ctx, doc, alloc, cfg.Profile, opts)
@@ -84,8 +93,69 @@ func RemediateFacturX(ctx context.Context, doc *document.Document, alloc *writer
 		return nil, fmt.Errorf("factur-x: injecting xmp: %w", err)
 	}
 	report.Fixed = append(report.Fixed, fixes...)
-	report.Fixed = append(report.Fixed, fmt.Sprintf("embedded %s as factur-x associated file", cfg.FileName))
+	if embed {
+		report.Fixed = append(report.Fixed, fmt.Sprintf("embedded %s as factur-x associated file", cfg.FileName))
+	}
 	return report, nil
+}
+
+// invoiceEmbedded reports whether doc already embeds cfg.InvoiceXML under
+// cfg.FileName, as a text/xml stream with cfg.Relationship, and lists its file
+// specification in the catalog /AF array: the attachment RemediateFacturX would
+// write.
+func invoiceEmbedded(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, cfg FacturXOptions) bool {
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
+	if !ok {
+		return false
+	}
+	catalog := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalog == nil {
+		return false
+	}
+	names, err := document.ResolveDict(ctx, doc, catalog["Names"])
+	if err != nil || names == nil {
+		return false
+	}
+	var entries []mutations.EFEntry
+	if mutations.CollectEmbeddedFileEntries(ctx, alloc, doc, names["EmbeddedFiles"], 0, &entries) {
+		return false
+	}
+	idx := slices.IndexFunc(entries, func(e mutations.EFEntry) bool { return e.Name == cfg.FileName })
+	if idx < 0 {
+		return false
+	}
+	specRef, ok := entries[idx].Ref.(ast.PdfIndirectRef)
+	if !ok {
+		return false
+	}
+	af, err := document.ResolveArray(ctx, doc, catalog["AF"])
+	if err != nil || !slices.Contains(af, ast.PdfObject(specRef)) {
+		return false
+	}
+	spec := resolveFromAllocOrDoc(ctx, alloc, doc, specRef)
+	if spec == nil {
+		return false
+	}
+	if rel, _ := document.ResolveName(ctx, doc, spec["AFRelationship"]); string(rel) != cfg.Relationship {
+		return false
+	}
+	ef, err := document.ResolveDict(ctx, doc, spec["EF"])
+	if err != nil || ef == nil {
+		return false
+	}
+	streamRef, ok := ef["F"].(ast.PdfIndirectRef)
+	if !ok {
+		return false
+	}
+	stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, streamRef, ef["F"])
+	if !ok {
+		return false
+	}
+	if subtype, _ := stream.Dict["Subtype"].(ast.PdfName); subtype != "text/xml" {
+		return false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	return err == nil && bytes.Equal(data, cfg.InvoiceXML)
 }
 
 // injectFacturXXMP rewrites the catalog Metadata stream to declare the

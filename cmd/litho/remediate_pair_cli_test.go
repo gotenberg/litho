@@ -402,8 +402,7 @@ func TestRemediatePair_CompactFollowsThePDFASide(t *testing.T) {
 
 // TestRemediatePair_FacturXWithPDFUA1 pins that Factur-X pairs with PDF/UA-1
 // on its PDF/A-3 base: the invoice flags apply as they do alone, and the
-// output conforms to PDF/A-3b and PDF/UA-1. The stub invoice fails the
-// Factur-X rules whatever the pair, so the test judges the PDF/A-3b base.
+// output conforms to PDF/A-3b and PDF/UA-1.
 func TestRemediatePair_FacturXWithPDFUA1(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out.pdf")
 	rc, stdout, stderr := runPipeCLI(t, "remediate", "--profile", "PDF/UA-1", "--profile", "Factur-X",

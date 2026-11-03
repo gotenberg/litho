@@ -11,6 +11,10 @@ import (
 // sentinel via [errors.Is] without inspecting the wrapped message.
 var ErrUnknownProfile = errors.New("compliance: unknown profile")
 
+// ErrInvoiceNotCII is returned by [InvoiceLevel] when the payload is not
+// well-formed XML whose root is the UN/CEFACT CrossIndustryInvoice element.
+var ErrInvoiceNotCII = errors.New("factur-x invoice XML is not a Cross-Industry Invoice")
+
 // errDamagedFontProgram is returned by [decodeFontProgram] for a program whose
 // filter chain met damaged data and kept only the bytes before the damage.
 // The font checks treat it as a program that will not decode.

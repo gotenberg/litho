@@ -9,12 +9,16 @@ import (
 	"testing"
 )
 
+// writeTempCII writes a Cross-Industry Invoice declaring EN 16931, which
+// conforms at that level, and returns its path.
 func writeTempCII(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "cii.xml")
-	const cii = `<?xml version="1.0" encoding="UTF-8"?>` +
-		`<rsm:CrossIndustryInvoice xmlns:rsm="urn:test"/>`
-	if err := os.WriteFile(path, []byte(cii), 0o644); err != nil {
+	cii, err := os.ReadFile("../../pkg/pdf/testdata/facturx/en16931.xml")
+	if err != nil {
+		t.Fatalf("read the CII fixture: %v", err)
+	}
+	if err := os.WriteFile(path, cii, 0o644); err != nil {
 		t.Fatalf("write temp CII: %v", err)
 	}
 	return path
