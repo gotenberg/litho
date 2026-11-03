@@ -822,23 +822,23 @@ func groupConvertedPages(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // ([mutations.SetOutputIntent]), and one is added at the end when there is
 // none. A replaced intent of another subtype keeps its family.
 func intendedFamily(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, target string, setIntent bool) string {
+	// The intents an earlier edit wrote are objects of alloc (see
+	// [outputIntentProfile]).
+	resolve := mutations.AllocResolver(ctx, alloc, doc)
 	var intents ast.PdfArray
 	if ref, ok := mutations.CatalogRef(ctx, doc); ok {
 		catalog, err := mutations.LiveCatalogDict(ctx, alloc, doc, ref)
 		if err != nil {
 			doc.Logger.Debug("convert colors: reading the catalog for its output intents", slog.Any("err", err))
 		} else if catalog["OutputIntents"] != nil {
-			intents, err = document.ResolveArray(ctx, doc, catalog["OutputIntents"])
-			if err != nil {
-				doc.Logger.Debug("convert colors: reading the output intents", slog.Any("err", err))
-			}
+			intents, _ = resolve(catalog["OutputIntents"]).(ast.PdfArray)
 		}
 	}
 	for _, entry := range intents {
 		if setIntent {
 			// ISO 32000-2, Table 401: GTS_PDFA1 is the subtype
 			// [mutations.SetOutputIntent] writes the target under.
-			if d, err := document.ResolveDict(ctx, doc, entry); err == nil && d != nil {
+			if d, _ := resolve(entry).(ast.PdfDict); d != nil {
 				if s, _ := document.ResolveName(ctx, doc, d["S"]); s == "GTS_PDFA1" {
 					return target
 				}
@@ -876,14 +876,18 @@ func outputIntentProfile(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrNoOutputIntent, err)
 	}
-	intents, err := document.ResolveArray(ctx, doc, catalog["OutputIntents"])
-	if err != nil || len(intents) == 0 {
+	// The intents an earlier edit on the Writer wrote, an earlier conversion's
+	// among them, are objects of alloc the source does not hold: reading the
+	// source alone found none of them.
+	resolve := mutations.AllocResolver(ctx, alloc, doc)
+	intents, _ := resolve(catalog["OutputIntents"]).(ast.PdfArray)
+	if len(intents) == 0 {
 		return nil, ErrNoOutputIntent
 	}
 	var first []byte
 	for _, entry := range intents {
-		d, err := document.ResolveDict(ctx, doc, entry)
-		if err != nil || d == nil {
+		d, _ := resolve(entry).(ast.PdfDict)
+		if d == nil {
 			continue
 		}
 		profile := decodedStream(ctx, alloc, doc, d["DestOutputProfile"])
