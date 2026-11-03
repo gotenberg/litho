@@ -209,3 +209,23 @@ func embeddedFileNames(t *testing.T, data []byte) []string {
 	}
 	return names
 }
+
+// TestFacturXXRechnungSellerContact pins that an XRechnung invoice carrying a
+// seller contact (person name, department, telephone and email) raises no
+// fatal violation. XRechnung rule BR-DE-5 tests the contact with the XPath 2.0
+// sequence "(ram:PersonName, ram:DepartmentName)[boolean(normalize-space(.))]",
+// which the Schematron evaluator once turned into a predicate on a boolean,
+// so the rule fired on every invoice.
+func TestFacturXXRechnungSellerContact(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile("testdata/facturx/xrechnung.xml")
+	if err != nil {
+		t.Fatalf("reading the invoice fixture: %v", err)
+	}
+	cfg := &FacturXConfig{InvoiceXML: data, Level: models.FacturXXRechnung}
+	_, out := remediateFacturXBytes(t, writerTestPDF(), cfg)
+	for _, v := range facturXFatals(t, out) {
+		t.Errorf("fatal violation on a compliant XRechnung invoice: %+v", v)
+	}
+}

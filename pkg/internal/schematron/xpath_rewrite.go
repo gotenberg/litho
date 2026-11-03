@@ -1319,14 +1319,81 @@ func rewriteOneBareSequence(expr string) (string, bool) {
 		if !safe {
 			continue
 		}
+		// "(X, Y)[P]" filters every item of the sequence by P (XPath
+		// 2.0, section 3.2.1), with the item as the context. Each item
+		// takes the predicates itself, "X[P] or Y[P]", since a boolean
+		// cannot take a predicate. A call item cannot: leave it alone.
+		tail, preds := capturePredicates(expr, end+1)
+		if preds != "" {
+			for _, item := range items {
+				if !isPathItem(strings.TrimSpace(item)) {
+					safe = false
+					break
+				}
+			}
+			if !safe {
+				continue
+			}
+		}
 		var parts []string
 		for _, item := range items {
-			parts = append(parts, "boolean("+strings.TrimSpace(item)+")")
+			parts = append(parts, "boolean("+strings.TrimSpace(item)+preds+")")
 		}
 		replacement := "(" + strings.Join(parts, " or ") + ")"
-		return expr[:i] + replacement + expr[end+1:], true
+		return expr[:i] + replacement + expr[tail:], true
 	}
 	return expr, false
+}
+
+// capturePredicates reads the run of "[...]" predicates starting at
+// pos, after optional whitespace. It returns the offset just past the
+// run and the predicate text, or (pos, "") when none follows.
+func capturePredicates(expr string, pos int) (int, string) {
+	end := pos
+	var sb strings.Builder
+	for {
+		j := end
+		for j < len(expr) && isXMLWhitespace(expr[j]) {
+			j++
+		}
+		if j >= len(expr) || expr[j] != '[' {
+			return end, sb.String()
+		}
+		depth := 0
+		k := j
+	scan:
+		for ; k < len(expr); k++ {
+			switch c := expr[k]; c {
+			case '\'', '"':
+				m := k + 1
+				for m < len(expr) && expr[m] != c {
+					m++
+				}
+				if m >= len(expr) {
+					return end, sb.String()
+				}
+				k = m
+			case '[':
+				depth++
+			case ']':
+				depth--
+				if depth == 0 {
+					break scan
+				}
+			}
+		}
+		if k >= len(expr) {
+			return end, sb.String()
+		}
+		sb.WriteString(expr[j : k+1])
+		end = k + 1
+	}
+}
+
+// isPathItem reports whether s is a path expression that can take a
+// predicate: it does not end in a function call's closing paren.
+func isPathItem(s string) bool {
+	return !strings.HasSuffix(s, ")")
 }
 
 // isFunctionCallParen reports whether the open paren at position i

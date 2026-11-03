@@ -511,3 +511,40 @@ func TestValidate_RoundAcrossCarriageReturn(t *testing.T) {
 		t.Errorf("fired %v skipped %v, want neither", fired, skipped)
 	}
 }
+
+func TestValidate_SequenceWithPredicate(t *testing.T) {
+	// XPath 2.0, 3.2.1: "(A, B)[P]" keeps the items of the sequence
+	// that satisfy P. XRechnung BR-DE-5 tests a contact this way. The
+	// predicate used to land on a boolean, which no rule can satisfy.
+	sch := `<?xml version="1.0" encoding="UTF-8"?>
+<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">
+  <sch:ns prefix="inv" uri="urn:example:invoice"/>
+  <sch:pattern id="P">
+    <sch:rule context="//inv:Invoice">
+      <sch:assert id="ONE" test="(inv:Person, inv:Dept)[boolean(normalize-space(.))]">a name</sch:assert>
+      <sch:assert id="SPACED" test="( inv:Person , inv:Dept ) [normalize-space(.) != ''] [. = 'Bob']">Bob</sch:assert>
+      <sch:assert id="STRING" test="(inv:Person, inv:Dept)[contains(., ']')]">a bracket</sch:assert>
+    </sch:rule>
+  </sch:pattern>
+</sch:schema>`
+	for _, tc := range []struct {
+		name    string
+		payload string
+		want    []string
+	}{
+		{"first item", `<inv:Invoice xmlns:inv="urn:example:invoice"><inv:Person>Bob ]</inv:Person><inv:Dept/></inv:Invoice>`, []string{"SPACED"}},
+		{"second item", `<inv:Invoice xmlns:inv="urn:example:invoice"><inv:Person> </inv:Person><inv:Dept>Bob</inv:Dept></inv:Invoice>`, []string{"STRING"}},
+		{"both blank", `<inv:Invoice xmlns:inv="urn:example:invoice"><inv:Person> </inv:Person><inv:Dept/></inv:Invoice>`, []string{"ONE", "SPACED", "STRING"}},
+		{"none", `<inv:Invoice xmlns:inv="urn:example:invoice"/>`, []string{"ONE", "SPACED", "STRING"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fired, skipped := runOne(t, sch, tc.payload)
+			if len(skipped) != 0 {
+				t.Errorf("skipped %v", skipped)
+			}
+			if strings.Join(fired, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("fired %v, want %v", fired, tc.want)
+			}
+		})
+	}
+}
