@@ -1279,8 +1279,19 @@ func generatedAppearance(
 	switch fieldType {
 	case "Tx", "Ch":
 		text := ""
-		if s, ok := value.(ast.PdfString); ok {
-			text = document.DecodePdfString(s)
+		switch v := value.(type) {
+		case ast.PdfString:
+			text = choiceDisplayText(ctx, doc, annotDict, fieldType, document.DecodePdfString(v))
+		case ast.PdfArray:
+			// A multiple-selection choice field lists its values (ISO 32000-1,
+			// Table 231), drawn as one line in the order it lists them.
+			var shown []string
+			for _, item := range v {
+				if s, ok := item.(ast.PdfString); ok {
+					shown = append(shown, choiceDisplayText(ctx, doc, annotDict, fieldType, document.DecodePdfString(s)))
+				}
+			}
+			text = strings.Join(shown, ", ")
 		}
 		if strings.TrimSpace(text) == "" {
 			return ast.PdfStream{}, false
@@ -1297,6 +1308,44 @@ func generatedAppearance(
 		return checkMarkAppearance(width, height), true
 	}
 	return ast.PdfStream{}, false
+}
+
+// choiceDisplayText returns the text a choice field shows for its value
+// value: the display text of the /Opt entry that pairs it as its export value
+// (ISO 32000-1, 12.7.4.4, Table 231), or value itself. A field of another
+// type shows its value.
+func choiceDisplayText(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, fieldType ast.PdfName, value string) string {
+	if fieldType != "Ch" {
+		return value
+	}
+	dict := annotDict
+	seen := make(map[int]bool)
+	for depth := 0; depth < maxFieldAncestorDepth && dict != nil; depth++ {
+		if optObj, ok := dict["Opt"]; ok {
+			opts, err := document.ResolveArray(ctx, doc, optObj)
+			if err != nil {
+				return value
+			}
+			for _, o := range opts {
+				pair, err := document.ResolveArray(ctx, doc, o)
+				if err != nil || len(pair) < 2 {
+					continue
+				}
+				export, ok1 := pair[0].(ast.PdfString)
+				display, ok2 := pair[1].(ast.PdfString)
+				if ok1 && ok2 && document.DecodePdfString(export) == value {
+					return document.DecodePdfString(display)
+				}
+			}
+			return value
+		}
+		_, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
+		if !ok {
+			break
+		}
+		dict = parent
+	}
+	return value
 }
 
 // inheritedFieldTypeAndValue reads /FT and /V from the widget or the nearest
