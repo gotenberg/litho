@@ -2108,7 +2108,9 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 func SyncXMPWithDocInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
-		return nil, fmt.Errorf("locating catalog")
+		// A catalog litho recovered without its object leaves none to edit
+		// (ISO 32000-1, 7.7.2).
+		return nil, fmt.Errorf("%w: locating catalog: no catalog object to edit", document.ErrMalformedPDF)
 	}
 	// Read through the allocator: an earlier mutation in the same write may
 	// already have replaced the catalog, and patching the stale one would drop

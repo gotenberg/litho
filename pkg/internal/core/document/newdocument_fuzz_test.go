@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -60,6 +61,11 @@ func FuzzNewDocument(f *testing.F) {
 			"trailer\n<< /Size 2 >>\nstartxref\n9\n%%EOF\n",
 		// Truncated mid-object, and truncated mid-xref.
 		"%PDF-1.4\n1 0 obj\n<< /Type",
+		// Cut before the xref table and trailer, the shape of a file whose
+		// download stopped short: the rebuild finds the catalog, and a file
+		// cut before it finds none.
+		valid[:strings.Index(valid, "xref")],
+		valid[:strings.Index(valid, "endobj")],
 		"%PDF-1.4\nxref\n0 2\n0000000000 65535 f \n",
 		"%PDF-1.4\n",
 		"",
@@ -92,6 +98,12 @@ func FuzzNewDocument(f *testing.F) {
 		}
 		if doc == nil {
 			t.Fatal("NewDocument returned a nil document and a nil error")
+		}
+
+		// A document with no catalog to reach is malformed, which the caller
+		// is told as such, never with an unclassified error.
+		if _, err := ResolveCatalog(context.Background(), doc); err != nil && !errors.Is(err, ErrMalformedPDF) {
+			t.Fatalf("ResolveCatalog: %v, which does not wrap ErrMalformedPDF", err)
 		}
 
 		// A stated version must be major.minor. The same invariant

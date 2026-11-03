@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/panicerr"
 )
 
@@ -11,6 +12,14 @@ import (
 var (
 	// ErrMissingHeader indicates the file does not begin with a %PDF- header.
 	ErrMissingHeader = errors.New("not a valid PDF document (missing %PDF- header)")
+
+	// ErrMalformedPDF indicates a document whose structure litho cannot read
+	// past: no catalog to reach from the trailer (ISO 32000-1, 7.5.5 and
+	// 7.7.2), or no page tree to reach from the catalog (7.7.3), after every
+	// recovery litho attempts. A file cut short reads this way once the
+	// objects it lost are the ones the structure starts from. pkg/pdf
+	// re-exports it as pdf.ErrMalformedPDF.
+	ErrMalformedPDF = parser.ErrMalformedPDF
 
 	// ErrDamagedXRef indicates the cross-reference table could not be located or parsed.
 	ErrDamagedXRef = errors.New("damaged or missing cross-reference table")

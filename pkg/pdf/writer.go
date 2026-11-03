@@ -2855,6 +2855,22 @@ func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ 
 	return w.remediate(ctx, pair.target(target), rcfg.tolerance, pair.revalidate, pair.run)
 }
 
+// checkPageTree returns the [ErrMalformedPDF] error of a document whose page
+// tree cannot be reached, and nil otherwise. It resolves the tree afresh: the
+// Reader caches the tree it resolves, and the Writer numbers the pages a /Kids
+// array holds directly (see [Writer.promotePageTree]) after this runs, so a
+// tree cached here would miss them. A cancelled ctx is left to the write.
+func checkPageTree(ctx context.Context, doc *document.Document) error {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err == nil {
+		_, err = document.ResolvePages(ctx, doc, catalog)
+	}
+	if errors.Is(err, ErrMalformedPDF) {
+		return err
+	}
+	return nil
+}
+
 // integritySnap captures the signals the post-remediation probe compares
 // against the baseline measured on the source [Reader].
 type integritySnap struct {
@@ -4239,6 +4255,12 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	}
 	if w.refused != nil {
 		return w.refused
+	}
+	// A document with no page tree to reach (ISO 32000-1, 7.7.3) is no PDF a
+	// viewer opens, whatever the edits: refuse it rather than write it
+	// through.
+	if err := checkPageTree(ctx, w.reader.doc); err != nil {
+		return err
 	}
 	// Every guard and every write below reads the options NewWriter was given
 	// under the ones passed here: a guard that read opts alone let an option

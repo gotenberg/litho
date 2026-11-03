@@ -895,7 +895,9 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 				streams = append(streams, stream)
 			}
 		default:
-			return nil, fmt.Errorf("invalid /Contents type: %T", contentsResolved)
+			// ISO 32000-1, 7.7.3.3, Table 30: /Contents is a stream or an
+			// array of streams.
+			return nil, fmt.Errorf("%w: invalid /Contents type: %T", document.ErrMalformedPDF, contentsResolved)
 		}
 	case ast.PdfStream:
 		streams = append(streams, v)

@@ -5,6 +5,11 @@ import (
 	"fmt"
 )
 
+// ErrMalformedPDF marks a document whose structure litho cannot read past,
+// such as a stream whose data the file ends inside. pkg/internal/core/document
+// re-exports it as document.ErrMalformedPDF, and pkg/pdf as pdf.ErrMalformedPDF.
+var ErrMalformedPDF = errors.New("not a valid PDF document")
+
 // errUnexpectedKeyword marks a bare keyword token found where an object was
 // expected. A space inside a name produces one: `/AASGAA+Arial,Unicode MS`
 // lexes as the name `/AASGAA+Arial,Unicode` followed by the keyword `MS`.

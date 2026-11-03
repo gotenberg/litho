@@ -1428,6 +1428,12 @@ func (p *Parser) newLazyStream(dict ast.PdfDict, src io.ReaderAt, offset, length
 			}
 			buf := make([]byte, length)
 			_, cachedErr = src.ReadAt(buf, offset)
+			if errors.Is(cachedErr, io.EOF) || errors.Is(cachedErr, io.ErrUnexpectedEOF) {
+				// The stream's data runs past the end of the file: the
+				// file was cut inside the object (ISO 32000-1, 7.3.8.1
+				// requires the data and endstream to follow).
+				cachedErr = fmt.Errorf("%w: the data of a stream at offset %d runs past the end of the file: %w", ErrMalformedPDF, offset, cachedErr)
+			}
 			if cachedErr != nil {
 				return
 			}

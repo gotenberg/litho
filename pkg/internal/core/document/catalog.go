@@ -206,15 +206,29 @@ func ResolveCatalog(ctx context.Context, doc *Document) (*Catalog, error) {
 		return &Catalog{Dict: recovered}, nil
 	}
 
+	// ISO 32000-1, 7.5.5 requires the trailer /Root, and 7.7.2 makes the
+	// catalog it names the root of every other structure: with none, and
+	// none recovered above, there is no document to read.
 	if !hasRoot {
-		return nil, fmt.Errorf("trailer missing /Root")
+		// A catalog without a page tree still roots the document's other
+		// structures: the page tree is reported missing where it is read.
+		if _, dict := scanObjects(ctx, doc, func(d ast.PdfDict) bool {
+			typeName, _ := ResolveName(ctx, doc, d["Type"]) //nolint:errcheck // a malformed /Type just means "not a catalog".
+			return typeName == "Catalog"
+		}); dict != nil {
+			return &Catalog{Dict: dict}, nil
+		}
+		return nil, fmt.Errorf("%w: trailer missing /Root", ErrMalformedPDF)
 	}
 	catalogDict, err := ResolveDict(ctx, doc, rootObj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve catalog: %w", err)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("failed to resolve catalog: %w", err)
+		}
+		return nil, fmt.Errorf("%w: failed to resolve catalog: %v", ErrMalformedPDF, err)
 	}
 	if catalogDict == nil {
-		return nil, fmt.Errorf("catalog is not a dictionary")
+		return nil, fmt.Errorf("%w: catalog is not a dictionary", ErrMalformedPDF)
 	}
 	return &Catalog{Dict: catalogDict}, nil
 }
@@ -395,17 +409,23 @@ func findPagesRoot(ctx context.Context, doc *Document) ast.PdfIndirectRef {
 
 // ResolvePages extracts all [Page] entries from the [Catalog] by traversing the page tree.
 func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, error) {
+	// ISO 32000-1, 7.7.2, Table 28 requires the catalog /Pages, the root of
+	// the page tree (7.7.3): a document without one, or whose tree cannot be
+	// walked, is malformed.
 	pagesObj, ok := catalog.Dict["Pages"]
 	if !ok {
-		return nil, fmt.Errorf("catalog missing /Pages")
+		return nil, fmt.Errorf("%w: catalog missing /Pages", ErrMalformedPDF)
 	}
 
 	pagesDict, err := ResolveDict(ctx, doc, pagesObj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve pages root: %w", err)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("failed to resolve pages root: %w", err)
+		}
+		return nil, fmt.Errorf("%w: failed to resolve pages root: %v", ErrMalformedPDF, err)
 	}
 	if pagesDict == nil {
-		return nil, fmt.Errorf("pages root is not a dictionary")
+		return nil, fmt.Errorf("%w: pages root is not a dictionary", ErrMalformedPDF)
 	}
 
 	var pages []*Page
@@ -418,7 +438,10 @@ func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page
 	done := make(map[int]bool)
 	err = traversePageTree(ctx, doc, pagesDict, ast.PdfIndirectRef{}, nil, nil, nil, nil, nil, 0, &pages, visited, done, 0)
 	if err != nil {
-		return nil, fmt.Errorf("traversing page tree: %w", err)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("traversing page tree: %w", err)
+		}
+		return nil, fmt.Errorf("%w: traversing page tree: %w", ErrMalformedPDF, err)
 	}
 
 	doc.Logger.Debug("page tree traversed",

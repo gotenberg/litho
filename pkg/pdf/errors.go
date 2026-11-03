@@ -28,6 +28,17 @@ var (
 	// %PDF- header.
 	ErrNotAPDF = errors.New("not a valid PDF document (missing %PDF- header)")
 
+	// ErrMalformedPDF is returned, wrapped with the reason, when a document
+	// starts with a %PDF- header but its structure cannot be read past: no
+	// document catalog reachable from the trailer (ISO 32000-1, 7.5.5 and
+	// 7.7.2), or no page tree reachable from the catalog (7.7.3), after the
+	// recovery litho attempts, which rebuilds a damaged cross-reference table
+	// and scans the file for a catalog. A file cut short reads this way. Its
+	// message reads "not a valid PDF document: <reason>". [Open] and
+	// [OpenFile] return it when no catalog is found; a method that needs the
+	// pages returns it when no page tree is.
+	ErrMalformedPDF = document.ErrMalformedPDF
+
 	// ErrInternalPanic is returned when an unexpected panic was recovered
 	// while processing document bytes, at a public API boundary or on a
 	// worker goroutine such as a compliance check group. Internal
@@ -891,6 +902,7 @@ func (e *EditError) Unwrap() error {
 var invalidInputErrors = []error{
 	ErrInvalidPassword,
 	ErrNotAPDF,
+	ErrMalformedPDF,
 	ErrDamagedXRef,
 	ErrUnsupportedEncryption,
 	ErrFontMissing,

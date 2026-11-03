@@ -1,6 +1,11 @@
 package mutations
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+)
 
 // ErrPageNotAddressable reports a page that cannot be rewritten in place
 // because it has no indirect reference of its own.
@@ -9,8 +14,10 @@ import "errors"
 // which case there is no object number for an incremental update to replace.
 // Copying mutations handle this by allocating a new object for the page; the
 // ones that edit a page where it stands cannot, and report this instead of
-// leaving the caller believing the edit landed.
-var ErrPageNotAddressable = errors.New("page has no indirect reference")
+// leaving the caller believing the edit landed. ISO 32000-1, 7.7.3.2 makes
+// /Kids an array of indirect references, so such a page is malformed and the
+// error wraps [document.ErrMalformedPDF].
+var ErrPageNotAddressable = fmt.Errorf("%w: page has no indirect reference", document.ErrMalformedPDF)
 
 // ErrInvalidPageNumber reports a page number outside [1, pageCount], or an
 // insertion position outside [0, pageCount], of the document a page operation

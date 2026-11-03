@@ -2,6 +2,7 @@ package semantics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -128,6 +129,13 @@ func nameTreeAttachments(
 		return nil, nil
 	}
 	namesDict, err := document.ResolveDict(ctx, doc, namesObj)
+	if errors.Is(err, document.ErrObjectNotFound) {
+		// ISO 32000-1, 7.3.10: a reference to an undefined object is a
+		// reference to null, not an error, so the document has no name
+		// dictionary. A file cut short loses the object this way.
+		doc.Logger.Debug("the catalog /Names names an undefined object", "err", err)
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve /Names: %w", err)
 	}

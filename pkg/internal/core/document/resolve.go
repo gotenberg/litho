@@ -1702,7 +1702,13 @@ func (d *Document) parseNormalObject(ctx context.Context, ref ast.PdfIndirectRef
 		if checkFormat && ctx.Err() == nil {
 			d.RecordFormatViolations(ref.ObjectNum, formatViolations...)
 		}
-		return nil, fmt.Errorf("failed to parse object %d at offset %d: %w", ref.ObjectNum, entry.Offset, err)
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("failed to parse object %d at offset %d: %w", ref.ObjectNum, entry.Offset, err)
+		}
+		// An object the cross-reference table locates and that does not
+		// parse breaks ISO 32000-1, 7.3.10: a file cut inside it reads this
+		// way.
+		return nil, fmt.Errorf("%w: failed to parse object %d at offset %d: %w", ErrMalformedPDF, ref.ObjectNum, entry.Offset, err)
 	}
 
 	// Record the object's format violations, header findings first, then the

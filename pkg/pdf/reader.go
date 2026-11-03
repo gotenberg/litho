@@ -634,6 +634,14 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 		}
 	}
 
+	// Every operation starts from the catalog (ISO 32000-1, 7.7.2), and a
+	// document with none reachable is no document: refuse it here rather
+	// than let each method fail, or answer empty, its own way. The catalog
+	// resolves after authentication, since an encrypted one decrypts.
+	if _, err := document.ResolveCatalog(ctx, doc); err != nil {
+		return nil, err
+	}
+
 	if len(o.filters) > 0 {
 		doc.Filters = filter.NewDecoder(o.filters, doc.Limits())
 	}
