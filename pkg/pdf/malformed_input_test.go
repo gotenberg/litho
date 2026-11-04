@@ -12,6 +12,10 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
+// malformedRenderDPI is the resolution the RenderPage entry point draws at: a
+// letter page 9 pixels per inch draws 76 by 99 pixels.
+const malformedRenderDPI = 9
+
 // malformedEntryPoints are the public operations a caller runs on a document,
 // each returning the error it fails with. The document is the Reader r reads.
 var malformedEntryPoints = []struct {
@@ -37,7 +41,13 @@ var malformedEntryPoints = []struct {
 	{"ValidateFacturXReport", func(ctx context.Context, r *Reader) error { _, err := r.ValidateFacturXReport(ctx); return err }},
 	{"DeclaredPDFAPart", func(ctx context.Context, r *Reader) error { _, err := r.DeclaredPDFAPart(ctx); return err }},
 	{"ExtractText", func(ctx context.Context, r *Reader) error { _, err := r.ExtractText(ctx, 1); return err }},
-	{"RenderPage", func(ctx context.Context, r *Reader) error { _, err := r.RenderPage(ctx, 1); return err }},
+	// The resolution decides how many pixels the page fills, not which
+	// objects the drawing reads, so a small raster reaches every error the
+	// default one does.
+	{"RenderPage", func(ctx context.Context, r *Reader) error {
+		_, err := r.RenderPage(ctx, 1, WithRenderDPI(malformedRenderDPI))
+		return err
+	}},
 	{"Writer.RotatePages", func(ctx context.Context, r *Reader) error {
 		w := NewWriter(r)
 		defer w.Close()
@@ -118,6 +128,12 @@ func TestMalformedDocumentIsInvalidInput(t *testing.T) {
 // a caller can only report as its own failure. Cutting the trailer and the
 // catalog used to answer "trailer missing /Root" unclassified, and metadata
 // an empty map.
+//
+// Every cut runs every entry point: a truncation that changes what litho
+// recovers can sit at any byte, so sampling the cuts would leave the next
+// such byte unpinned. The cost of the walk lies in RenderPage filling a
+// default-resolution raster on each cut, so it draws at [malformedRenderDPI]
+// instead.
 func TestTruncatedDocumentIsInvalidInput(t *testing.T) {
 	t.Parallel()
 
