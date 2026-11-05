@@ -2,10 +2,12 @@ package mutations
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"testing"
@@ -430,8 +432,8 @@ func TestFlattenDrawsAValueWithAnOfferedFont(t *testing.T) {
 	if !ok {
 		t.Fatalf("CIDToGIDMap is %v, want a stream", desc["CIDToGIDMap"])
 	}
-	if mapping, err := cidToGID.Bytes(ctx); err != nil || len(mapping) != 12 || mapping[3] != 1 || mapping[11] != 5 {
-		t.Errorf("the CIDToGIDMap holds %x (%v), want codes 1 to 5 mapped to glyphs 1 to 5", mapping, err)
+	if mapping := inflated(t, cidToGID); len(mapping) != 12 || mapping[3] != 1 || mapping[11] != 5 {
+		t.Errorf("the CIDToGIDMap holds %x, want codes 1 to 5 mapped to glyphs 1 to 5", mapping)
 	}
 	fd := flattenPendingDict(t, alloc, desc["FontDescriptor"])
 	if _, ok := fd["FontFile2"]; !ok {
@@ -465,10 +467,32 @@ func TestFlattenDrawsAValueWithAnOpenTypeCFFFont(t *testing.T) {
 	if !ok || ff.Dict["Subtype"] != ast.PdfName("CIDFontType0C") {
 		t.Fatalf("the descriptor embeds no CIDFontType0C FontFile3: %v", fd["FontFile3"])
 	}
-	program, err := ff.Bytes(ctx)
-	if err != nil || len(program) < 4 || program[0] != 1 {
-		t.Errorf("the FontFile3 holds no CFF program: %v", err)
+	if program := inflated(t, ff); len(program) < 4 || program[0] != 1 {
+		t.Errorf("the FontFile3 holds no CFF program: %x", program)
 	}
+}
+
+// inflated returns the bytes of stream, which the flatten writes under
+// FlateDecode.
+func inflated(t *testing.T, stream ast.PdfStream) []byte {
+	t.Helper()
+	if stream.Dict["Filter"] != ast.PdfName("FlateDecode") {
+		t.Fatalf("the stream is filtered by %v, want FlateDecode", stream.Dict["Filter"])
+	}
+	raw, err := stream.Bytes(context.Background())
+	if err != nil {
+		t.Fatalf("reading the stream: %v", err)
+	}
+	r, err := zlib.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("inflating the stream: %v", err)
+	}
+	defer r.Close()
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("inflating the stream: %v", err)
+	}
+	return out
 }
 
 // cyrillicOpenTypeCFF wraps the CFF twin of [cyrillicTrueType] in an OpenType
