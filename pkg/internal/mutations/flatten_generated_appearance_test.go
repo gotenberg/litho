@@ -3,7 +3,10 @@ package mutations
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -11,6 +14,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // flattenDoc builds a one-page document carrying the given widget and returns
@@ -163,25 +168,30 @@ func TestFlattenDropsAnEmptyField(t *testing.T) {
 	}
 }
 
-// TestFlattenKeepsAnEmptyFieldWithACharacteristic is the control: an empty field
-// whose /MK states a background colour still paints it when a viewer builds its
-// appearance (ISO 32000-1, Table 189), so litho, which draws no such box, keeps
-// the widget.
-func TestFlattenKeepsAnEmptyFieldWithACharacteristic(t *testing.T) {
+// TestFlattenDrawsAnEmptyFieldsCharacteristics is the control: an empty field
+// whose /MK states a background or a border colour still paints them when a
+// viewer builds its appearance (ISO 32000-1, Table 189), so the flatten paints
+// them into the page, the background filled and the border stroked at the
+// /BS width, and the widget leaves with the form.
+func TestFlattenDrawsAnEmptyFieldsCharacteristics(t *testing.T) {
 	t.Parallel()
 
 	ctx, doc, alloc := flattenDoc(t,
-		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [10 10 130 30] /MK << /BG [1 1 0] >> >>")
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [10 10 130 30] /MK << /BG [1 1 0] /BC [0] >> /BS << /W 2 >> >>")
 	if err := FlattenForm(ctx, alloc, doc); err != nil {
 		t.Fatalf("FlattenForm: %v", err)
 	}
-
-	page, ok := alloc.Pending()[3].(ast.PdfDict)
-	if !ok {
-		return // The page was left alone entirely, which keeps the widget too.
+	page, drawn := flattenedPage(t, alloc)
+	if annots, _ := page["Annots"].(ast.PdfArray); len(annots) != 0 {
+		t.Errorf("an empty field with a background colour was kept: %v", annots)
 	}
-	if annots, _ := page["Annots"].(ast.PdfArray); len(annots) != 1 {
-		t.Errorf("an empty field with a background colour was dropped: %v", annots)
+	if len(drawn) != 1 {
+		t.Fatalf("the flatten drew %d appearances, want the box", len(drawn))
+	}
+	for _, want := range []string{"1 1 0 rg\n0 0 120 20 re\nf", "0 G\n2 w\n1 1 118 18 re\nS"} {
+		if !strings.Contains(drawn[0], want) {
+			t.Errorf("the appearance %q does not paint %q", drawn[0], want)
+		}
 	}
 }
 
@@ -249,8 +259,8 @@ func TestTextFieldAppearanceSpellsTheFontName(t *testing.T) {
 	catalog := ast.PdfDict{"AcroForm": ast.PdfDict{"DR": ast.PdfDict{"Font": ast.PdfDict{"Helv Bold": font}}}}
 	annot := ast.PdfDict{"DA": ast.PdfString("/Helv#20Bold 9 Tf 0 g")}
 
-	stream, ok := textFieldAppearance(ctx, doc, alloc, catalog, annot, nil, "Ada", 120, 20)
-	if !ok {
+	stream, ok, err := textFieldAppearance(ctx, doc, alloc, catalog, annot, nil, newTextFonts(nil), "", "Ada", 120, 20)
+	if err != nil || !ok {
 		t.Fatal("no appearance was generated")
 	}
 	raw, err := stream.Bytes(ctx)
@@ -279,7 +289,7 @@ func TestTextFieldAppearanceSpellsTheFontName(t *testing.T) {
 
 // TestTextFieldAppearanceRefusesANullFontName pins the one font name no
 // spelling carries: ISO 32000-1, 7.3.5 excludes NUL from every name, so the
-// widget is kept rather than drawn through a name the writer refuses.
+// value is refused rather than drawn through a name the writer refuses.
 func TestTextFieldAppearanceRefusesANullFontName(t *testing.T) {
 	t.Parallel()
 
@@ -289,7 +299,7 @@ func TestTextFieldAppearanceRefusesANullFontName(t *testing.T) {
 	catalog := ast.PdfDict{"AcroForm": ast.PdfDict{"DR": ast.PdfDict{"Font": ast.PdfDict{"F\x001": font}}}}
 	annot := ast.PdfDict{"DA": ast.PdfString("/F#001 9 Tf 0 g")}
 
-	if _, ok := textFieldAppearance(ctx, doc, alloc, catalog, annot, nil, "Ada", 120, 20); ok {
+	if _, ok, err := textFieldAppearance(ctx, doc, alloc, catalog, annot, nil, newTextFonts(nil), "", "Ada", 120, 20); ok || err == nil {
 		t.Error("an appearance was generated through a font name holding NUL")
 	}
 }
@@ -311,39 +321,234 @@ func TestEscapePdfString(t *testing.T) {
 	}
 }
 
-// TestFlattenKeepsAValueItCannotEncode pins that a value the generated
-// appearance's font cannot express leaves the widget in place.
+// TestFlattenRefusesAValueNoFontCovers pins that a value the form's font
+// cannot express, with no other font offered, fails the flatten rather than
+// leaving the widget behind or drawing mojibake.
 //
 // The generated appearance draws through a WinAnsi-encoded font (ISO 32000-1,
 // Annex D.2), which covers Latin text and nothing else. Writing the value's
 // UTF-8 bytes anyway would reach a viewer decoded one byte per character, so a
-// Cyrillic value would be drawn as mojibake. Keeping the widget preserves the
-// value instead.
+// Cyrillic value would be drawn as mojibake. Keeping the widget preserved the
+// value, but left a form field in a document the flatten promised had none,
+// and the widget outlived the form that gave it meaning.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue12963.pdf: carries the Cyrillic value "СУВОРОВ", which would
 //     have been drawn as mojibake.
-func TestFlattenKeepsAValueItCannotEncode(t *testing.T) {
+func TestFlattenRefusesAValueNoFontCovers(t *testing.T) {
 	t.Parallel()
-
 	ctx, doc, alloc := flattenDoc(t,
 		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (СУВОРОВ) /Rect [10 10 130 30] >>")
-	if err := FlattenForm(ctx, alloc, doc); err != nil {
-		t.Fatalf("FlattenForm: %v", err)
+	err := FlattenForm(ctx, alloc, doc)
+	if !errors.Is(err, ErrFlattenIncomplete) || !errors.Is(err, ErrNoFontCovers) {
+		t.Fatalf("FlattenForm returned %v, want ErrFlattenIncomplete wrapping ErrNoFontCovers", err)
 	}
+	for _, want := range []string{`"name"`, `'С'`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error %q does not name %s", err, want)
+		}
+	}
+}
 
-	page, ok := alloc.Pending()[3].(ast.PdfDict)
+// cyrillicGlyphs returns one glyph per distinct letter of "СУВОРОВ".
+func cyrillicGlyphs() []fontbuild.Glyph {
+	var glyphs []fontbuild.Glyph
+	seen := map[rune]bool{}
+	for _, r := range "СУВОРОВ" {
+		if seen[r] {
+			continue
+		}
+		seen[r] = true
+		glyphs = append(glyphs, fontbuild.Glyph{Name: fmt.Sprintf("uni%04X", r), Unicode: r, Advance: 600})
+	}
+	return glyphs
+}
+
+// cyrillicTrueType builds a TrueType program whose glyphs cover the Cyrillic
+// letters of "СУВОРОВ" and nothing Latin.
+func cyrillicTrueType() []byte {
+	return fontbuild.TrueType{PostScriptName: "TestSans", Family: "Test Sans", Subfamily: "Regular", Glyphs: cyrillicGlyphs(), NotdefAdvance: 500}.Build()
+}
+
+// offering returns a [TextFontSource] offering programs in that order.
+func offering(programs ...[]byte) TextFontSource {
+	return func(context.Context, TextFontRequest) ([]TextFontCandidate, error) {
+		out := make([]TextFontCandidate, len(programs))
+		for i, p := range programs {
+			out[i] = func(context.Context) ([]byte, error) { return p, nil }
+		}
+		return out, nil
+	}
+}
+
+// TestFlattenDrawsAValueWithAnOfferedFont pins the other way out: a program
+// offered for the text draws it, embedded as an Identity-H Type0 font whose
+// codes are glyph IDs, subset to the glyphs the value uses, with a ToUnicode
+// CMap, so the value shows and extracts. A program that does not cover the
+// text gives way to one that does.
+func TestFlattenDrawsAValueWithAnOfferedFont(t *testing.T) {
+	t.Parallel()
+	ctx, doc, alloc := flattenDoc(t,
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (СУВОРОВ) /Rect [10 10 130 30] >>")
+	latin := fontbuild.TrueType{PostScriptName: "LatinOnly", Family: "Latin Only", Subfamily: "Regular",
+		Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 600}}, NotdefAdvance: 500}.Build()
+	if err := FlattenFormWith(ctx, alloc, doc, FlattenOptions{Fonts: offering(latin, cyrillicTrueType())}); err != nil {
+		t.Fatalf("FlattenFormWith: %v", err)
+	}
+	page, drawn := flattenedPage(t, alloc)
+	if annots, _ := page["Annots"].(ast.PdfArray); len(annots) != 0 {
+		t.Errorf("the widget was kept: %v", annots)
+	}
+	if len(drawn) != 1 {
+		t.Fatalf("the flatten drew %d appearances, want 1", len(drawn))
+	}
+	// Five distinct letters, GIDs 1 to 5 in first-use order: С У В О Р, the
+	// repeated О and В mapped back to their glyphs.
+	if want := "<0001000200030004000500040003> Tj"; !strings.Contains(drawn[0], want) {
+		t.Errorf("the value was not drawn as glyph IDs: %q", drawn[0])
+	}
+	font := embeddedType0(t, alloc)
+	if font["Encoding"] != ast.PdfName("Identity-H") {
+		t.Errorf("the font's encoding is %v, want Identity-H", font["Encoding"])
+	}
+	base, _ := font["BaseFont"].(ast.PdfName)
+	if !strings.HasSuffix(string(base), "+TestSans") || len(base) != len("ABCDEF+TestSans") {
+		t.Errorf("the font is %q, want a subset of TestSans with a six-letter tag", base)
+	}
+	if _, ok := font["ToUnicode"].(ast.PdfIndirectRef); !ok {
+		t.Error("the font carries no ToUnicode CMap")
+	}
+	desc := descendantOf(t, alloc, font)
+	if desc["Subtype"] != ast.PdfName("CIDFontType2") {
+		t.Errorf("the descendant is %v, want a CIDFontType2", desc)
+	}
+	// Five codes, each mapped to a glyph of the renumbered subset: .notdef
+	// then the five letters, in the order the subset numbers them.
+	ref, _ := desc["CIDToGIDMap"].(ast.PdfIndirectRef)
+	cidToGID, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfStream)
 	if !ok {
-		return // The page was left alone, which also keeps the widget.
+		t.Fatalf("CIDToGIDMap is %v, want a stream", desc["CIDToGIDMap"])
 	}
-	if annots, _ := page["Annots"].(ast.PdfArray); len(annots) != 1 {
-		t.Errorf("the widget was dropped for a value that cannot be drawn: %v", annots)
+	if mapping, err := cidToGID.Bytes(ctx); err != nil || len(mapping) != 12 || mapping[3] != 1 || mapping[11] != 5 {
+		t.Errorf("the CIDToGIDMap holds %x (%v), want codes 1 to 5 mapped to glyphs 1 to 5", mapping, err)
 	}
-	res, _ := page["Resources"].(ast.PdfDict)
-	if xobjs, _ := res["XObject"].(ast.PdfDict); len(xobjs) != 0 {
-		t.Errorf("something was drawn for an unencodable value: %v", xobjs)
+	fd := flattenPendingDict(t, alloc, desc["FontDescriptor"])
+	if _, ok := fd["FontFile2"]; !ok {
+		t.Error("the descriptor embeds no FontFile2")
 	}
+}
+
+// TestFlattenDrawsAValueWithAnOpenTypeCFFFont pins the CFF path: an OpenType
+// program with CFF outlines is embedded as a CIDFontType0 over its CFF table
+// (ISO 32000-1, 9.9, Table 126), its codes the glyph IDs a name-keyed program
+// takes as CIDs (9.7.4.2).
+func TestFlattenDrawsAValueWithAnOpenTypeCFFFont(t *testing.T) {
+	t.Parallel()
+	ctx, doc, alloc := flattenDoc(t,
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (СУВОРОВ) /Rect [10 10 130 30] >>")
+	if err := FlattenFormWith(ctx, alloc, doc, FlattenOptions{Fonts: offering(cyrillicOpenTypeCFF())}); err != nil {
+		t.Fatalf("FlattenFormWith: %v", err)
+	}
+	_, drawn := flattenedPage(t, alloc)
+	if len(drawn) != 1 || !strings.Contains(drawn[0], "<0001000200030004000500040003> Tj") {
+		t.Fatalf("the value was not drawn as glyph IDs: %v", drawn)
+	}
+	font := embeddedType0(t, alloc)
+	desc := descendantOf(t, alloc, font)
+	if desc["Subtype"] != ast.PdfName("CIDFontType0") {
+		t.Errorf("the descendant is a %v, want CIDFontType0", desc["Subtype"])
+	}
+	fd := flattenPendingDict(t, alloc, desc["FontDescriptor"])
+	ref, _ := fd["FontFile3"].(ast.PdfIndirectRef)
+	ff, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfStream)
+	if !ok || ff.Dict["Subtype"] != ast.PdfName("CIDFontType0C") {
+		t.Fatalf("the descriptor embeds no CIDFontType0C FontFile3: %v", fd["FontFile3"])
+	}
+	program, err := ff.Bytes(ctx)
+	if err != nil || len(program) < 4 || program[0] != 1 {
+		t.Errorf("the FontFile3 holds no CFF program: %v", err)
+	}
+}
+
+// cyrillicOpenTypeCFF wraps the CFF twin of [cyrillicTrueType] in an OpenType
+// program: the TrueType's tables but glyf and loca, with the CFF table in
+// their place (OpenType specification, CFF table).
+func cyrillicOpenTypeCFF() []byte {
+	glyphs := cyrillicGlyphs()
+	ttf := fontbuild.TrueType{PostScriptName: "TestSerif", Family: "Test Serif", Subfamily: "Regular", Glyphs: glyphs, NotdefAdvance: 500}.Build()
+	cffData := fontbuild.CFF{FontName: "TestSerif", Glyphs: glyphs, NotdefAdvance: 500}.Build()
+	records, err := truetype.ParseTableDirectory(ttf)
+	if err != nil {
+		panic(err)
+	}
+	tables := map[string][]byte{"CFF ": cffData}
+	for _, rec := range records {
+		if rec.Tag == "glyf" || rec.Tag == "loca" {
+			continue
+		}
+		data, err := truetype.TableData(ttf, records, rec.Tag)
+		if err != nil {
+			panic(err)
+		}
+		tables[rec.Tag] = data
+	}
+	tags := make([]string, 0, len(tables))
+	for tag := range tables {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	var out, body bytes.Buffer
+	out.WriteString("OTTO")
+	_ = binary.Write(&out, binary.BigEndian, uint16(len(tags))) //nolint:gosec // a handful of tables
+	_ = binary.Write(&out, binary.BigEndian, [3]uint16{0, 0, 0})
+	offset := 12 + 16*len(tags)
+	for _, tag := range tags {
+		data := tables[tag]
+		out.WriteString(tag)
+		_ = binary.Write(&out, binary.BigEndian, uint32(0))
+		_ = binary.Write(&out, binary.BigEndian, uint32(offset+body.Len())) //nolint:gosec // a test program of a few hundred bytes
+		_ = binary.Write(&out, binary.BigEndian, uint32(len(data)))         //nolint:gosec // a test program of a few hundred bytes
+		body.Write(data)
+		for body.Len()%4 != 0 {
+			body.WriteByte(0)
+		}
+	}
+	out.Write(body.Bytes())
+	return out.Bytes()
+}
+
+// embeddedType0 returns the one Type0 font pending in alloc.
+func embeddedType0(t *testing.T, alloc *writer.ObjAllocator) ast.PdfDict {
+	t.Helper()
+	for _, obj := range alloc.Pending() {
+		if dict, ok := obj.(ast.PdfDict); ok && dict["Subtype"] == ast.PdfName("Type0") {
+			return dict
+		}
+	}
+	t.Fatal("no Type0 font was allocated")
+	return nil
+}
+
+// descendantOf returns the descendant CIDFont of a Type0 font.
+func descendantOf(t *testing.T, alloc *writer.ObjAllocator, font ast.PdfDict) ast.PdfDict {
+	t.Helper()
+	desc, _ := font["DescendantFonts"].(ast.PdfArray)
+	if len(desc) != 1 {
+		t.Fatalf("the Type0 font has %d descendants, want 1", len(desc))
+	}
+	return flattenPendingDict(t, alloc, desc[0])
+}
+
+// flattenPendingDict returns the dictionary ref names in alloc.
+func flattenPendingDict(t *testing.T, alloc *writer.ObjAllocator, ref ast.PdfObject) ast.PdfDict {
+	t.Helper()
+	r, _ := ref.(ast.PdfIndirectRef)
+	dict, ok := alloc.Pending()[r.ObjectNum].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("%v is not a pending dictionary", ref)
+	}
+	return dict
 }
 
 // TestFlattenDrawsAccentedLatinCorrectly pins that a value WinAnsi does cover

@@ -35,6 +35,10 @@ type TextStampOptions struct {
 	// /BaseFont name (e.g., "Helvetica", "Times-Roman"). Ignored if
 	// TTFBytes is set.
 	StandardFont ast.PdfName
+	// Fonts offers the programs that draw the text when StandardFont cannot:
+	// text outside WinAnsiEncoding. Nil offers none, and such text fails
+	// with [ErrTextNotEncodable]. Ignored if TTFBytes is set.
+	Fonts TextFontSource
 	// TTFBytes embeds a TrueType font file. When set, the stamp uses a
 	// Type0 composite font with Identity-H encoding and a generated
 	// ToUnicode CMap.
@@ -141,10 +145,24 @@ func StampText(
 		// encoding cannot express is refused rather than handed a corrupted
 		// page.
 		winAnsi, encodable := winAnsiEncode(opts.Text)
-		if !encodable {
+		switch {
+		case encodable:
+			encoded = "(" + escapePDFString(string(winAnsi)) + ")"
+		case opts.Fonts == nil:
 			return CheckStandardFontText(opts.Text)
+		default:
+			// A program the fonts offer that covers the text draws it,
+			// embedded as a Type0 font matched to the standard font's family.
+			fonts := newTextFonts(opts.Fonts)
+			drawn, err := fonts.draw(ctx, alloc, doc, TextFontRequest{StandardFont: string(baseFont), Text: opts.Text})
+			if err != nil {
+				return err
+			}
+			if err := fonts.finish(ctx, alloc, doc); err != nil {
+				return err
+			}
+			fontRef, fontResName, encoded = drawn.ref, ast.PdfName(drawn.resName), drawn.encoded
 		}
-		encoded = "(" + escapePDFString(string(winAnsi)) + ")"
 	}
 
 	extGSName, extGSRef := buildExtGState(alloc, opts.Opacity)

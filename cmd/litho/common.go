@@ -225,6 +225,17 @@ type simpleMutationConfig struct {
 	compact               bool
 	skipEncryptionWarning bool
 	afterWrite            func()
+	// textFonts, when set, gives the command the --font-dir and
+	// --system-fonts flags and runs in place of mutate, with the fonts they
+	// offer.
+	textFonts func(*pdf.Writer, pdf.FontSource)
+}
+
+// withTextFontFlags gives the command the --font-dir and --system-fonts flags
+// (see [textFontFlags]) and runs mutate with the fonts they offer, in place of
+// the mutation the command names.
+func withTextFontFlags(mutate func(*pdf.Writer, pdf.FontSource)) simpleMutationOption {
+	return func(c *simpleMutationConfig) { c.textFonts = mutate }
 }
 
 // withAfterWrite runs report once the output is written and closed.
@@ -280,9 +291,22 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 		f := registerCompactFlags(fs)
 		compactFlags = &f
 	}
+	var fontFlags textFontFlags
+	if cmdCfg.textFonts != nil {
+		fontFlags = registerTextFontFlags(fs)
+	}
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
+	}
+	var textFonts pdf.FontSource
+	if cmdCfg.textFonts != nil {
+		src, err := fontFlags.source()
+		if err != nil {
+			fmt.Fprintf(stderr, "%v\n", err)
+			return exitError
+		}
+		textFonts = src
 	}
 
 	if fs.NArg() < 1 || *output == "" {
@@ -305,7 +329,11 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 
 	w := pdf.NewWriter(r, defaultPageSize.writeOptions()...)
 	defer releaseWriter(w, stderr)
-	mutate(w)
+	if cmdCfg.textFonts != nil {
+		cmdCfg.textFonts(w, textFonts)
+	} else {
+		mutate(w)
+	}
 
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {

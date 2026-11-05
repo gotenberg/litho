@@ -189,6 +189,7 @@
 //   - [Writer.FlattenTransparency] takes [FlattenOption]: [WithFlattenDPI],
 //     [WithFlattenPrintedAnnotations], [WithFlattenJPEGQuality],
 //     [WithFlattenOverprintSimulation].
+//   - [Writer.FlattenForm] takes [FlattenFormOption]: [WithFlattenFonts].
 //   - [Pipeline.Apply] takes [ApplyOption]: [WithEditLabel].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced

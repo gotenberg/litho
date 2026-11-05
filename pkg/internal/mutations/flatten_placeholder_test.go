@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -95,46 +96,23 @@ func flattenPlaceholder(t *testing.T, draws bool) (kept bool, keptHasAP bool) {
 	return true, hasAP
 }
 
-// TestFlattenKeepsAValueTheAppearanceCannotCarry pins that a field whose stored
-// appearance paints nothing survives the flatten, and loses the placeholder.
+// TestFlattenDrawsAValueTheAppearanceCannotCarry pins that a field whose
+// stored appearance paints nothing is drawn from its value, and leaves the
+// document with the form.
 //
 // A form asking viewers to build appearances (ISO 32000-1, 12.7.3.3) stores
 // placeholders. Baking one in writes an empty stream into the page and deletes
-// the widget, so the value leaves the document. Keeping the widget is not
+// the widget, so the value leaves the document. Keeping the widget was not
 // enough either, because the placeholder is then what a viewer draws once the
-// form is gone; removing it lets the viewer generate from /V again.
+// form is gone, and the widget outlived the form that gave it meaning: the
+// value is drawn as a viewer generating the appearance would draw it.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue12233.pdf: baking the placeholders lost "Man", "150" and
 //     "Red".
-func TestFlattenKeepsAValueTheAppearanceCannotCarry(t *testing.T) {
+func TestFlattenDrawsAValueTheAppearanceCannotCarry(t *testing.T) {
 	t.Parallel()
-
-	kept, hasAP := flattenPlaceholder(t, false)
-	if !kept {
-		t.Fatal("the widget was flattened away, taking its value with it")
-	}
-	if hasAP {
-		t.Error("the kept widget still carries the placeholder, which a viewer draws instead of the value")
-	}
-}
-
-// TestFlattenCarriesTheInheritedDefaultAppearance pins that a widget kept in
-// place takes the form's /DA with it.
-//
-// A field inherits its default appearance from /AcroForm (ISO 32000-1,
-// 12.7.3.3), and flattening removes the form. Leaving the widget behind without
-// the string gives a viewer nothing to draw the value with.
-//
-// # Corpus evidence
-//
-//   - litho sigcms_2b.pdf: has a text field carrying "not a signature" and no
-//     /DA of its own, and removing the form alone dropped it from the page.
-//     Deleting /AcroForm from the untouched input loses the same text.
-func TestFlattenCarriesTheInheritedDefaultAppearance(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	data := placeholderFormPDF(false)
 	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
@@ -145,25 +123,31 @@ func TestFlattenCarriesTheInheritedDefaultAppearance(t *testing.T) {
 	if err := FlattenForm(ctx, alloc, doc); err != nil {
 		t.Fatalf("FlattenForm: %v", err)
 	}
-	widget, ok := alloc.Pending()[4].(ast.PdfDict)
-	if !ok {
-		t.Fatalf("the kept widget was not rewritten: %T", alloc.Pending()[4])
+	page, drawn := flattenedPage(t, alloc)
+	if annots, _ := page["Annots"].(ast.PdfArray); len(annots) != 0 {
+		t.Errorf("the widget was kept: %v", annots)
 	}
-	da, ok := widget["DA"].(ast.PdfString)
-	if !ok {
-		t.Fatalf("/DA = %v, want the string inherited from the form", widget["DA"])
+	if len(drawn) != 1 || !strings.Contains(drawn[0], " Tj") {
+		t.Fatalf("the value was not drawn into the page: %v", drawn)
 	}
-	if string(da) != "/Helv 9 Tf 0 g" {
-		t.Errorf("/DA = %q, want the form's default appearance", da)
+	// The appearance draws the value with the form's default appearance,
+	// which the field inherits (ISO 32000-1, 12.7.3.3), form or no form.
+	//
+	// # Corpus evidence
+	//
+	//   - litho sigcms_2b.pdf: has a text field carrying "not a signature" and
+	//     no /DA of its own, and removing the form alone dropped it from the
+	//     page.
+	if !strings.Contains(drawn[0], " 9 Tf") {
+		t.Errorf("the value is not drawn at the form's default size: %q", drawn[0])
 	}
 }
 
-// TestFlattenStillBakesADrawnAppearance pins the other side: an appearance that
-// already paints the value is baked in and the widget removed, as before.
-func TestFlattenStillBakesADrawnAppearance(t *testing.T) {
+// TestFlattenBakesAnAppearanceThatCarriesItsValue is the control: a stored
+// appearance that does show the value is baked as it is.
+func TestFlattenBakesAnAppearanceThatCarriesItsValue(t *testing.T) {
 	t.Parallel()
-
 	if kept, _ := flattenPlaceholder(t, true); kept {
-		t.Error("an appearance that draws its own value should still be flattened into the page")
+		t.Error("a widget whose appearance shows its value was kept")
 	}
 }

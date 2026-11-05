@@ -29,6 +29,8 @@ var notARedactionRefusal = map[string]string{
 	"ErrFormFieldNotFound":             "SetFormField",
 	"ErrFormFieldValue":                "SetFormField and SetFormFieldValues",
 	"ErrTextNotEncodable":              "StampText and CheckStandardFontText",
+	"ErrNoFontCovers":                  "StampText and FlattenFormWith, through the fonts a TextFontSource offers",
+	"ErrFlattenIncomplete":             "FlattenFormWith",
 	"ErrInvalidImage":                  "StampImage and CheckStampImage",
 	"ErrNoPageLeft":                    "DeletePages",
 	"ErrOutlineItemNotAddressable":     "ScrubOutlineTitles",

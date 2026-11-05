@@ -424,6 +424,16 @@ var ErrFormFieldNotFound = errors.New("form field not found")
 // value.
 var ErrFormFieldValue = errors.New("value the form field cannot hold")
 
+// ErrNoFontCovers reports a line of text no program the fonts offered cover,
+// wrapped with the characters none has. pdf.ErrNoFontCovers is this value.
+var ErrNoFontCovers = errors.New("no font covers the text")
+
+// ErrFlattenIncomplete reports a form field [FlattenForm] could not draw into
+// its page, wrapped with the field's name and the reason. A flatten that kept
+// the field would promise a document without a form and hand over one whose
+// widget outlives it. pdf.ErrFlattenIncomplete is this value.
+var ErrFlattenIncomplete = errors.New("the form cannot be flattened in full")
+
 // ErrTextNotEncodable reports stamp text a standard font cannot draw.
 //
 // [StampText] writes a standard font's text in WinAnsiEncoding (ISO 32000-1,

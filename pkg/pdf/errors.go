@@ -170,9 +170,21 @@ var (
 	// ErrTextNotEncodable is returned, wrapped, by [Writer.StampText] when the
 	// stamp uses a standard font and its text holds a character outside
 	// WinAnsiEncoding (ISO 32000-1, Annex D.2), the encoding a standard font's
-	// text is written in. A font that covers the text, given in
-	// [TextStamp.Font], stamps it.
+	// text is written in, and the stamp offers no other font. A font that
+	// covers the text, given in [TextStamp.Font] or offered by
+	// [TextStamp.Fonts], stamps it.
 	ErrTextNotEncodable = mutations.ErrTextNotEncodable
+
+	// ErrNoFontCovers is returned, wrapped with the characters no program
+	// has, by [Writer.WriteTo] when a [FontSource] offers no program that
+	// covers a line of text a stamp or a flattened field draws.
+	ErrNoFontCovers = mutations.ErrNoFontCovers
+
+	// ErrFlattenIncomplete is returned, wrapped with the field's name and the
+	// reason, by [Writer.WriteTo] when [Writer.FlattenForm] cannot draw a
+	// field's value into its page: a value no font covers, most often. Nothing
+	// is written in that case.
+	ErrFlattenIncomplete = mutations.ErrFlattenIncomplete
 
 	// ErrNoPageLeft is returned, wrapped, by [Writer.WriteTo] when the
 	// deletions [Writer.DeletePages] queued, together with the insertions
@@ -926,6 +938,8 @@ var invalidInputErrors = []error{
 	ErrInvalidFont,
 	ErrInvalidImage,
 	ErrTextNotEncodable,
+	ErrNoFontCovers,
+	ErrFlattenIncomplete,
 	ErrNoPageLeft,
 	ErrSourceIndexOutOfRange,
 	ErrInvalidPageSize,

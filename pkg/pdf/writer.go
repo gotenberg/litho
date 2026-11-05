@@ -750,6 +750,11 @@ type TextStamp struct {
 	// package variables, or with [NewTTFFont] to embed a custom TrueType
 	// font.
 	Font StampFont
+	// Fonts offers the programs that draw Text when Font is a standard font
+	// and Text holds a character outside WinAnsiEncoding, which such a font
+	// cannot draw (see [FontSource]). The zero value offers none, and such a
+	// Text fails with [ErrTextNotEncodable].
+	Fonts FontSource
 	// Color is the RGB fill color (0.0-1.0 components). Zero draws black.
 	Color [3]float64
 	// Rotation is the counter-clockwise rotation in degrees around (X, Y).
@@ -2111,13 +2116,29 @@ func (w *Writer) SetFormFieldValues(name string, values []string) {
 // 14289-2, 8.2.2 then require the content to be tagged or an artifact, and
 // each one is marked as an artifact (ISO 32000-1, 14.8.2.2), which
 // [WithArtifacts] extracts.
-func (w *Writer) FlattenForm() {
+//
+// A widget that stores no appearance, or a placeholder the form asks the
+// viewer to regenerate, is drawn from the value the field holds and the
+// colours its /MK states (ISO 32000-1, 12.7.3.3 and 12.5.6.19), as a viewer
+// draws it: a text or choice field's value on one line, in the font its /DA
+// names, a checked button's tick. A value outside WinAnsiEncoding is drawn
+// with a program the fonts of [WithFlattenFonts] offer. A value no font draws
+// fails [Writer.WriteTo] with [ErrFlattenIncomplete], naming the field, and
+// writes nothing: a flatten that kept the field would promise a document
+// without a form and hand over one whose widget outlives it.
+func (w *Writer) FlattenForm(opts ...FlattenFormOption) {
 	if w.refuseAfterRemediation("FlattenForm") != nil {
 		return
 	}
+	var cfg flattenFormOpts
+	for _, o := range opts {
+		o(&cfg)
+	}
 	w.forceRewrite = true
 	w.queue("FlattenForm", mutation{
-		apply: mutations.FlattenForm,
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			return mutations.FlattenFormWith(ctx, alloc, doc, mutations.FlattenOptions{Fonts: cfg.fonts.source})
+		},
 	})
 }
 
@@ -2155,7 +2176,7 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	if stamp.Text == "" {
 		return ErrEmptyText
 	}
-	if len(stamp.Font.ttf) == 0 {
+	if len(stamp.Font.ttf) == 0 && stamp.Fonts.source == nil {
 		if err := mutations.CheckStandardFontText(stamp.Text); err != nil {
 			return err
 		}
@@ -2283,6 +2304,7 @@ func textStampToOptions(s TextStamp) mutations.TextStampOptions {
 			name = "Helvetica"
 		}
 		opts.StandardFont = ast.PdfName(name)
+		opts.Fonts = s.Fonts.source
 	}
 	return opts
 }

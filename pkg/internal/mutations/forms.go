@@ -3,6 +3,7 @@ package mutations
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -528,7 +529,27 @@ func searchKids(ctx context.Context, doc *document.Document, alloc *writer.ObjAl
 //   - pdfjs 160F-2019.pdf: flattened after a PDF/A-2b remediation, it
 //     validated to 42 violations, against 3 when the remediated file is
 //     flattened on its own.
+//
+// FlattenOptions tunes [FlattenFormWith].
+type FlattenOptions struct {
+	// Fonts offers the programs that draw a field's value when the standard
+	// fonts cannot: a value outside WinAnsiEncoding. Nil offers none, and such
+	// a value fails the flatten with [ErrFlattenIncomplete].
+	Fonts TextFontSource
+}
+
+// FlattenForm is [FlattenFormWith] with no options.
 func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+	return FlattenFormWith(ctx, alloc, doc, FlattenOptions{})
+}
+
+// FlattenFormWith bakes every widget of the document into its page and
+// removes the form. A widget that stores no appearance, or a placeholder the
+// form asks the viewer to regenerate, is drawn from the value the field holds
+// (ISO 32000-1, 12.7.3.3) and the colours its /MK states (12.5.6.19). A value
+// litho cannot draw fails the flatten with [ErrFlattenIncomplete], naming the
+// field: a kept widget would outlive the form it belonged to.
+func FlattenFormWith(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts FlattenOptions) error {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
@@ -541,7 +562,7 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	// Read the flag before the form goes: it decides whether the stored
 	// appearances are authoritative (see [flattenPageAnnotations]).
 	regenerated := formNeedsAppearances(ctx, doc, alloc, catalogDict)
-	// The default appearance string a kept widget inherits from the form, which
+	// The default appearance string a widget inherits from the form, which
 	// the form's removal would otherwise take with it.
 	inheritedDA := formDefaultAppearance(ctx, doc, alloc, catalogDict)
 	// A tagged document's structure tree has to follow the widgets out.
@@ -549,6 +570,7 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	if tags == nil {
 		tags = untaggedTags(ctx, doc, catalogDict)
 	}
+	fonts := newTextFonts(opts.Fonts)
 
 	// Remove /AcroForm from the catalog.
 	newCatalog := make(ast.PdfDict, len(catalogDict))
@@ -572,7 +594,12 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	}
 
 	for _, page := range pages {
-		flattenPageAnnotations(ctx, doc, alloc, page, regenerated, inheritedDA, catalogDict, tags)
+		if err := flattenPageAnnotations(ctx, doc, alloc, page, regenerated, inheritedDA, catalogDict, tags, fonts); err != nil {
+			return err
+		}
+	}
+	if err := fonts.finish(ctx, alloc, doc); err != nil {
+		return err
 	}
 
 	return tags.commit(ctx, alloc, doc)
@@ -592,7 +619,8 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 //     behind the values "Man", "150" and "Red". Flattening wrote those empty
 //     streams into the page and then deleted the widgets, so the values left
 //     the document entirely.
-func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page, regenerated bool, inheritedDA ast.PdfObject, catalogDict ast.PdfDict, tags *flattenTags) {
+func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page, regenerated bool, inheritedDA ast.PdfObject, catalogDict ast.PdfDict, tags *flattenTags, fonts *textFonts) error {
+	var failed error
 	flattenPageWidgets(ctx, doc, alloc, page, tags, func(annotObj ast.PdfObject, annotDict ast.PdfDict) (widgetOutcome, ast.PdfStream) {
 		// Only flatten Widget annotations (form fields). Non-widget
 		// annotations (Link, Text, Highlight, ...) are preserved.
@@ -608,44 +636,44 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 			return widgetDropped, ast.PdfStream{}
 		}
 
-		// A widget litho cannot bake into the page keeps its annotation. There is
-		// nothing to draw in its place, so dropping it deletes whatever it showed.
-		// A text field with a value and no /AP at all is rendered by generating
-		// an appearance from /V and /DA (ISO 32000-1, 12.7.3.3), and flattening
-		// it removed the widget and with it every character on the page.
+		// A stored appearance is drawn as the viewer shows it. One that does
+		// not show the value, in a form that asks the viewer to build its
+		// appearances, is a placeholder: baking it in loses the value it
+		// stands for, so the value is drawn instead. A widget with no
+		// appearance at all is drawn from its value too, the way a viewer
+		// would (ISO 32000-1, 12.7.3.3); `set-form` produces exactly that
+		// shape, writing /V and asking for regeneration without an /AP.
 		apStream, ok := resolveWidgetAppearance(ctx, doc, alloc, annotDict)
-		if !ok {
-			// No stored appearance. Draw the value the field holds, the way a
-			// viewer would (ISO 32000-1, 12.7.3.3), so the flatten can finish
-			// rather than leaving the widget behind. `set-form` produces exactly
-			// this shape: it writes /V and asks for regeneration without
-			// building an /AP.
-			generated, built := generatedWidgetAppearance(ctx, doc, alloc, catalogDict, annotDict, inheritedDA)
-			if !built && widgetDrawsNothing(ctx, doc, annotDict) {
-				// Nothing to draw and nothing lost: the widget goes with the
-				// form rather than outliving it as a field.
-				return widgetDropped, ast.PdfStream{}
+		if !ok || (regenerated && valueOutlivesAppearance(ctx, doc, annotDict, apStream)) {
+			generated, built, err := generatedWidgetAppearance(ctx, doc, alloc, catalogDict, annotDict, inheritedDA, fonts)
+			if err != nil {
+				failed = flattenFieldError(ctx, doc, alloc, annotObj, err)
+				return widgetKept, ast.PdfStream{}
 			}
 			if !built {
-				keepWidget(alloc, annotObj, annotDict, inheritedDA)
+				if widgetDrawsNothing(ctx, doc, annotDict) {
+					// Nothing to draw and nothing lost: the widget goes with
+					// the form rather than outliving it as a field.
+					return widgetDropped, ast.PdfStream{}
+				}
+				failed = flattenFieldError(ctx, doc, alloc, annotObj, errors.New("the value cannot be drawn"))
 				return widgetKept, ast.PdfStream{}
 			}
 			apStream = generated
 		}
-
-		// A form that asks the viewer to build its appearances stores
-		// placeholders, and baking one in loses the value it stands for:
-		// flattening wrote the empty streams into the page and then deleted the
-		// widgets, so the values left the document entirely. Keeping the widget
-		// is not enough on its own, because the placeholder it carries is what a
-		// viewer would draw once /NeedAppearances goes with the form; the
-		// placeholder has to go too.
-		if regenerated && valueOutlivesAppearance(ctx, doc, annotDict, apStream) {
-			keepWidget(alloc, annotObj, annotDict, inheritedDA)
-			return widgetKept, ast.PdfStream{}
-		}
 		return widgetBaked, apStream
 	})
+	return failed
+}
+
+// flattenFieldError wraps cause as the [ErrFlattenIncomplete] of the field
+// the widget annotObj presents. A later failure keeps the first.
+func flattenFieldError(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotObj ast.PdfObject, cause error) error {
+	name := "?"
+	if _, _, _, fieldName, ok := widgetFieldIdentity(ctx, doc, alloc, annotObj); ok && fieldName != "" {
+		name = fieldName
+	}
+	return fmt.Errorf("%w: field %q: %w", ErrFlattenIncomplete, name, cause)
 }
 
 // widgetOutcome is what flattening a page does with one of its annotations.
@@ -1103,53 +1131,6 @@ const (
 //   - All corpora: the deepest real /Parent chain is 7.
 const maxFieldAncestorDepth = 32
 
-// keepWidget rewrites a widget the flatten is leaving in place so it can still
-// be drawn once the interactive form is gone.
-//
-// Two things go with /AcroForm. A placeholder appearance that paints nothing is
-// what a viewer draws instead of building one from the field value, so it is
-// removed: ISO 32000-1, 12.7.3.3 has the viewer generate an appearance when the
-// widget stores none. And the default-appearance string is inherited from the
-// form (same clause), so it is copied onto the widget, which is otherwise left
-// with no font or colour to draw with.
-//
-// Only an indirect widget can be rewritten: one inlined in /Annots has no object
-// number to replace.
-//
-// The form's /DR is not carried across, because a resource dictionary has no
-// place on an annotation. A /DA naming one of the standard 14 fonts, which is
-// what these placeholders use, resolves without it.
-//
-// # Corpus evidence
-//
-//   - litho sigcms_2b.pdf: shows the inherited /DA case. Its text field carries
-//     a value and no /DA of its own, and deleting the form alone dropped
-//     "not a signature" from the page.
-func keepWidget(alloc *writer.ObjAllocator, annotObj ast.PdfObject, annotDict ast.PdfDict, inheritedDA ast.PdfObject) {
-	ref, ok := annotObj.(ast.PdfIndirectRef)
-	if !ok {
-		return
-	}
-	_, hasAP := annotDict["AP"]
-	_, hasDA := annotDict["DA"]
-	needsDA := !hasDA && inheritedDA != nil
-	if !hasAP && !needsDA {
-		return
-	}
-
-	updated := make(ast.PdfDict, len(annotDict)+1)
-	for key, value := range annotDict {
-		if key == "AP" {
-			continue
-		}
-		updated[key] = value
-	}
-	if needsDA {
-		updated["DA"] = inheritedDA
-	}
-	alloc.AllocAt(ref.ObjectNum, updated)
-}
-
 // widgetDrawsNothing reports whether a widget that stores no appearance, and
 // that litho could not draw one for, would show nothing on the page anyway.
 //
@@ -1269,11 +1250,17 @@ func generatedAppearance(
 	catalogDict ast.PdfDict,
 	annotDict ast.PdfDict,
 	inheritedDA ast.PdfObject,
+	fonts *textFonts,
 	width, height float64,
-) (ast.PdfStream, bool) {
+) (ast.PdfStream, bool, error) {
 	if width <= 0 || height <= 0 {
-		return ast.PdfStream{}, false
+		return ast.PdfStream{}, false, nil
 	}
+
+	// The background and border /MK states are painted under the value, as
+	// a viewer paints them when it builds the appearance (ISO 32000-1,
+	// 12.5.6.19, Table 189).
+	boxOps := appearanceCharacteristicsOps(ctx, doc, annotDict, width, height)
 
 	fieldType, value := inheritedFieldTypeAndValue(ctx, doc, annotDict)
 	switch fieldType {
@@ -1294,20 +1281,111 @@ func generatedAppearance(
 			text = strings.Join(shown, ", ")
 		}
 		if strings.TrimSpace(text) == "" {
-			return ast.PdfStream{}, false
+			if boxOps == "" {
+				return ast.PdfStream{}, false, nil
+			}
+			return formXObject(boxOps, nil, width, height), true, nil
 		}
-		return textFieldAppearance(ctx, doc, alloc, catalogDict, annotDict, inheritedDA, text, width, height)
+		return textFieldAppearance(ctx, doc, alloc, catalogDict, annotDict, inheritedDA, fonts, boxOps, text, width, height)
 	case "Btn":
 		state := ""
 		if n, ok := value.(ast.PdfName); ok {
 			state = string(n)
 		}
 		if state == "" || state == "Off" {
-			return ast.PdfStream{}, false
+			if boxOps == "" {
+				return ast.PdfStream{}, false, nil
+			}
+			return formXObject(boxOps, nil, width, height), true, nil
 		}
-		return checkMarkAppearance(width, height), true
+		return checkMarkAppearance(boxOps, width, height), true, nil
 	}
-	return ast.PdfStream{}, false
+	if boxOps != "" {
+		return formXObject(boxOps, nil, width, height), true, nil
+	}
+	return ast.PdfStream{}, false, nil
+}
+
+// appearanceCharacteristicsOps draws the background and the border the
+// widget's /MK states, as a viewer does when it builds the appearance (ISO
+// 32000-1, 12.5.6.19, Table 189): the /BG colour fills the box, and the /BC
+// colour strokes its edge at the /BS /W width (12.5.4, Table 166), 1 by
+// default. An empty array is transparent. It returns "" when /MK paints
+// neither.
+func appearanceCharacteristicsOps(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, width, height float64) string {
+	mk, err := document.ResolveDict(ctx, doc, annotDict["MK"])
+	if err != nil || mk == nil {
+		return ""
+	}
+	var ops strings.Builder
+	if fill, ok := colourOperator(ctx, doc, mk["BG"], false); ok {
+		fmt.Fprintf(&ops, "q\n%s\n0 0 %s %s re\nf\nQ\n", fill, formatFloat(width), formatFloat(height))
+	}
+	if stroke, ok := colourOperator(ctx, doc, mk["BC"], true); ok {
+		lineWidth := 1.0
+		if bs, err := document.ResolveDict(ctx, doc, annotDict["BS"]); err == nil && bs != nil {
+			if w, ok := bs["W"]; ok {
+				if v := document.Float(w); v >= 0 {
+					lineWidth = v
+				}
+			}
+		}
+		if lineWidth > 0 {
+			inset := lineWidth / 2
+			fmt.Fprintf(&ops, "q\n%s\n%s w\n%s %s %s %s re\nS\nQ\n", stroke, formatFloat(lineWidth),
+				formatFloat(inset), formatFloat(inset), formatFloat(width-lineWidth), formatFloat(height-lineWidth))
+		}
+	}
+	return ops.String()
+}
+
+// colourOperator returns the operator that sets a colour an /MK array
+// states, for a fill or a stroke: g or G for one component, rg or RG for
+// three, k or K for four (ISO 32000-1, Table 189). It reports false for a
+// missing or empty array, which paints nothing.
+func colourOperator(ctx context.Context, doc *document.Document, obj ast.PdfObject, stroke bool) (string, bool) {
+	arr, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil || len(arr) == 0 {
+		return "", false
+	}
+	var op string
+	switch len(arr) {
+	case 1:
+		op = "g"
+	case 3:
+		op = "rg"
+	case 4:
+		op = "k"
+	default:
+		return "", false
+	}
+	if stroke {
+		op = strings.ToUpper(op)
+	}
+	parts := make([]string, 0, len(arr)+1)
+	for _, c := range arr {
+		parts = append(parts, formatFloat(math.Max(0, math.Min(1, document.Float(c)))))
+	}
+	parts = append(parts, op)
+	return strings.Join(parts, " "), true
+}
+
+// formXObject wraps body, drawn under the fonts resources, as a form XObject
+// of the widget's size.
+func formXObject(body string, fonts ast.PdfDict, width, height float64) ast.PdfStream {
+	dict := ast.PdfDict{
+		"Type":     ast.PdfName("XObject"),
+		"Subtype":  ast.PdfName("Form"),
+		"FormType": ast.PdfInt(1),
+		"BBox": ast.PdfArray{
+			ast.PdfInt(0), ast.PdfInt(0),
+			ast.PdfReal(width), ast.PdfReal(height),
+		},
+	}
+	if len(fonts) > 0 {
+		dict["Resources"] = ast.PdfDict{"Font": fonts}
+	}
+	return ast.NewStream(dict, []byte(body))
 }
 
 // choiceDisplayText returns the text a choice field shows for its value
@@ -1394,16 +1472,17 @@ func textFieldAppearance(
 	catalogDict ast.PdfDict,
 	annotDict ast.PdfDict,
 	inheritedDA ast.PdfObject,
+	fonts *textFonts,
+	boxOps string,
 	text string,
 	width, height float64,
-) (ast.PdfStream, bool) {
+) (ast.PdfStream, bool, error) {
 	da := ""
 	if s, err := document.ResolveString(ctx, doc, annotDict["DA"]); err == nil && s != "" {
 		da = document.DecodePdfString(s)
 	} else if s, ok := inheritedDA.(ast.PdfString); ok {
 		da = document.DecodePdfString(s)
 	}
-
 	fontName, size, colourOps := parseDefaultAppearance(da)
 	if size <= 0 {
 		// An auto-sized field (0 Tf) leaves the size to the viewer. Fit the line
@@ -1419,20 +1498,6 @@ func textFieldAppearance(
 	if colourOps == "" {
 		colourOps = "0 g"
 	}
-
-	// The generated appearance draws through a WinAnsi-encoded font, so the
-	// value has to be expressible in it. A value that is not, such as a
-	// Cyrillic one, would otherwise reach a viewer as raw UTF-8 bytes decoded
-	// one by one through CP1252, i.e. mojibake.
-	// Declining leaves the widget in place, which is what litho did for every
-	// such field before it could draw any of them.
-	encoded, ok := winAnsiEncode(text)
-	if !ok {
-		return ast.PdfStream{}, false
-	}
-
-	fontRes, resourceName := appearanceFont(ctx, doc, alloc, catalogDict, fontName)
-
 	// Sit the baseline so the line is vertically centred in the box, with a
 	// small left inset so the glyphs do not touch the border.
 	baseline := (height - size) / 2
@@ -1441,46 +1506,74 @@ func textFieldAppearance(
 	}
 	baseline += size * baselineDescenderRatio
 
-	// The font name comes from the document's /DA, so it is spelled by the
-	// writer: written raw, a name holding white space, a delimiter or a "#"
-	// reads back as another name (ISO 32000-1, 7.3.5), and the Tf selects no
-	// font. One holding a NUL has no spelling at all, and the widget stays.
-	var fontOperand bytes.Buffer
-	if _, err := writer.SerializeName(&fontOperand, ast.PdfName(resourceName)); err != nil {
-		doc.Logger.Debug("widget /DA names a font with no PDF spelling, keeping the annotation",
-			slog.Any("err", err))
-		return ast.PdfStream{}, false
+	var (
+		fontOperand string
+		showText    string
+		fontRes     ast.PdfDict
+	)
+	// The /DA font draws through WinAnsiEncoding, so the value has to be
+	// expressible in it. A value that is not, such as a Cyrillic one, would
+	// otherwise reach a viewer as raw UTF-8 bytes decoded one by one through
+	// CP1252, i.e. mojibake: it is drawn with a program the fonts offer that
+	// covers it, embedded as a Type0 font, matched to the /DA font's family.
+	if encoded, ok := winAnsiEncode(text); ok {
+		res, resourceName := appearanceFont(ctx, doc, alloc, catalogDict, fontName)
+		// The font name comes from the document's /DA, so it is spelled by the
+		// writer: written raw, a name holding white space, a delimiter or a "#"
+		// reads back as another name (ISO 32000-1, 7.3.5), and the Tf selects no
+		// font. One holding a NUL has no spelling at all, and the widget stays.
+		var operand bytes.Buffer
+		if _, err := writer.SerializeName(&operand, ast.PdfName(resourceName)); err != nil {
+			return ast.PdfStream{}, false, fmt.Errorf("the /DA names a font with no PDF spelling: %w", err)
+		}
+		fontOperand = operand.String()
+		showText = escapePdfString(encoded)
+		fontRes = ast.PdfDict{ast.PdfName(resourceName): res}
+	} else {
+		drawn, err := fonts.draw(ctx, alloc, doc, TextFontRequest{
+			StandardFont: standardFontOf(ctx, doc, alloc, catalogDict, fontName),
+			Text:         text,
+		})
+		if err != nil {
+			return ast.PdfStream{}, false, err
+		}
+		fontOperand = "/" + drawn.resName
+		showText = drawn.encoded
+		fontRes = ast.PdfDict{ast.PdfName(drawn.resName): drawn.ref}
 	}
-
-	body := fmt.Sprintf("/Tx BMC\nq\nBT\n%s\n%s %s Tf\n%s %s Td\n%s Tj\nET\nQ\nEMC\n",
+	body := fmt.Sprintf("%s/Tx BMC\nq\nBT\n%s\n%s %s Tf\n%s %s Td\n%s Tj\nET\nQ\nEMC\n",
+		boxOps,
 		colourOps,
-		fontOperand.String(),
+		fontOperand,
 		formatFloat(size),
 		formatFloat(textInsetX),
 		formatFloat(baseline),
-		escapePdfString(encoded),
+		showText,
 	)
+	return formXObject(body, fontRes, width, height), true, nil
+}
 
-	dict := ast.PdfDict{
-		"Type":     ast.PdfName("XObject"),
-		"Subtype":  ast.PdfName("Form"),
-		"FormType": ast.PdfInt(1),
-		"BBox": ast.PdfArray{
-			ast.PdfInt(0), ast.PdfInt(0),
-			ast.PdfReal(width), ast.PdfReal(height),
-		},
-		"Resources": ast.PdfDict{
-			"Font": ast.PdfDict{ast.PdfName(resourceName): fontRes},
-		},
+// standardFontOf returns the standard 14 font the /DA font fontName stands
+// for, to match a program to: the /BaseFont of the form's /DR font of that
+// name, or Helvetica.
+func standardFontOf(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogDict ast.PdfDict, fontName string) string {
+	res, _ := appearanceFont(ctx, doc, alloc, catalogDict, fontName)
+	dict, err := resolveDictAllocFirst(ctx, alloc, doc, res)
+	if err != nil || dict == nil {
+		return "Helvetica"
 	}
-	return ast.NewStream(dict, []byte(body)), true
+	base, err := document.ResolveName(ctx, doc, dict["BaseFont"])
+	if err != nil || base == "" {
+		return "Helvetica"
+	}
+	return string(base)
 }
 
 // checkMarkAppearance draws the tick a checked button shows, in strokes rather
 // than glyphs so it needs no font.
-func checkMarkAppearance(width, height float64) ast.PdfStream {
+func checkMarkAppearance(boxOps string, width, height float64) ast.PdfStream {
 	inset := math.Min(width, height) * checkMarkInset
-	body := fmt.Sprintf("q\n0 g\n%s w\n1 J\n1 j\n%s %s m\n%s %s l\n%s %s l\nS\nQ\n",
+	body := boxOps + fmt.Sprintf("q\n0 g\n%s w\n1 J\n1 j\n%s %s m\n%s %s l\n%s %s l\nS\nQ\n",
 		formatFloat(math.Max(math.Min(width, height)*checkMarkStroke, 0.5)),
 		formatFloat(inset), formatFloat(height/2),
 		formatFloat(width/2-inset/2), formatFloat(inset),
@@ -1665,13 +1758,16 @@ func generatedWidgetAppearance(
 	catalogDict ast.PdfDict,
 	annotDict ast.PdfDict,
 	inheritedDA ast.PdfObject,
-) (ast.PdfStream, bool) {
+	fonts *textFonts,
+) (ast.PdfStream, bool, error) {
 	rect, err := document.ResolveArray(ctx, doc, annotDict["Rect"])
 	if err != nil || len(rect) < 4 {
-		return ast.PdfStream{}, false
+		// A widget whose /Rect does not resolve has nowhere to be drawn: it
+		// is not built, and the caller decides whether it showed anything.
+		return ast.PdfStream{}, false, nil //nolint:nilerr // an unreadable /Rect is a widget with no place, not a failure of the flatten
 	}
 	rect = document.ResolveRectangle(ctx, doc, rect)
 	width := math.Abs(document.Float(rect[2]) - document.Float(rect[0]))
 	height := math.Abs(document.Float(rect[3]) - document.Float(rect[1]))
-	return generatedAppearance(ctx, doc, alloc, catalogDict, annotDict, inheritedDA, width, height)
+	return generatedAppearance(ctx, doc, alloc, catalogDict, annotDict, inheritedDA, fonts, width, height)
 }

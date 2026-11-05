@@ -1049,8 +1049,18 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		})
 
 	case "flatten-form":
+		fs := flag.NewFlagSet("flatten-form", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		fontFlags := registerTextFontFlags(fs)
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		fonts, err := fontFlags.source()
+		if err != nil {
+			return nil, err
+		}
 		p.Apply(func(_ context.Context, w *pdf.Writer) error {
-			w.FlattenForm()
+			w.FlattenForm(pdf.WithFlattenFonts(fonts))
 			return nil
 		})
 
@@ -1068,6 +1078,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		// to stamp and keep PDF/A conformance: the default standard font is not
 		// embedded, which ISO 19005-2, 6.2.11.4.1 forbids.
 		fontPath := fs.String("font", "", "Path to a TTF font file")
+		fontFlags := registerTextFontFlags(fs)
 		fontSize := fs.Float64("font-size", 36, "Font size")
 		x := fs.Float64("x", 0, "X position")
 		y := fs.Float64("y", 0, "Y position")
@@ -1078,6 +1089,10 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		if *text == "" {
 			return nil, fmt.Errorf("--text is required")
 		}
+		fonts, err := fontFlags.source()
+		if err != nil {
+			return nil, err
+		}
 		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
 			stamp := pdf.TextStamp{
 				Text:     *text,
@@ -1086,6 +1101,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 				Y:        *y,
 				Opacity:  *opacity,
 				Rotation: *rotation,
+				Fonts:    fonts,
 			}
 			if *color != "" {
 				c, err := parseHexColor(*color)

@@ -11,5 +11,6 @@ func runFlattenForm(ctx context.Context, args []string, _ io.Writer, stderr io.W
 	return runSimpleMutation(ctx, args, stderr, "flatten-form",
 		"Usage: litho flatten-form <file> [--compact] [--recompress-images] [--subset-fonts] -o out.pdf",
 		func(w *pdf.Writer) { w.FlattenForm() },
+		withTextFontFlags(func(w *pdf.Writer, fonts pdf.FontSource) { w.FlattenForm(pdf.WithFlattenFonts(fonts)) }),
 		withCompactFlag())
 }

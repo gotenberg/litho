@@ -24,6 +24,7 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 	rotation := fs.Float64("rotation", 0, "Counter-clockwise rotation in degrees")
 	color := fs.String("color", "", "RGB hex color (e.g., #ff0000)")
 	fontPath := fs.String("font", "", "Path to a TTF font file")
+	fontFlags := registerTextFontFlags(fs)
 	fontSize := fs.Float64("font-size", 36, "Font size in points")
 	x := fs.Float64("x", 0, "X position in points from bottom-left")
 	y := fs.Float64("y", 0, "Y position in points from bottom-left")
@@ -69,6 +70,13 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 		}
 		stamp.Font = font
 	}
+
+	fonts, err := fontFlags.source()
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return exitError
+	}
+	stamp.Fonts = fonts
 
 	r, closer, err := openPDF(ctx, fs.Arg(0), *password)
 	if err != nil {
@@ -128,7 +136,7 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 // lives here.
 func fontHint(err error) string {
 	if errors.Is(err, pdf.ErrTextNotEncodable) {
-		return "; supply a TTF with -font to stamp it"
+		return "; supply a TTF with -font, or fonts with --font-dir or --system-fonts, to stamp it"
 	}
 	return ""
 }

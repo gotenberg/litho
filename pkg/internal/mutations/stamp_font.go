@@ -210,6 +210,14 @@ func sanitizePostScriptName(s string) string {
 // CIDFontType2 → Type0 top-level font + ToUnicode CMap. Returns the Type0
 // font ref, which is what a page /Font resource should point at.
 func embedTTFFont(alloc *writer.ObjAllocator, f *embeddedTTF) ast.PdfIndirectRef {
+	ref := alloc.Alloc(ast.PdfNull{})
+	embedTTFFontAt(alloc, f, ref)
+	return ref
+}
+
+// embedTTFFontAt is [embedTTFFont] writing the Type0 font at ref, an object
+// allocated for it, so a caller may hand the font out before it is built.
+func embedTTFFontAt(alloc *writer.ObjAllocator, f *embeddedTTF, ref ast.PdfIndirectRef) {
 	// FontFile2 stream: the raw TTF bytes with /Length1 set to their length.
 	// The stream is uncompressed; the core writer writes it verbatim.
 	fontFileDict := ast.PdfDict{
@@ -262,15 +270,14 @@ func embedTTFFont(alloc *writer.ObjAllocator, f *embeddedTTF) ast.PdfIndirectRef
 	cmapRef := alloc.Alloc(cmapStream)
 
 	// Top-level Type0 font.
-	type0 := ast.PdfDict{
+	alloc.AllocAt(ref.ObjectNum, ast.PdfDict{
 		"Type":            ast.PdfName("Font"),
 		"Subtype":         ast.PdfName("Type0"),
 		"BaseFont":        ast.PdfName(f.postScriptName),
 		"Encoding":        ast.PdfName("Identity-H"),
 		"DescendantFonts": ast.PdfArray{cidFontRef},
 		"ToUnicode":       cmapRef,
-	}
-	return alloc.Alloc(type0)
+	})
 }
 
 // buildCIDWidthArray emits the PDF /W array for a CIDFontType2 font. The
