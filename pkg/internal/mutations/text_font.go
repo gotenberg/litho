@@ -110,16 +110,6 @@ func (f *textFont) code(gid uint16) uint16 {
 	return uint16(cid)
 }
 
-// glyphs returns the glyph IDs text draws, .notdef included.
-func (f *textFont) glyphs(text string, into map[uint16]bool) {
-	into[0] = true
-	for _, r := range text {
-		if gid, ok := f.unicodeToGID[r]; ok {
-			into[gid] = true
-		}
-	}
-}
-
 // subsetTag returns the six uppercase letters a subset's BaseFont starts
 // with (ISO 32000-1, 9.6.4), derived from the glyphs kept so that the same
 // subset of the same program gets the same tag.
@@ -143,8 +133,9 @@ func subsetTag(keep []uint16) string {
 // glyphs kept, whose CIDToGIDMap stream maps each code to its glyph (ISO
 // 32000-1, 9.7.4.2); one with CFF outlines as a CIDFontType0 over the CFF
 // table subset in place, whose codes are the CIDs [textFont.code] gives (9.9,
-// Table 126). Both take the Identity-H encoding and a ToUnicode CMap, so the
-// text extracts and searches. A subset that fails leaves the program whole:
+// Table 126). Both take the Identity-H encoding and a ToUnicode CMap naming
+// the character each glyph was drawn for, so the text extracts and searches
+// as written. A subset that fails leaves the program whole:
 // the output is then larger, never wrong.
 func (s *sharedTextFont) write(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) {
 	f := s.font
@@ -165,7 +156,7 @@ func (s *sharedTextFont) write(ctx context.Context, alloc *writer.ObjAllocator, 
 			if w, ok := f.widths[gid]; ok {
 				sub.widths[gid] = w
 			}
-			if r, ok := f.gidToUnicode[gid]; ok {
+			if r, ok := s.runes[gid]; ok {
 				sub.gidToUnicode[gid] = r
 			}
 		}
@@ -200,7 +191,7 @@ func (s *sharedTextFont) write(ctx context.Context, alloc *writer.ObjAllocator, 
 		if w, ok := f.widths[gid]; ok {
 			widths[cid] = w
 		}
-		if r, ok := f.gidToUnicode[gid]; ok {
+		if r, ok := s.runes[gid]; ok {
 			toUnicode[cid] = r
 		}
 	}
@@ -346,6 +337,11 @@ type sharedTextFont struct {
 	font *textFont
 	ref  ast.PdfIndirectRef
 	keep map[uint16]bool
+	// runes holds the character each glyph was first drawn for, which its
+	// ToUnicode entry names: a glyph two characters share, as a CJK ideograph
+	// and its Kangxi radical do, extracts as the one the text held, not as
+	// the first the program's cmap lists.
+	runes map[uint16]rune
 	// codes maps a glyph ID to its code, and glyphs lists the glyph of each
 	// code from 1, for a TrueType program.
 	codes  map[uint16]uint16
@@ -368,6 +364,22 @@ func (s *sharedTextFont) code(gid uint16) uint16 {
 	c := uint16(len(s.glyphs)) //nolint:gosec // bounded above
 	s.codes[gid] = c
 	return c
+}
+
+// record notes the glyphs text draws, .notdef included, and the character
+// each glyph is first drawn for.
+func (s *sharedTextFont) record(text string) {
+	s.keep[0] = true
+	for _, r := range text {
+		gid, ok := s.font.unicodeToGID[r]
+		if !ok {
+			continue
+		}
+		s.keep[gid] = true
+		if _, seen := s.runes[gid]; !seen {
+			s.runes[gid] = r
+		}
+	}
 }
 
 // encode returns text as a hex string of the codes that select its glyphs.
@@ -438,7 +450,7 @@ func (t *textFonts) draw(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		}
 		missing := font.uncovered(req.Text)
 		if len(missing) == 0 {
-			s := &sharedTextFont{font: font, ref: alloc.Alloc(ast.PdfNull{}), keep: make(map[uint16]bool), codes: make(map[uint16]uint16)}
+			s := &sharedTextFont{font: font, ref: alloc.Alloc(ast.PdfNull{}), keep: make(map[uint16]bool), runes: make(map[uint16]rune), codes: make(map[uint16]uint16)}
 			t.fonts = append(t.fonts, s)
 			return t.use(s, req.Text), nil
 		}
@@ -451,7 +463,7 @@ func (t *textFonts) draw(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 
 // use records the glyphs text draws with s and returns the drawing.
 func (t *textFonts) use(s *sharedTextFont, text string) drawnText {
-	s.font.glyphs(text, s.keep)
+	s.record(text)
 	return drawnText{
 		ref:     s.ref,
 		resName: fmt.Sprintf("TextF%d", s.ref.ObjectNum),

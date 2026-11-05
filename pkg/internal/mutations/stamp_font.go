@@ -102,12 +102,13 @@ func parseTTF(data []byte) (*embeddedTTF, error) {
 	if err != nil {
 		return nil, fmt.Errorf("building glyph → unicode map: %w", err)
 	}
-
-	unicodeToGID := make(map[rune]uint16, len(gidToUnicode))
-	for gid, r := range gidToUnicode {
-		if _, exists := unicodeToGID[r]; !exists {
-			unicodeToGID[r] = gid
-		}
+	// Read in its own direction rather than inverted from gidToUnicode, which
+	// keeps one code point per glyph: a character whose glyph another
+	// character shares, as a CJK ideograph shares its Kangxi radical's, has to
+	// resolve too.
+	unicodeToGID, err := truetype.UnicodeToGID(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("building unicode → glyph map: %w", err)
 	}
 
 	psName := readPostScriptName(data, records)

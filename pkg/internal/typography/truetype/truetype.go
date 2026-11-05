@@ -154,7 +154,9 @@ func NumGlyphs(data []byte) (int, error) {
 
 // CharCodeToGID extracts a character code → glyph ID mapping from the cmap
 // table. This is the inverse of [GlyphToUnicode]: it maps Unicode code points
-// (used as character codes in PDF TrueType fonts) to glyph IDs.
+// (used as character codes in PDF TrueType fonts) to glyph IDs. A code point
+// whose glyph another code point shares is missing from it, as it is from
+// [GlyphToUnicode]; [UnicodeToGID] holds every code point the subtable maps.
 func CharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	gidToRune, err := GlyphToUnicode(ctx, data)
 	if err != nil {
@@ -204,6 +206,41 @@ func GlyphToUnicode(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	}
 
 	return parseCmap(ctx, cmapData)
+}
+
+// UnicodeToGID returns the code point to glyph ID map of the Unicode cmap
+// subtable [GlyphToUnicode] reads, holding every code point the subtable
+// maps. [CharCodeToGID] inverts [GlyphToUnicode], which keeps one code point
+// per glyph, so a code point whose glyph another code point shares is missing
+// from it: a CJK ideograph and the Kangxi radical drawn with the same glyph,
+// or a letter and its compatibility form. Drawing text needs the code point
+// the text holds, so this reads the subtable in its own direction. A code
+// past the Unicode range is left out.
+func UnicodeToGID(ctx context.Context, data []byte) (map[rune]uint16, error) {
+	records, err := ParseTableDirectory(data)
+	if err != nil {
+		return nil, err
+	}
+	cmapData, err := TableData(data, records, "cmap")
+	if err != nil {
+		return nil, err
+	}
+	subtable, err := unicodeCmapSubtable(cmapData)
+	if err != nil {
+		return nil, err
+	}
+	codes, _, err := decodeCmapSubtable(ctx, subtable)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[rune]uint16, len(codes))
+	for code, gid := range codes {
+		if code > maxUnicodeCodePoint {
+			continue
+		}
+		out[rune(code)] = gid //nolint:gosec // bounded by maxUnicodeCodePoint above
+	}
+	return out, nil
 }
 
 // CmapSubtable identifies a single (platformID, encodingID) cmap subtable
@@ -303,74 +340,56 @@ func PostGlyphNames(ctx context.Context, data []byte) (map[uint16]string, error)
 	return parsePost(postData)
 }
 
-// parseCmap processes the cmap table and returns a GID → rune map.
-func parseCmap(ctx context.Context, data []byte) (map[uint16]rune, error) {
-	if len(data) < 4 {
-		return nil, fmt.Errorf("%w: cmap table too short", ErrInvalidFont)
+// unicodeCmapSubtable returns the subtable of data, a cmap table, that
+// [GlyphToUnicode] and [UnicodeToGID] read: the full Unicode repertoire
+// (3,10) first, then Windows BMP (3,1), then any of the Unicode platform (0),
+// then Macintosh Roman (1,0), the first record of the best kind.
+func unicodeCmapSubtable(data []byte) ([]byte, error) {
+	records, err := cmapRecords(data)
+	if err != nil {
+		return nil, err
 	}
-
-	numSubtables := int(binary.BigEndian.Uint16(data[2:4]))
-	if len(data) < 4+numSubtables*8 {
-		return nil, fmt.Errorf("%w: cmap subtable records truncated", ErrInvalidFont)
-	}
-
-	// Prefer platform 3/encoding 10 (Format 12, full Unicode), then
-	// platform 3/encoding 1 (Format 4, BMP), then platform 0.
-	type candidate struct {
-		platformID uint16
-		encodingID uint16
-		offset     uint32
-		priority   int
-	}
-
-	var candidates []candidate
-	for i := range numSubtables {
-		off := 4 + i*8
-		pid := binary.BigEndian.Uint16(data[off : off+2])
-		eid := binary.BigEndian.Uint16(data[off+2 : off+4])
-		subtableOff := binary.BigEndian.Uint32(data[off+4 : off+8])
-
+	var best cmapSubtableRecord
+	bestPriority := 0
+	for _, rec := range records {
 		var priority int
 		switch {
-		case pid == 3 && eid == 10:
+		case rec.platform == 3 && rec.encoding == 10:
 			priority = 4 // best: full Unicode (Format 12)
-		case pid == 3 && eid == 1:
+		case rec.platform == 3 && rec.encoding == 1:
 			priority = 3 // good: Windows BMP (Format 4)
-		case pid == 0:
+		case rec.platform == 0:
 			priority = 2 // acceptable: Unicode platform
-		case pid == 1 && eid == 0:
+		case rec.platform == 1 && rec.encoding == 0:
 			priority = 1 // fallback: Macintosh Roman (Format 0/6)
 		default:
 			continue
 		}
-
-		candidates = append(candidates, candidate{pid, eid, subtableOff, priority})
-	}
-
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("%w: no Unicode-compatible cmap subtable found", ErrInvalidFont)
-	}
-
-	// Sort by priority descending.
-	best := candidates[0]
-	for _, c := range candidates[1:] {
-		if c.priority > best.priority {
-			best = c
+		if priority > bestPriority {
+			best, bestPriority = rec, priority
 		}
 	}
-
+	if bestPriority == 0 {
+		return nil, fmt.Errorf("%w: no Unicode-compatible cmap subtable found", ErrInvalidFont)
+	}
 	if intconv.Clamp(best.offset) >= len(data) {
 		return nil, fmt.Errorf("%w: cmap subtable offset out of bounds", ErrInvalidFont)
 	}
-
 	subtable := data[best.offset:]
 	if len(subtable) < 2 {
 		return nil, fmt.Errorf("%w: cmap subtable too short", ErrInvalidFont)
 	}
+	return subtable, nil
+}
 
-	format := binary.BigEndian.Uint16(subtable[0:2])
+// parseCmap processes the cmap table and returns a GID → rune map.
+func parseCmap(ctx context.Context, data []byte) (map[uint16]rune, error) {
+	subtable, err := unicodeCmapSubtable(data)
+	if err != nil {
+		return nil, err
+	}
 
-	switch format {
+	switch format := binary.BigEndian.Uint16(subtable[0:2]); format {
 	case 0:
 		return parseCmapFormat0(subtable)
 	case 4:

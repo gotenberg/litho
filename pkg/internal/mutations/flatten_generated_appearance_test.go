@@ -604,3 +604,53 @@ func TestWinAnsiEncode(t *testing.T) {
 		}
 	}
 }
+
+// TestFlattenDrawsAGlyphTwoCharactersShare pins that a character whose glyph
+// another character shares is covered, and that the ToUnicode CMap names the
+// character the value held. Noto Sans CJK draws U+2F47 KANGXI RADICAL SUN and
+// U+65E5 CJK UNIFIED IDEOGRAPH-65E5 with one glyph: with the coverage read
+// from an inverted glyph to code point map, which keeps the radical alone, a
+// value holding 日 was refused by every face of the family.
+func TestFlattenDrawsAGlyphTwoCharactersShare(t *testing.T) {
+	t.Parallel()
+	ctx, doc, alloc := flattenDoc(t,
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V <FEFF65E5672C> /Rect [10 10 130 30] >>")
+	program := fontbuild.TrueType{PostScriptName: "TestCJK", Family: "Test CJK", Subfamily: "Regular",
+		Glyphs: []fontbuild.Glyph{
+			{Name: "uni65E5", Unicode: 0x65E5, Advance: 1000},
+			{Name: "uni672C", Unicode: 0x672C, Advance: 1000},
+		}, NotdefAdvance: 500}.Build()
+	windows := truetype.CmapSubtable{PlatformID: 3, EncodingID: 1}
+	program, err := truetype.RewriteCmap(ctx, program, []truetype.CmapAlias{
+		{Target: windows, From: windows, Codes: map[uint32]uint16{0x2F47: 1, 0x65E5: 1, 0x672C: 2}},
+	})
+	if err != nil {
+		t.Fatalf("RewriteCmap: %v", err)
+	}
+	font, err := loadTextFont(program)
+	if err != nil {
+		t.Fatalf("loadTextFont: %v", err)
+	}
+	if missing := font.uncovered("日本⽇"); len(missing) != 0 {
+		t.Fatalf("the program lacks %q, want every character covered", string(missing))
+	}
+	if err := FlattenFormWith(ctx, alloc, doc, FlattenOptions{Fonts: offering(program)}); err != nil {
+		t.Fatalf("FlattenFormWith: %v", err)
+	}
+	_, drawn := flattenedPage(t, alloc)
+	if len(drawn) != 1 || !strings.Contains(drawn[0], "<00010002> Tj") {
+		t.Errorf("the value was drawn as %q, want codes 1 and 2", drawn)
+	}
+	ref, _ := embeddedType0(t, alloc)["ToUnicode"].(ast.PdfIndirectRef)
+	cmap, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfStream)
+	if !ok {
+		t.Fatal("the font carries no ToUnicode stream")
+	}
+	raw, err := cmap.Bytes(ctx)
+	if err != nil {
+		t.Fatalf("reading the ToUnicode CMap: %v", err)
+	}
+	if !strings.Contains(string(raw), "<0001> <65E5>") || strings.Contains(string(raw), "<2F47>") {
+		t.Errorf("the ToUnicode CMap holds %q, want code 1 named U+65E5, the character the value held, not the radical", raw)
+	}
+}

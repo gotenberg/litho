@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"maps"
 	"testing"
 )
 
@@ -620,5 +621,51 @@ func TestGlyphToUnicode_Format6(t *testing.T) {
 	}
 	if _, ok := gidMap[0]; ok {
 		t.Error("GID 0 is present; the third entry's zero glyph ID must be skipped")
+	}
+}
+
+// TestUnicodeToGID_KeepsEveryCodeOfASharedGlyph pins the direction
+// [UnicodeToGID] reads the cmap in. [GlyphToUnicode] keeps one code point per
+// glyph, so a program that draws two code points with one glyph loses the
+// second when that map is inverted, as [CharCodeToGID] inverts it. Noto Sans
+// CJK draws U+2F47 KANGXI RADICAL SUN and U+65E5 CJK UNIFIED IDEOGRAPH-65E5
+// with one glyph, which is how a line holding 日 was refused by every face of
+// the family.
+func TestUnicodeToGID_KeepsEveryCodeOfASharedGlyph(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		cmap []byte
+		want map[rune]uint16
+	}{
+		{
+			name: "format 4",
+			cmap: buildCmapTable(3, 1, buildCmapFormat4(map[uint16]uint16{0x2F47: 5, 0x65E5: 5, 0x672C: 6})),
+			want: map[rune]uint16{0x2F47: 5, 0x65E5: 5, 0x672C: 6},
+		},
+		{
+			name: "format 12 preferred over format 4",
+			cmap: buildCmapTableMultiple(
+				[]CmapSubtable{{PlatformID: 3, EncodingID: 1}, {PlatformID: 3, EncodingID: 10}},
+				[][]byte{
+					buildCmapFormat4(map[uint16]uint16{0x41: 9}),
+					buildCmapFormat12([][3]uint32{{0x2F47, 0x2F47, 5}, {0x65E5, 0x65E5, 5}, {0x20000, 0x20001, 7}}),
+				},
+			),
+			want: map[rune]uint16{0x2F47: 5, 0x65E5: 5, 0x20000: 7, 0x20001: 8},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fontData := buildTableDirectory(map[string][]byte{"cmap": tc.cmap})
+			got, err := UnicodeToGID(context.Background(), fontData)
+			if err != nil {
+				t.Fatalf("UnicodeToGID: %v", err)
+			}
+			if !maps.Equal(got, tc.want) {
+				t.Errorf("UnicodeToGID = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
