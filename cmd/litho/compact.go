@@ -169,27 +169,6 @@ func registerCompactFlag(fs *flag.FlagSet) *bool {
 			"duplicate streams, when the command rewrites the whole file")
 }
 
-// warnCompactSkipped reports that --compact was asked for and will not happen,
-// because the output is encrypted.
-//
-// The write engine refuses to compact an encrypted document: encryption runs
-// over every object before serialization, so packing afterwards would place
-// ciphertext strings inside a stream that is encrypted again, which
-// ISO 32000-1, 7.5.7 forbids, and dedup would compare ciphertext keyed per
-// object number and find nothing. That refusal is correct, but silent, and a
-// caller who passed the flag would otherwise receive an uncompacted file with
-// no indication why.
-//
-// A warning rather than an error, matching [warnEncryptionDropped]: the
-// command still produces a correct document, only a larger one.
-func warnCompactSkipped(stderr io.Writer, compact, encrypting bool) {
-	if !compact || !encrypting {
-		return
-	}
-	fmt.Fprintln(stderr, "warning: --compact does not apply to an encrypted output, so the output is not compacted. "+
-		"Compact the document first, then encrypt the result.")
-}
-
 // packingForbiddenByProfile reports whether object-stream packing would cost
 // the named compliance profile its conformance.
 //
@@ -231,8 +210,9 @@ func packingForbiddenByProfile(profile string) bool {
 // remediation entirely. Withholding it silently would leave a caller who sees
 // no object stream in the output guessing why.
 //
-// A warning rather than an error, matching [warnCompactSkipped]: the command
-// still produced the conformant document it was asked for, only a larger one.
+// A warning rather than an error, matching [warnEncryptionDropped]: the
+// command still produced the conformant document it was asked for, only a
+// larger one.
 func warnPackingWithheld(stderr io.Writer, compact bool, profile string) {
 	if !compact || !packingForbiddenByProfile(profile) {
 		return
@@ -306,18 +286,6 @@ func warnCompactIncremental(stderr io.Writer, c compaction, skipped bool, profil
 			"ISO 19005-1, 6.1.4 forbids the cross-reference stream they require.", profile)
 	}
 	fmt.Fprintln(stderr)
-}
-
-// warnRecompressSkipped reports that --recompress-images was asked for and
-// will not happen, because the output is encrypted: encryption has replaced
-// every stream's data with ciphertext before the pass would run, so the write
-// engine declines it, as it declines packing and dedup.
-func warnRecompressSkipped(stderr io.Writer, recompressImages, encrypting bool) {
-	if !recompressImages || !encrypting {
-		return
-	}
-	fmt.Fprintln(stderr, "warning: --recompress-images does not apply to an encrypted output, so no image is recompressed. "+
-		"Recompress the document first, then encrypt the result.")
 }
 
 // compactWriteOptions returns the write options -compact, -recompress-images

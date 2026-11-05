@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -204,11 +205,14 @@ func TestSerialize_RefusesDirectStream(t *testing.T) {
 // object stream would otherwise carry stays out of it (ISO 32000-1, 7.5.7).
 func TestWriteRewrite_WritesEveryStreamIndirect(t *testing.T) {
 	t.Parallel()
-	for name, cfg := range map[string]RewriteConfig{
+	for name, form := range map[string]struct {
+		xrefStream bool
+		passes     CompactConfig
+	}{
 		"table":            {},
-		"xref stream":      {UseXRefStream: true},
-		"object streams":   {PackObjectStreams: true},
-		"objstm and dedup": {PackObjectStreams: true, DedupStreams: true},
+		"xref stream":      {xrefStream: true},
+		"object streams":   {passes: CompactConfig{PackObjectStreams: true}},
+		"objstm and dedup": {passes: CompactConfig{PackObjectStreams: true, DedupStreams: true}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -216,15 +220,14 @@ func TestWriteRewrite_WritesEveryStreamIndirect(t *testing.T) {
 			// Enough dictionaries that packing does pack, so the test cannot
 			// pass because nothing reached an object stream.
 			substantialDicts(alloc, 12)
-			cfg.Allocator, cfg.Trailer = alloc, trailer
-			var out bytes.Buffer
-			if err := WriteRewrite(context.Background(), &out, cfg); err != nil {
-				t.Fatalf("WriteRewrite: %v", err)
+			out, err := compactAndRewrite(t, RewriteConfig{Allocator: alloc, Trailer: trailer, UseXRefStream: form.xrefStream}, form.passes)
+			if err != nil {
+				t.Fatalf("compacting and rewriting: %v", err)
 			}
-			if cfg.PackObjectStreams && !bytes.Contains(out.Bytes(), []byte("/ObjStm")) {
+			if form.passes.PackObjectStreams && !strings.Contains(out, "/ObjStm") {
 				t.Fatal("nothing was packed, so the test proves nothing about object streams")
 			}
-			assertEveryStreamIndirect(t, out.Bytes())
+			assertEveryStreamIndirect(t, []byte(out))
 		})
 	}
 }

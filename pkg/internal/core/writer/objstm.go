@@ -55,15 +55,22 @@ type PackedObject struct {
 	ObjStmIndex int
 }
 
-// packable reports whether obj may live inside an object stream.
+// packable reports whether obj, the object numbered objNum, may live inside
+// an object stream. rootNum numbers the catalog, which stays an object of its
+// own.
 //
 // ISO 32000-1, 7.5.7 excludes streams, since a stream cannot nest inside
 // another, and requires every contained object to have generation 0. Object 0
 // is the free-list head and never holds an object at all. The /Encrypt
-// dictionary is excluded document-wide by refusing to pack an encrypted file;
-// see [PackObjectStreams].
-func packable(objNum int, obj ast.PdfObject) bool {
-	if objNum <= 0 || obj == nil {
+// dictionary, which 7.5.7 excludes too, is allocated by the encryption that
+// follows packing (see [Compact]), so it is never a candidate.
+//
+// The catalog is left out by choice. [WriteRewrite] raises its /Version once
+// it knows whether the output carries a cross-reference stream or an AES
+// crypt filter, and the encryption in between reads that entry: all of that
+// happens after packing, and needs the catalog pending. It costs one object.
+func packable(objNum, rootNum int, obj ast.PdfObject) bool {
+	if objNum <= 0 || obj == nil || objNum == rootNum {
 		return false
 	}
 	_, isStream := obj.(ast.PdfStream)
@@ -72,14 +79,14 @@ func packable(objNum int, obj ast.PdfObject) bool {
 
 // PackObjectStreams moves eligible objects out of the allocator's pending set
 // and into newly allocated /Type /ObjStm streams, returning the placement of
-// each packed object. Objects that cannot be packed are left untouched.
+// each packed object. Objects that cannot be packed are left untouched, the
+// catalog trailer names among them (see [packable]).
 //
-// The caller must NOT pack an encrypted document. Encryption runs over the
-// pending map before serialization, so packing afterwards would place already
-// encrypted strings inside a stream that is then encrypted again, while
-// ISO 32000-1, 7.5.7 requires strings in an object stream never to be
-// encrypted separately. [WriteRewrite] enforces this by refusing to pack when
-// the trailer carries /Encrypt.
+// It runs before the document is encrypted, through [Compact]: the sweep that
+// follows encrypts each object stream as one stream, which is how ISO
+// 32000-1, 7.5.7 has the strings it holds encrypted, never separately. Run
+// after the sweep, it would seal already encrypted strings inside a stream
+// that is then encrypted again, so [Compact] refuses an encrypted document.
 //
 // An object stream is a PDF 1.5 construct, as is the cross-reference stream
 // its type-2 entries require (ISO 32000-1, 7.5.7 and 7.5.8). [WriteRewrite]
@@ -88,12 +95,16 @@ func packable(objNum int, obj ast.PdfObject) bool {
 //
 // Objects are packed in ascending object-number order so the output is
 // deterministic, as the reproducible-output rule requires.
-func PackObjectStreams(ctx context.Context, alloc *ObjAllocator) ([]PackedObject, error) {
+func PackObjectStreams(ctx context.Context, alloc *ObjAllocator, trailer ast.PdfDict) ([]PackedObject, error) {
+	rootNum := 0
+	if root, ok := trailer["Root"].(ast.PdfIndirectRef); ok {
+		rootNum = root.ObjectNum
+	}
 	pending := alloc.Pending()
 
 	candidates := make([]int, 0, len(pending))
 	for num, obj := range pending {
-		if packable(num, obj) {
+		if packable(num, rootNum, obj) {
 			candidates = append(candidates, num)
 		}
 	}

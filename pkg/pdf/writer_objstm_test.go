@@ -199,3 +199,113 @@ func TestSplit_WithObjectStreams_Packs(t *testing.T) {
 		t.Errorf("split output has %d pages, want 1", got)
 	}
 }
+
+// TestWriter_WithObjectStreams_AppliesToEncryptedOutput pins that packing runs
+// before encryption, so an encrypted output is packed too: its object streams
+// are encrypted as whole streams, and the file reopens under its password
+// with every page and the same text as the plain packed output.
+func TestWriter_WithObjectStreams_AppliesToEncryptedOutput(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := threePagePDF()
+
+	write := func(opts ...WriteOption) []byte {
+		t.Helper()
+		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer r.Close()
+		var out bytes.Buffer
+		if err := NewWriter(r).WriteTo(ctx, &out, append([]WriteOption{WithFullRewrite(), WithObjectStreams()}, opts...)...); err != nil {
+			t.Fatalf("WriteTo: %v", err)
+		}
+		return out.Bytes()
+	}
+	packed := write()
+	encrypted := write(WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o"}))
+
+	if !bytes.Contains(encrypted, []byte(objStmMarker)) {
+		t.Fatal("the encrypted output carries no object stream")
+	}
+	if _, err := Open(ctx, bytes.NewReader(encrypted), int64(len(encrypted))); err == nil {
+		t.Fatal("the output opens without its password, so it is not encrypted")
+	}
+
+	want, err := openRecompressSource(t, packed).ExtractAllText(ctx)
+	if err != nil {
+		t.Fatalf("ExtractAllText on the plain packed output: %v", err)
+	}
+	r := openRecompressSource(t, encrypted, WithPassword("u"))
+	if !r.IsEncrypted() {
+		t.Error("the output does not report itself encrypted")
+	}
+	if got, err := r.PageCount(ctx); err != nil || got != 3 {
+		t.Errorf("the encrypted packed output has %d pages (%v), want 3", got, err)
+	}
+	if got, err := r.ExtractAllText(ctx); err != nil || got != want {
+		t.Errorf("text %q (%v), want %q", got, err, want)
+	}
+}
+
+// TestMerge_WithDedup_AppliesToEncryptedOutput covers dedup on the Merge
+// path with encryption: the duplicate streams merge before the survivor is
+// encrypted under its own number, so the output is smaller and reopens.
+func TestMerge_WithDedup_AppliesToEncryptedOutput(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := threePagePDF()
+	encrypt := WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o"})
+
+	selfMerge := func(opts ...WriteOption) []byte {
+		t.Helper()
+		a, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer a.Close()
+		b, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer b.Close()
+		var out bytes.Buffer
+		if err := Merge(ctx, []*Reader{a, b}, &out, opts...); err != nil {
+			t.Fatalf("Merge: %v", err)
+		}
+		return out.Bytes()
+	}
+	plain, deduped := selfMerge(encrypt), selfMerge(encrypt, WithDedup())
+	if len(deduped) >= len(plain) {
+		t.Errorf("dedup did not shrink an encrypted self-merge: %d bytes vs %d", len(deduped), len(plain))
+	}
+	r := openRecompressSource(t, deduped, WithPassword("u"))
+	if got, err := r.PageCount(ctx); err != nil || got != 6 {
+		t.Errorf("deduplicated encrypted self-merge has %d pages (%v), want 6", got, err)
+	}
+}
+
+// TestSplit_WithObjectStreams_AppliesToEncryptedOutput covers packing on the
+// Split path with encryption, the third write path sharing the order.
+func TestSplit_WithObjectStreams_AppliesToEncryptedOutput(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := threePagePDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	var out bytes.Buffer
+	if err := Split(ctx, r, []int{1}, &out, WithObjectStreams(), WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o"})); err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	if !bytes.Contains(out.Bytes(), []byte(objStmMarker)) {
+		t.Fatal("the encrypted split output carries no object stream")
+	}
+	r2 := openRecompressSource(t, out.Bytes(), WithPassword("u"))
+	if got, err := r2.PageCount(ctx); err != nil || got != 1 {
+		t.Errorf("encrypted split output has %d pages (%v), want 1", got, err)
+	}
+}

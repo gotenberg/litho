@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"context"
 	"encoding/hex"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -286,9 +287,10 @@ func TestRecompressImagesLazyPathMatchesRetained(t *testing.T) {
 	}
 }
 
-// TestWriteRewriteRecompressesOnlyInTheClear checks the pass runs inside a
-// rewrite, and is declined when the trailer carries /Encrypt.
-func TestWriteRewriteRecompressesOnlyInTheClear(t *testing.T) {
+// TestCompactRecompressesOnlyInTheClear checks the pass runs through
+// [Compact], and that a trailer already carrying /Encrypt is refused before
+// the pass could decode ciphertext as image data.
+func TestCompactRecompressesOnlyInTheClear(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	samples := gradientRGB(64, 48)
@@ -300,11 +302,9 @@ func TestWriteRewriteRecompressesOnlyInTheClear(t *testing.T) {
 		if encrypted {
 			trailer["Encrypt"] = alloc.Alloc(ast.PdfDict{"Filter": ast.PdfName("Standard")})
 		}
-		var out bytes.Buffer
-		if err := WriteRewrite(ctx, &out, RewriteConfig{
-			Allocator: alloc, Trailer: trailer, RecompressImages: &ImageRecompression{},
-		}); err != nil {
-			t.Fatal(err)
+		_, err := Compact(ctx, alloc, trailer, CompactConfig{RecompressImages: &ImageRecompression{}})
+		if encrypted != errors.Is(err, ErrCompactEncrypted) {
+			t.Fatalf("encrypted=%v: Compact returned %v", encrypted, err)
 		}
 		got, err := streamAt(t, alloc, img.ObjectNum).Bytes(ctx)
 		if err != nil {

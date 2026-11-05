@@ -145,7 +145,7 @@ func versionComponent(s string) (int, bool) {
 }
 
 // raiseCatalogVersion raises the catalog's /Version entry to floor when it
-// names an earlier version, returning a function that puts the original back.
+// names an earlier version.
 //
 // Per ISO 32000-1, 7.5.2 the catalog entry overrides the file header, and
 // litho's reader applies it in both directions: document.initCatalogVersion
@@ -153,39 +153,38 @@ func versionComponent(s string) (int, bool) {
 // header alone would leave such a file still reporting 1.4 while carrying PDF
 // 1.5 constructs.
 //
-// This runs BEFORE packing. Packing serializes an object's body into the
-// compressed stream and drops it from the pending set, so a catalog that has
-// been packed can no longer be edited. Whether the output truly needs the
-// raise is known only after packing returns, which is what the undo is for.
+// This runs once the output's needs are known, after [Compact]. Packing
+// serializes an object's body into a compressed stream and drops it from the
+// pending set, which is why it never packs the catalog (see
+// [PackObjectStreams]): the catalog is still pending here, and editable.
 //
 // A catalog carrying no /Version is left alone: the header already answers the
 // question, and adding the key would write an entry the source never had. One
 // whose /Version is not a version number is also left alone, since readers
 // ignore it (document.initCatalogVersion does) and it therefore misdescribes
 // nothing.
-func raiseCatalogVersion(alloc *ObjAllocator, trailer ast.PdfDict, floor string) func() {
-	noop := func() {}
+func raiseCatalogVersion(alloc *ObjAllocator, trailer ast.PdfDict, floor string) {
 	if alloc == nil || trailer == nil {
-		return noop
+		return
 	}
 	root, ok := trailer["Root"].(ast.PdfIndirectRef)
 	if !ok {
-		return noop
+		return
 	}
 	catalog, ok := alloc.Pending()[root.ObjectNum].(ast.PdfDict)
 	if !ok {
-		return noop
+		return
 	}
 	current, ok := catalog["Version"].(ast.PdfName)
 	if !ok {
-		return noop
+		return
 	}
 	if _, _, valid := splitVersion(string(current)); !valid {
-		return noop
+		return
 	}
 	raised := atLeastVersion(string(current), floor)
 	if raised == string(current) {
-		return noop
+		return
 	}
 
 	// Replaced rather than mutated: [ObjAllocator.Snapshot] captures pending
@@ -194,10 +193,7 @@ func raiseCatalogVersion(alloc *ObjAllocator, trailer ast.PdfDict, floor string)
 	next := make(ast.PdfDict, len(catalog))
 	maps.Copy(next, catalog)
 	next["Version"] = ast.PdfName(raised)
-	if !alloc.AllocAt(root.ObjectNum, next) {
-		return noop
-	}
-	return func() { alloc.AllocAt(root.ObjectNum, catalog) }
+	alloc.AllocAt(root.ObjectNum, next)
 }
 
 // encryptionVersionFloor returns the earliest PDF version that defines the

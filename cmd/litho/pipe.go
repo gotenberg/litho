@@ -115,7 +115,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		return exitError
 	}
 	compacting = optimizing.compaction
-	compact, recompressImages := compacting.compact, compacting.recompressImages
+	compact := compacting.compact
 
 	// Checked before the input is opened or any stage runs, so a pipeline the
 	// library would refuse partway through fails as a usage error instead.
@@ -188,11 +188,8 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 			}
 		}
 	}
-	warnCompactSkipped(stderr, compact, encryptsOutput)
-	warnRecompressSkipped(stderr, recompressImages, encryptsOutput)
-
-	// Reported after the encryption case. The final write keeps dedup and
-	// withholds packing alone, see profileCompactWriteOptions.
+	// The final write keeps dedup and withholds packing alone, see
+	// profileCompactWriteOptions.
 	warnPackingWithheld(stderr, compact, packingRefusedProfile)
 
 	// Residual violations left by any remediate stage, judged after the write

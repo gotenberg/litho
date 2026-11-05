@@ -260,12 +260,10 @@ func WithXRefStream() WriteOption {
 // option with [ErrPDFA1ForbidsObjectStreams] and writes nothing. [WithDedup]
 // needs no cross-reference stream and is the compaction such an output takes.
 //
-// An encrypted output is never packed. Encryption runs over every object
-// before serialization, so packing afterwards would place ciphertext strings
-// inside a stream that is itself encrypted. ISO 32000-1, 7.5.7 requires that
-// strings in an object stream are not encrypted separately. Combining this
-// option with [WithEncryption] writes an unpacked file rather than an
-// unreadable one.
+// An encrypted output is packed too. The pass runs before the objects are
+// encrypted, and the encryption then covers each object stream as one stream,
+// which is how ISO 32000-1, 7.5.7 has the strings it holds encrypted, never
+// separately.
 func WithObjectStreams() WriteOption {
 	return func(o *writeOpts) {
 		o.packObjectStreams = true
@@ -281,11 +279,10 @@ func WithObjectStreams() WriteOption {
 // number, and collapsing a pair of those changes what the document means
 // rather than how it is stored.
 //
-// Like [WithObjectStreams] this applies to the full-rewrite path only, and an
-// encrypted output is never deduplicated: encryption derives a per-object key
-// from the object number (ISO 32000-1, 7.6.2), so identical plaintext streams
-// already differ as ciphertext and merging them would hand a reader bytes
-// decrypted under the wrong key.
+// Like [WithObjectStreams] this applies to the full-rewrite path only, and to
+// an encrypted output too: the pass compares the streams before encryption
+// derives a per-object key from the object number (ISO 32000-1, 7.6.2), so
+// the survivor is encrypted once, under its own number.
 func WithDedup() WriteOption {
 	return func(o *writeOpts) {
 		o.dedupStreams = true
@@ -319,10 +316,10 @@ func WithDedup() WriteOption {
 // [WithLimits], its data decodes only by salvage, or a filter plugin
 // ([WithFilterPlugin]) claims one of its filters.
 //
-// Like [WithObjectStreams] this applies to the full-rewrite path only. An
-// encrypted output is never recompressed, because encryption has replaced every
-// stream's data with ciphertext before the pass would run. The output stays
-// deterministic: the same input and options give the same bytes.
+// Like [WithObjectStreams] this applies to the full-rewrite path only, and to
+// an encrypted output too: the pass re-encodes each image before encryption
+// replaces its data with ciphertext. The output stays deterministic: the same
+// input and options give the same bytes.
 //
 // It costs time where the other compaction options cost almost none.
 // Compressing at zlib's best level takes seconds on an image-heavy file that
@@ -361,9 +358,9 @@ func WithImageRecompression() WriteOption {
 // Nothing is subset in a document holding a signature or an XFA form. A subset
 // is kept only when it is smaller.
 //
-// It applies to the full-rewrite path only, as [WithObjectStreams] does. It is
-// the one compaction option that also applies to an encrypted output, because
-// it runs before encryption. The output stays deterministic.
+// It applies to the full-rewrite path only, as [WithObjectStreams] does, and
+// to an encrypted output too, as every compaction option does: all run before
+// encryption. The output stays deterministic.
 //
 // A subset font holds only the glyphs the document shows. Text added to the
 // document later in that font, by an editor or a form, finds no glyph to draw.
@@ -388,8 +385,7 @@ func WithFontSubsetting() WriteOption {
 // It applies to [Writer.WriteTo], [Pipeline.WriteTo], [Split] and [Merge], the
 // last two always rewriting. A write that fails leaves *dst as it was.
 //
-// An encrypted output, never compacted either, is a full rewrite and is not
-// reported here: see [WithObjectStreams].
+// An encrypted output is a full rewrite, compacted like any other.
 func WithCompactionSkipped(dst *bool) WriteOption {
 	return func(o *writeOpts) {
 		o.compactionSkipped = dst

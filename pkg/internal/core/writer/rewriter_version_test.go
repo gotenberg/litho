@@ -109,12 +109,11 @@ func TestWriteRewrite_PackedOutputDeclaresPDF15(t *testing.T) {
 	catalog := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog")})
 	substantialDicts(alloc, 12)
 
-	out := rewriteTo(t, RewriteConfig{
-		Version:           "1.4",
-		Allocator:         alloc,
-		Trailer:           ast.PdfDict{"Root": catalog},
-		PackObjectStreams: true,
-	})
+	out := packTo(t, RewriteConfig{
+		Version:   "1.4",
+		Allocator: alloc,
+		Trailer:   ast.PdfDict{"Root": catalog},
+	}, true)
 
 	// Assert packing actually happened first. Without this the version check
 	// below would pass on a file that simply never packed.
@@ -138,12 +137,11 @@ func TestWriteRewrite_DeclinedPackingKeepsTheSourceVersion(t *testing.T) {
 		alloc := NewObjAllocator(0)
 		catalog := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog")})
 		alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Pages")})
-		return rewriteTo(t, RewriteConfig{
-			Version:           "1.4",
-			Allocator:         alloc,
-			Trailer:           ast.PdfDict{"Root": catalog},
-			PackObjectStreams: pack,
-		})
+		return packTo(t, RewriteConfig{
+			Version:   "1.4",
+			Allocator: alloc,
+			Trailer:   ast.PdfDict{"Root": catalog},
+		}, pack)
 	}
 
 	packed, plain := build(true), build(false)
@@ -214,12 +212,11 @@ func TestWriteRewrite_RaisesTheCatalogVersionWhenPacking(t *testing.T) {
 	})
 	substantialDicts(alloc, 12)
 
-	out := rewriteTo(t, RewriteConfig{
-		Version:           "1.4",
-		Allocator:         alloc,
-		Trailer:           ast.PdfDict{"Root": catalog},
-		PackObjectStreams: true,
-	})
+	out := packTo(t, RewriteConfig{
+		Version:   "1.4",
+		Allocator: alloc,
+		Trailer:   ast.PdfDict{"Root": catalog},
+	}, true)
 	if !strings.Contains(out, "/Type /ObjStm") {
 		t.Fatal("nothing was packed, so this proves nothing about the catalog")
 	}
@@ -244,12 +241,11 @@ func TestWriteRewrite_LeavesALaterCatalogVersionAlone(t *testing.T) {
 	})
 	substantialDicts(alloc, 12)
 
-	out := rewriteTo(t, RewriteConfig{
-		Version:           "1.7",
-		Allocator:         alloc,
-		Trailer:           ast.PdfDict{"Root": catalog},
-		PackObjectStreams: true,
-	})
+	out := packTo(t, RewriteConfig{
+		Version:   "1.7",
+		Allocator: alloc,
+		Trailer:   ast.PdfDict{"Root": catalog},
+	}, true)
 	flat := flattenStreams(t, out)
 	if !containsEntry(flat, "/Version", "/1.7") {
 		t.Error("a catalog /Version of 1.7 was lowered by the raise")
@@ -259,11 +255,10 @@ func TestWriteRewrite_LeavesALaterCatalogVersionAlone(t *testing.T) {
 	}
 }
 
-// TestWriteRewrite_DeclinedPackingRestoresTheCatalogVersion exercises the undo.
-// The catalog has to be raised BEFORE packing, because packing seals it inside
-// a compressed stream, but whether the raise is warranted is known only after
-// packing returns. A declined pack must leave no trace.
-func TestWriteRewrite_DeclinedPackingRestoresTheCatalogVersion(t *testing.T) {
+// TestWriteRewrite_DeclinedPackingLeavesTheCatalogVersionAlone: the raise
+// follows the packing decision, since the catalog is never packed and stays
+// editable, so a declined pack must leave no trace on it.
+func TestWriteRewrite_DeclinedPackingLeavesTheCatalogVersionAlone(t *testing.T) {
 	t.Parallel()
 	build := func(pack bool) string {
 		alloc := NewObjAllocator(0)
@@ -272,17 +267,16 @@ func TestWriteRewrite_DeclinedPackingRestoresTheCatalogVersion(t *testing.T) {
 			"Version": ast.PdfName("1.4"),
 		})
 		alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Pages")})
-		return rewriteTo(t, RewriteConfig{
-			Version:           "1.4",
-			Allocator:         alloc,
-			Trailer:           ast.PdfDict{"Root": catalog},
-			PackObjectStreams: pack,
-		})
+		return packTo(t, RewriteConfig{
+			Version:   "1.4",
+			Allocator: alloc,
+			Trailer:   ast.PdfDict{"Root": catalog},
+		}, pack)
 	}
 
 	packed, plain := build(true), build(false)
 	if strings.Contains(packed, "/Type /ObjStm") {
-		t.Fatal("fixture packed after all; it no longer exercises the undo")
+		t.Fatal("fixture packed after all; it no longer exercises the declined path")
 	}
 	if !containsEntry(packed, "/Version", "/1.4") {
 		t.Error("declined packing left the catalog /Version raised")
@@ -356,8 +350,7 @@ func TestRaiseCatalogVersion_LeavesWhatReadersIgnore(t *testing.T) {
 			ref := alloc.Alloc(tc.catalog)
 			trailer := ast.PdfDict{"Root": ref}
 
-			undo := raiseCatalogVersion(alloc, trailer, minXRefStreamVersion)
-			undo()
+			raiseCatalogVersion(alloc, trailer, minXRefStreamVersion)
 
 			got, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfDict)
 			if !ok {

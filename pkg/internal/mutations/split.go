@@ -247,27 +247,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		version = sourceVersion(doc)
 	}
 
-	if err := compact.subsetFonts(ctx, doc, alloc, trailer); err != nil {
-		return err
-	}
-
-	// Last, after every alloc.Alloc above: see applyEncryption on why an
-	// object allocated after the sweep is written in the clear.
-	if encryptCfg != nil {
-		if err := applyEncryption(ctx, alloc, trailer, encryptCfg, version); err != nil {
-			return fmt.Errorf("encrypting split output: %w", err)
-		}
-	}
-
-	return writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
-		Version:           version,
-		Allocator:         alloc,
-		Trailer:           trailer,
-		UseXRefStream:     xrefStream,
-		PackObjectStreams: compact.PackObjectStreams,
-		DedupStreams:      compact.DedupStreams,
-		RecompressImages:  compact.imageRecompression(doc),
-	})
+	return finishRewrite(ctx, dst, doc, alloc, trailer, version, xrefStream, compact, encryptCfg, "split output")
 }
 
 // copyCatalogEntries copies select catalog-level entries that should survive

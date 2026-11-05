@@ -186,34 +186,17 @@ func TestDedupStreams_LeavesIdenticalDictsAlone(t *testing.T) {
 // plaintext streams already differ as ciphertext by the time the writer sees
 // them. The control matters: the same fixture without /Encrypt must dedup, or
 // the refusal proves nothing.
-func TestWriteRewrite_RefusesToDedupWhenEncrypted(t *testing.T) {
+func TestWriteRewrite_DedupsThroughCompact(t *testing.T) {
 	t.Parallel()
-	build := func(encrypted bool) (string, *ObjAllocator) {
-		alloc := NewObjAllocator(0)
-		catalog := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog")})
-		alloc.Alloc(dupStream())
-		alloc.Alloc(dupStream())
-		trailer := ast.PdfDict{"Root": catalog}
-		if encrypted {
-			trailer["Encrypt"] = alloc.Alloc(ast.PdfDict{"Filter": ast.PdfName("Standard")})
-		}
-		var buf bytes.Buffer
-		if err := WriteRewrite(context.Background(), &buf, RewriteConfig{
-			Allocator:    alloc,
-			Trailer:      trailer,
-			DedupStreams: true,
-		}); err != nil {
-			t.Fatalf("WriteRewrite: %v", err)
-		}
-		return buf.String(), alloc
+	alloc := NewObjAllocator(0)
+	catalog := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog")})
+	alloc.Alloc(dupStream())
+	alloc.Alloc(dupStream())
+	out, err := compactAndRewrite(t, RewriteConfig{Allocator: alloc, Trailer: ast.PdfDict{"Root": catalog}}, CompactConfig{DedupStreams: true})
+	if err != nil {
+		t.Fatalf("compacting and rewriting: %v", err)
 	}
-
-	encOut, _ := build(true)
-	if n := strings.Count(encOut, "shared image bytes"); n != 2 {
-		t.Errorf("encrypted document kept %d copies of the payload, want 2 (dedup refused)", n)
-	}
-	plainOut, _ := build(false)
-	if n := strings.Count(plainOut, "shared image bytes"); n != 1 {
-		t.Errorf("unencrypted document kept %d copies, want 1; the refusal above proves nothing", n)
+	if n := strings.Count(out, "shared image bytes"); n != 1 {
+		t.Errorf("the output kept %d copies of the payload, want 1", n)
 	}
 }

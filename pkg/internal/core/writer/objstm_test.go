@@ -1,7 +1,6 @@
 package writer
 
 import (
-	"bytes"
 	"compress/zlib"
 	"context"
 	"io"
@@ -107,7 +106,7 @@ func TestPackObjectStreams_PacksDictsAndEmptiesPending(t *testing.T) {
 	alloc := NewObjAllocator(0)
 	refs := substantialDicts(alloc, 12)
 
-	placed, err := PackObjectStreams(context.Background(), alloc)
+	placed, err := PackObjectStreams(context.Background(), alloc, ast.PdfDict{})
 	if err != nil {
 		t.Fatalf("PackObjectStreams: %v", err)
 	}
@@ -161,7 +160,7 @@ func TestPackObjectStreams_LeavesStreamsUnpacked(t *testing.T) {
 	substantialDicts(alloc, 12)
 	streamRef := alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(2)}, []byte("hi")))
 
-	placed, err := PackObjectStreams(context.Background(), alloc)
+	placed, err := PackObjectStreams(context.Background(), alloc, ast.PdfDict{})
 	if err != nil {
 		t.Fatalf("PackObjectStreams: %v", err)
 	}
@@ -186,7 +185,7 @@ func TestPackObjectStreams_RefusesFewerThanTwo(t *testing.T) {
 	alloc := NewObjAllocator(0)
 	substantialDicts(alloc, 1)
 
-	placed, err := PackObjectStreams(context.Background(), alloc)
+	placed, err := PackObjectStreams(context.Background(), alloc, ast.PdfDict{})
 	if err != nil {
 		t.Fatalf("PackObjectStreams: %v", err)
 	}
@@ -210,7 +209,7 @@ func TestPackObjectStreams_DeclinesWhenItWouldNotShrink(t *testing.T) {
 	a := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog")})
 	b := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Pages")})
 
-	placed, err := PackObjectStreams(context.Background(), alloc)
+	placed, err := PackObjectStreams(context.Background(), alloc, ast.PdfDict{})
 	if err != nil {
 		t.Fatalf("PackObjectStreams: %v", err)
 	}
@@ -234,15 +233,7 @@ func TestWriteRewrite_NeverWorseThanUnpacked(t *testing.T) {
 		alloc := NewObjAllocator(0)
 		catalog := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog")})
 		alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Pages")})
-		var buf bytes.Buffer
-		if err := WriteRewrite(context.Background(), &buf, RewriteConfig{
-			Allocator:         alloc,
-			Trailer:           ast.PdfDict{"Root": catalog},
-			PackObjectStreams: pack,
-		}); err != nil {
-			t.Fatalf("WriteRewrite: %v", err)
-		}
-		return buf.String()
+		return packTo(t, RewriteConfig{Allocator: alloc, Trailer: ast.PdfDict{"Root": catalog}}, pack)
 	}
 	if packed, plain := build(true), build(false); packed != plain {
 		t.Errorf("packing a document it cannot help changed the output (%d vs %d bytes)",
@@ -260,16 +251,7 @@ func TestWriteRewrite_PackedOutputCarriesType2Entries(t *testing.T) {
 	catalog := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog")})
 	refs := substantialDicts(alloc, 12)
 
-	var buf bytes.Buffer
-	err := WriteRewrite(context.Background(), &buf, RewriteConfig{
-		Allocator:         alloc,
-		Trailer:           ast.PdfDict{"Root": catalog},
-		PackObjectStreams: true,
-	})
-	if err != nil {
-		t.Fatalf("WriteRewrite: %v", err)
-	}
-	out := buf.String()
+	out := packTo(t, RewriteConfig{Allocator: alloc, Trailer: ast.PdfDict{"Root": catalog}}, true)
 
 	if !strings.Contains(out, "/Type /ObjStm") {
 		t.Fatalf("output carries no object stream:\n%s", out[:min(len(out), 400)])
@@ -316,37 +298,6 @@ func TestWriteRewrite_PackedOutputCarriesType2Entries(t *testing.T) {
 // The control matters as much as the assertion: the same fixture without
 // /Encrypt must pack, or this test would pass on a document that was never
 // going to be packed anyway.
-func TestWriteRewrite_RefusesToPackWhenEncrypted(t *testing.T) {
-	t.Parallel()
-	build := func(encrypted bool) string {
-		alloc := NewObjAllocator(0)
-		catalog := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog")})
-		substantialDicts(alloc, 12)
-		trailer := ast.PdfDict{"Root": catalog}
-		if encrypted {
-			trailer["Encrypt"] = alloc.Alloc(ast.PdfDict{"Filter": ast.PdfName("Standard")})
-		}
-		var buf bytes.Buffer
-		if err := WriteRewrite(context.Background(), &buf, RewriteConfig{
-			Allocator:         alloc,
-			Trailer:           trailer,
-			PackObjectStreams: true,
-		}); err != nil {
-			t.Fatalf("WriteRewrite: %v", err)
-		}
-		return buf.String()
-	}
-
-	if out := build(true); strings.Contains(out, "/Type /ObjStm") {
-		t.Error("an encrypted document was packed; its strings would be encrypted twice")
-	} else if !strings.Contains(out, "/Type /Catalog") {
-		t.Error("the catalog is missing from the unpacked output")
-	}
-	if out := build(false); !strings.Contains(out, "/Type /ObjStm") {
-		t.Error("the same fixture does not pack without /Encrypt, so the refusal proves nothing")
-	}
-}
-
 // TestWriteRewrite_PackingIsDeterministic guards the reproducible-output rule:
 // packing iterates a map, so it must sort before grouping or two runs of the
 // same input differ.
@@ -356,15 +307,7 @@ func TestWriteRewrite_PackingIsDeterministic(t *testing.T) {
 		alloc := NewObjAllocator(0)
 		catalog := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog")})
 		substantialDicts(alloc, 40)
-		var buf bytes.Buffer
-		if err := WriteRewrite(context.Background(), &buf, RewriteConfig{
-			Allocator:         alloc,
-			Trailer:           ast.PdfDict{"Root": catalog},
-			PackObjectStreams: true,
-		}); err != nil {
-			t.Fatalf("WriteRewrite: %v", err)
-		}
-		return buf.String()
+		return packTo(t, RewriteConfig{Allocator: alloc, Trailer: ast.PdfDict{"Root": catalog}}, true)
 	}
 	if a, b := build(), build(); a != b {
 		t.Errorf("packing is non-deterministic (len a=%d b=%d)", len(a), len(b))

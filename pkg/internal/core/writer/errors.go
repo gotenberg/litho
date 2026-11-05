@@ -18,6 +18,12 @@ var ErrNameHoldsNull = errors.New("name holds a NUL byte, which ISO 32000-1, 7.3
 // its own before a write.
 var ErrDirectStream = errors.New("stream inside a dictionary or an array, which ISO 32000-1, 7.3.8.1 forbids: every stream is an indirect object")
 
+// ErrCompactEncrypted is returned by [Compact] for a trailer that already
+// carries /Encrypt. Encryption keys every string and stream to the number of
+// the object holding it and runs over the pending set, so compaction runs
+// before it, on the plaintext objects in their final numbers.
+var ErrCompactEncrypted = errors.New("compaction of an encrypted document: compact before encrypting, which keys every object to its number")
+
 // ErrRecompressionDiverged is returned, wrapped, when an image
 // [RecompressImages] re-encodes lazily no longer re-encodes to the bytes it
 // measured, which means its source changed between the pass and the write.

@@ -22,10 +22,9 @@ import (
 // linearization) extend this struct instead of lengthening those signatures
 // again.
 //
-// Every pass here is refused for an encrypted document, because encryption
-// runs over the object set before serialization; see [writer.PackObjectStreams]
-// [writer.DedupStreams] and [writer.RecompressImages] for what each would
-// otherwise corrupt.
+// Every pass here runs before the document is encrypted, through
+// [writer.Compact], so each applies to an encrypted output too; see
+// [writer.Compact] for what running after the encryption would corrupt.
 type CompactOptions struct {
 	// PackObjectStreams packs eligible objects into /Type /ObjStm streams.
 	// The write engine forces a cross-reference stream when it packs, since
@@ -39,9 +38,52 @@ type CompactOptions struct {
 	RecompressImages bool
 	// SubsetFonts subsets the embedded TrueType, CFF and Type 1 font
 	// programs to the glyphs the document can show, keeping every glyph ID
-	// (see [fontsubset.Run]). Unlike the passes above it runs before
-	// encryption, so it applies to an encrypted output too.
+	// (see [fontsubset.Run]). It runs first, before the passes above.
 	SubsetFonts bool
+}
+
+// passes maps c onto the passes [writer.Compact] runs, decoding images under
+// doc's filter plugins and budgets. Font subsetting is not among them: it is
+// a pass of its own, [CompactOptions.subsetFonts], run before them.
+func (c CompactOptions) passes(doc *document.Document) writer.CompactConfig {
+	return writer.CompactConfig{
+		PackObjectStreams: c.PackObjectStreams,
+		DedupStreams:      c.DedupStreams,
+		RecompressImages:  c.imageRecompression(doc),
+	}
+}
+
+// finishRewrite ends every full rewrite the same way: it subsets the fonts,
+// runs the compaction passes, encrypts the pending objects, then writes dst.
+// The order is load-bearing, see [writer.Compact] and [applyEncryption], and
+// the three write paths, [FullRewrite], [Split] and [Merge], share it so that
+// they cannot drift. doc is the document the fonts and images are read under,
+// and what names the output in an error.
+func finishRewrite(ctx context.Context, dst io.Writer, doc *document.Document, alloc *writer.ObjAllocator, trailer ast.PdfDict, version string, xrefStream bool, compact CompactOptions, encryptCfg *crypto.EncryptConfig, what string) error {
+	if err := compact.subsetFonts(ctx, doc, alloc, trailer); err != nil {
+		return err
+	}
+	packed, err := writer.Compact(ctx, alloc, trailer, compact.passes(doc))
+	if err != nil {
+		return fmt.Errorf("compacting %s: %w", what, err)
+	}
+
+	// Last, after every allocation above, the object streams packing
+	// allocated included: see [applyEncryption] on why an object allocated
+	// after the sweep is written in the clear.
+	if encryptCfg != nil {
+		if err := applyEncryption(ctx, alloc, trailer, encryptCfg, version); err != nil {
+			return fmt.Errorf("encrypting %s: %w", what, err)
+		}
+	}
+
+	return writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
+		Version:       version,
+		Allocator:     alloc,
+		Trailer:       trailer,
+		UseXRefStream: xrefStream,
+		Packed:        packed,
+	})
 }
 
 // subsetFonts runs the font subsetting pass c selects over the objects alloc
@@ -264,31 +306,10 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		version = writer.AtLeastVersion(version, sourceVersion(src))
 	}
 
-	if err := cfg.Compact.subsetFonts(ctx, doc, alloc, trailer); err != nil {
-		return err
-	}
-
-	// Shared with Split and Merge so the three write paths cannot drift: see
-	// applyEncryption for the ordering the sweep depends on.
-	if cfg.EncryptCfg != nil {
-		if err := applyEncryption(ctx, alloc, trailer, cfg.EncryptCfg, version); err != nil {
-			return err
-		}
-	}
-
 	// Decryption: the reader already decrypted all objects during resolution,
 	// and the copier copies the decrypted data. All that remains is to omit
 	// /Encrypt from the trailer, which the trailer built above never copies.
-
-	return writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
-		Version:           version,
-		Allocator:         alloc,
-		Trailer:           trailer,
-		UseXRefStream:     cfg.XRefStream,
-		PackObjectStreams: cfg.Compact.PackObjectStreams,
-		DedupStreams:      cfg.Compact.DedupStreams,
-		RecompressImages:  cfg.Compact.imageRecompression(doc),
-	})
+	return finishRewrite(ctx, dst, doc, alloc, trailer, version, cfg.XRefStream, cfg.Compact, cfg.EncryptCfg, "rewrite output")
 }
 
 // sourceVersion returns the version a rewrite of doc declares in its header

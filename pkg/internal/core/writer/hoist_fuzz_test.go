@@ -34,8 +34,7 @@ func FuzzHoistDirectStreams(f *testing.F) {
 		catalog := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Catalog"), "Held": held})
 		trailer := ast.PdfDict{"Root": catalog, "Held": obj}
 
-		var out bytes.Buffer
-		err = WriteRewrite(ctx, &out, RewriteConfig{Allocator: alloc, Trailer: trailer, PackObjectStreams: true})
+		out, err := compactAndRewrite(t, RewriteConfig{Allocator: alloc, Trailer: trailer}, CompactConfig{PackObjectStreams: true})
 		if errors.Is(err, ErrDirectStream) {
 			t.Fatalf("the write met a stream the hoist left inline: %v", err)
 		}
@@ -44,7 +43,7 @@ func FuzzHoistDirectStreams(f *testing.F) {
 			// refuses, fails the write; neither is the hoist's to fix.
 			return
 		}
-		if direct, _ := readBack(t, out.Bytes()); direct != 0 {
+		if direct, _ := readBack(t, []byte(out)); direct != 0 {
 			t.Fatalf("the output holds %d streams inside another object", direct)
 		}
 	})

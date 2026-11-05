@@ -54,8 +54,6 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 
 	warnEncryptionDroppedOfferingPassword(stderr, encrypting, r)
 	warnXFADropped(ctx, stderr, r)
-	warnCompactSkipped(stderr, *compactFlags.compact, encrypting)
-	warnRecompressSkipped(stderr, *compactFlags.recompressImages, encrypting)
 
 	pageCount, err := r.PageCount(ctx)
 	if err != nil {

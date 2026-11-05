@@ -145,7 +145,10 @@ func TestWriter_WithImageRecompression_HonoursImageBudget(t *testing.T) {
 // TestWriter_WithImageRecompression_DeclinesEncryptedOutput checks that an
 // encrypted output keeps its images as they were. Encryption's keys and salts
 // are random but its lengths are not, so the option must not change the size.
-func TestWriter_WithImageRecompression_DeclinesEncryptedOutput(t *testing.T) {
+// TestWriter_WithImageRecompression_AppliesToEncryptedOutput pins that the
+// pass runs before encryption: the encrypted output is smaller with it, and
+// its image still decodes, under the password, to the source's pixels.
+func TestWriter_WithImageRecompression_AppliesToEncryptedOutput(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	data, _ := gradientImagePDF()
@@ -159,11 +162,22 @@ func TestWriter_WithImageRecompression_DeclinesEncryptedOutput(t *testing.T) {
 		return out.Bytes()
 	}
 	plain, asked := write(), write(WithImageRecompression())
-	if len(plain) != len(asked) {
+	if len(asked) >= len(plain) {
 		t.Fatalf("encrypted output is %d bytes with the option and %d without", len(asked), len(plain))
 	}
-	if _, err := openRecompressSource(t, asked, WithPassword("u")).DecodeImage(ctx, 1, "Im0"); err != nil {
+	if _, err := Open(ctx, bytes.NewReader(asked), int64(len(asked))); err == nil {
+		t.Fatal("the output opens without its password, so it is not encrypted")
+	}
+	before, err := openRecompressSource(t, data).DecodeImage(ctx, 1, "Im0")
+	if err != nil {
+		t.Fatalf("DecodeImage on the source: %v", err)
+	}
+	after, err := openRecompressSource(t, asked, WithPassword("u")).DecodeImage(ctx, 1, "Im0")
+	if err != nil {
 		t.Fatalf("DecodeImage on the encrypted output: %v", err)
+	}
+	if !slices.Equal(levels(before), levels(after)) {
+		t.Fatal("re-coding changed the image's pixels")
 	}
 }
 

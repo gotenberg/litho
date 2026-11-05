@@ -170,17 +170,41 @@ func TestRecompressImagesFlag_EveryCompactCommand(t *testing.T) {
 	}
 }
 
-// TestRecompressImagesFlag_WarnsOnEncryptedOutput checks that asking to
-// recompress an output the command encrypts says why nothing was recompressed.
-func TestRecompressImagesFlag_WarnsOnEncryptedOutput(t *testing.T) {
+// TestRecompressImagesFlag_AppliesToEncryptedOutput checks that asking to
+// recompress an output the command encrypts recompresses it: the pass runs
+// before the encryption, so the encrypted output is smaller with the flag and
+// still opens with its password.
+func TestRecompressImagesFlag_AppliesToEncryptedOutput(t *testing.T) {
+	ctx := context.Background()
 	src := imageFixtureFile(t)
-	out := filepath.Join(t.TempDir(), "out.pdf")
-	var stdout, stderr bytes.Buffer
-	args := []string{"encrypt", "--user-password", "u", "--recompress-images", "-o", out, src}
-	if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
-		t.Fatalf("encrypt: exit %d, stderr: %s", rc, stderr.String())
+	encrypt := func(extra ...string) []byte {
+		t.Helper()
+		out := filepath.Join(t.TempDir(), "out.pdf")
+		var stdout, stderr bytes.Buffer
+		args := append([]string{"encrypt", "--user-password", "u"}, extra...)
+		args = append(args, "-o", out, src)
+		if rc := run(ctx, args, &stdout, &stderr); rc != exitOK {
+			t.Fatalf("encrypt %v: exit %d, stderr: %s", extra, rc, stderr.String())
+		}
+		if strings.Contains(stderr.String(), "does not apply") {
+			t.Errorf("encrypt %v warned that the pass does not apply: %q", extra, stderr.String())
+		}
+		data, err := os.ReadFile(out) //nolint:gosec // the test's own temp path
+		if err != nil {
+			t.Fatalf("reading output: %v", err)
+		}
+		return data
 	}
-	if !strings.Contains(stderr.String(), "--recompress-images does not apply to an encrypted output") {
-		t.Errorf("no warning on stderr: %q", stderr.String())
+	plain, recompressed := encrypt(), encrypt("--recompress-images")
+	if len(recompressed) >= len(plain) {
+		t.Errorf("encrypt --recompress-images wrote %d bytes against %d without the flag", len(recompressed), len(plain))
+	}
+	r, err := pdf.Open(ctx, bytes.NewReader(recompressed), int64(len(recompressed)), pdf.WithPassword("u"))
+	if err != nil {
+		t.Fatalf("the output does not open with its password: %v", err)
+	}
+	defer r.Close()
+	if n, err := r.PageCount(ctx); err != nil || n < 1 {
+		t.Errorf("PageCount on the encrypted output: %d, %v", n, err)
 	}
 }

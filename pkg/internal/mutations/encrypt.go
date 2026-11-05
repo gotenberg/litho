@@ -17,9 +17,13 @@ import (
 // already be in the allocator when this runs: [EncryptPendingObjects] walks
 // what is pending, so an object allocated afterwards is written in plaintext
 // inside a file whose trailer declares encryption, which no conforming reader
-// can recover. And the /Encrypt dictionary is allocated after that sweep
-// because ISO 32000-1, 7.6.1 exempts it from encryption: encrypting it would
-// leave the handler unable to read the parameters it needs to decrypt.
+// can recover. The compaction passes run before it for that reason, through
+// [writer.Compact]: packing allocates object streams, and the sweep encrypts
+// each as one stream, which is how ISO 32000-1, 7.5.7 has the strings an
+// object stream holds encrypted, never separately. And the /Encrypt
+// dictionary is allocated after that sweep because ISO 32000-1, 7.6.1 exempts
+// it from encryption: encrypting it would leave the handler unable to read
+// the parameters it needs to decrypt.
 //
 // The trailer /ID is replaced rather than carried from the source. The
 // standard security handler derives the file encryption key from the first
@@ -54,6 +58,8 @@ func applyEncryption(ctx context.Context, alloc *writer.ObjAllocator, trailer as
 	// A stream written inside another object moves into one of its own before
 	// the sweep keys its data to an object number (ISO 32000-1, 7.3.8.1 and
 	// 7.6.2, Algorithm 1): moved afterwards, it would decrypt to noise.
+	// [writer.Compact] hoisted already; a second walk finds nothing, and keeps
+	// this correct on its own.
 	if _, err := writer.HoistDirectStreams(ctx, alloc, trailer); err != nil {
 		return fmt.Errorf("hoisting direct streams: %w", err)
 	}

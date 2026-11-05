@@ -26,107 +26,111 @@ type RewriteConfig struct {
 	// A cross-reference stream is a PDF 1.5 construct (ISO 32000-1, 7.5.8),
 	// so selecting one raises the version the output declares.
 	UseXRefStream bool
+	// Packed names the objects [Compact] moved into object streams, so that
+	// the cross-reference names each by its stream (ISO 32000-1, 7.5.8.3). A
+	// non-empty list implies a cross-reference stream, since a traditional
+	// table cannot express a type-2 entry. Object streams and cross-reference
+	// streams are both PDF 1.5 constructs, so a packed file declares at least
+	// that version.
+	Packed []PackedObject
+}
+
+// CompactConfig selects the passes [Compact] runs.
+type CompactConfig struct {
 	// PackObjectStreams packs eligible objects into /Type /ObjStm streams
-	// (ISO 32000-1, 7.5.7). Packing implies a cross-reference stream, since
-	// a traditional table cannot express a type-2 entry, and is refused
-	// outright for an encrypted document; see [PackObjectStreams]. Both are
-	// PDF 1.5 constructs, so a packed file declares at least that version.
+	// (ISO 32000-1, 7.5.7); see [PackObjectStreams].
 	PackObjectStreams bool
-	// DedupStreams merges byte-identical stream objects before writing,
-	// repointing references at one survivor. Refused for an encrypted
-	// document for the reason [DedupStreams] gives. Note that it rewrites
-	// references inside Trailer in place.
+	// DedupStreams merges byte-identical stream objects, repointing
+	// references at one survivor; see [DedupStreams]. Note that it rewrites
+	// references inside the trailer in place.
 	DedupStreams bool
 	// RecompressImages, when not nil, re-encodes image streams losslessly
-	// where that makes them smaller (see [RecompressImages]). Declined for an
-	// encrypted document, whose streams are ciphertext by then.
+	// where that makes them smaller; see [RecompressImages].
 	RecompressImages *ImageRecompression
+}
+
+// Compact runs the compaction passes cfg selects over the objects pending in
+// alloc and the values of trailer, and returns where packing placed each
+// object, for [RewriteConfig.Packed]. It runs before [WriteRewrite], and
+// before the pending objects are encrypted: a trailer that already carries
+// /Encrypt is refused with [ErrCompactEncrypted].
+//
+// Encryption keys every string and stream to the number of the object holding
+// it (ISO 32000-1, 7.6.2, Algorithm 1) and runs over the pending set, so each
+// pass has to see the plaintext objects, in their final numbers. Packing
+// serializes an object's strings into an object stream, which the sweep then
+// encrypts as one stream, as 7.5.7 requires of the strings an object stream
+// holds; dedup compares stream bytes; recompression decodes image data. Run
+// after the sweep, packing would encrypt strings twice, dedup would compare
+// ciphertext keyed per object number and find nothing, and recompression
+// would decode ciphertext as image data.
+//
+// Every stream goes out as an indirect object (ISO 32000-1, 7.3.8.1), and the
+// passes must see the objects a direct stream becomes: dedup compares whole
+// stream objects, and packing would otherwise seal one inside an object
+// stream, which 7.5.7 forbids. So the direct streams are hoisted first.
+//
+// Recompression runs before dedup, so two copies of one image, which
+// re-encode to identical bytes, still merge. Dedup runs before packing, which
+// removes objects from the pending set and serializes their bodies, so a
+// later dedup would neither see the full population nor be able to repoint
+// what it merged.
+func Compact(ctx context.Context, alloc *ObjAllocator, trailer ast.PdfDict, cfg CompactConfig) ([]PackedObject, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("compaction canceled: %w", err)
+	}
+	if _, encrypted := trailer["Encrypt"]; encrypted {
+		return nil, ErrCompactEncrypted
+	}
+
+	if _, err := HoistDirectStreams(ctx, alloc, trailer); err != nil {
+		return nil, fmt.Errorf("hoisting direct streams: %w", err)
+	}
+
+	if cfg.RecompressImages != nil {
+		if _, err := RecompressImages(ctx, alloc, *cfg.RecompressImages); err != nil {
+			return nil, fmt.Errorf("recompressing images: %w", err)
+		}
+	}
+
+	if cfg.DedupStreams {
+		if _, err := DedupStreams(ctx, alloc, trailer); err != nil {
+			return nil, fmt.Errorf("deduplicating streams: %w", err)
+		}
+	}
+
+	if !cfg.PackObjectStreams {
+		return nil, nil
+	}
+	packed, err := PackObjectStreams(ctx, alloc, trailer)
+	if err != nil {
+		return nil, fmt.Errorf("packing object streams: %w", err)
+	}
+	return packed, nil
 }
 
 // WriteRewrite emits a complete PDF file to dst from the objects in the
 // allocator. Objects are written in ascending object-number order with
-// sequential byte offsets.
+// sequential byte offsets. The compaction passes run before it, through
+// [Compact], and before any encryption of the pending objects.
 func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("rewrite canceled: %w", err)
 	}
 
-	// Compact before the header goes out and before the objects are
-	// enumerated. Packing decides whether this file needs a cross-reference
-	// stream, and that decision sets the minimum version the header must
-	// declare, so it cannot run once the header is already on the wire.
-	// Packing also removes objects from the allocator's pending set and
-	// allocates the streams that now hold them, and Pending returns that live
-	// map, so an enumeration taken earlier would name objects this file no
-	// longer writes directly. No compaction pass writes to dst.
-	//
-	// Encryption has already run over every pending object by the time a
-	// rewrite reaches this point, so every compaction pass is refused for
-	// an encrypted document: packing would encrypt an object stream's
-	// strings a second time, which ISO 32000-1, 7.5.7 forbids, dedup would
-	// compare ciphertext keyed per object number and find nothing, and
-	// recompression would decode ciphertext as image data.
-	// The file is written uncompacted rather than incorrectly.
+	// Every stream goes out as an indirect object (ISO 32000-1, 7.3.8.1). An
+	// encrypted document's streams were moved before encryption keyed each to
+	// its object number (see [HoistDirectStreams]). Moving one now would
+	// leave it keyed to its old container, so the serializer refuses what is
+	// left.
 	_, encrypted := cfg.Trailer["Encrypt"]
-
-	// Every stream goes out as an indirect object (ISO 32000-1, 7.3.8.1), and
-	// the compaction passes must see the objects a direct stream becomes:
-	// dedup compares whole stream objects, and packing would otherwise seal
-	// one inside an object stream, which 7.5.7 forbids. An encrypted
-	// document's streams were moved before encryption keyed each to its
-	// object number (see [HoistDirectStreams]). Moving one now would leave it
-	// keyed to its old container, so the serializer refuses what is left.
 	if !encrypted {
 		if _, err := HoistDirectStreams(ctx, cfg.Allocator, cfg.Trailer); err != nil {
 			return fmt.Errorf("hoisting direct streams: %w", err)
 		}
 	}
 
-	// The catalog /Version overrides the header (ISO 32000-1, 7.5.2), so a
-	// file whose catalog says 1.4 keeps reporting 1.4 however the header
-	// reads. Raise it before packing, which would otherwise seal it inside a
-	// compressed stream, and undo the raise if packing then declines.
-	restoreCatalogVersion := func() {}
-	if cfg.UseXRefStream || (cfg.PackObjectStreams && !encrypted) {
-		restoreCatalogVersion = raiseCatalogVersion(cfg.Allocator, cfg.Trailer, minXRefStreamVersion)
-	}
-
-	// Recompression runs before dedup, so two copies of one image, which
-	// re-encode to identical bytes, still merge.
-	if cfg.RecompressImages != nil && !encrypted {
-		if _, err := RecompressImages(ctx, cfg.Allocator, *cfg.RecompressImages); err != nil {
-			return fmt.Errorf("recompressing images: %w", err)
-		}
-	}
-
-	// Dedup before packing. Packing removes objects from the pending set and
-	// serializes their bodies, so a later dedup would neither see the full
-	// population nor be able to repoint what it merged.
-	if cfg.DedupStreams && !encrypted {
-		if _, err := DedupStreams(ctx, cfg.Allocator, cfg.Trailer); err != nil {
-			return fmt.Errorf("deduplicating streams: %w", err)
-		}
-	}
-
-	useXRefStream := cfg.UseXRefStream
-	var packed []PackedObject
-	if cfg.PackObjectStreams && !encrypted {
-		p, err := PackObjectStreams(ctx, cfg.Allocator)
-		if err != nil {
-			return fmt.Errorf("packing object streams: %w", err)
-		}
-		packed = p
-		if len(packed) > 0 {
-			// A traditional cross-reference table has no type field and
-			// cannot name a compressed object (ISO 32000-1, 7.5.8.3).
-			useXRefStream = true
-		}
-	}
-	if !useXRefStream {
-		// Packing declined, so the output carries nothing that needs 1.5 and
-		// must come out byte-identical to an uncompacted rewrite.
-		restoreCatalogVersion()
-	}
+	useXRefStream := cfg.UseXRefStream || len(cfg.Packed) > 0
 
 	version := cfg.Version
 	if version == "" {
@@ -137,8 +141,13 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		// constructs (ISO 32000-1, 7.5.7 and 7.5.8). Declaring anything
 		// earlier contradicts the file's own contents: a 1.4 reader cannot
 		// parse the cross-reference, and litho's own PDF/A-1 check reports
-		// the file as using xref streams (ISO 19005-1, 6.1.4).
+		// the file as using xref streams (ISO 19005-1, 6.1.4). The catalog
+		// /Version overrides the header (ISO 32000-1, 7.5.2), so a file
+		// whose catalog says 1.4 would keep reporting 1.4 however the header
+		// reads: it is raised too. Packing never seals the catalog inside an
+		// object stream (see [PackObjectStreams]), so it is still pending.
 		version = atLeastVersion(version, minXRefStreamVersion)
+		raiseCatalogVersion(cfg.Allocator, cfg.Trailer, minXRefStreamVersion)
 	}
 	if encrypted {
 		// The same rule as above applied to encryption: AESV2 is a PDF 1.6
@@ -201,7 +210,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 
 	// Objects living inside an object stream are named by a type-2 entry
 	// instead of a byte offset (ISO 32000-1, 7.5.8.3).
-	for _, p := range packed {
+	for _, p := range cfg.Packed {
 		records = append(records, XRefRecord{
 			ObjNum:      p.ObjNum,
 			Compressed:  true,

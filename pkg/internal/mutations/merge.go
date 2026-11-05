@@ -253,27 +253,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		version = "1.4"
 	}
 
-	if err := compact.subsetFonts(ctx, sources[0].Doc, alloc, trailer); err != nil {
-		return err
-	}
-
-	// Last, after every alloc.Alloc above: see [applyEncryption] on why an
-	// object allocated after the sweep is written in the clear.
-	if encryptCfg != nil {
-		if err := applyEncryption(ctx, alloc, trailer, encryptCfg, version); err != nil {
-			return fmt.Errorf("encrypting merge output: %w", err)
-		}
-	}
-
-	return writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
-		Version:           version,
-		Allocator:         alloc,
-		Trailer:           trailer,
-		UseXRefStream:     xrefStream,
-		PackObjectStreams: compact.PackObjectStreams,
-		DedupStreams:      compact.DedupStreams,
-		RecompressImages:  compact.imageRecompression(sources[0].Doc),
-	})
+	return finishRewrite(ctx, dst, sources[0].Doc, alloc, trailer, version, xrefStream, compact, encryptCfg, "merge output")
 }
 
 // mergedLang returns the /Lang string the output's catalog holds and the
