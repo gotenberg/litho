@@ -781,8 +781,12 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		// other way round, whatever the direction of the text inside.
 		s.closeEdges(p, sp.End, true, closed, &x, widen)
 		s.openEdges(p, sp.Start, true, opened, &x, widen)
+		ascent, descent, gap := sp.Ascent, sp.Descent, sp.LineGap
+		if s.e.opts.PixelFontMetrics {
+			ascent, descent, gap = pixelMetrics(ascent, descent, gap)
+		}
 		it := &lineItem{
-			box: info.box, x: x, w: sp.Width, ascent: sp.Ascent, descent: sp.Descent, gap: sp.LineGap,
+			box: info.box, x: x, w: sp.Width, ascent: ascent, descent: descent, gap: gap,
 			ulPos: sp.UnderlinePosition, ulThick: sp.UnderlineThickness, stPos: sp.StrikeoutPosition, stThick: sp.StrikeoutThickness,
 			start: sp.Start, end: sp.End, rtl: sp.RTL, hang: max(sp.End-max(sp.Start, hangFrom), 0),
 		}

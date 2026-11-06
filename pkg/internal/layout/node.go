@@ -132,6 +132,11 @@ type Options struct {
 	// document out on one page this way (Chromium's single page, as
 	// Gotenberg prints it).
 	FitFirstPage bool
+	// PixelFontMetrics rounds the ascent, descent and line gap of every
+	// face to whole CSS pixels before the line boxes use them, as Blink
+	// does for document text (see pixelMetrics); off, the faces' fractional
+	// metrics apply, as WeasyPrint uses them.
+	PixelFontMetrics bool
 	// Lang is the document language as a BCP 47 tag, used for a node
 	// without one in its ancestry, "" for unknown.
 	Lang string
