@@ -292,7 +292,7 @@ func (e *engine) tableMinMax(td *tableData) (float64, float64) {
 	e.tableEdges(td, 0)
 	base := td.hSpacing() + hEdges(td.table)
 	if td.fixedLayout() {
-		w, _ := e.fixedWidths(td, 0)
+		w := e.fixedWidths(td, 0)
 		sum := 0.0
 		for _, v := range w {
 			sum += v
@@ -336,7 +336,7 @@ func (e *engine) tableWidth(td *tableData, cbw, avail float64) float64 {
 	if w, ok := specWidth(t, t.st.Width, cbw); ok {
 		used = w + edges
 		if td.fixedLayout() {
-			ws, _ := e.fixedWidths(td, w-td.hSpacing())
+			ws := e.fixedWidths(td, w-td.hSpacing())
 			sum := 0.0
 			for _, v := range ws {
 				sum += v
@@ -438,12 +438,12 @@ func autoWidths(cm []colMeasure, avail float64) []float64 {
 }
 
 // fixedWidths returns the column widths of the fixed layout of td with
-// content columns' width avail, the spacing taken off, and the width the
-// columns that set one take (CSS 2.1, 17.5.2.1): a column's width, else
+// content columns' width avail, the spacing taken off (CSS 2.1, 17.5.2.1):
+// a column's width, else
 // the width of the first row's cell in it divided over the columns it
 // spans; the other columns share what is left equally, and when every
 // column sets its width the excess spreads in proportion.
-func (e *engine) fixedWidths(td *tableData, avail float64) ([]float64, float64) {
+func (e *engine) fixedWidths(td *tableData, avail float64) []float64 {
 	nc := td.nCols
 	w := make([]float64, nc)
 	set := make([]bool, nc)
@@ -488,7 +488,6 @@ func (e *engine) fixedWidths(td *tableData, avail float64) ([]float64, float64) 
 			unset++
 		}
 	}
-	defined := sum
 	rest := avail - sum
 	switch {
 	case unset > 0:
@@ -506,7 +505,7 @@ func (e *engine) fixedWidths(td *tableData, avail float64) ([]float64, float64) 
 			w[i] += rest / float64(nc)
 		}
 	}
-	return w, defined
+	return w
 }
 
 // collapsed reports a row or column box with visibility: collapse, whose
@@ -521,7 +520,7 @@ func (e *engine) columnWidths(td *tableData, w float64) []float64 {
 	avail := max(w-td.hSpacing(), 0)
 	var ws []float64
 	if td.fixedLayout() {
-		ws, _ = e.fixedWidths(td, avail)
+		ws = e.fixedWidths(td, avail)
 	} else {
 		ws = autoWidths(e.measureColumns(td), avail)
 	}

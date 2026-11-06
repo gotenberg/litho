@@ -402,7 +402,7 @@ func (cs *computeState) element(n, parent *html.Node) {
 			}
 		}
 	}
-	st := cs.computeStyle(&winners, parentStyle, n, parent == nil)
+	st := cs.computeStyle(&winners, parentStyle, parent == nil)
 	cs.out[n] = st
 	if parent == nil {
 		cs.root = st
@@ -458,7 +458,7 @@ func (cs *computeState) match(n *html.Node) []cand {
 // computeStyle computes every longhand from its cascaded value (CSS
 // Cascade 4, 4 and CSS 2.1, 6.1 to 6.2): inherited longhands without a
 // value take the parent's, the others their initial value.
-func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, n *html.Node, isRoot bool) *Style {
+func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRoot bool) *Style {
 	st := new(Style)
 	*st = *parent
 	s := &styler{parent: parent, root: cs.root}

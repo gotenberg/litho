@@ -199,7 +199,7 @@ func (f *drawFeature) Run(ctx context.Context, _, fixtureID string) ([]byte, err
 	})
 	if err == nil {
 		var pages []image.Image
-		pages, _, err = renderPDF(ctx, data, drawDPI, 0)
+		pages, err = renderPDF(ctx, data, drawDPI, 0)
 		if err == nil {
 			got := stackPages(pages)
 			out := compareGrid(got, fx)

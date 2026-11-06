@@ -127,15 +127,15 @@ const maxConvertedPages = 64
 // renderPDF opens a PDF held in memory and renders its first pages, at most
 // maxPages and maxConvertedPages, at dpi over white. It returns the page
 // count beside the images.
-func renderPDF(ctx context.Context, data []byte, dpi float64, maxPages int) ([]image.Image, int, error) {
+func renderPDF(ctx context.Context, data []byte, dpi float64, maxPages int) ([]image.Image, error) {
 	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, 0, fmt.Errorf("open the conversion: %w", err)
+		return nil, fmt.Errorf("open the conversion: %w", err)
 	}
 	defer r.Close()
 	n, err := r.PageCount(ctx)
 	if err != nil {
-		return nil, 0, fmt.Errorf("count pages: %w", err)
+		return nil, fmt.Errorf("count pages: %w", err)
 	}
 	last := min(n, maxConvertedPages)
 	if maxPages > 0 {
@@ -145,11 +145,11 @@ func renderPDF(ctx context.Context, data []byte, dpi float64, maxPages int) ([]i
 	for p := 1; p <= last; p++ {
 		img, err := r.RenderPage(ctx, p, pdf.WithRenderDPI(dpi))
 		if err != nil {
-			return nil, n, fmt.Errorf("render page %d: %w", p, err)
+			return nil, fmt.Errorf("render page %d: %w", p, err)
 		}
 		pages = append(pages, img)
 	}
-	return pages, n, nil
+	return pages, nil
 }
 
 // reportName turns a fixture ID into a file name: path separators become

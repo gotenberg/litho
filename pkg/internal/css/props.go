@@ -248,9 +248,9 @@ func dimProp(name string, inh bool, f func(*Style) *Dimension, lf lengthFlags, k
 // [Style] currentColor: a currentColor value stays a keyword the element
 // resolves against its own color, even when a child inherits it
 // explicitly (CSS Color 4, 4.4).
-func colorProp(name string, inh bool, f func(*Style) *Color, slot colorSlots, initial any) propDef {
+func colorProp(name string, f func(*Style) *Color, slot colorSlots, initial any) propDef {
 	return propDef{
-		name: name, inherited: inh,
+		name: name,
 		parse: func(v []token, _ *declCtx) (any, bool) {
 			t, ok := single(v)
 			if !ok {
@@ -476,7 +476,7 @@ func borderProps(side Side, name string) (style, width, colour propDef) {
 		copyFrom: field(func(s *Style) *float64 { return &s.Border[side].Width }),
 		initial:  length{pt: 3 * Pt, hasLen: true},
 	}
-	colour = colorProp(name+"-color", false, func(s *Style) *Color { return &s.Border[side].Color }, slotBorderTop<<side, colorValue{current: true})
+	colour = colorProp(name+"-color", func(s *Style) *Color { return &s.Border[side].Color }, slotBorderTop<<side, colorValue{current: true})
 	return style, width, colour
 }
 
@@ -602,7 +602,7 @@ func init() {
 		{pRight, dimProp("right", false, func(s *Style) *Dimension { return &s.Right }, allowPct, kwAuto, false)},
 		{pBottom, dimProp("bottom", false, func(s *Style) *Dimension { return &s.Bottom }, allowPct, kwAuto, false)},
 		{pLeft, dimProp("left", false, func(s *Style) *Dimension { return &s.Left }, allowPct, kwAuto, false)},
-		{pBgColor, colorProp("background-color", false, func(s *Style) *Color { return &s.BackgroundColor }, slotBackground, nil)},
+		{pBgColor, colorProp("background-color", func(s *Style) *Color { return &s.BackgroundColor }, slotBackground, nil)},
 		{pBgImage, propDef{name: "background-image", parse: parseBgImage, compute: func(s *styler, st *Style, v any) {
 			if im, ok := v.(imageSpec); ok {
 				st.BackgroundImage, st.BackgroundGradient = im.url, nil
@@ -662,7 +662,7 @@ func init() {
 			}
 		}, copyFrom: field(func(s *Style) *TextDecoration { return &s.TextDecoration })}},
 		{pTextAlignLast, textAlignLastProp()},
-		{pTextDecorationColor, colorProp("text-decoration-color", false, func(s *Style) *Color { return &s.TextDecorationColor }, slotTextDecoration, colorValue{current: true})},
+		{pTextDecorationColor, colorProp("text-decoration-color", func(s *Style) *Color { return &s.TextDecorationColor }, slotTextDecoration, colorValue{current: true})},
 		{pTextDecorationStyle, enumProp("text-decoration-style", false, func(s *Style) *DecorationStyle { return &s.TextDecorationStyle }, decorationStyles)},
 		{pTextDecorationThickness, dimProp("text-decoration-thickness", false, func(s *Style) *Dimension { return &s.TextDecorationThickness }, allowPct|allowMixed, kwThickness, false)},
 		{pTextUnderlineOffset, dimProp("text-underline-offset", true, func(s *Style) *Dimension { return &s.TextUnderlineOffset }, allowPct|allowMixed, kwAuto, false)},

@@ -63,7 +63,7 @@ func outlineProps() (style, width, colour, offset propDef) {
 	}
 	// CSS UI 3, 5.4: the initial colour is currentColor where invert is
 	// not supported.
-	colour = colorProp("outline-color", false, func(s *Style) *Color { return &s.Outline.Color }, slotOutline, colorValue{current: true})
+	colour = colorProp("outline-color", func(s *Style) *Color { return &s.Outline.Color }, slotOutline, colorValue{current: true})
 	offset = propDef{
 		name: "outline-offset",
 		parse: func(v []token, _ *declCtx) (any, bool) {

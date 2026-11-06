@@ -301,7 +301,7 @@ func (f *reftestFeature) draw(ctx context.Context, root, rel string, paged bool)
 	if err != nil {
 		return nil, fmt.Errorf("convert: %w", err)
 	}
-	pages, _, err := renderPDF(ctx, data, reftestDPI, maxPages)
+	pages, err := renderPDF(ctx, data, reftestDPI, maxPages)
 	if err != nil {
 		return nil, err
 	}
