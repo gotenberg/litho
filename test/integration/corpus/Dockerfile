@@ -258,6 +258,8 @@ COPY facturx/ ./facturx/
 # The litho corpus ships its fixtures in git rather than downloading them,
 # so this COPY carries the PDFs themselves into the image.
 COPY litho/ ./litho/
+# The compose corpus too: PDFs litho converted from committed text sources.
+COPY compose/ ./compose/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   lib/run-mustang.sh \
@@ -272,7 +274,8 @@ RUN chmod +x entrypoint.sh \
   pdf20/download.sh \
   pdfcpu/download.sh \
   facturx/download.sh \
-  litho/download.sh
+  litho/download.sh \
+  compose/download.sh
 
 # Record the versions this image was built with, overrides included, so
 # the entrypoint can hand the corpus revisions to the download scripts and

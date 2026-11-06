@@ -1,0 +1,9 @@
+A printing press does one thing well: it puts ink where the type tells it to, page after page, without asking what the words mean. Everything else, the choice of paper, the width of the margins, the place where one line ends and the next begins, is decided before the press ever moves.
+
+This paragraph is long on purpose. It runs well past the width of an A4 page set in a twelve point serif face with two centimetres of margin on each side, so the converter has to find the break opportunities between words and carry the rest of the sentence onto the following line, and then do it again, and again, until the source line is used up.
+
+Short line.
+
+The fourth paragraph mixes punctuation into the run: commas, semicolons; colons: question marks? Exclamation marks! Quotes "like these" and 'like these', parentheses (with a nested aside), brackets [one] and braces {two}, a slash/between words, numbers such as 1,234.56 and 2026-11-06, and an e-mail address like someone@example.org that should not be split in an odd place.
+
+The last paragraph ends without a trailing newline, which plain text files often do, and the converter should treat the end of the file as the end of the line.

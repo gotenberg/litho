@@ -182,12 +182,12 @@ if wants render; then
   if nonempty "$RENDER"; then
     echo "==> render goldens already present, skipping pdftoppm."
   else
-    # The litho corpus is rendered whole: its fixtures are small and each
-    # exercises a construct of its own. The downloaded corpora are rendered
-    # one PDF in sixteen, chosen by a hash of the file name (see
+    # The litho and compose corpora are rendered whole: their fixtures are
+    # small and each exercises a construct of its own. The downloaded corpora
+    # are rendered one PDF in sixteen, chosen by a hash of the file name (see
     # gen-render.sh), which keeps their goldens to a few megabytes.
     case "$CORPUS" in
-      litho) SAMPLE=256 ;;
+      litho | compose) SAMPLE=256 ;;
       *) SAMPLE=16 ;;
     esac
     mkdir -p "$RENDER"

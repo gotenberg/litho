@@ -83,6 +83,13 @@ icc-goldens: ## Regenerate the ICC transform goldens with the Pillow (littleCMS)
 	"$$venv/bin/python" -I $(ICC_GOLDENS)/gen_transform_golden.py; \
 	npx prettier --write $(ICC_GOLDENS)/transform_golden.json
 
+COMPOSE_FONTS := test/integration/testdata/fonts
+
+.PHONY: compose-fixtures
+compose-fixtures: ## Regenerate the compose corpus PDFs from their text sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	go run ./test/integration/corpus/compose/build -fonts $(COMPOSE_FONTS)
+
 CORPUS_RUN_FLAGS :=
 ifdef CORPUS_JSON_OUTPUT
 CORPUS_RUN_FLAGS += --format=json

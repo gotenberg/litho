@@ -1,0 +1,15 @@
+{
+  "name": "compose",
+  "source": "compose",
+  "pdf_root": "pdfs",
+  "profile_mode": "expand",
+  "profiles": ["PDF_A-2b", "PDF_UA-1"],
+  "goldens": {
+    "text": "goldens/text",
+    "render": "goldens/render",
+    "determinism": "goldens/render",
+    "compliance": "goldens/compliance",
+    "remediation": "goldens/compliance",
+    "remediation-aggressive": "goldens/compliance"
+  }
+}

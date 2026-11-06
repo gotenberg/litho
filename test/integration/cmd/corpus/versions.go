@@ -65,10 +65,11 @@ var digestPins = map[string][]string{
 
 // localToolPins are the pins of tools the host runs rather than the image:
 // the live checks, the litho fixture builders and the outline and ICC golden
-// generators use them, and `corpus tools` compares them. They are not build
-// arguments. POPPLER_VERSION is not one of them although `corpus tools`
-// compares the host's pdfsig against it: the image builds the same release
-// for the render goldens.
+// generators use them, and `corpus tools` compares them. The font archives
+// the compose fixture builder converts with are fetched on the host too. They
+// are not build arguments. POPPLER_VERSION is not one of them although
+// `corpus tools` compares the host's pdfsig against it: the image builds the
+// same release for the render goldens.
 //
 //nolint:gochecknoglobals // static key set
 var localToolPins = map[string]bool{
@@ -76,6 +77,13 @@ var localToolPins = map[string]bool{
 	"PIKEPDF_VERSION":   true,
 	"FONTTOOLS_VERSION": true,
 	"PILLOW_VERSION":    true,
+
+	"LIBERATION_FONTS_VERSION": true,
+	"LIBERATION_FONTS_URL":     true,
+	"LIBERATION_FONTS_SHA256":  true,
+	"DEJAVU_FONTS_VERSION":     true,
+	"DEJAVU_FONTS_URL":         true,
+	"DEJAVU_FONTS_SHA256":      true,
 }
 
 // stagePins maps each directory a provisioning stage fills to the pins its
@@ -115,7 +123,8 @@ var stagePins = map[string][]string{
 }
 
 // sourcePins maps each corpus source directory to the pins its PDFs come
-// from. The litho corpus is committed in-tree, so git versions it.
+// from. The litho and compose corpora are committed in-tree, so git versions
+// them.
 //
 //nolint:gochecknoglobals // static dependency table
 var sourcePins = map[string][]string{
@@ -126,6 +135,7 @@ var sourcePins = map[string][]string{
 	"pdfcpu":  {"PDFCPU_CORPUS_REVISION"},
 	"facturx": {"FACTURX_CORPUS_REVISION"},
 	"litho":   nil,
+	"compose": nil,
 }
 
 // pinEntry is one KEY=VALUE line of versions.env.
