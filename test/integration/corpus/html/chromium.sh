@@ -7,9 +7,11 @@
 # writes the PDF to <out_dir>/<name>.pdf. The form fields are the ones the
 # litho side converts with (build/main.go and the diff feature of
 # test/integration/cmd/corpus): A4 (210 by 297 mm), the route's default
-# margins (0.39 inch on every side, left unset), the print media type, and
-# backgrounds printed, since a document converter paints them. Keep the
-# three in step.
+# margins (0.39 inch on every side, left unset), the print media type,
+# backgrounds printed, since a document converter paints them, and the CSS
+# page size preferred, since litho honours @page size (the route's default
+# of ignoring it is a Gotenberg option a later wave adds). Keep the three in
+# step.
 #
 # Chromium writes the time into each PDF, so two runs write other bytes; the
 # PDFs are committed and rebuilt only when a source or the pin changes. An
@@ -65,6 +67,7 @@ for dir in "$SOURCES"/*/; do
     -F paperHeight=297mm \
     -F emulatedMediaType=print \
     -F printBackground=true \
+    -F preferCssPageSize=true \
     "$URL/forms/chromium/convert/html"
   echo "  html: chromium/$name.pdf ($(wc -c < "$OUT/$name.pdf" | tr -d ' ') bytes)"
   count=$((count + 1))
