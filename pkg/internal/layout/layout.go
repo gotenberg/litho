@@ -214,7 +214,8 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 		for i := 0; i < len(frags); {
 			// A run of fragments is clipped to the page area, the slice of
 			// the flow the page shows; a transformed box that lands on one
-			// page alone may paint past it, up to the page's edges.
+			// page alone, and a line or a replaced box, may paint past it,
+			// up to the page's edges.
 			j := i + 1
 			for j < len(frags) && free[frags[j]] == free[frags[i]] {
 				j++
@@ -238,7 +239,8 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 
 // distribute returns the fragments of the container it per page, groups
 // rebuilt on each page they reach, depth the groups already open. free
-// collects the top-level groups of transformed boxes that land on one page.
+// collects the top-level groups of transformed boxes that land on one page
+// and the top-level fragments placed on one page.
 func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructElem]bool, free map[compose.Fragment]bool) map[int][]compose.Fragment {
 	out := map[int][]compose.Fragment{}
 	for _, k := range it.kids {
@@ -280,6 +282,13 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructEle
 				f = cloneFragment(f)
 			}
 			markUsed(f, used)
+			if depth == 0 && k.page >= 0 {
+				// A line or a replaced box sits on one page whole (CSS
+				// Fragmentation 3, 4.4), so its ink overflow, an
+				// underline or a glyph below the line box, paints into
+				// the page margin with it, as browsers print it.
+				free[f] = true
+			}
 			out[p] = append(out[p], f)
 		}
 	}
