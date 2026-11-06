@@ -23,6 +23,8 @@ func TestDefault_KeepsThePreviousCaps(t *testing.T) {
 		MaxFormDepth:         10,
 		MaxCachedObjects:     50_000,
 		MaxRenderPixels:      50_000_000,
+		MaxConvertInputBytes: 16 << 20,
+		MaxConvertPages:      10_000,
 	}
 	if got := limits.Default(); got != want {
 		t.Errorf("Default() = %+v, want %+v", got, want)
@@ -142,6 +144,8 @@ func TestValidate_RefusesNegativeAndPastCeiling(t *testing.T) {
 		MaxFormDepth:         limits.MaxFormDepthCeiling,
 		MaxCachedObjects:     limits.MaxCachedObjectsCeiling,
 		MaxRenderPixels:      limits.MaxRenderPixelsCeiling,
+		MaxConvertInputBytes: limits.MaxConvertInputBytesCeiling,
+		MaxConvertPages:      limits.MaxConvertPagesCeiling,
 	}
 	for _, l := range []limits.Limits{{}, limits.Default(), ceilings} {
 		if err := l.Validate(); err != nil {
@@ -161,6 +165,10 @@ func TestValidate_RefusesNegativeAndPastCeiling(t *testing.T) {
 		{MaxFormDepth: limits.MaxFormDepthCeiling + 1},
 		{MaxCachedObjects: limits.MaxCachedObjectsCeiling + 1},
 		{MaxRenderPixels: limits.MaxRenderPixelsCeiling + 1},
+		{MaxConvertInputBytes: -1},
+		{MaxConvertPages: -1},
+		{MaxConvertInputBytes: limits.MaxConvertInputBytesCeiling + 1},
+		{MaxConvertPages: limits.MaxConvertPagesCeiling + 1},
 	} {
 		if err := l.Validate(); !errors.Is(err, limits.ErrInvalid) {
 			t.Errorf("Validate(%+v) = %v, want ErrInvalid", l, err)

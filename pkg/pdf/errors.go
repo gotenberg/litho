@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
+	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
@@ -17,6 +18,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 	"github.com/gotenberg/litho/pkg/internal/signature"
 	"github.com/gotenberg/litho/pkg/internal/tagging"
+	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
 // Exported errors for granular error handling by consumers.
@@ -767,9 +769,34 @@ var (
 	ErrTransparencyFlatteningRefused = errors.New("transparency flattening refused")
 
 	// ErrInvalidLimits is returned, wrapped in an error naming the field, by
-	// [Limits.Validate], and by [Open] and [OpenFile] when a budget given to
-	// [WithLimits] is negative or above its ceiling. See [Limits].
+	// [Limits.Validate], by [Open] and [OpenFile] when a budget given to
+	// [WithLimits] is negative or above its ceiling, and by [Convert] for one
+	// given to [WithConvertLimits]. See [Limits].
 	ErrInvalidLimits = limits.ErrInvalid
+
+	// ErrUnsupportedFormat is returned, wrapped in an error naming the
+	// format, by [Convert] for a [Format] it does not read. Nothing is read
+	// from the source or written.
+	ErrUnsupportedFormat = errors.New("unsupported input format")
+
+	// ErrInvalidConvertOptions is returned, wrapped in an error naming the
+	// option, by [Convert] when a [ConvertOption] is out of range: a page or
+	// font size that is not finite and positive, a page side past 14,400
+	// points, or margins that leave no room on the page.
+	ErrInvalidConvertOptions = plaintext.ErrInvalidOptions
+
+	// ErrConvertInputTooLarge is returned, wrapped, by [Convert] for a source
+	// longer than [Limits.MaxConvertInputBytes]. Nothing is written.
+	ErrConvertInputTooLarge = plaintext.ErrInputTooLarge
+
+	// ErrConvertTooManyPages is returned, wrapped, by [Convert] when the
+	// layout needs more than [Limits.MaxConvertPages] pages. Nothing is
+	// written.
+	ErrConvertTooManyPages = plaintext.ErrTooManyPages
+
+	// ErrConvertNoFonts is returned, wrapped, by [Convert] when the font
+	// directories it reads hold no usable font. Nothing is written.
+	ErrConvertNoFonts = text.ErrNoFonts
 
 	// ErrStreamTooLarge is returned, wrapped, when decoding a stream would
 	// produce more than [Limits.MaxStreamBytes] bytes: by [Reader.DecodeImage]
@@ -1035,6 +1062,10 @@ var invalidInputErrors = []error{
 	ErrInvalidFlattenOptions,
 	ErrTransparencyFlatteningRefused,
 	ErrInvalidLimits,
+	ErrUnsupportedFormat,
+	ErrInvalidConvertOptions,
+	ErrConvertInputTooLarge,
+	ErrConvertTooManyPages,
 	ErrStreamTooLarge,
 	ErrDamagedStream,
 	ErrPageContentTooLarge,

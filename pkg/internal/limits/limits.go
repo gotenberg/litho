@@ -5,8 +5,9 @@ import (
 	"math"
 )
 
-// Limits holds the six resource budgets of one document. A zero field stands
-// for its default, which [Limits.WithDefaults] fills in. Only these six are
+// Limits holds the eight resource budgets of one document or conversion. A
+// zero field stands for its default, which [Limits.WithDefaults] fills in.
+// Only these eight are
 // configurable: the recursion guards that protect litho's own stack stay fixed
 // consts in the packages that recurse, since a Go stack overflow is fatal and
 // no recover can catch it.
@@ -42,6 +43,14 @@ type Limits struct {
 	// raster the renderer allocates at its size. See
 	// [DefaultMaxRenderPixels].
 	MaxRenderPixels int64
+
+	// MaxConvertInputBytes bounds the source bytes one conversion reads. See
+	// [DefaultMaxConvertInputBytes].
+	MaxConvertInputBytes int64
+
+	// MaxConvertPages bounds the pages one conversion lays out. See
+	// [DefaultMaxConvertPages].
+	MaxConvertPages int
 }
 
 // DefaultMaxStreamBytes caps the decoded output of one stream at 256 MiB. It is
@@ -172,6 +181,25 @@ const DefaultMaxCachedObjects = 50_000
 // raster.
 const DefaultMaxRenderPixels = 50_000_000
 
+// DefaultMaxConvertInputBytes caps the source one conversion reads at 16 MiB.
+// It is an anti-DoS guard, not spec-mandated: a converter holds its whole
+// source and the laid-out document in memory, and the document costs tens of
+// bytes for every character it draws. A converter refuses a larger source
+// rather than truncate it.
+//
+// 16 MiB of plain text fills about 3,500 A4 pages at 12 points, and a long
+// novel weighs about 1 MiB, so real documents fit many times over.
+const DefaultMaxConvertInputBytes = 16 << 20
+
+// DefaultMaxConvertPages caps the pages one conversion lays out at 10,000. It
+// is an anti-DoS guard, not spec-mandated: ISO 32000-1 sets no page count, and
+// a small source can ask for many pages, a run of form feeds one page per
+// byte. A converter fails past it rather than drop pages.
+//
+// 10,000 pages holds the default input budget laid out at 12 points nearly
+// three times over, and a 2,000-page report five times.
+const DefaultMaxConvertPages = 10_000
+
 // Ceilings bound what a caller may configure. Past its ceiling a budget stops
 // being a guard: one operation would hold more memory than a host has, or the
 // arithmetic built on the budget would leave the int64 range.
@@ -209,6 +237,16 @@ const (
 	// raster then holds 16 GiB, past what one render can reasonably ask of a
 	// host.
 	MaxRenderPixelsCeiling = min(1<<30, math.MaxInt/16)
+
+	// MaxConvertInputBytesCeiling is 1 GiB, sixty-four times the default. A
+	// conversion holds its source in one []byte and, laid out, some tens of
+	// bytes for each of its characters.
+	MaxConvertInputBytesCeiling = min(1<<30, math.MaxInt)
+
+	// MaxConvertPagesCeiling is 100,000 pages, the page cap of the
+	// composition backend every converter writes through: a document past it
+	// cannot be written.
+	MaxConvertPagesCeiling = 100_000
 )
 
 // Default returns every budget at its default.
@@ -220,6 +258,8 @@ func Default() Limits {
 		MaxFormDepth:         DefaultMaxFormDepth,
 		MaxCachedObjects:     DefaultMaxCachedObjects,
 		MaxRenderPixels:      DefaultMaxRenderPixels,
+		MaxConvertInputBytes: DefaultMaxConvertInputBytes,
+		MaxConvertPages:      DefaultMaxConvertPages,
 	}
 }
 
@@ -244,6 +284,12 @@ func (l Limits) WithDefaults() Limits {
 	if l.MaxRenderPixels == 0 {
 		l.MaxRenderPixels = d.MaxRenderPixels
 	}
+	if l.MaxConvertInputBytes == 0 {
+		l.MaxConvertInputBytes = d.MaxConvertInputBytes
+	}
+	if l.MaxConvertPages == 0 {
+		l.MaxConvertPages = d.MaxConvertPages
+	}
 	return l
 }
 
@@ -261,6 +307,8 @@ func (l Limits) Validate() error {
 		{"MaxFormDepth", int64(l.MaxFormDepth), MaxFormDepthCeiling},
 		{"MaxCachedObjects", int64(l.MaxCachedObjects), MaxCachedObjectsCeiling},
 		{"MaxRenderPixels", l.MaxRenderPixels, MaxRenderPixelsCeiling},
+		{"MaxConvertInputBytes", l.MaxConvertInputBytes, MaxConvertInputBytesCeiling},
+		{"MaxConvertPages", int64(l.MaxConvertPages), MaxConvertPagesCeiling},
 	} {
 		if b.value < 0 {
 			return fmt.Errorf("%w: %s is %d, below zero", ErrInvalid, b.name, b.value)

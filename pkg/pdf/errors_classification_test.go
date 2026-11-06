@@ -25,6 +25,7 @@ var otherErrors = []error{
 	ErrNoMetadata,
 	ErrPipelineEmpty,
 	ErrPipelineNoSource,
+	ErrConvertNoFonts,
 }
 
 // TestEverySentinelIsClassified fails when an exported sentinel joins

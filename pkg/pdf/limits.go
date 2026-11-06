@@ -5,16 +5,18 @@ import "github.com/gotenberg/litho/pkg/internal/limits"
 // Limits bounds the resources litho spends on one document: how many bytes a
 // stream may decode to, how many pixels an image may hold, how large an
 // embedded PDF validation opens, how deeply form XObjects nest, how many
-// parsed objects stay cached, and how many pixels a rendered page may hold. Each budget is an anti-DoS guard, not a
-// requirement of ISO 32000: a few kilobytes of crafted input can otherwise ask
-// for gigabytes of memory or unbounded work. The defaults ([DefaultLimits])
-// sit far above what real documents need.
+// parsed objects stay cached, how many pixels a rendered page may hold, and
+// how large a source [Convert] reads and how many pages it lays out. Each
+// budget is an anti-DoS guard, not a requirement of ISO 32000: a few kilobytes
+// of crafted input can otherwise ask for gigabytes of memory or unbounded
+// work. The defaults ([DefaultLimits]) sit far above what real documents need.
 //
 // A zero field keeps its default, so Limits{MaxStreamBytes: 1 << 30} raises
 // one budget and leaves the others alone. A negative field, or one above its
-// ceiling, makes [Open] fail with [ErrInvalidLimits], and [Limits.Validate]
-// reports the same error without opening a document. Pass it to [Open] or
-// [OpenFile] with [WithLimits].
+// ceiling, makes [Open] and [Convert] fail with [ErrInvalidLimits], and
+// [Limits.Validate] reports the same error without opening a document. Pass it
+// to [Open] or [OpenFile] with [WithLimits], and to [Convert] with
+// [WithConvertLimits].
 //
 // The ceilings below hold on a 64-bit platform. On a 32-bit one, where a Go
 // int, and with it any one buffer, stops below 2 GiB, they are lower:
@@ -104,6 +106,18 @@ type Limits struct {
 	// 16 bytes a pixel for the page. Default 50,000,000, a US Letter or A4
 	// page at 600 dpi, at most 2^30.
 	MaxRenderPixels int64
+
+	// MaxConvertInputBytes bounds the source bytes one [Convert] call reads.
+	// A larger source fails with [ErrConvertInputTooLarge] and is never
+	// truncated. Convert holds the source and the laid-out document in
+	// memory, some tens of bytes for each character drawn. Default 16 MiB,
+	// about 3,500 A4 pages of plain text at 12 points, at most 1 GiB.
+	MaxConvertInputBytes int64
+
+	// MaxConvertPages bounds the pages one [Convert] call lays out. A source
+	// that needs more fails with [ErrConvertTooManyPages]; no page is
+	// dropped. Default 10,000, at most 100,000.
+	MaxConvertPages int
 }
 
 // DefaultLimits returns the budgets a [Reader] applies when [WithLimits] is
@@ -141,6 +155,8 @@ func (l Limits) internal() limits.Limits {
 		MaxFormDepth:         l.MaxFormDepth,
 		MaxCachedObjects:     l.MaxCachedObjects,
 		MaxRenderPixels:      l.MaxRenderPixels,
+		MaxConvertInputBytes: l.MaxConvertInputBytes,
+		MaxConvertPages:      l.MaxConvertPages,
 	}
 }
 
@@ -153,5 +169,7 @@ func limitsFromInternal(l limits.Limits) Limits {
 		MaxFormDepth:         l.MaxFormDepth,
 		MaxCachedObjects:     l.MaxCachedObjects,
 		MaxRenderPixels:      l.MaxRenderPixels,
+		MaxConvertInputBytes: l.MaxConvertInputBytes,
+		MaxConvertPages:      l.MaxConvertPages,
 	}
 }
