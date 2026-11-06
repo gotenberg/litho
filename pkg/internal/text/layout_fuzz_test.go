@@ -6,24 +6,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
-)
-
-var (
-	fuzzFontsOnce sync.Once
-	fuzzFonts     *Fonts
 )
 
 func FuzzLayout(f *testing.F) {
 	f.Add("AB AB\nABC D", 30.0, false)
 	f.Add("\x00\x01\x7f\u0085\r\r\n\t\t\ufeff\u200d\xed\xa0\x80\xff A\u0301\u2067אב\u2069", 7.5, true)
 	f.Add(strings.Repeat("ABCD", 500), 0.01, true)
+	// The index reads its files again on first use of a face, so their
+	// directory lives as long as the fuzz target.
+	fuzzFonts := newFuzzFonts(f, f.TempDir())
 	f.Fuzz(func(t *testing.T, text string, width float64, preserve bool) {
-		fuzzFontsOnce.Do(func() {
-			dir := t.TempDir()
-			fuzzFonts = newFuzzFonts(t, dir)
-		})
 		if len(text) > 1<<14 {
 			return
 		}
@@ -53,10 +46,8 @@ func FuzzLayout(f *testing.F) {
 	})
 }
 
-// newFuzzFonts indexes the test families once for the fuzz target. The
-// directory outlives the first iteration, which is enough: the index holds
-// the bytes it read.
-func newFuzzFonts(t *testing.T, dir string) *Fonts {
+// newFuzzFonts indexes the test families in dir once for the fuzz target.
+func newFuzzFonts(t testing.TB, dir string) *Fonts {
 	t.Helper()
 	files := append(sansFamily(), fontFile{name: "digits.ttf", data: testDigits()}, fontFile{name: "hebrew.ttf", data: testHebrew()})
 	for _, file := range files {

@@ -3,10 +3,6 @@ package text
 import (
 	"fmt"
 	"math"
-	"strings"
-
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/fontscan"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 )
@@ -21,17 +17,35 @@ const maxFontSize = 1000
 // Style is what a converter asks for one run of text.
 type Style struct {
 	// Families lists family names in preference order, matched without
-	// regard to case or spaces. An empty list means sans-serif.
+	// regard to case or spaces against a face's family and typographic
+	// family names. An empty list means sans-serif. A concrete family
+	// brings its metric-compatible aliases right after it (see
+	// [Fonts.Match]).
 	//
-	// A generic family expands, in place, to these families, then to
-	// go-text's own substitutions for it:
+	// A generic family expands, in place, to these families, each with its
+	// metric-compatible aliases, after fontconfig's 60-latin.conf:
 	//
-	//   - serif: DejaVu Serif, Liberation Serif, Noto Serif, Times New Roman, Times
-	//   - sans-serif: DejaVu Sans, Liberation Sans, Noto Sans, Arial, Helvetica
-	//   - monospace: DejaVu Sans Mono, Liberation Mono, Noto Sans Mono, Courier New, Courier
-	//   - cursive: Comic Neue, Comic Sans MS, URW Chancery L
-	//   - fantasy: Impact, Papyrus
-	//   - system-ui: the sans-serif list
+	//   - serif: DejaVu Serif, Times New Roman, Thorndale AMT, Luxi Serif,
+	//     Nimbus Roman No9 L, Nimbus Roman, Times, Noto Serif
+	//   - sans-serif: DejaVu Sans, Verdana, Arial, Albany AMT, Luxi Sans,
+	//     Nimbus Sans L, Nimbus Sans, Helvetica, Lucida Sans Unicode, BPG
+	//     Glaho International, Tahoma, Noto Sans
+	//   - monospace: DejaVu Sans Mono, Inconsolata, Andale Mono, Courier
+	//     New, Cumberland AMT, Luxi Mono, Nimbus Mono L, Nimbus Mono, Nimbus
+	//     Mono PS, Courier, Noto Sans Mono
+	//   - cursive: TeX Gyre Chorus, URW Chancery L, Z003, ITC Zapf
+	//     Chancery, Zapfino, Comic Sans MS, Comic Neue
+	//   - fantasy: Impact, Copperplate Gothic Std, Cooper Std, Bauhaus Std,
+	//     Papyrus
+	//   - system-ui: Cantarell, Noto Sans UI, Segoe UI, then the sans-serif
+	//     list
+	//
+	// With a Chinese, Japanese or Korean [Style.Lang], the Noto CJK family
+	// of the language (Noto Sans CJK JP, SC, TC, HK or KR; Noto Serif CJK
+	// for serif; Noto Sans Mono CJK for monospace) comes before the list,
+	// as fontconfig's 70-noto-cjk.conf does. Since serif lists DejaVu Serif
+	// first, it picks DejaVu Serif over Liberation Serif when both are
+	// installed.
 	Families []string
 	// Weight is the CSS weight, from 1 to 1000; 400 is regular and 700
 	// bold. Zero means 400; values out of range are clamped.
@@ -41,7 +55,8 @@ type Style struct {
 	// Size is the font size in points, greater than 0 and at most 1000.
 	Size float64
 	// Lang is the BCP 47 language tag of the text, "" when unknown. It
-	// selects language-specific shaping.
+	// selects language-specific shaping and, for Chinese, Japanese and
+	// Korean, the Noto CJK variant matching and fallback prefer.
 	Lang string
 	// Color fills the glyphs.
 	Color compose.Color
@@ -85,66 +100,4 @@ func (s Style) weight() float32 {
 		return 1000
 	}
 	return float32(s.Weight)
-}
-
-// queryFor returns the go-text query for style.
-func queryFor(style Style) fontscan.Query {
-	families := expandFamilies(style.Families)
-	fontStyle := font.StyleNormal
-	if style.Italic {
-		fontStyle = font.StyleItalic
-	}
-	return fontscan.Query{
-		Families: families,
-		Aspect: font.Aspect{
-			Style:   fontStyle,
-			Weight:  font.Weight(style.weight()),
-			Stretch: font.StretchNormal,
-		},
-	}
-}
-
-// Generic family preference lists, as [Style.Families] documents them. The
-// generic keyword ends each list so go-text's own substitutions follow.
-var (
-	serifFamilies     = []string{"DejaVu Serif", "Liberation Serif", "Noto Serif", "Times New Roman", "Times", fontscan.Serif}
-	sansSerifFamilies = []string{"DejaVu Sans", "Liberation Sans", "Noto Sans", "Arial", "Helvetica", fontscan.SansSerif}
-	monospaceFamilies = []string{"DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Courier New", "Courier", fontscan.Monospace}
-	cursiveFamilies   = []string{"Comic Neue", "Comic Sans MS", "URW Chancery L", fontscan.Cursive}
-	fantasyFamilies   = []string{"Impact", "Papyrus", fontscan.Fantasy}
-)
-
-// genericFamily returns the preference list of a generic family name, nil
-// for a concrete family.
-func genericFamily(name string) []string {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "serif":
-		return serifFamilies
-	case "sans-serif", "system-ui":
-		return sansSerifFamilies
-	case "monospace":
-		return monospaceFamilies
-	case "cursive":
-		return cursiveFamilies
-	case "fantasy":
-		return fantasyFamilies
-	}
-	return nil
-}
-
-// expandFamilies returns families with every generic family replaced by its
-// preference list. The result never aliases families.
-func expandFamilies(families []string) []string {
-	if len(families) == 0 {
-		return append([]string(nil), sansSerifFamilies...)
-	}
-	out := make([]string, 0, len(families))
-	for _, name := range families {
-		if list := genericFamily(name); list != nil {
-			out = append(out, list...)
-			continue
-		}
-		out = append(out, name)
-	}
-	return out
 }

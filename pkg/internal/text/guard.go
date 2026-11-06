@@ -4,8 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-
-	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // errGoTextUnsafe reports a font program that would make go-text's parser
@@ -13,32 +11,42 @@ import (
 // before go-text reads it.
 var errGoTextUnsafe = errors.New("font program go-text cannot parse safely")
 
-// checkGoTextSafe refuses the face whose table directory starts at dir in
-// data when it holds a construct go-text v0.3.5 panics on instead of
-// returning an error:
+// goTextTables are the tables of a face [checkGoTextSafe] reads, each nil
+// when the face has none, and the length of its glyf table, 0 without one.
+type goTextTables struct {
+	cmap, head, maxp, loca, hhea, vhea []byte
+	glyfLen                            int64
+}
+
+// checkGoTextSafe refuses a face whose tables hold a construct go-text
+// v0.3.5 panics on instead of returning an error:
 //
 //   - a cmap format 4 segment whose idRangeOffset points before the
 //     glyphIdArray (ISO/IEC 14496-22, cmap format 4): go-text indexes the
 //     array with a negative offset;
 //   - a loca entry that decreases or points past the glyf table (ISO/IEC
-//     14496-22, loca table): go-text slices glyf with it unchecked.
+//     14496-22, loca table): go-text slices glyf with it unchecked;
+//   - an hhea numberOfHMetrics or a vhea numOfLongVerMetrics above maxp's
+//     numGlyphs (ISO/IEC 14496-22, hhea and vhea tables): go-text sizes the
+//     side bearing array with the negative difference; or of 0 for a face
+//     with glyphs, where the specification asks for at least one: go-text
+//     reads the advance of the last long metric, which does not exist.
 //
-// A program litho cannot read here is left to go-text, which reports its
-// own error.
-func checkGoTextSafe(data []byte, dir int64) error {
-	if dir < 0 || dir >= int64(len(data)) {
-		return nil
-	}
-	records, err := truetype.ParseTableDirectory(data[dir:])
-	if err != nil {
-		return nil //nolint:nilerr // go-text parses the directory itself and reports the error
-	}
-	if err := checkLoca(data, records); err != nil {
+// A table litho cannot read here is left to go-text, which reports its own
+// error.
+func checkGoTextSafe(t goTextTables) error {
+	cmap := t.cmap
+	if err := checkLoca(t.head, t.maxp, t.loca, t.glyfLen); err != nil {
 		return fmt.Errorf("%w: %w", errGoTextUnsafe, err)
 	}
-	cmap, err := truetype.TableData(data, records, "cmap")
-	if err != nil || len(cmap) < 4 {
-		return nil //nolint:nilerr // a missing or truncated cmap is go-text's error to report
+	if err := checkLongMetrics(t.maxp, t.hhea, "hhea"); err != nil {
+		return fmt.Errorf("%w: %w", errGoTextUnsafe, err)
+	}
+	if err := checkLongMetrics(t.maxp, t.vhea, "vhea"); err != nil {
+		return fmt.Errorf("%w: %w", errGoTextUnsafe, err)
+	}
+	if len(cmap) < 4 {
+		return nil
 	}
 	numTables := int(binary.BigEndian.Uint16(cmap[2:]))
 	for i := range numTables {
@@ -57,6 +65,20 @@ func checkGoTextSafe(data []byte, dir int64) error {
 		if err := checkCmap4(sub); err != nil {
 			return fmt.Errorf("%w: cmap subtable %d: %w", errGoTextUnsafe, i, err)
 		}
+	}
+	return nil
+}
+
+// checkLongMetrics checks that the long metrics count of header, an hhea or
+// vhea table, lies between 1 and maxp's numGlyphs. Both tables share the
+// layout: the count is the last uint16 of their 36 bytes.
+func checkLongMetrics(maxp, header []byte, tag string) error {
+	if len(maxp) < 6 || len(header) < 36 {
+		return nil
+	}
+	numGlyphs := binary.BigEndian.Uint16(maxp[4:])
+	if long := binary.BigEndian.Uint16(header[34:]); long > numGlyphs || (long == 0 && numGlyphs > 0) {
+		return fmt.Errorf("%s counts %d long metrics for %d glyphs", tag, long, numGlyphs)
 	}
 	return nil
 }
@@ -83,24 +105,12 @@ func checkCmap4(sub []byte) error {
 	return nil
 }
 
-// checkLoca checks that every glyph's loca range lies within glyf and does
-// not run backwards. A table litho cannot read is left to go-text.
-func checkLoca(data []byte, records []truetype.TableRecord) error {
-	head, err := truetype.TableData(data, records, "head")
-	if err != nil || len(head) < 54 {
-		return nil //nolint:nilerr // go-text reports a missing or short head itself
-	}
-	maxp, err := truetype.TableData(data, records, "maxp")
-	if err != nil || len(maxp) < 6 {
-		return nil //nolint:nilerr // go-text reports a missing or short maxp itself
-	}
-	loca, err := truetype.TableData(data, records, "loca")
-	if err != nil {
-		return nil //nolint:nilerr // a font without loca has no glyf for go-text to slice
-	}
-	glyf, err := truetype.TableData(data, records, "glyf")
-	if err != nil {
-		glyf = nil
+// checkLoca checks that every glyph's loca range lies within a glyf table
+// of glyfLen bytes and does not run backwards. A table litho cannot read is
+// left to go-text.
+func checkLoca(head, maxp, loca []byte, glyfLen int64) error {
+	if len(head) < 54 || len(maxp) < 6 || loca == nil {
+		return nil
 	}
 	numGlyphs := int(binary.BigEndian.Uint16(maxp[4:]))
 	long := int16(binary.BigEndian.Uint16(head[50:])) == 1 //nolint:gosec // reinterprets the indexToLocFormat bits as the int16 the table stores
@@ -117,10 +127,11 @@ func checkLoca(data []byte, records []truetype.TableRecord) error {
 	if len(loca) < size*(numGlyphs+1) {
 		return nil
 	}
+	glyf := uint64(max(glyfLen, 0))
 	for i := range numGlyphs {
 		start, end := entry(i), entry(i+1)
-		if start != end && (start > end || end > uint64(len(glyf))) {
-			return fmt.Errorf("glyph %d: loca range [%d, %d) outside a glyf table of %d bytes", i, start, end, len(glyf))
+		if start != end && (start > end || end > glyf) {
+			return fmt.Errorf("glyph %d: loca range [%d, %d) outside a glyf table of %d bytes", i, start, end, glyf)
 		}
 	}
 	return nil

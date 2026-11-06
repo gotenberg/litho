@@ -6,12 +6,12 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/go-text/typesetting/di"
 	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/fontscan"
 	"github.com/go-text/typesetting/harfbuzz"
 	"github.com/go-text/typesetting/language"
 	"github.com/go-text/typesetting/segmenter"
@@ -140,17 +140,37 @@ type Report struct {
 // reversed as a block. Deeper embedding levels (UAX #9, L2) are not
 // reordered further.
 //
-// When the face [Fonts.Match] picks for a run lacks a character, the face
-// go-text resolves for that character under the same families, weight and
-// style draws it, and failing that any indexed face that covers it, closest
-// weight and style first. A character no face covers draws the matched
-// face's .notdef glyph and is listed in [Report.MissingGlyphs].
+// When the face [Fonts.Match] picks for a run lacks a character, another
+// face that covers it draws it, tried in this order, each family yielding
+// its face closest in aspect:
+//
+//   - the other faces of the matched face's family;
+//   - the families the run's style asks for, aliases and generic lists
+//     expanded as [Fonts.Match] expands them;
+//   - the families fontconfig prefers for the character's script: the
+//     generic list of the style's first generic family (sans-serif without
+//     one) for Latin, Greek and Cyrillic; the Noto CJK families for Han,
+//     kana, Hangul and Bopomofo, the one of [Style.Lang] first and Japanese
+//     first without one; Noto Sans Arabic, Noto Naskh Arabic and DejaVu Sans
+//     for Arabic; Noto Sans Hebrew and DejaVu Sans for Hebrew; Noto Sans
+//     Devanagari; Noto Sans Thai;
+//   - any indexed face, closest in aspect first, then in index order, with
+//     Apple's LastResort placeholder font last.
+//
+// Colour emoji faces are not indexed, so emoji fall to an outline face that
+// covers them, if any. A character no face covers draws the matched face's
+// .notdef glyph and is listed in [Report.MissingGlyphs].
+//
+// Layout parses the font programs of the faces it draws with on first use
+// and keeps them in the index's bounded cache.
 //
 // Layout returns [ErrInvalidWidth] for a width that is not finite and
 // positive (a width past 65536 points acts as 65536), [ErrInvalidStyle] for
 // a run whose style is out of range, [ErrTooManyRuns] past [MaxLayoutRuns],
-// [ErrTextTooLong] past [MaxLayoutRunes], [ErrNoFonts] on an empty index,
-// and ctx's error, checked per line. It never truncates text.
+// [ErrTextTooLong] past [MaxLayoutRunes], [ErrNoFonts] on an empty index or
+// one none of whose faces still loads, an error when a face's file changed
+// or vanished since [NewFonts], and ctx's error, checked per line. It never
+// truncates text.
 //
 // Layout does not modify runs. The returned lines share [compose.Face]
 // values with other calls on the same Fonts.
@@ -180,7 +200,10 @@ func (f *Fonts) Layout(ctx context.Context, runs []Run, width float64, opts Opti
 	if err := ctx.Err(); err != nil {
 		return nil, Report{}, fmt.Errorf("laying out text: %w", err)
 	}
-	st := newLayoutState(f, runs)
+	st, err := newLayoutState(f, runs)
+	if err != nil {
+		return nil, Report{}, err
+	}
 	norm := normalize(runs, opts.Whitespace)
 	maxWidth := st.toFixed(width)
 	var lines []Line
@@ -209,7 +232,13 @@ type layoutState struct {
 	// unit is the number of shaping units per point.
 	unit float64
 
+	// local holds this call's go-text face of every face it drew with,
+	// parsed the parsed font each one loaded, nil for a face that failed to
+	// load, and byFont maps a parsed font back to its face: the index's
+	// cache may evict a font this call still uses.
 	local   map[*Face]*font.Face
+	parsed  map[*Face]*font.Font
+	byFont  map[*font.Font]*Face
 	cache   map[resolveKey]*Face
 	missing map[rune]struct{}
 
@@ -221,13 +250,19 @@ type layoutState struct {
 
 // styleState is a run's style resolved for shaping.
 type styleState struct {
-	style   Style
-	query   fontscan.Query
-	primary *Face
-	size    fixed.Int26_6
-	letter  fixed.Int26_6
-	word    fixed.Int26_6
-	lang    language.Language
+	style Style
+	req   request
+	// families are the keys of the families the style asks for, generic
+	// the generic family its script preferences follow, region the Noto
+	// CJK variant of its language.
+	families []string
+	generic  generic
+	region   string
+	primary  *Face
+	size     fixed.Int26_6
+	letter   fixed.Int26_6
+	word     fixed.Int26_6
+	lang     language.Language
 }
 
 // resolveKey identifies one per-character face resolution.
@@ -240,7 +275,7 @@ type resolveKey struct {
 // newLayoutState resolves the styles of runs. The shaping scale is the
 // finest power of two, up to [maxShapingUnitsPerPoint], at which the
 // largest size stays within [maxFontSize] units.
-func newLayoutState(f *Fonts, runs []Run) *layoutState {
+func newLayoutState(f *Fonts, runs []Run) (*layoutState, error) {
 	largest := 0.0
 	for _, r := range runs {
 		largest = max(largest, r.Style.Size)
@@ -254,24 +289,66 @@ func newLayoutState(f *Fonts, runs []Run) *layoutState {
 		styles:  make([]styleState, len(runs)),
 		unit:    unit,
 		local:   make(map[*Face]*font.Face),
+		parsed:  make(map[*Face]*font.Font),
+		byFont:  make(map[*font.Font]*Face),
 		cache:   make(map[resolveKey]*Face),
 		missing: make(map[rune]struct{}),
 	}
+	// Runs that share families, weight, slant and language share a match.
+	type matchKey struct {
+		families string
+		req      request
+		lang     string
+	}
+	matched := make(map[matchKey]*styleState)
 	for i, r := range runs {
 		s := styleState{
-			style:   r.Style,
-			query:   queryFor(r.Style),
-			primary: f.Match(r.Style),
-			size:    st.toFixed(r.Style.Size),
-			letter:  st.toFixed(r.Style.LetterSpacing),
-			word:    st.toFixed(r.Style.WordSpacing),
+			style:  r.Style,
+			req:    requestOf(r.Style),
+			size:   st.toFixed(r.Style.Size),
+			letter: st.toFixed(r.Style.LetterSpacing),
+			word:   st.toFixed(r.Style.WordSpacing),
 		}
 		if r.Style.Lang != "" {
 			s.lang = language.NewLanguage(r.Style.Lang)
 		}
+		key := matchKey{families: strings.Join(r.Style.Families, "\x00"), req: s.req, lang: r.Style.Lang}
+		if prev, ok := matched[key]; ok {
+			s.families, s.generic, s.region, s.primary = prev.families, prev.generic, prev.region, prev.primary
+		} else {
+			s.families = requestedFamilies(r.Style)
+			s.generic = firstGeneric(r.Style)
+			s.region = cjkRegion(r.Style.Lang)
+			primary, err := st.usablePrimary(&s, f.Match(r.Style))
+			if err != nil {
+				return nil, err
+			}
+			s.primary = primary
+			matched[key] = &s
+		}
 		st.styles[i] = s
 	}
-	return st
+	return st, nil
+}
+
+// usablePrimary returns matched when its font loads, else the face that
+// draws U+0020 SPACE for s by the fallback order, else the first face that
+// loads. Only a face whose file changed or vanished since indexing fails to
+// load.
+func (st *layoutState) usablePrimary(s *styleState, matched *Face) (*Face, error) {
+	if st.font(matched) != nil {
+		return matched, nil
+	}
+	s.primary = matched
+	if fc := st.fallback(s, language.Latin, ' '); fc != nil {
+		return fc, nil
+	}
+	for _, fc := range st.fonts.faces {
+		if st.font(fc) != nil {
+			return fc, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: no indexed face loads", ErrNoFonts)
 }
 
 // toFixed converts points to shaping units in 26.6 fixed point. Callers
@@ -285,13 +362,30 @@ func (st *layoutState) toPoints(v fixed.Int26_6) float64 {
 	return float64(v) / 64 / st.unit
 }
 
-// face returns this call's own go-text face for fc: go-text faces cache
-// glyph lookups and are not safe for concurrent use.
+// font returns the parsed font of fc, loading it on this call's first use,
+// nil when it fails to load.
+func (st *layoutState) font(fc *Face) *font.Font {
+	if ft, ok := st.parsed[fc]; ok {
+		return ft
+	}
+	ft, err := st.fonts.loadFont(fc)
+	if err != nil {
+		ft = nil
+	}
+	st.parsed[fc] = ft
+	if ft != nil {
+		st.byFont[ft] = fc
+	}
+	return ft
+}
+
+// face returns this call's own go-text face for fc, whose font loads:
+// go-text faces cache glyph lookups and are not safe for concurrent use.
 func (st *layoutState) face(fc *Face) *font.Face {
 	if face, ok := st.local[fc]; ok {
 		return face
 	}
-	face := font.NewFace(fc.font)
+	face := font.NewFace(st.font(fc))
 	st.local[fc] = face
 	return face
 }
@@ -304,22 +398,100 @@ func (st *layoutState) resolve(style int, script language.Script, r rune) *Face 
 	}
 	s := &st.styles[style]
 	fc := s.primary
-	if !covers(fc, r) {
-		st.fonts.mu.Lock()
-		fc = st.fonts.resolveLocked(s.query, script, r)
-		st.fonts.mu.Unlock()
-		if !covers(fc, r) {
-			fc = s.primary
+	if !st.covers(fc, r) {
+		if sc := language.LookupScript(r); sc != language.Common && sc != language.Inherited && sc != language.Unknown {
+			script = sc
+		}
+		if alt := st.fallback(s, script, r); alt != nil {
+			fc = alt
 		}
 	}
 	st.cache[key] = fc
 	return fc
 }
 
-// covers reports whether fc maps r to a glyph.
-func covers(fc *Face, r rune) bool {
-	gid, ok := fc.font.NominalGlyph(r)
+// covers reports whether the parsed font of fc maps r to a glyph.
+func (st *layoutState) covers(fc *Face, r rune) bool {
+	ft := st.font(fc)
+	if ft == nil {
+		return false
+	}
+	gid, ok := ft.NominalGlyph(r)
 	return ok && gid != 0
+}
+
+// placeholderFamily is the family key of Apple's LastResort font, which maps
+// every character to a placeholder glyph showing its Unicode block: it draws
+// a character only when no other face covers it.
+const placeholderFamily = "lastresort"
+
+// isPlaceholderFace reports whether fc is a placeholder face. macOS names
+// its system-only families with a leading dot, ".LastResort" among them.
+func isPlaceholderFace(fc *Face) bool {
+	return slices.ContainsFunc(fc.keys, func(k string) bool { return strings.TrimPrefix(k, ".") == placeholderFamily })
+}
+
+// fallback returns the face that draws r when the primary face of s lacks
+// it, in the order [Fonts.Layout] documents, nil when no face does. A
+// candidate is chosen by its footprint, then loaded to check its cmap, at
+// most [maxFallbackLoads] times.
+func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *Face {
+	f := st.fonts
+	tried := make(map[*Face]bool)
+	loads := 0
+	var found *Face
+	try := func(fc *Face) bool {
+		if fc == nil || fc == s.primary || tried[fc] {
+			return false
+		}
+		tried[fc] = true
+		if loads >= maxFallbackLoads {
+			return true
+		}
+		loads++
+		if st.covers(fc, r) {
+			found = fc
+			return true
+		}
+		return false
+	}
+	for _, key := range s.primary.keys {
+		if try(f.bestInFamily(key, s.req, r)) {
+			return found
+		}
+	}
+	for _, key := range s.families {
+		if try(f.bestInFamily(key, s.req, r)) {
+			return found
+		}
+	}
+	for _, key := range scriptFamilies(script, s.generic, s.region) {
+		if try(f.bestInFamily(key, s.req, r)) {
+			return found
+		}
+	}
+	var rest []*Face
+	for _, fc := range f.faces {
+		if fc.covers(r) && !tried[fc] && fc != s.primary {
+			rest = append(rest, fc)
+		}
+	}
+	slices.SortFunc(rest, func(a, b *Face) int {
+		if pa, pb := isPlaceholderFace(a), isPlaceholderFace(b); pa != pb {
+			if pa {
+				return 1
+			}
+			return -1
+		}
+		ra, rb := rankFace(s.req, a), rankFace(s.req, b)
+		return slices.Compare(ra[:], rb[:])
+	})
+	for _, fc := range rest {
+		if try(fc) {
+			return found
+		}
+	}
+	return nil
 }
 
 // styleFontmap resolves faces for one style and script, the
@@ -488,14 +660,16 @@ func rescale(out *shaping.Output, size fixed.Int26_6) {
 // collectMissing records the characters out draws as .notdef because its
 // face lacks them.
 func (st *layoutState) collectMissing(out *shaping.Output, para []rune) {
-	fc := st.fonts.byFont[out.Face.Font]
 	for _, g := range out.Glyphs {
 		if g.GlyphID != 0 {
 			continue
 		}
 		start, end := clusterRange(g, len(para))
 		for _, r := range para[start:end] {
-			if harfbuzz.IsDefaultIgnorable(r) || (fc != nil && covers(fc, r)) {
+			if harfbuzz.IsDefaultIgnorable(r) {
+				continue
+			}
+			if gid, ok := out.Face.NominalGlyph(r); ok && gid != 0 {
 				continue
 			}
 			if _, ok := st.missing[r]; !ok && len(st.missing) < maxMissingGlyphs {
@@ -531,8 +705,7 @@ func (st *layoutState) line(runs shaping.Line, para []rune, styleOf []int, dir d
 		if len(out.Glyphs) == 0 {
 			continue
 		}
-		fc := st.fonts.byFont[out.Face.Font]
-		cf, err := fc.Compose()
+		cf, err := st.byFont[out.Face.Font].Compose()
 		if err != nil {
 			return Line{}, fmt.Errorf("laying out text: %w", err)
 		}

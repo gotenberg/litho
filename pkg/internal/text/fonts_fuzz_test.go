@@ -1,12 +1,10 @@
 package text
 
 import (
+	"bytes"
 	"context"
-	"log/slog"
+	"slices"
 	"testing"
-
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/fontscan"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
@@ -17,9 +15,7 @@ func FuzzLoadFontData(f *testing.F) {
 	f.Add(valid[:len(valid)/2])
 	f.Add(fontbuild.Collection(valid, testDigits()))
 	f.Fuzz(func(t *testing.T, data []byte) {
-		logger := slog.New(slog.DiscardHandler)
-		fonts := &Fonts{logger: logger, byFont: make(map[*font.Font]*Face), fm: fontscan.NewFontMap(fontscanLogger{logger})}
-		fonts.loadData("fuzz.ttf", data)
+		fonts := memoryFonts(map[string][]byte{"fuzz.ttf": data})
 		if fonts.Len() == 0 {
 			return
 		}
@@ -32,4 +28,31 @@ func FuzzLoadFontData(f *testing.F) {
 			t.Fatalf("Layout on a fuzzed face: %v", err)
 		}
 	})
+}
+
+// memoryFile is a font file held in memory.
+type memoryFile struct {
+	*bytes.Reader
+}
+
+// Close does nothing.
+func (memoryFile) Close() error { return nil }
+
+// memoryFonts indexes files held in memory, in lexical order of their
+// names, as [NewFonts] indexes a directory.
+func memoryFonts(files map[string][]byte) *Fonts {
+	f := newIndex(nil, func(path string) (sfntFile, int64, error) {
+		data := files[path]
+		return memoryFile{bytes.NewReader(data)}, int64(len(data)), nil
+	})
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	budget := maxFontIndexBytes
+	for _, name := range names {
+		f.indexFile(name, &budget)
+	}
+	return f
 }
