@@ -1,4 +1,4 @@
-package mutations
+package embed
 
 import (
 	"bytes"
@@ -354,14 +354,14 @@ func TestSubsetTTF_FallbackOnCorruptInput(t *testing.T) {
 
 func TestSubsetTTF_RoundTripMinimalTTF(t *testing.T) {
 	// Build a minimal TTF fixture, subset it keeping only GID 0 and 1,
-	// and confirm the result still parses via parseTTF.
+	// and confirm the result still parses via parse.
 	raw := buildSubsetTestTTF(t)
 
 	subset, err := subsetTTF(raw, map[uint16]bool{1: true})
 	if err != nil {
 		t.Fatalf("subsetTTF: %v", err)
 	}
-	if _, err := parseTTF(subset); err != nil {
+	if _, err := parse(subset); err != nil {
 		t.Fatalf("subset re-parse: %v", err)
 	}
 	// Subset should be the same size or smaller than the input (it
@@ -399,7 +399,7 @@ func TestSubsetTTF_HeadChecksumAdjustment(t *testing.T) {
 }
 
 // buildSubsetTestTTF reuses the minimalTTF fixture pattern from the
-// public-facing stamp test. It is kept here as a package-private helper
+// public-facing stamp test in pkg/pdf. It is kept here as a package-private helper
 // to avoid a cross-package test dependency and to document the minimum
 // table set required by [subsetTTF].
 func buildSubsetTestTTF(t *testing.T) []byte {

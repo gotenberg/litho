@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/typography/embed"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
@@ -655,11 +656,11 @@ func TestFlattenDrawsAGlyphTwoCharactersShare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RewriteCmap: %v", err)
 	}
-	font, err := loadTextFont(program)
+	font, err := embed.Load(program)
 	if err != nil {
-		t.Fatalf("loadTextFont: %v", err)
+		t.Fatalf("embed.Load: %v", err)
 	}
-	if missing := font.uncovered("日本⽇"); len(missing) != 0 {
+	if missing := font.Uncovered("日本⽇"); len(missing) != 0 {
 		t.Fatalf("the program lacks %q, want every character covered", string(missing))
 	}
 	if err := FlattenFormWith(ctx, alloc, doc, FlattenOptions{Fonts: offering(program)}); err != nil {

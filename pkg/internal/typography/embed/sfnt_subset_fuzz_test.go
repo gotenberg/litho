@@ -1,21 +1,21 @@
-package mutations
+package embed
 
 import (
 	"encoding/binary"
 	"testing"
 )
 
-// FuzzSubsetTTF feeds arbitrary font bytes to the stamp subsetter and asserts
+// FuzzSubsetTTF feeds arbitrary font bytes to the in-place subsetter and asserts
 // crash-freedom.
 //
-// The bytes are a font file the caller hands to the stamp API, so this walks
+// The bytes are a font file the caller hands to the text stamp, so this walks
 // input litho did not produce: a table directory, the loca offsets, and the
 // glyf table, following composite-glyph references to a fixed point. Unlike the
 // readers beside it this one BUILDS a font from what it reads, so a length it
 // trusts too far corrupts the written document rather than only the report.
 //
-// [FuzzValidateTTFForStamp] covers the validator that runs before it; measured
-// against the fuzz corpora, every function in stamp_font_subset.go sat at zero.
+// [FuzzLoad] covers the parser that runs before it; measured
+// against the fuzz corpora, every function of the subsetter sat at zero.
 func FuzzSubsetTTF(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte("\x00\x01\x00\x00"))

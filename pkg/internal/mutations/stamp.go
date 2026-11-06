@@ -8,7 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/internal/typography/embed"
 )
 
 // TextStampOptions holds everything needed to stamp a line of text on one
@@ -104,40 +104,19 @@ func StampText(
 		glyphs []inkGlyph
 	)
 	if len(opts.TTFBytes) > 0 {
-		var f *embeddedTTF
-		f, err = parseTTF(opts.TTFBytes)
+		var f *embed.Font
+		f, err = embed.Load(opts.TTFBytes)
 		if err != nil {
 			return fmt.Errorf("parsing TTF for stamp: %w", err)
 		}
 
-		if opts.Position != PositionNone {
-			// Measured before subsetting, which replaces f.raw. A program
-			// with CFF outlines reads them from its CFF table.
-			var cffData []byte
-			if data, err := truetype.CFFTable(opts.TTFBytes); err == nil {
-				cffData = data
-			}
-			if glyphs, err = embeddedInkGlyphs(ctx, doc, f, cffData, opts.Text); err != nil {
-				return err
-			}
-		}
-
-		// Subset the raw TTF to just the glyphs referenced by the stamp
-		// text (plus .notdef and any composite-glyph dependencies). The
-		// subsetter reuses the parsed font's Unicode→GID map so text
-		// encoding continues to work with the same embeddedTTF. On any
-		// subsetting failure the stamp falls back to full embedding so it
-		// still renders. Correctness over size.
-		keepGIDs := collectUsedGIDs(opts.Text, f)
-		if subsetBytes, subErr := subsetTTF(opts.TTFBytes, keepGIDs); subErr == nil {
-			f.raw = subsetBytes
-		} else if doc != nil {
-			doc.Logger.Debug("TTF subsetting failed, falling back to full embedding",
-				"err", subErr,
-			)
-		}
-
-		fontRef = embedTTFFont(alloc, f)
+		// Subset the program to just the glyphs referenced by the stamp
+		// text (plus .notdef and any composite-glyph dependencies), keeping
+		// glyph IDs, so the text is encoded as glyph IDs. On any subsetting
+		// failure the stamp falls back to full embedding so it still
+		// renders. Correctness over size.
+		fontRef = alloc.Alloc(ast.PdfNull{})
+		f.WriteIdentity(alloc, textFontLogger(doc), fontRef, collectUsedGIDs(opts.Text, f))
 		encoded = encodeTextAsGIDs(opts.Text, f)
 		fontResName = ast.PdfName(fmt.Sprintf("StampF%d", fontRef.ObjectNum))
 	} else {

@@ -1,19 +1,22 @@
-package mutations
+package embed
 
 import (
 	"encoding/binary"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// FuzzValidateTTFForStamp feeds arbitrary bytes to the stamp font validator and
-// asserts crash-freedom.
+// FuzzLoad feeds arbitrary bytes to the font loader and asserts
+// crash-freedom.
 //
 // The bytes come from a caller-supplied font file rather than from the PDF, but
 // the rule is the same: this function's leading argument is a []byte it did not
 // produce, and it walks an sfnt table directory to decide whether the font can
 // be embedded. A truncated directory or a table offset past the end of the file
 // is exactly what it exists to reject, so it must reject rather than panic.
-func FuzzValidateTTFForStamp(f *testing.F) {
+func FuzzLoad(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte("\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"))
 	f.Add([]byte("OTTO\x00\x01\x00\x00"))
@@ -25,16 +28,28 @@ func FuzzValidateTTFForStamp(f *testing.F) {
 	// hmtx widths, the cmap walk) is never reached: mutation cannot invent five
 	// consistent tables by chance.
 	f.Add(stampableTTF())
+	f.Add(stampableTTF()[:len(stampableTTF())/2])
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
 			return
 		}
-		_ = ValidateTTFForStamp(data)
+		font, err := Load(data)
+		if err != nil {
+			return
+		}
+		// A program Load accepts is one a caller goes on to embed, so the
+		// subset and the writer walk it too.
+		sub := font.NewSubset()
+		for gid := range uint16(4) {
+			sub.Code(gid, "x")
+		}
+		sub.Write(t.Context(), writer.NewObjAllocator(0), nil, ast.PdfIndirectRef{ObjectNum: 1})
+		font.WriteIdentity(writer.NewObjAllocator(0), nil, ast.PdfIndirectRef{ObjectNum: 1}, []uint16{1})
 	})
 }
 
-// stampableTTF builds the smallest font [ValidateTTFForStamp] accepts: the five
+// stampableTTF builds the smallest font [Load] accepts: the five
 // tables it reads, each just long enough to satisfy the offsets it indexes.
 // Table records must be sorted by tag, which cmap/head/hhea/hmtx/maxp already
 // are.
@@ -96,7 +111,7 @@ func stampableTTF() []byte {
 func TestStampableTTFIsAccepted(t *testing.T) {
 	t.Parallel()
 
-	if err := ValidateTTFForStamp(stampableTTF()); err != nil {
+	if _, err := Load(stampableTTF()); err != nil {
 		t.Fatalf("the seed font was rejected: %v", err)
 	}
 }

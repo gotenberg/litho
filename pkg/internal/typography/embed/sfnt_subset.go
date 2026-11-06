@@ -1,4 +1,4 @@
-package mutations
+package embed
 
 import (
 	"encoding/binary"
@@ -15,7 +15,7 @@ import (
 // than renumbered, so every original table that references glyph IDs
 // (cmap, hmtx, ...) remains correct without modification. The resulting
 // byte stream is dramatically smaller than the input because the glyf
-// table shrinks to contain only the outlines the stamp actually needs.
+// table shrinks to contain only the outlines the caller actually draws.
 //
 // The tables that change: glyf (payload), loca (offsets), head
 // (checkSumAdjustment). Everything else (cmap, hmtx, maxp, hhea, name,
