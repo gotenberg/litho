@@ -140,6 +140,13 @@ Each wave ships behind oracles wired into the corpus matrix
 Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
+Status: waves 0 and 1 are done. `test/integration/baseline.json` records
+the oracle scores per fixture; the wpt, weasyprint and html cells score the
+converter in seconds (`go run ./test/integration/cmd/corpus run
+--corpus=wpt,weasyprint,html --feature=reftest,draw,diff`). Wave 1 also
+took positioning, transforms, gradients, box-shadow, outlines and generated
+content from wave 3, because the reftests and real pages lean on them.
+
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
 poppler rasters, and writes a side-by-side PNG with a diff heatmap per
