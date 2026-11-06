@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-06T18:57:25Z",
+  "captured_at": "2026-11-06T19:33:58Z",
   "corpora": {
     "compose": {
       "features": {
@@ -278,8 +278,8 @@
     "html": {
       "features": {
         "diff": {
-          "matched": 7,
-          "mismatched": 5,
+          "matched": 10,
+          "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -301,10 +301,10 @@
               "text_f1": 1
             },
             "borders": {
-              "layout": 0.521,
+              "layout": 0.9243,
               "link_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "floats": {
@@ -315,18 +315,18 @@
               "text_f1": 1
             },
             "i18n": {
-              "layout": 0.6783,
+              "layout": 0.9004,
               "link_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.7552
+              "strict": 1,
+              "text_f1": 0.7297
             },
             "images": {
-              "layout": 0.7254,
+              "layout": 0.9849,
               "link_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.967
+              "strict": 1,
+              "text_f1": 1
             },
             "invoice": {
               "layout": 0.9469,
@@ -350,25 +350,25 @@
               "text_f1": 0.97
             },
             "markdown": {
-              "layout": 0.9403,
+              "layout": 0.9376,
               "link_recall": 1,
               "pages": 1,
               "strict": 0.5,
               "text_f1": 0.9477
             },
             "print-css": {
-              "layout": 0.467,
+              "layout": 0.9665,
               "link_recall": 1,
               "pages": 1,
               "strict": 0.25,
               "text_f1": 1
             },
             "wide-table": {
-              "layout": 0.422,
+              "layout": 0.4328,
               "link_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.75
+              "text_f1": 0.8
             }
           },
           "score_tolerance": 0.02
@@ -936,8 +936,8 @@
     "weasyprint": {
       "features": {
         "draw": {
-          "matched": 194,
-          "mismatched": 121,
+          "matched": 199,
+          "mismatched": 116,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -1182,19 +1182,19 @@
             "test_table__test_tables_11": "pass",
             "test_table__test_tables_15": "pass",
             "test_table__test_tables_16": "pass",
-            "test_table__test_tables_17": "fail",
-            "test_table__test_tables_18": "fail",
-            "test_table__test_tables_19": "fail",
+            "test_table__test_tables_17": "pass",
+            "test_table__test_tables_18": "pass",
+            "test_table__test_tables_19": "pass",
             "test_table__test_tables_20": "fail",
             "test_table__test_tables_21": "pass",
-            "test_table__test_tables_22": "fail",
+            "test_table__test_tables_22": "pass",
             "test_table__test_tables_23": "fail",
             "test_table__test_tables_24": "pass",
             "test_table__test_tables_24_rtl": "pass",
             "test_table__test_tables_9": "pass",
             "test_table__test_tables_border_tfoot": "pass",
             "test_table__test_tables_column_background": "pass",
-            "test_table__test_tables_split_row": "fail",
+            "test_table__test_tables_split_row": "pass",
             "test_text__test_ellipsis_nested": "fail",
             "test_text__test_font_size_very_small": "pass",
             "test_text__test_huge_justification": "pass",
@@ -1265,8 +1265,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 476,
-          "mismatched": 93,
+          "matched": 487,
+          "mismatched": 82,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -1451,7 +1451,7 @@
             "css/CSS2/normal-flow/min-width-016.xht": "pass",
             "css/CSS2/normal-flow/min-width-056.xht": "pass",
             "css/CSS2/normal-flow/min-width-applies-to-002.xht": "pass",
-            "css/CSS2/normal-flow/min-width-applies-to-005.xht": "fail",
+            "css/CSS2/normal-flow/min-width-applies-to-005.xht": "pass",
             "css/CSS2/normal-flow/negative-margin-shrinking-container-size-002.html": "pass",
             "css/CSS2/normal-flow/width-057.xht": "pass",
             "css/CSS2/normal-flow/width-101.xht": "pass",
@@ -1473,7 +1473,7 @@
             "css/CSS2/pagination/rowgroup-page-break-inside-avoid-4-print.html": "pass",
             "css/CSS2/pagination/rowgroup-page-break-inside-avoid-5-print.html": "pass",
             "css/CSS2/pagination/rowgroup-page-break-inside-avoid-6-print.html": "pass",
-            "css/CSS2/pagination/rowgroup-page-break-inside-avoid-7-print.html": "fail",
+            "css/CSS2/pagination/rowgroup-page-break-inside-avoid-7-print.html": "pass",
             "css/CSS2/pagination/rowgroup-page-break-inside-avoid-8-print.html": "pass",
             "css/CSS2/pagination/table-page-break-inside-avoid-2-print.html": "pass",
             "css/CSS2/pagination/table-page-break-inside-avoid-4-print.html": "pass",
@@ -1543,7 +1543,7 @@
             "css/css-backgrounds/background-clip/clip-text-transform.html": "pass",
             "css/css-backgrounds/background-color-body-propagation-008.html": "pass",
             "css/css-backgrounds/background-color-body-propagation-009.html": "pass",
-            "css/css-backgrounds/background-color-body-propagation-010.html": "fail",
+            "css/css-backgrounds/background-color-body-propagation-010.html": "pass",
             "css/css-backgrounds/background-color-clip.html": "pass",
             "css/css-backgrounds/background-color-root-propagation-001.html": "pass",
             "css/css-backgrounds/background-margin-transformed-root.html": "fail",
@@ -1646,7 +1646,7 @@
             "css/css-lists/counter-002.html": "pass",
             "css/css-lists/counter-increment-inside-display-contents.html": "pass",
             "css/css-lists/counter-invalid.htm": "pass",
-            "css/css-lists/counter-list-item.html": "fail",
+            "css/css-lists/counter-list-item.html": "pass",
             "css/css-lists/counter-reset-inside-display-contents.html": "pass",
             "css/css-lists/counter-reset-reversed-display-none.html": "pass",
             "css/css-lists/counter-reset-reversed-list-item-start.html": "pass",
@@ -1656,8 +1656,8 @@
             "css/css-lists/counters-001.html": "pass",
             "css/css-lists/counters-scope-001.html": "pass",
             "css/css-lists/foo-counter-reversed-006e.html": "pass",
-            "css/css-lists/inline-list-marker.html": "fail",
-            "css/css-lists/inline-list.html": "fail",
+            "css/css-lists/inline-list-marker.html": "pass",
+            "css/css-lists/inline-list.html": "pass",
             "css/css-lists/li-value-counter-reset-001.html": "pass",
             "css/css-lists/li-value-reversed-003.html": "pass",
             "css/css-lists/li-value-reversed-006e.html": "pass",
@@ -1692,8 +1692,8 @@
             "css/css-page/margin-boxes/dimensions-005-print.html": "fail",
             "css/css-page/margin-boxes/dimensions-010-print.html": "fail",
             "css/css-page/monolithic-overflow-003-print.html": "pass",
-            "css/css-page/monolithic-overflow-010-print.html": "fail",
-            "css/css-page/monolithic-overflow-014-print.html": "fail",
+            "css/css-page/monolithic-overflow-010-print.html": "pass",
+            "css/css-page/monolithic-overflow-014-print.html": "pass",
             "css/css-page/monolithic-overflow-019-print.html": "pass",
             "css/css-page/monolithic-overflow-029-print.html": "pass",
             "css/css-page/monolithic-overflow-030-print.html": "fail",
@@ -1752,7 +1752,7 @@
             "css/css-text/line-breaking/segment-break-transformation-rules-031.html": "pass",
             "css/css-text/line-breaking/segment-break-transformation-rules-034.html": "pass",
             "css/css-text/overflow-wrap/overflow-wrap-004.html": "pass",
-            "css/css-text/overflow-wrap/overflow-wrap-anywhere-001.html": "fail",
+            "css/css-text/overflow-wrap/overflow-wrap-anywhere-001.html": "pass",
             "css/css-text/overflow-wrap/overflow-wrap-anywhere-005.html": "pass",
             "css/css-text/overflow-wrap/overflow-wrap-anywhere-fit-content-001.html": "pass",
             "css/css-text/overflow-wrap/overflow-wrap-break-word-009.html": "pass",
@@ -1804,7 +1804,7 @@
             "css/css-text/white-space/tab-position-with-text-align.html": "pass",
             "css/css-text/white-space/text-wrap-balance-float-002.html": "pass",
             "css/css-text/white-space/text-wrap-balance-line-clamp-003.html": "pass",
-            "css/css-text/white-space/text-wrap-balance-line-clamp-005.html": "fail",
+            "css/css-text/white-space/text-wrap-balance-line-clamp-005.html": "pass",
             "css/css-text/white-space/trailing-ideographic-space-001.html": "pass",
             "css/css-text/white-space/trailing-ideographic-space-005.html": "pass",
             "css/css-text/white-space/trailing-ideographic-space-007.html": "pass",
@@ -1818,7 +1818,7 @@
             "css/css-text/white-space/trailing-other-space-separators-break-spaces-015.html": "pass",
             "css/css-text/white-space/white-space-intrinsic-size-001.html": "pass",
             "css/css-text/white-space/white-space-intrinsic-size-002.html": "pass",
-            "css/css-text/white-space/white-space-intrinsic-size-025.html": "fail",
+            "css/css-text/white-space/white-space-intrinsic-size-025.html": "pass",
             "css/css-text/white-space/white-space-pre-035.html": "pass",
             "css/css-text/white-space/white-space-pre-wrap-trailing-spaces-012.html": "pass",
             "css/css-text/white-space/white-space-trim-discard-before.html": "pass",
