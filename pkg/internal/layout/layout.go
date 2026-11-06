@@ -136,7 +136,42 @@ func (e *engine) pageCount(rb *box, d *ditem) int {
 		}
 	}
 	walk(d, math.Inf(-1), math.Inf(1))
+	n = max(n, e.positionedPages(rb, clipped))
 	return max(min(n, e.maxPages+1), 1)
+}
+
+// positionedPages returns the pages the border boxes of the absolutely
+// positioned boxes under rb reach, painted or not. An absolutely positioned
+// box adds its border box to the scrollable overflow of its containing
+// block, and so of the root (CSS Overflow 3, 2.2), which the pages show
+// whole, as Chromium prints it: a tall positioned box with nothing to paint
+// still takes its pages. A fixed box is on every page already, and the boxes
+// a clipping or transformed box holds are left to the display list, which
+// knows where they paint. With clipped, a viewport that clips each page, a
+// box takes only the page its top is on.
+func (e *engine) positionedPages(rb *box, clipped bool) int {
+	n := 0
+	var walk func(b *box)
+	walk = func(b *box) {
+		for _, k := range b.kids {
+			if k.fixed || k.transformed() {
+				continue
+			}
+			if k.abs && k.laidOut {
+				end := k.y + k.borderH() - 1e-3
+				if clipped {
+					end = k.y
+				}
+				n = max(n, e.pageOf(max(end, k.y, 0))+1)
+			}
+			if k.kind == kindBlock && k.st.Overflow != css.OverflowVisible {
+				continue
+			}
+			walk(k)
+		}
+	}
+	walk(rb)
+	return n
 }
 
 // pathSpan returns the vertical extent of the points of ops, false for no
