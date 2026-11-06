@@ -176,6 +176,9 @@ type prepared struct {
 	o     Options
 	setup printSetup
 	first layout.PageBox
+	// svg collects the warnings of the SVG pictures, which the layout
+	// decodes too.
+	svg *svgState
 }
 
 // heading is an h1 to h6 of the content tree, for the outline.
@@ -205,6 +208,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		return nil, err
 	}
 	res := newResources(o.Resources)
+	res.svg.fonts = fonts
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
 	sheets := c.stylesheets(ctx, scan.sheets)
 
@@ -278,6 +282,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		o:        o,
 		setup:    setup,
 		first:    sourceFirst,
+		svg:      &res.svg,
 	}
 	for _, w := range computed.Warnings() {
 		p.warnings = append(p.warnings, compose.Warning{Code: w.Code, Message: displayURL(w.Message)})
@@ -351,6 +356,9 @@ func (p *prepared) assemble(res *layout.Result, ranges []pageRange) (*compose.Do
 	}
 	if len(keep) < len(res.Pages) {
 		pruneStructure(doc)
+	}
+	if p.svg != nil {
+		doc.Warnings = append(doc.Warnings, p.svg.warnings()...)
 	}
 	for _, w := range res.Warnings {
 		w.Message = displayURL(w.Message)

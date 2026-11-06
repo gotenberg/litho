@@ -65,11 +65,21 @@
 //   - <img> in PNG, JPEG, GIF (its first frame), WebP, BMP and TIFF, at its
 //     pixel size at 96 dpi unless styled otherwise. A JPEG is embedded as
 //     it is. An image that cannot be read is replaced by its alt text, with
-//     a warning. SVG is not drawn yet.
+//     a warning.
+//   - SVG, as an <img>, a background or list-style image, or an inline
+//     <svg> element, drawn as vector graphics by the svg package at the
+//     size its width, height and viewBox give it (CSS Images 3, 4.3), with
+//     object-fit and object-position. An inline <svg> inherits its colour
+//     and font from the document, and the document's <style> elements
+//     style its content. An image element inside an SVG image draws a
+//     raster picture; an SVG one is left out with a warning. The svg
+//     package's warnings (codes unsupported-svg-element,
+//     unsupported-svg-property, unsupported-svg-paint, svg-image, svg-text
+//     and svg-limit) join the document's.
 //   - <input>, <button>, <select> and <textarea> draw as inline blocks
 //     holding the text they show, without their widgets, with a warning.
-//   - <iframe>, <embed>, <video>, <audio> and inline SVG are left out with
-//     a warning; <object> and <canvas> draw their fallback content.
+//   - <iframe>, <embed>, <video> and <audio> are left out with a warning;
+//     <object> and <canvas> draw their fallback content.
 //   - Elements whose display is none, and their content, generate nothing.
 //
 // # Tagging

@@ -156,8 +156,10 @@ func (b *builder) element(ctx context.Context, n *dom.Node, parent *css.Style, d
 	}
 	if n.Namespace != "" {
 		if n.Namespace == "svg" {
-			b.warnOnce(CodeUnsupportedElement, "svg", "inline SVG is not drawn yet")
-			return nil, nil
+			if n.Data != "svg" {
+				return nil, nil
+			}
+			return b.inlineSVG(ctx, n, b.computed.Style(n)), nil
 		}
 		// MathML draws as its text, which is what a reader needs most.
 		return b.styled(ctx, n, parent, depth)

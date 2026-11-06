@@ -165,18 +165,20 @@ func TestPrepare_DecodesImages(t *testing.T) {
 	if u := byID(t, p.root, "u"); u.Picture == nil || u.Picture.Width != 2*css.Pt {
 		t.Errorf("data: URL picture %+v", u.Picture)
 	}
-	for id, alt := range map[string]string{"d": "vector", "m": "gone", "f": "broken", "e": "empty"} {
+	if d := byID(t, p.root, "d").Children; len(d) != 1 || d[0].Kind != layout.Replaced || d[0].Picture == nil || d[0].Picture.Vector == nil {
+		t.Errorf("SVG image not a vector picture: %+v", d)
+	}
+	for id, alt := range map[string]string{"m": "gone", "f": "broken", "e": "empty"} {
 		if got := treeText(byID(t, p.root, id)); got != alt {
 			t.Errorf("%s: fallback text %q, want %q", id, got, alt)
 		}
 	}
-	if !hasWarning(p.warnings, CodeUnsupportedImage, "img/d.svg") ||
-		!hasWarning(p.warnings, CodeResourceFailed, "img/missing.png") ||
+	if !hasWarning(p.warnings, CodeResourceFailed, "img/missing.png") ||
 		!hasWarning(p.warnings, CodeResourceFailed, "img/bad.png") {
 		t.Errorf("warnings %+v", p.warnings)
 	}
-	if len(p.warnings) != 3 {
-		t.Errorf("%d warnings, want 3: %+v", len(p.warnings), p.warnings)
+	if len(p.warnings) != 2 {
+		t.Errorf("%d warnings, want 2: %+v", len(p.warnings), p.warnings)
 	}
 }
 
@@ -321,14 +323,14 @@ func TestPrepare_DrawsFormControlsAsText(t *testing.T) {
 
 func TestPrepare_LeavesEmbeddedContentOut(t *testing.T) {
 	t.Parallel()
-	p := prep(t, `<p id=x>a<iframe src="x.html">i</iframe><video>v</video><svg><text>s</text></svg>`+
+	p := prep(t, `<p id=x>a<iframe src="x.html">i</iframe><video>v</video><math><mi>m</mi></math>`+
 		`<object data="x.swf">fallback</object><canvas>canvas-fallback</canvas><video>v2</video></p>`, Options{})
-	if got := treeText(byID(t, p.root, "x")); got != "afallbackcanvas-fallback" {
+	if got := treeText(byID(t, p.root, "x")); got != "amfallbackcanvas-fallback" {
 		t.Errorf("text %q", got)
 	}
-	want := []string{CodeUnsupportedElement, CodeUnsupportedElement, CodeUnsupportedElement, CodeUnsupportedElement}
+	want := []string{CodeUnsupportedElement, CodeUnsupportedElement, CodeUnsupportedElement}
 	if got := codes(p.warnings); strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("warnings %v, want four unsupported-element (video once)", got)
+		t.Errorf("warnings %v, want three unsupported-element (video once)", got)
 	}
 }
 

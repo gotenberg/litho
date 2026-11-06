@@ -100,6 +100,8 @@ type resources struct {
 	read     int64
 	pixels   int64
 	pictures map[string]pictureResult
+	// svg is what the SVG pictures share.
+	svg svgState
 }
 
 // pictureResult is a decoded picture or why it failed.
@@ -229,7 +231,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		return nil, err
 	}
 	if isSVG(u, data) {
-		return nil, errSVG
+		return r.decodeSVG(ctx, u, data)
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
