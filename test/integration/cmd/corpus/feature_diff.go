@@ -18,14 +18,20 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// The page the html corpus is converted on, in points: A4 (210 by 297 mm)
-// with the 0.39 inch margins Gotenberg's Chromium route applies by default.
-// corpus/html/chromium.sh asks Chromium for the same, and
-// corpus/html/build/main.go converts with the same; keep the three in step.
+// The page the html corpus is converted on, in points: what Chromium lays
+// out when corpus/html/chromium.sh asks for A4 with the 0.39 inch margins
+// Gotenberg's Chromium route applies by default. Chromium's references
+// carry a 595.92 by 841.92 point media box and a text column that starts
+// 27.75 points in (37 CSS pixels: it rounds the margin to whole pixels
+// before scaling), measured on the committed PDFs; converting on the exact
+// A4 of 595.276 by 841.89 points with 28.08 point margins wraps some
+// paragraphs one line longer and shifts every page break after.
+// corpus/html/build/main.go converts with the same values; keep the three
+// in step.
 const (
-	diffPaperWidth  = 595.276
-	diffPaperHeight = 841.890
-	diffMargin      = 0.39 * 72
+	diffPaperWidth  = 595.92
+	diffPaperHeight = 841.92
+	diffMargin      = 27.75
 )
 
 // diffDPI is the resolution the diff goldens are drawn at, mirroring

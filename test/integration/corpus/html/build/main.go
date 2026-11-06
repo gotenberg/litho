@@ -28,14 +28,15 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// The page every source is converted on, in points: A4 with Gotenberg's
-// default Chromium margins of 0.39 inch, for the print media type. The diff
-// feature (diffPaperWidth and its siblings) and chromium.sh use the same;
-// keep the three in step.
+// The page every source is converted on, in points: the page Chromium lays
+// out for A4 with Gotenberg's default margins of 0.39 inch (a 595.92 by
+// 841.92 point media box and 27.75 point margins, measured on the Chromium
+// references), for the print media type. The diff feature (diffPaperWidth
+// and its siblings) and chromium.sh use the same; keep the three in step.
 const (
-	paperWidth  = 595.276
-	paperHeight = 841.890
-	margin      = 0.39 * 72
+	paperWidth  = 595.92
+	paperHeight = 841.92
+	margin      = 27.75
 	media       = "print"
 )
 
