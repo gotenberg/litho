@@ -1,0 +1,4 @@
+go test fuzz v1
+string("<style>@page{size:A3}</style><h1>a</h1><div style=\"width:900pt\">w</div><p style=\"break-before:page\">b")
+byte('\x05')
+string("2-")

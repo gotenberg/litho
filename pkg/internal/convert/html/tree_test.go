@@ -352,7 +352,7 @@ func TestPrepare_CapsTheTreeDepth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := prepareDoc(context.Background(), doc, o, nil)
+	p, err := prepareDoc(context.Background(), doc, o, nil, newPrintSetup(o))
 	if err != nil {
 		t.Fatal(err)
 	}

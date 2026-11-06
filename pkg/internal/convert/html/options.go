@@ -90,14 +90,24 @@ type Options struct {
 	// [ErrInvalidOptions]. Page counters in headers, footers and margin
 	// boxes count the whole document (Chromium's printToPDF pageRanges).
 	PageRanges string
-	// OmitBackgrounds drops the background colours and images of every
-	// element, as a browser's print dialog does by default, except where
-	// print-color-adjust: exact keeps them (CSS Color Adjustment 1, 3).
-	// Off, backgrounds print (Chromium's printToPDF printBackground).
+	// OmitBackgrounds drops the background colours and images of the html
+	// and body elements, which paint the canvas (CSS 2.1, 14.2), and keeps
+	// every other element's and the page box's, as Gotenberg's Chromium
+	// route prints with printBackground false: it injects html, body {
+	// background: none !important } and makes every colour exact rather
+	// than let Chromium's economy mode blank the backgrounds (Gotenberg
+	// issue 1154). Off, every background prints.
 	OmitBackgrounds bool
 	// OmitOutline leaves the document outline out. Off, the headings
 	// become the outline.
 	OmitOutline bool
+	// NoShrinkToFit lays a document wider than its page area out at the
+	// area's width, the page clipping what overflows, as WeasyPrint
+	// prints. Off, the default, such a document is laid out again at its
+	// content's width, at most 1.5 times the area's, and drawn scaled down
+	// to the area, as Chromium prints (blink::LocalFrameView::
+	// ForceLayoutForPagination).
+	NoShrinkToFit bool
 	// HeaderTemplate and FooterTemplate are HTML fragments drawn in the top
 	// and bottom margins of every page, as Chromium's printToPDF
 	// headerTemplate and footerTemplate: each is the inner HTML of
@@ -149,11 +159,21 @@ type Options struct {
 	Logger *slog.Logger
 }
 
-// withDefaults returns o with every zero field set to its default, or an
-// error wrapping [ErrInvalidOptions] for a field out of range.
+// withDefaults returns o with every zero field set to its default and
+// the paper turned for Landscape, or an error wrapping
+// [ErrInvalidOptions] for a field out of range. It is called once per
+// conversion: Landscape stays set, so a second call would turn the paper
+// back.
 func (o Options) withDefaults() (Options, error) {
 	if o.PageWidth == 0 && o.PageHeight == 0 {
 		o.PageWidth, o.PageHeight = DefaultPageWidth, DefaultPageHeight
+	}
+	if o.Landscape {
+		// The paper turns before the @page rules see it, as printToPDF's
+		// landscape turns the print settings' paper
+		// (printing::PrintSettings::SetOrientation); the margins stay on
+		// their sides.
+		o.PageWidth, o.PageHeight = o.PageHeight, o.PageWidth
 	}
 	if o.Media == "" {
 		o.Media = MediaPrint

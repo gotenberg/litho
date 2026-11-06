@@ -58,14 +58,43 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("converting HTML: %w", text.ErrNoFonts)
 	}
+	ranges, err := parsePageRanges(o.PageRanges)
+	if err != nil {
+		return nil, err
+	}
 	data, err := readCapped(src, o.MaxInputBytes)
 	if err != nil {
 		return nil, err
 	}
-	p, err := prepare(ctx, data, o, fonts)
+	doc, err := parse(data)
 	if err != nil {
 		return nil, err
 	}
+	p, err := prepareDoc(ctx, doc, o, fonts, newPrintSetup(o))
+	if err != nil {
+		return nil, err
+	}
+	res, err := layOut(ctx, lay, p, fonts)
+	if err != nil {
+		return nil, err
+	}
+	if s, again := p.refit(res); again {
+		// The document is wider than its page area: lay it out again, its
+		// styles too, since the viewport the media queries and the
+		// viewport units measure changed (blink::LocalFrameView::
+		// ForceLayoutForPagination).
+		if p, err = prepareDoc(ctx, doc, o, fonts, s); err != nil {
+			return nil, err
+		}
+		if res, err = layOut(ctx, lay, p, fonts); err != nil {
+			return nil, err
+		}
+	}
+	return p.assemble(res, ranges)
+}
+
+// layOut lays the prepared document p out with lay.
+func layOut(ctx context.Context, lay layoutFunc, p *prepared, fonts *text.Fonts) (*layout.Result, error) {
 	res, err := lay(ctx, p.root, fonts, p.layout)
 	if err != nil {
 		if errors.Is(err, layout.ErrTooManyPages) {
@@ -73,7 +102,7 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		}
 		return nil, fmt.Errorf("laying out the HTML document: %w", err)
 	}
-	return p.assemble(res), nil
+	return res, nil
 }
 
 // readCapped reads src to its end, failing with [ErrInputTooLarge] past max
@@ -129,6 +158,12 @@ type prepared struct {
 	meta     compose.Metadata
 	warnings []compose.Warning
 	headings []heading
+	// o is the conversion's options, defaults set, setup how the page
+	// boxes became the layout's and first the first page's box as the
+	// @page rules give it, in points of the page.
+	o     Options
+	setup printSetup
+	first layout.PageBox
 }
 
 // heading is an h1 to h6 of the content tree, for the outline.
@@ -137,22 +172,22 @@ type heading struct {
 	level int
 }
 
-// prepare parses data, cascades its stylesheets and builds the content
-// tree.
-func prepare(ctx context.Context, data []byte, o Options, fonts *text.Fonts) (*prepared, error) {
+// parse parses the HTML source data.
+func parse(data []byte) (*dom.Node, error) {
 	doc, err := dom.Parse(strings.NewReader(decode(data)))
 	if err != nil {
 		// A strings.Reader never fails, so the parser fails only on its
 		// own nesting cap.
 		return nil, fmt.Errorf("%w: %w", ErrTooDeep, err)
 	}
-	return prepareDoc(ctx, doc, o, fonts)
+	return doc, nil
 }
 
 // prepareDoc cascades the stylesheets of the parsed document doc and
-// builds its content tree. fonts resolves the ex and ch units; nil takes
-// their half-em fallback.
-func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts) (*prepared, error) {
+// builds its content tree, its pages laid out as setup says. fonts
+// resolves the ex and ch units; nil takes their half-em fallback. It
+// leaves doc as it is, so a second layout prepares it again.
+func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup) (*prepared, error) {
 	scan, err := scanDocument(ctx, doc)
 	if err != nil {
 		return nil, err
@@ -168,11 +203,19 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	// right one is not known before the cascade: the viewport takes a
 	// left-to-right document's.
 	first, _ := pageBox(resolver, o, pageSel(0, false))
-	if w, h := areaOf(first); w != media.Width || h != media.Height {
-		// The viewport units measure the page area of the first page, the
-		// size and margins @page sets (CSS Page 3, 3.1 and 5.1), while the
-		// media features keep the paper's ([paperArea]).
-		media.ViewportWidth, media.ViewportHeight = w, h
+	setup, _ = setup.fitFactor(first)
+	// The media features measure the paper's page area ([paperArea]) and
+	// the viewport units the page area of the first page, the size and
+	// margins @page sets (CSS Page 3, 3.1 and 5.1), both as the layout
+	// sees them: scaled by the setup's factor, as Chromium's initial
+	// containing block is
+	// (blink::CalculateInitialContainingBlockSizeForPagination). Evaluate
+	// the media rules again when that changes anything.
+	w, h := media.Width*setup.factor, media.Height*setup.factor
+	vw, vh := areaOf(setup.layoutBox(first))
+	if w != media.Width || h != media.Height || vw != w || vh != h {
+		media.Width, media.Height = w, h
+		media.ViewportWidth, media.ViewportHeight = vw, vh
 		resolver = css.NewResolver(media, sheets)
 	}
 
@@ -182,10 +225,21 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	}
 	rootStyle := computed.Style(scan.root)
 	page, pageAt, pageWarns := pageBoxes(resolver, o, rootStyle != nil && rootStyle.Direction == css.RTL)
+	boxes := []layout.PageBox{page}
+	if pageAt != nil {
+		boxes = append(boxes, pageAt(1), pageAt(2))
+	}
+	setup, fitWarns := setup.fitFactor(boxes...)
+	pageWarns = append(pageWarns, fitWarns...)
+	sourceFirst := page
+	page = setup.layoutBox(page)
+	if at := pageAt; at != nil {
+		pageAt = func(i int) layout.PageBox { return setup.layoutBox(at(i)) }
+	}
 
 	b := &builder{
 		computed: computed, res: res, scan: scan,
-		warned: map[string]bool{},
+		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds,
 	}
 	root, err := b.buildRoot(ctx, scan.root)
 	if err != nil {
@@ -195,15 +249,19 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	p := &prepared{
 		root: root,
 		layout: layout.Options{
-			Page:     page,
-			PageAt:   pageAt,
-			Lang:     scan.lang,
-			Image:    res.picture,
-			MaxPages: o.MaxPages,
-			Logger:   o.Logger,
+			Page:         page,
+			PageAt:       pageAt,
+			FitFirstPage: setup.single,
+			Lang:         scan.lang,
+			Image:        res.picture,
+			MaxPages:     o.MaxPages,
+			Logger:       o.Logger,
 		},
 		meta:     scan.meta,
 		headings: b.headings,
+		o:        o,
+		setup:    setup,
+		first:    sourceFirst,
 	}
 	for _, w := range computed.Warnings() {
 		p.warnings = append(p.warnings, compose.Warning{Code: w.Code, Message: displayURL(w.Message)})
@@ -214,20 +272,78 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	return p, nil
 }
 
-// assemble returns the document of the layout res.
-func (p *prepared) assemble(res *layout.Result) *compose.Document {
+// assemble returns the document of the layout res: the pages ranges
+// selects, or the first alone for a single page, each placed on its sheet
+// (see [prepared.placement]), the links, the outline and the structure
+// tree kept for them. Page numbers count the whole layout before the
+// selection: a page keeps the number it was laid out with in what it
+// shows, and the selection only drops pages.
+func (p *prepared) assemble(res *layout.Result, ranges []pageRange) (*compose.Document, error) {
+	keep := []int{0}
+	if !p.o.SinglePage {
+		var err error
+		if keep, err = selectPages(ranges, len(res.Pages)); err != nil {
+			return nil, err
+		}
+	}
+	// at maps a page of the layout to its 1-based number in the output,
+	// 0 for a page left out; places holds each kept page's placement.
+	at := make([]int, len(res.Pages))
+	places := make([]placement, len(res.Pages))
+	for i, k := range keep {
+		at[k] = i + 1
+		places[k] = p.placement(res.Pages[k])
+	}
+	dest := func(d compose.Dest) (compose.Dest, bool) {
+		if d.Page < 1 || d.Page > len(at) || at[d.Page-1] == 0 {
+			return d, false
+		}
+		k := d.Page - 1
+		d.Page = at[k]
+		d.X, d.Y = places[k].point(d.X, d.Y)
+		return d, true
+	}
 	doc := &compose.Document{
-		Pages:     res.Pages,
 		Metadata:  p.meta,
 		Structure: res.Structure,
-		Outline:   outline(p.headings, res.Anchors),
 		Warnings:  p.warnings,
+	}
+	for _, k := range keep {
+		pg := places[k].page(res.Pages[k])
+		links := pg.Links[:0:0]
+		for _, l := range pg.Links {
+			if l.Dest != nil {
+				d, ok := dest(*l.Dest)
+				if !ok {
+					continue
+				}
+				l.Dest = &d
+			}
+			links = append(links, l)
+		}
+		pg.Links = links
+		doc.Pages = append(doc.Pages, pg)
+	}
+	if !p.o.OmitOutline {
+		anchors := make(map[string]compose.Dest, len(res.Anchors))
+		for id, d := range res.Anchors {
+			if d, ok := dest(d); ok {
+				anchors[id] = d
+			}
+		}
+		doc.Outline = outline(p.headings, anchors)
+	}
+	if len(keep) < len(res.Pages) {
+		pruneStructure(doc)
 	}
 	for _, w := range res.Warnings {
 		w.Message = displayURL(w.Message)
+		if w.Page > 0 && w.Page <= len(at) {
+			w.Page = at[w.Page-1]
+		}
 		doc.Warnings = append(doc.Warnings, w)
 	}
-	return doc
+	return doc, nil
 }
 
 // scan is what one pass over the document finds before styling.

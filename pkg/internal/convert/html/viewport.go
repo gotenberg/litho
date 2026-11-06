@@ -11,9 +11,7 @@ package html
 // user agent. A margin pair wider than the paper leaves no area, which
 // makes every size feature false.
 func paperArea(o Options) (float64, float64) {
+	// o's paper is already turned for Landscape ([Options.withDefaults]).
 	w, h := o.PageWidth, o.PageHeight
-	if o.Landscape {
-		w, h = h, w
-	}
 	return max(w-o.MarginLeft-o.MarginRight, 0), max(h-o.MarginTop-o.MarginBottom, 0)
 }

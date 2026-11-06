@@ -76,6 +76,9 @@ type builder struct {
 	warned    map[string]bool
 	// counters holds the CSS counters and the quote depth of the walk.
 	counters counterState
+	// omitBackgrounds clears the backgrounds of the html and body
+	// elements ([Options.OmitBackgrounds]).
+	omitBackgrounds bool
 }
 
 // buildRoot builds the content tree of the root element.
@@ -83,6 +86,9 @@ func (b *builder) buildRoot(ctx context.Context, root *dom.Node) (*layout.Node, 
 	st := b.computed.Style(root)
 	if st == nil {
 		st = css.Initial()
+	}
+	if b.omitBackgrounds {
+		st = withoutBackground(st)
 	}
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	if st.Display == css.DisplayNone {
@@ -171,6 +177,9 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	st := b.computed.Style(n)
 	if st == nil || st.Display == css.DisplayNone {
 		return nil, nil
+	}
+	if b.omitBackgrounds && n.Namespace == "" && n.DataAtom == atom.Body {
+		st = withoutBackground(st)
 	}
 	if depth >= maxTreeDepth {
 		b.warnOnce(CodeTooDeep, "depth", fmt.Sprintf("content nested deeper than %d elements was left out", maxTreeDepth))

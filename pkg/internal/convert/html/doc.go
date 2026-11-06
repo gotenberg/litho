@@ -38,6 +38,27 @@
 // and left pages, the first page being a right page unless the root's
 // direction is right to left. Named pages are not supported.
 //
+// # Printing
+//
+// The print options mirror Chromium's printToPDF as Gotenberg's Chromium
+// route drives it. [Options.Landscape] turns the paper before the @page
+// rules see it. Without [Options.PreferCSSPageSize] the paper is the
+// sheet: a page whose @page size or orientation differs is laid out at
+// that size and drawn scaled down to fit the paper, never up, centred on
+// it, the paper turned to the page's orientation; with it, the @page size
+// is the sheet. The page area is laid out multiplied by 1 / [Options.Scale]
+// and drawn divided by it, the margins kept, and the viewport the media
+// queries and viewport units measure is that enlarged area. A document
+// wider than its page area is laid out again at its content's width, at
+// most 1.5 times the area's, and drawn shrunk to fit, as Chromium prints,
+// unless [Options.NoShrinkToFit]. [Options.SinglePage] writes one page as
+// tall as the content of the first, and in landscape as wide as the
+// content. [Options.PageRanges] takes Chromium's grammar and selects the
+// pages after layout, so page numbers count the whole document; links and
+// outline entries to a page left out are dropped. [Options.OmitBackgrounds]
+// blanks the canvas alone, as the route does, and [Options.OmitOutline]
+// writes no outline.
+//
 // # Content
 //
 //   - Text, <br> as a forced break, <wbr> as a break opportunity.
