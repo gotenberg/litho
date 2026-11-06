@@ -70,7 +70,7 @@ func (r *renderer) text(n *html.Node, st *style, s sink) {
 		r.d.warn("svg-limit", fmt.Sprintf("text past %d characters was left out", maxTextRunes))
 	}
 	collapseSpaces(tc.chars)
-	r.layoutText(tc.chars, st, s)
+	r.layoutText(tc.chars, s)
 }
 
 // attrNS returns the value of n's attribute key in namespace ns.
@@ -173,7 +173,7 @@ type piece struct {
 }
 
 // layoutText positions and shapes the kept characters and draws them.
-func (r *renderer) layoutText(chars []textChar, st *style, s sink) {
+func (r *renderer) layoutText(chars []textChar, s sink) {
 	var pieces []*piece
 	var cur *piece
 	x, y := 0.0, 0.0

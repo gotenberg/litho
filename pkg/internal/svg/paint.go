@@ -177,7 +177,7 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *pai
 	if !ok {
 		return nil, p.fallback, false
 	}
-	stops := r.stops(g, st)
+	stops := r.stops(g)
 	if len(stops) == 0 {
 		// No stop paints nothing (SVG 1.1, 13.2.4).
 		return nil, nil, true
@@ -279,7 +279,7 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *pai
 // one, each colour its stop-color and stop-opacity, padded so that the
 // list starts at 0 and ends at 1 as the composition model asks. A list of
 // fully transparent stops paints nothing and yields nil.
-func (r *renderer) stops(g *gradient, st *style) []compose.ColorStop {
+func (r *renderer) stops(g *gradient) []compose.ColorStop {
 	var out []compose.ColorStop
 	prev := 0.0
 	for _, n := range g.stops {
