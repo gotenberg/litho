@@ -16,7 +16,8 @@ import (
 
 // opts asks for the test face and every other default.
 func opts() plaintext.Options {
-	return plaintext.Options{FontFamilies: []string{"Test Serif"}}
+	m := plaintext.DefaultMargin
+	return plaintext.Options{FontFamilies: []string{"Test Serif"}, MarginTop: m, MarginRight: m, MarginBottom: m, MarginLeft: m}
 }
 
 // linesPerPage is how many lines fit a default page of the test face: the
@@ -389,13 +390,13 @@ func TestConvert_HonoursTheContext(t *testing.T) {
 func TestConvert_DefaultsToSerif(t *testing.T) {
 	t.Parallel()
 	// No family names the test face, so Match falls back to it; the page
-	// takes A4 and 2 cm margins.
+	// takes A4, and the zero margins are kept as none.
 	doc := convert(t, testFonts(t), "A", plaintext.Options{})
 	p := doc.Pages[0]
 	if p.Width != 595.276 || p.Height != 841.890 {
 		t.Errorf("page %vx%v, want A4", p.Width, p.Height)
 	}
-	if run := p.Content[0].(*compose.Text); run.Size != 12 || run.Origin.X != 56.693 {
+	if run := p.Content[0].(*compose.Text); run.Size != 12 || run.Origin.X != 0 {
 		t.Errorf("run size %v at %v", run.Size, run.Origin)
 	}
 }

@@ -41,6 +41,7 @@ type convertOptions struct {
 	width, height                        float64
 	marginTop, marginRight, marginBottom float64
 	marginLeft                           float64
+	marginsSet                           bool
 	families                             []string
 	fontSize                             float64
 	limits                               Limits
@@ -88,13 +89,14 @@ func WithPaperSize(width, height float64) ConvertOption {
 	}
 }
 
-// WithMargins sets the page margins in points. The default is 56.693 points,
-// 2 cm, on every side; all four zero keep it. A margin must be finite and
-// zero or more, and the margins must leave room on the page, or [Convert]
-// fails with [ErrInvalidConvertOptions].
+// WithMargins sets the page margins in points, zero for none. Without it
+// every side is 56.693 points, 2 cm. A margin must be finite and zero or
+// more, and the margins must leave room on the page, or [Convert] fails
+// with [ErrInvalidConvertOptions].
 func WithMargins(top, right, bottom, left float64) ConvertOption {
 	return func(o *convertOptions) {
 		o.marginTop, o.marginRight, o.marginBottom, o.marginLeft = top, right, bottom, left
+		o.marginsSet = true
 	}
 }
 
@@ -244,6 +246,9 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 		return nil, fmt.Errorf("indexing fonts: %w", err)
 	}
 
+	if !o.marginsSet {
+		o.marginTop, o.marginRight, o.marginBottom, o.marginLeft = plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin
+	}
 	doc, err := plaintext.Convert(ctx, src, fonts, plaintext.Options{
 		PageWidth:     o.width,
 		PageHeight:    o.height,

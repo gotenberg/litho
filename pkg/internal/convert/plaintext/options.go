@@ -63,14 +63,15 @@ const maxLineHeight = 100
 const maxTabWidth = 64
 
 // Options is the page setup of a plain text conversion. The zero value asks
-// for every default.
+// for every default but the margins, which are then none.
 type Options struct {
 	// PageWidth and PageHeight are the page size in points, A4 (595.276 by
 	// 841.890) when both are zero. Each side lies in (0, 14400].
 	PageWidth, PageHeight float64
 	// MarginTop, MarginRight, MarginBottom and MarginLeft are the margins in
-	// points, 56.693 (2 cm) each when all four are zero. Each is zero or
-	// more, and they leave room between them on the page.
+	// points, zero for none; [DefaultMargin] is what a caller without a
+	// preference passes. Each is zero or more, and they leave room between
+	// them on the page.
 	MarginTop, MarginRight, MarginBottom, MarginLeft float64
 	// FontFamilies lists the families asked for, in preference order, as
 	// [text.Style.Families] reads them; [DefaultFontFamilies] when empty.
@@ -97,9 +98,6 @@ type Options struct {
 func (o Options) withDefaults() (Options, error) {
 	if o.PageWidth == 0 && o.PageHeight == 0 {
 		o.PageWidth, o.PageHeight = DefaultPageWidth, DefaultPageHeight
-	}
-	if o.MarginTop == 0 && o.MarginRight == 0 && o.MarginBottom == 0 && o.MarginLeft == 0 {
-		o.MarginTop, o.MarginRight, o.MarginBottom, o.MarginLeft = DefaultMargin, DefaultMargin, DefaultMargin, DefaultMargin
 	}
 	if len(o.FontFamilies) == 0 {
 		o.FontFamilies = DefaultFontFamilies

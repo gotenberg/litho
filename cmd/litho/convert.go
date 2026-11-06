@@ -113,7 +113,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	var paper pageSizeFlag
 	fs.Var(&paper, "paper", "Page size: letter, legal, a3, a4, a5, or WIDTHxHEIGHT in points (default a4)")
 	var margin marginFlag
-	fs.Var(&margin, "margin", "Margins in points: one for every side, or top,right,bottom,left (default 56.693, 2 cm; all zero keeps it)")
+	fs.Var(&margin, "margin", "Margins in points: one for every side, or top,right,bottom,left (default 56.693, 2 cm)")
 	var fonts stringsFlag
 	fs.Var(&fonts, "font", "Font family, repeatable in preference order (default Liberation Serif, then serif)")
 	fontSize := fs.Float64("font-size", 0, "Font size in points (default 12)")
