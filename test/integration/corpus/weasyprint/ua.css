@@ -7,10 +7,12 @@
  * converter applies the HTML user agent stylesheet a browser does, so this
  * one takes back out what that stylesheet adds and tests_ua.css does not:
  * the margins and paddings of block elements, the sizes and weights of
- * headings, table border spacing, and the page margin. It is an author
- * stylesheet placed before the test's own, and its selectors are type
- * selectors, so a rule of the test wins over it where they meet unless the
- * test's selector is the universal one alone.
+ * headings, the table border spacing, the padding, vertical alignment and
+ * weight of cells, the alignment of captions, the grey of table borders,
+ * and the page margin; and it gives the body the orphans and widows of
+ * tests_ua.css. It is an author stylesheet placed before the test's own,
+ * and its selectors are type selectors, so a rule of the test wins over it
+ * where they meet unless the test's selector is the universal one alone.
  */
 @page {
   margin: 0;
@@ -63,4 +65,23 @@ hr {
 }
 table {
   border-spacing: 0;
+}
+td,
+th {
+  padding: 0;
+  vertical-align: baseline;
+}
+th,
+caption {
+  font-weight: inherit;
+  text-align: inherit;
+}
+table,
+td,
+th {
+  border-color: currentcolor;
+}
+body {
+  orphans: 1;
+  widows: 1;
 }

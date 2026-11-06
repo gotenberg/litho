@@ -298,7 +298,7 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 	e.prepareInline(d, cb.w)
 	forced := map[int]bool{}
 	floats, warnings := len(bc.floats), len(e.warnings)
-	saved := marginState{strut: mc.strut, waiting: slices.Clone(mc.waiting)}
+	saved := mc.clone()
 	var end float64
 	for pass := range maxFragmentationPasses {
 		end = e.flowLines(b, d, cb, bc, cursor, mc, forced)
@@ -310,7 +310,7 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 		}
 		bc.floats = bc.floats[:floats]
 		e.warnings = e.warnings[:warnings]
-		mc.strut, mc.waiting = saved.strut, slices.Clone(saved.waiting)
+		*mc = saved.clone()
 	}
 	return end
 }
@@ -369,11 +369,12 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			return y
 		}
 		if p.p == nil || p.p.Len() == 0 {
-			s.placeFloats(p, 0, math.MaxInt, y, mc, first)
+			s.placeFloats(p, 0, math.MaxInt, pendingTop(y, mc, first), mc, first)
 			if p.forced {
 				top := y
 				if first {
 					top = y + mc.strut.sum()
+					mc.commitFloats(top)
 				}
 				l := &lineBox{x: cb.x, w: cb.w, h: strutH, baseline: s.rootV.above}
 				top = s.position(top, strutH, forced)
@@ -410,35 +411,32 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			}
 			top := y
 			if first {
+				// The margins resolve here: the floats placed under them
+				// take their place before the line fits beside them.
 				top = y + mc.strut.sum()
+				mc.commitFloats(top)
 			}
-			s.placeFloats(p, pos, pos, top, mc, first)
+			s.placeFloats(p, pos, pos, top, mc, false)
 			lineIndent := 0.0
 			if len(s.lines) == 0 {
 				lineIndent = indent
 			}
-			var end int
-			var left, right float64
-			for range len(bc.floats) + 1 {
-				left, right = bc.band(top, strutH, cb.x, cb.x+cb.w)
-				var fits bool
-				end, fits = e.breakLine(p, w, pos, lineIndent, right-left)
-				if fits || !bc.narrowed(top, strutH, cb.x, cb.x+cb.w) {
-					break
-				}
-				next := bc.below(top, strutH)
-				if math.IsInf(next, 1) {
-					break
-				}
-				top = next
-			}
-			last := end == n && (p.forced || isLastPara(d, p))
-			l := s.buildLine(p, pos, end, left, right)
-			s.placeFloatsBeside(p, pos, end, l, top, mc, first)
+			top, end, left, right, l := s.fitLine(p, w, pos, lineIndent, top, strutH)
+			floatsBefore := len(bc.floats)
+			s.placeFloatsBeside(p, pos, end, l, top)
 			if newTop := s.position(top, l.h, forced); newTop != top {
 				top = newTop
-				l.x, l.w = bandOf(bc, top, l.h, cb)
+				nl, nw := bandOf(bc, top, l.h, cb)
+				if len(bc.floats) == floatsBefore && (math.Abs(nl-left) > eps || math.Abs(nl+nw-right) > eps) {
+					// The page cut moved the line to where the floats
+					// leave another width: break it again there.
+					top, end, _, _, l = s.fitLine(p, w, pos, lineIndent, top, strutH)
+					top = s.position(top, l.h, forced)
+					nl, nw = bandOf(bc, top, l.h, cb)
+				}
+				l.x, l.w = nl, nw
 			}
+			last := end == n && (p.forced || isLastPara(d, p))
 			s.align(l, lineIndent, last)
 			if first {
 				mc.commit(top)
@@ -457,10 +455,56 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			paraFirst = false
 			pos = end
 		}
-		s.placeFloats(p, n, math.MaxInt, y, mc, first)
+		s.placeFloats(p, n, math.MaxInt, pendingTop(y, mc, first), mc, first)
 	}
 	b.lines = s.lines
 	return y
+}
+
+// pendingTop returns y with the margins pending in mc added when pending.
+func pendingTop(y float64, mc *marginState, pending bool) float64 {
+	if pending {
+		return y + mc.strut.sum()
+	}
+	return y
+}
+
+// fitLine breaks the line of p starting at pos beside the floats, from
+// top down, and returns where it lands, its end, the band it was broken in
+// and the line built. The line is first fitted beside the floats over the
+// strut's height h; when the line built turns out taller and a float
+// narrows the band over its full height, it is broken again in that band
+// (CSS 2.1, 9.5: line boxes beside a float are shortened to make room for
+// its margin box).
+func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h float64) (float64, int, float64, float64, *lineBox) {
+	e, bc, cb := s.e, s.bc, s.cb
+	var end int
+	var left, right float64
+	var l *lineBox
+	for range maxFitPasses {
+		for range len(bc.floats) + 1 {
+			left, right = bc.band(top, h, cb.x, cb.x+cb.w)
+			var fits bool
+			end, fits = e.breakLine(p, w, pos, indent, right-left)
+			if fits || !bc.narrowed(top, h, cb.x, cb.x+cb.w) {
+				break
+			}
+			next := bc.below(top, h)
+			if math.IsInf(next, 1) {
+				break
+			}
+			top = next
+		}
+		l = s.buildLine(p, pos, end, left, right)
+		if l.h <= h+eps {
+			break
+		}
+		if l2, r2 := bc.band(top, l.h, cb.x, cb.x+cb.w); l2 <= left+eps && r2 >= right-eps {
+			break
+		}
+		h = l.h
+	}
+	return top, end, left, right, l
 }
 
 // isLastPara reports whether p is the last paragraph of d.
@@ -494,28 +538,29 @@ func (s *inlineState) position(top, h float64, forced map[int]bool) float64 {
 }
 
 // placeFloats lays out the floats of p anchored at a character position in
-// [from, to] at or below y.
-func (s *inlineState) placeFloats(p *ifcPara, from, to int, y float64, mc *marginState, pending bool) {
+// [from, to] at or below top, recording them in mc when margins are
+// pending.
+func (s *inlineState) placeFloats(p *ifcPara, from, to int, top float64, mc *marginState, pending bool) {
 	for _, f := range p.floats {
 		if f.pos < from || f.pos > to || s.placed[f.box] {
 			continue
 		}
 		s.placed[f.box] = true
-		top := y
+		i := s.e.layoutFloat(f.box, s.cb, s.bc, top)
 		if pending {
-			top = y + mc.strut.sum()
+			mc.floatPlaced(f.box, s.bc, i, top)
 		}
-		s.e.layoutFloat(f.box, s.cb, s.bc, top)
 	}
 }
 
-// placeFloatsBeside places the floats anchored inside the line [start, end)
-// at the line's top when they fit beside its content, moving the line
-// beside them (CSS 2.1, 9.5.1, rule 8). The others wait for the line's
-// bottom.
-func (s *inlineState) placeFloatsBeside(p *ifcPara, start, end int, l *lineBox, top float64, mc *marginState, pending bool) {
+// placeFloatsBeside places the floats anchored inside the line (start,
+// end], the break after it included, at the line's top when they fit
+// beside its content, moving the line beside them (CSS 2.1, 9.5.1, rule
+// 8): a float met at the end of a line's content still belongs to that
+// line. The others wait for the line's bottom.
+func (s *inlineState) placeFloatsBeside(p *ifcPara, start, end int, l *lineBox, top float64) {
 	for _, f := range p.floats {
-		if f.pos <= start || f.pos >= end || s.placed[f.box] {
+		if f.pos <= start || f.pos > end || s.placed[f.box] {
 			continue
 		}
 		resolveEdges(f.box, s.cb.w)
@@ -531,11 +576,7 @@ func (s *inlineState) placeFloatsBeside(p *ifcPara, start, end int, l *lineBox, 
 		if contentWidth(l)+fw > l.w+eps {
 			continue
 		}
-		t := top
-		if pending {
-			t = top + mc.strut.sum()
-		}
-		s.e.layoutFloat(f.box, s.cb, s.bc, t)
+		s.e.layoutFloat(f.box, s.cb, s.bc, top)
 		s.placed[f.box] = true
 		l.x, l.w = bandOf(s.bc, top, l.h, s.cb)
 	}
@@ -1048,9 +1089,18 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 	lo, hi := 0.0, 0.0
 	indent := max(resolve(b.st.TextIndent, 0), 0)
 	for pi, p := range d.paras {
+		// The floats of a paragraph sit beside its line in max-content
+		// layout, side by side until one clears the others (CSS Sizing 3,
+		// 5.2, as browsers lay floats out at the max-content width).
+		floats := 0.0
 		for _, f := range p.floats {
 			fl, fh := e.contribution(f.box)
 			lo, hi = max(lo, fl), max(hi, fh)
+			if f.box.st.Clear != css.ClearNone {
+				floats = 0
+			}
+			floats += fh
+			hi = max(hi, floats)
 		}
 		if p.p == nil {
 			continue
@@ -1075,7 +1125,7 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 				trail = 0
 			}
 		}
-		hi = max(hi, x-trail)
+		hi = max(hi, x-trail+floats)
 		seg, trail := 0.0, 0.0
 		anywhere := false
 		for i := range n {

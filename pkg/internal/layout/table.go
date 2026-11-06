@@ -706,6 +706,12 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 		}
 		rowH[cd.row] = max(rowH[cd.row], cd.natH)
 		if vaKind(c.st) == css.Baseline && cd.hasBase {
+			// A cell's baseline may lie below its bottom (a line box
+			// whose line-height is smaller than its font): the part
+			// below the baseline is then negative, not zero.
+			if !hasBase[cd.row] {
+				below[cd.row] = cd.natH - cd.base
+			}
 			base[cd.row] = max(base[cd.row], cd.base)
 			below[cd.row] = max(below[cd.row], cd.natH-cd.base)
 			hasBase[cd.row] = true

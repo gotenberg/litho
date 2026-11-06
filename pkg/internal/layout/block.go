@@ -42,16 +42,132 @@ func (s strut) sum() float64 { return s.pos + s.neg }
 type marginState struct {
 	strut   strut
 	waiting []*box
+	// absorb drops the top margins adjoining the top of a box placed by
+	// clearance: they collapsed into the margin the clearance replaced.
+	absorb bool
+	// floats are the floats placed while the margins were pending.
+	floats []pendingFloat
+}
+
+// pendingFloat is a float placed at y while margins were pending: idx is
+// its rectangle in bc, -1 for none, and owner the innermost box waiting on
+// the margins it sits in.
+type pendingFloat struct {
+	box   *box
+	bc    *bfc
+	idx   int
+	y     float64
+	owner *box
+}
+
+// collapsedThrough hands the floats of b, an empty box whose margins
+// collapse through and which no longer waits, to the box still waiting
+// around it, or lets them keep their place when none does.
+func (mc *marginState) collapsedThrough(b *box) {
+	kept := mc.floats[:0]
+	for _, f := range mc.floats {
+		if f.owner == b {
+			if len(mc.waiting) == 0 {
+				continue
+			}
+			f.owner = mc.waiting[len(mc.waiting)-1]
+		}
+		kept = append(kept, f)
+	}
+	mc.floats = kept
+}
+
+// clone returns a copy of mc that shares no slice with it.
+func (mc *marginState) clone() marginState {
+	c := *mc
+	c.waiting = slices.Clone(mc.waiting)
+	c.floats = slices.Clone(mc.floats)
+	return c
+}
+
+// floatPlaced records the float f placed at y in bc, its rectangle at
+// index idx of bc's floats, when a box's top waits on the pending margins:
+// the float then belongs inside that box. A float placed between resolved
+// boxes keeps its place.
+func (mc *marginState) floatPlaced(f *box, bc *bfc, idx int, y float64) {
+	if len(mc.waiting) == 0 {
+		return
+	}
+	mc.floats = append(mc.floats, pendingFloat{box: f, bc: bc, idx: idx, y: y, owner: mc.waiting[len(mc.waiting)-1]})
+}
+
+// floatTop returns where the first float placed under the pending margins
+// sits, false when none is.
+func (mc *marginState) floatTop() (float64, bool) {
+	if len(mc.floats) == 0 {
+		return 0, false
+	}
+	return mc.floats[0].y, true
 }
 
 // commit resolves the pending margins: content lands at y, and so does the
 // top of every box waiting on it.
+//
+// A float placed while a box's top waited on the margins sits at that
+// box's top, wherever the margins resolve (CSS 2.1, 8.3.1 and 9.5.1, as
+// browsers place floats once the position of their formatting context's
+// content is known): it moves down with them.
 func (mc *marginState) commit(y float64) {
+	mc.commitFloats(y)
 	for _, b := range mc.waiting {
 		b.y = y
 	}
 	mc.waiting = nil
 	mc.strut = strut{}
+	mc.absorb = false
+}
+
+// commitFloats moves the floats placed under the pending margins to y,
+// where the margins resolve, and forgets them; the margins stay pending.
+func (mc *marginState) commitFloats(y float64) {
+	if len(mc.waiting) > 0 {
+		for _, f := range mc.floats {
+			dy := y - f.y
+			if math.Abs(dy) <= eps {
+				continue
+			}
+			f.box.shift(0, dy)
+			if f.idx >= 0 && f.idx < len(f.bc.floats) {
+				f.bc.floats[f.idx].y0 += dy
+				f.bc.floats[f.idx].y1 += dy
+			}
+		}
+	}
+	mc.floats = nil
+}
+
+// leadingMargins returns the top margins of the first in-flow descendants
+// of b that adjoin its top margin (CSS 2.1, 8.3.1): they collapse with it,
+// so they take part in the hypothetical position clearance is computed
+// from (9.5.2). The walk stops at a top border or padding, at a box that
+// establishes a block formatting context, and at inline content.
+func leadingMargins(b *box, cbw float64) strut {
+	var s strut
+	for depth := 0; depth < maxTreeDepth; depth++ {
+		pd, bd, _ := edgesOf(b, cbw)
+		if pd[css.Top] != 0 || bd[css.Top] != 0 || b.inlineKids || (depth > 0 && b.establishesBFC()) {
+			break
+		}
+		var first *box
+		for _, k := range b.kids {
+			if k.float == css.FloatNone && !k.inline {
+				first = k
+				break
+			}
+		}
+		if first == nil {
+			break
+		}
+		_, _, m := edgesOf(first, cbw)
+		s = s.add(m[css.Top])
+		b = first
+	}
+	return s
 }
 
 // breakMode is how a box starts with respect to the page cuts.
@@ -108,12 +224,29 @@ func (flowFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 		return e.inlineIntrinsic(b)
 	}
 	lo, hi := 0.0, 0.0
+	// Consecutive floats sit side by side in max-content layout until one
+	// clears them; a box that establishes a formatting context sits beside
+	// them, any other in-flow box below (CSS 2.1, 9.5).
+	floats := 0.0
 	for _, k := range b.kids {
 		if e.err != nil {
 			break
 		}
 		kl, kh := e.contribution(k)
-		lo, hi = max(lo, kl), max(hi, kh)
+		lo = max(lo, kl)
+		switch {
+		case k.float != css.FloatNone:
+			if k.st.Clear != css.ClearNone {
+				floats = 0
+			}
+			floats += kh
+			hi = max(hi, floats)
+		case k.st.Clear == css.ClearNone && k.establishesBFC():
+			hi = max(hi, floats+kh)
+		default:
+			floats = 0
+			hi = max(hi, kh)
+		}
 	}
 	return lo, hi
 }
@@ -300,6 +433,9 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	}
 	b.laidOut = true
 	resolveEdges(b, cb.w)
+	if mc.absorb {
+		b.m[css.Top] = 0
+	}
 	mt, mb := b.m[css.Top], b.m[css.Bottom]
 	if mode != breakNone && e.paginating() {
 		// Margins before a break are truncated; after a forced break the
@@ -321,16 +457,34 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	clearY := math.Inf(-1)
 	if b.st.Clear != css.ClearNone {
 		clearY = bc.clearTo(b.st.Clear)
-		if hyp := cursor + mc.strut.add(mt).sum(); clearY > hyp+eps {
+		hyp := mc.strut.add(mt)
+		if b.kind != kindReplaced && !b.establishesBFC() {
+			lead := leadingMargins(b, cb.w)
+			hyp = hyp.add(lead.pos).add(lead.neg)
+		}
+		if clearY > cursor+hyp.sum()+eps {
 			mc.commit(cursor + mc.strut.sum())
 			cleared = true
 		}
 	}
 	if b.kind == kindReplaced || b.establishesBFC() {
 		top := cursor + mc.strut.add(mt).sum()
-		if cleared {
+		switch {
+		case cleared:
 			top = clearY
+		default:
+			if fy, ok := mc.floatTop(); ok && math.Abs(top-fy) > eps && bc.narrowed(fy, 0, cb.x, cb.x+cb.w) {
+				// A float placed under the pending margins sits at fy: a
+				// box that must not overlap it and does not fit beside
+				// it is separated from it as clearance would, its margin
+				// truncated, rather than moving the float with a
+				// collapsed margin (CSS 2.1, 9.5 and 9.5.2, as browsers
+				// resolve it).
+				mc.commit(fy)
+				top = fy
+			}
 		}
+		mc.commitFloats(top)
 		e.layoutBFCRoot(b, cb, bc, top)
 		mc.commit(b.y)
 		mc.strut = strut{}.add(mb)
@@ -350,7 +504,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	switch {
 	case cleared:
 		b.y = clearY
-		inner = &marginState{}
+		inner = &marginState{absorb: b.bd[css.Top] == 0 && b.pd[css.Top] == 0}
 		start = b.contentY()
 	case collapseTop:
 		mc.strut = mc.strut.add(mt)
@@ -366,11 +520,15 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	specH, hSet := specHeight(b, b.st.Height, cb)
 	kcb := cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}
 	end := formatterFor(b).layout(e, b, kcb, bc, start, inner)
-	collapseBottom := b.bd[css.Bottom] == 0 && b.pd[css.Bottom] == 0 && !hSet && b.st.MinHeight.Value <= 0
+	// The last child's bottom margin adjoins b's when b's height is auto
+	// (CSS 2.1, 8.3.1); a min-height that then makes b taller cuts that
+	// margin off instead of moving it into b, as browsers do.
+	collapseBottom := b.bd[css.Bottom] == 0 && b.pd[css.Bottom] == 0 && !hSet
 	if i := slices.Index(mc.waiting, b); i >= 0 {
 		// No content resolved the margins: b is empty.
-		if collapseBottom {
+		if collapseBottom && b.st.MinHeight.Value <= 0 {
 			mc.waiting = slices.Delete(mc.waiting, i, i+1)
+			mc.collapsedThrough(b)
 			b.y = cursor + mc.strut.sum()
 			b.h = 0
 			mc.strut = mc.strut.add(mb)
@@ -421,8 +579,8 @@ func (cblock) rtl(b *box) bool {
 func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 	left, right := cb.x, cb.x+cb.w
 	rtl := cb.rtl(b)
+	l, r := bc.band(top, 0, left, right)
 	for pass := range maxFitPasses {
-		l, r := bc.band(top, 0, left, right)
 		resolveEdges(b, cb.w)
 		if b.kind == kindReplaced {
 			w, h := e.replacedSize(b, cb)
@@ -453,11 +611,23 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 		if b.x >= l2-eps && b.x+b.borderW() <= r2+eps || pass == maxFitPasses-1 {
 			return
 		}
+		if l2 > l+eps || r2 < r-eps {
+			// Laid out in the space beside the floats at its top, the box
+			// grows down beside a float that narrows it further: try the
+			// narrower space at the same top before moving down, as a box
+			// whose width depends on it may then fit.
+			if !e.relayout(top) {
+				return
+			}
+			l, r = l2, r2
+			continue
+		}
 		next := bc.below(top, h)
 		if math.IsInf(next, 1) || !e.relayout(top) {
 			return
 		}
 		top = next
+		l, r = bc.band(top, 0, left, right)
 	}
 }
 
@@ -494,10 +664,10 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		warnings int
 	}
 	take := func(c float64) snapshot {
-		return snapshot{cursor: c, mc: marginState{strut: mc.strut, waiting: slices.Clone(mc.waiting)}, floats: len(bc.floats), warnings: len(e.warnings)}
+		return snapshot{cursor: c, mc: mc.clone(), floats: len(bc.floats), warnings: len(e.warnings)}
 	}
 	restore := func(s snapshot) float64 {
-		mc.strut, mc.waiting = s.mc.strut, slices.Clone(s.mc.waiting)
+		*mc = s.mc.clone()
 		bc.floats = bc.floats[:s.floats]
 		e.warnings = e.warnings[:s.warnings]
 		return s.cursor
@@ -509,7 +679,8 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 			return cursor
 		}
 		if k.float != css.FloatNone {
-			e.layoutFloat(k, cb, bc, cursor+mc.strut.sum())
+			top := cursor + mc.strut.sum()
+			mc.floatPlaced(k, bc, e.layoutFloat(k, cb, bc, top), top)
 			continue
 		}
 		snap := take(cursor)
@@ -577,14 +748,20 @@ func firstContent(b *box) float64 {
 }
 
 // layoutFloat lays the float f out and places it no higher than minY in
-// the containing block cb (CSS 2.1, 9.5.1). It is laid out where it lands,
-// so its content honours the page cuts.
-func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) {
+// the containing block cb (CSS 2.1, 9.5.1), and returns the index of its
+// rectangle in bc, -1 for none. It is laid out where it lands, so its
+// content honours the page cuts.
+func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 	if e.err != nil {
-		return
+		return -1
 	}
 	f.laidOut = true
 	resolveEdges(f, cb.w)
+	if f.st.Clear != css.ClearNone {
+		// A float's top outer edge goes below the floats it clears (CSS
+		// 2.1, 9.5.2: clear on a floating box adds rule 10 to 9.5.1).
+		minY = max(minY, bc.clearTo(f.st.Clear))
+	}
 	place := func(x, y float64) {
 		if f.kind == kindReplaced {
 			w, h := e.replacedSize(f, cb)
@@ -614,12 +791,13 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) {
 	}
 	if len(bc.floats) >= maxFloats {
 		e.warnOnce(codeTooManyFloats, fmt.Sprintf("more than %d floats in one formatting context: later ones do not push content aside", maxFloats), f.y)
-		return
+		return -1
 	}
 	bc.floats = append(bc.floats, floatRect{
 		side: f.float, x0: f.x - f.m[css.Left], y0: f.y - f.m[css.Top],
 		x1: f.x - f.m[css.Left] + f.marginW(), y1: f.y - f.m[css.Top] + f.marginH(),
 	})
+	return len(bc.floats) - 1
 }
 
 // layoutAtomic lays the inline block or inline replaced box a out in a

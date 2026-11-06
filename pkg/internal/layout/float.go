@@ -76,11 +76,12 @@ func (c *bfc) place(side css.Float, w, h, minY, left, right float64) (float64, f
 	}
 	for range len(c.floats) + 1 {
 		l, r := c.band(y, max(h, eps), left, right)
-		if w <= r-l+eps || !c.narrowed(y, max(h, eps), left, right) {
-			if side == css.FloatLeft {
-				return l, y
-			}
-			return r - w, y
+		x := l
+		if side != css.FloatLeft {
+			x = r - w
+		}
+		if w <= r-l+eps || (!c.narrowed(y, max(h, eps), left, right) && !c.collides(y, max(h, eps), x, x+w)) {
+			return x, y
 		}
 		next := c.below(y, max(h, eps))
 		if math.IsInf(next, 1) {
@@ -92,6 +93,19 @@ func (c *bfc) place(side css.Float, w, h, minY, left, right float64) (float64, f
 		return left, y
 	}
 	return right - w, y
+}
+
+// collides reports whether a float placed in the band [y, y+h) overlaps
+// the horizontal span [x0, x1): a float of the formatting context outside
+// the containing block still bars a wider float from overlapping it (CSS
+// 2.1, 9.5.1, rules 2, 3 and 7).
+func (c *bfc) collides(y, h, x0, x1 float64) bool {
+	for _, f := range c.floats {
+		if f.overlaps(y, h) && f.x0 < x1-eps && f.x1 > x0+eps {
+			return true
+		}
+	}
+	return false
 }
 
 // clearTo returns the position below the floats a clear value clears
