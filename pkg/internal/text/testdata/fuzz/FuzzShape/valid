@@ -1,0 +1,4 @@
+go test fuzz v1
+string("AB C\u05d0\u05d1 AB")
+float64(3.5)
+uint8(5)

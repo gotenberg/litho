@@ -20,6 +20,11 @@
 //     direction, script, style and face, shapes each item with HarfBuzz and
 //     breaks the result into lines at UAX #14 opportunities, falling back to
 //     grapheme boundaries (UAX #29) for a word wider than the line.
+//   - [Fonts.Shape] shapes a paragraph once for a caller that breaks lines
+//     itself, the layout engine: it returns a [Paragraph] holding each
+//     character's advance, break opportunity and grapheme boundary, with
+//     atomic [Object] runs and per-run direction overrides, and
+//     [Paragraph.Line] positions any range of it as a line in visual order.
 //
 // # Coordinates
 //
