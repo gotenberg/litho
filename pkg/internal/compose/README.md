@@ -90,9 +90,17 @@ else draws text:
   `compose.Text` runs positioned relative to each line's origin, with the
   line's ascent, descent and line gap, and a report of the characters no
   indexed face covers.
-- Fallback per character: the matched face, then what go-text resolves
-  for the character under the same family, weight and style, then any
-  indexed face closest in weight and style, then `.notdef`.
+- Matching is fontconfig-shaped and litho's own: exact family, then the
+  metric aliases of fontconfig's 30-metric-aliases.conf, then the generic
+  lists of 60-latin.conf ending in the Noto families, with the Noto CJK
+  family of the style's language first for a CJK language. Faces are
+  ranked by width, then slant, then weight (CSS Fonts Level 4, 5.2).
+  Fallback per character prefers the matched family's other faces, then
+  the style's family list, then the faces fontconfig prefers for the
+  character's script, then any face in index order.
+- The index holds footprints only (family, aspect, metrics, coverage);
+  a face's program loads on first use into a bounded cache, and the
+  program bytes are read again when a face is embedded.
 - Whitespace is `Collapse` (CSS normal) or `Preserve`; trailing spaces at
   a wrapped line end hang.
 

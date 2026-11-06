@@ -22,8 +22,11 @@ func FuzzConvert(f *testing.F) {
 	f.Add([]byte("Hello world\n\tindented\r\nnext\fpage two\n"))
 	f.Add([]byte("\xEF\xBB\xBF\xff\xfe\x00\r\r\n\f\f\t\x0b Á‮אב\xed\xa0\x80"))
 	f.Fuzz(func(t *testing.T, data []byte) {
-		// The index outlives the first iteration's directory: it holds the
-		// bytes it read.
+		// The index reads a face's file again on the face's first layout
+		// and first Compose. It outlives the first iteration's directory
+		// because that iteration lays out the only face, whose parsed font
+		// and program the index then keeps: one face stays under its cache
+		// bound.
 		fuzzFontsOnce.Do(func() { fuzzFonts = testFonts(t) })
 		o := plaintext.Options{FontFamilies: []string{"Test Serif"}, MaxInputBytes: 1 << 14, MaxPages: 64}
 		doc, err := plaintext.Convert(context.Background(), bytes.NewReader(data), fuzzFonts, o)
