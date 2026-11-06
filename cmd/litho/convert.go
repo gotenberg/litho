@@ -10,13 +10,16 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // convertUsage is the synopsis litho convert prints on a missing argument.
-const convertUsage = "Usage: litho convert [--from text|html] [--paper A4|Letter|WxH] [--margin PT | --margin T,R,B,L] " +
-	"[--font FAMILY] [--font-size PT] [--media print|screen] [--resources DIR] [--font-dir DIR]... [-f json] -o out.pdf <file>"
+const convertUsage = "Usage: litho convert [--from text|html] [--paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
+	"[--font FAMILY] [--font-size PT] [--media print|screen] [--media-feature NAME=VALUE]... [--resources DIR] [--base-url URL] " +
+	"[--prefer-css-page-size] [--scale N] [--single-page] [--pages RANGES] [--background=false] [--outline=false] " +
+	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--font-dir DIR]... [-f json] -o out.pdf <file>"
 
 // convertFormats maps the --from values, and the file extensions that imply
 // them, to the formats [pdf.Convert] reads. Immutable lookup tables.
@@ -124,6 +127,19 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	resources := fs.String("resources", "", "Directory an HTML file's relative URLs (stylesheets, images) are read from (default: the input file's directory; none for standard input)")
 	var fontDirs stringsFlag
 	fs.Var(&fontDirs, "font-dir", "Directory of font files, searched recursively; repeatable. Without it, the system font directories")
+	landscape := fs.Bool("landscape", false, "Swap the paper's width and height of an HTML file")
+	preferCSS := fs.Bool("prefer-css-page-size", false, "Let an @page size of an HTML file set the page size; without it the paper is the page and such a document is scaled to fit it")
+	scale := fs.Float64("scale", 1, "Scale of the content of an HTML file, from 0.1 to 2; the page keeps its size")
+	singlePage := fs.Bool("single-page", false, "Lay an HTML file out on one page as tall as its content")
+	pages := fs.String("pages", "", "Pages of an HTML file to write, such as 1-5,8,11-13 (default all)")
+	background := fs.Bool("background", true, "Print the backgrounds of an HTML file; --background=false drops them as a print dialog does")
+	outlineFlag := fs.Bool("outline", true, "Make the headings of an HTML file the document outline; --outline=false leaves it out")
+	header := fs.String("header", "", "File of the HTML fragment drawn in the top margin of every page of an HTML file (classes date, title, url, pageNumber, totalPages)")
+	footer := fs.String("footer", "", "File of the HTML fragment drawn in the bottom margin of every page of an HTML file")
+	date := fs.String("date", "", "Date the header and footer show, RFC 3339 or now (default none)")
+	baseURL := fs.String("base-url", "", "URL of the HTML file: shown by the url class of the header and footer; relative references of an http(s) URL are not fetched by the CLI")
+	var mediaFeatures stringsFlag
+	fs.Var(&mediaFeatures, "media-feature", "Media feature an HTML file's @media rules see, as NAME=VALUE such as prefers-color-scheme=dark; repeatable")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -160,6 +176,11 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		fmt.Fprintf(stderr, "invalid --media %q: expected print or screen\n", *media)
 		return exitError
 	}
+	printOpts, err := convertPrintOptions(*landscape, *preferCSS, *scale, *singlePage, *pages, *background, *outlineFlag, *header, *footer, *date, *baseURL, mediaFeatures)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitError
+	}
 	resDir := *resources
 	if resDir == "" && input != "-" {
 		resDir = filepath.Dir(input)
@@ -180,6 +201,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	opts := []pdf.ConvertOption{pdf.WithConvertFontDirs(fontDirs...), pdf.WithFontFamilies(fonts...), pdf.WithFontSize(*fontSize)}
 	if inFormat == pdf.FormatHTML {
 		opts = append(opts, pdf.WithMediaType(*media))
+		opts = append(opts, printOpts...)
 		if resDir != "" {
 			// An os.Root refuses a path or a symbolic link that leaves
 			// resDir, so the document reads nothing outside it.
@@ -247,6 +269,59 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 	}
 	return exitOK
+}
+
+// convertPrintOptions turns the print flags of litho convert into options
+// of [pdf.Convert]: it reads the header and footer files, parses --date and
+// splits every --media-feature at its first "=". The library checks the
+// ranges.
+func convertPrintOptions(landscape, preferCSS bool, scale float64, singlePage bool, pages string, background, outline bool, header, footer, date, baseURL string, mediaFeatures []string) ([]pdf.ConvertOption, error) {
+	opts := []pdf.ConvertOption{
+		pdf.WithLandscape(landscape),
+		pdf.WithPreferCSSPageSize(preferCSS),
+		pdf.WithPrintScale(scale),
+		pdf.WithSinglePage(singlePage),
+		pdf.WithPageRanges(pages),
+		pdf.WithPrintBackground(background),
+		pdf.WithOutline(outline),
+		pdf.WithBaseURL(baseURL),
+	}
+	for _, f := range []struct {
+		flag, path string
+		with       func(string) pdf.ConvertOption
+	}{{"--header", header, pdf.WithHeaderTemplate}, {"--footer", footer, pdf.WithFooterTemplate}} {
+		if f.path == "" {
+			continue
+		}
+		data, err := os.ReadFile(f.path) //nolint:gosec // The template path is the command's own argument.
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", f.flag, err)
+		}
+		opts = append(opts, f.with(string(data)))
+	}
+	switch date {
+	case "":
+	case "now":
+		opts = append(opts, pdf.WithPrintDate(time.Now()))
+	default:
+		t, err := time.Parse(time.RFC3339, date)
+		if err != nil {
+			return nil, fmt.Errorf("--date: %w: expected RFC 3339, such as 2026-11-06T10:30:00Z, or now", err)
+		}
+		opts = append(opts, pdf.WithPrintDate(t))
+	}
+	if len(mediaFeatures) > 0 {
+		features := make(map[string]string, len(mediaFeatures))
+		for _, mf := range mediaFeatures {
+			name, value, ok := strings.Cut(mf, "=")
+			if !ok || name == "" {
+				return nil, fmt.Errorf("--media-feature %q: expected NAME=VALUE", mf)
+			}
+			features[strings.ToLower(name)] = value
+		}
+		opts = append(opts, pdf.WithMediaFeatures(features))
+	}
+	return opts, nil
 }
 
 // convertFormat returns the format --from names, or, without it, the one the

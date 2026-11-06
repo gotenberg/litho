@@ -11,6 +11,13 @@ type Media struct {
 	// units resolve against them. Zero makes every width and height
 	// feature false and every viewport unit zero.
 	Width, Height float64
+	// Features are the discrete media features (Media Queries 5, 2.4) the
+	// @media rules evaluate against, by name, such as
+	// "prefers-color-scheme": "dark" or "hover": "hover". A feature absent
+	// from the map keeps its default: light, no-preference and none, what
+	// a printer and a headless browser report. Keys are lowercase; values
+	// are compared case-insensitively.
+	Features map[string]string
 }
 
 // mediaCond is the media query list of a conditional group or an
@@ -253,6 +260,9 @@ func evalFeature(t token, m Media) (bool, bool) {
 		return false, true
 	}
 	v := lower(val[0].value)
+	if want, ok := m.Features[name]; ok {
+		return v == lower(want), true
+	}
 	switch name {
 	case "orientation":
 		if h >= w {

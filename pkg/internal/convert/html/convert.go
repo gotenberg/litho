@@ -161,7 +161,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
 	sheets := c.stylesheets(ctx, scan.sheets)
 
-	media := css.Media{Type: o.Media, Width: o.PageWidth, Height: o.PageHeight}
+	media := css.Media{Type: o.Media, Width: o.PageWidth, Height: o.PageHeight, Features: o.MediaFeatures}
 	resolver := css.NewResolver(media, sheets)
 	// The direction that decides whether the first page is a left or a
 	// right one is not known before the cascade: the viewport takes a

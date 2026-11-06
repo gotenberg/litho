@@ -7,10 +7,12 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
@@ -49,6 +51,18 @@ type convertOptions struct {
 	limits                               Limits
 	media                                string
 	resources                            fs.FS
+	landscape                            bool
+	preferCSSPageSize                    bool
+	scale                                float64
+	singlePage                           bool
+	pageRanges                           string
+	omitBackgrounds                      bool
+	omitOutline                          bool
+	headerTemplate, footerTemplate       string
+	date                                 time.Time
+	baseURL                              string
+	httpClient                           *http.Client
+	mediaFeatures                        map[string]string
 }
 
 // WithConvertLogger injects a structured logger for the diagnostics of a
@@ -147,6 +161,122 @@ func WithMediaType(media string) ConvertOption {
 // warning.
 func WithResources(fsys fs.FS) ConvertOption {
 	return func(o *convertOptions) { o.resources = fsys }
+}
+
+// WithLandscape swaps the paper's width and height of a [FormatHTML]
+// source, so the page is as wide as the paper is tall: [WithPaperSize]
+// names the portrait sheet.
+func WithLandscape(landscape bool) ConvertOption {
+	return func(o *convertOptions) { o.landscape = landscape }
+}
+
+// WithPreferCSSPageSize lets an @page size descriptor of a [FormatHTML]
+// source set the page size and orientation (CSS Page 3, 5.1). Without it,
+// the default, the paper is the page: a document whose @page size differs
+// is laid out at its @page size and scaled down to fit the paper, as
+// Chromium prints without preferCSSPageSize. @page margins apply either
+// way.
+func WithPreferCSSPageSize(prefer bool) ConvertOption {
+	return func(o *convertOptions) { o.preferCSSPageSize = prefer }
+}
+
+// WithPrintScale scales the content of a [FormatHTML] source: 1, the
+// default, draws it as laid out; a scale in [0.1, 2] lays the content out
+// in the page area divided by it and draws it at that scale, the page
+// keeping its size and margins. Any other value is refused with
+// [ErrInvalidConvertOptions].
+func WithPrintScale(scale float64) ConvertOption {
+	return func(o *convertOptions) { o.scale = scale }
+}
+
+// WithSinglePage lays a [FormatHTML] source out on one page as tall as its
+// content plus the margins, and with [WithLandscape] as wide as it too:
+// the page is never cut. A forced break still ends the page, and only the
+// first page is written.
+func WithSinglePage(single bool) ConvertOption {
+	return func(o *convertOptions) { o.singlePage = single }
+}
+
+// WithPageRanges selects the pages of a [FormatHTML] source written,
+// one-based, in document order, as "1-5, 8, 11-13"; empty, the default,
+// writes every page. A range past the last page is ignored. A selection
+// that keeps no page, a range whose start exceeds its end and a malformed
+// specification are refused with [ErrInvalidConvertOptions]. Page
+// counters in headers, footers and margin boxes count the whole document.
+func WithPageRanges(spec string) ConvertOption {
+	return func(o *convertOptions) { o.pageRanges = spec }
+}
+
+// WithPrintBackground sets whether the background colours and images of a
+// [FormatHTML] source print. true, the default, prints them; false drops
+// them as a browser's print dialog does by default, except where
+// print-color-adjust: exact keeps them (CSS Color Adjustment 1, 3).
+func WithPrintBackground(print bool) ConvertOption {
+	return func(o *convertOptions) { o.omitBackgrounds = !print }
+}
+
+// WithOutline sets whether the headings of a [FormatHTML] source become
+// the document outline. true is the default.
+func WithOutline(outline bool) ConvertOption {
+	return func(o *convertOptions) { o.omitOutline = !outline }
+}
+
+// WithHeaderTemplate draws the HTML fragment html in the top margin of
+// every page of a [FormatHTML] source, as Chromium's printToPDF
+// headerTemplate: the fragment is the inner HTML of a box as wide as the
+// page and as tall as the margin, with Chromium's header stylesheet and
+// defaults, where the text of an element of class date, title, url,
+// pageNumber or totalPages is replaced by the print date
+// ([WithPrintDate]), the document title, the document URL
+// ([WithBaseURL]), the page number and the page count, and an element of
+// class text that reaches into the page area is hidden. Empty, the
+// default, draws nothing.
+func WithHeaderTemplate(html string) ConvertOption {
+	return func(o *convertOptions) { o.headerTemplate = html }
+}
+
+// WithFooterTemplate draws the HTML fragment html in the bottom margin of
+// every page of a [FormatHTML] source, as [WithHeaderTemplate] does in the
+// top one.
+func WithFooterTemplate(html string) ConvertOption {
+	return func(o *convertOptions) { o.footerTemplate = html }
+}
+
+// WithPrintDate sets what the date class of the header and footer
+// templates shows, formatted as Chromium formats it for the en-US locale,
+// "11/6/26, 10:30 AM". The zero time, the default, shows nothing. It is
+// the only date of a conversion: the output never depends on the clock.
+func WithPrintDate(t time.Time) ConvertOption {
+	return func(o *convertOptions) { o.date = t }
+}
+
+// WithBaseURL sets the URL of a [FormatHTML] source: what the url class
+// of the header and footer templates shows, and, for an http or https
+// URL, what relative references resolve against, fetched through
+// [WithHTTPClient]. Empty, the default, resolves relative references in
+// [WithResources]. A URL that is not absolute is refused with
+// [ErrInvalidConvertOptions].
+func WithBaseURL(u string) ConvertOption {
+	return func(o *convertOptions) { o.baseURL = u }
+}
+
+// WithHTTPClient fetches the http and https resources a [FormatHTML]
+// source names, stylesheets, images and fonts, through c, each read up to
+// the caps of [WithResources]. The caller's client decides what the
+// document may reach: its transport, its timeouts and its redirects.
+// nil, the default, leaves every such reference out with a warning.
+func WithHTTPClient(c *http.Client) ConvertOption {
+	return func(o *convertOptions) { o.httpClient = c }
+}
+
+// WithMediaFeatures sets the discrete media features the @media rules of
+// a [FormatHTML] source evaluate against, by lowercase name, such as
+// "prefers-color-scheme": "dark" (Media Queries 5, 2.4). A feature absent
+// keeps its default: light, no-preference, none, what a printer reports.
+// A name that is not lowercase is refused with
+// [ErrInvalidConvertOptions].
+func WithMediaFeatures(features map[string]string) ConvertOption {
+	return func(o *convertOptions) { o.mediaFeatures = features }
 }
 
 // WithConvertLimits sets the resource budgets of a [Convert] call. It reads
@@ -349,6 +479,20 @@ func convertHTML(ctx context.Context, src io.Reader, fonts *text.Fonts, o *conve
 		MaxInputBytes: maxBytes,
 		MaxPages:      maxPages,
 		Logger:        o.logger,
+
+		Landscape:         o.landscape,
+		PreferCSSPageSize: o.preferCSSPageSize,
+		Scale:             o.scale,
+		SinglePage:        o.singlePage,
+		PageRanges:        o.pageRanges,
+		OmitBackgrounds:   o.omitBackgrounds,
+		OmitOutline:       o.omitOutline,
+		HeaderTemplate:    o.headerTemplate,
+		FooterTemplate:    o.footerTemplate,
+		Date:              o.date,
+		BaseURL:           o.baseURL,
+		HTTPClient:        o.httpClient,
+		MediaFeatures:     o.mediaFeatures,
 	})
 	switch {
 	case err == nil:

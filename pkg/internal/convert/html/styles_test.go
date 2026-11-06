@@ -1,6 +1,7 @@
 package html
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -241,5 +242,21 @@ func TestPrepare_EvaluatesMediaOnThePageSize(t *testing.T) {
 	p := prep(t, src, Options{})
 	if byID(t, p.root, "x").Style.Color != red {
 		t.Errorf("media features compared against the paper, not the @page size")
+	}
+}
+
+func TestPrepare_EvaluatesTheMediaFeaturesGiven(t *testing.T) {
+	t.Parallel()
+	src := `<style>@media (prefers-color-scheme: dark) { #x { color: red } }</style><p id=x>x`
+	if p := prep(t, src, Options{}); byID(t, p.root, "x").Style.Color == red {
+		t.Errorf("prefers-color-scheme: dark matched without the feature; a printer prefers light")
+	}
+	p := prep(t, src, Options{MediaFeatures: map[string]string{"prefers-color-scheme": "Dark"}})
+	if byID(t, p.root, "x").Style.Color != red {
+		t.Errorf("prefers-color-scheme: dark did not match the feature given")
+	}
+	o := Options{MediaFeatures: map[string]string{"Prefers-Color-Scheme": "dark"}}
+	if _, err := o.withDefaults(); !errors.Is(err, ErrInvalidOptions) {
+		t.Errorf("a feature name that is not lowercase: got %v, want ErrInvalidOptions", err)
 	}
 }
