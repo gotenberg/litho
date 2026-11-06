@@ -1,0 +1,111 @@
+package css
+
+import (
+	"bytes"
+	"context"
+	"testing"
+
+	"golang.org/x/net/html"
+)
+
+const fuzzSheet = `@import url(a.css) print;
+@media print and (min-width: 100px) { p > a:not(.x)[href^="http"] { color: rgb(1 2 3 / 50%); margin: calc(1em + 2px) auto } }
+@page :first { size: A4 landscape; margin: 2cm }
+@font-face { font-family: X; src: url(x.woff2) format("woff2"); unicode-range: U+0-7F }
+@supports (display: grid) and (not (gap: 1px)) { div { display: grid } }
+:root { --c: red; --w: calc(var(--n, 2) * 1px) }
+li:nth-child(2n+1 of .a), :is(h1, h2)::before { font: italic bold 12px/1.5 "A B", serif; color: var(--c) }
+table td { border: 1px solid; background: url(x.png) no-repeat center / cover, #fff }
+`
+
+func FuzzParse(f *testing.F) {
+	f.Add([]byte(fuzzSheet))
+	f.Add([]byte(fuzzSheet[:len(fuzzSheet)/2]))
+	f.Add([]byte("p{a:(((((((((("))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		fetch := func(context.Context, string) ([]byte, error) { return data, nil }
+		s, err := Parse(context.Background(), data, ParseOptions{BaseURL: "https://e.com/s.css", Fetch: fetch})
+		if s == nil {
+			t.Fatalf("nil stylesheet (err %v)", err)
+		}
+		r := NewResolver(a4, []Sheet{{Sheet: s, Origin: Author}})
+		r.Page(PageSelector{First: true, Left: true})
+		r.FontFaces()
+	})
+}
+
+func FuzzParseDeclarations(f *testing.F) {
+	f.Add("color: red !important; margin: 1px 2px; --x: { a }; width: var(--x, 3px); background: url(a) 50% / 10px")
+	f.Add("font: bold 1")
+	f.Add("border: 1px solid rgb(")
+	f.Fuzz(func(t *testing.T, src string) {
+		ParseDeclarations(src, ParseOptions{BaseURL: "https://e.com/"})
+		Hint("color", src)
+		Hint("width", src)
+	})
+}
+
+func FuzzSelector(f *testing.F) {
+	f.Add("div > p.a#b[c~='d' i]:not(:nth-child(2n+1 of .x)) ~ span:lang(en)::before")
+	f.Add(":is(a, b:where(c")
+	f.Add("li:nth-last-of-type(-n+3), *|*, [x|=y s]")
+	doc, err := html.Parse(bytes.NewReader([]byte(selectorDoc)))
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Fuzz(func(t *testing.T, sel string) {
+		l, _ := parseComponentValues(sel, maxTokens)
+		list, serr := parseSelectorList(trimWS(l), 0, false)
+		if serr != nil {
+			return
+		}
+		m := newMatcher("en", 1<<20)
+		var walk func(n *html.Node)
+		walk = func(n *html.Node) {
+			if n.Type == html.ElementNode {
+				m.anyMatches(list, n)
+			}
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c)
+			}
+		}
+		walk(doc)
+	})
+}
+
+// FuzzCompute splits its input at the first NUL byte into an HTML
+// document and a stylesheet, and computes the styles.
+func FuzzCompute(f *testing.F) {
+	f.Add([]byte(cascadeDoc + "\x00" + cascadeCSS))
+	f.Add([]byte(selectorDoc + "\x00" + fuzzSheet))
+	f.Add([]byte("<p style='--a: var(--a); width: var(--a)'>x\x00p { color: var(--b, red) }"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		doc, sheet, _ := bytes.Cut(data, []byte{0})
+		root, err := html.Parse(bytes.NewReader(doc))
+		if err != nil {
+			return
+		}
+		s, _ := Parse(context.Background(), sheet, ParseOptions{})
+		r := NewResolver(a4, []Sheet{{Sheet: HTMLUserAgent(), Origin: UserAgent}, {Sheet: s, Origin: Author}})
+		c, err := r.Compute(context.Background(), root, ComputeOptions{Hints: HTMLHints, Lang: "en"})
+		if err != nil {
+			return
+		}
+		var walk func(n *html.Node)
+		walk = func(n *html.Node) {
+			if n.Type == html.ElementNode {
+				st := c.Style(n)
+				if st == nil {
+					t.Fatalf("no style for <%s>", n.Data)
+				}
+				if st.FontSize < 0 || st.FontSize > maxFontSize || st.FontWeight < 100 || st.FontWeight > 900 {
+					t.Fatalf("out-of-range font %v %d", st.FontSize, st.FontWeight)
+				}
+			}
+			for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
+				walk(ch)
+			}
+		}
+		walk(root)
+	})
+}

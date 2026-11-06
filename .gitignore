@@ -5,3 +5,5 @@
 /.claude/
 /gen-rules
 /graphify-out/
+/dist/
+/pkg/internal/css/testdata/css-parsing-tests/

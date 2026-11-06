@@ -1,0 +1,2 @@
+go test fuzz v1
+string("div > p.a#b[c~='d' i]:not(:nth-child(2n+1 of .x)) ~ span:lang(en)::before")

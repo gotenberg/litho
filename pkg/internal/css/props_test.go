@@ -1,0 +1,280 @@
+package css
+
+import (
+	"context"
+	"reflect"
+	"testing"
+)
+
+// styleOf computes one <div id=t> styled by decls, inside a 20px body.
+func styleOf(t *testing.T, decls string) *Style {
+	t.Helper()
+	c := compute(t, `<body><div id=t></div></body>`, `body { font-size: 20px; color: blue } #t { `+decls+` }`)
+	return c.of("t")
+}
+
+func TestProperties_Shorthands(t *testing.T) {
+	t.Parallel()
+	s := styleOf(t, "margin: 1px 2px 3px; padding: 4px 8px; inset: 1px auto")
+	if !reflect.DeepEqual(s.Margin, [4]Dimension{pts(0.75), pts(1.5), pts(2.25), pts(1.5)}) {
+		t.Errorf("margin = %+v", s.Margin)
+	}
+	if !reflect.DeepEqual(s.Padding, [4]Dimension{pts(3), pts(6), pts(3), pts(6)}) {
+		t.Errorf("padding = %+v", s.Padding)
+	}
+	if !dimEq(s.Top, pts(0.75)) || s.Right.Kind != Auto || !dimEq(s.Bottom, pts(0.75)) || s.Left.Kind != Auto {
+		t.Errorf("inset = %+v %+v %+v %+v", s.Top, s.Right, s.Bottom, s.Left)
+	}
+
+	s = styleOf(t, "border: thick dashed red; border-left: none; border-top-width: thin; border-bottom-style: hidden")
+	if s.Border[Top] != (Border{Width: 0.75, Style: Dashed, Color: rgb(255, 0, 0)}) {
+		t.Errorf("top = %+v", s.Border[Top])
+	}
+	if s.Border[Right].Width != 3.75 || s.Border[Left].Width != 0 || s.Border[Bottom].Width != 0 {
+		t.Errorf("widths = %v %v %v", s.Border[Right].Width, s.Border[Left].Width, s.Border[Bottom].Width)
+	}
+	if !colorEq(s.Border[Left].Color, rgb(0, 0, 255)) {
+		t.Errorf("border-left: none resets the colour to currentColor, got %+v", s.Border[Left].Color)
+	}
+
+	s = styleOf(t, "border-style: solid; border-color: red green")
+	if s.Border[Top].Width != 2.25 || !colorEq(s.Border[Right].Color, rgb(0, 128, 0)) {
+		t.Errorf("medium default width %v, right colour %+v", s.Border[Top].Width, s.Border[Right].Color)
+	}
+
+	s = styleOf(t, "border-radius: 10px 5% / 20px")
+	if s.BorderRadius[TopLeft] != (Radius{H: pts(7.5), V: pts(15)}) || s.BorderRadius[TopRight] != (Radius{H: pct(0.05), V: pts(15)}) {
+		t.Errorf("radius = %+v", s.BorderRadius)
+	}
+
+	s = styleOf(t, `font: italic small-caps bold 12px/1.2 "Times New Roman", serif`)
+	if s.FontStyle != FontItalic || s.FontVariant != SmallCaps || s.FontWeight != 700 || s.FontSize != 9 ||
+		s.LineHeight != (Dimension{Kind: Number, Value: 1.2}) || !reflect.DeepEqual(s.FontFamilies, []string{"Times New Roman", "serif"}) {
+		t.Errorf("font = %+v %v %d %v %+v %q", s.FontStyle, s.FontVariant, s.FontWeight, s.FontSize, s.LineHeight, s.FontFamilies)
+	}
+	s = styleOf(t, "font-weight: bold; line-height: 3; font: 10px monospace")
+	if s.FontWeight != 400 || s.LineHeight.Kind != Normal || s.FontSize != 7.5 {
+		t.Errorf("font resets: weight %d line-height %+v", s.FontWeight, s.LineHeight)
+	}
+
+	s = styleOf(t, "background: url(a.png) no-repeat right 20% / cover padding-box content-box, #ff0000")
+	if s.BackgroundImage != "a.png" || s.BackgroundRepeat != [2]Repeat{RepeatNoRepeat, RepeatNoRepeat} ||
+		s.BackgroundPosition != [2]Dimension{pct(1), pct(0.2)} || s.BackgroundSize.Kind != SizeCover ||
+		s.BackgroundOrigin != PaddingEdge || s.BackgroundClip != ContentEdge || !colorEq(s.BackgroundColor, rgb(255, 0, 0)) {
+		t.Errorf("background = %+v", s)
+	}
+	s = styleOf(t, "background: center / 50% auto repeat-y")
+	if s.BackgroundPosition != [2]Dimension{pct(0.5), pct(0.5)} || s.BackgroundSize.Width != pct(0.5) || s.BackgroundSize.Height.Kind != Auto ||
+		s.BackgroundRepeat != [2]Repeat{RepeatNoRepeat, RepeatRepeat} || s.BackgroundOrigin != PaddingEdge {
+		t.Errorf("background = %+v %+v %v", s.BackgroundPosition, s.BackgroundSize, s.BackgroundRepeat)
+	}
+	s = styleOf(t, "background-position: right 10% bottom 5%")
+	if s.BackgroundPosition != [2]Dimension{pct(0.9), pct(0.95)} {
+		t.Errorf("4-value position = %+v", s.BackgroundPosition)
+	}
+
+	s = styleOf(t, "list-style: square inside url(m.png)")
+	if s.ListStyleType != Square || s.ListStylePosition != Inside || s.ListStyleImage != "m.png" {
+		t.Errorf("list-style = %v %v %q", s.ListStyleType, s.ListStylePosition, s.ListStyleImage)
+	}
+	if s = styleOf(t, "list-style: none"); s.ListStyleType != ListNone || s.ListStyleImage != "" {
+		t.Errorf("list-style: none = %v", s.ListStyleType)
+	}
+	if s = styleOf(t, "text-decoration: underline overline dotted red"); s.TextDecoration != Underline|Overline {
+		t.Errorf("text-decoration = %v", s.TextDecoration)
+	}
+	s = styleOf(t, "page-break-before: always; page-break-after: avoid; page-break-inside: avoid; word-wrap: break-word")
+	if s.BreakBefore != Page || s.BreakAfter != BreakAvoid || s.BreakInside != InsideAvoid || s.OverflowWrap != BreakWord {
+		t.Errorf("legacy aliases = %v %v %v %v", s.BreakBefore, s.BreakAfter, s.BreakInside, s.OverflowWrap)
+	}
+	if s = styleOf(t, "word-break: break-word"); s.WordBreak != WordBreakNormal || s.OverflowWrap != Anywhere {
+		t.Errorf("word-break: break-word = %v %v", s.WordBreak, s.OverflowWrap)
+	}
+	if s = styleOf(t, "overflow: scroll hidden"); s.Overflow != OverflowHidden {
+		t.Errorf("overflow = %v", s.Overflow)
+	}
+	if s = styleOf(t, "overflow: auto"); s.Overflow != OverflowVisible {
+		t.Errorf("overflow auto = %v", s.Overflow)
+	}
+	if s = styleOf(t, "margin-inline: 1px 2px; padding-block-start: 3px"); !dimEq(s.Margin[Left], pts(0.75)) || !dimEq(s.Margin[Right], pts(1.5)) || !dimEq(s.Padding[Top], pts(2.25)) {
+		t.Errorf("logical = %+v %+v", s.Margin, s.Padding)
+	}
+}
+
+func TestProperties_Longhands(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		decl  string
+		check func(*Style) bool
+	}{
+		{"display: inline-table", func(s *Style) bool { return s.Display == InlineTable }},
+		{"display: block flow", func(s *Style) bool { return s.Display == Block }},
+		{"display: inline flow-root", func(s *Style) bool { return s.Display == InlineBlock }},
+		{"display: inline-grid", func(s *Style) bool { return s.Display == InlineBlock }},
+		{"position: sticky", func(s *Style) bool { return s.Position == Relative }},
+		{"opacity: 150%", func(s *Style) bool { return s.Opacity == 1 }},
+		{"opacity: 0.25", func(s *Style) bool { return s.Opacity == 0.25 }},
+		{"width: 50%; height: 2em", func(s *Style) bool { return s.Width == pct(0.5) && s.Height == pts(30) }},
+		{"width: -1px", func(s *Style) bool { return s.Width.Kind == Auto }},
+		{"width: max-content", func(s *Style) bool { return s.Width.Kind == Auto }},
+		{"min-width: auto; max-height: none", func(s *Style) bool { return s.MinWidth == pts(0) && s.MaxHeight.Kind == None }},
+		{"max-width: 10vw", func(s *Style) bool { return near(s.MaxWidth.Value, 59.528) }},
+		{"line-height: normal", func(s *Style) bool { return s.LineHeight.Kind == Normal }},
+		{"line-height: 20px", func(s *Style) bool { return s.LineHeight == pts(15) }},
+		{"line-height: calc(100% + 2px)", func(s *Style) bool { return s.LineHeight == pts(16.5) }},
+		{"font-size: 150%", func(s *Style) bool { return s.FontSize == 22.5 }},
+		{"font-size: x-large", func(s *Style) bool { return s.FontSize == 18 }},
+		{"font-size: larger", func(s *Style) bool { return s.FontSize == 18 }},
+		{"font-size: smaller", func(s *Style) bool { return near(s.FontSize, 12.5) }},
+		{"font-size: 2rem", func(s *Style) bool { return s.FontSize == 24 }},
+		{"font-size: calc(1em + 10%)", func(s *Style) bool { return near(s.FontSize, 16.5) }},
+		{"font-size: -1px", func(s *Style) bool { return s.FontSize == 15 }},
+		{"font-weight: 550", func(s *Style) bool { return s.FontWeight == 550 }},
+		{"font-weight: lighter", func(s *Style) bool { return s.FontWeight == 100 }},
+		{"font-weight: 1001", func(s *Style) bool { return s.FontWeight == 400 }},
+		{"font-style: oblique 10deg", func(s *Style) bool { return s.FontStyle == FontOblique }},
+		{"font-family: Times New Roman, 'Arial Black', SERIF", func(s *Style) bool {
+			return reflect.DeepEqual(s.FontFamilies, []string{"Times New Roman", "Arial Black", "serif"})
+		}},
+		{"text-align: justify", func(s *Style) bool { return s.TextAlign == AlignJustify }},
+		{"text-indent: 2em hanging", func(s *Style) bool { return s.TextIndent == pts(30) }},
+		{"text-transform: uppercase", func(s *Style) bool { return s.TextTransform == Uppercase }},
+		{"letter-spacing: 2px; word-spacing: normal", func(s *Style) bool { return s.LetterSpacing == pts(1.5) && s.WordSpacing.Kind == Normal }},
+		{"white-space: pre-wrap", func(s *Style) bool { return s.WhiteSpace == PreWrap }},
+		{"tab-size: 4", func(s *Style) bool { return s.TabSize == Dimension{Kind: Number, Value: 4} }},
+		{"tab-size: 20px", func(s *Style) bool { return s.TabSize == pts(15) }},
+		{"vertical-align: -10%", func(s *Style) bool { return s.VerticalAlign == VerticalAlign{Kind: AlignLength, Length: pct(-0.1)} }},
+		{"vertical-align: text-top", func(s *Style) bool { return s.VerticalAlign.Kind == TextTop }},
+		{"direction: rtl; unicode-bidi: plaintext", func(s *Style) bool { return s.Direction == RTL && s.UnicodeBidi == Plaintext }},
+		{"list-style-type: lower-latin", func(s *Style) bool { return s.ListStyleType == LowerAlpha }},
+		{"list-style-type: hebrew", func(s *Style) bool { return s.ListStyleType == Decimal }},
+		{"border-collapse: collapse; border-spacing: 1px 2px", func(s *Style) bool {
+			return s.BorderCollapse == CollapseBorders && s.BorderSpacing == [2]float64{0.75, 1.5}
+		}},
+		{"caption-side: bottom; empty-cells: hide; table-layout: fixed", func(s *Style) bool {
+			return s.CaptionSide == CaptionBottom && s.EmptyCells == Hide && s.TableLayout == TableFixed
+		}},
+		{"break-before: recto; break-after: column; break-inside: avoid-page", func(s *Style) bool {
+			return s.BreakBefore == RightPage && s.BreakAfter == BreakAuto && s.BreakInside == InsideAvoidPage
+		}},
+		{"orphans: 3; widows: 0", func(s *Style) bool { return s.Orphans == 3 && s.Widows == 2 }},
+		{"color: currentColor", func(s *Style) bool { return colorEq(s.Color, rgb(0, 0, 255)) }},
+		{"background-color: currentcolor; color: red", func(s *Style) bool { return colorEq(s.BackgroundColor, rgb(255, 0, 0)) }},
+		{"background-image: linear-gradient(red, blue)", func(s *Style) bool { return s.BackgroundImage == "" }},
+		{"visibility: collapse; box-sizing: border-box", func(s *Style) bool { return s.Visibility == VisibilityCollapse && s.BoxSizing == BorderBox }},
+		{"float: right; clear: both", func(s *Style) bool { return s.Float == FloatRight && s.Clear == ClearBoth }},
+	}
+	for _, tt := range tests {
+		if s := styleOf(t, tt.decl); !tt.check(s) {
+			t.Errorf("%s: wrong computed value", tt.decl)
+		}
+	}
+}
+
+func TestProperties_CSSWideKeywords(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<div id=p><span id=c>x</span></div>`, `
+#p { color: red; border: 1px solid; margin: 5px; font-size: 30px; display: table }
+#c { color: initial; border: inherit; margin: unset; font-size: revert; display: inherit; text-align: inherit }`)
+	ch := c.of("c")
+	if !colorEq(ch.Color, rgb(0, 0, 0)) {
+		t.Errorf("color: initial = %+v", ch.Color)
+	}
+	if ch.Border[Top].Width != 0.75 || ch.Border[Top].Style != Solid || !colorEq(ch.Border[Top].Color, rgb(255, 0, 0)) {
+		t.Errorf("border: inherit = %+v", ch.Border[Top])
+	}
+	if !dimEq(ch.Margin[Top], pts(0)) || ch.FontSize != 22.5 || ch.Display != Table {
+		t.Errorf("unset margin %+v, revert font-size %v, inherit display %v", ch.Margin[Top], ch.FontSize, ch.Display)
+	}
+}
+
+func TestProperties_DisplayFixups(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<span id=f>a</span><span id=a>b</span><span id=t style="display: inline-table; float: left">c</span><td id=cell></td><span id=n style="display:none; float: left"></span>`,
+		`#f { float: left } #a { position: absolute; float: right } html { display: inline }`)
+	if s := c.of("f"); s.Display != Block {
+		t.Errorf("float display = %v", s.Display)
+	}
+	if s := c.of("a"); s.Display != Block || s.Float != FloatNone {
+		t.Errorf("absolute display %v float %v", s.Display, s.Float)
+	}
+	if s := c.of("t"); s.Display != Table {
+		t.Errorf("floated inline-table = %v", s.Display)
+	}
+	if s := c.of("n"); s.Display != DisplayNone {
+		t.Errorf("display none = %v", s.Display)
+	}
+	if s := c.c.Style(byTag(c.doc, "html")); s.Display != Block {
+		t.Errorf("root display = %v", s.Display)
+	}
+}
+
+func TestProperties_UnknownWarnedOnce(t *testing.T) {
+	t.Parallel()
+	s := mustParse(t, `p { foo: 1; foo: 2; -webkit-foo: 1; cursor: pointer } div { foo: 3; display: grid; display: grid }`)
+	n := 0
+	for _, w := range s.Warnings() {
+		if w.Code == "unsupported-css-property" {
+			n++
+		}
+	}
+	if n != 1 || !hasWarning(s.Warnings(), "unsupported-css-value", "display: grid") {
+		t.Errorf("warnings = %v", s.Warnings())
+	}
+}
+
+func TestVars_Substitution(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<div id=p><div id=c>x</div><div id=d>y</div></div>`, `
+:root { --gap: 4px; --brand: rgb(0 128 0); --a: var(--b); --b: var(--a); --big: calc(var(--gap) * 2) }
+#p { --side: 2px; margin: var(--side) var(--gap); color: var(--brand); width: var(--undefined, 50%); }
+#c { --gap: 8px; padding: var(--big); height: var(--a, 7px); border: var(--nope); color: var(--brand, red) }
+#d { width: var(--side) var(--side); --empty:; font-family: var(--empty) serif; background: var(--x, url(f.png) no-repeat) }
+`)
+	p := c.of("p")
+	if !dimEq(p.Margin[Top], pts(1.5)) || !dimEq(p.Margin[Right], pts(3)) || !colorEq(p.Color, rgb(0, 128, 0)) || !dimEq(p.Width, pct(0.5)) {
+		t.Errorf("p margins %+v color %+v width %+v", p.Margin, p.Color, p.Width)
+	}
+	ch := c.of("c")
+	if !dimEq(ch.Padding[Top], pts(6)) {
+		t.Errorf("--big inherits its computed value (4px * 2), got %+v", ch.Padding[Top])
+	}
+	if !dimEq(ch.Height, pts(5.25)) {
+		t.Errorf("a cycle is guaranteed-invalid and takes the fallback, got %+v", ch.Height)
+	}
+	if ch.Border[Top].Style != BorderNone {
+		t.Errorf("an invalid var() computes as unset, got %+v", ch.Border[Top])
+	}
+	d := c.of("d")
+	if d.Width.Kind != Auto {
+		t.Errorf("width with two lengths after substitution = %+v, want unset", d.Width)
+	}
+	if !reflect.DeepEqual(d.FontFamilies, []string{"serif"}) || d.BackgroundImage != "f.png" || d.BackgroundRepeat[0] != RepeatNoRepeat {
+		t.Errorf("d families %q image %q", d.FontFamilies, d.BackgroundImage)
+	}
+	if !hasWarning(c.c.Warnings(), "invalid-css-value", `"width"`) {
+		t.Errorf("warnings = %v", c.c.Warnings())
+	}
+}
+
+func TestVars_ExponentialGrowthIsCapped(t *testing.T) {
+	t.Parallel()
+	css := `:root { --a: x x x x x x x x x x; --b: var(--a) var(--a) var(--a) var(--a) var(--a) var(--a) var(--a) var(--a);
+	--c: var(--b) var(--b) var(--b) var(--b) var(--b) var(--b) var(--b) var(--b);
+	--d: var(--c) var(--c) var(--c) var(--c) var(--c) var(--c) var(--c) var(--c);
+	--e: var(--d) var(--d) var(--d) var(--d) var(--d) var(--d) var(--d) var(--d);
+	--f: var(--e) var(--e) var(--e) var(--e) var(--e) var(--e) var(--e) var(--e); }
+	p { font-family: var(--f) }`
+	doc := parseHTML(t, `<p id=p>`)
+	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, css), Origin: Author}})
+	c, err := r.Compute(context.Background(), doc, ComputeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasWarning(c.Warnings(), "css-limit", "var()") {
+		t.Errorf("warnings = %v", c.Warnings())
+	}
+	if got := c.Style(byID(doc, "p")).FontFamilies; !reflect.DeepEqual(got, []string{"serif"}) {
+		t.Errorf("families = %q", got)
+	}
+}

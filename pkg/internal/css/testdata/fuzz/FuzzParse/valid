@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("@import url(a.css) print;\n@media print and (min-width: 100px) { p > a:not(.x)[href^=\"http\"] { color: rgb(1 2 3 / 50%); margin: calc(1em + 2px) auto } }\n@page :first { size: A4 landscape; margin: 2cm }\n@font-face { font-family: X; src: url(x.woff2) format(\"woff2\"); unicode-range: U+0-7F }\n:root { --c: red } li:nth-child(2n+1 of .a) { font: italic bold 12px/1.5 \"A B\", serif; color: var(--c) }\n")

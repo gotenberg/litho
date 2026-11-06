@@ -586,6 +586,7 @@ func Initial() *Style {
 		Margin:             [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
 		Padding:            [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
 		BackgroundPosition: [2]Dimension{{Kind: Percent}, {Kind: Percent}},
+		BackgroundOrigin:   PaddingEdge,
 		Color:              Color{A: 1},
 		FontFamilies:       []string{"serif"},
 		FontSize:           16 * Pt,

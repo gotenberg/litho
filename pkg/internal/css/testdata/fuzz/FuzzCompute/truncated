@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<!doctype html><html lang=en><body text=red><div class=a style='padding: 1em; --v: 2px; margin: var(--v)'><p>x<a href=y>z</a></p><table border=1 cellpadding=2><tr><td nowrap>c</td></tr></table></div></body></html>\x00@import url(a.css) print;\n@media print and (min-width: 100px) { p > a:not(.x)[href^=\"http\"")
