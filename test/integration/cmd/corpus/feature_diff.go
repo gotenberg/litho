@@ -32,11 +32,23 @@ const (
 // gen-render.sh: one pixel per point.
 const diffDPI = renderDPI
 
-// diffDownsample is the side, in pixels, of the blocks the layout score
-// averages a page into: 8 pixels at 72 dpi are 8 points, about one line of
-// small text, so text set in another face or wrapped a word apart averages
-// out, while a block, an image or a page break out of place does not.
-const diffDownsample = 8
+// The layout score's tolerance of position (see [layoutScore]), in pixels
+// at 72 dpi. A page is halved to one pixel per two points, blurred with a box
+// of layoutBlur half-pixels each way, cut into bands of layoutBand
+// half-pixel rows, and each band compared with the other page shifted by up
+// to layoutShiftY rows and layoutShiftX columns. The blur, 12 points each
+// way, turns words into blobs, so glyphs placed a pixel or two apart, or
+// drawn by another rasterizer, read alike, while a line of other words, a
+// missing block or an image out of place does not. The band search, 12
+// points up or down and 4 across, absorbs a line pitch a fraction of a
+// pixel apart, which drifts by a few pixels over a page, without letting a
+// band slide onto the next line of text.
+const (
+	layoutBlur   = 6
+	layoutBand   = 16
+	layoutShiftY = 6
+	layoutShiftX = 2
+)
 
 // diffScoreTolerance is how far a fixture's score may drop below the
 // baseline's before corpus check calls it a regression: 0.02, two points of
@@ -58,11 +70,15 @@ const diffScoreTolerance = 0.02
 //   - html: each Chromium reference converted back through the feature (litho
 //     reads and draws the PDF the goldens come from) scores text F1 1 on 11
 //     sources and 0.89 on i18n, whose Arabic, Hebrew and Thai litho's text
-//     extraction and PDF.js tokenise apart; layout 0.85 (i18n, lists) to 0.99
-//     (backgrounds, images), the anti-aliasing of two rasterizers weighed
-//     against little ink; strict 1 on every page.
+//     extraction and PDF.js tokenise apart; layout 0.93 (i18n) to 0.99
+//     (backgrounds, images, floats); strict 1 on every page.
+//   - html: litho's drawing of each reference's first page shifted by 1 or
+//     2 pixels both ways, or stretched by 1% down the page (a line pitch a
+//     fraction of a pixel apart), scores layout 0.92 to 0.99 against its
+//     golden.
 //   - html: the lists reference scored against the 11 other sources reaches
-//     text F1 0.14 and layout 0.14 at most, and a blank page scores 0 on both.
+//     text F1 0.14 and layout 0.05 at most (markdown), and a blank page
+//     scores 0 on both.
 const (
 	diffTextBar   = 0.85
 	diffLayoutBar = 0.75
@@ -149,9 +165,9 @@ type diffGolden struct {
 //     whitespace, averaged over the pages either has.
 //   - link_recall: the share of Chromium's links, by page and target, litho
 //     writes too; 1 when Chromium writes none.
-//   - layout: how much of the ink of the two pages, averaged into 8 by 8
-//     pixel blocks, lies in the same place (see [layoutScore]), averaged
-//     over the pages.
+//   - layout: how much of the ink of the two pages lies in the same place,
+//     blurred and matched band by band within a few pixels (see
+//     [layoutScore]), averaged over the pages.
 //   - strict: the share of pages the render cell's pixel rule matches.
 //
 // A missing page scores 0 on every per-page score. Two engines lay text out
@@ -516,55 +532,125 @@ func linkRecall(golden []diffLink, pages []diffLithoPage) float64 {
 	return float64(found) / float64(len(golden))
 }
 
-// layoutScore compares two pages averaged into diffDownsample-pixel blocks
-// over their overlap: one minus the summed absolute channel difference of the
-// blocks over the summed ink, a block channel's ink being its distance from
-// white on whichever page draws it darker. Weighing by ink rather than by
-// the page keeps a mostly white page from scoring near 1 whatever it draws:
-// a blank page scores 0 against any page that draws, an identical one 1.
-// Two blank pages score 1. Two pages of different sizes compare their common
-// top-left region; the pages score reads a page size defect.
+// layoutScore compares where two pages put their ink, tolerating a small
+// displacement (see layoutBlur and its siblings). Each page's ink, the
+// distance of each channel from white, is halved and blurred over the two
+// pages' overlap; every band of each page is matched against the other page
+// at the shift that fits it best; and the score is one minus the summed
+// absolute difference, both ways, over the summed ink of both pages. A blank
+// page scores 0 against any page that draws, two pages that put nothing
+// where the other inks score 0, an identical page 1, and two blank pages 1.
+// Two pages of different sizes compare their common top-left region; the
+// pages score reads a page size defect.
+//
+// Cost: O(w*h*(2*layoutShiftY+1)*(2*layoutShiftX+1)) per page at worst, a
+// few tens of milliseconds for an A4 page at 72 dpi.
 func layoutScore(got, want image.Image) float64 {
 	gb, wb := got.Bounds(), want.Bounds()
 	w, h := min(gb.Dx(), wb.Dx()), min(gb.Dy(), wb.Dy())
 	if w <= 0 || h <= 0 {
 		return 0
 	}
-	g, wt := blockMeans(flattenOnWhite(got, w, h), w, h), blockMeans(flattenOnWhite(want, w, h), w, h)
-	var diff, ink float64
+	g, hw, hh := layoutInk(flattenOnWhite(got, w, h), w, h)
+	wt, _, _ := layoutInk(flattenOnWhite(want, w, h), w, h)
+	var ink float64
 	for i := range g {
-		diff += math.Abs(g[i] - wt[i])
-		ink += 255 - min(g[i], wt[i])
+		ink += g[i] + wt[i]
 	}
 	if ink == 0 {
 		return 1
 	}
-	return max(0, 1-diff/ink)
+	d := bandShiftDiff(g, wt, hw, hh) + bandShiftDiff(wt, g, hw, hh)
+	return max(0, 1-d/ink)
 }
 
-// blockMeans averages an RGB image into diffDownsample-pixel blocks, the
-// last row and column of blocks covering what remains, and returns each
-// block's mean red, green and blue.
-func blockMeans(px []uint8, w, h int) []float64 {
-	bw, bh := (w+diffDownsample-1)/diffDownsample, (h+diffDownsample-1)/diffDownsample
-	sums := make([]float64, 3*bw*bh)
-	counts := make([]float64, bw*bh)
+// layoutInk turns an RGB image into three planes of ink, 255 minus each
+// channel, halved by averaging 2 by 2 pixels and box-blurred by layoutBlur.
+// The planes are laid out one after the other, each hw by hh.
+func layoutInk(px []uint8, w, h int) ([]float64, int, int) {
+	hw, hh := (w+1)/2, (h+1)/2
+	n := hw * hh
+	out := make([]float64, 3*n)
+	counts := make([]float64, n)
 	for y := range h {
 		for x := range w {
-			b := (y/diffDownsample)*bw + x/diffDownsample
+			k := (y/2)*hw + x/2
 			i := 3 * (y*w + x)
-			sums[3*b] += float64(px[i])
-			sums[3*b+1] += float64(px[i+1])
-			sums[3*b+2] += float64(px[i+2])
-			counts[b]++
+			for c := range 3 {
+				out[c*n+k] += 255 - float64(px[i+c])
+			}
+			counts[k]++
 		}
 	}
-	for b, c := range counts {
-		sums[3*b] /= c
-		sums[3*b+1] /= c
-		sums[3*b+2] /= c
+	for c := range 3 {
+		plane := out[c*n : (c+1)*n]
+		for k := range plane {
+			plane[k] /= counts[k]
+		}
+		boxBlur(plane, hw, hh, layoutBlur)
 	}
-	return sums
+	return out, hw, hh
+}
+
+// boxBlur blurs a w by h plane in place with a box of radius r, separably,
+// averaging over the part of the box inside the plane.
+func boxBlur(p []float64, w, h, r int) {
+	tmp := make([]float64, len(p))
+	for y := range h {
+		for x := range w {
+			var s float64
+			lo, hi := max(0, x-r), min(w-1, x+r)
+			for k := lo; k <= hi; k++ {
+				s += p[y*w+k]
+			}
+			tmp[y*w+x] = s / float64(hi-lo+1)
+		}
+	}
+	for y := range h {
+		lo, hi := max(0, y-r), min(h-1, y+r)
+		for x := range w {
+			var s float64
+			for k := lo; k <= hi; k++ {
+				s += tmp[k*w+x]
+			}
+			p[y*w+x] = s / float64(hi-lo+1)
+		}
+	}
+}
+
+// bandShiftDiff sums, over the layoutBand-row bands of a's three planes, the
+// absolute difference with b at the shift within layoutShiftY rows and
+// layoutShiftX columns that makes it smallest. Outside its plane, b reads as
+// no ink.
+func bandShiftDiff(a, b []float64, w, h int) float64 {
+	n := w * h
+	var total float64
+	for y0 := 0; y0 < h; y0 += layoutBand {
+		y1 := min(h, y0+layoutBand)
+		best := math.Inf(1)
+		for dy := -layoutShiftY; dy <= layoutShiftY; dy++ {
+			for dx := -layoutShiftX; dx <= layoutShiftX; dx++ {
+				var d float64
+				for y := y0; y < y1 && d < best; y++ {
+					by := y + dy
+					for x := range w {
+						bx := x + dx
+						inside := by >= 0 && by < h && bx >= 0 && bx < w
+						for c := range 3 {
+							v := 0.0
+							if inside {
+								v = b[c*n+by*w+bx]
+							}
+							d += math.Abs(a[c*n+y*w+x] - v)
+						}
+					}
+				}
+				best = min(best, d)
+			}
+		}
+		total += best
+	}
+	return total
 }
 
 // Compare turns Run's scores into a verdict: matched when every bar is

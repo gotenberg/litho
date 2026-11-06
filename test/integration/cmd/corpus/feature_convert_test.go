@@ -298,8 +298,8 @@ func TestLinkRecall(t *testing.T) {
 func TestLayoutScore(t *testing.T) {
 	t.Parallel()
 
-	page := withSquare(64, 64, 8, 8, 24)
-	blank := solid(64, 64, color.RGBA{0xff, 0xff, 0xff, 0xff})
+	page := withSquare(200, 200, 40, 40, 40)
+	blank := solid(200, 200, color.RGBA{0xff, 0xff, 0xff, 0xff})
 	if got := layoutScore(page, page); got != 1 {
 		t.Errorf("identical pages: %v", got)
 	}
@@ -309,10 +309,13 @@ func TestLayoutScore(t *testing.T) {
 	if got := layoutScore(blank, blank); got != 1 {
 		t.Errorf("two blank pages: %v", got)
 	}
-	moved := layoutScore(withSquare(64, 64, 10, 8, 24), page)
-	far := layoutScore(withSquare(64, 64, 36, 36, 24), page)
-	if moved <= far || moved >= 1 || far < 0 {
-		t.Errorf("a square moved 2 pixels scores %v, one moved 28 pixels %v", moved, far)
+	for _, shift := range []int{1, 2, 4} {
+		if got := layoutScore(withSquare(200, 200, 40+shift, 40+shift, 40), page); got < 0.9 {
+			t.Errorf("a square moved %d pixels scores %v, want 0.9 or more", shift, got)
+		}
+	}
+	if got := layoutScore(withSquare(200, 200, 140, 140, 40), page); got > 0.2 {
+		t.Errorf("a square moved 100 pixels scores %v, want 0.2 or less", got)
 	}
 }
 
