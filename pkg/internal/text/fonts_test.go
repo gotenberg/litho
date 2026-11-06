@@ -175,6 +175,15 @@ func TestFace_MetricsMatchHhea(t *testing.T) {
 	if m.Ascent <= 0 || m.Descent <= 0 {
 		t.Errorf("metrics %+v must be positive", m)
 	}
+	// OS/2 version 2 and later record sxHeight after the code page ranges;
+	// without it the x-height is half the size.
+	want := 10.0
+	if os2 := sfntTable(t, data, "OS/2"); len(os2) >= 88 && binary.BigEndian.Uint16(os2) >= 2 {
+		want = float64(int16(binary.BigEndian.Uint16(os2[86:]))) * 20 / upem
+	}
+	if !near(m.XHeight, want) {
+		t.Errorf("x-height %v, want %v", m.XHeight, want)
+	}
 }
 
 // sfntTable returns the table tag of the sfnt program data.

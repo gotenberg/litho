@@ -99,8 +99,8 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		out.link = l
 		b.link = l
 	}
-	if d := b.st.TextDecoration; d != 0 {
-		out.decos = append(slices.Clip(ctx.decos), deco{lines: d, color: b.st.Color})
+	if b.st.TextDecoration != 0 {
+		out.decos = append(slices.Clip(ctx.decos), newDeco(b.st))
 	}
 	return out
 }
@@ -244,7 +244,7 @@ func ownDecos(st *css.Style) []deco {
 	if st.TextDecoration == 0 {
 		return nil
 	}
-	return []deco{{lines: st.TextDecoration, color: st.Color}}
+	return []deco{newDeco(st)}
 }
 
 // isAbs reports an absolutely positioned style: absolute or fixed, out of

@@ -124,6 +124,32 @@ func TestShape_Spacing(t *testing.T) {
 	}
 }
 
+func TestShape_FormatCharactersTakeNoSpacing(t *testing.T) {
+	f := newTestFonts(t, sansFamily()...)
+	s := style()
+	plain := shape(t, f, []ParagraphRun{{Text: "A\u200bB", Style: s}}, ParagraphOptions{})
+	s.LetterSpacing = 1
+	spaced := shape(t, f, []ParagraphRun{{Text: "A\u200bB", Style: s}}, ParagraphOptions{})
+	// CSS Text 3, 8.2: a zero width space is no typographic character
+	// unit.
+	if got, want := spaced.Advance(1), plain.Advance(1); math.Abs(got-want) > 1e-6 {
+		t.Errorf("zero width space advance %v, want %v", got, want)
+	}
+	if got, want := spaced.Advance(0), plain.Advance(0)+1; math.Abs(got-want) > 1e-6 {
+		t.Errorf("A advance %v, want %v", got, want)
+	}
+}
+
+func TestLineTrimmed_HangingSpacesKeepAdvance(t *testing.T) {
+	f := newTestFonts(t, sansFamily()...)
+	p := shape(t, f, []ParagraphRun{{Text: "A  ", Style: style()}}, ParagraphOptions{})
+	hung := p.Line(0, 3, true).Width
+	kept := p.LineTrimmed(0, 3, 2).Width
+	if math.Abs(kept-(hung+p.Advance(1))) > 1e-6 || hung != p.Advance(0) {
+		t.Errorf("Line width %v, LineTrimmed width %v, advances %v %v", hung, kept, p.Advance(0), p.Advance(1))
+	}
+}
+
 func TestShape_ControlCharactersDrawNothing(t *testing.T) {
 	f := newTestFonts(t, sansFamily()...)
 	p := shape(t, f, []ParagraphRun{{Text: "A\x01B", Style: style()}}, ParagraphOptions{})

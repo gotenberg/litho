@@ -440,7 +440,10 @@ func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style
 			if it.rtl {
 				last = k == 0 || it.glyphs[k-1].cluster != it.glyphs[k].cluster
 			}
-			if last {
+			// A default ignorable character, a format control such as a
+			// zero width space or a bidi control, is no typographic
+			// character unit: it takes no spacing.
+			if c := it.glyphs[k].cluster; last && c < n && !unicode.Is(unicode.Cf, p.text[c]) {
 				it.glyphs[k].advance += style.LetterSpacing
 			}
 		}
@@ -552,6 +555,18 @@ func (p *Paragraph) Line(start, end int, hang bool) ParagraphLine {
 			hangFrom--
 		}
 	}
+	return p.LineTrimmed(start, end, hangFrom)
+}
+
+// LineTrimmed is [Paragraph.Line] with the characters from trim to end
+// drawing no advance, whatever they are: a caller that tells the spaces
+// it removes at a line end (CSS Text 3, 4.1.2) from the ones that hang
+// and still draw (4.1.3) passes the first removed one. ParagraphLine.Width
+// then counts the hanging ones.
+func (p *Paragraph) LineTrimmed(start, end, trim int) ParagraphLine {
+	start = min(max(start, 0), len(p.text))
+	end = min(max(end, start), len(p.text))
+	hangFrom := min(max(trim, start), end)
 	type piece struct {
 		item  *shapedItem
 		start int

@@ -32,10 +32,42 @@ type link struct {
 	node *Node
 }
 
-// deco is one text decoration a box draws on its text (CSS 2.1, 16.3.1).
+// deco is one text decoration a box draws on its text (CSS 2.1, 16.3.1):
+// the lines, colour, style, thickness and underline offset of the
+// decorating box (CSS Text Decoration 4, 2 and 3).
 type deco struct {
 	lines css.TextDecoration
 	color css.Color
+	style css.DecorationStyle
+	// thick is the thickness in points, autoThickness or fromFont.
+	thick float64
+	// offset is the underline offset below the baseline in points, valid
+	// when hasOffset.
+	offset    float64
+	hasOffset bool
+}
+
+// The keyword thicknesses of a [deco].
+const (
+	autoThickness = -1
+	fromFont      = -2
+)
+
+// newDeco returns the decoration a box of style st draws on its text.
+func newDeco(st *css.Style) deco {
+	d := deco{lines: st.TextDecoration, color: st.TextDecorationColor, style: st.TextDecorationStyle, thick: autoThickness}
+	size := max(clamp(st.FontSize), 0)
+	switch t := st.TextDecorationThickness; t.Kind {
+	case css.Points, css.Percent:
+		d.thick = max(resolve(t, size), 0)
+	case css.Normal:
+		d.thick = fromFont
+	case css.Auto, css.None, css.Number:
+	}
+	if o := st.TextUnderlineOffset; o.Kind == css.Points || o.Kind == css.Percent {
+		d.offset, d.hasOffset = resolve(o, size), true
+	}
+	return d
 }
 
 // box is one box of the box tree: generated once from the content tree,

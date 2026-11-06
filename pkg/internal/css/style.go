@@ -417,6 +417,13 @@ const (
 	AlignRight
 	AlignCenter
 	AlignJustify
+	// AlignJustifyAll justifies every line, the last one and the ones
+	// before a forced break included (CSS Text 3, 6.1, justify-all).
+	AlignJustifyAll
+	// AlignAuto is text-align-last's initial value: the last line takes
+	// text-align, start for justify (CSS Text 3, 6.3). text-align never
+	// computes to it.
+	AlignAuto
 )
 
 // TextDecoration is the text-decoration-line bit set (CSS Text Decoration
@@ -429,6 +436,19 @@ const (
 	Underline TextDecoration = 1 << iota
 	Overline
 	LineThrough
+)
+
+// DecorationStyle is the text-decoration-style property (CSS Text
+// Decoration 3, 2.3).
+type DecorationStyle uint8
+
+// The text-decoration-style values.
+const (
+	DecorationSolid DecorationStyle = iota
+	DecorationDouble
+	DecorationDotted
+	DecorationDashed
+	DecorationWavy
 )
 
 // TextTransform is the text-transform property (CSS Text 3, 2.1).
@@ -452,6 +472,39 @@ const (
 	Nowrap
 	PreWrap
 	PreLine
+	// BreakSpaces preserves white space like pre-wrap, but preserved
+	// spaces never hang and a soft wrap opportunity follows each one
+	// (CSS Text 3, 3).
+	BreakSpaces
+)
+
+// WordSpaceTransform is the word-space-transform property (CSS Text 4,
+// 4.3).
+type WordSpaceTransform uint8
+
+// The word-space-transform values.
+const (
+	WordSpaceNone WordSpaceTransform = iota
+	// WordSpaceSpace turns ideographic spaces and the word boundaries
+	// marked by zero width spaces into spaces.
+	WordSpaceSpace
+	// WordSpaceIdeographic turns spaces and those word boundaries into
+	// ideographic spaces.
+	WordSpaceIdeographic
+)
+
+// LineBreak is the line-break property (CSS Text 3, 5.3).
+type LineBreak uint8
+
+// The line-break values. litho breaks loose and strict as auto.
+const (
+	LineBreakAuto LineBreak = iota
+	LineBreakLoose
+	LineBreakNormal
+	LineBreakStrict
+	// LineBreakAnywhere puts a soft wrap opportunity around every
+	// typographic character unit, spaces and punctuation included.
+	LineBreakAnywhere
 )
 
 // WordBreak is the word-break property (CSS Text 3, 5.2).
@@ -722,6 +775,21 @@ type Style struct {
 
 	TextAlign      TextAlign
 	TextDecoration TextDecoration
+	// TextAlignLast aligns the last line of a block and every line before
+	// a forced break (CSS Text 3, 6.3), AlignAuto by default.
+	TextAlignLast TextAlign
+	// TextDecorationColor is the colour of the decoration lines, the
+	// element's color for currentColor (CSS Text Decoration 3, 2.2).
+	TextDecorationColor Color
+	// TextDecorationStyle is the style of the decoration lines.
+	TextDecorationStyle DecorationStyle
+	// TextDecorationThickness takes Auto, Normal for from-font, Points or
+	// Percent of the font size (CSS Text Decoration 4, 2.6).
+	TextDecorationThickness Dimension
+	// TextUnderlineOffset takes Auto, Points or Percent of the font size:
+	// the distance from the alphabetic baseline down to the underline
+	// (CSS Text Decoration 4, 3.3).
+	TextUnderlineOffset Dimension
 	// TextIndent takes Points or Percent of the containing block's width.
 	TextIndent    Dimension
 	TextTransform TextTransform
@@ -731,6 +799,9 @@ type Style struct {
 	WhiteSpace    WhiteSpace
 	WordBreak     WordBreak
 	OverflowWrap  OverflowWrap
+	LineBreak     LineBreak
+	// WordSpaceTransform turns word separators into another one.
+	WordSpaceTransform WordSpaceTransform
 	// TabSize takes Number (a count of spaces) or Points.
 	TabSize       Dimension
 	VerticalAlign VerticalAlign
@@ -781,35 +852,38 @@ const (
 	slotBorderBottom
 	slotBorderLeft
 	slotOutline
+	slotTextDecoration
 )
 
 // Initial returns the initial value of every property (CSS 2.1, appendix
 // F), with the root's font size at medium, 16px.
 func Initial() *Style {
 	return &Style{
-		Opacity:            1,
-		ZIndex:             ZIndex{Auto: true},
-		TransformOrigin:    [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
-		MinWidth:           Pts(0),
-		MinHeight:          Pts(0),
-		MaxWidth:           Dimension{Kind: None},
-		MaxHeight:          Dimension{Kind: None},
-		Margin:             [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
-		Padding:            [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
-		BackgroundPosition: [2]Dimension{{Kind: Percent}, {Kind: Percent}},
-		BackgroundOrigin:   PaddingEdge,
-		ObjectPosition:     [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
-		Color:              Color{A: 1},
-		FontFamilies:       []string{"serif"},
-		FontSize:           16 * Pt,
-		FontWeight:         400,
-		LineHeight:         Dimension{Kind: Normal},
-		TextIndent:         Pts(0),
-		LetterSpacing:      Dimension{Kind: Normal},
-		WordSpacing:        Dimension{Kind: Normal},
-		TabSize:            Dimension{Kind: Number, Value: 8},
-		Orphans:            2,
-		Widows:             2,
+		Opacity:             1,
+		ZIndex:              ZIndex{Auto: true},
+		TransformOrigin:     [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
+		MinWidth:            Pts(0),
+		MinHeight:           Pts(0),
+		MaxWidth:            Dimension{Kind: None},
+		MaxHeight:           Dimension{Kind: None},
+		Margin:              [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
+		Padding:             [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
+		BackgroundPosition:  [2]Dimension{{Kind: Percent}, {Kind: Percent}},
+		BackgroundOrigin:    PaddingEdge,
+		ObjectPosition:      [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
+		Color:               Color{A: 1},
+		FontFamilies:        []string{"serif"},
+		FontSize:            16 * Pt,
+		FontWeight:          400,
+		LineHeight:          Dimension{Kind: Normal},
+		TextIndent:          Pts(0),
+		LetterSpacing:       Dimension{Kind: Normal},
+		WordSpacing:         Dimension{Kind: Normal},
+		TabSize:             Dimension{Kind: Number, Value: 8},
+		TextAlignLast:       AlignAuto,
+		TextDecorationColor: Color{A: 1},
+		Orphans:             2,
+		Widows:              2,
 	}
 }
 

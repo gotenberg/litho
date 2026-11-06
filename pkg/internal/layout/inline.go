@@ -26,14 +26,17 @@ type lineBox struct {
 	// that monolithic content (CSS Fragmentation 3, 4.1). A line taller
 	// than the area for its text alone takes one page and is cut there.
 	overflows bool
+	// hangW is the advance of the spaces that hang at the line's logical
+	// end, drawn on its left when hangLeft (a right-to-left paragraph),
+	// else on its right.
+	hangW    float64
+	hangLeft bool
 }
 
 // lineItem is one piece of a line: a glyph run of a text box, or an
 // atomic inline. Positions are relative to the line box.
 type lineItem struct {
 	box *box
-	// start and end are the item's characters in its paragraph.
-	start, end int
 	// text is the glyph run, its Origin relative to the line box; nil for
 	// an atomic inline or a piece that draws no glyph.
 	text   *compose.Text
@@ -44,6 +47,11 @@ type lineItem struct {
 	baseline, ascent, descent float64
 	ulPos, ulThick            float64
 	stPos, stThick            float64
+	// start and end are the item's characters in its paragraph, hang how
+	// many of them hang at the line end, and rtl reports glyphs drawn
+	// right to left.
+	start, end, hang int
+	rtl              bool
 }
 
 // inlineFrag is the part of an inline box on one line, painted with its
@@ -53,22 +61,40 @@ type inlineFrag struct {
 	// x0 and x1 are the border box's left and right edges, top and bottom
 	// its top and bottom, relative to the line box.
 	x0, x1, top, bottom float64
-	// start and end report whether the fragment draws the box's start and
-	// end edges (box-decoration-break: slice).
-	start, end bool
+	// left and right report whether the fragment draws the box's left and
+	// right edges (box-decoration-break: slice).
+	left, right bool
 }
 
-// edges returns the start and end edge widths of inline box b: margin,
-// border and padding.
+// inlineEdges returns the widths inline box b takes at its logical start
+// and end: margin, border and padding of its start side on its first
+// fragment and of its end side on its last, the start side being the left
+// one in a left-to-right box and the right one in a right-to-left box (CSS
+// 2.1, 8.6 and 9.10).
 func inlineEdges(b *box) (float64, float64) {
+	st, en := css.Left, css.Right
+	if b.st.Direction == css.RTL {
+		st, en = en, st
+	}
 	l, r := 0.0, 0.0
 	if b.first {
-		l = b.m[css.Left] + b.bd[css.Left] + b.pd[css.Left]
+		l = b.m[st] + b.bd[st] + b.pd[st]
 	}
 	if b.last {
-		r = b.m[css.Right] + b.bd[css.Right] + b.pd[css.Right]
+		r = b.m[en] + b.bd[en] + b.pd[en]
 	}
 	return l, r
+}
+
+// edgeSides reports whether the fragment of inline box b that
+// holds its logical start (start) or end (end) draws its left or right
+// edge: a left-to-right box draws its left edge on its first fragment, a
+// right-to-left one on its last.
+func edgeSides(b *box, start, end bool) (left, right bool) {
+	if b.st.Direction == css.RTL {
+		return b.last && end, b.first && start
+	}
+	return b.first && start, b.last && end
 }
 
 // prepareInline resolves the edges of the inline boxes of d and lays its
@@ -144,8 +170,10 @@ func (p *ifcPara) styleAt(i int) *css.Style {
 
 // allowed reports a soft wrap opportunity before character i of p (CSS
 // Text 3, 5): a UAX #14 opportunity where white space allows wrapping and
-// word-break keep-all does not suppress it, or any grapheme boundary
-// between letters under word-break: break-all.
+// word-break keep-all does not suppress it, any grapheme boundary between
+// letters under word-break: break-all, any grapheme boundary under
+// line-break: anywhere (5.3), and the boundary after every preserved space
+// under white-space: break-spaces (3).
 func (p *ifcPara) allowed(i int) bool {
 	if i <= 0 || i >= p.p.Len() {
 		return false
@@ -155,11 +183,30 @@ func (p *ifcPara) allowed(i int) bool {
 		return false
 	}
 	a, b := p.p.Rune(i-1), p.p.Rune(i)
+	if p.styleAt(i).LineBreak == css.LineBreakAnywhere && wraps(after) && p.p.GraphemeStart(i) {
+		return true
+	}
+	if before == css.BreakSpaces && isPreservedSpace(a) && p.infos[p.p.RunOf(i-1)].kind != runAtomic {
+		return true
+	}
+	if after == css.BreakSpaces && isPreservedSpace(b) {
+		// Spaces stay with the word before them: they wrap only after
+		// themselves.
+		return false
+	}
 	if p.p.Break(i) == text.NoBreak {
-		st := p.styleAt(i)
-		return st.WordBreak == css.BreakAll && p.p.GraphemeStart(i) && !unicode.IsSpace(b) && !unicode.IsPunct(b) && !unicode.IsSpace(a)
+		// break-all on either side opens the boundary between two letters,
+		// as at the edge of a span that sets it.
+		breakAll := p.styleAt(i).WordBreak == css.BreakAll || p.styleAt(i-1).WordBreak == css.BreakAll
+		return breakAll && p.p.GraphemeStart(i) && !unicode.IsSpace(b) && !unicode.IsPunct(b) && !unicode.IsSpace(a)
 	}
 	return p.styleAt(i).WordBreak != css.KeepAll || !isWordChar(a) || !isWordChar(b)
+}
+
+// isPreservedSpace reports a space or tab that break-spaces keeps and
+// wraps after.
+func isPreservedSpace(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\u3000'
 }
 
 // isWordChar reports a letter or digit, which keep-all keeps together.
@@ -178,7 +225,7 @@ func (p *ifcPara) breakAnywhere(i int) bool {
 // hangs reports whether a space at character i hangs at a line end:
 // preserved spaces under white-space: pre do not (CSS Text 3, 4.1.3).
 func (p *ifcPara) hangs(i int) bool {
-	return p.wsAt(i) != css.Pre && text.IsHangingSpace(p.p.Rune(i))
+	return !keepsSpaces(p.wsAt(i)) && text.IsHangingSpace(p.p.Rune(i))
 }
 
 // collapsibleSpace reports a collapsible space at character i, removed at
@@ -189,13 +236,15 @@ func (p *ifcPara) collapsibleSpace(i int) bool {
 
 // tabWidth returns the advance of a preserved tab at line offset x: to the
 // next tab stop, a multiple of tab-size (CSS Text 3, 4.2), the next one
-// when closer than half a space.
+// when closer than half a space. A number of spaces counts the space's
+// advance with its letter-spacing and word-spacing, which the shaped space
+// already carries.
 func (e *engine) tabWidth(b *box, x float64) float64 {
 	space := e.spaceWidth(b.st, b.lang)
 	step := 8 * space
 	switch b.st.TabSize.Kind {
 	case css.Number:
-		step = max(clamp(b.st.TabSize.Value), 0) * (space + max(resolve(b.st.LetterSpacing, 0), 0))
+		step = max(clamp(b.st.TabSize.Value), 0) * space
 	case css.Points:
 		step = max(clamp(b.st.TabSize.Value), 0)
 	case css.Auto, css.Percent, css.None, css.Normal:
@@ -270,6 +319,8 @@ type vbox struct {
 	ca, cd       float64
 	size         float64
 	lh           float64
+	// xh is the box's x-height, for vertical-align: middle.
+	xh float64
 	// aligned reports top or bottom alignment, settled against the line
 	// box; inAligned a box inside one.
 	aligned   bool
@@ -598,7 +649,8 @@ func (s *inlineState) placeFloats(p *ifcPara, from, to int, top float64, mc *mar
 // line. The others wait for the line's bottom.
 func (s *inlineState) placeFloatsBeside(p *ifcPara, start, end int, l *lineBox, top float64) {
 	for _, f := range p.floats {
-		if f.pos <= start || f.pos > end || s.placed[f.box] {
+		// A float at the paragraph's end belongs to its last line too.
+		if f.pos <= start || f.pos > end || f.pos == end && end < p.p.Len() || s.placed[f.box] {
 			continue
 		}
 		resolveEdges(f.box, s.cb.w)
@@ -636,7 +688,7 @@ func (s *inlineState) newVbox(b *box, parent *vbox) *vbox {
 	m := e.faceMetrics(b.st)
 	lh := e.lineHeight(b.st)
 	half := (lh - (m.Ascent + m.Descent)) / 2
-	v := &vbox{b: b, parent: parent, above: m.Ascent + half, below: m.Descent + half, ca: m.Ascent, cd: m.Descent, size: e.fontSize(b.st), lh: lh}
+	v := &vbox{b: b, parent: parent, above: m.Ascent + half, below: m.Descent + half, ca: m.Ascent, cd: m.Descent, size: e.fontSize(b.st), lh: lh, xh: m.XHeight}
 	if parent == nil {
 		return v
 	}
@@ -664,8 +716,7 @@ func alignShift(va css.VerticalAlign, parent *vbox, above, below, lh float64) fl
 	case css.TextBottom:
 		return ps + parent.cd - below
 	case css.Middle:
-		// The parent's x-height is taken as half its em.
-		return ps - parent.size/4 + (above-below)/2
+		return ps - parent.xh/2 + (above-below)/2
 	case css.AlignLength:
 		return ps - resolve(va.Length, lh)
 	case css.Baseline, css.AlignTop, css.AlignBottom:
@@ -693,9 +744,23 @@ func (s *inlineState) vboxOf(b *box) *vbox {
 func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64) *lineBox {
 	e := s.e
 	s.vboxes = map[*box]*vbox{}
-	hang := end > start && p.wsAt(end-1) != css.Pre
-	pl := p.p.Line(start, end, hang)
-	l := &lineBox{x: left, w: right - left}
+	// The spaces at the line end hang (CSS Text 3, 4.1.3): they are drawn
+	// but neither fit nor align. The collapsible ones among them are
+	// removed instead (4.1.2) and draw nothing.
+	hang := end > start && !keepsSpaces(p.wsAt(end-1))
+	hangFrom := end
+	for hang && hangFrom > start && text.IsHangingSpace(p.p.Rune(hangFrom-1)) {
+		hangFrom--
+	}
+	trim := end
+	for trim > hangFrom && p.collapsibleSpace(trim-1) {
+		trim--
+	}
+	pl := p.p.LineTrimmed(start, end, trim)
+	l := &lineBox{x: left, w: right - left, hangLeft: p.p.Direction() == text.RightToLeft}
+	for i := hangFrom; i < trim; i++ {
+		l.hangW += p.p.Advance(i)
+	}
 	type extent struct{ x0, x1 float64 }
 	ext := map[*box]*extent{}
 	widen := func(b *box, x0, x1 float64) {
@@ -707,13 +772,18 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 	}
 	s.glyphs = 0
 	x := 0.0
-	opened := map[*box]bool{}
+	opened, closed := map[*box]bool{}, map[*box]bool{}
 	for _, sp := range pl.Spans {
 		info := p.infos[sp.Run]
-		s.leadEdges(p, sp.Start, opened, &x, widen)
+		// A left-to-right box draws its start edge on the left of its
+		// content and its end edge on the right; a right-to-left box the
+		// other way round, whatever the direction of the text inside.
+		s.closeEdges(p, sp.End, true, closed, &x, widen)
+		s.openEdges(p, sp.Start, true, opened, &x, widen)
 		it := &lineItem{
-			box: info.box, start: sp.Start, end: sp.End, x: x, w: sp.Width, ascent: sp.Ascent, descent: sp.Descent,
+			box: info.box, x: x, w: sp.Width, ascent: sp.Ascent, descent: sp.Descent,
 			ulPos: sp.UnderlinePosition, ulThick: sp.UnderlineThickness, stPos: sp.StrikeoutPosition, stThick: sp.StrikeoutThickness,
+			start: sp.Start, end: sp.End, rtl: sp.RTL, hang: max(sp.End-max(sp.Start, hangFrom), 0),
 		}
 		switch info.kind {
 		case runAtomic:
@@ -735,7 +805,8 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		if info.kind == runEmpty {
 			widen(info.box, it.x, it.x)
 		}
-		s.trailEdges(p, sp.End, &x, widen)
+		s.openEdges(p, sp.Start, false, opened, &x, widen)
+		s.closeEdges(p, sp.End, false, closed, &x, widen)
 	}
 	l.frags = nil
 	present := make([]*box, 0, len(ext))
@@ -748,8 +819,7 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 	for _, k := range present {
 		g := ext[k]
 		f := &inlineFrag{box: k, x0: g.x0, x1: g.x1}
-		f.start = k.first && p.opensIn(k, start, end)
-		f.end = k.last && p.closesIn(k, start, end)
+		f.left, f.right = edgeSides(k, p.opensIn(k, start, end), p.closesIn(k, start, end))
 		l.frags = append(l.frags, f)
 	}
 	s.vertical(l)
@@ -778,34 +848,60 @@ func (p *ifcPara) closesIn(b *box, start, end int) bool {
 	return ok && (pos > start && pos <= end || pos == start && start == 0)
 }
 
-// leadEdges advances x past the start edges of the inline boxes opening at
-// pos, recording where their border boxes start.
-func (s *inlineState) leadEdges(p *ifcPara, pos int, opened map[*box]bool, x *float64, widen func(*box, float64, float64)) {
-	for _, o := range p.openAt[pos] {
-		if opened[o] {
+// openEdges advances x past the start edges of the inline boxes opening at
+// pos that sit on the left of their content when left, a left-to-right
+// box's, else on its right, a right-to-left box's.
+func (s *inlineState) openEdges(p *ifcPara, pos int, left bool, opened map[*box]bool, x *float64, widen func(*box, float64, float64)) {
+	// openAt lists the boxes outermost first: on the right of the content
+	// the innermost comes first.
+	list := p.openAt[pos]
+	if !left {
+		list = reversed(list)
+	}
+	for _, o := range list {
+		if opened[o] || (o.st.Direction != css.RTL) != left {
 			continue
 		}
 		opened[o] = true
-		if !o.first {
-			continue
+		if o.first {
+			s.edge(o, left, x, widen)
 		}
-		*x += o.m[css.Left]
-		widen(o, *x, *x)
-		*x += o.bd[css.Left] + o.pd[css.Left]
 	}
 }
 
-// trailEdges advances x past the end edges of the inline boxes closing at
-// pos, recording where their border boxes end.
-func (s *inlineState) trailEdges(p *ifcPara, pos int, x *float64, widen func(*box, float64, float64)) {
-	for _, c := range p.closeAt[pos] {
-		if !c.last {
+// closeEdges advances x past the end edges of the inline boxes closing at
+// pos that sit on the left of their content when left, a right-to-left
+// box's, else on its right, a left-to-right box's.
+func (s *inlineState) closeEdges(p *ifcPara, pos int, left bool, closed map[*box]bool, x *float64, widen func(*box, float64, float64)) {
+	// closeAt lists the boxes innermost first: on the left of the content
+	// the outermost comes first.
+	list := p.closeAt[pos]
+	if left {
+		list = reversed(list)
+	}
+	for _, c := range list {
+		if closed[c] || (c.st.Direction == css.RTL) != left {
 			continue
 		}
-		*x += c.pd[css.Right] + c.bd[css.Right]
-		widen(c, *x, *x)
-		*x += c.m[css.Right]
+		closed[c] = true
+		if c.last {
+			s.edge(c, left, x, widen)
+		}
 	}
+}
+
+// edge advances x past the left edge of b when left, its margin outside its
+// border box, else past its right edge, recording the border box's side.
+func (s *inlineState) edge(b *box, left bool, x *float64, widen func(*box, float64, float64)) {
+	if left {
+		*x += b.m[css.Left]
+		widen(b, *x, *x)
+		*x += b.bd[css.Left] + b.pd[css.Left]
+		return
+	}
+	*x += b.pd[css.Right] + b.bd[css.Right]
+	widen(b, *x, *x)
+	*x += b.m[css.Right]
 }
 
 // vertical computes the line box height and the baseline of every item
@@ -964,19 +1060,17 @@ func (s *inlineState) align(l *lineBox, indent float64, last bool) {
 	for _, f := range l.frags {
 		width = max(width, f.x1)
 	}
+	width -= l.hangW
 	free := l.w - width - indent
 	start, endOff := indent, 0.0
 	if !ltr {
 		start, endOff = free, indent
 	}
 	off := start
-	align := st.TextAlign
-	if align == css.AlignJustify && last {
-		align = css.AlignStart
-	}
+	align := lineAlign(st, last)
 	if free > 0 {
 		switch align {
-		case css.AlignStart:
+		case css.AlignStart, css.AlignAuto:
 		case css.AlignEnd:
 			off = endOff
 			if ltr {
@@ -997,13 +1091,17 @@ func (s *inlineState) align(l *lineBox, indent float64, last bool) {
 			if ltr {
 				off += indent
 			}
-		case css.AlignJustify:
+		case css.AlignJustify, css.AlignJustifyAll:
 			s.justify(l, free)
 			off = indent
 			if !ltr {
 				off = 0
 			}
 		}
+	}
+	if l.hangLeft {
+		// The hanging spaces come first, left of the aligned content.
+		off -= l.hangW
 	}
 	for _, it := range l.items {
 		it.x += off
@@ -1017,6 +1115,34 @@ func (s *inlineState) align(l *lineBox, indent float64, last bool) {
 	}
 }
 
+// lineAlign returns the alignment of a line of a block of style st, last
+// for the last line or one before a forced break: text-align-last there,
+// whose auto takes text-align with justify as start (CSS Text 3, 6.3), and
+// justify-all justifying every line (6.1).
+func lineAlign(st *css.Style, last bool) css.TextAlign {
+	align := st.TextAlign
+	if align == css.AlignJustifyAll {
+		align = css.AlignJustify
+		if last && st.TextAlignLast == css.AlignAuto {
+			return css.AlignJustify
+		}
+	}
+	if !last {
+		return align
+	}
+	switch st.TextAlignLast {
+	case css.AlignAuto:
+		if align == css.AlignJustify {
+			return css.AlignStart
+		}
+		return align
+	case css.AlignJustifyAll:
+		return css.AlignJustify
+	case css.AlignStart, css.AlignEnd, css.AlignLeft, css.AlignRight, css.AlignCenter, css.AlignJustify:
+	}
+	return st.TextAlignLast
+}
+
 // settle moves the atomic inlines of l, placed at l.y, to their place.
 func (s *inlineState) settle(l *lineBox) {
 	for _, it := range l.items {
@@ -1027,8 +1153,8 @@ func (s *inlineState) settle(l *lineBox) {
 }
 
 // justify spreads free points over the word separators of l, shifting the
-// glyphs after each one (CSS Text 3, 7.1): the spaces at the line end,
-// which hang, take none.
+// glyphs after each one (CSS Text 3, 7.1): the spaces at the logical line
+// end, which hang, take none, wherever the bidi reordering put them.
 func (s *inlineState) justify(l *lineBox, free float64) {
 	if free <= eps {
 		return
@@ -1042,27 +1168,45 @@ func (s *inlineState) justify(l *lineBox, free float64) {
 		if it.text == nil {
 			continue
 		}
+		var own []sep
 		for gi, g := range it.text.Glyphs {
-			if g.Text == " " || g.Text == " " {
-				seps = append(seps, sep{it, gi})
+			if g.Text == " " || g.Text == "\u00a0" {
+				own = append(own, sep{it, gi})
 			}
 		}
-	}
-	// Drop the trailing separators: they hang.
-	for len(seps) > 0 {
-		last := seps[len(seps)-1]
-		if last.g != len(last.it.text.Glyphs)-1 || last.it != lastTextItem(l) {
-			break
+		// The hanging spaces are the logically last separators: the
+		// visually first ones of a right-to-left run.
+		drop := min(it.hang, len(own))
+		if it.rtl {
+			own = own[drop:]
+		} else {
+			own = own[:len(own)-drop]
 		}
-		seps = seps[:len(seps)-1]
-		if len(seps) > 0 && seps[len(seps)-1].it == last.it && seps[len(seps)-1].g == last.g-1 {
-			continue
-		}
+		seps = append(seps, own...)
 	}
 	if len(seps) == 0 {
 		return
 	}
 	extra := free / float64(len(seps))
+	// at holds where each separator starts before justification, for the
+	// inline box fragments: an edge moves by the extra of the separators
+	// before it.
+	at := make([]float64, len(seps))
+	for i, sp := range seps {
+		at[i] = sp.it.x + sp.it.text.Glyphs[sp.g].X
+	}
+	moved := func(x float64) float64 {
+		n := 0
+		for _, a := range at {
+			if a < x-eps {
+				n++
+			}
+		}
+		return x + float64(n)*extra
+	}
+	for _, f := range l.frags {
+		f.x0, f.x1 = moved(f.x0), moved(f.x1)
+	}
 	acc := 0.0
 	k := 0
 	for _, it := range l.items {
@@ -1081,19 +1225,6 @@ func (s *inlineState) justify(l *lineBox, free float64) {
 		it.w += local
 		acc += local
 	}
-	for _, f := range l.frags {
-		f.x1 += acc
-	}
-}
-
-// lastTextItem returns the last item of l that draws glyphs.
-func lastTextItem(l *lineBox) *lineItem {
-	for i := len(l.items) - 1; i >= 0; i-- {
-		if l.items[i].text != nil {
-			return l.items[i]
-		}
-	}
-	return nil
 }
 
 // recordAnchors records where the boxes of l first land, for
@@ -1172,7 +1303,7 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 				seg, trail = 0, 0
 			}
 			st := p.styleAt(i)
-			anywhere = st.OverflowWrap == css.Anywhere && wraps(st.WhiteSpace)
+			anywhere = (st.OverflowWrap == css.Anywhere || st.LineBreak == css.LineBreakAnywhere) && wraps(st.WhiteSpace)
 			wi := minW[i]
 			if info := p.infos[p.p.RunOf(i)]; info.kind == runTab {
 				wi = e.tabWidth(info.box, seg)
@@ -1187,4 +1318,11 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 		lo = max(lo, seg-trail)
 	}
 	return lo, max(hi, lo)
+}
+
+// reversed returns a reversed copy of bs.
+func reversed(bs []*box) []*box {
+	out := slices.Clone(bs)
+	slices.Reverse(out)
+	return out
 }

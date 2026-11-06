@@ -62,7 +62,7 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if err != nil {
 		return nil, err
 	}
-	p, err := prepare(ctx, data, o)
+	p, err := prepare(ctx, data, o, fonts)
 	if err != nil {
 		return nil, err
 	}
@@ -139,19 +139,20 @@ type heading struct {
 
 // prepare parses data, cascades its stylesheets and builds the content
 // tree.
-func prepare(ctx context.Context, data []byte, o Options) (*prepared, error) {
+func prepare(ctx context.Context, data []byte, o Options, fonts *text.Fonts) (*prepared, error) {
 	doc, err := dom.Parse(strings.NewReader(decode(data)))
 	if err != nil {
 		// A strings.Reader never fails, so the parser fails only on its
 		// own nesting cap.
 		return nil, fmt.Errorf("%w: %w", ErrTooDeep, err)
 	}
-	return prepareDoc(ctx, doc, o)
+	return prepareDoc(ctx, doc, o, fonts)
 }
 
 // prepareDoc cascades the stylesheets of the parsed document doc and
-// builds its content tree.
-func prepareDoc(ctx context.Context, doc *dom.Node, o Options) (*prepared, error) {
+// builds its content tree. fonts resolves the ex and ch units; nil takes
+// their half-em fallback.
+func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts) (*prepared, error) {
 	scan, err := scanDocument(ctx, doc)
 	if err != nil {
 		return nil, err
@@ -175,7 +176,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options) (*prepared, error
 		resolver = css.NewResolver(media, sheets)
 	}
 
-	computed, err := resolver.Compute(ctx, doc, css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase})
+	computed, err := resolver.Compute(ctx, doc, css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts)})
 	if err != nil {
 		return nil, fmt.Errorf("computing the HTML document's styles: %w", err)
 	}
@@ -427,4 +428,30 @@ func collapse(s string) string {
 	return strings.Join(strings.FieldsFunc(s, func(r rune) bool {
 		return r == ' ' || r == '\t' || r == '\n' || r == '\f' || r == '\r'
 	}), " ")
+}
+
+// fontUnitSize is the font size fontUnits measures at: the ratios do not
+// depend on it.
+const fontUnitSize = 100
+
+// fontUnits returns the [css.ComputeOptions.FontUnits] of fonts: the
+// x-height of the face a style selects and the advance of its "0" (CSS
+// Values 4, 6.1.1), nil without fonts.
+func fontUnits(ctx context.Context, fonts *text.Fonts) func(*css.Style) (float64, float64) {
+	if fonts == nil {
+		return nil
+	}
+	return func(st *css.Style) (float64, float64) {
+		ts := text.Style{Families: st.FontFamilies, Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: fontUnitSize}
+		fc := fonts.Match(ts)
+		if fc == nil {
+			return 0, 0
+		}
+		ex := fc.Metrics(fontUnitSize).XHeight / fontUnitSize
+		ch := 0.0
+		if p, _, err := fonts.Shape(ctx, []text.ParagraphRun{{Text: "0", Style: ts}}, text.ParagraphOptions{}); err == nil && p.Len() == 1 {
+			ch = p.Advance(0) / fontUnitSize
+		}
+		return ex, ch
+	}
 }

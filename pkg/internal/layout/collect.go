@@ -130,6 +130,7 @@ func (e *engine) ifcOf(b *box) *ifcData {
 			break
 		}
 		p.index()
+		p.transformSpaces()
 		e.shapePara(b, p)
 	}
 	return b.ifc
@@ -207,7 +208,14 @@ func collapses(ws css.WhiteSpace) bool {
 
 // wraps reports a white-space value that allows soft wrapping.
 func wraps(ws css.WhiteSpace) bool {
-	return ws == css.WhiteSpaceNormal || ws == css.PreWrap || ws == css.PreLine
+	return ws == css.WhiteSpaceNormal || ws == css.PreWrap || ws == css.PreLine || ws == css.BreakSpaces
+}
+
+// keepsSpaces reports a white-space value whose spaces never hang at a line
+// end: pre does not wrap, and break-spaces wraps them like any character
+// (CSS Text 3, 4.1.3).
+func keepsSpaces(ws css.WhiteSpace) bool {
+	return ws == css.Pre || ws == css.BreakSpaces
 }
 
 // text collects a text box: its characters after white space processing
@@ -255,6 +263,8 @@ func (c *collector) text(k *box) {
 					c.space = true
 				}
 			case unicode.IsControl(r):
+				buf.WriteRune(visibleControl(r))
+				c.space = false
 			default:
 				buf.WriteRune(r)
 				c.space = false
@@ -273,13 +283,90 @@ func (c *collector) text(k *box) {
 			flush()
 			c.object(runTab, k)
 			c.space = false
+		case r == '\f':
 		case unicode.IsControl(r):
+			buf.WriteRune(visibleControl(r))
+			c.space = false
 		default:
 			buf.WriteRune(r)
 			c.space = false
 		}
 	}
 	flush()
+}
+
+// visibleControl returns the visible glyph a control character other than
+// tab, line feed, carriage return and form feed draws as (CSS Text 3, 4.1:
+// it must be rendered as a visible glyph): its Control Pictures symbol for
+// the C0 controls and DEL, the replacement character for the C1 controls.
+func visibleControl(r rune) rune {
+	switch {
+	case r < 0x20:
+		return 0x2400 + r
+	case r == 0x7f:
+		return 0x2421
+	}
+	return unicode.ReplacementChar
+}
+
+// transformSpaces applies word-space-transform to the text runs of p (CSS
+// Text 4, 4.3): under space, ideographic spaces and the zero width spaces
+// between two characters become spaces; under ideographic-space, spaces
+// and those zero width spaces become ideographic spaces. A zero width
+// space at either end of the paragraph or beside an atomic inline marks no
+// word boundary and stays. Each replacement keeps the character count.
+func (p *ifcPara) transformSpaces() {
+	found := false
+	for i, r := range p.runs {
+		if r.Object == nil && p.infos[i].box.st.WordSpaceTransform != css.WordSpaceNone {
+			found = true
+		}
+	}
+	if !found {
+		return
+	}
+	// flat holds every character of p, 0 for an object, with its run.
+	type char struct {
+		r   rune
+		run int
+	}
+	var flat []char
+	for i, r := range p.runs {
+		if r.Object != nil {
+			flat = append(flat, char{0, i})
+			continue
+		}
+		for _, c := range r.Text {
+			flat = append(flat, char{c, i})
+		}
+	}
+	boundary := func(k int) bool {
+		return k > 0 && k < len(flat)-1 && flat[k-1].r != 0 && flat[k+1].r != 0 && flat[k-1].r != '\u200b' && flat[k+1].r != '\u200b'
+	}
+	out := make([][]rune, len(p.runs))
+	for k, c := range flat {
+		if p.runs[c.run].Object != nil {
+			continue
+		}
+		r := c.r
+		switch p.infos[c.run].box.st.WordSpaceTransform {
+		case css.WordSpaceSpace:
+			if r == '\u3000' || r == '\u200b' && boundary(k) {
+				r = ' '
+			}
+		case css.WordSpaceIdeographic:
+			if r == ' ' || r == '\u200b' && boundary(k) {
+				r = '\u3000'
+			}
+		case css.WordSpaceNone:
+		}
+		out[c.run] = append(out[c.run], r)
+	}
+	for i := range p.runs {
+		if p.runs[i].Object == nil {
+			p.runs[i].Text = string(out[i])
+		}
+	}
 }
 
 // trimSpace removes the collapsible space that ends the current paragraph,

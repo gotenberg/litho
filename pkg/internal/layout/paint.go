@@ -2,6 +2,7 @@ package layout
 
 import (
 	"cmp"
+	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -710,14 +711,14 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 		return
 	}
 	radii := radiiOf(f.box, r.Width, r.Height)
-	sides := [4]bool{true, f.end, true, f.start}
+	sides := [4]bool{true, f.right, true, f.left}
 	bd := f.box.bd
 	pd := f.box.pd
-	if !f.start {
+	if !f.left {
 		bd[css.Left], pd[css.Left] = 0, 0
 		radii[css.TopLeft], radii[css.BottomLeft] = [2]float64{}, [2]float64{}
 	}
-	if !f.end {
+	if !f.right {
 		bd[css.Right], pd[css.Right] = 0, 0
 		radii[css.TopRight], radii[css.BottomRight] = [2]float64{}, [2]float64{}
 	}
@@ -782,13 +783,16 @@ func inlineAlpha(b *box) float64 {
 }
 
 // text paints the glyph run of item it of line l and its decorations
-// (CSS Text Decoration 3, 2).
+// (CSS Text Decoration 3, 2): underlines and overlines under the glyphs,
+// line-throughs over them (CSS Text Decoration 3, 2.4 and CSS 2.1,
+// appendix E).
 func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	alpha := inlineAlpha(it.box)
 	t := it.text
 	if t.Face == nil {
 		return
 	}
+	p.textDecorations(it, l, page, alpha, css.Underline|css.Overline)
 	c := *t
 	c.Origin = compose.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}
 	c.Color.A *= alpha
@@ -797,44 +801,129 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	if c.Color.A > 0 {
 		p.emit(it.box, true, &c, top, bottom, page)
 	}
-	size := t.Size
+	p.textDecorations(it, l, page, alpha, css.LineThrough)
+}
+
+// roundPx rounds v points to whole CSS pixels.
+func roundPx(v float64) float64 { return math.Round(v/css.Pt) * css.Pt }
+
+// textDecorations paints the decoration lines of item it among which.
+func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha float64, which css.TextDecoration) {
+	size := it.text.Size
 	for _, d := range it.box.decos {
+		lines := d.lines & which
+		if lines == 0 {
+			continue
+		}
 		col, ok := colorOf(d.color)
 		col.A *= alpha
 		if !ok || col.A <= 0 {
 			continue
 		}
-		thick := it.ulThick
+		// auto is a tenth of the font size, at least one pixel; from-font
+		// is the face's underline thickness (CSS Text Decoration 4, 2.6).
+		thick := d.thick
+		if thick == fromFont {
+			thick = autoThickness
+			if it.ulThick > 0 {
+				thick = max(roundPx(it.ulThick), css.Pt)
+			}
+		}
+		if thick == autoThickness {
+			thick = max(roundPx(size/10), css.Pt)
+		}
 		if thick <= 0 {
-			thick = size / 14
+			continue
 		}
-		var ys []float64
-		if d.lines&css.Underline != 0 {
-			pos := it.ulPos
-			if it.ulThick <= 0 {
-				pos = size / 10
+		if lines&css.Underline != 0 {
+			// The face's underline position, else a tenth of the font
+			// size, rounded to the pixel grid as browsers draw it.
+			pos := size / 10
+			if it.ulThick > 0 {
+				pos = it.ulPos
 			}
-			ys = append(ys, it.baseline+pos)
-		}
-		if d.lines&css.Overline != 0 {
-			ys = append(ys, it.baseline-it.ascent)
-		}
-		if d.lines&css.LineThrough != 0 {
-			st, sth := it.stPos, it.stThick
-			if sth <= 0 {
-				st = size / 3
+			pos = roundPx(pos)
+			if d.hasOffset {
+				pos = d.offset
 			}
-			ys = append(ys, it.baseline-st)
+			p.decoLine(it, l, page, d.style, col, it.baseline+pos, thick, true)
 		}
-		for _, y := range ys {
-			r := compose.Rect{X: l.x + it.x + p.dx, Y: l.y + y + p.dy, Width: it.w, Height: thick}
-			if r.Width <= 0 {
-				continue
+		if lines&css.Overline != 0 {
+			p.decoLine(it, l, page, d.style, col, it.baseline-it.ascent, thick, false)
+		}
+		if lines&css.LineThrough != 0 {
+			// Centred on the face's strikeout stroke, else a third of the
+			// font size above the baseline.
+			mid := it.baseline - size/3
+			if it.stThick > 0 {
+				ft := max(roundPx(it.stThick), css.Pt)
+				mid = it.baseline - roundPx(it.stPos) + ft/2
 			}
-			p.emit(it.box, true, &compose.Path{Ops: rectOps(r), Fill: &compose.Fill{Color: col}}, l.y, l.y+l.h, page)
+			p.decoLine(it, l, page, d.style, col, mid-thick/2, thick, false)
 		}
 	}
 }
+
+// decoLine paints one decoration line of item it whose top is at y below
+// the line top, thick points thick, in style st (CSS Text Decoration 3,
+// 2.3): a double line adds a second one a thickness below (above for an
+// overline or line-through, away from the glyphs for an underline),
+// dotted and dashed lines are dashes of one and three thicknesses, a wavy
+// line zigzags over twice the thickness.
+func (p *painter) decoLine(it *lineItem, l *lineBox, page int, st css.DecorationStyle, col compose.Color, y, thick float64, under bool) {
+	x0 := l.x + it.x + p.dx
+	w := it.w
+	if w <= 0 {
+		return
+	}
+	top := l.y + y + p.dy
+	add := func(ops []compose.PathOp, fill bool, stroke *compose.Stroke) {
+		path := &compose.Path{Ops: ops, Stroke: stroke}
+		if fill {
+			path.Fill = &compose.Fill{Color: col}
+		}
+		p.emit(it.box, true, path, l.y, l.y+l.h, page)
+	}
+	switch st {
+	case css.DecorationDouble:
+		second := top + 2*thick
+		if !under {
+			second = top - 2*thick
+		}
+		add(rectOps(compose.Rect{X: x0, Y: top, Width: w, Height: thick}), true, nil)
+		add(rectOps(compose.Rect{X: x0, Y: second, Width: w, Height: thick}), true, nil)
+	case css.DecorationDotted, css.DecorationDashed:
+		dash := []float64{thick, thick}
+		if st == css.DecorationDashed {
+			dash = []float64{3 * thick, 3 * thick}
+		}
+		mid := top + thick/2
+		add([]compose.PathOp{
+			{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: mid}}},
+			{Kind: compose.LineTo, P: [3]compose.Point{{X: x0 + w, Y: mid}}},
+		}, false, &compose.Stroke{Color: col, Width: thick, Dash: dash})
+	case css.DecorationWavy:
+		mid := top + thick/2
+		step := 2 * thick
+		ops := []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: mid}}}}
+		n := min(int(math.Ceil(w/step)), maxWaveSegments) // fits int: capped
+		for k := 1; k <= n; k++ {
+			dy := thick
+			if k%2 == 1 {
+				dy = -thick
+			}
+			ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: min(x0+float64(k)*step, x0+w), Y: mid + dy}}})
+		}
+		add(ops, false, &compose.Stroke{Color: col, Width: thick})
+	case css.DecorationSolid:
+		add(rectOps(compose.Rect{X: x0, Y: top, Width: w, Height: thick}), true, nil)
+	}
+}
+
+// maxWaveSegments bounds the segments of one wavy decoration line. Anti-DoS
+// guard, not spec-mandated: a line item is at most a page wide, and 10,000
+// segments draw a wave of one-point thickness 20,000 points long.
+const maxWaveSegments = 10_000
 
 // placeMarker lays out the outside marker of the list item b next to its
 // first line box (CSS 2.1, 12.5): its end edge on the item's content edge,

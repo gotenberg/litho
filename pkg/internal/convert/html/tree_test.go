@@ -352,7 +352,7 @@ func TestPrepare_CapsTheTreeDepth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := prepareDoc(context.Background(), doc, o)
+	p, err := prepareDoc(context.Background(), doc, o, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestPrepare_RefusesTooDeepADocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = prepare(context.Background(), []byte(strings.Repeat("<div>", 600)), o)
+	_, err = prepare(context.Background(), []byte(strings.Repeat("<div>", 600)), o, nil)
 	if !errors.Is(err, ErrTooDeep) {
 		t.Errorf("600 nested divs: %v", err)
 	}
@@ -383,11 +383,11 @@ func TestPrepare_CapsTheElements(t *testing.T) {
 		t.Fatal(err)
 	}
 	// html, head and body come with the parser.
-	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", MaxElements-3)), o)
+	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", MaxElements-3)), o, nil)
 	if err != nil {
 		t.Fatalf("at the cap: %v", err)
 	}
-	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", MaxElements-2)), o)
+	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", MaxElements-2)), o, nil)
 	if !errors.Is(err, ErrTooManyElements) {
 		t.Fatalf("past the cap: %v", err)
 	}

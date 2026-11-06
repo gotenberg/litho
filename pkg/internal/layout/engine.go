@@ -266,7 +266,7 @@ func (e *engine) faceMetrics(st *css.Style) text.Metrics {
 		return m
 	}
 	size := e.fontSize(st)
-	m := text.Metrics{Ascent: 0.8 * size, Descent: 0.2 * size}
+	m := text.Metrics{Ascent: 0.8 * size, Descent: 0.2 * size, XHeight: size / 2}
 	if fc := e.fonts.Match(e.textStyle(st, "")); fc != nil && size > 0 {
 		m = fc.Metrics(size)
 	}

@@ -152,6 +152,11 @@ type ComputeOptions struct {
 	// BaseURL resolves the url() values of style attributes: the
 	// document's URL. Empty keeps them as written.
 	BaseURL string
+	// FontUnits returns the x-height and the advance of "0" of the first
+	// font a style's families, weight and style select, as fractions of the
+	// font size, for the ex and ch units (CSS Values 4, 6.1.1). nil, or a
+	// result that is not positive, takes half an em for either.
+	FontUnits func(st *Style) (ex, ch float64)
 }
 
 // Computed holds the computed style of every element of a tree. It is
@@ -205,7 +210,51 @@ type computeState struct {
 	elem  int
 	root  *Style
 	nodes int
+	// units caches FontUnits by font selection.
+	units map[fontKey][2]float64
 }
+
+// fontKey is what selects a font for the ex and ch units.
+type fontKey struct {
+	families string
+	weight   int
+	style    FontStyle
+}
+
+// fontUnits returns the ex and ch ratios of st, 0 for the fallback.
+func (cs *computeState) fontUnits(st *Style) (float64, float64) {
+	if cs.opts.FontUnits == nil {
+		return 0, 0
+	}
+	k := fontKey{families: strings.Join(st.FontFamilies, "\x00"), weight: st.FontWeight, style: st.FontStyle}
+	if u, ok := cs.units[k]; ok {
+		return u[0], u[1]
+	}
+	ex, ch := cs.opts.FontUnits(st)
+	if !finite(ex) || !finite(ch) {
+		ex, ch = 0, 0
+	}
+	if cs.units == nil {
+		cs.units = map[fontKey][2]float64{}
+	}
+	cs.units[k] = [2]float64{ex, ch}
+	return ex, ch
+}
+
+// computeOrder is the order computeStyle computes the longhands in: the
+// font size and colour first, as [propID] says, then the font selection,
+// which the ex and ch units of every other length resolve against, then
+// the rest in propID order.
+var computeOrder = func() []propID {
+	first := []propID{pFontSize, pColor, pFontFamily, pFontWeight, pFontStyle}
+	out := slices.Clone(first)
+	for id := propID(0); id < numProps; id++ {
+		if !slices.Contains(first, id) {
+			out = append(out, id)
+		}
+	}
+	return out
+}()
 
 // Compute computes the style of root and of every element under it (CSS
 // Cascade 4 and CSS 2.1, 6). root is a document node or an element; an
@@ -418,7 +467,8 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, n *h
 		rootFS = cs.root.FontSize
 	}
 	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: cs.r.media.Width, height: cs.r.media.Height}
-	for id := propID(0); id < numProps; id++ {
+	s.lc.ex, s.lc.ch = cs.fontUnits(parent)
+	for _, id := range computeOrder {
 		def := &props[id]
 		v := winners[id]
 		if w, ok := v.(cssWide); ok {
@@ -445,11 +495,14 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, n *h
 		if v != nil {
 			def.compute(s, st, v)
 		}
-		if id == pFontSize {
+		switch id { //nolint:exhaustive // only the font longhands change the length context
+		case pFontSize:
 			s.lc.fontSize = st.FontSize
 			if isRoot {
 				s.lc.rootFontSize = st.FontSize
 			}
+		case pFontStyle:
+			s.lc.ex, s.lc.ch = cs.fontUnits(st)
 		}
 	}
 	fixupDisplay(st, isRoot)

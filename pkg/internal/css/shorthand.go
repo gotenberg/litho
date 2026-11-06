@@ -162,7 +162,7 @@ func initShorthands() {
 		},
 		"list-style": {longhands: []propID{pListStyleType, pListStylePosition, pListStyleImage}, expand: expandListStyle},
 		"text-decoration": {
-			longhands: []propID{pTextDecoration},
+			longhands: []propID{pTextDecoration, pTextDecorationStyle, pTextDecorationColor, pTextDecorationThickness},
 			expand:    expandTextDecoration,
 		},
 		"word-break": {
@@ -401,39 +401,50 @@ func expandListStyle(v []token, c *declCtx) ([]entry, bool) {
 	return []entry{{pListStyleType, typ}, {pListStylePosition, pos}, {pListStyleImage, img}}, true
 }
 
-var decorationStyles = map[string]bool{"solid": true, "double": true, "dotted": true, "dashed": true, "wavy": true}
+// decorationStyles are the text-decoration-style keywords.
+var decorationStyles = map[string]DecorationStyle{
+	"solid": DecorationSolid, "double": DecorationDouble, "dotted": DecorationDotted, "dashed": DecorationDashed, "wavy": DecorationWavy,
+}
 
 // expandTextDecoration expands text-decoration (CSS Text Decoration 3,
-// 2.4) onto its line; the style, colour and thickness parse and are not
-// rendered.
+// 2.4, with the thickness of level 4) onto its line, style, colour and
+// thickness.
 func expandTextDecoration(v []token, c *declCtx) ([]entry, bool) {
 	var lines []token
-	var style, colour, thick bool
+	var style, colour, thick any = wideInitial, wideInitial, wideInitial
+	seenStyle, seenColour, seenThick := false, false, false
 	for _, t := range v {
 		switch {
-		case t.typ == tIdent && decorationStyles[lower(t.value)] && !style:
-			style = true
+		case t.typ == tIdent && !seenStyle && hasKey(decorationStyles, lower(t.value)):
+			style, seenStyle = decorationStyles[lower(t.value)], true
 		case t.typ == tIdent && (lower(t.value) == "underline" || lower(t.value) == "overline" ||
 			lower(t.value) == "line-through" || lower(t.value) == "blink" || lower(t.value) == "none"):
 			lines = append(lines, t)
 		default:
-			if _, ok := parseColor(t); ok && !colour {
-				colour = true
+			if col, ok := parseColor(t); ok && !seenColour {
+				colour, seenColour = col, true
 				continue
 			}
-			if _, ok := parseLength(t, allowPct); (ok || t.isIdent("auto") || t.isIdent("from-font")) && !thick {
-				thick = true
+			if d, ok := parseDim([]token{t}, allowPct|allowMixed, kwThickness, false); ok && !seenThick {
+				thick, seenThick = d, true
 				continue
 			}
 			return nil, false
 		}
 	}
-	if len(lines) == 0 {
-		return []entry{{pTextDecoration, wideInitial}}, true
+	var line any = wideInitial
+	if len(lines) > 0 {
+		d, ok := parseDecorationLine(lines, c)
+		if !ok {
+			return nil, false
+		}
+		line = d
 	}
-	d, ok := parseDecorationLine(lines, c)
-	if !ok {
-		return nil, false
-	}
-	return []entry{{pTextDecoration, d}}, true
+	return []entry{{pTextDecoration, line}, {pTextDecorationStyle, style}, {pTextDecorationColor, colour}, {pTextDecorationThickness, thick}}, true
+}
+
+// hasKey reports whether m holds k.
+func hasKey[V any](m map[string]V, k string) bool {
+	_, ok := m[k]
+	return ok
 }

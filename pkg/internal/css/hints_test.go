@@ -177,3 +177,24 @@ func TestHint_AndParseDeclarations(t *testing.T) {
 		t.Errorf("a lone bogus declaration = %+v", d)
 	}
 }
+
+func TestHTMLHints_DirAuto(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<body><p id=rtl dir=auto>&rlm;<b>א</b> a</p><p id=ltr dir=auto>1 <bdi>א</bdi> a</p>
+<p id=none dir=auto>123</p><div dir=rtl><p id=inh dir=auto>!</p></div><p id=skip dir=auto><span dir=rtl>א</span>a</p></body>`, ``)
+	tests := []struct {
+		id   string
+		want Direction
+	}{
+		{"rtl", RTL},
+		{"ltr", LTR},
+		{"none", LTR},
+		{"inh", RTL},
+		{"skip", LTR},
+	}
+	for _, tt := range tests {
+		if got := c.of(tt.id).Direction; got != tt.want {
+			t.Errorf("%s: direction %v, want %v", tt.id, got, tt.want)
+		}
+	}
+}

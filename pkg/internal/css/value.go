@@ -8,10 +8,11 @@ import (
 
 // length is a specified <length-percentage>: a linear combination of units
 // that calc() sums (CSS Values 4, 10.7). A plain "12px" sets pt alone. ex
-// and ch fold into em at half its weight, the fallback CSS Values 4, 6.1.1
-// allows when no font metrics are at hand.
+// and ch resolve against the font's x-height and "0" advance when
+// [ComputeOptions.FontUnits] gives them, else at half an em, the fallback
+// CSS Values 4, 6.1.1 allows when no font metrics are at hand.
 type length struct {
-	pt, em, rem, vw, vh, vmin, vmax, pct float64
+	pt, em, ex, ch, rem, vw, vh, vmin, vmax, pct float64
 	// hasLen and hasPct record the types the value holds, whatever the
 	// coefficients: calc(10px + 0%) is still a mix (CSS Values 4, 10.8).
 	hasLen, hasPct bool
@@ -22,6 +23,8 @@ func (l length) mixed() bool { return l.hasLen && l.hasPct }
 func (l length) scale(k float64) length {
 	l.pt *= k
 	l.em *= k
+	l.ex *= k
+	l.ch *= k
 	l.rem *= k
 	l.vw *= k
 	l.vh *= k
@@ -33,7 +36,7 @@ func (l length) scale(k float64) length {
 
 func (l length) add(o length) length {
 	return length{
-		pt: l.pt + o.pt, em: l.em + o.em, rem: l.rem + o.rem,
+		pt: l.pt + o.pt, em: l.em + o.em, ex: l.ex + o.ex, ch: l.ch + o.ch, rem: l.rem + o.rem,
 		vw: l.vw + o.vw, vh: l.vh + o.vh, vmin: l.vmin + o.vmin, vmax: l.vmax + o.vmax,
 		pct: l.pct + o.pct, hasLen: l.hasLen || o.hasLen, hasPct: l.hasPct || o.hasPct,
 	}
@@ -43,13 +46,23 @@ func (l length) add(o length) length {
 // the root's, and the page box size for the viewport units.
 type lenCtx struct {
 	fontSize, rootFontSize float64
-	width, height          float64
+	// ex and ch are the font's x-height and "0" advance as fractions of
+	// its size, 0 for the half-em fallback.
+	ex, ch        float64
+	width, height float64
 }
 
 // points resolves the length part to points, clamped to maxLength.
 func (l length) points(c lenCtx) float64 {
 	vmin, vmax := math.Min(c.width, c.height), math.Max(c.width, c.height)
-	v := l.pt + l.em*c.fontSize + l.rem*c.rootFontSize +
+	ex, ch := c.ex, c.ch
+	if ex <= 0 {
+		ex = 0.5
+	}
+	if ch <= 0 {
+		ch = 0.5
+	}
+	v := l.pt + (l.em+l.ex*ex+l.ch*ch)*c.fontSize + l.rem*c.rootFontSize +
 		(l.vw*c.width+l.vh*c.height+l.vmin*vmin+l.vmax*vmax)/100
 	return clampLen(v)
 }
@@ -100,8 +113,10 @@ func unitLength(n float64, unit string) (length, bool) {
 	switch unit {
 	case "em":
 		l.em = n
-	case "ex", "ch":
-		l.em = n / 2
+	case "ex":
+		l.ex = n
+	case "ch":
+		l.ch = n
 	case "rem":
 		l.rem = n
 	case "vw":

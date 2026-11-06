@@ -76,7 +76,7 @@ func prep(t *testing.T, src string, o Options) *prepared {
 	if err != nil {
 		t.Fatalf("options: %v", err)
 	}
-	p, err := prepare(context.Background(), []byte(src), o)
+	p, err := prepare(context.Background(), []byte(src), o, nil)
 	if err != nil {
 		t.Fatalf("prepare(%q): %v", src, err)
 	}

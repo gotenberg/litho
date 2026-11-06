@@ -485,6 +485,10 @@ func (fc *Face) setMetrics(hasOS2 bool, os2 tables.Os2, hasHhea bool, hhea table
 	default:
 		fc.ascent, fc.descent = 0.8*fc.upem, 0.2*fc.upem
 	}
+	// OS/2 version 2 adds sxHeight after the two code page ranges.
+	if hasOS2 && os2.Version >= 2 && len(os2.HigherVersionData) >= 10 {
+		fc.xHeight = max(float64(int16(binary.BigEndian.Uint16(os2.HigherVersionData[8:10]))), 0) //nolint:gosec // sxHeight is a signed FWORD
+	}
 }
 
 // cmapCoverage returns the characters the cmap go-text selects maps, merged

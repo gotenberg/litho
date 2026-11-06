@@ -135,8 +135,11 @@ type Face struct {
 	// ascent, descent and lineGap are in font units, descent positive below
 	// the baseline.
 	ascent, descent, lineGap float64
-	upem                     float64
-	coverage                 []runeRange
+	// xHeight is the OS/2 x-height in font units, 0 when the face records
+	// none.
+	xHeight  float64
+	upem     float64
+	coverage []runeRange
 	// size is the sum of the face's table lengths.
 	size int64
 
@@ -160,6 +163,9 @@ type Metrics struct {
 	Descent float64
 	// LineGap is the extra space the font asks for between lines.
 	LineGap float64
+	// XHeight is the height of a lowercase x above the baseline, from the
+	// OS/2 table, half the size when the face records none.
+	XHeight float64
 }
 
 // NewFonts indexes the font faces in the files under dirs.
@@ -402,13 +408,19 @@ func (fc *Face) readProgram() ([]byte, error) {
 
 // Metrics returns the face's vertical metrics at size points: the
 // ascender, descender and line gap HarfBuzz uses, from the OS/2 typographic
-// metrics when the font sets USE_TYPO_METRICS and from hhea otherwise. It
+// metrics when the font sets USE_TYPO_METRICS and from hhea otherwise, and
+// the OS/2 x-height. It
 // answers from the index and reads no file.
 func (fc *Face) Metrics(size float64) Metrics {
 	scale := size / fc.upem
-	return Metrics{
+	m := Metrics{
 		Ascent:  fc.ascent * scale,
 		Descent: fc.descent * scale,
 		LineGap: fc.lineGap * scale,
+		XHeight: fc.xHeight * scale,
 	}
+	if m.XHeight <= 0 {
+		m.XHeight = size / 2
+	}
+	return m
 }

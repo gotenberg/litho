@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
+	"golang.org/x/text/unicode/bidi"
 )
 
 // HTMLHints returns the presentational hints of an HTML element (HTML
@@ -34,7 +35,8 @@ import (
 //   - br: clear. ol, ul and li: type.
 //
 // The dir and hidden attributes are user agent stylesheet rules, as the
-// HTML Standard writes them. vlink and alink colour nothing, since
+// HTML Standard writes them, except dir=auto, whose direction comes from
+// the element's text: a direction hint. vlink and alink colour nothing, since
 // :visited and :active never match. The background attribute is not
 // covered.
 func HTMLHints(n *html.Node) []Declaration {
@@ -210,7 +212,57 @@ func HTMLHints(n *html.Node) []Declaration {
 			}
 		}
 	}
+	if v, ok := attr(n, "dir"); ok && lower(strings.TrimSpace(v)) == "auto" {
+		if d, ok := autoDirection(n); ok {
+			h.add("direction", d)
+		}
+	}
 	return h.list
+}
+
+// maxDirAutoRunes bounds the characters dir=auto reads looking for a
+// strong one. Anti-DoS guard, not spec-mandated: nested dir=auto elements
+// would otherwise read their text once per level; a paragraph's first
+// strong character comes well within 4,096 characters.
+const maxDirAutoRunes = 4096
+
+// autoDirection returns the directionality of the dir=auto element n
+// (HTML Standard, 3.2.6.4): rtl when the first character of bidirectional
+// class L, R or AL in its text, skipping bdi, script, style and textarea
+// elements and the elements with a dir attribute of their own, is R or
+// AL, ltr when it is L, and false when there is none.
+func autoDirection(n *html.Node) (string, bool) {
+	budget := maxDirAutoRunes
+	var walk func(*html.Node) (string, bool)
+	walk = func(k *html.Node) (string, bool) {
+		for c := k.FirstChild; c != nil && budget > 0; c = c.NextSibling {
+			switch c.Type { //nolint:exhaustive // only text and elements carry characters
+			case html.TextNode:
+				for _, r := range c.Data {
+					budget--
+					if budget < 0 {
+						return "", false
+					}
+					p, _ := bidi.LookupRune(r)
+					switch p.Class() { //nolint:exhaustive // the weak and neutral classes are skipped
+					case bidi.L:
+						return "ltr", true
+					case bidi.R, bidi.AL:
+						return "rtl", true
+					}
+				}
+			case html.ElementNode:
+				if c.Namespace != "" || c.Data == "bdi" || c.Data == "script" || c.Data == "style" || c.Data == "textarea" || hasAttr(c, "dir") {
+					continue
+				}
+				if d, ok := walk(c); ok {
+					return d, true
+				}
+			}
+		}
+		return "", false
+	}
+	return walk(n)
 }
 
 // hints accumulates declarations.

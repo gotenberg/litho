@@ -43,6 +43,11 @@ func TestWhiteSpace_Processing(t *testing.T) {
 		{"nowrap does not wrap", doc(el(sty(ws(css.Nowrap)), txt(sty(ws(css.Nowrap)), "aa  bb cc"))), 30, []string{"aa bb cc"}},
 		{"normal wraps", doc(el(sty(), txt(sty(), "aa bb cc"))), 30, []string{"aa ", "bb ", "cc"}},
 		{"forced break", doc(el(sty(), txt(sty(), "a "), br(sty()), txt(sty(), " b"))), 200, []string{"a ", "b"}},
+		// break-spaces: the spaces take room and wrap after themselves.
+		{"break-spaces wraps spaces", doc(el(sty(ws(css.BreakSpaces)), txt(sty(ws(css.BreakSpaces)), "aa  bb"))), 30, []string{"aa ", " bb"}},
+		// A control character is drawn as a visible symbol (CSS Text 3,
+		// 4.1).
+		{"control characters show", doc(el(sty(), txt(sty(), "a\x0eb\u0085"))), 200, []string{"a\u240eb\ufffd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -158,7 +163,9 @@ func TestVerticalAlign_Kinds(t *testing.T) {
 		{"super", css.VerticalAlign{Kind: css.Super}, 21 + 1.0/3, 19 + 1.0/3},
 		{"text-top", css.VerticalAlign{Kind: css.TextTop}, 20, 8},
 		{"text-bottom", css.VerticalAlign{Kind: css.TextBottom}, 20, 18},
-		{"middle", css.VerticalAlign{Kind: css.Middle}, 20, 12.5},
+		// Ahem's x-height is 0.8 em: the box's middle sits 4px above the
+		// parent's baseline.
+		{"middle", css.VerticalAlign{Kind: css.Middle}, 20, 14},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -206,6 +213,76 @@ func TestOverflowWrap_BreaksLongWord(t *testing.T) {
 	}
 }
 
+func TestLineBreak_Anywhere(t *testing.T) {
+	lb := func(s *css.Style) { s.LineBreak = css.LineBreakAnywhere }
+	res := run(t, doc(el(sty(lb), txt(sty(lb), "abc de"))), page(20, 50))
+	if got, _ := lineTexts(res, 1); strings.Join(got, "|") != "ab|c |de" {
+		t.Errorf("lines %q, want ab|c |de: a break between any two characters", got)
+	}
+}
+
+func TestWordBreak_BreakAllAtSpanEdge(t *testing.T) {
+	ba := inlineSty(func(s *css.Style) { s.WordBreak = css.BreakAll })
+	res := run(t, doc(el(sty(), txt(sty(), "aa"), el(ba, txt(ba, "bb")), txt(sty(), "cc"))), page(40, 50))
+	// break-all on the span opens the boundary after its last letter.
+	if got, _ := lineTexts(res, 1); strings.Join(got, "|") != "aabb|cc" {
+		t.Errorf("lines %q, want aabb|cc", got)
+	}
+}
+
+func TestWordSpaceTransform_ZeroWidthSpaces(t *testing.T) {
+	wst := func(s *css.Style) { s.WordSpaceTransform = css.WordSpaceSpace }
+	res := run(t, doc(el(sty(wst), txt(sty(wst), "\u200baa\u200bbb\u200b"))), page(200, 50))
+	// The word boundary becomes a space; the ones at the ends mark none.
+	if got, _ := lineTexts(res, 1); strings.Join(got, "|") != "\u200baa bb\u200b" {
+		t.Errorf("lines %q", got)
+	}
+}
+
+func TestTextAlign_LastLine(t *testing.T) {
+	tests := []struct {
+		align, last css.TextAlign
+		isLast      bool
+		want        css.TextAlign
+	}{
+		{css.AlignJustify, css.AlignAuto, false, css.AlignJustify},
+		{css.AlignJustify, css.AlignAuto, true, css.AlignStart},
+		{css.AlignJustifyAll, css.AlignAuto, true, css.AlignJustify},
+		{css.AlignCenter, css.AlignAuto, true, css.AlignCenter},
+		{css.AlignJustify, css.AlignRight, true, css.AlignRight},
+		{css.AlignJustify, css.AlignRight, false, css.AlignJustify},
+	}
+	for _, tt := range tests {
+		st := css.Initial()
+		st.TextAlign, st.TextAlignLast = tt.align, tt.last
+		if got := lineAlign(st, tt.isLast); got != tt.want {
+			t.Errorf("text-align %v, text-align-last %v, last %v: %v, want %v", tt.align, tt.last, tt.isLast, got, tt.want)
+		}
+	}
+}
+
+func TestHangingSpaces_DrawnButNotAligned(t *testing.T) {
+	pw := func(s *css.Style) { s.WhiteSpace = css.PreWrap; s.FontSize = px(4); s.TextAlign = css.AlignRight }
+	span := inlineSty(pw, bg(red), fg(blue))
+	res := run(t, doc(el(sty(pw), el(span, txt(span, "a ")))), page(8, 4))
+	// The trailing preserved space hangs past the right edge: the glyph
+	// aligns flush right, the space's background is not drawn inside.
+	assertPixels(t, res, 1, `
+		____BBBB
+		____BBBB
+		____BBBB
+		____BBBB`)
+}
+
+func TestFloat_AtParagraphEndBesideLastLine(t *testing.T) {
+	f := el(sty(float(css.FloatRight), width(10), height(10)))
+	rb := boxes(t, doc(el(sty(), txt(sty(), "a"), f)), page(100, 100))
+	p := kid(t, rb, 0, 0)
+	if got := rect(p.kids[1]); got[1] != 0 {
+		t.Errorf("float at %v, want y 0: beside the line it ends", got)
+	}
+}
+
 func TestTabs_ToTabStops(t *testing.T) {
 	pre := func(s *css.Style) { s.WhiteSpace = css.Pre; s.TabSize = css.Dimension{Kind: css.Number, Value: 4} }
 	res := run(t, doc(el(sty(pre), txt(sty(pre), "a\tb"))), page(200, 50))
@@ -248,6 +325,25 @@ func TestInlineBox_EdgesAndPainting(t *testing.T) {
 		_RRRR__RRBBBBRR_`)
 }
 
+func TestInlineBox_SplitAcrossLinesRTL(t *testing.T) {
+	sm := func(s *css.Style) { s.FontSize = px(4); s.Direction = css.RTL }
+	span := inlineSty(sm, func(s *css.Style) {
+		s.Border = [4]css.Border{{}, {Width: px(1), Style: css.Solid, Color: red}, {}, {Width: px(1), Style: css.Solid, Color: red}}
+	}, fg(blue))
+	res := run(t, doc(el(sty(sm), el(span, txt(span, "a b")))), page(8, 8))
+	// A right-to-left box starts on its right: the first line draws the
+	// right border, the second the left one (CSS 2.1, 8.6).
+	assertPixels(t, res, 1, `
+		___BBBBR
+		___BBBBR
+		___BBBBR
+		___BBBBR
+		___RBBBB
+		___RBBBB
+		___RBBBB
+		___RBBBB`)
+}
+
 func TestInlineBox_SplitAcrossLines(t *testing.T) {
 	sm := func(s *css.Style) { s.FontSize = px(4) }
 	span := inlineSty(sm, func(s *css.Style) {
@@ -267,19 +363,47 @@ func TestInlineBox_SplitAcrossLines(t *testing.T) {
 		BBBBR___`)
 }
 
-func TestTextDecoration_Underline(t *testing.T) {
-	u := sty(func(s *css.Style) { s.TextDecoration = css.Underline; s.Color = css.Color{G: 1, A: 1} })
-	res := run(t, doc(el(u, txt(sty(fg(black)), "a"))), page(10, 12))
-	img := render(t, res, 1)
-	rows := grid(img)
-	found := false
-	for _, r := range rows[8:] {
-		if strings.Contains(r, "G") {
-			found = true
-		}
+func TestTextDecoration_Lines(t *testing.T) {
+	lime := css.Color{G: 1, A: 1}
+	tests := []struct {
+		name  string
+		line  css.TextDecoration
+		text  css.Color
+		set   func(*css.Style)
+		where func(row int) bool
+	}{
+		// An underline paints under the glyphs: with transparent text it
+		// shows below the baseline (CSS Text Decoration 3, 2.4).
+		{"underline", css.Underline, css.Color{}, nil, func(r int) bool { return r >= 8 }},
+		// A line-through paints over the glyphs, above the baseline.
+		{"line-through", css.LineThrough, black, nil, func(r int) bool { return r < 8 }},
+		// text-underline-offset moves the underline below the glyphs.
+		{"offset", css.Underline, black, func(s *css.Style) { s.TextUnderlineOffset = css.Pts(3) }, func(r int) bool { return r >= 10 }},
 	}
-	if !found {
-		t.Errorf("no lime underline below the baseline:\n%s", strings.Join(rows, "\n"))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := sty(func(s *css.Style) {
+				s.TextDecoration = tt.line
+				s.TextDecorationColor = lime
+				if tt.set != nil {
+					tt.set(s)
+				}
+			})
+			res := run(t, doc(el(u, txt(sty(fg(tt.text)), "a"))), page(10, 14))
+			rows := grid(render(t, res, 1))
+			found := false
+			for r, row := range rows {
+				if strings.Contains(row, "G") {
+					if !tt.where(r) {
+						t.Fatalf("lime at row %d:\n%s", r, strings.Join(rows, "\n"))
+					}
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("no lime line:\n%s", strings.Join(rows, "\n"))
+			}
+		})
 	}
 }
 

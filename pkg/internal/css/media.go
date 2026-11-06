@@ -165,7 +165,7 @@ func mediaLength(t token) (float64, bool) {
 	if !ok || l.vw != 0 || l.vh != 0 || l.vmin != 0 || l.vmax != 0 {
 		return 0, false
 	}
-	return (l.pt + (l.em+l.rem)*mediumFontSize) / Pt, true
+	return (l.pt + (l.em+(l.ex+l.ch)/2+l.rem)*mediumFontSize) / Pt, true
 }
 
 // mediaRatio evaluates a <ratio>: a number, or two separated by a slash.

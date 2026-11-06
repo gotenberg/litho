@@ -66,6 +66,11 @@ const (
 	pLineHeight
 	pTextAlign
 	pTextDecoration
+	pTextAlignLast
+	pTextDecorationColor
+	pTextDecorationStyle
+	pTextDecorationThickness
+	pTextUnderlineOffset
 	pTextIndent
 	pTextTransform
 	pLetterSpacing
@@ -73,6 +78,8 @@ const (
 	pWhiteSpace
 	pWordBreak
 	pOverflowWrap
+	pLineBreak
+	pWordSpaceTransform
 	pTabSize
 	pVerticalAlign
 	pDirection
@@ -275,9 +282,12 @@ func colorProp(name string, inh bool, f func(*Style) *Color, slot colorSlots, in
 }
 
 var (
-	kwAuto   = map[string]DimKind{"auto": Auto}
-	kwNormal = map[string]DimKind{"normal": Normal}
-	kwNoKw   = map[string]DimKind{}
+	// kwThickness are the keywords of text-decoration-thickness:
+	// from-font computes to Normal.
+	kwThickness = map[string]DimKind{"auto": Auto, "from-font": Normal}
+	kwAuto      = map[string]DimKind{"auto": Auto}
+	kwNormal    = map[string]DimKind{"normal": Normal}
+	kwNoKw      = map[string]DimKind{}
 	// kwSizing are the intrinsic sizing keywords of CSS Sizing 3, 3.1,
 	// which compute to auto in this version.
 	kwSizing = map[string]DimKind{
@@ -641,7 +651,7 @@ func init() {
 		{pLineHeight, propDef{name: "line-height", inherited: true, parse: parseLineHeight, compute: computeLineHeight, copyFrom: field(func(s *Style) *Dimension { return &s.LineHeight })}},
 		{pTextAlign, textAlignProp(enumProp("text-align", true, func(s *Style) *TextAlign { return &s.TextAlign }, map[string]TextAlign{
 			"start": AlignStart, "end": AlignEnd, "left": AlignLeft, "right": AlignRight,
-			"center": AlignCenter, "justify": AlignJustify, "justify-all": AlignJustify,
+			"center": AlignCenter, "justify": AlignJustify, "justify-all": AlignJustifyAll,
 			"-webkit-left": AlignLeft, "-webkit-right": AlignRight,
 			"-webkit-center": AlignCenter, "-moz-left": AlignLeft, "-moz-right": AlignRight,
 			"-moz-center": AlignCenter, "-webkit-auto": AlignStart,
@@ -651,6 +661,11 @@ func init() {
 				st.TextDecoration = d
 			}
 		}, copyFrom: field(func(s *Style) *TextDecoration { return &s.TextDecoration })}},
+		{pTextAlignLast, textAlignLastProp()},
+		{pTextDecorationColor, colorProp("text-decoration-color", false, func(s *Style) *Color { return &s.TextDecorationColor }, slotTextDecoration, colorValue{current: true})},
+		{pTextDecorationStyle, enumProp("text-decoration-style", false, func(s *Style) *DecorationStyle { return &s.TextDecorationStyle }, decorationStyles)},
+		{pTextDecorationThickness, dimProp("text-decoration-thickness", false, func(s *Style) *Dimension { return &s.TextDecorationThickness }, allowPct|allowMixed, kwThickness, false)},
+		{pTextUnderlineOffset, dimProp("text-underline-offset", true, func(s *Style) *Dimension { return &s.TextUnderlineOffset }, allowPct|allowMixed, kwAuto, false)},
 		{pTextIndent, propDef{name: "text-indent", inherited: true, parse: parseTextIndent, compute: func(s *styler, st *Style, v any) {
 			if l, ok := v.(length); ok {
 				st.TextIndent = l.dim(s.lc, false)
@@ -663,7 +678,7 @@ func init() {
 		{pWordSpacing, dimProp("word-spacing", true, func(s *Style) *Dimension { return &s.WordSpacing }, 0, kwNormal, false)},
 		{pWhiteSpace, enumProp("white-space", true, func(s *Style) *WhiteSpace { return &s.WhiteSpace }, map[string]WhiteSpace{
 			"normal": WhiteSpaceNormal, "pre": Pre, "nowrap": Nowrap, "pre-wrap": PreWrap,
-			"pre-line": PreLine, "break-spaces": PreWrap, "-moz-pre-wrap": PreWrap, "-o-pre-wrap": PreWrap,
+			"pre-line": PreLine, "break-spaces": BreakSpaces, "-moz-pre-wrap": PreWrap, "-o-pre-wrap": PreWrap,
 		})},
 		{pWordBreak, enumProp("word-break", true, func(s *Style) *WordBreak { return &s.WordBreak }, map[string]WordBreak{
 			"normal": WordBreakNormal, "break-all": BreakAll, "keep-all": KeepAll, "auto-phrase": WordBreakNormal,
@@ -671,6 +686,14 @@ func init() {
 		{pOverflowWrap, enumProp("overflow-wrap", true, func(s *Style) *OverflowWrap { return &s.OverflowWrap }, map[string]OverflowWrap{
 			"normal": OverflowWrapNormal, "break-word": BreakWord, "anywhere": Anywhere,
 		})},
+		{pLineBreak, enumProp("line-break", true, func(s *Style) *LineBreak { return &s.LineBreak }, map[string]LineBreak{
+			"auto": LineBreakAuto, "loose": LineBreakLoose, "normal": LineBreakNormal, "strict": LineBreakStrict, "anywhere": LineBreakAnywhere,
+		})},
+		{pWordSpaceTransform, propDef{name: "word-space-transform", inherited: true, parse: parseWordSpaceTransform, compute: func(_ *styler, st *Style, v any) {
+			if w, ok := v.(WordSpaceTransform); ok {
+				st.WordSpaceTransform = w
+			}
+		}, copyFrom: field(func(s *Style) *WordSpaceTransform { return &s.WordSpaceTransform })}},
 		{pTabSize, dimProp("tab-size", true, func(s *Style) *Dimension { return &s.TabSize }, nonNeg, kwNoKw, true)},
 		{pVerticalAlign, propDef{name: "vertical-align", parse: parseVerticalAlign, compute: func(s *styler, st *Style, v any) {
 			if va, ok := v.(valignSpec); ok {
@@ -885,6 +908,42 @@ func parseBorderSpacing(v []token, _ *declCtx) (any, bool) {
 	return out, true
 }
 
+// parseWordSpaceTransform parses word-space-transform (CSS Text 4, 4.3):
+// none, or space or ideographic-space with or without auto-phrase, which
+// litho ignores.
+func parseWordSpaceTransform(v []token, _ *declCtx) (any, bool) {
+	if k, ok := keyword(v); ok && k == "none" {
+		return WordSpaceNone, true
+	}
+	if len(v) == 0 || len(v) > 2 {
+		return nil, false
+	}
+	w, phrase := WordSpaceNone, false
+	for _, t := range v {
+		if t.typ != tIdent {
+			return nil, false
+		}
+		switch lower(t.value) {
+		case "space", "ideographic-space":
+			if w != WordSpaceNone {
+				return nil, false
+			}
+			w = WordSpaceSpace
+			if lower(t.value) == "ideographic-space" {
+				w = WordSpaceIdeographic
+			}
+		case "auto-phrase":
+			if phrase {
+				return nil, false
+			}
+			phrase = true
+		default:
+			return nil, false
+		}
+	}
+	return w, true
+}
+
 // parseDecorationLine parses text-decoration-line (CSS Text Decoration
 // 3, 2.1); blink is accepted and draws nothing.
 func parseDecorationLine(v []token, _ *declCtx) (any, bool) {
@@ -965,6 +1024,17 @@ func textAlignProp(def propDef) propDef {
 		}
 		return base(v, c)
 	}
+	return def
+}
+
+// textAlignLastProp defines text-align-last (CSS Text 3, 6.3), whose
+// initial value auto is not [TextAlign]'s zero value.
+func textAlignLastProp() propDef {
+	def := textAlignProp(enumProp("text-align-last", true, func(s *Style) *TextAlign { return &s.TextAlignLast }, map[string]TextAlign{
+		"auto": AlignAuto, "start": AlignStart, "end": AlignEnd, "left": AlignLeft, "right": AlignRight,
+		"center": AlignCenter, "justify": AlignJustify,
+	}))
+	def.initial = AlignAuto
 	return def
 }
 

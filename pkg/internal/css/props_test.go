@@ -126,6 +126,23 @@ func TestProperties_Longhands(t *testing.T) {
 		{"line-height: 20px", func(s *Style) bool { return s.LineHeight == pts(15) }},
 		{"line-height: calc(100% + 2px)", func(s *Style) bool { return s.LineHeight == pts(16.5) }},
 		{"font-size: 150%", func(s *Style) bool { return s.FontSize == 22.5 }},
+		{"white-space: break-spaces", func(s *Style) bool { return s.WhiteSpace == BreakSpaces }},
+		{"line-break: anywhere", func(s *Style) bool { return s.LineBreak == LineBreakAnywhere }},
+		{"word-space-transform: ideographic-space auto-phrase", func(s *Style) bool { return s.WordSpaceTransform == WordSpaceIdeographic }},
+		{"word-space-transform: space space", func(s *Style) bool { return s.WordSpaceTransform == WordSpaceNone }},
+		{"text-align: justify-all", func(s *Style) bool { return s.TextAlign == AlignJustifyAll && s.TextAlignLast == AlignAuto }},
+		{"text-align-last: center", func(s *Style) bool { return s.TextAlignLast == AlignCenter }},
+		{"text-decoration: underline dotted red 2px", func(s *Style) bool {
+			return s.TextDecoration == Underline && s.TextDecorationStyle == DecorationDotted &&
+				s.TextDecorationColor == rgb(255, 0, 0) && s.TextDecorationThickness == pts(1.5)
+		}},
+		{"text-decoration: line-through", func(s *Style) bool {
+			return s.TextDecorationColor == rgb(0, 0, 255) && s.TextDecorationThickness.Kind == Auto
+		}},
+		{"text-decoration-thickness: from-font; text-underline-offset: 10%", func(s *Style) bool {
+			return s.TextDecorationThickness.Kind == Normal && s.TextUnderlineOffset == pct(0.1)
+		}},
+		{"width: 2ch; height: 2ex", func(s *Style) bool { return s.Width == pts(15) && s.Height == pts(15) }},
 		{"font-size: x-large", func(s *Style) bool { return s.FontSize == 18 }},
 		{"font-size: larger", func(s *Style) bool { return s.FontSize == 18 }},
 		{"font-size: smaller", func(s *Style) bool { return near(s.FontSize, 12.5) }},
@@ -281,5 +298,27 @@ func TestVars_ExponentialGrowthIsCapped(t *testing.T) {
 	}
 	if got := c.Style(byID(doc, "p")).FontFamilies; !reflect.DeepEqual(got, []string{"serif"}) {
 		t.Errorf("families = %q", got)
+	}
+}
+
+func TestFontUnits_ResolveExAndCh(t *testing.T) {
+	t.Parallel()
+	root := parseHTML(t, `<body><div id=t style="font-family: f; width: 2ch; height: 2ex; font-size: 2ex"></div></body>`)
+	r := NewResolver(a4, []Sheet{{Sheet: HTMLUserAgent(), Origin: UserAgent}, {Sheet: mustParse(t, `body { font-size: 20px }`), Origin: Author}})
+	units := func(st *Style) (float64, float64) {
+		if len(st.FontFamilies) > 0 && st.FontFamilies[0] == "f" {
+			return 0.25, 0.75
+		}
+		return 0.5, 0.5
+	}
+	c, err := r.Compute(context.Background(), root, ComputeOptions{Hints: HTMLHints, FontUnits: units})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	s := c.Style(byID(root, "t"))
+	// font-size takes the parent's ex: 2 * 0.5 * 20px = 20px; the other
+	// lengths the element's own font.
+	if s.FontSize != 15 || s.Width != pts(22.5) || s.Height != pts(7.5) {
+		t.Errorf("font-size %v, width %+v, height %+v", s.FontSize, s.Width, s.Height)
 	}
 }
