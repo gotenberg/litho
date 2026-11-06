@@ -32,8 +32,11 @@
 // one of them. Cascade layers are flattened into source order; @container
 // and @scope are ignored with their rules. Logical properties map onto the
 // physical ones of a horizontal left-to-right box. The input is UTF-8.
-// Generated content, 3D transforms, columns, flex and grid layout parse and
-// compute to the nearest supported value, with a warning.
+// The flexible box layout properties and the box alignment properties that
+// apply to it compute in full (CSS Flexbox 1; CSS Box Alignment 3), and
+// the children of a flex container are blockified. Generated content, 3D
+// transforms, columns and grid layout parse and compute to the nearest
+// supported value, with a warning.
 //
 // # Concurrency
 //

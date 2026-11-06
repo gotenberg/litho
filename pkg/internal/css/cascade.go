@@ -583,6 +583,11 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 		}
 	}
 	fixupDisplay(st, isRoot)
+	if !isRoot && isFlexContainer(parent.Display) {
+		// The children of a flex container are its flex items, blockified
+		// (CSS Flexbox 1, 4; CSS Display 3, 2.7).
+		st.Display, _ = blockify(st.Display)
+	}
 	return st
 }
 
@@ -599,18 +604,5 @@ func fixupDisplay(st *Style, isRoot bool) {
 	} else if st.Float == FloatNone && !isRoot {
 		return
 	}
-	switch st.Display { //nolint:exhaustive // the other display values are already block-level
-	case InlineTable:
-		st.Display = Table
-		st.OuterInline = true
-	case Inline, InlineBlock:
-		st.Display = Block
-		st.OuterInline = true
-	case InlineListItem:
-		st.Display = ListItem
-		st.OuterInline = true
-	case TableRowGroup, TableColumn, TableColumnGroup,
-		TableHeaderGroup, TableFooterGroup, TableRow, TableCell, TableCaption:
-		st.Display = Block
-	}
+	st.Display, st.OuterInline = blockify(st.Display)
 }

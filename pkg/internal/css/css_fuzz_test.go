@@ -41,6 +41,7 @@ func FuzzParseDeclarations(f *testing.F) {
 	f.Add("transform: rotate(1turn) translate(1px, 2%) skewY(3deg) matrix(1, 2, 3, 4, 5, 6); z-index: -3; transform-origin: left 1px 2px")
 	f.Add("background: repeating-radial-gradient(ellipse closest-side at 10% 20px, red 0 1em, 30%, blue 2px) no-repeat; background-image: linear-gradient(to top left, currentcolor, 1turn)")
 	f.Add("border: 1px solid rgb(")
+	f.Add("display: inline flex; flex: 2 1 10%; flex-flow: column wrap-reverse; place-content: safe center space-evenly; align-self: last baseline; gap: 1px 2%; order: -2; min-width: auto")
 	f.Fuzz(func(t *testing.T, src string) {
 		ParseDeclarations(src, ParseOptions{BaseURL: "https://e.com/"})
 		Hint("color", src)

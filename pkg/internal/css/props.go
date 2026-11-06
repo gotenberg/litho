@@ -113,6 +113,18 @@ const (
 	pCounterIncrement
 	pCounterSet
 	pQuotes
+	pFlexDirection
+	pFlexWrap
+	pOrder
+	pFlexGrow
+	pFlexShrink
+	pFlexBasis
+	pJustifyContent
+	pAlignContent
+	pAlignItems
+	pAlignSelf
+	pRowGap
+	pColumnGap
 	numProps
 )
 
@@ -332,15 +344,15 @@ var displays = map[string]Display{
 	"table-row": TableRow, "table-column-group": TableColumnGroup, "table-column": TableColumn,
 	"table-cell": TableCell, "table-caption": TableCaption, "none": DisplayNone,
 	"run-in": Block, "flow-root": FlowRoot,
+	"flex": Flex, "inline-flex": InlineFlex, "-webkit-flex": Flex, "-ms-flexbox": Flex,
+	"-webkit-inline-flex": InlineFlex, "-ms-inline-flexbox": InlineFlex,
 }
 
 // displays3 are the CSS Display 3 values laid out as Block or InlineBlock
 // in this version, with a warning.
 var displays3 = map[string]Display{
-	"flex": Block, "grid": Block, "contents": Block,
-	"inline-flex": InlineBlock, "inline-grid": InlineBlock, "-webkit-box": Block,
-	"-webkit-flex": Block, "-ms-flexbox": Block, "-webkit-inline-box": InlineBlock,
-	"-webkit-inline-flex": InlineBlock, "-ms-inline-flexbox": InlineBlock,
+	"grid": Block, "contents": Block,
+	"inline-grid": InlineBlock, "-webkit-box": Block, "-webkit-inline-box": InlineBlock,
 	"ruby": Inline, "ruby-text": Inline, "ruby-base": Inline,
 }
 
@@ -403,7 +415,12 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 			return InlineBlock, true
 		}
 		return FlowRoot, true
-	case words["flex"], words["grid"]:
+	case words["flex"]:
+		if inline {
+			return InlineFlex, true
+		}
+		return Flex, true
+	case words["grid"]:
 		d := Block
 		if inline {
 			d = InlineBlock
@@ -617,8 +634,8 @@ func init() {
 		{pTransformOrigin, transformOriginProp()},
 		{pWidth, sizeProp("width", func(s *Style) *Dimension { return &s.Width }, kwSizing)},
 		{pHeight, sizeProp("height", func(s *Style) *Dimension { return &s.Height }, kwSizing)},
-		{pMinWidth, minSizeProp("min-width", func(s *Style) *Dimension { return &s.MinWidth })},
-		{pMinHeight, minSizeProp("min-height", func(s *Style) *Dimension { return &s.MinHeight })},
+		{pMinWidth, minSizeProp("min-width", func(s *Style) *Dimension { return &s.MinWidth }, func(s *Style) *bool { return &s.MinWidthAuto })},
+		{pMinHeight, minSizeProp("min-height", func(s *Style) *Dimension { return &s.MinHeight }, func(s *Style) *bool { return &s.MinHeightAuto })},
 		{pMaxWidth, sizeProp("max-width", func(s *Style) *Dimension { return &s.MaxWidth }, kwMaxSizing)},
 		{pMaxHeight, sizeProp("max-height", func(s *Style) *Dimension { return &s.MaxHeight }, kwMaxSizing)},
 		{pTop, dimProp("top", false, func(s *Style) *Dimension { return &s.Top }, allowPct, kwAuto, false)},
@@ -806,6 +823,9 @@ func init() {
 	for i, n := range corners {
 		props[pRadiusTopLeft+propID(i)] = radiusProp(Corner(i), n)
 	}
+	for id, def := range flexProps() {
+		props[id] = def
+	}
 	longhandByName = map[string]propID{}
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)
@@ -826,14 +846,10 @@ func init() {
 	} {
 		longhandByName[alias] = id
 	}
+	for alias, id := range flexAliases {
+		longhandByName[alias] = id
+	}
 	initShorthands()
-}
-
-// minSizeProp defines min-width or min-height: a non-negative length or
-// percentage, auto and the sizing keywords computing to 0 (CSS Sizing 3,
-// 4.5, for a box that is not a flex item).
-func minSizeProp(name string, f func(*Style) *Dimension) propDef {
-	return dimProp(name, false, f, allowPct|nonNeg, kwMinSizing, false)
 }
 
 // countProp defines orphans or widows: a positive integer (CSS

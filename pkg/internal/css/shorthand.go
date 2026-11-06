@@ -183,6 +183,9 @@ func initShorthands() {
 		"page-break-before": legacyBreak(pBreakBefore),
 		"page-break-after":  legacyBreak(pBreakAfter),
 	}
+	for name, def := range flexShorthands() {
+		shorthands[name] = def
+	}
 	delete(longhandByName, "word-break")
 }
 

@@ -29,6 +29,9 @@ const (
 	Normal
 	// Number is a unitless number (line-height, tab-size).
 	Number
+	// FlexContent is the content keyword of flex-basis (CSS Flexbox 1,
+	// 7.3.3).
+	FlexContent
 )
 
 // Dimension is a computed length, percentage, number or keyword.
@@ -53,8 +56,9 @@ type Color struct {
 // Transparent paints nothing.
 var Transparent = Color{}
 
-// Display is the display property (CSS 2.1, 9.2.4). flex, grid and the
-// other CSS 3 values compute to Block until a later wave lays them out.
+// Display is the display property (CSS 2.1, 9.2.4). flex and inline-flex
+// are laid out (CSS Flexbox 1, 3); grid and the other CSS 3 values compute
+// to Block until a later wave lays them out.
 type Display uint8
 
 // The display values.
@@ -82,6 +86,11 @@ const (
 	// FlowRoot is a block box that establishes a block formatting context
 	// for its content (CSS Display 3, 2.3).
 	FlowRoot
+	// Flex is a block-level flex container and InlineFlex an inline-level
+	// one (CSS Flexbox 1, 3). Blockified, InlineFlex becomes Flex. The
+	// children of a flex container are blockified (CSS Display 3, 2.7).
+	Flex
+	InlineFlex
 )
 
 // Position is the position property (CSS 2.1, 9.3.1). Sticky computes to
@@ -952,6 +961,42 @@ type Style struct {
 	Orphans int
 	Widows  int
 
+	// Flexible box layout (CSS Flexbox 1) and the box alignment of flex
+	// containers and items (CSS Box Alignment 3). None is inherited.
+
+	// FlexDirection and FlexWrap are a flex container's main axis and
+	// line wrapping (CSS Flexbox 1, 5.1 and 5.2).
+	FlexDirection FlexDirection
+	FlexWrap      FlexWrap
+	// Order places a flex item in order-modified document order (CSS
+	// Flexbox 1, 5.4).
+	Order int
+	// FlexGrow and FlexShrink are a flex item's flex factors, finite and
+	// non-negative (CSS Flexbox 1, 7.3).
+	FlexGrow, FlexShrink float64
+	// FlexBasis takes Auto, FlexContent, Points, or Percent of the flex
+	// container's inner main size (CSS Flexbox 1, 7.3.3).
+	FlexBasis Dimension
+	// JustifyContent and AlignContent distribute a flex container's
+	// items along its main axis and its lines along its cross axis;
+	// AlignItems is the default AlignSelf of its items, which aligns an
+	// item in its line's cross axis (CSS Box Alignment 3, 5 and 6).
+	// AlignSelf alone takes BoxAuto.
+	JustifyContent BoxAlign
+	AlignContent   BoxAlign
+	AlignItems     BoxAlign
+	AlignSelf      BoxAlign
+	// RowGap and ColumnGap are the gutters between a flex container's
+	// lines and items: Normal, Points, or Percent of the container's
+	// content box in the gap's axis (CSS Box Alignment 3, 8).
+	RowGap, ColumnGap Dimension
+	// MinWidthAuto and MinHeightAuto report a min-width or min-height of
+	// auto, the initial value (CSS Sizing 3, 4.4): MinWidth or MinHeight
+	// then holds Pts(0), its used value on a box that is not a flex item,
+	// and a flex item takes its automatic minimum size in its main axis
+	// instead (CSS Flexbox 1, 4.5).
+	MinWidthAuto, MinHeightAuto bool
+
 	// currentColor records the colour longhands whose computed value is
 	// the currentColor keyword (CSS Color 4, 4.4): the exported field
 	// holds it resolved, and an element that inherits it explicitly
@@ -1002,8 +1047,73 @@ func Initial() *Style {
 		TextDecorationColor: Color{A: 1},
 		Orphans:             2,
 		Widows:              2,
+		FlexShrink:          1,
+		AlignSelf:           BoxAuto,
+		RowGap:              Dimension{Kind: Normal},
+		ColumnGap:           Dimension{Kind: Normal},
+		MinWidthAuto:        true,
+		MinHeightAuto:       true,
 	}
 }
+
+// FlexDirection is the flex-direction property (CSS Flexbox 1, 5.1).
+type FlexDirection uint8
+
+// The flex-direction values.
+const (
+	FlexRow FlexDirection = iota
+	FlexRowReverse
+	FlexColumn
+	FlexColumnReverse
+)
+
+// FlexWrap is the flex-wrap property (CSS Flexbox 1, 5.2).
+type FlexWrap uint8
+
+// The flex-wrap values.
+const (
+	NoWrap FlexWrap = iota
+	Wrap
+	WrapReverse
+)
+
+// BoxAlign is a value of justify-content, align-content, align-items or
+// align-self (CSS Box Alignment 3, 4): a keyword, with the safe overflow
+// position as the [BoxSafe] bit. unsafe and no overflow position compute
+// alike: the alignment is honoured whatever overflows.
+type BoxAlign uint8
+
+// The alignment keywords. first baseline computes to BoxBaseline.
+const (
+	BoxNormal BoxAlign = iota
+	BoxAuto
+	BoxStretch
+	BoxBaseline
+	BoxLastBaseline
+	BoxCenter
+	BoxStart
+	BoxEnd
+	BoxFlexStart
+	BoxFlexEnd
+	BoxSelfStart
+	BoxSelfEnd
+	BoxLeft
+	BoxRight
+	BoxSpaceBetween
+	BoxSpaceAround
+	BoxSpaceEvenly
+)
+
+// BoxSafe is the bit of the safe overflow position: an alignment that
+// would overflow the alignment container falls back to start (CSS Box
+// Alignment 3, 4.4).
+const BoxSafe BoxAlign = 0x80
+
+// Keyword returns a with the overflow position bit cleared.
+func (a BoxAlign) Keyword() BoxAlign { return a &^ BoxSafe }
+
+// Safe reports the safe overflow position.
+func (a BoxAlign) Safe() bool { return a&BoxSafe != 0 }
 
 // Orientation is the orientation part of the @page size descriptor (CSS
 // Page 3, 5.1).
