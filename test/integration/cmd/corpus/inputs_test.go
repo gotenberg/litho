@@ -208,7 +208,7 @@ func TestHostProvisionedCorporaReadTheirPin(t *testing.T) {
 			t.Errorf("%s is provisioned on the host but ships a download.sh the image would run", m.Name)
 		}
 	}
-	if checked != 2 {
-		t.Errorf("checked %d host-provisioned corpora, want wpt and weasyprint", checked)
+	if checked != 3 {
+		t.Errorf("checked %d host-provisioned corpora, want wpt, weasyprint and svg", checked)
 	}
 }

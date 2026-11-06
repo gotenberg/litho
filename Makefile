@@ -97,6 +97,12 @@ wpt-fetch: ## Download the web-platform-tests reftests of the wpt corpus at the 
 	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
 	test/integration/corpus/wpt/fetch.sh $(WPT_DIR) $(COMPOSE_FONTS)
 
+SVG_DIR := test/integration/testdata/svg
+
+.PHONY: svg-fetch
+svg-fetch: ## Download the resvg tests of the svg corpus at the commit test/integration/corpus/versions.env pins (hash-checked), with their Noto fonts
+	test/integration/corpus/svg/fetch.sh $(SVG_DIR) $(COMPOSE_FONTS)
+
 WEASYPRINT := test/integration/corpus/weasyprint
 
 .PHONY: weasyprint-fixtures

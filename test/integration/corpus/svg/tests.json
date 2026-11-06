@@ -1,0 +1,1478 @@
+[
+  {
+    "id": "masking/clip-rule/clip-rule=evenodd.svg",
+    "png": "masking/clip-rule/clip-rule=evenodd.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/clip-path-on-child-with-transform.svg",
+    "png": "masking/clipPath/clip-path-on-child-with-transform.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/clip-path-on-children.svg",
+    "png": "masking/clipPath/clip-path-on-children.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/clip-path-with-transform.svg",
+    "png": "masking/clipPath/clip-path-with-transform.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/clipping-with-complex-text-and-clip-rule.svg",
+    "png": "masking/clipPath/clipping-with-complex-text-and-clip-rule.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/invalid-clip-path-on-child.svg",
+    "png": "masking/clipPath/invalid-clip-path-on-child.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/invisible-child-2.svg",
+    "png": "masking/clipPath/invisible-child-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/line-is-not-a-valid-child.svg",
+    "png": "masking/clipPath/line-is-not-a-valid-child.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/malformed-path-child.svg",
+    "png": "masking/clipPath/malformed-path-child.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/recursive-on-child.svg",
+    "png": "masking/clipPath/recursive-on-child.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/clipPath/with-invalid-child-via-use.svg",
+    "png": "masking/clipPath/with-invalid-child-via-use.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/attributes-via-xlink-href-only-required.svg",
+    "png": "paint-servers/linearGradient/attributes-via-xlink-href-only-required.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/gradientUnits=objectBoundingBox-with-percent.svg",
+    "png": "paint-servers/linearGradient/gradientUnits=objectBoundingBox-with-percent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/href-with-invalid-prefix.svg",
+    "png": "paint-servers/linearGradient/href-with-invalid-prefix.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/invalid-child-3.svg",
+    "png": "paint-servers/linearGradient/invalid-child-3.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/invalid-gradientUnits.svg",
+    "png": "paint-servers/linearGradient/invalid-gradientUnits.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/no-stops.svg",
+    "png": "paint-servers/linearGradient/no-stops.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/recursive-xlink-href-3.svg",
+    "png": "paint-servers/linearGradient/recursive-xlink-href-3.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/single-stop-with-opacity-used-by-stroke.svg",
+    "png": "paint-servers/linearGradient/single-stop-with-opacity-used-by-stroke.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/stops-via-xlink-href-complex-order-1.svg",
+    "png": "paint-servers/linearGradient/stops-via-xlink-href-complex-order-1.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/stops-via-xlink-href-from-radialGradient.svg",
+    "png": "paint-servers/linearGradient/stops-via-xlink-href-from-radialGradient.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/stops-via-xlink-href.svg",
+    "png": "paint-servers/linearGradient/stops-via-xlink-href.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/linearGradient/unresolved-xlink-href.svg",
+    "png": "paint-servers/linearGradient/unresolved-xlink-href.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/attributes-via-xlink-href-only-required.svg",
+    "png": "paint-servers/radialGradient/attributes-via-xlink-href-only-required.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/fr=0.2.svg",
+    "png": "paint-servers/radialGradient/fr=0.2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/fr=0.7.svg",
+    "png": "paint-servers/radialGradient/fr=0.7.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/fy-resolving-1.svg",
+    "png": "paint-servers/radialGradient/fy-resolving-1.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/fy-resolving-3.svg",
+    "png": "paint-servers/radialGradient/fy-resolving-3.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/gradientTransform.svg",
+    "png": "paint-servers/radialGradient/gradientTransform.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/many-stops.svg",
+    "png": "paint-servers/radialGradient/many-stops.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/single-stop.svg",
+    "png": "paint-servers/radialGradient/single-stop.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/stops-via-xlink-href-complex-order.svg",
+    "png": "paint-servers/radialGradient/stops-via-xlink-href-complex-order.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/radialGradient/zero-r-with-stop-opacity-2.svg",
+    "png": "paint-servers/radialGradient/zero-r-with-stop-opacity-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/stop-color/simple-case.svg",
+    "png": "paint-servers/stop-color/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/stop-opacity/50percent.svg",
+    "png": "paint-servers/stop-opacity/50percent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/stop-opacity/simple-case.svg",
+    "png": "paint-servers/stop-opacity/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/stop/hsla-color.svg",
+    "png": "paint-servers/stop/hsla-color.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/stop/invalid-offset-1.svg",
+    "png": "paint-servers/stop/invalid-offset-1.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/stop/invalid-offset-2.svg",
+    "png": "paint-servers/stop/invalid-offset-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/stop/missing-offset-3.svg",
+    "png": "paint-servers/stop/missing-offset-3.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/stop/missing-offset-7.svg",
+    "png": "paint-servers/stop/missing-offset-7.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "paint-servers/stop/stop-color-with-currentColor-3.svg",
+    "png": "paint-servers/stop/stop-color-with-currentColor-3.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/color/inherit.svg",
+    "png": "painting/color/inherit.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/color/simple-case.svg",
+    "png": "painting/color/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/display/bBox-impact.svg",
+    "png": "painting/display/bBox-impact.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/display/none-on-clipPath.svg",
+    "png": "painting/display/none-on-clipPath.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/display/none-on-defs.svg",
+    "png": "painting/display/none-on-defs.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/display/none-on-svg.svg",
+    "png": "painting/display/none-on-svg.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill-opacity/nested.svg",
+    "png": "painting/fill-opacity/nested.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill-opacity/on-text.svg",
+    "png": "painting/fill-opacity/on-text.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill-opacity/with-linearGradient.svg",
+    "png": "painting/fill-opacity/with-linearGradient.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill-rule/evenodd.svg",
+    "png": "painting/fill-rule/evenodd.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill-rule/nonzero.svg",
+    "png": "painting/fill-rule/nonzero.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/currentColor-without-parent.svg",
+    "png": "painting/fill/currentColor-without-parent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/funcIRI-to-a-missing-element-with-a-none-fallback.svg",
+    "png": "painting/fill/funcIRI-to-a-missing-element-with-a-none-fallback.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/hsl-with-alpha.svg",
+    "png": "painting/fill/hsl-with-alpha.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/missing-FuncIRI-with-a-currentColor-fallback.svg",
+    "png": "painting/fill/missing-FuncIRI-with-a-currentColor-fallback.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/named-color-in-uppercase.svg",
+    "png": "painting/fill/named-color-in-uppercase.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/not-trimmed-attribute-value.svg",
+    "png": "painting/fill/not-trimmed-attribute-value.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/random-value.svg",
+    "png": "painting/fill/random-value.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/rgba-0-127-0-50percent.svg",
+    "png": "painting/fill/rgba-0-127-0-50percent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/transparent.svg",
+    "png": "painting/fill/transparent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/fill/valid-FuncIRI-with-a-fallback-ICC-color.svg",
+    "png": "painting/fill/valid-FuncIRI-with-a-fallback-ICC-color.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/opacity/50percent.svg",
+    "png": "painting/opacity/50percent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/opacity/bBox-impact.svg",
+    "png": "painting/opacity/bBox-impact.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/opacity/group-opacity.svg",
+    "png": "painting/opacity/group-opacity.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/opacity/on-an-invalid-element.svg",
+    "png": "painting/opacity/on-an-invalid-element.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-dasharray/0-n-with-butt-caps.svg",
+    "png": "painting/stroke-dasharray/0-n-with-butt-caps.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-dasharray/0-n-with-round-caps.svg",
+    "png": "painting/stroke-dasharray/0-n-with-round-caps.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-dasharray/em-units.svg",
+    "png": "painting/stroke-dasharray/em-units.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-dasharray/even-count.svg",
+    "png": "painting/stroke-dasharray/even-count.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-dasharray/n-0.svg",
+    "png": "painting/stroke-dasharray/n-0.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-dasharray/negative-values.svg",
+    "png": "painting/stroke-dasharray/negative-values.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-dashoffset/default.svg",
+    "png": "painting/stroke-dashoffset/default.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-dashoffset/em-units.svg",
+    "png": "painting/stroke-dashoffset/em-units.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-dashoffset/percent-units.svg",
+    "png": "painting/stroke-dashoffset/percent-units.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-linecap/open-path-with-butt.svg",
+    "png": "painting/stroke-linecap/open-path-with-butt.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-linecap/zero-length-path-with-round.svg",
+    "png": "painting/stroke-linecap/zero-length-path-with-round.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-linecap/zero-length-path-with-square.svg",
+    "png": "painting/stroke-linecap/zero-length-path-with-square.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-linejoin/bevel.svg",
+    "png": "painting/stroke-linejoin/bevel.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-linejoin/miter-clip.svg",
+    "png": "painting/stroke-linejoin/miter-clip.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-linejoin/miter.svg",
+    "png": "painting/stroke-linejoin/miter.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-linejoin/round.svg",
+    "png": "painting/stroke-linejoin/round.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-miterlimit/default.svg",
+    "png": "painting/stroke-miterlimit/default.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-miterlimit/value-with-mm.svg",
+    "png": "painting/stroke-miterlimit/value-with-mm.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-miterlimit/value-with-percent.svg",
+    "png": "painting/stroke-miterlimit/value-with-percent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-opacity/50percent.svg",
+    "png": "painting/stroke-opacity/50percent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-opacity/on-parent.svg",
+    "png": "painting/stroke-opacity/on-parent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-opacity/with-linearGradient.svg",
+    "png": "painting/stroke-opacity/with-linearGradient.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-width/bold.svg",
+    "png": "painting/stroke-width/bold.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-width/default.svg",
+    "png": "painting/stroke-width/default.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-width/percentage.svg",
+    "png": "painting/stroke-width/percentage.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke-width/zero.svg",
+    "png": "painting/stroke-width/zero.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke/control-points-clamping-2.svg",
+    "png": "painting/stroke/control-points-clamping-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke/funcIRI-to-unsupported-element.svg",
+    "png": "painting/stroke/funcIRI-to-unsupported-element.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke/line-as-curve-1.svg",
+    "png": "painting/stroke/line-as-curve-1.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke/line-as-curve-2.svg",
+    "png": "painting/stroke/line-as-curve-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/stroke/linear-gradient.svg",
+    "png": "painting/stroke/linear-gradient.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/visibility/bbox-impact-2.svg",
+    "png": "painting/visibility/bbox-impact-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/visibility/collapse-on-tspan.svg",
+    "png": "painting/visibility/collapse-on-tspan.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/visibility/hidden-on-shape.svg",
+    "png": "painting/visibility/hidden-on-shape.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/visibility/hidden-on-tspan.svg",
+    "png": "painting/visibility/hidden-on-tspan.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/circle/missing-cx-and-cy-attributes.svg",
+    "png": "shapes/circle/missing-cx-and-cy-attributes.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/circle/missing-cx-attribute.svg",
+    "png": "shapes/circle/missing-cx-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/circle/missing-cy-attribute.svg",
+    "png": "shapes/circle/missing-cy-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/circle/missing-r-attribute.svg",
+    "png": "shapes/circle/missing-r-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/circle/negative-r-attribute.svg",
+    "png": "shapes/circle/negative-r-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/circle/simple-case.svg",
+    "png": "shapes/circle/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/ellipse/missing-cx-and-cy-attributes.svg",
+    "png": "shapes/ellipse/missing-cx-and-cy-attributes.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/ellipse/missing-rx-and-ry-attributes.svg",
+    "png": "shapes/ellipse/missing-rx-and-ry-attributes.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/ellipse/missing-rx-attribute.svg",
+    "png": "shapes/ellipse/missing-rx-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/ellipse/missing-ry-attribute.svg",
+    "png": "shapes/ellipse/missing-ry-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/ellipse/negative-ry-attribute.svg",
+    "png": "shapes/ellipse/negative-ry-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/ellipse/percent-values-missing-ry.svg",
+    "png": "shapes/ellipse/percent-values-missing-ry.png",
+    "width": 300,
+    "height": 150
+  },
+  {
+    "id": "shapes/line/no-coordinates.svg",
+    "png": "shapes/line/no-coordinates.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/line/no-x1-and-y1-coordinates.svg",
+    "png": "shapes/line/no-x1-and-y1-coordinates.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/line/no-x2-coordinate.svg",
+    "png": "shapes/line/no-x2-coordinate.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/line/no-y1-coordinate.svg",
+    "png": "shapes/line/no-y1-coordinate.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/line/no-y2-coordinate.svg",
+    "png": "shapes/line/no-y2-coordinate.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/line/simple-case.svg",
+    "png": "shapes/line/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-A-t.svg",
+    "png": "shapes/path/M-A-t.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-A-trimmed.svg",
+    "png": "shapes/path/M-A-trimmed.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-C-S.svg",
+    "png": "shapes/path/M-C-S.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-H-H.svg",
+    "png": "shapes/path/M-H-H.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-H.svg",
+    "png": "shapes/path/M-H.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-L-L-implicit.svg",
+    "png": "shapes/path/M-L-L-implicit.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-L.svg",
+    "png": "shapes/path/M-L.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-S.svg",
+    "png": "shapes/path/M-S.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-T-Q-rel.svg",
+    "png": "shapes/path/M-T-Q-rel.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-V-V-implicit.svg",
+    "png": "shapes/path/M-V-V-implicit.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-V.svg",
+    "png": "shapes/path/M-V.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-Z.svg",
+    "png": "shapes/path/M-Z.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/M-rel-M.svg",
+    "png": "shapes/path/M-rel-M.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/invalid-data-in-L.svg",
+    "png": "shapes/path/invalid-data-in-L.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/no-commawsp-between-and-after-arc-flags.svg",
+    "png": "shapes/path/no-commawsp-between-and-after-arc-flags.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/path/out-of-range-large-arc-flag-value.svg",
+    "png": "shapes/path/out-of-range-large-arc-flag-value.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/polygon/ignore-odd-points.svg",
+    "png": "shapes/polygon/ignore-odd-points.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/polygon/not-enough-points.svg",
+    "png": "shapes/polygon/not-enough-points.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/polygon/simple-case.svg",
+    "png": "shapes/polygon/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/polygon/stop-processing-on-invalid-data.svg",
+    "png": "shapes/polygon/stop-processing-on-invalid-data.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/polyline/ignore-odd-points.svg",
+    "png": "shapes/polyline/ignore-odd-points.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/polyline/missing-points-attribute.svg",
+    "png": "shapes/polyline/missing-points-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/polyline/simple-case.svg",
+    "png": "shapes/polyline/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/polyline/stop-processing-on-invalid-data.svg",
+    "png": "shapes/polyline/stop-processing-on-invalid-data.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/missing-width-attribute-processing.svg",
+    "png": "shapes/rect/missing-width-attribute-processing.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/mm-values.svg",
+    "png": "shapes/rect/mm-values.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/negative-height-attribute-processing.svg",
+    "png": "shapes/rect/negative-height-attribute-processing.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/negative-rx-and-ry-attributes-resolving.svg",
+    "png": "shapes/rect/negative-rx-and-ry-attributes-resolving.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/negative-width-attribute-processing.svg",
+    "png": "shapes/rect/negative-width-attribute-processing.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/percentage-values-1.svg",
+    "png": "shapes/rect/percentage-values-1.png",
+    "width": 300,
+    "height": 150
+  },
+  {
+    "id": "shapes/rect/rx-and-ry-attributes-clamping-order.svg",
+    "png": "shapes/rect/rx-and-ry-attributes-clamping-order.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/rx-attribute-resolving.svg",
+    "png": "shapes/rect/rx-attribute-resolving.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/ry-attribute-resolving.svg",
+    "png": "shapes/rect/ry-attribute-resolving.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/simple-case.svg",
+    "png": "shapes/rect/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/y-attribute-resolving.svg",
+    "png": "shapes/rect/y-attribute-resolving.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "shapes/rect/zero-rx-attribute-resolving.svg",
+    "png": "shapes/rect/zero-rx-attribute-resolving.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/defs/ignore-shapes-inside-defs.svg",
+    "png": "structure/defs/ignore-shapes-inside-defs.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/defs/simple-case.svg",
+    "png": "structure/defs/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/defs/style-inheritance-on-text.svg",
+    "png": "structure/defs/style-inheritance-on-text.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/defs/style-inheritance.svg",
+    "png": "structure/defs/style-inheritance.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/g/deeply-nested-groups.svg",
+    "png": "structure/g/deeply-nested-groups.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/g/recursive-inheritance.svg",
+    "png": "structure/g/recursive-inheritance.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style-attribute/comments.svg",
+    "png": "structure/style-attribute/comments.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style-attribute/non-presentational-attribute.svg",
+    "png": "structure/style-attribute/non-presentational-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style-attribute/simple-case.svg",
+    "png": "structure/style-attribute/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/class-selector.svg",
+    "png": "structure/style/class-selector.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/combined-selectors.svg",
+    "png": "structure/style/combined-selectors.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/current-color-stroke-before-color.svg",
+    "png": "structure/style/current-color-stroke-before-color.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/important.svg",
+    "png": "structure/style/important.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/non-presentational-attribute.svg",
+    "png": "structure/style/non-presentational-attribute.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/rule-specificity.svg",
+    "png": "structure/style/rule-specificity.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/style-after-usage.svg",
+    "png": "structure/style/style-after-usage.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/style-inside-CDATA.svg",
+    "png": "structure/style/style-inside-CDATA.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/type-selector.svg",
+    "png": "structure/style/type-selector.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/style/universal-selector.svg",
+    "png": "structure/style/universal-selector.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/background-color-with-viewbox.svg",
+    "png": "structure/svg/background-color-with-viewbox.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/explicit-svg-namespace.svg",
+    "png": "structure/svg/explicit-svg-namespace.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/funcIRI-with-quotes.svg",
+    "png": "structure/svg/funcIRI-with-quotes.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/negative-size.svg",
+    "png": "structure/svg/negative-size.png",
+    "width": 500,
+    "height": 500
+  },
+  {
+    "id": "structure/svg/nested-svg-with-overflow-visible.svg",
+    "png": "structure/svg/nested-svg-with-overflow-visible.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/nested-svg-with-rect-and-viewBox-2.svg",
+    "png": "structure/svg/nested-svg-with-rect-and-viewBox-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/nested-svg-with-rect-and-viewBox-3.svg",
+    "png": "structure/svg/nested-svg-with-rect-and-viewBox-3.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/nested-svg-with-rect-and-viewBox-and-percent-values.svg",
+    "png": "structure/svg/nested-svg-with-rect-and-viewBox-and-percent-values.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/nested-svg-with-rect.svg",
+    "png": "structure/svg/nested-svg-with-rect.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/nested-svg-with-transform-and-clip.svg",
+    "png": "structure/svg/nested-svg-with-transform-and-clip.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/nested-svg-with-viewBox-and-percent-values.svg",
+    "png": "structure/svg/nested-svg-with-viewBox-and-percent-values.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/not-UTF-8-encoding.svg",
+    "png": "structure/svg/not-UTF-8-encoding.png",
+    "width": 500,
+    "height": 500
+  },
+  {
+    "id": "structure/svg/preserveAspectRatio=xMaxYMax-slice.svg",
+    "png": "structure/svg/preserveAspectRatio=xMaxYMax-slice.png",
+    "width": 300,
+    "height": 150
+  },
+  {
+    "id": "structure/svg/preserveAspectRatio=xMinYMin.svg",
+    "png": "structure/svg/preserveAspectRatio=xMinYMin.png",
+    "width": 300,
+    "height": 150
+  },
+  {
+    "id": "structure/svg/root-transform-with-viewbox.svg",
+    "png": "structure/svg/root-transform-with-viewbox.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/svg/viewBox-not-at-zero-pos.svg",
+    "png": "structure/svg/viewBox-not-at-zero-pos.png",
+    "width": 300,
+    "height": 150
+  },
+  {
+    "id": "structure/switch/comment-as-first-child.svg",
+    "png": "structure/switch/comment-as-first-child.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/switch/requiredFeatures.svg",
+    "png": "structure/switch/requiredFeatures.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/switch/simple-case.svg",
+    "png": "structure/switch/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/switch/systemLanguage=en.svg",
+    "png": "structure/switch/systemLanguage=en.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/switch/systemLanguage=ru-en.svg",
+    "png": "structure/switch/systemLanguage=ru-en.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/switch/with-attributes.svg",
+    "png": "structure/switch/with-attributes.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/symbol/content-outside-the-viewbox.svg",
+    "png": "structure/symbol/content-outside-the-viewbox.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/symbol/opacity-on-use-and-symbol.svg",
+    "png": "structure/symbol/opacity-on-use-and-symbol.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/symbol/opacity-on-use.svg",
+    "png": "structure/symbol/opacity-on-use.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/symbol/simple-case.svg",
+    "png": "structure/symbol/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/symbol/with-transform-on-use-no-size.svg",
+    "png": "structure/symbol/with-transform-on-use-no-size.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/symbol/with-transform.svg",
+    "png": "structure/symbol/with-transform.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/symbol/with-viewBox-and-custom-use-rect.svg",
+    "png": "structure/symbol/with-viewBox-and-custom-use-rect.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/symbol/with-viewBox.svg",
+    "png": "structure/symbol/with-viewBox.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/systemLanguage/en-GB.svg",
+    "png": "structure/systemLanguage/en-GB.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/systemLanguage/en.svg",
+    "png": "structure/systemLanguage/en.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/systemLanguage/on-defs.svg",
+    "png": "structure/systemLanguage/on-defs.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/default.svg",
+    "png": "structure/transform/default.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/extra-spaces.svg",
+    "png": "structure/transform/extra-spaces.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/matrix-no-commas.svg",
+    "png": "structure/transform/matrix-no-commas.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/nested-transforms-1.svg",
+    "png": "structure/transform/nested-transforms-1.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/nested-transforms-2.svg",
+    "png": "structure/transform/nested-transforms-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/numeric-character-references.svg",
+    "png": "structure/transform/numeric-character-references.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/rotate-at-position.svg",
+    "png": "structure/transform/rotate-at-position.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/rotate.svg",
+    "png": "structure/transform/rotate.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/scale.svg",
+    "png": "structure/transform/scale.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/transform-list.svg",
+    "png": "structure/transform/transform-list.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/translate-without-Y.svg",
+    "png": "structure/transform/translate-without-Y.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/transform/translate.svg",
+    "png": "structure/transform/translate.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/cSS-rules.svg",
+    "png": "structure/use/cSS-rules.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/complex-style-resolving-order.svg",
+    "png": "structure/use/complex-style-resolving-order.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/display-inheritance.svg",
+    "png": "structure/use/display-inheritance.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/href-precedence-over-xlink.svg",
+    "png": "structure/use/href-precedence-over-xlink.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/nested-recursive-2.svg",
+    "png": "structure/use/nested-recursive-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/nested-xlink-to-svg-element-with-rect-and-size.svg",
+    "png": "structure/use/nested-xlink-to-svg-element-with-rect-and-size.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/recursive.svg",
+    "png": "structure/use/recursive.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/xlink-to-an-invalid-element-3.svg",
+    "png": "structure/use/xlink-to-an-invalid-element-3.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/xlink-to-svg-element-with-viewBox.svg",
+    "png": "structure/use/xlink-to-svg-element-with-viewBox.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "structure/use/xlink-to-svg-element-with-x-y-on-use.svg",
+    "png": "structure/use/xlink-to-svg-element-with-x-y-on-use.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/font-size/ex-nested-and-mixed.svg",
+    "png": "text/font-size/ex-nested-and-mixed.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/font-size/ex.svg",
+    "png": "text/font-size/ex.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/font-size/zero-size-on-parent-2.svg",
+    "png": "text/font-size/zero-size-on-parent-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/text-anchor/inheritance-1.svg",
+    "png": "text/text-anchor/inheritance-1.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/text-anchor/inheritance-3.svg",
+    "png": "text/text-anchor/inheritance-3.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/text-anchor/middle-on-text.svg",
+    "png": "text/text-anchor/middle-on-text.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/text/escaped-text-4.svg",
+    "png": "text/text/escaped-text-4.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/text/fill-rule=evenodd.svg",
+    "png": "text/text/fill-rule=evenodd.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/text/x-and-y-with-dx-and-dy-lists.svg",
+    "png": "text/text/x-and-y-with-dx-and-dy-lists.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/text/x-and-y-with-less-values-than-characters.svg",
+    "png": "text/text/x-and-y-with-less-values-than-characters.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/text/x-and-y-with-multiple-values-and-arabic-text.svg",
+    "png": "text/text/x-and-y-with-multiple-values-and-arabic-text.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/text/x-and-y-with-multiple-values-and-tspan.svg",
+    "png": "text/text/x-and-y-with-multiple-values-and-tspan.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/tspan/mixed-xml-space-1.svg",
+    "png": "text/tspan/mixed-xml-space-1.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/tspan/nested.svg",
+    "png": "text/tspan/nested.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/tspan/sequential.svg",
+    "png": "text/tspan/sequential.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "text/tspan/tspan-bbox-1.svg",
+    "png": "text/tspan/tspan-bbox-1.png",
+    "width": 300,
+    "height": 300
+  }
+]

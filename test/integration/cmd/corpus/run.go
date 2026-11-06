@@ -43,6 +43,7 @@ var featureRegistry = append([]FeatureFactory{
 	func() Feature { return newDeterminismFeature() },
 	func() Feature { return newReftestFeature() },
 	func() Feature { return newDrawFeature() },
+	func() Feature { return newSVGDrawFeature() },
 	func() Feature { return newDiffFeature() },
 }, mutationFeatureFactories()...)
 

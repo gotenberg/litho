@@ -58,6 +58,7 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 | `make icc-goldens`         | Regenerate the ICC transform goldens                                         | After a color transform change                     |
 | `make compose-fixtures`    | Rebuild the compose corpus PDFs with the pinned fonts                        | After a converter change                           |
 | `make wpt-fetch`           | Download the pinned WPT reftests and fonts of the wpt corpus                 | Before the first `make corpus` on wpt              |
+| `make svg-fetch`           | Download the pinned resvg SVG tests and fonts of the svg corpus              | Before the first `make corpus` on svg              |
 | `make weasyprint-fixtures` | Extract the weasyprint corpus fixtures from the pinned WeasyPrint release    | After a WeasyPrint pin change                      |
 | `make html-chromium`       | Rebuild the html corpus's Chromium reference PDFs (needs Docker)             | After an html source change                        |
 | `make html-fixtures`       | Rebuild the html corpus's litho PDFs with the pinned fonts                   | After a converter change                           |

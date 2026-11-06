@@ -100,7 +100,10 @@ var localToolPins = map[string]bool{
 	// downloads, the WeasyPrint release `make weasyprint-fixtures` extracts,
 	// and the Gotenberg image `make html-chromium` converts with. The host
 	// runs all three; wpt/fetch.sh records WPT_COMMIT in the wpt testdata.
+	// The resvg commit `make svg-fetch` downloads at, which svg/fetch.sh
+	// records in the svg testdata.
 	"WPT_COMMIT":             true,
+	"RESVG_COMMIT":           true,
 	"WEASYPRINT_VERSION":     true,
 	"WEASYPRINT_SHA256":      true,
 	"WEASYPRINT_FONT_SHA256": true,
@@ -148,7 +151,7 @@ var stagePins = map[string][]string{
 // from. The litho and compose corpora are committed in-tree, so git versions
 // them, and so are the weasyprint fixtures and the html corpus's Chromium
 // references. The wpt corpus's files come from the WPT commit wpt/fetch.sh
-// records.
+// records, and the svg corpus's from the resvg commit svg/fetch.sh records.
 //
 //nolint:gochecknoglobals // static dependency table
 var sourcePins = map[string][]string{
@@ -162,6 +165,7 @@ var sourcePins = map[string][]string{
 	"compose": nil,
 
 	"wpt":        {"WPT_COMMIT"},
+	"svg":        {"RESVG_COMMIT"},
 	"weasyprint": nil,
 	"html":       nil,
 }

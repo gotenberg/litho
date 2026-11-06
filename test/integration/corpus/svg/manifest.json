@@ -1,0 +1,10 @@
+{
+  "name": "svg",
+  "source": "svg",
+  "provisioned_by": "make svg-fetch",
+  "inputs": { "list": "tests.json" },
+  "goldens_in_source": true,
+  "goldens": {
+    "svgdraw": "."
+  }
+}
