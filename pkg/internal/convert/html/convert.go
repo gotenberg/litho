@@ -70,6 +70,18 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if err != nil {
 		return nil, err
 	}
+	if o.SinglePage {
+		// The route sizes the paper to the content it measures on screen,
+		// then prints it (see [measureSinglePage]).
+		w, h, err := measureSinglePage(ctx, doc, o, fonts, lay)
+		if err != nil {
+			return nil, err
+		}
+		if o.Landscape {
+			o.PageWidth = min(w+o.MarginLeft+o.MarginRight, maxPageSide)
+		}
+		o.PageHeight = min(h+o.MarginTop+o.MarginBottom, maxPageSide)
+	}
 	p, err := prepareDoc(ctx, doc, o, fonts, newPrintSetup(o))
 	if err != nil {
 		return nil, err
@@ -209,10 +221,14 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	// margins @page sets (CSS Page 3, 3.1 and 5.1), both as the layout
 	// sees them: scaled by the setup's factor, as Chromium's initial
 	// containing block is
-	// (blink::CalculateInitialContainingBlockSizeForPagination). Evaluate
-	// the media rules again when that changes anything.
+	// (blink::CalculateInitialContainingBlockSizeForPagination); the
+	// screen measurement of a single page sees the screen (single.go).
+	// Evaluate the media rules again when that changes anything.
 	w, h := media.Width*setup.factor, media.Height*setup.factor
 	vw, vh := areaOf(setup.layoutBox(first))
+	if setup.measure {
+		w, h, vw, vh = screenWidth, screenHeight, screenWidth, screenHeight
+	}
 	if w != media.Width || h != media.Height || vw != w || vh != h {
 		media.Width, media.Height = w, h
 		media.ViewportWidth, media.ViewportHeight = vw, vh
@@ -251,7 +267,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		layout: layout.Options{
 			Page:         page,
 			PageAt:       pageAt,
-			FitFirstPage: setup.single,
+			FitFirstPage: setup.measure,
 			Lang:         scan.lang,
 			Image:        res.picture,
 			MaxPages:     o.MaxPages,

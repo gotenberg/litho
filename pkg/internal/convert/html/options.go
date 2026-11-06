@@ -78,10 +78,16 @@ type Options struct {
 	// page area divided by Scale and drawn at Scale (Chromium's printToPDF
 	// scale).
 	Scale float64
-	// SinglePage lays the document out on one page as tall as its content
-	// plus the margins, and in Landscape as wide as it too: the page is
-	// never cut. A forced break still ends the page, and only the first
-	// page is written (Gotenberg's singlePage).
+	// SinglePage writes one page sized to the content, as Gotenberg's
+	// singlePage does: the route measures the document on Chromium's
+	// screen before printing, so the content is laid out once in one
+	// continuous column 800 CSS pixels wide, without margins or forced
+	// breaks, its height at least the screen's 437.12 CSS pixels and its
+	// width at least 800. The paper is then as tall as that height plus
+	// the top and bottom margins, and in Landscape as wide as that width
+	// plus the left and right margins; the document is printed on it as
+	// usual, forced breaks cutting, and only the first page is written.
+	// PageRanges is ignored.
 	SinglePage bool
 	// PageRanges selects the pages written, one-based, in document order,
 	// as "1-5, 8, 11-13"; empty writes every page. A range past the last

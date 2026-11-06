@@ -5,7 +5,6 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
-	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
@@ -35,40 +34,35 @@ const shrinkSlack = 0.75 / 64
 type printSetup struct {
 	// factor is the layout's points per point of the page.
 	factor float64
-	// width, when positive, replaces the width of every page box, in
-	// points: a single landscape page as wide as its content.
-	width float64
-	// single lays the document out on pages as tall as the layout allows,
-	// the first trimmed to its content ([Options.SinglePage]).
-	single bool
+	// measure lays the document out as the screen measurement of a single
+	// page: one continuous column [screenWidth] wide, no margins, no page
+	// box, the viewport [screenWidth] by [screenHeight] (see
+	// [measureSinglePage]).
+	measure bool
 }
 
 // newPrintSetup returns the setup of a first layout under o.
 func newPrintSetup(o Options) printSetup {
-	return printSetup{factor: 1 / o.Scale, single: o.SinglePage}
+	return printSetup{factor: 1 / o.Scale}
 }
 
-// source returns the page box b of the @page rules as the setup changes it
-// before layout, still in points of the page: its width replaced.
+// source returns the page box b of the @page rules as the setup lays it
+// out, still in points of the page: the screen column when measuring.
 func (s printSetup) source(b layout.PageBox) layout.PageBox {
-	if s.width > 0 {
-		b.Width = s.width
+	if s.measure {
+		return layout.PageBox{Width: screenWidth, Height: maxPageSide}
 	}
 	return b
 }
 
 // layoutBox returns the box the layout engine lays the page b out on: the
-// source box multiplied by the factor, as tall as the engine allows for a
-// single page.
+// source box multiplied by the factor.
 func (s printSetup) layoutBox(b layout.PageBox) layout.PageBox {
 	b = s.source(b)
 	b.Width *= s.factor
 	b.Height *= s.factor
 	for i := range b.Margin {
 		b.Margin[i] *= s.factor
-	}
-	if s.single {
-		b.Height = max(b.Height, maxPageSide)
 	}
 	return b
 }
@@ -93,10 +87,9 @@ func (s printSetup) fitFactor(boxes ...layout.PageBox) (printSetup, []compose.Wa
 }
 
 // refit returns the setup of a second layout when the first, res, laid
-// the document out wider than its page area, false when it fits: a single
-// landscape page widened to the content (Gotenberg's singlePage sizes the
-// paper to the content), or the factor grown by the overflow ratio, at
-// most [maxShrink], as Chromium shrinks such a document
+// the document out wider than its page area, false when it fits or is
+// measured: the factor grown by the overflow ratio, at most [maxShrink], as
+// Chromium shrinks such a document
 // (blink::CalculateOverflowShrinkForPrinting).
 func (p *prepared) refit(res *layout.Result) (printSetup, bool) {
 	s := p.setup
@@ -104,13 +97,7 @@ func (p *prepared) refit(res *layout.Result) (printSetup, bool) {
 	if !(lw > 0) || !(res.ContentWidth-lw > shrinkSlack) {
 		return s, false
 	}
-	if s.single && p.o.Landscape {
-		src := s.source(p.first)
-		w := res.ContentWidth/s.factor + src.Margin[css.Left] + src.Margin[css.Right]
-		s.width = min(w, maxPageSide)
-		return s, s.width > src.Width
-	}
-	if p.o.NoShrinkToFit {
+	if s.measure || p.o.NoShrinkToFit {
 		return s, false
 	}
 	s.factor *= min(res.ContentWidth/lw, maxShrink)
@@ -125,8 +112,7 @@ type placement struct {
 
 // placement returns where the laid out page lp lands. The page box it
 // was laid out on, divided by the factor, is the source page. With
-// [Options.PreferCSSPageSize] or a single page, the sheet is the source
-// page. Otherwise the sheet is the paper, turned to the source page's
+// [Options.PreferCSSPageSize] the sheet is the source page. Otherwise the sheet is the paper, turned to the source page's
 // orientation, and the source page is scaled down to fit it, never up,
 // and centred on it, as Chromium prints without preferCSSPageSize
 // (blink::TargetPageBorderBoxLogicalRect,
@@ -136,7 +122,7 @@ func (p *prepared) placement(lp *compose.Page) placement {
 	f := p.setup.factor
 	sw, sh := lp.Width/f, lp.Height/f
 	tw, th := sw, sh
-	if !p.o.PreferCSSPageSize && !p.o.SinglePage {
+	if !p.o.PreferCSSPageSize {
 		tw, th = p.o.PageWidth, p.o.PageHeight
 		if !nearly(sw, sh) && (tw > th) != (sw > sh) {
 			tw, th = th, tw

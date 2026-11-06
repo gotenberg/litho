@@ -190,10 +190,14 @@ func WithPrintScale(scale float64) ConvertOption {
 	return func(o *convertOptions) { o.scale = scale }
 }
 
-// WithSinglePage lays a [FormatHTML] source out on one page as tall as its
-// content plus the margins, and with [WithLandscape] as wide as it too:
-// the page is never cut. A forced break still ends the page, and only the
-// first page is written.
+// WithSinglePage writes a [FormatHTML] source on one page sized to its
+// content, as Gotenberg's singlePage does. The route measures the document
+// on Chromium's screen before printing, so the content is measured in one
+// continuous column 800 CSS pixels wide, forced breaks ignored, at least
+// 437.12 CSS pixels tall and 800 wide: the paper becomes that tall plus the
+// top and bottom margins, and with [WithLandscape] that wide plus the left
+// and right margins. The document is printed on it as usual and only the
+// first page is written, whatever [WithPageRanges] says.
 func WithSinglePage(single bool) ConvertOption {
 	return func(o *convertOptions) { o.singlePage = single }
 }

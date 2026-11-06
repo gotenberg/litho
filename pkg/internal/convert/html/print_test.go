@@ -215,31 +215,44 @@ func TestConvert_ShrinksWideContentToFit(t *testing.T) {
 
 func TestConvert_SinglePage(t *testing.T) {
 	t.Parallel()
-	src := `<body style="margin:0"><p style="margin:0;font-size:10pt;line-height:20pt">a</p>` +
-		`<p style="break-before:page">b</p>`
-	doc := conv(t, src, Options{SinglePage: true, PageRanges: "2", MarginTop: 7, MarginBottom: 3})
-	if len(doc.Pages) != 1 {
-		t.Fatalf("%d pages, want 1", len(doc.Pages))
+	tests := []struct {
+		name  string
+		body  string
+		o     Options
+		w, h  float64
+		scale float64
+	}{
+		{"short content takes the screen's height", `<p style="margin:0">a</p>`,
+			Options{MarginTop: 7, MarginBottom: 3}, DefaultPageWidth, screenHeight + 10, 1},
+		{"forced breaks ignored by the measure", `<div style="height:400pt"></div><div style="break-before:page;height:300pt"></div>`,
+			Options{MarginTop: 7, MarginBottom: 3}, DefaultPageWidth, 710, 1},
+		{"landscape takes the content's width", `<div style="width:1000pt;height:40pt"></div>`,
+			Options{Landscape: true, MarginLeft: 10, MarginRight: 20}, 1030, screenHeight, 1},
+		{"landscape takes the screen's width at least", `<p>a</p>`,
+			Options{Landscape: true, MarginLeft: 10, MarginRight: 20}, screenWidth + 30, screenHeight, 1},
+		{"portrait shrinks wide content to the paper", `<div style="width:1000pt;height:40pt"></div>`,
+			Options{}, DefaultPageWidth, screenHeight, 1 / 1.5},
+		{"page ranges ignored", `<p>a</p><p style="break-before:page">b</p>`,
+			Options{PageRanges: "2"}, DefaultPageWidth, screenHeight, 1},
+		{"capped at the PDF limit", `<div style="height:20000pt"></div>`,
+			Options{}, DefaultPageWidth, maxPageSide, 1},
 	}
-	if pg := doc.Pages[0]; !near6(pg.Width, DefaultPageWidth) || !near6(pg.Height, 30) {
-		t.Errorf("page %vx%v, want the paper's width by the content and margins, 30", pg.Width, pg.Height)
-	}
-	// In landscape the page is as wide as the content too, and nothing is
-	// shrunk.
-	doc = conv(t, `<body style="margin:0"><div style="width:1000pt;height:40pt"></div>`, Options{SinglePage: true, Landscape: true, MarginLeft: 10, MarginRight: 20})
-	if pg := doc.Pages[0]; !near6(pg.Width, 1030) || !near6(pg.Height, 40) || placementOf(pg) != compose.Identity {
-		t.Errorf("landscape page %vx%v placed %+v, want 1030x40 as laid out", pg.Width, pg.Height, placementOf(pg))
-	}
-	// In portrait the wide content shrinks to the paper.
-	doc = conv(t, `<body style="margin:0"><div style="width:1000pt;height:40pt"></div>`, Options{SinglePage: true})
-	if pg := doc.Pages[0]; !near6(pg.Width, DefaultPageWidth) || !near6(pg.Height, 40/1.5) || !near6(placementOf(pg).A, 1/1.5) {
-		t.Errorf("portrait page %vx%v placed %+v, want the paper's width, shrunk 1.5 times", pg.Width, pg.Height, placementOf(pg))
-	}
-	// A scale above one draws the tall layout past the PDF limit: the
-	// page stops at it.
-	doc = conv(t, `<div style="height:13000pt"></div>`, Options{SinglePage: true, Scale: 2})
-	if pg := doc.Pages[0]; pg.Height > maxPageSide {
-		t.Errorf("page height %v past the PDF limit", pg.Height)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tt.o.SinglePage = true
+			doc := conv(t, `<body style="margin:0">`+tt.body, tt.o)
+			if len(doc.Pages) != 1 {
+				t.Fatalf("%d pages, want 1", len(doc.Pages))
+			}
+			pg := doc.Pages[0]
+			if !near6(pg.Width, tt.w) || !near6(pg.Height, tt.h) {
+				t.Errorf("page %vx%v, want %vx%v", pg.Width, pg.Height, tt.w, tt.h)
+			}
+			if m := placementOf(pg); !near6(m.A, tt.scale) {
+				t.Errorf("placement %+v, want a scale of %v", m, tt.scale)
+			}
+		})
 	}
 }
 
