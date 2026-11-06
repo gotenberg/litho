@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-06T19:33:58Z",
+  "captured_at": "2026-11-06T21:46:41Z",
   "corpora": {
     "compose": {
       "features": {
@@ -278,17 +278,18 @@
     "html": {
       "features": {
         "diff": {
-          "matched": 10,
-          "mismatched": 2,
+          "matched": 12,
+          "mismatched": 17,
           "skipped": 0,
           "metrics": {
-            "convert_error": 0,
-            "pages_equal": 12
+            "convert_error": 1,
+            "pages_equal": 20
           },
           "scores": {
             "article": {
               "layout": 0.946,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 1
@@ -296,6 +297,7 @@
             "backgrounds": {
               "layout": 0.9408,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 0,
               "text_f1": 1
@@ -303,20 +305,55 @@
             "borders": {
               "layout": 0.9243,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 1
+            },
+            "flex": {
+              "layout": 0.3175,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.5,
+              "strict": 0,
+              "text_f1": 0.3798
             },
             "floats": {
               "layout": 0.9483,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 1
             },
+            "font-face": {
+              "layout": 0.4863,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "header-default-classes": {
+              "layout": 0.4815,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.3333
+            },
+            "header-footer": {
+              "layout": 0.7734,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.4444
+            },
             "i18n": {
               "layout": 0.9004,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 0.7297
@@ -324,6 +361,7 @@
             "images": {
               "layout": 0.9849,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 1
@@ -331,6 +369,7 @@
             "invoice": {
               "layout": 0.9469,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
               "text_f1": 1
@@ -338,34 +377,143 @@
             "landing": {
               "layout": 0.9735,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 0.25,
+              "text_f1": 1
+            },
+            "landscape": {
+              "layout": 0.9429,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
               "text_f1": 1
             },
             "lists": {
               "layout": 0.9327,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 0.97
             },
+            "margin-boxes": {
+              "layout": 0.7447,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9065
+            },
             "markdown": {
               "layout": 0.9376,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
               "text_f1": 0.9477
             },
+            "markdown-plain": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "media-dark": {
+              "layout": 0.998,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "named-pages": {
+              "layout": 0.0418,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.3333,
+              "strict": 0,
+              "text_f1": 0.2381
+            },
+            "no-background": {
+              "layout": 0.6656,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "outline": {
+              "layout": 0.9565,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "page-ranges": {
+              "layout": 0.1547,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.1667,
+              "strict": 0.1667,
+              "text_f1": 0.0833
+            },
             "print-css": {
               "layout": 0.9665,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 0.25,
               "text_f1": 1
             },
+            "print-css-fit": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "scale": {
+              "layout": 0.2526,
+              "link_recall": 0.7778,
+              "outline_recall": 1,
+              "pages": 0.6667,
+              "strict": 0,
+              "text_f1": 0.5608
+            },
+            "single-page": {
+              "layout": 0.0786,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0.0833
+            },
+            "single-page-landscape": {
+              "layout": 0.9624,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0.7368
+            },
+            "svg": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 0.9247
+            },
             "wide-table": {
               "layout": 0.4328,
               "link_recall": 1,
+              "outline_recall": 1,
               "pages": 1,
               "strict": 0,
               "text_f1": 0.8
@@ -1265,8 +1413,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 487,
-          "mismatched": 82,
+          "matched": 488,
+          "mismatched": 81,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -1720,7 +1868,7 @@
             "css/css-page/page-size-011-print.html": "pass",
             "css/css-page/page-size-013-print.html": "fail",
             "css/css-page/root-element-display-none-print.html": "pass",
-            "css/css-page/subpixel-page-size-001-print.html": "fail",
+            "css/css-page/subpixel-page-size-001-print.html": "pass",
             "css/css-text/hanging-punctuation/hanging-punctuation-inline-bound-001.html": "fail",
             "css/css-text/hyphens/hyphenate-character-005.html": "pass",
             "css/css-text/hyphens/hyphens-auto-001.html": "pass",
