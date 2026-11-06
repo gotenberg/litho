@@ -2,6 +2,7 @@ package html
 
 import (
 	"context"
+	"math"
 
 	dom "golang.org/x/net/html"
 
@@ -76,4 +77,16 @@ func continuous(root *layout.Node) {
 			stack = append(stack, n.Marker)
 		}
 	}
+}
+
+// chromiumPaper returns the paper side v, in points, as printToPDF prints
+// it: rounded up to whole points (print_to_pdf::GetPrintPagesParams,
+// gfx::ToCeiledSize of the paper in points), then to the nearest dot at
+// 300 dpi, the PDF's device resolution (printing::kDefaultPdfDpi). Every
+// page size of the route's references is a whole number of such dots:
+// 599.04 points is 2496 dots, 1087.92 is 4533. The route sizes a single
+// page's paper in inches, so it lands there.
+func chromiumPaper(v float64) float64 {
+	const dots = 300.0 / 72
+	return math.Round(math.Ceil(v-1e-9)*dots) / dots
 }

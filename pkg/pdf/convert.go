@@ -59,6 +59,7 @@ type convertOptions struct {
 	omitBackgrounds                      bool
 	omitOutline                          bool
 	noShrinkToFit                        bool
+	fractionalFontMetrics                bool
 	headerTemplate, footerTemplate       string
 	date                                 time.Time
 	baseURL                              string
@@ -230,6 +231,15 @@ func WithPrintBackground(print bool) ConvertOption {
 // the page clip what overflows, as WeasyPrint prints.
 func WithShrinkToFit(shrink bool) ConvertOption {
 	return func(o *convertOptions) { o.noShrinkToFit = !shrink }
+}
+
+// WithFractionalFontMetrics sets whether the lines of a [FormatHTML]
+// source use the fonts' fractional ascent, descent and line gap, as
+// WeasyPrint does. false, the default, rounds them to whole CSS pixels
+// first, as Chromium does for document text, so lines of line-height:
+// normal sit where Chromium puts them.
+func WithFractionalFontMetrics(fractional bool) ConvertOption {
+	return func(o *convertOptions) { o.fractionalFontMetrics = fractional }
 }
 
 // WithOutline sets whether the headings of a [FormatHTML] source become
@@ -497,20 +507,21 @@ func convertHTML(ctx context.Context, src io.Reader, fonts *text.Fonts, o *conve
 		MaxPages:      maxPages,
 		Logger:        o.logger,
 
-		Landscape:         o.landscape,
-		PreferCSSPageSize: o.preferCSSPageSize,
-		Scale:             o.scale,
-		SinglePage:        o.singlePage,
-		PageRanges:        o.pageRanges,
-		OmitBackgrounds:   o.omitBackgrounds,
-		OmitOutline:       o.omitOutline,
-		NoShrinkToFit:     o.noShrinkToFit,
-		HeaderTemplate:    o.headerTemplate,
-		FooterTemplate:    o.footerTemplate,
-		Date:              o.date,
-		BaseURL:           o.baseURL,
-		HTTPClient:        o.httpClient,
-		MediaFeatures:     o.mediaFeatures,
+		Landscape:             o.landscape,
+		PreferCSSPageSize:     o.preferCSSPageSize,
+		Scale:                 o.scale,
+		SinglePage:            o.singlePage,
+		PageRanges:            o.pageRanges,
+		OmitBackgrounds:       o.omitBackgrounds,
+		OmitOutline:           o.omitOutline,
+		NoShrinkToFit:         o.noShrinkToFit,
+		FractionalFontMetrics: o.fractionalFontMetrics,
+		HeaderTemplate:        o.headerTemplate,
+		FooterTemplate:        o.footerTemplate,
+		Date:                  o.date,
+		BaseURL:               o.baseURL,
+		HTTPClient:            o.httpClient,
+		MediaFeatures:         o.mediaFeatures,
 	})
 	switch {
 	case err == nil:

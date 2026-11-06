@@ -114,6 +114,12 @@ type Options struct {
 	// to the area, as Chromium prints (blink::LocalFrameView::
 	// ForceLayoutForPagination).
 	NoShrinkToFit bool
+	// FractionalFontMetrics lays lines out with the fonts' fractional
+	// ascent, descent and line gap, as WeasyPrint does. Off, the default,
+	// they are rounded to whole CSS pixels first, as Chromium rounds them
+	// for document text (blink::SimpleFontData::PlatformInit), which moves
+	// every line of line-height: normal to Chromium's place.
+	FractionalFontMetrics bool
 	// HeaderTemplate and FooterTemplate are HTML fragments drawn in the top
 	// and bottom margins of every page, as Chromium's printToPDF
 	// headerTemplate and footerTemplate: each is the inner HTML of

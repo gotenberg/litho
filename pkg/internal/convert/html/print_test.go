@@ -246,8 +246,14 @@ func TestConvert_SinglePage(t *testing.T) {
 				t.Fatalf("%d pages, want 1", len(doc.Pages))
 			}
 			pg := doc.Pages[0]
-			if !near6(pg.Width, tt.w) || !near6(pg.Height, tt.h) {
-				t.Errorf("page %vx%v, want %vx%v", pg.Width, pg.Height, tt.w, tt.h)
+			// The paper comes out as printToPDF sizes it: whole points,
+			// then whole 300 dpi dots.
+			w, h := tt.w, min(chromiumPaper(tt.h), maxPageSide)
+			if tt.o.Landscape {
+				w = chromiumPaper(w)
+			}
+			if !near6(pg.Width, w) || !near6(pg.Height, h) {
+				t.Errorf("page %vx%v, want %vx%v", pg.Width, pg.Height, w, h)
 			}
 			if m := placementOf(pg); !near6(m.A, tt.scale) {
 				t.Errorf("placement %+v, want a scale of %v", m, tt.scale)

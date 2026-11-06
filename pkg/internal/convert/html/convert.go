@@ -78,9 +78,9 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 			return nil, err
 		}
 		if o.Landscape {
-			o.PageWidth = min(w+o.MarginLeft+o.MarginRight, maxPageSide)
+			o.PageWidth = min(chromiumPaper(w+o.MarginLeft+o.MarginRight), maxPageSide)
 		}
-		o.PageHeight = min(h+o.MarginTop+o.MarginBottom, maxPageSide)
+		o.PageHeight = min(chromiumPaper(h+o.MarginTop+o.MarginBottom), maxPageSide)
 	}
 	p, err := prepareDoc(ctx, doc, o, fonts, newPrintSetup(o))
 	if err != nil {
@@ -269,13 +269,14 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	p := &prepared{
 		root: root,
 		layout: layout.Options{
-			Page:         page,
-			PageAt:       pageAt,
-			FitFirstPage: setup.measure,
-			Lang:         scan.lang,
-			Image:        res.picture,
-			MaxPages:     o.MaxPages,
-			Logger:       o.Logger,
+			Page:             page,
+			PageAt:           pageAt,
+			FitFirstPage:     setup.measure,
+			PixelFontMetrics: !o.FractionalFontMetrics,
+			Lang:             scan.lang,
+			Image:            res.picture,
+			MaxPages:         o.MaxPages,
+			Logger:           o.Logger,
 		},
 		meta:     scan.meta,
 		headings: b.headings,

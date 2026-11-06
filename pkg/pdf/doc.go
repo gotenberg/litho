@@ -207,9 +207,9 @@
 //     options of Chromium's printToPDF: [WithLandscape],
 //     [WithPreferCSSPageSize], [WithPrintScale], [WithSinglePage],
 //     [WithPageRanges], [WithPrintBackground], [WithOutline],
-//     [WithShrinkToFit], [WithHeaderTemplate], [WithFooterTemplate],
-//     [WithPrintDate], [WithBaseURL], [WithHTTPClient],
-//     [WithMediaFeatures].
+//     [WithShrinkToFit], [WithFractionalFontMetrics],
+//     [WithHeaderTemplate], [WithFooterTemplate], [WithPrintDate],
+//     [WithBaseURL], [WithHTTPClient], [WithMediaFeatures].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:
