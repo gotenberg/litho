@@ -6,8 +6,9 @@
 // box generation (section 9.2), block formatting with margin collapsing,
 // floats and clearance (sections 8.3.1, 9.4.1, 9.5, 10.3, 10.6), inline
 // formatting with line boxes (sections 9.4.2, 10.8 and CSS Text 3), lists
-// (section 12.5), backgrounds and borders (CSS Backgrounds 3), and page
-// fragmentation (CSS Fragmentation 3 and CSS 2.1 section 13.3).
+// (section 12.5), tables (chapter 17), backgrounds and borders (CSS
+// Backgrounds 3), and page fragmentation (CSS Fragmentation 3 and CSS 2.1
+// section 13.3).
 //
 // # Fragmentation
 //
@@ -22,13 +23,24 @@
 // # Formatting contexts
 //
 // A block container's content is laid out by a formatter chosen per
-// display value: block flow and inline flow now. A table formatter plugs in
-// as one more case of formatterFor without touching the block and inline
-// code.
+// display value: block flow, inline flow, and the table formatter of a
+// table wrapper box.
+//
+// # Tables
+//
+// A table generates a wrapper box holding its captions and the table box,
+// with the anonymous rows, cells and tables CSS 2.1, 17.2.1 asks for. The
+// columns take the automatic layout the way browsers do it, or the fixed
+// one; rows take the height of their cells, aligned on a shared baseline,
+// at the top, middle or bottom. Borders are separated by border-spacing or
+// collapsed, the conflicts resolved per CSS 2.1, 17.6.2.1. A row is never
+// split across pages: one that does not fit moves to the next page, under a
+// copy of the header group, and the page it leaves ends with a copy of the
+// footer group, the copies painted as artifacts. A row taller than the page
+// area is clipped with a warning.
 //
 // # Not supported
 //
-// Tables are laid out as blocks, a row and a cell each a block box.
 // Absolute and fixed positioning lay out as static, with a warning. Flex,
 // grid, transforms, generated content, hyphenation and multi-column layout
 // are out of scope.

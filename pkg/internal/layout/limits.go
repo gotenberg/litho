@@ -85,3 +85,26 @@ const maxPageFragments = 500_000
 // styles spell a number in about log26(n) letters, and lists never run that
 // long.
 const maxMarkerValue = 1 << 30
+
+// maxTableColumns bounds the columns of one table: cells and columns past
+// it are left out with a warning. It is the bound HTML puts on colspan.
+// Anti-DoS guard, not spec-mandated: a page shows a few dozen columns.
+const maxTableColumns = 1000
+
+// maxTableRows bounds the rows of one table: rows past it are left out
+// with a warning. It is the bound HTML puts on rowspan. Anti-DoS guard,
+// not spec-mandated: 65534 rows fill over a thousand pages.
+const maxTableRows = 65_534
+
+// maxTableCells bounds the cells of one table: cells past it are left out
+// with a warning. Anti-DoS guard, not spec-mandated: the largest tables of
+// real documents, reports of tens of thousands of rows, hold a few hundred
+// thousand cells, and every cell is a box counted against [MaxBoxes] too.
+const maxTableCells = 1 << 19
+
+// maxTableSlots bounds the grid of one table, rows times columns, which is
+// also the total area the cells span: the rows past it are left out with a
+// warning. The engine keeps a few words per slot for the grid and the
+// collapsed borders. Anti-DoS guard, not spec-mandated: 2^21 slots are
+// 50000 rows of 40 columns.
+const maxTableSlots = 1 << 21

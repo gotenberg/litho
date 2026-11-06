@@ -60,6 +60,9 @@ type painter struct {
 	alpha float64
 	// canvas is the box whose background paints the canvas.
 	canvas *box
+	// artifact reports a repeated table header or footer being painted:
+	// its fragments hang from no structure element.
+	artifact bool
 }
 
 // paint returns the display list of the box tree rooted at root.
@@ -164,6 +167,17 @@ func (p *painter) emit(b *box, content bool, frag compose.Fragment, y0, y1 float
 	c := p.sync(p.chain(b, content))
 	if p.mono >= 0 {
 		page = p.mono
+	}
+	if p.artifact {
+		frag = cloneFragment(frag)
+		switch v := frag.(type) {
+		case *compose.Text:
+			v.Parent = nil
+		case *compose.Image:
+			v.Parent = nil
+		case *compose.Path:
+			v.Parent = nil
+		}
 	}
 	c.kids = append(c.kids, &ditem{frag: frag, y0: y0, y1: y1, page: page})
 }
@@ -276,6 +290,9 @@ func (p *painter) collect(b *box, blocks, floats, contexts *[]*box) {
 		case k.inline:
 		case k.isStackingContext():
 			*contexts = append(*contexts, k)
+		case k.tpart == partTable:
+			// A table paints its rows and cells itself (CSS 2.1, 17.5.1).
+			*blocks = append(*blocks, k)
 		default:
 			*blocks = append(*blocks, k)
 			if k.kind == kindBlock {
@@ -287,6 +304,13 @@ func (p *painter) collect(b *box, blocks, floats, contexts *[]*box) {
 
 // decorations paints the background and borders of b.
 func (p *painter) decorations(b *box) {
+	switch {
+	case b.tpart == partTable:
+		p.tableDecorations(b)
+		return
+	case b.tpart.internal():
+		return
+	}
 	if b.hidden || b.kind == kindInline || b.kind == kindText {
 		return
 	}
@@ -308,6 +332,10 @@ func (p *painter) borders(b *box) {
 // content paints the inline content of b, its replaced content and its
 // outside marker (CSS 2.1, Appendix E, step 7).
 func (p *painter) content(b *box) {
+	if b.tpart == partTable {
+		p.tableContent(b)
+		return
+	}
 	if b.kind == kindReplaced {
 		p.replaced(b)
 		return
@@ -364,6 +392,9 @@ func (p *painter) marker(b *box) {
 // link regions.
 func (p *painter) line(l *lineBox) {
 	page := p.e.pageOf(l.y + eps)
+	if p.mono >= 0 {
+		page = p.mono
+	}
 	for _, f := range l.frags {
 		if f.box.hidden {
 			continue

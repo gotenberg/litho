@@ -108,20 +108,11 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 	return out
 }
 
-// genChildren generates the boxes of children into the block container b
-// and wraps its inline runs in anonymous blocks.
+// genChildren generates the boxes of children into the block container b,
+// wraps its runs of table boxes in anonymous tables and its inline runs in
+// anonymous blocks.
 func (e *engine) genChildren(b *box, children []*Node, ctx genCtx) {
-	ordinal := new(int)
-	for _, c := range children {
-		if e.err != nil {
-			return
-		}
-		for _, k := range e.genNode(c, b, ctx, ordinal) {
-			k.parent = b
-			b.kids = append(b.kids, k)
-		}
-	}
-	e.normalize(b)
+	e.adopt(b, e.genRaw(b, children, ctx))
 }
 
 // genNode generates the boxes of n, a child of parent: none, one, or for
@@ -170,14 +161,26 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	default:
 		return nil
 	}
-	if st.Display == css.DisplayNone || isColumn(st.Display) {
+	if st.Display == css.DisplayNone {
 		return nil
+	}
+	if isColumn(st.Display) {
+		// A column generates a box inside a table alone, where it paints
+		// its background (CSS 2.1, 17.2).
+		if parent == nil || parent.tpart != partTable {
+			return nil
+		}
+		return []*box{e.genColumn(n, st, ctx)}
 	}
 	float := st.Float
 	switch {
 	case float == css.FloatNone && st.Display == css.Inline:
 		return e.genInline(n, st, ctx, ordinal)
-	case float == css.FloatNone && (st.Display == css.InlineBlock || st.Display == css.InlineTable):
+	case st.Display == css.Table || st.Display == css.InlineTable:
+		return []*box{e.genTable(n, st, ctx, float)}
+	case float == css.FloatNone && isTablePart(st.Display):
+		return []*box{e.genPart(n, st, ctx)}
+	case float == css.FloatNone && st.Display == css.InlineBlock:
 		b := e.newBox(n, st, kindBlock, ctx)
 		b.inline = true
 		cctx := e.enter(n, b, ctx)
@@ -211,23 +214,25 @@ func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*
 	ib.decos = cctx.decos
 	out := []*box{ib}
 	cur := ib
+	kids := make([]*box, 0, len(n.Children))
 	for _, c := range n.Children {
-		for _, k := range e.genNode(c, cur, cctx, ordinal) {
-			if k.inline || k.float != css.FloatNone {
-				k.parent = cur
-				cur.kids = append(cur.kids, k)
-				continue
-			}
-			cur.last = false
-			out = append(out, k)
-			piece := e.newBox(n, st, kindInline, ctx)
-			*piece = *ib
-			piece.kids = nil
-			piece.first, piece.last = false, true
-			piece.id = ""
-			out = append(out, piece)
-			cur = piece
+		kids = append(kids, e.genNode(c, ib, cctx, ordinal)...)
+	}
+	for _, k := range e.wrapOrphans(ib, kids, true) {
+		if k.inline || k.float != css.FloatNone {
+			k.parent = cur
+			cur.kids = append(cur.kids, k)
+			continue
 		}
+		cur.last = false
+		out = append(out, k)
+		piece := e.newBox(n, st, kindInline, ctx)
+		*piece = *ib
+		piece.kids = nil
+		piece.first, piece.last = false, true
+		piece.id = ""
+		out = append(out, piece)
+		cur = piece
 	}
 	return out
 }
@@ -244,6 +249,13 @@ func ownDecos(st *css.Style) []deco {
 // isInlineLevel reports whether a display value is inline-level.
 func isInlineLevel(d css.Display) bool {
 	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable
+}
+
+// isTablePart reports a display value of a caption or an internal table
+// box other than a column (CSS 2.1, 17.2).
+func isTablePart(d css.Display) bool {
+	return d == css.TableRowGroup || d == css.TableHeaderGroup || d == css.TableFooterGroup ||
+		d == css.TableRow || d == css.TableCell || d == css.TableCaption
 }
 
 // isColumn reports a table column or column group, which generates no box

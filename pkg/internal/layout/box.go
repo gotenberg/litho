@@ -104,6 +104,13 @@ type box struct {
 	measured   bool
 	// picture is the picture of a replaced box, nil for none.
 	picture *Picture
+
+	// tpart is the box's part in a table (CSS 2.1, 17.2), partNone outside
+	// one. tdata is the table model of a table wrapper box and of its table
+	// box, cell the grid slot of a cell.
+	tpart tablePart
+	tdata *tableData
+	cell  *cellData
 }
 
 // markerBox is the outside marker of a list item (CSS 2.1, 12.5).
@@ -145,17 +152,19 @@ func (b *box) marginH() float64 { return b.borderH() + b.m[css.Top] + b.m[css.Bo
 
 // establishesBFC reports whether a block-level box establishes a new block
 // formatting context (CSS 2.1, 9.4.1): floats, inline blocks, boxes with
-// overflow other than visible, and the root.
+// overflow other than visible, and the root; and the table wrapper boxes,
+// captions and cells (CSS 2.1, 17.4).
 func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || (b.inline && b.kind == kindBlock) ||
-		b.st.Overflow != css.OverflowVisible || b.kind == kindReplaced
+		b.st.Overflow != css.OverflowVisible || b.kind == kindReplaced ||
+		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell
 }
 
 // isStackingContext reports whether the box paints as a unit above the
 // in-flow content of its parent: an opacity below 1 (CSS Color 3, 3.2) or
 // relative positioning (CSS 2.1, Appendix E, step 8).
 func (b *box) isStackingContext() bool {
-	return b.parent != nil && (b.st.Opacity < 1 || b.st.Position == css.Relative) && b.kind != kindText && b.kind != kindInline
+	return b.parent != nil && !b.tpart.internal() && (b.st.Opacity < 1 || b.st.Position == css.Relative) && b.kind != kindText && b.kind != kindInline
 }
 
 // shift moves the box and everything laid out inside it by (dx, dy).
@@ -179,6 +188,12 @@ func (b *box) shift(dx, dy float64) {
 	if b.outside != nil {
 		b.outside.x += dx
 		b.outside.baseline += dy
+	}
+	if b.tpart == partTable {
+		// Column boxes hold no content and are no kids of the table box.
+		for _, c := range b.tdata.colBoxes {
+			c.shift(dx, dy)
+		}
 	}
 	for _, k := range b.kids {
 		switch k.kind {

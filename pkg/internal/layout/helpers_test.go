@@ -13,7 +13,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
-	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // px converts CSS pixels to points.
@@ -114,17 +113,20 @@ func render(t testing.TB, res *Result, n int) image.Image {
 	if err := compose.Write(context.Background(), document(res), &b, compose.Options{}); err != nil {
 		t.Fatalf("compose.Write: %v", err)
 	}
-	r, err := pdf.Open(context.Background(), bytes.NewReader(b.Bytes()), int64(b.Len()))
-	if err != nil {
-		t.Fatalf("pdf.Open: %v", err)
+	if RenderPDF == nil {
+		t.Fatal("no PDF renderer installed")
 	}
-	t.Cleanup(func() { r.Close() })
-	img, err := r.RenderPage(context.Background(), n, pdf.WithRenderDPI(96))
+	img, err := RenderPDF(b.Bytes(), n)
 	if err != nil {
-		t.Fatalf("RenderPage: %v", err)
+		t.Fatalf("rendering page %d: %v", n, err)
 	}
 	return img
 }
+
+// RenderPDF rasterises page n (1-based) of a PDF at 96 dpi. The external
+// test package installs it: pkg/pdf imports this package, so the internal
+// tests cannot import pkg/pdf themselves.
+var RenderPDF func(data []byte, n int) (image.Image, error)
 
 // Pixel colours of the draw tests, after WeasyPrint's: _ white, R red, B
 // blue, G lime, K black, y yellow, the dark shade of a colour in lower case.

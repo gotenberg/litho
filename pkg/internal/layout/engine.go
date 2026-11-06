@@ -27,6 +27,7 @@ const (
 	codeFontSize         = "font-size-clamped"
 	codeStructTooDeep    = "structure-too-deep"
 	codeTooManyFragments = "too-many-fragments"
+	codeTableTooLarge    = "table-too-large"
 )
 
 // eps absorbs the rounding of float sums when comparing positions.

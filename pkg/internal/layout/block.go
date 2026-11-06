@@ -82,10 +82,13 @@ type formatter interface {
 	intrinsic(e *engine, b *box) (float64, float64)
 }
 
-// formatterFor returns the formatter of the block container b. Every
-// display value lays out as flow for now: tables, rows and cells as
-// blocks.
-func formatterFor(*box) formatter {
+// formatterFor returns the formatter of the block container b: a table
+// wrapper lays out its captions and table (CSS 2.1, 17.4), every other
+// container, a cell or a caption included, lays out as flow.
+func formatterFor(b *box) formatter {
+	if b.tpart == partWrapper {
+		return tableFormatter{}
+	}
 	return flowFormatter{}
 }
 
@@ -238,7 +241,7 @@ func blockWidths(b *box, cbw float64, rtl bool, w float64, wSet bool) {
 	width, set := specWidth(b, st.Width, cbw)
 	if wSet && !set {
 		width, set = w, true
-		if b.kind != kindReplaced {
+		if b.kind != kindReplaced && b.tpart != partWrapper {
 			// A shrink-to-fit width stands in for auto: auto margins still
 			// count as 0 (10.3.5).
 			if st.Margin[css.Left].Kind == css.Auto {
@@ -431,7 +434,13 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 				e.warn(codeClipped, "a replaced box taller than the page area was clipped", b.y)
 			}
 		} else {
-			blockWidths(b, r-l, rtl, 0, false)
+			// A table's width comes from its columns, its auto margins
+			// centre it (CSS 2.1, 17.4).
+			w, wSet := 0.0, false
+			if b.tpart == partWrapper {
+				w, wSet = e.wrapperWidth(b, cb.w, r-l), true
+			}
+			blockWidths(b, r-l, rtl, w, wSet)
 			b.x = l + b.m[css.Left]
 			b.y = top
 			e.layoutOwnContext(b, cb)
@@ -583,9 +592,12 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) {
 			f.x, f.y = x+f.m[css.Left], y+f.m[css.Top]
 			return
 		}
-		if w, ok := specWidth(f, f.st.Width, cb.w); ok {
+		switch w, ok := specWidth(f, f.st.Width, cb.w); {
+		case f.tpart == partWrapper:
+			f.w = e.wrapperWidth(f, cb.w, cb.w)
+		case ok:
 			f.w = constrainWidth(f, w, cb.w)
-		} else {
+		default:
 			f.w = constrainWidth(f, e.shrinkToFit(f, cb.w), cb.w)
 		}
 		f.x, f.y = x+f.m[css.Left], y+f.m[css.Top]
@@ -623,9 +635,12 @@ func (e *engine) layoutAtomic(a *box, cbw float64) {
 		a.x, a.y = a.m[css.Left], a.m[css.Top]
 		return
 	}
-	if w, ok := specWidth(a, a.st.Width, cbw); ok {
+	switch w, ok := specWidth(a, a.st.Width, cbw); {
+	case a.tpart == partWrapper:
+		a.w = e.wrapperWidth(a, cbw, cbw)
+	case ok:
 		a.w = constrainWidth(a, w, cbw)
-	} else {
+	default:
 		a.w = constrainWidth(a, e.shrinkToFit(a, cbw), cbw)
 	}
 	a.x, a.y = a.m[css.Left], a.m[css.Top]
@@ -633,7 +648,12 @@ func (e *engine) layoutAtomic(a *box, cbw float64) {
 	e.layoutOwnContext(a, cb)
 	e.noPaginate--
 	a.hasBaseline = false
-	if a.st.Overflow == css.OverflowVisible {
+	if td := a.tdata; td != nil {
+		// An inline table's baseline is its first row's (CSS 2.1, 10.8.1).
+		if td.hasBaseline {
+			a.baseline, a.hasBaseline = td.table.y+td.baseline-a.y, true
+		}
+	} else if a.st.Overflow == css.OverflowVisible {
 		if y, ok := lastBaseline(a); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}

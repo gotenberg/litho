@@ -49,7 +49,11 @@ var fuzzTexts = []string{"a", "ab cd", "  x\ty\nz  ", "abcdefghij klmnop", "אב
 func (g *treeGen) style() *css.Style {
 	st := sty()
 	b := g.next()
-	st.Display = []css.Display{css.Block, css.Inline, css.InlineBlock, css.ListItem, css.Inline, css.Block, css.Table, css.TableCell, css.DisplayNone, css.InlineTable, css.TableColumn}[int(b)%11]
+	displays := []css.Display{
+		css.Block, css.Inline, css.InlineBlock, css.ListItem, css.Inline, css.Block, css.Table, css.TableCell, css.DisplayNone, css.InlineTable, css.TableColumn,
+		css.TableRow, css.TableRowGroup, css.TableHeaderGroup, css.TableFooterGroup, css.TableColumnGroup, css.TableCaption, css.TableCell, css.TableRow,
+	}
+	st.Display = displays[int(b)%len(displays)]
 	if b&0x80 != 0 {
 		st.Float = css.Float(g.next() % 3)
 	}
@@ -108,6 +112,16 @@ func (g *treeGen) style() *css.Style {
 		st.BoxSizing = css.BoxSizing(g.next() % 2)
 		st.MinWidth, st.MaxWidth = g.length(false), g.length(false)
 	}
+	if st.Display >= css.Table && st.Display <= css.TableCaption {
+		tf := g.next()
+		st.BorderCollapse = css.BorderCollapse(tf & 1)
+		st.CaptionSide = css.CaptionSide(tf >> 1 & 1)
+		st.EmptyCells = css.EmptyCells(tf >> 2 & 1)
+		st.TableLayout = css.TableLayout(tf >> 3 & 1)
+		if tf&16 != 0 {
+			st.BorderSpacing = [2]float64{px(float64(g.next() % 5)), px(float64(g.next() % 5))}
+		}
+	}
 	if flags&128 != 0 {
 		st.BreakBefore, st.BreakAfter = css.Break(g.next()%6), css.Break(g.next()%6)
 		st.BreakInside = css.BreakInside(g.next() % 3)
@@ -150,6 +164,12 @@ func (g *treeGen) node(depth int) *Node {
 			n.Children = append(n.Children, g.node(depth+1))
 		}
 		n.ListValue = int(int8(g.next()))
+		if sp := g.next(); sp != 0 {
+			n.ColSpan, n.RowSpan, n.Span = int(sp%4), int(sp>>2%4), int(sp>>4%4)
+			if sp == 0xff {
+				n.ColSpan, n.RowSpan, n.Span = 1<<30, -1, 1<<20
+			}
+		}
 	}
 	return n
 }
@@ -158,6 +178,7 @@ func FuzzLayout(f *testing.F) {
 	f.Add([]byte("seed: a few blocks of text"))
 	f.Add([]byte{0x40, 0x10, 0x03, 0xff, 0x00, 0x13, 0x07, 0x81, 0x02, 0x7f, 0x33, 0x05, 0x04, 0x01, 0x22, 0x10, 0x91})
 	f.Add([]byte{})
+	f.Add([]byte{0x06, 0x31, 0x04, 0x01, 0x10, 0x04, 0x0b, 0x01, 0x03, 0x00, 0x11, 0x0c, 0x01, 0x03, 0x04, 0x11, 0x07, 0x05, 0x02, 0x41, 0x11, 0x22, 0x03, 0x00, 0x31, 0x9a, 0x00, 0x11, 0x0d, 0x01, 0x05, 0x42})
 	fonts := ahem(f)
 	img := pic(color.NRGBA{R: 255, A: 255}, 3, 2)
 	loader := func(context.Context, string) (*Picture, error) { return img, nil }
