@@ -37,6 +37,7 @@ func FuzzParse(f *testing.F) {
 func FuzzParseDeclarations(f *testing.F) {
 	f.Add("color: red !important; margin: 1px 2px; --x: { a }; width: var(--x, 3px); background: url(a) 50% / 10px")
 	f.Add("font: bold 1")
+	f.Add("transform: rotate(1turn) translate(1px, 2%) skewY(3deg) matrix(1, 2, 3, 4, 5, 6); z-index: -3; transform-origin: left 1px 2px")
 	f.Add("border: 1px solid rgb(")
 	f.Fuzz(func(t *testing.T, src string) {
 		ParseDeclarations(src, ParseOptions{BaseURL: "https://e.com/"})
@@ -79,6 +80,7 @@ func FuzzCompute(f *testing.F) {
 	f.Add([]byte(cascadeDoc + "\x00" + cascadeCSS))
 	f.Add([]byte(selectorDoc + "\x00" + fuzzSheet))
 	f.Add([]byte("<p style='--a: var(--a); width: var(--a)'>x\x00p { color: var(--b, red) }"))
+	f.Add([]byte("<span id=a>x</span>\x00#a { position: absolute; z-index: 2; transform: scale(2) translateX(1em); transform-origin: 1px 2px 3px }"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		doc, sheet, _ := bytes.Cut(data, []byte{0})
 		root, err := html.Parse(bytes.NewReader(doc))

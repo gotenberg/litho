@@ -39,11 +39,23 @@
 // footer group, the copies painted as artifacts. A row taller than the page
 // area is clipped with a warning.
 //
+// # Positioning
+//
+// Relative positioning moves a box, inline boxes included, when it paints
+// (CSS 2.1, 9.4.3). An absolutely positioned box leaves the flow, which
+// records its static position; once the flow is laid out, the positioned
+// boxes are laid out in tree order in their containing blocks (CSS 2.1,
+// 10.1, 10.3.7, 10.3.8, 10.6.4 and 10.6.5), in the coordinates of the tall
+// column, so they fragment across the page cuts like the flow. A fixed box
+// is laid out once on the page area and painted on every page (CSS 2.1,
+// 9.6.1). Painting follows the stacking contexts of CSS 2.1, 9.9 and
+// Appendix E: z-index, opacity and 2D transforms (CSS Transforms 1) create
+// them; a transform paints its box through a group transform.
+//
 // # Not supported
 //
-// Absolute and fixed positioning lay out as static, with a warning. Flex,
-// grid, transforms, generated content, hyphenation and multi-column layout
-// are out of scope.
+// Flex, grid, 3D transforms, generated content, hyphenation and
+// multi-column layout are out of scope.
 //
 // # Concurrency
 //

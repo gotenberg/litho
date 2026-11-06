@@ -98,6 +98,9 @@ const (
 	pObjectFit
 	pObjectPosition
 	pContain
+	pZIndex
+	pTransform
+	pTransformOrigin
 	numProps
 )
 
@@ -576,6 +579,9 @@ func init() {
 				st.Opacity = o
 			}
 		}, copyFrom: field(func(s *Style) *float64 { return &s.Opacity })}},
+		{pZIndex, zIndexProp()},
+		{pTransform, transformProp()},
+		{pTransformOrigin, transformOriginProp()},
 		{pWidth, sizeProp("width", func(s *Style) *Dimension { return &s.Width }, kwSizing)},
 		{pHeight, sizeProp("height", func(s *Style) *Dimension { return &s.Height }, kwSizing)},
 		{pMinWidth, minSizeProp("min-width", func(s *Style) *Dimension { return &s.MinWidth })},

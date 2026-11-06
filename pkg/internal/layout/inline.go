@@ -27,6 +27,8 @@ type lineBox struct {
 // atomic inline. Positions are relative to the line box.
 type lineItem struct {
 	box *box
+	// start and end are the item's characters in its paragraph.
+	start, end int
 	// text is the glyph run, its Origin relative to the line box; nil for
 	// an atomic inline or a piece that draws no glyph.
 	text   *compose.Text
@@ -370,6 +372,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 		}
 		if p.p == nil || p.p.Len() == 0 {
 			s.placeFloats(p, 0, math.MaxInt, pendingTop(y, mc, first), mc, first)
+			s.staticRest(p, y, mc, first)
 			if p.forced {
 				top := y
 				if first {
@@ -446,6 +449,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			s.settle(l)
 			s.lines = append(s.lines, l)
 			s.recordAnchors(l)
+			s.staticLine(p, pos, end, l)
 			adv := l.h
 			if e.paginating() {
 				adv = min(adv, e.pageH)
@@ -456,6 +460,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			pos = end
 		}
 		s.placeFloats(p, n, math.MaxInt, pendingTop(y, mc, first), mc, first)
+		s.staticRest(p, y, mc, first)
 	}
 	b.lines = s.lines
 	return y
@@ -674,7 +679,7 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		info := p.infos[sp.Run]
 		s.leadEdges(p, sp.Start, opened, &x, widen)
 		it := &lineItem{
-			box: info.box, x: x, w: sp.Width, ascent: sp.Ascent, descent: sp.Descent,
+			box: info.box, start: sp.Start, end: sp.End, x: x, w: sp.Width, ascent: sp.Ascent, descent: sp.Descent,
 			ulPos: sp.UnderlinePosition, ulThick: sp.UnderlineThickness, stPos: sp.StrikeoutPosition, stThick: sp.StrikeoutThickness,
 		}
 		switch info.kind {

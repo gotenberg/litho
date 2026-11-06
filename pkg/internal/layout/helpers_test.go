@@ -233,6 +233,7 @@ func boxes(t testing.TB, root *Node, pb PageBox) *box {
 	e := newEngine(context.Background(), ahem(t), Options{Page: pb}, pb.Width-pb.Margin[css.Left]-pb.Margin[css.Right], pb.Height-pb.Margin[css.Top]-pb.Margin[css.Bottom])
 	rb := e.generate(root)
 	e.layoutRoot(rb)
+	e.layoutPositioned(rb)
 	if e.err != nil {
 		t.Fatalf("layout: %v", e.err)
 	}

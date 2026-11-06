@@ -121,6 +121,17 @@ func (g *treeGen) style() *css.Style {
 			st.OutlineOffset = px(float64(int8(g.next()) / 16))
 			st.ObjectFit = css.ObjectFit(g.next() % 5)
 		}
+		st.Bottom, st.Right = g.length(true), g.length(true)
+		if z := g.next(); z%3 != 0 {
+			st.ZIndex = css.ZIndex{Level: int(int8(z)) % 4}
+		}
+		if tf := g.next(); tf%4 != 0 {
+			st.Transform = []css.TransformFunc{{
+				Kind: css.TransformKind(tf % 5), X: g.length(false), Y: g.length(false),
+				V: [6]float64{float64(int8(g.next())) / 8, float64(int8(g.next())) / 8, 1, 1, 3, 4},
+			}}
+			st.TransformOrigin = [2]css.Dimension{g.length(false), g.length(false)}
+		}
 	}
 	if st.Display >= css.Table && st.Display <= css.TableCaption {
 		tf := g.next()

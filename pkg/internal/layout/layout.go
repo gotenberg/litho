@@ -47,6 +47,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	}
 	e.rootBox = rb
 	e.layoutRoot(rb)
+	e.layoutPositioned(rb)
 	if e.err != nil {
 		return nil, e.err
 	}
@@ -107,7 +108,7 @@ func (e *engine) pageCount(rb *box, d *ditem) int {
 						klo, khi = max(lo, y0), min(hi, y1)
 					}
 				}
-				if khi > klo {
+				if khi > klo && !k.fixed {
 					walk(k, klo, khi)
 				}
 				continue
@@ -156,20 +157,32 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 	pb := e.opts.Page
 	pages := make([]*compose.Page, n)
 	e.pageFrags = make([]int, n)
-	perPage := e.distribute(d, 0, n, used)
+	free := map[compose.Fragment]bool{}
+	perPage := e.distribute(d, 0, n, used, free)
 	for k := range n {
 		pg := &compose.Page{Width: pb.Width, Height: pb.Height}
 		e.paintCanvas(pg, canvas)
-		if frags := perPage[k]; len(frags) > 0 {
-			top := float64(k) * e.pageH
+		top := float64(k) * e.pageH
+		frags := perPage[k]
+		for i := 0; i < len(frags); {
+			// A run of fragments is clipped to the page area, the slice of
+			// the flow the page shows; a transformed box that lands on one
+			// page alone may paint past it, up to the page's edges.
+			j := i + 1
+			for j < len(frags) && free[frags[j]] == free[frags[i]] {
+				j++
+			}
+			clip := compose.Rect{X: -pb.Margin[css.Left], Y: top, Width: pb.Width, Height: e.pageH}
+			if free[frags[i]] {
+				clip = compose.Rect{X: -pb.Margin[css.Left], Y: top - pb.Margin[css.Top], Width: pb.Width, Height: pb.Height}
+			}
 			pg.Content = append(pg.Content, &compose.Group{
 				Transform: compose.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top},
-				Clip: &compose.Path{Ops: rectOps(compose.Rect{
-					X: -pb.Margin[css.Left], Y: top, Width: pb.Width, Height: e.pageH,
-				}), Fill: &compose.Fill{}},
-				Opacity: 1,
-				Content: frags,
+				Clip:      &compose.Path{Ops: rectOps(clip), Fill: &compose.Fill{}},
+				Opacity:   1,
+				Content:   frags[i:j],
 			})
+			i = j
 		}
 		pages[k] = pg
 	}
@@ -177,12 +190,17 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 }
 
 // distribute returns the fragments of the container it per page, groups
-// rebuilt on each page they reach, depth the groups already open.
-func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructElem]bool) map[int][]compose.Fragment {
+// rebuilt on each page they reach, depth the groups already open. free
+// collects the top-level groups of transformed boxes that land on one page.
+func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructElem]bool, free map[compose.Fragment]bool) map[int][]compose.Fragment {
 	out := map[int][]compose.Fragment{}
 	for _, k := range it.kids {
+		if k.group && k.fixed {
+			e.repeat(k, depth, n, used, out)
+			continue
+		}
 		if k.group {
-			sub := e.distribute(k, depth+1, n, used)
+			sub := e.distribute(k, depth+1, n, used, free)
 			for _, p := range slices.Sorted(mapKeys(sub)) {
 				frags := sub[p]
 				if depth+1 >= maxGroupDepth {
@@ -191,7 +209,11 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructEle
 					continue
 				}
 				if e.admit(p) {
-					out[p] = append(out[p], &compose.Group{Transform: compose.Identity, Clip: k.clip, Opacity: k.opacity, Content: frags})
+					g := &compose.Group{Transform: groupTransform(k), Clip: k.clip, Opacity: k.opacity, Content: frags}
+					if depth == 0 && k.transform != nil && len(sub) == 1 {
+						free[g] = true
+					}
+					out[p] = append(out[p], g)
 				}
 			}
 			continue
@@ -215,6 +237,99 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructEle
 		}
 	}
 	return out
+}
+
+// groupTransform returns the transform of the group it.
+func groupTransform(it *ditem) compose.Matrix {
+	if it.transform != nil {
+		return *it.transform
+	}
+	return compose.Identity
+}
+
+// repeat adds the content of the fixed group it, laid out on the first
+// page, to every one of the n pages of out, moved to each page's place in
+// the flow (CSS 2.1, 9.6.1). The copies after the first are artifacts.
+func (e *engine) repeat(it *ditem, depth, n int, used map[*compose.StructElem]bool, out map[int][]compose.Fragment) {
+	if depth+1 >= maxGroupDepth {
+		e.warnOnce(codeGroupDepth, fmt.Sprintf("opacity and clipping nested deeper than %d levels painted without the inner groups", maxGroupDepth), -1)
+		return
+	}
+	leaves := countLeaves(it)
+	for p := range n {
+		if e.pageFrags[p]+leaves > maxPageFragments {
+			e.warnOnce(codeTooManyFragments, fmt.Sprintf("a page of more than %d fragments was cut short", maxPageFragments), e.pageTop(p))
+			continue
+		}
+		e.pageFrags[p] += leaves
+		frags := e.flatten(it, depth+1, p > 0)
+		if p == 0 {
+			for _, f := range frags {
+				markTree(f, used)
+			}
+		}
+		out[p] = append(out[p], &compose.Group{
+			Transform: compose.Matrix{A: 1, D: 1, F: e.pageTop(p)},
+			Opacity:   1,
+			Content:   frags,
+		})
+	}
+}
+
+// countLeaves returns the fragments of the group it, its subgroups'
+// included.
+func countLeaves(it *ditem) int {
+	n := 0
+	for _, k := range it.kids {
+		if k.group {
+			n += countLeaves(k)
+		} else {
+			n++
+		}
+	}
+	return n
+}
+
+// flatten returns the fragments of the group it whatever their page, its
+// subgroups rebuilt; with artifact set, copies that hang from no structure
+// element.
+func (e *engine) flatten(it *ditem, depth int, artifact bool) []compose.Fragment {
+	var out []compose.Fragment
+	for _, k := range it.kids {
+		if k.group {
+			if depth+1 >= maxGroupDepth {
+				out = append(out, e.flatten(k, depth+1, artifact)...)
+				continue
+			}
+			out = append(out, &compose.Group{Transform: groupTransform(k), Clip: k.clip, Opacity: k.opacity, Content: e.flatten(k, depth+1, artifact)})
+			continue
+		}
+		f := k.frag
+		if artifact {
+			f = cloneFragment(f)
+			switch v := f.(type) {
+			case *compose.Text:
+				v.Parent = nil
+			case *compose.Image:
+				v.Parent = nil
+			case *compose.Path:
+				v.Parent = nil
+			}
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// markTree records the structure elements the fragments of f hang from.
+func markTree(f compose.Fragment, used map[*compose.StructElem]bool) {
+	if g, ok := f.(*compose.Group); ok {
+		for _, k := range g.Content {
+			markTree(k, used)
+		}
+		return
+	}
+	markUsed(f, used)
 }
 
 // admit counts one more fragment on page p and reports whether it fits

@@ -683,6 +683,10 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 			mc.floatPlaced(k, bc, e.layoutFloat(k, cb, bc, top), top)
 			continue
 		}
+		if k.abs {
+			staticBlock(k, cb, cursor+mc.strut.sum())
+			continue
+		}
 		snap := take(cursor)
 		mode := breakNone
 		if prev != nil && (isForced(prev.st.BreakAfter) || isForced(k.st.BreakBefore)) {
@@ -740,7 +744,7 @@ func firstContent(b *box) float64 {
 		return b.lines[0].y
 	}
 	for _, k := range b.kids {
-		if !k.inline && k.float == css.FloatNone && k.laidOut {
+		if !k.inline && k.float == css.FloatNone && !k.abs && k.laidOut {
 			return firstContent(k)
 		}
 	}
@@ -847,7 +851,7 @@ func lastBaseline(b *box) (float64, bool) {
 	}
 	for i := len(b.kids) - 1; i >= 0; i-- {
 		k := b.kids[i]
-		if k.inline || k.float != css.FloatNone || k.kind != kindBlock || !k.laidOut {
+		if k.inline || k.float != css.FloatNone || k.abs || k.kind != kindBlock || !k.laidOut {
 			continue
 		}
 		if y, ok := lastBaseline(k); ok {
@@ -865,7 +869,7 @@ func firstBaseline(b *box) (float64, bool) {
 		return l.y + l.baseline, true
 	}
 	for _, k := range b.kids {
-		if k.inline || k.float != css.FloatNone || k.kind != kindBlock || !k.laidOut {
+		if k.inline || k.float != css.FloatNone || k.abs || k.kind != kindBlock || !k.laidOut {
 			continue
 		}
 		if y, ok := firstBaseline(k); ok {

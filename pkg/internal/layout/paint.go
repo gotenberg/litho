@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"cmp"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -18,10 +19,16 @@ type ditem struct {
 	y0, y1 float64
 	page   int
 	group  bool
-	// opacity and clip are the group's; clip is in flow coordinates.
-	opacity float64
-	clip    *compose.Path
-	kids    []*ditem
+	// opacity, clip and transform are the group's, in flow coordinates;
+	// transform is nil for none.
+	opacity   float64
+	clip      *compose.Path
+	transform *compose.Matrix
+	// fixed reports the group of a fixed box: its content is in the
+	// coordinates of the first page and paints on every page (CSS 2.1,
+	// 9.6.1).
+	fixed bool
+	kids  []*ditem
 }
 
 // openClip is a clip group open in the painter, for an overflow: hidden
@@ -118,7 +125,7 @@ func viewportBox(root *box) *box {
 		return root
 	}
 	for _, k := range root.kids {
-		if k.anon || k.node == nil || k.inline || k.float != css.FloatNone {
+		if k.anon || k.node == nil || k.inline || k.float != css.FloatNone || k.abs {
 			continue
 		}
 		if k.st.Overflow != css.OverflowVisible {
@@ -156,13 +163,23 @@ func (p *painter) chain(b *box, content bool) []*box {
 	start := b
 	if !content && b != nil {
 		start = b.parent
+		if b.abs {
+			// An overflow clip applies to the descendants whose containing
+			// block is the box or lies inside it (CSS 2.1, 11.1.1).
+			start = b.cbBox
+		}
 	}
-	for a := start; a != nil; a = a.parent {
+	for a := start; a != nil; {
 		if p.clips(a) {
 			out = append(out, a)
 		}
 		if a == root {
 			break
+		}
+		if a.abs {
+			a = a.cbBox
+		} else {
+			a = a.parent
 		}
 	}
 	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
@@ -232,7 +249,7 @@ func (p *painter) borderRect(b *box) compose.Rect {
 
 // offset returns the relative positioning offset of b (CSS 2.1, 9.4.3).
 func offset(b *box) (float64, float64) {
-	if b.st.Position != css.Relative {
+	if b.st.Position != css.Relative || b.kind == kindText || b.kind == kindBreak || b.tpart.internal() {
 		return 0, 0
 	}
 	cbw, cbh := 0.0, 0.0
@@ -255,9 +272,37 @@ func offset(b *box) (float64, float64) {
 	return dx, dy
 }
 
+// ancestorOffset returns the relative positioning offsets b's position
+// takes from its ancestors: those of its containing block chain, none for a
+// fixed box on the page.
+func ancestorOffset(b *box) (float64, float64) {
+	dx, dy := 0.0, 0.0
+	a := b.parent
+	if b.abs {
+		a = b.cbBox
+	}
+	for a != nil {
+		ox, oy := offset(a)
+		dx += ox
+		dy += oy
+		if a.abs {
+			a = a.cbBox
+		} else {
+			a = a.parent
+		}
+	}
+	return dx, dy
+}
+
 // context paints b and its descendants as one unit: a stacking context, a
-// float or an atomic inline (CSS 2.1, Appendix E).
-func (p *painter) context(b *box) {
+// float or an atomic inline (CSS 2.1, Appendix E), its positioned
+// descendants in its own layers.
+func (p *painter) context(b *box) { p.unit(b, true) }
+
+// unit paints b and its descendants. own reports a box that paints the
+// positioned descendants it holds: a positioned box with z-index auto does
+// not, its stacking context lifts them (CSS 2.1, 9.9.1).
+func (p *painter) unit(b *box, own bool) {
 	if p.e.err != nil {
 		return
 	}
@@ -265,32 +310,52 @@ func (p *painter) context(b *box) {
 	p.dx += dx
 	p.dy += dy
 	defer func() { p.dx -= dx; p.dy -= dy }()
-	pushed := false
+	pushed := 0
+	push := func(g *ditem) {
+		c := p.sync(p.chain(b, false))
+		if pushed > 0 {
+			c = p.cur().container
+		}
+		c.kids = append(c.kids, g)
+		p.frames = append(p.frames, &frame{container: g, root: b})
+		pushed++
+	}
+	defer func() { p.frames = p.frames[:len(p.frames)-pushed] }()
+	if b.fixed {
+		savedMono := p.mono
+		p.mono = -1
+		defer func() { p.mono = savedMono }()
+		push(&ditem{group: true, opacity: 1, fixed: true})
+	}
+	m, has, visible := transformOf(b, p.borderRect(b))
+	if !visible {
+		return
+	}
+	op := 1.0
 	if b.parent != nil && b.st.Opacity < 1 {
-		op := min(max(clamp(b.st.Opacity), 0), 1)
+		op = min(max(clamp(b.st.Opacity), 0), 1)
 		if op <= 0 {
 			return
 		}
-		c := p.sync(p.chain(b, false))
-		g := &ditem{group: true, opacity: op}
-		c.kids = append(c.kids, g)
-		p.frames = append(p.frames, &frame{container: g, root: b})
-		pushed = true
 	}
-	if p.clips(b) && !pushed {
+	if op < 1 || has {
+		g := &ditem{group: true, opacity: op}
+		if has {
+			g.transform = &m
+		}
+		push(g)
+	}
+	if p.clips(b) && pushed == 0 {
 		// The box's own clip is relative to the frame of its context: a
 		// frame of its own keeps the chains short.
-		c := p.sync(p.chain(b, false))
-		g := &ditem{group: true, opacity: 1}
-		c.kids = append(c.kids, g)
-		p.frames = append(p.frames, &frame{container: g, root: b})
-		pushed = true
+		push(&ditem{group: true, opacity: 1})
 	}
-	if pushed {
-		defer func() { p.frames = p.frames[:len(p.frames)-1] }()
+	var blocks, floats, layers []*box
+	p.collect(b, &blocks, &floats, &layers)
+	var neg, zero, pos []*box
+	if own {
+		neg, zero, pos = p.stack(layers)
 	}
-	var blocks, floats, contexts []*box
-	p.collect(b, &blocks, &floats, &contexts)
 	if b == p.canvas || b.parent == nil {
 		// The root's background, or the one it takes from its first
 		// child, paints the canvas instead (CSS 2.1, 14.2).
@@ -299,6 +364,9 @@ func (p *painter) context(b *box) {
 		p.decorations(b)
 	}
 	p.linkBox(b)
+	for _, c := range neg {
+		p.lifted(c)
+	}
 	for _, k := range blocks {
 		p.linkBox(k)
 		if k == p.canvas {
@@ -314,8 +382,11 @@ func (p *painter) context(b *box) {
 	for _, k := range blocks {
 		p.content(k)
 	}
-	for _, c := range contexts {
-		p.context(c)
+	for _, c := range zero {
+		p.lifted(c)
+	}
+	for _, c := range pos {
+		p.lifted(c)
 	}
 	// Outlines paint over everything else of the context (CSS 2.1,
 	// Appendix E, step 10).
@@ -325,27 +396,67 @@ func (p *painter) context(b *box) {
 	}
 }
 
+// stack sorts the layered descendants of a stacking context into its
+// negative, zero and positive layers (CSS 2.1, Appendix E, steps 3, 8 and
+// 9): a positioned box with z-index auto joins the zero layer and its own
+// layered descendants join the context's.
+func (p *painter) stack(layers []*box) (neg, zero, pos []*box) {
+	var walk func([]*box, int)
+	walk = func(ls []*box, depth int) {
+		for _, c := range ls {
+			switch z := c.zLevel(); {
+			case c.isStackingContext() && z < 0:
+				neg = append(neg, c)
+			case c.isStackingContext() && z > 0:
+				pos = append(pos, c)
+			default:
+				zero = append(zero, c)
+			}
+			if c.isStackingContext() || depth >= maxTreeDepth {
+				continue
+			}
+			var blocks, floats, sub []*box
+			p.collect(c, &blocks, &floats, &sub)
+			walk(sub, depth+1)
+		}
+	}
+	walk(layers, 0)
+	slices.SortStableFunc(neg, func(a, b *box) int { return cmp.Compare(a.zLevel(), b.zLevel()) })
+	slices.SortStableFunc(pos, func(a, b *box) int { return cmp.Compare(a.zLevel(), b.zLevel()) })
+	return neg, zero, pos
+}
+
+// lifted paints the layered box c from its stacking context, with the
+// relative offsets its ancestors give it.
+func (p *painter) lifted(c *box) {
+	sdx, sdy := p.dx, p.dy
+	p.dx, p.dy = ancestorOffset(c)
+	p.unit(c, c.isStackingContext())
+	p.dx, p.dy = sdx, sdy
+}
+
 // collect lists, in tree order, the in-flow block-level descendants of b,
-// the floats and the stacking contexts among them, without entering
-// floats, atomic inlines or stacking contexts, which paint as units.
-func (p *painter) collect(b *box, blocks, floats, contexts *[]*box) {
+// the floats and the layered boxes among them, without entering floats,
+// atomic inlines or layered boxes, which paint as units.
+func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 	for _, k := range b.kids {
 		switch {
 		case !k.laidOut && k.kind != kindText && k.kind != kindInline && k.kind != kindBreak:
+		case k.kind == kindInline:
+			p.collect(k, blocks, floats, layers)
+		case k.inline:
+			// An atomic inline paints with its line.
+		case k.layered():
+			*layers = append(*layers, k)
 		case k.float != css.FloatNone:
 			*floats = append(*floats, k)
-		case k.kind == kindInline:
-			p.collect(k, blocks, floats, contexts)
-		case k.inline:
-		case k.isStackingContext():
-			*contexts = append(*contexts, k)
 		case k.tpart == partTable:
 			// A table paints its rows and cells itself (CSS 2.1, 17.5.1).
 			*blocks = append(*blocks, k)
 		default:
 			*blocks = append(*blocks, k)
 			if k.kind == kindBlock {
-				p.collect(k, blocks, floats, contexts)
+				p.collect(k, blocks, floats, layers)
 			}
 		}
 	}
@@ -534,6 +645,9 @@ func (p *painter) line(l *lineBox) {
 		if it.box == nil {
 			continue
 		}
+		ox, oy := inlineOffset(it.box.parent)
+		p.dx += ox
+		p.dy += oy
 		if it.atomic != nil {
 			saved := p.mono
 			p.mono = page
@@ -542,6 +656,8 @@ func (p *painter) line(l *lineBox) {
 		} else if it.text != nil && !it.box.hidden {
 			p.text(it, l, page)
 		}
+		p.dx -= ox
+		p.dy -= oy
 		if lk := it.box.link; lk != nil && lk.node != nil && isInlineLink(lk, it.box) {
 			r := compose.Rect{X: l.x + it.x + p.dx, Y: l.y + it.baseline - it.ascent + p.dy, Width: it.w, Height: it.ascent + it.descent}
 			if it.atomic != nil {
@@ -573,7 +689,8 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 	if f.box.hidden {
 		return
 	}
-	r := compose.Rect{X: l.x + f.x0 + p.dx, Y: l.y + f.top + p.dy, Width: f.x1 - f.x0, Height: f.bottom - f.top}
+	ox, oy := inlineOffset(f.box)
+	r := compose.Rect{X: l.x + f.x0 + p.dx + ox, Y: l.y + f.top + p.dy + oy, Width: f.x1 - f.x0, Height: f.bottom - f.top}
 	if r.Width <= 0 && r.Height <= 0 {
 		return
 	}
@@ -590,6 +707,19 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 		radii[css.TopRight], radii[css.BottomRight] = [2]float64{}, [2]float64{}
 	}
 	p.inlineFrag(f.box, r, radii, bd, pd, sides, page)
+}
+
+// inlineOffset returns the relative positioning offsets of the inline box
+// b and of the inline boxes it sits in (CSS 2.1, 9.4.3), which move its
+// fragments and its content.
+func inlineOffset(b *box) (float64, float64) {
+	dx, dy := 0.0, 0.0
+	for a := b; a != nil && a.kind == kindInline; a = a.parent {
+		ox, oy := offset(a)
+		dx += ox
+		dy += oy
+	}
+	return dx, dy
 }
 
 // isInlineLink reports whether the link lk, which b sits in, starts at an

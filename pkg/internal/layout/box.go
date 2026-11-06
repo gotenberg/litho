@@ -49,6 +49,19 @@ type box struct {
 	inline bool
 	// float is the float side, FloatNone for a box in flow.
 	float css.Float
+	// abs reports an absolutely or fixed positioned box, out of flow (CSS
+	// 2.1, 9.6). sx and sy are its static position (CSS 2.1, 10.3.7 and
+	// 10.6.4) in flow coordinates, the start edge of its hypothetical box,
+	// srtl whether that start is the right edge, staticSet whether the
+	// flow reached it. cbBox is its containing block's box, nil for the
+	// initial one or the page; fixed reports a box positioned on the page,
+	// which repeats on every page (CSS 2.1, 9.6.1).
+	abs       bool
+	sx, sy    float64
+	srtl      bool
+	staticSet bool
+	cbBox     *box
+	fixed     bool
 	// anon reports an anonymous block box (CSS 2.1, 9.2.1.1).
 	anon bool
 	// inlineKids reports a block container whose children are all
@@ -151,20 +164,51 @@ func (b *box) marginW() float64 { return b.borderW() + b.m[css.Left] + b.m[css.R
 func (b *box) marginH() float64 { return b.borderH() + b.m[css.Top] + b.m[css.Bottom] }
 
 // establishesBFC reports whether a block-level box establishes a new block
-// formatting context (CSS 2.1, 9.4.1): floats, inline blocks, boxes with
+// formatting context (CSS 2.1, 9.4.1): floats, absolutely positioned
+// boxes, inline blocks, boxes with
 // overflow other than visible, and the root; and the table wrapper boxes,
 // captions and cells (CSS 2.1, 17.4).
 func (b *box) establishesBFC() bool {
-	return b.parent == nil || b.float != css.FloatNone || (b.inline && b.kind == kindBlock) ||
+	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
 		b.st.Overflow != css.OverflowVisible || b.kind == kindReplaced ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell
 }
 
-// isStackingContext reports whether the box paints as a unit above the
-// in-flow content of its parent: an opacity below 1 (CSS Color 3, 3.2) or
-// relative positioning (CSS 2.1, Appendix E, step 8).
+// layered reports whether the box paints in the positioned layers of its
+// stacking context rather than with the in-flow content: a positioned
+// box, or one that creates a stacking context (CSS 2.1, 9.9.1 and Appendix
+// E, steps 2, 8 and 9).
+func (b *box) layered() bool {
+	if b.parent == nil || b.tpart.internal() || b.kind == kindText || b.kind == kindInline || b.kind == kindBreak {
+		return false
+	}
+	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed()
+}
+
+// isStackingContext reports whether the box creates a stacking context: a
+// positioned box with an integer z-index (CSS 2.1, 9.9.1), a fixed box
+// (CSS Position 3, 3.4), an opacity below 1 (CSS Color 3, 3.2) or a
+// transform (CSS Transforms 1, 6).
 func (b *box) isStackingContext() bool {
-	return b.parent != nil && !b.tpart.internal() && (b.st.Opacity < 1 || b.st.Position == css.Relative) && b.kind != kindText && b.kind != kindInline
+	if !b.layered() {
+		return false
+	}
+	return b.st.Position != css.Static && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed()
+}
+
+// zLevel returns the stack level of a stacking context: its z-index, 0
+// for one that a positioned z-index does not create.
+func (b *box) zLevel() int {
+	if b.st.Position == css.Static || b.st.ZIndex.Auto {
+		return 0
+	}
+	return b.st.ZIndex.Level
+}
+
+// transformed reports a box its transform applies to: a block-level or
+// atomic box, not a non-replaced inline box (CSS Transforms 1, 3).
+func (b *box) transformed() bool {
+	return len(b.st.Transform) > 0 && (b.kind == kindBlock || b.kind == kindReplaced) && !b.tpart.internal()
 }
 
 // shift moves the box and everything laid out inside it by (dx, dy).
@@ -174,6 +218,8 @@ func (b *box) shift(dx, dy float64) {
 	}
 	b.x += dx
 	b.y += dy
+	b.sx += dx
+	b.sy += dy
 	b.anchorX += dx
 	b.anchorY += dy
 	for _, l := range b.lines {
@@ -219,7 +265,7 @@ func (b *box) shiftInline(dx, dy float64) {
 		switch {
 		case k.kind == kindInline:
 			k.shiftInline(dx, dy)
-		case k.float != css.FloatNone:
+		case k.float != css.FloatNone || k.abs:
 			k.shift(dx, dy)
 		case k.kind == kindText || k.kind == kindBreak:
 			k.anchorX += dx

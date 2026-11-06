@@ -252,6 +252,8 @@ func tableStyle(st *css.Style) *css.Style {
 	t := *st
 	t.Margin = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
 	t.Position = css.Static
+	t.ZIndex = css.ZIndex{Auto: true}
+	t.Transform = nil
 	t.Float = css.FloatNone
 	t.Clear = css.ClearNone
 	t.Opacity = 1

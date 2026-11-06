@@ -460,6 +460,7 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, n *h
 // not float, and a floated, absolutely positioned or root box is
 // blockified.
 func fixupDisplay(st *Style, isRoot bool) {
+	st.OuterInline = false
 	if st.Display == DisplayNone {
 		return
 	}
@@ -471,7 +472,11 @@ func fixupDisplay(st *Style, isRoot bool) {
 	switch st.Display { //nolint:exhaustive // the other display values are already block-level
 	case InlineTable:
 		st.Display = Table
-	case Inline, InlineBlock, TableRowGroup, TableColumn, TableColumnGroup,
+		st.OuterInline = true
+	case Inline, InlineBlock:
+		st.Display = Block
+		st.OuterInline = true
+	case TableRowGroup, TableColumn, TableColumnGroup,
 		TableHeaderGroup, TableFooterGroup, TableRow, TableCell, TableCaption:
 		st.Display = Block
 	}

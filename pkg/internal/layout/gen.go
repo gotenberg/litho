@@ -58,9 +58,6 @@ func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 	if n != nil && n.ID != "" {
 		b.id = n.ID
 	}
-	if st.Position == css.Absolute || st.Position == css.Fixed {
-		e.warnOnce(codeUnsupported, "absolute and fixed positioning laid out as static", -1)
-	}
 	return b
 }
 
@@ -151,6 +148,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		}
 		b := e.newBox(n, st, kindReplaced, ctx)
 		e.enter(n, b, ctx)
+		b.abs = isAbs(st)
 		b.float = st.Float
 		b.inline = b.float == css.FloatNone && isInlineLevel(st.Display)
 		if p := n.Picture; p != nil && p.Source != nil && p.Width > 0 && p.Height > 0 && !math.IsInf(p.Width, 0) && !math.IsInf(p.Height, 0) {
@@ -177,7 +175,9 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	case float == css.FloatNone && st.Display == css.Inline:
 		return e.genInline(n, st, ctx, ordinal)
 	case st.Display == css.Table || st.Display == css.InlineTable:
-		return []*box{e.genTable(n, st, ctx, float)}
+		w := e.genTable(n, st, ctx, float)
+		w.abs = isAbs(st)
+		return []*box{w}
 	case float == css.FloatNone && isTablePart(st.Display):
 		return []*box{e.genPart(n, st, ctx)}
 	case float == css.FloatNone && st.Display == css.InlineBlock:
@@ -190,8 +190,9 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	}
 	b := e.newBox(n, st, kindBlock, ctx)
 	b.float = float
+	b.abs = isAbs(st)
 	cctx := e.enter(n, b, ctx)
-	if float != css.FloatNone {
+	if float != css.FloatNone || b.abs {
 		cctx.decos = ownDecos(b.st)
 	}
 	if st.Display == css.ListItem {
@@ -219,7 +220,7 @@ func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*
 		kids = append(kids, e.genNode(c, ib, cctx, ordinal)...)
 	}
 	for _, k := range e.wrapOrphans(ib, kids, true) {
-		if k.inline || k.float != css.FloatNone {
+		if k.inline || k.float != css.FloatNone || k.abs {
 			k.parent = cur
 			cur.kids = append(cur.kids, k)
 			continue
@@ -246,6 +247,12 @@ func ownDecos(st *css.Style) []deco {
 	return []deco{{lines: st.TextDecoration, color: st.Color}}
 }
 
+// isAbs reports an absolutely positioned style: absolute or fixed, out of
+// flow (CSS 2.1, 9.6).
+func isAbs(st *css.Style) bool {
+	return st.Position == css.Absolute || st.Position == css.Fixed
+}
+
 // isInlineLevel reports whether a display value is inline-level.
 func isInlineLevel(d css.Display) bool {
 	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable
@@ -267,13 +274,13 @@ func isColumn(d css.Display) bool {
 // normalize wraps every run of inline-level children of the block
 // container b in an anonymous block when b also holds in-flow block-level
 // children (CSS 2.1, 9.2.1.1), and marks b as establishing an inline
-// formatting context otherwise. A run of floats alone stays in the block
-// flow.
+// formatting context otherwise. Floats and absolutely positioned boxes
+// join the run they sit in; a run of them alone stays in the block flow.
 func (e *engine) normalize(b *box) {
 	hasBlock, hasInline := false, false
 	for _, k := range b.kids {
 		switch {
-		case k.float != css.FloatNone:
+		case k.float != css.FloatNone || k.abs:
 		case k.inline:
 			hasInline = true
 		default:
@@ -290,14 +297,14 @@ func (e *engine) normalize(b *box) {
 	var kids []*box
 	for i := 0; i < len(b.kids); {
 		k := b.kids[i]
-		if !k.inline && k.float == css.FloatNone {
+		if !k.inline && k.float == css.FloatNone && !k.abs {
 			kids = append(kids, k)
 			i++
 			continue
 		}
 		j := i
 		inl := false
-		for j < len(b.kids) && (b.kids[j].inline || b.kids[j].float != css.FloatNone) {
+		for j < len(b.kids) && (b.kids[j].inline || b.kids[j].float != css.FloatNone || b.kids[j].abs) {
 			inl = inl || b.kids[j].inline
 			j++
 		}
@@ -409,6 +416,8 @@ func markerStyle(item *css.Style) *css.Style {
 	st.Display = css.Inline
 	st.Float = css.FloatNone
 	st.Position = css.Static
+	st.ZIndex = css.ZIndex{Auto: true}
+	st.Transform = nil
 	st.Margin = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
 	st.Padding = st.Margin
 	st.Border = [4]css.Border{}

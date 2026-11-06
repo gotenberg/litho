@@ -53,6 +53,9 @@ type ifcPara struct {
 	// order, closes the ones closing after one, innermost first, and
 	// floats the floats anchored before one.
 	opens, closes, floats []posBox
+	// abs lists the absolutely positioned boxes anchored before a
+	// character, for their static position.
+	abs []posBox
 	// forced reports a paragraph ended by a forced break, which makes a
 	// line even when empty.
 	forced bool
@@ -138,6 +141,8 @@ func (c *collector) walk(k *box) {
 	switch {
 	case k.float != css.FloatNone:
 		c.cur.floats = append(c.cur.floats, posBox{pos: c.cur.n, box: k})
+	case k.abs:
+		c.cur.abs = append(c.cur.abs, posBox{pos: c.cur.n, box: k})
 	case k.kind == kindText:
 		c.text(k)
 	case k.kind == kindBreak:
@@ -287,7 +292,7 @@ func (c *collector) trimSpace() {
 	}
 	r.Text = strings.TrimSuffix(r.Text, " ")
 	p.n--
-	for _, list := range []*[]posBox{&p.opens, &p.closes, &p.floats} {
+	for _, list := range []*[]posBox{&p.opens, &p.closes, &p.floats, &p.abs} {
 		for i := range *list {
 			(*list)[i].pos = min((*list)[i].pos, p.n)
 		}

@@ -43,8 +43,8 @@ func TestGenerate_UnsupportedWarns(t *testing.T) {
 	for _, w := range res.Warnings {
 		codes[w.Code]++
 	}
-	if codes[codeUnsupported] != 2 {
-		t.Errorf("warnings %+v, want positioning and small-caps reported once each", res.Warnings)
+	if codes[codeUnsupported] != 1 {
+		t.Errorf("warnings %+v, want small-caps reported once, positioning laid out", res.Warnings)
 	}
 }
 

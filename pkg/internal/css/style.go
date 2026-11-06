@@ -77,8 +77,8 @@ const (
 	DisplayNone
 )
 
-// Position is the position property (CSS 2.1, 9.3.1). Absolute and Fixed
-// are parsed now and laid out in a later wave.
+// Position is the position property (CSS 2.1, 9.3.1). Sticky computes to
+// Relative: paged output never scrolls.
 type Position uint8
 
 // The position values.
@@ -88,6 +88,44 @@ const (
 	Absolute
 	Fixed
 )
+
+// ZIndex is the z-index property (CSS 2.1, 9.9.1): auto, or the integer
+// stack level of a positioned box's stacking context.
+type ZIndex struct {
+	// Auto reports z-index: auto, which creates no stacking context.
+	Auto bool
+	// Level is the stack level when Auto is false.
+	Level int
+}
+
+// TransformKind says what a [TransformFunc] is (CSS Transforms 1, 13).
+type TransformKind uint8
+
+// The 2D transform functions.
+const (
+	// TransformMatrix is matrix(a, b, c, d, e, f): V holds a to f, e and f
+	// in points.
+	TransformMatrix TransformKind = iota
+	// TransformTranslate is translate(X, Y), translateX and translateY.
+	TransformTranslate
+	// TransformScale is scale(V[0], V[1]), scaleX and scaleY.
+	TransformScale
+	// TransformRotate is rotate(V[0]), V[0] in radians, clockwise on the
+	// page.
+	TransformRotate
+	// TransformSkew is skew(V[0], V[1]), skewX and skewY, in radians.
+	TransformSkew
+)
+
+// TransformFunc is one function of a transform list (CSS Transforms 1, 13).
+type TransformFunc struct {
+	Kind TransformKind
+	// X and Y are the offsets of a translation, Points or Percent of the
+	// border box's width and height (CSS Transforms 1, 13.1).
+	X, Y Dimension
+	// V holds the numbers of the other functions.
+	V [6]float64
+}
 
 // Float is the float property (CSS 2.1, 9.5.1).
 type Float uint8
@@ -517,6 +555,18 @@ type Style struct {
 	BoxSizing  BoxSizing
 	// Opacity runs from 0 to 1 (CSS Color 3, 3.2).
 	Opacity float64
+	// ZIndex is the stack level of a positioned box (CSS 2.1, 9.9.1).
+	ZIndex ZIndex
+	// Transform is the 2D transform list, nil for none (CSS Transforms 1,
+	// 5); TransformOrigin holds its horizontal then vertical origin, each
+	// Points or Percent of the border box (CSS Transforms 1, 6).
+	Transform       []TransformFunc
+	TransformOrigin [2]Dimension
+	// OuterInline reports a box whose display was inline-level before CSS
+	// 2.1, 9.7 blockified it: an absolutely positioned box's static
+	// position is then where its inline box would have sat on the line
+	// (CSS Position 3, 4.1).
+	OuterInline bool
 
 	// Box dimensions. Width and Height take Auto, Points or Percent;
 	// MinWidth and MinHeight take Points or Percent; MaxWidth and MaxHeight
@@ -665,6 +715,8 @@ const (
 func Initial() *Style {
 	return &Style{
 		Opacity:            1,
+		ZIndex:             ZIndex{Auto: true},
+		TransformOrigin:    [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
 		MinWidth:           Pts(0),
 		MinHeight:          Pts(0),
 		MaxWidth:           Dimension{Kind: None},
