@@ -1,8 +1,8 @@
 /*
  * litho's user agent stylesheet for HTML, after the HTML Standard,
  * section 15 (Rendering): the display, margins and fonts of the elements
- * that matter on paper. Interactive widgets, ruby and generated content
- * are left out.
+ * that matter on paper, and the quotes of q. Interactive widgets and
+ * ruby are left out.
  */
 
 /* 15.3.1 Hidden elements */
@@ -129,6 +129,12 @@ sub {
 }
 sup {
   vertical-align: super;
+}
+q::before {
+  content: open-quote;
+}
+q::after {
+  content: close-quote;
 }
 sub,
 sup {
@@ -322,6 +328,12 @@ menu,
 ol,
 ul {
   padding-inline-start: 40px;
+}
+dir,
+menu,
+ol,
+ul {
+  counter-reset: list-item;
 }
 ol {
   list-style-type: decimal;

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("content: \"a\" counter(x, lower-greek) counters(y, \"-\", disc) no-close-quote attr(data-x string, \"z\") / \"alt\"; counter-reset: reversed(list-item) a -1; quotes: \"<\" \">\"; list-style-type: \"->\"")

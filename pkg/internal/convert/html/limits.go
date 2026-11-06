@@ -80,4 +80,18 @@ const (
 	// CodeTooDeep flags content nested past the depth the converter
 	// follows.
 	CodeTooDeep = "content-too-deep"
+	// CodeGeneratedLimit flags generated content or counters cut short by
+	// a cap.
+	CodeGeneratedLimit = "generated-content-limit"
 )
+
+// maxCounters caps the counter instances alive at once: 16,384. Anti-DoS
+// guard, not spec-mandated: a counter costs a map entry, and a document
+// whose siblings each reset new names would otherwise grow them with its
+// element count. A document nests a few counters a few levels deep.
+const maxCounters = 1 << 14
+
+// maxGeneratedBytes caps the text one pseudo-element generates: 64 KiB.
+// Anti-DoS guard, not spec-mandated: counters() repeats its separator once
+// a nesting level, and a label is a few words.
+const maxGeneratedBytes = 64 << 10

@@ -45,14 +45,13 @@ func rank(o Origin, important bool) int {
 type Resolver struct {
 	media Media
 	rules []resolvedRule
-	// The rules' selectors are indexed by the key of their rightmost
-	// compound, the way browsers bucket them, so an element is only
-	// tested against selectors that can match it.
-	byID, byClass, byTag map[string][]selRef
-	universal            []selRef
-	pages                []resolvedPage
-	faces                []FontFace
-	warns                []Warning
+	// elems indexes the selectors that target elements, pseudos those
+	// that target each generated pseudo-element.
+	elems   selIndex
+	pseudos [numPseudos]selIndex
+	pages   []resolvedPage
+	faces   []FontFace
+	warns   []Warning
 }
 
 type resolvedRule struct {
@@ -75,10 +74,38 @@ type selRef struct {
 	anc  []uint64
 }
 
+// selIndex holds selectors by the key of their rightmost compound, the
+// way browsers bucket them, so an element is only tested against
+// selectors that can match it.
+type selIndex struct {
+	byID, byClass, byTag map[string][]selRef
+	universal            []selRef
+}
+
+// PseudoElement names a pseudo-element whose style [Computed.Pseudo]
+// returns (CSS Pseudo 4).
+type PseudoElement uint8
+
+// The pseudo-elements litho generates boxes for.
+const (
+	// PseudoBefore is ::before, the first child of its element (CSS
+	// Pseudo 4, 4.1).
+	PseudoBefore PseudoElement = iota
+	// PseudoAfter is ::after, its last child.
+	PseudoAfter
+	// PseudoMarker is ::marker, a list item's marker (CSS Lists 3, 3.1).
+	PseudoMarker
+	numPseudos
+)
+
+// pseudoNames maps the selector name of each generated pseudo-element to
+// it.
+var pseudoNames = map[string]PseudoElement{"before": PseudoBefore, "after": PseudoAfter, "marker": PseudoMarker}
+
 // NewResolver indexes the rules of sheets, in order, whose media
 // conditions match media. A nil Sheet is skipped.
 func NewResolver(media Media, sheets []Sheet) *Resolver {
-	r := &Resolver{media: media, byID: map[string][]selRef{}, byClass: map[string][]selRef{}, byTag: map[string][]selRef{}}
+	r := &Resolver{media: media}
 	cache := map[*mediaCond]bool{}
 	var w warnings
 	order := 0
@@ -98,10 +125,12 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 			idx := len(r.rules)
 			r.rules = append(r.rules, resolvedRule{rule: sr, origin: sh.Origin, order: order})
 			for _, s := range sr.selectors {
-				if s.pseudoElement != "" {
-					continue
+				ref := selRef{rule: idx, sel: s, anc: ancestorFeatures(s)}
+				if s.pseudoElement == "" {
+					r.elems.add(ref)
+				} else if pe, ok := pseudoNames[s.pseudoElement]; ok {
+					r.pseudos[pe].add(ref)
 				}
-				r.index(selRef{rule: idx, sel: s, anc: ancestorFeatures(s)})
 			}
 		}
 		for i := range sh.Sheet.pages {
@@ -121,19 +150,30 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 	return r
 }
 
-func (r *Resolver) index(ref selRef) {
+func (x *selIndex) add(ref selRef) {
 	last := &ref.sel.parts[len(ref.sel.parts)-1]
+	put := func(m *map[string][]selRef, k string) {
+		if *m == nil {
+			*m = map[string][]selRef{}
+		}
+		(*m)[k] = append((*m)[k], ref)
+	}
 	switch {
 	case last.never:
 	case len(last.ids) > 0:
-		r.byID[last.ids[0]] = append(r.byID[last.ids[0]], ref)
+		put(&x.byID, last.ids[0])
 	case len(last.classes) > 0:
-		r.byClass[last.classes[0]] = append(r.byClass[last.classes[0]], ref)
+		put(&x.byClass, last.classes[0])
 	case last.tag != "":
-		r.byTag[last.tag] = append(r.byTag[last.tag], ref)
+		put(&x.byTag, last.tag)
 	default:
-		r.universal = append(r.universal, ref)
+		x.universal = append(x.universal, ref)
 	}
+}
+
+// empty reports an index without selectors.
+func (x *selIndex) empty() bool {
+	return len(x.byID) == 0 && len(x.byClass) == 0 && len(x.byTag) == 0 && len(x.universal) == 0
 }
 
 // FontFaces returns the @font-face rules whose media conditions match, in
@@ -163,13 +203,30 @@ type ComputeOptions struct {
 // immutable and safe for concurrent use.
 type Computed struct {
 	styles map[*html.Node]*Style
+	pseudo map[pseudoKey]*Style
 	warns  []Warning
+}
+
+// pseudoKey names one pseudo-element of one element.
+type pseudoKey struct {
+	n     *html.Node
+	which PseudoElement
 }
 
 // Style returns the computed style of the element n, nil for a node that
 // is not an element of the computed tree. The Style is shared: do not
 // modify it.
 func (c *Computed) Style(n *html.Node) *Style { return c.styles[n] }
+
+// Pseudo returns the computed style of the pseudo-element which of the
+// element n (CSS Pseudo 4, 4), inheriting from n's style, or nil when no
+// rule targets it: a ::before or ::after without a rule has content none
+// and generates no box, a ::marker without one takes the item's style. A
+// pseudo-element's content is normal unless a rule sets it. The Style is
+// shared: do not modify it.
+func (c *Computed) Pseudo(n *html.Node, which PseudoElement) *Style {
+	return c.pseudo[pseudoKey{n, which}]
+}
 
 // Warnings returns what the cascade and the stylesheets dropped or
 // approximated, deduplicated and capped, in a deterministic order. The
@@ -197,19 +254,20 @@ type pendingRef struct{ d *Declaration }
 
 // computeState is the state of one Compute call.
 type computeState struct {
-	r     *Resolver
-	ctx   context.Context
-	opts  ComputeOptions
-	m     *matcher
-	anc   *ancestorFilter
-	warns warnings
-	out   map[*html.Node]*Style
-	vars  map[*html.Node]map[string][]token
-	stamp []int
-	spec  []uint32
-	elem  int
-	root  *Style
-	nodes int
+	r      *Resolver
+	ctx    context.Context
+	opts   ComputeOptions
+	m      *matcher
+	anc    *ancestorFilter
+	warns  warnings
+	out    map[*html.Node]*Style
+	pseudo map[pseudoKey]*Style
+	vars   map[*html.Node]map[string][]token
+	stamp  []int
+	spec   []uint32
+	elem   int
+	root   *Style
+	nodes  int
 	// units caches FontUnits by font selection.
 	units map[fontKey][2]float64
 }
@@ -266,14 +324,14 @@ var computeOrder = func() []propID {
 func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOptions) (*Computed, error) {
 	cs := &computeState{
 		r: r, ctx: ctx, opts: opts, m: newMatcher(opts.Lang, maxComputeSteps),
-		out: map[*html.Node]*Style{}, vars: map[*html.Node]map[string][]token{}, anc: &ancestorFilter{},
+		out: map[*html.Node]*Style{}, pseudo: map[pseudoKey]*Style{}, vars: map[*html.Node]map[string][]token{}, anc: &ancestorFilter{},
 		stamp: make([]int, len(r.rules)), spec: make([]uint32, len(r.rules)),
 	}
 	for _, w := range r.warns {
 		cs.warns.add(w)
 	}
 	if root == nil {
-		return &Computed{styles: cs.out, warns: cs.warns.result()}, nil
+		return &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result()}, nil
 	}
 	for a := root.Parent; isElement(a); a = a.Parent {
 		cs.anc.push(a)
@@ -318,7 +376,7 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 			stack = append(stack, frame{n: kids[i], parent: parent})
 		}
 	}
-	return &Computed{styles: cs.out, warns: cs.warns.result()}, nil
+	return &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result()}, nil
 }
 
 // element computes the style of n, whose parent element (nil for the
@@ -331,7 +389,7 @@ func (cs *computeState) element(n, parent *html.Node) {
 		parentStyle = cs.out[parent]
 		parentVars = cs.vars[parent]
 	}
-	cands := cs.match(n)
+	cands := cs.match(n, &cs.r.elems)
 	if cs.opts.Hints != nil {
 		hints := cs.opts.Hints(n)
 		for i := range hints {
@@ -344,6 +402,31 @@ func (cs *computeState) element(n, parent *html.Node) {
 			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
 		}
 	}
+	st, vars := cs.cascade(cands, parentStyle, parentVars, parent == nil)
+	cs.out[n] = st
+	cs.vars[n] = vars
+	if parent == nil {
+		cs.root = st
+	}
+	for pe := range numPseudos {
+		x := &cs.r.pseudos[pe]
+		if x.empty() || st.Display == DisplayNone {
+			continue
+		}
+		cs.elem++
+		pc := cs.match(n, x)
+		if len(pc) == 0 {
+			continue
+		}
+		ps, _ := cs.cascade(pc, st, vars, false)
+		cs.pseudo[pseudoKey{n, pe}] = ps
+	}
+}
+
+// cascade sorts the declarations competing for one element or
+// pseudo-element and computes its style from them, and its custom
+// properties.
+func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map[string][]token, isRoot bool) (*Style, map[string][]token) {
 	slices.SortStableFunc(cands, func(a, b cand) int {
 		if c := cmp.Compare(a.rank, b.rank); c != 0 {
 			return c
@@ -383,7 +466,6 @@ func (cs *computeState) element(n, parent *html.Node) {
 	if len(customNames) > 0 {
 		vars = cs.resolveCustom(customNames, custom, parentVars)
 	}
-	cs.vars[n] = vars
 	expanded := map[*Declaration][]entry{}
 	for id := range winners {
 		p, ok := winners[id].(pendingRef)
@@ -402,15 +484,11 @@ func (cs *computeState) element(n, parent *html.Node) {
 			}
 		}
 	}
-	st := cs.computeStyle(&winners, parentStyle, parent == nil)
-	cs.out[n] = st
-	if parent == nil {
-		cs.root = st
-	}
+	return cs.computeStyle(&winners, parentStyle, isRoot), vars
 }
 
 // match returns the declarations of the rules matching n.
-func (cs *computeState) match(n *html.Node) []cand {
+func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 	var matched []int
 	test := func(refs []selRef) {
 		for _, ref := range refs {
@@ -429,7 +507,6 @@ func (cs *computeState) match(n *html.Node) []cand {
 			}
 		}
 	}
-	r := cs.r
 	if id, ok := attr(n, "id"); ok {
 		test(r.byID[id])
 	}
@@ -446,7 +523,7 @@ func (cs *computeState) match(n *html.Node) []cand {
 	test(r.universal)
 	var out []cand
 	for _, ri := range matched {
-		rr := &r.rules[ri]
+		rr := &cs.r.rules[ri]
 		for i := range rr.rule.decls {
 			d := &rr.rule.decls[i]
 			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), spec: uint64(cs.spec[ri]), ord: rr.order, idx: i})
@@ -528,6 +605,9 @@ func fixupDisplay(st *Style, isRoot bool) {
 		st.OuterInline = true
 	case Inline, InlineBlock:
 		st.Display = Block
+		st.OuterInline = true
+	case InlineListItem:
+		st.Display = ListItem
 		st.OuterInline = true
 	case TableRowGroup, TableColumn, TableColumnGroup,
 		TableHeaderGroup, TableFooterGroup, TableRow, TableCell, TableCaption:

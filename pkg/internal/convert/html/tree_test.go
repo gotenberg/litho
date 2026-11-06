@@ -269,10 +269,10 @@ func TestPrepare_NumbersLists(t *testing.T) {
 		`<ol><li id=p1>a</ol><ul><li id=u1 value=7>a</ul>`+
 		`<ol start=99999999999><li id=big>a</ol>`, Options{})
 	for id, want := range map[string]int{
-		"a": 5, "b": 0, "c": 10, "d": 0,
+		"a": 5, "b": 6, "c": 10, "d": 11,
 		"r1": 3, "r2": 2, "r3": 1,
 		"s1": 10, "s2": 3, "s3": 2,
-		"p1": 0, "u1": 7, "big": maxListValue,
+		"p1": 1, "u1": 7, "big": maxListValue,
 	} {
 		if got := byID(t, p.root, id).ListValue; got != want {
 			t.Errorf("%s: list value %d, want %d", id, got, want)

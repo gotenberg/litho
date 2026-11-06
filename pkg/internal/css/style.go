@@ -75,6 +75,10 @@ const (
 	TableCaption
 	// DisplayNone generates no box.
 	DisplayNone
+	// InlineListItem is display: inline list-item, an inline box with a
+	// marker (CSS Display 3, 2 and CSS Lists 3, 2). Its marker is
+	// always inside. Blockified, it becomes ListItem.
+	InlineListItem
 )
 
 // Position is the position property (CSS 2.1, 9.3.1). Sticky computes to
@@ -592,6 +596,9 @@ const (
 	Armenian
 	Georgian
 	ListNone
+	// ListString draws Style.ListStyleString as the marker, as written,
+	// without a suffix (CSS Lists 3, 3.1, <string>).
+	ListString
 )
 
 // ListStylePosition is the list-style-position property (CSS 2.1, 12.5.1).
@@ -602,6 +609,97 @@ const (
 	Outside ListStylePosition = iota
 	Inside
 )
+
+// ContentKind says what a [Content] value is.
+type ContentKind uint8
+
+// The content keywords and the list form (CSS Generated Content 3, 1.1).
+const (
+	// ContentNormal is the initial value: none on ::before and ::after,
+	// the default marker on ::marker.
+	ContentNormal ContentKind = iota
+	// ContentNone generates no box for the pseudo-element.
+	ContentNone
+	// ContentList generates the items of Content.Items.
+	ContentList
+)
+
+// ContentItemKind says what a [ContentItem] is.
+type ContentItemKind uint8
+
+// The content items (CSS 2.1, 12.2 and CSS Generated Content 3, 1.1).
+const (
+	// ItemString is Text as written, escapes resolved.
+	ItemString ContentItemKind = iota
+	// ItemAttr is the value of the originating element's attribute named
+	// Text, Fallback when it has none (CSS Values 5, 7.7).
+	ItemAttr
+	// ItemCounter is the innermost counter named Text in the counter style
+	// Style (CSS Lists 3, 4.8, counter()).
+	ItemCounter
+	// ItemCounters is every counter named Text in scope, outermost first,
+	// joined by Separator, each in the counter style Style (counters()).
+	ItemCounters
+	// ItemOpenQuote and ItemCloseQuote draw the quote of the current depth
+	// and change it; ItemNoOpenQuote and ItemNoCloseQuote change it alone
+	// (CSS Generated Content 3, 2).
+	ItemOpenQuote
+	ItemCloseQuote
+	ItemNoOpenQuote
+	ItemNoCloseQuote
+	// ItemImage is the image at the resolved URL Text (url()).
+	ItemImage
+)
+
+// ContentItem is one item of a content list.
+type ContentItem struct {
+	Kind ContentItemKind
+	// Text is the string, the attribute name, the counter name or the
+	// image URL, as Kind says.
+	Text string
+	// Fallback is the text of an ItemAttr whose attribute is absent.
+	Fallback string
+	// Separator joins the counters of an ItemCounters.
+	Separator string
+	// Style is the counter style of an ItemCounter or ItemCounters,
+	// decimal by default; ListNone draws nothing and ListString is not
+	// used.
+	Style ListStyleType
+}
+
+// Content is the content property of a pseudo-element (CSS Generated
+// Content 3, 1.1). It is not inherited; litho reads it on ::before,
+// ::after and ::marker alone.
+type Content struct {
+	Kind ContentKind
+	// Items are the items of a ContentList, at least one.
+	Items []ContentItem
+	// Alt is the alternative text after the slash, "" for none.
+	Alt string
+}
+
+// CounterOp is one counter of counter-reset, counter-increment or
+// counter-set (CSS Lists 3, 4.1 to 4.3): its name and value.
+type CounterOp struct {
+	Name  string
+	Value int
+	// Reversed marks a counter-reset of reversed(name): Value is then
+	// unused and the counter counts down from the number of items
+	// (CSS Lists 3, 4.1).
+	Reversed bool
+	// Implicit marks a reversed counter written without a value.
+	Implicit bool
+}
+
+// Quotes is the quotes property (CSS Generated Content 3, 2.1). The zero
+// value is auto: the quotes of the content language.
+type Quotes struct {
+	// None reports quotes: none, which draws no quote.
+	None bool
+	// Pairs holds the open and close quote of each nesting level,
+	// outermost first; nil for auto or none.
+	Pairs [][2]string
+}
 
 // BorderCollapse is the border-collapse property (CSS 2.1, 17.6).
 type BorderCollapse uint8
@@ -814,6 +912,23 @@ type Style struct {
 	ListStylePosition ListStylePosition
 	// ListStyleImage is the resolved URL of the marker image, "" for none.
 	ListStyleImage string
+	// ListStyleString is the marker string when ListStyleType is
+	// ListString.
+	ListStyleString string
+
+	// Generated content (CSS Generated Content 3 and CSS Lists 3, 4).
+
+	// Content is the content of a pseudo-element; the converter reads
+	// it on the style [Computed.Pseudo] returns.
+	Content Content
+	// CounterReset, CounterIncrement and CounterSet list the counters
+	// each property names in the order written, nil for none. They are
+	// not inherited.
+	CounterReset     []CounterOp
+	CounterIncrement []CounterOp
+	CounterSet       []CounterOp
+	// Quotes is inherited.
+	Quotes Quotes
 
 	// Tables.
 

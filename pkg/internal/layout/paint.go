@@ -949,8 +949,12 @@ func (e *engine) placeMarker(b *box) {
 		m.baseline, m.placed = baseline, true
 		return
 	}
+	mst := m.st
+	if mst == nil {
+		mst = b.st
+	}
 	if m.runs == nil {
-		style := e.textStyle(b.st, b.lang)
+		style := e.textStyle(mst, b.lang)
 		para, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: m.text, Style: style}}, text.ParagraphOptions{})
 		if err != nil {
 			return
@@ -963,10 +967,10 @@ func (e *engine) placeMarker(b *box) {
 			}
 		}
 	}
-	mt := e.faceMetrics(b.st)
+	mt := e.faceMetrics(mst)
 	m.ascent = mt.Ascent
 	if !ok {
-		baseline = b.contentY() + mt.Ascent + (e.lineHeight(b.st)-mt.Ascent-mt.Descent)/2
+		baseline = b.contentY() + mt.Ascent + (e.lineHeight(mst)-mt.Ascent-mt.Descent)/2
 	}
 	m.x = b.contentX() - m.width
 	if rtl {

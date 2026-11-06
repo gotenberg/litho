@@ -126,14 +126,49 @@ const (
 	latinUpper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
 
-// markerText returns the text of a list item's marker numbered n in style t,
-// suffix included (CSS Lists 3, 3.1): the bullet and a space, or the
-// counter, a full stop and a space. A value a style does not define falls
-// back to decimal (CSS Counter Styles 3, 3.1.1). ListNone has no marker.
-func markerText(t css.ListStyleType, n int) string {
+// MarkerText returns the text of the default marker of a list item styled
+// st and numbered n (CSS Lists 3, 3.1): its list-style-type string as
+// written, or what markerText draws. A converter that generates a
+// ::marker itself calls it for content: normal.
+func MarkerText(st *css.Style, n int) string {
+	if st.ListStyleType == css.ListString {
+		return st.ListStyleString
+	}
+	return markerText(st.ListStyleType, n)
+}
+
+// CounterText spells n in the counter style t without a suffix, for
+// counter() and counters() (CSS Lists 3, 4.8): the bullet of disc, circle
+// and square, nothing for none, decimal for a value the style does not
+// define (CSS Counter Styles 3, 3.1.1).
+func CounterText(t css.ListStyleType, n int) string {
 	n = min(max(n, -maxMarkerValue), maxMarkerValue)
 	switch t {
 	case css.ListNone:
+		return ""
+	case css.Disc:
+		return "•"
+	case css.Circle:
+		return "◦"
+	case css.Square:
+		return "▪"
+	case css.ListString:
+		return strconv.Itoa(n)
+	case css.Decimal, css.DecimalLeadingZero, css.LowerRoman, css.UpperRoman, css.LowerAlpha, css.UpperAlpha,
+		css.LowerGreek, css.Armenian, css.Georgian:
+	}
+	return counter(t, n)
+}
+
+// markerText returns the text of a list item's marker numbered n in style t,
+// suffix included (CSS Lists 3, 3.1): the bullet and a space, or the
+// counter, a full stop and a space. A value a style does not define falls
+// back to decimal (CSS Counter Styles 3, 3.1.1). ListNone and ListString,
+// whose string the style holds, have no marker here.
+func markerText(t css.ListStyleType, n int) string {
+	n = min(max(n, -maxMarkerValue), maxMarkerValue)
+	switch t {
+	case css.ListNone, css.ListString:
 		return ""
 	case css.Disc:
 		return "• "
@@ -149,8 +184,8 @@ func markerText(t css.ListStyleType, n int) string {
 
 // markerAlt returns the text a reader hears for an image marker: the marker
 // the style would draw, without its trailing space, a bullet for none.
-func markerAlt(t css.ListStyleType, n int) string {
-	if s := strings.TrimSuffix(markerText(t, n), " "); s != "" {
+func markerAlt(st *css.Style, n int) string {
+	if s := strings.TrimSuffix(MarkerText(st, n), " "); s != "" {
 		return s
 	}
 	return "•"
@@ -194,7 +229,7 @@ func counter(t css.ListStyleType, n int) string {
 		if n >= 1 && n <= 19999 {
 			return additiveText(georgianSymbols, n)
 		}
-	case css.Decimal, css.Disc, css.Circle, css.Square, css.ListNone:
+	case css.Decimal, css.Disc, css.Circle, css.Square, css.ListNone, css.ListString:
 	}
 	return strconv.Itoa(n)
 }

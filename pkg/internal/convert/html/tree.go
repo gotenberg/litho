@@ -69,12 +69,13 @@ type builder struct {
 	res      *resources
 	scan     *scan
 
-	elements   int
-	synthetic  int
-	headings   []heading
-	warnings   []compose.Warning
-	warned     map[string]bool
-	listValues map[*dom.Node]int
+	elements  int
+	synthetic int
+	headings  []heading
+	warnings  []compose.Warning
+	warned    map[string]bool
+	// counters holds the CSS counters and the quote depth of the walk.
+	counters counterState
 }
 
 // buildRoot builds the content tree of the root element.
@@ -87,9 +88,34 @@ func (b *builder) buildRoot(ctx context.Context, root *dom.Node) (*layout.Node, 
 	if st.Display == css.DisplayNone {
 		return n, nil
 	}
-	kids, err := b.children(ctx, root, st, 1)
-	n.Children = kids
+	v := b.applyCounters(root, st)
+	err := b.content(ctx, n, root, st, v, 1)
 	return n, err
+}
+
+// content builds the children of node, the box of the element n styled
+// st, numbered v when it is a list item: its marker, its ::before, its
+// children and its ::after, in the level of n's counters (CSS Lists 3,
+// 4.5 and CSS Pseudo 4, 4.1).
+func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, st *css.Style, v, depth int) error {
+	if isListItem(st.Display) {
+		node.ListValue = v
+		node.Marker = b.marker(ctx, n, st, v)
+	}
+	b.counters.open()
+	defer b.counters.close()
+	if g := b.pseudo(ctx, n, css.PseudoBefore); g != nil {
+		node.Children = append(node.Children, g)
+	}
+	kids, err := b.children(ctx, n, st, depth)
+	if err != nil {
+		return err
+	}
+	node.Children = append(node.Children, kids...)
+	if g := b.pseudo(ctx, n, css.PseudoAfter); g != nil {
+		node.Children = append(node.Children, g)
+	}
+	return nil
 }
 
 // children builds the nodes of n's children, n's style being st.
@@ -150,6 +176,7 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 		b.warnOnce(CodeTooDeep, "depth", fmt.Sprintf("content nested deeper than %d elements was left out", maxTreeDepth))
 		return nil, nil
 	}
+	v := b.applyCounters(n, st)
 	if n.Namespace == "" {
 		switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 		case atom.Br:
@@ -169,22 +196,18 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 			// Without scripts a canvas shows its fallback content (HTML
 			// Standard, 4.12.5).
 			return b.children(ctx, n, parent, depth)
-		case atom.Ol:
-			b.numberList(n)
 		}
 	}
 	node := &layout.Node{Kind: layout.Element, Style: st}
 	b.semantics(node, n)
-	kids, err := b.children(ctx, n, st, depth+1)
-	if err != nil {
+	if err := b.content(ctx, node, n, st, v, depth+1); err != nil {
 		return nil, err
 	}
-	node.Children = kids
 	return []*layout.Node{node}, nil
 }
 
 // semantics sets what node says about the element n beyond its style: its
-// role, language, anchor, link, list value and spans.
+// role, language, anchor, link and spans.
 func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 	if n.Namespace != "" {
 		return
@@ -206,15 +229,6 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 				node.Role = "Link"
 				node.Alt, _ = attr(n, "title")
 			}
-		}
-	case atom.Li:
-		if v, ok := attr(n, "value"); ok {
-			if i, ok := parseInteger(v); ok {
-				node.ListValue = i
-			}
-		}
-		if v, ok := b.listValues[n]; ok && node.ListValue == 0 {
-			node.ListValue = v
 		}
 	case atom.Td, atom.Th:
 		node.ColSpan = spanAttr(n, "colspan", maxColSpan)
@@ -392,50 +406,6 @@ func selectText(n *dom.Node) string {
 		return label
 	}
 	return collapse(textContent(selected))
-}
-
-// numberList records the ordinals of an <ol>'s li children that its start
-// and reversed attributes decide (HTML Standard, 4.4.8 and 4.4.5). A
-// child li with a value attribute keeps it and numbering goes on from it.
-func (b *builder) numberList(ol *dom.Node) {
-	start, hasStart := 0, false
-	if v, ok := attr(ol, "start"); ok {
-		start, hasStart = parseInteger(v)
-	}
-	_, reversed := attr(ol, "reversed")
-	var items []*dom.Node
-	for c := ol.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type == dom.ElementNode && c.DataAtom == atom.Li && c.Namespace == "" {
-			if st := b.computed.Style(c); st != nil && st.Display == css.ListItem {
-				items = append(items, c)
-			}
-		}
-	}
-	if len(items) == 0 || !reversed && (!hasStart || start == 1) {
-		return
-	}
-	if b.listValues == nil {
-		b.listValues = map[*dom.Node]int{}
-	}
-	if !reversed {
-		if _, ok := attr(items[0], "value"); !ok {
-			b.listValues[items[0]] = start
-		}
-		return
-	}
-	if !hasStart {
-		start = min(len(items), maxListValue)
-	}
-	cur := start
-	for _, li := range items {
-		if v, ok := attr(li, "value"); ok {
-			if i, ok := parseInteger(v); ok {
-				cur = i
-			}
-		}
-		b.listValues[li] = cur
-		cur = max(cur-1, -maxListValue)
-	}
 }
 
 // parseInteger parses an integer as the HTML Standard's rules for parsing

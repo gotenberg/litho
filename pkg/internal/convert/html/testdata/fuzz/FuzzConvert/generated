@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<style>body{counter-reset:h} h2{counter-increment:h} h2::before{content:counter(h) \". \" open-quote} h2::after{content:close-quote; display:block} li::marker{content:\"(\" counter(list-item) \")\"} .i{display:inline list-item}</style><h2>A</h2><ol reversed><li value=3>a<li>b<li class=i>c</ol><q lang=fr>d<q>e</q></q>")

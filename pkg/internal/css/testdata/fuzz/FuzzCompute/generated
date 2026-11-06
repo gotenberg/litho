@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<ol><li id=a title=t>x<q>y</q></li></ol>\x00li::marker { content: counters(list-item, \".\") \" \"; color: red } li::before { content: attr(title, \"f\") counter(c, upper-roman) open-quote url(a.png) / \"alt\"; counter-increment: c 2 } ol { counter-reset: reversed(list-item) c 3; counter-set: c; quotes: \"<\" \">\"; display: inline list-item }")

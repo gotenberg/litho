@@ -75,6 +75,16 @@ type Node struct {
 	// ListValue is the ordinal of a list-item, 0 to number it after the
 	// previous list-item sibling (1 for the first).
 	ListValue int
+	// Marker, when not nil, is the marker of a list-item as the converter
+	// generated it from the ::marker pseudo-element (CSS Lists 3, 3.1):
+	// its Style is the marker's computed style, and its Children, when
+	// there are any, its content: the text of the Text children joins
+	// into the marker's label, the first Replaced child with a Picture
+	// draws in place of the label. A Marker without children draws the
+	// default marker in its Style; one whose content is empty draws
+	// nothing. Its Alt is what a reader hears for a picture. nil draws
+	// the default marker in the item's Style.
+	Marker *Node
 	// ColSpan and RowSpan are the spans of a table cell, 0 for 1.
 	ColSpan, RowSpan int
 	// Span is the span of a table column or column group, 0 for 1.

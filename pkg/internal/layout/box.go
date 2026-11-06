@@ -163,6 +163,8 @@ type markerBox struct {
 	text    string
 	picture *Picture
 	elem    *compose.StructElem
+	// st is the marker's style: the ::marker's, else the item's.
+	st *css.Style
 	// Layout results: the marker's left edge and baseline, flow
 	// coordinates.
 	x, baseline float64

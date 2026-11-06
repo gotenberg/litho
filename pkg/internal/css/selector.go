@@ -126,7 +126,8 @@ func addSpec(x, y uint32) uint32 {
 }
 
 // knownPseudoElements are the pseudo-elements that parse (CSS Pseudo 4).
-// Rules targeting them are kept and produce nothing in this version.
+// Rules targeting ::before, ::after and ::marker give the styles
+// [Computed.Pseudo] returns; those targeting the others produce nothing.
 var knownPseudoElements = map[string]bool{
 	"before": true, "after": true, "first-line": true, "first-letter": true, "marker": true,
 	"placeholder": true, "selection": true, "backdrop": true, "file-selector-button": true,

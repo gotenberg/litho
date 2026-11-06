@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -151,8 +152,8 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		b.abs = isAbs(st)
 		b.float = st.Float
 		b.inline = b.float == css.FloatNone && isInlineLevel(st.Display)
-		if p := n.Picture; p != nil && p.Source != nil && p.Width > 0 && p.Height > 0 && !math.IsInf(p.Width, 0) && !math.IsInf(p.Height, 0) {
-			b.picture = p
+		if validPicture(n.Picture) {
+			b.picture = n.Picture
 		}
 		return []*box{b}
 	case Element:
@@ -172,7 +173,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	}
 	float := st.Float
 	switch {
-	case float == css.FloatNone && st.Display == css.Inline:
+	case float == css.FloatNone && (st.Display == css.Inline || st.Display == css.InlineListItem):
 		return e.genInline(n, st, ctx, ordinal)
 	case st.Display == css.Table || st.Display == css.InlineTable:
 		w := e.genTable(n, st, ctx, float)
@@ -200,10 +201,16 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		if n.ListValue != 0 {
 			*ordinal = n.ListValue
 		}
-		cctx = e.genMarker(n, b, cctx, *ordinal)
+		cctx = e.genMarker(n, b, cctx, *ordinal, false)
 	}
 	e.genChildren(b, n.Children, cctx)
 	return []*box{b}
+}
+
+// validPicture reports a picture the engine can draw: a source and a
+// finite, positive intrinsic size.
+func validPicture(p *Picture) bool {
+	return p != nil && p.Source != nil && p.Width > 0 && p.Height > 0 && !math.IsInf(p.Width, 0) && !math.IsInf(p.Height, 0)
 }
 
 // genInline generates an inline element: its inline box, split around the
@@ -213,6 +220,13 @@ func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*
 	ib.inline = true
 	cctx := e.enter(n, ib, ctx)
 	ib.decos = cctx.decos
+	if st.Display == css.InlineListItem {
+		*ordinal++
+		if n.ListValue != 0 {
+			*ordinal = n.ListValue
+		}
+		cctx = e.genMarker(n, ib, cctx, *ordinal, true)
+	}
 	out := []*box{ib}
 	cur := ib
 	kids := make([]*box, 0, len(n.Children))
@@ -255,7 +269,7 @@ func isAbs(st *css.Style) bool {
 
 // isInlineLevel reports whether a display value is inline-level.
 func isInlineLevel(d css.Display) bool {
-	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable
+	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable || d == css.InlineListItem
 }
 
 // isTablePart reports a display value of a caption or an internal table
@@ -368,11 +382,38 @@ func anonStyle(parent *css.Style) *css.Style {
 // (CSS 2.1, 12.5): an outside marker box, or an inside marker as the first
 // inline child. When the item's role is LI, the marker hangs from a Lbl
 // element and the content from a LBody (ISO 32000-1, 14.8.4.3.3); it
-// returns the context of the item's children.
-func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int) genCtx {
+// returns the context of the item's children. inside forces an inside
+// marker, for an inline list item.
+func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool) genCtx {
 	st := b.st
-	pic := e.picture(st.ListStyleImage, -1)
-	label := markerText(st.ListStyleType, ordinal)
+	var pic *Picture
+	var label, alt string
+	switch m := n.Marker; {
+	case m != nil && len(m.Children) > 0:
+		if m.Style != nil {
+			st = m.Style
+		}
+		var sb strings.Builder
+		for _, c := range m.Children {
+			switch {
+			case c.Kind == Text:
+				sb.WriteString(c.Text)
+			case c.Kind == Replaced && pic == nil && validPicture(c.Picture):
+				pic = c.Picture
+			}
+		}
+		label, alt = sb.String(), m.Alt
+		if pic != nil && alt == "" {
+			alt = label
+		}
+	default:
+		if m != nil && m.Style != nil {
+			st = m.Style
+		}
+		pic = e.picture(st.ListStyleImage, -1)
+		label = MarkerText(st, ordinal)
+		alt = markerAlt(st, ordinal)
+	}
 	if pic == nil && label == "" {
 		return ctx
 	}
@@ -381,15 +422,15 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int) genCtx {
 		lbl := &compose.StructElem{Role: "Lbl"}
 		body := &compose.StructElem{Role: "LBody"}
 		if pic != nil {
-			lbl.ActualText = markerAlt(st.ListStyleType, ordinal)
+			lbl.ActualText = alt
 		}
 		ctx.elem.Kids = append(ctx.elem.Kids, lbl, body)
 		markerElem = lbl
 		ctx.elem = body
 		ctx.structDepth++
 	}
-	if st.ListStylePosition == css.Outside {
-		b.outside = &markerBox{text: label, picture: pic, elem: markerElem}
+	if b.st.ListStylePosition == css.Outside && !inside {
+		b.outside = &markerBox{text: label, picture: pic, elem: markerElem, st: st}
 		return ctx
 	}
 	mctx := ctx

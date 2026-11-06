@@ -108,6 +108,11 @@ const (
 	pZIndex
 	pTransform
 	pTransformOrigin
+	pContent
+	pCounterReset
+	pCounterIncrement
+	pCounterSet
+	pQuotes
 	numProps
 )
 
@@ -367,6 +372,19 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 	}
 	inline := words["inline"]
 	if words["list-item"] {
+		// CSS Display 3, 2: list-item with an outer display and flow or
+		// flow-root inside; litho lays flow-root out as flow.
+		for w := range words {
+			if w != "list-item" && w != "inline" && w != "block" && w != "flow" && w != "flow-root" {
+				return nil, false
+			}
+		}
+		if inline && words["block"] || words["flow"] && words["flow-root"] {
+			return nil, false
+		}
+		if inline {
+			return InlineListItem, true
+		}
 		return ListItem, true
 	}
 	switch {
@@ -709,10 +727,15 @@ func init() {
 			"isolate-override": IsolateOverride, "plaintext": Plaintext, "-webkit-isolate": Isolate,
 		})},
 		{pListStyleType, propDef{name: "list-style-type", inherited: true, parse: parseListStyleType, compute: func(_ *styler, st *Style, v any) {
-			if t, ok := v.(ListStyleType); ok {
-				st.ListStyleType = t
+			switch t := v.(type) {
+			case ListStyleType:
+				st.ListStyleType, st.ListStyleString = t, ""
+			case listString:
+				st.ListStyleType, st.ListStyleString = ListString, string(t)
 			}
-		}, copyFrom: field(func(s *Style) *ListStyleType { return &s.ListStyleType })}},
+		}, copyFrom: func(dst, src *Style) {
+			dst.ListStyleType, dst.ListStyleString = src.ListStyleType, src.ListStyleString
+		}}},
 		{pListStylePosition, enumProp("list-style-position", true, func(s *Style) *ListStylePosition { return &s.ListStylePosition }, map[string]ListStylePosition{
 			"outside": Outside, "inside": Inside,
 		})},
@@ -769,6 +792,11 @@ func init() {
 			st.Contain = c
 		}
 	}, copyFrom: field(func(s *Style) *Containment { return &s.Contain })}
+	props[pContent] = contentProp()
+	props[pCounterReset] = counterProp("counter-reset", 0, func(s *Style) *[]CounterOp { return &s.CounterReset })
+	props[pCounterIncrement] = counterProp("counter-increment", 1, func(s *Style) *[]CounterOp { return &s.CounterIncrement })
+	props[pCounterSet] = counterProp("counter-set", 0, func(s *Style) *[]CounterOp { return &s.CounterSet })
+	props[pQuotes] = quotesProp()
 	corners := [4]string{"border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius"}
 	for i, n := range corners {
 		props[pRadiusTopLeft+propID(i)] = radiusProp(Corner(i), n)
@@ -985,9 +1013,12 @@ var listStyleTypes = map[string]ListStyleType{
 	"disclosure-open": Disc, "disclosure-closed": Disc,
 }
 
+// listString is a specified list-style-type <string>.
+type listString string
+
 // parseListStyleType parses list-style-type (CSS Lists 3, 3.1). A counter
 // style litho lacks computes to decimal, as CSS Counter Styles 3, 2 asks
-// of an unknown name; a string marker computes to disc with a warning.
+// of an unknown name; a string is the marker as written.
 func parseListStyleType(v []token, c *declCtx) (any, bool) {
 	t, ok := single(v)
 	if !ok {
@@ -1002,8 +1033,7 @@ func parseListStyleType(v []token, c *declCtx) (any, bool) {
 		c.warn("unsupported-css-value", "list-style-type: %s is not supported and computes to decimal", k)
 		return Decimal, true
 	case tString:
-		c.warn("unsupported-css-value", "list-style-type: a string marker is not supported and computes to disc")
-		return Disc, true
+		return listString(t.value), true
 	case tFunction:
 		if eqFold(t.value, "symbols") {
 			c.warn("unsupported-css-value", "list-style-type: symbols() is not supported and computes to disc")
