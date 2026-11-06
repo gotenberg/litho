@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-06T22:19:41Z",
+  "captured_at": "2026-11-06T22:21:53Z",
   "corpora": {
     "compose": {
       "features": {
@@ -278,16 +278,16 @@
     "html": {
       "features": {
         "diff": {
-          "matched": 20,
-          "mismatched": 9,
+          "matched": 22,
+          "mismatched": 7,
           "skipped": 0,
           "metrics": {
             "convert_error": 1,
-            "pages_equal": 25
+            "pages_equal": 27
           },
           "scores": {
             "article": {
-              "layout": 0.946,
+              "layout": 0.9441,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -295,7 +295,7 @@
               "text_f1": 1
             },
             "backgrounds": {
-              "layout": 0.9408,
+              "layout": 0.9431,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -303,7 +303,7 @@
               "text_f1": 1
             },
             "borders": {
-              "layout": 0.9243,
+              "layout": 0.9302,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -311,15 +311,15 @@
               "text_f1": 1
             },
             "flex": {
-              "layout": 0.9829,
+              "layout": 0.9879,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "floats": {
-              "layout": 0.9483,
+              "layout": 0.9474,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -327,7 +327,7 @@
               "text_f1": 1
             },
             "font-face": {
-              "layout": 0.4863,
+              "layout": 0.4918,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -335,7 +335,7 @@
               "text_f1": 1
             },
             "header-default-classes": {
-              "layout": 0.4815,
+              "layout": 0.4705,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -343,7 +343,7 @@
               "text_f1": 0.3333
             },
             "header-footer": {
-              "layout": 0.7734,
+              "layout": 0.7592,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -351,7 +351,7 @@
               "text_f1": 0.4444
             },
             "i18n": {
-              "layout": 0.9004,
+              "layout": 0.8943,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -359,7 +359,7 @@
               "text_f1": 0.7586
             },
             "images": {
-              "layout": 0.9849,
+              "layout": 0.984,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -367,23 +367,23 @@
               "text_f1": 1
             },
             "invoice": {
-              "layout": 0.9469,
+              "layout": 0.954,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "landing": {
-              "layout": 0.9735,
+              "layout": 0.9766,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.25,
+              "strict": 1,
               "text_f1": 1
             },
             "landscape": {
-              "layout": 0.9429,
+              "layout": 0.9268,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -391,7 +391,7 @@
               "text_f1": 1
             },
             "lists": {
-              "layout": 0.9327,
+              "layout": 0.9301,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -399,7 +399,7 @@
               "text_f1": 0.97
             },
             "margin-boxes": {
-              "layout": 0.7447,
+              "layout": 0.7488,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -407,7 +407,7 @@
               "text_f1": 0.9065
             },
             "markdown": {
-              "layout": 0.95,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -423,7 +423,7 @@
               "text_f1": 0
             },
             "media-dark": {
-              "layout": 0.998,
+              "layout": 0.9979,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -431,7 +431,7 @@
               "text_f1": 1
             },
             "named-pages": {
-              "layout": 0.0418,
+              "layout": 0.0411,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.3333,
@@ -439,7 +439,7 @@
               "text_f1": 0.2381
             },
             "no-background": {
-              "layout": 0.9408,
+              "layout": 0.9431,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -447,7 +447,7 @@
               "text_f1": 1
             },
             "outline": {
-              "layout": 0.9565,
+              "layout": 0.9322,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -455,7 +455,7 @@
               "text_f1": 1
             },
             "page-ranges": {
-              "layout": 0.9426,
+              "layout": 0.9265,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -463,23 +463,23 @@
               "text_f1": 1
             },
             "print-css": {
-              "layout": 0.9665,
+              "layout": 0.9693,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.25,
+              "strict": 1,
               "text_f1": 1
             },
             "print-css-fit": {
-              "layout": 0.9553,
+              "layout": 0.9556,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.25,
+              "strict": 1,
               "text_f1": 1
             },
             "scale": {
-              "layout": 0.9405,
+              "layout": 0.9389,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -487,23 +487,23 @@
               "text_f1": 1
             },
             "single-page": {
-              "layout": 0.9429,
+              "layout": 0.9268,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0,
-              "strict": 0,
+              "pages": 1,
+              "strict": 1,
               "text_f1": 1
             },
             "single-page-landscape": {
               "layout": 0.9615,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0,
+              "pages": 1,
               "strict": 1,
               "text_f1": 1
             },
             "svg": {
-              "layout": 0.9591,
+              "layout": 0.9724,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -511,11 +511,11 @@
               "text_f1": 1
             },
             "wide-table": {
-              "layout": 0.9194,
+              "layout": 0.9241,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 0.9756
             }
           },
