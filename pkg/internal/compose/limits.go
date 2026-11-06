@@ -1,0 +1,63 @@
+package compose
+
+// maxPages caps the pages of one document. Anti-DoS guard, not
+// spec-mandated: ISO 32000-1 sets no page count. A 2000-page report sits
+// fifty times under it, and every page costs a page object, a content stream
+// and a /Kids entry, so the cap bounds the objects a model can make Write
+// allocate before any content.
+const maxPages = 100_000
+
+// maxFragmentsPerPage caps the fragments of one page, nested group content
+// and links included. Anti-DoS guard, not spec-mandated. A dense page set as
+// one run per word holds a few thousand fragments, and a page of 100k glyphs
+// drawn one glyph per run still fits ten times over.
+const maxFragmentsPerPage = 1_000_000
+
+// maxGlyphsPerRun caps the glyphs of one [Text] run. Anti-DoS guard, not
+// spec-mandated. A run is a line or a paragraph in practice; a page of 100k
+// glyphs written as a single run still fits ten times over.
+const maxGlyphsPerRun = 1_000_000
+
+// maxOpsPerPath caps the operators of one [Path] or clip. Anti-DoS guard,
+// not spec-mandated. A detailed map outline or a chart polyline holds tens
+// of thousands of segments; a million leaves room for generated art.
+const maxOpsPerPath = 1_000_000
+
+// maxDashEntries caps the dash array of one [Stroke]. Anti-DoS guard, not
+// spec-mandated: ISO 32000-1, 8.4.3.6 sets no length, and real dash patterns
+// hold two to six entries.
+const maxDashEntries = 1024
+
+// maxGroupDepth caps the nesting of [Group] fragments. Each group writes one
+// q/Q pair and an image placement one more, and ISO 32000-1, Annex C, Table
+// C.1 (and ISO 19005-2, 6.1.13, Table 1) bound q nesting at 28: 24 levels of
+// groups plus the image placement keep the output under it. It also bounds
+// the recursion that walks the groups. Real layouts nest a handful of levels.
+const maxGroupDepth = 24
+
+// maxOutlineEntries caps the entries of the outline, at every level.
+// Anti-DoS guard, not spec-mandated. A 2000-page report with a heading per
+// half page holds a few thousand entries.
+const maxOutlineEntries = 100_000
+
+// maxStructElems caps the elements of the structure tree. Anti-DoS guard,
+// not spec-mandated. A 2000-page report tagged to the span holds a few
+// hundred thousand elements at most.
+const maxStructElems = 1_000_000
+
+// maxTreeDepth caps the depth of the outline and the structure tree, whose
+// walks recurse. Anti-DoS guard protecting litho's own stack, not
+// spec-mandated: ISO 32000-1, 12.3.3 and 14.7.2 set no depth, and real
+// documents nest under twenty levels.
+const maxTreeDepth = 256
+
+// maxImagePixels caps the pixels of one image, width times height. Anti-DoS
+// guard, not spec-mandated: Write holds the samples of a decoded picture in
+// memory, 4 bytes per pixel at most, so the cap bounds that buffer to 256
+// MiB. 8192 by 8192 pixels, a 27-inch print at 300 dpi, fits.
+const maxImagePixels = 1 << 26
+
+// maxPageSize is the largest page side in points: ISO 32000-1, Annex C.2,
+// Table C.1 bounds the page size at 14400 units (200 inches) in either
+// dimension. It is the implementation limit, not a litho guard.
+const maxPageSize = 14400
