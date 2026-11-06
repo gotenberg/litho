@@ -132,7 +132,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	scale := fs.Float64("scale", 1, "Scale of the content of an HTML file, from 0.1 to 2; the page keeps its size")
 	singlePage := fs.Bool("single-page", false, "Lay an HTML file out on one page as tall as its content")
 	pages := fs.String("pages", "", "Pages of an HTML file to write, such as 1-5,8,11-13 (default all)")
-	background := fs.Bool("background", true, "Print the backgrounds of an HTML file; --background=false drops them as a print dialog does")
+	background := fs.Bool("background", true, "Print the backgrounds of an HTML file; --background=false drops the html and body backgrounds, the canvas, as Gotenberg's Chromium route does")
 	outlineFlag := fs.Bool("outline", true, "Make the headings of an HTML file the document outline; --outline=false leaves it out")
 	header := fs.String("header", "", "File of the HTML fragment drawn in the top margin of every page of an HTML file (classes date, title, url, pageNumber, totalPages)")
 	footer := fs.String("footer", "", "File of the HTML fragment drawn in the bottom margin of every page of an HTML file")

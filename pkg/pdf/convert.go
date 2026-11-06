@@ -58,6 +58,7 @@ type convertOptions struct {
 	pageRanges                           string
 	omitBackgrounds                      bool
 	omitOutline                          bool
+	noShrinkToFit                        bool
 	headerTemplate, footerTemplate       string
 	date                                 time.Time
 	baseURL                              string
@@ -207,12 +208,24 @@ func WithPageRanges(spec string) ConvertOption {
 	return func(o *convertOptions) { o.pageRanges = spec }
 }
 
-// WithPrintBackground sets whether the background colours and images of a
-// [FormatHTML] source print. true, the default, prints them; false drops
-// them as a browser's print dialog does by default, except where
-// print-color-adjust: exact keeps them (CSS Color Adjustment 1, 3).
+// WithPrintBackground sets whether the canvas background of a [FormatHTML]
+// source prints. true, the default, prints every background; false drops
+// the background colours and images of the html and body elements, which
+// paint the canvas, and keeps every other element's, as Gotenberg's
+// Chromium route does with printBackground false (it injects html, body {
+// background: none !important } and makes every colour exact; Gotenberg
+// issue 1154).
 func WithPrintBackground(print bool) ConvertOption {
 	return func(o *convertOptions) { o.omitBackgrounds = !print }
+}
+
+// WithShrinkToFit sets whether a [FormatHTML] source wider than its page
+// area is shrunk to fit it. true, the default, lays it out at its content's
+// width, at most 1.5 times the area's, and draws it scaled down to the
+// area, as Chromium prints; false lays it out at the area's width and lets
+// the page clip what overflows, as WeasyPrint prints.
+func WithShrinkToFit(shrink bool) ConvertOption {
+	return func(o *convertOptions) { o.noShrinkToFit = !shrink }
 }
 
 // WithOutline sets whether the headings of a [FormatHTML] source become
@@ -487,6 +500,7 @@ func convertHTML(ctx context.Context, src io.Reader, fonts *text.Fonts, o *conve
 		PageRanges:        o.pageRanges,
 		OmitBackgrounds:   o.omitBackgrounds,
 		OmitOutline:       o.omitOutline,
+		NoShrinkToFit:     o.noShrinkToFit,
 		HeaderTemplate:    o.headerTemplate,
 		FooterTemplate:    o.footerTemplate,
 		Date:              o.date,
