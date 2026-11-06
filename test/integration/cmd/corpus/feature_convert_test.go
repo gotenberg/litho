@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -352,21 +353,72 @@ func TestScoreDiff_AgainstGoldens(t *testing.T) {
 	}
 	noReport := func(int, image.Image, image.Image, pixelDiff) {}
 
-	same := scoreDiff(g, []diffLithoPage{{text: "hello  world", links: []diffLink{{Page: 1, URI: "https://a.example"}}, img: page}}, dir, noReport)
+	same := scoreDiff(g, diffLithoDoc{pages: []diffLithoPage{{text: "hello  world", links: []diffLink{{Page: 1, URI: "https://a.example"}}, img: page}}}, dir, noReport)
 	if same.Outcome != outcomePass || same.Scores[scoreLayout] != 1 || same.Scores[scoreStrict] != 1 || same.Scores[scoreText] != 1 {
 		t.Errorf("identical conversion: %+v", same)
 	}
 
 	reported := 0
-	extra := scoreDiff(g, []diffLithoPage{
+	extra := scoreDiff(g, diffLithoDoc{pages: []diffLithoPage{
 		{text: "hello", img: solid(40, 40, color.RGBA{0xff, 0xff, 0xff, 0xff})},
 		{text: "overflow", img: page},
-	}, dir, func(int, image.Image, image.Image, pixelDiff) { reported++ })
+	}}, dir, func(int, image.Image, image.Image, pixelDiff) { reported++ })
 	if extra.Outcome != outcomeFail || extra.Scores[scorePages] != 0.5 || extra.Scores[scoreLinks] != 0 || extra.Scores[scoreLayout] != 0 {
 		t.Errorf("blank page plus an extra one: %+v", extra.Scores)
 	}
 	if reported != 1 {
 		t.Errorf("reported %d pages, want the one compared page that fails", reported)
+	}
+
+	// The page sizes and the outline: a landscape page against a portrait
+	// one fails pages though the counts agree, and an outline item missing
+	// fails outline_recall.
+	shaped := *g
+	shaped.sizes = []diffPageSize{{W: 595.92, H: 841.92}}
+	shaped.outline = []diffOutlineItem{{Title: "Chapter 1", Page: 1}, {Title: "Section 1.1", Page: 1}}
+	lithoPage := diffLithoPage{text: "hello world", links: []diffLink{{Page: 1, URI: "https://a.example/"}}, img: page}
+	cases := []struct {
+		name          string
+		size          diffPageSize
+		outline       []diffOutlineItem
+		pages, recall float64
+		outcome       string
+	}{
+		{"same size and outline", diffPageSize{W: 595.28, H: 841.89}, shaped.outline, 1, 1, outcomePass},
+		{"landscape", diffPageSize{W: 841.92, H: 595.92}, shaped.outline, 0, 1, outcomeFail},
+		{"one item missing", diffPageSize{W: 595.92, H: 841.92}, []diffOutlineItem{{Title: " Chapter\t1 ", Page: 1}}, 1, 0.5, outcomeFail},
+		{"item on another page", diffPageSize{W: 595.92, H: 841.92}, []diffOutlineItem{{Title: "Chapter 1", Page: 2}, {Title: "Section 1.1", Page: 1}}, 1, 0.5, outcomeFail},
+	}
+	for _, tc := range cases {
+		p := lithoPage
+		p.size = tc.size
+		got := scoreDiff(&shaped, diffLithoDoc{pages: []diffLithoPage{p}, outline: tc.outline}, dir, noReport)
+		if got.Scores[scorePages] != tc.pages || got.Scores[scoreOutline] != tc.recall || got.Outcome != tc.outcome {
+			t.Errorf("%s: pages %v, outline %v, %s (%s); want %v, %v, %s", tc.name, got.Scores[scorePages], got.Scores[scoreOutline], got.Outcome, got.Reason, tc.pages, tc.recall, tc.outcome)
+		}
+	}
+}
+
+func TestOutlineRecall(t *testing.T) {
+	t.Parallel()
+
+	golden := []diffOutlineItem{{Title: "A", Page: 1}, {Title: "A", Page: 1}, {Title: "B", Page: 2}}
+	cases := []struct {
+		name         string
+		golden, have []diffOutlineItem
+		want         float64
+	}{
+		{"neither has one", nil, nil, 1},
+		{"only litho has one", nil, golden, 1},
+		{"only Chromium has one", golden, nil, 0},
+		{"the same", golden, golden, 1},
+		{"a duplicate counted once", golden, []diffOutlineItem{{Title: "A", Page: 1}, {Title: "B", Page: 2}}, 2.0 / 3},
+		{"NFKC and white space", []diffOutlineItem{{Title: "ﬁle  one", Page: 1}}, []diffOutlineItem{{Title: "file one", Page: 1}}, 1},
+	}
+	for _, tc := range cases {
+		if got := outlineRecall(tc.golden, tc.have); math.Abs(got-tc.want) > 1e-9 {
+			t.Errorf("%s: %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
 
@@ -441,7 +493,7 @@ func TestConverterFeatures_ReportErrorsWithoutTheConverter(t *testing.T) {
 	if got := cells["draw"].Outcomes["d"]; got != outcomeError {
 		t.Errorf("draw baseline outcome %q", got)
 	}
-	if got := cells["diff"].Scores["x"]; len(got) != 5 || got[scoreLayout] != 0 {
+	if got := cells["diff"].Scores["x"]; len(got) != 6 || got[scoreLayout] != 0 {
 		t.Errorf("diff baseline scores %v", got)
 	}
 	if cells["diff"].ScoreTolerance != diffScoreTolerance {

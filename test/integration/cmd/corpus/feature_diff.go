@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"math"
@@ -15,23 +16,9 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
-)
-
-// The page the html corpus is converted on, in points: what Chromium lays
-// out when corpus/html/chromium.sh asks for A4 with the 0.39 inch margins
-// Gotenberg's Chromium route applies by default. Chromium's references
-// carry a 595.92 by 841.92 point media box and a text column that starts
-// 27.75 points in (37 CSS pixels: it rounds the margin to whole pixels
-// before scaling), measured on the committed PDFs; converting on the exact
-// A4 of 595.276 by 841.89 points with 28.08 point margins wraps some
-// paragraphs one line longer and shifts every page break after.
-// corpus/html/build/main.go converts with the same values; keep the three
-// in step.
-const (
-	diffPaperWidth  = 595.92
-	diffPaperHeight = 841.92
-	diffMargin      = 27.75
+	"github.com/gotenberg/litho/test/integration/corpus/html/fixture"
 )
 
 // diffDPI is the resolution the diff goldens are drawn at, mirroring
@@ -97,7 +84,18 @@ const (
 	scoreLinks  = "link_recall"
 	scoreLayout = "layout"
 	scoreStrict = "strict"
+	// scoreOutline is the share of the reference's outline items, by title
+	// and target page, litho's outline holds too; 1 when the reference has
+	// no outline.
+	scoreOutline = "outline_recall"
 )
+
+// diffPageSizeSlack is how far, in points, a page's width or height may lie
+// from the reference's before the page counts as another size: 1 point,
+// above the rounding of Chromium's media boxes (595.92 for A4's 595.28, a
+// 1/300 inch grid) and below any size a print option sets, a landscape page
+// or a single page cut to its content differing by tens of points.
+const diffPageSizeSlack = 1.0
 
 // metricPagesEqual counts the fixtures whose page count is Chromium's.
 const metricPagesEqual = "pages_equal"
@@ -156,16 +154,61 @@ type diffGolden struct {
 	text   *pdfjsReference
 	render *renderIndex
 	links  *diffLinkGolden
+	// sizes are the reference's page sizes in points, read with litho from
+	// the provisioned Chromium PDF; nil skips the page size check.
+	sizes []diffPageSize
+	// outline is the reference's outline, flattened in outline order.
+	outline []diffOutlineItem
+}
+
+// diffPageSize is a page's width and height in points, after /Rotate.
+type diffPageSize struct {
+	W, H float64
+}
+
+// matches reports whether two page sizes agree within diffPageSizeSlack.
+func (s diffPageSize) matches(o diffPageSize) bool {
+	return math.Abs(s.W-o.W) <= diffPageSizeSlack && math.Abs(s.H-o.H) <= diffPageSizeSlack
+}
+
+// diffOutlineItem is one outline item: its title and the page it leads to.
+type diffOutlineItem struct {
+	Title string `json:"title"`
+	Page  int    `json:"page"`
+}
+
+// key is what two outline items must share to count as the same item: the
+// title, NFKC-normalised with its white space collapsed, and the page.
+func (o diffOutlineItem) key() string {
+	return fmt.Sprintf("%d %s", o.Page, strings.Join(textTokens(o.Title), " "))
+}
+
+// flattenOutline lists a bookmark tree depth first, in outline order.
+func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
+	var out []diffOutlineItem
+	var walk func([]models.Bookmark)
+	walk = func(bs []models.Bookmark) {
+		for _, b := range bs {
+			out = append(out, diffOutlineItem{Title: b.Title, Page: b.PageNumber})
+			walk(b.Children)
+		}
+	}
+	walk(marks)
+	return out
 }
 
 // diffFeature scores litho's HTML converter against Chromium, the engine it
 // replaces in Gotenberg. Each source of the html corpus is converted by
-// litho (print media, A4, Gotenberg's default margins) and compared with the
-// PDF Gotenberg's Chromium route wrote from the same source, read at
-// provisioning by PDF.js (text, links) and poppler (pages at 72 dpi). Five
-// scores, each in [0, 1], land in the baseline per fixture:
+// litho at the options of its options.json (corpus/html/fixture: by default
+// print media, A4, Gotenberg's default margins) and compared with the PDF
+// Gotenberg's Chromium route wrote from the same source at the same options,
+// read at provisioning by PDF.js (text, links) and poppler (pages at 72 dpi),
+// and at load by litho (page sizes, outline). Six scores, each in [0, 1],
+// land in the baseline per fixture:
 //
-//   - pages: 1 when the page counts agree, else the smaller over the larger.
+//   - pages: the smaller page count over the larger, times the share of the
+//     pages both have whose width and height lie within diffPageSizeSlack of
+//     the reference's: 1 when the counts and every size agree.
 //   - text_f1: the token F1 of each page's text, litho's extraction of its
 //     PDF against PDF.js's of Chromium's, NFKC-normalised and split at
 //     whitespace, averaged over the pages either has.
@@ -175,6 +218,8 @@ type diffGolden struct {
 //     blurred and matched band by band within a few pixels (see
 //     [layoutScore]), averaged over the pages.
 //   - strict: the share of pages the render cell's pixel rule matches.
+//   - outline_recall: the share of the reference's outline items, by title
+//     and target page, litho's outline holds; 1 when the reference has none.
 //
 // A missing page scores 0 on every per-page score. Two engines lay text out
 // with their own line breaking and font metrics, so strict stays low even
@@ -223,6 +268,9 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 	if err != nil {
 		return err
 	}
+	// The provisioned Chromium PDFs sit at <testdata>/html/pdfs, two levels
+	// above goldens/diff (the manifest's pdf_root).
+	pdfsDir := filepath.Join(filepath.Dir(filepath.Dir(dir)), "pdfs")
 	goldens := make(map[string]*diffGolden, len(texts))
 	for id, t := range texts {
 		r, l := renders[id], links[id]
@@ -232,7 +280,14 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 		if r.DPI != diffDPI {
 			return fmt.Errorf("diff render golden %s was drawn at %g dpi, the feature compares at %d: re-provision goldens/diff", id, r.DPI, diffDPI)
 		}
-		goldens[id] = &diffGolden{text: t, render: r, links: l}
+		sizes, outline, err := readReferenceShape(context.Background(), filepath.Join(pdfsDir, id+".pdf"))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("diff reference %s: %w", id, err)
+		}
+		goldens[id] = &diffGolden{text: t, render: r, links: l, sizes: sizes, outline: outline}
 	}
 	if len(goldens) == 0 {
 		return ErrNoGoldens
@@ -245,6 +300,47 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 	f.goldens, f.renderDir, f.fontDirs = goldens, filepath.Join(dir, "render"), fonts
 	f.mu.Unlock()
 	return nil
+}
+
+// readReferenceShape reads the page sizes and the outline of a reference
+// PDF with litho.
+func readReferenceShape(ctx context.Context, path string) ([]diffPageSize, []diffOutlineItem, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // provisioned reference under the corpus testdata root
+	if err != nil {
+		return nil, nil, err
+	}
+	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, nil, fmt.Errorf("open: %w", err)
+	}
+	defer r.Close()
+	sizes, err := pageSizes(ctx, r)
+	if err != nil {
+		return nil, nil, err
+	}
+	marks, err := r.Bookmarks(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read the outline: %w", err)
+	}
+	return sizes, flattenOutline(marks), nil
+}
+
+// pageSizes lists the size of each page of r, up to maxConvertedPages.
+func pageSizes(ctx context.Context, r *pdf.Reader) ([]diffPageSize, error) {
+	n, err := r.PageCount(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("count pages: %w", err)
+	}
+	n = min(n, maxConvertedPages)
+	sizes := make([]diffPageSize, 0, n)
+	for p := 1; p <= n; p++ {
+		pg, err := r.Page(ctx, p)
+		if err != nil {
+			return nil, fmt.Errorf("read page %d: %w", p, err)
+		}
+		sizes = append(sizes, diffPageSize{W: pg.Width, H: pg.Height})
+	}
+	return sizes, nil
 }
 
 // loadDiffJSON decodes every JSON file of dir into a map keyed by file name
@@ -304,10 +400,17 @@ type diffLithoPage struct {
 	text  string
 	links []diffLink
 	img   image.Image
+	size  diffPageSize
+}
+
+// diffLithoDoc is what litho's PDF holds: its pages and its outline.
+type diffLithoDoc struct {
+	pages   []diffLithoPage
+	outline []diffOutlineItem
 }
 
 // Run converts the source, reads litho's PDF back and scores it against the
-// goldens.
+// goldens. srcPath is the source directory, or a file in it.
 func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byte, error) {
 	g := f.golden(fixtureID)
 	if g == nil {
@@ -316,24 +419,37 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	f.mu.RLock()
 	fonts, renderDir, reportDir := f.fontDirs, f.renderDir, f.reportDir
 	f.mu.RUnlock()
-	src, err := os.ReadFile(srcPath) //nolint:gosec // committed corpus source
+	dir := srcPath
+	if info, err := os.Stat(srcPath); err == nil && !info.IsDir() {
+		dir = filepath.Dir(srcPath)
+	}
+	source, err := fixture.Load(dir)
 	if err != nil {
 		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: "read: " + err.Error(), Scores: zeroDiffScores()})
 	}
+	src, err := os.ReadFile(source.Document)
+	if err != nil {
+		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: "read: " + err.Error(), Scores: zeroDiffScores()})
+	}
+	width, height := source.Paper()
+	top, right, bottom, left := source.Margins()
 	data, err := f.convert(ctx, src, htmlSettings{
-		Media:     "print",
-		Width:     diffPaperWidth,
-		Height:    diffPaperHeight,
-		Top:       diffMargin,
-		Right:     diffMargin,
-		Bottom:    diffMargin,
-		Left:      diffMargin,
-		Resources: os.DirFS(filepath.Dir(srcPath)),
-		FontDirs:  fonts,
+		Media:             source.MediaType(),
+		Width:             width,
+		Height:            height,
+		Top:               top,
+		Right:             right,
+		Bottom:            bottom,
+		Left:              left,
+		Resources:         os.DirFS(dir),
+		FontDirs:          fonts,
+		PreferCSSPageSize: source.PreferCSSPageSize(),
+		Format:            source.Format,
+		Print:             source.PrintOptions(),
 	})
-	var pages []diffLithoPage
+	var doc diffLithoDoc
 	if err == nil {
-		pages, err = readDiffPages(ctx, data)
+		doc, err = readDiffPages(ctx, data)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -341,7 +457,7 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 		}
 		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: err.Error(), GoldenPages: g.text.NumPages, Scores: zeroDiffScores()})
 	}
-	out := scoreDiff(g, pages, renderDir, func(page int, got, want image.Image, d pixelDiff) {
+	out := scoreDiff(g, doc, renderDir, func(page int, got, want image.Image, d pixelDiff) {
 		if reportDir == "" {
 			return
 		}
@@ -355,31 +471,35 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 
 // zeroDiffScores is the score set of a fixture litho could not convert.
 func zeroDiffScores() map[string]float64 {
-	return map[string]float64{scorePages: 0, scoreText: 0, scoreLinks: 0, scoreLayout: 0, scoreStrict: 0}
+	return map[string]float64{scorePages: 0, scoreText: 0, scoreLinks: 0, scoreLayout: 0, scoreStrict: 0, scoreOutline: 0}
 }
 
-// readDiffPages reads each page of litho's PDF: its text, its links and its
-// drawing at 72 dpi.
-func readDiffPages(ctx context.Context, data []byte) ([]diffLithoPage, error) {
+// readDiffPages reads litho's PDF: each page's text, links, size and
+// drawing at 72 dpi, and the outline.
+func readDiffPages(ctx context.Context, data []byte) (diffLithoDoc, error) {
 	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, fmt.Errorf("open the conversion: %w", err)
+		return diffLithoDoc{}, fmt.Errorf("open the conversion: %w", err)
 	}
 	defer r.Close()
-	n, err := r.PageCount(ctx)
+	sizes, err := pageSizes(ctx, r)
 	if err != nil {
-		return nil, fmt.Errorf("count pages: %w", err)
+		return diffLithoDoc{}, err
 	}
-	n = min(n, maxConvertedPages)
-	pages := make([]diffLithoPage, 0, n)
-	for p := 1; p <= n; p++ {
+	marks, err := r.Bookmarks(ctx)
+	if err != nil {
+		return diffLithoDoc{}, fmt.Errorf("read the outline: %w", err)
+	}
+	pages := make([]diffLithoPage, 0, len(sizes))
+	for i, size := range sizes {
+		p := i + 1
 		text, err := r.ExtractText(ctx, p)
 		if err != nil {
-			return nil, fmt.Errorf("extract text of page %d: %w", p, err)
+			return diffLithoDoc{}, fmt.Errorf("extract text of page %d: %w", p, err)
 		}
 		annots, err := r.ExtractAnnotations(ctx, p)
 		if err != nil {
-			return nil, fmt.Errorf("read annotations of page %d: %w", p, err)
+			return diffLithoDoc{}, fmt.Errorf("read annotations of page %d: %w", p, err)
 		}
 		var links []diffLink
 		for _, a := range annots {
@@ -389,17 +509,18 @@ func readDiffPages(ctx context.Context, data []byte) ([]diffLithoPage, error) {
 		}
 		img, err := r.RenderPage(ctx, p, pdf.WithRenderDPI(diffDPI))
 		if err != nil {
-			return nil, fmt.Errorf("render page %d: %w", p, err)
+			return diffLithoDoc{}, fmt.Errorf("render page %d: %w", p, err)
 		}
-		pages = append(pages, diffLithoPage{text: text, links: links, img: img})
+		pages = append(pages, diffLithoPage{text: text, links: links, img: img, size: size})
 	}
-	return pages, nil
+	return diffLithoDoc{pages: pages, outline: flattenOutline(marks)}, nil
 }
 
 // scoreDiff scores litho's pages against the goldens. report is called for
 // each page the strict rule fails, with litho's drawing, Chromium's and
 // their comparison.
-func scoreDiff(g *diffGolden, pages []diffLithoPage, renderDir string, report func(page int, got, want image.Image, d pixelDiff)) diffOutput {
+func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, report func(page int, got, want image.Image, d pixelDiff)) diffOutput {
+	pages := doc.pages
 	out := diffOutput{Pages: len(pages), GoldenPages: g.text.NumPages}
 	n := max(len(pages), g.text.NumPages)
 	goldenText := make(map[int]string, len(g.text.Pages))
@@ -411,8 +532,18 @@ func scoreDiff(g *diffGolden, pages []diffLithoPage, renderDir string, report fu
 		goldenPNG[p.Page] = p.File
 	}
 	var textSum, layoutSum, strictSum float64
+	sizesCompared, sizesMatched := 0, 0
+	var sizeDetail string
 	for p := 1; p <= min(n, maxConvertedPages); p++ {
 		res := diffPageResult{Page: p}
+		if p <= len(pages) && p <= len(g.sizes) {
+			sizesCompared++
+			if got, want := pages[p-1].size, g.sizes[p-1]; got.matches(want) {
+				sizesMatched++
+			} else if sizeDetail == "" {
+				sizeDetail = fmt.Sprintf(", page %d is %.2fx%.2f pt against %.2fx%.2f", p, got.W, got.H, want.W, want.H)
+			}
+		}
 		if p <= len(pages) && p <= g.text.NumPages {
 			lp := pages[p-1]
 			res.TextF1 = tokenF1(goldenText[p], lp.text)
@@ -442,22 +573,50 @@ func scoreDiff(g *diffGolden, pages []diffLithoPage, renderDir string, report fu
 		}
 		out.PageResults = append(out.PageResults, res)
 	}
+	pagesScore := pageCountScore(len(pages), g.text.NumPages)
+	if sizesCompared > 0 {
+		pagesScore *= float64(sizesMatched) / float64(sizesCompared)
+	}
 	out.Scores = map[string]float64{
-		scorePages:  pageCountScore(len(pages), g.text.NumPages),
-		scoreText:   meanOver(textSum, n),
-		scoreLinks:  linkRecall(g.links.Links, pages),
-		scoreLayout: meanOver(layoutSum, n),
-		scoreStrict: meanOver(strictSum, n),
+		scorePages:   pagesScore,
+		scoreText:    meanOver(textSum, n),
+		scoreLinks:   linkRecall(g.links.Links, pages),
+		scoreLayout:  meanOver(layoutSum, n),
+		scoreStrict:  meanOver(strictSum, n),
+		scoreOutline: outlineRecall(g.outline, doc.outline),
 	}
 	s := out.Scores
-	if s[scorePages] == 1 && s[scoreText] >= diffTextBar && s[scoreLinks] == 1 && s[scoreLayout] >= diffLayoutBar {
+	if s[scorePages] == 1 && s[scoreText] >= diffTextBar && s[scoreLinks] == 1 && s[scoreLayout] >= diffLayoutBar && s[scoreOutline] == 1 {
 		out.Outcome = outcomePass
 	} else {
 		out.Outcome = outcomeFail
-		out.Reason = fmt.Sprintf("pages %d against %d, text F1 %.3f, link recall %.3f, layout %.3f, strict %.3f",
-			len(pages), g.text.NumPages, s[scoreText], s[scoreLinks], s[scoreLayout], s[scoreStrict])
+		out.Reason = fmt.Sprintf("pages %d against %d%s, text F1 %.3f, link recall %.3f, layout %.3f, strict %.3f, outline recall %.3f",
+			len(pages), g.text.NumPages, sizeDetail, s[scoreText], s[scoreLinks], s[scoreLayout], s[scoreStrict], s[scoreOutline])
 	}
 	return out
+}
+
+// outlineRecall is the share of the reference's outline items, matched by
+// title and page as multisets, that litho's outline holds; 1 when the
+// reference has none. An outline litho writes and Chromium does not is not
+// penalised: the route writes none unless asked (nativeBookmarks), and the
+// fixtures that ask score the items Chromium writes.
+func outlineRecall(golden, got []diffOutlineItem) float64 {
+	if len(golden) == 0 {
+		return 1
+	}
+	have := make(map[string]int, len(got))
+	for _, o := range got {
+		have[o.key()]++
+	}
+	found := 0
+	for _, o := range golden {
+		if have[o.key()] > 0 {
+			have[o.key()]--
+			found++
+		}
+	}
+	return float64(found) / float64(len(golden))
 }
 
 // meanOver divides sum by n, 0 for no page.

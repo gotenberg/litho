@@ -1,0 +1,22 @@
+package fixture
+
+import "testing"
+
+// FuzzParseOptions checks that no options file makes ParseOptions panic, and
+// that what it accepts maps to options without panicking either.
+func FuzzParseOptions(f *testing.F) {
+	f.Add([]byte(`{"paperWidth": 8.5, "landscape": true, "scale": 0.75, "nativePages": "2-3", "emulatedMediaFeatures": {"prefers-color-scheme": "dark"}}`))
+	f.Add([]byte(`{"paperWidth": 8.`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		o, err := ParseOptions(data)
+		if err != nil {
+			return
+		}
+		s := &Source{Options: o}
+		s.Paper()
+		s.Margins()
+		s.MediaType()
+		s.PreferCSSPageSize()
+		s.PrintOptions()
+	})
+}

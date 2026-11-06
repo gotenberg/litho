@@ -118,8 +118,8 @@ weasyprint-fixtures: ## Extract the weasyprint corpus fixtures from the WeasyPri
 HTML_CORPUS := test/integration/corpus/html
 
 .PHONY: html-chromium
-html-chromium: ## Rebuild the html corpus's Chromium reference PDFs with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker)
-	$(HTML_CORPUS)/chromium.sh $(HTML_CORPUS)/sources $(HTML_CORPUS)/chromium
+html-chromium: ## Rebuild the html corpus's Chromium reference PDFs with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker). Vars: HTML_NAMES (space-separated sources, default all)
+	$(HTML_CORPUS)/chromium.sh $(HTML_CORPUS)/sources $(HTML_CORPUS)/chromium $(HTML_NAMES)
 
 .PHONY: html-fixtures
 html-fixtures: ## Rebuild the html corpus's litho PDFs from its sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)

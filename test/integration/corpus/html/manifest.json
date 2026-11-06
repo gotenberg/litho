@@ -2,7 +2,7 @@
   "name": "html",
   "source": "html",
   "pdf_root": "pdfs",
-  "inputs": { "glob": "sources/*/index.html" },
+  "inputs": { "glob": "sources/*" },
   "goldens": {
     "diff": "goldens/diff"
   }

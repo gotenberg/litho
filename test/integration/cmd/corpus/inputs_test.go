@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/test/integration/corpus/html/fixture"
 )
 
 func TestGlobInputFixtures_KeysOnTheWildcard(t *testing.T) {
@@ -150,7 +152,7 @@ func TestCommittedConverterCorporaLoad(t *testing.T) {
 	}
 
 	html := filepath.Join(corpusSourceDir, "html")
-	sources, err := globInputFixtures(html, "sources/*/index.html")
+	sources, err := globInputFixtures(html, "sources/*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +160,12 @@ func TestCommittedConverterCorporaLoad(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(html, "chromium", s.ID+".pdf")); err != nil {
 			t.Errorf("source %s has no Chromium reference: run make html-chromium", s.ID)
 		}
-		src, err := os.ReadFile(s.PDFPath)
+		source, err := fixture.Load(s.PDFPath)
+		if err != nil {
+			t.Errorf("source %s: %v", s.ID, err)
+			continue
+		}
+		src, err := os.ReadFile(source.Document)
 		if err != nil {
 			t.Fatal(err)
 		}

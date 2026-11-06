@@ -1,8 +1,10 @@
 // Command build regenerates the html corpus's litho PDFs: it converts the
-// index.html of every sources/<name>/ directory to pdfs/<name>.pdf with
-// pdf.Convert, at the options the diff feature of test/integration/cmd/corpus
-// scores with and the Chromium references were made with (chromium.sh), and
-// with the pinned fixture fonts alone, so two machines write the same bytes.
+// document of every sources/<name>/ directory, index.html or index.md, to
+// pdfs/<name>.pdf with pdf.Convert, at the options the directory's
+// options.json names (read through the fixture package, as the diff feature
+// of test/integration/cmd/corpus reads it and chromium.sh posts it to
+// Chromium), and with the pinned fixture fonts alone, so two machines write
+// the same bytes.
 //
 // Run it from the repository root through `make html-fixtures`, which first
 // downloads the fonts versions.env pins:
@@ -26,18 +28,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-)
-
-// The page every source is converted on, in points: the page Chromium lays
-// out for A4 with Gotenberg's default margins of 0.39 inch (a 595.92 by
-// 841.92 point media box and 27.75 point margins, measured on the Chromium
-// references), for the print media type. The diff feature (diffPaperWidth
-// and its siblings) and chromium.sh use the same; keep the three in step.
-const (
-	paperWidth  = 595.92
-	paperHeight = 841.92
-	margin      = 27.75
-	media       = "print"
+	"github.com/gotenberg/litho/test/integration/corpus/html/fixture"
 )
 
 // fixtureFamilies are the prefixes of the font directories
@@ -46,7 +37,7 @@ const (
 var fixtureFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-"}
 
 func main() {
-	sources := flag.String("sources", "test/integration/corpus/html/sources", "Directory of the <name>/index.html sources")
+	sources := flag.String("sources", "test/integration/corpus/html/sources", "Directory of the <name>/ source directories")
 	out := flag.String("out", "test/integration/corpus/html/pdfs", "Directory the PDFs are written to")
 	fonts := flag.String("fonts", "test/integration/testdata/fonts", "Directory of the pinned fixture fonts (make html-fixtures fills it)")
 	flag.Parse()
@@ -62,12 +53,18 @@ func run(ctx context.Context, sourcesDir, outDir, fontsDir string) error {
 	if err != nil {
 		return err
 	}
-	names, err := filepath.Glob(filepath.Join(sourcesDir, "*", "index.html"))
+	entries, err := os.ReadDir(sourcesDir)
 	if err != nil {
 		return fmt.Errorf("listing sources: %w", err)
 	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, filepath.Join(sourcesDir, e.Name()))
+		}
+	}
 	if len(names) == 0 {
-		return fmt.Errorf("no <name>/index.html source under %s", sourcesDir)
+		return fmt.Errorf("no <name>/ source under %s", sourcesDir)
 	}
 	sort.Strings(names)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -77,7 +74,7 @@ func run(ctx context.Context, sourcesDir, outDir, fontsDir string) error {
 	for _, name := range names {
 		if err := buildOne(ctx, name, outDir, fontDirs); err != nil {
 			fmt.Fprintf(os.Stderr, "  html: %v\n", err)
-			failed = append(failed, filepath.Base(filepath.Dir(name)))
+			failed = append(failed, filepath.Base(name))
 		}
 	}
 	if len(failed) > 0 {
@@ -110,20 +107,30 @@ func familyDirs(dir string) ([]string, error) {
 	return dirs, nil
 }
 
-func buildOne(ctx context.Context, source, outDir string, fontDirs []string) error {
-	src, err := os.ReadFile(source) //nolint:gosec // committed corpus source
+func buildOne(ctx context.Context, dir, outDir string, fontDirs []string) error {
+	base := filepath.Base(dir)
+	s, err := fixture.Load(dir)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", source, err)
+		return fmt.Errorf("reading %s: %w", base, err)
 	}
-	base := filepath.Base(filepath.Dir(source))
-	opts := []pdf.ConvertOption{
+	src, err := os.ReadFile(s.Document)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", s.Document, err)
+	}
+	width, height := s.Paper()
+	top, right, bottom, left := s.Margins()
+	printOpts := s.PrintOptions()
+	opts := make([]pdf.ConvertOption, 0, 6+len(printOpts))
+	opts = append(opts,
 		pdf.WithConvertFontDirs(fontDirs...),
-		pdf.WithPaperSize(paperWidth, paperHeight),
-		pdf.WithMargins(margin, margin, margin, margin),
-		pdf.WithMediaType(media),
-		pdf.WithResources(os.DirFS(filepath.Dir(source))),
-	}
-	first, report, err := convert(ctx, src, opts)
+		pdf.WithPaperSize(width, height),
+		pdf.WithMargins(top, right, bottom, left),
+		pdf.WithMediaType(s.MediaType()),
+		pdf.WithPreferCSSPageSize(s.PreferCSSPageSize()),
+		pdf.WithResources(os.DirFS(dir)),
+	)
+	opts = append(opts, printOpts...)
+	first, report, err := convert(ctx, src, s.Format, opts)
 	if err != nil {
 		return fmt.Errorf("converting %s: %w", base, err)
 	}
@@ -134,7 +141,7 @@ func buildOne(ctx context.Context, source, outDir string, fontDirs []string) err
 		}
 		fmt.Printf("  html: %s: %d warnings:\n    %s\n", base, len(msgs), strings.Join(msgs, "\n    "))
 	}
-	second, _, err := convert(ctx, src, opts)
+	second, _, err := convert(ctx, src, s.Format, opts)
 	if err != nil {
 		return fmt.Errorf("converting %s again: %w", base, err)
 	}
@@ -149,9 +156,9 @@ func buildOne(ctx context.Context, source, outDir string, fontDirs []string) err
 	return nil
 }
 
-func convert(ctx context.Context, src []byte, opts []pdf.ConvertOption) ([]byte, *pdf.ConvertReport, error) {
+func convert(ctx context.Context, src []byte, format pdf.Format, opts []pdf.ConvertOption) ([]byte, *pdf.ConvertReport, error) {
 	var buf bytes.Buffer
-	report, err := pdf.Convert(ctx, bytes.NewReader(src), pdf.FormatHTML, &buf, opts...)
+	report, err := pdf.Convert(ctx, bytes.NewReader(src), format, &buf, opts...)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -28,6 +28,15 @@ type htmlSettings struct {
 	Resources fs.FS
 	// FontDirs are the font directories, in preference order.
 	FontDirs []string
+	// PreferCSSPageSize lets an @page size descriptor set the page.
+	PreferCSSPageSize bool
+	// Format is the source's format; empty converts HTML.
+	Format pdf.Format
+	// Print are the remaining print options of the source, after the
+	// ones above: landscape, scale, page ranges, single page, backgrounds,
+	// outline, header and footer templates and media features (see
+	// fixture.Source.PrintOptions in corpus/html/fixture).
+	Print []pdf.ConvertOption
 }
 
 // htmlConverter converts an HTML source to a PDF. It is [convertHTML]
@@ -52,8 +61,14 @@ func convertHTML(ctx context.Context, src []byte, s htmlSettings) ([]byte, error
 	if len(s.FontDirs) > 0 {
 		opts = append(opts, pdf.WithConvertFontDirs(s.FontDirs...))
 	}
+	opts = append(opts, pdf.WithPreferCSSPageSize(s.PreferCSSPageSize))
+	opts = append(opts, s.Print...)
+	format := s.Format
+	if format == "" {
+		format = pdf.FormatHTML
+	}
 	var buf bytes.Buffer
-	if _, err := pdf.Convert(ctx, bytes.NewReader(src), pdf.FormatHTML, &buf, opts...); err != nil {
+	if _, err := pdf.Convert(ctx, bytes.NewReader(src), format, &buf, opts...); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
