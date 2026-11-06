@@ -78,17 +78,23 @@ named anti-DoS cap.
 `text` wraps go-text/typesetting (Unlicense OR BSD-3-Clause) and nothing
 else draws text:
 
-- `Fonts` indexes the font files of a set of directories once and matches
-  a family list, weight, style and language to a face, with per-character
-  fallback for the characters the first choice lacks. It is safe for
-  concurrent use after construction and its answers are deterministic for
-  a given set of files.
-- `Shape` runs HarfBuzz over one run of one face and returns positioned
-  glyphs with cluster-to-text mapping.
-- `Paragraph` itemizes a sequence of styled runs by script, direction and
-  face, shapes the items and breaks them into lines of a given width at
-  UAX #14 opportunities. It returns `compose.Text` runs positioned
-  relative to each line's origin.
+- `Fonts` indexes the font files of a set of directories once (no cache on
+  disk) and `Match` picks a face for a family list, weight and style, with
+  generic families resolved to a documented preference list. It is safe
+  for concurrent use after construction and deterministic for a given set
+  of files.
+- `Layout` itemizes a sequence of styled runs by bidi direction, script
+  and face, shapes each item with HarfBuzz, applies letter and word
+  spacing, and breaks the result into lines of a given width at UAX #14
+  opportunities, cutting an over-long word at a grapheme. It returns
+  `compose.Text` runs positioned relative to each line's origin, with the
+  line's ascent, descent and line gap, and a report of the characters no
+  indexed face covers.
+- Fallback per character: the matched face, then what go-text resolves
+  for the character under the same family, weight and style, then any
+  indexed face closest in weight and style, then `.notdef`.
+- Whitespace is `Collapse` (CSS normal) or `Preserve`; trailing spaces at
+  a wrapped line end hang.
 
 ## Waves and oracles
 
