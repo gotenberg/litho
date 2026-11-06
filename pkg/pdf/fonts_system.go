@@ -54,13 +54,18 @@ const maxFontDirDepth = 32
 // ([WithDocumentID]) records that it was set. The licence to embed a system's
 // font is the caller's.
 func WithSystemFonts() RemediateOption {
+	return withSystemFontDirs(hostFontDirs())
+}
+
+// hostFontDirs returns the font directories of the system litho runs on,
+// the ones [WithSystemFonts] reads. No home directory leaves the per-user
+// directories out; the system-wide ones still serve.
+func hostFontDirs() []string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		// No home directory leaves the per-user directories out; the
-		// system-wide ones still serve.
 		home = ""
 	}
-	return withSystemFontDirs(systemFontDirs(runtime.GOOS, os.Getenv, home))
+	return systemFontDirs(runtime.GOOS, os.Getenv, home)
 }
 
 // withSystemFontDirs is [WithSystemFonts] over dirs, which tests set.

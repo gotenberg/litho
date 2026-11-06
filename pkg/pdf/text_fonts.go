@@ -3,8 +3,6 @@ package pdf
 import (
 	"context"
 	"io/fs"
-	"os"
-	"runtime"
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 )
@@ -35,13 +33,7 @@ type FontSource struct {
 // directories [WithSystemFonts] reads, indexed once on first use. The output
 // then depends on the fonts installed where litho runs.
 func NewSystemFontSource() FontSource {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		// No home directory leaves the per-user directories out; the
-		// system-wide ones still serve.
-		home = ""
-	}
-	return newFontFilesSource(newSystemFonts(systemFontDirs(runtime.GOOS, os.Getenv, home)))
+	return newFontFilesSource(newSystemFonts(hostFontDirs()))
 }
 
 // NewFontFileSource offers the TrueType and OpenType files of fsys, searched

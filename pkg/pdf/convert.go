@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -217,7 +215,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 
 	dirs := o.fontDirs
 	if len(dirs) == 0 {
-		dirs = defaultConvertFontDirs()
+		dirs = hostFontDirs()
 	}
 	fonts, err := convertFonts(ctx, o.logger, dirs)
 	if err != nil {
@@ -248,18 +246,6 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 		report.Warnings = append(report.Warnings, ConvertWarning{Code: w.Code, Message: w.Message, Page: w.Page})
 	}
 	return report, nil
-}
-
-// defaultConvertFontDirs returns the operating system's font directories,
-// the ones [WithSystemFonts] reads.
-func defaultConvertFontDirs() []string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		// No home directory leaves the per-user directories out; the
-		// system-wide ones still serve.
-		home = ""
-	}
-	return systemFontDirs(runtime.GOOS, os.Getenv, home)
 }
 
 // maxConvertFontIndexes bounds the font indexes [convertFonts] keeps, one per

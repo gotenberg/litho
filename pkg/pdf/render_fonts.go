@@ -4,8 +4,6 @@ import (
 	"context"
 	"io/fs"
 	"log/slog"
-	"os"
-	"runtime"
 
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 )
@@ -66,13 +64,7 @@ func WithRenderFontFiles(fsys fs.FS) RenderOption {
 // The directories are indexed once, at the first font a render asks for, and
 // the index is kept for every render the option value serves.
 func WithRenderSystemFonts() RenderOption {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		// No home directory leaves the per-user directories out; the
-		// system-wide ones still serve.
-		home = ""
-	}
-	p := newSystemFonts(systemFontDirs(runtime.GOOS, os.Getenv, home))
+	p := newSystemFonts(hostFontDirs())
 	return func(o *renderOpts) {
 		o.systemFonts = p
 	}
