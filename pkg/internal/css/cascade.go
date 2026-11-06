@@ -543,7 +543,8 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 	if cs.root != nil {
 		rootFS = cs.root.FontSize
 	}
-	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: cs.r.media.Width, height: cs.r.media.Height}
+	vw, vh := cs.r.media.viewport()
+	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: vw, height: vh}
 	s.lc.ex, s.lc.ch = cs.fontUnits(parent)
 	for _, id := range computeOrder {
 		def := &props[id]

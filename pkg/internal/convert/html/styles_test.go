@@ -236,12 +236,36 @@ func TestPrepare_ViewportIsThePageArea(t *testing.T) {
 	}
 }
 
-func TestPrepare_EvaluatesMediaOnThePageSize(t *testing.T) {
+// TestPrepare_EvaluatesMediaOnThePaper locks the size the media features
+// see: the page area of the paper and margins of the options, whatever size
+// and margins @page gives the pages, while the viewport units take the
+// @page page area (TestPrepare_ViewportIsThePageArea).
+//
+// # Corpus evidence
+//
+//   - html: Chromium in the pinned Gotenberg image, A4 paper and its default
+//     0.39in margins, matches (min-width: 720px) and (min-height: 1048px)
+//     and no wider, under @page { margin: 1in }, @page { size: 400px 300px;
+//     margin: 50px } and @page { size: landscape; margin: 0 } alike, where
+//     100vw spans the @page page area of each.
+func TestPrepare_EvaluatesMediaOnThePaper(t *testing.T) {
 	t.Parallel()
-	src := `<style>@page { size: 300pt 300pt } @media (max-width: 500px) { #x { color: red } }</style><p id=x>x`
-	p := prep(t, src, Options{})
-	if byID(t, p.root, "x").Style.Color != red {
-		t.Errorf("media features compared against the paper, not the @page size")
+	tests := []struct {
+		name string
+		css  string
+		o    Options
+		want bool
+	}{
+		{"@page size ignored", `@page { size: 300pt 300pt } @media (max-width: 500px) { #x { color: red } }`, Options{}, false},
+		{"@page margins ignored", `@page { margin: 200pt } @media (min-width: 590pt) { #x { color: red } }`, Options{}, true},
+		{"the options' margins count", `@media (max-width: 400pt) { #x { color: red } }`, Options{MarginLeft: 100, MarginRight: 100}, true},
+		{"landscape paper", `@media (orientation: landscape) { #x { color: red } }`, Options{Landscape: true}, true},
+	}
+	for _, tt := range tests {
+		p := prep(t, "<style>"+tt.css+"</style><p id=x>x", tt.o)
+		if got := byID(t, p.root, "x").Style.Color == red; got != tt.want {
+			t.Errorf("%s: the media rule matched = %v, want %v", tt.name, got, tt.want)
+		}
 	}
 }
 

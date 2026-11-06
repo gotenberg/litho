@@ -161,18 +161,18 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
 	sheets := c.stylesheets(ctx, scan.sheets)
 
-	media := css.Media{Type: o.Media, Width: o.PageWidth, Height: o.PageHeight, Features: o.MediaFeatures}
+	media := css.Media{Type: o.Media, Features: o.MediaFeatures}
+	media.Width, media.Height = paperArea(o)
 	resolver := css.NewResolver(media, sheets)
 	// The direction that decides whether the first page is a left or a
 	// right one is not known before the cascade: the viewport takes a
 	// left-to-right document's.
 	first, _ := pageBox(resolver, o, pageSel(0, false))
 	if w, h := areaOf(first); w != media.Width || h != media.Height {
-		// The viewport the media features and the viewport units measure
-		// is the page area of the first page, the size and margins @page
-		// sets (CSS Page 3, 3.1 and 5.1); evaluate the media rules again
-		// for it.
-		media.Width, media.Height = w, h
+		// The viewport units measure the page area of the first page, the
+		// size and margins @page sets (CSS Page 3, 3.1 and 5.1), while the
+		// media features keep the paper's ([paperArea]).
+		media.ViewportWidth, media.ViewportHeight = w, h
 		resolver = css.NewResolver(media, sheets)
 	}
 

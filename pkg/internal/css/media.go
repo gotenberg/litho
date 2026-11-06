@@ -7,10 +7,18 @@ type Media struct {
 	// Type is "print" or "screen"; "" means print.
 	Type string
 	// Width and Height are the page box size in points. Width and height
-	// media features compare against them and the vw, vh, vmin and vmax
-	// units resolve against them. Zero makes every width and height
-	// feature false and every viewport unit zero.
+	// media features compare against them and, unless ViewportWidth and
+	// ViewportHeight are set, the vw, vh, vmin and vmax units resolve
+	// against them. Zero makes every width and height feature false and
+	// every viewport unit zero.
 	Width, Height float64
+	// ViewportWidth and ViewportHeight, when both are positive, are the
+	// size in points the vw, vh, vmin and vmax units resolve against in
+	// place of Width and Height (CSS Values 4, 6.1.2): a paginated medium
+	// whose media features see another size than its initial containing
+	// block, as Chromium's print evaluates media queries against the
+	// paper's page area and sizes viewport units by the @page page area.
+	ViewportWidth, ViewportHeight float64
 	// Features are the discrete media features (Media Queries 5, 2.4) the
 	// @media rules evaluate against, by name, such as
 	// "prefers-color-scheme": "dark" or "hover": "hover". A feature absent
@@ -398,4 +406,12 @@ func evalSupports(l []token) bool {
 		return false, false
 	})
 	return v && ok
+}
+
+// viewport returns the size the viewport units resolve against.
+func (m Media) viewport() (float64, float64) {
+	if m.ViewportWidth > 0 && m.ViewportHeight > 0 {
+		return m.ViewportWidth, m.ViewportHeight
+	}
+	return m.Width, m.Height
 }
