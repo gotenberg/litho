@@ -96,10 +96,9 @@ func WithMargins(top, right, bottom, left float64) ConvertOption {
 // WithFontFamilies sets the font families asked for, in preference order,
 // matched without regard to case or spaces. The generic families serif,
 // sans-serif, monospace, cursive, fantasy and system-ui expand to common
-// families of their kind. The default is serif, which asks for DejaVu Serif,
-// Liberation Serif, Noto Serif, Times New Roman, then Times: the family a
-// word processor opens a text file in. A character the chosen face lacks is
-// drawn from another face that covers it.
+// families of their kind. The default is Liberation Serif, the family a word
+// processor opens a text file in, then serif. A character the chosen face
+// lacks is drawn from another face that covers it.
 func WithFontFamilies(families ...string) ConvertOption {
 	return func(o *convertOptions) {
 		o.families = slices.Clone(families)

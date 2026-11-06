@@ -27,11 +27,11 @@ const (
 	DefaultTabWidth = 8
 )
 
-// DefaultFontFamily is the family asked for when [Options.FontFamilies] is
-// empty: the generic serif family, which [text.Style] expands to DejaVu
-// Serif, Liberation Serif, Noto Serif, Times New Roman and Times. LibreOffice
-// opens a .txt file in Liberation Serif.
-const DefaultFontFamily = "serif"
+// DefaultFontFamilies are the families asked for, in order, when
+// [Options.FontFamilies] is empty: Liberation Serif, the face LibreOffice
+// opens a .txt file in, then the generic serif family for a system without
+// it. The slice is never mutated.
+var DefaultFontFamilies = []string{"Liberation Serif", "serif"}
 
 // DefaultMaxInputBytes is the source cap when [Options.MaxInputBytes] is
 // zero. It is the default of the conversion input budget (see
@@ -73,7 +73,7 @@ type Options struct {
 	// more, and they leave room between them on the page.
 	MarginTop, MarginRight, MarginBottom, MarginLeft float64
 	// FontFamilies lists the families asked for, in preference order, as
-	// [text.Style.Families] reads them; [DefaultFontFamily] when empty.
+	// [text.Style.Families] reads them; [DefaultFontFamilies] when empty.
 	FontFamilies []string
 	// FontSize is the font size in points, 12 when zero, at most 1000.
 	FontSize float64
@@ -102,7 +102,7 @@ func (o Options) withDefaults() (Options, error) {
 		o.MarginTop, o.MarginRight, o.MarginBottom, o.MarginLeft = DefaultMargin, DefaultMargin, DefaultMargin, DefaultMargin
 	}
 	if len(o.FontFamilies) == 0 {
-		o.FontFamilies = []string{DefaultFontFamily}
+		o.FontFamilies = DefaultFontFamilies
 	} else {
 		o.FontFamilies = slices.Clone(o.FontFamilies)
 	}

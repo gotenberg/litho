@@ -115,7 +115,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	var margin marginFlag
 	fs.Var(&margin, "margin", "Margins in points: one for every side, or top,right,bottom,left (default 56.693, 2 cm; all zero keeps it)")
 	var fonts stringsFlag
-	fs.Var(&fonts, "font", "Font family, repeatable in preference order (default serif)")
+	fs.Var(&fonts, "font", "Font family, repeatable in preference order (default Liberation Serif, then serif)")
 	fontSize := fs.Float64("font-size", 0, "Font size in points (default 12)")
 	var fontDirs stringsFlag
 	fs.Var(&fontDirs, "font-dir", "Directory of font files, searched recursively; repeatable. Without it, the system font directories")
