@@ -373,14 +373,22 @@ func TestConvert_HTMLAppliesPageSetupAndMedia(t *testing.T) {
 	if _, rep := convertHTMLTest(t, dir, src, WithMediaType("screen")); rep.Pages != 2 {
 		t.Errorf("screen: %d pages, want 2", rep.Pages)
 	}
-	data, _ = convertHTMLTest(t, dir, `<style>@page { size: A5 landscape }</style><p>x`)
-	r2, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer r2.Close()
-	if p, err := r2.Page(ctx, 1); err != nil || math.Abs(p.Width-595.276) > 0.01 || math.Abs(p.Height-419.528) > 0.01 {
-		t.Errorf("@page A5 landscape: %vx%v, %v", p.Width, p.Height, err)
+	// With the CSS page size preferred the @page size is the page;
+	// without, the paper is, turned to the @page orientation.
+	for _, tc := range []struct {
+		prefer bool
+		w, h   float64
+	}{{true, 595.276, 419.528}, {false, 841.89, 595.276}} {
+		data, _ = convertHTMLTest(t, dir, `<style>@page { size: A5 landscape }</style><p>x`, WithPreferCSSPageSize(tc.prefer))
+		r2, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		p, err := r2.Page(ctx, 1)
+		r2.Close()
+		if err != nil || math.Abs(p.Width-tc.w) > 0.01 || math.Abs(p.Height-tc.h) > 0.01 {
+			t.Errorf("@page A5 landscape, prefer %v: %vx%v, %v; want %vx%v", tc.prefer, p.Width, p.Height, err, tc.w, tc.h)
+		}
 	}
 }
 
