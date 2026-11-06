@@ -105,6 +105,13 @@ type Options struct {
 	// shows the next slice of it, as tall as its own area. Layout calls it
 	// at most once per index, in index order, from its own goroutine.
 	PageAt func(index int) PageBox
+	// FitFirstPage makes the first page as tall as the content it shows
+	// plus its top and bottom margins, at most its box's Height and at
+	// least one point of page area: the flow is cut as the box says, and
+	// the page is then trimmed to what it holds. A converter lays a
+	// document out on one page this way (Chromium's single page, as
+	// Gotenberg prints it).
+	FitFirstPage bool
 	// Lang is the document language as a BCP 47 tag, used for a node
 	// without one in its ancestry, "" for unknown.
 	Lang string
@@ -143,6 +150,13 @@ type Result struct {
 	// Warnings lists the constructs the engine did not lay out as the
 	// style asked, in document order.
 	Warnings []compose.Warning
+	// ContentWidth is the right edge of the flow's scrollable overflow,
+	// in points from the left edge of the first page's area (CSS Overflow
+	// 3, 2.2): the border boxes and line contents of every box, those
+	// inside a box that clips its overflow left out. It is at least zero
+	// and exceeds the area's width when content overflows it, which a
+	// converter shrinks to fit as browsers print.
+	ContentWidth float64
 }
 
 // DefaultMaxPages is the page cap when Options.MaxPages is zero.

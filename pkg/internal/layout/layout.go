@@ -53,7 +53,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if e.err != nil {
 		return nil, e.err
 	}
-	res := &Result{Structure: e.root}
+	res := &Result{Structure: e.root, ContentWidth: overflowRight(rb)}
 	used := map[*compose.StructElem]bool{}
 	res.Pages = e.assemble(disp, canvas, rb, used)
 	if len(res.Pages) > e.maxPages {
@@ -204,8 +204,12 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 	e.pageFrags = make([]int, n)
 	free := map[compose.Fragment]bool{}
 	perPage := e.distribute(d, 0, n, used, free)
+	fitH := 0.0
+	if e.opts.FitFirstPage {
+		fitH = e.fittedHeight(rb, d)
+	}
 	for k := range n {
-		pb := e.box(k)
+		pb := e.assembledBox(k, fitH)
 		pg := &compose.Page{Width: pb.Width, Height: pb.Height}
 		e.paintPageBackground(pg, pb)
 		e.paintCanvas(pg, canvas, pb)
