@@ -239,9 +239,18 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	tj := tjWriter{buf: &p.buf}
 	var started bool
 	var penX, baseline float64
-	for _, g := range t.Glyphs {
+	gt := clusterTexts(fe.font, t.Glyphs)
+	spans := gt.spans
+	for i, g := range t.Glyphs {
 		if err := p.step(ctx); err != nil {
 			return err
+		}
+		if len(spans) > 0 && spans[0].start == i {
+			// Marked content may sit inside a text object (ISO 32000-1,
+			// 8.2, Figure 9); a TJ array may not hold it, so the array
+			// ends and the next continues where it left the pen.
+			tj.end()
+			writeActualText(&p.buf, spans[0].text)
 		}
 		advance, ok := fe.advance(g.GID)
 		if !ok {
@@ -259,8 +268,13 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 			tj.number(adj)
 			penX -= adj / 1000 * size
 		}
-		tj.code(fe.subset.Code(g.GID, g.Text))
+		tj.code(fe.subset.Code(g.GID, gt.texts[i]))
 		penX += advance * size
+		if len(spans) > 0 && spans[0].end == i+1 {
+			tj.end()
+			p.buf.WriteString("EMC\n")
+			spans = spans[1:]
+		}
 	}
 	tj.end()
 	if t.Stroke > 0 {
