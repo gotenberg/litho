@@ -69,7 +69,7 @@ func (g *treeGen) style() *css.Style {
 	displays := []css.Display{
 		css.Block, css.Inline, css.InlineBlock, css.ListItem, css.Inline, css.Block, css.Table, css.TableCell, css.DisplayNone, css.InlineTable, css.TableColumn,
 		css.TableRow, css.TableRowGroup, css.TableHeaderGroup, css.TableFooterGroup, css.TableColumnGroup, css.TableCaption, css.TableCell, css.TableRow,
-		css.FlowRoot,
+		css.FlowRoot, css.Flex, css.InlineFlex, css.Flex,
 	}
 	st.Display = displays[int(b)%len(displays)]
 	if b&0x80 != 0 {
@@ -153,6 +153,20 @@ func (g *treeGen) style() *css.Style {
 			}}
 			st.TransformOrigin = [2]css.Dimension{g.length(false), g.length(false)}
 		}
+	}
+	if st.Display == css.Flex || st.Display == css.InlineFlex || b&0x40 != 0 {
+		ff := g.next()
+		st.FlexDirection = css.FlexDirection(ff % 4)
+		st.FlexWrap = css.FlexWrap(ff >> 2 % 3)
+		st.JustifyContent = css.BoxAlign(g.next() % 17)
+		st.AlignItems = css.BoxAlign(g.next() % 17)
+		st.AlignContent = css.BoxAlign(g.next() % 17)
+		st.AlignSelf = css.BoxAlign(g.next()%17) | css.BoxAlign(ff&0x80)
+		st.FlexGrow, st.FlexShrink = float64(g.next()%3), float64(g.next()%3)
+		st.FlexBasis = []css.Dimension{{Kind: css.Auto}, {Kind: css.FlexContent}, g.length(true)}[g.next()%3]
+		st.Order = int(int8(g.next())) % 3
+		st.RowGap, st.ColumnGap = g.length(false), g.length(false)
+		st.MinWidthAuto, st.MinHeightAuto = ff&0x40 != 0, ff&0x20 != 0
 	}
 	if st.Display >= css.Table && st.Display <= css.TableCaption {
 		tf := g.next()

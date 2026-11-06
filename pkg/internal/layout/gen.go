@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"slices"
@@ -43,6 +44,10 @@ func (e *engine) generate(root *Node) *box {
 	}
 	cctx := e.enter(root, rb, ctx)
 	rb.elem = cctx.elem
+	if st.Display == css.Flex {
+		e.genFlex(rb, root.Children, cctx)
+		return rb
+	}
 	e.genChildren(rb, root.Children, cctx)
 	return rb
 }
@@ -181,6 +186,17 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		return []*box{w}
 	case float == css.FloatNone && isTablePart(st.Display):
 		return []*box{e.genPart(n, st, ctx)}
+	case st.Display == css.Flex || st.Display == css.InlineFlex:
+		b := e.newBox(n, st, kindBlock, ctx)
+		b.float = float
+		b.abs = isAbs(st)
+		b.inline = float == css.FloatNone && !b.abs && st.Display == css.InlineFlex
+		cctx := e.enter(n, b, ctx)
+		if float != css.FloatNone || b.abs || b.inline {
+			cctx.decos = ownDecos(b.st)
+		}
+		e.genFlex(b, n.Children, cctx)
+		return []*box{b}
 	case float == css.FloatNone && st.Display == css.InlineBlock:
 		b := e.newBox(n, st, kindBlock, ctx)
 		b.inline = true
@@ -269,7 +285,7 @@ func isAbs(st *css.Style) bool {
 
 // isInlineLevel reports whether a display value is inline-level.
 func isInlineLevel(d css.Display) bool {
-	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable || d == css.InlineListItem
+	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable || d == css.InlineListItem || d == css.InlineFlex
 }
 
 // isTablePart reports a display value of a caption or an internal table
@@ -472,4 +488,62 @@ func markerStyle(item *css.Style) *css.Style {
 	st.TextIndent = css.Pts(0)
 	st.TextTransform = css.TransformNone
 	return &st
+}
+
+// genFlex generates the children of the flex container b (CSS Flexbox 1,
+// 4): each in-flow child box is a flex item, which neither floats nor
+// clears; each run of text between them is wrapped in an anonymous flex
+// item, unless it holds white space alone, which is not rendered. The
+// items are sorted in order-modified document order (5.4), an absolutely
+// positioned child taking order 0 for painting.
+func (e *engine) genFlex(b *box, children []*Node, ctx genCtx) {
+	raw := e.wrapOrphans(b, e.genRaw(b, children, ctx), false)
+	var kids []*box
+	for i := 0; i < len(raw); {
+		k := raw[i]
+		if k.abs {
+			kids = append(kids, k)
+			i++
+			continue
+		}
+		if !k.inline {
+			k.float = css.FloatNone
+			k.flexItem = true
+			kids = append(kids, k)
+			i++
+			continue
+		}
+		j := i
+		blank := true
+		for j < len(raw) && raw[j].inline && !raw[j].abs {
+			blank = blank && isSpace(raw[j])
+			j++
+		}
+		if !blank {
+			a := &box{
+				st: anonStyle(b.st), kind: kindBlock, anon: true, first: true, last: true, parent: b,
+				lang: b.lang, elem: b.elem, link: b.link, depth: b.depth + 1, inlineKids: true, flexItem: true,
+			}
+			a.hidden = a.st.Visibility != css.Visible
+			e.boxes++
+			for _, c := range raw[i:j] {
+				c.parent = a
+				a.kids = append(a.kids, c)
+			}
+			kids = append(kids, a)
+		}
+		i = j
+	}
+	order := func(k *box) int {
+		if k.abs {
+			return 0
+		}
+		return k.st.Order
+	}
+	slices.SortStableFunc(kids, func(x, y *box) int { return cmp.Compare(order(x), order(y)) })
+	for _, k := range kids {
+		k.parent = b
+	}
+	b.kids = kids
+	b.flex = &flexData{}
 }

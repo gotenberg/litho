@@ -236,6 +236,9 @@ func formatterFor(b *box) formatter {
 	if b.tpart == partWrapper {
 		return tableFormatter{}
 	}
+	if b.flex != nil {
+		return flexFormatter{}
+	}
 	return flowFormatter{}
 }
 
@@ -911,6 +914,12 @@ func (e *engine) layoutAtomic(a *box, cbw float64) {
 		if td.hasBaseline {
 			a.baseline, a.hasBaseline = td.table.y+td.baseline-a.y, true
 		}
+	} else if a.flex != nil {
+		// An inline flex container's baseline is its first main-axis
+		// baseline (CSS Flexbox 1, 8.5).
+		if y, ok := flexBaseline(a, false); ok {
+			a.baseline, a.hasBaseline = y-a.y, true
+		}
 	} else if a.st.Overflow == css.OverflowVisible {
 		if y, ok := lastBaseline(a); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
@@ -921,6 +930,9 @@ func (e *engine) layoutAtomic(a *box, cbw float64) {
 // lastBaseline returns the baseline of the last line box in flow inside b
 // (CSS 2.1, 10.8.1, for inline-block).
 func lastBaseline(b *box) (float64, bool) {
+	if b.flex != nil {
+		return flexBaseline(b, true)
+	}
 	if len(b.lines) > 0 {
 		l := b.lines[len(b.lines)-1]
 		return l.y + l.baseline, true
@@ -940,6 +952,9 @@ func lastBaseline(b *box) (float64, bool) {
 // firstBaseline returns the baseline of the first line box in flow inside
 // b, for the outside marker of a list item.
 func firstBaseline(b *box) (float64, bool) {
+	if b.flex != nil {
+		return flexBaseline(b, false)
+	}
 	if len(b.lines) > 0 {
 		l := b.lines[0]
 		return l.y + l.baseline, true

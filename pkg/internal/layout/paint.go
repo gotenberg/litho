@@ -447,6 +447,9 @@ func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 			p.collect(k, blocks, floats, layers)
 		case k.inline:
 			// An atomic inline paints with its line.
+		case k.flexItem && !k.layered():
+			// A flex item paints as an inline block does, with its
+			// container's content (CSS Flexbox 1, 4.3).
 		case k.layered():
 			*layers = append(*layers, k)
 		case k.float != css.FloatNone:
@@ -505,6 +508,16 @@ func (p *painter) content(b *box) {
 	}
 	if b.kind == kindReplaced {
 		p.replaced(b)
+		return
+	}
+	if b.flex != nil {
+		// Flex items paint like inline blocks, in order-modified
+		// document order, the order of the kids (CSS Flexbox 1, 4.3).
+		for _, k := range b.kids {
+			if k.flexItem && k.laidOut && !k.layered() {
+				p.context(k)
+			}
+		}
 		return
 	}
 	p.marker(b)

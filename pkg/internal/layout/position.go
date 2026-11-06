@@ -250,10 +250,20 @@ func (e *engine) layoutAbs(b *box) {
 	}
 	left := e.absWidths(b, cb, rw)
 	b.x = cb.x + left + b.m[css.Left]
+	_, lSet := insetOf(b.st.Left, cb.w)
+	_, rSet := insetOf(b.st.Right, cb.w)
+	if !lSet && !rSet {
+		b.x += flexStaticShift(b, true)
+	}
 	if b.kind == kindReplaced {
 		b.h = rh
 	}
 	e.absHeights(b, cb, ccb)
+	_, tSet := insetOf(b.st.Top, cb.h)
+	_, bSet := insetOf(b.st.Bottom, cb.h)
+	if !tSet && !bSet {
+		b.shift(0, flexStaticShift(b, false))
+	}
 }
 
 // absWidths sets the content width and horizontal margins of the

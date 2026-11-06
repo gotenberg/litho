@@ -62,7 +62,7 @@ func newDeco(st *css.Style) deco {
 		d.thick = max(resolve(t, size), 0)
 	case css.Normal:
 		d.thick = fromFont
-	case css.Auto, css.None, css.Number:
+	case css.Auto, css.None, css.Number, css.FlexContent:
 	}
 	if o := st.TextUnderlineOffset; o.Kind == css.Points || o.Kind == css.Percent {
 		d.offset, d.hasOffset = resolve(o, size), true
@@ -156,6 +156,11 @@ type box struct {
 	tpart tablePart
 	tdata *tableData
 	cell  *cellData
+
+	// flex is the flex layout state of a flex container (CSS Flexbox 1),
+	// nil for any other box; flexItem reports a flex item.
+	flex     *flexData
+	flexItem bool
 }
 
 // markerBox is the outside marker of a list item (CSS 2.1, 12.5).
@@ -206,18 +211,20 @@ func (b *box) marginH() float64 { return b.borderH() + b.m[css.Top] + b.m[css.Bo
 func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
 		b.st.Overflow != css.OverflowVisible || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
-		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell
+		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
+		b.flex != nil || b.flexItem
 }
 
 // layered reports whether the box paints in the positioned layers of its
 // stacking context rather than with the in-flow content: a positioned
 // box, or one that creates a stacking context (CSS 2.1, 9.9.1 and Appendix
-// E, steps 2, 8 and 9).
+// E, steps 2, 8 and 9), a flex item with a z-index among them (CSS
+// Flexbox 1, 4.3).
 func (b *box) layered() bool {
 	if b.parent == nil || b.tpart.internal() || b.kind == kindText || b.kind == kindInline || b.kind == kindBreak {
 		return false
 	}
-	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed()
+	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.flexItem && !b.st.ZIndex.Auto
 }
 
 // isStackingContext reports whether the box creates a stacking context: a
@@ -228,13 +235,13 @@ func (b *box) isStackingContext() bool {
 	if !b.layered() {
 		return false
 	}
-	return b.st.Position != css.Static && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed()
+	return (b.st.Position != css.Static || b.flexItem) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed()
 }
 
 // zLevel returns the stack level of a stacking context: its z-index, 0
 // for one that a positioned z-index does not create.
 func (b *box) zLevel() int {
-	if b.st.Position == css.Static || b.st.ZIndex.Auto {
+	if b.st.Position == css.Static && !b.flexItem || b.st.ZIndex.Auto {
 		return 0
 	}
 	return b.st.ZIndex.Level

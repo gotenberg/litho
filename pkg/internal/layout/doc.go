@@ -6,8 +6,8 @@
 // box generation (section 9.2), block formatting with margin collapsing,
 // floats and clearance (sections 8.3.1, 9.4.1, 9.5, 10.3, 10.6), inline
 // formatting with line boxes (sections 9.4.2, 10.8 and CSS Text 3), lists
-// (section 12.5), tables (chapter 17), backgrounds and borders (CSS
-// Backgrounds 3), and page fragmentation (CSS Fragmentation 3 and CSS 2.1
+// (section 12.5), tables (chapter 17), flexible boxes (CSS Flexbox 1),
+// backgrounds and borders (CSS Backgrounds 3), and page fragmentation (CSS Fragmentation 3 and CSS 2.1
 // section 13.3).
 //
 // # Fragmentation
@@ -30,8 +30,8 @@
 // # Formatting contexts
 //
 // A block container's content is laid out by a formatter chosen per
-// display value: block flow, inline flow, and the table formatter of a
-// table wrapper box.
+// display value: block flow, inline flow, the table formatter of a table
+// wrapper box, and the flex formatter of a flex container.
 //
 // # Tables
 //
@@ -53,6 +53,21 @@
 // the next page whole; one with nothing to break at, taller than a page
 // area, overflows onto the pages below.
 //
+// # Flexible boxes
+//
+// A flex container's in-flow children are its flex items, a run of text
+// among them an anonymous one, sorted in order-modified document order. The
+// flex formatter runs the algorithm of CSS Flexbox 1, section 9: flex base
+// and hypothetical main sizes with the automatic minimum size, lines,
+// flexible lengths, cross sizes with stretching and baseline alignment,
+// auto margins, justify-content, align-items, align-self, align-content and
+// gaps, in the horizontal writing mode alone. Each item is measured off the
+// page cuts and laid out where it lands: a row container breaks between
+// its lines and inside its items, the items of a line starting on the same
+// page; a column container breaks between and inside its items. Items
+// paint as inline blocks do, in order-modified document order, and an item
+// with a z-index creates a stacking context.
+//
 // # Positioning
 //
 // Relative positioning moves a box, inline boxes included, when it paints
@@ -68,8 +83,9 @@
 //
 // # Not supported
 //
-// Flex, grid, 3D transforms, generated content, hyphenation and
-// multi-column layout are out of scope.
+// Grid, vertical writing modes, 3D transforms, generated content,
+// hyphenation and multi-column layout are out of scope; visibility:
+// collapse on a flex item hides it as visibility: hidden does.
 //
 // # Concurrency
 //

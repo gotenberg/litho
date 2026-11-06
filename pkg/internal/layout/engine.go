@@ -74,6 +74,9 @@ type engine struct {
 	// rtlRoot reports a root laid out right to left, whose first page is
 	// a left page.
 	rtlRoot bool
+	// flexPasses counts the layouts made to measure flex items, against
+	// [maxFlexPasses].
+	flexPasses int
 }
 
 // fail records the first error; the layout unwinds once it is set.
