@@ -4,8 +4,8 @@ Reftests from [web-platform-tests](https://github.com/web-platform-tests/wpt) at
 
 | File                 | What it holds                                                                                                                                               |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reftests.json`      | The 569 tests: each test's WPT path, whether it is a print reftest, its pages compared, its resources, and each reference with its relation and fuzziness   |
-| `files.sha256`       | Every file the tests read (tests, references, their stylesheets and images, `LICENSE.md`, `fonts/Ahem.ttf`): 1009 lines of `<sha256>  <WPT path>`           |
+| `reftests.json`      | The 774 tests: each test's WPT path, whether it is a print reftest, its pages compared, its resources, and each reference with its relation and fuzziness   |
+| `files.sha256`       | Every file the tests read (tests, references, their stylesheets and images, `LICENSE.md`, `fonts/Ahem.ttf`): 1383 lines of `<sha256>  <WPT path>`           |
 | `list-candidates.py` | The selection script: reads a WPT checkout and writes `reftests.json` (standard library only)                                                               |
 | `fetch.sh`           | Downloads each listed file from `raw.githubusercontent.com` at the pinned commit, refuses one whose hash differs, and records the commit in `versions.json` |
 
@@ -14,7 +14,9 @@ Reftests from [web-platform-tests](https://github.com/web-platform-tests/wpt) at
 `list-candidates.py` walks these WPT directories and keeps a reftest when the test and every reference it links are plain HTML and CSS a static converter can draw:
 
 - CSS 2.1 chapters: `css/CSS2/` `box-display`, `normal-flow`, `floats`, `floats-clear`, `margin-padding-clear`, `borders`, `text`, `lists`, `visuren`, `visudet`, `page-box`, `pagination`, `colors`, `backgrounds`. WPT has no `css/CSS2/page`; `page-box` and `pagination` hold its tests.
-- CSS modules: `css/css-backgrounds/`, `css/css-text/`, `css/css-lists/`, `css/css-page/`, `css/css-break/`, without their `flexbox`, `grid`, `table`, `multicol` and `writing-mode` subdirectories (layout modes outside the converter's first wave), and without `support`, `reference`, `resources`, `crashtests`, `animations`, `parsing`, `inheritance` and tentative tests.
+- CSS modules: `css/css-backgrounds/`, `css/css-text/`, `css/css-lists/`, `css/css-page/`, `css/css-break/`, `css/css-flexbox/`, `css/css-align/`, without their `flexbox`, `grid`, `table`, `multicol` and `writing-mode` subdirectories (layout modes outside the converter's first wave), and without `support`, `reference`, `resources`, `crashtests`, `animations`, `parsing`, `inheritance` and tentative tests.
+
+The flexbox areas, `css-flexbox` and `css-align`, also leave out the tests that lean on what the converter does not lay out: grid, multi-column, the intrinsic sizing keywords, `aspect-ratio`, `visibility: collapse`, `display: contents`, containment, sticky positioning, `zoom`, the legacy `-webkit-box`, any `writing-mode`, anchor positioning, `<details>`, `<fieldset>`, and the balanced wrapping of CSS Flexbox 2 (`flex-wrap: balance`, `flex-line-count`). A `css-align` test qualifies only when it holds a flex container.
 
 A test qualifies when:
 
@@ -23,7 +25,7 @@ A test qualifies when:
 - an XHTML file (`.xht`) parses alike as HTML: no CDATA section, no self-closed element other than a void one. CSS 2.1 tests wrap their style sheets in `<![CDATA[ ]]>`, which an HTML parser hands to CSS as text that swallows the whole sheet; that rule excludes 2318 files, most of the CSS 2.1 suite;
 - every stylesheet and image a file names resolves inside that file's own directory and exists. The feature converts each document with the file system rooted there, so a `../support/` image (145 CSS 2.1 tests use `../support/black96x96.png`) cannot be read. The one absolute URL allowed is `/fonts/ahem.css`, whose `@font-face` the converter cannot load: the corpus installs Ahem as a font instead.
 
-That leaves 2860 candidates. Each area then keeps at most its cap, the candidates whose path hashes lowest (SHA-256), so the choice stays put when WPT adds or removes other tests: 24 per CSS 2.1 chapter, 80 from `css-backgrounds`, 120 from `css-text`, 40 each from `css-lists`, `css-page` and `css-break`.
+That leaves 3285 candidates. Each area then keeps at most its cap, the candidates whose path hashes lowest (SHA-256), so the choice stays put when WPT adds or removes other tests: 24 per CSS 2.1 chapter, 80 from `css-backgrounds`, 120 from `css-text`, 40 each from `css-lists`, `css-page` and `css-break`, 200 from `css-flexbox` and 20 from `css-align`.
 
 | Area                            | Tests | Print reftests |
 | ------------------------------- | ----- | -------------- |
@@ -45,9 +47,11 @@ That leaves 2860 candidates. Each area then keeps at most its cap, the candidate
 | `css/css-lists`                 | 40    |                |
 | `css/css-page`                  | 40    | 40             |
 | `css/css-text`                  | 120   |                |
-| Total                           | 569   | 70             |
+| `css/css-flexbox`               | 200   | 2              |
+| `css/css-align`                 | 5     |                |
+| Total                           | 774   | 72             |
 
-17 tests have a mismatch reference, 14 more than one reference, and 18 declare a fuzziness. Every fuzziness of the selection allows from 0 differences, so the cell, which checks only the upper bounds, decides no test otherwise than WPT would on them. One test, `css/css-page/subpixel-page-size-001-print.html`, declares `<meta name="reftest-pages" content="2">`: `list-candidates.py` writes it as the entry's `pages`, and the cell compares only that page of the test with the reference, as WPT's runner does. 167 are XHTML files that parse as HTML.
+17 tests have a mismatch reference, 14 more than one reference, and 25 declare a fuzziness. Every fuzziness of the selection allows from 0 differences, so the cell, which checks only the upper bounds, decides no test otherwise than WPT would on them. One test, `css/css-page/subpixel-page-size-001-print.html`, declares `<meta name="reftest-pages" content="2">`: `list-candidates.py` writes it as the entry's `pages`, and the cell compares only that page of the test with the reference, as WPT's runner does. 167 are XHTML files that parse as HTML.
 
 To list the candidates again, at the pinned commit or a new one:
 

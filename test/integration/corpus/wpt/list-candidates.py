@@ -55,13 +55,15 @@ DIRS = [
     "css/css-lists",
     "css/css-page",
     "css/css-break",
+    "css/css-flexbox",
+    "css/css-align",
 ]
 
 # AREA_CAP bounds the tests one area contributes, an area being a CSS2
 # chapter directory or a whole CSS module, so the large ones (css-text holds
 # thousands of reftests, CSS2 backgrounds hundreds of near-identical
 # background-position tests) do not crowd out the others. The caps keep the
-# total within 300 to 600 tests, the size a run scores in about a minute.
+# total within 300 to 900 tests, the size a run scores in about a minute.
 AREA_CAP = {
     "css/CSS2": 24,
     "css/css-backgrounds": 80,
@@ -69,6 +71,48 @@ AREA_CAP = {
     "css/css-lists": 40,
     "css/css-page": 40,
     "css/css-break": 40,
+    "css/css-flexbox": 200,
+    "css/css-align": 20,
+}
+
+# AREA_FORBIDDEN are the constructs that keep a test of an area out on top
+# of FORBIDDEN, for the areas of a layout mode whose tests lean on features
+# the converter leaves out: grid, multi-column, intrinsic sizing keywords,
+# aspect-ratio, visibility: collapse on flex items, display: contents, size
+# containment, sticky positioning, zoom, the legacy -webkit-box, and the
+# balanced wrapping of CSS Flexbox 2.
+FLEX_FORBIDDEN = [
+    re.compile(p, re.I)
+    for p in [
+        r"display\s*:\s*(inline-)?grid",
+        r"\bgrid-",
+        r"\bcolumns?(-count|-width)?\s*:",
+        r"\b(min|max|fit)-content\b",
+        r"\baspect-ratio\b",
+        r"visibility\s*:\s*collapse",
+        r"display\s*:\s*contents",
+        r"\bcontain(-intrinsic-[a-z-]+)?\s*:",
+        r"\bsticky\b",
+        r"\bzoom\s*:",
+        r"-webkit-box\b",
+        r"writing-mode",
+        r"\banchor",
+        r"<details\b",
+        r"<fieldset\b",
+        r"flex-wrap\s*:\s*balance",
+        r"flex-line-count",
+    ]
+]
+
+AREA_FORBIDDEN = {
+    "css/css-flexbox": FLEX_FORBIDDEN,
+    "css/css-align": FLEX_FORBIDDEN,
+}
+
+# AREA_REQUIRED is what every test of an area must hold: the css-align tests
+# kept are the ones that align flex items.
+AREA_REQUIRED = {
+    "css/css-align": re.compile(r"display\s*:\s*(inline-)?flex\b", re.I),
 }
 
 # SKIP_DIR_NAMES are directories that hold no reftest of their own (support,
@@ -198,13 +242,16 @@ def xht_parses_as_html(text):
     return True
 
 
-def check_file(root, rel, depth=0):
-    """Returns (scan, resources, reason): reason is None when the file qualifies."""
+def check_file(root, rel, extra=()):
+    """Returns (scan, resources, reason): reason is None when the file qualifies.
+
+    extra lists the patterns of AREA_FORBIDDEN that apply to the test's area.
+    """
     path = os.path.join(root, rel)
     if not os.path.isfile(path):
         return None, [], "missing " + rel
     text = read(path)
-    for pat in FORBIDDEN:
+    for pat in list(FORBIDDEN) + list(extra):
         if pat.search(text):
             return None, [], "%s: %s" % (rel, pat.pattern)
     if rel.endswith(".xht") and not xht_parses_as_html(text):
@@ -237,7 +284,7 @@ def check_file(root, rel, depth=0):
         resources.append(target)
         if target.endswith(".css"):
             css = read(os.path.join(root, target))
-            for pat in FORBIDDEN:
+            for pat in list(FORBIDDEN) + list(extra):
                 if pat.search(css):
                     return None, [], "%s: %s" % (target, pat.pattern)
             for u in css_urls(css):
@@ -295,7 +342,11 @@ def candidates(root):
                 if not name.endswith((".html", ".htm", ".xht")) or "-ref" in name or ".sub." in name or ".tentative." in name:
                     continue
                 rel = posixpath.relpath(os.path.join(dirpath, name), root).replace(os.sep, "/")
-                scan, resources, reason = check_file(root, rel)
+                extra = AREA_FORBIDDEN.get(area(rel), ())
+                scan, resources, reason = check_file(root, rel, extra)
+                need = AREA_REQUIRED.get(area(rel))
+                if reason is None and need is not None and not need.search(read(os.path.join(root, rel))):
+                    reason = rel + ": no " + need.pattern
                 if reason is None and not (scan.match or scan.mismatch):
                     continue
                 refs = []
@@ -303,7 +354,7 @@ def candidates(root):
                     for kind, hrefs in (("match", scan.match), ("mismatch", scan.mismatch)):
                         for href in hrefs:
                             ref = resolve(rel, href)
-                            rscan, rres, why = check_file(root, ref)
+                            rscan, rres, why = check_file(root, ref, extra)
                             if why:
                                 reason = "ref " + why
                                 break
