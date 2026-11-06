@@ -22,25 +22,23 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if root == nil || fonts == nil {
 		return nil, fmt.Errorf("%w: nil root or font index", ErrInvalidOptions)
 	}
-	pb := opts.Page
-	finite := func(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
-	if !finite(pb.Width) || !finite(pb.Height) || pb.Width <= 0 || pb.Height <= 0 || pb.Width > maxPageSide || pb.Height > maxPageSide {
-		return nil, fmt.Errorf("%w: page of %v by %v points", ErrInvalidOptions, pb.Width, pb.Height)
+	if err := checkPage(opts.Page); err != nil {
+		return nil, err
 	}
-	for _, m := range pb.Margin {
-		if !finite(m) || m < 0 {
-			return nil, fmt.Errorf("%w: page margin %v", ErrInvalidOptions, m)
+	first := opts.Page
+	if opts.PageAt != nil {
+		first = opts.PageAt(0)
+		if err := checkPage(first); err != nil {
+			return nil, err
 		}
-	}
-	areaW := pb.Width - pb.Margin[css.Left] - pb.Margin[css.Right]
-	areaH := pb.Height - pb.Margin[css.Top] - pb.Margin[css.Bottom]
-	if areaW <= 0 || areaH <= 0 {
-		return nil, fmt.Errorf("%w: margins leave a page area of %v by %v points", ErrInvalidOptions, areaW, areaH)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("laying out: %w", err)
 	}
+	areaW, areaH := areaOf(first)
 	e := newEngine(ctx, fonts, opts, areaW, areaH)
+	e.geom.init(e, first)
+	e.rtlRoot = root.Style != nil && root.Style.Direction == css.RTL
 	rb := e.generate(root)
 	if e.err != nil {
 		return nil, e.err
@@ -94,9 +92,13 @@ func newEngine(ctx context.Context, fonts *text.Fonts, opts Options, w, h float6
 
 // pageCount returns the pages the flow of the root box rb and the display
 // list d need. A fragment counts for the part of it its clips leave: the
-// content an overflow: hidden box cuts off adds no page.
+// content an overflow: hidden box cuts off adds no page, while content
+// overflowing its box below the root's bottom, a monolithic piece taller
+// than a page included, takes the pages it reaches. The root's bottom
+// margin takes no page of its own: a margin at the end of the flow
+// truncates (CSS Fragmentation 3, 5.2).
 func (e *engine) pageCount(rb *box, d *ditem) int {
-	bottom := rb.y + rb.borderH() + max(rb.m[css.Bottom], 0)
+	bottom := rb.y + rb.borderH()
 	n := e.pageOf(max(bottom-1e-3, 0)) + 1
 	var walk func(it *ditem, lo, hi float64)
 	walk = func(it *ditem, lo, hi float64) {
@@ -121,7 +123,7 @@ func (e *engine) pageCount(rb *box, d *ditem) int {
 				n = max(n, k.page+1)
 				continue
 			}
-			n = max(n, e.pageOf(max(y0, 0))+1)
+			n = max(n, e.pageOf(max(min(k.y1, hi)-1e-3, y0, 0))+1)
 		}
 	}
 	walk(d, math.Inf(-1), math.Inf(1))
@@ -154,16 +156,16 @@ func pathSpan(ops []compose.PathOp) (float64, float64, bool) {
 // fragments hang from.
 func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructElem]bool) []*compose.Page {
 	n := e.pageCount(rb, d)
-	pb := e.opts.Page
 	pages := make([]*compose.Page, n)
 	e.pageFrags = make([]int, n)
 	free := map[compose.Fragment]bool{}
 	perPage := e.distribute(d, 0, n, used, free)
 	for k := range n {
+		pb := e.box(k)
 		pg := &compose.Page{Width: pb.Width, Height: pb.Height}
-		e.paintPageBackground(pg)
-		e.paintCanvas(pg, canvas)
-		top := float64(k) * e.pageH
+		e.paintPageBackground(pg, pb)
+		e.paintCanvas(pg, canvas, pb)
+		top := e.pageTop(k)
 		frags := perPage[k]
 		for i := 0; i < len(frags); {
 			// A run of fragments is clipped to the page area, the slice of
@@ -173,7 +175,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 			for j < len(frags) && free[frags[j]] == free[frags[i]] {
 				j++
 			}
-			clip := compose.Rect{X: -pb.Margin[css.Left], Y: top, Width: pb.Width, Height: e.pageH}
+			clip := compose.Rect{X: -pb.Margin[css.Left], Y: top, Width: pb.Width, Height: e.areaH(k)}
 			if free[frags[i]] {
 				clip = compose.Rect{X: -pb.Margin[css.Left], Y: top - pb.Margin[css.Top], Width: pb.Width, Height: pb.Height}
 			}
@@ -389,27 +391,25 @@ func markUsed(f compose.Fragment, used map[*compose.StructElem]bool) {
 	}
 }
 
-// paintCanvas paints the canvas background of the page pg from the box
-// canvas (CSS 2.1, 14.2): the colour over the whole page, the image
-// positioned in the page area and repeated over the page.
-func (e *engine) paintCanvas(pg *compose.Page, canvas *box) {
+// paintCanvas paints the canvas background of the page pg, whose page box
+// is pb, from the box canvas (CSS 2.1, 14.2) over the page box's border
+// box, the page area, not its margins (CSS Page 3, 3.1).
+func (e *engine) paintCanvas(pg *compose.Page, canvas *box, pb PageBox) {
 	if canvas == nil {
 		return
 	}
 	st := canvas.st
-	whole := compose.Rect{Width: pg.Width, Height: pg.Height}
+	w, h := areaOf(pb)
+	area := compose.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: w, Height: h}
 	if c, ok := colorOf(st.BackgroundColor); ok {
-		pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(whole), Fill: &compose.Fill{Color: c}})
+		pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(area), Fill: &compose.Fill{Color: c}})
 	}
-	pb := e.opts.Page
-	area := compose.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: e.pageW, Height: e.pageH}
-	e.paintPageLayer(pg, st, area)
+	e.paintPageLayer(pg, st, area, area)
 }
 
 // paintPageLayer paints the background image or gradient of st over the
-// whole page pg, positioned in area.
-func (e *engine) paintPageLayer(pg *compose.Page, st *css.Style, area compose.Rect) {
-	whole := compose.Rect{Width: pg.Width, Height: pg.Height}
+// rectangle whole of the page pg, positioned in area.
+func (e *engine) paintPageLayer(pg *compose.Page, st *css.Style, area, whole compose.Rect) {
 	g := &compose.Group{Transform: compose.Identity, Opacity: 1, Clip: &compose.Path{Ops: rectOps(whole), Fill: &compose.Fill{}}}
 	switch {
 	case st.BackgroundGradient != nil:
@@ -437,8 +437,8 @@ func (e *engine) paintPageLayer(pg *compose.Page, st *css.Style, area compose.Re
 // root element that generates no box leaves the page blank, background
 // included, as browsers print it (WPT css-page,
 // root-element-display-none-print).
-func (e *engine) paintPageBackground(pg *compose.Page) {
-	st := e.opts.Page.Background
+func (e *engine) paintPageBackground(pg *compose.Page, pb PageBox) {
+	st := pb.Background
 	if st == nil || (e.rootBox != nil && e.rootBox.node != nil && e.rootBox.st.Display == css.DisplayNone) {
 		return
 	}
@@ -446,15 +446,15 @@ func (e *engine) paintPageBackground(pg *compose.Page) {
 	if c, ok := colorOf(st.BackgroundColor); ok {
 		pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(whole), Fill: &compose.Fill{Color: c}})
 	}
-	pb := e.opts.Page
-	area := compose.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: e.pageW, Height: e.pageH}
-	e.paintPageLayer(pg, st, area)
+	w, h := areaOf(pb)
+	area := compose.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: w, Height: h}
+	e.paintPageLayer(pg, st, area, whole)
 }
 
 // dest converts a flow position to a destination.
 func (e *engine) dest(x, y float64) compose.Dest {
 	p := e.pageOf(y)
-	pb := e.opts.Page
+	pb := e.box(p)
 	return compose.Dest{Page: p + 1, X: pb.Margin[css.Left] + x, Y: pb.Margin[css.Top] + y - e.pageTop(p)}
 }
 
@@ -489,7 +489,6 @@ func (e *engine) anchors(rb *box, n int) map[string]compose.Dest {
 // links adds the link regions to the pages of res, cut at the page cuts,
 // internal targets resolved against res.Anchors.
 func (e *engine) links(res *Result, links []pendingLink, used map[*compose.StructElem]bool) {
-	pb := e.opts.Page
 	for _, pl := range links {
 		href := pl.lk.href
 		var dest *compose.Dest
@@ -511,7 +510,8 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*compose.Struc
 		p0, p1 := e.pageOf(max(r.Y, 0)), e.pageOf(max(r.Y+r.Height-1e-3, 0))
 		for p := p0; p <= p1 && p < len(res.Pages); p++ {
 			top := e.pageTop(p)
-			y0, y1 := max(r.Y, top), min(r.Y+r.Height, top+e.pageH)
+			pb := e.box(p)
+			y0, y1 := max(r.Y, top), min(r.Y+r.Height, top+e.areaH(p))
 			if y1 <= y0 {
 				continue
 			}

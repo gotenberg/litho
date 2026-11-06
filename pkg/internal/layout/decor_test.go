@@ -173,23 +173,25 @@ func TestBackground_ImageRepeat(t *testing.T) {
 	}
 }
 
-func TestCanvas_FillsPage(t *testing.T) {
+func TestCanvas_FillsPageArea(t *testing.T) {
+	// The canvas paints the page box's border box, the page area, and
+	// leaves the page margins blank (CSS Page 3, 3.1).
 	root := el(sty(bg(lime)), el(sty(height(1), bg(red))))
 	pb := page(4, 4)
 	pb.Margin = [4]float64{px(1), px(1), px(1), px(1)}
 	res := run(t, root, pb)
 	assertPixels(t, res, 1, `
-		GGGG
-		GRRG
-		GGGG
-		GGGG`)
+		____
+		_RR_
+		_GG_
+		____`)
 	// Without a root background the first child's paints the canvas.
 	root = el(sty(), el(sty(bg(lime)), el(sty(height(1), bg(red)))))
 	assertPixels(t, run(t, root, pb), 1, `
-		GGGG
-		GRRG
-		GGGG
-		GGGG`)
+		____
+		_RR_
+		_GG_
+		____`)
 }
 
 func TestOpacity_Group(t *testing.T) {

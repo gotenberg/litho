@@ -27,13 +27,16 @@
 // each <link rel=stylesheet> in document order, under its media attribute,
 // with their @import rules read as above, the style attributes and the
 // presentational hints of [css.HTMLHints]. The stylesheets are evaluated
-// for [Options.Media] on the page size.
+// for [Options.Media] on the page area of the first page, which the
+// viewport units measure too.
 //
 // # Page
 //
 // The paper and margins of [Options] apply unless an @page rule for an
 // unnamed page sets a size, an orientation or a margin (CSS Page 3).
-// :first, :left and :right rules do not apply.
+// :first, :left and :right rules apply to the first page and to the right
+// and left pages, the first page being a right page unless the root's
+// direction is right to left. Named pages are not supported.
 //
 // # Content
 //

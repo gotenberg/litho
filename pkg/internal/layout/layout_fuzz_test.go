@@ -237,8 +237,22 @@ func FuzzLayout(f *testing.F) {
 			pb.Background = css.Initial()
 			pb.Background.BackgroundGradient = g.gradient()
 		}
+		opts := Options{Page: pb, Image: loader, MaxPages: 40}
+		if alt := g.next(); alt&1 != 0 {
+			// Left and right pages of another size and margins.
+			other := PageBox{Width: px(float64(g.next()%200) + 8), Height: px(float64(g.next()%200) + 8)}
+			for s := range 4 {
+				other.Margin[s] = px(float64(g.next() % 6))
+			}
+			opts.PageAt = func(i int) PageBox {
+				if i%2 == 1 {
+					return other
+				}
+				return pb
+			}
+		}
 		root := g.node(0)
-		res, err := Layout(context.Background(), root, fonts, Options{Page: pb, Image: loader, MaxPages: 40})
+		res, err := Layout(context.Background(), root, fonts, opts)
 		if err != nil {
 			if errors.Is(err, ErrTooManyPages) || errors.Is(err, ErrInvalidOptions) {
 				return

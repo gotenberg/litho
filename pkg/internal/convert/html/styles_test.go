@@ -172,7 +172,8 @@ func TestPageBox_AppliesPageRules(t *testing.T) {
 		{"@page { margin-top: 1in; margin-left: 10% }", 600, 800, [4]float64{72, 20, 30, 60}, false},
 		{"@page { margin: 5% }", 600, 800, [4]float64{40, 30, 40, 30}, false},
 		{"@page { margin: 0 }", 600, 800, [4]float64{}, false},
-		{"@page :first { margin: 0 }", 600, 800, [4]float64{10, 20, 30, 40}, false},
+		{"@page :first { margin: 0 }", 600, 800, [4]float64{}, false},
+		{"@page :left { margin: 0 }", 600, 800, [4]float64{10, 20, 30, 40}, false},
 		{"@page { margin-left: 590pt }", 600, 800, [4]float64{10, 20, 30, 40}, true},
 		{"@page { size: 50pt 50pt }", 50, 50, [4]float64{}, true},
 		{"@page { size: 20000pt 100pt }", maxPageSide, 100, [4]float64{10, 20, 30, 40}, true},
@@ -185,6 +186,52 @@ func TestPageBox_AppliesPageRules(t *testing.T) {
 		if got := hasWarning(p.warnings, CodePageBox, ""); got != tc.warn {
 			t.Errorf("%q: page-box warning %v, want %v: %+v", tc.css, got, tc.warn, p.warnings)
 		}
+	}
+}
+
+func TestPageBoxes_FirstLeftAndRightPages(t *testing.T) {
+	t.Parallel()
+	o := Options{PageWidth: 600, PageHeight: 800, MarginTop: 10, MarginRight: 20, MarginBottom: 30, MarginLeft: 40}
+	opt := [4]float64{10, 20, 30, 40}
+	sheet := "@page :first { margin: 0 } @page :left { margin-left: 100pt } @page :right { margin-right: 100pt }"
+	for _, tc := range []struct {
+		name string
+		src  string
+		want [4][4]float64
+	}{
+		{"same pages", "<p>x", [4][4]float64{opt, opt, opt, opt}},
+		{"ltr starts right", "<style>" + sheet + "</style><p>x", [4][4]float64{
+			{}, {10, 20, 30, 100}, {10, 100, 30, 40}, {10, 20, 30, 100},
+		}},
+		{"rtl starts left", "<html dir=rtl><style>" + sheet + "</style><p>x", [4][4]float64{
+			{}, {10, 100, 30, 40}, {10, 20, 30, 100}, {10, 100, 30, 40},
+		}},
+	} {
+		p := prep(t, tc.src, o)
+		for i, want := range tc.want {
+			pb := p.layout.Page
+			if p.layout.PageAt != nil {
+				pb = p.layout.PageAt(i)
+			} else if i > 0 && want != opt {
+				t.Fatalf("%s: no PageAt", tc.name)
+			}
+			if pb.Margin != want {
+				t.Errorf("%s: page %d margins %v, want %v", tc.name, i+1, pb.Margin, want)
+			}
+		}
+		if tc.name == "same pages" && p.layout.PageAt != nil {
+			t.Errorf("%s: PageAt set for identical pages", tc.name)
+		}
+	}
+}
+
+func TestPrepare_ViewportIsThePageArea(t *testing.T) {
+	t.Parallel()
+	src := `<style>@page { size: 300pt 300pt; margin: 50pt } #x { width: 100vw; height: 50vh }</style><p id=x>x`
+	p := prep(t, src, Options{})
+	st := byID(t, p.root, "x").Style
+	if st.Width.Value != 200 || st.Height.Value != 100 {
+		t.Errorf("100vw by 50vh is %v by %v, want 200 by 100: the page area of the first page", st.Width, st.Height)
 	}
 }
 

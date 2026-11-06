@@ -87,6 +87,14 @@ type Options struct {
 	// resolved. Width and Height are positive and the margins leave a
 	// positive page area.
 	Page PageBox
+	// PageAt, when not nil, returns the page box of the page at a 0-based
+	// index, for documents whose pages differ (CSS Page 3, 4.2: the :first,
+	// :left and :right pages). It overrides Page; every box it returns
+	// obeys Page's rules, or Layout fails with [ErrInvalidOptions]. The
+	// flow is laid out at the width of the first page's area; each page
+	// shows the next slice of it, as tall as its own area. Layout calls it
+	// at most once per index, in index order, from its own goroutine.
+	PageAt func(index int) PageBox
 	// Lang is the document language as a BCP 47 tag, used for a node
 	// without one in its ancestry, "" for unknown.
 	Lang string

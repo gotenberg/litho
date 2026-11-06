@@ -38,6 +38,7 @@ func TestFragmentation_Lines(t *testing.T) {
 		{"widows pull a line over", doc(para()(4)), []int{2, 2}},
 		{"one widow allowed", doc(para(func(s *css.Style) { s.Widows = 1 })(4)), []int{3, 1}},
 		{"orphans push the block", doc(el(sty(height(20))), para()(3)), []int{0, 3}},
+		{"orphans win over widows", doc(el(sty(height(10))), para()(3)), []int{2, 1}},
 		{"one orphan allowed", doc(el(sty(height(20))), para(func(s *css.Style) { s.Orphans = 1 })(3)), []int{1, 2}},
 		{"forced break", doc(para()(1), para(func(s *css.Style) { s.BreakBefore = css.Page })(1)), []int{1, 1}},
 		{"forced break after", doc(para(func(s *css.Style) { s.BreakAfter = css.Page })(1), para()(1)), []int{1, 1}},
@@ -79,7 +80,7 @@ func TestFragmentation_BackgroundSliced(t *testing.T) {
 	}
 }
 
-func TestFragmentation_MonolithicMovesAndClips(t *testing.T) {
+func TestFragmentation_MonolithicMovesAndOverflows(t *testing.T) {
 	img := func(h int) *Node {
 		return &Node{Kind: Replaced, Style: sty(), Picture: pic(color.NRGBA{B: 255, A: 255}, 2, h)}
 	}
@@ -88,16 +89,14 @@ func TestFragmentation_MonolithicMovesAndClips(t *testing.T) {
 		t.Fatalf("%d pages, want 2: the image moves to the next page", len(res.Pages))
 	}
 	assertPixels(t, res, 2, "BB\nBB\n__\n__")
+	// An image taller than a page overflows onto the next one, and what
+	// follows it starts below its full height.
 	res = run(t, doc(img(6), el(sty(height(1), bg(red)))), page(2, 4))
-	found := false
-	for _, w := range res.Warnings {
-		found = found || w.Code == codeClipped
-	}
-	if !found || len(res.Pages) != 2 {
-		t.Fatalf("%d pages, warnings %+v: want the tall image clipped on page 1", len(res.Pages), res.Warnings)
+	if len(res.Pages) != 2 {
+		t.Fatalf("%d pages, want 2", len(res.Pages))
 	}
 	assertPixels(t, res, 1, "BB\nBB\nBB\nBB")
-	assertPixels(t, res, 2, "RR\n__\n__\n__")
+	assertPixels(t, res, 2, "BB\nBB\nRR\n__")
 }
 
 func TestFragmentation_PageMargins(t *testing.T) {

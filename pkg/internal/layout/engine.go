@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -68,6 +69,11 @@ type engine struct {
 	rootBox    *box
 	// pageFrags counts the fragments of every page as they are assembled.
 	pageFrags []int
+	// geom is where the pages cut the flow.
+	geom geometry
+	// rtlRoot reports a root laid out right to left, whose first page is
+	// a left page.
+	rtlRoot bool
 }
 
 // fail records the first error; the layout unwinds once it is set.
@@ -111,6 +117,15 @@ func (e *engine) pageOf(y float64) int {
 	if y <= 0 {
 		return 0
 	}
+	if g := &e.geom; g.varies() {
+		for g.tops[len(g.tops)-1] <= y+eps && g.grow() {
+		}
+		if last := g.tops[len(g.tops)-1]; last <= y+eps {
+			// Past the page cap: the pages beyond are as tall as the first.
+			return len(g.boxes) + int(min((y+eps-last)/e.pageH, math.MaxInt32/2))
+		}
+		return sort.SearchFloat64s(g.tops, y+eps+1e-9) - 1
+	}
 	p := math.Floor((y + eps) / e.pageH)
 	if p > float64(math.MaxInt32) {
 		return math.MaxInt32
@@ -119,7 +134,18 @@ func (e *engine) pageOf(y float64) int {
 }
 
 // pageTop returns the flow position of the top of page p.
-func (e *engine) pageTop(p int) float64 { return float64(p) * e.pageH }
+func (e *engine) pageTop(p int) float64 {
+	if g := &e.geom; g.varies() {
+		for p >= len(g.tops) && g.grow() {
+		}
+		if p < len(g.tops) {
+			return g.tops[max(p, 0)]
+		}
+		last := len(g.tops) - 1
+		return g.tops[last] + float64(p-last)*e.pageH
+	}
+	return float64(p) * e.pageH
+}
 
 // atPageTop reports whether y is the top of a page.
 func (e *engine) atPageTop(y float64) bool {
@@ -151,7 +177,9 @@ func (e *engine) reach(y float64) {
 // fit returns where a monolithic piece of height h whose top would be at y
 // lands: y itself, or the top of the next page when the piece would
 // straddle a page cut and starts below a page top (CSS Fragmentation 3,
-// 4.1). A piece taller than a page lands at a page top and is clipped.
+// 4.1). A piece taller than a page lands at a page top and overflows onto
+// the pages after it, sliced at each cut as Chromium paints monolithic
+// overflow; the content after it follows its full height.
 func (e *engine) fit(y, h float64) float64 {
 	if !e.paginating() || h <= 0 {
 		return y
@@ -159,7 +187,7 @@ func (e *engine) fit(y, h float64) float64 {
 	if e.pageOf(y) != e.pageOf(y+h-metricSlack) && !e.atPageTop(y) {
 		y = e.nextPage(y)
 	}
-	e.reach(y + min(h, e.pageH) - metricSlack)
+	e.reach(y + h - metricSlack)
 	return y
 }
 

@@ -12,13 +12,20 @@
 //
 // # Fragmentation
 //
-// The engine lays the document out in one tall column whose height is cut
-// every page area height. A line box, a replaced box or a box that avoids
-// breaks inside, which would straddle a cut, moves down to the next page:
-// the gap it leaves is a pagination strut. Painting then slices the column
-// into pages, so a box that spans a cut paints its background and borders
-// on every page it crosses, sliced at the cut (box-decoration-break:
-// slice).
+// The engine lays the document out in one tall column, as wide as the
+// first page's area, cut at every page area height: each page's own when
+// [Options.PageAt] gives the pages different boxes. A line box, a replaced
+// box or a box that avoids breaks inside, which would straddle a cut,
+// moves down to the next page: the gap it leaves is a pagination strut. A
+// monolithic piece taller than a page overflows onto the pages below and
+// the content after it follows its full height; a line taller than a page
+// for its text alone takes one page. Margins adjoining an unforced break
+// truncate (CSS Fragmentation 3, 5.2), and a container whose content
+// starts on a later page than its top moves to that page. Forced breaks
+// to a left or a right page leave a blank page when needed. Painting then
+// slices the column into pages, so a box that spans a cut paints its
+// background and borders on every page it crosses, sliced at the cut
+// (box-decoration-break: slice).
 //
 // # Formatting contexts
 //

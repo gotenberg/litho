@@ -21,6 +21,11 @@ type lineBox struct {
 	baseline   float64
 	items      []*lineItem
 	frags      []*inlineFrag
+	// overflows reports a line taller than its page area for an atomic
+	// inline taller than the area: it overflows onto the pages below with
+	// that monolithic content (CSS Fragmentation 3, 4.1). A line taller
+	// than the area for its text alone takes one page and is cut there.
+	overflows bool
 }
 
 // lineItem is one piece of a line: a glyph run of a text box, or an
@@ -342,6 +347,9 @@ func (e *engine) fixOrphans(b *box, forced map[int]bool) bool {
 			forced[0] = true
 			changed = true
 		case after < widows && next == len(lines):
+			// A block too short to leave orphans lines before the break
+			// and widows after it keeps its orphans and breaks, as
+			// Chromium does.
 			if k2 := k - (widows - after); k2-segStart >= orphans && k2 > segStart && !forced[k2] {
 				forced[k2] = true
 				changed = true
@@ -376,7 +384,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			if p.forced {
 				top := y
 				if first {
-					top = y + mc.strut.sum()
+					top = e.pastMargin(y, mc.strut, mc.kept)
 					mc.commitFloats(top)
 				}
 				l := &lineBox{x: cb.x, w: cb.w, h: strutH, baseline: s.rootV.above}
@@ -389,6 +397,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				y = top + l.h
 				s.lines = append(s.lines, l)
 			}
+			y = s.clearBreak(p, y)
 			continue
 		}
 		w := p.paraWidths(nil)
@@ -416,7 +425,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			if first {
 				// The margins resolve here: the floats placed under them
 				// take their place before the line fits beside them.
-				top = y + mc.strut.sum()
+				top = e.pastMargin(y, mc.strut, mc.kept)
 				mc.commitFloats(top)
 			}
 			s.placeFloats(p, pos, pos, top, mc, false)
@@ -450,17 +459,14 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			s.lines = append(s.lines, l)
 			s.recordAnchors(l)
 			s.staticLine(p, pos, end, l)
-			adv := l.h
-			if e.paginating() {
-				adv = min(adv, e.pageH)
-			}
-			y = top + adv
+			y = top + e.advance(l)
 			s.placeFloats(p, pos+1, end, y, mc, false)
 			paraFirst = false
 			pos = end
 		}
 		s.placeFloats(p, n, math.MaxInt, pendingTop(y, mc, first), mc, first)
 		s.staticRest(p, y, mc, first)
+		y = s.clearBreak(p, y)
 	}
 	b.lines = s.lines
 	return y
@@ -512,6 +518,37 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 	return top, end, left, right, l
 }
 
+// clearBreak returns where the line after the paragraph p starts when the
+// paragraph ended at y: below the floats the clear value of its line break
+// names (CSS 2.1, 9.5.2, which HTML applies to br).
+func (s *inlineState) clearBreak(p *ifcPara, y float64) float64 {
+	if !p.forced || p.clear == css.ClearNone {
+		return y
+	}
+	return max(y, s.bc.clearTo(p.clear))
+}
+
+// advance returns how far the line l, placed, moves the flow down: its
+// height, or the page area height for a line taller than its page for its
+// text alone, which is cut at the page bottom. It sets l.overflows.
+func (e *engine) advance(l *lineBox) float64 {
+	l.overflows = false
+	if !e.paginating() {
+		return l.h
+	}
+	area := e.areaH(e.pageOf(l.y + eps))
+	if l.h <= area+eps {
+		return l.h
+	}
+	for _, it := range l.items {
+		if it.atomic != nil && it.atomic.marginH() > area+eps {
+			l.overflows = true
+			return l.h
+		}
+	}
+	return area
+}
+
 // isLastPara reports whether p is the last paragraph of d.
 func isLastPara(d *ifcData, p *ifcPara) bool {
 	return len(d.paras) > 0 && d.paras[len(d.paras)-1] == p
@@ -526,7 +563,7 @@ func bandOf(bc *bfc, y, h float64, cb cblock) (float64, float64) {
 
 // position returns where the line of height h whose top would be at top
 // lands: on the next page when it straddles a cut or when its index is
-// forced, warning when it is taller than a page.
+// forced.
 func (s *inlineState) position(top, h float64, forced map[int]bool) float64 {
 	e := s.e
 	if !e.paginating() {
@@ -535,11 +572,7 @@ func (s *inlineState) position(top, h float64, forced map[int]bool) float64 {
 	if forced[len(s.lines)] && !e.atPageTop(top) {
 		top = e.nextPage(top)
 	}
-	top = e.fit(top, h)
-	if h > e.pageH+eps {
-		e.warn(codeClipped, "a line box taller than the page area was clipped", top)
-	}
-	return top
+	return e.fit(top, h)
 }
 
 // placeFloats lays out the floats of p anchored at a character position in

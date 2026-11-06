@@ -162,20 +162,25 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options) (*prepared, error
 
 	media := css.Media{Type: o.Media, Width: o.PageWidth, Height: o.PageHeight}
 	resolver := css.NewResolver(media, sheets)
-	page, pageWarns := pageBox(resolver, o)
-	if page.Width != media.Width || page.Height != media.Height {
-		// The page size the media features compare against is the one
-		// @page sets (CSS Page 3, 5.1); evaluate the media rules again for
-		// it.
-		media.Width, media.Height = page.Width, page.Height
+	// The direction that decides whether the first page is a left or a
+	// right one is not known before the cascade: the viewport takes a
+	// left-to-right document's.
+	first, _ := pageBox(resolver, o, pageSel(0, false))
+	if w, h := areaOf(first); w != media.Width || h != media.Height {
+		// The viewport the media features and the viewport units measure
+		// is the page area of the first page, the size and margins @page
+		// sets (CSS Page 3, 3.1 and 5.1); evaluate the media rules again
+		// for it.
+		media.Width, media.Height = w, h
 		resolver = css.NewResolver(media, sheets)
-		page, pageWarns = pageBox(resolver, o)
 	}
 
 	computed, err := resolver.Compute(ctx, doc, css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase})
 	if err != nil {
 		return nil, fmt.Errorf("computing the HTML document's styles: %w", err)
 	}
+	rootStyle := computed.Style(scan.root)
+	page, pageAt, pageWarns := pageBoxes(resolver, o, rootStyle != nil && rootStyle.Direction == css.RTL)
 
 	b := &builder{
 		computed: computed, res: res, scan: scan,
@@ -190,6 +195,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options) (*prepared, error
 		root: root,
 		layout: layout.Options{
 			Page:     page,
+			PageAt:   pageAt,
 			Lang:     scan.lang,
 			Image:    res.picture,
 			MaxPages: o.MaxPages,

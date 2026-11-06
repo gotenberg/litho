@@ -522,7 +522,7 @@ func (p *painter) replaced(b *box) {
 	box := compose.Rect{X: b.contentX() + p.dx, Y: b.contentY() + p.dy, Width: b.w, Height: b.h}
 	r := objectRect(b.st, b.picture, box)
 	img := &compose.Image{Rect: r, Source: b.picture.Source, Parent: b.elem}
-	page := p.e.pageOf(box.Y)
+	page := p.e.monoPage(box.Y, box.Height)
 	if r == box {
 		p.emit(b, false, img, r.Y, r.Y+r.Height, page)
 		return
@@ -565,6 +565,18 @@ func objectRect(st *css.Style, pic *Picture, box compose.Rect) compose.Rect {
 	}
 }
 
+// monoPage returns the page a monolithic piece of height h at flow
+// position y paints on: the page it lands on, or -1 for every page it
+// overlaps when it is taller than a page and overflows (CSS Fragmentation
+// 3, 4.1).
+func (e *engine) monoPage(y, h float64) int {
+	p := e.pageOf(y + eps)
+	if h > e.areaH(p)+eps {
+		return -1
+	}
+	return p
+}
+
 // linkBox records the border box of a block-level or replaced box that
 // starts a link as its link region.
 func (p *painter) linkBox(b *box) {
@@ -601,6 +613,9 @@ func (p *painter) marker(b *box) {
 // link regions.
 func (p *painter) line(l *lineBox) {
 	page := p.e.pageOf(l.y + eps)
+	if l.overflows {
+		page = -1
+	}
 	if p.mono >= 0 {
 		page = p.mono
 	}

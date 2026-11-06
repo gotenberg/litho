@@ -59,6 +59,9 @@ type ifcPara struct {
 	// forced reports a paragraph ended by a forced break, which makes a
 	// line even when empty.
 	forced bool
+	// clear is the clear value of the line break that ends the paragraph:
+	// the next line moves below the floats it names.
+	clear css.Clear
 	// openAt and closeAt index opens and closes by position, openPos and
 	// closePos by box.
 	openAt, closeAt   map[int][]*box
@@ -146,6 +149,7 @@ func (c *collector) walk(k *box) {
 	case k.kind == kindText:
 		c.text(k)
 	case k.kind == kindBreak:
+		c.cur.clear = k.st.Clear
 		c.breakPara()
 	case k.kind == kindInline:
 		start := c.cur.n

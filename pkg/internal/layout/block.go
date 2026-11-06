@@ -36,6 +36,27 @@ func (s strut) add(m float64) strut {
 // sum returns the collapsed margin.
 func (s strut) sum() float64 { return s.pos + s.neg }
 
+// pastMargin returns where content lands under the margins s collapsed at
+// cursor. Margins adjoining an unforced break truncate (CSS Fragmentation
+// 3, 5.2): a positive margin that would carry the content across a page
+// cut breaks there and leaves nothing on the next page, and one that
+// starts at the top of a page the content before it filled is dropped.
+// kept reports margins that start at a page top without an unforced break
+// before them, after a forced break or at a box's content edge: they stay.
+func (e *engine) pastMargin(cursor float64, s strut, kept bool) float64 {
+	y := cursor + s.sum()
+	if !e.paginating() || s.sum() <= 0 {
+		return y
+	}
+	if !kept && cursor > eps && e.atPageTop(cursor) {
+		return cursor
+	}
+	if e.pageOf(y) > e.pageOf(cursor) {
+		y = e.nextPage(cursor)
+	}
+	return y
+}
+
 // marginState carries the margins collapsing through the block flow and
 // the boxes whose top waits on them: a box whose top margin collapses with
 // its first child's has its border top where that child's content lands.
@@ -45,6 +66,10 @@ type marginState struct {
 	// absorb drops the top margins adjoining the top of a box placed by
 	// clearance: they collapsed into the margin the clearance replaced.
 	absorb bool
+	// kept reports margins pending after a forced break or at a box's
+	// content edge: they do not truncate at a page top (CSS Fragmentation
+	// 3, 5.2).
+	kept bool
 	// floats are the floats placed while the margins were pending.
 	floats []pendingFloat
 }
@@ -120,6 +145,7 @@ func (mc *marginState) commit(y float64) {
 	mc.waiting = nil
 	mc.strut = strut{}
 	mc.absorb = false
+	mc.kept = false
 }
 
 // commitFloats moves the floats placed under the pending margins to y,
@@ -182,6 +208,11 @@ const (
 	// breakPush starts the box on the next page with its top margin
 	// truncated, as an unforced break does, to keep it whole.
 	breakPush
+	// breakLeft and breakRight are forced breaks to the next left or right
+	// page, leaving the page between blank when the next one is the wrong
+	// side (CSS Fragmentation 3, 3.1; CSS Page 3, 4.3).
+	breakLeft
+	breakRight
 )
 
 // formatter lays out the content of a block container. Block flow and
@@ -445,7 +476,11 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		if !e.atPageTop(y) {
 			y = e.nextPage(y)
 		}
+		if right := e.isRight(e.pageOf(y)); mode == breakLeft && right || mode == breakRight && !right {
+			y = e.nextPage(y)
+		}
 		mc.commit(y)
+		mc.kept = mode != breakPush
 		cursor = y
 		if mode == breakPush {
 			mt = 0
@@ -468,7 +503,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		}
 	}
 	if b.kind == kindReplaced || b.establishesBFC() {
-		top := cursor + mc.strut.add(mt).sum()
+		top := e.pastMargin(cursor, mc.strut.add(mt), mc.kept)
 		switch {
 		case cleared:
 			top = clearY
@@ -488,13 +523,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		e.layoutBFCRoot(b, cb, bc, top)
 		mc.commit(b.y)
 		mc.strut = strut{}.add(mb)
-		bottom := b.y + b.borderH()
-		if b.kind == kindReplaced && e.paginating() && b.borderH() > e.pageH+eps {
-			// A replaced box taller than a page takes that page and is
-			// clipped to it.
-			bottom = e.nextPage(b.y)
-		}
-		return bottom
+		return b.y + b.borderH()
 	}
 	blockWidths(b, cb.w, cb.rtl(b), 0, false)
 	b.x = cb.x + b.m[css.Left]
@@ -504,17 +533,17 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	switch {
 	case cleared:
 		b.y = clearY
-		inner = &marginState{absorb: b.bd[css.Top] == 0 && b.pd[css.Top] == 0}
+		inner = &marginState{absorb: b.bd[css.Top] == 0 && b.pd[css.Top] == 0, kept: true}
 		start = b.contentY()
 	case collapseTop:
 		mc.strut = mc.strut.add(mt)
 		mc.waiting = append(mc.waiting, b)
-		b.y = cursor + mc.strut.sum()
+		b.y = e.pastMargin(cursor, mc.strut, mc.kept)
 	default:
-		top := cursor + mc.strut.add(mt).sum()
+		top := e.pastMargin(cursor, mc.strut.add(mt), mc.kept)
 		mc.commit(top)
 		b.y = top
-		inner = &marginState{}
+		inner = &marginState{kept: true}
 		start = b.contentY()
 	}
 	specH, hSet := specHeight(b, b.st.Height, cb)
@@ -534,13 +563,13 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 			mc.strut = mc.strut.add(mb)
 			return cursor
 		}
-		mc.commit(cursor + mc.strut.sum())
+		mc.commit(e.pastMargin(cursor, mc.strut, mc.kept))
 		end = b.contentY()
 	}
 	trailing := inner.strut
 	contentBottom := end
 	if !collapseBottom {
-		contentBottom = end + trailing.sum()
+		contentBottom = e.pastMargin(end, trailing, false)
 		if contentBottom < b.contentY() {
 			contentBottom = b.contentY()
 		}
@@ -588,9 +617,6 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 			b.w, b.h = w, h
 			b.x = l + b.m[css.Left]
 			b.y = e.fit(top, b.borderH())
-			if e.paginating() && b.borderH() > e.pageH+eps {
-				e.warn(codeClipped, "a replaced box taller than the page area was clipped", b.y)
-			}
 		} else {
 			// A table's width comes from its columns, its auto margins
 			// centre it (CSS 2.1, 17.4).
@@ -637,10 +663,10 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	specH, hSet := specHeight(b, b.st.Height, cb)
 	own := &bfc{}
-	mc := &marginState{}
+	mc := &marginState{kept: true}
 	kcb := cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
-	end += mc.strut.sum()
+	end = e.pastMargin(end, mc.strut, false)
 	mc.commit(end)
 	end = max(end, own.bottom(), b.contentY())
 	h := end - b.contentY()
@@ -674,6 +700,9 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 	}
 	var prev *box
 	var prevSnap snapshot
+	// filled reports an in-flow child with a border box before the one
+	// being laid out.
+	filled := false
 	for _, k := range b.kids {
 		if e.err != nil {
 			return cursor
@@ -690,14 +719,19 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		snap := take(cursor)
 		mode := breakNone
 		if prev != nil && (isForced(prev.st.BreakAfter) || isForced(k.st.BreakBefore)) {
-			mode = breakForced
+			mode = forcedMode(prev.st.BreakAfter, k.st.BreakBefore)
 		} else if prev == nil && isForced(k.st.BreakBefore) && cursor+mc.strut.sum() > eps {
-			mode = breakForced
+			mode = forcedMode(css.BreakAuto, k.st.BreakBefore)
 		}
 		cursor = e.layoutBlock(k, cb, bc, cursor, mc, mode)
 		if e.paginating() && mode == breakNone {
 			switch {
-			case avoidsInside(k) && e.straddles(k) && k.borderH() <= e.pageH && !e.atPageTop(k.y):
+			case avoidsInside(k) && e.straddles(k) && !e.atPageTop(k.y) && (k.borderH() <= e.areaH(e.pageOf(k.y)+1) || filled):
+				// The break before k violates no rule, the one inside it
+				// does: k moves to the next page. One taller than a page
+				// breaks inside there anyway, so it moves only past a
+				// sibling with content, a class A break point, rather than
+				// leave its page empty (CSS Fragmentation 3, 4.3 and 4.4).
 				if e.relayout(k.y) {
 					cursor = e.layoutBlock(k, cb, bc, restore(snap), mc, breakPush)
 				}
@@ -707,9 +741,20 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 					cursor = e.layoutBlock(prev, cb, bc, restore(prevSnap), mc, breakPush)
 					cursor = e.layoutBlock(k, cb, bc, cursor, mc, breakNone)
 				}
+			case !e.atPageTop(k.y) && e.pageOf(firstContent(k)) > e.pageOf(k.y) && hasContent(k):
+				// k's content starts on a later page than its top: only its
+				// border, padding or the margins of its first child sit on
+				// the page before. Breaking there leaves an empty slice, so
+				// k moves to the page its content starts on, as Chromium
+				// breaks before a container rather than after its top edge
+				// (CSS Fragmentation 3, 4.1, class C, and 4.4).
+				if e.relayout(k.y) {
+					cursor = e.layoutBlock(k, cb, bc, restore(snap), mc, breakPush)
+				}
 			}
 		}
 		prev, prevSnap = k, snap
+		filled = filled || k.borderH() > 0
 	}
 	return cursor
 }
@@ -718,6 +763,23 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 // Fragmentation 3, 3.1).
 func isForced(v css.Break) bool {
 	return v == css.Page || v == css.LeftPage || v == css.RightPage
+}
+
+// forcedMode returns the break mode of a forced break between a box whose
+// break-after is after and the next one, whose break-before is before: the
+// later box's value wins when both force a break.
+func forcedMode(after, before css.Break) breakMode {
+	v := after
+	if isForced(before) {
+		v = before
+	}
+	switch v { //nolint:exhaustive // the other forced value is a plain page break
+	case css.LeftPage:
+		return breakLeft
+	case css.RightPage:
+		return breakRight
+	}
+	return breakForced
 }
 
 // avoidsInside reports a box that avoids page breaks inside it.
@@ -749,6 +811,20 @@ func firstContent(b *box) float64 {
 		}
 	}
 	return b.contentY()
+}
+
+// hasContent reports a box with a line box or an in-flow block-level child
+// laid out, the content [firstContent] finds.
+func hasContent(b *box) bool {
+	if len(b.lines) > 0 {
+		return true
+	}
+	for _, k := range b.kids {
+		if !k.inline && k.float == css.FloatNone && k.laidOut {
+			return true
+		}
+	}
+	return false
 }
 
 // layoutFloat lays the float f out and places it no higher than minY in
