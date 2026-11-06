@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-06T21:59:03Z",
+  "captured_at": "2026-11-06T22:06:43Z",
   "corpora": {
     "compose": {
       "features": {
@@ -356,7 +356,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7297
+              "text_f1": 0.7586
             },
             "images": {
               "layout": 0.9849,
@@ -407,11 +407,11 @@
               "text_f1": 0.9065
             },
             "markdown": {
-              "layout": 0.9376,
+              "layout": 0.95,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 0.9477
             },
             "markdown-plain": {
@@ -1084,8 +1084,8 @@
     "weasyprint": {
       "features": {
         "draw": {
-          "matched": 199,
-          "mismatched": 116,
+          "matched": 201,
+          "mismatched": 114,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -1098,7 +1098,7 @@
             "test_absolute__test_absolute_pages_counter": "fail",
             "test_absolute__test_absolute_pages_counter_orphans": "fail",
             "test_absolute__test_absolute_rtl_1": "pass",
-            "test_absolute__test_absolute_rtl_2": "pass",
+            "test_absolute__test_absolute_rtl_2": "fail",
             "test_absolute__test_absolute_rtl_3": "pass",
             "test_absolute__test_absolute_rtl_4": "pass",
             "test_absolute__test_absolute_rtl_5": "pass",
@@ -1377,10 +1377,10 @@
             "test_text__test_text_underline_offset": "pass",
             "test_text__test_text_underline_offset_calc": "pass",
             "test_text__test_text_underline_offset_percentage": "pass",
-            "test_text__test_text_underline_thickness": "fail",
-            "test_text__test_text_underline_thickness_calc": "fail",
+            "test_text__test_text_underline_thickness": "pass",
+            "test_text__test_text_underline_thickness_calc": "pass",
             "test_text__test_text_underline_thickness_calc_inherit": "fail",
-            "test_text__test_text_underline_thickness_percentage": "fail",
+            "test_text__test_text_underline_thickness_percentage": "pass",
             "test_text__test_text_word_spacing": "pass",
             "test_text__test_zero_width_character": "pass",
             "test_transform__test_2d_transform_1": "pass",
@@ -1413,8 +1413,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 694,
-          "mismatched": 80,
+          "matched": 696,
+          "mismatched": 78,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -2036,7 +2036,7 @@
             "css/css-lists/outside-marker-with-text-indent.html": "pass",
             "css/css-page/basic-pagination-004-print.html": "pass",
             "css/css-page/fixedpos-003-print.html": "pass",
-            "css/css-page/fixedpos-004-print.html": "fail",
+            "css/css-page/fixedpos-004-print.html": "pass",
             "css/css-page/layers-004-print.html": "fail",
             "css/css-page/margin-boxes/alignment-001-print.html": "pass",
             "css/css-page/margin-boxes/content-005-print.html": "fail",
@@ -2049,7 +2049,7 @@
             "css/css-page/monolithic-overflow-014-print.html": "pass",
             "css/css-page/monolithic-overflow-019-print.html": "pass",
             "css/css-page/monolithic-overflow-029-print.html": "pass",
-            "css/css-page/monolithic-overflow-030-print.html": "fail",
+            "css/css-page/monolithic-overflow-030-print.html": "pass",
             "css/css-page/monolithic-overflow-031-print.html": "pass",
             "css/css-page/page-box-003-print.html": "fail",
             "css/css-page/page-left-right-001-print.html": "pass",
