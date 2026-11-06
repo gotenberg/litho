@@ -85,14 +85,16 @@ var localToolPins = map[string]bool{
 	"DEJAVU_FONTS_URL":         true,
 	"DEJAVU_FONTS_SHA256":      true,
 
-	// The script fonts of the html corpus, fetched by compose/fetch-fonts.sh
-	// on the host like the two above.
+	// The script fonts of the html corpus and the CJK collection the
+	// Gotenberg image draws with, fetched by compose/fetch-fonts.sh on the
+	// host like the two above.
 	"NOTO_SANS_THAI_VERSION":       true,
 	"NOTO_SANS_THAI_URL":           true,
 	"NOTO_SANS_THAI_SHA256":        true,
 	"NOTO_SANS_DEVANAGARI_VERSION": true,
 	"NOTO_SANS_DEVANAGARI_URL":     true,
 	"NOTO_SANS_DEVANAGARI_SHA256":  true,
+	"NOTO_SANS_CJK_OTC_SHA256":     true,
 
 	// The converter oracles: the web-platform-tests commit `make wpt-fetch`
 	// downloads, the WeasyPrint release `make weasyprint-fixtures` extracts,

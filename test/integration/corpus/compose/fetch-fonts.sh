@@ -134,6 +134,28 @@ else
   echo "  fonts: noto-cjk-sans-$NOTO installed (4 faces)"
 fi
 
+# Noto Sans CJK Regular, the collection of every region's face, from the same
+# tag: the face the Gotenberg image's fontconfig gives CJK text. Its directory
+# shares the noto-cjk-sans- prefix, so the converter oracles index it with the
+# subset faces.
+dir="$OUT/noto-cjk-sans-otc-$NOTO"
+url="$base/Sans/OTC/NotoSansCJK-Regular.ttc"
+stamp="$url $(pin NOTO_SANS_CJK_OTC_SHA256)"
+if current "$dir" "$stamp"; then
+  echo "  fonts: noto-cjk-sans-otc-$NOTO already at the pinned release"
+else
+  tmp="$(mktemp -d)"
+  fetch "$url" "$tmp/NotoSansCJK-Regular.ttc"
+  verify "$tmp/NotoSansCJK-Regular.ttc" "$(pin NOTO_SANS_CJK_OTC_SHA256)" NOTO_SANS_CJK_OTC_SHA256
+  fetch "$base/LICENSE" "$tmp/LICENSE"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  cp "$tmp"/* "$dir/"
+  printf '%s' "$stamp" > "$dir/.pinned"
+  rm -rf "$tmp"
+  echo "  fonts: noto-cjk-sans-otc-$NOTO installed"
+fi
+
 # Noto Sans Thai and Noto Sans Devanagari: the hinted static Regular and Bold
 # faces of each release archive.
 THAI="$(pin NOTO_SANS_THAI_VERSION)"
