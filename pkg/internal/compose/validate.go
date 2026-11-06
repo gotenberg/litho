@@ -410,12 +410,17 @@ func structElems(root *StructElem) (map[*StructElem]bool, error) {
 }
 
 // checkColor checks that every channel lies in [0, 1], which also refuses
-// NaN.
+// NaN, and that the colour paints something: a zero alpha is the model's
+// zero value, and accepting it would let a converter that forgot to set a
+// colour write invisible text.
 func checkColor(c Color) error {
 	for _, ch := range []float64{c.R, c.G, c.B, c.A} {
 		if !(ch >= 0 && ch <= 1) {
 			return fmt.Errorf("%w: %v", ErrInvalidColor, c)
 		}
+	}
+	if c.A == 0 {
+		return fmt.Errorf("%w: fully transparent %v", ErrInvalidColor, c)
 	}
 	return nil
 }

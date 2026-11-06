@@ -87,7 +87,9 @@ type Matrix struct {
 var Identity = Matrix{A: 1, D: 1}
 
 // Color is an sRGB colour with straight (not premultiplied) alpha. Every
-// channel runs from 0 to 1; A is 1 for opaque.
+// channel runs from 0 to 1; A is 1 for opaque. A fully transparent colour
+// paints nothing and is refused: omit the fragment instead. That rule also
+// catches the zero value, which would otherwise paint invisible text.
 type Color struct {
 	R, G, B, A float64
 }

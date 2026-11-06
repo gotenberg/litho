@@ -529,12 +529,12 @@ func TestWriteCanceled(t *testing.T) {
 func TestWriteRefusesABadFace(t *testing.T) {
 	t.Parallel()
 	bad := &compose.Face{Program: []byte("not a font"), Key: "broken-face"}
-	doc := &compose.Document{Pages: []*compose.Page{letter(&compose.Text{Face: bad, Size: 12, Glyphs: []compose.Glyph{{GID: 1}}})}}
+	doc := &compose.Document{Pages: []*compose.Page{letter(&compose.Text{Face: bad, Size: 12, Color: compose.Black, Glyphs: []compose.Glyph{{GID: 1}}})}}
 	err := compose.Write(context.Background(), doc, &bytes.Buffer{}, compose.Options{})
 	if !errors.Is(err, compose.ErrInvalidFont) || !strings.Contains(err.Error(), "broken-face") {
 		t.Errorf("Write = %v, want ErrInvalidFont naming the face", err)
 	}
-	missing := &compose.Text{Face: sans, Size: 12, Glyphs: []compose.Glyph{{GID: 60000}}}
+	missing := &compose.Text{Face: sans, Size: 12, Color: compose.Black, Glyphs: []compose.Glyph{{GID: 60000}}}
 	err = compose.Write(context.Background(), &compose.Document{Pages: []*compose.Page{letter(missing)}}, &bytes.Buffer{}, compose.Options{})
 	if !errors.Is(err, compose.ErrInvalidFont) {
 		t.Errorf("Write with a missing glyph = %v, want ErrInvalidFont", err)

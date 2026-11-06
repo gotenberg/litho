@@ -63,6 +63,8 @@ func TestValidateRefuses(t *testing.T) {
 		{"infinite glyph", page(&Text{Face: face, Size: 12, Glyphs: []Glyph{{X: inf}}}), ErrInvalidText},
 		{"NaN origin", page(&Text{Face: face, Size: 12, Origin: Point{Y: nan}}), ErrInvalidText},
 		{"text color", page(&Text{Face: face, Size: 12, Color: Color{R: 2, A: 1}}), ErrInvalidColor},
+		{"zero color", page(&Text{Face: face, Size: 12}), ErrInvalidColor},
+		{"transparent fill", page(&Path{Ops: square(), Fill: &Fill{Color: Color{R: 1}}}), ErrInvalidColor},
 		{"nil source", page(&Image{}), ErrInvalidImage},
 		{"empty source", page(&Image{Source: &ImageSource{}}), ErrInvalidImage},
 		{"both sources", page(&Image{Source: &ImageSource{Image: image.NewGray(image.Rect(0, 0, 1, 1)), JPEG: []byte{0xFF}}}), ErrInvalidImage},
@@ -97,7 +99,7 @@ func TestValidateRefuses(t *testing.T) {
 		{"nested outline dest", &Document{Pages: []*Page{{Width: 1, Height: 1}}, Outline: []Outline{{Title: "x", Dest: Dest{Page: 1}, Kids: []Outline{{Dest: Dest{Page: -1}}}}}}, ErrInvalidDest},
 		{"cyclic outline", &Document{Pages: []*Page{{Width: 1, Height: 1}}, Outline: selfOutline}, ErrNotATree},
 		{"detached parent", page(&Path{Ops: square(), Fill: &Fill{Color: Black}, Parent: orphan}), ErrDetachedElement},
-		{"detached parent, untagged", page(&Text{Face: face, Size: 1, Parent: orphan}), ErrDetachedElement},
+		{"detached parent, untagged", page(&Text{Face: face, Size: 1, Color: Black, Parent: orphan}), ErrDetachedElement},
 		{"detached link parent", &Document{Structure: &StructElem{Role: "Document"}, Pages: []*Page{{Width: 1, Height: 1, Links: []Link{{URI: "x", Parent: orphan}}}}}, ErrDetachedElement},
 		{"cyclic structure", &Document{Structure: cyclic, Pages: []*Page{{Width: 1, Height: 1}}}, ErrNotATree},
 		{"shared element", &Document{Structure: &StructElem{Role: "Document", Kids: []*StructElem{shared, shared}}, Pages: []*Page{{Width: 1, Height: 1}}}, ErrNotATree},
@@ -120,7 +122,7 @@ func TestValidateAccepts(t *testing.T) {
 	doc := &Document{
 		Structure: &StructElem{Role: "Document", Kids: []*StructElem{p}},
 		Pages: []*Page{{Width: 14400, Height: 0.5, Content: []Fragment{
-			&Text{Face: &Face{}, Size: 1, Parent: p},
+			&Text{Face: &Face{}, Size: 1, Color: Black, Parent: p},
 			&Group{Opacity: 0, Clip: &Path{Ops: square()}},
 			&Group{Opacity: 1},
 			&Path{Ops: square(), Stroke: &Stroke{Color: Black, Miter: 1, Dash: []float64{0, 2}}},
