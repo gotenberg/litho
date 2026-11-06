@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"path/filepath"
 	"slices"
@@ -24,6 +25,10 @@ const (
 	// FormatText is plain text in UTF-8. See [Convert] for how it is laid
 	// out.
 	FormatText Format = "text"
+	// FormatHTML is an HTML document with its CSS. It is not read yet:
+	// Convert returns [ErrUnsupportedFormat] for it until the HTML
+	// converter lands.
+	FormatHTML Format = "html"
 )
 
 // ConvertOption tunes [Convert].
@@ -39,6 +44,8 @@ type convertOptions struct {
 	families                             []string
 	fontSize                             float64
 	limits                               Limits
+	media                                string
+	resources                            fs.FS
 }
 
 // WithConvertLogger injects a structured logger for the diagnostics of a
@@ -110,6 +117,21 @@ func WithFontSize(size float64) ConvertOption {
 	return func(o *convertOptions) {
 		o.fontSize = size
 	}
+}
+
+// WithMediaType sets the media type the stylesheets of a [FormatHTML]
+// source are evaluated for: "print", the default, or "screen". Any other
+// value is refused with [ErrInvalidConvertOptions].
+func WithMediaType(media string) ConvertOption {
+	return func(o *convertOptions) { o.media = media }
+}
+
+// WithResources gives a [FormatHTML] source the files its relative URLs
+// name: stylesheets, images and, later, fonts, read from fsys with the URL
+// path as the file path. Without it, and for every absolute URL, the
+// reference is left out and reported as a warning.
+func WithResources(fsys fs.FS) ConvertOption {
+	return func(o *convertOptions) { o.resources = fsys }
 }
 
 // WithConvertLimits sets the resource budgets of a [Convert] call. It reads
