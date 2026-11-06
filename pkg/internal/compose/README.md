@@ -13,16 +13,26 @@ pkg/internal/compose/            The model (model.go) and the PDF backend (write
 pkg/internal/typography/embed/   Embeds a font program by glyph IDs: subset, Type0 objects, ToUnicode.
 pkg/internal/text/               Font matching, shaping, line breaking: text in, positioned glyph runs out.
 pkg/internal/convert/plaintext/  Plain text converter, the smallest complete consumer.
-pkg/internal/convert/html/       HTML and CSS converter (wave 1 onward).
+pkg/internal/css/                CSS parser, selectors, cascade: a DOM in, a computed Style per element out (style.go is the contract).
+pkg/internal/layout/             Box layout and pagination: a styled Node tree in, pages out (node.go is the contract).
+pkg/internal/convert/html/       HTML converter: parses with x/net/html, styles with css, builds the layout tree (wave 1 onward).
 pkg/internal/convert/ooxml/      DOCX, XLSX and PPTX converters (waves 4 to 6).
 pkg/pdf/convert.go               Public entry point: pdf.Convert.
 cmd/litho/convert.go             CLI: litho convert.
 ```
 
-Dependencies point one way: converters import `text` and `compose`; `text`
-imports `compose` (it produces `compose.Text` runs) and go-text; `compose`
-imports `embed` and the core writer; nothing imports a converter but
-`pkg/pdf`.
+Dependencies point one way: converters import `layout`, `css`, `text` and
+`compose`; `layout` imports `css`, `text` and `compose`; `css` imports
+x/net/html for selector matching and nothing of litho; `text` imports
+`compose` (it produces `compose.Text` runs) and go-text; `compose` imports
+`embed` and the core writer; nothing imports a converter but `pkg/pdf`.
+
+The two wave 1 contracts split the HTML route in three so the Office
+converters of waves 4 to 6 reuse the engine: `css.Style` is every computed
+property in points, `layout.Node` is a content tree of elements, text runs,
+forced breaks and pictures carrying a style, a structure role, a language,
+an anchor ID, a link target and table spans. An Office converter builds the
+same tree from its document model and never touches CSS syntax.
 
 ## The model
 
