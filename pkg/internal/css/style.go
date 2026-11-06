@@ -872,6 +872,13 @@ type Style struct {
 	FontFamilies []string
 	// FontSize is the computed size in points.
 	FontSize float64
+	// fontSizeKeyword and fontSizeAbsolute carry what the font size was
+	// derived from, inherited with it: the absolute-size keyword it comes
+	// from, 1 for xx-small to 8 for xxx-large, 0 for none, and whether a
+	// length other than a font-relative one set it. The monospace size
+	// rule of [fixMonospaceSize] reads them.
+	fontSizeKeyword  int8
+	fontSizeAbsolute bool
 	// FontWeight is the numeric weight, 100 to 900.
 	FontWeight  int
 	FontStyle   FontStyle
@@ -1037,6 +1044,7 @@ func Initial() *Style {
 		Color:               Color{A: 1},
 		FontFamilies:        []string{"serif"},
 		FontSize:            16 * Pt,
+		fontSizeKeyword:     mediumKeyword,
 		FontWeight:          400,
 		LineHeight:          Dimension{Kind: Normal},
 		TextIndent:          Pts(0),

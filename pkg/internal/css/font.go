@@ -5,27 +5,59 @@ import (
 	"strings"
 )
 
-// fontSizeKeywords are the absolute-size keywords as multiples of medium
-// (CSS Fonts 4, 2.5, the table of CSS Fonts 3, 3.5), medium being 16px.
-var fontSizeKeywords = map[string]float64{
-	"xx-small": 3.0 / 5, "x-small": 3.0 / 4, "small": 8.0 / 9, "medium": 1,
-	"large": 6.0 / 5, "x-large": 3.0 / 2, "xx-large": 2, "xxx-large": 3,
+// fontSizeKeywords numbers the absolute-size keywords (CSS Fonts 4, 2.5),
+// xx-small to xxx-large, from 1, the columns of [keywordSizes].
+var fontSizeKeywords = map[string]int8{
+	"xx-small": 1, "x-small": 2, "small": 3, "medium": mediumKeyword,
+	"large": 5, "x-large": 6, "xx-large": 7, "xxx-large": 8,
+}
+
+// mediumKeyword is the number of medium in [fontSizeKeywords].
+const mediumKeyword = 4
+
+// keywordSizes are the absolute-size keywords in pixels, xx-small to
+// xxx-large, for a proportional font (medium 16px) and for the generic
+// monospace family alone (medium 13px). CSS Fonts 4, 2.5 leaves the table
+// to the user agent: these are Chromium's, the standards-mode table of
+// third_party/blink/renderer/core/css/font_size_functions.cc
+// (kStrictFontSizeTable) at its default font sizes, 16px and 13px.
+var keywordSizes = [2][8]float64{
+	{9, 10, 13, 16, 18, 24, 32, 48},
+	{9, 10, 12, 13, 16, 20, 26, 39},
 }
 
 // mediumFontSize is the medium font size in points: 16px.
 const mediumFontSize = 16 * Pt
 
+// fixedFontScale is the ratio of the default monospace font size to the
+// default font size, 13px to 16px, the sizes Chromium's settings default to
+// (Settings::GetDefaultFixedFontSize and GetDefaultFontSize).
+const fixedFontScale = 13.0 / 16
+
 // fontSizeScale is the ratio larger and smaller apply (CSS 2.1, 15.7).
 const fontSizeScale = 1.2
 
-// fontSizeSpec is a specified font-size: an absolute keyword's factor, a
+// keywordSize returns the size in points of the absolute-size keyword k of
+// [fontSizeKeywords], for the generic monospace family alone when mono.
+func keywordSize(k int8, mono bool) float64 {
+	row := 0
+	if mono {
+		row = 1
+	}
+	return keywordSizes[row][max(1, min(k, 8))-1] * Pt
+}
+
+// fontSizeSpec is a specified font-size: an absolute keyword's number, a
 // relative keyword's step, or a length whose percentages and em units
-// resolve against the parent's font size.
+// resolve against the parent's font size. relative marks a length that
+// keeps the parent's absoluteness: a percentage, or an em, ex or ch length
+// outside calc().
 type fontSizeSpec struct {
-	factor float64
-	step   int
-	l      length
-	isLen  bool
+	keyword  int8
+	step     int
+	l        length
+	isLen    bool
+	relative bool
 }
 
 func parseFontSize(v []token, _ *declCtx) (any, bool) {
@@ -41,15 +73,25 @@ func parseFontSize(v []token, _ *declCtx) (any, bool) {
 		case "smaller":
 			return fontSizeSpec{step: -1}, true
 		}
-		f, ok := fontSizeKeywords[k]
-		return fontSizeSpec{factor: f}, ok
+		n, ok := fontSizeKeywords[k]
+		return fontSizeSpec{keyword: n}, ok
 	}
 	l, ok := parseLength(t, allowPct|nonNeg|allowMixed)
-	return fontSizeSpec{l: l, isLen: true}, ok
+	relative := t.typ == tPercentage
+	if t.typ == tDimension {
+		switch lower(t.value) {
+		case "em", "ex", "ch":
+			relative = true
+		}
+	}
+	return fontSizeSpec{l: l, isLen: true, relative: relative}, ok
 }
 
 // computeFontSize computes font-size (CSS Fonts 4, 2.5): em and
-// percentages against the parent's size, rem against the root's.
+// percentages against the parent's size, rem against the root's, an
+// absolute-size keyword from [keywordSizes]. A keyword is sized for a
+// proportional font here; [fixMonospaceSize] resizes it once the family is
+// known.
 func computeFontSize(s *styler, st *Style, v any) {
 	f, ok := v.(fontSizeSpec)
 	if !ok {
@@ -57,19 +99,60 @@ func computeFontSize(s *styler, st *Style, v any) {
 	}
 	parent := s.parent.FontSize
 	var size float64
+	st.fontSizeKeyword, st.fontSizeAbsolute = 0, s.parent.fontSizeAbsolute
 	switch {
 	case f.isLen:
 		lc := s.lc
 		lc.fontSize = parent
 		size = f.l.points(lc) + f.l.pct/100*parent
+		st.fontSizeAbsolute = st.fontSizeAbsolute || !f.relative
 	case f.step > 0:
 		size = parent * fontSizeScale
 	case f.step < 0:
 		size = parent / fontSizeScale
 	default:
-		size = f.factor * mediumFontSize
+		size = keywordSize(f.keyword, false)
+		st.fontSizeKeyword, st.fontSizeAbsolute = f.keyword, false
 	}
 	st.FontSize = math.Max(0, math.Min(size, maxFontSize))
+}
+
+// copyFontSize copies the font size and what it was derived from.
+func copyFontSize(dst, src *Style) {
+	dst.FontSize, dst.fontSizeKeyword, dst.fontSizeAbsolute = src.FontSize, src.fontSizeKeyword, src.fontSizeAbsolute
+}
+
+// isMonospace reports whether families is the generic monospace family
+// alone, the family list Chromium sizes as monospace
+// (FontDescription::IsMonospace).
+func isMonospace(families []string) bool {
+	return len(families) == 1 && families[0] == "monospace"
+}
+
+// fixMonospaceSize applies the monospace size rule browsers follow and no
+// specification states: the generic monospace family alone is sized against
+// a medium of 13px rather than 16px. An absolute-size keyword takes the size
+// of its row of [keywordSizes] for the element's family. A size no
+// absolute length set (a keyword, a percentage or an em length up the
+// chain) is scaled by [fixedFontScale] where the element turns to that
+// family from another, and back where it turns away from it. A size an
+// absolute length set (px, pt, rem, a viewport unit or calc()) stays. This
+// is Chromium's FontBuilder::CheckForGenericFamilyChange and
+// UpdateSpecifiedSize (third_party/blink/renderer/core/css/resolver
+// /font_builder.cc), with StyleBuilderConverterBase::ConvertFontSize
+// deciding what is absolute.
+func fixMonospaceSize(st, parent *Style) {
+	mono := isMonospace(st.FontFamilies)
+	switch {
+	case st.fontSizeKeyword > 0:
+		st.FontSize = keywordSize(st.fontSizeKeyword, mono)
+	case st.fontSizeAbsolute || mono == isMonospace(parent.FontFamilies):
+	case mono:
+		st.FontSize *= fixedFontScale
+	default:
+		st.FontSize /= fixedFontScale
+	}
+	st.FontSize = math.Max(0, math.Min(st.FontSize, maxFontSize))
 }
 
 // genericFamilies are the generic family keywords (CSS Fonts 4, 2.1.1).

@@ -575,7 +575,7 @@ func init() {
 		id  propID
 		def propDef
 	}{
-		{pFontSize, propDef{name: "font-size", inherited: true, parse: parseFontSize, compute: computeFontSize, copyFrom: field(func(s *Style) *float64 { return &s.FontSize })}},
+		{pFontSize, propDef{name: "font-size", inherited: true, parse: parseFontSize, compute: computeFontSize, copyFrom: copyFontSize}},
 		{pColor, propDef{
 			name: "color", inherited: true,
 			parse: func(v []token, _ *declCtx) (any, bool) {

@@ -578,6 +578,14 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 			if isRoot {
 				s.lc.rootFontSize = st.FontSize
 			}
+		case pFontFamily:
+			// The family can resize the font (fixMonospaceSize), before
+			// any other length reads it.
+			fixMonospaceSize(st, parent)
+			s.lc.fontSize = st.FontSize
+			if isRoot {
+				s.lc.rootFontSize = st.FontSize
+			}
 		case pFontStyle:
 			s.lc.ex, s.lc.ch = cs.fontUnits(st)
 		}

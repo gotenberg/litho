@@ -100,7 +100,7 @@ func TestHTMLHints_Attributes(t *testing.T) {
 		{"f1", func(s *Style) bool {
 			return s.FontSize == 18 && s.FontFamilies[0] == "Arial" && colorEq(s.Color, rgb(255, 0, 0))
 		}},
-		{"f2", func(s *Style) bool { return s.FontSize == 9 }},
+		{"f2", func(s *Style) bool { return s.FontSize == 7.5 }}, // x-small, 10px in Chromium's table
 		{"f3", func(s *Style) bool { return s.FontSize == 36 }},
 		{"hr", func(s *Style) bool {
 			return s.Border[Bottom].Width == 0 && s.Border[Top].Style == Solid && s.Margin[Left] == pts(0) && s.Width == pct(0.5)
