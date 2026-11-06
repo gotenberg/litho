@@ -1,0 +1,42 @@
+{
+  "expected": [
+    "_________",
+    "_rrrrBBB_",
+    "_________",
+    "_rrrrBBB_",
+    "_________",
+    "_BBBrrrr_",
+    "_________",
+    "_BBBrrrr_",
+    "_________"
+  ],
+  "html": "\n      <style>\n        @page { size: 9px }\n        body { font-family: weasyprint; color: blue; font-size: 1px }\n        p { background: red; line-height: 1; width: 7em; margin: 1em }\n      </style>\n      <!-- &#8207 forces Unicode RTL direction for the following chars -->\n      <p style=\"direction: rtl\"> abc </p>\n      <p style=\"direction: rtl\"> &#8207;abc </p>\n      <p style=\"direction: ltr\"> abc </p>\n      <p style=\"direction: ltr\"> &#8207;abc </p>\n    ",
+  "name": "test_text__test_text_align_rtl_trailing_whitespace",
+  "pixels": {
+    "B": [0, 0, 255],
+    "C": [0, 255, 255],
+    "G": [0, 255, 0],
+    "K": [0, 0, 0],
+    "M": [255, 0, 255],
+    "P": [50, 76, 103],
+    "Q": [63, 88, 110],
+    "R": [255, 0, 0],
+    "S": [255, 63, 63],
+    "V": [191, 0, 64],
+    "Y": [255, 255, 0],
+    "_": [255, 255, 255],
+    "a": [0, 0, 254],
+    "b": [0, 0, 128],
+    "g": [0, 128, 0],
+    "h": [64, 0, 64],
+    "p": [192, 0, 63],
+    "r": [255, 0, 0],
+    "s": [255, 127, 127],
+    "t": [127, 255, 127],
+    "u": [128, 0, 127],
+    "v": [128, 0, 128],
+    "z": null
+  },
+  "source": "tests/draw/test_text.py::test_text_align_rtl_trailing_whitespace",
+  "xfail": false
+}

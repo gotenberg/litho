@@ -66,7 +66,14 @@ const corpusImage = "litho-corpus-builder"
 // disagrees with the pins: deleting goldens is the operator's call, since a
 // re-provision can take an hour. The disagreement is reported with the
 // command that re-provisions, and run, baseline and check refuse to score it.
+//
+// A corpus the host provisions (see [Manifest.ProvisionedBy]) is skipped with
+// the make target that provisions it: the image has no part in it.
 func provisionCorpus(m *Manifest, pins *resolvedPins) error {
+	if m.ProvisionedBy != "" {
+		fmt.Printf("%s: provisioned on the host by %s, not by Docker: skipping\n", m.Name, m.ProvisionedBy)
+		return nil
+	}
 	testdataRoot, err := filepath.Abs(m.TestdataRoot())
 	if err != nil {
 		return fmt.Errorf("resolve testdata root: %w", err)

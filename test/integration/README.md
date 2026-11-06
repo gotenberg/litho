@@ -1,6 +1,6 @@
 # Integration Tests
 
-Matrix runner that scores litho across (corpus, feature) cells. Every corpus supplies PDF fixtures; every feature either loads a captured golden or runs live against an external tool.
+Matrix runner that scores litho across (corpus, feature) cells. Every corpus supplies PDF fixtures, or, for the three converter corpora, the HTML sources litho converts; every feature either loads a captured golden or runs live against an external tool.
 
 ## Layout
 
@@ -15,6 +15,8 @@ test/integration/
 │   │   ├── gen-references.mjs  PDF.js text + metadata generator (shared)
 │   │   ├── join-lines.mjs      Joins PDF.js text items into golden lines (node --test join-lines.test.mjs)
 │   │   ├── gen-images.mjs      PDF.js image signature generator (shared)
+│   │   ├── gen-links.mjs       PDF.js link annotation lister (html diff goldens)
+│   │   ├── gen-render.sh       poppler page renderer (render and diff goldens)
 │   │   ├── gen-bookmarks.sh    pdfcpu bookmark exporter (shared)
 │   │   ├── gen-merges.sh       pdfcpu merge oracle (shared)
 │   │   ├── gen-merge-empty.sh  pdfcpu merge-with-empty oracle (shared)
@@ -49,15 +51,41 @@ test/integration/
 │   │   ├── build/*.py          pikepdf builders that regenerate the fixtures
 │   │   ├── pdfs/*.pdf
 │   │   └── FIXTURES.md         Per-fixture expected firing set
-│   └── compose/                PDFs litho converts from text sources, committed
-│       ├── download.sh         Copies pdfs/ into the output dir
-│       ├── fetch-fonts.sh      Downloads the pinned fixture fonts, hash-checked
+│   ├── compose/                PDFs litho converts from text sources, committed
+│   │   ├── download.sh         Copies pdfs/ into the output dir
+│   │   ├── fetch-fonts.sh      Downloads the pinned fixture fonts, hash-checked
+│   │   ├── manifest.json
+│   │   ├── sources/*.txt       The UTF-8 plain text inputs
+│   │   ├── build/main.go       pdf.Convert builder (make compose-fixtures)
+│   │   ├── pdfs/*.pdf
+│   │   └── FIXTURES.md         Per-fixture focus, oracles and fonts
+│   ├── wpt/                    WPT reftests (host-provisioned, no Docker)
+│   │   ├── manifest.json
+│   │   ├── reftests.json       The 569 tests, their references and fuzziness
+│   │   ├── files.sha256        Every file they read, by WPT path and SHA-256
+│   │   ├── list-candidates.py  Selects the tests from a WPT checkout
+│   │   ├── fetch.sh            Downloads and hash-checks the files (make wpt-fetch)
+│   │   └── FIXTURES.md         How the tests were chosen
+│   ├── weasyprint/             WeasyPrint draw tests (host-provisioned, no Docker)
+│   │   ├── manifest.json
+│   │   ├── fixtures/*.json     One test each: HTML, expected pixel grid, colours
+│   │   ├── resources/          The images and stylesheets the tests name
+│   │   ├── ua.css              Prepended to each test (WeasyPrint's test UA)
+│   │   ├── extract.py          Extracts the fixtures (make weasyprint-fixtures)
+│   │   ├── LICENSE             WeasyPrint's licence
+│   │   └── FIXTURES.md         What was extracted and skipped
+│   └── html/                   HTML sources litho and Chromium convert
+│       ├── download.sh         Copies chromium/ into the output dir
 │       ├── manifest.json
-│       ├── sources/*.txt       The UTF-8 plain text inputs
-│       ├── build/main.go       pdf.Convert builder (make compose-fixtures)
-│       ├── pdfs/*.pdf
-│       └── FIXTURES.md         Per-fixture focus, oracles and fonts
-├── testdata/fonts/             Fonts the compose builder converts with (gitignored)
+│       ├── sources/<name>/     index.html and its assets, one directory each
+│       ├── chromium/*.pdf      Chromium references (make html-chromium)
+│       ├── chromium.sh         Converts the sources with the pinned Gotenberg image
+│       ├── build/main.go       pdf.Convert builder (make html-fixtures)
+│       ├── pdfs/*.pdf          litho's PDFs, once the converter writes them
+│       └── FIXTURES.md         Per-source origin and focus
+├── testdata/fonts/             Fixture fonts, Ahem and the WeasyPrint test font (gitignored)
+├── testdata/wpt/               The fetched WPT files, with versions.json (gitignored)
+├── testdata/reports/           Failure images of the converter cells (gitignored)
 ├── testdata/<corpus>/          Provisioned output (gitignored)
 │   ├── pdfs/*.pdf
 │   ├── versions.json           Versions each provisioning stage ran with
@@ -90,6 +118,12 @@ make corpus-init CORPUS_NAME=verapdf
 # Compare the local verapdf, node, java, qpdf, pdfsig, pikepdf, fontTools and Pillow with the pins.
 make corpus-tools
 
+# Provision the converter corpora the host provisions (corpus-init skips them).
+make wpt-fetch           # WPT files and Ahem, hash-checked
+make weasyprint-fixtures # re-extract the committed WeasyPrint fixtures, fetch the test font
+make html-fixtures       # fixture fonts, then litho's html corpus PDFs
+make html-chromium       # rebuild the committed Chromium references (Docker)
+
 # Wipe provisioned data to force re-init on the next run.
 make clean-corpus
 
@@ -114,7 +148,7 @@ make corpus-check
 
 ## Tool versions
 
-`corpus/versions.env` pins every tool and corpus source provisioning uses, one commented `KEY=VALUE` per line: veraPDF (the `verapdf/cli` image tag and the digest of the one build the goldens came from), Node (the `node` base image, by digest), the Temurin JRE veraPDF, Mustang and KoSIT run on, the PDF.js commit the image builds, pdfcpu (with the SHA-256 of its Linux archive for each architecture the image builds for, amd64 and arm64), Mustang, KoSIT with its XRechnung bundle and EN 16931 XSLT, poppler (the release, the SHA-256 of its tarball, and the Debian base image it builds on, by digest), and the revision of each downloaded corpus (a commit SHA or a tag, never a branch; govdocs by its fixed thread list). A last group pins the tools the host runs for live checks, fixture builds, the outline goldens and the ICC transform goldens (qpdf, pikepdf, fontTools, Pillow), which the image does not install, and the Liberation and DejaVu font archives the compose fixtures are converted with, each by URL and SHA-256; the host's poppler `pdfsig` is checked against the poppler pin the image builds.
+`corpus/versions.env` pins every tool and corpus source provisioning uses, one commented `KEY=VALUE` per line: veraPDF (the `verapdf/cli` image tag and the digest of the one build the goldens came from), Node (the `node` base image, by digest), the Temurin JRE veraPDF, Mustang and KoSIT run on, the PDF.js commit the image builds, pdfcpu (with the SHA-256 of its Linux archive for each architecture the image builds for, amd64 and arm64), Mustang, KoSIT with its XRechnung bundle and EN 16931 XSLT, poppler (the release, the SHA-256 of its tarball, and the Debian base image it builds on, by digest), and the revision of each downloaded corpus (a commit SHA or a tag, never a branch; govdocs by its fixed thread list). A last group pins the tools the host runs for live checks, fixture builds, the outline goldens and the ICC transform goldens (qpdf, pikepdf, fontTools, Pillow), which the image does not install, and the Liberation and DejaVu font archives the compose fixtures are converted with, each by URL and SHA-256; the host's poppler `pdfsig` is checked against the poppler pin the image builds. The converter corpora add four host pins: the web-platform-tests commit (`WPT_COMMIT`), the WeasyPrint release with the SHA-256 of its source tarball and of its test font (`WEASYPRINT_VERSION`, `WEASYPRINT_SHA256`, `WEASYPRINT_FONT_SHA256`), and the Gotenberg image the Chromium references come from (`GOTENBERG_IMAGE`). `wpt/fetch.sh` records `WPT_COMMIT` in `testdata/wpt/versions.json`, so the wpt cell refuses files fetched at another commit as the image-provisioned cells do.
 
 `corpus init` passes every entry to `docker build` as a `--build-arg`. The Dockerfile carries no default of its own, so a bare `docker build` fails rather than drifting; build by hand with the arguments `corpus versions` prints:
 
@@ -151,6 +185,8 @@ The live `remediation` cells shell out to the `verapdf` on your PATH, and live c
 
 `test/integration/baseline.json` captures one `(matched, mismatched, skipped)` count per `(corpus, feature)` cell, plus named metrics for the cells that emit them (45 of 52 cells, 88 distinct names, across `text`, `imagedecode`, `render`, `compliance`, `remediation`, `remediation-aggressive`, `remediation-pair`, `facturx-*`, `split`, `merge`, `merge-catalog`, `determinism` and the `mutate-*` cells). The file is committed; `make corpus-check` runs the matrix and fails when any cell's `matched` count drops below the captured value, or when a metric moves the wrong way, which is **not always downwards**. `costMetrics` (`baseline.go`) registers forty-seven metrics as good-when-lower, so a **rise** in `false_positive`, `false_negative`, `ruleset_mismatch`, `disagreement`, `parse_failed`, `decode_failed`, `litho_regressed`, `verapdf_regressed`, `acroform_invented`, `portfolio_dropped`, `lexicons_dropped`, `nondeterministic`, `render_pages_nondeterministic`, `render_failed`, `render_size_mismatch`, or one of the failure counts of the [mutation features](FEATURES.md#mutation-features), [`redact-render`](FEATURES.md#redaction-verifier), [`recolor`](FEATURES.md#colour-conversion) or `flatten` is the regression. A further twenty-two, listed in `uncomparedMetrics` (`litho_pre`/`post`/`fixed`, `verapdf_pre`/`post`/`fixed` among them), are raw inventory totals the check does not gate at all. Improvements are non-fatal: they surface as `improvement:` lines so the operator can decide whether to refresh the baseline with `make corpus-baseline`.
 
+The three converter cells record more than counts. `reftest` and `draw` record each fixture's outcome (`pass`, `fail` or `error`) under `outcomes`: a fixture that passed in the baseline and does not now is a regression, whatever the cell's count does, and one that passes now and did not is an improvement. `diff` records each fixture's five scores under `scores`, with the tolerance it forgives under `score_tolerance` (0.02): a score that drops by more is a regression. A fixture the baseline holds and the run did not score is reported missing. The outcomes and scores of a cell are replaced whole by a `--merge` capture, so new passes merge in with the cell.
+
 Cells with `[no golden]` (typically corpora not provisioned for a feature) are excluded so capturing the baseline on a partially provisioned tree does not pin missing-golden states. The check is silent about corpora that exist in the current run but not the baseline; new corpora become regression-gated only after the next `make corpus-baseline` commit.
 
 > **`make corpus-baseline` rewrites the whole file, including cells it did not measure.** The narrowing variables above flow into it, so `make corpus-baseline CORPUS_NAME=pdfjs` scores one corpus and writes a baseline containing only that corpus, silently dropping the other six. To refresh part of the matrix, call the tool directly with `-merge`, which replaces only the cells the run measured and preserves the rest:
@@ -167,16 +203,19 @@ Each feature, its oracle and its comparison rules are in [FEATURES.md](FEATURES.
 
 ## Corpora
 
-| Corpus    | Fixtures                             | Source                                                                                                                                                                  |
-| --------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pdfjs`   | ~1,200 PDFs (1 fixture each)         | Mozilla's PDF.js test suite                                                                                                                                             |
-| `verapdf` | ~2,600 PDFs × 15 profiles            | veraPDF corpus, flattened from the per-profile directories                                                                                                              |
-| `govdocs` | ~1,100 PDFs (1 fixture per claim)    | Govdocs1 random-sample of five fixed thread archives (real-world PDFs)                                                                                                  |
-| `pdf20`   | 7 PDFs (1 fixture per claim)         | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                        |
-| `pdfcpu`  | ~50 PDFs (1 fixture each)            | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)                                                                                                          |
-| `facturx` | ~150 PDFs (1 fixture per claim)      | ZUGFeRD/corpus (Apache-2.0): real, sample and intentionally-broken Factur-X / ZUGFeRD invoices, flattened from the `ZUGFeRDv2`, `XML-Rechnung` and `ZUGFeRDv1` subtrees |
-| `litho`   | 215 PDFs × 13 profiles (2,795 cells) | Self-authored, committed in-tree; see `corpus/litho/README.md`                                                                                                          |
-| `compose` | 8 PDFs × 2 profiles (16 cells)       | Converted by litho from committed text sources; see `corpus/compose/FIXTURES.md`                                                                                        |
+| Corpus       | Fixtures                             | Source                                                                                                                                                                  |
+| ------------ | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pdfjs`      | ~1,200 PDFs (1 fixture each)         | Mozilla's PDF.js test suite                                                                                                                                             |
+| `verapdf`    | ~2,600 PDFs × 15 profiles            | veraPDF corpus, flattened from the per-profile directories                                                                                                              |
+| `govdocs`    | ~1,100 PDFs (1 fixture per claim)    | Govdocs1 random-sample of five fixed thread archives (real-world PDFs)                                                                                                  |
+| `pdf20`      | 7 PDFs (1 fixture per claim)         | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                        |
+| `pdfcpu`     | ~50 PDFs (1 fixture each)            | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)                                                                                                          |
+| `facturx`    | ~150 PDFs (1 fixture per claim)      | ZUGFeRD/corpus (Apache-2.0): real, sample and intentionally-broken Factur-X / ZUGFeRD invoices, flattened from the `ZUGFeRDv2`, `XML-Rechnung` and `ZUGFeRDv1` subtrees |
+| `litho`      | 215 PDFs × 13 profiles (2,795 cells) | Self-authored, committed in-tree; see `corpus/litho/README.md`                                                                                                          |
+| `compose`    | 8 PDFs × 2 profiles (16 cells)       | Converted by litho from committed text sources; see `corpus/compose/FIXTURES.md`                                                                                        |
+| `wpt`        | 569 HTML reftests                    | web-platform-tests (BSD-3) at a pinned commit, fetched by `make wpt-fetch`; see `corpus/wpt/FIXTURES.md`                                                                |
+| `weasyprint` | 315 HTML draw tests                  | WeasyPrint's `tests/draw` (BSD-3), extracted and committed; see `corpus/weasyprint/FIXTURES.md`                                                                         |
+| `html`       | 12 HTML sources                      | Gotenberg's web test corpus and self-authored pages, with Chromium's PDFs; see `corpus/html/FIXTURES.md`                                                                |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
@@ -184,11 +223,13 @@ Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 - `none` (pdfjs): one fixture per PDF, ID = `<basename>`.
 - `auto` (govdocs, pdf20, facturx): one fixture per PDF, profile read from the document's XMP claim. Files claiming `PDF_A-Nx` or `PDF_UA-N` get ID = `<profile>/<basename>` and run compliance/remediation. Files with no claim get ID = `<basename>` and run only the profile-agnostic features (text, metadata).
 
+A converter corpus (`wpt`, `weasyprint`, `html`) lists source documents instead of PDFs, through its manifest's `inputs`. Its fixture IDs are the WPT paths of the tests (`css/CSS2/floats/float-001.html`), the fixture file names (`test_float__test_float`), and the source directory names (`invoice`).
+
 Auto-mode provisioning runs the in-tree `corpus scan-claims` helper after download, writing `<testdata_root>/claims.csv` keyed `<basename>,<profile>`. `run-verapdf.sh` consumes that file and validates each PDF only against the profile it claims (one veraPDF invocation per profile, hard-linked staging buckets), so cost scales with corpus size, not corpus size × profile count. The runner picks up the same CSV on `corpus run` to skip the live XMP scan. Delete the CSV (or `make clean-corpus`) to force a re-scan.
 
 Known limitation: the current govdocs sample (1,091 files) and the pdf20 examples contain zero PDF/A or PDF/UA claims (verified by byte-scanning for `pdfaid`), so their `claims.csv` files are legitimately empty and the compliance/remediation features run no fixtures there. Compliance is scored on three corpora instead: `verapdf` and `litho`, whose fixtures are built to exercise specific rules, and `facturx`, whose invoices claim PDF/A-3. `compose` scores it too, on what litho's converter writes, which claims nothing. veraPDF is the ground truth for all three. A general real-world sample of documents that claim PDF/A or PDF/UA is still missing.
 
-Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`, then adding the matching `COPY <name>/ ./<name>/` and `chmod +x <name>/download.sh` lines to `corpus/Dockerfile` so the provisioning image can reach the script. Nothing else changes: the CLI discovers corpora by scanning for `manifest.json`.
+Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`, then adding the matching `COPY <name>/ ./<name>/` and `chmod +x <name>/download.sh` lines to `corpus/Dockerfile` so the provisioning image can reach the script. Nothing else changes: the CLI discovers corpora by scanning for `manifest.json`. A corpus the host provisions, as `wpt` and `weasyprint` are, names its make target in `provisioned_by` instead and ships no `download.sh`; `corpus init` skips it.
 
 A new corpus becomes regression-gated only after the next `make corpus-baseline` commit; until then it runs and scores but cannot fail `make corpus-check`.
 
@@ -236,6 +277,9 @@ Fields:
 - `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from. The provisioning Docker image only generates goldens for features listed here, so dropping `text` + `metadata` from the veraPDF corpus skips the (slow) PDF.js generator entirely.
 - `golden_overrides`: maps feature name to a committed file, relative to the corpus source directory, that corrects goldens the oracle reads wrong. `text` and `flatten` take one. A `text` override file (litho and govdocs carry one) corrects the PDF.js goldens: each entry records the oracle's reading it replaces, so it fails its fixture when the oracle changes, and gives the right reading or marks the page unscored, with the clause behind it; the goldens stay the oracle's raw output. A `flatten` scope file (pdfjs and govdocs carry one) widens the `flatten` cell from the render sample to the whole corpus (see [Transparency flattening](FEATURES.md#transparency-flattening)).
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
+- `inputs`: makes the corpus a converter corpus, whose fixtures are source documents. `{"list": "reftests.json"}` reads a committed JSON array of objects with an `id`, each the path of its source under the testdata root (`wpt`); `{"glob": "sources/*/index.html"}` matches sources under the corpus source directory, each keyed by what its one `*` matched (`weasyprint`, `html`). `pdf_root`, `profile_mode` and `profiles` do not apply.
+- `goldens_in_source`: resolves `goldens` against the corpus source directory instead of the testdata root, for references committed beside the manifest (`wpt`, `weasyprint`).
+- `provisioned_by`: names the make target that provisions the corpus on the host; `corpus init` skips the corpus and says so.
 
 ## See also
 

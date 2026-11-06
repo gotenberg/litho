@@ -1,0 +1,32 @@
+{
+  "expected": ["BBBBBBBBBB", "BBBBBBBBBB", "RRRRRRRR__", "RRRRRRRR__"],
+  "html": "\n        <style>\n            @page {\n                size: 10px 4px;\n                @note-area {\n                    content: element(sidenotes, all-once);\n                }\n            }\n            div {\n                color: red;\n                font: 2px/1 weasyprint;\n            }\n            span {\n                color: blue;\n                display: block;\n                position: note(sidenotes);\n\n                &::note-call { color: red}\n            }\n        </style>\n        <div>abc<span>de</span></div>",
+  "name": "test_note__test_one_note",
+  "pixels": {
+    "B": [0, 0, 255],
+    "C": [0, 255, 255],
+    "G": [0, 255, 0],
+    "K": [0, 0, 0],
+    "M": [255, 0, 255],
+    "P": [50, 76, 103],
+    "Q": [63, 88, 110],
+    "R": [255, 0, 0],
+    "S": [255, 63, 63],
+    "V": [191, 0, 64],
+    "Y": [255, 255, 0],
+    "_": [255, 255, 255],
+    "a": [0, 0, 254],
+    "b": [0, 0, 128],
+    "g": [0, 128, 0],
+    "h": [64, 0, 64],
+    "p": [192, 0, 63],
+    "r": [255, 0, 0],
+    "s": [255, 127, 127],
+    "t": [127, 255, 127],
+    "u": [128, 0, 127],
+    "v": [128, 0, 128],
+    "z": null
+  },
+  "source": "tests/draw/test_note.py::test_one_note",
+  "xfail": false
+}

@@ -1,0 +1,10 @@
+{
+  "name": "wpt",
+  "source": "wpt",
+  "provisioned_by": "make wpt-fetch",
+  "inputs": { "list": "reftests.json" },
+  "goldens_in_source": true,
+  "goldens": {
+    "reftest": "."
+  }
+}

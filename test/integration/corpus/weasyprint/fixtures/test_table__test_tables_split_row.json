@@ -1,0 +1,41 @@
+{
+  "expected": [
+    "KKKKKKKK",
+    "KRRKKRRK",
+    "KRRKKRRK",
+    "K__KK__K",
+    "K__KKRRK",
+    "K__KKRRK",
+    "KKKKKKKK",
+    "________"
+  ],
+  "html": "\n      <style>\n        @page { margin: 0; size: 8px 4px }\n        td { border: 1px solid black; color: red; vertical-align: top;\n             font-family: weasyprint; font-size: 2px; line-height: 1 }\n      </style>\n      <table>\n        <tr>\n          <td>a</td>\n          <td>a<br>a</td>\n        </tr>\n      </table>",
+  "name": "test_table__test_tables_split_row",
+  "pixels": {
+    "B": [0, 0, 255],
+    "C": [0, 255, 255],
+    "G": [0, 255, 0],
+    "K": [0, 0, 0],
+    "M": [255, 0, 255],
+    "P": [50, 76, 103],
+    "Q": [63, 88, 110],
+    "R": [255, 0, 0],
+    "S": [255, 63, 63],
+    "V": [191, 0, 64],
+    "Y": [255, 255, 0],
+    "_": [255, 255, 255],
+    "a": [0, 0, 254],
+    "b": [0, 0, 128],
+    "g": [0, 128, 0],
+    "h": [64, 0, 64],
+    "p": [192, 0, 63],
+    "r": [255, 0, 0],
+    "s": [255, 127, 127],
+    "t": [127, 255, 127],
+    "u": [128, 0, 127],
+    "v": [128, 0, 128],
+    "z": null
+  },
+  "source": "tests/draw/test_table.py::test_tables_split_row",
+  "xfail": false
+}

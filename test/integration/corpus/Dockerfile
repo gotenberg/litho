@@ -260,6 +260,8 @@ COPY facturx/ ./facturx/
 COPY litho/ ./litho/
 # The compose corpus too: PDFs litho converted from committed text sources.
 COPY compose/ ./compose/
+# And the html corpus: the Chromium reference PDFs of its committed sources.
+COPY html/ ./html/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   lib/run-mustang.sh \
@@ -275,7 +277,8 @@ RUN chmod +x entrypoint.sh \
   pdfcpu/download.sh \
   facturx/download.sh \
   litho/download.sh \
-  compose/download.sh
+  compose/download.sh \
+  html/download.sh
 
 # Record the versions this image was built with, overrides included, so
 # the entrypoint can hand the corpus revisions to the download scripts and

@@ -386,7 +386,9 @@ func TestDockerfileFinalStageRecordsEveryStagePin(t *testing.T) {
 		t.Fatalf("collected only %d recorded pins: %v", len(recorded), recorded)
 	}
 	for p := range recorded {
-		if !declared[p] {
+		// A pin a host-side step records (wpt/fetch.sh writes WPT_COMMIT) is
+		// no build argument, so the image has nothing to declare.
+		if !declared[p] && !localToolPins[p] {
 			t.Errorf("a stage records %s, but the Dockerfile's final stage declares no ARG for it", p)
 		}
 	}
@@ -419,6 +421,10 @@ func TestEntrypointRecordsEveryGoldenDir(t *testing.T) {
 	}
 
 	for _, m := range readManifests(t) {
+		// A corpus the host provisions has no entrypoint stage to record.
+		if m.ProvisionedBy != "" {
+			continue
+		}
 		for feature, rel := range m.Goldens {
 			stage := filepath.ToSlash(filepath.Clean(rel))
 			if !recorded[stage] {
@@ -446,6 +452,11 @@ func TestEverySourceReadsItsPin(t *testing.T) {
 		keys, ok := sourcePins[m.Source]
 		if !ok {
 			t.Errorf("corpus %s (source %s) has no sourcePins entry", m.Name, m.Source)
+			continue
+		}
+		// A corpus the host provisions has no download.sh: its make target
+		// reads the pin (TestHostProvisionedCorporaReadTheirPin).
+		if m.ProvisionedBy != "" {
 			continue
 		}
 		script, err := os.ReadFile(filepath.Join(corpusSourceDir, m.Source, "download.sh"))

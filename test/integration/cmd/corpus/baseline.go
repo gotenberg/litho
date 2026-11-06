@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"maps"
+	"math"
 	"os"
 	"runtime"
 	"sort"
@@ -38,6 +39,16 @@ type baselineFeature struct {
 	Mismatched int            `json:"mismatched"`
 	Skipped    int            `json:"skipped"`
 	Metrics    map[string]int `json:"metrics,omitempty"`
+
+	// Outcomes maps each fixture to its outcome, for a feature that records
+	// them (see [OutcomeFeature]). A fixture that passed in the baseline and
+	// does not now is a regression.
+	Outcomes map[string]string `json:"outcomes,omitempty"`
+	// Scores maps each fixture to its named scores, for a feature that
+	// records them (see [ScoreFeature]), and ScoreTolerance is the drop the
+	// check forgives each one.
+	Scores         map[string]map[string]float64 `json:"scores,omitempty"`
+	ScoreTolerance float64                       `json:"score_tolerance,omitempty"`
 }
 
 const baselineCurrentVersion = 1
@@ -133,6 +144,11 @@ var costMetrics = map[string]bool{
 	metricFlattenPopplerMismatch:  true,
 	metricFlattenTextChanged:      true,
 	metricFlattenTransparencyLeft: true,
+
+	// The converter cells count the fixtures litho failed to convert or read
+	// back. pages_equal, the diff cell's count of fixtures with Chromium's
+	// page count, stays gated as good-when-higher.
+	metricConvertError: true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any
@@ -217,6 +233,7 @@ func runBaseline(ctx context.Context, args []string) int {
 	merge := fs.Bool("merge", false, "Overlay this run's cells onto the existing baseline instead of replacing the whole file")
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
 	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
+	reportDir := fs.String("report-dir", defaultReportDir, reportDirUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
@@ -227,6 +244,7 @@ func runBaseline(ctx context.Context, args []string) int {
 		features:          splitCSV(*feature),
 		workers:           *workers,
 		allowVersionDrift: *allowDrift,
+		reportDir:         *reportDir,
 	}
 	if opts.workers < 1 {
 		opts.workers = 1
@@ -272,6 +290,7 @@ func runCheck(ctx context.Context, args []string) int {
 	baselinePath := fs.String("baseline", defaultBaselinePath(), "Baseline file to check against")
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
 	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
+	reportDir := fs.String("report-dir", defaultReportDir, reportDirUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
@@ -288,6 +307,7 @@ func runCheck(ctx context.Context, args []string) int {
 		features:          splitCSV(*feature),
 		workers:           *workers,
 		allowVersionDrift: *allowDrift,
+		reportDir:         *reportDir,
 	}
 	if opts.workers < 1 {
 		opts.workers = 1
@@ -346,6 +366,7 @@ func baselineFromScoreboard(board *Scoreboard) *Baseline {
 				bf.Metrics = make(map[string]int, len(fr.Metrics))
 				maps.Copy(bf.Metrics, fr.Metrics)
 			}
+			recordPerFixture(&bf, fr)
 			feats[fr.Name] = bf
 		}
 		if len(feats) > 0 {
@@ -353,6 +374,48 @@ func baselineFromScoreboard(board *Scoreboard) *Baseline {
 		}
 	}
 	return bl
+}
+
+// recordPerFixture copies the per-fixture outcomes and scores of a cell whose
+// feature records them into bf. A skipped verdict records nothing.
+func recordPerFixture(bf *baselineFeature, fr *FeatureReport) {
+	if fr.RecordsOutcomes {
+		bf.Outcomes = make(map[string]string, len(fr.Verdicts))
+		for _, v := range fr.Verdicts {
+			if v.Skipped {
+				continue
+			}
+			outcome := v.Outcome
+			if outcome == "" {
+				outcome = outcomeError
+			}
+			bf.Outcomes[v.FixtureID] = outcome
+		}
+	}
+	if fr.ScoreTolerance > 0 {
+		bf.ScoreTolerance = fr.ScoreTolerance
+		bf.Scores = make(map[string]map[string]float64, len(fr.Verdicts))
+		for _, v := range fr.Verdicts {
+			if v.Skipped {
+				continue
+			}
+			scores := make(map[string]float64, len(v.Scores))
+			for k, val := range v.Scores {
+				scores[k] = roundScore(val)
+			}
+			bf.Scores[v.FixtureID] = scores
+		}
+	}
+}
+
+// scoreDecimals is how many decimals a recorded score keeps: the baseline
+// tolerance is a few hundredths, so a fourth decimal is noise that would
+// churn the file on every capture.
+const scoreDecimals = 1e4
+
+// roundScore rounds a score to scoreDecimals.
+func roundScore(v float64) float64 {
+	return math.Round(v*scoreDecimals) / scoreDecimals
 }
 
 // mergeBaseline overlays the freshly measured corpora in fresh onto prev,
@@ -413,6 +476,9 @@ func loadBaseline(path string) (*Baseline, error) {
 //   - missing: baseline cells that did not appear in the current run
 //     (corpus unprovisioned, feature filtered out). Non-fatal but
 //     surfaced so the runner can choose to re-provision.
+//
+// A cell that records per-fixture outcomes or scores is also compared
+// fixture by fixture (see [diffPerFixture]).
 func diffBaseline(want, got *Baseline) (regressions, improvements, missing []string) {
 	corpusNames := make([]string, 0, len(want.Corpora))
 	for name := range want.Corpora {
@@ -454,6 +520,10 @@ func diffBaseline(want, got *Baseline) (regressions, improvements, missing []str
 			// chars_match and words_match). Cost metrics invert the
 			// direction, and raw inventory totals are informational
 			// only.
+			r, i, m := diffPerFixture(corpus+" / "+fname, wf, gf)
+			regressions = append(regressions, r...)
+			improvements = append(improvements, i...)
+			missing = append(missing, m...)
 			metricNames := make([]string, 0, len(wf.Metrics))
 			for mname := range wf.Metrics {
 				metricNames = append(metricNames, mname)
@@ -480,6 +550,61 @@ func diffBaseline(want, got *Baseline) (regressions, improvements, missing []str
 						fmt.Sprintf("%s / %s / %s: got %d, baseline %d",
 							corpus, fname, mname, gv, wv))
 				}
+			}
+		}
+	}
+	return regressions, improvements, missing
+}
+
+// diffPerFixture compares the per-fixture outcomes and scores of one cell. A
+// fixture that passed in the baseline and does not now is a regression, and
+// one that passes now and did not is an improvement. A score below its
+// baseline by more than the baseline's tolerance is a regression, one above
+// it by more an improvement; a fixture the current run did not score reads
+// as 0. A baseline fixture absent from the current run is missing.
+func diffPerFixture(cell string, want, got baselineFeature) (regressions, improvements, missing []string) {
+	ids := make([]string, 0, len(want.Outcomes))
+	for id := range want.Outcomes {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		w := want.Outcomes[id]
+		g, ok := got.Outcomes[id]
+		switch {
+		case !ok:
+			missing = append(missing, fmt.Sprintf("%s / %s", cell, id))
+		case w == outcomePass && g != outcomePass:
+			regressions = append(regressions, fmt.Sprintf("%s / %s: %s, baseline pass", cell, id, g))
+		case w != outcomePass && g == outcomePass:
+			improvements = append(improvements, fmt.Sprintf("%s / %s: pass, baseline %s", cell, id, w))
+		}
+	}
+
+	ids = ids[:0]
+	for id := range want.Scores {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		gs, ok := got.Scores[id]
+		if !ok {
+			missing = append(missing, fmt.Sprintf("%s / %s", cell, id))
+			continue
+		}
+		ws := want.Scores[id]
+		names := make([]string, 0, len(ws))
+		for name := range ws {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			wv, gv := ws[name], gs[name]
+			switch {
+			case gv < wv-want.ScoreTolerance:
+				regressions = append(regressions, fmt.Sprintf("%s / %s / %s: got %.4f, baseline %.4f", cell, id, name, gv, wv))
+			case gv > wv+want.ScoreTolerance:
+				improvements = append(improvements, fmt.Sprintf("%s / %s / %s: got %.4f, baseline %.4f", cell, id, name, gv, wv))
 			}
 		}
 	}

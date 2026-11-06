@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Backgrounds</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 10pt; }
+.grid::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 200px; height: 110px; margin: 0 14px 14px 0; padding: 8px; border: 1px solid #333; }
+.color { background-color: #ffb703; }
+.rgba { background-color: rgba(33, 158, 188, 0.5); }
+.tile { background-image: url(tile.png); }
+.no-repeat { background: #eee url(tile.png) no-repeat center; }
+.repeat-x { background: #eee url(tile.png) repeat-x 0 50%; }
+.repeat-y { background: #eee url(tile.png) repeat-y right top; }
+.padding-box { background: #8ecae6 url(tile.png) no-repeat; background-origin: padding-box; background-clip: padding-box; border: 10px dashed #023047; }
+.content-box { background-color: #8ecae6; background-clip: content-box; padding: 20px; }
+.size { background: url(tile.png) no-repeat; background-size: 100px 60px; }
+.gradient { background: linear-gradient(to right, #e63946, #457b9d); color: #fff; }
+.layered { background: url(tile.png) no-repeat 10px 10px, linear-gradient(#f1faee, #a8dadc); }
+.page-band { background: #023047; color: #fff; padding: 12px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<div class="page-band">BAND-MARKER A full-width band with a dark background colour.</div>
+<div class="grid">
+  <div class="cell color">background-color BACKGROUND-MARKER</div>
+  <div class="cell rgba">semi-transparent colour</div>
+  <div class="cell tile">repeated image</div>
+  <div class="cell no-repeat">centred, no repeat</div>
+  <div class="cell repeat-x">repeat-x</div>
+  <div class="cell repeat-y">repeat-y, right</div>
+  <div class="cell padding-box">clipped to the padding box</div>
+  <div class="cell content-box">clipped to the content box</div>
+  <div class="cell size">background-size</div>
+  <div class="cell gradient">linear gradient</div>
+  <div class="cell layered">two layers</div>
+</div>
+</body>
+</html>

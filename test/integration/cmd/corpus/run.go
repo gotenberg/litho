@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -40,6 +41,9 @@ var featureRegistry = append([]FeatureFactory{
 	func() Feature { return newRecolorFeature() },
 	func() Feature { return newFlattenFeature() },
 	func() Feature { return newDeterminismFeature() },
+	func() Feature { return newReftestFeature() },
+	func() Feature { return newDrawFeature() },
+	func() Feature { return newDiffFeature() },
 }, mutationFeatureFactories()...)
 
 // runOptions captures the CLI flags for the run subcommand.
@@ -53,6 +57,27 @@ type runOptions struct {
 	// allowVersionDrift scores goldens recorded with other versions than
 	// versions.env pins instead of refusing them.
 	allowVersionDrift bool
+
+	// reportDir is where features that draw their failures (see
+	// [ReportWriter]) write them, under <corpus>/<feature>. Empty writes
+	// none.
+	reportDir string
+}
+
+// defaultReportDir is where the converter features write the images of their
+// failures unless --report-dir says otherwise: beside the testdata, outside
+// git.
+const defaultReportDir = "test/integration/testdata/reports"
+
+// reportDirUsage documents the flag run, baseline and check share.
+const reportDirUsage = "Directory the converter features write failure images to, under <corpus>/<feature> (empty: none)"
+
+// ReportWriter is an optional interface a [Feature] implements when it can
+// draw a failure for a reader: a side-by-side image with a diff heatmap. The
+// runner calls SetReportDir before LoadGoldens with the directory to write
+// into, or "" for none.
+type ReportWriter interface {
+	SetReportDir(dir string)
 }
 
 func runRun(ctx context.Context, args []string) int {
@@ -63,6 +88,7 @@ func runRun(ctx context.Context, args []string) int {
 	format := fs.String("format", "text", "Output format: text or json")
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
 	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
+	reportDir := fs.String("report-dir", defaultReportDir, reportDirUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
@@ -75,6 +101,7 @@ func runRun(ctx context.Context, args []string) int {
 		format:            *format,
 		workers:           *workers,
 		allowVersionDrift: *allowDrift,
+		reportDir:         *reportDir,
 	}
 	if opts.workers < 1 {
 		opts.workers = 1
@@ -222,6 +249,19 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 		fr := &FeatureReport{
 			Name:         feat.Name(),
 			GoldenSource: feat.GoldenSource(),
+		}
+		if _, ok := feat.(OutcomeFeature); ok {
+			fr.RecordsOutcomes = true
+		}
+		if sf, ok := feat.(ScoreFeature); ok {
+			fr.ScoreTolerance = sf.ScoreTolerance()
+		}
+		if rw, ok := feat.(ReportWriter); ok {
+			dir := ""
+			if opts.reportDir != "" {
+				dir = filepath.Join(opts.reportDir, manifest.Name, feat.Name())
+			}
+			rw.SetReportDir(dir)
 		}
 		goldenDir := manifest.GoldenDir(feat.Name())
 		if goldenDir == "" {

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Images</title>
+<style>
+body { font-family: "Liberation Serif", serif; font-size: 11pt; }
+img { border: 1px solid #333; }
+.row::after { content: ""; display: block; clear: both; }
+figure { float: left; margin: 0 16px 16px 0; }
+figcaption { font-size: 9pt; text-align: center; }
+.inline img { vertical-align: middle; }
+.wide { width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<h1>Images</h1>
+<div class="row">
+  <figure><img src="photo.jpg" alt="Photo"><figcaption>JPEG at its own size IMAGE-MARKER</figcaption></figure>
+  <figure><img src="chart.png" alt="Chart"><figcaption>PNG at its own size</figcaption></figure>
+  <figure><img src="chart.png" alt="Chart scaled" width="120" height="60"><figcaption>PNG scaled by attributes</figcaption></figure>
+</div>
+<p class="inline">An inline image <img src="dot.png" alt="dot" width="16" height="16"> sits in the line and aligns on its middle. INLINE-IMAGE-MARKER</p>
+<p><img class="wide" src="photo.jpg" alt="Photo, full width"></p>
+<p>The image above takes the full width of the content box and keeps its aspect ratio.</p>
+</body>
+</html>

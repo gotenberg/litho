@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # gen-render.sh: render goldens (poppler pdftoppm).
 #
-# Renders the first RENDER_MAX_PAGES pages of each sampled PDF at
+# Renders the first <max_pages> pages (RENDER_MAX_PAGES by default) of each
+# sampled PDF at
 # RENDER_DPI into <out_dir>/<id>.<page>.png, and writes <out_dir>/<id>.json
 # naming the pages it rendered, the page count, and every failure, so the
 # render feature tells a page the oracle could not render from one it never
@@ -27,7 +28,11 @@
 # gains or loses other files, and independent of the order files are listed
 # in.
 #
-# Usage: gen-render.sh <pdfs_dir> <out_dir> <sample_per_256>
+# The html corpus's diff goldens pass a fourth argument, 0, to render every
+# page: its feature compares whole documents (see featureDiff in
+# test/integration/cmd/corpus).
+#
+# Usage: gen-render.sh <pdfs_dir> <out_dir> <sample_per_256> [max_pages]
 set -euo pipefail
 
 PDFS_DIR="$1"
@@ -37,6 +42,9 @@ mkdir -p "$OUT_DIR"
 
 RENDER_DPI=72
 RENDER_MAX_PAGES=3
+# MAX_PAGES is the page cap this run applies: the fourth argument, or
+# RENDER_MAX_PAGES. 0 renders every page.
+MAX_PAGES="${4:-$RENDER_MAX_PAGES}"
 # RENDER_TIMEOUT bounds one pdftoppm or pdfinfo call, in seconds. A crafted
 # PDF can keep poppler busy indefinitely; at 72 dpi a page takes well under a
 # second.
@@ -67,7 +75,10 @@ render_one() {
   pages=$(awk '/^Pages:/ { print $2 }' "$OUT_DIR/$id.info")
   rm -f "$OUT_DIR/$id.info"
   pages=${pages:-0}
-  last=$((pages < RENDER_MAX_PAGES ? pages : RENDER_MAX_PAGES))
+  last=$pages
+  if [ "$MAX_PAGES" -gt 0 ] && [ "$MAX_PAGES" -lt "$pages" ]; then
+    last=$MAX_PAGES
+  fi
   for ((page = 1; page <= last; page++)); do
     out="$OUT_DIR/$id.$page"
     if err=$(timeout "$RENDER_TIMEOUT" pdftoppm -r "$RENDER_DPI" -cropbox -aa yes -aaVector yes \
@@ -84,7 +95,7 @@ render_one() {
     '{id: $id, dpi: $dpi, page_count: $count, pages: $pages}' > "$OUT_DIR/$id.json"
 }
 export -f render_one
-export OUT_DIR SAMPLE RENDER_DPI RENDER_MAX_PAGES RENDER_TIMEOUT
+export OUT_DIR SAMPLE RENDER_DPI MAX_PAGES RENDER_TIMEOUT
 
 find "$PDFS_DIR" -maxdepth 1 -type f -name '*.pdf' -print0 \
   | sort -z \

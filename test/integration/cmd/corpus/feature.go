@@ -61,6 +61,39 @@ type Verdict struct {
 	// Mismatches carries structured diffs already serialised as JSON so
 	// the scoreboard can relay them verbatim.
 	Mismatches []json.RawMessage `json:"mismatches,omitempty"`
+	// Outcome is the fixture's outcome for a feature that records one per
+	// fixture in the baseline (see [OutcomeFeature]): "pass", "fail" or
+	// "error".
+	Outcome string `json:"outcome,omitempty"`
+	// Scores carries the named scores, each in [0, 1], a feature records
+	// per fixture in the baseline (see [ScoreFeature]).
+	Scores map[string]float64 `json:"scores,omitempty"`
+}
+
+// The outcomes a converter oracle gives a fixture: it passed, it failed the
+// comparison, or litho errored before there was anything to compare.
+const (
+	outcomePass  = "pass"
+	outcomeFail  = "fail"
+	outcomeError = "error"
+)
+
+// OutcomeFeature is an optional interface a [Feature] implements when the
+// baseline records each fixture's outcome rather than counts alone, so a
+// fixture that passed and now fails is a regression even when another one
+// started passing at the same time. A verdict with no Outcome (a Run error,
+// a timeout, a panic) records as "error".
+type OutcomeFeature interface {
+	RecordsOutcomes()
+}
+
+// ScoreFeature is an optional interface a [Feature] implements when the
+// baseline records each fixture's [Verdict.Scores]. A score that drops by
+// more than ScoreTolerance is a regression; one that rises by more is an
+// improvement. A verdict with no Scores records every score the baseline
+// holds for it as 0.
+type ScoreFeature interface {
+	ScoreTolerance() float64
 }
 
 // ErrNoGoldens signals that a feature's golden directory is missing or

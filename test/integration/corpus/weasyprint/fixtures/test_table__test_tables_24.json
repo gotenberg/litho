@@ -1,0 +1,43 @@
+{
+  "expected": [
+    "__________________",
+    "_RKKKKgYYYYYYGGG__",
+    "_RKKKKgKKYYKKGGG__",
+    "_BBBBBBKKYYKKGGG__",
+    "_BBBBBBYYYYYYGGG__",
+    "_BBBBBBCCCCCCGGG__",
+    "_BBBBBB___________",
+    "_BBBBBB___________",
+    "__________________",
+    "__________________"
+  ],
+  "html": "\n      <style>\n        @page { size: 18px 10px }\n        table {\n          border-collapse: collapse;\n          font: 2px/1 weasyprint;\n          margin: 1px;\n        }\n        tr {\n          border-left: 1px solid red;\n          border-right: 3px solid lime;\n        }\n        td.left {\n          background-color: magenta;\n          border-bottom: 5px solid blue;\n          border-right: 1px solid green;\n        }\n        td.right {\n          background-color: yellow;\n          border-bottom: 1px solid cyan;\n          border-left: 1px dotted orange;\n        }\n        td {\n          vertical-align: middle;\n        }\n      </style>\n      <table>\n        <tr>\n          <td class=\"left\">XX</td>\n          <td class=\"right\">X X</td>\n        </tr>\n      </table>\n    ",
+  "name": "test_table__test_tables_24",
+  "pixels": {
+    "B": [0, 0, 255],
+    "C": [0, 255, 255],
+    "G": [0, 255, 0],
+    "K": [0, 0, 0],
+    "M": [255, 0, 255],
+    "P": [50, 76, 103],
+    "Q": [63, 88, 110],
+    "R": [255, 0, 0],
+    "S": [255, 63, 63],
+    "V": [191, 0, 64],
+    "Y": [255, 255, 0],
+    "_": [255, 255, 255],
+    "a": [0, 0, 254],
+    "b": [0, 0, 128],
+    "g": [0, 128, 0],
+    "h": [64, 0, 64],
+    "p": [192, 0, 63],
+    "r": [255, 0, 0],
+    "s": [255, 127, 127],
+    "t": [127, 255, 127],
+    "u": [128, 0, 127],
+    "v": [128, 0, 128],
+    "z": null
+  },
+  "source": "tests/draw/test_table.py::test_tables_24",
+  "xfail": false
+}

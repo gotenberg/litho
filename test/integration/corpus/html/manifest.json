@@ -1,0 +1,9 @@
+{
+  "name": "html",
+  "source": "html",
+  "pdf_root": "pdfs",
+  "inputs": { "glob": "sources/*/index.html" },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

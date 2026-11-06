@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lists</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; line-height: 1.35; }
+ol.roman { list-style-type: upper-roman; }
+ol.alpha { list-style-type: lower-alpha; }
+ul.square { list-style-type: square; }
+ul.circle { list-style-type: circle; }
+ul.inside { list-style-position: inside; border: 1px solid #999; padding: 6px 6px 6px 24px; }
+ul.none { list-style: none; padding-left: 0; }
+li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<h1>Lists</h1>
+<h2>Ordered</h2>
+<ol>
+  <li>First item ORDERED-MARKER</li>
+  <li>Second item
+    <ol class="alpha">
+      <li>Nested alpha one</li>
+      <li>Nested alpha two
+        <ol class="roman">
+          <li>Deep roman one</li>
+          <li>Deep roman two</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>Third item</li>
+</ol>
+<ol start="7" reversed>
+  <li>Seven, counting down</li>
+  <li>Six</li>
+  <li>Five</li>
+</ol>
+<h2>Unordered</h2>
+<ul>
+  <li>Disc item UNORDERED-MARKER</li>
+  <li>Disc item with a long text that wraps onto a second line to show how the marker stays on the first line while the text aligns under itself.
+    <ul class="circle">
+      <li>Circle item</li>
+      <li>Circle item
+        <ul class="square">
+          <li>Square item</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+<ul class="inside">
+  <li>Inside marker, inside the border INSIDE-MARKER</li>
+  <li>Inside marker with a long text that wraps onto a second line under the marker itself.</li>
+</ul>
+<ul class="none">
+  <li>No marker NONE-MARKER</li>
+  <li>No marker</li>
+</ul>
+<h2>Definitions</h2>
+<dl>
+  <dt>Term</dt><dd>Definition indented under its term. DL-MARKER</dd>
+  <dt>Another term</dt><dd>Another definition.</dd>
+</dl>
+</body>
+</html>

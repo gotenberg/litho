@@ -1,0 +1,41 @@
+{
+  "expected": [
+    "___zzzzz",
+    "__zzzzzz",
+    "_zzzzzzz",
+    "zzzzzzzz",
+    "zzzzzzzz",
+    "zzzzzzzR",
+    "zzzzzzRR",
+    "zzzzzRRR"
+  ],
+  "html": "\n      <style>\n        @page {\n          size: 8px 8px;\n        }\n        div {\n          background: Red;\n          border-radius: 50% 0 0 0;\n          height: 16px;\n          width: 16PX;\n        }\n      </style>\n      <div></div>\n    ",
+  "name": "test_box__test_draw_border_radius",
+  "pixels": {
+    "B": [0, 0, 255],
+    "C": [0, 255, 255],
+    "G": [0, 255, 0],
+    "K": [0, 0, 0],
+    "M": [255, 0, 255],
+    "P": [50, 76, 103],
+    "Q": [63, 88, 110],
+    "R": [255, 0, 0],
+    "S": [255, 63, 63],
+    "V": [191, 0, 64],
+    "Y": [255, 255, 0],
+    "_": [255, 255, 255],
+    "a": [0, 0, 254],
+    "b": [0, 0, 128],
+    "g": [0, 128, 0],
+    "h": [64, 0, 64],
+    "p": [192, 0, 63],
+    "r": [255, 0, 0],
+    "s": [255, 127, 127],
+    "t": [127, 255, 127],
+    "u": [128, 0, 127],
+    "v": [128, 0, 128],
+    "z": null
+  },
+  "source": "tests/draw/test_box.py::test_draw_border_radius",
+  "xfail": false
+}

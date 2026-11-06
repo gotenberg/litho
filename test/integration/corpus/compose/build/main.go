@@ -52,8 +52,18 @@ func main() {
 	}
 }
 
+// fixtureFamilies are the prefixes of the font directories fetch-fonts.sh
+// installs. The fonts directory also holds the test fonts other corpora draw
+// with (Ahem, the WeasyPrint test font), which must not take part in the
+// compose fixtures' font matching, so only these subdirectories are read.
+var fixtureFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-"}
+
 func run(ctx context.Context, sourcesDir, outDir, fontsDir string) error {
 	if err := checkFonts(fontsDir); err != nil {
+		return err
+	}
+	fontDirs, err := familyDirs(fontsDir)
+	if err != nil {
 		return err
 	}
 	names, err := filepath.Glob(filepath.Join(sourcesDir, "*.txt"))
@@ -68,7 +78,7 @@ func run(ctx context.Context, sourcesDir, outDir, fontsDir string) error {
 		return fmt.Errorf("creating %s: %w", outDir, err)
 	}
 	opts := []pdf.ConvertOption{
-		pdf.WithConvertFontDirs(fontsDir),
+		pdf.WithConvertFontDirs(fontDirs...),
 		pdf.WithPaperSize(paperWidth, paperHeight),
 		pdf.WithMargins(margin, margin, margin, margin),
 		pdf.WithFontFamilies(fontFamily),
@@ -80,6 +90,30 @@ func run(ctx context.Context, sourcesDir, outDir, fontsDir string) error {
 		}
 	}
 	return nil
+}
+
+// familyDirs returns the subdirectories of dir that fetch-fonts.sh installs,
+// sorted, failing when one family is missing.
+func familyDirs(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", dir, err)
+	}
+	var dirs []string
+	for _, prefix := range fixtureFamilies {
+		found := false
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), prefix) {
+				dirs = append(dirs, filepath.Join(dir, e.Name()))
+				found = true
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("no %s* font directory under %s: run make compose-fixtures, which downloads the pinned fonts first", prefix, dir)
+		}
+	}
+	sort.Strings(dirs)
+	return dirs, nil
 }
 
 // checkFonts fails unless dir holds at least one font file, so a missing

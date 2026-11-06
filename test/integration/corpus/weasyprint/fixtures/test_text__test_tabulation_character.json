@@ -1,0 +1,32 @@
+{
+  "expected": ["__________", "_RR____RR_", "_RR____RR_", "__________"],
+  "html": "\n      <style>\n        @page {\n          size: 10px 4px;\n          margin: 1px;\n        }\n        body {\n          color: red;\n          font-family: weasyprint;\n          font-size: 2px;\n          line-height: 1;\n          tab-size: 3;\n        }\n      </style>\n      <pre>a&Tab;b</pre>",
+  "name": "test_text__test_tabulation_character",
+  "pixels": {
+    "B": [0, 0, 255],
+    "C": [0, 255, 255],
+    "G": [0, 255, 0],
+    "K": [0, 0, 0],
+    "M": [255, 0, 255],
+    "P": [50, 76, 103],
+    "Q": [63, 88, 110],
+    "R": [255, 0, 0],
+    "S": [255, 63, 63],
+    "V": [191, 0, 64],
+    "Y": [255, 255, 0],
+    "_": [255, 255, 255],
+    "a": [0, 0, 254],
+    "b": [0, 0, 128],
+    "g": [0, 128, 0],
+    "h": [64, 0, 64],
+    "p": [192, 0, 63],
+    "r": [255, 0, 0],
+    "s": [255, 127, 127],
+    "t": [127, 255, 127],
+    "u": [128, 0, 127],
+    "v": [128, 0, 128],
+    "z": null
+  },
+  "source": "tests/draw/test_text.py::test_tabulation_character",
+  "xfail": false
+}

@@ -15,12 +15,14 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// Fixture is one PDF plus the identifier the goldens are keyed on.
+// Fixture is one PDF, or one source document of a converter corpus, plus the
+// identifier the goldens are keyed on.
 type Fixture struct {
 	// ID is the key used to look up goldens. Stable across runs.
 	ID string
 
-	// PDFPath is the absolute path to the fixture PDF on disk.
+	// PDFPath is the path to the fixture PDF on disk, or to the source
+	// document of a converter corpus (see [Manifest.Inputs]).
 	PDFPath string
 
 	// SkipReason is non-empty when the manifest marks the fixture as
@@ -35,7 +37,13 @@ type Fixture struct {
 // "<profile>/<basename>"; "none" yields "<basename>"; "auto" yields
 // "<profile>/<basename>" when the PDF claims a profile via XMP and
 // "<basename>" otherwise.
+//
+// A converter corpus lists its source documents instead (see
+// [loadInputFixtures]).
 func LoadFixtures(ctx context.Context, m *Manifest) ([]Fixture, error) {
+	if m.Inputs != nil {
+		return loadInputFixtures(m)
+	}
 	pdfs, err := walkPDFs(m)
 	if err != nil {
 		return nil, err

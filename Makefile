@@ -90,6 +90,42 @@ compose-fixtures: ## Regenerate the compose corpus PDFs from their text sources,
 	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
 	go run ./test/integration/corpus/compose/build -fonts $(COMPOSE_FONTS)
 
+WPT_DIR := test/integration/testdata/wpt
+
+.PHONY: wpt-fetch
+wpt-fetch: ## Download the web-platform-tests reftests of the wpt corpus at the commit test/integration/corpus/versions.env pins (hash-checked), with Ahem and the fixture fonts
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	test/integration/corpus/wpt/fetch.sh $(WPT_DIR) $(COMPOSE_FONTS)
+
+WEASYPRINT := test/integration/corpus/weasyprint
+
+.PHONY: weasyprint-fixtures
+weasyprint-fixtures: ## Extract the weasyprint corpus fixtures from the WeasyPrint release test/integration/corpus/versions.env pins (tarball and test font hash-checked), and fetch the fixture fonts
+	@set -e; \
+	pin() { v="$$(printenv "$$1" || true)"; [ -n "$$v" ] || v="$$(sed -n "s/^$$1=//p" test/integration/corpus/versions.env)"; printf '%s' "$$v"; }; \
+	version="$$(pin WEASYPRINT_VERSION)"; sha="$$(pin WEASYPRINT_SHA256)"; font_sha="$$(pin WEASYPRINT_FONT_SHA256)"; \
+	tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
+	curl -fsSL --retry 3 -o "$$tmp/weasyprint.tar.gz" "https://github.com/Kozea/WeasyPrint/archive/refs/tags/v$$version.tar.gz"; \
+	got="$$(shasum -a 256 "$$tmp/weasyprint.tar.gz" | cut -d ' ' -f 1)"; \
+	if [ "$$got" != "$$sha" ]; then echo "ERROR: WeasyPrint v$$version hashes to $$got, WEASYPRINT_SHA256 pins $$sha" >&2; exit 1; fi; \
+	mkdir "$$tmp/x"; tar -xzf "$$tmp/weasyprint.tar.gz" -C "$$tmp/x"; \
+	python3 -I $(WEASYPRINT)/extract.py "$$tmp/x/WeasyPrint-$$version" $(WEASYPRINT)/fixtures $(WEASYPRINT)/resources $(COMPOSE_FONTS)/weasyprint; \
+	got="$$(shasum -a 256 $(COMPOSE_FONTS)/weasyprint/weasyprint.otf | cut -d ' ' -f 1)"; \
+	if [ "$$got" != "$$font_sha" ]; then echo "ERROR: the WeasyPrint test font hashes to $$got, WEASYPRINT_FONT_SHA256 pins $$font_sha" >&2; exit 1; fi
+	npx prettier --write $(WEASYPRINT)/fixtures
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+
+HTML_CORPUS := test/integration/corpus/html
+
+.PHONY: html-chromium
+html-chromium: ## Rebuild the html corpus's Chromium reference PDFs with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker)
+	$(HTML_CORPUS)/chromium.sh $(HTML_CORPUS)/sources $(HTML_CORPUS)/chromium
+
+.PHONY: html-fixtures
+html-fixtures: ## Rebuild the html corpus's litho PDFs from its sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	go run ./test/integration/corpus/html/build -fonts $(COMPOSE_FONTS)
+
 CORPUS_RUN_FLAGS :=
 ifdef CORPUS_JSON_OUTPUT
 CORPUS_RUN_FLAGS += --format=json

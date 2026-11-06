@@ -1,0 +1,37 @@
+{
+  "expected": [
+    "BBBBRRRRRRRRgggg",
+    "BBBBRRRRRRRRgggg",
+    "____RRRR____gggg",
+    "____RRRR____gggg"
+  ],
+  "html": "\n        <style>\n            @page {\n                size: 16px 2px;\n            }\n            body {\n                color: red;\n                font-family: weasyprint;\n                font-size: 2px;\n                line-height: 1;\n            }\n            div.split {\n                color: blue;\n                position: absolute;\n                width: 4px;\n            }\n            div.split2 {\n                color: green;\n                position: absolute;\n                top: 0;\n                right: 0;\n                width: 4px;\n            }\n            div.push {\n                margin-left: 4px;\n            }\n        </style>\n        <div class=\"split\">aa</div>\n        <div class=\"split2\">cc cc</div>\n        <div class=\"push\">bbbb bb</div>\n    ",
+  "name": "test_absolute__test_absolute_split_7",
+  "pixels": {
+    "B": [0, 0, 255],
+    "C": [0, 255, 255],
+    "G": [0, 255, 0],
+    "K": [0, 0, 0],
+    "M": [255, 0, 255],
+    "P": [50, 76, 103],
+    "Q": [63, 88, 110],
+    "R": [255, 0, 0],
+    "S": [255, 63, 63],
+    "V": [191, 0, 64],
+    "Y": [255, 255, 0],
+    "_": [255, 255, 255],
+    "a": [0, 0, 254],
+    "b": [0, 0, 128],
+    "g": [0, 128, 0],
+    "h": [64, 0, 64],
+    "p": [192, 0, 63],
+    "r": [255, 0, 0],
+    "s": [255, 127, 127],
+    "t": [127, 255, 127],
+    "u": [128, 0, 127],
+    "v": [128, 0, 128],
+    "z": null
+  },
+  "source": "tests/draw/test_absolute.py::test_absolute_split_7",
+  "xfail": false
+}

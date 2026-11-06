@@ -35,6 +35,14 @@ type FeatureReport struct {
 	NoGoldenFixtures int            `json:"no_golden_fixtures,omitempty"`
 	Metrics          map[string]int `json:"metrics,omitempty"`
 	Verdicts         []Verdict      `json:"verdicts,omitempty"`
+
+	// RecordsOutcomes marks a cell whose feature records each fixture's
+	// outcome in the baseline (see [OutcomeFeature]).
+	RecordsOutcomes bool `json:"records_outcomes,omitempty"`
+	// ScoreTolerance is the drop a fixture's score may take before the
+	// baseline check calls it a regression, for a cell whose feature records
+	// per-fixture scores (see [ScoreFeature]); 0 otherwise.
+	ScoreTolerance float64 `json:"score_tolerance,omitempty"`
 }
 
 // Denominator returns the number of fixtures that counted toward the
@@ -96,6 +104,13 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 		veraRegressed := fr.Metrics["verapdf_regressed"]
 		fmt.Fprintf(w, "%s %s  fully_fixed=%d  litho_regressed=%d  verapdf_regressed=%d\n",
 			prefix, primary, fullyFixed, lithoRegressed, veraRegressed)
+	case "reftest", "draw":
+		fmt.Fprintf(w, "%s %s  fail=%d  error=%d\n", prefix, primary, fr.Mismatched-fr.Metrics[metricConvertError], fr.Metrics[metricConvertError])
+	case "diff":
+		means := meanScores(fr)
+		fmt.Fprintf(w, "%s %s  error=%d  pages_equal=%d  text_f1=%.3f  link_recall=%.3f  layout=%.3f  strict=%.3f\n",
+			prefix, primary, fr.Metrics[metricConvertError], fr.Metrics[metricPagesEqual],
+			means[scoreText], means[scoreLinks], means[scoreLayout], means[scoreStrict])
 	case "remediation-pair":
 		fmt.Fprintf(w, "%s %s  fully_fixed=%d  disagreement=%d  parse_failed=%d\n",
 			prefix, primary, fr.Metrics["fully_fixed"], fr.Metrics["disagreement"], fr.Metrics["parse_failed"])
@@ -109,6 +124,25 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 	if fr.Skipped > 0 {
 		fmt.Fprintf(w, "    %d fixtures skipped (corpus skip list or not scored)\n", fr.Skipped)
 	}
+}
+
+// meanScores averages each named score over a cell's scored verdicts.
+func meanScores(fr *FeatureReport) map[string]float64 {
+	sums := make(map[string]float64)
+	n := 0
+	for _, v := range fr.Verdicts {
+		if v.Skipped {
+			continue
+		}
+		n++
+		for k, s := range v.Scores {
+			sums[k] += s
+		}
+	}
+	for k := range sums {
+		sums[k] /= float64(n)
+	}
+	return sums
 }
 
 // firedMutationMetrics names the failure counts of a mutate-* cell that fired,

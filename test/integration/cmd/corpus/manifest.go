@@ -64,6 +64,39 @@ type Manifest struct {
 	// skip it (infinite loop, decompression bomb). Skipped fixtures do
 	// not reach any feature.
 	Skips map[string]string `json:"skips,omitempty"`
+
+	// Inputs, when set, makes the corpus a converter corpus: its fixtures
+	// are the source documents a converter feature turns into PDFs, not
+	// PDFs, and PDFRoot and ProfileMode do not apply. See [InputSpec].
+	Inputs *InputSpec `json:"inputs,omitempty"`
+
+	// GoldensInSource resolves the Goldens paths against the corpus source
+	// directory rather than its testdata root: the references of a corpus
+	// whose expectations are committed (a reftest list, extracted pixel
+	// grids) live in git beside its manifest.
+	GoldensInSource bool `json:"goldens_in_source,omitempty"`
+
+	// ProvisionedBy names the make target that provisions the corpus on the
+	// host, for a corpus the Docker image has no part in. corpus init skips
+	// such a corpus and says which target to run instead.
+	ProvisionedBy string `json:"provisioned_by,omitempty"`
+}
+
+// InputSpec lists the source documents of a converter corpus. Exactly one of
+// List and Glob is set.
+type InputSpec struct {
+	// List names a committed JSON file, relative to the corpus source
+	// directory, holding an array of objects with an "id" field: each is one
+	// fixture, whose source is the file at that ID's path under the corpus
+	// testdata root. The wpt corpus lists its reftests this way, the files
+	// themselves fetched into testdata.
+	List string `json:"list,omitempty"`
+
+	// Glob matches the sources, relative to the corpus source directory,
+	// with exactly one "*": each match is one fixture, whose ID is the text
+	// the "*" matched ("sources/*/index.html" makes "invoice" of
+	// "sources/invoice/index.html").
+	Glob string `json:"glob,omitempty"`
 }
 
 // Profile mode constants. Empty string aliases "expand" for backward
@@ -156,13 +189,24 @@ func (m *Manifest) TestdataRoot() string {
 }
 
 // GoldenDir returns the absolute path to the golden directory for a
-// feature, or "" when the manifest does not declare a golden.
+// feature, or "" when the manifest does not declare a golden. The path is
+// under the testdata root, or under the corpus source directory when
+// [Manifest.GoldensInSource] is set.
 func (m *Manifest) GoldenDir(feature string) string {
 	rel, ok := m.Goldens[feature]
 	if !ok {
 		return ""
 	}
+	if m.GoldensInSource {
+		return filepath.Join(m.SourceDir(), rel)
+	}
 	return filepath.Join(m.TestdataRoot(), rel)
+}
+
+// SourceDir returns the corpus source directory under
+// test/integration/corpus/, the one holding its manifest.
+func (m *Manifest) SourceDir() string {
+	return filepath.Join(corpusRoot(), m.Source)
 }
 
 // GoldenOverridesPath returns the path to the committed golden override

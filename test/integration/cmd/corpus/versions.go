@@ -84,6 +84,16 @@ var localToolPins = map[string]bool{
 	"DEJAVU_FONTS_VERSION":     true,
 	"DEJAVU_FONTS_URL":         true,
 	"DEJAVU_FONTS_SHA256":      true,
+
+	// The converter oracles: the web-platform-tests commit `make wpt-fetch`
+	// downloads, the WeasyPrint release `make weasyprint-fixtures` extracts,
+	// and the Gotenberg image `make html-chromium` converts with. The host
+	// runs all three; wpt/fetch.sh records WPT_COMMIT in the wpt testdata.
+	"WPT_COMMIT":             true,
+	"WEASYPRINT_VERSION":     true,
+	"WEASYPRINT_SHA256":      true,
+	"WEASYPRINT_FONT_SHA256": true,
+	"GOTENBERG_IMAGE":        true,
 }
 
 // stagePins maps each directory a provisioning stage fills to the pins its
@@ -120,11 +130,14 @@ var stagePins = map[string][]string{
 	"goldens/facturx-validity":   {"MUSTANG_VERSION", "JRE_VERSION"},
 	"goldens/render":             {"POPPLER_VERSION", "POPPLER_DEBIAN_RELEASE", "POPPLER_DEBIAN_IMAGE_DIGEST", "POPPLER_DATA_VERSION", "NOTO_CJK_SANS_VERSION"},
 	"goldens/facturx-schematron": {"KOSIT_VERSION", "XRECHNUNG_CONFIG_TAG", "XRECHNUNG_CONFIG_ASSET", "EN16931_VERSION", "MUSTANG_VERSION", "JRE_VERSION"},
+	"goldens/diff":               {"PDFJS_REVISION", "NODE_VERSION", "POPPLER_VERSION", "POPPLER_DEBIAN_RELEASE", "POPPLER_DEBIAN_IMAGE_DIGEST", "POPPLER_DATA_VERSION", "NOTO_CJK_SANS_VERSION"},
 }
 
 // sourcePins maps each corpus source directory to the pins its PDFs come
 // from. The litho and compose corpora are committed in-tree, so git versions
-// them.
+// them, and so are the weasyprint fixtures and the html corpus's Chromium
+// references. The wpt corpus's files come from the WPT commit wpt/fetch.sh
+// records.
 //
 //nolint:gochecknoglobals // static dependency table
 var sourcePins = map[string][]string{
@@ -136,6 +149,10 @@ var sourcePins = map[string][]string{
 	"facturx": {"FACTURX_CORPUS_REVISION"},
 	"litho":   nil,
 	"compose": nil,
+
+	"wpt":        {"WPT_COMMIT"},
+	"weasyprint": nil,
+	"html":       nil,
 }
 
 // pinEntry is one KEY=VALUE line of versions.env.

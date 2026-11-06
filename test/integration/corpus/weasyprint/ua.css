@@ -1,0 +1,66 @@
+/*
+ * The draw feature prepends this stylesheet to every WeasyPrint draw test.
+ *
+ * WeasyPrint runs its tests under a user agent stylesheet of its own,
+ * resources/tests_ua.css: display values and the test font, and no margin,
+ * padding or font size anywhere. The expected grids assume it. litho's
+ * converter applies the HTML user agent stylesheet a browser does, so this
+ * one takes back out what that stylesheet adds and tests_ua.css does not:
+ * the margins and paddings of block elements, the sizes and weights of
+ * headings, table border spacing, and the page margin. It is an author
+ * stylesheet placed before the test's own, and its selectors are type
+ * selectors, so a rule of the test wins over it where they meet unless the
+ * test's selector is the universal one alone.
+ */
+@page {
+  margin: 0;
+}
+html,
+body,
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+ul,
+ol,
+li,
+dl,
+dt,
+dd,
+menu,
+blockquote,
+figure,
+figcaption,
+pre,
+hr,
+section,
+article,
+nav,
+aside,
+header,
+footer,
+details,
+summary,
+fieldset,
+legend {
+  margin: 0;
+  padding: 0;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+hr {
+  border: 0;
+}
+table {
+  border-spacing: 0;
+}

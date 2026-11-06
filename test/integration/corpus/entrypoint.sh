@@ -215,6 +215,35 @@ else
   echo "==> skipping render goldens (not requested by ${CORPUS})."
 fi
 
+# The diff goldens of the html corpus: what the Chromium reference PDFs hold,
+# read the ways the diff feature reads litho's conversion of the same source.
+# PDF.js extracts each page's text (the text goldens' tooling), poppler draws
+# every page at 72 dpi (gen-render.sh, every PDF, every page), and PDF.js lists
+# each page's links. The page count is in all three.
+if wants diff; then
+  DIFF="$OUTPUT/goldens/diff"
+  if nonempty "$DIFF/text" && nonempty "$DIFF/render" && nonempty "$DIFF/links"; then
+    echo "==> diff goldens already present, skipping PDF.js and pdftoppm."
+  else
+    rm -rf "$DIFF"
+    mkdir -p "$DIFF/text" "$DIFF/metadata" "$DIFF/render" "$DIFF/links"
+    echo "==> generating diff goldens (PDF.js text and links, pdftoppm pages)..."
+    node /work/lib/gen-references.mjs \
+      --pdfjs-dir /opt/pdfjs \
+      --pdfs-dir "$PDFS" \
+      --text-out "$DIFF/text" \
+      --meta-out "$DIFF/metadata"
+    SHELL=/bin/bash /work/lib/gen-render.sh "$PDFS" "$DIFF/render" 256 0
+    node /work/lib/gen-links.mjs \
+      --pdfjs-dir /opt/pdfjs \
+      --pdfs-dir "$PDFS" \
+      --out "$DIFF/links"
+    record_stage goldens/diff
+  fi
+else
+  echo "==> skipping diff goldens (not requested by ${CORPUS})."
+fi
+
 if wants bookmarks; then
   BOOKS="$OUTPUT/goldens/bookmarks"
   if nonempty "$BOOKS"; then
