@@ -57,6 +57,14 @@ Of the 372 `assert_pixels` calls of release 70.0, 315 became fixtures:
 
 Many fixtures reach past the converter's first wave (tables, columns, footnotes, transforms, gradients, SVG images): they score as failures until it covers them, and the baseline records which pass.
 
+## Known disagreements with Chromium
+
+Chromium is the reference where WeasyPrint and Chromium draw a test differently, so these fixtures stay failing on purpose, recorded in `baseline.json`:
+
+- `test_tables_20`: WeasyPrint and Chromium disagree on the table's layout.
+- `test_background_repeat_round_2` and `_4`: Chromium positions the rounded tiles where litho does.
+- `test_absolute_rtl_2`: an absolutely positioned box whose border box reaches past the first page takes a second page in Chromium (it prints two pages); WeasyPrint expects one.
+
 ## Licence
 
 WeasyPrint is under the 3-Clause BSD License (`LICENSE`, copied from the release). The fixtures copy its tests' HTML and expected grids, and `resources/` copies files of its test suite, under that licence. The test font is not committed.
