@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\"><linearGradient id=\"g\"><stop offset=\"0\" stop-color=\"red\"/><stop offset=\"1\" stop-color=\"blue\"/></linearGradient><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"url(#g)\" stroke=\"black\"/></svg>")
