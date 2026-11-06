@@ -194,3 +194,18 @@ func TestFragmentation_ContainerFollowsItsContent(t *testing.T) {
 		t.Errorf("child top %v, want 38", got)
 	}
 }
+
+func TestFragmentation_ViewportClipsOverflow(t *testing.T) {
+	// The body's overflow goes to the viewport, which clips each page to
+	// its area: the inline block overflowing the body takes no page.
+	ib := el(sty(display(css.InlineBlock), width(5), height(70), bg(red)))
+	hidden := func(s *css.Style) { s.Overflow = css.OverflowHidden }
+	root := el(sty(), el(sty(height(1), hidden), el(sty(), ib)))
+	if res := run(t, root, page(10, 30)); len(res.Pages) != 1 {
+		t.Errorf("%d pages, want 1", len(res.Pages))
+	}
+	root = el(sty(), el(sty(height(1)), el(sty(), ib)))
+	if res := run(t, root, page(10, 30)); len(res.Pages) != 3 {
+		t.Errorf("%d pages, want 3: visible overflow takes its pages", len(res.Pages))
+	}
+}

@@ -94,12 +94,17 @@ func newEngine(ctx context.Context, fonts *text.Fonts, opts Options, w, h float6
 // list d need. A fragment counts for the part of it its clips leave: the
 // content an overflow: hidden box cuts off adds no page, while content
 // overflowing its box below the root's bottom, a monolithic piece taller
-// than a page included, takes the pages it reaches. The root's bottom
+// than a page included, takes the pages it reaches unless the viewport
+// clips it. The root's bottom
 // margin takes no page of its own: a margin at the end of the flow
 // truncates (CSS Fragmentation 3, 5.2).
 func (e *engine) pageCount(rb *box, d *ditem) int {
 	bottom := rb.y + rb.borderH()
 	n := e.pageOf(max(bottom-1e-3, 0)) + 1
+	// A viewport whose overflow is not visible clips each page to its page
+	// area: content overflowing a page takes no page of its own there (CSS
+	// Overflow 3, 3.3).
+	clipped := viewportBox(rb) != nil
 	var walk func(it *ditem, lo, hi float64)
 	walk = func(it *ditem, lo, hi float64) {
 		for _, k := range it.kids {
@@ -121,6 +126,10 @@ func (e *engine) pageCount(rb *box, d *ditem) int {
 			}
 			if k.page >= 0 {
 				n = max(n, k.page+1)
+				continue
+			}
+			if clipped {
+				n = max(n, e.pageOf(max(y0, 0))+1)
 				continue
 			}
 			n = max(n, e.pageOf(max(min(k.y1, hi)-1e-3, y0, 0))+1)
