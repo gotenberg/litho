@@ -111,6 +111,16 @@ func (g *treeGen) style() *css.Style {
 		st.Visibility = css.Visibility(g.next() % 3)
 		st.BoxSizing = css.BoxSizing(g.next() % 2)
 		st.MinWidth, st.MaxWidth = g.length(false), g.length(false)
+		if sf := g.next(); sf&3 != 0 {
+			st.BoxShadow = []css.Shadow{{
+				X: px(float64(int8(g.next()) / 8)), Y: px(float64(int8(g.next()) / 8)),
+				Blur: px(float64(g.next() % 12)), Spread: px(float64(int8(g.next()) / 16)),
+				Color: css.Color{R: 1, A: 1}, Inset: sf&4 != 0,
+			}}
+			st.Outline = css.Border{Width: px(float64(sf >> 4)), Style: css.BorderStyle(sf >> 3 % 10), Color: css.Color{G: 1, A: 1}}
+			st.OutlineOffset = px(float64(int8(g.next()) / 16))
+			st.ObjectFit = css.ObjectFit(g.next() % 5)
+		}
 	}
 	if st.Display >= css.Table && st.Display <= css.TableCaption {
 		tf := g.next()
@@ -178,6 +188,7 @@ func FuzzLayout(f *testing.F) {
 	f.Add([]byte("seed: a few blocks of text"))
 	f.Add([]byte{0x40, 0x10, 0x03, 0xff, 0x00, 0x13, 0x07, 0x81, 0x02, 0x7f, 0x33, 0x05, 0x04, 0x01, 0x22, 0x10, 0x91})
 	f.Add([]byte{})
+	f.Add([]byte{0x40, 0x40, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8f, 0x10, 0x20, 0x05, 0xf0, 0x03, 0x01, 0x02, 0x10, 0x22})
 	f.Add([]byte{0x06, 0x31, 0x04, 0x01, 0x10, 0x04, 0x0b, 0x01, 0x03, 0x00, 0x11, 0x0c, 0x01, 0x03, 0x04, 0x11, 0x07, 0x05, 0x02, 0x41, 0x11, 0x22, 0x03, 0x00, 0x31, 0x9a, 0x00, 0x11, 0x0d, 0x01, 0x05, 0x42})
 	fonts := ahem(f)
 	img := pic(color.NRGBA{R: 255, A: 255}, 3, 2)

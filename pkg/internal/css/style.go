@@ -193,8 +193,12 @@ const (
 
 // Border is one side's border.
 type Border struct {
-	// Width is the computed width in points, 0 when Style is BorderNone or
-	// BorderHidden (CSS 2.1, 8.5.1).
+	// Width is the computed width in points, snapped as a border width
+	// (CSS Values 4, 6.1.1): a width under 1px rounds up to 1px, a wider one
+	// down to a whole pixel. It keeps the specified length whatever Style
+	// is, as Blink, Gecko and WebKit do (CSS Backgrounds 3, 4.3); the
+	// used width is 0 when Style is BorderNone or BorderHidden, and the
+	// layout engine applies that.
 	Width float64
 	Style BorderStyle
 	Color Color
@@ -234,6 +238,44 @@ type BackgroundSize struct {
 	Kind          SizeKind
 	Width, Height Dimension
 }
+
+// Shadow is one shadow of box-shadow (CSS Backgrounds 3, 7.1).
+type Shadow struct {
+	// X and Y are the horizontal and vertical offsets, Blur the blur
+	// radius, at least 0, and Spread the spread distance, all in points.
+	X, Y, Blur, Spread float64
+	Color              Color
+	// Inset casts the shadow inside the padding box instead of outside
+	// the border box.
+	Inset bool
+	// current records a colour given as currentColor, resolved again by
+	// an element that inherits the shadow explicitly (CSS Color 4, 4.4).
+	current bool
+}
+
+// ObjectFit is the object-fit property (CSS Images 3, 5.5).
+type ObjectFit uint8
+
+// The object-fit values.
+const (
+	FitFill ObjectFit = iota
+	FitContain
+	FitCover
+	FitNone
+	FitScaleDown
+)
+
+// Containment is the contain property's bit set (CSS Containment 2, 2).
+type Containment uint8
+
+// The containment bits. strict and content set several of them.
+const (
+	ContainSize Containment = 1 << iota
+	ContainInlineSize
+	ContainLayout
+	ContainStyle
+	ContainPaint
+)
 
 // FontStyle is the font-style property (CSS Fonts 4, 2.4). Oblique is
 // treated as italic.
@@ -511,6 +553,31 @@ type Style struct {
 	BackgroundOrigin   BoxEdge
 	BackgroundClip     BoxEdge
 
+	// Decoration around the box.
+
+	// BoxShadow lists the shadows in the order written, the first painted
+	// on top; nil for none (CSS Backgrounds 3, 7.1).
+	BoxShadow []Shadow
+	// Outline is the outline's width, style and colour (CSS UI 3, 5): the
+	// width computed as a border width is, the style auto computed to
+	// Solid. The used width is 0 when the style is BorderNone.
+	Outline Border
+	// OutlineOffset is the outline-offset in points (CSS UI 3, 5.5).
+	OutlineOffset float64
+	// Contain is the contain property (CSS Containment 2, 2). The engine
+	// reads ContainPaint, which stops the body's background reaching the
+	// canvas (CSS Backgrounds 3, 2.11.2).
+	Contain Containment
+
+	// Replaced content.
+
+	// ObjectFit sizes a replaced element's picture in its content box
+	// (CSS Images 3, 5.5).
+	ObjectFit ObjectFit
+	// ObjectPosition places the picture in the content box, as
+	// BackgroundPosition places a background (CSS Images 3, 5.6).
+	ObjectPosition [2]Dimension
+
 	// Colour and font.
 
 	Color Color
@@ -572,7 +639,26 @@ type Style struct {
 	// Orphans and Widows are the minimum line counts, at least 1.
 	Orphans int
 	Widows  int
+
+	// currentColor records the colour longhands whose computed value is
+	// the currentColor keyword (CSS Color 4, 4.4): the exported field
+	// holds it resolved, and an element that inherits it explicitly
+	// resolves it again against its own color.
+	currentColor colorSlots
 }
+
+// colorSlots is a bit set of the colour longhands other than color.
+type colorSlots uint8
+
+// The colour longhands that can hold currentColor.
+const (
+	slotBackground colorSlots = 1 << iota
+	slotBorderTop
+	slotBorderRight
+	slotBorderBottom
+	slotBorderLeft
+	slotOutline
+)
 
 // Initial returns the initial value of every property (CSS 2.1, appendix
 // F), with the root's font size at medium, 16px.
@@ -587,6 +673,7 @@ func Initial() *Style {
 		Padding:            [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
 		BackgroundPosition: [2]Dimension{{Kind: Percent}, {Kind: Percent}},
 		BackgroundOrigin:   PaddingEdge,
+		ObjectPosition:     [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
 		Color:              Color{A: 1},
 		FontFamilies:       []string{"serif"},
 		FontSize:           16 * Pt,

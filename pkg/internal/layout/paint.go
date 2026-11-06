@@ -1,6 +1,8 @@
 package layout
 
 import (
+	"slices"
+
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -60,9 +62,15 @@ type painter struct {
 	alpha float64
 	// canvas is the box whose background paints the canvas.
 	canvas *box
+	// viewport is the box whose overflow applies to the viewport instead
+	// of itself, nil for none.
+	viewport *box
 	// artifact reports a repeated table header or footer being painted:
 	// its fragments hang from no structure element.
 	artifact bool
+	// shadowPixels counts the raster pixels of the blurred shadows drawn,
+	// against maxShadowBudget.
+	shadowPixels int
 }
 
 // paint returns the display list of the box tree rooted at root.
@@ -70,27 +78,62 @@ func (e *engine) paint(root *box) (*ditem, []pendingLink, *box) {
 	p := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1, alpha: 1}
 	p.frames = []*frame{{container: p.top, root: root}}
 	p.canvas = canvasBox(root)
+	p.viewport = viewportBox(root)
 	p.context(root)
 	return p.top, p.links, p.canvas
 }
 
 // canvasBox returns the box whose background paints the canvas (CSS 2.1,
-// 14.2): the root's, or for a root without one, its first child element's,
-// which is the body of an HTML document.
+// 14.2; CSS Backgrounds 3, 2.11.2): the root's, or for a root without one,
+// its first child element's, which is the body of an HTML document, unless
+// either has paint containment. A root that generates no box paints none.
 func canvasBox(root *box) *box {
+	if root.node != nil && root.st.Display == css.DisplayNone {
+		return nil
+	}
 	if hasBackground(root.st) {
+		return root
+	}
+	if root.st.Contain&css.ContainPaint != 0 {
+		return nil
+	}
+	for _, k := range root.kids {
+		if k.anon || k.node == nil || k.inline || k.float != css.FloatNone {
+			continue
+		}
+		if hasBackground(k.st) && k.st.Contain&css.ContainPaint == 0 {
+			return k
+		}
+		break
+	}
+	return nil
+}
+
+// viewportBox returns the box whose overflow applies to the viewport
+// (CSS Overflow 3, 3.3): the root's when it is not visible, else the first
+// child element's, the body of an HTML document. That box does not clip
+// its own content; the page area does.
+func viewportBox(root *box) *box {
+	if root.st.Overflow != css.OverflowVisible {
 		return root
 	}
 	for _, k := range root.kids {
 		if k.anon || k.node == nil || k.inline || k.float != css.FloatNone {
 			continue
 		}
-		if hasBackground(k.st) {
+		if k.st.Overflow != css.OverflowVisible {
 			return k
 		}
 		break
 	}
 	return nil
+}
+
+// clips reports whether the block a clips its content to its padding
+// box: overflow hidden, unless its overflow went to the viewport (CSS
+// 2.1, 11.1.1).
+func (p *painter) clips(a *box) bool {
+	return a.kind == kindBlock && a.parent != nil && a.st.Overflow == css.OverflowHidden && a != p.viewport
 }
 
 // hasBackground reports a style that paints a background.
@@ -115,7 +158,7 @@ func (p *painter) chain(b *box, content bool) []*box {
 		start = b.parent
 	}
 	for a := start; a != nil; a = a.parent {
-		if a.kind == kindBlock && a.parent != nil && a.st.Overflow == css.OverflowHidden {
+		if p.clips(a) {
 			out = append(out, a)
 		}
 		if a == root {
@@ -234,7 +277,7 @@ func (p *painter) context(b *box) {
 		p.frames = append(p.frames, &frame{container: g, root: b})
 		pushed = true
 	}
-	if b.parent != nil && b.kind == kindBlock && b.st.Overflow == css.OverflowHidden && !pushed {
+	if p.clips(b) && !pushed {
 		// The box's own clip is relative to the frame of its context: a
 		// frame of its own keeps the chains short.
 		c := p.sync(p.chain(b, false))
@@ -273,6 +316,12 @@ func (p *painter) context(b *box) {
 	}
 	for _, c := range contexts {
 		p.context(c)
+	}
+	// Outlines paint over everything else of the context (CSS 2.1,
+	// Appendix E, step 10).
+	p.outline(b)
+	for _, k := range blocks {
+		p.outline(k)
 	}
 }
 
@@ -316,17 +365,23 @@ func (p *painter) decorations(b *box) {
 	}
 	r := p.borderRect(b)
 	radii := radiiOf(b, r.Width, r.Height)
+	p.shadows(b, b.st, r, radii, b.bd, false)
 	p.background(b, b.st, r, radii, b.bd, b.pd)
-	p.borders(b)
+	p.shadows(b, b.st, r, radii, b.bd, true)
+	p.border(b, b.st, r, radii, b.bd, [4]bool{true, true, true, true})
 }
 
-// borders paints the borders of b alone.
+// borders paints the shadows and borders of b, whose background paints
+// the canvas instead.
 func (p *painter) borders(b *box) {
 	if b.hidden || b.kind == kindInline || b.kind == kindText {
 		return
 	}
 	r := p.borderRect(b)
-	p.border(b, b.st, r, radiiOf(b, r.Width, r.Height), b.bd, [4]bool{true, true, true, true})
+	radii := radiiOf(b, r.Width, r.Height)
+	p.shadows(b, b.st, r, radii, b.bd, false)
+	p.shadows(b, b.st, r, radii, b.bd, true)
+	p.border(b, b.st, r, radii, b.bd, [4]bool{true, true, true, true})
 }
 
 // content paints the inline content of b, its replaced content and its
@@ -346,14 +401,57 @@ func (p *painter) content(b *box) {
 	}
 }
 
-// replaced paints the picture of the replaced box b in its content box.
+// replaced paints the picture of the replaced box b in its content box,
+// sized by object-fit and placed by object-position (CSS Images 3, 5.5
+// and 5.6), the part outside the content box clipped.
 func (p *painter) replaced(b *box) {
 	if b.hidden || b.picture == nil || b.w <= 0 || b.h <= 0 {
 		return
 	}
-	r := compose.Rect{X: b.contentX() + p.dx, Y: b.contentY() + p.dy, Width: b.w, Height: b.h}
+	box := compose.Rect{X: b.contentX() + p.dx, Y: b.contentY() + p.dy, Width: b.w, Height: b.h}
+	r := objectRect(b.st, b.picture, box)
 	img := &compose.Image{Rect: r, Source: b.picture.Source, Parent: b.elem}
-	p.emit(b, false, img, r.Y, r.Y+r.Height, p.e.pageOf(r.Y))
+	page := p.e.pageOf(box.Y)
+	if r == box {
+		p.emit(b, false, img, r.Y, r.Y+r.Height, page)
+		return
+	}
+	if p.mono >= 0 {
+		page = p.mono
+	}
+	g := &ditem{group: true, opacity: 1, clip: &compose.Path{Ops: rectOps(box), Fill: &compose.Fill{}}}
+	g.kids = append(g.kids, &ditem{frag: img, y0: box.Y, y1: box.Y + box.Height, page: page})
+	c := p.sync(p.chain(b, false))
+	c.kids = append(c.kids, g)
+}
+
+// objectRect returns where the picture pic lands in the content box box,
+// placed by the object-fit and object-position of st (CSS Images 3, 5.5 and
+// 5.6): fill stretches it over the box, contain and cover scale it keeping
+// its ratio, none keeps its intrinsic size, scale-down the smaller of none
+// and contain.
+func objectRect(st *css.Style, pic *Picture, box compose.Rect) compose.Rect {
+	iw, ih := pic.Width, pic.Height
+	if st.ObjectFit == css.FitFill || !(iw > 0) || !(ih > 0) {
+		return box
+	}
+	contain := min(box.Width/iw, box.Height/ih)
+	k := 1.0
+	switch st.ObjectFit {
+	case css.FitContain:
+		k = contain
+	case css.FitCover:
+		k = max(box.Width/iw, box.Height/ih)
+	case css.FitScaleDown:
+		k = min(contain, 1)
+	case css.FitNone, css.FitFill:
+	}
+	w, h := iw*k, ih*k
+	return compose.Rect{
+		X:     box.X + resolve(st.ObjectPosition[0], box.Width-w),
+		Y:     box.Y + resolve(st.ObjectPosition[1], box.Height-h),
+		Width: w, Height: h,
+	}
 }
 
 // linkBox records the border box of a block-level or replaced box that
@@ -395,27 +493,32 @@ func (p *painter) line(l *lineBox) {
 	if p.mono >= 0 {
 		page = p.mono
 	}
+	// The decorations of an inline box paint in tree order with the text,
+	// just before its first item: over the text of earlier siblings, as
+	// Blink paints them. A box with no item on the line paints first.
+	first := map[*box]int{}
+	for i, it := range l.items {
+		for k := it.box; k != nil; k = k.parent {
+			if _, ok := first[k]; !ok {
+				first[k] = i
+			}
+			if k.kind != kindInline && k != it.box {
+				break
+			}
+		}
+	}
+	before := make([][]*inlineFrag, max(len(l.items), 1))
 	for _, f := range l.frags {
-		if f.box.hidden {
-			continue
+		at := first[f.box] // 0 for a box with no item on the line
+		before[at] = append(before[at], f)
+	}
+	for _, fs := range before {
+		slices.SortStableFunc(fs, func(a, b *inlineFrag) int { return a.box.depth - b.box.depth })
+	}
+	paintFrags := func(fs []*inlineFrag) {
+		for _, f := range fs {
+			p.lineFrag(l, f, page)
 		}
-		r := compose.Rect{X: l.x + f.x0 + p.dx, Y: l.y + f.top + p.dy, Width: f.x1 - f.x0, Height: f.bottom - f.top}
-		if r.Width <= 0 && r.Height <= 0 {
-			continue
-		}
-		radii := radiiOf(f.box, r.Width, r.Height)
-		sides := [4]bool{true, f.end, true, f.start}
-		bd := f.box.bd
-		pd := f.box.pd
-		if !f.start {
-			bd[css.Left], pd[css.Left] = 0, 0
-			radii[css.TopLeft], radii[css.BottomLeft] = [2]float64{}, [2]float64{}
-		}
-		if !f.end {
-			bd[css.Right], pd[css.Right] = 0, 0
-			radii[css.TopRight], radii[css.BottomRight] = [2]float64{}, [2]float64{}
-		}
-		p.inlineFrag(f.box, r, radii, bd, pd, sides, page)
 	}
 	type span struct {
 		rect compose.Rect
@@ -423,7 +526,11 @@ func (p *painter) line(l *lineBox) {
 	}
 	var linkOrder []*link
 	linkRects := map[*link]*span{}
-	for _, it := range l.items {
+	paintFrags(before[0])
+	for i, it := range l.items {
+		if i > 0 {
+			paintFrags(before[i])
+		}
 		if it.box == nil {
 			continue
 		}
@@ -460,6 +567,31 @@ func (p *painter) line(l *lineBox) {
 	}
 }
 
+// lineFrag paints the background and borders of the inline fragment f of
+// line l.
+func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
+	if f.box.hidden {
+		return
+	}
+	r := compose.Rect{X: l.x + f.x0 + p.dx, Y: l.y + f.top + p.dy, Width: f.x1 - f.x0, Height: f.bottom - f.top}
+	if r.Width <= 0 && r.Height <= 0 {
+		return
+	}
+	radii := radiiOf(f.box, r.Width, r.Height)
+	sides := [4]bool{true, f.end, true, f.start}
+	bd := f.box.bd
+	pd := f.box.pd
+	if !f.start {
+		bd[css.Left], pd[css.Left] = 0, 0
+		radii[css.TopLeft], radii[css.BottomLeft] = [2]float64{}, [2]float64{}
+	}
+	if !f.end {
+		bd[css.Right], pd[css.Right] = 0, 0
+		radii[css.TopRight], radii[css.BottomRight] = [2]float64{}, [2]float64{}
+	}
+	p.inlineFrag(f.box, r, radii, bd, pd, sides, page)
+}
+
 // isInlineLink reports whether the link lk, which b sits in, starts at an
 // inline-level box, so its regions follow the line fragments.
 func isInlineLink(lk *link, b *box) bool {
@@ -485,7 +617,9 @@ func (p *painter) inlineFrag(b *box, r compose.Rect, radii [4][2]float64, bd, pd
 	if p.mono < 0 {
 		p.mono = page
 	}
+	p.shadows(b, b.st, r, radii, bd, false)
 	p.background(b, b.st, r, radii, bd, pd)
+	p.shadows(b, b.st, r, radii, bd, true)
 	p.border(b, b.st, r, radii, bd, sides)
 	p.mono = saved
 }

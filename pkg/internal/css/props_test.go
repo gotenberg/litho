@@ -30,7 +30,10 @@ func TestProperties_Shorthands(t *testing.T) {
 	if s.Border[Top] != (Border{Width: 0.75, Style: Dashed, Color: rgb(255, 0, 0)}) {
 		t.Errorf("top = %+v", s.Border[Top])
 	}
-	if s.Border[Right].Width != 3.75 || s.Border[Left].Width != 0 || s.Border[Bottom].Width != 0 {
+	// The computed width keeps its length under none and hidden (CSS
+	// Backgrounds 3, 4.3 as browsers implement it): border-left: none
+	// resets it to medium.
+	if s.Border[Right].Width != 3.75 || s.Border[Left].Width != 2.25 || s.Border[Bottom].Width != 3.75 {
 		t.Errorf("widths = %v %v %v", s.Border[Right].Width, s.Border[Left].Width, s.Border[Bottom].Width)
 	}
 	if !colorEq(s.Border[Left].Color, rgb(0, 0, 255)) {
@@ -180,7 +183,9 @@ func TestProperties_CSSWideKeywords(t *testing.T) {
 	if !colorEq(ch.Color, rgb(0, 0, 0)) {
 		t.Errorf("color: initial = %+v", ch.Color)
 	}
-	if ch.Border[Top].Width != 0.75 || ch.Border[Top].Style != Solid || !colorEq(ch.Border[Top].Color, rgb(255, 0, 0)) {
+	// The parent's border colour is currentColor, a keyword the child
+	// resolves against its own color (CSS Color 4, 4.4).
+	if ch.Border[Top].Width != 0.75 || ch.Border[Top].Style != Solid || !colorEq(ch.Border[Top].Color, rgb(0, 0, 0)) {
 		t.Errorf("border: inherit = %+v", ch.Border[Top])
 	}
 	if !dimEq(ch.Margin[Top], pts(0)) || ch.FontSize != 22.5 || ch.Display != Table {

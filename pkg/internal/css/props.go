@@ -4,8 +4,7 @@ import "math"
 
 // propID names a longhand. The cascade computes longhands in this order:
 // font-size first, since em units resolve against it, then color, since
-// currentColor resolves to it, then border styles before border widths,
-// since a none style zeroes the width.
+// currentColor resolves to it.
 type propID uint8
 
 const (
@@ -91,6 +90,14 @@ const (
 	pBreakInside
 	pOrphans
 	pWidows
+	pOutlineStyle
+	pOutlineWidth
+	pOutlineColor
+	pOutlineOffset
+	pBoxShadow
+	pObjectFit
+	pObjectPosition
+	pContain
 	numProps
 )
 
@@ -227,8 +234,11 @@ func dimProp(name string, inh bool, f func(*Style) *Dimension, lf lengthFlags, k
 	}
 }
 
-// colorProp defines a colour longhand.
-func colorProp(name string, inh bool, f func(*Style) *Color, initial any) propDef {
+// colorProp defines a colour longhand stored at f, slot its bit in
+// [Style] currentColor: a currentColor value stays a keyword the element
+// resolves against its own color, even when a child inherits it
+// explicitly (CSS Color 4, 4.4).
+func colorProp(name string, inh bool, f func(*Style) *Color, slot colorSlots, initial any) propDef {
 	return propDef{
 		name: name, inherited: inh,
 		parse: func(v []token, _ *declCtx) (any, bool) {
@@ -243,13 +253,21 @@ func colorProp(name string, inh bool, f func(*Style) *Color, initial any) propDe
 			if c, ok := v.(colorValue); ok {
 				if c.current {
 					*f(st) = st.Color
+					st.currentColor |= slot
 				} else {
 					*f(st) = c.c
+					st.currentColor &^= slot
 				}
 			}
 		},
-		copyFrom: field(f),
-		initial:  initial,
+		copyFrom: func(dst, src *Style) {
+			*f(dst) = *f(src)
+			dst.currentColor = dst.currentColor&^slot | src.currentColor&slot
+			if dst.currentColor&slot != 0 {
+				*f(dst) = dst.Color
+			}
+		},
+		initial: initial,
 	}
 }
 
@@ -435,22 +453,17 @@ func borderProps(side Side, name string) (style, width, colour propDef) {
 		name:  name + "-width",
 		parse: parseBorderWidth,
 		compute: func(s *styler, st *Style, v any) {
-			l, ok := v.(length)
-			if !ok {
-				return
+			// CSS Backgrounds 3, 4.3: the computed width keeps the
+			// specified length whatever the style, as Blink, Gecko and
+			// WebKit do; the layout engine uses 0 for none and hidden.
+			if w, ok := computeLineWidth(s, v); ok {
+				st.Border[side].Width = w
 			}
-			// CSS 2.1, 8.5.1 and CSS Backgrounds 3, 4.3: the computed
-			// width is 0 when the style is none or hidden.
-			if bs := st.Border[side].Style; bs == BorderNone || bs == BorderHidden {
-				st.Border[side].Width = 0
-				return
-			}
-			st.Border[side].Width = math.Max(0, l.points(s.lc))
 		},
 		copyFrom: field(func(s *Style) *float64 { return &s.Border[side].Width }),
 		initial:  length{pt: 3 * Pt, hasLen: true},
 	}
-	colour = colorProp(name+"-color", false, func(s *Style) *Color { return &s.Border[side].Color }, colorValue{current: true})
+	colour = colorProp(name+"-color", false, func(s *Style) *Color { return &s.Border[side].Color }, slotBorderTop<<side, colorValue{current: true})
 	return style, width, colour
 }
 
@@ -573,7 +586,7 @@ func init() {
 		{pRight, dimProp("right", false, func(s *Style) *Dimension { return &s.Right }, allowPct, kwAuto, false)},
 		{pBottom, dimProp("bottom", false, func(s *Style) *Dimension { return &s.Bottom }, allowPct, kwAuto, false)},
 		{pLeft, dimProp("left", false, func(s *Style) *Dimension { return &s.Left }, allowPct, kwAuto, false)},
-		{pBgColor, colorProp("background-color", false, func(s *Style) *Color { return &s.BackgroundColor }, nil)},
+		{pBgColor, colorProp("background-color", false, func(s *Style) *Color { return &s.BackgroundColor }, slotBackground, nil)},
 		{pBgImage, propDef{name: "background-image", parse: parseBgImage, compute: func(_ *styler, st *Style, v any) {
 			if u, ok := v.(string); ok {
 				st.BackgroundImage = u
@@ -709,6 +722,19 @@ func init() {
 		props[pBorderTopWidth+propID(i)] = w
 		props[pBorderTopColor+propID(i)] = c
 	}
+	props[pOutlineStyle], props[pOutlineWidth], props[pOutlineColor], props[pOutlineOffset] = outlineProps()
+	props[pBoxShadow] = propDef{name: "box-shadow", parse: parseBoxShadow, compute: computeShadows, copyFrom: copyShadows}
+	props[pObjectFit] = enumProp("object-fit", false, func(s *Style) *ObjectFit { return &s.ObjectFit }, objectFits)
+	props[pObjectPosition] = propDef{name: "object-position", parse: parseObjectPosition, compute: func(s *styler, st *Style, v any) {
+		if p, ok := v.([2]length); ok {
+			st.ObjectPosition = [2]Dimension{p[0].dim(s.lc, false), p[1].dim(s.lc, false)}
+		}
+	}, copyFrom: field(func(s *Style) *[2]Dimension { return &s.ObjectPosition })}
+	props[pContain] = propDef{name: "contain", parse: parseContain, compute: func(_ *styler, st *Style, v any) {
+		if c, ok := v.(Containment); ok {
+			st.Contain = c
+		}
+	}, copyFrom: field(func(s *Style) *Containment { return &s.Contain })}
 	corners := [4]string{"border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius"}
 	for i, n := range corners {
 		props[pRadiusTopLeft+propID(i)] = radiusProp(Corner(i), n)

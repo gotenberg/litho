@@ -58,10 +58,10 @@ func TestBorders_TwoTone(t *testing.T) {
 		style       css.BorderStyle
 		top, bottom color.NRGBA
 	}{
-		{css.Inset, color.NRGBA{0, 0, 128, 255}, color.NRGBA{0, 0, 255, 255}},
-		{css.Outset, color.NRGBA{0, 0, 255, 255}, color.NRGBA{0, 0, 128, 255}},
-		{css.Groove, color.NRGBA{0, 0, 128, 255}, color.NRGBA{0, 0, 255, 255}},
-		{css.Ridge, color.NRGBA{0, 0, 255, 255}, color.NRGBA{0, 0, 128, 255}},
+		{css.Inset, color.NRGBA{0, 0, 170, 255}, color.NRGBA{0, 0, 255, 255}},
+		{css.Outset, color.NRGBA{0, 0, 255, 255}, color.NRGBA{0, 0, 170, 255}},
+		{css.Groove, color.NRGBA{0, 0, 170, 255}, color.NRGBA{0, 0, 255, 255}},
+		{css.Ridge, color.NRGBA{0, 0, 255, 255}, color.NRGBA{0, 0, 170, 255}},
 	}
 	for _, tt := range tests {
 		root := doc(el(sty(width(8), height(8), border(4, tt.style, blue))))
@@ -87,10 +87,12 @@ func TestBorders_DashedDotted(t *testing.T) {
 		img := render(t, run(t, root, page(44, 8)), 1)
 		red, white := 0, 0
 		for x := 4; x < 40; x++ {
-			switch code(img.At(x, 0)) {
-			case 'R':
+			// Round dots off the pixel grid anti-alias: count the
+			// mostly red pixels.
+			switch c := at(img, x, 0); {
+			case c.R > 200 && c.G < 100:
 				red++
-			case '_':
+			case c.G == 255:
 				white++
 			}
 		}

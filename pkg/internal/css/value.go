@@ -213,8 +213,8 @@ func (c *calcCursor) peek() *token {
 // parseCalc parses the contents of calc() or of a parenthesised
 // sub-expression (CSS Values 4, 10.1): <calc-sum>. Multiplication needs a
 // number on one side and division a non-zero number on the right, so every
-// result stays a linear combination. min(), max(), clamp() and the
-// constants are not supported.
+// result stays a linear combination. min(), max() and clamp() are not
+// supported.
 func parseCalc(list []token, depth int) (calcValue, bool) {
 	if depth > maxCalcDepth {
 		return calcValue{}, false
@@ -319,9 +319,28 @@ func calcLeaf(c *calcCursor, depth int) (calcValue, bool) {
 		if isCalc(t) {
 			return parseCalc(t.children, depth+1)
 		}
+	case tIdent:
+		// CSS Values 4, 10.7.1: the numeric constants. An infinite value
+		// stands for the largest one representable (10.9), here a huge
+		// finite number every computed length clamps.
+		switch lower(t.value) {
+		case "e":
+			return calcValue{isNum: true, num: math.E}, true
+		case "pi":
+			return calcValue{isNum: true, num: math.Pi}, true
+		case "infinity":
+			return calcValue{isNum: true, num: calcInfinity}, true
+		case "-infinity":
+			return calcValue{isNum: true, num: -calcInfinity}, true
+		}
 	}
 	return calcValue{}, false
 }
+
+// calcInfinity is the value of the infinity constant: finite, so sums and
+// products stay finite, and far past maxLength, so a length using it
+// clamps there.
+const calcInfinity = 1e100
 
 // parseNumber parses a <number>, calc() included (CSS Values 4, 5.4).
 func parseNumber(t token) (float64, bool) {

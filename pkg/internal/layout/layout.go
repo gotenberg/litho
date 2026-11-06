@@ -92,26 +92,59 @@ func newEngine(ctx context.Context, fonts *text.Fonts, opts Options, w, h float6
 }
 
 // pageCount returns the pages the flow of the root box rb and the display
-// list d need.
+// list d need. A fragment counts for the part of it its clips leave: the
+// content an overflow: hidden box cuts off adds no page.
 func (e *engine) pageCount(rb *box, d *ditem) int {
 	bottom := rb.y + rb.borderH() + max(rb.m[css.Bottom], 0)
 	n := e.pageOf(max(bottom-1e-3, 0)) + 1
-	var walk func(*ditem)
-	walk = func(it *ditem) {
+	var walk func(it *ditem, lo, hi float64)
+	walk = func(it *ditem, lo, hi float64) {
 		for _, k := range it.kids {
 			if k.group {
-				walk(k)
+				klo, khi := lo, hi
+				if k.clip != nil {
+					if y0, y1, ok := pathSpan(k.clip.Ops); ok {
+						klo, khi = max(lo, y0), min(hi, y1)
+					}
+				}
+				if khi > klo {
+					walk(k, klo, khi)
+				}
+				continue
+			}
+			y0 := max(k.y0, lo)
+			if !(y0 < min(k.y1, hi) || k.y1 <= k.y0 && k.y0 >= lo && k.y0 < hi) {
 				continue
 			}
 			if k.page >= 0 {
 				n = max(n, k.page+1)
-			} else {
-				n = max(n, e.pageOf(max(k.y0, 0))+1)
+				continue
 			}
+			n = max(n, e.pageOf(max(y0, 0))+1)
 		}
 	}
-	walk(d)
+	walk(d, math.Inf(-1), math.Inf(1))
 	return max(min(n, e.maxPages+1), 1)
+}
+
+// pathSpan returns the vertical extent of the points of ops, false for no
+// point.
+func pathSpan(ops []compose.PathOp) (float64, float64, bool) {
+	lo, hi := math.Inf(1), math.Inf(-1)
+	for _, op := range ops {
+		n := 1
+		switch op.Kind {
+		case compose.CurveTo:
+			n = 3
+		case compose.ClosePath:
+			n = 0
+		case compose.MoveTo, compose.LineTo:
+		}
+		for _, q := range op.P[:n] {
+			lo, hi = min(lo, q.Y), max(hi, q.Y)
+		}
+	}
+	return lo, hi, lo <= hi
 }
 
 // assemble slices the display list into pages: each page paints the canvas,

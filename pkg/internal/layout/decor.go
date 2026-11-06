@@ -206,11 +206,22 @@ func (e *engine) tiles(st *css.Style, pic *Picture, area, clip compose.Rect, y f
 		}
 	}
 	rep := st.BackgroundRepeat
+	w0, h0 := w, h
 	if rep[0] == css.RepeatRound && w > 0 {
 		w = area.Width / max(math.Round(area.Width/w), 1)
 	}
 	if rep[1] == css.RepeatRound && h > 0 {
 		h = area.Height / max(math.Round(area.Height/h), 1)
+	}
+	// CSS Backgrounds 3, 3.4: round on one axis only, with an auto size
+	// on the other, scales the other to keep the aspect ratio.
+	autoW := bs.Kind == css.SizeExplicit && bs.Width.Kind == css.Auto
+	autoH := bs.Kind == css.SizeExplicit && bs.Height.Kind == css.Auto
+	switch {
+	case rep[0] == css.RepeatRound && rep[1] != css.RepeatRound && autoH && w0 > 0:
+		h = h0 * w / w0
+	case rep[1] == css.RepeatRound && rep[0] != css.RepeatRound && autoW && h0 > 0:
+		w = w0 * h / h0
 	}
 	if !(w > 0) || !(h > 0) || math.IsInf(w, 0) || math.IsInf(h, 0) {
 		return nil
@@ -280,15 +291,21 @@ func positions(rep css.Repeat, start, size, areaStart, areaSize, clipStart, clip
 }
 
 // shades returns the darker and lighter shade of c a two-tone border style
-// draws with (CSS Backgrounds 3, 4.2 leaves them to the user agent): half
-// toward black, and for a colour already near black, the colour itself
-// and a lighter grey.
+// draws with. CSS Backgrounds 3, 4.2 leaves them to the user agent; these
+// are Blink's (Color::Dark and Color::Light), which the Chromium
+// references draw: the brightest channel moved down or up by a third of
+// the range, the others scaled with it, and black lightened to #545454.
 func shades(c compose.Color) (compose.Color, compose.Color) {
-	dark := compose.Color{R: c.R / 2, G: c.G / 2, B: c.B / 2, A: c.A}
-	light := c
-	if max(c.R, c.G, c.B) < 0.2 {
-		dark = c
-		light = compose.Color{R: c.R + (1-c.R)*0.4, G: c.G + (1-c.G)*0.4, B: c.B + (1-c.B)*0.4, A: c.A}
+	v := max(c.R, c.G, c.B)
+	dark := compose.Color{A: c.A}
+	if v > 0 {
+		k := max(v-1.0/3, 0) / v
+		dark = compose.Color{R: c.R * k, G: c.G * k, B: c.B * k, A: c.A}
+	}
+	light := compose.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: c.A}
+	if v > 0 {
+		k := min(v+1.0/3, 1) / v
+		light = compose.Color{R: min(c.R*k, 1), G: min(c.G*k, 1), B: min(c.B*k, 1), A: c.A}
 	}
 	return dark, light
 }
@@ -324,6 +341,16 @@ func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]floa
 		}
 		return
 	}
+	if bs := st.Border[0].Style; uniform && (bs == css.Dashed || bs == css.Dotted) && radii != ([4][2]float64{}) {
+		// A rounded dashed or dotted border runs its pattern along the
+		// whole rounded outline, as Blink strokes it.
+		c, _ := colorOf(st.Border[0].Color)
+		mid, midRadii := insetRect(r, radii, [4]float64{bd[0] / 2, bd[0] / 2, bd[0] / 2, bd[0] / 2})
+		ops := roundedRect(mid, midRadii)
+		stroke := dashStroke(bs, c, bd[0], roundedLength(mid, midRadii), true)
+		p.emit(b, false, &compose.Path{Ops: ops, Stroke: stroke}, r.Y, r.Y+r.Height, -1)
+		return
+	}
 	for s := range 4 {
 		if !visible[s] {
 			continue
@@ -346,6 +373,85 @@ func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]floa
 		c := p.sync(p.chain(b, false))
 		c.kids = append(c.kids, g)
 	}
+}
+
+// dashStroke returns the stroke of a dashed or dotted line of width w
+// along a path of length l (CSS Backgrounds 3, 4.2 leaves the pattern to
+// the user agent; this is Blink's). Dashes are twice the width, three times
+// under 3px, dots round and as wide as the line, and the gaps, nominally
+// the width, stretch or shrink so the pattern starts and ends on a dash or
+// a dot: on the corners of a side. closed reports a closed path, whose
+// pattern repeats a whole number of times around it.
+func dashStroke(bs css.BorderStyle, c compose.Color, w, l float64, closed bool) *compose.Stroke {
+	st := &compose.Stroke{Color: c, Width: w}
+	dash := 2 * w
+	if w < 3*css.Pt {
+		dash = 3 * w
+	}
+	if bs == css.Dotted {
+		dash = w
+		st.Cap = compose.RoundCap
+	}
+	gap := w
+	if closed {
+		n := max(math.Round(l/(dash+gap)), 1)
+		gap = max(l/n-dash, 0)
+	} else {
+		span := l
+		if bs == css.Dotted {
+			// Round caps reach half a width past each end.
+			span = l + w
+		}
+		gap = bestGap(span, dash, gap)
+	}
+	if bs == css.Dotted {
+		st.Dash = []float64{0, dash + gap}
+		return st
+	}
+	st.Dash = []float64{dash, gap}
+	return st
+}
+
+// bestGap returns the gap closest to gap that fits a whole number of dashes
+// of length dash, gaps between them, in length l, dashes on both ends
+// (Blink's StrokeData::SelectBestDashGap).
+func bestGap(l, dash, gap float64) float64 {
+	if !(l > 0) || !(dash+gap > 0) {
+		return gap
+	}
+	lo := math.Floor((l + gap) / (dash + gap))
+	if lo > float64(maxBackgroundTiles) {
+		return gap
+	}
+	hi := lo + 1
+	loGap, hiGap := math.Inf(1), (l-hi*dash)/(hi-1)
+	if lo > 1 {
+		loGap = (l - lo*dash) / (lo - 1)
+	}
+	if hiGap <= 0 || math.Abs(loGap-gap) < math.Abs(hiGap-gap) {
+		if math.IsInf(loGap, 0) {
+			return gap
+		}
+		return max(loGap, 0)
+	}
+	return hiGap
+}
+
+// roundedLength returns the length of the outline of r with elliptical
+// corners of radii, each quarter ellipse measured with Ramanujan's
+// approximation.
+func roundedLength(r compose.Rect, radii [4][2]float64) float64 {
+	l := 2 * (r.Width + r.Height)
+	for _, c := range radii {
+		a, b := c[0], c[1]
+		if a <= 0 || b <= 0 {
+			continue
+		}
+		h := (a - b) * (a - b) / ((a + b) * (a + b))
+		quarter := math.Pi * (a + b) * (1 + 3*h/(10+math.Sqrt(4-3*h))) / 4
+		l += quarter - a - b
+	}
+	return l
 }
 
 // sideClip returns the trapezoid of side s between the outer box r and the
@@ -425,16 +531,22 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, r compose.Rect, rad
 		case css.Left:
 			a, z = compose.Point{X: r.X + w/2, Y: r.Y + r.Height}, compose.Point{X: r.X + w/2, Y: r.Y}
 		}
-		// CSS Backgrounds 3, 4.2 leaves the dash pattern to the user
-		// agent: dashes three widths long, dots as squares of the width.
-		stroke := &compose.Stroke{Color: c, Width: w, Dash: []float64{3 * w, 3 * w}}
+		l := math.Hypot(z.X-a.X, z.Y-a.Y)
 		if bdr.Style == css.Dotted {
-			stroke.Dash = []float64{w, w}
+			// The dots sit on the line, the first and the last centred
+			// half a width in from the corners.
+			if l <= w {
+				return
+			}
+			ux, uy := (z.X-a.X)/l, (z.Y-a.Y)/l
+			a = compose.Point{X: a.X + ux*w/2, Y: a.Y + uy*w/2}
+			z = compose.Point{X: z.X - ux*w/2, Y: z.Y - uy*w/2}
+			l -= w
 		}
 		g.kids = append(g.kids, &ditem{frag: &compose.Path{Ops: []compose.PathOp{
 			{Kind: compose.MoveTo, P: [3]compose.Point{a}},
 			{Kind: compose.LineTo, P: [3]compose.Point{z}},
-		}, Stroke: stroke}})
+		}, Stroke: dashStroke(bdr.Style, c, w, l, false)}})
 	case css.Solid, css.BorderNone, css.BorderHidden:
 		fill(ring(r, radii, inner, iradii), c)
 	}
