@@ -37,7 +37,27 @@ type Picture struct {
 	Source *compose.ImageSource
 	// Width and Height are the intrinsic size in points, both positive.
 	Width, Height float64
+	// Vector, when set, draws a vector picture, such as SVG, in place of
+	// Source, which is then nil: it returns the fragments that paint the
+	// picture into the rectangle r, in the caller's coordinates in points,
+	// with nothing outside r. Their group nesting is at most
+	// MaxVectorDepth. The engine copies a fragment before changing it, and
+	// calls Vector from its own goroutine with its context.
+	Vector func(ctx context.Context, r compose.Rect) []compose.Fragment
+	// NoNaturalWidth and NoNaturalHeight mark a vector picture without a
+	// natural width or height (CSS Images 3, 4.1), as an SVG whose width
+	// or height is a percentage or missing. Width and Height then hold the
+	// size the picture takes when nothing else sizes it: the other natural
+	// dimension through the ratio, else 300 by 150 pixels (CSS Images 3,
+	// 4.3). NoRatio marks a picture without a natural aspect ratio; with
+	// it unset the ratio is Width over Height. A raster picture leaves all
+	// three unset.
+	NoNaturalWidth, NoNaturalHeight, NoRatio bool
 }
+
+// MaxVectorDepth is the deepest group nesting a [Picture.Vector] may
+// return; the engine keeps room for it under its own groups.
+const MaxVectorDepth = 5
 
 // Node is one node of the content tree.
 type Node struct {

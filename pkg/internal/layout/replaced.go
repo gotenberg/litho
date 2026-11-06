@@ -2,6 +2,8 @@ package layout
 
 import (
 	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
 // replacedSize returns the used content width and height of the replaced
@@ -11,7 +13,8 @@ import (
 // without a picture has no intrinsic size: an auto dimension is 0.
 func (e *engine) replacedSize(b *box, cb cblock) (float64, float64) {
 	iw, ih := 0.0, 0.0
-	if p := b.picture; p != nil {
+	p := b.picture
+	if p != nil {
 		iw, ih = p.Width, p.Height
 	}
 	minW, maxW := 0.0, math.Inf(1)
@@ -32,8 +35,8 @@ func (e *engine) replacedSize(b *box, cb cblock) (float64, float64) {
 	ch := func(v float64) float64 { return min(max(v, minH), maxH) }
 	w, wSet := specWidth(b, b.st.Width, cb.w)
 	h, hSet := specHeight(b, b.st.Height, cb)
-	ratio := 0.0
-	if iw > 0 && ih > 0 {
+	ratio := pictureRatio(p)
+	if p == nil && iw > 0 && ih > 0 {
 		ratio = iw / ih
 	}
 	switch {
@@ -54,6 +57,19 @@ func (e *engine) replacedSize(b *box, cb cblock) (float64, float64) {
 	}
 	if ratio == 0 {
 		return cw(iw), ch(ih)
+	}
+	if p != nil && p.NoNaturalWidth && p.NoNaturalHeight && cb.w > 0 {
+		// A picture with a ratio and no natural size fills the containing
+		// block's width, the width a block in normal flow takes (CSS 2.1,
+		// 10.3.2), when that width does not depend on the picture: in a
+		// shrink-to-fit measurement, cb.w is 0 and the default object
+		// size stands.
+		pd, bd, m := edgesOf(b, cb.w)
+		iw = max(cb.w-pd[css.Left]-pd[css.Right]-bd[css.Left]-bd[css.Right]-m[css.Left]-m[css.Right], 0)
+		ih = iw / ratio
+		if !(iw > 0) {
+			return cw(0), ch(0)
+		}
 	}
 	return constrainRatio(iw, ih, minW, maxW, minH, maxH)
 }

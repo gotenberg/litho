@@ -223,10 +223,10 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	return []*box{b}
 }
 
-// validPicture reports a picture the engine can draw: a source and a
-// finite, positive intrinsic size.
+// validPicture reports a picture the engine can draw: a source or a
+// vector, and a finite, positive intrinsic size.
 func validPicture(p *Picture) bool {
-	return p != nil && p.Source != nil && p.Width > 0 && p.Height > 0 && !math.IsInf(p.Width, 0) && !math.IsInf(p.Height, 0)
+	return p != nil && (p.Source != nil || p.Vector != nil) && p.Width > 0 && p.Height > 0 && !math.IsInf(p.Width, 0) && !math.IsInf(p.Height, 0)
 }
 
 // genInline generates an inline element: its inline box, split around the

@@ -161,8 +161,17 @@ func (p *painter) background(b *box, st *css.Style, r compose.Rect, radii [4][2]
 		if pic == nil {
 			return
 		}
-		for _, t := range p.e.tiles(st, pic, area, clipR, r.Y) {
-			g.kids = append(g.kids, &ditem{frag: &compose.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: -1})
+		pic = naturalPicture(pic, area.Width, area.Height)
+		tiles := p.e.tiles(st, pic, area, clipR, r.Y)
+		for i, t := range tiles {
+			f := p.e.pictureFrag(pic, t, nil)
+			if f == nil {
+				break
+			}
+			if i == 0 && pic.Vector != nil {
+				tiles = p.e.vectorTiles(tiles, fragNodes(f), r.Y)
+			}
+			g.kids = append(g.kids, &ditem{frag: f, y0: t.Y, y1: t.Y + t.Height, page: -1})
 		}
 	}
 	if len(g.kids) == 0 {

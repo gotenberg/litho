@@ -320,7 +320,7 @@ func (e *engine) picture(url string, y float64) *Picture {
 		switch {
 		case err != nil:
 			e.warn(codeImage, fmt.Sprintf("image %q left out: %v", url, err), y)
-		case p == nil || p.Source == nil || !(p.Width > 0) || !(p.Height > 0) || math.IsInf(p.Width, 0) || math.IsInf(p.Height, 0):
+		case p == nil || p.Source == nil && p.Vector == nil || !(p.Width > 0) || !(p.Height > 0) || math.IsInf(p.Width, 0) || math.IsInf(p.Height, 0):
 			e.warn(codeImage, fmt.Sprintf("image %q left out: no picture or no intrinsic size", url), y)
 		default:
 			pic = p

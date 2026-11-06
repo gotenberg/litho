@@ -278,14 +278,17 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructEle
 		}
 		p0, p1 = max(p0, 0), min(p1, n-1)
 		for p := p0; p <= p1; p++ {
-			if !e.admit(p) {
+			if !e.admitN(p, fragNodes(k.frag)) {
 				continue
 			}
-			f := k.frag
+			f := e.fitLeaf(k.frag, depth)
+			if f == nil {
+				continue
+			}
 			if p1 > p0 {
 				f = cloneFragment(f)
 			}
-			markUsed(f, used)
+			markTree(f, used)
 			if depth == 0 && k.page >= 0 {
 				// A line or a replaced box sits on one page whole (CSS
 				// Fragmentation 3, 4.4), so its ink overflow, an
@@ -344,7 +347,7 @@ func countLeaves(it *ditem) int {
 		if k.group {
 			n += countLeaves(k)
 		} else {
-			n++
+			n += fragNodes(k.frag)
 		}
 	}
 	return n
@@ -364,7 +367,10 @@ func (e *engine) flatten(it *ditem, depth int, artifact bool) []compose.Fragment
 			out = append(out, &compose.Group{Transform: groupTransform(k), Clip: k.clip, Opacity: k.opacity, Content: e.flatten(k, depth+1, artifact)})
 			continue
 		}
-		f := k.frag
+		f := e.fitLeaf(k.frag, depth)
+		if f == nil {
+			continue
+		}
 		if artifact {
 			f = cloneFragment(f)
 			switch v := f.(type) {
@@ -374,6 +380,8 @@ func (e *engine) flatten(it *ditem, depth int, artifact bool) []compose.Fragment
 				v.Parent = nil
 			case *compose.Path:
 				v.Parent = nil
+			case *compose.Group:
+				v.Content = adopt(v.Content, nil, 0)
 			}
 		}
 		out = append(out, f)
@@ -394,12 +402,16 @@ func markTree(f compose.Fragment, used map[*compose.StructElem]bool) {
 
 // admit counts one more fragment on page p and reports whether it fits
 // [maxPageFragments].
-func (e *engine) admit(p int) bool {
-	if e.pageFrags[p] >= maxPageFragments {
+func (e *engine) admit(p int) bool { return e.admitN(p, 1) }
+
+// admitN counts n more fragments on page p and reports whether they fit
+// [maxPageFragments].
+func (e *engine) admitN(p, n int) bool {
+	if e.pageFrags[p]+n > maxPageFragments {
 		e.warnOnce(codeTooManyFragments, fmt.Sprintf("a page of more than %d fragments was cut short", maxPageFragments), e.pageTop(p))
 		return false
 	}
-	e.pageFrags[p]++
+	e.pageFrags[p] += n
 	return true
 }
 
@@ -424,6 +436,9 @@ func cloneFragment(f compose.Fragment) compose.Fragment {
 		c := *v
 		return &c
 	case *compose.Text:
+		c := *v
+		return &c
+	case *compose.Group:
 		c := *v
 		return &c
 	}

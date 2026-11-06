@@ -238,6 +238,8 @@ func (p *painter) emit(b *box, content bool, frag compose.Fragment, y0, y1 float
 			v.Parent = nil
 		case *compose.Path:
 			v.Parent = nil
+		case *compose.Group:
+			v.Content = adopt(v.Content, nil, 0)
 		}
 	}
 	c.kids = append(c.kids, &ditem{frag: frag, y0: y0, y1: y1, page: page})
@@ -534,8 +536,11 @@ func (p *painter) replaced(b *box) {
 		return
 	}
 	box := compose.Rect{X: b.contentX() + p.dx, Y: b.contentY() + p.dy, Width: b.w, Height: b.h}
-	r := objectRect(b.st, b.picture, box)
-	img := &compose.Image{Rect: r, Source: b.picture.Source, Parent: b.elem}
+	r := objectRect(b.st, objectPicture(b.st, b.picture, b.w, b.h), box)
+	img := p.e.pictureFrag(b.picture, r, b.elem)
+	if img == nil {
+		return
+	}
 	page := p.e.monoPage(box.Y, box.Height)
 	if r == box {
 		p.emit(b, false, img, r.Y, r.Y+r.Height, page)
@@ -608,7 +613,9 @@ func (p *painter) marker(b *box) {
 	}
 	if m.picture != nil {
 		r := compose.Rect{X: m.x + p.dx, Y: m.baseline - m.picture.Height + p.dy, Width: m.picture.Width, Height: m.picture.Height}
-		p.emit(b, false, &compose.Image{Rect: r, Source: m.picture.Source, Parent: m.elem}, r.Y, r.Y+r.Height, p.e.pageOf(m.baseline-m.ascent))
+		if f := p.e.pictureFrag(m.picture, r, m.elem); f != nil {
+			p.emit(b, false, f, r.Y, r.Y+r.Height, p.e.pageOf(m.baseline-m.ascent))
+		}
 		return
 	}
 	for _, t := range m.runs {
