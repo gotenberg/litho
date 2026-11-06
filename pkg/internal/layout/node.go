@@ -42,9 +42,10 @@ type Picture struct {
 // Node is one node of the content tree.
 type Node struct {
 	Kind Kind
-	// Style is the node's computed style. It is set on every node: a Text,
-	// LineBreak or Replaced node shares its parent's. The engine reads it
-	// and never writes it.
+	// Style is the node's computed style. It is set on every node: a Text or
+	// LineBreak node shares its parent's, a Replaced node carries its own
+	// (its width, display and float are its own). The engine reads it and
+	// never writes it.
 	Style *css.Style
 	// Text is the characters of a Text node.
 	Text string

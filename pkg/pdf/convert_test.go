@@ -5,12 +5,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
@@ -245,5 +248,194 @@ func TestConvertFonts_CachesABoundedNumberOfIndexes(t *testing.T) {
 	}
 	if f, err := convertFonts(ctx, nil, []string{dir}); err != nil || f.Len() != 1 {
 		t.Errorf("the build after a cancelled one: %v", err)
+	}
+}
+
+// convertHTMLPage is the page the HTML tests convert: a heading, a
+// paragraph with an internal and an external link, a list, an image and a
+// forced page break.
+const convertHTMLPage = `<!doctype html><html lang="en"><head><title>Test page</title>
+<meta name="author" content="Tester"><link rel="stylesheet" href="css/site.css"></head>
+<body><h1 id="top">Heading one</h1>
+<p>Go to <a href="#second">the second part</a> or <a href="https://example.com/">away</a>.</p>
+<ul><li>First item</li><li>Second item</li></ul>
+<p><img src="img/dot.png" alt="A dot"></p>
+<h2 id="second" class="break">Second part</h2><p>The end.</p></body></html>`
+
+// convertHTMLResources is the resource tree convertHTMLPage reads.
+func convertHTMLResources(t *testing.T) fstest.MapFS {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return fstest.MapFS{
+		"css/site.css": {Data: []byte(`.break { break-before: page } h1 { font-size: 20pt }`)},
+		"img/dot.png":  {Data: b.Bytes()},
+	}
+}
+
+// convertHTMLTest converts src as HTML with the test face, the test resources
+// and opts, failing the test on error.
+func convertHTMLTest(t *testing.T, dir, src string, opts ...ConvertOption) ([]byte, *ConvertReport) {
+	t.Helper()
+	var out bytes.Buffer
+	base := []ConvertOption{WithConvertFontDirs(dir), WithResources(convertHTMLResources(t))}
+	rep, err := Convert(context.Background(), strings.NewReader(src), FormatHTML, &out, append(base, opts...)...)
+	if errors.Is(err, ErrUnsupportedFormat) {
+		t.Fatalf("Convert refuses FormatHTML: %v", err)
+	}
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	return out.Bytes(), rep
+}
+
+func TestConvert_HTMLLaysOutATaggedLinkedDocument(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data, rep := convertHTMLTest(t, convertFontDir(t), convertHTMLPage)
+	if rep.Pages != 2 || len(rep.Warnings) != 0 {
+		t.Errorf("report %+v, want 2 pages and no warning", rep)
+	}
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	if n, err := r.PageCount(ctx); err != nil || n != 2 {
+		t.Fatalf("PageCount = %d, %v", n, err)
+	}
+	for page, want := range map[int][]string{
+		1: {"Heading one", "Go to the second part or away.", "First item", "Second item"},
+		2: {"Second part", "The end."},
+	} {
+		got, err := r.ExtractText(ctx, page)
+		if err != nil {
+			t.Fatalf("ExtractText(%d): %v", page, err)
+		}
+		flat := strings.Join(strings.Fields(got), " ")
+		for _, w := range want {
+			if !strings.Contains(flat, w) {
+				t.Errorf("page %d text %q lacks %q", page, flat, w)
+			}
+		}
+	}
+	if tagged, err := r.IsTagged(ctx); err != nil || !tagged {
+		t.Errorf("IsTagged = %v, %v", tagged, err)
+	}
+	annots, err := r.ExtractAnnotations(ctx, 1)
+	if err != nil {
+		t.Fatalf("ExtractAnnotations: %v", err)
+	}
+	var internal, external bool
+	for _, a := range annots {
+		if a.Subtype != "Link" {
+			continue
+		}
+		internal = internal || a.DestPage == 2
+		external = external || a.URI == "https://example.com/"
+	}
+	if !internal || !external {
+		t.Errorf("links %+v, want one to page 2 and one to https://example.com/", annots)
+	}
+	if imgs, err := r.ExtractImages(ctx, 1); err != nil || len(imgs) != 1 {
+		t.Errorf("images on page 1: %d, %v", len(imgs), err)
+	}
+	marks, err := r.Bookmarks(ctx)
+	if err != nil || len(marks) != 1 || marks[0].Title != "Heading one" || len(marks[0].Children) != 1 || marks[0].Children[0].PageNumber != 2 {
+		t.Errorf("bookmarks %+v, %v", marks, err)
+	}
+	meta, err := r.Metadata(ctx)
+	if err != nil || meta["Title"] != "Test page" || meta["Author"] != "Tester" {
+		t.Errorf("metadata %v, %v", meta, err)
+	}
+}
+
+func TestConvert_HTMLAppliesPageSetupAndMedia(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := convertFontDir(t)
+	src := `<style>@media screen { p { break-before: page } }</style><p>one</p><p>two</p>`
+	data, rep := convertHTMLTest(t, dir, src, WithPaperSize(612, 792), WithMargins(0, 0, 0, 0))
+	if rep.Pages != 1 {
+		t.Errorf("print: %d pages, want 1", rep.Pages)
+	}
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	if p, err := r.Page(ctx, 1); err != nil || p.Width != 612 || p.Height != 792 {
+		t.Errorf("page 1 %vx%v, %v, want Letter", p.Width, p.Height, err)
+	}
+	if _, rep := convertHTMLTest(t, dir, src, WithMediaType("screen")); rep.Pages != 2 {
+		t.Errorf("screen: %d pages, want 2", rep.Pages)
+	}
+	data, _ = convertHTMLTest(t, dir, `<style>@page { size: A5 landscape }</style><p>x`)
+	r2, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r2.Close()
+	if p, err := r2.Page(ctx, 1); err != nil || math.Abs(p.Width-595.276) > 0.01 || math.Abs(p.Height-419.528) > 0.01 {
+		t.Errorf("@page A5 landscape: %vx%v, %v", p.Width, p.Height, err)
+	}
+}
+
+func TestConvert_HTMLRefusesBadInput(t *testing.T) {
+	t.Parallel()
+	dir := convertFontDir(t)
+	for name, tc := range map[string]struct {
+		opts []ConvertOption
+		src  string
+		want error
+	}{
+		"bad media":        {opts: []ConvertOption{WithMediaType("tv")}, want: ErrInvalidConvertOptions},
+		"bad paper":        {opts: []ConvertOption{WithPaperSize(-1, 10)}, want: ErrInvalidConvertOptions},
+		"input past limit": {src: "<p>ABCD", opts: []ConvertOption{WithConvertLimits(Limits{MaxConvertInputBytes: 4})}, want: ErrConvertInputTooLarge},
+		"pages past limit": {src: `<p style="break-after: page">A<p>B`, opts: []ConvertOption{WithConvertLimits(Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
+		"too deep":         {src: strings.Repeat("<div>", 600), want: ErrConvertInputTooLarge},
+	} {
+		var out bytes.Buffer
+		opts := append([]ConvertOption{WithConvertFontDirs(dir)}, tc.opts...)
+		rep, err := Convert(context.Background(), strings.NewReader(tc.src), FormatHTML, &out, opts...)
+		if !errors.Is(err, tc.want) || rep != nil {
+			t.Errorf("%s: %v, %+v, want %v", name, err, rep, tc.want)
+		}
+		if out.Len() != 0 {
+			t.Errorf("%s: wrote %d bytes, want none", name, out.Len())
+		}
+		if !IsInvalidInput(err) {
+			t.Errorf("%s: IsInvalidInput(%v) = false", name, err)
+		}
+	}
+}
+
+func TestConvert_HTMLReportsWhatItLeavesOut(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	rep, err := Convert(context.Background(), strings.NewReader(`<p><img src="a.png" alt="alt text"><iframe src="x"></iframe>`), FormatHTML, &out, WithConvertFontDirs(convertFontDir(t)))
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	var got []string
+	for _, w := range rep.Warnings {
+		got = append(got, w.Code)
+	}
+	if strings.Join(got, ",") != "resource-refused,unsupported-element" {
+		t.Errorf("warnings %+v", rep.Warnings)
+	}
+}
+
+func TestConvert_HTMLIsDeterministic(t *testing.T) {
+	t.Parallel()
+	dir := convertFontDir(t)
+	want, _ := convertHTMLTest(t, dir, convertHTMLPage)
+	for range 3 {
+		if got, _ := convertHTMLTest(t, dir, convertHTMLPage); !bytes.Equal(got, want) {
+			t.Fatal("two conversions wrote different bytes")
+		}
 	}
 }

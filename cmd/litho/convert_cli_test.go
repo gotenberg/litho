@@ -198,3 +198,112 @@ func TestConvert_RefusesBadFlags(t *testing.T) {
 		}
 	}
 }
+
+// writeHTMLSite writes page.html (or name) and its stylesheet into a fresh
+// directory and returns the page's path. The stylesheet starts a page
+// before .x for print and before .y for screen.
+func writeHTMLSite(t *testing.T, name string) string {
+	t.Helper()
+	dir := t.TempDir()
+	css := "@media print { .x { break-before: page } } @media screen { .y { break-before: page } }"
+	if err := os.WriteFile(filepath.Join(dir, "site.css"), []byte(css), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	page := `<link rel="stylesheet" href="site.css"><p>AB</p><p class="x">BA</p><p class="y">AA</p>`
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(page), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestConvert_HTMLReadsItsOwnDirectory(t *testing.T) {
+	t.Parallel()
+	fonts := convertFontDir(t)
+	for _, tc := range []struct {
+		name  string
+		extra []string
+		pages []string
+	}{
+		{"page.html", nil, []string{"AB", "BA AA"}},
+		{"page.htm", []string{"--media", "print"}, []string{"AB", "BA AA"}},
+		{"page.html", []string{"--media", "screen"}, []string{"AB BA", "AA"}},
+		{"page.txt", []string{"--from", "html"}, []string{"AB", "BA AA"}},
+	} {
+		src := writeHTMLSite(t, tc.name)
+		out := filepath.Join(t.TempDir(), "out.pdf")
+		var stdout, stderr bytes.Buffer
+		args := append(append([]string{"convert", "--font-dir", fonts}, tc.extra...), "-o", out, src)
+		if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
+			t.Fatalf("%q: exit %d, stderr %s", args, rc, stderr.String())
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("%q: stderr %q, want nothing", args, stderr.String())
+		}
+		if got := pdfText(t, out); strings.Join(got, "|") != strings.Join(tc.pages, "|") {
+			t.Errorf("%q: pages %q, want %q", args, got, tc.pages)
+		}
+	}
+}
+
+func TestConvert_HTMLResourcesFlag(t *testing.T) {
+	t.Parallel()
+	src := writeHTMLSite(t, "page.html")
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	var stdout, stderr bytes.Buffer
+	args := []string{"convert", "-f", "json", "--font-dir", convertFontDir(t), "--resources", t.TempDir(), "-o", out, src}
+	if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("exit %d, stderr %s", rc, stderr.String())
+	}
+	var res convertResult
+	if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+		t.Fatalf("stdout %q: %v", stdout.String(), err)
+	}
+	if res.Format != "html" || res.Pages != 1 || len(res.Warnings) != 1 || res.Warnings[0].Code != "resource-failed" {
+		t.Errorf("report %+v, want one page and the stylesheet missing from the empty directory", res)
+	}
+}
+
+// TestConvert_HTMLFromStdinReadsNoResources swaps os.Stdin, so it must not
+// run in parallel.
+func TestConvert_HTMLFromStdinReadsNoResources(t *testing.T) {
+	f, err := os.Open(writeHTMLSite(t, "page.html")) //nolint:gosec // a fixture this test just wrote
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close() //nolint:errcheck // read-only fixture handle
+	saved := os.Stdin
+	os.Stdin = f
+	t.Cleanup(func() { os.Stdin = saved })
+
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(), []string{"convert", "--from", "html", "--font-dir", convertFontDir(t), "-o", out, "-"}, &stdout, &stderr); rc != exitOK {
+		t.Fatalf("exit %d, stderr %s", rc, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "warning: resource-refused") {
+		t.Errorf("stderr %q, want the stylesheet refused", stderr.String())
+	}
+	if got := pdfText(t, out); len(got) != 1 || got[0] != "AB BA AA" {
+		t.Errorf("pages %q", got)
+	}
+}
+
+func TestConvert_HTMLRefusesBadFlags(t *testing.T) {
+	t.Parallel()
+	src := writeHTMLSite(t, "page.html")
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	for _, args := range [][]string{
+		{"convert", "--font-dir", convertFontDir(t), "--media", "tv", "-o", out, src},
+		{"convert", "--font-dir", convertFontDir(t), "--resources", filepath.Join(t.TempDir(), "absent"), "-o", out, src},
+		{"convert", "--font-dir", convertFontDir(t), "--resources", src, "-o", out, src},
+	} {
+		var stdout, stderr bytes.Buffer
+		if rc := run(context.Background(), args, &stdout, &stderr); rc != exitError || stderr.Len() == 0 {
+			t.Errorf("%q: exit %d, stderr %q, want 1 with a message", args, rc, stderr.String())
+		}
+		if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%q left %s: %v", args, out, err)
+		}
+	}
+}

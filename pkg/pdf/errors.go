@@ -782,11 +782,14 @@ var (
 	// ErrInvalidConvertOptions is returned, wrapped in an error naming the
 	// option, by [Convert] when a [ConvertOption] is out of range: a page or
 	// font size that is not finite and positive, a page side past 14,400
-	// points, or margins that leave no room on the page.
+	// points, margins that leave no room on the page, or a media type other
+	// than print and screen.
 	ErrInvalidConvertOptions = plaintext.ErrInvalidOptions
 
 	// ErrConvertInputTooLarge is returned, wrapped, by [Convert] for a source
-	// longer than [Limits.MaxConvertInputBytes]. Nothing is written.
+	// longer than [Limits.MaxConvertInputBytes], and for an HTML document
+	// whose elements, cascade or boxes pass the converter's caps. Nothing is
+	// written.
 	ErrConvertInputTooLarge = plaintext.ErrInputTooLarge
 
 	// ErrConvertTooManyPages is returned, wrapped, by [Convert] when the

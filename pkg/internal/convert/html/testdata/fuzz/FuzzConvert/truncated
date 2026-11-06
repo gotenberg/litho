@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<!doctype html><html lang=en><style>@page{margin:1cm} h1{co")

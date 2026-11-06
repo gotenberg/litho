@@ -32,6 +32,7 @@ violations, err := r.ValidatePDFAReport(ctx, models.PDFA2b)
 - **Remediate** PDF/A, PDF/UA and WTPDF violations, to one profile or to a PDF/A and PDF/UA pair at once, embedding the fonts you supply, behind an integrity check that rolls back a fix that degrades the document.
 - **Edit** pages (rotate, delete, insert, split, merge), stamps and watermarks, metadata, form fields, bookmarks and attachments, auto-tagging, redaction, colour conversion and transparency flattening.
 - **Render** pages to images, on screen or for print, RGB or CMYK.
+- **Convert** plain text and HTML with its CSS to tagged PDF, with no browser: the CSS 2.1 visual formatting model for paged media, `@page`, lists, backgrounds, borders and images, with links, an outline and the document's metadata.
 - **Protect** with RC4, AES-128 or AES-256 encryption, and PKCS#7 or PAdES signatures up to B-LTA.
 - **Optimize** with object streams, stream deduplication, lossless image recompression and font subsetting.
 - **Stay safe** on hostile input: configurable resource limits, no panics, deterministic output.

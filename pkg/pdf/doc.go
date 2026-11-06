@@ -22,7 +22,8 @@
 // on it, and [Reader.CheckTextContrast] the text short of the contrast WCAG
 // 2.x asks of it, an advisory check no PDF/UA validation depends on.
 //
-// [Convert] makes a new, tagged PDF from another format: plain text for now.
+// [Convert] makes a new, tagged PDF from another format: plain text or HTML
+// with its CSS.
 //
 // # Quick start
 //
@@ -201,7 +202,8 @@
 //   - [Pipeline.Apply] takes [ApplyOption]: [WithEditLabel].
 //   - [Convert] takes [ConvertOption]: [WithConvertLogger],
 //     [WithConvertFontDirs], [WithPaperSize], [WithMargins],
-//     [WithFontFamilies], [WithFontSize], [WithConvertLimits].
+//     [WithFontFamilies], [WithFontSize], [WithMediaType],
+//     [WithResources], [WithConvertLimits].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:

@@ -13,7 +13,10 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
+	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -25,9 +28,8 @@ const (
 	// FormatText is plain text in UTF-8. See [Convert] for how it is laid
 	// out.
 	FormatText Format = "text"
-	// FormatHTML is an HTML document with its CSS. It is not read yet:
-	// Convert returns [ErrUnsupportedFormat] for it until the HTML
-	// converter lands.
+	// FormatHTML is an HTML document with its CSS. See [Convert] for what
+	// is drawn.
 	FormatHTML Format = "html"
 )
 
@@ -100,21 +102,25 @@ func WithMargins(top, right, bottom, left float64) ConvertOption {
 	}
 }
 
-// WithFontFamilies sets the font families asked for, in preference order,
+// WithFontFamilies sets the font families a [FormatText] source is drawn
+// in, in preference order,
 // matched without regard to case or spaces. The generic families serif,
 // sans-serif, monospace, cursive, fantasy and system-ui expand to common
 // families of their kind. The default is Liberation Serif, the family a word
 // processor opens a text file in, then serif. A character the chosen face
-// lacks is drawn from another face that covers it.
+// lacks is drawn from another face that covers it. A [FormatHTML] source
+// takes its fonts from its stylesheets and ignores this option.
 func WithFontFamilies(families ...string) ConvertOption {
 	return func(o *convertOptions) {
 		o.families = slices.Clone(families)
 	}
 }
 
-// WithFontSize sets the font size in points, 12 by default. It must be
-// finite, positive and at most 1000, or [Convert] fails with
-// [ErrInvalidConvertOptions]. Lines sit 1.15 times the size apart.
+// WithFontSize sets the font size in points of a [FormatText] source, 12
+// by default. It must be finite, positive and at most 1000, or [Convert]
+// fails with [ErrInvalidConvertOptions]. Lines sit 1.15 times the size
+// apart. A [FormatHTML] source takes its sizes from its stylesheets and
+// ignores this option.
 func WithFontSize(size float64) ConvertOption {
 	return func(o *convertOptions) {
 		o.fontSize = size
@@ -129,9 +135,16 @@ func WithMediaType(media string) ConvertOption {
 }
 
 // WithResources gives a [FormatHTML] source the files its relative URLs
-// name: stylesheets, images and, later, fonts, read from fsys with the URL
-// path as the file path. Without it, and for every absolute URL, the
-// reference is left out and reported as a warning.
+// name: stylesheets and images, read from fsys with the URL path as the
+// file path, the document sitting at the root. Without it, and for every
+// absolute URL, root-relative path or path that leaves the root, the
+// reference is left out and reported as a warning. data: URLs need no
+// resources.
+//
+// A conversion reads at most 32 MiB a file and 256 MiB of files in all,
+// decodes at most 4096 distinct images of at most 67 million pixels each
+// and 268 million in all; a resource past a cap is left out with a
+// warning.
 func WithResources(fsys fs.FS) ConvertOption {
 	return func(o *convertOptions) { o.resources = fsys }
 }
@@ -161,7 +174,11 @@ type ConvertWarning struct {
 	// Code is a stable identifier in kebab-case. "missing-glyph" flags a
 	// character no font covers, drawn as a placeholder glyph, reported once
 	// per character. "line-split" flags a source line of more than 65,536
-	// characters, laid out in pieces that each start a new line.
+	// characters, laid out in pieces that each start a new line. An HTML
+	// conversion adds, among others, "unsupported-css-property" and the
+	// other codes of a construct the cascade dropped, "resource-refused",
+	// "resource-failed" and "resource-limit" for a stylesheet or image left
+	// out, "unsupported-image", "unsupported-element" and "form-control".
 	Code string
 	// Message explains the construct and what was done instead.
 	Message string
@@ -195,16 +212,47 @@ type ConvertWarning struct {
 //
 // The output is a tagged PDF 1.7 file (ISO 32000-1, 14.8): a Document
 // element with one P element for each source line that draws text. Its
-// language is left unset. The fonts are embedded, each subset to the glyphs
-// drawn. Nothing is written for PDF/A or PDF/UA conformance; remediate the
-// output for that.
+// language is left unset.
+//
+// # HTML
+//
+// [FormatHTML] reads an HTML document in the encoding its byte order mark
+// or <meta charset> names, UTF-8 otherwise, and lays it out as CSS 2.1's
+// visual formatting model asks for paged media, with the stylesheets of
+// its <style> and <link rel=stylesheet> elements, their imports, its style
+// attributes and its presentational attributes, evaluated for the media
+// type of [WithMediaType]. No script runs.
+//
+//   - The page is the paper and margins of [WithPaperSize] and
+//     [WithMargins] unless an @page rule sets a size, an orientation or a
+//     margin. :first, :left and :right page rules do not apply.
+//   - Stylesheets and images are read from [WithResources]. PNG, JPEG, GIF,
+//     WebP, BMP and TIFF images are drawn at their pixel size at 96 dpi
+//     unless styled otherwise; an image that cannot be read is replaced by
+//     its alt text. SVG is not drawn yet.
+//   - Form controls draw as the text they show. Embedded documents, media
+//     and inline SVG are left out.
+//   - Flex and grid layout lay out as blocks, and absolute and fixed
+//     positioning as static, with a warning.
+//
+// The output is tagged: each element maps to the standard structure type
+// of its meaning (ISO 32000-1, 14.8.4), images carry their alt text, and
+// the root element's lang is the document's language. Links become Link
+// annotations, h1 to h6 the outline, and <title> and <meta name> author,
+// description and keywords the document information.
+//
+// # Both formats
+//
+// The fonts are embedded, each subset to the glyphs drawn. Nothing is
+// written for PDF/A or PDF/UA conformance; remediate the output for that.
 //
 // # Errors
 //
 // Convert returns an error wrapping [ErrUnsupportedFormat] for a format it
 // does not read, [ErrInvalidLimits] or [ErrInvalidConvertOptions] for an
 // option out of range, [ErrConvertInputTooLarge] past
-// [Limits.MaxConvertInputBytes], [ErrConvertTooManyPages] past
+// [Limits.MaxConvertInputBytes] or for an HTML document past the
+// converter's element, cascade or box caps, [ErrConvertTooManyPages] past
 // [Limits.MaxConvertPages], [ErrConvertNoFonts] when the font directories
 // hold no usable font, [ErrInternalPanic] for a recovered panic, and ctx's
 // error when ctx ends first. On an error other than a write error on dst,
@@ -223,7 +271,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	}
 	defer recoverToError(o.logger, "Convert", &err)
 
-	if format != FormatText {
+	if format != FormatText && format != FormatHTML {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
 	if src == nil {
@@ -249,20 +297,28 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	if !o.marginsSet {
 		o.marginTop, o.marginRight, o.marginBottom, o.marginLeft = plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin
 	}
-	doc, err := plaintext.Convert(ctx, src, fonts, plaintext.Options{
-		PageWidth:     o.width,
-		PageHeight:    o.height,
-		MarginTop:     o.marginTop,
-		MarginRight:   o.marginRight,
-		MarginBottom:  o.marginBottom,
-		MarginLeft:    o.marginLeft,
-		FontFamilies:  o.families,
-		FontSize:      o.fontSize,
-		MaxInputBytes: budget.MaxConvertInputBytes,
-		MaxPages:      budget.MaxConvertPages,
-	})
+	var doc *compose.Document
+	if format == FormatHTML {
+		doc, err = convertHTML(ctx, src, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
+	} else {
+		doc, err = plaintext.Convert(ctx, src, fonts, plaintext.Options{
+			PageWidth:     o.width,
+			PageHeight:    o.height,
+			MarginTop:     o.marginTop,
+			MarginRight:   o.marginRight,
+			MarginBottom:  o.marginBottom,
+			MarginLeft:    o.marginLeft,
+			FontFamilies:  o.families,
+			FontSize:      o.fontSize,
+			MaxInputBytes: budget.MaxConvertInputBytes,
+			MaxPages:      budget.MaxConvertPages,
+		})
+		if err != nil {
+			err = fmt.Errorf("converting text: %w", err)
+		}
+	}
 	if err != nil {
-		return nil, fmt.Errorf("converting text: %w", err)
+		return nil, err
 	}
 	if err := compose.Write(ctx, doc, dst, compose.Options{Logger: o.logger}); err != nil {
 		return nil, fmt.Errorf("writing the PDF: %w", err)
@@ -273,6 +329,40 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 		report.Warnings = append(report.Warnings, ConvertWarning{Code: w.Code, Message: w.Message, Page: w.Page})
 	}
 	return report, nil
+}
+
+// convertHTML lays an HTML source out, mapping the HTML converter's errors
+// onto the public sentinels: its option errors to
+// [ErrInvalidConvertOptions], every cap on the document's size or
+// complexity to [ErrConvertInputTooLarge], its page cap to
+// [ErrConvertTooManyPages].
+func convertHTML(ctx context.Context, src io.Reader, fonts *text.Fonts, o *convertOptions, maxBytes int64, maxPages int) (*compose.Document, error) {
+	doc, err := htmlconv.Convert(ctx, src, fonts, htmlconv.Options{
+		PageWidth:     o.width,
+		PageHeight:    o.height,
+		MarginTop:     o.marginTop,
+		MarginRight:   o.marginRight,
+		MarginBottom:  o.marginBottom,
+		MarginLeft:    o.marginLeft,
+		Media:         o.media,
+		Resources:     o.resources,
+		MaxInputBytes: maxBytes,
+		MaxPages:      maxPages,
+		Logger:        o.logger,
+	})
+	switch {
+	case err == nil:
+		return doc, nil
+	case errors.Is(err, htmlconv.ErrInvalidOptions):
+		return nil, fmt.Errorf("converting HTML: %w: %w", ErrInvalidConvertOptions, err)
+	case errors.Is(err, htmlconv.ErrInputTooLarge), errors.Is(err, htmlconv.ErrTooManyElements), errors.Is(err, htmlconv.ErrTooDeep),
+		errors.Is(err, css.ErrTooComplex), errors.Is(err, layout.ErrTooManyBoxes):
+		return nil, fmt.Errorf("converting HTML: %w: %w", ErrConvertInputTooLarge, err)
+	case errors.Is(err, htmlconv.ErrTooManyPages):
+		return nil, fmt.Errorf("converting HTML: %w: %w", ErrConvertTooManyPages, err)
+	default:
+		return nil, fmt.Errorf("converting HTML: %w", err)
+	}
 }
 
 // maxConvertFontIndexes bounds the font indexes [convertFonts] keeps, one per

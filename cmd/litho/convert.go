@@ -15,18 +15,21 @@ import (
 )
 
 // convertUsage is the synopsis litho convert prints on a missing argument.
-const convertUsage = "Usage: litho convert [--from text] [--paper A4|Letter|WxH] [--margin PT | --margin T,R,B,L] " +
-	"[--font FAMILY] [--font-size PT] [--font-dir DIR]... [-f json] -o out.pdf <file>"
+const convertUsage = "Usage: litho convert [--from text|html] [--paper A4|Letter|WxH] [--margin PT | --margin T,R,B,L] " +
+	"[--font FAMILY] [--font-size PT] [--media print|screen] [--resources DIR] [--font-dir DIR]... [-f json] -o out.pdf <file>"
 
 // convertFormats maps the --from values, and the file extensions that imply
 // them, to the formats [pdf.Convert] reads. Immutable lookup tables.
 var (
 	convertFormats = map[string]pdf.Format{
 		"text": pdf.FormatText,
+		"html": pdf.FormatHTML,
 	}
 	convertExtensions = map[string]pdf.Format{
 		".txt":  pdf.FormatText,
 		".text": pdf.FormatText,
+		".html": pdf.FormatHTML,
+		".htm":  pdf.FormatHTML,
 	}
 )
 
@@ -103,11 +106,11 @@ func (f *marginFlag) Set(value string) error {
 	return nil
 }
 
-// runConvert converts a plain text file to a tagged PDF.
+// runConvert converts a plain text or HTML file to a tagged PDF.
 func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("convert", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	from := fs.String("from", "", "Input format: text. Without it, the file extension decides: .txt and .text are text")
+	from := fs.String("from", "", "Input format: text or html. Without it, the file extension decides: .txt and .text are text, .html and .htm are html")
 	output := fs.String("o", "", "Output file (required), - for stdout")
 	format := fs.String("f", "text", "Report format: text (warnings on stderr) or json (the report on stdout)")
 	var paper pageSizeFlag
@@ -115,8 +118,10 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	var margin marginFlag
 	fs.Var(&margin, "margin", "Margins in points: one for every side, or top,right,bottom,left (default 56.693, 2 cm)")
 	var fonts stringsFlag
-	fs.Var(&fonts, "font", "Font family, repeatable in preference order (default Liberation Serif, then serif)")
-	fontSize := fs.Float64("font-size", 0, "Font size in points (default 12)")
+	fs.Var(&fonts, "font", "Font family of a text file, repeatable in preference order (default Liberation Serif, then serif); HTML takes its fonts from its CSS")
+	fontSize := fs.Float64("font-size", 0, "Font size in points of a text file (default 12); HTML takes its sizes from its CSS")
+	media := fs.String("media", "print", "Media type the stylesheets of an HTML file are evaluated for: print or screen")
+	resources := fs.String("resources", "", "Directory an HTML file's relative URLs (stylesheets, images) are read from (default: the input file's directory; none for standard input)")
 	var fontDirs stringsFlag
 	fs.Var(&fontDirs, "font-dir", "Directory of font files, searched recursively; repeatable. Without it, the system font directories")
 
@@ -151,7 +156,42 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 	}
 
+	if *media != "print" && *media != "screen" {
+		fmt.Fprintf(stderr, "invalid --media %q: expected print or screen\n", *media)
+		return exitError
+	}
+	resDir := *resources
+	if resDir == "" && input != "-" {
+		resDir = filepath.Dir(input)
+	}
+	if inFormat != pdf.FormatHTML {
+		resDir = ""
+	}
+	if resDir != "" {
+		if info, err := os.Stat(resDir); err != nil {
+			fmt.Fprintf(stderr, "--resources: %v\n", err)
+			return exitError
+		} else if !info.IsDir() {
+			fmt.Fprintf(stderr, "--resources: %s is not a directory\n", resDir)
+			return exitError
+		}
+	}
+
 	opts := []pdf.ConvertOption{pdf.WithConvertFontDirs(fontDirs...), pdf.WithFontFamilies(fonts...), pdf.WithFontSize(*fontSize)}
+	if inFormat == pdf.FormatHTML {
+		opts = append(opts, pdf.WithMediaType(*media))
+		if resDir != "" {
+			// An os.Root refuses a path or a symbolic link that leaves
+			// resDir, so the document reads nothing outside it.
+			root, err := os.OpenRoot(resDir)
+			if err != nil {
+				fmt.Fprintf(stderr, "--resources: %v\n", err)
+				return exitError
+			}
+			defer root.Close() //nolint:errcheck // read-only directory handle
+			opts = append(opts, pdf.WithResources(root.FS()))
+		}
+	}
 	if paper.set {
 		opts = append(opts, pdf.WithPaperSize(paper.width, paper.height))
 	}
@@ -215,17 +255,17 @@ func convertFormat(from, path string) (pdf.Format, error) {
 	if from != "" {
 		f, ok := convertFormats[strings.ToLower(from)]
 		if !ok {
-			return "", fmt.Errorf("unsupported --from %q: litho convert reads text", from)
+			return "", fmt.Errorf("unsupported --from %q: litho convert reads text and html", from)
 		}
 		return f, nil
 	}
 	if path == "-" {
-		return "", errors.New("standard input has no extension to tell its format: pass --from text")
+		return "", errors.New("standard input has no extension to tell its format: pass --from text or --from html")
 	}
 	ext := strings.ToLower(filepath.Ext(path))
 	f, ok := convertExtensions[ext]
 	if !ok {
-		return "", fmt.Errorf("cannot tell the format of %s from its extension %q: pass --from text", path, ext)
+		return "", fmt.Errorf("cannot tell the format of %s from its extension %q: pass --from text or --from html", path, ext)
 	}
 	return f, nil
 }

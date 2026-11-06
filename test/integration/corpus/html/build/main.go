@@ -10,7 +10,8 @@
 //	go run ./test/integration/corpus/html/build
 //
 // Each source is converted twice and the build fails when the two runs write
-// different bytes or when the conversion reports a warning.
+// different bytes. The warnings of a conversion are printed: they name what
+// litho does not draw yet, which the diff feature scores.
 package main
 
 import (
@@ -130,7 +131,7 @@ func buildOne(ctx context.Context, source, outDir string, fontDirs []string) err
 		for _, w := range report.Warnings {
 			msgs = append(msgs, fmt.Sprintf("%s on page %d: %s", w.Code, w.Page, w.Message))
 		}
-		return fmt.Errorf("converting %s: %d warnings:\n  %s", base, len(msgs), strings.Join(msgs, "\n  "))
+		fmt.Printf("  html: %s: %d warnings:\n    %s\n", base, len(msgs), strings.Join(msgs, "\n    "))
 	}
 	second, _, err := convert(ctx, src, opts)
 	if err != nil {

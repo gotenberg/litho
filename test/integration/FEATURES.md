@@ -139,7 +139,7 @@ The cell compares two runs in one process, so a process-wide cache whose content
 
 ### Converter oracles
 
-Three corpora score litho's HTML converter (`pdf.Convert` with `pdf.FormatHTML`) rather than litho's reading of a PDF. Their fixtures are source documents, listed by the manifest's `inputs` (see the [manifest schema](README.md#manifest-schema)), and each cell converts them live, so it measures the converter of the tree it runs in. Until the converter lands, `pdf.Convert` refuses the format and every fixture of the three cells is an `error`; the cells, the baseline and `corpus check` work the same, and the first converter change that draws anything reads as improvements. A conversion error never fails a run: it is the fixture's outcome, counted in `convert_error` (a cost metric).
+Three corpora score litho's HTML converter (`pdf.Convert` with `pdf.FormatHTML`) rather than litho's reading of a PDF. Their fixtures are source documents, listed by the manifest's `inputs` (see the [manifest schema](README.md#manifest-schema)), and each cell converts them live, so it measures the converter of the tree it runs in. A conversion error never fails a run: it is the fixture's outcome, counted in `convert_error` (a cost metric).
 
 Each of the three writes, for a failing fixture, a PNG into the report directory (`--report-dir`, by default `test/integration/testdata/reports/<corpus>/<feature>/`): litho's drawing, the reference and a heatmap of the reference faded to grey with each differing pixel in red, side by side.
 

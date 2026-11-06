@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<!doctype html><html lang=en><style>@page{margin:1cm} h1{color:blue}</style><h1>Title</h1><p>Hello <a href=\x22#x\x22>link</a><br>world</p><ul><li>a<li>b</ul><table><tr><td>1<td>2</table><p id=x>end")

@@ -2,14 +2,14 @@
 
 HTML sources converted twice: by Chromium, through the Chromium route of the Gotenberg image `GOTENBERG_IMAGE` in `corpus/versions.env` pins, and by litho. The `diff` feature scores litho's conversion against Chromium's (see `FEATURES.md`). Each source is a self-contained directory, `sources/<name>/index.html` with the files it names beside it.
 
-| Path            | What it holds                                                                                                    |
-| --------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `sources/`      | The 12 sources                                                                                                   |
-| `chromium/`     | Chromium's PDF of each source, the reference (`make html-chromium`, committed)                                   |
-| `pdfs/`         | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them)                      |
-| `chromium.sh`   | Posts each source to the Gotenberg image and writes `chromium/<name>.pdf`                                        |
-| `build/main.go` | Converts each source with `pdf.Convert` twice and writes `pdfs/<name>.pdf`, failing on a difference or a warning |
-| `download.sh`   | Installs `chromium/*.pdf` as the corpus PDFs the provisioning image derives the diff goldens from                |
+| Path            | What it holds                                                                                                                 |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `sources/`      | The 12 sources                                                                                                                |
+| `chromium/`     | Chromium's PDF of each source, the reference (`make html-chromium`, committed)                                                |
+| `pdfs/`         | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them)                                   |
+| `chromium.sh`   | Posts each source to the Gotenberg image and writes `chromium/<name>.pdf`                                                     |
+| `build/main.go` | Converts each source with `pdf.Convert` twice and writes `pdfs/<name>.pdf`, failing on a difference and printing the warnings |
+| `download.sh`   | Installs `chromium/*.pdf` as the corpus PDFs the provisioning image derives the diff goldens from                             |
 
 ## Sources
 
@@ -50,4 +50,4 @@ runs `chromium.sh`, which starts the pinned image on a free loopback port and po
 make html-fixtures
 ```
 
-fetches the fixture fonts (`compose/fetch-fonts.sh`) and runs `build/main.go`, which converts each source at A4, 0.39 inch margins, print media, the source's directory as the resource root and the Liberation, DejaVu and Noto Sans CJK fixture fonts alone. It converts each twice and fails on a byte difference or a warning. Until the HTML converter lands it fails on every source, and `pdfs/` stays empty; the diff feature converts the sources itself and does not read `pdfs/`, which is there for review and for the oracles that read committed PDFs.
+fetches the fixture fonts (`compose/fetch-fonts.sh`) and runs `build/main.go`, which converts each source at A4, 0.39 inch margins, print media, the source's directory as the resource root and the Liberation, DejaVu and Noto Sans CJK fixture fonts alone. It converts each twice, fails on a byte difference and prints each conversion's warnings, which name what litho does not draw yet. The diff feature converts the sources itself and does not read `pdfs/`, which is there for review and for the oracles that read committed PDFs.
