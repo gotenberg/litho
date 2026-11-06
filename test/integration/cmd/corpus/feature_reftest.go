@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -49,6 +50,9 @@ type reftestEntry struct {
 	Print     bool         `json:"print"`
 	Resources []string     `json:"resources"`
 	Refs      []reftestRef `json:"refs"`
+	// Pages is WPT's <meta name="reftest-pages"> of a print reftest: the
+	// test's pages compared, as "2" or "1,3-5". Empty compares every page.
+	Pages string `json:"pages,omitempty"`
 }
 
 // reftestRef is one reference of a test: the file, whether the test must
@@ -141,6 +145,9 @@ func (f *reftestFeature) LoadGoldens(dir string) error {
 		if !validInputID(e.ID) || len(e.Refs) == 0 {
 			return fmt.Errorf("reftests.json: entry %q has no valid id or no reference", e.ID)
 		}
+		if _, err := parseReftestPages(e.Pages); err != nil {
+			return fmt.Errorf("reftests.json: %s: %w", e.ID, err)
+		}
 		for _, r := range e.Refs {
 			if !validInputID(r.Path) || (r.Rel != "match" && r.Rel != "mismatch") || (len(r.Fuzzy) != 0 && len(r.Fuzzy) != 4) {
 				return fmt.Errorf("reftests.json: %s has an invalid reference %+v", e.ID, r)
@@ -202,6 +209,13 @@ func (f *reftestFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]
 		}
 		return json.Marshal(reftestOutput{Outcome: outcomeError, Reason: "test: " + err.Error()})
 	}
+	if t.Print && t.Pages != "" {
+		ranges, err := parseReftestPages(t.Pages)
+		if err != nil {
+			return json.Marshal(reftestOutput{Outcome: outcomeError, Reason: "test: " + err.Error()})
+		}
+		testPages = selectReftestPages(testPages, ranges)
+	}
 	out := reftestOutput{}
 	hasMatch, matched, mismatchOK := false, false, true
 	var failure *reftestFailure
@@ -244,6 +258,78 @@ func (f *reftestFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]
 		f.report(fixtureID, failure)
 	}
 	return json.Marshal(out)
+}
+
+// maxReftestPage bounds a page number of a reftest-pages range. Anti-DoS
+// guard, not spec-mandated: a print reftest runs to a few pages, and
+// renderPDF draws at most maxConvertedPages.
+const maxReftestPage = maxConvertedPages
+
+// reftestPageRange is one range of a reftest-pages value, first to last
+// page inclusive, one-based.
+type reftestPageRange struct{ first, last int }
+
+// parseReftestPages parses WPT's reftest-pages syntax: ranges separated by
+// commas, each "N", "N-M", "N-" (to the last page) or "-M" (from the first),
+// with white space allowed around each number. Empty selects every page.
+// A page number below 1, a range whose start exceeds its end, and anything
+// else is an error.
+func parseReftestPages(spec string) ([]reftestPageRange, error) {
+	if strings.TrimSpace(spec) == "" {
+		return nil, nil
+	}
+	var out []reftestPageRange
+	for part := range strings.SplitSeq(spec, ",") {
+		lo, hi, isRange := strings.Cut(part, "-")
+		num := func(s string, def int) (int, error) {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				return def, nil
+			}
+			n, err := strconv.Atoi(s)
+			if err != nil || n < 1 || n > maxReftestPage {
+				return 0, fmt.Errorf("reftest-pages %q: page %q is not a number in [1, %d]", spec, s, maxReftestPage)
+			}
+			return n, nil
+		}
+		first, err := num(lo, 1)
+		if err != nil {
+			return nil, err
+		}
+		last := first
+		if isRange {
+			if last, err = num(hi, maxReftestPage); err != nil {
+				return nil, err
+			}
+		} else if strings.TrimSpace(lo) == "" {
+			return nil, fmt.Errorf("reftest-pages %q: empty range", spec)
+		}
+		if first > last {
+			return nil, fmt.Errorf("reftest-pages %q: range %q starts after it ends", spec, part)
+		}
+		out = append(out, reftestPageRange{first, last})
+	}
+	return out, nil
+}
+
+// selectReftestPages keeps the pages the ranges name, in page order, each
+// once, as WPT's runner does; a page past the last is ignored. No range
+// keeps every page.
+func selectReftestPages(pages []image.Image, ranges []reftestPageRange) []image.Image {
+	if len(ranges) == 0 {
+		return pages
+	}
+	var out []image.Image
+	for i, p := range pages {
+		n := i + 1
+		for _, r := range ranges {
+			if n >= r.first && n <= r.last {
+				out = append(out, p)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // reftestFailure is the page pair a failing comparison is drawn from.

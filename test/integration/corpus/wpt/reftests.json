@@ -5453,6 +5453,7 @@
   },
   {
     "id": "css/css-page/subpixel-page-size-001-print.html",
+    "pages": "2",
     "print": true,
     "refs": [
       {

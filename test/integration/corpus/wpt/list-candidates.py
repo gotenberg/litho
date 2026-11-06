@@ -129,11 +129,12 @@ CSS_URL = re.compile(r"""url\(\s*(['"]?)([^'")]+)\1\s*\)|@import\s+(['"])([^'"]+
 
 
 class Scan(html.parser.HTMLParser):
-    """Collects references, fuzzy metadata, flags and resource URLs."""
+    """Collects references, fuzzy and reftest-pages metadata, flags and resource URLs."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.match, self.mismatch, self.fuzzy, self.flags = [], [], [], set()
+        self.pages = ""
         self.urls, self.styles = [], []
         self.in_style = False
         self.print_class = False
@@ -152,6 +153,8 @@ class Scan(html.parser.HTMLParser):
             name = a.get("name", "").lower()
             if name == "fuzzy":
                 self.fuzzy.append(a.get("content", ""))
+            elif name == "reftest-pages":
+                self.pages = a.get("content", "").strip()
             elif name == "flags":
                 self.flags.update(a.get("content", "").split())
         elif tag == "img":
@@ -320,12 +323,17 @@ def candidates(root):
                 if reason:
                     rejected[reason.split(":")[-1].strip()] = rejected.get(reason.split(":")[-1].strip(), 0) + 1
                     continue
-                out.append({
+                entry = {
                     "id": rel,
                     "print": is_print(rel, scan),
                     "resources": resources,
                     "refs": refs,
-                })
+                }
+                if scan.pages:
+                    # WPT's reftest-pages: the test's pages compared, in
+                    # the order listed; the reference's are all compared.
+                    entry["pages"] = scan.pages
+                out.append(entry)
     return out, rejected
 
 

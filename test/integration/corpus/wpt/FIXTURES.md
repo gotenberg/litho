@@ -4,7 +4,7 @@ Reftests from [web-platform-tests](https://github.com/web-platform-tests/wpt) at
 
 | File                 | What it holds                                                                                                                                               |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reftests.json`      | The 569 tests: each test's WPT path, whether it is a print reftest, its resources, and each reference with its relation and fuzziness                       |
+| `reftests.json`      | The 569 tests: each test's WPT path, whether it is a print reftest, its pages compared, its resources, and each reference with its relation and fuzziness   |
 | `files.sha256`       | Every file the tests read (tests, references, their stylesheets and images, `LICENSE.md`, `fonts/Ahem.ttf`): 1009 lines of `<sha256>  <WPT path>`           |
 | `list-candidates.py` | The selection script: reads a WPT checkout and writes `reftests.json` (standard library only)                                                               |
 | `fetch.sh`           | Downloads each listed file from `raw.githubusercontent.com` at the pinned commit, refuses one whose hash differs, and records the commit in `versions.json` |
@@ -47,7 +47,7 @@ That leaves 2860 candidates. Each area then keeps at most its cap, the candidate
 | `css/css-text`                  | 120   |                |
 | Total                           | 569   | 70             |
 
-17 tests have a mismatch reference, 14 more than one reference, and 18 declare a fuzziness. 167 are XHTML files that parse as HTML.
+17 tests have a mismatch reference, 14 more than one reference, and 18 declare a fuzziness. Every fuzziness of the selection allows from 0 differences, so the cell, which checks only the upper bounds, decides no test otherwise than WPT would on them. One test, `css/css-page/subpixel-page-size-001-print.html`, declares `<meta name="reftest-pages" content="2">`: `list-candidates.py` writes it as the entry's `pages`, and the cell compares only that page of the test with the reference, as WPT's runner does. 167 are XHTML files that parse as HTML.
 
 To list the candidates again, at the pinned commit or a new one:
 
