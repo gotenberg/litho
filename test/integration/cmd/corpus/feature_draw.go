@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // drawDPI is the resolution the WeasyPrint draw tests are drawn at: their
@@ -196,6 +198,10 @@ func (f *drawFeature) Run(ctx context.Context, _, fixtureID string) ([]byte, err
 		Left:      0,
 		Resources: os.DirFS(resources),
 		FontDirs:  fonts,
+		// WeasyPrint's @page size is the page, and WeasyPrint shrinks
+		// nothing to fit it.
+		PreferCSSPageSize: true,
+		Print:             []pdf.ConvertOption{pdf.WithShrinkToFit(false)},
 	})
 	if err == nil {
 		var pages []image.Image
