@@ -123,6 +123,10 @@ func overflowRight(rb *box) float64 {
 		if b.kind == kindBlock || b.kind == kindReplaced {
 			right = max(right, clamp(b.x+b.borderW()))
 		}
+		if b.kind == kindBlock && b.parent != nil && b.st.Overflow == css.OverflowHidden && b != vp {
+			// The box clips its content: its border box alone counts.
+			continue
+		}
 		for _, l := range b.lines {
 			for _, it := range l.items {
 				right = max(right, clamp(l.x+it.x+it.w))
@@ -130,9 +134,6 @@ func overflowRight(rb *box) float64 {
 			for _, f := range l.frags {
 				right = max(right, clamp(l.x+f.x1))
 			}
-		}
-		if b.kind == kindBlock && b.parent != nil && b.st.Overflow == css.OverflowHidden && b != vp {
-			continue
 		}
 		stack = append(stack, b.kids...)
 	}

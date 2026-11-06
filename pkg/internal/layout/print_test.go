@@ -21,6 +21,7 @@ func TestContentWidth_ScrollableOverflow(t *testing.T) {
 		{"unbreakable line", doc(para(white)(1), el(sty(), txt(sty(white), "aaaaa"))), px(50)},
 		{"inline block past the edge", doc(el(sty(), el(sty(display(css.InlineBlock), width(35), height(5))))), px(35)},
 		{"clipped by a box", doc(el(sty(width(10), hidden), el(sty(width(80), height(5))))), px(20)},
+		{"lines clipped by their box", doc(el(sty(width(10), hidden, white), txt(sty(white), "aaaaaaaa"))), px(20)},
 		{"margin-left moves the box", doc(el(sty(margin(0, 0, 0, 15), width(10), height(5)))), px(25)},
 		{"floats count", doc(el(sty(float(css.FloatLeft), width(30), height(5)))), px(30)},
 	}
