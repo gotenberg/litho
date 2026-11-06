@@ -56,6 +56,8 @@ type pageWriter struct {
 	xobjNames map[*ImageSource]string
 	gstates   []gsUse
 	gsNames   map[alphaState]string
+	shadings  []shUse
+	masks     []maskUse
 	// alpha is a stack mirroring q/Q: its top is the alpha in force.
 	alpha []alphaState
 
@@ -361,6 +363,15 @@ func (p *pageWriter) path(ctx context.Context, pa *Path, opacity float64) error 
 	if len(pa.Ops) == 0 || (pa.Fill == nil && pa.Stroke == nil) {
 		return nil
 	}
+	if pa.Fill != nil && pa.Fill.Shading != nil {
+		if err := p.shadingFill(ctx, pa, opacity); err != nil {
+			return err
+		}
+		if pa.Stroke == nil {
+			return nil
+		}
+		pa = &Path{Ops: pa.Ops, Stroke: pa.Stroke, Parent: pa.Parent}
+	}
 	p.mark(pa.Parent)
 	a := p.currentAlpha()
 	if pa.Fill != nil {
@@ -485,7 +496,7 @@ func (p *pageWriter) resources() ast.PdfDict {
 		}
 		res["XObject"] = xobjs
 	}
-	if len(p.gstates) > 0 {
+	if len(p.gstates) > 0 || len(p.masks) > 0 {
 		gs := ast.PdfDict{}
 		for _, g := range p.gstates {
 			gs[ast.PdfName(g.name)] = ast.PdfDict{
@@ -494,7 +505,22 @@ func (p *pageWriter) resources() ast.PdfDict {
 				"CA":   pdfReal(g.alpha.stroke),
 			}
 		}
+		for _, m := range p.masks {
+			gs[ast.PdfName(m.name)] = ast.PdfDict{
+				"Type":  ast.PdfName("ExtGState"),
+				"ca":    pdfReal(m.alpha.fill),
+				"CA":    pdfReal(m.alpha.stroke),
+				"SMask": m.smask,
+			}
+		}
 		res["ExtGState"] = gs
+	}
+	if len(p.shadings) > 0 {
+		sh := ast.PdfDict{}
+		for _, s := range p.shadings {
+			sh[ast.PdfName(s.name)] = s.ref
+		}
+		res["Shading"] = sh
 	}
 	return res
 }

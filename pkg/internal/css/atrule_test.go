@@ -308,3 +308,31 @@ func TestParse_RecoversFromErrors(t *testing.T) {
 		t.Errorf("unclosed @media lost its rule")
 	}
 }
+
+func TestPage_Background(t *testing.T) {
+	t.Parallel()
+	css := `
+@page { background: linear-gradient(currentcolor, red) no-repeat; background-origin: border-box }
+@page :first { background-color: blue; background-size: 1em }
+`
+	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, css), Origin: Author}})
+	first := r.Page(PageSelector{First: true})
+	bg := first.Background
+	if bg == nil {
+		t.Fatal("no page background")
+	}
+	g := bg.BackgroundGradient
+	if g == nil || len(g.Stops) != 2 || !colorEq(g.Stops[0].Color, rgb(0, 0, 0)) || !colorEq(g.Stops[1].Color, rgb(255, 0, 0)) {
+		t.Errorf("page gradient %+v", g)
+	}
+	if !colorEq(bg.BackgroundColor, rgb(0, 0, 255)) || bg.BackgroundRepeat != [2]Repeat{RepeatNoRepeat, RepeatNoRepeat} ||
+		bg.BackgroundOrigin != BorderEdge || !dimEq(bg.BackgroundSize.Width, pts(12)) {
+		t.Errorf("page background %+v %+v %v %+v", bg.BackgroundColor, bg.BackgroundRepeat, bg.BackgroundOrigin, bg.BackgroundSize)
+	}
+	if bg.Display != initialStyle.Display || bg.FontSize != initialStyle.FontSize {
+		t.Error("page background style is not initial outside the background")
+	}
+	if NewResolver(a4, nil).Page(PageSelector{}).Background != nil {
+		t.Error("background without rules")
+	}
+}

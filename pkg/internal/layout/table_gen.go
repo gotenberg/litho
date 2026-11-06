@@ -238,6 +238,7 @@ func wrapperStyle(st *css.Style) *css.Style {
 	w.Padding = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
 	w.BackgroundColor = css.Transparent
 	w.BackgroundImage = ""
+	w.BackgroundGradient = nil
 	w.Width, w.Height = css.Dimension{}, css.Dimension{}
 	w.MinWidth, w.MinHeight = css.Pts(0), css.Pts(0)
 	w.MaxWidth, w.MaxHeight = css.Dimension{Kind: css.None}, css.Dimension{Kind: css.None}

@@ -96,6 +96,9 @@ func randomDoc(rng *rand.Rand, font *embed.Font) *compose.Document {
 				p := &compose.Path{Ops: rect(rng.Float64()*500, rng.Float64()*700, rng.Float64()*100, rng.Float64()*100), Parent: parent()}
 				if rng.Intn(2) == 0 {
 					p.Fill = &compose.Fill{Color: color(), Rule: compose.FillRule(rng.Intn(2))}
+					if rng.Intn(2) == 0 {
+						p.Fill.Shading = randomShading(rng, color)
+					}
 				}
 				if rng.Intn(2) == 0 {
 					p.Stroke = &compose.Stroke{Color: color(), Width: rng.Float64() * 5, Cap: compose.LineCap(rng.Intn(3)), Join: compose.LineJoin(rng.Intn(3)), Dash: []float64{1 + rng.Float64(), rng.Float64()}}
@@ -137,4 +140,31 @@ func randomDoc(rng *rand.Rand, font *embed.Font) *compose.Document {
 		doc.Outline = append(doc.Outline, o)
 	}
 	return doc
+}
+
+// randomShading returns an axial or radial shading of a few stops, some
+// translucent, some sharing an offset.
+func randomShading(rng *rand.Rand, color func() compose.Color) *compose.Shading {
+	sh := &compose.Shading{
+		Kind:     compose.ShadingKind(rng.Intn(2)),
+		From:     compose.Point{X: rng.Float64() * 500, Y: rng.Float64() * 700},
+		To:       compose.Point{X: rng.Float64() * 500, Y: rng.Float64() * 700},
+		ToRadius: 1 + rng.Float64()*100, FromRadius: rng.Float64() * 10,
+		Transform: compose.Matrix{A: 0.5 + rng.Float64(), B: rng.Float64() - 0.5, D: 0.5 + rng.Float64(), E: rng.Float64() * 20},
+	}
+	n := 2 + rng.Intn(5)
+	off := 0.0
+	for i := range n {
+		if i == n-1 {
+			off = 1
+		} else if i > 0 && rng.Intn(3) > 0 {
+			off += (1 - off) * rng.Float64()
+		}
+		c := color()
+		if i == 0 {
+			c.A = 1
+		}
+		sh.Stops = append(sh.Stops, compose.ColorStop{Offset: off, Color: c})
+	}
+	return sh
 }

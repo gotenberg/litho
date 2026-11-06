@@ -161,6 +161,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 	perPage := e.distribute(d, 0, n, used, free)
 	for k := range n {
 		pg := &compose.Page{Width: pb.Width, Height: pb.Height}
+		e.paintPageBackground(pg)
 		e.paintCanvas(pg, canvas)
 		top := float64(k) * e.pageH
 		frags := perPage[k]
@@ -400,22 +401,54 @@ func (e *engine) paintCanvas(pg *compose.Page, canvas *box) {
 	if c, ok := colorOf(st.BackgroundColor); ok {
 		pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(whole), Fill: &compose.Fill{Color: c}})
 	}
-	if st.BackgroundImage == "" {
-		return
-	}
-	pic := e.picture(st.BackgroundImage, -1)
-	if pic == nil {
-		return
-	}
 	pb := e.opts.Page
 	area := compose.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: e.pageW, Height: e.pageH}
+	e.paintPageLayer(pg, st, area)
+}
+
+// paintPageLayer paints the background image or gradient of st over the
+// whole page pg, positioned in area.
+func (e *engine) paintPageLayer(pg *compose.Page, st *css.Style, area compose.Rect) {
+	whole := compose.Rect{Width: pg.Width, Height: pg.Height}
 	g := &compose.Group{Transform: compose.Identity, Opacity: 1, Clip: &compose.Path{Ops: rectOps(whole), Fill: &compose.Fill{}}}
-	for _, t := range e.tiles(st, pic, area, whole, -1) {
-		g.Content = append(g.Content, &compose.Image{Rect: t, Source: pic.Source})
+	switch {
+	case st.BackgroundGradient != nil:
+		for _, pa := range e.gradientTiles(st, area, whole, -1) {
+			g.Content = append(g.Content, pa)
+		}
+	case st.BackgroundImage != "":
+		pic := e.picture(st.BackgroundImage, -1)
+		if pic == nil {
+			return
+		}
+		for _, t := range e.tiles(st, pic, area, whole, -1) {
+			g.Content = append(g.Content, &compose.Image{Rect: t, Source: pic.Source})
+		}
 	}
 	if len(g.Content) > 0 {
 		pg.Content = append(pg.Content, g)
 	}
+}
+
+// paintPageBackground paints the page box's own background on pg, under
+// the canvas (CSS Page 3, page backgrounds and painting order): its colour
+// over the whole page, its image or gradient positioned in the page box's
+// area, the page inside its margins, which has no border or padding. A
+// root element that generates no box leaves the page blank, background
+// included, as browsers print it (WPT css-page,
+// root-element-display-none-print).
+func (e *engine) paintPageBackground(pg *compose.Page) {
+	st := e.opts.Page.Background
+	if st == nil || (e.rootBox != nil && e.rootBox.node != nil && e.rootBox.st.Display == css.DisplayNone) {
+		return
+	}
+	whole := compose.Rect{Width: pg.Width, Height: pg.Height}
+	if c, ok := colorOf(st.BackgroundColor); ok {
+		pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(whole), Fill: &compose.Fill{Color: c}})
+	}
+	pb := e.opts.Page
+	area := compose.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: e.pageW, Height: e.pageH}
+	e.paintPageLayer(pg, st, area)
 }
 
 // dest converts a flow position to a destination.

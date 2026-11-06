@@ -145,7 +145,7 @@ func (p *painter) clips(a *box) bool {
 
 // hasBackground reports a style that paints a background.
 func hasBackground(st *css.Style) bool {
-	return st.BackgroundColor.A > 0 || st.BackgroundImage != ""
+	return st.BackgroundColor.A > 0 || st.BackgroundImage != "" || st.BackgroundGradient != nil
 }
 
 // cur returns the current frame.

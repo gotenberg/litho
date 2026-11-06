@@ -82,6 +82,20 @@ func TestValidateRefuses(t *testing.T) {
 		{"negative dash", page(&Path{Ops: square(), Stroke: &Stroke{Color: Black, Dash: []float64{3, -1}}}), ErrInvalidPath},
 		{"fill color", page(&Path{Ops: square(), Fill: &Fill{Color: Color{G: -0.1, A: 1}}}), ErrInvalidColor},
 		{"stroke alpha", page(&Path{Ops: square(), Stroke: &Stroke{Color: Color{A: nan}}}), ErrInvalidColor},
+		{"shading kind", page(shaded(&Shading{Kind: 7, To: Point{X: 1}, Stops: twoStops()})), ErrInvalidShading},
+		{"axial without length", page(shaded(&Shading{Stops: twoStops()})), ErrInvalidShading},
+		{"radial equal circles", page(shaded(&Shading{Kind: Radial, FromRadius: 2, ToRadius: 2, Stops: twoStops()})), ErrInvalidShading},
+		{"radial zero radii", page(shaded(&Shading{Kind: Radial, To: Point{X: 1}, Stops: twoStops()})), ErrInvalidShading},
+		{"negative radius", page(shaded(&Shading{Kind: Radial, FromRadius: -1, ToRadius: 2, Stops: twoStops()})), ErrInvalidShading},
+		{"NaN shading point", page(shaded(&Shading{To: Point{X: nan}, Stops: twoStops()})), ErrInvalidShading},
+		{"singular shading transform", page(shaded(&Shading{To: Point{X: 1}, Stops: twoStops(), Transform: Matrix{A: 1, B: 1, C: 1, D: 1}})), ErrInvalidShading},
+		{"one stop", page(shaded(&Shading{To: Point{X: 1}, Stops: twoStops()[:1]})), ErrInvalidShading},
+		{"stops not from 0", page(shaded(&Shading{To: Point{X: 1}, Stops: []ColorStop{{Offset: 0.1, Color: Black}, {Offset: 1, Color: Black}}})), ErrInvalidShading},
+		{"stops out of order", page(shaded(&Shading{To: Point{X: 1}, Stops: []ColorStop{{Color: Black}, {Offset: 0.6, Color: Black}, {Offset: 0.4, Color: Black}, {Offset: 1, Color: Black}}})), ErrInvalidShading},
+		{"NaN stop", page(shaded(&Shading{To: Point{X: 1}, Stops: []ColorStop{{Color: Black}, {Offset: nan, Color: Black}, {Offset: 1, Color: Black}}})), ErrInvalidShading},
+		{"stop color", page(shaded(&Shading{To: Point{X: 1}, Stops: []ColorStop{{Color: Color{R: 2, A: 1}}, {Offset: 1, Color: Black}}})), ErrInvalidColor},
+		{"invisible shading", page(shaded(&Shading{To: Point{X: 1}, Stops: []ColorStop{{}, {Offset: 1}}})), ErrInvalidShading},
+		{"too many stops", page(shaded(&Shading{To: Point{X: 1}, Stops: make([]ColorStop, maxShadingStops+1)})), ErrLimitExceeded},
 		{"opacity above 1", page(&Group{Opacity: 1.5}), ErrInvalidGroup},
 		{"negative opacity", page(&Group{Opacity: -0.5}), ErrInvalidGroup},
 		{"NaN opacity", page(&Group{Opacity: nan}), ErrInvalidGroup},
@@ -205,4 +219,14 @@ func TestValidateAcceptsTheDeepestGroups(t *testing.T) {
 	if err := doc.Validate(); err != nil {
 		t.Errorf("Validate = %v", err)
 	}
+}
+
+// shaded returns a square filled with sh.
+func shaded(sh *Shading) *Path {
+	return &Path{Ops: square(), Fill: &Fill{Shading: sh}}
+}
+
+// twoStops returns opaque black to opaque white.
+func twoStops() []ColorStop {
+	return []ColorStop{{Color: Black}, {Offset: 1, Color: Color{R: 1, G: 1, B: 1, A: 1}}}
 }

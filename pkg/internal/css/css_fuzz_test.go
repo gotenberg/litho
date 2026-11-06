@@ -22,6 +22,7 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte(fuzzSheet))
 	f.Add([]byte(fuzzSheet[:len(fuzzSheet)/2]))
 	f.Add([]byte("p{a:(((((((((("))
+	f.Add([]byte("@page { background: linear-gradient(45deg, red 10%, 40%, blue) 0 0 / 50% auto } p { background: radial-gradient(circle 4px at left, red, blue 2px 3px) }"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		fetch := func(context.Context, string) ([]byte, error) { return data, nil }
 		s, err := Parse(context.Background(), data, ParseOptions{BaseURL: "https://e.com/s.css", Fetch: fetch})
@@ -38,6 +39,7 @@ func FuzzParseDeclarations(f *testing.F) {
 	f.Add("color: red !important; margin: 1px 2px; --x: { a }; width: var(--x, 3px); background: url(a) 50% / 10px")
 	f.Add("font: bold 1")
 	f.Add("transform: rotate(1turn) translate(1px, 2%) skewY(3deg) matrix(1, 2, 3, 4, 5, 6); z-index: -3; transform-origin: left 1px 2px")
+	f.Add("background: repeating-radial-gradient(ellipse closest-side at 10% 20px, red 0 1em, 30%, blue 2px) no-repeat; background-image: linear-gradient(to top left, currentcolor, 1turn)")
 	f.Add("border: 1px solid rgb(")
 	f.Fuzz(func(t *testing.T, src string) {
 		ParseDeclarations(src, ParseOptions{BaseURL: "https://e.com/"})

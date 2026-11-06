@@ -188,10 +188,69 @@ const (
 	EvenOdd
 )
 
-// Fill paints a path's interior.
+// Fill paints a path's interior with a flat colour or, when Shading is set,
+// a smooth colour transition.
 type Fill struct {
+	// Color is the flat colour. It is ignored, and may be the zero value,
+	// when Shading is set.
 	Color Color
 	Rule  FillRule
+	// Shading, when set, paints the interior instead of Color.
+	Shading *Shading
+}
+
+// ShadingKind is the geometry of a [Shading].
+type ShadingKind uint8
+
+// The shading geometries.
+const (
+	// Axial varies the colour along the line from From to To and keeps it
+	// constant on every line perpendicular to it (ISO 32000-1, 8.7.4.5.3,
+	// type 2 shading).
+	Axial ShadingKind = iota
+	// Radial varies the colour across the circles that blend the circle
+	// of centre From and radius FromRadius into the circle of centre To
+	// and radius ToRadius (ISO 32000-1, 8.7.4.5.4, type 3 shading).
+	Radial
+)
+
+// ColorStop is one colour of a [Shading] at one point of its parameter.
+type ColorStop struct {
+	// Offset runs from 0, at From, to 1, at To.
+	Offset float64
+	// Color is the colour at Offset. Unlike a flat colour it may be fully
+	// transparent.
+	Color Color
+}
+
+// Shading is a smooth colour transition, axial or radial. Between two
+// stops every channel, alpha included, interpolates linearly and
+// independently: the colour is not premultiplied by its alpha, so a
+// converter whose source interpolates premultiplied colours adds stops to
+// follow that curve. Two stops at one offset make a sharp edge. Past
+// either end the shading extends over the whole interior of the path it
+// fills, with the colour the stops reach at that end: the last stop at
+// offset 0 before From, the first stop at offset 1 past To.
+type Shading struct {
+	Kind ShadingKind
+	// From and To are the start and end points: the ends of the axis of an
+	// Axial shading, the centres of the start and end circles of a Radial
+	// one. They are in the shading's own coordinates, which Transform maps
+	// to the path's. An Axial shading needs them apart.
+	From, To Point
+	// FromRadius and ToRadius are the radii of a Radial shading's circles,
+	// in the shading's coordinates, non-negative and not both zero. An
+	// Axial shading ignores them. Two equal circles are refused.
+	FromRadius, ToRadius float64
+	// Stops holds at least two stops in non-decreasing Offset order, the
+	// first at 0 and the last at 1. At least one stop is not fully
+	// transparent.
+	Stops []ColorStop
+	// Transform maps the shading's coordinates to the coordinates of the
+	// path it fills; it must be invertible. The zero value is replaced by
+	// [Identity]. A Radial shading under a transform that scales x and y
+	// apart paints ellipses.
+	Transform Matrix
 }
 
 // LineCap is the shape at the end of an open stroked subpath.

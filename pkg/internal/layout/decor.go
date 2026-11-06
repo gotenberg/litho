@@ -139,11 +139,7 @@ func (p *painter) background(b *box, st *css.Style, r compose.Rect, radii [4][2]
 	if c, ok := colorOf(st.BackgroundColor); ok {
 		p.emit(b, false, &compose.Path{Ops: roundedRect(clipR, clipRadii), Fill: &compose.Fill{Color: c}}, clipR.Y, clipR.Y+clipR.Height, -1)
 	}
-	if st.BackgroundImage == "" {
-		return
-	}
-	pic := p.e.picture(st.BackgroundImage, r.Y)
-	if pic == nil {
+	if st.BackgroundImage == "" && st.BackgroundGradient == nil {
 		return
 	}
 	area := r
@@ -154,13 +150,23 @@ func (p *painter) background(b *box, st *css.Style, r compose.Rect, radii [4][2]
 	case css.ContentEdge:
 		area, _ = insetRect(r, radii, addSides(bd, pd))
 	}
-	tiles := p.e.tiles(st, pic, area, clipR, r.Y)
-	if len(tiles) == 0 {
-		return
-	}
 	g := &ditem{group: true, opacity: 1, clip: &compose.Path{Ops: roundedRect(clipR, clipRadii), Fill: &compose.Fill{}}}
-	for _, t := range tiles {
-		g.kids = append(g.kids, &ditem{frag: &compose.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: -1})
+	if st.BackgroundGradient != nil {
+		for _, pa := range p.e.gradientTiles(st, area, clipR, r.Y) {
+			t := pa.Ops[0].P[0]
+			g.kids = append(g.kids, &ditem{frag: pa, y0: t.Y, y1: pa.Ops[2].P[0].Y, page: -1})
+		}
+	} else {
+		pic := p.e.picture(st.BackgroundImage, r.Y)
+		if pic == nil {
+			return
+		}
+		for _, t := range p.e.tiles(st, pic, area, clipR, r.Y) {
+			g.kids = append(g.kids, &ditem{frag: &compose.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: -1})
+		}
+	}
+	if len(g.kids) == 0 {
+		return
 	}
 	c := p.sync(p.chain(b, false))
 	if p.mono >= 0 {

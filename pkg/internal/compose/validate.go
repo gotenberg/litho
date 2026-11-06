@@ -12,7 +12,7 @@ import (
 // package's caps. It returns nil or the first fault found, wrapping one of
 // the package's sentinel errors: [ErrNoPages], [ErrInvalidPage],
 // [ErrInvalidFragment], [ErrInvalidText], [ErrInvalidImage],
-// [ErrInvalidPath], [ErrInvalidGroup], [ErrInvalidLink], [ErrInvalidDest],
+// [ErrInvalidPath], [ErrInvalidShading], [ErrInvalidGroup], [ErrInvalidLink], [ErrInvalidDest],
 // [ErrInvalidColor], [ErrDetachedElement], [ErrInvalidElement],
 // [ErrNotATree] or [ErrLimitExceeded].
 //
@@ -196,7 +196,11 @@ func (v *validator) path(p *Path) error {
 		return err
 	}
 	if p.Fill != nil {
-		if err := checkColor(p.Fill.Color); err != nil {
+		if p.Fill.Shading != nil {
+			if err := checkShading(p.Fill.Shading); err != nil {
+				return err
+			}
+		} else if err := checkColor(p.Fill.Color); err != nil {
 			return err
 		}
 		if p.Fill.Rule > EvenOdd {
@@ -239,6 +243,78 @@ func checkOps(ops []PathOp) error {
 		}
 	}
 	return nil
+}
+
+// checkShading checks a shading against ISO 32000-1, 8.7.4.5: finite
+// coordinates, non-negative radii (8.7.4.5.4, Table 81), and a colour
+// function whose domain [0, 1] the stops span in order (7.10.4: the bounds
+// of a stitching function increase within its domain). An axial shading
+// with coincident ends and a radial one with equal circles leave the
+// colour undefined, and a singular transform paints a line, so all three
+// are refused.
+func checkShading(sh *Shading) error {
+	if sh.Kind > Radial {
+		return fmt.Errorf("%w: kind %d", ErrInvalidShading, sh.Kind)
+	}
+	m := shadingMatrix(sh)
+	for _, c := range []float64{sh.From.X, sh.From.Y, sh.To.X, sh.To.Y, sh.FromRadius, sh.ToRadius, m.A, m.B, m.C, m.D, m.E, m.F} {
+		if !finite(c) {
+			return fmt.Errorf("%w: coordinates or transform not finite", ErrInvalidShading)
+		}
+	}
+	if det := m.A*m.D - m.B*m.C; det == 0 || !finite(det) {
+		return fmt.Errorf("%w: transform %v is not invertible", ErrInvalidShading, m)
+	}
+	switch sh.Kind {
+	case Axial:
+		if sh.From == sh.To {
+			return fmt.Errorf("%w: axial shading from and to %v", ErrInvalidShading, sh.From)
+		}
+	case Radial:
+		if sh.FromRadius < 0 || sh.ToRadius < 0 || (sh.FromRadius == 0 && sh.ToRadius == 0) {
+			return fmt.Errorf("%w: radii %v and %v", ErrInvalidShading, sh.FromRadius, sh.ToRadius)
+		}
+		if sh.From == sh.To && sh.FromRadius == sh.ToRadius {
+			return fmt.Errorf("%w: radial shading between two equal circles", ErrInvalidShading)
+		}
+	}
+	n := len(sh.Stops)
+	if n > maxShadingStops {
+		return fmt.Errorf("%w: %d stops in a shading, at most %d", ErrLimitExceeded, n, maxShadingStops)
+	}
+	if n < 2 {
+		return fmt.Errorf("%w: %d stops, at least 2", ErrInvalidShading, n)
+	}
+	if sh.Stops[0].Offset != 0 || sh.Stops[n-1].Offset != 1 {
+		return fmt.Errorf("%w: stops span %v to %v, not 0 to 1", ErrInvalidShading, sh.Stops[0].Offset, sh.Stops[n-1].Offset)
+	}
+	visible := false
+	prev := 0.0
+	for i, st := range sh.Stops {
+		if !(st.Offset >= prev && st.Offset <= 1) {
+			return fmt.Errorf("%w: stop %d at offset %v", ErrInvalidShading, i, st.Offset)
+		}
+		prev = st.Offset
+		for _, ch := range []float64{st.Color.R, st.Color.G, st.Color.B, st.Color.A} {
+			if !(ch >= 0 && ch <= 1) {
+				return fmt.Errorf("%w: stop %d: %v", ErrInvalidColor, i, st.Color)
+			}
+		}
+		visible = visible || st.Color.A > 0
+	}
+	if !visible {
+		return fmt.Errorf("%w: every stop is fully transparent", ErrInvalidShading)
+	}
+	return nil
+}
+
+// shadingMatrix returns sh's transform after the model's zero-means-
+// identity rule.
+func shadingMatrix(sh *Shading) Matrix {
+	if sh.Transform == (Matrix{}) {
+		return Identity
+	}
+	return sh.Transform
 }
 
 // checkStroke checks the line parameters against ISO 32000-1, 8.4.3: a

@@ -35,6 +35,13 @@ var (
 	// ErrInvalidDest is returned for a destination naming a page outside
 	// 1..len(Pages), or a position that is not finite.
 	ErrInvalidDest = errors.New("invalid destination")
+	// ErrInvalidShading is returned for a shading of an unknown kind,
+	// with fewer than two stops, stops out of order or not spanning 0 to
+	// 1, every stop fully transparent, coordinates or a transform that are
+	// not finite, a transform that is not invertible, an axial shading
+	// whose ends coincide, or a radial one whose radii are negative or
+	// whose circles are equal.
+	ErrInvalidShading = errors.New("invalid shading")
 	// ErrInvalidColor is returned for a colour channel outside [0, 1].
 	ErrInvalidColor = errors.New("invalid color")
 	// ErrDetachedElement is returned for a structure element a fragment or a
@@ -48,7 +55,7 @@ var (
 	ErrNotATree = errors.New("structure or outline is not a tree")
 	// ErrLimitExceeded is returned when the document passes one of the
 	// package's anti-DoS caps: pages, fragments per page, glyphs per run,
-	// operators per path, dash entries, group nesting, outline entries,
+	// operators per path, dash entries, shading stops, group nesting, outline entries,
 	// structure elements, tree depth or image pixels.
 	ErrLimitExceeded = errors.New("composition limit exceeded")
 	// ErrInvalidFont is returned by [Write] for a face whose program does

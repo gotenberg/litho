@@ -45,6 +45,23 @@ func (g *treeGen) colour() css.Color {
 
 var fuzzTexts = []string{"a", "ab cd", "  x\ty\nz  ", "abcdefghij klmnop", "אב ab", "á  b", "", "W"}
 
+// gradient returns a gradient drawn from the bytes, hints and stops in
+// any order.
+func (g *treeGen) gradient() *css.Gradient {
+	gr := &css.Gradient{
+		Kind: css.GradientKind(g.next() % 2), Repeating: g.next()%2 == 0,
+		Angle:  float64(g.next()) * 7,
+		Corner: [2]int8{int8(g.next()%3) - 1, int8(g.next()%3) - 1},
+		Circle: g.next()%2 == 0, Size: css.RadialSize(g.next() % 5),
+		Radius: [2]css.Dimension{g.length(false), g.length(false)},
+		Center: [2]css.Dimension{g.length(false), g.length(false)},
+	}
+	for range g.next() % 6 {
+		gr.Stops = append(gr.Stops, css.GradientStop{Color: g.colour(), Position: g.length(true), Hint: g.next()%5 == 0})
+	}
+	return gr
+}
+
 // style returns a style drawn from the bytes.
 func (g *treeGen) style() *css.Style {
 	st := sty()
@@ -78,6 +95,9 @@ func (g *treeGen) style() *css.Style {
 	}
 	if flags&8 != 0 {
 		st.BackgroundColor = g.colour()
+		if g.next()%3 == 1 {
+			st.BackgroundGradient = g.gradient()
+		}
 		if g.next()%3 == 0 {
 			st.BackgroundImage = "img"
 			st.BackgroundRepeat = [2]css.Repeat{css.Repeat(g.next() % 4), css.Repeat(g.next() % 4)}
@@ -212,6 +232,10 @@ func FuzzLayout(f *testing.F) {
 		pb := PageBox{Width: px(float64(g.next()%200) + 8), Height: px(float64(g.next()%200) + 8)}
 		for s := range 4 {
 			pb.Margin[s] = px(float64(g.next() % 4))
+		}
+		if g.next()%4 == 0 {
+			pb.Background = css.Initial()
+			pb.Background.BackgroundGradient = g.gradient()
 		}
 		root := g.node(0)
 		res, err := Layout(context.Background(), root, fonts, Options{Page: pb, Image: loader, MaxPages: 40})

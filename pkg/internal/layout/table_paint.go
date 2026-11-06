@@ -149,20 +149,25 @@ func (p *painter) partBackground(b *box, clip compose.Rect) {
 	if c, ok := colorOf(st.BackgroundColor); ok {
 		p.emit(b, false, &compose.Path{Ops: rectOps(clip), Fill: &compose.Fill{Color: c}}, clip.Y, clip.Y+clip.Height, -1)
 	}
-	if st.BackgroundImage == "" {
-		return
-	}
-	pic := p.e.picture(st.BackgroundImage, clip.Y)
-	if pic == nil {
-		return
-	}
-	tiles := p.e.tiles(st, pic, p.borderRect(b), clip, clip.Y)
-	if len(tiles) == 0 {
+	if st.BackgroundImage == "" && st.BackgroundGradient == nil {
 		return
 	}
 	g := &ditem{group: true, opacity: 1, clip: &compose.Path{Ops: rectOps(clip), Fill: &compose.Fill{}}}
-	for _, t := range tiles {
-		g.kids = append(g.kids, &ditem{frag: &compose.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: p.mono})
+	if st.BackgroundGradient != nil {
+		for _, pa := range p.e.gradientTiles(st, p.borderRect(b), clip, clip.Y) {
+			g.kids = append(g.kids, &ditem{frag: pa, y0: pa.Ops[0].P[0].Y, y1: pa.Ops[2].P[0].Y, page: p.mono})
+		}
+	} else {
+		pic := p.e.picture(st.BackgroundImage, clip.Y)
+		if pic == nil {
+			return
+		}
+		for _, t := range p.e.tiles(st, pic, p.borderRect(b), clip, clip.Y) {
+			g.kids = append(g.kids, &ditem{frag: &compose.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: p.mono})
+		}
+	}
+	if len(g.kids) == 0 {
+		return
 	}
 	c := p.sync(p.chain(b, false))
 	c.kids = append(c.kids, g)

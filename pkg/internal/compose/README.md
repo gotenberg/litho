@@ -42,6 +42,9 @@ encodes:
 - Points, top-left origin, y down. The backend flips.
 - A `Fragment` is a `Text`, an `Image`, a `Path` or a `Group`. Paint order
   is slice order.
+- A `Path` fills with a flat colour or a `Shading`, axial or radial, whose
+  stops the backend writes as a stitched PDF function; translucent stops
+  paint through a luminosity soft mask.
 - Glyphs are already positioned: the converter applies advances, kerning
   and offsets. The backend only has to write them.
 - `Glyph.Text` carries the characters a glyph stands for, so extraction

@@ -2,7 +2,9 @@ package css
 
 // unsupportedImages are the <image> functions litho parses and does not
 // paint: a background or a marker using one computes to none with a
-// warning (CSS Images 3 and 4).
+// warning (CSS Images 3 and 4). A background takes the linear and radial
+// gradients before this table is read (see [bgImageValue]); a list marker
+// does not.
 var unsupportedImages = map[string]bool{
 	"linear-gradient": true, "radial-gradient": true, "conic-gradient": true,
 	"repeating-linear-gradient": true, "repeating-radial-gradient": true,
@@ -67,7 +69,7 @@ func parseBgImage(v []token, c *declCtx) (any, bool) {
 	if !ok {
 		return nil, false
 	}
-	u, ok := imageValue(t, c, "background-image")
+	u, ok := bgImageValue(t, c, "background-image")
 	return u, ok
 }
 
@@ -309,7 +311,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 				}
 			}
 			if !image {
-				if u, ok := imageValue(t, c, "background"); ok {
+				if u, ok := bgImageValue(t, c, "background"); ok {
 					image = true
 					if li == 0 {
 						out[1].v = u

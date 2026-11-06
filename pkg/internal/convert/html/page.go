@@ -15,8 +15,9 @@ import (
 // orientation alone turns it (CSS Page 3, 5.1), and a margin replaces that
 // side's, a percentage resolved against the page's width for the left and
 // right margins and its height for the top and bottom ones (CSS Page 3,
-// the page-margin properties). :first, :left and :right rules do not
-// apply: the engine lays every page out on one box.
+// the page-margin properties), and the page's background properties paint
+// every page. :first, :left and :right rules do not apply: the engine lays
+// every page out on one box.
 //
 // A size past the PDF page limit is clamped to it, and @page margins that
 // leave no page area give way to o's, with a warning.
@@ -35,7 +36,7 @@ func pageBox(r *css.Resolver, o Options) (layout.PageBox, []compose.Warning) {
 	case ps.Orientation == css.Landscape && w < h, ps.Orientation == css.Portrait && w > h:
 		w, h = h, w
 	}
-	box := layout.PageBox{Width: w, Height: h}
+	box := layout.PageBox{Width: w, Height: h, Background: ps.Background}
 	opt := [4]float64{css.Top: o.MarginTop, css.Right: o.MarginRight, css.Bottom: o.MarginBottom, css.Left: o.MarginLeft}
 	fromRules := false
 	for side := css.Top; side <= css.Left; side++ {

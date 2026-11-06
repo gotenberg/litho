@@ -593,11 +593,16 @@ func init() {
 		{pBottom, dimProp("bottom", false, func(s *Style) *Dimension { return &s.Bottom }, allowPct, kwAuto, false)},
 		{pLeft, dimProp("left", false, func(s *Style) *Dimension { return &s.Left }, allowPct, kwAuto, false)},
 		{pBgColor, colorProp("background-color", false, func(s *Style) *Color { return &s.BackgroundColor }, slotBackground, nil)},
-		{pBgImage, propDef{name: "background-image", parse: parseBgImage, compute: func(_ *styler, st *Style, v any) {
-			if u, ok := v.(string); ok {
-				st.BackgroundImage = u
+		{pBgImage, propDef{name: "background-image", parse: parseBgImage, compute: func(s *styler, st *Style, v any) {
+			if im, ok := v.(imageSpec); ok {
+				st.BackgroundImage, st.BackgroundGradient = im.url, nil
+				if im.grad != nil {
+					st.BackgroundGradient = im.grad.compute(s.lc, st.Color)
+				}
 			}
-		}, copyFrom: field(func(s *Style) *string { return &s.BackgroundImage })}},
+		}, copyFrom: func(dst, src *Style) {
+			dst.BackgroundImage, dst.BackgroundGradient = src.BackgroundImage, src.BackgroundGradient
+		}}},
 		{pBgRepeat, propDef{name: "background-repeat", parse: parseBgRepeat, compute: func(_ *styler, st *Style, v any) {
 			if r, ok := v.([2]Repeat); ok {
 				st.BackgroundRepeat = r

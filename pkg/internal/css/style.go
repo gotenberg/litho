@@ -259,6 +259,75 @@ const (
 	RepeatRound
 )
 
+// GradientKind is the shape of a [Gradient].
+type GradientKind uint8
+
+// The gradient shapes (CSS Images 3, 3.1 and 3.2).
+const (
+	LinearGradient GradientKind = iota
+	RadialGradient
+)
+
+// RadialSize is the size of a radial gradient's ending shape (CSS Images
+// 3, 3.2.1, <radial-extent>), or RadialExplicit for a size given as
+// lengths.
+type RadialSize uint8
+
+// The radial sizes. The zero value is the default, farthest-corner.
+const (
+	FarthestCorner RadialSize = iota
+	ClosestSide
+	ClosestCorner
+	FarthestSide
+	// RadialExplicit takes the size from Gradient.Radius.
+	RadialExplicit
+)
+
+// GradientStop is one colour stop or transition hint of a gradient's
+// colour stop list (CSS Images 3, 3.4; transition hints from CSS Images
+// 4, 3.5.3), in the order written. A stop written with two positions is
+// two stops of one colour.
+type GradientStop struct {
+	// Color is the stop's colour, currentColor resolved. A hint has none.
+	Color Color
+	// Position is Auto for a stop written without one, else Points or
+	// Percent of the gradient line's length for a linear gradient and of
+	// the ending shape's horizontal radius for a radial one. The fixup of
+	// CSS Images 3, 3.4.3 is left to the layout engine, which knows the
+	// length.
+	Position Dimension
+	// Hint marks a transition hint: Position is set and Color unused.
+	Hint bool
+}
+
+// Gradient is a computed <gradient> (CSS Images 3, 3): a linear or radial
+// one, repeating or not. A conic gradient is not represented.
+type Gradient struct {
+	Kind      GradientKind
+	Repeating bool
+	// Angle is the direction of a linear gradient in degrees, clockwise
+	// from toward the top (CSS Images 3, 3.1.1), when Corner is zero. "to
+	// bottom", the default, is 180.
+	Angle float64
+	// Corner points a linear gradient at a corner of its box, horizontal
+	// then vertical, -1 for left or top and +1 for right or bottom; zero
+	// otherwise. Its angle depends on the box, so it stays a keyword.
+	Corner [2]int8
+	// Circle selects a circular ending shape over an elliptical one.
+	Circle bool
+	Size   RadialSize
+	// Radius is an explicit size: a circle's radius in Radius[0], Points;
+	// an ellipse's horizontal then vertical radius, Points or Percent of
+	// the box's width and height.
+	Radius [2]Dimension
+	// Center is the centre of a radial gradient, horizontal then vertical,
+	// Points or Percent of the box's width and height from its top-left
+	// corner (CSS Images 3, 3.2.1, the at <position> clause).
+	Center [2]Dimension
+	// Stops holds at least one colour stop, hints only between two stops.
+	Stops []GradientStop
+}
+
 // SizeKind says what a [BackgroundSize] holds.
 type SizeKind uint8
 
@@ -591,8 +660,12 @@ type Style struct {
 
 	BackgroundColor Color
 	// BackgroundImage is the resolved URL of the image, "" for none. A
-	// gradient computes to "" and is reported by the cascade as a warning.
+	// gradient computes to "" and sets BackgroundGradient instead.
 	BackgroundImage string
+	// BackgroundGradient is the gradient the image is, nil for none, a
+	// URL or a gradient litho does not paint (a conic one, reported by
+	// the cascade as a warning). It is shared and never mutated.
+	BackgroundGradient *Gradient
 	// BackgroundRepeat holds the horizontal then the vertical repeat.
 	BackgroundRepeat [2]Repeat
 	// BackgroundPosition holds the horizontal then the vertical offset,
@@ -761,4 +834,9 @@ type PageStyle struct {
 	// Margin is indexed by [Side], Auto for a side the rules leave to the
 	// caller, Points or Percent of the page size otherwise.
 	Margin [4]Dimension
+	// Background is the page box's background (CSS Page 3, page
+	// backgrounds and painting order): a style whose Background fields
+	// hold what the @page rules set, every other field initial. nil when
+	// no rule sets a background property.
+	Background *Style
 }

@@ -106,6 +106,10 @@ type PageBox struct {
 	Width, Height float64
 	// Margin is indexed by [css.Side].
 	Margin [4]float64
+	// Background is the page box's own background, painted on every page
+	// under the canvas: a style whose Background fields alone are read
+	// (see css.PageStyle). nil for none.
+	Background *css.Style
 }
 
 // Result is what [Layout] produced.

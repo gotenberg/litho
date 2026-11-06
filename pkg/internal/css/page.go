@@ -40,6 +40,8 @@ type pageDecl struct {
 	important bool
 	size      *pageSize
 	margins   []entry
+	// background holds the background longhands the descriptor sets.
+	background []entry
 }
 
 // parsePageSelectors parses a page selector list (CSS Page 3, 4.1); an
@@ -183,8 +185,9 @@ func parsePageSize(v []token) (pageSize, bool) {
 	return pageSize{w: w, h: h}, true
 }
 
-// pageDecls parses the descriptors of an @page block: size and the
-// margin properties. Margin at-rules and other descriptors are ignored.
+// pageDecls parses the descriptors of an @page block: size, the margin
+// properties and the background properties. Margin at-rules and other
+// descriptors are ignored.
 func pageDecls(block []token, c *declCtx) []pageDecl {
 	var out []pageDecl
 	newListParser(block).declarations(func(it item) bool {
@@ -211,6 +214,19 @@ func pageDecls(block []token, c *declCtx) []pageDecl {
 				return true
 			}
 			out = append(out, pageDecl{important: it.important, margins: e})
+		case "background", "background-color", "background-image", "background-repeat",
+			"background-position", "background-size", "background-origin", "background-clip":
+			// CSS Page 3 gives the page box the background properties.
+			if containsVar(it.value) {
+				c.warn("unsupported-css-value", "@page %s: var() is not supported in page descriptors", name)
+				return true
+			}
+			e, ok := c.expand(name, it.value)
+			if !ok {
+				c.warn("invalid-css-value", "invalid value for @page %s was ignored", name)
+				return true
+			}
+			out = append(out, pageDecl{important: it.important, background: e})
 		}
 		return true
 	})
@@ -279,6 +295,34 @@ func (r *Resolver) Page(sel PageSelector) PageStyle {
 				ps.Margin[side] = Dimension{Kind: Auto}
 			}
 		}
+		for _, e := range c.d.background {
+			if ps.Background == nil {
+				bg := *initialStyle
+				ps.Background = &bg
+			}
+			pageBackground(ps.Background, e, lc)
+		}
 	}
 	return ps
+}
+
+// pageBackground computes the background longhand e into st, a style
+// whose other properties keep their initial values: the page box has no
+// parent to inherit from, and currentColor is the initial colour, black.
+func pageBackground(st *Style, e entry, lc lenCtx) {
+	if e.id < pBgColor || e.id > pBgClip {
+		return
+	}
+	def := &props[e.id]
+	v := e.v
+	if _, ok := v.(cssWide); ok {
+		v = def.initial
+		if v == nil {
+			def.copyFrom(st, initialStyle)
+			return
+		}
+	}
+	if v != nil {
+		def.compute(&styler{parent: initialStyle, lc: lc}, st, v)
+	}
 }

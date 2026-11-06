@@ -61,3 +61,12 @@ const maxImagePixels = 1 << 26
 // Table C.1 bounds the page size at 14400 units (200 inches) in either
 // dimension. It is the implementation limit, not a litho guard.
 const maxPageSize = 14400
+
+// maxShadingStops caps the stops of one [Shading]. Anti-DoS guard, not
+// spec-mandated: ISO 32000-1, 7.10.4 sets no bound on a stitching
+// function's subfunctions, and Write emits one per pair of stops. litho's
+// own renderer compiles at most 1024 functions for one function object, so
+// a shading of 1024 stops, 1023 segments under the stitching function,
+// still renders with it. A CSS gradient holds a handful of stops, and a
+// repeating one unrolled over its box a few hundred.
+const maxShadingStops = 1024

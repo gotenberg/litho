@@ -47,6 +47,9 @@ const pdfVersion = "1.7"
 //   - One Type0 font per distinct [Face.Key], subset to the glyphs drawn and
 //     shared by every page (see package embed).
 //   - One image XObject per distinct [ImageSource] pointer.
+//   - One shading dictionary per distinct [Shading] geometry and stops,
+//     painted with sh inside the clip of its path; translucent stops add a
+//     luminosity soft mask per placement.
 //   - Link annotations, the outline, the Info dictionary from
 //     [Document.Metadata] (no dates), and /Lang when Metadata.Lang is set.
 //   - With [Document.Structure], a structure tree, marked content with
@@ -85,12 +88,13 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 	}
 
 	w := &docWriter{
-		doc:    doc,
-		alloc:  writer.NewObjAllocator(0),
-		logger: logger,
-		fonts:  make(map[string]*fontEntry),
-		images: make(map[*ImageSource]ast.PdfIndirectRef),
-		id:     sha256.New(),
+		doc:      doc,
+		alloc:    writer.NewObjAllocator(0),
+		logger:   logger,
+		fonts:    make(map[string]*fontEntry),
+		images:   make(map[*ImageSource]ast.PdfIndirectRef),
+		shadings: make(map[string]shadingRefs),
+		id:       sha256.New(),
 	}
 	trailer, err := w.write(ctx, producer)
 	if err != nil {
@@ -119,6 +123,8 @@ type docWriter struct {
 	fonts     map[string]*fontEntry
 	fontOrder []*fontEntry
 	images    map[*ImageSource]ast.PdfIndirectRef
+	// shadings maps a [shadingKey] to the objects written for it.
+	shadings map[string]shadingRefs
 	// st is nil for an untagged document.
 	st *structState
 	// id hashes what the file /ID is derived from.

@@ -423,6 +423,7 @@ func markerStyle(item *css.Style) *css.Style {
 	st.Border = [4]css.Border{}
 	st.BackgroundColor = css.Transparent
 	st.BackgroundImage = ""
+	st.BackgroundGradient = nil
 	st.Width, st.Height = css.Dimension{}, css.Dimension{}
 	st.MinWidth, st.MinHeight = css.Pts(0), css.Pts(0)
 	st.MaxWidth, st.MaxHeight = css.Dimension{Kind: css.None}, css.Dimension{Kind: css.None}
