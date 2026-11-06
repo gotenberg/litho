@@ -58,12 +58,11 @@ func (e *engine) replacedSize(b *box, cb cblock) (float64, float64) {
 	if ratio == 0 {
 		return cw(iw), ch(ih)
 	}
-	if p != nil && p.NoNaturalWidth && p.NoNaturalHeight && cb.w > 0 {
+	if p != nil && p.NoNaturalWidth && p.NoNaturalHeight {
 		// A picture with a ratio and no natural size fills the containing
 		// block's width, the width a block in normal flow takes (CSS 2.1,
-		// 10.3.2), when that width does not depend on the picture: in a
-		// shrink-to-fit measurement, cb.w is 0 and the default object
-		// size stands.
+		// 10.3.2). In a shrink-to-fit measurement, cb.w is 0 and so is
+		// the picture, as Chromium sizes it.
 		pd, bd, m := edgesOf(b, cb.w)
 		iw = max(cb.w-pd[css.Left]-pd[css.Right]-bd[css.Left]-bd[css.Right]-m[css.Left]-m[css.Right], 0)
 		ih = iw / ratio

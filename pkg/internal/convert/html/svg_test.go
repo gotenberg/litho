@@ -96,6 +96,7 @@ func TestSVG_Placement(t *testing.T) {
 		{"img ratio with a width", `<img src="ratio.svg" style="width:80px">`, compose.Rect{Width: 60, Height: 15}},
 		{"img default size", `<img src="nosize.svg">`, compose.Rect{Width: 225, Height: 112.5}},
 		{"img scaled content", `<img src="scaled.svg" style="width:20px;height:20px">`, compose.Rect{Width: 7.5, Height: 15}},
+		{"img stretched without a viewBox", `<img src="scaled.svg" style="width:60px;height:40px">`, compose.Rect{Width: 22.5, Height: 30}},
 		{"img data URL", `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Crect width='8' height='8' fill='red'/%3E%3C/svg%3E">`, compose.Rect{Width: 6, Height: 6}},
 		{"inline natural size", `<svg width="40" height="20">` + full + `</svg>`, compose.Rect{Width: 30, Height: 15}},
 		{"inline percent width", `<svg width="50%" height="20">` + full + `</svg>`, compose.Rect{Width: 200, Height: 15}},

@@ -202,10 +202,11 @@ func findSVG(n *html.Node, depth int) *html.Node {
 
 // newDocument indexes the drawing under root and draws it once at its
 // default size, which loads its images and records its warnings. An image
-// (image set) without a viewBox but with a natural width and height scales
-// its content with its viewport as if its viewBox were 0 0 width height,
-// as browsers draw an SVG image at another size; inline SVG keeps its user
-// units, its viewport growing around them.
+// (image set) without a viewBox but with a natural width and height
+// stretches its content over its viewport as if its viewBox were 0 0
+// width height with preserveAspectRatio none, as Chromium draws such an
+// SVG image at another size; inline SVG keeps its user units, its
+// viewport growing around them.
 func newDocument(ctx context.Context, root *html.Node, opts Options, image bool) (*Document, error) {
 	d := &Document{
 		root: root, opts: opts, ids: map[string]*html.Node{}, images: map[string]*Raster{},
@@ -259,6 +260,7 @@ func newDocument(ctx context.Context, root *html.Node, opts Options, image bool)
 	d.background = d.computeStyle(root, initialStyle(opts.Context)).background
 	if s := d.size; image && !d.viewBox.ok && s.HasWidth && s.HasHeight && s.Width > 0 && s.Height > 0 {
 		d.viewBox = viewBox{w: s.Width / ptPerPx, h: s.Height / ptPerPx, ok: true}
+		d.par = aspect{none: true}
 	}
 	w, h := d.defaultViewport()
 	if _, err := d.render(ctx, w, h); err != nil {

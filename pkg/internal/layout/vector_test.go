@@ -60,6 +60,16 @@ func TestVector_Sizing(t *testing.T) {
 	}
 }
 
+func TestVector_RatioOnlyShrinksToZero(t *testing.T) {
+	// In a shrink-to-fit container a picture without natural size takes
+	// no width, as Chromium sizes it.
+	pic := &Node{Kind: Replaced, Style: sty(), Picture: vec(300, 75, noSize)}
+	rb := boxes(t, doc(el(sty(float(css.FloatLeft)), pic)), page(100, 100))
+	if b := kid(t, rb, 0, 0); b.borderW() != 0 {
+		t.Errorf("float %v wide, want 0", b.borderW()/css.Pt)
+	}
+}
+
 func TestVector_ObjectFit(t *testing.T) {
 	contain := func(s *css.Style) { s.ObjectFit = css.FitContain }
 	root := doc(&Node{Kind: Replaced, Style: sty(width(4), height(4), contain), Picture: vec(4, 2)})
