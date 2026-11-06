@@ -198,10 +198,10 @@ func (f *drawFeature) Run(ctx context.Context, _, fixtureID string) ([]byte, err
 		Left:      0,
 		Resources: os.DirFS(resources),
 		FontDirs:  fonts,
-		// WeasyPrint's @page size is the page, and WeasyPrint shrinks
-		// nothing to fit it.
+		// WeasyPrint's @page size is the page, WeasyPrint shrinks nothing
+		// to fit it and keeps the fonts' fractional metrics.
 		PreferCSSPageSize: true,
-		Print:             []pdf.ConvertOption{pdf.WithShrinkToFit(false)},
+		Print:             []pdf.ConvertOption{pdf.WithShrinkToFit(false), pdf.WithFractionalFontMetrics(true)},
 	})
 	if err == nil {
 		var pages []image.Image
