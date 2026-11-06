@@ -547,7 +547,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		start = b.contentY()
 	}
 	specH, hSet := specHeight(b, b.st.Height, cb)
-	kcb := cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}
+	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}, cb)
 	end := formatterFor(b).layout(e, b, kcb, bc, start, inner)
 	// The last child's bottom margin adjoins b's when b's height is auto
 	// (CSS 2.1, 8.3.1); a min-height that then makes b taller cuts that
@@ -664,7 +664,7 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	specH, hSet := specHeight(b, b.st.Height, cb)
 	own := &bfc{}
 	mc := &marginState{kept: true}
-	kcb := cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}
+	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}, cb)
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
 	end = e.pastMargin(end, mc.strut, false)
 	mc.commit(end)

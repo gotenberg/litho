@@ -331,13 +331,13 @@ var displays = map[string]Display{
 	"table-header-group": TableHeaderGroup, "table-footer-group": TableFooterGroup,
 	"table-row": TableRow, "table-column-group": TableColumnGroup, "table-column": TableColumn,
 	"table-cell": TableCell, "table-caption": TableCaption, "none": DisplayNone,
-	"run-in": Block,
+	"run-in": Block, "flow-root": FlowRoot,
 }
 
 // displays3 are the CSS Display 3 values laid out as Block or InlineBlock
 // in this version, with a warning.
 var displays3 = map[string]Display{
-	"flex": Block, "grid": Block, "flow-root": Block, "contents": Block,
+	"flex": Block, "grid": Block, "contents": Block,
 	"inline-flex": InlineBlock, "inline-grid": InlineBlock, "-webkit-box": Block,
 	"-webkit-flex": Block, "-ms-flexbox": Block, "-webkit-inline-box": InlineBlock,
 	"-webkit-inline-flex": InlineBlock, "-ms-inline-flexbox": InlineBlock,
@@ -398,7 +398,12 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 			return InlineTable, true
 		}
 		return Table, true
-	case words["flow-root"], words["flex"], words["grid"]:
+	case words["flow-root"]:
+		if inline {
+			return InlineBlock, true
+		}
+		return FlowRoot, true
+	case words["flex"], words["grid"]:
 		d := Block
 		if inline {
 			d = InlineBlock

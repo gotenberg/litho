@@ -401,19 +401,24 @@ func TestTable_RowsNotSplit(t *testing.T) {
 	}
 }
 
-func TestTable_TallRowClipped(t *testing.T) {
-	root := doc(table(nil, tr(nil, td(mods(height(80)), "a")), tr(nil, td(mods(height(10)), "b"))))
+func TestTable_TallRowOverflows(t *testing.T) {
+	// A row taller than the page with nothing to break at overflows onto
+	// the next page, sliced at the cut, and the next row follows its full
+	// height (CSS Fragmentation 3, 4.1, as css-page monolithic-overflow-010
+	// expects).
+	root := doc(table(nil, tr(nil, td(mods(height(80), bg(blue)), "")), tr(nil, td(mods(height(10)), "b"))))
 	res := run(t, root, page(20, 50))
-	found := false
 	for _, w := range res.Warnings {
-		found = found || w.Code == codeClipped
+		if w.Code == codeClipped {
+			t.Errorf("warning %q, want none: the row overflows, it is not clipped", w.Message)
+		}
 	}
-	if !found {
-		t.Error("no warning for the clipped row")
+	if len(res.Pages) != 2 {
+		t.Fatalf("%d pages, want 2", len(res.Pages))
 	}
 	tm := tableOf(t, root, page(20, 50))
-	if got := pxOf(tm.rows[1].box.y); got != 50 {
-		t.Errorf("next row at %v, want 50: the page after the one the tall row is clipped to", got)
+	if got := pxOf(tm.rows[1].box.y); got != 80 {
+		t.Errorf("next row at %v, want 80: below the tall row", got)
 	}
 }
 

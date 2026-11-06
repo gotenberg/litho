@@ -40,11 +40,18 @@
 // columns take the automatic layout the way browsers do it, or the fixed
 // one; rows take the height of their cells, aligned on a shared baseline,
 // at the top, middle or bottom. Borders are separated by border-spacing or
-// collapsed, the conflicts resolved per CSS 2.1, 17.6.2.1. A row is never
-// split across pages: one that does not fit moves to the next page, under a
-// copy of the header group, and the page it leaves ends with a copy of the
-// footer group, the copies painted as artifacts. A row taller than the page
-// area is clipped with a warning.
+// collapsed, the conflicts resolved per CSS 2.1, 17.6.2.1. Percentage
+// heights on rows and cells resolve against the table's height, and
+// visibility: collapse removes rows, row groups and columns with their
+// border spacing. A row that does not fit what is left of a page breaks
+// inside its cells at a line boundary, as Chromium and WeasyPrint break
+// table rows: each cell's content continues at the top of the row's piece
+// on the next page, under a copy of the header group, and the page it
+// leaves ends with a copy of the footer group, the copies painted as
+// artifacts; the cells' borders and backgrounds are sliced at the cut. A
+// row that avoids breaks inside it, or none of whose lines fits, moves to
+// the next page whole; one with nothing to break at, taller than a page
+// area, overflows onto the pages below.
 //
 // # Positioning
 //

@@ -113,6 +113,8 @@ func TestProperties_Longhands(t *testing.T) {
 		{"display: inline-table", func(s *Style) bool { return s.Display == InlineTable }},
 		{"display: block flow", func(s *Style) bool { return s.Display == Block }},
 		{"display: inline flow-root", func(s *Style) bool { return s.Display == InlineBlock }},
+		{"display: flow-root", func(s *Style) bool { return s.Display == FlowRoot }},
+		{"display: block flow-root", func(s *Style) bool { return s.Display == FlowRoot }},
 		{"display: inline-grid", func(s *Style) bool { return s.Display == InlineBlock }},
 		{"position: sticky", func(s *Style) bool { return s.Position == Relative }},
 		{"opacity: 150%", func(s *Style) bool { return s.Opacity == 1 }},

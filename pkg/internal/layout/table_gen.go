@@ -157,22 +157,52 @@ type cellData struct {
 	// and aligns at the top, as browsers do.
 	natH, base float64
 	hasBase    bool
+	// contentEnd is the bottom of the content at the tentative layout,
+	// below its padding, in the coordinates of natH.
+	contentEnd float64
+	// split reports a cell of a row split across pages: off is its
+	// alignment offset, and struts the gaps opened in its content at the
+	// cuts, in order.
+	split  bool
+	off    float64
+	struts []cellStrut
+}
+
+// cellStrut is a gap opened inside a cell where its row breaks across pages
+// (CSS Fragmentation 3, 4.4): the content from at down, relative to the
+// row top, moves down by d.
+type cellStrut struct {
+	at, d float64
 }
 
 // placedRow is a row as it lands in the flow: the row itself, or a copy of
-// a header or footer row moved by dy. clip is the page a row taller than
-// the page area is clipped to, -1 for none.
+// a header or footer row moved by dy. A row split across pages lands as
+// pieces, one per page: piece reports one, y0 and y1 bound it, cutTop and
+// cutBottom report the edges a page break cuts, which draw no border
+// (box-decoration-break: slice), and first the piece that paints the
+// cells' content.
 type placedRow struct {
-	r    int
-	dy   float64
-	clip int
+	r                 int
+	dy                float64
+	piece             bool
+	y0, y1            float64
+	cutTop, cutBottom bool
+	first             bool
 }
 
 // top returns the top of the placed row.
-func (td *tableData) top(p placedRow) float64 { return td.rows[p.r].box.y + p.dy }
+func (td *tableData) top(p placedRow) float64 {
+	if p.piece {
+		return p.y0 + p.dy
+	}
+	return td.rows[p.r].box.y + p.dy
+}
 
 // bottom returns the bottom of the placed row.
 func (td *tableData) bottom(p placedRow) float64 {
+	if p.piece {
+		return p.y1 + p.dy
+	}
 	rb := td.rows[p.r].box
 	return rb.y + rb.h + p.dy
 }
@@ -211,6 +241,12 @@ type tableData struct {
 	// seqs lists the runs of rows painted together: a page's rows, copies
 	// of the header and footer included, top to bottom.
 	seqs [][]placedRow
+	// rowH holds the height of every row as placed, a split row's
+	// including the gaps its breaks open.
+	rowH []float64
+	// rowBase and rowHasBase hold every row's baseline below its top.
+	rowBase    []float64
+	rowHasBase []bool
 	// baseline is the first row's baseline below the table box top.
 	baseline    float64
 	hasBaseline bool
@@ -806,6 +842,9 @@ func (td *tableData) lastCol(c int) bool {
 	return c == td.nCols-1 || td.cols[c+1].group != td.cols[c].group
 }
 
+// noRow stands for no row on one side of [tableData.hEdge].
+const noRow = -2
+
 // firstRow reports whether row r starts its row group.
 func (td *tableData) firstRow(r int) bool {
 	return r == 0 || td.rows[r-1].group != td.rows[r].group
@@ -818,8 +857,9 @@ func (td *tableData) lastRow(r int) bool {
 
 // hEdge resolves the collapsed border of column c between row above and
 // row below (CSS 2.1, 17.6.2.1): -1 above is the table's top edge and the
-// row count below its bottom edge. The rows need not be adjacent: a copy
-// of the header meets the row it repeats over.
+// row count below its bottom edge; noRow on either side takes nothing
+// from it, the side a page break cuts. The rows need not be adjacent: a
+// copy of the header meets the row it repeats over.
 func (td *tableData) hEdge(above, below, c int) cborder {
 	n := len(td.rows)
 	ca, cb := td.cellAt(above, c), td.cellAt(below, c)
@@ -828,7 +868,9 @@ func (td *tableData) hEdge(above, below, c int) cborder {
 	}
 	var r resolver
 	col := td.cols[c]
-	if above < 0 {
+	switch {
+	case above == noRow:
+	case above < 0:
 		r.add(td.table.st.Border[css.Top], originTable)
 		if col.group != nil {
 			r.add(col.group.st.Border[css.Top], originColGroup)
@@ -836,7 +878,7 @@ func (td *tableData) hEdge(above, below, c int) cborder {
 		if col.col != nil {
 			r.add(col.col.st.Border[css.Top], originColumn)
 		}
-	} else {
+	default:
 		if ca != nil && ca.cell.row+ca.cell.rowSpan-1 == above {
 			r.add(ca.st.Border[css.Bottom], originCell)
 		}

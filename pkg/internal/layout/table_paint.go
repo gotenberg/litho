@@ -25,11 +25,7 @@ func cellStarts(td *tableData) []int {
 // nothing (CSS 2.1, 17.5.5).
 func (td *tableData) cellSkipped(c *box) bool {
 	cd := c.cell
-	if collapsed(td.rows[cd.row].box) {
-		return true
-	}
-	col := td.cols[cd.col]
-	return collapsed(col.col) || collapsed(col.group)
+	return td.rowCollapsed(cd.row) || td.colCollapsed(cd.col)
 }
 
 // cellEmpty reports a cell without content: no line box, no in-flow or
@@ -44,28 +40,54 @@ func cellEmpty(c *box) bool {
 // eachRow calls fn for every row of td as it was placed, natural or a copy
 // of the header or footer, with the painter moved to it: a copy is
 // offset, paints on its own page and paints as an artifact (ISO 32000-1,
-// 14.8.2.2.2, pagination artifacts); a row clipped to its page paints on
-// that page alone.
-func (p *painter) eachRow(td *tableData, fn func(pr placedRow, cells []*box)) {
+// 14.8.2.2.2, pagination artifacts). A row paints on the page of its top,
+// or across the pages it spans when it overflows them. With content set,
+// a row split across pages is met once, at its first piece, and paints on
+// every page it reaches.
+func (p *painter) eachRow(td *tableData, content bool, fn func(pr placedRow, cells []*box)) {
 	starts := cellStarts(td)
 	for _, seq := range td.seqs {
 		for _, pr := range seq {
 			if p.e.err != nil {
 				return
 			}
+			if content && pr.piece && !pr.first {
+				continue
+			}
 			dy, mono, art := p.dy, p.mono, p.artifact
 			p.dy += pr.dy
-			if p.mono < 0 {
-				p.mono = p.e.pageOf(td.top(pr) + eps)
-				if pr.clip >= 0 {
-					p.mono = pr.clip
-				}
+			if p.mono < 0 && (!content || !pr.piece) {
+				p.mono = p.e.spanPage(td.top(pr), td.bottom(pr))
 			}
 			p.artifact = art || pr.dy != 0
 			fn(pr, td.cells[starts[pr.r]:starts[pr.r+1]])
 			p.dy, p.mono, p.artifact = dy, mono, art
 		}
 	}
+}
+
+// spanPage returns the page the flow extent from top to bottom lies on,
+// -1 when it spans pages.
+func (e *engine) spanPage(top, bottom float64) int {
+	a := e.pageOf(top + eps)
+	if e.pageOf(max(bottom-metricSlack, top+eps)) != a {
+		return -1
+	}
+	return a
+}
+
+// cellRect returns the border box of cell c in the placed row pr: a piece
+// of a split row shows the slice of the cell within it, and reports which
+// of its top and bottom edges the slice keeps (box-decoration-break:
+// slice, CSS Fragmentation 3, 5.4).
+func (p *painter) cellRect(c *box, pr placedRow) (compose.Rect, bool, bool) {
+	r := p.borderRect(c)
+	if !pr.piece {
+		return r, true, true
+	}
+	y0, y1 := max(r.Y, pr.y0+p.dy), min(r.Y+r.Height, pr.y1+p.dy)
+	r.Y, r.Height = y0, max(y1-y0, 0)
+	return r, !pr.cutTop, !pr.cutBottom
 }
 
 // tableDecorations paints the layers of the table box t (CSS 2.1, 17.5.1):
@@ -83,10 +105,10 @@ func (p *painter) tableDecorations(t *box) {
 	if !t.hidden {
 		p.background(t, t.st, r, radii, t.bd, t.pd)
 	}
-	p.eachRow(td, func(pr placedRow, cells []*box) {
+	p.eachRow(td, false, func(pr placedRow, cells []*box) {
 		for _, c := range cells {
 			if !td.cellSkipped(c) {
-				p.cellBackgrounds(td, c)
+				p.cellBackgrounds(td, c, pr)
 			}
 		}
 	})
@@ -96,13 +118,24 @@ func (p *painter) tableDecorations(t *box) {
 		if !t.hidden {
 			p.border(t, t.st, r, radii, t.bd, [4]bool{true, true, true, true})
 		}
-		p.eachRow(td, func(pr placedRow, cells []*box) {
+		p.eachRow(td, false, func(pr placedRow, cells []*box) {
 			for _, c := range cells {
 				if td.cellSkipped(c) || c.hidden || c.st.EmptyCells == css.Hide && cellEmpty(c) {
 					continue
 				}
-				cr := p.borderRect(c)
-				p.border(c, c.st, cr, radiiOf(c, cr.Width, cr.Height), c.bd, [4]bool{true, true, true, true})
+				cr, top, bottom := p.cellRect(c, pr)
+				bd := c.bd
+				var radii [4][2]float64
+				if top && bottom {
+					radii = radiiOf(c, cr.Width, cr.Height)
+				}
+				if !top {
+					bd[css.Top] = 0
+				}
+				if !bottom {
+					bd[css.Bottom] = 0
+				}
+				p.border(c, c.st, cr, radii, bd, [4]bool{top, true, bottom, true})
 			}
 		})
 	}
@@ -115,12 +148,15 @@ func (p *painter) tableDecorations(t *box) {
 // its column group, column, row group and row, then its own. In the
 // separated model an empty cell with empty-cells: hide paints none (CSS
 // 2.1, 17.6.1.1).
-func (p *painter) cellBackgrounds(td *tableData, c *box) {
+func (p *painter) cellBackgrounds(td *tableData, c *box, pr placedRow) {
 	if !td.collapse && c.st.EmptyCells == css.Hide && cellEmpty(c) {
 		return
 	}
 	cd := c.cell
-	r := p.borderRect(c)
+	r, top, bottom := p.cellRect(c, pr)
+	if r.Height <= 0 {
+		return
+	}
 	col := td.cols[cd.col]
 	row := td.rows[cd.row]
 	for _, b := range []*box{col.group, col.col, row.group, row.box} {
@@ -132,10 +168,17 @@ func (p *painter) cellBackgrounds(td *tableData, c *box) {
 		return
 	}
 	var radii [4][2]float64
-	if !td.collapse {
+	if !td.collapse && top && bottom {
 		radii = radiiOf(c, r.Width, r.Height)
 	}
-	p.background(c, c.st, r, radii, c.bd, c.pd)
+	bd, pd := c.bd, c.pd
+	if !top {
+		bd[css.Top], pd[css.Top] = 0, 0
+	}
+	if !bottom {
+		bd[css.Bottom], pd[css.Bottom] = 0, 0
+	}
+	p.background(c, c.st, r, radii, bd, pd)
 }
 
 // partBackground paints the background of the row, row group, column or
@@ -178,7 +221,7 @@ func (p *painter) partBackground(b *box, clip compose.Rect) {
 // Appendix E), its own decorations already painted by the table.
 func (p *painter) tableContent(t *box) {
 	td := t.tdata
-	p.eachRow(td, func(pr placedRow, cells []*box) {
+	p.eachRow(td, true, func(pr placedRow, cells []*box) {
 		for _, c := range cells {
 			if !td.cellSkipped(c) {
 				p.cellFlow(c)
@@ -229,10 +272,7 @@ func (p *painter) collapsedBorders(td *tableData) {
 		}
 		mono := p.mono
 		if p.mono < 0 {
-			p.mono = p.e.pageOf(td.top(seq[0]) + eps)
-			if seq[0].clip >= 0 {
-				p.mono = seq[0].clip
-			}
+			p.mono = p.e.spanPage(td.top(seq[0]), td.bottom(seq[n-1]))
 		}
 		h := make([][]cborder, n+1)
 		v := make([][]cborder, n)
@@ -250,7 +290,17 @@ func (p *painter) collapsedBorders(td *tableData) {
 			}
 			h[k] = make([]cborder, nc)
 			for c := range nc {
-				h[k][c] = td.hEdge(above, below, c)
+				switch {
+				case cutLine(seq, k):
+				case k > 0 && k < n && seq[k].cutTop:
+					// A copy of the header over a piece of a split row: the
+					// piece's cut top adds nothing.
+					h[k][c] = td.hEdge(above, noRow, c)
+				case k > 0 && k < n && seq[k-1].cutBottom:
+					h[k][c] = td.hEdge(noRow, below, c)
+				default:
+					h[k][c] = td.hEdge(above, below, c)
+				}
 			}
 			if k < n {
 				v[k] = make([]cborder, nc+1)
@@ -335,6 +385,18 @@ func (p *painter) collapsedBorders(td *tableData) {
 		}
 		p.mono = mono
 	}
+}
+
+// cutLine reports the grid line k of the run of rows seq that a page break
+// cuts: the top of a piece of a split row not under a copy of the header,
+// the bottom of one not over a copy of the footer. It draws no border
+// (box-decoration-break: slice).
+func cutLine(seq []placedRow, k int) bool {
+	n := len(seq)
+	if k < n && seq[k].cutTop && (k == 0 || seq[k-1].dy == 0) {
+		return true
+	}
+	return k > 0 && seq[k-1].cutBottom && (k == n || seq[k].dy == 0)
 }
 
 // segment paints one collapsed border b on the rectangle r, a horizontal

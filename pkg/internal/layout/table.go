@@ -9,6 +9,9 @@ import (
 
 // tableFormatter lays out a table wrapper box: its captions as blocks of
 // the wrapper's width, and the table box between them (CSS 2.1, 17.4).
+// When the table's first rows move to the next page, a caption above it
+// stays where it is, as in Chromium: the break falls between the caption
+// and the table box.
 type tableFormatter struct{}
 
 func (tableFormatter) layout(e *engine, w *box, cb cblock, bc *bfc, cursor float64, mc *marginState) float64 {
@@ -29,6 +32,17 @@ func (tableFormatter) layout(e *engine, w *box, cb cblock, bc *bfc, cursor float
 		y = t.y + t.borderH()
 	}
 	return y
+}
+
+// wrapperCB returns the containing block kcb the box b gives its content,
+// but for a table wrapper box the height of cb, its own containing block:
+// the table box's percentage height resolves against it (CSS 2.1, 17.4
+// and 10.5), the wrapper's height being auto.
+func wrapperCB(b *box, kcb, cb cblock) cblock {
+	if b.tpart == partWrapper {
+		kcb.h, kcb.hDefinite = cb.h, cb.hDefinite
+	}
+	return kcb
 }
 
 func (tableFormatter) intrinsic(e *engine, w *box) (float64, float64) {
@@ -87,7 +101,31 @@ func (td *tableData) hSpacing() float64 {
 	if td.nCols == 0 {
 		return 0
 	}
-	return float64(td.nCols+1) * hs
+	n := 1
+	for i := range td.nCols {
+		if !td.colCollapsed(i) {
+			n++
+		}
+	}
+	return float64(n) * hs
+}
+
+// colCollapsed reports a column of td removed by visibility: collapse on
+// it or its column group: it takes no width and no border spacing, as in
+// Chromium (CSS 2.1, 17.5.5).
+func (td *tableData) colCollapsed(i int) bool {
+	if i < 0 || i >= len(td.cols) {
+		return false
+	}
+	col := td.cols[i]
+	return collapsed(col.col) || collapsed(col.group)
+}
+
+// rowCollapsed reports a row of td removed by visibility: collapse on it
+// or its row group (CSS 2.1, 17.5.5).
+func (td *tableData) rowCollapsed(r int) bool {
+	row := td.rows[r]
+	return collapsed(row.box) || collapsed(row.group)
 }
 
 // tableEdges resolves the padding and borders of the table box of td
@@ -189,6 +227,12 @@ func (e *engine) measureColumns(td *tableData) []colMeasure {
 				cm[i].pct = max(clamp(b.st.Width.Value), 0)
 			case css.Auto, css.None, css.Normal, css.Number:
 			}
+			if b.st.MinWidth.Kind == css.Points {
+				// A column's or column group's min-width is a floor on
+				// each column it applies to, as Chromium honours it.
+				mw := max(clamp(b.st.MinWidth.Value), 0)
+				cm[i].min, cm[i].max = max(cm[i].min, mw), max(cm[i].max, mw)
+			}
 		}
 	}
 	var spans []*box
@@ -253,6 +297,11 @@ func (e *engine) measureColumns(td *tableData) []colMeasure {
 		}
 		for i := range cols {
 			cols[i].max = max(cols[i].max, cols[i].min)
+		}
+	}
+	for i := range cm {
+		if td.colCollapsed(i) {
+			cm[i] = colMeasure{}
 		}
 	}
 	// Percentages past 100% in all are cut, the later columns first.
@@ -524,8 +573,8 @@ func (e *engine) columnWidths(td *tableData, w float64) []float64 {
 	} else {
 		ws = autoWidths(e.measureColumns(td), avail)
 	}
-	for i, col := range td.cols {
-		if collapsed(col.col) || collapsed(col.group) {
+	for i := range td.cols {
+		if td.colCollapsed(i) {
 			ws[i] = 0
 		}
 	}
@@ -567,6 +616,9 @@ func (e *engine) layoutTable(t *box, cb cblock, y float64) {
 	td.colX[0] = hs
 	for i, v := range ws {
 		td.colX[i+1] = td.colX[i] + v + hs
+		if td.colCollapsed(i) {
+			td.colX[i+1] = td.colX[i]
+		}
 	}
 	if td.collapse && nc > 0 {
 		td.colX[0] = 0
@@ -586,11 +638,13 @@ func (e *engine) layoutTable(t *box, cb cblock, y float64) {
 		return
 	}
 	rowH, base, hasBase := e.rowHeights(td, cb)
+	td.rowBase, td.rowHasBase = base, hasBase
 	end, pushed := e.placeRows(td, rowH, t.contentY())
 	if pushed && e.relayout(y) {
 		t.y = e.nextPage(y)
 		end, _ = e.placeRows(td, rowH, t.contentY())
 	}
+	rowH = td.rowH
 	for r, row := range td.rows {
 		rb := row.box
 		rb.laidOut = true
@@ -619,7 +673,13 @@ func (e *engine) layoutTable(t *box, cb cblock, y float64) {
 				off = base[cd.row] - cd.base
 			}
 		}
+		if cd.split {
+			off = cd.off
+		}
 		c.shift(0, top.y+max(off, 0)-c.y)
+		for _, s := range cd.struts {
+			c.insertStrut(top.y+s.at, s.d, 0)
+		}
 		c.y = top.y
 		c.h = max(h-vEdges(c), 0)
 	}
@@ -634,7 +694,9 @@ func (e *engine) layoutTable(t *box, cb cblock, y float64) {
 		}
 	}
 	h := end - top
-	if sh, ok := specHeight(t, t.st.Height, cb); ok {
+	if sh, ok := specHeight(t, t.st.Height, cb); ok && len(td.groups) > 0 {
+		// A table without a row group, empty or not, takes no height
+		// from its height property, as in Chromium.
 		h = max(h, sh)
 	}
 	t.h = max(h, 0)
@@ -668,6 +730,7 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw float64) {
 	mc.commit(end)
 	end = max(end, own.bottom(), c.contentY())
 	h := end - c.contentY()
+	cd.contentEnd = end
 	if sh, ok := specHeight(c, c.st.Height, cblock{}); ok {
 		// A cell's height is a minimum (CSS 2.1, 17.5.3).
 		h = max(h, sh)
@@ -683,7 +746,13 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw float64) {
 // rowHeights returns the height of every row of td (CSS 2.1, 17.5.3): its
 // height property, at least its cells' and the room baseline alignment
 // takes, with the excess of spanning cells and of the table's height
-// spread over the rows; and every row's baseline below its top.
+// spread over the rows; and every row's baseline below its top. A
+// percentage height on a row or on a cell resolves, as Chromium does,
+// against the table's content height less the border spacing above the
+// first row and below the last, when the table's height is not auto; the
+// percentages past 100% in all are cut, the later rows first. The table's
+// excess goes to the rows of auto height, else to those of a fixed
+// height, else to all, in proportion to their heights.
 func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []bool) {
 	nr := len(td.rows)
 	_, vs := td.spacing()
@@ -691,9 +760,17 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 	base := make([]float64, nr)
 	below := make([]float64, nr)
 	hasBase := make([]bool, nr)
+	pct := make([]float64, nr)
+	fixed := make([]bool, nr)
+	tableH, tableSet := specHeight(td.table, td.table.st.Height, cb)
 	for r, row := range td.rows {
-		if h, ok := specHeight(row.box, row.box.st.Height, cblock{}); ok {
+		st := row.box.st
+		if h, ok := specHeight(row.box, st.Height, cblock{}); ok {
 			rowH[r] = h
+			fixed[r] = true
+		}
+		if st.Height.Kind == css.Percent {
+			pct[r] = max(clamp(st.Height.Value), 0)
 		}
 	}
 	var spans []*box
@@ -702,6 +779,13 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 		if cd.rowSpan > 1 {
 			spans = append(spans, c)
 			continue
+		}
+		switch c.st.Height.Kind {
+		case css.Points:
+			fixed[cd.row] = true
+		case css.Percent:
+			pct[cd.row] = max(pct[cd.row], clamp(c.st.Height.Value))
+		case css.Auto, css.None, css.Normal, css.Number:
 		}
 		rowH[cd.row] = max(rowH[cd.row], cd.natH)
 		if vaKind(c.st) == css.Baseline && cd.hasBase {
@@ -721,6 +805,17 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 			rowH[r] = max(rowH[r], base[r]+below[r])
 		}
 	}
+	if tableSet {
+		ref := max(tableH-2*vs, 0)
+		left := 1.0
+		for r := range pct {
+			pct[r] = min(pct[r], max(left, 0))
+			left -= pct[r]
+			rowH[r] = max(rowH[r], pct[r]*ref)
+		}
+	} else {
+		clear(pct)
+	}
 	slices.SortStableFunc(spans, func(a, b *box) int { return cmp.Compare(a.cell.rowSpan, b.cell.rowSpan) })
 	for _, c := range spans {
 		cd := c.cell
@@ -733,25 +828,56 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 			spread(hs, extra)
 		}
 	}
-	for r, row := range td.rows {
-		if collapsed(row.box) {
+	for r := range td.rows {
+		if td.rowCollapsed(r) {
 			rowH[r] = 0
 		}
 	}
-	if sh, ok := specHeight(td.table, td.table.st.Height, cb); ok && nr > 0 {
+	if tableSet && nr > 0 {
 		total := float64(nr+1) * vs
 		for _, h := range rowH {
 			total += h
 		}
-		if extra := sh - total; extra > eps {
-			body := rowH[td.headN : nr-td.footN]
-			if len(body) == 0 {
-				body = rowH
+		if extra := tableH - total; extra > eps {
+			lo, hi := td.headN, nr-td.footN
+			if lo >= hi {
+				lo, hi = 0, nr
 			}
-			spread(body, extra)
+			td.spreadRows(rowH[lo:hi], pct[lo:hi], fixed[lo:hi], lo, extra)
 		}
 	}
 	return rowH, base, hasBase
+}
+
+// spreadRows spreads the excess extra of a table's height over the rows
+// hs, the rows of td from first: the rows of auto height, else those of
+// a fixed height, else all of them, collapsed rows aside, in proportion
+// to their heights.
+func (td *tableData) spreadRows(hs, pct []float64, fixed []bool, first int, extra float64) {
+	for _, pick := range []func(int) bool{
+		func(i int) bool { return pct[i] == 0 && !fixed[i] },
+		func(i int) bool { return pct[i] == 0 },
+		func(int) bool { return true },
+	} {
+		var idx []int
+		for i := range hs {
+			if pick(i) && !td.rowCollapsed(first+i) {
+				idx = append(idx, i)
+			}
+		}
+		if len(idx) == 0 {
+			continue
+		}
+		sub := make([]float64, len(idx))
+		for k, i := range idx {
+			sub[k] = hs[i]
+		}
+		spread(sub, extra)
+		for k, i := range idx {
+			hs[i] = sub[k]
+		}
+		return
+	}
 }
 
 // spread adds extra to the heights hs in proportion to them, equally when
@@ -815,19 +941,30 @@ func (td *tableData) halfAbove(r int) float64 {
 func (td *tableData) halfBelow(r int) float64 { return td.halfAbove(r + 1) }
 
 // placeRows sets the top of every row of td, from start, the content top
-// of the table box, and returns the bottom of the table's content. Rows
-// are not split (CSS 2.1, 17.5.3 leaves it open; browsers keep them
-// whole): a row that does not fit what is left of a page moves to the
-// next one, under a copy of the header group, and the page it leaves ends
-// with a copy of the footer group. A row taller than a page area lands at
-// a page top and is clipped to that page. pushed reports that the first
-// rows would leave the header alone on the table's first page: the caller
-// moves the table to the next page.
+// of the table box, and returns the bottom of the table's content. A row
+// that does not fit what is left of a page breaks inside its cells at a
+// line boundary (CSS Fragmentation 3, 4.4, as Chromium and WeasyPrint
+// break table rows): each cell's content after its break continues at the
+// top of the row's piece on the next page, under a copy of the header
+// group, and the page it leaves ends with a copy of the footer group. A
+// row that avoids breaks inside it, or whose content has no line that
+// fits, moves to the next page whole instead, as do the runs of rows
+// rowUnits keeps together. A row with nothing to break at, taller than a
+// page area, lands at a page top and overflows onto the pages below,
+// sliced at each cut, the rows after it following its full height. pushed
+// reports that the first rows would leave the header alone on the
+// table's first page: the caller moves the table to the next page. The
+// heights as placed, a split row's gaps included, land in td.rowH.
 func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float64, bool) {
 	nr := len(td.rows)
 	_, vs := td.spacing()
 	gap := vs
 	td.seqs = nil
+	for _, c := range td.cells {
+		c.cell.split, c.cell.struts = false, nil
+	}
+	rowH = slices.Clone(rowH)
+	td.rowH = rowH
 	var seq []placedRow
 	y := start + vs
 	if td.collapse {
@@ -853,11 +990,21 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 	}
 	headH, footH := sumH(0, headN), sumH(nr-footN, nr)
 	lastTop := y
-	place := func(lo, hi, clip int) {
+	place := func(lo, hi int) {
 		for r := lo; r < hi; r++ {
+			if td.rowCollapsed(r) {
+				// A collapsed row takes no border spacing either: it
+				// sits on the bottom of the row above (CSS 2.1, 17.5.5).
+				td.rows[r].box.y = y
+				if r > 0 {
+					td.rows[r].box.y = y - gap
+				}
+				seq = append(seq, placedRow{r: r})
+				continue
+			}
 			lastTop = y
 			td.rows[r].box.y = y
-			seq = append(seq, placedRow{r: r, clip: clip})
+			seq = append(seq, placedRow{r: r})
 			y += rowH[r] + gap
 		}
 		e.reach(y)
@@ -899,35 +1046,137 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 		top     float64
 	}
 	var foots []footCopy
-	place(0, headN, -1)
+	place(0, headN)
 	headTop := td.rows[0].box.y
 	page := e.pageOf(y)
 	onPage := 0
-	tallBefore := false
+	// endPage ends the current page: a copy of the footer group at top,
+	// then the run of rows, and the next page starts with a copy of the
+	// header group when head.
+	endPage := func(top float64, foot, head bool) {
+		if foot {
+			foots = append(foots, footCopy{seq: len(td.seqs), at: len(seq), top: top})
+			for r := nr - footN; r < nr; r++ {
+				seq = append(seq, placedRow{r: r})
+			}
+		}
+		td.seqs = append(td.seqs, seq)
+		seq = nil
+		page++
+		if head {
+			p := e.pageTop(page)
+			copyTop := p + vs
+			if td.collapse {
+				copyTop = p + td.halfAbove(0)
+			}
+			for r := range headN {
+				seq = append(seq, placedRow{r: r, dy: copyTop - headTop})
+			}
+		}
+	}
+	// split places the one-row unit u from y, broken across pages at line
+	// boundaries inside its cells. Unless force, it places nothing and
+	// reports false when no cell keeps a line on the current page.
+	split := func(u rowUnit, force bool) bool {
+		r := u.lo
+		rowTop := y
+		cells := td.splitCells(r)
+		bottom := func() float64 {
+			b := rowH[r]
+			for _, sc := range cells {
+				b = max(b, sc.bottom)
+			}
+			return b
+		}
+		pieceTop, cutTop, first := rowTop, false, true
+		for e.err == nil {
+			pb := e.pageTop(page + 1)
+			if rowTop+bottom()+footNeed(u) <= pb+eps {
+				break
+			}
+			end := pb
+			if repeatFoot {
+				end -= footNeed(u)
+			}
+			if !chooseCuts(cells, pieceTop-rowTop, end-rowTop, first && !force) {
+				if first && !force {
+					return false
+				}
+				// Nothing fits: the content overflows this page.
+				page++
+				e.reach(e.pageTop(page))
+				continue
+			}
+			at := e.pageTop(page + 1)
+			if repeatHead {
+				at += contStart(u, true)
+			}
+			inner := at
+			if repeatHead && td.collapse {
+				inner += td.edgeHalf(headN - 1)
+			}
+			for _, sc := range cells {
+				if sc.has {
+					sc.open(inner - rowTop)
+				}
+			}
+			seq = append(seq, placedRow{r: r, piece: true, y0: pieceTop, y1: end, cutTop: cutTop, cutBottom: true, first: first})
+			endPage(end+gap, repeatFoot, repeatHead)
+			pieceTop, cutTop, first = at, true, false
+			e.reach(at)
+		}
+		h := bottom()
+		rowH[r] = h
+		td.rows[r].box.y = rowTop
+		pr := placedRow{r: r}
+		if !first {
+			pr = placedRow{r: r, piece: true, y0: pieceTop, y1: rowTop + h, cutTop: true}
+			for _, sc := range cells {
+				sc.c.cell.split = true
+			}
+		}
+		seq = append(seq, pr)
+		lastTop = max(pieceTop, rowTop+h-metricSlack)
+		y = rowTop + h + gap
+		e.reach(y)
+		onPage = 1
+		return true
+	}
 	for k, u := range units {
 		if e.err != nil {
 			return y, false
 		}
-		clip := -1
 		if paginate {
 			page = max(page, e.pageOf(lastTop))
 			need := u.h + footNeed(u)
 			pb := e.pageTop(page + 1)
 			canBreak := onPage > 0 || k == 0 && (headN > 0 || !e.atPageTop(td.table.y))
-			brk := u.forced && k > 0 || tallBefore || canBreak && y+need > pb+eps
-			if brk && k == 0 && !tallBefore && !e.atPageTop(td.table.y) && y-td.table.y+need <= e.pageH+eps {
+			single := u.hi-u.lo == 1
+			fits := y+need <= pb+eps
+			if !fits && single && (!u.forced || k == 0) && canBreak && !td.avoidsSplit(u.lo) && split(u, false) {
+				continue
+			}
+			brk := u.forced && k > 0 || canBreak && !fits
+			if g := td.rows[u.lo].group; canBreak && !brk && td.firstRow(u.lo) && avoidsInside(g) {
+				// A row group that avoids breaks inside it and does not
+				// fit what is left of the page starts the next one, even
+				// when it is taller than a page and breaks there anyway
+				// (CSS Fragmentation 3, 4.4). A forced break inside it ends
+				// what has to fit.
+				end := u.lo
+				for end+1 < nr-footN && td.rows[end+1].group == g {
+					if forced, _ := td.breakBefore(end + 1); forced {
+						break
+					}
+					end++
+				}
+				brk = y+sumH(u.lo, end+1)+footNeed(u) > pb+eps
+			}
+			if brk && k == 0 && !e.atPageTop(td.table.y) && y-td.table.y+need <= e.pageH+eps {
 				return y, true
 			}
 			if brk {
-				if repeatFoot && onPage > 0 && !tallBefore {
-					foots = append(foots, footCopy{seq: len(td.seqs), at: len(seq), top: y})
-					for r := nr - footN; r < nr; r++ {
-						seq = append(seq, placedRow{r: r, clip: -1})
-					}
-				}
-				td.seqs = append(td.seqs, seq)
-				seq = nil
-				page++
+				endPage(y, repeatFoot && onPage > 0, false)
 				p := e.pageTop(page)
 				if repeatHead && contStart(u, true)+need <= e.pageH+eps {
 					copyTop := p + vs
@@ -935,7 +1184,7 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 						copyTop = p + td.halfAbove(0)
 					}
 					for r := range headN {
-						seq = append(seq, placedRow{r: r, dy: copyTop - headTop, clip: -1})
+						seq = append(seq, placedRow{r: r, dy: copyTop - headTop})
 					}
 					y = p + contStart(u, true)
 				} else {
@@ -943,24 +1192,20 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 				}
 				onPage = 0
 			}
-			tallBefore = false
-			if y+u.h+td.halfBelow(u.hi-1) > e.pageTop(page+1)+eps {
-				e.warn(codeClipped, "a table row taller than the page area was clipped", y)
-				clip = page
-				tallBefore = true
+			if single && y+u.h+footNeed(u) > e.pageTop(page+1)+eps {
+				split(u, true)
+				continue
 			}
 		}
-		place(u.lo, u.hi, clip)
+		place(u.lo, u.hi)
+		if paginate {
+			// A run taller than the page overflows onto the pages below.
+			lastTop = max(lastTop, y-gap-metricSlack)
+		}
 		onPage += u.hi - u.lo
 	}
 	if footN > 0 {
-		if paginate && tallBefore {
-			td.seqs = append(td.seqs, seq)
-			seq = nil
-			page++
-			y = e.pageTop(page) + contStart(rowUnit{lo: nr - footN}, false)
-		}
-		place(nr-footN, nr, -1)
+		place(nr-footN, nr)
 		for _, f := range foots {
 			dy := f.top - td.rows[nr-footN].box.y
 			s := td.seqs[f.seq]
@@ -976,6 +1221,25 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 		end = last.y + rowH[nr-1]
 	}
 	return end, false
+}
+
+// avoidsSplit reports a row of td that avoids breaks inside it (CSS
+// Fragmentation 3, 3.2). A row group or a table that avoids them moves
+// whole when it fits a page, rowUnits and the block flow see to that;
+// one taller than a page breaks inside anyway, its rows too.
+func (td *tableData) avoidsSplit(r int) bool {
+	return avoidsInside(td.rows[r].box)
+}
+
+// edgeHalf returns half the widest collapsed border below row above of td
+// where a copy of the header group meets the piece of a row split across
+// pages, whose cut top adds no border.
+func (td *tableData) edgeHalf(above int) float64 {
+	h := 0.0
+	for c := range td.nCols {
+		h = max(h, td.hEdge(above, noRow, c).w/2)
+	}
+	return h
 }
 
 // rowUnits groups the body rows of td into the units placement keeps

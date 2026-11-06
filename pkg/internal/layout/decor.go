@@ -332,22 +332,31 @@ func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]floa
 		return
 	}
 	inner, iradii := insetRect(r, radii, bd)
+	ref := 0
+	for !visible[ref] {
+		ref++
+	}
+	// A side cut away, not drawn and of no width, as the slice of a box a
+	// page break cuts has, does not break the uniformity of the others.
 	uniform := true
-	for s := 1; s < 4; s++ {
-		if !visible[s] || !visible[0] || st.Border[s] != st.Border[0] || bd[s] != bd[0] {
+	for s := range 4 {
+		if !visible[s] && !draw[s] && bd[s] == 0 {
+			continue
+		}
+		if !visible[s] || st.Border[s] != st.Border[ref] || bd[s] != bd[ref] {
 			uniform = false
 		}
 	}
-	if uniform && (st.Border[0].Style == css.Solid || st.Border[0].Style == css.Double) {
+	if uniform && (st.Border[ref].Style == css.Solid || st.Border[ref].Style == css.Double) {
 		// One colour all round needs no cut at the corners.
 		g := &ditem{}
-		p.side(g, css.Top, st.Border[0], r, radii, inner, iradii, bd)
+		p.side(g, css.Side(ref), st.Border[ref], r, radii, inner, iradii, bd)
 		for _, k := range g.kids {
 			p.emit(b, false, k.frag, r.Y, r.Y+r.Height, -1)
 		}
 		return
 	}
-	if bs := st.Border[0].Style; uniform && (bs == css.Dashed || bs == css.Dotted) && radii != ([4][2]float64{}) {
+	if bs := st.Border[0].Style; uniform && ref == 0 && visible[2] && (bs == css.Dashed || bs == css.Dotted) && radii != ([4][2]float64{}) {
 		// A rounded dashed or dotted border runs its pattern along the
 		// whole rounded outline, as Blink strokes it.
 		c, _ := colorOf(st.Border[0].Color)

@@ -79,6 +79,9 @@ const (
 	// marker (CSS Display 3, 2 and CSS Lists 3, 2). Its marker is
 	// always inside. Blockified, it becomes ListItem.
 	InlineListItem
+	// FlowRoot is a block box that establishes a block formatting context
+	// for its content (CSS Display 3, 2.3).
+	FlowRoot
 )
 
 // Position is the position property (CSS 2.1, 9.3.1). Sticky computes to

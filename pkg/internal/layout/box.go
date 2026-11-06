@@ -200,11 +200,12 @@ func (b *box) marginH() float64 { return b.borderH() + b.m[css.Top] + b.m[css.Bo
 // establishesBFC reports whether a block-level box establishes a new block
 // formatting context (CSS 2.1, 9.4.1): floats, absolutely positioned
 // boxes, inline blocks, boxes with
-// overflow other than visible, and the root; and the table wrapper boxes,
-// captions and cells (CSS 2.1, 17.4).
+// overflow other than visible, flow-root boxes (CSS Display 3, 2.3), and
+// the root; and the table wrapper boxes, captions and cells (CSS 2.1,
+// 17.4).
 func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
-		b.st.Overflow != css.OverflowVisible || b.kind == kindReplaced ||
+		b.st.Overflow != css.OverflowVisible || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell
 }
 

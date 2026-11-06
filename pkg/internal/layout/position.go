@@ -406,7 +406,7 @@ func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 func (e *engine) absContent(b *box, ccb cblock, h float64, hSet bool) {
 	own := &bfc{}
 	mc := &marginState{}
-	kcb := cblock{x: b.contentX(), w: b.w, h: h, hDefinite: hSet}
+	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: h, hDefinite: hSet}, ccb)
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
 	end += mc.strut.sum()
 	mc.commit(end)
