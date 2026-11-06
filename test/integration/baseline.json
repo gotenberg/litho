@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-06T22:06:43Z",
+  "captured_at": "2026-11-06T22:11:52Z",
   "corpora": {
     "compose": {
       "features": {
@@ -278,12 +278,12 @@
     "html": {
       "features": {
         "diff": {
-          "matched": 13,
-          "mismatched": 16,
+          "matched": 19,
+          "mismatched": 10,
           "skipped": 0,
           "metrics": {
             "convert_error": 1,
-            "pages_equal": 21
+            "pages_equal": 25
           },
           "scores": {
             "article": {
@@ -386,8 +386,8 @@
               "layout": 0.9429,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0,
-              "strict": 0,
+              "pages": 1,
+              "strict": 1,
               "text_f1": 1
             },
             "lists": {
@@ -439,7 +439,7 @@
               "text_f1": 0.2381
             },
             "no-background": {
-              "layout": 0.6656,
+              "layout": 0.9408,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -455,12 +455,12 @@
               "text_f1": 1
             },
             "page-ranges": {
-              "layout": 0.1547,
+              "layout": 0.9426,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.1667,
-              "strict": 0.1667,
-              "text_f1": 0.0833
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "print-css": {
               "layout": 0.9665,
@@ -471,36 +471,36 @@
               "text_f1": 1
             },
             "print-css-fit": {
-              "layout": 0,
+              "layout": 0.9553,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.25,
+              "text_f1": 1
+            },
+            "scale": {
+              "layout": 0.9405,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "single-page": {
+              "layout": 0.9429,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0,
               "strict": 0,
               "text_f1": 1
             },
-            "scale": {
-              "layout": 0.2526,
-              "link_recall": 0.7778,
-              "outline_recall": 1,
-              "pages": 0.6667,
-              "strict": 0,
-              "text_f1": 0.5608
-            },
-            "single-page": {
-              "layout": 0.0786,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0.0833
-            },
             "single-page-landscape": {
-              "layout": 0.9624,
+              "layout": 0.9615,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0,
-              "strict": 0,
-              "text_f1": 0.7368
+              "strict": 1,
+              "text_f1": 1
             },
             "svg": {
               "layout": 0,
@@ -511,12 +511,12 @@
               "text_f1": 0.9247
             },
             "wide-table": {
-              "layout": 0.4328,
+              "layout": 0.9194,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8
+              "text_f1": 0.9756
             }
           },
           "score_tolerance": 0.02
