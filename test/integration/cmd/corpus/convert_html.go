@@ -80,7 +80,7 @@ func fixtureFontsRoot() string {
 // oracles written for them read.
 //
 //nolint:gochecknoglobals // static list of directory prefixes
-var fixtureFamilyPrefixes = []string{"dejavu-", "liberation-", "noto-cjk-sans-"}
+var fixtureFamilyPrefixes = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-"}
 
 // errFontsMissing reports a font directory a converter feature needs and
 // the testdata lacks.

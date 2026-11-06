@@ -127,6 +127,12 @@ func (v *validator) text(t *Text) error {
 	if !finite(t.Origin.X) || !finite(t.Origin.Y) {
 		return fmt.Errorf("%w: origin %v", ErrInvalidText, t.Origin)
 	}
+	if !finite(t.Stroke) || t.Stroke < 0 || t.Stroke > t.Size {
+		return fmt.Errorf("%w: stroke %v for size %v", ErrInvalidText, t.Stroke, t.Size)
+	}
+	if !finite(t.Skew) || math.Abs(t.Skew) > 1 {
+		return fmt.Errorf("%w: skew %v", ErrInvalidText, t.Skew)
+	}
 	if len(t.Glyphs) > maxGlyphsPerRun {
 		return fmt.Errorf("%w: %d glyphs in a run, at most %d", ErrLimitExceeded, len(t.Glyphs), maxGlyphsPerRun)
 	}

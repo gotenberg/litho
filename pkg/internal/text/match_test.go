@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -84,6 +85,67 @@ func TestMatch_GenericOrder(t *testing.T) {
 		if got := f.Match(Style{Families: tc.families, Size: 10}).Family(); got != tc.want {
 			t.Errorf("Match(%q) = %s, want %s", tc.families, got, tc.want)
 		}
+	}
+}
+
+func TestBrowserFamilies_ResolveAsChromium(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		in, want []string
+	}{
+		{nil, []string{"Times New Roman", "serif"}},
+		{[]string{"Georgia"}, []string{"Georgia", "Times New Roman", "serif"}},
+		{[]string{"Georgia", "Sans-Serif"}, []string{"Georgia", "Arial", "Sans-Serif"}},
+		{[]string{"monospace"}, []string{"monospace"}},
+		{[]string{"cursive", "fantasy"}, []string{"Comic Sans MS", "cursive", "Impact", "fantasy"}},
+		// ui-monospace is no generic Chromium resolves on Linux.
+		{[]string{"ui-monospace"}, []string{"ui-monospace", "Times New Roman", "serif"}},
+	} {
+		in := slices.Clone(tc.in)
+		if got := BrowserFamilies(in); !slices.Equal(got, tc.want) {
+			t.Errorf("BrowserFamilies(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+		if !slices.Equal(in, tc.in) {
+			t.Errorf("BrowserFamilies(%q) changed its argument", tc.in)
+		}
+	}
+	// The DejaVu faces sort first and lead fontconfig's lists, but Chromium
+	// asks for Times New Roman and Arial in place of serif and sans-serif,
+	// which their metric aliases turn into the Liberation faces.
+	f := newTestFonts(t,
+		fontFile{name: "a_dejavu_serif.ttf", data: familyFace("DejaVu Serif", "Regular", 400, false)},
+		fontFile{name: "b_dejavu_sans.ttf", data: familyFace("DejaVu Sans", "Regular", 400, false)},
+		fontFile{name: "c_dejavu_mono.ttf", data: familyFace("DejaVu Sans Mono", "Regular", 400, false)},
+		fontFile{name: "d_liberation_serif.ttf", data: familyFace("Liberation Serif", "Regular", 400, false)},
+		fontFile{name: "e_liberation_sans.ttf", data: familyFace("Liberation Sans", "Regular", 400, false)},
+		fontFile{name: "f_liberation_mono.ttf", data: familyFace("Liberation Mono", "Regular", 400, false)},
+	)
+	for _, tc := range []struct {
+		families []string
+		want     string
+	}{
+		{[]string{"serif"}, "Liberation Serif"},
+		{[]string{"sans-serif"}, "Liberation Sans"},
+		{[]string{"Georgia", "serif"}, "Liberation Serif"},
+		// An unavailable family alone takes Chromium's standard font.
+		{[]string{"Georgia"}, "Liberation Serif"},
+		{[]string{"DejaVu Serif", "serif"}, "DejaVu Serif"},
+		// Chromium asks for "Monospace", which fontconfig resolves by its
+		// own list: DejaVu Sans Mono first.
+		{[]string{"monospace"}, "DejaVu Sans Mono"},
+		{[]string{"system-ui"}, "DejaVu Sans"},
+	} {
+		if got := f.Match(Style{Families: BrowserFamilies(tc.families), Size: 10}).Family(); got != tc.want {
+			t.Errorf("Match(BrowserFamilies(%q)) = %s, want %s", tc.families, got, tc.want)
+		}
+	}
+	// Without the Liberation faces, fontconfig's lists decide.
+	g := newTestFonts(t,
+		fontFile{name: "a_noto_serif.ttf", data: familyFace("Noto Serif", "Regular", 400, false)},
+		fontFile{name: "b_dejavu_serif.ttf", data: familyFace("DejaVu Serif", "Regular", 400, false)},
+	)
+	if got := g.Match(Style{Families: BrowserFamilies([]string{"serif"}), Size: 10}).Family(); got != "DejaVu Serif" {
+		t.Errorf("serif without Liberation = %s, want DejaVu Serif", got)
 	}
 }
 

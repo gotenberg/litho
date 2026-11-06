@@ -160,7 +160,9 @@ type shapedItem struct {
 	ascent, descent, gap   float64
 	ulPos, ulThick         float64
 	strikePos, strikeThick float64
-	object                 bool
+	// stroke and skew synthesise the bold and italic the face lacks.
+	stroke, skew float64
+	object       bool
 }
 
 // shapedGlyph is one glyph of a [shapedItem], in points.
@@ -405,6 +407,7 @@ func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style
 			return shapedItem{}, fmt.Errorf("shaping text: %w", err)
 		}
 		it.face = cf
+		it.stroke, it.skew = synthesis(requestOf(style), fc, style.Size)
 	}
 	if upem := float64(out.Face.Upem()); upem > 0 {
 		k := style.Size / upem
@@ -422,8 +425,12 @@ func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style
 	n := len(p.text)
 	for k, g := range out.Glyphs {
 		start, end := clusterRange(g, n)
+		gid := glyphID(g.GlyphID)
+		if gid == 0 {
+			gid = blankEmoji(out.Face, p.text[start:end])
+		}
 		it.glyphs[k] = shapedGlyph{
-			gid:     glyphID(g.GlyphID),
+			gid:     gid,
 			xoff:    st.toPoints(g.XOffset),
 			yoff:    st.toPoints(-g.YOffset),
 			advance: st.toPoints(g.Advance),
@@ -611,7 +618,7 @@ func (p *Paragraph) LineTrimmed(start, end, trim int) ParagraphLine {
 // [start, end), the ones from hangFrom on drawing no advance, and returns
 // their advance.
 func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int) float64 {
-	t := &compose.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: compose.Point{X: sp.X}}
+	t := &compose.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: compose.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew}
 	pen := 0.0
 	cluster := -1
 	for _, g := range it.glyphs {

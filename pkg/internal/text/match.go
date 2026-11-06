@@ -98,6 +98,23 @@ var genericFamilies = map[generic][]string{
 	},
 }
 
+// browserDefaults are the families Chromium asks fontconfig for in place of
+// a generic family, the defaults of its Linux font settings
+// (chrome/app/resources/locale_settings_linux.grd): Times New Roman for
+// serif, Arial for sans-serif, Comic Sans MS for cursive and Impact for
+// fantasy. Chromium does not ask fontconfig for the generic itself, so
+// fontconfig's metric aliases turn these into Liberation Serif and
+// Liberation Sans where those are installed, ahead of the DejaVu faces
+// 60-latin.conf prefers. Monospace and system-ui have none: Chromium asks
+// for "Monospace" and the toolkit's "Sans", which fontconfig resolves by its
+// own lists.
+var browserDefaults = map[generic]string{
+	genericSerif:     "Times New Roman",
+	genericSansSerif: "Arial",
+	genericCursive:   "Comic Sans MS",
+	genericFantasy:   "Impact",
+}
+
 // metricAliasGroups are the metric-compatible families of fontconfig's
 // conf.d/30-metric-aliases.conf: families that share every advance width,
 // so text set in one keeps its line breaks in another. Each group is a list
@@ -273,6 +290,44 @@ func requestedFamilies(style Style) []string {
 	return l.keys
 }
 
+// BrowserFamilies returns families as Chromium resolves them, a new list
+// for [Style.Families]; families itself is not modified.
+//
+// Chromium does not ask fontconfig for a generic family: it asks for the
+// family its settings name in its place ([browserDefaults]), Times New
+// Roman for serif, Arial for sans-serif, Comic Sans MS for cursive and
+// Impact for fantasy, which fontconfig's metric aliases turn into Liberation
+// Serif and Liberation Sans where those are installed, ahead of the DejaVu
+// faces fontconfig's own lists prefer. BrowserFamilies puts that family
+// right before each generic it stands for, so the generic's list stays the
+// fallback. Monospace and system-ui keep fontconfig's lists, as Chromium
+// asks for "Monospace" and the toolkit's "Sans".
+//
+// A list that names no generic family [Style.Families] resolves, nil and
+// empty lists included, ends with serif. CSS Fonts 4, 5 (Font Matching
+// Algorithm), has the user agent fall back to its default font when no
+// family of the list is available, and Chromium's default is its standard
+// font, Times New Roman, the family it asks for in place of serif. So
+// Georgia alone draws with Liberation Serif, not with the sans-serif face
+// [Fonts.Match] falls back to.
+func BrowserFamilies(families []string) []string {
+	out := make([]string, 0, len(families)+2)
+	hasGeneric := false
+	for _, name := range families {
+		if g := genericOf(name); g != genericNone {
+			hasGeneric = true
+			if d := browserDefaults[g]; d != "" {
+				out = append(out, d)
+			}
+		}
+		out = append(out, name)
+	}
+	if !hasGeneric {
+		out = append(out, browserDefaults[genericSerif], "serif")
+	}
+	return out
+}
+
 // matchFamilies returns the families [Fonts.Match] tries for style: the
 // requested ones, then sans-serif, which takes an unknown family.
 func matchFamilies(style Style) []string {
@@ -418,4 +473,52 @@ func (f *Fonts) bestInFamily(key string, req request, r rune) *Face {
 		}
 	}
 	return best
+}
+
+// The synthetic bold of Skia, which Chromium draws with: the outline is
+// stroked with a line of fakeBoldSmallRatio of the size up to
+// fakeBoldSmallSize points, fakeBoldLargeRatio from fakeBoldLargeSize
+// points, interpolated linearly between (SkScalerContext's
+// kStdFakeBoldInterpKeys and kStdFakeBoldInterpValues).
+const (
+	fakeBoldSmallSize  = 9.0
+	fakeBoldLargeSize  = 36.0
+	fakeBoldSmallRatio = 1.0 / 24
+	fakeBoldLargeRatio = 1.0 / 32
+)
+
+// syntheticBoldDelta is how much heavier than the face a requested weight
+// must be for Chromium to embolden it: a 700 request on a 400 face, not a
+// 600 one.
+const syntheticBoldDelta = 200
+
+// syntheticItalicSkew is the shear Chromium slants a face without italic
+// by, about 14 degrees.
+const syntheticItalicSkew = 0.25
+
+// synthesis returns the stroke width and skew that synthesise the bold and
+// italic req asks for and fc lacks, at size points, as Chromium does (CSS
+// Fonts 4, 3.5, font-synthesis: weight and style allowed by default): bold
+// when the requested weight exceeds the face's by more than
+// [syntheticBoldDelta], italic when an italic or oblique face is asked for
+// and fc is upright.
+func synthesis(req request, fc *Face, size float64) (stroke, skew float64) {
+	if fc == nil {
+		return 0, 0
+	}
+	if req.weight > fc.weight+syntheticBoldDelta {
+		ratio := fakeBoldSmallRatio
+		switch {
+		case size >= fakeBoldLargeSize:
+			ratio = fakeBoldLargeRatio
+		case size > fakeBoldSmallSize:
+			t := (size - fakeBoldSmallSize) / (fakeBoldLargeSize - fakeBoldSmallSize)
+			ratio = fakeBoldSmallRatio + t*(fakeBoldLargeRatio-fakeBoldSmallRatio)
+		}
+		stroke = size * ratio
+	}
+	if req.slant != slantNormal && fc.slant == slantNormal {
+		skew = syntheticItalicSkew
+	}
+	return stroke, skew
 }

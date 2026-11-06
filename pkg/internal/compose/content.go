@@ -200,7 +200,9 @@ func (p *pageWriter) color(c Color, op string) {
 
 // text writes a run as one text object (ISO 32000-1, 9.4). The font is
 // selected at size 1 and the text matrix carries the size, with d negated
-// so the glyphs stand upright under the page's flip: [size 0 0 -size x y].
+// so the glyphs stand upright under the page's flip, and the skew as c:
+// [size 0 size*skew -size x y]. A run with a stroke is drawn in text
+// rendering mode 2 (9.3.6) with that line width.
 // Glyphs on one baseline share TJ arrays, a glyph away from where the
 // previous one's advance leaves the pen taking a TJ adjustment in
 // thousandths of text space (9.4.3); a change of baseline sets a new text
@@ -216,9 +218,22 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	name := p.fontName(fe)
 	p.mark(t.Parent)
 	cur := p.currentAlpha()
-	p.setAlpha(alphaState{fill: t.Color.A * opacity, stroke: cur.stroke})
+	stroke := cur.stroke
+	if t.Stroke > 0 {
+		stroke = t.Color.A * opacity
+	}
+	p.setAlpha(alphaState{fill: t.Color.A * opacity, stroke: stroke})
 	p.color(t.Color, "rg")
+	if t.Stroke > 0 {
+		// Synthetic bold: the outline is stroked in the fill colour with
+		// round joins, so no miter spikes at sharp corners (8.4.3.4).
+		p.color(t.Color, "RG")
+		fmt.Fprintf(&p.buf, "%s w 1 j\n", num(t.Stroke))
+	}
 	fmt.Fprintf(&p.buf, "BT\n/%s 1 Tf\n", name)
+	if t.Stroke > 0 {
+		p.buf.WriteString("2 Tr\n")
+	}
 
 	size := t.Size
 	tj := tjWriter{buf: &p.buf}
@@ -235,7 +250,7 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		x, y := t.Origin.X+g.X, t.Origin.Y+g.Y
 		if !started || round(y) != round(baseline) {
 			tj.end()
-			fmt.Fprintf(&p.buf, "%s 0 0 %s %s %s Tm\n", num(size), num(-size), num(x), num(y))
+			fmt.Fprintf(&p.buf, "%s 0 %s %s %s %s Tm\n", num(size), num(size*t.Skew), num(-size), num(x), num(y))
 			started, penX, baseline = true, x, y
 		} else if adj := round((penX - x) / size * 1000); adj != 0 {
 			// A positive adjustment moves the next glyph left (9.4.3, the
@@ -248,6 +263,11 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		penX += advance * size
 	}
 	tj.end()
+	if t.Stroke > 0 {
+		// The rendering mode is graphics state that outlives the text
+		// object (9.3.1): later runs fill only.
+		p.buf.WriteString("0 Tr\n")
+	}
 	p.buf.WriteString("ET\n")
 	return nil
 }

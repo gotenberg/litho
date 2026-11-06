@@ -43,7 +43,7 @@ const (
 // fixtureFamilies are the prefixes of the font directories
 // corpus/compose/fetch-fonts.sh installs, the only ones the conversion reads:
 // the fonts directory also holds test fonts other corpora draw with.
-var fixtureFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-"}
+var fixtureFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-"}
 
 func main() {
 	sources := flag.String("sources", "test/integration/corpus/html/sources", "Directory of the <name>/index.html sources")

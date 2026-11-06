@@ -326,7 +326,8 @@ func (f *Fonts) Len() int {
 // directions). A generic family stands for its preference list (see
 // [Style.Families]); for a Chinese, Japanese or Korean [Style.Lang] the Noto
 // CJK family of that language comes first. Then the sans-serif list is
-// tried, and at last the first indexed face.
+// tried, and at last the first indexed face. [BrowserFamilies] turns a list
+// into the one that resolves as Chromium does.
 //
 // Among the faces of a family, Match keeps the one closest in aspect, in the
 // order of CSS Fonts Level 4, 5.2 (Matching font styles): a normal width

@@ -120,6 +120,12 @@ type Report struct {
 	// the matched face's .notdef glyph. It is sorted, holds each character
 	// once and keeps at most the first 256 distinct characters met.
 	MissingGlyphs []rune
+	// MissingEmoji lists the emoji no indexed face covers: pictographs,
+	// which a colour emoji font draws and [NewFonts] does not index. They
+	// draw blank, the advance of the matched face's .notdef glyph, rather
+	// than as a box, and keep their text for extraction. It is sorted and
+	// bounded as MissingGlyphs is, and MissingGlyphs leaves them out.
+	MissingEmoji []rune
 }
 
 // Layout lays runs out into lines no wider than width points.
@@ -158,8 +164,10 @@ type Report struct {
 //     Apple's LastResort placeholder font last.
 //
 // Colour emoji faces are not indexed, so emoji fall to an outline face that
-// covers them, if any. A character no face covers draws the matched face's
-// .notdef glyph and is listed in [Report.MissingGlyphs].
+// covers them, if any, which draws their text presentation. An emoji no face
+// covers draws blank and is listed in [Report.MissingEmoji]; any other
+// character no face covers draws the matched face's .notdef glyph and is
+// listed in [Report.MissingGlyphs].
 //
 // Layout parses the font programs of the faces it draws with on first use
 // and keeps them in the index's bounded cache.
@@ -241,6 +249,7 @@ type layoutState struct {
 	byFont  map[*font.Font]*Face
 	cache   map[resolveKey]*Face
 	missing map[rune]struct{}
+	emoji   map[rune]struct{}
 
 	shaper  shaping.HarfbuzzShaper
 	seg     shaping.Segmenter
@@ -293,6 +302,7 @@ func newLayoutState(f *Fonts, runs []Run) (*layoutState, error) {
 		byFont:  make(map[*font.Font]*Face),
 		cache:   make(map[resolveKey]*Face),
 		missing: make(map[rune]struct{}),
+		emoji:   make(map[rune]struct{}),
 	}
 	// Runs that share families, weight, slant and language share a match.
 	type matchKey struct {
@@ -672,8 +682,12 @@ func (st *layoutState) collectMissing(out *shaping.Output, para []rune) {
 			if gid, ok := out.Face.NominalGlyph(r); ok && gid != 0 {
 				continue
 			}
-			if _, ok := st.missing[r]; !ok && len(st.missing) < maxMissingGlyphs {
-				st.missing[r] = struct{}{}
+			set := st.missing
+			if isEmoji(r) {
+				set = st.emoji
+			}
+			if _, ok := set[r]; !ok && len(set) < maxMissingGlyphs {
+				set[r] = struct{}{}
 			}
 		}
 	}
@@ -705,11 +719,13 @@ func (st *layoutState) line(runs shaping.Line, para []rune, styleOf []int, dir d
 		if len(out.Glyphs) == 0 {
 			continue
 		}
-		cf, err := st.byFont[out.Face.Font].Compose()
+		fc := st.byFont[out.Face.Font]
+		cf, err := fc.Compose()
 		if err != nil {
 			return Line{}, fmt.Errorf("laying out text: %w", err)
 		}
-		s := st.styles[styleOf[out.Runes.Offset]].style
+		ss := st.styles[styleOf[out.Runes.Offset]]
+		s := ss.style
 		t := &compose.Text{
 			Face:   cf,
 			Size:   s.Size,
@@ -717,6 +733,7 @@ func (st *layoutState) line(runs shaping.Line, para []rune, styleOf []int, dir d
 			Origin: compose.Point{X: x},
 			Glyphs: make([]compose.Glyph, len(out.Glyphs)),
 		}
+		t.Stroke, t.Skew = synthesis(ss.req, fc, s.Size)
 		pen := 0.0
 		cluster := -1
 		for k, g := range out.Glyphs {
@@ -729,6 +746,10 @@ func (st *layoutState) line(runs shaping.Line, para []rune, styleOf []int, dir d
 				cluster = c
 				start, end := clusterRange(g, len(para))
 				cg.Text = string(para[start:end])
+			}
+			if cg.GID == 0 {
+				start, end := clusterRange(g, len(para))
+				cg.GID = blankEmoji(out.Face, para[start:end])
 			}
 			t.Glyphs[k] = cg
 			pen += st.toPoints(g.Advance)
@@ -798,8 +819,39 @@ func allHanging(rs []rune) bool {
 
 // report returns the call's [Report].
 func (st *layoutState) report() Report {
-	if len(st.missing) == 0 {
-		return Report{}
+	var rep Report
+	if len(st.missing) > 0 {
+		rep.MissingGlyphs = slices.Sorted(maps.Keys(st.missing))
 	}
-	return Report{MissingGlyphs: slices.Sorted(maps.Keys(st.missing))}
+	if len(st.emoji) > 0 {
+		rep.MissingEmoji = slices.Sorted(maps.Keys(st.emoji))
+	}
+	return rep
+}
+
+// blankEmoji returns the glyph that replaces a .notdef glyph of face
+// drawing the characters of cluster: the face's space glyph when each of
+// them is an emoji or default ignorable, so a missing emoji draws blank
+// (see [Report.MissingEmoji]), else 0, the .notdef glyph itself.
+func blankEmoji(face *font.Face, cluster []rune) uint16 {
+	if face == nil || len(cluster) == 0 {
+		return 0
+	}
+	emoji := false
+	for _, r := range cluster {
+		switch {
+		case isEmoji(r):
+			emoji = true
+		case harfbuzz.IsDefaultIgnorable(r):
+		default:
+			return 0
+		}
+	}
+	if !emoji {
+		return 0
+	}
+	if gid, ok := face.NominalGlyph(' '); ok {
+		return glyphID(gid)
+	}
+	return 0
 }

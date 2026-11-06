@@ -45,7 +45,8 @@ type Style struct {
 	// for serif; Noto Sans Mono CJK for monospace) comes before the list,
 	// as fontconfig's 70-noto-cjk.conf does. Since serif lists DejaVu Serif
 	// first, it picks DejaVu Serif over Liberation Serif when both are
-	// installed.
+	// installed; [BrowserFamilies] rewrites a list to pick the faces
+	// Chromium picks.
 	Families []string
 	// Weight is the CSS weight, from 1 to 1000; 400 is regular and 700
 	// bold. Zero means 400; values out of range are clamped.

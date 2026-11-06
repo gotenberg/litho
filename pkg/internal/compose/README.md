@@ -52,6 +52,9 @@ encodes:
   glyph; the next glyphs of the cluster carry "".
 - Fonts are `Face` values: one sfnt program and a dedup key. The backend
   embeds a key once, subset to the glyphs used.
+- `Text.Stroke` and `Text.Skew` let a converter synthesise the bold and
+  italic a face lacks, as browsers do: a stroke of the outlines in the fill
+  colour, and a shear of the glyphs about their baseline.
 - Structure is a tree of `StructElem` fragments point into. A fragment
   with a nil parent in a structured document is an artifact.
 - Dates never enter the model. Output bytes depend on input and options
@@ -69,7 +72,9 @@ through `writer.WriteRewrite`:
   opacity.
 - Text runs become `BT`/`ET` blocks with `Tf`, `Tm` and `TJ`; glyph
   positions that differ from the font's advances become kerning
-  adjustments or new `Td` moves.
+  adjustments or new `Td` moves. A run with a stroke draws in text
+  rendering mode 2 (`2 Tr`, with `w` the stroke width); a skew enters the
+  `Tm` matrix.
 - Fonts embed through `embed`: Type0 over CIDFontType2 or CIDFontType0C,
   Identity-H, a ToUnicode CMap built from `Glyph.Text`.
 - Images: `image.Image` writes as Flate RGB or Gray with an SMask for

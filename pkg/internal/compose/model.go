@@ -136,6 +136,19 @@ type Text struct {
 	// Parent is the structure element the run belongs to, nil for an
 	// artifact or an untagged document.
 	Parent *StructElem
+	// Stroke, when positive, also strokes the glyph outlines in the run's
+	// colour with a line of this width in points, centred on the outline:
+	// text rendering mode 2, fill then stroke (ISO 32000-1, 9.3.6). A
+	// converter sets it to embolden a face that has no bold, as browsers
+	// synthesise bold. Zero fills only. It is at most [Text.Size].
+	Stroke float64
+	// Skew slants the glyphs by Skew points to the right per point above
+	// the baseline, a shear about each glyph's baseline origin in the text
+	// matrix (ISO 32000-1, 9.4.2). A converter sets it to slant a face that
+	// has no italic, as browsers synthesise italic with a skew of 0.25.
+	// Zero draws upright; a negative value leans left. Its magnitude is at
+	// most 1.
+	Skew float64
 }
 
 // ImageSource is the pixels of an [Image], shared by every placement of it.

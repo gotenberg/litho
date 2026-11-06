@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"image/color"
+	"strings"
 	"sync"
 	"testing"
 
@@ -36,15 +37,15 @@ func TestGenerate_DepthCapWarns(t *testing.T) {
 	}
 }
 
-func TestGenerate_UnsupportedWarns(t *testing.T) {
+func TestGenerate_SupportedDoNotWarn(t *testing.T) {
 	abs := sty(func(s *css.Style) { s.Position = css.Absolute; s.FontVariant = css.SmallCaps })
 	res := run(t, doc(el(abs, txt(abs, "a"))), page(100, 20))
 	codes := map[string]int{}
 	for _, w := range res.Warnings {
 		codes[w.Code]++
 	}
-	if codes[codeUnsupported] != 1 {
-		t.Errorf("warnings %+v, want small-caps reported once, positioning laid out", res.Warnings)
+	if codes[codeUnsupported] != 0 {
+		t.Errorf("warnings %+v, want none: small-caps synthesised, positioning laid out", res.Warnings)
 	}
 }
 
@@ -130,5 +131,18 @@ func TestInline_EmptyBoxMakesNoLine(t *testing.T) {
 	rb := boxes(t, doc(el(sty(), el(inlineSty()))), page(10, 10))
 	if p := kid(t, rb, 0, 0); len(p.lines) != 0 || p.h != 0 {
 		t.Errorf("%d lines, height %v: an empty inline box makes no line", len(p.lines), p.h)
+	}
+}
+
+func TestGenerate_MissingEmojiWarnOnce(t *testing.T) {
+	res := run(t, doc(el(sty(), txt(sty(), "a\U0001F680"), el(sty(), txt(sty(), "\U0001F389")))), page(100, 40))
+	var msgs []string
+	for _, w := range res.Warnings {
+		if w.Code == codeMissingGlyph {
+			msgs = append(msgs, w.Message)
+		}
+	}
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "emoji") {
+		t.Errorf("missing-glyph warnings %q, want one for the emoji", msgs)
 	}
 }

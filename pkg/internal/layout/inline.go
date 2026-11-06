@@ -43,8 +43,9 @@ type lineItem struct {
 	atomic *box
 	x, w   float64
 	// baseline is the item's baseline below the line top, ascent and
-	// descent its extent.
+	// descent its extent, and gap the line gap of a glyph run's face.
 	baseline, ascent, descent float64
+	gap                       float64
 	ulPos, ulThick            float64
 	stPos, stThick            float64
 	// start and end are the item's characters in its paragraph, hang how
@@ -781,7 +782,7 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		s.closeEdges(p, sp.End, true, closed, &x, widen)
 		s.openEdges(p, sp.Start, true, opened, &x, widen)
 		it := &lineItem{
-			box: info.box, x: x, w: sp.Width, ascent: sp.Ascent, descent: sp.Descent,
+			box: info.box, x: x, w: sp.Width, ascent: sp.Ascent, descent: sp.Descent, gap: sp.LineGap,
 			ulPos: sp.UnderlinePosition, ulThick: sp.UnderlineThickness, stPos: sp.StrikeoutPosition, stThick: sp.StrikeoutThickness,
 			start: sp.Start, end: sp.End, rtl: sp.RTL, hang: max(sp.End-max(sp.Start, hangFrom), 0),
 		}
@@ -952,7 +953,15 @@ func (s *inlineState) vertical(l *lineBox) {
 			v = parent
 		}
 		it.baseline = v.shift
-		half := (v.lh - (it.ascent + it.descent)) / 2
+		lh := v.lh
+		if v.b.st.LineHeight.Kind == css.Normal && it.text != nil {
+			// line-height: normal lays a glyph run out at the normal line
+			// height of the face that draws it, a fallback face included,
+			// as CSS Inline 3, 5.1 lets the user agent do and browsers do:
+			// text a fallback face draws taller grows the line.
+			lh = it.ascent + it.descent + max(it.gap, 0)
+		}
+		half := (lh - (it.ascent + it.descent)) / 2
 		if it.text != nil || it.box.kind == kindInline {
 			include(v, v.shift-wider(it.ascent+half, v.above), v.shift+wider(it.descent+half, v.below))
 		}

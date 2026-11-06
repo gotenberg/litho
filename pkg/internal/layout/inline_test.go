@@ -514,3 +514,59 @@ func TestFloats_InLineMovesTheLine(t *testing.T) {
 		t.Errorf("float at %v, want below the full first line", got)
 	}
 }
+
+func TestSmallCaps_Synthesised(t *testing.T) {
+	sc := func(s *css.Style) { s.FontVariant = css.SmallCaps }
+	res := run(t, doc(el(sty(sc), txt(sty(sc), "Ab1c"))), page(100, 20))
+	runs := texts(res, 1)
+	type piece struct {
+		text string
+		size float64
+	}
+	var got []piece
+	for _, r := range runs {
+		got = append(got, piece{r.text, r.run.Size / css.Pt})
+	}
+	// CSS Fonts 4, 6.6: the lowercase letters become capitals at 0.7 em,
+	// the rest keeps the size.
+	want := []piece{{"A", 10}, {"B", 7}, {"1", 10}, {"C", 7}}
+	if len(got) != len(want) {
+		t.Fatalf("runs %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i].text != want[i].text || !near(got[i].size, want[i].size) {
+			t.Fatalf("runs %+v, want %+v", got, want)
+		}
+	}
+	// B starts after A's 10px em square, 1 after B's 7px one.
+	if !near(runs[1].x-runs[0].x, px(10)) || !near(runs[2].x-runs[1].x, px(7)) {
+		t.Errorf("runs at %v, %v, %v", runs[0].x, runs[1].x, runs[2].x)
+	}
+}
+
+func TestSmallCaps_Pieces(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		on   bool
+		want []smallCapsPiece
+	}{
+		{"abc", false, []smallCapsPiece{{text: "abc"}}},
+		{"abc", true, []smallCapsPiece{{text: "ABC", small: true}}},
+		{"Hé 2", true, []smallCapsPiece{{text: "H"}, {text: "É", small: true}, {text: " 2"}}},
+		// ß has no one-rune uppercase: it keeps its form and size.
+		{"ß", true, []smallCapsPiece{{text: "ß"}}},
+		{"", true, nil},
+	} {
+		got := smallCaps(tc.in, tc.on)
+		if len(got) != len(tc.want) {
+			t.Errorf("smallCaps(%q, %v) = %+v, want %+v", tc.in, tc.on, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("smallCaps(%q, %v) = %+v, want %+v", tc.in, tc.on, got, tc.want)
+				break
+			}
+		}
+	}
+}

@@ -570,3 +570,53 @@ func TestWriteInfo(t *testing.T) {
 		t.Error("Info carries a date")
 	}
 }
+
+// TestWriteSyntheticBoldAndItalic draws a glyph stroked and skewed, as a
+// converter synthesises bold and italic, and checks the operators and the
+// ink: the stroke widens the glyph, the skew moves its top right.
+func TestWriteSyntheticBoldAndItalic(t *testing.T) {
+	t.Parallel()
+	plain := run(t, sans, 40, compose.Point{X: 50, Y: 100}, "H")
+	bold := run(t, sans, 40, compose.Point{X: 50, Y: 100}, "H")
+	bold.Stroke = 4
+	italic := run(t, sans, 40, compose.Point{X: 50, Y: 100}, "H")
+	italic.Skew = 0.25
+	ink := func(txt *compose.Text) (image.Image, []byte) {
+		page := &compose.Page{Width: 200, Height: 200, Content: []compose.Fragment{txt}}
+		out := write(t, &compose.Document{Pages: []*compose.Page{page}})
+		return render(t, open(t, out), 1), inflated(t, out)
+	}
+	plainImg, plainContent := ink(plain)
+	boldImg, boldContent := ink(bold)
+	italicImg, italicContent := ink(italic)
+	if bytes.Contains(plainContent, []byte(" Tr")) || !bytes.Contains(plainContent, []byte("40 0 0 -40 50 100 Tm")) {
+		t.Errorf("plain run content:\n%s", plainContent)
+	}
+	for _, op := range []string{"4 w", "2 Tr", "0 Tr\nET"} {
+		if !bytes.Contains(boldContent, []byte(op)) {
+			t.Errorf("bold run content lacks %q:\n%s", op, boldContent)
+		}
+	}
+	if !bytes.Contains(italicContent, []byte("40 0 10 -40 50 100 Tm")) {
+		t.Errorf("italic run content:\n%s", italicContent)
+	}
+	if p, b := inkIn(plainImg, 0, 0, 200, 200), inkIn(boldImg, 0, 0, 200, 200); b <= p {
+		t.Errorf("bold ink %d, plain %d: want more", b, p)
+	}
+	// The glyph is 20 points tall: skewed by 0.25, its top moves 5 points
+	// right of its bottom.
+	left := func(img image.Image, y int) int {
+		for x := range 200 {
+			if dark(img.At(x, y)) {
+				return x
+			}
+		}
+		return -1
+	}
+	if top, bottom := left(italicImg, 82), left(italicImg, 98); top-bottom < 3 {
+		t.Errorf("skewed glyph starts at %d on top, %d at the bottom: want the top right", top, bottom)
+	}
+	if top, bottom := left(plainImg, 82), left(plainImg, 98); top != bottom {
+		t.Errorf("upright glyph starts at %d on top, %d at the bottom", top, bottom)
+	}
+}

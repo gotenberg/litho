@@ -248,7 +248,7 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		size = 1
 	}
 	return text.Style{
-		Families:      st.FontFamilies,
+		Families:      text.BrowserFamilies(st.FontFamilies),
 		Weight:        st.FontWeight,
 		Italic:        st.FontStyle != css.FontNormal,
 		Size:          size,

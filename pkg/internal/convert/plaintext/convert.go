@@ -29,7 +29,8 @@ const maxMissingGlyphWarnings = 256
 // Warning codes [Convert] reports.
 const (
 	// CodeMissingGlyph flags a character no indexed face covers, drawn as
-	// the matched face's .notdef glyph.
+	// the matched face's .notdef glyph, or, once per document, emoji no
+	// indexed face covers, drawn blank.
 	CodeMissingGlyph = "missing-glyph"
 	// CodeLineSplit flags a source line longer than [maxParagraphRunes]
 	// characters, laid out in pieces.
@@ -134,8 +135,10 @@ type layouter struct {
 	// places a run.
 	para *compose.StructElem
 
-	seen      map[rune]bool
-	truncated bool
+	seen map[rune]bool
+	// emojiWarned reports that the missing emoji warning was given.
+	emojiWarned bool
+	truncated   bool
 }
 
 // run walks the decoded source and lays out every source line.
@@ -249,6 +252,14 @@ func (l *layouter) paragraph(ctx context.Context, s string) error {
 		first = len(l.doc.Pages)
 	}
 	l.reportMissing(rep.MissingGlyphs, first)
+	if len(rep.MissingEmoji) > 0 && !l.emojiWarned {
+		l.emojiWarned = true
+		l.doc.Warnings = append(l.doc.Warnings, compose.Warning{
+			Code:    CodeMissingGlyph,
+			Message: "colour emoji fonts are not supported: emoji no text font covers are drawn blank",
+			Page:    first,
+		})
+	}
 	return nil
 }
 

@@ -74,6 +74,31 @@ install_archive() {
   echo "  fonts: $name installed ($(find "$dir" -name '*.[ot]tf' | wc -l | tr -d ' ') faces)"
 }
 
+# install_zip <name> <url> <sha256> <pin_key> <member>... fetches a release
+# zip and unpacks the named members, flattened, into $OUT/<name>, OFL.txt
+# becoming LICENSE.
+install_zip() {
+  local name="$1" url="$2" sha="$3" key="$4" dir="$OUT/$1" stamp tmp
+  shift 4
+  stamp="$url $sha"
+  if current "$dir" "$stamp"; then
+    echo "  fonts: $name already at the pinned release"
+    return
+  fi
+  tmp="$(mktemp -d)"
+  fetch "$url" "$tmp/archive"
+  verify "$tmp/archive" "$sha" "$key"
+  mkdir -p "$tmp/x"
+  unzip -q -j "$tmp/archive" "$@" OFL.txt -d "$tmp/x"
+  mv "$tmp/x/OFL.txt" "$tmp/x/LICENSE"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  cp "$tmp"/x/* "$dir/"
+  printf '%s' "$stamp" > "$dir/.pinned"
+  rm -rf "$tmp"
+  echo "  fonts: $name installed ($(find "$dir" -name '*.[ot]tf' | wc -l | tr -d ' ') faces)"
+}
+
 mkdir -p "$OUT"
 
 install_archive "liberation-$(pin LIBERATION_FONTS_VERSION)" \
@@ -108,3 +133,12 @@ else
   rm -rf "$tmp"
   echo "  fonts: noto-cjk-sans-$NOTO installed (4 faces)"
 fi
+
+# Noto Sans Thai and Noto Sans Devanagari: the hinted static Regular and Bold
+# faces of each release archive.
+THAI="$(pin NOTO_SANS_THAI_VERSION)"
+install_zip "noto-sans-thai-$THAI" "$(pin NOTO_SANS_THAI_URL)" "$(pin NOTO_SANS_THAI_SHA256)" NOTO_SANS_THAI_SHA256 \
+  NotoSansThai/hinted/ttf/NotoSansThai-Regular.ttf NotoSansThai/hinted/ttf/NotoSansThai-Bold.ttf
+DEVANAGARI="$(pin NOTO_SANS_DEVANAGARI_VERSION)"
+install_zip "noto-sans-devanagari-$DEVANAGARI" "$(pin NOTO_SANS_DEVANAGARI_URL)" "$(pin NOTO_SANS_DEVANAGARI_SHA256)" NOTO_SANS_DEVANAGARI_SHA256 \
+  NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Regular.ttf NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Bold.ttf

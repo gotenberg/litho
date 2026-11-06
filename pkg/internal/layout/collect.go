@@ -242,10 +242,15 @@ func (c *collector) text(k *box) {
 		if buf.Len() == 0 {
 			return
 		}
-		t := buf.String()
-		c.cur.runs = append(c.cur.runs, text.ParagraphRun{Text: t, Style: style, Override: override})
-		c.cur.infos = append(c.cur.infos, runInfo{kind: runText, box: k, ws: ws})
-		c.cur.n += utf8.RuneCountInString(t)
+		for _, pc := range smallCaps(buf.String(), k.st.FontVariant == css.SmallCaps) {
+			st := style
+			if pc.small {
+				st.Size *= smallCapsScale
+			}
+			c.cur.runs = append(c.cur.runs, text.ParagraphRun{Text: pc.text, Style: st, Override: override})
+			c.cur.infos = append(c.cur.infos, runInfo{kind: runText, box: k, ws: ws})
+			c.cur.n += utf8.RuneCountInString(pc.text)
+		}
 		buf.Reset()
 	}
 	rs := []rune(s)
@@ -293,6 +298,50 @@ func (c *collector) text(k *box) {
 		}
 	}
 	flush()
+}
+
+// smallCapsScale is the size synthesised small capitals are drawn at, a
+// fraction of the font size: Chromium's kSmallCapsFontSizeMultiplier, the
+// 0.7 em browsers use for a face without small capitals.
+const smallCapsScale = 0.7
+
+// smallCapsPiece is a piece of text drawn at the font size, or, small, in
+// synthesised small capitals.
+type smallCapsPiece struct {
+	text  string
+	small bool
+}
+
+// smallCaps splits s for font-variant: small-caps when on, synthesising
+// small capitals as CSS Fonts 4, 6.6 allows for a face without them: each
+// lowercase letter with an uppercase mapping becomes that uppercase letter,
+// drawn at [smallCapsScale] of the size, and every other character keeps
+// the size. A rune maps to one rune, so positions in the paragraph keep
+// their meaning. Off, s is one piece.
+func smallCaps(s string, on bool) []smallCapsPiece {
+	if !on {
+		return []smallCapsPiece{{text: s}}
+	}
+	var out []smallCapsPiece
+	var b strings.Builder
+	small := false
+	for _, r := range s {
+		up := unicode.ToUpper(r)
+		lower := up != r && unicode.IsLower(r)
+		if lower != small && b.Len() > 0 {
+			out = append(out, smallCapsPiece{text: b.String(), small: small})
+			b.Reset()
+		}
+		small = lower
+		if lower {
+			r = up
+		}
+		b.WriteRune(r)
+	}
+	if b.Len() > 0 {
+		out = append(out, smallCapsPiece{text: b.String(), small: small})
+	}
+	return out
 }
 
 // visibleControl returns the visible glyph a control character other than
@@ -456,9 +505,7 @@ func (e *engine) shapePara(b *box, p *ifcPara) {
 	if len(fresh) > 0 {
 		e.warn(codeMissingGlyph, fmt.Sprintf("no font covers %q: drawn as the font's missing-glyph box", string(fresh)), -1)
 	}
-	for _, info := range p.infos {
-		if info.kind == runText && info.box.st.FontVariant == css.SmallCaps {
-			e.warnOnce(codeUnsupported, "font-variant: small-caps laid out as normal", -1)
-		}
+	if len(rep.MissingEmoji) > 0 {
+		e.warnOnce(codeMissingGlyph, "colour emoji fonts are not supported: emoji no text font covers are drawn blank", -1)
 	}
 }
