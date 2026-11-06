@@ -68,9 +68,12 @@ func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
 		return ellipseOps(num("cx", axisX), num("cy", axisY), rad, rad)
 	case "ellipse":
 		rx, ry := num("rx", axisX), num("ry", axisY)
-		// SVG 2, 10.4: an auto radius takes the other's value.
-		_, rxok := parseLength(attrOf(n, "rx"))
-		_, ryok := parseLength(attrOf(n, "ry"))
+		// SVG 2, 10.4: an auto radius takes the other's value, and a
+		// negative one is invalid, which leaves it auto.
+		rxl, rxok := parseLength(attrOf(n, "rx"))
+		ryl, ryok := parseLength(attrOf(n, "ry"))
+		rxok = rxok && rxl.v >= 0
+		ryok = ryok && ryl.v >= 0
 		switch {
 		case rxok && !ryok:
 			ry = rx
@@ -201,7 +204,49 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 	if fill == nil && stroke == nil {
 		return
 	}
-	r.emit(s, &compose.Path{Ops: ops, Fill: fill, Stroke: stroke})
+	var caps []compose.PathOp
+	if stroke != nil && stroke.Cap != compose.ButtCap {
+		ops, caps = zeroLengthCaps(ops, stroke)
+	}
+	if len(ops) > 0 {
+		r.emit(s, &compose.Path{Ops: ops, Fill: fill, Stroke: stroke})
+	}
+	if len(caps) > 0 {
+		r.emit(s, &compose.Path{Ops: caps, Fill: &compose.Fill{Color: stroke.Color}})
+	}
+}
+
+// zeroLengthCaps splits the zero-length subpaths out of ops: SVG 1.1,
+// 11.4 draws their round or square cap, a disc or an axis-aligned square
+// of the stroke width centred on the point, which a PDF viewer may leave
+// out. It returns ops without them and the caps' outlines.
+func zeroLengthCaps(ops []compose.PathOp, s *compose.Stroke) ([]compose.PathOp, []compose.PathOp) {
+	var keep, caps []compose.PathOp
+	half := s.Width / 2
+	for i := 0; i < len(ops); {
+		j := i + 1
+		for j < len(ops) && ops[j].Kind != compose.MoveTo {
+			j++
+		}
+		sub := ops[i:j]
+		p := sub[0].P[0]
+		zero := sub[0].Kind == compose.MoveTo && len(sub) > 1
+		for _, op := range sub[1:] {
+			for _, q := range op.P[:pointsOf(op.Kind)] {
+				zero = zero && q == p
+			}
+		}
+		switch {
+		case !zero:
+			keep = append(keep, sub...)
+		case s.Cap == compose.RoundCap:
+			caps = append(caps, ellipseOps(p.X, p.Y, half, half)...)
+		default:
+			caps = append(caps, rectOps(p.X-half, p.Y-half, s.Width, s.Width)...)
+		}
+		i = j
+	}
+	return keep, caps
 }
 
 // withAlpha returns f with its colours' alpha multiplied by a, nil when

@@ -71,6 +71,10 @@ type style struct {
 	anchor   anchor
 	lang     string
 
+	// background is the CSS background-color of the root element, which
+	// paints its viewport (CSS Backgrounds 3, 3.2); it is not inherited.
+	background compose.Color
+
 	// mask, filter and marker record the properties the renderer does not
 	// draw, for a warning.
 	mask, filter, marker bool
@@ -122,6 +126,7 @@ func (p *style) inherit() *style {
 	st.stopAlpha = 1
 	st.overflowOK = false
 	st.mask, st.filter = false, false
+	st.background = compose.Color{}
 	return &st
 }
 
@@ -251,6 +256,16 @@ func (st *style) apply(d declaration, parent *style) bool {
 			st.color = composeColor(c)
 		} else if parent != nil {
 			st.color = parent.color
+		}
+		return true
+	case "background-color":
+		c, current, ok := css.ParseColor(v)
+		if !ok {
+			return false
+		}
+		st.background = composeColor(c)
+		if current {
+			st.background = st.color
 		}
 		return true
 	case "stop-color":
@@ -404,9 +419,9 @@ func composeColor(c css.Color) compose.Color {
 	return compose.Color{R: c.R, G: c.G, B: c.B, A: c.A}
 }
 
-// parsePaint parses a <paint> (SVG 1.1, 11.2): none, currentColor, a
-// colour, or a url() reference with an optional fallback. An ICC colour
-// after an sRGB one is ignored.
+// parsePaint parses a <paint> (SVG 2, 13.2): none, currentColor, a
+// colour, or a url() reference with an optional fallback. SVG 1.1's ICC
+// colour makes the value invalid, as SVG 2 and browsers have it.
 func parsePaint(v string) (paint, bool) {
 	v = strings.TrimSpace(v)
 	switch {
@@ -430,9 +445,6 @@ func parsePaint(v string) (paint, bool) {
 			p.fallback = &fb
 		}
 		return p, true
-	}
-	if i := strings.Index(strings.ToLower(v), "icc-color("); i > 0 {
-		v = strings.TrimSpace(v[:i])
 	}
 	c, current, ok := css.ParseColor(v)
 	if !ok {

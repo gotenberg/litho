@@ -133,3 +133,60 @@ func TestDraw_TransformedLeaves(t *testing.T) {
 		})
 	}
 }
+
+func TestDraw_RootAndEdgeCases(t *testing.T) {
+	tests := []struct {
+		name   string
+		src    string
+		probes []probe
+	}{
+		{"root-transform-about-centre", `<svg width="100" height="100" transform="scale(0.5)"><rect width="100" height="100" fill="red"/></svg>`,
+			[]probe{{50, 50, red}, {20, 20, white}, {80, 80, white}}},
+		{"root-background", `<svg width="100" height="100" viewBox="0 0 10 10" style="background-color: lime"><rect width="5" height="10" fill="red"/></svg>`,
+			[]probe{{25, 50, red}, {75, 50, lime}}},
+		{"negative-size", `<svg width="-100" height="100"><rect width="100" height="100" fill="red"/></svg>`,
+			[]probe{{50, 50, white}}},
+		{"zero-length-square-cap", `<svg width="100" height="100"><path d="M50 50 L50 50" stroke="black" stroke-width="20" stroke-linecap="square"/></svg>`,
+			[]probe{{50, 50, black}, {43, 43, black}, {35, 35, white}}},
+		{"zero-length-round-cap", `<svg width="100" height="100"><path d="M50 50 Z" stroke="black" stroke-width="20" stroke-linecap="round"/></svg>`,
+			[]probe{{50, 50, black}, {41, 41, white}, {50, 41, black}}},
+		{"clip-chain", `<svg width="100" height="100"><clipPath id="a"><rect width="50" height="100"/></clipPath><clipPath id="b" clip-path="url(#a)"><rect width="100" height="50"/></clipPath><rect width="100" height="100" fill="red" clip-path="url(#b)"/></svg>`,
+			[]probe{{25, 25, red}, {75, 25, white}, {25, 75, white}}},
+		{"clip-on-child", `<svg width="100" height="100"><clipPath id="a"><rect width="50" height="100"/></clipPath><clipPath id="b"><rect width="100" height="50" clip-path="url(#a)"/></clipPath><rect width="100" height="100" fill="red" clip-path="url(#b)"/></svg>`,
+			[]probe{{25, 25, red}, {75, 25, white}, {25, 75, white}}},
+		{"clip-cycle-dropped", `<svg width="100" height="100"><clipPath id="a" clip-path="url(#a)"><rect width="50" height="100"/></clipPath><rect width="100" height="100" fill="red" clip-path="url(#a)"/></svg>`,
+			[]probe{{25, 25, red}, {75, 25, white}}},
+		{"empty-clip-hides", `<svg width="100" height="100"><clipPath id="a"/><rect width="100" height="100" fill="red" clip-path="url(#a)"/></svg>`,
+			[]probe{{50, 50, white}}},
+		{"fr-larger-than-r", `<svg width="100" height="100"><radialGradient id="g" fr="0.7"><stop stop-color="black"/><stop offset="1" stop-color="white"/></radialGradient><rect width="100" height="100" fill="url(#g)"/></svg>`,
+			[]probe{{50, 50, white}, {1, 1, [3]uint8{10, 10, 10}}}},
+		{"icc-color-invalid", `<svg width="100" height="100"><rect width="100" height="100" fill="red icc-color(x, 1)"/></svg>`,
+			[]probe{{50, 50, black}}},
+		{"negative-ry-auto", `<svg width="100" height="100"><ellipse cx="50" cy="50" rx="40" ry="-1" fill="lime"/></svg>`,
+			[]probe{{50, 15, lime}}},
+		{"style-comments", `<svg width="100" height="100"><rect width="100" height="100" style="/*x*/fill:lime/*y*/"/></svg>`,
+			[]probe{{50, 50, lime}}},
+		{"symbol-transform-ignored", `<svg width="100" height="100"><symbol id="s" transform="translate(50 0)"><rect width="50" height="100" fill="red"/></symbol><use href="#s"/></svg>`,
+			[]probe{{25, 50, red}, {75, 50, white}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			checkProbes(t, draw(t, tt.src, 100, 100), 40, tt.probes)
+		})
+	}
+}
+
+func TestParse_XMLEncoding(t *testing.T) {
+	// "é" in ISO 8859-1 is the byte 0xE9.
+	src := "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><svg width=\"10\" height=\"10\"><title>caf\xe9</title></svg>"
+	d := parse(t, src)
+	var title string
+	for c := d.root.FirstChild; c != nil; c = c.NextSibling {
+		if c.Data == "title" && c.FirstChild != nil {
+			title = c.FirstChild.Data
+		}
+	}
+	if title != "café" {
+		t.Errorf("title %q, want café", title)
+	}
+}

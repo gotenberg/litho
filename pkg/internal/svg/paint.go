@@ -3,6 +3,7 @@ package svg
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -264,7 +265,6 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *pai
 		k := rad * 0.999 / d
 		fx, fy = cx+(fx-cx)*k, cy+(fy-cy)*k
 	}
-	fr = min(fr, rad)
 	if fx == cx && fy == cy && fr == rad {
 		return solid()
 	}
@@ -321,23 +321,36 @@ func anyOpaque(stops []compose.ColorStop) bool {
 	return false
 }
 
-// clipPath returns the clip the clip-path of the element n, styled st,
-// names (SVG 1.1, 14.3.5), in n's user space: the union of the outlines
-// of the clipPath's shapes, each under its transform and the clipPath's,
-// and in bounding box units when clipPathUnits asks. It reports empty for
-// a clipPath that has nothing to clip with, which hides n; a reference
-// that does not name a clipPath clips nothing. Text in a clip path and a
-// clip-path on the clipPath itself are not drawn, with a warning, and a
-// clipPath of several shapes combines them with the nonzero rule.
-func (r *renderer) clipPath(n *html.Node, st *style, box *bbox) (*compose.Path, bool) {
-	cp := r.d.ids[st.clipPath]
+// maxClipChain caps the clip paths one clip-path reference chains through
+// the clip-path of a clip path or of its child. Anti-DoS guard, not
+// spec-mandated: SVG 1.1, 14.3.5 forbids circular references, which this
+// also stops, and real drawings chain one or two.
+const maxClipChain = 8
+
+// clipPath returns the clips the clip path id names for the element n
+// (SVG 1.1, 14.3.5), in n's user space, which intersect: the union of the
+// outlines of the clip path's shapes, each under its transform and the
+// clip path's, in bounding box units when clipPathUnits asks; then the
+// clip path a lone child names, and the one the clip path itself names. It
+// reports empty for a clip path that has nothing to clip with, which hides
+// n; a reference that does not name a clipPath, or that leads back into
+// the chain, clips nothing. Text in a clip path does not clip, with a
+// warning; a clipPath of several shapes combines them with the nonzero
+// rule and ignores their own clip paths, with a warning. seen holds the
+// clip paths of the chain so far.
+func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Node) ([]*compose.Path, bool) {
+	cp := r.d.ids[id]
 	if cp == nil || cp.Data != "clipPath" {
 		return nil, false
 	}
-	cs := r.d.styleOf(cp, 0)
-	if cs.clipPath != "" {
-		r.d.warn("unsupported-svg-property", "a clip-path on a clipPath element is not applied")
+	if slices.Contains(seen, cp) || len(seen) >= maxClipChain {
+		// A reference back into the chain is an error (SVG 1.1, 14.3.5);
+		// the link is dropped and the rest of the chain clips, as resvg
+		// draws it.
+		return nil, false
 	}
+	seen = append(seen, cp)
+	cs := r.d.styleOf(cp, 0)
 	m := identity
 	if t, ok := attrOK(cp, "transform"); ok {
 		if tm, good := parseTransform(t); good {
@@ -349,7 +362,7 @@ func (r *renderer) clipPath(n *html.Node, st *style, box *bbox) (*compose.Path, 
 		if box != nil {
 			b = *box
 		} else {
-			b = r.bboxOf(n, st, identity, 0)
+			b = r.bboxOf(n, cs, identity, 0)
 		}
 		if !b.ok || !(b.x1 > b.x0) || !(b.y1 > b.y0) {
 			return nil, true
@@ -359,6 +372,9 @@ func (r *renderer) clipPath(n *html.Node, st *style, box *bbox) (*compose.Path, 
 	var ops []compose.PathOp
 	rule := compose.NonZero
 	shapesN := 0
+	var childClip string
+	var childEl *html.Node
+	var childM compose.Matrix
 	for c := cp.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type != html.ElementNode || c.Namespace != "svg" {
 			continue
@@ -368,8 +384,8 @@ func (r *renderer) clipPath(n *html.Node, st *style, box *bbox) (*compose.Path, 
 		if el.Data == "use" {
 			// A use in a clip path references a shape directly (SVG 1.1,
 			// 14.3.5).
-			id, ok := strings.CutPrefix(strings.TrimSpace(href(el)), "#")
-			t := r.d.ids[id]
+			ref, ok := strings.CutPrefix(strings.TrimSpace(href(el)), "#")
+			t := r.d.ids[ref]
 			if !ok || t == nil || !shapes[t.Data] {
 				continue
 			}
@@ -405,15 +421,39 @@ func (r *renderer) clipPath(n *html.Node, st *style, box *bbox) (*compose.Path, 
 		}
 		shapesN++
 		rule = es.clipRule
-		ops = append(ops, transformOps(g, mul(m, local))...)
+		childClip, childEl, childM = es.clipPath, el, mul(m, local)
+		ops = append(ops, transformOps(g, childM)...)
 	}
 	if shapesN == 0 || len(ops) == 0 {
 		return nil, true
 	}
+	chain := []*compose.Path{{Ops: ops, Fill: &compose.Fill{Rule: rule}}}
 	if shapesN > 1 {
-		rule = compose.NonZero
+		chain[0].Fill.Rule = compose.NonZero
+		if childClip != "" {
+			r.d.warn("unsupported-svg-property", "the clip paths of the children of a clip path of several shapes are not applied")
+		}
+		childClip = ""
 	}
-	return &compose.Path{Ops: ops, Fill: &compose.Fill{Rule: rule}}, false
+	if childClip != "" {
+		// The child's clip path is in the child's user space.
+		g := opsBBox(r.geometry(childEl, r.d.styleOf(childEl, 0)))
+		sub, empty := r.clipPath(childEl, childClip, &g, seen)
+		if empty {
+			return nil, true
+		}
+		for _, p := range sub {
+			chain = append(chain, &compose.Path{Ops: transformOps(p.Ops, childM), Fill: p.Fill})
+		}
+	}
+	if cs.clipPath != "" {
+		sub, empty := r.clipPath(n, cs.clipPath, box, seen)
+		if empty {
+			return nil, true
+		}
+		chain = append(chain, sub...)
+	}
+	return chain, false
 }
 
 // bboxOf returns the bounding box of the element n styled st, in the

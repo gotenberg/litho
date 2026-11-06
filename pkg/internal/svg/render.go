@@ -240,10 +240,10 @@ func passes(n *html.Node) bool {
 // when given, else from the element's geometry.
 func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func()) {
 	op := st.opacity
-	var clip *compose.Path
+	var clips []*compose.Path
 	if st.clipPath != "" {
 		var empty bool
-		clip, empty = r.clipPath(n, st, box)
+		clips, empty = r.clipPath(n, st.clipPath, box, nil)
 		if empty {
 			// An empty clip path clips everything away (SVG 1.1, 14.3.5).
 			op = 0
@@ -253,9 +253,30 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 		s.alpha = 0
 		return s, func() {}
 	}
-	if op >= 1 && clip == nil {
+	if op >= 1 && len(clips) == 0 {
 		return s, func() {}
 	}
+	var first *compose.Path
+	if len(clips) > 0 {
+		first, clips = clips[0], clips[1:]
+	}
+	inner, done := r.openGroup(s, op, first)
+	// Clips that intersect, a clip path's own or its child's, nest.
+	for _, c := range clips {
+		var d2 func()
+		inner, d2 = r.openGroup(inner, 1, c)
+		outer := done
+		done = func() { d2(); outer() }
+	}
+	return inner, done
+}
+
+// openGroup opens a composition group of opacity op clipped to clip, in
+// the coordinates of the sink's element, and returns the sink of its
+// content and the function that closes it. Past the nesting cap it opens
+// nothing: the opacity folds into the colours and the clip is dropped,
+// with a warning.
+func (r *renderer) openGroup(s sink, op float64, clip *compose.Path) (sink, func()) {
 	if s.nest >= maxGroupNesting {
 		r.d.warn("svg-limit", fmt.Sprintf("opacity and clipping nested deeper than %d levels are approximated", maxGroupNesting))
 		s.alpha *= op
@@ -443,21 +464,8 @@ func (r *renderer) openClip(s sink, n *html.Node, st *style, clip *compose.Path)
 	if clip == nil || outer.alpha <= 0 {
 		return outer, done
 	}
-	if outer.nest >= maxGroupNesting {
-		r.d.warn("svg-limit", fmt.Sprintf("opacity and clipping nested deeper than %d levels are approximated", maxGroupNesting))
-		return outer, done
-	}
-	g := &compose.Group{Transform: outer.pending, Clip: clip, Opacity: 1}
-	c := &container{}
-	inner := sink{c: c, pending: identity, nest: outer.nest + 1, alpha: outer.alpha}
-	return inner, func() {
-		if len(c.out) > 0 {
-			g.Content = c.out
-			outer.c.out = append(outer.c.out, g)
-			outer.c.last = nil
-		}
-		done()
-	}
+	inner, d2 := r.openGroup(outer, 1, clip)
+	return inner, func() { d2(); done() }
 }
 
 // use draws the element a use references (SVG 1.1, 5.6), translated by x
@@ -492,12 +500,9 @@ func (r *renderer) use(n *html.Node, st *style, s sink, depth int) {
 		}
 		w := r.length(n, "width", st, axisX, r.vw)
 		h := r.length(n, "height", st, axisY, r.vh)
+		// A symbol's own transform is ignored: SVG 1.1, 5.5 gives it
+		// none, and resvg and the SVG 1.1 test suite follow it.
 		inner = inner.with(translate(x, y))
-		if t, ok := attrOK(target, "transform"); ok {
-			if m, good := parseTransform(t); good {
-				inner = inner.with(m)
-			}
-		}
 		r.symbol(target, ts, inner, depth+1, w, h)
 	case "svg":
 		w := r.length(n, "width", st, axisX, r.length(target, "width", st, axisX, r.vw))

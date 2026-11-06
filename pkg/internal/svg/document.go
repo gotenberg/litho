@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"sync"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/charset"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -93,7 +95,13 @@ type Document struct {
 	// viewBox is the root's viewBox, ok false for none.
 	viewBox viewBox
 	par     aspect
-	images  map[string]*Raster
+	// transform is the root's transform, applied in the viewport after
+	// the viewBox mapping (SVG 2, 8.5); background its background colour;
+	// disabled marks a root that draws nothing.
+	transform  compose.Matrix
+	background compose.Color
+	disabled   bool
+	images     map[string]*Raster
 
 	mu       sync.Mutex
 	decls    map[*html.Node][]declaration
@@ -120,7 +128,7 @@ func Parse(ctx context.Context, data []byte, opts Options) (*Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	doc, err := html.Parse(bytes.NewReader(data))
+	doc, err := html.Parse(bytes.NewReader(decodeXML(data)))
 	if err != nil {
 		return nil, fmt.Errorf("parsing the SVG: %w", err)
 	}
@@ -130,6 +138,36 @@ func Parse(ctx context.Context, data []byte, opts Options) (*Document, error) {
 	}
 	return newDocument(ctx, root, opts, true)
 }
+
+// decodeXML returns data in UTF-8: as it is, unless its XML declaration
+// names another encoding the WHATWG Encoding Standard knows (XML 1.0,
+// 4.3.3), which decodes it. A byte order mark decides first.
+func decodeXML(data []byte) []byte {
+	if bytes.HasPrefix(data, []byte("\xef\xbb\xbf")) || !bytes.HasPrefix(data, []byte("<?xml")) {
+		return data
+	}
+	end := bytes.Index(data, []byte("?>"))
+	if end < 0 {
+		return data
+	}
+	m := xmlEncoding.FindSubmatch(data[:end])
+	if m == nil {
+		return data
+	}
+	enc, name := charset.Lookup(string(m[1]))
+	if enc == nil || name == "utf-8" {
+		return data
+	}
+	out, err := enc.NewDecoder().Bytes(data)
+	if err != nil {
+		// A decoder replaces what it cannot map; it fails on nothing.
+		return data
+	}
+	return out
+}
+
+// xmlEncoding matches the encoding declaration of an XML declaration.
+var xmlEncoding = regexp.MustCompile(`encoding\s*=\s*["']([A-Za-z0-9._:-]+)["']`)
 
 // FromNode builds a drawing from an svg element of an already parsed
 // HTML document: inline SVG (HTML Standard, 4.8.16). The tree is read,
@@ -211,7 +249,14 @@ func newDocument(ctx context.Context, root *html.Node, opts Options, image bool)
 		d.rules = append(d.rules, parseSheet(s, maxStyleRules-len(d.rules))...)
 	}
 	d.matcher = newMatcherState()
-	d.size, d.viewBox, d.par = rootGeometry(root)
+	d.size, d.viewBox, d.par, d.disabled = rootGeometry(root)
+	d.transform = identity
+	if t, ok := attrOK(root, "transform"); ok {
+		if m, good := parseTransform(t); good {
+			d.transform = m
+		}
+	}
+	d.background = d.computeStyle(root, initialStyle(opts.Context)).background
 	if s := d.size; image && !d.viewBox.ok && s.HasWidth && s.HasHeight && s.Width > 0 && s.Height > 0 {
 		d.viewBox = viewBox{w: s.Width / ptPerPx, h: s.Height / ptPerPx, ok: true}
 	}
@@ -269,30 +314,37 @@ const ptPerPx = 0.75
 // copies one before changing it. An empty viewport, or one whose content
 // cannot be drawn, yields nil.
 func (d *Document) Draw(ctx context.Context, r compose.Rect) []compose.Fragment {
-	if !(r.Width > 0) || !(r.Height > 0) || !finite(r.Width) || !finite(r.Height) || !finite(r.X) || !finite(r.Y) {
+	if d.disabled || !(r.Width > 0) || !(r.Height > 0) || !finite(r.Width) || !finite(r.Height) || !finite(r.X) || !finite(r.Y) {
 		return nil
 	}
 	w, h := r.Width/ptPerPx, r.Height/ptPerPx
 	content, err := d.render(ctx, w, h)
-	if err != nil || len(content) == 0 {
+	if err != nil || len(content) == 0 && d.background.A <= 0 {
 		return nil
 	}
-	vbm := identity
-	clip := rectOps(0, 0, w, h)
+	// The root's transform turns about the centre of its viewport, the
+	// initial transform-origin of an element with a CSS layout box (CSS
+	// Transforms 1, 6).
+	m := mul(translate(w/2, h/2), mul(d.transform, translate(-w/2, -h/2)))
 	if d.viewBox.ok {
-		m, ok := viewBoxTransform(d.viewBox, d.par, w, h)
+		vbm, ok := viewBoxTransform(d.viewBox, d.par, w, h)
 		if !ok {
 			return nil
 		}
-		vbm = m
-		// The clip is in the group's coordinates, the viewBox's: the
-		// viewport maps back through the inverse, which exists since the
-		// viewBox scales by positive factors.
-		inv := compose.Matrix{A: 1 / m.A, D: 1 / m.D, E: -m.E / m.A, F: -m.F / m.D}
-		clip = transformOps(clip, inv)
+		m = mul(m, vbm)
+	}
+	// The clip and the background are in the group's coordinates, the
+	// root's user space: the viewport maps back through the inverse.
+	inv, ok := invert(m)
+	if !ok {
+		return nil
+	}
+	clip := transformOps(rectOps(0, 0, w, h), inv)
+	if d.background.A > 0 {
+		content = append([]compose.Fragment{&compose.Path{Ops: clip, Fill: &compose.Fill{Color: d.background}}}, content...)
 	}
 	return []compose.Fragment{&compose.Group{
-		Transform: mul(mul(translate(r.X, r.Y), scale(ptPerPx, ptPerPx)), vbm),
+		Transform: mul(mul(translate(r.X, r.Y), scale(ptPerPx, ptPerPx)), m),
 		Clip:      &compose.Path{Ops: clip, Fill: &compose.Fill{}},
 		Opacity:   1,
 		Content:   content,

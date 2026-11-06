@@ -45,6 +45,19 @@ func invertible(m compose.Matrix) bool {
 	return det != 0 && finite(det) && finite(m.A) && finite(m.B) && finite(m.C) && finite(m.D) && finite(m.E) && finite(m.F)
 }
 
+// invert returns the inverse of m, false when it has none.
+func invert(m compose.Matrix) (compose.Matrix, bool) {
+	det := m.A*m.D - m.B*m.C
+	if det == 0 || !finite(det) {
+		return identity, false
+	}
+	inv := compose.Matrix{
+		A: m.D / det, B: -m.B / det, C: -m.C / det, D: m.A / det,
+		E: (m.C*m.F - m.D*m.E) / det, F: (m.B*m.E - m.A*m.F) / det,
+	}
+	return inv, invertible(inv)
+}
+
 // finite reports whether v is neither NaN nor infinite.
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 

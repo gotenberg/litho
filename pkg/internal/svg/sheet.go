@@ -164,6 +164,7 @@ func matchBrace(s string, open int) int {
 // semicolons, each optionally !important. Property names are ASCII
 // case-insensitive; an invalid declaration is dropped.
 func parseDeclarations(s string) []declaration {
+	s = stripComments(s)
 	var out []declaration
 	i := 0
 	for i < len(s) {

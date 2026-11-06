@@ -130,22 +130,28 @@ func fitRect(cw, ch float64, par aspect, x, y, w, h float64) compose.Rect {
 // preserveAspectRatio of the root svg element (SVG 2, 8.2; CSS Images 3,
 // 4.1): an absolute width or height is natural, a percentage or a missing
 // one is not; the ratio comes from the viewBox, or from both dimensions.
-// The em unit resolves against the 16 pixel default font size.
-func rootGeometry(root *html.Node) (Size, viewBox, aspect) {
-	var s Size
+// The em unit resolves against the 16 pixel default font size. A negative
+// width or height is an error that disables rendering (SVG 1.1, 7.9),
+// which disabled reports.
+func rootGeometry(root *html.Node) (s Size, vb viewBox, par aspect, disabled bool) {
 	lc := lengthCtx{fontSize: 16}
+	for _, k := range [2]string{"width", "height"} {
+		if l, ok := parseLength(attrOf(root, k)); ok && l.v < 0 {
+			disabled = true
+		}
+	}
 	if l, ok := parseLength(attrOf(root, "width")); ok && l.u != unitPercent && l.v >= 0 {
 		s.Width, s.HasWidth = l.resolve(lc, axisX)*ptPerPx, true
 	}
 	if l, ok := parseLength(attrOf(root, "height")); ok && l.u != unitPercent && l.v >= 0 {
 		s.Height, s.HasHeight = l.resolve(lc, axisY)*ptPerPx, true
 	}
-	vb := parseViewBox(attrOf(root, "viewBox"))
+	vb = parseViewBox(attrOf(root, "viewBox"))
 	switch {
 	case vb.ok:
 		s.Ratio = vb.w / vb.h
 	case s.HasWidth && s.HasHeight && s.Width > 0 && s.Height > 0:
 		s.Ratio = s.Width / s.Height
 	}
-	return s, vb, parseAspect(attrOf(root, "preserveAspectRatio"))
+	return s, vb, parseAspect(attrOf(root, "preserveAspectRatio")), disabled
 }

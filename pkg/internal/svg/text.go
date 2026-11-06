@@ -2,6 +2,7 @@ package svg
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -138,7 +139,7 @@ func collapseSpaces(chars []textChar) {
 	prevSpace := true
 	for i := range chars {
 		if chars[i].pre {
-			prevSpace = false
+			prevSpace = chars[i].r == ' '
 			continue
 		}
 		if chars[i].r == ' ' {
@@ -207,7 +208,7 @@ func (r *renderer) layoutText(chars []textChar, st *style, s sink) {
 			pc.n++
 		}
 		moved := has[0] || has[1] || has[2] || has[3]
-		if moved || cur == nil || cur.st != c.st {
+		if moved || cur == nil || !sameText(cur.st, c.st) {
 			flush()
 		}
 		if has[0] || has[1] {
@@ -234,6 +235,27 @@ func (r *renderer) layoutText(chars []textChar, st *style, s sink) {
 	for _, p := range pieces {
 		r.drawPiece(p, s)
 	}
+}
+
+// sameText reports whether two styles draw text alike, so that their
+// characters shape as one run, with the kerning and ligatures across them
+// that a split would lose.
+func sameText(a, b *style) bool {
+	if a == b {
+		return true
+	}
+	return slices.Equal(a.families, b.families) && a.fontSize == b.fontSize && a.weight == b.weight &&
+		a.italic == b.italic && a.lang == b.lang && samePaint(a.fill, b.fill) && samePaint(a.stroke, b.stroke) &&
+		a.fillOpacity == b.fillOpacity && a.strokeOpacity == b.strokeOpacity && a.strokeWidth == b.strokeWidth &&
+		a.visible == b.visible && a.color == b.color && a.opacity == b.opacity
+}
+
+// samePaint reports whether two paints are the same.
+func samePaint(a, b paint) bool {
+	if a.kind != b.kind || a.color != b.color || a.url != b.url || (a.fallback == nil) != (b.fallback == nil) {
+		return false
+	}
+	return a.fallback == nil || *a.fallback == *b.fallback
 }
 
 // anchor shifts each text chunk by its text-anchor (SVG 1.1, 10.9.1): the

@@ -28,3 +28,19 @@ func TestDraw_Text(t *testing.T) {
 		})
 	}
 }
+
+func TestText_TspansShapeTogether(t *testing.T) {
+	// Equal tspans shape as one run, and a preserved space ends a
+	// collapsible run: "A" + " " + "  B" puts B three advances after A.
+	img := draw(t, `<svg width="100" height="100"><text x="0" y="50" font-family="Ahem" font-size="10">A <tspan xml:space="preserve">  B</tspan>  </text></svg>`, 100, 100)
+	checkProbes(t, img, 40, []probe{{5, 46, black}, {15, 46, white}, {35, 46, white}, {45, 46, black}})
+	same := &style{families: []string{"A"}, fontSize: 10}
+	other := *same
+	if !sameText(same, &other) {
+		t.Errorf("equal styles do not shape together")
+	}
+	other.fontSize = 11
+	if sameText(same, &other) {
+		t.Errorf("different sizes shape together")
+	}
+}

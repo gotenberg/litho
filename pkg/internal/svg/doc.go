@@ -21,8 +21,9 @@
 //     opacity on groups, visibility and display.
 //   - Gradients: linearGradient and radialGradient with gradientUnits,
 //     gradientTransform, fx and fy, the href chain and stops (13.2).
-//   - Clipping: clip-path naming a clipPath of shapes, with clipPathUnits
-//     and clip-rule (14.3).
+//   - Clipping: clip-path naming a clipPath of shapes, with clipPathUnits,
+//     clip-rule, and the clip-path of the clipPath or of its lone child
+//     intersecting it (14.3).
 //   - Transforms: the transform attribute grammar (7.6).
 //   - Text: text and tspan with x, y, dx, dy lists, text-anchor and the
 //     font properties, shaped with the text package (10).
