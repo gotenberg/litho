@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Margin boxes</title>
+<style>
+@page {
+  size: A4;
+  margin: 25mm 20mm;
+  @top-center { content: "TOP-CENTER-MARKER Running head"; font-family: "Liberation Sans", sans-serif; font-size: 10pt; color: #1d3557; border-bottom: 1px solid #1d3557; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font-family: "Liberation Sans", sans-serif; font-size: 10pt; }
+  @bottom-left { content: "BOTTOM-LEFT-MARKER"; font-family: "Liberation Sans", sans-serif; font-size: 8pt; color: #666666; }
+}
+@page :first {
+  @top-center { content: none; }
+}
+body { font-family: "Liberation Serif", serif; font-size: 12pt; line-height: 1.4; margin: 0; }
+h2 { break-before: page; }
+</style>
+</head>
+<body>
+<h1>Margin boxes</h1>
+<p>The first page has no running head: its top-center box is set to none. Every page carries its number and the page count in the bottom-right box, and a fixed label in the bottom-left box.</p>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+<h2>Second page</h2>
+<p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+<h2>Third page</h2>
+<p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.</p>
+</body>
+</html>

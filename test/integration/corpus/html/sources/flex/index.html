@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flex invoice</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; margin: 0; color: #222222; }
+.page { display: flex; gap: 16px; }
+.sidebar { display: flex; flex-direction: column; justify-content: space-between; width: 150px; min-height: 600px; background: #1d3557; color: #ffffff; padding: 12px; }
+.sidebar .logo { font-size: 20pt; font-weight: bold; }
+.main { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1d3557; padding-bottom: 8px; }
+.header h1 { margin: 0; font-size: 22pt; }
+.parties { display: flex; gap: 12px; }
+.parties > div { flex: 1; border: 1px solid #999999; padding: 8px; }
+.row { display: flex; border-bottom: 1px solid #dddddd; padding: 4px 0; }
+.row.head { font-weight: bold; background: #f1faee; }
+.row .desc { flex: 3; }
+.row .qty, .row .price, .row .total { flex: 1; text-align: right; }
+.totals { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.card { flex: 0 0 120px; height: 60px; border: 1px solid #457b9d; background: #a8dadc; display: flex; align-items: center; justify-content: center; }
+.card:nth-child(3n) { flex-basis: 180px; background: #e9c46a; }
+</style>
+</head>
+<body>
+<div class="page">
+  <aside class="sidebar">
+    <div class="logo">ACME</div>
+    <div>SIDEBAR-MIDDLE-MARKER</div>
+    <div>SIDEBAR-BOTTOM-MARKER</div>
+  </aside>
+  <main class="main">
+    <div class="header"><h1>Invoice</h1><div>INV-2026-0042<br>6 November 2026</div></div>
+    <div class="parties">
+      <div><strong>From</strong><br>ACME Corporation<br>1 Main Street<br>Springfield</div>
+      <div><strong>To</strong><br>Example Customer<br>42 Side Road<br>Shelbyville</div>
+    </div>
+    <div>
+      <div class="row head"><div class="desc">Description</div><div class="qty">Qty</div><div class="price">Price</div><div class="total">Total</div></div>
+      <div class="row"><div class="desc">Widget, standard size</div><div class="qty">4</div><div class="price">12.50</div><div class="total">50.00</div></div>
+      <div class="row"><div class="desc">Gadget with a long description that wraps onto a second line inside its flex item</div><div class="qty">1</div><div class="price">199.00</div><div class="total">199.00</div></div>
+      <div class="row"><div class="desc">Service hours</div><div class="qty">3</div><div class="price">80.00</div><div class="total">240.00</div></div>
+    </div>
+    <div class="totals"><div>Subtotal 489.00</div><div>Tax 97.80</div><div><strong>TOTAL-MARKER 586.80</strong></div></div>
+    <h2>Products</h2>
+    <div class="cards">
+      <div class="card">Card 1</div><div class="card">Card 2</div><div class="card">Card 3</div><div class="card">Card 4</div>
+      <div class="card">Card 5</div><div class="card">Card 6</div><div class="card">Card 7</div><div class="card">Card 8</div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -77,9 +77,10 @@ test/integration/
 │   └── html/                   HTML sources litho and Chromium convert
 │       ├── download.sh         Copies chromium/ into the output dir
 │       ├── manifest.json
-│       ├── sources/<name>/     index.html and its assets, one directory each
+│       ├── sources/<name>/     index.html or index.md, assets, options.json
 │       ├── chromium/*.pdf      Chromium references (make html-chromium)
 │       ├── chromium.sh         Converts the sources with the pinned Gotenberg image
+│       ├── fixture/            Reads a source and its options.json (Go side)
 │       ├── build/main.go       pdf.Convert builder (make html-fixtures)
 │       ├── pdfs/*.pdf          litho's PDFs, once the converter writes them
 │       └── FIXTURES.md         Per-source origin and focus
@@ -122,7 +123,7 @@ make corpus-tools
 make wpt-fetch           # WPT files and Ahem, hash-checked
 make weasyprint-fixtures # re-extract the committed WeasyPrint fixtures, fetch the test font
 make html-fixtures       # fixture fonts, then litho's html corpus PDFs
-make html-chromium       # rebuild the committed Chromium references (Docker)
+make html-chromium       # rebuild the committed Chromium references (Docker; HTML_NAMES="a b" for some)
 
 # Wipe provisioned data to force re-init on the next run.
 make clean-corpus
@@ -215,7 +216,7 @@ Each feature, its oracle and its comparison rules are in [FEATURES.md](FEATURES.
 | `compose`    | 8 PDFs × 2 profiles (16 cells)       | Converted by litho from committed text sources; see `corpus/compose/FIXTURES.md`                                                                                        |
 | `wpt`        | 569 HTML reftests                    | web-platform-tests (BSD-3) at a pinned commit, fetched by `make wpt-fetch`; see `corpus/wpt/FIXTURES.md`                                                                |
 | `weasyprint` | 315 HTML draw tests                  | WeasyPrint's `tests/draw` (BSD-3), extracted and committed; see `corpus/weasyprint/FIXTURES.md`                                                                         |
-| `html`       | 12 HTML sources                      | Gotenberg's web test corpus and self-authored pages, with Chromium's PDFs; see `corpus/html/FIXTURES.md`                                                                |
+| `html`       | 29 HTML and Markdown sources         | Gotenberg's web test corpus and self-authored pages, with Chromium's PDFs; see `corpus/html/FIXTURES.md`                                                                |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
@@ -277,7 +278,7 @@ Fields:
 - `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from. The provisioning Docker image only generates goldens for features listed here, so dropping `text` + `metadata` from the veraPDF corpus skips the (slow) PDF.js generator entirely.
 - `golden_overrides`: maps feature name to a committed file, relative to the corpus source directory, that corrects goldens the oracle reads wrong. `text` and `flatten` take one. A `text` override file (litho and govdocs carry one) corrects the PDF.js goldens: each entry records the oracle's reading it replaces, so it fails its fixture when the oracle changes, and gives the right reading or marks the page unscored, with the clause behind it; the goldens stay the oracle's raw output. A `flatten` scope file (pdfjs and govdocs carry one) widens the `flatten` cell from the render sample to the whole corpus (see [Transparency flattening](FEATURES.md#transparency-flattening)).
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
-- `inputs`: makes the corpus a converter corpus, whose fixtures are source documents. `{"list": "reftests.json"}` reads a committed JSON array of objects with an `id`, each the path of its source under the testdata root (`wpt`); `{"glob": "sources/*/index.html"}` matches sources under the corpus source directory, each keyed by what its one `*` matched (`weasyprint`, `html`). `pdf_root`, `profile_mode` and `profiles` do not apply.
+- `inputs`: makes the corpus a converter corpus, whose fixtures are source documents. `{"list": "reftests.json"}` reads a committed JSON array of objects with an `id`, each the path of its source under the testdata root (`wpt`); `{"glob": "fixtures/*.json"}` matches sources under the corpus source directory, each keyed by what its one `*` matched (`weasyprint`; `html` globs `sources/*`, a directory per source, which the `diff` feature reads through `corpus/html/fixture`). `pdf_root`, `profile_mode` and `profiles` do not apply.
 - `goldens_in_source`: resolves `goldens` against the corpus source directory instead of the testdata root, for references committed beside the manifest (`wpt`, `weasyprint`).
 - `provisioned_by`: names the make target that provisions the corpus on the host; `corpus init` skips the corpus and says so.
 

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Colour scheme</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 12pt; background: #ffffff; color: #111111; }
+.panel { border: 3px solid #1d3557; background: #f1faee; padding: 12px; margin: 0 0 16px; }
+.dark-only { display: none; }
+.badge { display: inline-block; padding: 4px 10px; background: #e9c46a; color: #000000; }
+@media (prefers-color-scheme: dark) {
+  body { background: #1b1b1f; color: #f0f0f0; }
+  .panel { border-color: #e9c46a; background: #2a2a33; }
+  .light-only { display: none; }
+  .dark-only { display: block; }
+  .badge { background: #2a9d8f; color: #ffffff; }
+}
+</style>
+</head>
+<body>
+<h1>Colour scheme</h1>
+<p class="light-only">LIGHT-MARKER The page is printed for the light colour scheme.</p>
+<p class="dark-only">DARK-MARKER The page is printed for the dark colour scheme: the media feature prefers-color-scheme reads dark.</p>
+<div class="panel">
+  <p>A panel whose border and fill switch with the colour scheme. <span class="badge">BADGE</span></p>
+  <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</div>
+<div class="panel">
+  <p>A second panel. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Named pages</title>
+<style>
+@page { size: A4; margin: 20mm; }
+@page :first { margin-top: 50mm; }
+@page wide { size: A4 landscape; margin: 15mm; }
+body { font-family: "Liberation Serif", serif; font-size: 12pt; line-height: 1.4; margin: 0; }
+.wide { page: wide; }
+table { border-collapse: collapse; width: 100%; }
+td, th { border: 1px solid #333333; padding: 4px 8px; }
+th { background: #dddddd; }
+</style>
+</head>
+<body>
+<section>
+  <h1>Named pages</h1>
+  <p>FIRST-PAGE-MARKER The first page has a deeper top margin from the :first page selector. The section after it is laid out on pages named wide, which are A4 landscape with their own margins; the last section returns to the default portrait page.</p>
+  <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+</section>
+<section class="wide">
+  <h2>WIDE-MARKER A landscape table</h2>
+  <table>
+    <tr><th>Quarter</th><th>North</th><th>South</th><th>East</th><th>West</th><th>Central</th><th>Total</th></tr>
+    <tr><td>Q1</td><td>120</td><td>98</td><td>143</td><td>87</td><td>110</td><td>558</td></tr>
+    <tr><td>Q2</td><td>131</td><td>102</td><td>150</td><td>91</td><td>115</td><td>589</td></tr>
+    <tr><td>Q3</td><td>127</td><td>99</td><td>139</td><td>95</td><td>119</td><td>579</td></tr>
+    <tr><td>Q4</td><td>140</td><td>110</td><td>161</td><td>99</td><td>124</td><td>634</td></tr>
+  </table>
+</section>
+<section>
+  <h2>BACK-MARKER Back to portrait</h2>
+  <p>The last section names no page, so it is laid out on the default page again, which starts a new page.</p>
+</section>
+</body>
+</html>
