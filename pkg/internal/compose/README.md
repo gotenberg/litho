@@ -16,6 +16,7 @@ pkg/internal/convert/plaintext/  Plain text converter, the smallest complete con
 pkg/internal/css/                CSS parser, selectors, cascade: a DOM in, a computed Style per element out (style.go is the contract).
 pkg/internal/layout/             Box layout and pagination: a styled Node tree in, pages out (node.go is the contract).
 pkg/internal/convert/html/       HTML converter: parses with x/net/html, styles with css, builds the layout tree (wave 1 onward).
+pkg/internal/convert/markdown/   Markdown converter: renders with gomarkdown at Gotenberg's defaults, lays out through html (wave 2).
 pkg/internal/convert/ooxml/      DOCX, XLSX and PPTX converters (waves 4 to 6).
 pkg/pdf/convert.go               Public entry point: pdf.Convert.
 cmd/litho/convert.go             CLI: litho convert.

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<div style=\"color:red\"><script>x</script></div>\n\n<!-- c -->\n")

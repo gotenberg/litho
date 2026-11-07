@@ -16,6 +16,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
+	"github.com/gotenberg/litho/pkg/internal/convert/markdown"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -33,6 +34,9 @@ const (
 	// FormatHTML is an HTML document with its CSS. See [Convert] for what
 	// is drawn.
 	FormatHTML Format = "html"
+	// FormatMarkdown is a Markdown document, rendered to HTML and laid out
+	// as [FormatHTML] is. See [Convert].
+	FormatMarkdown Format = "markdown"
 )
 
 // ConvertOption tunes [Convert].
@@ -153,9 +157,9 @@ func WithMediaType(media string) ConvertOption {
 // WithResources gives a [FormatHTML] source the files its relative URLs
 // name: stylesheets and images, read from fsys with the URL path as the
 // file path, the document sitting at the root. Without it, and for every
-// absolute URL, root-relative path or path that leaves the root, the
-// reference is left out and reported as a warning. data: URLs need no
-// resources.
+// root-relative path or path that leaves the root, the reference is left
+// out and reported as a warning. data: URLs need no resources; http and
+// https URLs are fetched through [WithHTTPClient], file: URLs never.
 //
 // A conversion reads at most 32 MiB a file and 256 MiB of files in all,
 // decodes at most 4096 distinct images of at most 67 million pixels each
@@ -335,8 +339,10 @@ type ConvertWarning struct {
 	// conversion adds, among others, "unsupported-css-property" and the
 	// other codes of a construct the cascade dropped, "resource-refused",
 	// "resource-failed" and "resource-limit" for a stylesheet or image left
-	// out, "image-format-unsupported", "unsupported-element" and
-	// "form-control".
+	// out, "resource-no-network" for an http or https one without
+	// [WithHTTPClient], "resource-http-status" for one the server answered
+	// outside 2xx, "image-format-unsupported" for an AVIF, JPEG XL or ICO
+	// picture, "unsupported-element" and "form-control".
 	Code string
 	// Message explains the construct and what was done instead.
 	Message string
@@ -384,9 +390,12 @@ type ConvertWarning struct {
 //   - The page is the paper and margins of [WithPaperSize] and
 //     [WithMargins] unless an @page rule sets a size, an orientation or a
 //     margin. :first, :left and :right page rules do not apply.
-//   - Stylesheets and images are read from [WithResources]. PNG, JPEG, GIF,
+//   - Stylesheets and images are read from [WithResources], or fetched
+//     through [WithHTTPClient] for http and https URLs. PNG, JPEG, GIF,
 //     WebP, BMP and TIFF images are drawn at their pixel size at 96 dpi
-//     unless styled otherwise; an image that cannot be read is replaced by
+//     unless styled otherwise, a JPEG turned as its EXIF orientation says,
+//     and <picture> and srcset choose their source as Chromium does at a
+//     device pixel ratio of 1; an image that cannot be read is replaced by
 //     its alt text. SVG is not drawn yet.
 //   - Form controls draw as the text they show. Embedded documents, media
 //     and inline SVG are left out.
@@ -399,7 +408,20 @@ type ConvertWarning struct {
 // annotations, h1 to h6 the outline, and <title> and <meta name> author,
 // description and keywords the document information.
 //
-// # Both formats
+// # Markdown
+//
+// [FormatMarkdown] reads Markdown in UTF-8 and renders it to HTML as
+// Gotenberg's Chromium markdown route does, with github.com/gomarkdown/markdown
+// at its defaults (tables, fenced code, autolinks, strikethrough,
+// definition lists, footnotes), in a document without a stylesheet whose
+// title is the first heading. That document is laid out as [FormatHTML]
+// is, with every option of an HTML source: its relative images and links
+// resolve in [WithResources] or against [WithBaseURL]. The raw HTML a
+// Markdown document holds is kept, unsanitised: no script runs.
+// [Limits.MaxConvertInputBytes] caps the Markdown, not the HTML it renders
+// to.
+//
+// # All formats
 //
 // The fonts are embedded, each subset to the glyphs drawn. Nothing is
 // written for PDF/A or PDF/UA conformance; remediate the output for that.
@@ -429,7 +451,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	}
 	defer recoverToError(o.logger, "Convert", &err)
 
-	if format != FormatText && format != FormatHTML {
+	if format != FormatText && format != FormatHTML && format != FormatMarkdown {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
 	if src == nil {
@@ -456,8 +478,8 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 		o.marginTop, o.marginRight, o.marginBottom, o.marginLeft = plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin
 	}
 	var doc *compose.Document
-	if format == FormatHTML {
-		doc, err = convertHTML(ctx, src, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
+	if format == FormatHTML || format == FormatMarkdown {
+		doc, err = convertHTML(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
 	} else {
 		doc, err = plaintext.Convert(ctx, src, fonts, plaintext.Options{
 			PageWidth:     o.width,
@@ -489,13 +511,17 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	return report, nil
 }
 
-// convertHTML lays an HTML source out, mapping the HTML converter's errors
-// onto the public sentinels: its option errors to
+// convertHTML lays an HTML or Markdown source out, mapping the HTML
+// converter's errors onto the public sentinels: its option errors to
 // [ErrInvalidConvertOptions], every cap on the document's size or
 // complexity to [ErrConvertInputTooLarge], its page cap to
 // [ErrConvertTooManyPages].
-func convertHTML(ctx context.Context, src io.Reader, fonts *text.Fonts, o *convertOptions, maxBytes int64, maxPages int) (*compose.Document, error) {
-	doc, err := htmlconv.Convert(ctx, src, fonts, htmlconv.Options{
+func convertHTML(ctx context.Context, src io.Reader, format Format, fonts *text.Fonts, o *convertOptions, maxBytes int64, maxPages int) (*compose.Document, error) {
+	conv, name := htmlconv.Convert, "HTML"
+	if format == FormatMarkdown {
+		conv, name = markdown.Convert, "Markdown"
+	}
+	doc, err := conv(ctx, src, fonts, htmlconv.Options{
 		PageWidth:     o.width,
 		PageHeight:    o.height,
 		MarginTop:     o.marginTop,
@@ -528,14 +554,14 @@ func convertHTML(ctx context.Context, src io.Reader, fonts *text.Fonts, o *conve
 	case err == nil:
 		return doc, nil
 	case errors.Is(err, htmlconv.ErrInvalidOptions):
-		return nil, fmt.Errorf("converting HTML: %w: %w", ErrInvalidConvertOptions, err)
+		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrInvalidConvertOptions, err)
 	case errors.Is(err, htmlconv.ErrInputTooLarge), errors.Is(err, htmlconv.ErrTooManyElements), errors.Is(err, htmlconv.ErrTooDeep),
 		errors.Is(err, css.ErrTooComplex), errors.Is(err, layout.ErrTooManyBoxes):
-		return nil, fmt.Errorf("converting HTML: %w: %w", ErrConvertInputTooLarge, err)
+		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrConvertInputTooLarge, err)
 	case errors.Is(err, htmlconv.ErrTooManyPages):
-		return nil, fmt.Errorf("converting HTML: %w: %w", ErrConvertTooManyPages, err)
+		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrConvertTooManyPages, err)
 	default:
-		return nil, fmt.Errorf("converting HTML: %w", err)
+		return nil, fmt.Errorf("converting %s: %w", name, err)
 	}
 }
 
