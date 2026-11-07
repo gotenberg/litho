@@ -199,7 +199,13 @@ func (p *ifcPara) allowed(i int) bool {
 		// break-all on either side opens the boundary between two letters,
 		// as at the edge of a span that sets it.
 		breakAll := p.styleAt(i).WordBreak == css.BreakAll || p.styleAt(i-1).WordBreak == css.BreakAll
-		return breakAll && p.p.GraphemeStart(i) && !unicode.IsSpace(b) && !unicode.IsPunct(b) && !unicode.IsSpace(a)
+		if breakAll && p.p.GraphemeStart(i) && !unicode.IsSpace(b) && !unicode.IsPunct(b) && !unicode.IsSpace(a) {
+			return true
+		}
+		return p.tailoredBreak(i)
+	}
+	if p.strictBreak(i) {
+		return false
 	}
 	return p.styleAt(i).WordBreak != css.KeepAll || !isWordChar(a) || !isWordChar(b)
 }
@@ -1128,10 +1134,13 @@ func (s *inlineState) align(l *lineBox, indent float64, last bool) {
 				off += indent
 			}
 		case css.AlignJustify, css.AlignJustifyAll:
-			s.justify(l, free)
-			off = indent
-			if !ltr {
-				off = 0
+			// A line with no justification opportunity aligns to its
+			// start (CSS Text 3, 7.1).
+			if s.justify(l, free) {
+				off = indent
+				if !ltr {
+					off = 0
+				}
 			}
 		}
 	}
@@ -1185,81 +1194,6 @@ func (s *inlineState) settle(l *lineBox) {
 		if a := it.atomic; a != nil {
 			a.shift(l.x+it.x-(a.x-a.m[css.Left]), l.y+it.baseline-it.ascent-(a.y-a.m[css.Top]))
 		}
-	}
-}
-
-// justify spreads free points over the word separators of l, shifting the
-// glyphs after each one (CSS Text 3, 7.1): the spaces at the logical line
-// end, which hang, take none, wherever the bidi reordering put them.
-func (s *inlineState) justify(l *lineBox, free float64) {
-	if free <= eps {
-		return
-	}
-	type sep struct {
-		it *lineItem
-		g  int
-	}
-	var seps []sep
-	for _, it := range l.items {
-		if it.text == nil {
-			continue
-		}
-		var own []sep
-		for gi, g := range it.text.Glyphs {
-			if g.Text == " " || g.Text == "\u00a0" {
-				own = append(own, sep{it, gi})
-			}
-		}
-		// The hanging spaces are the logically last separators: the
-		// visually first ones of a right-to-left run.
-		drop := min(it.hang, len(own))
-		if it.rtl {
-			own = own[drop:]
-		} else {
-			own = own[:len(own)-drop]
-		}
-		seps = append(seps, own...)
-	}
-	if len(seps) == 0 {
-		return
-	}
-	extra := free / float64(len(seps))
-	// at holds where each separator starts before justification, for the
-	// inline box fragments: an edge moves by the extra of the separators
-	// before it.
-	at := make([]float64, len(seps))
-	for i, sp := range seps {
-		at[i] = sp.it.x + sp.it.text.Glyphs[sp.g].X
-	}
-	moved := func(x float64) float64 {
-		n := 0
-		for _, a := range at {
-			if a < x-eps {
-				n++
-			}
-		}
-		return x + float64(n)*extra
-	}
-	for _, f := range l.frags {
-		f.x0, f.x1 = moved(f.x0), moved(f.x1)
-	}
-	acc := 0.0
-	k := 0
-	for _, it := range l.items {
-		it.x += acc
-		if it.text == nil {
-			continue
-		}
-		local := 0.0
-		for gi := range it.text.Glyphs {
-			it.text.Glyphs[gi].X += local
-			if k < len(seps) && seps[k].it == it && seps[k].g == gi {
-				local += extra
-				k++
-			}
-		}
-		it.w += local
-		acc += local
 	}
 }
 
