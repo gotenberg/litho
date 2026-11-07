@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-07T18:57:32Z",
+  "captured_at": "2026-11-07T21:26:41Z",
   "corpora": {
     "compose": {
       "features": {
@@ -79,11 +79,115 @@
         }
       }
     },
+    "csv": {
+      "features": {
+        "diff": {
+          "matched": 0,
+          "mismatched": 11,
+          "skipped": 0,
+          "metrics": {
+            "convert_error": 11,
+            "pages_equal": 0
+          },
+          "scores": {
+            "sales": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fdo48621_broken_quotes.csv": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/numberformat.csv": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf148423.csv": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf150452.csv": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf152053.csv": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf152980.csv": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf48731.csv": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf80149.csv": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/testTdf82254-csv-bom.csv": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sheet": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            }
+          },
+          "score_tolerance": 0.02
+        }
+      }
+    },
     "docx": {
       "features": {
         "diff": {
-          "matched": 173,
-          "mismatched": 187,
+          "matched": 174,
+          "mismatched": 186,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -123,12 +227,12 @@
               "text_f1": 0.6492
             },
             "layout/fdo48718-1.docx": {
-              "layout": 0.0176,
+              "layout": 0.0292,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.6667,
               "strict": 0,
-              "text_f1": 0.298
+              "text_f1": 0.2455
             },
             "layout/fld-in-tbl.docx": {
               "layout": 0.9501,
@@ -147,7 +251,7 @@
               "text_f1": 0.9572
             },
             "layout/hidden-para-separator.docx": {
-              "layout": 0.4294,
+              "layout": 0.5607,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -899,7 +1003,7 @@
               "text_f1": 1
             },
             "ooxmlexport/TextEffects_StylisticSets_CntxtAlts.docx": {
-              "layout": 0.7224,
+              "layout": 0.9622,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2395,7 +2499,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo77727.docx": {
-              "layout": 0.3985,
+              "layout": 0.4929,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2411,12 +2515,12 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo77887.docx": {
-              "layout": 0.0176,
+              "layout": 0.0292,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.6667,
               "strict": 0,
-              "text_f1": 0.298
+              "text_f1": 0.2455
             },
             "ooxmlexport/fdo77890.docx": {
               "layout": 0.7249,
@@ -3271,7 +3375,7 @@
               "text_f1": 1
             },
             "header-default-classes": {
-              "layout": 0.8889,
+              "layout": 0.9411,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -3279,7 +3383,7 @@
               "text_f1": 1
             },
             "header-footer": {
-              "layout": 0.906,
+              "layout": 0.9311,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -3447,7 +3551,7 @@
               "text_f1": 1
             },
             "single-page-header": {
-              "layout": 0.8994,
+              "layout": 0.9208,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -3748,6 +3852,2086 @@
             "chars_match": 249,
             "words_match": 249
           }
+        }
+      }
+    },
+    "ods": {
+      "features": {
+        "diff": {
+          "matched": 0,
+          "mismatched": 258,
+          "skipped": 0,
+          "metrics": {
+            "convert_error": 258,
+            "pages_equal": 0
+          },
+          "scores": {
+            "chart2/ErrorBarRange.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/PivotChartRoundTrip.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/PivotTableExample.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/axis-numformats-linked.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/axis_number_format.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chartWithDotInSheetName.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/combined_chart_secondary_axis.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/error_bar.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/error_bar_properties.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/error_bar_range.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/fdo60083.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/labelString.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/legend_overlay.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/moving-type.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/multilevelcat.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/multiple_axis.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/pie_chart_100_and_0.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/secondary_axis.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/ser_labels.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/smoothedLines.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/stepped_lines.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf101894.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf107097.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf108021.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf120348.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf123774.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf128432.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf131115.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf131979.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf132076.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf135366_data_label_series.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf136011.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf136024.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf146066.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf146463.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf148142.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf151091.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf153706_XY_scatter_chart.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf158223.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "figures": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "figures-flat": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/3AnchorTypes.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/CommentTextHAlign.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/CommentTextVAlign.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/LargeAnchorOffset.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/ManualColWidthRowHeight.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/RowHeightTdf165003.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/SolverModel.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/Sparklines.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/alldefaultheights.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/autofilter-colbutton.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/autofilter-colors.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/autoheight2rows.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/autostyle-name-is-single-char.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/basic-cell-content.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/border.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/borders_ooo33.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/bug-fixes.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cachedValue.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/caseinsensitive-duplicate-fields.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/ceiling-floor.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cell-anchored-shapes.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/change-tracking.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/chart-import-basic.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/chart2dataprovider.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/colorscale.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/comment.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/conditionalformat_containstext.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/conditionalformat_rangelist.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cool15769_minimal_DB_ranges.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/copy-merged-number-formats.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/custom-numfmt-hybrid-cell.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/custom_column_width.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/dataValidity.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/databar.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/database-functions.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/database.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/date-time-functions.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/deleteCircleInMergedCell.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/deleteCirclesInRowAndCol.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/dependencyTree.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/different-column-width.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/document_with_linked_graphic.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/external-ref-cache.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/external_hyperlink.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fdo30900-1.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fdo36933test.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fdo43534test.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fdo43700test.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fdo62729.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fdo64229b.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fdo67682-2.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fdo79305.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/formats.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/formula-across-sheets.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/formula-delete-contents.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/formula-quote-in-sheet-name.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/functions.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hard-recalc.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/header-footer-content.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/header-image.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hidden-empty-rows.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hideColsShow.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hybrid-shared-string.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hyperlink_frame.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/keep-preview-missing-obj-link.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/legacycellanchoredrotatedclippedshape.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/legacycellanchoredrotatedhiddenshape.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/legacycellanchoredrotatedshape.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/loadVerticalFlip.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/lookup_source.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/lookup_target.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/lostRowStyle.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/matrix.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/measurelineHideColSave.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/merged.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/miscemptyrepeatedrowheights.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/move-cell-anchored-shapes.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/multilineoptimal.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/named-range-conflict.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/named-ranges-global.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/named-ranges-hidden.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/new_cond_format_test.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/new_cond_format_test_export.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/notes-on-3-sheets.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/numgroup_example.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/offsetIllegalParam.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/ooo88173-1.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/outline.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivot-table-basic.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivot-table-err-in-cache.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivot-table-median.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivot-table-named-range-source.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivot-table-num-fmt.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivot-table-shared-cache-with-group.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivot-table-str-and-err-in-data.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_fieldInRowsAndData.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_no_columns_layout.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_restore_query_filter.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/print-range.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/protection-key1.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/protection-key2.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/protection-key3.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/protection-key4.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/protection-key5.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/ranges-column-2000.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/repeatedColumns.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/rich-text-cells.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/row-height-import.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/shapes_foreground_background.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/sheet-protection.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/sheet_name_with_dots.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/single-note.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/sort-with-sheet-external-references.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/spreadsheet13e.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/sum-whole-column-row.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf100458_lost_zero_value.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf101104.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf102370_ExponentWithoutSign.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf103092_RotatedImage.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf103734.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf103829_textTab.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf104026.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf104502_hiddenColsCountedInPageCount.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf106181.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf108188_pagestyle.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf108244.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf109409.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf112567.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf112780.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf113500_autofillMixed.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf113646.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf113991_relativeNamedRanges.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf115655_HideDetail.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf117948_CollapseBeforeShape.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf118086.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf118561.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf118561_external.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf118624.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf119191_FitToCellSize.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf119191_transformedShape.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf119533.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf121040.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf121260.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf121612.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf121716_EvenHeaderFooter.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf121718_UseFirstPageNumber.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf121963.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf122331.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf122643.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf123225_pivotTable_empty_row_col_items.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf123225_pivotTable_no_col_items.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf123225_pivotTable_row_col_items.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf123421_1datafield.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf123421_2datafields.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf124454.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf124651_simplePivotTable.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf125099.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf125580.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf125938_anchor_after_copy_paste.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf126116.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf126305.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf127982.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf128895_emptyHiddenCols.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf129410.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf129681.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf129789.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf129940.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf130108.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf130132.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf130556.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf130583.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf131372.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf131471.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf132105.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf132105_external.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf133327.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf133688_dont_save_precedents_to_xlsx.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf134234.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf134332.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf136551.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137020_FlipVertical.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137033_FlipHoriRotCustomShape.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137033_RotShearCellAnchor.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137033_RotShearResizeAnchor.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137044_CoverHiddenRows.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137081_RTL_page_anchored.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137082_LTR_arrow_image.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137082_RTL_cell_anchored.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137205_AutofillDatesInMergedCells.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137216_HideCol.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137355_UndoHideRows.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137453.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137576_Measureline.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137621_autofillMergedBool.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137624_autofillMergedMixed.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137625_autofillMergedUserlist.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137653_137654_autofillUserlist.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf138138_MoveCellWithRotatedShape.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf138507.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf138824_externalSource.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf139083_copy_without_resize.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf139258_rotated_image.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf139612.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf139782.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf140098.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf140866.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf141914.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf142231.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf142578.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf142607.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf142764.ods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf144758-dbdata-no-orientation.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf147088.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf161483_CellTextRotation.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf162177_Eastersunday.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf162963_DatabaseRange.fods": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            }
+          },
+          "score_tolerance": 0.02
         }
       }
     },
@@ -4731,7 +6915,7 @@
               "text_f1": 1
             },
             "odfimport/fdo37606.odt": {
-              "layout": 0.9323,
+              "layout": 0.9934,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -4771,7 +6955,7 @@
               "text_f1": 0
             },
             "odfimport/fdo69862.odt": {
-              "layout": 0.9221,
+              "layout": 0.9929,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 1,
@@ -7066,6 +9250,2302 @@
             "css/css-writing-modes/block-plaintext-paragraph-after-block-level-box.html": "pass",
             "css/css-writing-modes/wm-propagation-002.html": "pass"
           }
+        }
+      }
+    },
+    "xlsx": {
+      "features": {
+        "diff": {
+          "matched": 0,
+          "mismatched": 285,
+          "skipped": 0,
+          "metrics": {
+            "convert_error": 285,
+            "pages_equal": 0
+          },
+          "scores": {
+            "budget": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "budget-single": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/ChartDataTable.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/DataTable-MultipleLegendEntriesForOneDataSeries.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/SimpleHistogram.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/add_series_secondary_axis.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/auto_marker_excel10.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/autotitledel_2007.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/autotitledel_2013.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/axis-label-rotation.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/axis_character_properties.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/axis_title_default_rotation.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/axis_title_rotated.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/axis_title_rotation.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/barOfPieChart.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/barOfPieChart2.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/bar_chart_simple.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/barchart_outend.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/barchart_totalsrow.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/bartest-stroke.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/box-whisker-gapwidth.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/boxWhisker.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/bubble_chart_simple.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart-area-style-background.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart-area-style-border.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart-auto-background.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart-hatch-fill.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart-text-can-overlap.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart_label_text_break.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart_pie2007.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart_title.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart_with_name_range.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/clusteredColumn.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/color_funnel.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/column-style.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/combined_chart_secondary_axis.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/custom_data_label.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/data_label.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/data_labels_fill_color.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/deleted_data_labels.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/deleted_legend_entry.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/deleted_legend_entry2.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/dispBlanksAs_2007.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/dispBlanksAs_2013.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/empty_chart.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/external_str_ref.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/fdo54361-1.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/fdo54361.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/fdo70609.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/fdo78080.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/funnel1.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/gapWidth.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/hidden_cells.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/incorrect_label_position.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/invertIfNeg_bar.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/invertIfNeg_bubble.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/legend_manual_layout.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/majorTickMark.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/markerColor.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/minorTickMark.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/no_marker.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "figures-lo": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/129969-min.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/Book1_custom.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/CalcThemeTest.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/MissingPathExternal.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/NamedSheetViews.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/PivotTable_CachedDefinitionAndDataInSync.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithCacheData.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithoutCacheData.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/ProtecteSheet1234Pass.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/RowImportCellStyleIssue.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/Sparklines.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/Spill.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/TableEmptyHeaders.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/TableStyleTest.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/Test_ThemeColor_Text_Background_Border.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/TextColor.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/XlStartupExternal.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/autofilter-colors-fg.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/autofilter-colors.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/autofilter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/autofilterShowButton.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/autofilternamedrange.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/bnc762542.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/bug-fixes.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/built-in_ranges.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/button-form-control.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/ceiling-floor.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cell-anchored-hidden-shapes.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cell-borders.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cell-multi-line.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cell-note.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cell-value.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/change-tracking.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/chart_hyperlink.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/check-boolean.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/checkbox-form-control.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/colorscale.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/colorscale_num_with_ref.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/column-style.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/column_style.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/complex_icon_set.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/condFormat_cellis.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cond_format_formula_listener.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cond_format_theme_color2.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cond_format_theme_color3.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/cond_parent.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/condformat_databar.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/condformat_theme_color.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/conditional_fmt_checkpriority.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/conditional_fmt_origin.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/customxml.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/dataValidity.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/data_validation_test.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/databar.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/database.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/dateAutofilter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/embedded-text-in-decimal.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/empty-noconf.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/empty.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/empty_ext_defined_name.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/enhanced-protection.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/enhancedProtectionRangeShorthand.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/escape-unicode.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/external-refs.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/fontSize.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/formats.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/forum-mso-en4-134670.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/forum-mso-en4-145327.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/freezePaneStartCell.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/functions-excel-2010.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/groupShape.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hiddenButton.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hiddenShape.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hidden_sheets.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hyperlink.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hyperlink_export.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hyperlink_formula.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/hyperlinks.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/image_hyperlink.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/invalid_ext_data_validation.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/matrix-multiplication.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/miscrowheights.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/named-ranges-global.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/named-ranges-hidden.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/new_cond_format_test.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/new_cond_format_test_export.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/open-as-read-only.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/orderOfCNumFmtElements.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/page_scale.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivot_dark1.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivot_table_first_header_row.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_1s_difference.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_bool_field_filter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_date_field_filter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_double_field_filter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_duplicated_member_filter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_error_item_filter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_invalid_formats.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_long_text.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_outline_mode.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_rowcolpage_field_filter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_string_field_filter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/pivottable_tabular_mode.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/preserve-whitespace.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/preserve_space.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/queryTableExport.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/ref_string.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/row-index-1-based.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/seconds-without-truncate-and-decimals.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/shape-macro-ext-ref.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/sheet-names.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/sheet-tab-color.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/sortconditionref.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/sortconditionref2.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/strike-through.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/subtotal-above.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tablerefsnamed.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf100034.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf100154.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf100709.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf104310-2.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf104310.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf105272.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf105840_allRowsHidden.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf106197_import_upright.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf107586.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf109061.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf111876.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf112106.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf112567.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf112936.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf113013.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf113271.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf113621.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf115022.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf115159.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf117287_comment.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf118668.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf118990.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf119190.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf119292.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf119565.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf120168.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf120301_xmlSpaceParsing.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf120749.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf121715.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf121887.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf122102.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf122191.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf122336.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf122471.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf122716_font_with_charset.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf123026_optimalRowHeight.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf123139_applyAlignment.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf123353.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf124525.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf129985.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf130104_indent.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf130959.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf131380.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf131424.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf131536.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf133595.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf134392.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf134455.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf134459_HeaderFooterColor.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf134553.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf134769.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf134817_HeaderFooterTextWith2Section.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf134826.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf135828_Shape_Rect.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf136364.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137000_export_upright.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137091.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf137543.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf138601.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf138741_externalLinkSkipUnusedsCrash.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf139021.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf139167.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf139394.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf139928.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf139934.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf141495.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf141644.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf142881.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf142905.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf142929.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf143068_top10filter.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf144397.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf144642_RowHeight_10mm_SavedByCalc.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf144642_RowHeight_28.35pt_SavedByExcel.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf145054.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf145057.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf145129_DefaultRowHeight_28.35pt_SavedByExcel.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf147014.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf147955.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf148820.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf151755_stylesLostOnXLSXExport.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf152581_bordercolorNotExportedToXLSX.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf153767.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf155046.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf155321.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf155402.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf156028.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf156814.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf157689.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf159581_optimalRowHeight.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf160371.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf161301.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf161365.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf162093.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf162948.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf162963_TableWithTotalsEnabled.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf163554.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf164417.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf164895.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf165180_date1904.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf165503.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf165655.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sc/tdf165886.xlsx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "scrolled": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "scrolled-pages": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            }
+          },
+          "score_tolerance": 0.02
         }
       }
     }
